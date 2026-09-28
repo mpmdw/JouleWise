@@ -16,7 +16,6 @@ from unittest.mock import patch
 
 import joulewise.calibration_ledger as calibration_ledger_module
 from joulewise.calibration_bracketing import (
-    ANCHOR_V3_R7_ACCEPTANCE_BOUND_PATH,
     CalibrationCandidate,
     _canonical_sha256 as bracketing_canonical_sha256,
     _valid_acceptance_bound,
@@ -147,7 +146,7 @@ class CalibrationLiveThreeWindowTests(unittest.TestCase):
             calibration_bracket_max_drift_s=0.010,
         )
 
-        source = load_calibration_acceptance_bound(ANCHOR_V3_R7_ACCEPTANCE_BOUND_PATH)
+        source = load_calibration_acceptance_bound()
         if source is None:
             raise AssertionError("checked-in issued acceptance artifact is unavailable")
         source_path = Path(

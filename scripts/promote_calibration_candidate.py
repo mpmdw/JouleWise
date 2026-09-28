@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import gzip
 import hashlib
 import json
 from pathlib import Path
@@ -26,6 +27,13 @@ ACCEPTANCE_ID = "d079_calibration_acceptance_v2_n12_25g83_r1"
 RULING_IDS = (
     "SCI-25G83-CANDIDATE-01", "SCI-25G83-CANDIDATE-01-A1",
     "SCI-25G83-CANDIDATE-01-A2", "SCI-25G83-CANDIDATE-01-A3",
+)
+CLAIM_ELIGIBLE_MEANING = (
+    "these bytes are an authentic issued calibration, and its numbers may "
+    "serve as the timing-uncertainty basis of a reported result. It is a "
+    "property of the file. It is not permission to start a window. Permission "
+    "to start a claim-bearing window is separate; H1 withholds it, and H5 "
+    "to H7 condition it."
 )
 PROTECTED = (
     "schema_version", "acceptance_id", "decision_ids", "ledger_cutoff",
@@ -50,6 +58,33 @@ def _parse(raw: bytes) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise ValueError("expected JSON object")
     return value
+
+
+def _repository_bytes(relative_path: Any) -> bytes:
+    if not isinstance(relative_path, str) or not relative_path:
+        raise ValueError("cited path missing")
+    path = (ROOT / relative_path).resolve()
+    if not path.is_relative_to(ROOT):
+        raise ValueError("cited path outside repository")
+    try:
+        return path.read_bytes()
+    except OSError as error:
+        raise ValueError(f"cited file missing: {relative_path}") from error
+
+
+def _verify_cited_files(value: Any) -> None:
+    if isinstance(value, list):
+        for item in value:
+            _verify_cited_files(item)
+    elif isinstance(value, dict):
+        if "relative_path" in value and "file_sha256" in value:
+            digest = value["file_sha256"]
+            if not isinstance(digest, str) or re.fullmatch(r"[0-9a-f]{64}", digest) is None:
+                raise ValueError("cited file digest malformed")
+            if hashlib.sha256(_repository_bytes(value["relative_path"])).hexdigest() != digest:
+                raise ValueError(f"cited file digest mismatch: {value['relative_path']}")
+        for item in value.values():
+            _verify_cited_files(item)
 
 
 def _validate_text(text: dict[str, Any], candidate: dict[str, Any]) -> None:
@@ -81,6 +116,25 @@ def _validate_text(text: dict[str, Any], candidate: dict[str, Any]) -> None:
     provenance = text["network_time_provenance"]
     if not isinstance(provenance, dict) or provenance.get("disclosure_id") != "D8":
         raise ValueError("network time provenance missing D8")
+    _verify_cited_files(text)
+    preserved_log = provenance.get("preserved_log")
+    if not isinstance(preserved_log, dict):
+        raise ValueError("preserved log missing")
+    try:
+        log_digest = hashlib.sha256(gzip.decompress(
+            _repository_bytes(preserved_log.get("relative_path"))
+        )).hexdigest()
+    except (OSError, EOFError) as error:
+        raise ValueError("preserved log invalid") from error
+    if log_digest != preserved_log.get("plain_text_sha256"):
+        raise ValueError("preserved log plain-text digest mismatch")
+    d8_text = disclosures[7]["text"]
+    if provenance.get("text") != d8_text:
+        raise ValueError("network time provenance differs from D8")
+    if record.get("claim_eligible_meaning") != CLAIM_ELIGIBLE_MEANING:
+        raise ValueError("claim_eligible_meaning mismatch")
+    if not isinstance(record.get("hold_enforcement"), str) or not record["hold_enforcement"].strip():
+        raise ValueError("hold_enforcement missing")
 
 
 def promote(candidate_raw: bytes, issuance_raw: bytes) -> bytes:
@@ -130,6 +184,8 @@ def promote(candidate_raw: bytes, issuance_raw: bytes) -> bytes:
     if issued["backfill_candidate"]["candidate_inventory"] != candidate["backfill_candidate"]["candidate_inventory"]:
         raise ValueError("candidate inventory changed")
     raw = (json.dumps(issued, indent=2, sort_keys=False, ensure_ascii=True) + "\n").encode("utf-8")
+    # Not an independent check: both sides derive from the same parsed object.
+    # The independent check is test P2 on the written file.
     if _parse(raw) != issued:
         raise ValueError("serialization self-check failed")
     return raw

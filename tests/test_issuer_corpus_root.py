@@ -68,7 +68,7 @@ class IssuerCorpusRootTests(unittest.TestCase):
             "--preregistration", str(prereg),
             "--preregistration-sha256", prereg_sha,
             "--predecessor-acceptance",
-            str(issuer.ANCHOR_V3_R7_ACCEPTANCE_BOUND_PATH if revision_five else
+            str(issuer.DEFAULT_ACCEPTANCE_BOUND_PATH if revision_five else
                 ROOT / "configs/calibration/calibration_acceptance_d079_v2_n17_r6.json"),
             "--registration-session-id", SESSION_A,
             "--registration-session-id", SESSION_B,

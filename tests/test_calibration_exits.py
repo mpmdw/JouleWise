@@ -1482,11 +1482,6 @@ def _rekey_private_writer_acceptance(repo: Path) -> None:
     new_acceptance_sha256 = hashlib.sha256(acceptance_path.read_bytes()).hexdigest()
     bracketing_path = repo / "joulewise" / "calibration_bracketing.py"
     bracketing_source = bracketing_path.read_text(encoding="utf-8")
-    # These 25F84 witness repositories copy and re-key R7 explicitly.
-    bracketing_source = bracketing_source.replace(
-        "DEFAULT_ACCEPTANCE_BOUND_PATH = EPOCH_25G83_R1_ACCEPTANCE_BOUND_PATH",
-        "DEFAULT_ACCEPTANCE_BOUND_PATH = ANCHOR_V3_R7_ACCEPTANCE_BOUND_PATH",
-    )
     if bracketing_source.count(old_acceptance_sha256) != 1:
         raise AssertionError("issued acceptance digest pin shape changed")
     bracketing_path.write_text(

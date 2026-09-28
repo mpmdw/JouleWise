@@ -44,9 +44,7 @@ from joulewise.calibration_bracketing import (
     ANCHOR_V3_R6_ACCEPTANCE_BOUND_SHA256,
     ANCHOR_V3_R6_ACCEPTANCE_ID,
     ANCHOR_V3_R7_ACCEPTANCE_BOUND_SHA256,
-    ANCHOR_V3_R7_ACCEPTANCE_BOUND_PATH,
     ANCHOR_V3_R7_ACCEPTANCE_ID,
-    EPOCH_25G83_R1_ACCEPTANCE_BOUND_SHA256,
     EPOCH_25G83_R1_ACCEPTANCE_ID,
     ANCHOR_V3_R5_ACCEPTANCE_ID,
     ISSUED_ACCEPTANCE_REGISTRY,
@@ -610,11 +608,11 @@ class CalibrationBracketingTests(unittest.TestCase):
 
         self.assertIsNotNone(artifact)
         self.assertEqual(artifact["artifact_role"], "issued")
-        # The live default is the epoch-25G83 issuance; R7 remains registered.
+        # The live default remains R7 while the issued 25G83 generation is held.
         self.assertEqual(
-            hashlib.sha256(raw).hexdigest(), EPOCH_25G83_R1_ACCEPTANCE_BOUND_SHA256
+            hashlib.sha256(raw).hexdigest(), ANCHOR_V3_R7_ACCEPTANCE_BOUND_SHA256
         )
-        self.assertEqual(artifact["acceptance_id"], EPOCH_25G83_R1_ACCEPTANCE_ID)
+        self.assertEqual(artifact["acceptance_id"], ANCHOR_V3_R7_ACCEPTANCE_ID)
         # r6 is RETAINED as an intermediate generation: superseded as the live
         # default, still authenticating byte-identically under its own pin.
         self.assertEqual(
@@ -623,9 +621,7 @@ class CalibrationBracketingTests(unittest.TestCase):
             ).hexdigest(),
             ANCHOR_V3_R6_ACCEPTANCE_BOUND_SHA256,
         )
-        self.assertEqual(artifact["derivation_corpus"]["n"], 12)
-        self.assertEqual(hashlib.sha256(ANCHOR_V3_R7_ACCEPTANCE_BOUND_PATH.read_bytes()).hexdigest(),
-                         ANCHOR_V3_R7_ACCEPTANCE_BOUND_SHA256)
+        self.assertEqual(artifact["derivation_corpus"]["n"], 17)
         self.assertEqual(
             hashlib.sha256(PREDECESSOR_ACCEPTANCE_BOUND_PATH.read_bytes()).hexdigest(),
             ISSUED_ACCEPTANCE_BOUND_SHA256,
@@ -679,7 +675,7 @@ class CalibrationBracketingTests(unittest.TestCase):
         )
 
     def test_issued_allowance_projection_uses_exact_decimal_authority(self) -> None:
-        artifact = load_calibration_acceptance_bound(ANCHOR_V3_R7_ACCEPTANCE_BOUND_PATH)
+        artifact = load_calibration_acceptance_bound()
         self.assertIsNotNone(artifact)
         projection = issued_calibration_allowance_projection(
             artifact,
@@ -2724,7 +2720,7 @@ class CalibrationBracketingTests(unittest.TestCase):
                 )
 
     def test_acceptance_artifact_rederives_from_decimal_member_table(self) -> None:
-        artifact = load_calibration_acceptance_bound(ANCHOR_V3_R7_ACCEPTANCE_BOUND_PATH)
+        artifact = load_calibration_acceptance_bound()
         self.assertIsNotNone(artifact)
         self.assertEqual(artifact["derivation_corpus"]["n"], 17)
         self.assertEqual(
@@ -2747,7 +2743,7 @@ class CalibrationBracketingTests(unittest.TestCase):
             self.assertIsNone(load_calibration_acceptance_bound(path))
 
     def test_rekeyed_self_consistent_artifact_is_not_authenticated(self) -> None:
-        artifact = load_calibration_acceptance_bound(ANCHOR_V3_R7_ACCEPTANCE_BOUND_PATH)
+        artifact = load_calibration_acceptance_bound()
         self.assertIsNotNone(artifact)
         rekeyed = json.loads(json.dumps(artifact))
         rekeyed["identity_epoch"]["os_build"] = "25F85"
@@ -2995,6 +2991,68 @@ class CustodyCandidateProbeTests(unittest.TestCase):
             ):
                 self.assertIsNone(load_calibration_candidate(original, runs_root=original.parent.parent, mode="read_replay"))
                 inspect.assert_called_once_with(mapped, runs_root=backup / "runs")
+
+
+class DoublingTriggerDispositionTests(unittest.TestCase):
+    """Disposed diagnostics never make the eligible 25G83 corpus double."""
+
+    def setUp(self):
+        import joulewise.calibration_bracketing as bracket_module
+        self.bracket = bracket_module
+        kwargs = ({"allow_claim_held": True}
+                  if hasattr(bracket_module, "CLAIM_HELD_ACCEPTANCE_IDS") else {})
+        self.issued = bracket_module.load_calibration_acceptance_bound(
+            bracket_module.EPOCH_25G83_R1_ACCEPTANCE_BOUND_PATH, **kwargs)
+        self.assertIsNotNone(self.issued)
+        self.identity = dict(self.issued["identity_epoch"])
+
+    def evaluate(self, count, *, artifact=None, identity=None, explicit=True):
+        from tests.test_claim_hold_routes import synthetic_bracket
+        hold = getattr(self.bracket, "CLAIM_HELD_ACCEPTANCE_IDS", {})
+        with patch.dict(hold, {}, clear=True):
+            return synthetic_bracket(
+                artifact or self.issued, identity or self.identity, count,
+                explicit=explicit,
+            )
+
+    def test_dt1_one_new_valid_capture_does_not_double(self):
+        result, _ = self.evaluate(1)
+        self.assertNotIn("corpus_doubles_from_12_to_24",
+                         result["acceptance"]["prospective_rederivation"]["observed_triggers"])
+
+    def test_dt2_eleven_new_valid_captures_do_not_double(self):
+        result, _ = self.evaluate(11)
+        self.assertNotIn("corpus_doubles_from_12_to_24",
+                         result["acceptance"]["prospective_rederivation"]["observed_triggers"])
+
+    def test_dt3_twelve_new_valid_captures_double_and_refuse(self):
+        result, reasons = self.evaluate(12)
+        self.assertIn("corpus_doubles_from_12_to_24",
+                      result["acceptance"]["prospective_rederivation"]["observed_triggers"])
+        self.assertEqual(reasons, ("calibration_acceptance_bound_stale",))
+
+    def test_dt4_newly_disposed_valid_capture_is_not_counted(self):
+        import joulewise.calibration_dispositions as dispositions
+        extra_id = hashlib.sha256(b"endpoint-0").hexdigest()
+        altered = copy.deepcopy(dispositions.DISPOSITION_DECISIONS)
+        decision_id = dispositions.DISPOSITION_DECISION_ID
+        altered[decision_id]["content_ids"] |= {extra_id}
+        # The issued bytes authenticate against the original table; the
+        # counterfactual table change here isolates the trigger's count.
+        with patch.object(dispositions, "DISPOSITION_DECISIONS", altered), patch.object(
+            self.bracket, "_authenticated_explicit_acceptance_bound", return_value=self.issued,
+        ):
+            result, _ = self.evaluate(12)
+        self.assertNotIn("corpus_doubles_from_12_to_24",
+                         result["acceptance"]["prospective_rederivation"]["observed_triggers"])
+
+    def test_dt5_r7_doubles_at_thirty_four_valid_rows(self):
+        r7 = self.bracket.load_calibration_acceptance_bound()
+        self.assertEqual(r7["acceptance_id"], self.bracket.ANCHOR_V3_R7_ACCEPTANCE_ID)
+        result, _ = self.evaluate(4, artifact=r7, identity=dict(r7["identity_epoch"]),
+                                  explicit=False)
+        self.assertIn("corpus_doubles_from_17_to_34",
+                      result["acceptance"]["prospective_rederivation"]["observed_triggers"])
 
 
 if __name__ == "__main__":
@@ -3286,7 +3344,12 @@ class GenerationKeyedIssuanceValidationTests(unittest.TestCase):
                 self.assertEqual(
                     hashlib.sha256(raw).hexdigest(), entry["file_sha256"]
                 )
-                artifact = load_calibration_acceptance_bound(path)
+                if acceptance_id == EPOCH_25G83_R1_ACCEPTANCE_ID:
+                    self.assertIsNone(load_calibration_acceptance_bound(path))
+                artifact = load_calibration_acceptance_bound(
+                    path,
+                    allow_claim_held=acceptance_id == EPOCH_25G83_R1_ACCEPTANCE_ID,
+                )
                 self.assertIsNotNone(artifact)
                 self.assertEqual(artifact["acceptance_id"], acceptance_id)
                 self.assertEqual(artifact, json.loads(raw))
@@ -3327,7 +3390,7 @@ class GenerationKeyedIssuanceValidationTests(unittest.TestCase):
     def test_registered_cutoff_sequence_is_read_from_the_row_not_a_literal(
         self,
     ) -> None:
-        artifact = load_calibration_acceptance_bound(ANCHOR_V3_R7_ACCEPTANCE_BOUND_PATH)
+        artifact = load_calibration_acceptance_bound()
         self.assertTrue(_valid_acceptance_bound(artifact))
         # Both numbers move together so the row stays internally consistent
         # (cutoff = 2 x count); only the comparison against the ARTIFACT can
@@ -3341,7 +3404,7 @@ class GenerationKeyedIssuanceValidationTests(unittest.TestCase):
     def test_generation_row_missing_a_fence_refuses_rather_than_defaulting(
         self,
     ) -> None:
-        artifact = load_calibration_acceptance_bound(ANCHOR_V3_R7_ACCEPTANCE_BOUND_PATH)
+        artifact = load_calibration_acceptance_bound()
         for dropped in (
             "epoch_catalog_ids",
             "prior_prefix_mode",
@@ -3370,7 +3433,7 @@ class GenerationKeyedIssuanceValidationTests(unittest.TestCase):
         # vocabulary is widened here and only the comparison site can refuse.
         from joulewise import calibration_bracketing as module
 
-        artifact = load_calibration_acceptance_bound(ANCHOR_V3_R7_ACCEPTANCE_BOUND_PATH)
+        artifact = load_calibration_acceptance_bound()
         rekeyed = dict(_D102_GENERATION_DERIVATIONS[ANCHOR_V3_R7_ACCEPTANCE_ID])
         rekeyed["screen_rule"] = "max_range_or_d125_floor"
         with patch.object(

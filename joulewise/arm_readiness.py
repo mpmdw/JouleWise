@@ -28,6 +28,9 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Iterable, Mapping, Sequence
 
 from joulewise import clock_reference as _clock_reference
+from joulewise.calibration_bracketing import (
+    CLAIM_HELD_ACCEPTANCE_IDS as _CLAIM_HELD_ACCEPTANCE_IDS,
+)
 from joulewise.identity_pins import (
     IDENTITY_PIN_PROJECTION_RECEIPT_SCHEMA,
     IDENTITY_PIN_PROJECTION_REASON_CODES,
@@ -6199,13 +6202,6 @@ _ISSUED_D079_IDS = frozenset({
     "d079_calibration_acceptance_v2_n17_r7",
     "d079_calibration_acceptance_v2_n12_25g83_r1",
 })
-# An issued calibration may be held from claim-bearing pack admission.
-_CLAIM_HELD_ACCEPTANCE_IDS = {
-    "d079_calibration_acceptance_v2_n12_25g83_r1":
-    "H1-25G83-CAP-CADENCE (SCI-25G83-CANDIDATE-01-A1 §5.3)",
-}
-
-
 def _issued_d079(tree: Mapping[str, Any]) -> bool:
     policy = tree.get("acceptance_policy")
     if not isinstance(policy, Mapping):

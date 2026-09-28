@@ -78,9 +78,7 @@ class EpochContinuationTests(unittest.TestCase):
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name)
         self.out = self.root / "candidate.json"
-        self.artifact = bracket.load_calibration_acceptance_bound(
-            bracket.ANCHOR_V3_R7_ACCEPTANCE_BOUND_PATH
-        )
+        self.artifact = bracket.load_calibration_acceptance_bound()
         self.rule = continuation.continuation_rule(self.artifact)
         self.level = Decimal(self.rule["level_screen_s"])
         self.screen = Decimal(self.rule["operative_bracket_screen_s"])
@@ -105,7 +103,7 @@ class EpochContinuationTests(unittest.TestCase):
             "--ledger", str(fixture["ledger"]), "--head-pin", str(fixture["pin"]),
             "--repo-root", str(fixture["root"]),
             "--preregistration-sha256", PREREGISTRATION_SHA256,
-            "--acceptance", str(bracket.ANCHOR_V3_R7_ACCEPTANCE_BOUND_PATH),
+            "--acceptance", str(bracket.DEFAULT_ACCEPTANCE_BOUND_PATH),
             "--d102-addendum-date", "2026-09-10", "--out", str(self.out), *extra,
         ]
 
@@ -115,8 +113,8 @@ class EpochContinuationTests(unittest.TestCase):
     # cross-check refuses any other acceptance before it compares a single
     # science field.  The s9 tests therefore hand the issuer the witnesses' own
     # generation (a later `--acceptance` overrides the default one above).  The
-    # The fixture's comparison generation is explicitly R7; replaying an R6
-    # witness against the active 25G83 generation refuses by name -- pinned by
+    # ACTIVE generation is r7 (D-138 re-issue, 2026-09-22); replaying a witness
+    # against it refuses by name -- pinned by
     # test_s9_witness_against_the_active_generation_refuses_by_name.
     S9_WITNESS_ACCEPTANCE = (
         "--acceptance", str(bracket.ANCHOR_V3_R6_ACCEPTANCE_BOUND_PATH),
@@ -1016,7 +1014,7 @@ class EpochContinuationTests(unittest.TestCase):
         rc, out, _ = self.run_cli_of(desk.main, [
             "--session-id", SESSION_ID,
             "--ledger", str(self.fixture["ledger"]), "--head-pin", str(self.fixture["pin"]),
-            "--acceptance", str(bracket.ANCHOR_V3_R7_ACCEPTANCE_BOUND_PATH),
+            "--acceptance", str(bracket.DEFAULT_ACCEPTANCE_BOUND_PATH),
             "--repo-root", str(self.fixture["root"]), "--out", str(witness),
         ])
         self.assertEqual(rc, 0, out)
@@ -1123,15 +1121,14 @@ class EpochContinuationTests(unittest.TestCase):
                 self.assertFalse(self.out.exists())
 
     def test_s9_witness_against_the_active_generation_refuses_by_name(self):
-        # The witnesses name r6; the ACTIVE generation is 25G83. Handing the
+        # The witnesses name r6; the ACTIVE generation is r7.  Handing the
         # issuer the active default must refuse on the generation identity,
         # before any science field is compared (the cross-check that made the
         # r6 override above necessary is itself the behaviour under test).
         self.build()
         fixture = Path(__file__).parent / "fixtures/epoch_continuation/s9-pass.json"
         rc, _, error = self.run_cli(
-            self.args("--equivalence-record", str(fixture), "--force",
-                      "--acceptance", str(bracket.DEFAULT_ACCEPTANCE_BOUND_PATH))
+            self.args("--equivalence-record", str(fixture), "--force")
         )
         self.assertEqual(rc, 3)
         self.assertIn("equivalence_record.reference_envelope.acceptance_id", error)
@@ -1159,12 +1156,12 @@ class EpochContinuationTests(unittest.TestCase):
             self.assertEqual(self.evaluate()[1], ())
         self.assertEqual(bracket.ISSUED_ACCEPTANCE_REGISTRY, before)
         self.assertEqual({key: hashlib.sha256(entry["path"].read_bytes()).hexdigest() for key, entry in before.items()}, hashes)
-        self.assertEqual(bracket.load_calibration_acceptance_bound(
-            bracket.ANCHOR_V3_R7_ACCEPTANCE_BOUND_PATH
-        )["derivation_sha256"], derivation)
-        # The active 25G83 issuance is pinned while R7 remains registered.
-        self.assertEqual(hashes[bracket.ACTIVE_ACCEPTANCE_ID], bracket.EPOCH_25G83_R1_ACCEPTANCE_BOUND_SHA256)
-        self.assertEqual(hashes[bracket.ANCHOR_V3_R7_ACCEPTANCE_ID], bracket.ANCHOR_V3_R7_ACCEPTANCE_BOUND_SHA256)
+        self.assertEqual(bracket.load_calibration_acceptance_bound()["derivation_sha256"], derivation)
+        # Follows the ACTIVE generation: the D-079 r7 issuance moved
+        # ACTIVE_ACCEPTANCE_ID from r6 to r7, so the frozen bytes this
+        # names are r7's.  r6 stays in the registry as history and its
+        # own row is still checked by the two assertions above.
+        self.assertEqual(hashes[bracket.ACTIVE_ACCEPTANCE_ID], bracket.ANCHOR_V3_R7_ACCEPTANCE_BOUND_SHA256)
 
 
 if __name__ == "__main__":

@@ -12,6 +12,7 @@ from unittest.mock import patch
 import joulewise.calibration_bracketing as bracket
 from scripts import promote_calibration_candidate as promote
 from scripts.issue_calibration_acceptance_generation import generation_row_for_registry
+from scripts.issue_calibration_acceptance_generation import derivation_input_sha256
 
 
 class PromotionTests(unittest.TestCase):
@@ -76,6 +77,37 @@ class PromotionTests(unittest.TestCase):
 
     def test_p5_generation_row_matches_code(self):
         self.assertEqual(generation_row_for_registry(self.issued["registered_generation_row"]), bracket._D102_GENERATION_DERIVATIONS[bracket.EPOCH_25G83_R1_ACCEPTANCE_ID])
+
+    def test_p6_cited_evidence_and_disclosure_mutations_refuse(self):
+        issuance = json.loads(self.issuance_raw)
+        mutations = []
+
+        def changed(edit):
+            text = copy.deepcopy(issuance)
+            edit(text)
+            mutations.append(text)
+
+        changed(lambda t: t["issuance_record"]["rulings"][0].__setitem__("file_sha256", "f" * 64))
+        changed(lambda t: t["issuance_record"]["rulings"][0].__setitem__("relative_path", "nonexistent.md"))
+        changed(lambda t: t["issuance_record"]["disclosures"][7].__setitem__("text", "x"))
+        changed(lambda t: t["network_time_provenance"].__setitem__("text", "contradicts D8"))
+        changed(lambda t: (t["issuance_record"].pop("claim_eligible_meaning"),
+                           t["issuance_record"].pop("hold_enforcement")))
+        changed(lambda t: t["issuance_record"]["source_candidate"].__setitem__("relative_path", "elsewhere"))
+        for index, text in enumerate(mutations, start=1):
+            with self.subTest(altered_text=f"P4{chr(ord('a') + index - 1)}"):
+                with self.assertRaises(ValueError):
+                    promote.promote(self.candidate_raw, json.dumps(text).encode())
+
+    def test_p7_issued_input_seal_drift_stops(self):
+        def drift_on_issued(value):
+            if value.get("artifact_role") == "issued":
+                return "f" * 64
+            return derivation_input_sha256(value)
+
+        with patch.object(promote, "derivation_input_sha256", side_effect=drift_on_issued):
+            with self.assertRaisesRegex(ValueError, "STOP: derivation input seal"):
+                promote.promote(self.candidate_raw, self.issuance_raw)
 
 
 if __name__ == "__main__":

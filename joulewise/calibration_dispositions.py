@@ -80,6 +80,9 @@ def parse_disposition_registry(raw: bytes, *, expected_sha256: str) -> dict[str,
         ):
             raise DispositionRegistryError("invalid or duplicate row")
         result[content_id] = decision_id
+    # Equality with the code table is required only for the production pin. A
+    # caller that supplies another digest (tests do) gets a parse without that
+    # check and must not treat the result as authority.
     if expected_sha256 == DISPOSITION_REGISTRY_SHA256:
         expected = {
             content_id: decision_id

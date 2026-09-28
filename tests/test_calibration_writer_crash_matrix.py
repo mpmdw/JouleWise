@@ -273,8 +273,9 @@ class CalibrationWriterCrashMatrixTests(unittest.TestCase):
         # This private synthetic repository must authenticate the estimator
         # bytes it actually copied, which are this checkout's bytes rather than
         # the issued artifact's recorded ones; this fixture re-key is test
-        # custody, never an issuance or live claim. This historical fixture
-        # explicitly binds the retained anchor-v3 R7 generation.
+        # custody, never an issuance or live claim. It copies the LIVE issued
+        # generation (the anchor-v3 science reissue) because that is what the
+        # production loader resolves by default.
         acceptance_path = (
             cls.repo
             / "configs"
@@ -322,12 +323,6 @@ class CalibrationWriterCrashMatrixTests(unittest.TestCase):
         ).hexdigest()
         bracketing_path = cls.repo / "joulewise" / "calibration_bracketing.py"
         bracketing_source = bracketing_path.read_text(encoding="utf-8")
-        # This historical crash matrix uses the R7 epoch; bind its private
-        # checkout to that retained issuance explicitly.
-        bracketing_source = bracketing_source.replace(
-            "DEFAULT_ACCEPTANCE_BOUND_PATH = EPOCH_25G83_R1_ACCEPTANCE_BOUND_PATH",
-            "DEFAULT_ACCEPTANCE_BOUND_PATH = ANCHOR_V3_R7_ACCEPTANCE_BOUND_PATH",
-        )
         if bracketing_source.count(old_acceptance_sha256) != 1:
             raise AssertionError("issued acceptance digest pin shape changed")
         bracketing_path.write_text(

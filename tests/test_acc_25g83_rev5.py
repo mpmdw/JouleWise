@@ -129,6 +129,7 @@ class RevisionFiveTests(unittest.TestCase):
                     "--head-pin", str(fixture["pin"]), "--repo-root", str(fixture["root"]),
                     "--preregistration", str(prereg),
                     "--preregistration-sha256", hashlib.sha256(prereg.read_bytes()).hexdigest(),
+                    "--predecessor-acceptance", str(R7),
                     "--registration-session-id", "derivation-night-1",
                     "--registration-session-id", "derivation-night-2",
                     "--d125-ruling", "D-125 25G83/v3 Revision 5",
@@ -138,10 +139,9 @@ class RevisionFiveTests(unittest.TestCase):
             with patch.object(issuer, "_registered_dispositions", return_value={}), patch.object(
                 issuer, "_derivation_frame_cadence", return_value={"median_s": .132, "max_s": .144}
             ):
-                self.assertEqual(args(sealed).predecessor_acceptance, R7)
-                candidate = issuer._prepare_candidate(args(sealed))
                 with self.assertRaisesRegex(issuer.PrepareRefusal, "pins are malformed"):
                     issuer._prepare_candidate(args(malformed))
+                candidate = issuer._prepare_candidate(args(sealed))
             self.assertEqual(candidate["registered_generation_row"]["registration_revision"], 5)
             self.assertEqual(candidate["registered_generation_row"]["predecessor_acceptance_id"],
                              bracketing.ANCHOR_V3_R7_ACCEPTANCE_ID)

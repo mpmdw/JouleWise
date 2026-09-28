@@ -52,11 +52,6 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 _ACCEPTANCE_RELATIVE = (
     "configs/calibration/calibration_acceptance_d079_v2_n17_r7.json"
 )
-# The repository-root preflight refusals are judged against the ACTIVE
-# acceptance, which D-138 moved to the 25G83 generation.
-_ACTIVE_ACCEPTANCE_RELATIVE = (
-    "configs/calibration/calibration_acceptance_d079_v2_n12_25g83_r1.json"
-)
 # The stall deadline the sampler-ack driver allows a freshly spawned fixture
 # sampler child.  Liveness backstop only; no assertion depends on its value.
 _SAMPLER_ACK_TIMEOUT_S = 30.0
@@ -80,13 +75,6 @@ def _acceptance_epoch() -> dict:
     return dict(artifact["identity_epoch"])
 
 
-def _active_acceptance_epoch() -> dict:
-    artifact = json.loads(
-        (REPO_ROOT / _ACTIVE_ACCEPTANCE_RELATIVE).read_text(encoding="utf-8")
-    )
-    return dict(artifact["identity_epoch"])
-
-
 class DerivationOnlyPreflightRefusalTests(unittest.TestCase):
     """Refusals that fire before any hardware, sampler, or ledger work."""
 
@@ -95,7 +83,7 @@ class DerivationOnlyPreflightRefusalTests(unittest.TestCase):
         cls.script = REPO_ROOT / "scripts" / "validate_powermetrics_fiducial.py"
         cls.tmp = tempfile.TemporaryDirectory()
         cls.root = Path(cls.tmp.name)
-        cls.epoch = _active_acceptance_epoch()
+        cls.epoch = _acceptance_epoch()
 
     @classmethod
     def tearDownClass(cls) -> None:
@@ -157,7 +145,7 @@ class DerivationOnlyPreflightRefusalTests(unittest.TestCase):
         self.assertEqual(
             payload["context"]["acceptance_id"],
             json.loads(
-                (REPO_ROOT / _ACTIVE_ACCEPTANCE_RELATIVE).read_text(encoding="utf-8")
+                (REPO_ROOT / _ACCEPTANCE_RELATIVE).read_text(encoding="utf-8")
             )["acceptance_id"],
         )
 
@@ -182,7 +170,7 @@ class DerivationOnlyPreflightRefusalTests(unittest.TestCase):
             "--output-root",
             str(self.root / "standalone" / "instrument_validation"),
             "--identity-epoch-json-for-test",
-            str(self._identity("standalone", os_build="25F84")),
+            str(self._identity("standalone", os_build="25G83")),
         )
         payload = self._refusal(completed)
         self.assertEqual(
@@ -338,20 +326,10 @@ class DerivationOnlyLiveCaptureTests(unittest.TestCase):
             REPO_ROOT / _ACCEPTANCE_RELATIVE,
             cls.repo / _ACCEPTANCE_RELATIVE,
         )
-        bracketing_path = cls.repo / "joulewise" / "calibration_bracketing.py"
-        bracketing_source = bracketing_path.read_text(encoding="utf-8")
-        moved_default = "DEFAULT_ACCEPTANCE_BOUND_PATH = EPOCH_25G83_R1_ACCEPTANCE_BOUND_PATH"
-        if bracketing_source.count(moved_default) != 1:
-            raise AssertionError("active acceptance default shape changed")
-        bracketing_path.write_text(
-            bracketing_source.replace(
-                moved_default,
-                "DEFAULT_ACCEPTANCE_BOUND_PATH = ANCHOR_V3_R7_ACCEPTANCE_BOUND_PATH",
-            ),
-            encoding="utf-8",
-        )
         cls._pristine_acceptance = (cls.repo / _ACCEPTANCE_RELATIVE).read_bytes()
-        cls._pristine_bracketing = bracketing_path.read_bytes()
+        cls._pristine_bracketing = (
+            cls.repo / "joulewise" / "calibration_bracketing.py"
+        ).read_bytes()
         cls.fake_sampler = _install_fake_writer_dependencies(cls.repo)
         init_git_fixture(cls.repo, "-q")
         for key, value in (

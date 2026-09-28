@@ -149,7 +149,7 @@ EPOCH_25G83_R1_ACCEPTANCE_BOUND_PATH = (
 )
 EPOCH_25G83_R1_ACCEPTANCE_ID = "d079_calibration_acceptance_v2_n12_25g83_r1"
 EPOCH_25G83_R1_ACCEPTANCE_BOUND_SHA256 = (
-    "80c2303611268b6b94626e001fb5df0e783719744145c9f6a31d4061ddee351b"
+    "d6de84b854a4c5d7f6d73dfde2ae0f14d71a483355c7289a36882e0dfcccd5ea"
 )
 # Multi-generation registry.  Authentication is indexed by the artifact's own
 # `acceptance_id`, so a caller cannot present one generation's bytes under
@@ -210,8 +210,17 @@ ISSUED_ACCEPTANCE_REGISTRY: dict[str, dict[str, Any]] = {
 # epoch merely by existing on disk; this registry must pin its issued bytes.
 EPOCH_CONTINUATION_REGISTRY: dict[str, dict[str, Any]] = {}
 # The LIVE surface: what production loads when no artifact is named.
-ACTIVE_ACCEPTANCE_ID = EPOCH_25G83_R1_ACCEPTANCE_ID
-DEFAULT_ACCEPTANCE_BOUND_PATH = EPOCH_25G83_R1_ACCEPTANCE_BOUND_PATH
+ACTIVE_ACCEPTANCE_ID = ANCHOR_V3_R7_ACCEPTANCE_ID
+DEFAULT_ACCEPTANCE_BOUND_PATH = ANCHOR_V3_R7_ACCEPTANCE_BOUND_PATH
+# Issued calibrations that may not yet back any claim. Each entry names its
+# hold. The loader hides a held file from every caller that does not state a
+# non-claim purpose, and a held file can never be the default.
+CLAIM_HELD_ACCEPTANCE_IDS: dict[str, str] = {
+    EPOCH_25G83_R1_ACCEPTANCE_ID:
+    "H1-25G83-CAP-CADENCE (SCI-25G83-CANDIDATE-01-A1 §5.3)",
+}
+if ACTIVE_ACCEPTANCE_ID in CLAIM_HELD_ACCEPTANCE_IDS:
+    raise RuntimeError("the default calibration acceptance is claim-held")
 # Authenticates the retained ``schema_fixture_unissued`` genesis bytes; this is
 # not the digest of ``DEFAULT_ACCEPTANCE_BOUND_PATH``.
 GENESIS_FIXTURE_ACCEPTANCE_SHA256 = (
@@ -1078,6 +1087,8 @@ def _valid_acceptance_bound(value: Any) -> bool:
             if excluded_content_id is None:
                 return False
             excluded_content_ids.add(excluded_content_id)
+        # Implied by the completeness equality; kept so that a change to that
+        # equality cannot silently admit a disposed exclusion.
         if disposed & excluded_content_ids:
             return False
         if (
@@ -1185,8 +1196,14 @@ def _valid_acceptance_bound(value: Any) -> bool:
 
 def load_calibration_acceptance_bound(
     path: Path = DEFAULT_ACCEPTANCE_BOUND_PATH,
+    *,
+    allow_claim_held: bool = False,
 ) -> dict[str, Any] | None:
-    """Load the file-pinned D-102 acceptance artifact fail-closed."""
+    """Load the file-pinned D-102 acceptance artifact fail-closed.
+
+    A claim-held generation is returned only to a caller that states a
+    non-claim purpose with ``allow_claim_held=True``.
+    """
 
     try:
         raw = read_authentication_input(
@@ -1194,7 +1211,14 @@ def load_calibration_acceptance_bound(
         )
     except OSError:
         return None
-    return _acceptance_bound_from_authenticated_bytes(raw)
+    artifact = _acceptance_bound_from_authenticated_bytes(raw)
+    if (
+        artifact is not None
+        and artifact.get("acceptance_id") in CLAIM_HELD_ACCEPTANCE_IDS
+        and not allow_claim_held
+    ):
+        return None
+    return artifact
 
 
 def _acceptance_bound_from_authenticated_bytes(
@@ -2076,13 +2100,22 @@ def evaluate_calibration_bracket(
         else _authenticated_explicit_acceptance_bound(acceptance_bound)
     )
     if artifact is None:
+        requested_id = (
+            ACTIVE_ACCEPTANCE_ID if using_default_bound
+            else acceptance_bound.get("acceptance_id")
+            if isinstance(acceptance_bound, Mapping) else None
+        )
+        hold_name = CLAIM_HELD_ACCEPTANCE_IDS.get(requested_id)
+        freshness = {"status": "stale", "reason": (
+            "acceptance_artifact_claim_held" if hold_name
+            else "acceptance_artifact_missing_or_invalid"
+        )}
+        if hold_name:
+            freshness["hold"] = hold_name
         result["acceptance"] = {
             "schema_version": ACCEPTANCE_EVALUATION_SCHEMA,
             "artifact": None,
-            "freshness": {
-                "status": "stale",
-                "reason": "acceptance_artifact_missing_or_invalid",
-            },
+            "freshness": freshness,
         }
         return result, ("calibration_acceptance_bound_stale",)
     artifact_role = artifact["artifact_role"]
@@ -2455,9 +2488,17 @@ def evaluate_calibration_bracket(
         for observation in new_observations
     ):
         return result, ("calibration_observation_unclassifiable",)
+    # Rows set aside by a decision this artifact declares are diagnostics that
+    # can never be members, so they do not count toward corpus doubling.
+    disposed_ids = disposed_content_ids_for(
+        artifact["prior_observation_set"].get("disposing_decision_ids")
+    )
+    if disposed_ids is None:
+        return result, ("calibration_acceptance_bound_stale",)
     valid_counts_by_epoch = [
         sum(
             observation.disposition == "valid"
+            and observation.content_id not in disposed_ids
             and dict(observation.identity_epoch) == dict(epoch)
             for observation in distinct_observations.values()
         )
