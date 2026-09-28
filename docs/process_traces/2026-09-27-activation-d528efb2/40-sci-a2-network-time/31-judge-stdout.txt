@@ -1,0 +1,41 @@
+ADDENDUM: SCI-25G83-CANDIDATE-01-A3 ISSUED — PROCEED
+
+The ruling is written to `/Users/edr/code/JouleWise-wt-bk-77b1bee2/docs/process_traces/2026-09-27-activation-d528efb2/40-sci-a2-network-time/31-addendum-ruling.md` (sha256 `365caf0a8f6362fd…`, untracked). The session ran 18:34–18:49 PDT. I changed no other file and left no process running.
+
+## Rulings
+
+| Finding | Ruling | Basis |
+|---|---|---|
+| **B1** (BLOCKER): H6 can pass on a deleted log | **Adopted**; H6 replaced | A query over 09-26 00:00–03:00 exits 0 with the header only. Deletion is strictly oldest-first: 38 lines the refuter saw earlier are gone, including applied corrections, and every later line is still present. |
+| **S1**: preserve the log | Already cured | All pulls are tracked at `81e4055f`, and the full pull's digest matches. |
+| **S2**: D8 overstates the rule | Adopted, reworded | The method's text does not exempt calibration captures. The hazard was on record from 09-22 (A267) and the control was installed in only one chain. |
+| **S3**: the 505/554 µs sensitivity and the OFF nights | Adopted, with one correction | The figures reproduce. They are the upper end, because the frozen rate differs between OFF windows. The direction is strict. |
+| **S4**: W1-d01's loss mechanism | Adopted | Two anchor readings sit 27.8 and 47.8 µs off the line; the 250 µs allowance was not what refused it. |
+| **S5**: zero tolerance with a 300 s lead | Adopted in part | Lead shortened to 180 s. One marker still excludes, because with network time OFF any marker means the control failed. |
+| **S6**: provenance and pooling | Adopted | The network-time block is required in the issued file. ON-state and OFF-state members combine only under a rule registered beforehand. |
+| Nits N1–N5 | Adopted | — |
+
+## What changed in the final texts
+
+- **H6** now runs one query per window, reaching back 3,600 s before the first capture. It calls a capture clean only if the output holds a `[com.apple.timed:data]` line older than the first capture's 180 s lead. The evidence chain's approved per-capture query is untouched.
+- **D8** is replaced in full, **D3**'s addition is amended, and **D1** stands as A2 wrote it.
+- **H5** and **H7** are replaced; H7 now carries the pooling rule.
+- The ruling gives the content of the `network_time_provenance` block, and A3 joins the issued file's list of rulings.
+
+## Limits
+
+- The new H6 is a design with named tests; nothing implements it yet. Its two premises were executed on one machine over one day.
+- My OFF-night standing rates (3.58 and 2.87 ppm) differ from the refuter's (3.62 and 2.90) by about 1 %, which I did not resolve. D8 says "about 3.6 and 2.9".
+- The constant-drift statistics and the W1-d01 best-line fit are re-runs of the refuter's scripts, not independent code.
+- I accepted the per-member clock table, the 12 digests, the +8.9 µs counterfactual and A2's arm-path map on two agreeing seats without re-running them.
+
+## What needs Ed
+
+Nothing for the issuance. Before the next window that takes calibration captures, H5, H6 and the pooling rule must enter the registration by amendment, because it names only one exclusion mechanism today. If sealed-registration amendments need Ed's sign-off, that one is Ed's; I did not read the project's rule on this.
+
+## Summary
+
+1. Proceed with issuance: the dissent changes no number, only the disclosure wording and the conditions on future windows, and the refuter agrees the verdict stands.
+2. The refuter's blocker was right: the Mac deletes its clock log after about 29 hours and a query over a deleted period looks exactly like a clean one, so the new check must first find a log line from before the window.
+3. Before the next window, network time must be set OFF, the new log check installed and the rule added to the registration; the record now says the hazard was known five days earlier and fixed in only one of the two capture programs.
+rc=0

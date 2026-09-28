@@ -1,0 +1,838 @@
+{
+ "w1-d01": {
+  "status": "invalid",
+  "reasons": [
+   "clock_anchor_unresolved",
+   "not_all_pulses_detected",
+   "pulse_count_below_protocol:0!=59"
+  ],
+  "start": "00:40:08.308",
+  "end": "00:43:26.973",
+  "n": 129,
+  "span_s": 198.66619493754115,
+  "moved_us": -1257.0,
+  "pred_us": -785.9585829749476,
+  "excess_us": -471.0414170250524,
+  "maxdev_us": 345.3672943275268,
+  "inside": [],
+  "before300": [
+   [
+    "00:39:52.030",
+    "adjtime",
+    -1262.4,
+    16.3
+   ]
+  ],
+  "last_ms": [
+   "00:39:52.030",
+   -1262.4,
+   16.3
+  ],
+  "freq_ppm": -3.9561767578125,
+  "freq_changes_inside": [],
+  "span_code_us": 0.0,
+  "eff_bound_us": 0.0,
+  "allowance": null,
+  "B": null,
+  "clock_status": "unknown"
+ },
+ "w1-d02": {
+  "status": "invalid",
+  "reasons": [
+   "detection_nonconvergent",
+   "not_all_pulses_detected",
+   "pulse_count_below_protocol:0!=59"
+  ],
+  "start": "00:50:08.374",
+  "end": "00:53:26.933",
+  "n": 129,
+  "span_s": 198.56015118747018,
+  "moved_us": -785.0,
+  "pred_us": -785.5390551556056,
+  "excess_us": 0.539055155605638,
+  "maxdev_us": 2.4843310606144087,
+  "inside": [],
+  "before300": [],
+  "last_ms": [
+   "00:39:52.030",
+   -1262.4,
+   616.3
+  ],
+  "freq_ppm": -3.9561767578125,
+  "freq_changes_inside": [],
+  "span_code_us": 787.7349853515625,
+  "eff_bound_us": 1400.5166882228837,
+  "allowance": 0.00025,
+  "B": null,
+  "clock_status": "bounded"
+ },
+ "w1-d03": {
+  "status": "invalid",
+  "reasons": [
+   "detection_nonconvergent",
+   "not_all_pulses_detected",
+   "pulse_count_below_protocol:0!=59"
+  ],
+  "start": "01:00:08.749",
+  "end": "01:03:26.980",
+  "n": 129,
+  "span_s": 198.23142512503546,
+  "moved_us": -784.25,
+  "pred_us": -784.2385567477141,
+  "excess_us": -0.011443252285857852,
+  "maxdev_us": 3.2445832151756804,
+  "inside": [],
+  "before300": [],
+  "last_ms": [
+   "00:39:52.030",
+   -1262.4,
+   1216.7
+  ],
+  "freq_ppm": -3.9561767578125,
+  "freq_changes_inside": [],
+  "span_code_us": 785.82763671875,
+  "eff_bound_us": 1355.4639289183547,
+  "allowance": 0.00025,
+  "B": null,
+  "clock_status": "bounded"
+ },
+ "w1-d04": {
+  "status": "valid",
+  "reasons": [],
+  "start": "01:10:07.903",
+  "end": "01:13:25.972",
+  "n": 129,
+  "span_s": 198.0700569790788,
+  "moved_us": -1486.25,
+  "pred_us": -1486.1540676606514,
+  "excess_us": -0.09593233934856471,
+  "maxdev_us": 3.0925111781160695,
+  "inside": [],
+  "before300": [
+   [
+    "01:07:12.527",
+    "adjtime",
+    -12579.2,
+    175.4
+   ]
+  ],
+  "last_ms": [
+   "01:07:12.527",
+   -12579.2,
+   175.4
+  ],
+  "freq_ppm": -7.503173828125,
+  "freq_changes_inside": [],
+  "span_code_us": 1487.73193359375,
+  "eff_bound_us": 2872.783321740028,
+  "allowance": 0.00025,
+  "B": 0.03610911339816257,
+  "clock_status": "bounded"
+ },
+ "w1-d05": {
+  "status": "valid",
+  "reasons": [],
+  "start": "01:20:08.525",
+  "end": "01:23:26.999",
+  "n": 129,
+  "span_s": 198.47581520793028,
+  "moved_us": -1489.25,
+  "pred_us": -1489.1985421839163,
+  "excess_us": -0.051457816083711805,
+  "maxdev_us": 2.930447175016525,
+  "inside": [],
+  "before300": [],
+  "last_ms": [
+   "01:07:12.527",
+   -12579.2,
+   776.0
+  ],
+  "freq_ppm": -7.503173828125,
+  "freq_changes_inside": [],
+  "span_code_us": 1490.3545379638672,
+  "eff_bound_us": 2022.5257116374785,
+  "allowance": 0.00025,
+  "B": 0.0247300413330314,
+  "clock_status": "bounded"
+ },
+ "w1-d06": {
+  "status": "valid",
+  "reasons": [],
+  "start": "01:30:08.218",
+  "end": "01:33:26.870",
+  "n": 129,
+  "span_s": 198.6538934999844,
+  "moved_us": -1490.75,
+  "pred_us": -1490.534694564214,
+  "excess_us": -0.21530543578592187,
+  "maxdev_us": 2.8983221049235226,
+  "inside": [],
+  "before300": [],
+  "last_ms": [
+   "01:07:12.527",
+   -12579.2,
+   1375.7
+  ],
+  "freq_ppm": -7.503173828125,
+  "freq_changes_inside": [],
+  "span_code_us": 1492.2618865966797,
+  "eff_bound_us": 2276.5328866713025,
+  "allowance": 0.00025,
+  "B": 0.02626709931386116,
+  "clock_status": "bounded"
+ },
+ "w1-d07": {
+  "status": "valid",
+  "reasons": [],
+  "start": "01:40:08.893",
+  "end": "01:43:26.934",
+  "n": 129,
+  "span_s": 198.04184029158205,
+  "moved_us": -1486.5,
+  "pred_us": -1485.9363091921764,
+  "excess_us": -0.5636908078236047,
+  "maxdev_us": 3.275869114457805,
+  "inside": [],
+  "before300": [],
+  "last_ms": [
+   "01:07:12.527",
+   -12579.2,
+   1976.4
+  ],
+  "freq_ppm": -7.503143310546875,
+  "freq_changes_inside": [],
+  "span_code_us": 1487.73193359375,
+  "eff_bound_us": 2298.0676847338714,
+  "allowance": 0.00025,
+  "B": 0.02930916584265009,
+  "clock_status": "bounded"
+ },
+ "w1-d08": {
+  "status": "invalid",
+  "reasons": [
+   "clock_anchor_unresolved",
+   "not_all_pulses_detected",
+   "pulse_count_below_protocol:0!=59"
+  ],
+  "start": "01:50:09.245",
+  "end": "01:53:27.955",
+  "n": 129,
+  "span_s": 198.65792379155755,
+  "moved_us": 51964.0,
+  "pred_us": -1490.558871983756,
+  "excess_us": 53454.558871983754,
+  "maxdev_us": 37205.76685757874,
+  "inside": [
+   [
+    "01:53:09.223",
+    "settimeofday",
+    53198.0
+   ],
+   [
+    "01:53:09.225",
+    "adjtime",
+    41.6
+   ]
+  ],
+  "before300": [],
+  "last_ms": [
+   "01:07:12.527",
+   -12579.2,
+   2576.7
+  ],
+  "freq_ppm": -7.503143310546875,
+  "freq_changes_inside": [
+   [
+    "01:53:09.225",
+    6.2431182861328125
+   ]
+  ],
+  "span_code_us": 51981.210708618164,
+  "eff_bound_us": 0.0,
+  "allowance": null,
+  "B": null,
+  "clock_status": "unknown"
+ },
+ "w1-d09": {
+  "status": "invalid",
+  "reasons": [
+   "detection_nonconvergent",
+   "not_all_pulses_detected",
+   "pulse_count_below_protocol:0!=59"
+  ],
+  "start": "02:00:10.004",
+  "end": "02:03:27.915",
+  "n": 129,
+  "span_s": 197.90983914548997,
+  "moved_us": 1234.75,
+  "pred_us": 1235.574535774812,
+  "excess_us": -0.8245357748119204,
+  "maxdev_us": 2.5894228055830126,
+  "inside": [],
+  "before300": [],
+  "last_ms": [
+   "01:53:09.223",
+   53198.0,
+   420.8
+  ],
+  "freq_ppm": 6.2431182861328125,
+  "freq_changes_inside": [],
+  "span_code_us": 1237.8692626953125,
+  "eff_bound_us": 2663.955175428033,
+  "allowance": 0.00025,
+  "B": null,
+  "clock_status": "bounded"
+ },
+ "w1-d10": {
+  "status": "valid",
+  "reasons": [],
+  "start": "02:10:10.356",
+  "end": "02:13:28.934",
+  "n": 129,
+  "span_s": 198.57668831245974,
+  "moved_us": 1240.75,
+  "pred_us": 1239.7377540032132,
+  "excess_us": 1.0122459967867599,
+  "maxdev_us": 2.8009356260576723,
+  "inside": [],
+  "before300": [],
+  "last_ms": [
+   "01:53:09.223",
+   53198.0,
+   1021.1
+  ],
+  "freq_ppm": 6.2431182861328125,
+  "freq_changes_inside": [],
+  "span_code_us": 1245.9754943847656,
+  "eff_bound_us": 2310.093480342382,
+  "allowance": 0.00025,
+  "B": 0.024377093921897318,
+  "clock_status": "bounded"
+ },
+ "w1-d11": {
+  "status": "invalid",
+  "reasons": [
+   "clock_anchor_unresolved",
+   "not_all_pulses_detected",
+   "pulse_count_below_protocol:0!=59"
+  ],
+  "start": "02:20:09.750",
+  "end": "02:23:28.018",
+  "n": 129,
+  "span_s": 198.2624902499374,
+  "moved_us": 5830.75,
+  "pred_us": 1237.7761783336127,
+  "excess_us": 4592.973821666387,
+  "maxdev_us": 1786.7213242015473,
+  "inside": [
+   [
+    "02:20:42.025",
+    "adjtime",
+    4385.9
+   ]
+  ],
+  "before300": [],
+  "last_ms": [
+   "01:53:09.223",
+   53198.0,
+   1620.5
+  ],
+  "freq_ppm": 6.2431182861328125,
+  "freq_changes_inside": [
+   [
+    "02:20:42.025",
+    7.500518798828125
+   ]
+  ],
+  "span_code_us": 5832.672119140625,
+  "eff_bound_us": 0.0,
+  "allowance": null,
+  "B": null,
+  "clock_status": "unknown"
+ },
+ "w1-d12": {
+  "status": "valid",
+  "reasons": [],
+  "start": "02:30:10.336",
+  "end": "02:33:28.909",
+  "n": 129,
+  "span_s": 198.57068464602344,
+  "moved_us": 1529.5,
+  "pred_us": 1489.38315308367,
+  "excess_us": 40.116846916329905,
+  "maxdev_us": 17.57440030357506,
+  "inside": [
+   [
+    "02:30:38.153",
+    "adjtime",
+    23.5
+   ],
+   [
+    "02:30:38.203",
+    "adjtime",
+    34.0
+   ],
+   [
+    "02:30:38.260",
+    "adjtime",
+    39.8
+   ]
+  ],
+  "before300": [],
+  "last_ms": [
+   "02:20:42.025",
+   4385.9,
+   568.3
+  ],
+  "freq_ppm": 7.500518798828125,
+  "freq_changes_inside": [
+   [
+    "02:30:38.153",
+    7.500518798828125
+   ],
+   [
+    "02:30:38.203",
+    7.500518798828125
+   ],
+   [
+    "02:30:38.259",
+    7.500518798828125
+   ]
+  ],
+  "span_code_us": 1536.8461608886719,
+  "eff_bound_us": 2322.0347490442887,
+  "allowance": 0.00025,
+  "B": 0.02649306058292668,
+  "clock_status": "bounded"
+ },
+ "w2-d01": {
+  "status": "valid",
+  "reasons": [],
+  "start": "09:10:10.968",
+  "end": "09:13:28.942",
+  "n": 129,
+  "span_s": 197.9756984995911,
+  "moved_us": -1171.5,
+  "pred_us": -1160.0229210043103,
+  "excess_us": -11.47707899568968,
+  "maxdev_us": 8.223052938634623,
+  "inside": [],
+  "before300": [
+   [
+    "09:09:48.902",
+    "adjtime",
+    -7.5,
+    22.1
+   ],
+   [
+    "09:09:48.943",
+    "adjtime",
+    -7.9,
+    22.0
+   ],
+   [
+    "09:09:49.013",
+    "adjtime",
+    -45.3,
+    22.0
+   ]
+  ],
+  "last_ms": [
+   "09:00:03.253",
+   10687.6,
+   607.7
+  ],
+  "freq_ppm": -5.8594207763671875,
+  "freq_changes_inside": [],
+  "span_code_us": 1173.0194091796875,
+  "eff_bound_us": 2545.741949795106,
+  "allowance": 0.00025,
+  "B": 0.03203051441482298,
+  "clock_status": "bounded"
+ },
+ "w2-d02": {
+  "status": "invalid",
+  "reasons": [
+   "detection_nonconvergent",
+   "not_all_pulses_detected",
+   "pulse_count_below_protocol:0!=59"
+  ],
+  "start": "09:20:11.622",
+  "end": "09:23:29.944",
+  "n": 129,
+  "span_s": 198.32338299998082,
+  "moved_us": -1162.0,
+  "pred_us": -1162.0601507895146,
+  "excess_us": 0.060150789514636926,
+  "maxdev_us": 3.3271489006733646,
+  "inside": [],
+  "before300": [],
+  "last_ms": [
+   "09:00:03.253",
+   10687.6,
+   1208.4
+  ],
+  "freq_ppm": -5.8594207763671875,
+  "freq_changes_inside": [],
+  "span_code_us": 1164.1979217529297,
+  "eff_bound_us": 2152.429506905287,
+  "allowance": 0.00025,
+  "B": null,
+  "clock_status": "bounded"
+ },
+ "w2-d03": {
+  "status": "valid",
+  "reasons": [],
+  "start": "09:30:11.357",
+  "end": "09:33:29.924",
+  "n": 129,
+  "span_s": 198.56744647899177,
+  "moved_us": -1162.5,
+  "pred_us": -1163.490221409184,
+  "excess_us": 0.9902214091839596,
+  "maxdev_us": 3.6564642169760546,
+  "inside": [],
+  "before300": [],
+  "last_ms": [
+   "09:00:03.253",
+   10687.6,
+   1808.1
+  ],
+  "freq_ppm": -5.8594207763671875,
+  "freq_changes_inside": [],
+  "span_code_us": 1164.9131774902344,
+  "eff_bound_us": 1790.772349346916,
+  "allowance": 0.00025,
+  "B": 0.027705716700833778,
+  "clock_status": "bounded"
+ },
+ "w2-d04": {
+  "status": "valid",
+  "reasons": [],
+  "start": "09:40:11.092",
+  "end": "09:43:30.022",
+  "n": 129,
+  "span_s": 198.9283476874698,
+  "moved_us": 1233.5,
+  "pred_us": 1233.1153515311962,
+  "excess_us": 0.384648468803789,
+  "maxdev_us": 2.688265246474316,
+  "inside": [],
+  "before300": [
+   [
+    "09:36:33.097",
+    "adjtime",
+    65.0,
+    218.0
+   ],
+   [
+    "09:36:33.143",
+    "adjtime",
+    61.8,
+    217.9
+   ],
+   [
+    "09:36:33.198",
+    "adjtime",
+    61.4,
+    217.9
+   ]
+  ],
+  "last_ms": [
+   "09:34:47.572",
+   44193.5,
+   323.5
+  ],
+  "freq_ppm": 6.19879150390625,
+  "freq_changes_inside": [],
+  "span_code_us": 1239.5381927490234,
+  "eff_bound_us": 2424.474216452232,
+  "allowance": 0.00025,
+  "B": 0.03245902112381383,
+  "clock_status": "bounded"
+ },
+ "w2-d05": {
+  "status": "valid",
+  "reasons": [],
+  "start": "09:50:11.128",
+  "end": "09:53:29.964",
+  "n": 129,
+  "span_s": 198.83455568761565,
+  "moved_us": 1233.5,
+  "pred_us": 1232.533954479366,
+  "excess_us": 0.9660455206339975,
+  "maxdev_us": 3.1614099756288567,
+  "inside": [],
+  "before300": [
+   [
+    "09:46:36.837",
+    "adjtime",
+    -22.4,
+    214.3
+   ],
+   [
+    "09:46:36.883",
+    "adjtime",
+    -14.5,
+    214.2
+   ],
+   [
+    "09:46:36.942",
+    "adjtime",
+    -21.1,
+    214.2
+   ]
+  ],
+  "last_ms": [
+   "09:34:47.572",
+   44193.5,
+   923.6
+  ],
+  "freq_ppm": 6.19879150390625,
+  "freq_changes_inside": [],
+  "span_code_us": 1234.7698211669922,
+  "eff_bound_us": 1736.9595857527213,
+  "allowance": 0.00025,
+  "B": 0.028014781845868017,
+  "clock_status": "bounded"
+ },
+ "w2-d06": {
+  "status": "invalid",
+  "reasons": [
+   "detection_nonconvergent",
+   "not_all_pulses_detected",
+   "pulse_count_below_protocol:0!=59"
+  ],
+  "start": "10:00:11.219",
+  "end": "10:03:29.870",
+  "n": 129,
+  "span_s": 198.65035402099602,
+  "moved_us": 1231.0,
+  "pred_us": 1231.392126753319,
+  "excess_us": -0.3921267533189621,
+  "maxdev_us": 3.0116557305268543,
+  "inside": [],
+  "before300": [],
+  "last_ms": [
+   "09:34:47.572",
+   44193.5,
+   1523.6
+  ],
+  "freq_ppm": 6.19879150390625,
+  "freq_changes_inside": [],
+  "span_code_us": 1233.5777282714844,
+  "eff_bound_us": 3067.541170861996,
+  "allowance": 0.00025,
+  "B": null,
+  "clock_status": "bounded"
+ },
+ "w2-d07": {
+  "status": "invalid",
+  "reasons": [
+   "clock_anchor_unresolved",
+   "not_all_pulses_detected",
+   "pulse_count_below_protocol:0!=59"
+  ],
+  "start": "10:10:11.443",
+  "end": "10:13:30.006",
+  "n": 129,
+  "span_s": 198.5985707915388,
+  "moved_us": -35880.75,
+  "pred_us": 1231.0711333105146,
+  "excess_us": -37111.821133310514,
+  "maxdev_us": 13487.164755678037,
+  "inside": [
+   [
+    "10:11:29.297",
+    "adjtime",
+    -35939.1
+   ]
+  ],
+  "before300": [],
+  "last_ms": [
+   "09:34:47.572",
+   44193.5,
+   2123.9
+  ],
+  "freq_ppm": 6.19879150390625,
+  "freq_changes_inside": [
+   [
+    "10:11:29.297",
+    -3.7287750244140625
+   ]
+  ],
+  "span_code_us": 35897.254943847656,
+  "eff_bound_us": 0.0,
+  "allowance": null,
+  "B": null,
+  "clock_status": "unknown"
+ },
+ "w2-d08": {
+  "status": "invalid",
+  "reasons": [
+   "detection_nonconvergent",
+   "not_all_pulses_detected",
+   "pulse_count_below_protocol:0!=59"
+  ],
+  "start": "10:20:12.080",
+  "end": "10:23:30.968",
+  "n": 129,
+  "span_s": 198.88922858342994,
+  "moved_us": -741.5,
+  "pred_us": -741.613188166873,
+  "excess_us": 0.1131881668729875,
+  "maxdev_us": 2.354907581793441,
+  "inside": [],
+  "before300": [],
+  "last_ms": [
+   "10:11:29.297",
+   -35939.1,
+   522.8
+  ],
+  "freq_ppm": -3.7287750244140625,
+  "freq_changes_inside": [],
+  "span_code_us": 742.9122924804688,
+  "eff_bound_us": 1102.2792713943682,
+  "allowance": 0.00025,
+  "B": null,
+  "clock_status": "bounded"
+ },
+ "w2-d09": {
+  "status": "valid",
+  "reasons": [],
+  "start": "10:30:11.763",
+  "end": "10:33:29.991",
+  "n": 129,
+  "span_s": 198.2291821038816,
+  "moved_us": -739.0,
+  "pred_us": -739.1520233389808,
+  "excess_us": 0.15202333898082543,
+  "maxdev_us": 2.9644448714344094,
+  "inside": [],
+  "before300": [],
+  "last_ms": [
+   "10:11:29.297",
+   -35939.1,
+   1122.5
+  ],
+  "freq_ppm": -3.7287750244140625,
+  "freq_changes_inside": [],
+  "span_code_us": 741.0049438476562,
+  "eff_bound_us": 1873.3978659913703,
+  "allowance": 0.00025,
+  "B": 0.02952480316956647,
+  "clock_status": "bounded"
+ },
+ "w2-d10": {
+  "status": "valid",
+  "reasons": [],
+  "start": "10:40:11.616",
+  "end": "10:43:29.926",
+  "n": 129,
+  "span_s": 198.31102812546305,
+  "moved_us": -739.0,
+  "pred_us": -739.4511567678074,
+  "excess_us": 0.45115676780744707,
+  "maxdev_us": 2.7057539988788903,
+  "inside": [],
+  "before300": [
+   [
+    "10:37:58.321",
+    "adjtime",
+    -4.2,
+    133.3
+   ],
+   [
+    "10:37:58.378",
+    "adjtime",
+    17.5,
+    133.2
+   ],
+   [
+    "10:37:58.444",
+    "adjtime",
+    27.4,
+    133.2
+   ]
+  ],
+  "last_ms": [
+   "10:11:29.297",
+   -35939.1,
+   1722.3
+  ],
+  "freq_ppm": -3.7287445068359375,
+  "freq_changes_inside": [],
+  "span_code_us": 741.0049438476562,
+  "eff_bound_us": 1545.121268604151,
+  "allowance": 0.00025,
+  "B": 0.03807857930294817,
+  "clock_status": "bounded"
+ },
+ "w2-d11": {
+  "status": "invalid",
+  "reasons": [
+   "detection_nonconvergent",
+   "not_all_pulses_detected",
+   "pulse_count_below_protocol:0!=59"
+  ],
+  "start": "10:50:11.902",
+  "end": "10:53:29.952",
+  "n": 129,
+  "span_s": 198.05017210403457,
+  "moved_us": -738.0,
+  "pred_us": -738.4784913108309,
+  "excess_us": 0.47849131083091834,
+  "maxdev_us": 4.408990417102359,
+  "inside": [],
+  "before300": [],
+  "last_ms": [
+   "10:11:29.297",
+   -35939.1,
+   2322.6
+  ],
+  "freq_ppm": -3.7287445068359375,
+  "freq_changes_inside": [],
+  "span_code_us": 739.5744323730469,
+  "eff_bound_us": 1134.7534286432399,
+  "allowance": 0.00025,
+  "B": null,
+  "clock_status": "bounded"
+ },
+ "w2-d12": {
+  "status": "invalid",
+  "reasons": [
+   "detection_nonconvergent",
+   "not_all_pulses_detected",
+   "pulse_count_below_protocol:0!=59"
+  ],
+  "start": "11:00:12.671",
+  "end": "11:03:30.992",
+  "n": 129,
+  "span_s": 198.3203120835824,
+  "moved_us": 1204.5,
+  "pred_us": 1205.3460459434198,
+  "excess_us": -0.8460459434197674,
+  "maxdev_us": 2.9762046025567486,
+  "inside": [],
+  "before300": [
+   [
+    "10:56:16.264",
+    "adjtime",
+    38817.8,
+    236.4
+   ]
+  ],
+  "last_ms": [
+   "10:56:16.264",
+   38817.8,
+   236.4
+  ],
+  "freq_ppm": 6.0777740478515625,
+  "freq_changes_inside": [],
+  "span_code_us": 1207.113265991211,
+  "eff_bound_us": 1539.4074746260796,
+  "allowance": 0.00025,
+  "B": null,
+  "clock_status": "bounded"
+ }
+}
