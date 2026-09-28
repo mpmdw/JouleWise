@@ -1517,9 +1517,14 @@ class AnalysisIntegrationTests(unittest.TestCase):
         return artifact, roots
 
     def test_b4_salvage_floor_binder_refuses_without_explicit_dispatch_pair(self):
-        with tempfile.TemporaryDirectory() as tmp:
+        with exemption_parity(self.id()), tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             artifact, roots = self._salvage_floor_dispatch_fixture(root)
+            # The floor members get bundle form under each root: the class
+            # corpus's produced (controller-written, bound, paired) bundles.
+            for floor_root in roots.values():
+                for member in sorted(self.runs_root.glob("cell-1-*")):
+                    shutil.copytree(member, floor_root / member.name, symlinks=True)
             binding = bind_floor_artifact_evidence(
                 artifact,
                 root / "floor.json",
@@ -1530,9 +1535,14 @@ class AnalysisIntegrationTests(unittest.TestCase):
         self.assertFalse(binding.bound_cell_ids)
 
     def test_b4_salvage_floor_binder_rejects_mismatched_dispatch_pair(self):
-        with tempfile.TemporaryDirectory() as tmp:
+        with exemption_parity(self.id()), tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             artifact, roots = self._salvage_floor_dispatch_fixture(root)
+            # The floor members get bundle form under each root: the class
+            # corpus's produced (controller-written, bound, paired) bundles.
+            for floor_root in roots.values():
+                for member in sorted(self.runs_root.glob("cell-1-*")):
+                    shutil.copytree(member, floor_root / member.name, symlinks=True)
             binding = bind_floor_artifact_evidence(
                 artifact,
                 root / "floor.json",
