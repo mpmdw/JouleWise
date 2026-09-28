@@ -285,3 +285,11 @@ Launched by the watchdog at 17:36:30 PDT (attempt 124) after a usage back-off; t
     - step 4, the independent replay (Astra, item (vi) as restated in §5.3): running;
     - step 7, fresh refuters: hold → Astra xhigh, contract → Opus. **Any route means STOP for good.**
 99. **D-138 `b953f4b0`, step 4, the independent replay (Astra, fresh): REPLAY: PASS** ([report](50-d138-issuance-seat/replay3/report.md)). Items (i)–(v) and the restated (vi-a/b/c) pass; the repository, custody files and real ledger are unchanged. **The first fresh hold refuter (Astra xhigh) stopped INCOMPLETE** ([report](50-d138-issuance-seat/refuters/hold-refuter-3-astra-incomplete.md); a null-final-message recovery, "HOLD: OPEN — 0 routes", execution coverage not done). It named unexecuted candidates, notably calling `run_campaign(args)` directly and bypassing `main()`, where S3 sits. **A complete hold refutation was relaunched** (Astra xhigh, 2 h, candidates first).
+100. **RULING: NTP-ENFORCE-DESIGN-01 ISSUED** (cold Fable, [21](71-ntp-design/21-coldgate-fable-ruling.md), seats Sol and Opus in `71-ntp-design/`).
+    - **The driver owns H5 and H6.** `scripts/run_night.py` sets OFF, saves the receipt, queries after the last capture and restores ON. A leftover marker lets the next run or the dead-man job finish after a crash.
+    - Every consumer recomputes the verdict from the saved bytes, and a capture with no record is refused.
+    - **The query window is amended beyond A3:** it starts 3,600 s before OFF, and the witness must be older than OFF. The owner may overrule. H5–H7 go into the successor registration Ed already signs.
+    - Four seats: N1 (module and driver) now; N2 (the calibration consumer) after D-138 merges; N3 (the idle consumer) beside N2; N4 (packs) after a scout.
+    - Night kinds not in `NETWORK_TIME_ENFORCED_KINDS` refuse to launch, and the set is empty at N1's merge. **So no night launches between N1's merge and the first consumer's merge.**
+    - New closing condition NT-C1 for the cap's closing ruling.
+    - **Seat N1 launched** (Sol 6.0 xhigh, 3 h; branch `feat/2026-09-28-ntp-n1`, worktree `JouleWise-wt-ntp-n1-d528efb2`; [brief](71-ntp-design/30-n1-brief.txt)).
