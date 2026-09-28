@@ -1,0 +1,1735 @@
+{
+ "schema": "joulewise-paper-number-inventory/v0-prototype",
+ "status": "PROTOTYPE, report-only, non-gating, not wired into CI. A proposal artefact for the magistrate's design decision (record 2026-09-27-activation-d528efb2 items 156-157), not an adopted gate.",
+ "skeleton": "docs/paper/draft-v2-skeleton.md",
+ "skeleton_sha256_at_authoring": "56a008525beef55e6d922b458a37b8cd8f8a0cbe30ab5cee1650c48d9c1d76a5",
+ "registry": "docs/paper/results-fill-registry.md",
+ "sources": {
+  "XD": {
+   "path": "docs/paper/round7/excursion-decomposition.json",
+   "sha256": "21618026dfc677165b2a1acd511ff0d3130bd3837fa344c9ca9fbac95d7e058b",
+   "pin": {
+    "kind": "registry_line",
+    "pattern": [
+     "^- XD = docs/paper/round7/excursion-decomposition\\.json, sha256 ([0-9a-f]{64}) ",
+     "^\\| DX-001 — XD artifact identity; no draft site \\| ([0-9a-f]{64}) \\|"
+    ]
+   }
+  },
+  "WEX": {
+   "path": "docs/paper/figures/worked-examples.json",
+   "sha256": "6fba73a8741224ad67f9aacd6de116213d057843fc5bc733752ebc80b6b6bc16",
+   "pin": {
+    "kind": "registry_line",
+    "pattern": "^WEX = `docs/paper/figures/worked-examples\\.json`, SHA-256 `([0-9a-f]{64})`"
+   }
+  },
+  "S17": {
+   "path": "configs/calibration/calibration_acceptance_d079_v2_n17_r3.json",
+   "sha256": "73f022633e7bc22e9e129617f3f2ad8797293adaff3b53923dc41f75da2ae917",
+   "pin": {
+    "kind": "python_constant",
+    "file": "joulewise/calibration_bracketing.py",
+    "name": "ANCHOR_V3_ACCEPTANCE_BOUND_SHA256"
+   }
+  }
+ },
+ "groups": [],
+ "spelled_out_expected_total": 307,
+ "unbound_results_provenance": {
+  "census": "docs/process_traces/2026-09-27-activation-d528efb2/62-paper-number-census/results_bearing_unpoliced.tsv",
+  "census_sha256": "a9cfc5b2f80b8dcc7924fb73d12ed12fd96a910a06ebda1dd9f7db136b611e66",
+  "rule": "every census row whose literal no group slot claims; ctx is the census context string; offset is the literal's offset in ctx"
+ },
+ "unbound_results": [
+  {
+   "line": 27,
+   "literal": "50",
+   "ctx": "50 phases: 33 crossed three reco",
+   "offset": 0,
+   "census_status": "UNPOLICED-REGISTERED",
+   "occurrence": 0,
+   "occurrences": 2
+  },
+  {
+   "line": 157,
+   "literal": "17",
+   "ctx": "derives two constants from its retained 17-capture corpus. Student-\\(t\\)",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 157,
+   "literal": "17",
+   "ctx": "cause the spread is estimated from only 17 captures—sets the maximum per",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 157,
+   "literal": "17",
+   "ctx": " permitted pre/post difference. For \\(n=17\\) per-capture bounds, the sam",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 157,
+   "literal": "2.460856",
+   "ctx": "(n-1\\) formula of Section 3) is \\(s_b = 2.460856\\) ms (retained SD operand, \\(",
+   "offset": 40,
+   "census_status": "UNPOLICED-UNREGISTERED"
+  },
+  {
+   "line": 157,
+   "literal": "2.460856207694636",
+   "ctx": "= 2.460856\\) ms (retained SD operand, \\(2.460856207694636\\) ms) and \\(t_{0.995,16}\\) is",
+   "offset": 40,
+   "census_status": "UNPOLICED-UNREGISTERED"
+  },
+  {
+   "line": 157,
+   "literal": "10",
+   "ctx": "times s_b\\times\\sqrt{2}\\) records about 10 ms (retained as 10.1648347577",
+   "offset": 40,
+   "census_status": "UNPOLICED-UNREGISTERED"
+  },
+  {
+   "line": 157,
+   "literal": "10.164834757777545",
+   "ctx": "t{2}\\) records about 10 ms (retained as 10.164834757777545 ms for byte-exact replay), pr",
+   "offset": 40,
+   "census_status": "UNPOLICED-UNREGISTERED"
+  },
+  {
+   "line": 157,
+   "literal": "10.164835",
+   "ctx": "or byte-exact replay), printed as the \\(10.164835\\)-ms maximum permitted pre/po",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 157,
+   "literal": "9.723589288793850",
+   "ctx": "wance** starts from the corpus range, \\(9.723589288793850\\) ms, rounded to the nearest ",
+   "offset": 40,
+   "census_status": "UNPOLICED-UNREGISTERED"
+  },
+  {
+   "line": 157,
+   "literal": "9.724",
+   "ctx": "ven digit (`ROUND_HALF_EVEN`), giving \\(9.724\\) ms; Appendix A.3.8 prints t",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 157,
+   "literal": "17",
+   "ctx": "\\(9.724\\) ms; Appendix A.3.8 prints the 17 bounds from the retained cali",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 157,
+   "literal": "9.724",
+   "ctx": "ax(|B_{\\mathrm{post}}-B_{\\mathrm{pre}}|,9.724\\ \\mathrm{ms})\\), added once. ",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 157,
+   "literal": "10.164835",
+   "ctx": "t-window bound differ by 4 ms, pass the 10.164835-ms limit, and give \\(b=29+\\ma",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 157,
+   "literal": "9.724",
+   "ctx": "164835-ms limit, and give \\(b=29+\\max(4,9.724)=38.724\\) ms. If the post-win",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 537,
+   "literal": "0.0000010000000000000002",
+   "ctx": "in every row is about 1 µs (retained as 0.0000010000000000000002 s for byte-exact replay).",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 571,
+   "literal": "59",
+   "ctx": "l’s switch-on and switch-off times. The 59",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 572,
+   "literal": "49",
+   "ctx": "onset lags are all positive; 49 of 59 offset lags are negativ",
+   "offset": 29,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 572,
+   "literal": "59",
+   "ctx": "onset lags are all positive; 49 of 59 offset lags are negative, eig",
+   "offset": 35,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 573,
+   "literal": "+13.0",
+   "ctx": "and two zero. Their medians are +13.0 ms and",
+   "offset": 32,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 574,
+   "literal": "−5.5",
+   "ctx": "−5.5 ms. These are 59 onset and 59",
+   "offset": 0,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 574,
+   "literal": "59",
+   "ctx": "−5.5 ms. These are 59 onset and 59 offset values (1",
+   "offset": 19,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 574,
+   "literal": "59",
+   "ctx": "−5.5 ms. These are 59 onset and 59 offset values (118 edges) fro",
+   "offset": 32,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 574,
+   "literal": "118",
+   "ctx": "hese are 59 onset and 59 offset values (118 edges) from one capture,",
+   "offset": 40,
+   "census_status": "UNPOLICED-UNREGISTERED"
+  },
+  {
+   "line": 584,
+   "literal": "59",
+   "ctx": "ks mark the scale. Blue circles are the 59 fitted onset lags; orange squ",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 585,
+   "literal": "59",
+   "ctx": "the 59 fitted offset lags. The solid",
+   "offset": 4,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 587,
+   "literal": "+13.0",
+   "ctx": "+13.0 ms and −5.5 ms; they describe",
+   "offset": 0,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 587,
+   "literal": "−5.5",
+   "ctx": "+13.0 ms and −5.5 ms; they describe this sample",
+   "offset": 13,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 590,
+   "literal": "+27",
+   "ctx": "The leader at pulse index 9 marks its +27-ms best-fit onset. The accept",
+   "offset": 38,
+   "census_status": "UNPOLICED-UNREGISTERED"
+  },
+  {
+   "line": 592,
+   "literal": "28.93293456111476",
+   "ctx": "region, 28.93293456111476 ms on that onset, equals the ",
+   "offset": 8,
+   "census_status": "UNPOLICED-UNREGISTERED"
+  },
+  {
+   "line": 593,
+   "literal": "1.1349971959968978",
+   "ctx": "excursion. Adding the 1.1349971959968978-ms clock-anchor allowance giv",
+   "offset": 22,
+   "census_status": "UNPOLICED-UNREGISTERED"
+  },
+  {
+   "line": 594,
+   "literal": "30.067931757111657",
+   "ctx": "30.067931757111657 ms. The endpoint displacement",
+   "offset": 0,
+   "census_status": "UNPOLICED-UNREGISTERED"
+  },
+  {
+   "line": 603,
+   "literal": "59",
+   "ctx": "59/59 and 49/59 counts. The same",
+   "offset": 0,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 603,
+   "literal": "59",
+   "ctx": "59/59 and 49/59 counts. The same JS",
+   "offset": 3,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 603,
+   "literal": "49",
+   "ctx": "59/59 and 49/59 counts. The same JSON's `p",
+   "offset": 10,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 603,
+   "literal": "59",
+   "ctx": "59/59 and 49/59 counts. The same JSON's `per_",
+   "offset": 13,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 643,
+   "literal": "50",
+   "ctx": "prompt-processing phases in 50 bundles: 10 from `runs_window",
+   "offset": 28,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 643,
+   "literal": "10",
+   "ctx": "prompt-processing phases in 50 bundles: 10 from `runs_window_a10_2026072",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 644,
+   "literal": "40",
+   "ctx": "and 40 from `runs_window_c_20260726`",
+   "offset": 4,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 645,
+   "literal": "37",
+   "ctx": "population, 37 of 50 phases overlapped two s",
+   "offset": 12,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 645,
+   "literal": "50",
+   "ctx": "population, 37 of 50 phases overlapped two samplin",
+   "offset": 18,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 646,
+   "literal": "13",
+   "ctx": "13 of 50 overlapped three. Accor",
+   "offset": 0,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 646,
+   "literal": "50",
+   "ctx": "13 of 50 overlapped three. Accordingly",
+   "offset": 6,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 647,
+   "literal": "13",
+   "ctx": "mum (`not_resolvable_sample_count`) and 13 passed",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 667,
+   "literal": "37",
+   "ctx": "ecords failed the three-record minimum: 37 of the 50 1.5B",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 667,
+   "literal": "50",
+   "ctx": "led the three-record minimum: 37 of the 50 1.5B",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 668,
+   "literal": "50",
+   "ctx": "phases and none of the 50 7B phases, which overlapped t",
+   "offset": 23,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 690,
+   "literal": "0.121034145",
+   "ctx": "lasted 0.121034145 s, rendered as 0.121 s for th",
+   "offset": 7,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 690,
+   "literal": "0.121",
+   "ctx": "lasted 0.121034145 s, rendered as 0.121 s for the comparison below. O",
+   "offset": 34,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 691,
+   "literal": "406",
+   "ctx": "run's retained power trace, the 406 sampling records had a record",
+   "offset": 32,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 697,
+   "literal": "405",
+   "ctx": "ument’s physical resolution. Across the 405 differences",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 703,
+   "literal": "100",
+   "ctx": "dg071-dg075-statistics.md) reports that 100 of 405 boundaries",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 703,
+   "literal": "405",
+   "ctx": "g075-statistics.md) reports that 100 of 405 boundaries",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 704,
+   "literal": "0.0000004",
+   "ctx": "e a nonzero gap and that the largest is 0.0000004 s. The enforced endpoint",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 708,
+   "literal": "0.121",
+   "ctx": "The 0.121-s phase is only barely longer",
+   "offset": 4,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 718,
+   "literal": "37",
+   "ctx": "record width; 37 phases had only two overlaps.",
+   "offset": 14,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 720,
+   "literal": "1784978933",
+   "ctx": "relative to epoch 1784978933 s, the phase [0.267684,0.3887",
+   "offset": 18,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 720,
+   "literal": "0.267684",
+   "ctx": "ative to epoch 1784978933 s, the phase [0.267684,0.3887181]",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 720,
+   "literal": "0.3887181",
+   "ctx": "epoch 1784978933 s, the phase [0.267684,0.3887181]",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 721,
+   "literal": "0.1945653",
+   "ctx": "overlaps records [0.1945653,0.3210495] and [0.3210495,0.4",
+   "offset": 18,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 721,
+   "literal": "0.3210495",
+   "ctx": "overlaps records [0.1945653,0.3210495] and [0.3210495,0.434475] for",
+   "offset": 28,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 721,
+   "literal": "0.3210495",
+   "ctx": "laps records [0.1945653,0.3210495] and [0.3210495,0.434475] for",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 721,
+   "literal": "0.434475",
+   "ctx": "ds [0.1945653,0.3210495] and [0.3210495,0.434475] for",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 722,
+   "literal": "0.0533655",
+   "ctx": "0.0533655 and 0.0676686 s: this phase f",
+   "offset": 0,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 722,
+   "literal": "0.0676686",
+   "ctx": "0.0533655 and 0.0676686 s: this phase fails the three",
+   "offset": 14,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 724,
+   "literal": "1784981672",
+   "ctx": "a three-overlap case: relative to epoch 1784981672 s, its phase is",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 725,
+   "literal": "0.671041",
+   "ctx": "[0.671041,0.807431]. The middle record ",
+   "offset": 1,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 725,
+   "literal": "0.807431",
+   "ctx": "[0.671041,0.807431]. The middle record lies whol",
+   "offset": 10,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 730,
+   "literal": "364",
+   "ctx": "| r03 | 364 | 0.0726435 | 0.1945655 | 0 |",
+   "offset": 8,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 730,
+   "literal": "0.0726435",
+   "ctx": "| r03 | 364 | 0.0726435 | 0.1945655 | 0 |",
+   "offset": 14,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 730,
+   "literal": "0.1945655",
+   "ctx": "| r03 | 364 | 0.0726435 | 0.1945655 | 0 |",
+   "offset": 26,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 730,
+   "literal": "0",
+   "ctx": "| r03 | 364 | 0.0726435 | 0.1945655 | 0 |",
+   "offset": 38,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 731,
+   "literal": "365",
+   "ctx": "| r03 | 365 | 0.1945653 | 0.3210495 | 0.0",
+   "offset": 8,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 731,
+   "literal": "0.1945653",
+   "ctx": "| r03 | 365 | 0.1945653 | 0.3210495 | 0.0533655 |",
+   "offset": 14,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 731,
+   "literal": "0.3210495",
+   "ctx": "| r03 | 365 | 0.1945653 | 0.3210495 | 0.0533655 |",
+   "offset": 26,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 731,
+   "literal": "0.0533655",
+   "ctx": "| r03 | 365 | 0.1945653 | 0.3210495 | 0.0533655 |",
+   "offset": 38,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 732,
+   "literal": "366",
+   "ctx": "| r03 | 366 | 0.3210495 | 0.434475 | 0.06",
+   "offset": 8,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 732,
+   "literal": "0.3210495",
+   "ctx": "| r03 | 366 | 0.3210495 | 0.434475 | 0.0676686 |",
+   "offset": 14,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 732,
+   "literal": "0.434475",
+   "ctx": "| r03 | 366 | 0.3210495 | 0.434475 | 0.0676686 |",
+   "offset": 26,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 732,
+   "literal": "0.0676686",
+   "ctx": "| r03 | 366 | 0.3210495 | 0.434475 | 0.0676686 |",
+   "offset": 37,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 733,
+   "literal": "367",
+   "ctx": "| r03 | 367 | 0.434475 | 0.5463145 | 0 |",
+   "offset": 8,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 733,
+   "literal": "0.434475",
+   "ctx": "| r03 | 367 | 0.434475 | 0.5463145 | 0 |",
+   "offset": 14,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 733,
+   "literal": "0.5463145",
+   "ctx": "| r03 | 367 | 0.434475 | 0.5463145 | 0 |",
+   "offset": 25,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 733,
+   "literal": "0",
+   "ctx": "| r03 | 367 | 0.434475 | 0.5463145 | 0 |",
+   "offset": 37,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 734,
+   "literal": "360",
+   "ctx": "| r08 | 360 | 0.4395304 | 0.5621388 | 0 |",
+   "offset": 8,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 734,
+   "literal": "0.4395304",
+   "ctx": "| r08 | 360 | 0.4395304 | 0.5621388 | 0 |",
+   "offset": 14,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 734,
+   "literal": "0.5621388",
+   "ctx": "| r08 | 360 | 0.4395304 | 0.5621388 | 0 |",
+   "offset": 26,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 734,
+   "literal": "0",
+   "ctx": "| r08 | 360 | 0.4395304 | 0.5621388 | 0 |",
+   "offset": 38,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 735,
+   "literal": "361",
+   "ctx": "| r08 | 361 | 0.5621388 | 0.6849675 | 0.0",
+   "offset": 8,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 735,
+   "literal": "0.5621388",
+   "ctx": "| r08 | 361 | 0.5621388 | 0.6849675 | 0.0139265 |",
+   "offset": 14,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 735,
+   "literal": "0.6849675",
+   "ctx": "| r08 | 361 | 0.5621388 | 0.6849675 | 0.0139265 |",
+   "offset": 26,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 735,
+   "literal": "0.0139265",
+   "ctx": "| r08 | 361 | 0.5621388 | 0.6849675 | 0.0139265 |",
+   "offset": 38,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 736,
+   "literal": "362",
+   "ctx": "| r08 | 362 | 0.6849675 | 0.799845 | 0.11",
+   "offset": 8,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 736,
+   "literal": "0.6849675",
+   "ctx": "| r08 | 362 | 0.6849675 | 0.799845 | 0.1148775 |",
+   "offset": 14,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 736,
+   "literal": "0.799845",
+   "ctx": "| r08 | 362 | 0.6849675 | 0.799845 | 0.1148775 |",
+   "offset": 26,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 736,
+   "literal": "0.1148775",
+   "ctx": "| r08 | 362 | 0.6849675 | 0.799845 | 0.1148775 |",
+   "offset": 37,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 737,
+   "literal": "363",
+   "ctx": "| r08 | 363 | 0.799845 | 0.9133315 | 0.00",
+   "offset": 8,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 737,
+   "literal": "0.799845",
+   "ctx": "| r08 | 363 | 0.799845 | 0.9133315 | 0.007586 |",
+   "offset": 14,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 737,
+   "literal": "0.9133315",
+   "ctx": "| r08 | 363 | 0.799845 | 0.9133315 | 0.007586 |",
+   "offset": 25,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 737,
+   "literal": "0.007586",
+   "ctx": "| r08 | 363 | 0.799845 | 0.9133315 | 0.007586 |",
+   "offset": 37,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 738,
+   "literal": "364",
+   "ctx": "| r08 | 364 | 0.9133313 | 1.0261726 | 0 |",
+   "offset": 8,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 738,
+   "literal": "0.9133313",
+   "ctx": "| r08 | 364 | 0.9133313 | 1.0261726 | 0 |",
+   "offset": 14,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 738,
+   "literal": "1.0261726",
+   "ctx": "| r08 | 364 | 0.9133313 | 1.0261726 | 0 |",
+   "offset": 26,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 738,
+   "literal": "0",
+   "ctx": "| r08 | 364 | 0.9133313 | 1.0261726 | 0 |",
+   "offset": 38,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 748,
+   "literal": "37",
+   "ctx": " map: registry DG-067/068/069 binds the 37/50/13 counts to",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 748,
+   "literal": "50",
+   "ctx": "p: registry DG-067/068/069 binds the 37/50/13 counts to",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 748,
+   "literal": "13",
+   "ctx": "registry DG-067/068/069 binds the 37/50/13 counts to",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 792,
+   "literal": "30",
+   "ctx": "about 30 ms (retained as 0.03006793175",
+   "offset": 6,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 792,
+   "literal": "0.030067931757111657",
+   "ctx": "about 30 ms (retained as 0.030067931757111657 s for byte-exact replay). <!-",
+   "offset": 25,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 827,
+   "literal": "59",
+   "ctx": "The 59 of 59 onsets late and 49 of 5",
+   "offset": 4,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 827,
+   "literal": "59",
+   "ctx": "The 59 of 59 onsets late and 49 of 59 offs",
+   "offset": 10,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 827,
+   "literal": "49",
+   "ctx": "The 59 of 59 onsets late and 49 of 59 offsets early form a on",
+   "offset": 29,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 827,
+   "literal": "59",
+   "ctx": "The 59 of 59 onsets late and 49 of 59 offsets early form a one-dire",
+   "offset": 35,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 892,
+   "literal": "50",
+   "ctx": "50 members of `runs_window_7bflo",
+   "offset": 0,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 915,
+   "literal": "50",
+   "ctx": "(7B) passed in all 50 phases: 33 crossed three reco",
+   "offset": 19,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 996,
+   "literal": "111",
+   "ctx": "22T145535-e941c821`, record 0): *e_0* = 111 242 541 ns; the parsed channe",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 996,
+   "literal": "242",
+   "ctx": "45535-e941c821`, record 0): *e_0* = 111 242 541 ns; the parsed channel po",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 996,
+   "literal": "541",
+   "ctx": "5-e941c821`, record 0): *e_0* = 111 242 541 ns; the parsed channel powers",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 996,
+   "literal": "0.9169149999999999",
+   "ctx": "2 541 ns; the parsed channel powers are 0.9169149999999999 W + 0.00898937 W + 0.0 W, giv",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 996,
+   "literal": "0.00898937",
+   "ctx": "annel powers are 0.9169149999999999 W + 0.00898937 W + 0.0 W, giving *p_0* = 0.9",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 996,
+   "literal": "0.0",
+   "ctx": "e 0.9169149999999999 W + 0.00898937 W + 0.0 W, giving *p_0* = 0.925904369",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 996,
+   "literal": "0.9259043699999999",
+   "ctx": " + 0.00898937 W + 0.0 W, giving *p_0* = 0.9259043699999999 W; counters 102 + 1 + 0 mJ gi",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 996,
+   "literal": "102",
+   "ctx": " *p_0* = 0.9259043699999999 W; counters 102 + 1 + 0 mJ give *E_0* = 0.103",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 996,
+   "literal": "1",
+   "ctx": " = 0.9259043699999999 W; counters 102 + 1 + 0 mJ give *E_0* = 0.103 J; ",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 996,
+   "literal": "0",
+   "ctx": ".9259043699999999 W; counters 102 + 1 + 0 mJ give *E_0* = 0.103 J; and ",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 996,
+   "literal": "0.103",
+   "ctx": "W; counters 102 + 1 + 0 mJ give *E_0* = 0.103 J; and *p_0* · 0.111242541 s ",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 996,
+   "literal": "0.111242541",
+   "ctx": " 0 mJ give *E_0* = 0.103 J; and *p_0* · 0.111242541 s = 0.10299995484180416 J, wh",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 996,
+   "literal": "0.10299995484180416",
+   "ctx": " = 0.103 J; and *p_0* · 0.111242541 s = 0.10299995484180416 J, which differs from *E_0* b",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 996,
+   "literal": "4.5",
+   "ctx": "84180416 J, which differs from *E_0* by 4.5·10⁻⁸ J, far inside the tolera",
+   "offset": 40,
+   "census_status": "UNPOLICED-UNREGISTERED"
+  },
+  {
+   "line": 1004,
+   "literal": "0.0000010000000000000002",
+   "ctx": "very stamp reports a wall resolution of 0.0000010000000000000002 s (the closest binary64 value",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 1004,
+   "literal": "4",
+   "ctx": " to 1 µs) and a monotonic resolution of 4.166666666666666e-8 s, so *r* ",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 1004,
+   "literal": "0.0000010000000000000002",
+   "ctx": "ion of 4.166666666666666e-8 s, so *r* = 0.0000010000000000000002 s for every stamp.",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 1057,
+   "literal": "1784298599.0949996",
+   "ctx": " largest raw upper offset *w* − *mb* is 1784298599.0949996 s (at S_stop) and the smalles",
+   "offset": 40,
+   "census_status": "UNPOLICED-UNREGISTERED"
+  },
+  {
+   "line": 1057,
+   "literal": "1784298599.0945535",
+   "ctx": "smallest raw lower offset *w* − *ma* is 1784298599.0945535 s (at S_pre); the difference ",
+   "offset": 40,
+   "census_status": "UNPOLICED-UNREGISTERED"
+  },
+  {
+   "line": 1057,
+   "literal": "0.00044608116149902344",
+   "ctx": " s (at S_pre); the difference is span = 0.00044608116149902344 s (446 µs), the second of the",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 1057,
+   "literal": "446",
+   "ctx": "nce is span = 0.00044608116149902344 s (446 µs), the second of the four t",
+   "offset": 40,
+   "census_status": "UNPOLICED-UNREGISTERED"
+  },
+  {
+   "line": 1083,
+   "literal": "111",
+   "ctx": "ly that amount. Worked example: *e_0* = 111 242 541 ns and *r_pre* = 0.00",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 1083,
+   "literal": "242",
+   "ctx": "hat amount. Worked example: *e_0* = 111 242 541 ns and *r_pre* = 0.000001",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 1083,
+   "literal": "541",
+   "ctx": "amount. Worked example: *e_0* = 111 242 541 ns and *r_pre* = 0.0000010000",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 1083,
+   "literal": "0.0000010000000000000002",
+   "ctx": "e: *e_0* = 111 242 541 ns and *r_pre* = 0.0000010000000000000002 s ≈ 1000 ns, so *k_pre* = 111",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 1083,
+   "literal": "111",
+   "ctx": "0000000000002 s ≈ 1000 ns, so *k_pre* = 111 241 541 ns; and *k_parse* = (",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 1083,
+   "literal": "241",
+   "ctx": "000000002 s ≈ 1000 ns, so *k_pre* = 111 241 541 ns; and *k_parse* = (4587",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 1083,
+   "literal": "541",
+   "ctx": "00002 s ≈ 1000 ns, so *k_pre* = 111 241 541 ns; and *k_parse* = (458737.5",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 1083,
+   "literal": "458737.509840291",
+   "ctx": "pre* = 111 241 541 ns; and *k_parse* = (458737.509840291 − 458736.4081875)·10⁹ + 1000 ",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 1083,
+   "literal": "458736.4081875",
+   "ctx": "ns; and *k_parse* = (458737.509840291 − 458736.4081875)·10⁹ + 1000 ns = 1.1016537909",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 1083,
+   "literal": "1.1016537909669094",
+   "ctx": "40291 − 458736.4081875)·10⁹ + 1000 ns = 1.1016537909669094·10⁹ ns, i.e. record 0 ended b",
+   "offset": 40,
+   "census_status": "UNPOLICED-UNREGISTERED"
+  },
+  {
+   "line": 1083,
+   "literal": "0.111",
+   "ctx": "094·10⁹ ns, i.e. record 0 ended between 0.111 s and 1.102 s after *m_0*. If",
+   "offset": 40,
+   "census_status": "UNPOLICED-UNREGISTERED"
+  },
+  {
+   "line": 1083,
+   "literal": "1.102",
+   "ctx": "i.e. record 0 ended between 0.111 s and 1.102 s after *m_0*. If *k_pre* > *",
+   "offset": 40,
+   "census_status": "UNPOLICED-UNREGISTERED"
+  },
+  {
+   "line": 1091,
+   "literal": "1665",
+   "ctx": "ausal rows (two native rows per record; 1665 records give 3330 rows on the",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 1091,
+   "literal": "3330",
+   "ctx": "tive rows per record; 1665 records give 3330 rows on the example capture).",
+   "offset": 40,
+   "census_status": "UNPOLICED-UNREGISTERED"
+  },
+  {
+   "line": 1100,
+   "literal": "0.05247795879145338",
+   "ctx": "exceeded`. On the example capture it is 0.05247795879145338 s.",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 1118,
+   "literal": "1784757336.5519202",
+   "ctx": ", wall origin the Unix epoch): *A_lo* = 1784757336.5519202 s and *A_hi* = 1784757336.553",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 1118,
+   "literal": "1784757336.5532944",
+   "ctx": "lo* = 1784757336.5519202 s and *A_hi* = 1784757336.5532944 s after outward rounding, poi",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 1118,
+   "literal": "1784757336.5526073",
+   "ctx": "er outward rounding, point anchor *A* = 1784757336.5526073 s, and the four terms are",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 1120,
+   "literal": "0.0006869160344978743",
+   "ctx": "    H      = 0.0006869160344978743",
+   "offset": 13,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 1121,
+   "literal": "0.00044608116149902344",
+   "ctx": "    span   = 0.00044608116149902344",
+   "offset": 13,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 1122,
+   "literal": "0.0000010000000000000002",
+   "ctx": "    r_max  = 0.0000010000000000000002",
+   "offset": 13,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 1123,
+   "literal": "0.000001",
+   "ctx": "    pad    = 0.000001",
+   "offset": 13,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 1124,
+   "literal": "0.0011349971959968977402",
+   "ctx": "    sum    = 0.0011349971959968977402  →  roundup  →  0.00113499719",
+   "offset": 13,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 1124,
+   "literal": "0.0011349971959968978",
+   "ctx": ".0011349971959968977402  →  roundup  →  0.0011349971959968978 s",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 1126,
+   "literal": "0.0011349971959968978",
+   "ctx": "so *B_anchor* = 0.0011349971959968978 s (1.135 ms). The sum is exac",
+   "offset": 16,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 1126,
+   "literal": "1.135",
+   "ctx": "o *B_anchor* = 0.0011349971959968978 s (1.135 ms). The sum is exact in deci",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 1126,
+   "literal": "0.0006871223449707031",
+   "ctx": "lo*)/2 from the printed endpoints gives 0.0006871223449707031 s, 0.0000002063105 s above th",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 1126,
+   "literal": "0.0000002063105",
+   "ctx": "ndpoints gives 0.0006871223449707031 s, 0.0000002063105 s above the exact *H* — less ",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 1126,
+   "literal": "1.78",
+   "ctx": "binary64 spacing at the epoch magnitude 1.78·10⁹ s, which is 2.4·10⁻⁷ s — ",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 1126,
+   "literal": "2.4",
+   "ctx": "he epoch magnitude 1.78·10⁹ s, which is 2.4·10⁻⁷ s — because each endpoin",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 1126,
+   "literal": "1.0000022202281935",
+   "ctx": "printed endpoints. Fitted rate window: [1.0000022202281935, 1.0000022646196323], i.e. th",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 1126,
+   "literal": "1.0000022646196323",
+   "ctx": "itted rate window: [1.0000022202281935, 1.0000022646196323], i.e. the wall clock ran abo",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 1126,
+   "literal": "2.2",
+   "ctx": "6196323], i.e. the wall clock ran about 2.2 ppm fast against the monotoni",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 1126,
+   "literal": "197",
+   "ctx": "st against the monotonic clock over the 197-second capture; 197 rollovers",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 1126,
+   "literal": "197",
+   "ctx": "onic clock over the 197-second capture; 197 rollovers and 1665 records we",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 1126,
+   "literal": "1665",
+   "ctx": "e 197-second capture; 197 rollovers and 1665 records were checked.",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 1152,
+   "literal": "0.0",
+   "ctx": "mple capture the idle GPU channel reads 0.0 W throughout the baseline set",
+   "offset": 40,
+   "census_status": "UNPOLICED-UNREGISTERED"
+  },
+  {
+   "line": 1152,
+   "literal": "0.0",
+   "ctx": "aseline set, so \\(P_{\\mathrm{rest}}\\) = 0.0 W, the MAD is 0, and the floo",
+   "offset": 40,
+   "census_status": "UNPOLICED-UNREGISTERED"
+  },
+  {
+   "line": 1152,
+   "literal": "0",
+   "ctx": "P_{\\mathrm{rest}}\\) = 0.0 W, the MAD is 0, and the floor engages: σ = 0",
+   "offset": 40,
+   "census_status": "UNPOLICED-UNREGISTERED"
+  },
+  {
+   "line": 1152,
+   "literal": "0.001",
+   "ctx": "he MAD is 0, and the floor engages: σ = 0.001 W.",
+   "offset": 40,
+   "census_status": "UNPOLICED-UNREGISTERED"
+  },
+  {
+   "line": 1160,
+   "literal": "40.6667",
+   "ctx": "Example (pulse 0 of the capture): *a* = 40.6667 W, SNR = 40 666.7. All pulse-",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 1160,
+   "literal": "40",
+   "ctx": "of the capture): *a* = 40.6667 W, SNR = 40 666.7. All pulse-0 fit values",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 1160,
+   "literal": "666.7",
+   "ctx": "the capture): *a* = 40.6667 W, SNR = 40 666.7. All pulse-0 fit values quote",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 1160,
+   "literal": "1784757336.5528765",
+   "ctx": "rocessed, under an earlier anchor point 1784757336.5528765 s, about 0.27 ms later than t",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 1160,
+   "literal": "0.27",
+   "ctx": "nchor point 1784757336.5528765 s, about 0.27 ms later than the current poi",
+   "offset": 40,
+   "census_status": "UNPOLICED-UNREGISTERED"
+  },
+  {
+   "line": 1214,
+   "literal": "2",
+   "ctx": "e: pulse 0's on-stamp has *ma* − *mb* = 2.500019036233425e-7 s as execu",
+   "offset": 40,
+   "census_status": "UNPOLICED-UNREGISTERED"
+  },
+  {
+   "line": 1214,
+   "literal": "0.0000010000000000000002",
+   "ctx": "e-7 s as executed in binary64 and *r* = 0.0000010000000000000002 s, so *u_on* = 1.125000951811",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 1214,
+   "literal": "1",
+   "ctx": "0.0000010000000000000002 s, so *u_on* = 1.1250009518116714e-6 s. Its re",
+   "offset": 40,
+   "census_status": "UNPOLICED-UNREGISTERED"
+  },
+  {
+   "line": 1214,
+   "literal": "0.014921970702173189",
+   "ctx": "der the earlier anchor noted above) is [0.014921970702173189, 0.017213039063451813] s and ",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 1214,
+   "literal": "0.017213039063451813",
+   "ctx": " noted above) is [0.014921970702173189, 0.017213039063451813] s and its offset region is [",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 1214,
+   "literal": "−0.012269482911167666",
+   "ctx": "9063451813] s and its offset region is [−0.012269482911167666, −0.009886278807582334] s: th",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 1214,
+   "literal": "−0.009886278807582334",
+   "ctx": "ffset region is [−0.012269482911167666, −0.009886278807582334] s: the instrument reported t",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 1214,
+   "literal": "16",
+   "ctx": "ment reported this pulse starting about 16 ms late and ending about 11 m",
+   "offset": 40,
+   "census_status": "UNPOLICED-UNREGISTERED"
+  },
+  {
+   "line": 1214,
+   "literal": "11",
+   "ctx": "rting about 16 ms late and ending about 11 ms early, and the model-defin",
+   "offset": 40,
+   "census_status": "UNPOLICED-UNREGISTERED"
+  },
+  {
+   "line": 1214,
+   "literal": "2.3",
+   "ctx": "del-defined allowed onset band is about 2.3 ms wide; it is not a physical",
+   "offset": 40,
+   "census_status": "UNPOLICED-UNREGISTERED"
+  },
+  {
+   "line": 1226,
+   "literal": "0.030067931757111657",
+   "ctx": "hor estimator of A.3.3): *B_fiducial* = 0.030067931757111657 s, of which *B_anchor* = 0.00",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 1226,
+   "literal": "0.0011349971959968978",
+   "ctx": "67931757111657 s, of which *B_anchor* = 0.0011349971959968978 s and the difference between ",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 1226,
+   "literal": "0.0289329345611147592",
+   "ctx": "rence between the two printed bounds is 0.0289329345611147592 s (28.9 ms). That difference ",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 1226,
+   "literal": "28.9",
+   "ctx": "nted bounds is 0.0289329345611147592 s (28.9 ms). That difference is what ",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 1247,
+   "literal": "17",
+   "ctx": "These are the 17 per-capture \\(b_{\\mathrm{fidu",
+   "offset": 14,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 1262,
+   "literal": "0.030067931757111657",
+   "ctx": "| `20260722T145535-e941c821` | 0.030067931757111657 |",
+   "offset": 31,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 1263,
+   "literal": "0.027365018417518542",
+   "ctx": "| `20260722T194118-9dc0749d` | 0.027365018417518542 |",
+   "offset": 31,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 1264,
+   "literal": "0.03289849371536248",
+   "ctx": "| `20260722T214220-1acdbbc0` | 0.03289849371536248 |",
+   "offset": 31,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 1265,
+   "literal": "0.02317490442656863",
+   "ctx": "| `20260722T215127-eeef661a` | 0.02317490442656863 |",
+   "offset": 31,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 1266,
+   "literal": "0.028744604461883507",
+   "ctx": "| `20260722T232509-82642517` | 0.028744604461883507 |",
+   "offset": 31,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 1267,
+   "literal": "0.025549688302808828",
+   "ctx": "| `20260723T023058-8732d1c9` | 0.025549688302808828 |",
+   "offset": 31,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 1268,
+   "literal": "0.026112736870656926",
+   "ctx": "| `20260723T052051-d9358c8a` | 0.026112736870656926 |",
+   "offset": 31,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 1269,
+   "literal": "0.025120423355537637",
+   "ctx": "| `20260723T194632-d04e038e` | 0.025120423355537637 |",
+   "offset": 31,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 1270,
+   "literal": "0.025462798878078775",
+   "ctx": "| `20260723T195730-bc4ba14a` | 0.025462798878078775 |",
+   "offset": 31,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 1271,
+   "literal": "0.027201280356104838",
+   "ctx": "| `20260723T221449-e9ae755e` | 0.027201280356104838 |",
+   "offset": 31,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 1272,
+   "literal": "0.025993442258292716",
+   "ctx": "| `20260723T223406-314f6d9e` | 0.025993442258292716 |",
+   "offset": 31,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 1273,
+   "literal": "0.02562670977988252",
+   "ctx": "| `20260724T014109-57844352` | 0.02562670977988252 |",
+   "offset": 31,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 1274,
+   "literal": "0.02366861961761718",
+   "ctx": "| `20260725T005132-a64711b7` | 0.02366861961761718 |",
+   "offset": 31,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 1275,
+   "literal": "0.029273357215668885",
+   "ctx": "| `20260725T011533-0b5ec77c` | 0.029273357215668885 |",
+   "offset": 31,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 1276,
+   "literal": "0.028733193582380412",
+   "ctx": "| `20260725T022712-0a9534f5` | 0.028733193582380412 |",
+   "offset": 31,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 1277,
+   "literal": "0.026415695490612106",
+   "ctx": "| `20260725T030533-d3f076e5` | 0.026415695490612106 |",
+   "offset": 31,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 1278,
+   "literal": "0.02501695592329986",
+   "ctx": "| `20260725T060617-97c5cba6` | 0.02501695592329986 |",
+   "offset": 31,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 1284,
+   "literal": "1784757381.2856488",
+   "ctx": "(1784757381.2856488, 458782.19098725, 458782.1909",
+   "offset": 1,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 1284,
+   "literal": "458782.19098725",
+   "ctx": "(1784757381.2856488, 458782.19098725, 458782.190989791) s;",
+   "offset": 21,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 1284,
+   "literal": "458782.190989791",
+   "ctx": "(1784757381.2856488, 458782.19098725, 458782.190989791) s;",
+   "offset": 38,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 1285,
+   "literal": "1784757382.293089",
+   "ctx": "its off command has (1784757382.293089, 458783.198425958,",
+   "offset": 21,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 1285,
+   "literal": "458783.198425958",
+   "ctx": "its off command has (1784757382.293089, 458783.198425958,",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 1286,
+   "literal": "458783.198426833",
+   "ctx": "458783.198426833) s. Both resolutions are the ",
+   "offset": 0,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 1287,
+   "literal": "1784757336",
+   "ctx": "The native record-0 label is 1784757336 s and q₀=0, giving the numeri",
+   "offset": 29,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 1288,
+   "literal": "1784757335.99975",
+   "ctx": "1784757335.99975 ≤ A ≤ 1784757337.00025 s. Rec",
+   "offset": 0,
+   "census_status": "UNPOLICED-UNREGISTERED"
+  },
+  {
+   "line": 1288,
+   "literal": "1784757337.00025",
+   "ctx": "1784757335.99975 ≤ A ≤ 1784757337.00025 s. Record 1 has",
+   "offset": 23,
+   "census_status": "UNPOLICED-UNREGISTERED"
+  },
+  {
+   "line": 1289,
+   "literal": "0.118530666",
+   "ctx": "q₁=0.118530666 s and the same label, giving",
+   "offset": 3,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 1290,
+   "literal": "1784757335.99975",
+   "ctx": "1784757335.99975 ≤ A+β(0.118530666) ≤ 17847573",
+   "offset": 0,
+   "census_status": "UNPOLICED-UNREGISTERED"
+  },
+  {
+   "line": 1290,
+   "literal": "0.118530666",
+   "ctx": "1784757335.99975 ≤ A+β(0.118530666) ≤ 1784757337.00025 s.",
+   "offset": 23,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 1290,
+   "literal": "1784757337.00025",
+   "ctx": "1784757335.99975 ≤ A+β(0.118530666) ≤ 1784757337.00025 s.",
+   "offset": 38,
+   "census_status": "UNPOLICED-UNREGISTERED"
+  },
+  {
+   "line": 1292,
+   "literal": "0.111241541",
+   "ctx": "its causal constants are k_pre=0.111241541 s and",
+   "offset": 31,
+   "census_status": "UNPOLICED-UNREGISTERED"
+  },
+  {
+   "line": 1293,
+   "literal": "1.1016537909669094",
+   "ctx": "k_parse=1.1016537909669094 s. All 1665 native labels and",
+   "offset": 8,
+   "census_status": "UNPOLICED-UNREGISTERED"
+  },
+  {
+   "line": 1293,
+   "literal": "1665",
+   "ctx": "k_parse=1.1016537909669094 s. All 1665 native labels and elapsed cou",
+   "offset": 34,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 1309,
+   "literal": "1784757336.5526073",
+   "ctx": "Table A3 uses the current point anchor 1784757336.5526073 s and \\(P_{\\mathrm{rest}}=0\\)",
+   "offset": 39,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 1309,
+   "literal": "0",
+   "ctx": "57336.5526073 s and \\(P_{\\mathrm{rest}}=0\\) W,",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 1310,
+   "literal": "0.001",
+   "ctx": "σ=0.001 W, pulse height a=42.5514 W. ",
+   "offset": 2,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 1310,
+   "literal": "42.5514",
+   "ctx": "σ=0.001 W, pulse height a=42.5514 W. Every local record is show",
+   "offset": 26,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 1313,
+   "literal": "+0.027",
+   "ctx": "shifts (+0.027,−0.007) s. Display columns ar",
+   "offset": 8,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 1313,
+   "literal": "−0.007",
+   "ctx": "shifts (+0.027,−0.007) s. Display columns are round",
+   "offset": 15,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 1342,
+   "literal": "42.5514",
+   "ctx": "ng a record’s overlap fraction f into ŷ=42.5514 f",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 1343,
+   "literal": "0.001",
+   "ctx": "then x=(y−ŷ)/0.001 gives its displayed Huber con",
+   "offset": 13,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 1346,
+   "literal": "13724.280240837228",
+   "ctx": "Loss*=13724.280240837228; the no-pulse loss is 478338.",
+   "offset": 6,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 1346,
+   "literal": "478338.47061854997",
+   "ctx": "3724.280240837228; the no-pulse loss is 478338.47061854997.",
+   "offset": 40,
+   "census_status": "UNPOLICED-REGISTERED"
+  },
+  {
+   "line": 1347,
+   "literal": "239169.23530927498",
+   "ctx": "Thus Loss*<239169.23530927498 passes the half-flat-loss che",
+   "offset": 11,
+   "census_status": "UNPOLICED-UNREGISTERED"
+  },
+  {
+   "line": 1348,
+   "literal": "14410.494252879089",
+   "ctx": "Λ=Loss*+0.05 Loss*=14410.494252879089.",
+   "offset": 19,
+   "census_status": "UNPOLICED-REGISTERED"
+  }
+ ]
+}
