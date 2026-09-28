@@ -262,3 +262,7 @@ Launched by the watchdog at 17:36:30 PDT (attempt 124) after a usage back-off; t
     - (c) `test_promote_calibration_candidate…p1`: the issuance text changed and the bytes are not yet regenerated. Expected.
     - (d) `test_run_night…blocked_journal…`: the known flake.
 91. **D-138 fix round 3 (the LAST round) launched** (Sol 6.0 xhigh, 4 h timeout; [brief](50-d138-issuance-seat/03-fix3-brief.txt)): the ruling's §4.5 scope plus the census file. The seat regenerates the bytes and prepares the RED record. If a fresh refuter then finds a route, the transaction stops for good and goes to Ed with the ruling's costed options (a)/(b)/(c).
+92. **S1 triage confirmation, in progress** ([01-lead-confirmation](30-s1-repair/70-triage/01-lead-confirmation.md)).
+    - Confirmed so far: 23 paper-pin rows are outside the cap (step-5 repin). About 37 gate-fix rows fail "pair not bound": round-1/2 fixtures paired unbound configs, so the repair is bind + pair in T1 form, byte-identical assertions, fixture-only in the §E files. 3 NEW rows are S1's own §4.3 tests.
+    - Two rows are to be re-run alone (night_gate git-status; the lifecycle race).
+    - Still to confirm: T5 57, T2 33, T6 5, T1 3, and 5 rows of `…generalized`. Then R3-3, the pilot.
