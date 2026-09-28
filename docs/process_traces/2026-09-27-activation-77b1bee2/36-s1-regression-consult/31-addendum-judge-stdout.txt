@@ -1,0 +1,42 @@
+ADDENDUM: S1-REGRESSION-01-A1 ISSUED
+
+The ruling is written to `/Users/edr/code/JouleWise-wt-bk-77b1bee2/docs/process_traces/2026-09-27-activation-77b1bee2/36-s1-regression-consult/31-addendum-ruling.md` (sha256 `4d30c6cdd1cd36f55661f6a56f22762347f5ec709760f25e66fb58b658d43545`). The session ran 17:40 to 17:51 PDT, modified no other file in any repository, and left no process running.
+
+## Contamination disclosure
+
+The harness loaded the global and project `CLAUDE.md`, the memory index, the skill list and the git status before my first turn. I used none of it for a ruling and opened none of the forbidden files. I read the refuter before forming my view, so my view is not blind to it.
+
+## Facts verified
+
+- Both input digests match the charge, and S1 is at `c7593edb`, clean.
+- **One charge fact is inexact:** the example "clean checkout" of main is at `c772b019`, a bookkeeping commit on top of `e7c8bcc6`. I read main through `git show e7c8bcc6:` instead.
+
+## Rulings
+
+| Item | Ruling | Basis |
+|---|---|---|
+| **SF-1** (pair on a mock config) | Adopted, modified | I re-executed it: the same mock bundle returns `pass` with a pair and is refused with the controller's marker (`bundle_read.py:477-481` runs before `:491-495`). The ban becomes a static grep rule plus a bench count of mock-config pair authentications. Helper H's pair writers refuse a mock or unbound config. The reader-side fix goes to a lane. |
+| **SF-2** (`run_campaign.py:7848`) | Adopted, modified: **stays strict** | The refuter's premise is wrong. The function behind `:7848` also writes a whole-window verdict record (`:8071-8114`), which is a claim artifact; the function behind `:9032` does not. The two tests are repaired evidence-forward by replacing the child launcher in-process. |
+| **SF-3** (claim readiness) | Adopted, the refuter's option (a) | Both readiness functions are byte-identical to main, and no production code outside `run_campaign.py` reads the field. Clause 12a (d) and test T12a-8 are replaced; T12a-8 now also asserts that the analysis loader refuses the same campaign. |
+| **SF-4** (path fence) | Adopted, modified | The in-tree fence compares two fixed commits and cannot see the repair. Check 7 is replaced and a new check 9 limits the repair to an explicit set of 50 paths. The candidate branch takes no merge of main, because a two-commit diff across the earlier merge `4aefdd12` falsely reports three `configs/calibration` paths. |
+
+**NITs.** Only N-1 changes the plan: check 2 now says exactly where `admit_mock_window` may appear in tests, with a call-form list kept apart from the R-list. N-2 and N-3 change nothing.
+
+**Plan.** Order, seats, bases, every WRITE_SCOPE and the §6 grant are unchanged. The plan gains:
+- three defect-shaped tests (H-5, H-6, T12a-11) and a replaced T12a-8;
+- checks 2 (k), 2 (l), 7 (b), 7 (c) and 9, with two lead self-tests;
+- one seat stop rule and one sentence for the pull-request description;
+- two lanes, BFGS-MOCK-PAIR-01 and BFGS-AXI-VISIBILITY-01.
+
+**Refuter errors.** Five are recorded in §9 of the ruling. The material ones are SF-2's premise, its "subprocess needs a production hook" claim (both tests run in-process), and SF-4's allowed set, which was wide enough to let the repair edit S1 test files no seat may write.
+
+## Not executed
+
+I ran no full suite and no repair. Whether strict bundle validation accepts a helper-written non-mock bundle is untested; if it does not, seat A returns `NEEDS_RULING` for the two paired-entry tests. The refuter's stand-in counts for rule 12a are taken from the refuter, not re-run.
+
+## Plain summary
+
+1. Three of the refuter's four fixes are adopted with tightening: fixtures may not fake a passing battery check on a synthetic run, a synthetic campaign's record keeps its existing "inputs complete" meaning, and a new check lists every file the repair may touch.
+2. The fourth goes against the refuter's preference: the paired-entry campaign's battery gate stays strict, because that function also writes a whole-window verdict that a paper number can come from.
+3. No seat, scope, order or granted path changes; the plan gains a few tests, bench checks with their own self-tests, and two small follow-up lanes.
+rc=0
