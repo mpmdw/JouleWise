@@ -325,3 +325,12 @@ Launched by the watchdog at 17:36:30 PDT (attempt 124) after a usage back-off; t
     - **T5** (`test_analysis_integration…test_real_controller_unpinned_model_is_included_by_loader`): **did NOT hold.** The member stays `excluded` under parity, for `adapter_continuity_failed`, `cpu_admission_core_failed`, `environment_admission_failed`, `environment_admission_missing`, `whole_window_verdict_conflict` and `whole_window_verdict_provenance_invalid`. That is more than the single own-summary refusal the H3 replay keyword was ruled to cure.
     - **Stop condition 6 is MET** (S1-REPAIR-ROUTE-01 §5.5), so the lead returns to a cold gate before any seat starts.
     - The prototype's parity closed list has 4 entries (`inputs.py` anchor fallback; `floor_extraction` CPU admission; two `run_campaign` member checks).
+111. **NTP N1 fix round 1 landed** (`60a8df22`, Sol xhigh; [report](71-ntp-design/35-n1-fix1-report.md)). It covers:
+    - real-log continuation parsing, with a regression built from real bytes;
+    - proven chain termination before the query and ON, and no dead-man inference from an unknown identity;
+    - crash-safe query publication and receipt-shape validation;
+    - the reasons in `COLD_GATE_CODES`, with main's invariant restored;
+    - the missing ruled tests, recorded refusals, and `--h7` on the estimator's drift definition;
+    - the nits, and `test_launch_window` patched with a pack-refused assertion.
+
+    **Lead-owned docs:** the ARM-RETRY-POLICY blocks were regenerated from `render_policy()` in `NIGHT_HANDBACK.md` and the derivation runbook (`f2ec01e9`; `test_arm_retry` OK). The GO-receipt contract paragraph followed in `3ad82b43`, because the first attempt's edit had not applied (the commit message said otherwise, and this is corrected in the next commit). The seat noted that N3's scope omits `network_time_window.py` (for `OLD_IDLE_PLANS`), a scope note for N3. **Gates:** the whole suite on `3ad82b43` and a fresh delta re-audit (Astra) are running.
