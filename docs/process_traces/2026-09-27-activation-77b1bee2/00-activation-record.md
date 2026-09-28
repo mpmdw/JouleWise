@@ -274,3 +274,12 @@
       - **Find what steps the wall clock.**
       - **Packet erratum** on item 04.
     - The paired Opus refuter is pending. **D-138 is not started in this turn** (runbook §4.4).
+47. **Paired Opus refuter on the science gate** ([22](70-science-gate/22-opus-refuter.md)): **REFUTER: CONCUR**, 0 BLOCKER. It independently replicated all 12 member B values, the 20 cell counts, the 8 diagnostic B values and the clock-step spans. Its SF-1 to SF-3 went to the **cold addendum SCI-25G83-CANDIDATE-01-A1** (Fable, [31](70-science-gate/31-addendum-ruling.md)), which ruled **ADDENDUM: ISSUED**, adopting all of them:
+    - **SF-1:** the 165,000-cell cap is **not** a derivation-code defect under statement item 7(b). It was registered on 2026-08-15, frozen on 08-18 and pinned before capture. Re-runs at caps of 165k, 206k and 5M give the stored B to the last digit.
+    - **SF-2:** D-138 issues with the four estimator files **byte-for-byte as run** (binding text B1–B4 in the ruling). Four unmerged branches touch pinned files (three named by the refuter, plus `impl/p2041`). A cap re-size is a separate, later transaction, after the council rules on re-issue membership and on a sizing rule that uses no B value.
+    - **SF-3, a HOLD on claim-bearing windows at 25G83:** before any claim-bearing window is armed, one of two things must be true.
+      - The cap is re-sized by a rule written in advance, with at least 24 non-claim captures showing none stopping on the cap.
+      - Or the cap stays, under a registered plan that records every abandoned bracket and compares its energy with completed ones.
+      The clock-step exclusions fall under the same hold.
+    - N-1 to N-4 adopted.
+    - **Next (a new activation or turn; runbook §4.4):** the D-138 issuing transaction, with its own gate, carrying D1–D6 and A1's binding text.
