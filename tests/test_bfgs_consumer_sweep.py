@@ -833,6 +833,41 @@ def tracked_sources(root=ROOT, replacements=None):
     return files
 
 
+MOCK_ADMISSION_CALLS = {
+    ("joulewise/aggregate.py", "aggregate_experiment", "authenticate_window_members", "forward"),
+    ("joulewise/aggregate.py", "aggregate_experiment", "_read_member", "forward"),
+    ("joulewise/aggregate.py", "_read_member", "authenticate_window_members", "forward"),
+    ("joulewise/controller.py", "run_experiment", "aggregate_experiment", "true"),
+    ("scripts/run_campaign.py", "run_campaign", "authenticate_window_members", "true"),
+}
+
+
+def mock_admission_calls(files):
+    calls = set()
+    violations = []
+    for path, source in files.items():
+        if not path.startswith(("joulewise/", "scripts/")) or not path.endswith(".py"):
+            continue
+        for qualname, fn in qualified(ast.parse(source, filename=path)):
+            if not isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            for node, _ in own_nodes(fn):
+                if not isinstance(node, ast.Call):
+                    continue
+                for keyword in node.keywords:
+                    if keyword.arg != "admit_mock_window":
+                        continue
+                    value = keyword.value
+                    form = ("true" if isinstance(value, ast.Constant) and value.value is True
+                            else "forward" if isinstance(value, ast.Name)
+                            and value.id == "admit_mock_window" else "invalid")
+                    entry = (path, qualname, name_of(node), form)
+                    calls.add(entry)
+                    if form == "invalid":
+                        violations.append(f"{path}::{qualname}:{node.lineno}: invalid admit_mock_window value")
+    return calls, violations
+
+
 def functions(files):
     for path, source in files.items():
         for qualname, node in qualified(ast.parse(source, filename=path)):
@@ -1384,6 +1419,26 @@ class DetectorExamples(unittest.TestCase):
 
 
 class ConsumerSweepTests(unittest.TestCase):
+    def test_12a_9_mock_admission_call_forms_are_closed(self):
+        files = tracked_sources()
+        calls, violations = mock_admission_calls(files)
+        self.assertEqual(violations, [])
+        self.assertEqual(calls, MOCK_ADMISSION_CALLS)
+        changed = dict(files)
+        path = "joulewise/analysis_engine/inputs.py"
+        before = "battery_verdicts = authenticate_window_members(members)"
+        self.assertIn(before, changed[path])
+        changed[path] = changed[path].replace(
+            before, "battery_verdicts = authenticate_window_members(members, admit_mock_window=True)", 1)
+        mutant_calls, _ = mock_admission_calls(changed)
+        self.assertIn((path, "load_analysis_inputs", "authenticate_window_members", "true"),
+                      mutant_calls - MOCK_ADMISSION_CALLS)  # claim-loader keyword RED
+        changed[path] = changed[path].replace(
+            "battery_verdicts = authenticate_window_members(members, admit_mock_window=True)",
+            "battery_verdicts = authenticate_window_members(members, admit_mock_window=False)", 1)
+        _, invalid = mock_admission_calls(changed)
+        self.assertTrue(any("invalid admit_mock_window value" in row for row in invalid))
+
     def test_all_supported_ungated_reads_have_checked_reasons(self):
         self.assertEqual(allowlist_violations(tracked_sources()), [])
 
@@ -1630,7 +1685,8 @@ class ConsumerSweepTests(unittest.TestCase):
         self.assertIn("content leaves before verdict", " ".join(content_violations(
             "joulewise/bundle_read.py", changed, "authenticate_window_members")))  # R57-4
         aggregate = files["joulewise/aggregate.py"]
-        before = '    authenticate_window_members(((member, runs_root / member),))'
+        before = ('    authenticate_window_members(((member, runs_root / member),),\n'
+                  '                                admit_mock_window=admit_mock_window)')
         self.assertIn(before, aggregate)
         changed = dict(files, **{"joulewise/aggregate.py": aggregate.replace(
             before, '    battery_float.authenticate_bundle(runs_root / member)', 1)})
@@ -1761,7 +1817,7 @@ class ConsumerSweepTests(unittest.TestCase):
         self.assertEqual(consumers_violations(files, consumers), [])
         src = files["scripts/run_campaign.py"]
         for label, before, after in (
-            ("campaign_gate_removed", '        battery_verdicts = authenticate_window_members(battery_members)',
+            ("campaign_gate_removed", '        battery_verdicts = authenticate_window_members(battery_members, admit_mock_window=True)',
              '        battery_verdicts = {}'),
             ("axi_gate_removed", '            authenticate_window_members(\n                (label, path) for path, label in sorted(gate_paths.items())\n            )',
              '            pass'),
@@ -1872,7 +1928,7 @@ class ConsumerSweepTests(unittest.TestCase):
         candidate = "joulewise/calibration_bracketing.py::_load_calibration_candidate_unbounded"
         chain = RAW_CAPTURE_READERS[candidate][1][1]
         self.assertEqual(capture_chain_violations(files, candidate, chain), [])  # R74-2 GREEN
-        before = ('        if _battery_exclusion_for_observation(observation) is not None:\n'
+        before = ('        if _battery_exclusion_for_observation(observation, mode=mode) is not None:\n'
                   '            continue\n')
         self.assertIn(before, files[calibration])
         removed = dict(files, **{calibration: files[calibration].replace(before, "", 1)})

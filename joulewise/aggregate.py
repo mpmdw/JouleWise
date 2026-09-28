@@ -89,7 +89,9 @@ def student_t_critical_95(df: int) -> float:
     return _T_CRITICAL_95[floor]
 
 
-def aggregate_experiment(runs_root: Path, manifest: dict[str, Any]) -> dict[str, Any]:
+def aggregate_experiment(
+    runs_root: Path, manifest: dict[str, Any], *, admit_mock_window: bool = False,
+) -> dict[str, Any]:
     """Return the D-014 aggregate block for ``manifest``.
 
     This is pure over ``manifest["members"]`` and the member bundle
@@ -102,12 +104,14 @@ def aggregate_experiment(runs_root: Path, manifest: dict[str, Any]) -> dict[str,
         member_names = []
 
     battery_verdicts = authenticate_window_members(
-        (member, Path(runs_root) / member)
-        for member in member_names
-        if isinstance(member, str) and _is_plain_member_name(member)
+        ((member, Path(runs_root) / member)
+         for member in member_names
+         if isinstance(member, str) and _is_plain_member_name(member)),
+        admit_mock_window=admit_mock_window,
     )
 
-    records = [_read_member(Path(runs_root), member) for member in member_names]
+    records = [_read_member(Path(runs_root), member, admit_mock_window=admit_mock_window)
+               for member in member_names]
     metric_names = list(STANDARD_METRICS)
     metric_names.extend(_phase_metric_names(records))
 
@@ -141,7 +145,7 @@ def aggregate_experiment(runs_root: Path, manifest: dict[str, Any]) -> dict[str,
     }
 
 
-def _read_member(runs_root: Path, member: Any) -> dict[str, Any]:
+def _read_member(runs_root: Path, member: Any, *, admit_mock_window: bool = False) -> dict[str, Any]:
     member_name = member if isinstance(member, str) else repr(member)
     if not isinstance(member, str) or not _is_plain_member_name(member):
         return {
@@ -152,7 +156,8 @@ def _read_member(runs_root: Path, member: Any) -> dict[str, Any]:
             "problem": "invalid member name",
         }
 
-    authenticate_window_members(((member, runs_root / member),))
+    authenticate_window_members(((member, runs_root / member),),
+                                admit_mock_window=admit_mock_window)
     summary = BundleReader(runs_root / member).raw_summary()
     if not isinstance(summary, dict):
         return {

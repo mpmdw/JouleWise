@@ -9029,7 +9029,7 @@ def run_campaign(args: argparse.Namespace) -> int:
                 if str(path) not in seen_battery_paths:
                     battery_members.append((str(path), path))
                     seen_battery_paths.add(str(path))
-        battery_verdicts = authenticate_window_members(battery_members)
+        battery_verdicts = authenticate_window_members(battery_members, admit_mock_window=True)
         categories = classify_campaign_members(all_evaluations, missing_members)
         collection_verdict, collection_reasons = collection_verdict_for(categories)
         sampling_audit = sampling_audit_for(analysis_manifest)

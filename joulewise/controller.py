@@ -3001,7 +3001,7 @@ def run_experiment(
         manifest.pop("aggregate", None)
         manifest_path = write_experiment_manifest(runs_root, manifest)
         try:
-            manifest["aggregate"] = aggregate_experiment(runs_root, manifest)
+            manifest["aggregate"] = aggregate_experiment(runs_root, manifest, admit_mock_window=True)
         except Exception as exc:
             manifest["aggregate_error"] = {
                 "error_type": type(exc).__name__,

@@ -281,6 +281,7 @@ GATE_EXCEPTIONS = (WindowBatteryRefusal, battery_float.CustodyFailure)
 
 def authenticate_window_members(
     members: Iterable[tuple[str, Path] | tuple[str, Path, Mapping[str, str]]],
+    *, admit_mock_window: bool = False,
 ) -> dict[str, battery_float.PairVerdict]:
     """Classify each member before any window energy is read."""
 
@@ -349,7 +350,12 @@ def authenticate_window_members(
                 "reasons": list(verdict.reasons),
                 "bundle_sha256": verdict.bundle_sha256,
             })
-    if refused:
+    if refused and not (
+        admit_mock_window
+        and verdicts
+        and len(refused) == len(verdicts)
+        and all(verdict.status == "not_applicable" for verdict in verdicts.values())
+    ):
         raise WindowBatteryRefusal(refused)
     return verdicts
 

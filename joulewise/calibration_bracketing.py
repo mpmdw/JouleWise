@@ -1812,11 +1812,22 @@ def _capture_pipeline_refusal_for_observation(
 
 
 def _battery_classification_for_observation(
-    observation: LedgerObservation, *, custody: Path | None = None,
+    observation: LedgerObservation, *, mode: Literal["read_replay", "issuing"],
+    custody: Path | None = None,
 ) -> tuple[str, tuple[str, ...], str | None, str | None]:
     """Classify ledger-bound capture bytes; a broken recorded digest is custody."""
-    root = Path(observation.custody_locator) if custody is None else Path(custody)
     expected_sha = observation.artifact_sha256.get("instrument_evidence.json")
+    root = Path(custody) if custody is not None else probe_custody(
+        Path(observation.custody_locator), lambda mapped: mapped, lambda: None,
+        mode=mode,
+    )
+    if root is None:
+        raise battery_float.CustodyFailure([{
+            "slot": observation.bracket_slot or "capture",
+            "artifact": "instrument_evidence.json",
+            "expected_sha256": expected_sha,
+            "observed_sha256": None,
+        }])
     try:
         raw = read_authentication_input(
             root / "instrument_evidence.json", grammar="raw",
@@ -1859,8 +1870,10 @@ def _battery_classification_for_observation(
     return verdict.status, verdict.reasons, verdict.pre_raw_sha256, verdict.post_raw_sha256
 
 
-def _battery_exclusion_for_observation(observation: LedgerObservation) -> str | None:
-    status, _, _, _ = _battery_classification_for_observation(observation)
+def _battery_exclusion_for_observation(
+    observation: LedgerObservation, *, mode: Literal["read_replay", "issuing"],
+) -> str | None:
+    status, _, _, _ = _battery_classification_for_observation(observation, mode=mode)
     return status if status in {"battery_float_confounded", "battery_float_evidence_missing"} else None
 
 
@@ -1906,7 +1919,7 @@ def discover_calibration_candidates(
             continue
         if _capture_pipeline_refusal_for_observation(observation) is not None:
             continue
-        if _battery_exclusion_for_observation(observation) is not None:
+        if _battery_exclusion_for_observation(observation, mode=mode) is not None:
             continue
         candidate = _candidate_from_observation(observation, mode=mode)
         if candidate is None:
@@ -2035,6 +2048,7 @@ def evaluate_calibration_bracket(
     bracket_plan_sha256: str | None = None,
     bracket_evidence_root_id: str | None = None,
     bracket_runs_root: Path | str | None = None,
+    mode: Literal["read_replay", "issuing"] = "issuing",
     _allow_unissued_fixture: bool = False,
 ) -> tuple[dict[str, Any], tuple[str, ...]]:
     """Select a causal bracket and apply the provenance-bound D-079 budget."""
@@ -2257,7 +2271,8 @@ def evaluate_calibration_bracket(
     discovered_battery_status_by_attempt: dict[str, str] = {}
     if not _allow_unissued_fixture:
         for observation in eligible_observations:
-            status, reasons, pre_sha, post_sha = _battery_classification_for_observation(observation)
+            status, reasons, pre_sha, post_sha = _battery_classification_for_observation(
+                observation, mode=mode)
             discovered_battery_status_by_attempt[observation.attempt_id] = status
             if status in {"battery_float_confounded", "battery_float_evidence_missing"}:
                 result["battery_excluded_endpoints"].append({
@@ -2286,7 +2301,7 @@ def evaluate_calibration_bracket(
         # the registered universe that discovery never offers, and the exact
         # equality below would refuse every claim window on the machine.
         and not _is_derivation_kind_observation(observation, ledger_snapshot)
-        and (_allow_unissued_fixture or _battery_exclusion_for_observation(observation) is None)
+        and (_allow_unissued_fixture or _battery_exclusion_for_observation(observation, mode=mode) is None)
     }
     supplied_valid = {
         (
@@ -2337,7 +2352,8 @@ def evaluate_calibration_bracket(
             if _allow_unissued_fixture:
                 continue
             return result, ("calibration_battery_float_disagreement",)
-        status, _, _, _ = _battery_classification_for_observation(observation, custody=resolved)
+        status, _, _, _ = _battery_classification_for_observation(
+            observation, mode=mode, custody=resolved)
         if (not _allow_unissued_fixture
                 and status != discovered_battery_status_by_attempt.get(observation.attempt_id)):
             return result, ("calibration_battery_float_disagreement",)
@@ -2750,6 +2766,7 @@ def calibration_bracket_for_bundles(
             bindings={},
             policy=policy,
             ledger_snapshot=ledger_snapshot,
+            mode=mode,
             _allow_unissued_fixture=_allow_unissued_fixture,
         )
         return empty, ("instrument_calibration_bracket_missing",)
@@ -2774,6 +2791,7 @@ def calibration_bracket_for_bundles(
             bindings={},
             policy=policy,
             ledger_snapshot=ledger_snapshot,
+            mode=mode,
             _allow_unissued_fixture=_allow_unissued_fixture,
         )
         return empty, ("instrument_calibration_bracket_missing",)
@@ -2789,6 +2807,7 @@ def calibration_bracket_for_bundles(
             bindings=expected,
             policy=policy,
             ledger_snapshot=ledger_snapshot,
+            mode=mode,
             _allow_unissued_fixture=_allow_unissued_fixture,
         )
         return empty, ("instrument_calibration_mismatch",)
@@ -2830,7 +2849,7 @@ def calibration_bracket_for_bundles(
             # `calibration_ledger_custody_invalid` for as long as the row is on
             # the ledger, which is forever.
             and not _is_derivation_kind_observation(observation, ledger_snapshot)
-            and (_allow_unissued_fixture or _battery_exclusion_for_observation(observation) is None)
+            and (_allow_unissued_fixture or _battery_exclusion_for_observation(observation, mode=mode) is None)
             for observation in ledger_snapshot.observations
         )
         if ledger_snapshot.valid and len(candidates) != registered_valid:
@@ -2841,6 +2860,7 @@ def calibration_bracket_for_bundles(
                 bindings=expected,
                 policy=policy,
                 ledger_snapshot=ledger_snapshot,
+                mode=mode,
                 _allow_unissued_fixture=_allow_unissued_fixture,
             )
             return empty, ("calibration_ledger_custody_invalid",)
@@ -2857,6 +2877,7 @@ def calibration_bracket_for_bundles(
         bracket_plan_sha256=bracket_plan_sha256,
         bracket_evidence_root_id=bracket_evidence_root_id,
         bracket_runs_root=runs_root,
+        mode=mode,
         _allow_unissued_fixture=_allow_unissued_fixture,
     )
     if superseded_observations:

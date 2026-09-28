@@ -6,6 +6,7 @@ from dataclasses import replace
 import ast
 import hashlib
 import json
+import os
 from pathlib import Path
 from types import SimpleNamespace
 import tempfile
@@ -21,17 +22,18 @@ from joulewise.calibration_bracketing import (
 )
 from joulewise.calibration_ledger import CalibrationLedgerSnapshot, LEDGER_SCHEMA, LedgerObservation
 from joulewise.calibration_ledger import content_id_from_artifact_hashes
+import joulewise.calibration_ledger as calibration_ledger
 from joulewise.uncertainty_evidence import ACTIVE_CAPTURE_ANCHOR_METHOD
 import tests.test_battery_float as battery_test
 import tests.test_calibration_bracketing as legacy
 
 
 def _battery_exclusion_for_observation(observation):
-    return bracket._battery_exclusion_for_observation(observation)
+    return bracket._battery_exclusion_for_observation(observation, mode="issuing")
 
 
 def _battery_classification_for_observation(observation):
-    return bracket._battery_classification_for_observation(observation)
+    return bracket._battery_classification_for_observation(observation, mode="issuing")
 
 
 def _capture(root: Path, attempt_id: str, *, charging: bool = False,
@@ -57,6 +59,82 @@ def _capture(root: Path, attempt_id: str, *, charging: bool = False,
 
 
 class BatteryBracketingTests(unittest.TestCase):
+    def _replay_snapshot(self, root: Path, *, charging: tuple[str, ...] = ()):
+        original = root / "original"
+        backup = root / "backup"
+        rows = []
+        for index, name in enumerate(("first", "second")):
+            captured = _capture(backup / name, name, charging=name in charging)
+            rows.append(LedgerObservation(
+                sequence=177 + index, receipt_digest="a" * 64,
+                attempt_id=name, content_id="b" * 64,
+                artifact_sha256=captured.artifact_sha256, identity_epoch={},
+                t1_bindings={"anchor_method_version": ACTIVE_CAPTURE_ANCHOR_METHOD},
+                capture_wall_time_s="100", exact_bound_lexeme_s="0.02",
+                disposition="valid", custody_locator=str(original / name),
+            ))
+        snapshot = CalibrationLedgerSnapshot(
+            ledger_schema=LEDGER_SCHEMA, ledger_path=root / "ledger.jsonl",
+            head_sequence=178, head_digest="a" * 64, receipts=(),
+            observations=tuple(rows), refusal_reasons=(),
+        )
+        return snapshot, original, backup
+
+    def _replay_context(self, original: Path, backup: Path):
+        # Use the existing mode-aware resolver's override, never a new hook.
+        return (patch.object(calibration_ledger, "BACKUP_ROOTS", (original,)),
+                patch.dict(os.environ, {"JOULEWISE_BACKUP_ROOTS": str(backup)}))
+
+    def test_10a_replay_discovers_moved_passing_capture(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            snapshot, original, backup = self._replay_snapshot(Path(tmp))
+            roots, override = self._replay_context(original, backup)
+            with roots, override, patch.object(
+                bracket, "_candidate_from_observation",
+                side_effect=lambda observation, **_: observation.attempt_id,
+            ):
+                self.assertFalse(original.exists())
+                self.assertEqual(discover_calibration_candidates(snapshot, mode="read_replay"),
+                                 ("first", "second"))  # 10a(a): direct locator read is RED
+
+    def test_10a_issuing_refuses_absent_original(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            snapshot, original, backup = self._replay_snapshot(Path(tmp))
+            roots, override = self._replay_context(original, backup)
+            with roots, override, self.assertRaises(battery_float.CustodyFailure):
+                discover_calibration_candidates(snapshot, mode="issuing")  # 10a(b): hard-code replay RED
+
+    def test_10a_replay_refuses_changed_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            snapshot, original, backup = self._replay_snapshot(Path(tmp))
+            evidence = backup / "first" / "instrument_evidence.json"
+            evidence.write_bytes(evidence.read_bytes() + b" ")
+            roots, override = self._replay_context(original, backup)
+            with roots, override, self.assertRaises(battery_float.CustodyFailure):
+                discover_calibration_candidates(snapshot, mode="read_replay")  # 10a(c): skip digest RED
+
+    def test_10a_replay_refuses_deleted_raw(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            snapshot, original, backup = self._replay_snapshot(Path(tmp))
+            (backup / "first" / "raw" / "battery_float.post.ioreg").unlink()
+            roots, override = self._replay_context(original, backup)
+            with roots, override, self.assertRaises(battery_float.CustodyFailure):
+                discover_calibration_candidates(snapshot, mode="read_replay")  # 10a(d): wrong root RED
+
+    def test_10a_replay_excludes_charging_and_keeps_other(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            snapshot, original, backup = self._replay_snapshot(Path(tmp), charging=("first",))
+            roots, override = self._replay_context(original, backup)
+            with roots, override, patch.object(
+                bracket, "_candidate_from_observation",
+                side_effect=lambda observation, **_: observation.attempt_id,
+            ):
+                self.assertEqual(bracket._battery_exclusion_for_observation(
+                    snapshot.observations[0], mode="read_replay"),
+                    "battery_float_confounded")
+                self.assertEqual(discover_calibration_candidates(snapshot, mode="read_replay"),
+                                 ("second",))  # 10a(e): bypass classification RED
+
     def test_fixture_flag_has_no_production_true_caller(self) -> None:
         root = Path(__file__).resolve().parents[1]
         tracked = subprocess.check_output(
@@ -214,7 +292,7 @@ class BatteryBracketingTests(unittest.TestCase):
                           for name, stamp, path, observation in zip(
                               ("pre", "post"), (99.0, 111.0), paths, observations)]
             snapshot, normalized = legacy._fixture_snapshot(candidates)
-            def classify(observation, *, custody=None):
+            def classify(observation, *, mode, custody=None):
                 return (("battery_float_confounded", (), None, None)
                         if custody is not None else ("pass", (), None, None))
             with patch("joulewise.calibration_bracketing._battery_classification_for_observation",
@@ -251,7 +329,7 @@ class BatteryBracketingTests(unittest.TestCase):
                                 attempt_id="capture", content_id=observation.content_id,
                                 ledger_receipt_digest=observation.receipt_digest)
 
-            def classify(_observation, *, custody=None):
+            def classify(_observation, *, mode, custody=None):
                 return ("pass" if custody is None else "unobserved_historical", (), None, None)
 
             with (patch("joulewise.calibration_bracketing._candidate_from_observation",

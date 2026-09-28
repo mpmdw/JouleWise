@@ -7,6 +7,7 @@ import hashlib
 import ast
 import contextlib
 import io
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -28,8 +29,12 @@ NAMED_RESIDUALS = {"joulewise/analysis_manifest_v3.py"}
 
 class WindowMembersTests(unittest.TestCase):
     def pair_bundle(self, root: Path, run_id: str, *, charging: bool = False,
-                    failed_probe: bool = False) -> Path:
-        writer = RunBundleWriter.create(root, load_config(run_id=run_id), FakeClock())
+                    failed_probe: bool = False, real: bool = False) -> Path:
+        hardware = json.loads((Path(__file__).parents[1] / "configs/examples/mock_local.json").read_text())["hardware_target"]
+        if real:
+            hardware["telemetry_backend"] = "powermetrics"
+        writer = RunBundleWriter.create(root, load_config(run_id=run_id,
+            hardware_target=hardware), FakeClock())
         pair = {}
         for phase, stamps in (("pre", (10, 20)), ("post", (90, 100))):
             relative = f"raw/battery_float.{phase}.ioreg"
@@ -57,6 +62,344 @@ class WindowMembersTests(unittest.TestCase):
             "phase": phase, "message": "", "metadata": {"monotonic_ns": stamp},
         }) + "\n" for event_type, phase, stamp in rows))
         return writer.path
+
+    def mock_bundle(self, root: Path, run_id: str) -> Path:
+        writer = RunBundleWriter.create(root, load_config(run_id=run_id), FakeClock())
+        writer.write_metadata({"battery_float": {
+            "pre": None, "post": None, "not_applicable": "mock",
+        }})
+        return writer.path
+
+    def test_12a_1_mixed_passing_real_still_refuses_mock(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            mock = self.mock_bundle(root, "mock")
+            real = self.pair_bundle(root, "real", real=True)
+            with self.assertRaises(WindowBatteryRefusal) as caught:
+                authenticate_window_members((("mock", mock), ("real", real)),
+                                            admit_mock_window=True)
+            self.assertEqual([(row["label"], row["status"])
+                              for row in caught.exception.members],
+                             [("mock", "not_applicable")])  # all->any RED
+            charging = self.pair_bundle(root, "charging", charging=True, real=True)
+            missing = self.pair_bundle(root, "missing", failed_probe=True, real=True)
+            with self.assertRaises(WindowBatteryRefusal) as all_refused:
+                authenticate_window_members(
+                    (("mock", mock), ("charging", charging), ("missing", missing)),
+                    admit_mock_window=True)
+            self.assertEqual([(row["label"], row["status"])
+                              for row in all_refused.exception.members], [
+                ("mock", "not_applicable"),
+                ("charging", "battery_float_confounded"),
+                ("missing", "battery_float_evidence_missing"),
+            ])
+
+    def test_12a_2_historical_member_blocks_mock_admission(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            mock = self.mock_bundle(Path(tmp), "mock")
+            historical = Path(__file__).parent / "fixtures/d078_r01"
+            with self.assertRaises(WindowBatteryRefusal) as caught:
+                authenticate_window_members((("mock", mock), ("historical", historical)),
+                                            admit_mock_window=True)
+            self.assertEqual(caught.exception.members[0]["label"], "mock")
+            self.assertEqual(caught.exception.members[0]["status"], "not_applicable")
+
+    def test_12a_3_empty_obligation_returns_empty(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            writer = RunBundleWriter.create(Path(tmp), load_config(run_id="early"), FakeClock())
+            writer.write_metadata({"battery_float": {
+                "pre": None, "post": None, "not_reached": "prepare",
+            }})
+            self.assertEqual(authenticate_window_members(
+                (("early", writer.path),), admit_mock_window=True), {})
+
+    def test_12a_5_changed_mock_config_refuses(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            mock = self.mock_bundle(Path(tmp), "mock")
+            config = mock / "config.json"
+            config.write_bytes(config.read_bytes() + b" ")
+            with self.assertRaises(WindowBatteryRefusal) as caught:
+                authenticate_window_members((("mock", mock),), admit_mock_window=True)
+            self.assertEqual(caught.exception.members[0]["status"],
+                             "battery_float_evidence_missing")
+            self.assertIn("not bound", " ".join(caught.exception.members[0]["reasons"]))
+
+    def test_12a_6_nonmock_marker_refuses(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            real = self.pair_bundle(Path(tmp), "real", real=True)
+            metadata_path = real / "metadata.json"
+            metadata = json.loads(metadata_path.read_text())
+            metadata["battery_float"] = {"pre": None, "post": None,
+                                         "not_applicable": "mock"}
+            metadata_path.write_text(json.dumps(metadata))
+            with self.assertRaises(WindowBatteryRefusal) as caught:
+                authenticate_window_members((("real", real),), admit_mock_window=True)
+            self.assertEqual(caught.exception.members[0]["status"],
+                             "battery_float_evidence_missing")
+
+    def test_12a_7_missing_metadata_still_raises_custody(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            mock = self.mock_bundle(root, "mock")
+            missing = root / "missing"
+            missing.mkdir()
+            with self.assertRaises(CustodyUnreadable) as caught:
+                authenticate_window_members((("mock", mock), ("missing", missing)),
+                                            admit_mock_window=True)
+            self.assertEqual(caught.exception.window_member, "missing")
+
+    def test_12a_10_mixed_aggregate_refuses_before_member_read(self) -> None:
+        from joulewise import aggregate
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self.mock_bundle(root, "mock")
+            self.pair_bundle(root, "real", real=True)
+            with patch.object(aggregate, "_read_member", side_effect=AssertionError(
+                "per-member read happened before whole-set gate")) as read:
+                with self.assertRaises(WindowBatteryRefusal) as caught:
+                    aggregate.aggregate_experiment(root, {"members": ["mock", "real"]},
+                                                   admit_mock_window=True)
+            read.assert_not_called()
+            self.assertEqual(caught.exception.members[0]["status"], "not_applicable")
+
+    def test_12a_8_mock_records_visible_but_analysis_refused(self) -> None:
+        from joulewise.analysis_engine.inputs import load_analysis_inputs
+        from joulewise.controller import run_experiment
+        from joulewise.environment import subprocess as environment_subprocess
+        from tests.test_experiment import make_config, fake_environment_run
+        import tests.test_run_campaign as campaign_test
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            experiment_root = root / "experiment-runs"
+            with patch.object(environment_subprocess, "run", side_effect=fake_environment_run):
+                manifest_path, members = run_experiment(
+                    make_config("mock-experiment", repetitions=2),
+                    experiment_root, FakeClock(),
+                )
+            experiment = json.loads(manifest_path.read_text())
+            self.assertEqual(experiment["aggregate"]["battery_float_members"],
+                             {path.name: "not_applicable" for path, _ in members})
+
+            config_dir = root / "campaign-configs"
+            runs_dir = root / "campaign-runs"
+            config_dir.mkdir()
+            manifest = campaign_test.write_strict_analysis_campaign(config_dir, runs_dir)
+            evidence = {entry["run_id"]: "recovered" for entry in manifest["entries"]}
+            evidence[manifest["entries"][0]["run_id"]] = "first_run_exempt"
+            campaign_test.write_prior_campaign_provenance(
+                runs_dir, evidence, campaign_test.analysis_manifest_id(config_dir))
+            probe = root / "identity-probe"
+            probe.write_text("#!/bin/sh\nprintf 'Tue Sep 8 01:02:03 2026 S\\n'\n")
+            probe.chmod(0o755)
+            with patch.dict(os.environ, {
+                "JOULEWISE_CUSTODY_PARENT": str(root / "custody"),
+                "JOULEWISE_ADDITIONAL_CUSTODY_PARENTS": "[]",
+                "JOULEWISE_IDENTITY_PROBE": str(probe),
+            }):
+                completed = campaign_test.run_campaign(config_dir, runs_dir)
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            rows = campaign_test.read_all_jsonl(runs_dir / "campaign_log.jsonl")
+            completion = rows[-1]
+            self.assertEqual(completion["record_type"], "campaign_verdict")
+            self.assertTrue(completion["battery_float_members"])
+            self.assertEqual(set(completion["battery_float_members"].values()),
+                             {"not_applicable"})
+            self.assertTrue({entry["run_id"] for entry in manifest["entries"]}
+                            .issubset(completion["battery_float_members"]))
+            self.assertEqual(completion["claim_readiness"]["verdict"],
+                             "ready_for_analysis")
+            artifact = root / "analysis-artifact.json"
+            with self.assertRaises(WindowBatteryRefusal) as caught:
+                load_analysis_inputs(config_dir / "analysis_manifest.json", runs_dir,
+                                     root / "floor-artifact.json",
+                                     strict_validator=lambda *_: ())
+            self.assertEqual({row["label"] for row in caught.exception.members},
+                             {entry["run_id"] for entry in manifest["entries"]})
+            self.assertFalse(artifact.exists())
+
+    def test_12a_11_axi_paired_entry_gate_stays_strict(self) -> None:
+        import scripts.run_campaign as campaign
+        import tests.test_run_campaign as campaign_test
+
+        config_root = Path(__file__).parent / "fixtures/axi_ap_spec"
+        state = campaign.load_analysis_manifest(config_root)
+        self.assertIsNotNone(state)
+        binding = campaign.load_campaign_policy(str(campaign_test.TEST_CAMPAIGN_POLICY))
+        entries = sorted(state.raw["entries"], key=lambda row: row["order_index"])
+        dispatched = iter(entries)
+
+        def child(command, *, env, outer_authentication, bundle_paths):
+            entry = next(dispatched)
+            bundle_path = bundle_paths[0]
+            config_path = campaign._resolve_analysis_reference(config_root, entry["config"])
+            from joulewise.schemas import BenchmarkConfig
+            config = json.loads(config_path.read_text())
+            config["run_id"] = bundle_path.name
+            writer = RunBundleWriter.create(
+                bundle_path.parent, BenchmarkConfig.from_mapping(config), FakeClock())
+            writer.write_metadata({"battery_float": {
+                "pre": None, "post": None, "not_applicable": "mock",
+            }})
+            (writer.path / "summary_metrics.json").write_text('{"status":"succeeded"}\n')
+            return subprocess.CompletedProcess(command, 0)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runs = root / "runs"
+            log = runs / "campaign_log.jsonl"
+            probe = root / "identity-probe"
+            probe.write_text("#!/bin/sh\nprintf 'Tue Sep 8 01:02:03 2026 S\\n'\n")
+            probe.chmod(0o755)
+            from joulewise.measurement_liveness import Identity
+            with (patch.dict(os.environ, {
+                      "JOULEWISE_CUSTODY_PARENT": str(root / "custody"),
+                      "JOULEWISE_ADDITIONAL_CUSTODY_PARENTS": "[]",
+                      "JOULEWISE_IDENTITY_PROBE": str(probe),
+                  }),
+                  patch.object(campaign, "observe_identity",
+                               return_value=Identity("LIVE", "Tue Sep 8 01:02:03 2026")),
+                  patch.object(campaign, "run_authenticated_campaign_child", side_effect=child),
+                  patch.object(campaign, "campaign_environment_preflight",
+                               return_value={"admitted": True}),
+                  patch.object(campaign, "campaign_cooldown_before_member",
+                               return_value={"result": "recovered"}),
+                  patch.object(campaign, "validate_bundle", side_effect=lambda *_args, **_kwargs: [])):
+                self.assertIs(campaign.run_axi_spec_campaign.__globals__["validate_bundle"],
+                              campaign.validate_bundle)
+                with self.assertRaises(WindowBatteryRefusal) as caught:
+                    campaign.run_axi_spec_campaign(
+                        campaign.argparse.Namespace(
+                            dry_run=False, cli_cmd=None, arm_quiet_mode=False,
+                            arm_countdown_s=0, environment_override=None,
+                        ), state, runs_dir=runs, policy_binding=binding, log_path=log)
+            self.assertEqual(len(caught.exception.members), len(entries))
+            self.assertEqual({row["status"] for row in caught.exception.members},
+                             {"not_applicable"})
+            self.assertFalse((runs / "axi_attempt_evidence" / state.manifest_id /
+                              "attempt_ledger.jsonl").exists())
+            if log.exists():
+                rows = [json.loads(line) for line in log.read_text().splitlines()]
+                self.assertFalse([row for row in rows if row.get("record_type") in {
+                    "campaign_verdict", "idle_admission_whole_window_verdict"}])
+
+    def test_12a_4_strict_window_consumers_refuse_mock(self) -> None:
+        from joulewise import aggregate, floor_extraction, window_duration_margins
+        from joulewise.calibration_ledger import CalibrationLedgerSnapshot, LEDGER_SCHEMA
+        from joulewise.whole_window import AuthenticatedConsumptionSession
+        import scripts.extract_detection_floors as floor_cli
+        import scripts.mint_floor_artifact as mint
+        import scripts.run_campaign as campaign
+        from joulewise.analysis_engine.inputs import load_analysis_inputs
+        import tests.test_run_campaign as campaign_test
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            bundle = self.mock_bundle(root, "mock")
+            spec = {"cells": [{"members": [{"bundle_id": "mock"}]}]}
+            snapshot = CalibrationLedgerSnapshot(
+                ledger_schema=LEDGER_SCHEMA, ledger_path=root / "ledger.jsonl",
+                head_sequence=0, head_digest="a" * 64, receipts=(),
+                observations=(), refusal_reasons=(),
+            )
+            policy = campaign.load_campaign_policy(
+                str(Path(__file__).parent / "fixtures/campaign_policy_test.json")).policy
+            cases = []
+            cases.append(("aggregate/make_figures", lambda:
+                aggregate.aggregate_experiment(root, {"members": ["mock"]})))
+            session = AuthenticatedConsumptionSession(
+                root, {"mock"}, calibration_ledger_snapshot=snapshot)
+            cases.append(("whole_window._prepare", lambda:
+                session._prepare(bundle_paths={"mock": bundle}, policy=policy)))
+            cases.append(("floor_extraction", lambda:
+                floor_extraction.extract_cells(root, spec,
+                    calibration_ledger_snapshot=snapshot)))
+            spec_path = root / "extraction-spec.json"
+            spec_path.write_text(json.dumps(spec))
+            floor_output = root / "floor-extraction.json"
+            cases.append(("extract_detection_floors.main", lambda:
+                floor_cli.main(["--runs-root", str(root), "--spec", str(spec_path),
+                                "--out", str(floor_output)])))
+            pack = root / "pack"
+            pack.mkdir()
+            cases.append(("window_duration_margins", lambda:
+                window_duration_margins.derive_window_duration_margins(
+                    repository_root=Path(__file__).parents[1], pack_root=pack,
+                    runs_root=root, pack_identity="fixture")))
+            report_path = root / "mint-report.json"
+            report_path.write_text(json.dumps({
+                "schema_version": mint.EXTRACTION_SCHEMA_VERSION,
+                "spec_schema_version": mint.EXTRACTION_SPEC_SCHEMA_VERSION,
+                "spec_membership_refusals": [], "idle_admission_refusals": [],
+                "runs_root": str(root),
+            }))
+            order_path = root / "mint-order.json"
+            order_path.write_text("{}")
+            plan_path = root / "mint-plan.json"
+            plan_path.write_text("{}")
+            mint_paths = mint.ComponentPaths(
+                evidence_root_id="fixture", evidence_root=root,
+                report_path=report_path, spec_path=spec_path,
+                order_manifest_path=order_path, calibration_cell_id="cell",
+                expected_kind="absolute",
+            )
+            mint_output = root / "mint-floor.json"
+            cases.append(("mint_floor_artifact", lambda:
+                mint.mint_floor_artifact(
+                    artifact_id="fixture", floor_path=mint_output,
+                    statement_path=root / "statement.json",
+                    calibration_plan_path=plan_path,
+                    calibration_plan_relative_path="mint-plan.json",
+                    absolute_paths=mint_paths, comparative_paths=mint_paths,
+                    project_commit="a" * 40, project_tree_state="clean",
+                    strict_validator=lambda *_: (),
+                    calibration_ledger_snapshot=snapshot)))
+            for name, call in cases:
+                with self.subTest(consumer=name):
+                    if name == "floor_extraction":
+                        context = patch.object(floor_extraction,
+                                               "validate_extraction_spec", return_value=[])
+                    elif name == "window_duration_margins":
+                        context = contextlib.ExitStack()
+                        context.enter_context(patch.object(window_duration_margins,
+                            "_pack_inventory", return_value=("a", "b", [object()])))
+                        context.enter_context(patch.object(window_duration_margins,
+                            "_resolve_member_paths", return_value={"mock": bundle}))
+                    elif name == "mint_floor_artifact":
+                        context = contextlib.ExitStack()
+                        context.enter_context(patch.object(mint,
+                            "validate_extraction_spec", return_value=[]))
+                        context.enter_context(patch.object(mint,
+                            "_target_spec_cell", return_value={}))
+                        context.enter_context(patch.object(mint,
+                            "_target_report_cell", return_value={}))
+                        context.enter_context(patch.object(mint,
+                            "_report_members", return_value=([], {})))
+                        context.enter_context(patch.object(mint,
+                            "_verify_report_widths", return_value=None))
+                        context.enter_context(patch.object(mint,
+                            "_spec_member_ids", return_value={"mock"}))
+                    else:
+                        context = contextlib.nullcontext()
+                    with context, self.assertRaises(WindowBatteryRefusal) as caught:
+                        call()
+                    self.assertEqual([(row["label"], row["status"])
+                                      for row in caught.exception.members],
+                                     [("mock", "not_applicable")])
+            self.assertFalse(floor_output.exists())
+            self.assertFalse(mint_output.exists())
+
+            config_dir = root / "analysis-configs"
+            analysis_runs = root / "analysis-runs"
+            config_dir.mkdir()
+            campaign_test.write_strict_analysis_campaign(config_dir, analysis_runs)
+            with self.assertRaises(WindowBatteryRefusal) as caught:
+                load_analysis_inputs(config_dir / "analysis_manifest.json",
+                                     analysis_runs, root / "unused-floor.json",
+                                     strict_validator=lambda *_: ())
+            self.assertEqual({row["status"] for row in caught.exception.members},
+                             {"not_applicable"})
+            self.assertFalse((root / "analysis-artifact.json").exists())
 
     def test_passing_pair_returns_verdict(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
