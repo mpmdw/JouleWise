@@ -1,0 +1,57 @@
+RULING: CAP-COUNCIL-25G83-01 ISSUED
+
+The ruling is written to `/Users/edr/code/JouleWise-wt-bk-77b1bee2/docs/process_traces/2026-09-27-activation-d528efb2/20-cap-council/21-coldgate-fable-ruling.md` (sha256 `a90b6e76…4ed1`, 29,466 bytes). The session ran about 12 of the 45 budgeted minutes. I changed no other file and left no process running.
+
+## What I ruled
+
+| Item | Ruling |
+|---|---|
+| Route | **R.** The hold on claim-bearing windows closes only when a closing ruling cites seven listed items (C1–C7) by path and digest. |
+| Sizing rule | One constant: **10 × the largest measured cell count, rounded up to the next 10,000**. It is not a function of frame length. The text (CAP-RULE-25G83-1, R0–R12) is in §4.3 of the ruling, ready to pre-register. |
+| Covered range | Per-capture median frame length 100–150 ms. Outside it the capture is flagged and the whole window's claim status is held; no bracket is dropped for frame length alone. |
+| Acceptance test | At least 24 non-claim captures in which the cell search actually ran, with zero cap stops, zero deadline stops and every capture using at most half the cap. |
+| Membership | The eight capped captures are never members. The same 12 are re-issued unchanged inside the cap transaction as an interim calibration that is not claim-eligible. A fresh registered corpus follows, and the acceptance captures may also serve as that corpus if both purposes are registered beforehand. |
+| Clock limit | The 5 ms span limit stands. |
+
+## Two findings from my own runs
+
+- **Cell need does not rise steadily with frame length.** Four 2026-09-19 captures at 244–254 ms frames need only 45,000–53,000 cells, against 144,000–171,000 at 128–130 ms. The steepest growth law any seat fitted predicts about 20.9 million cells at 245 ms, so it is wrong there by a factor of about 440. No seat reported this. It is why I rejected both the "measure the top of the range first" rules (Sol, Astra) and the exponent checks (Opus, Fable seat).
+- **The three clock-step losses are macOS network-time corrections.** My own system-log query shows a correction inside each of the three captures: +53.198 ms, +4.386 ms and −35.939 ms. A fourth loss (W1-d01) probably has the same cause; that is an inference, not established.
+
+Network time was on for both windows, and the W1 chain script never checked it. The clock method's own text calls such captures validation-only material (`joulewise/uncertainty_evidence.py:903–909`). I referred that to the `dbad7cc7` issuance gate and did not rule on it.
+
+## Sequence
+
+1. Issue `dbad7cc7` unchanged.
+2. File the clock record and get network time switched off for windows.
+3. Pre-register the rule, then compute the value.
+4. Build one staged branch: the cap plus any waiting estimator change that leaves all 12 member values identical.
+5. Run the three-family audit on that frozen tree.
+6. Merge with the interim re-issue.
+7. Run two non-claim windows.
+8. Run the cell-count test before any B is read.
+9. Issue the successor, then a limited audit of what changed.
+10. Closing ruling, then claim-bearing windows.
+
+If nothing fails this is about 2–4 days; I gave no date.
+
+## Needed from Ed
+
+- **Administrator action:** switch network time off for windows (`scripts/quiet_window_clock.sh disable` / `enable`, or a passwordless helper). The new windows cannot run without it.
+- **Approval** of the successor registration before it is sealed.
+- **Identity** of two artifacts: the interim re-issue and the successor.
+- **A word on the audit:** whether a full audit before the captures plus a limited pass after meets directive #416, which I did not read.
+
+## Disclosures
+
+- The harness preloaded the instruction files and the memory index; I opened none of them.
+- I have seen the 20 B values printed in the earlier gate ruling, and I read two seats' scratch evidence.
+- My closing process check listed the command line of another running session (process 77895, not mine, left untouched). It shows a separate cold addendum, A2, is charged with the network-time question for the issuance. I read none of its output.
+- Not executed: replay of the August corpus, the other 20 captures of 09-19, any review of the four waiting estimator branches, and the capture writer's digest check. The interim re-issue rests on the registration's wording for that last one.
+
+## Summary
+
+1. The cap becomes one constant, ten times the largest work ever measured, fixed by a rule written before the value is computed, and every window reports how close it came.
+2. The calibration is re-issued twice: the same 12 values under the new code (not usable for claims), then a fresh corpus from two new non-claim windows that also prove the cap stops nothing.
+3. The clock losses come from network-time corrections about every 27 minutes; the 5 ms limit stays, and Ed needs to switch network time off for windows, approve the successor registration and name the two artifacts.
+rc=0
