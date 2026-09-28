@@ -57,7 +57,7 @@ class FloorMintPinsetsSchemaTests(unittest.TestCase):
         )
         self.assertEqual(
             set(conditionals["finalProducer"]),
-            {"n19AcceptanceIds", "n17AcceptanceIds"},
+            {"n19AcceptanceIds", "n17AcceptanceIds", "n12Epoch25g83AcceptanceIds"},
         )
 
         ids_by_screen: dict[str, set[str]] = {}
@@ -72,6 +72,14 @@ class FloorMintPinsetsSchemaTests(unittest.TestCase):
                     set(schema["$defs"][definition_name]["enum"]),
                     ids_by_screen[screen],
                 )
+
+        membership = [
+            acceptance_id
+            for name in conditionals["finalProducer"]
+            for acceptance_id in schema["$defs"][name]["enum"]
+        ]
+        self.assertEqual(len(membership), len(set(membership)))
+        self.assertEqual(set(membership), issued_ids)
 
 
 if __name__ == "__main__":

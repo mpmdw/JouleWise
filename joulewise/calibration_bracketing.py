@@ -17,6 +17,9 @@ from types import MappingProxyType
 from typing import Any, Literal, Mapping, Sequence
 
 from joulewise.authentication_io import read_authentication_input
+from joulewise.calibration_dispositions import (
+    decisions_disposing, disposed_content_ids_for,
+)
 from joulewise.bundle_read import BundleReadError, BundleReader
 from joulewise.calibration_ledger import (
     IDENTITY_EPOCH_FIELDS,
@@ -141,6 +144,13 @@ ANCHOR_V3_R7_ACCEPTANCE_ID = "d079_calibration_acceptance_v2_n17_r7"
 ANCHOR_V3_R7_ACCEPTANCE_BOUND_SHA256 = (
     "9c3a29f61a6f72bbe5efdfb0eddd1caa14557595522b2abb093b414380b9fe16"
 )
+EPOCH_25G83_R1_ACCEPTANCE_BOUND_PATH = (
+    _CALIBRATION_CONFIG_DIR / "calibration_acceptance_d079_v2_n12_25g83_r1.json"
+)
+EPOCH_25G83_R1_ACCEPTANCE_ID = "d079_calibration_acceptance_v2_n12_25g83_r1"
+EPOCH_25G83_R1_ACCEPTANCE_BOUND_SHA256 = (
+    "9e5c735bf7b4d27604bfadd87809750974322258b943fd1afb04d1873e824c06"
+)
 # Multi-generation registry.  Authentication is indexed by the artifact's own
 # `acceptance_id`, so a caller cannot present one generation's bytes under
 # another generation's pin, and predecessor packs stay verifiable unchanged.
@@ -190,13 +200,18 @@ ISSUED_ACCEPTANCE_REGISTRY: dict[str, dict[str, Any]] = {
         ),
         "file_sha256": ANCHOR_V3_R7_ACCEPTANCE_BOUND_SHA256,
     },
+    EPOCH_25G83_R1_ACCEPTANCE_ID: {
+        "path": EPOCH_25G83_R1_ACCEPTANCE_BOUND_PATH,
+        "relative_path": "configs/calibration/calibration_acceptance_d079_v2_n12_25g83_r1.json",
+        "file_sha256": EPOCH_25G83_R1_ACCEPTANCE_BOUND_SHA256,
+    },
 }
 # Issuance is a later governed transaction. A candidate file never adds an
 # epoch merely by existing on disk; this registry must pin its issued bytes.
 EPOCH_CONTINUATION_REGISTRY: dict[str, dict[str, Any]] = {}
 # The LIVE surface: what production loads when no artifact is named.
-ACTIVE_ACCEPTANCE_ID = ANCHOR_V3_R7_ACCEPTANCE_ID
-DEFAULT_ACCEPTANCE_BOUND_PATH = ANCHOR_V3_R7_ACCEPTANCE_BOUND_PATH
+ACTIVE_ACCEPTANCE_ID = EPOCH_25G83_R1_ACCEPTANCE_ID
+DEFAULT_ACCEPTANCE_BOUND_PATH = EPOCH_25G83_R1_ACCEPTANCE_BOUND_PATH
 # Authenticates the retained ``schema_fixture_unissued`` genesis bytes; this is
 # not the digest of ``DEFAULT_ACCEPTANCE_BOUND_PATH``.
 GENESIS_FIXTURE_ACCEPTANCE_SHA256 = (
@@ -374,6 +389,31 @@ _D102_N17_DERIVATION: dict[str, Any] = {
     "predecessor_ceiling_s": None,
     "registration_session_ids": (),
 }
+_D102_N12_25G83_DERIVATION: dict[str, Any] = {
+    "corpus_n": 12,
+    "corpus_doubling_trigger": "corpus_doubles_from_12_to_24",
+    "prediction_95_two_draw_s": "0.013479318561660503",
+    "prediction_99_two_draw_s": "0.01902064410651988",
+    "operatives": {
+        "bracket_screen_s": "0.013701",
+        "preflight_level_screen_s": "0.038078579302948",
+        "max_budgetable_excess_s": "0.00531964410651988",
+        "maximum_budgetable_drift_s": "0.01902064410651988",
+    },
+    "epoch_catalog_ids": (D079_EPOCH_CATALOG_ID, "d079_epoch_25g83"),
+    "prior_prefix_mode": PRIOR_PREFIX_MODE_IMPORT_PLUS_LIVE,
+    "prior_observation_count": 86,
+    "cutoff_sequence": 276,
+    "screen_rule": SCREEN_RULE_FLOORED_RANGE_ENVELOPE,
+    "predecessor_ceiling_s": "0.010164834757777545",
+    "predecessor_acceptance_id": ANCHOR_V3_R7_ACCEPTANCE_ID,
+    "registration_session_ids": (
+        "d079-epoch-25g83-derivation-w1-20260927",
+        "d079-epoch-25g83-derivation-w2-20260927",
+    ),
+    "d125_ruling": "docs/decision_log.md, D-125 addendum (2026-09-25): Revision 5 screen and ceiling for epoch 25G83/v3 (ACCEPTANCE-25G83-02 §5 R5(i), R9)",
+    "registration_revision": 5,
+}
 _D102_GENERATION_DERIVATIONS: dict[str, dict[str, Any]] = {
     PREDECESSOR_ACCEPTANCE_ID: _D102_N19_DERIVATION,
     SUCCESSOR_ACCEPTANCE_ID: _D102_N19_DERIVATION,
@@ -387,6 +427,7 @@ _D102_GENERATION_DERIVATIONS: dict[str, dict[str, Any]] = {
     ANCHOR_V3_R6_ACCEPTANCE_ID: _D102_N17_DERIVATION,
     # r7 is the science-neutral A267 clock-anchor-deriver reissue of r6.
     ANCHOR_V3_R7_ACCEPTANCE_ID: _D102_N17_DERIVATION,
+    EPOCH_25G83_R1_ACCEPTANCE_ID: _D102_N12_25G83_DERIVATION,
 }
 
 
@@ -975,12 +1016,28 @@ def _valid_acceptance_bound(value: Any) -> bool:
     # ones, and nothing else in the artifact would show it.
     if prefix_mode == PRIOR_PREFIX_MODE_IMPORT_PLUS_LIVE:
         registration_session_ids = set(generation["registration_session_ids"])
+        declared = prior.get("disposing_decision_ids")
+        disposed = disposed_content_ids_for(declared)
+        if disposed is None:
+            return False
+        if decisions_disposing(set(prior_ids)) != (declared if declared is not None else []):
+            return False
+        if not disposed.issubset(set(prior_ids)):
+            return False
+        if any(
+            prior_row_by_content_id[content_id].get("session_id") in registration_session_ids
+            or content_id in member_content_ids
+            for content_id in disposed
+        ):
+            return False
         registration_valid_ids: set[str] = set()
         for observation in prior["observations"]:
             if (
                 observation["disposition"] != "valid"
                 or observation["epoch_id"] != target_epoch_id
             ):
+                continue
+            if observation["content_id"] in disposed:
                 continue
             # A valid same-epoch row from OUTSIDE this registration refuses
             # issuance rather than being silently absorbed into the corpus:
@@ -1021,6 +1078,8 @@ def _valid_acceptance_bound(value: Any) -> bool:
             if excluded_content_id is None:
                 return False
             excluded_content_ids.add(excluded_content_id)
+        if disposed & excluded_content_ids:
+            return False
         if (
             len(excluded_content_ids) != len(excluded)
             or member_content_ids & excluded_content_ids

@@ -1561,7 +1561,7 @@ class CalibrationLaunchAuthenticationTests(unittest.TestCase):
 
 class FrozenProtocolTests(unittest.TestCase):
     def test_preflight_screen_is_derived_bit_exactly_from_real_artifact(self) -> None:
-        # The ACTIVE generation since the A267 clock-anchor-deriver reissue.
+        # The retained R7 generation from the A267 clock-anchor-deriver reissue.
         # The estimator-bearing branch was fail-closed while the issued pin was
         # stale; the atomic Phase-2 acceptance/pin re-freeze is exactly what
         # cures it, so this unit proves the cured state end to end.
@@ -1594,11 +1594,16 @@ class FrozenProtocolTests(unittest.TestCase):
         )
         self.assertIsInstance(observed, Decimal)
         self.assertEqual(observed.as_tuple(), expected.as_tuple())
+        active_screen = validation_script._derive_preflight_systematic_screen_s(
+            acceptance_path=validation_script.DEFAULT_ACCEPTANCE_BOUND_PATH
+        )
+        self.assertIsInstance(active_screen, Decimal)
+        self.assertNotEqual(active_screen, observed)
         self.assertEqual(
             validation_script.PREFLIGHT_SYSTEMATIC_SCREEN_S,
-            observed,
-            "the branch-wide convenience value derives from the issued "
-            "artifact once its estimator pin is fresh",
+            active_screen,
+            "the branch-wide convenience value derives from the active "
+            "25G83 issuance while the retained R7 path keeps its own screen",
         )
         # Every retained predecessor generation keeps its own exact bytes and
         # stays stale-pinned: a superseded generation must never be able to
@@ -2275,6 +2280,7 @@ os._exit(23)
             mlx_core = ModuleType("mlx.core")
             mlx_core.__version__ = "synthetic"
             mlx_package.core = mlx_core
+            from joulewise.calibration_bracketing import ANCHOR_V3_R7_ACCEPTANCE_BOUND_PATH
             with (
                 patch.dict(
                     sys.modules,
@@ -2284,6 +2290,11 @@ os._exit(23)
                     validation_script,
                     "verify_frozen_protocol",
                     return_value=True,
+                ),
+                patch.object(
+                    validation_script,
+                    "DEFAULT_ACCEPTANCE_BOUND_PATH",
+                    ANCHOR_V3_R7_ACCEPTANCE_BOUND_PATH,
                 ),
                 patch.object(
                     validation_script,

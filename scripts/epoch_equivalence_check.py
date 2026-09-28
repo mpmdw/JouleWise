@@ -95,7 +95,7 @@ if str(REPO_ROOT) not in sys.path:
 from joulewise.calibration_bracketing import (  # noqa: E402
     _D102_GENERATION_DERIVATIONS,
     ANCHOR_V3_R7_ACCEPTANCE_ID,
-    DEFAULT_ACCEPTANCE_BOUND_PATH,
+    ANCHOR_V3_R7_ACCEPTANCE_BOUND_PATH,
     acceptance_generation_operatives,
     load_calibration_acceptance_bound,
 )
@@ -696,7 +696,7 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
-        "--acceptance", type=Path, default=DEFAULT_ACCEPTANCE_BOUND_PATH,
+        "--acceptance", type=Path, default=ANCHOR_V3_R7_ACCEPTANCE_BOUND_PATH,
         help="the issued acceptance artifact that supplies the reference envelope",
     )
     parser.add_argument(

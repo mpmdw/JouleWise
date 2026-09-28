@@ -44,7 +44,10 @@ from joulewise.calibration_bracketing import (
     ANCHOR_V3_R6_ACCEPTANCE_BOUND_SHA256,
     ANCHOR_V3_R6_ACCEPTANCE_ID,
     ANCHOR_V3_R7_ACCEPTANCE_BOUND_SHA256,
+    ANCHOR_V3_R7_ACCEPTANCE_BOUND_PATH,
     ANCHOR_V3_R7_ACCEPTANCE_ID,
+    EPOCH_25G83_R1_ACCEPTANCE_BOUND_SHA256,
+    EPOCH_25G83_R1_ACCEPTANCE_ID,
     ANCHOR_V3_R5_ACCEPTANCE_ID,
     ISSUED_ACCEPTANCE_REGISTRY,
     PREDECESSOR_ACCEPTANCE_BOUND_PATH,
@@ -607,14 +610,11 @@ class CalibrationBracketingTests(unittest.TestCase):
 
         self.assertIsNotNone(artifact)
         self.assertEqual(artifact["artifact_role"], "issued")
-        # The live default is the ACTIVE generation.  Since the D-138 A267
-        # clock-anchor-deriver re-freeze it is the n=17 r7 generation; all
-        # retained earlier generations keep their own registered pins and are
-        # asserted below.
+        # The live default is the epoch-25G83 issuance; R7 remains registered.
         self.assertEqual(
-            hashlib.sha256(raw).hexdigest(), ANCHOR_V3_R7_ACCEPTANCE_BOUND_SHA256
+            hashlib.sha256(raw).hexdigest(), EPOCH_25G83_R1_ACCEPTANCE_BOUND_SHA256
         )
-        self.assertEqual(artifact["acceptance_id"], ANCHOR_V3_R7_ACCEPTANCE_ID)
+        self.assertEqual(artifact["acceptance_id"], EPOCH_25G83_R1_ACCEPTANCE_ID)
         # r6 is RETAINED as an intermediate generation: superseded as the live
         # default, still authenticating byte-identically under its own pin.
         self.assertEqual(
@@ -623,7 +623,9 @@ class CalibrationBracketingTests(unittest.TestCase):
             ).hexdigest(),
             ANCHOR_V3_R6_ACCEPTANCE_BOUND_SHA256,
         )
-        self.assertEqual(artifact["derivation_corpus"]["n"], 17)
+        self.assertEqual(artifact["derivation_corpus"]["n"], 12)
+        self.assertEqual(hashlib.sha256(ANCHOR_V3_R7_ACCEPTANCE_BOUND_PATH.read_bytes()).hexdigest(),
+                         ANCHOR_V3_R7_ACCEPTANCE_BOUND_SHA256)
         self.assertEqual(
             hashlib.sha256(PREDECESSOR_ACCEPTANCE_BOUND_PATH.read_bytes()).hexdigest(),
             ISSUED_ACCEPTANCE_BOUND_SHA256,
@@ -677,7 +679,7 @@ class CalibrationBracketingTests(unittest.TestCase):
         )
 
     def test_issued_allowance_projection_uses_exact_decimal_authority(self) -> None:
-        artifact = load_calibration_acceptance_bound()
+        artifact = load_calibration_acceptance_bound(ANCHOR_V3_R7_ACCEPTANCE_BOUND_PATH)
         self.assertIsNotNone(artifact)
         projection = issued_calibration_allowance_projection(
             artifact,
@@ -2722,7 +2724,7 @@ class CalibrationBracketingTests(unittest.TestCase):
                 )
 
     def test_acceptance_artifact_rederives_from_decimal_member_table(self) -> None:
-        artifact = load_calibration_acceptance_bound()
+        artifact = load_calibration_acceptance_bound(ANCHOR_V3_R7_ACCEPTANCE_BOUND_PATH)
         self.assertIsNotNone(artifact)
         self.assertEqual(artifact["derivation_corpus"]["n"], 17)
         self.assertEqual(
@@ -2745,7 +2747,7 @@ class CalibrationBracketingTests(unittest.TestCase):
             self.assertIsNone(load_calibration_acceptance_bound(path))
 
     def test_rekeyed_self_consistent_artifact_is_not_authenticated(self) -> None:
-        artifact = load_calibration_acceptance_bound()
+        artifact = load_calibration_acceptance_bound(ANCHOR_V3_R7_ACCEPTANCE_BOUND_PATH)
         self.assertIsNotNone(artifact)
         rekeyed = json.loads(json.dumps(artifact))
         rekeyed["identity_epoch"]["os_build"] = "25F85"
@@ -3297,6 +3299,8 @@ class GenerationKeyedIssuanceValidationTests(unittest.TestCase):
 
     def test_every_registered_generation_row_carries_the_full_schema(self) -> None:
         for acceptance_id, generation in _D102_GENERATION_DERIVATIONS.items():
+            if acceptance_id == EPOCH_25G83_R1_ACCEPTANCE_ID:
+                continue
             with self.subTest(acceptance_id=acceptance_id):
                 self.assertEqual(
                     generation["epoch_catalog_ids"], (D079_EPOCH_CATALOG_ID,)
@@ -3310,7 +3314,7 @@ class GenerationKeyedIssuanceValidationTests(unittest.TestCase):
                     generation["screen_rule"], SCREEN_RULE_RANGE_EQUALS_SCREEN
                 )
                 self.assertEqual(generation["registration_session_ids"], ())
-                # Neither registered generation is a D-125 envelope successor:
+                # None of the retained old-epoch generations is a D-125 envelope successor:
                 # the n=19 corpus is the genesis, and the anchor-v3 r-series is
                 # a re-derivation of the same captures under changed estimator
                 # bytes, whose ceiling is its own Q99 and sits BELOW n=19's.
@@ -3323,7 +3327,7 @@ class GenerationKeyedIssuanceValidationTests(unittest.TestCase):
     def test_registered_cutoff_sequence_is_read_from_the_row_not_a_literal(
         self,
     ) -> None:
-        artifact = load_calibration_acceptance_bound()
+        artifact = load_calibration_acceptance_bound(ANCHOR_V3_R7_ACCEPTANCE_BOUND_PATH)
         self.assertTrue(_valid_acceptance_bound(artifact))
         # Both numbers move together so the row stays internally consistent
         # (cutoff = 2 x count); only the comparison against the ARTIFACT can
@@ -3337,7 +3341,7 @@ class GenerationKeyedIssuanceValidationTests(unittest.TestCase):
     def test_generation_row_missing_a_fence_refuses_rather_than_defaulting(
         self,
     ) -> None:
-        artifact = load_calibration_acceptance_bound()
+        artifact = load_calibration_acceptance_bound(ANCHOR_V3_R7_ACCEPTANCE_BOUND_PATH)
         for dropped in (
             "epoch_catalog_ids",
             "prior_prefix_mode",
@@ -3366,7 +3370,7 @@ class GenerationKeyedIssuanceValidationTests(unittest.TestCase):
         # vocabulary is widened here and only the comparison site can refuse.
         from joulewise import calibration_bracketing as module
 
-        artifact = load_calibration_acceptance_bound()
+        artifact = load_calibration_acceptance_bound(ANCHOR_V3_R7_ACCEPTANCE_BOUND_PATH)
         rekeyed = dict(_D102_GENERATION_DERIVATIONS[ANCHOR_V3_R7_ACCEPTANCE_ID])
         rekeyed["screen_rule"] = "max_range_or_d125_floor"
         with patch.object(
@@ -4184,6 +4188,8 @@ class GenerationKeyedIssuanceValidationTests(unittest.TestCase):
         # The six issued generations carry no `d125_ruling` and must keep
         # validating; the key is required only of envelope rows.
         for acceptance_id, generation in _D102_GENERATION_DERIVATIONS.items():
+            if acceptance_id == EPOCH_25G83_R1_ACCEPTANCE_ID:
+                continue
             with self.subTest(acceptance_id=acceptance_id):
                 self.assertNotIn("d125_ruling", generation)
                 self.assertEqual(

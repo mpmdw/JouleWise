@@ -24,8 +24,8 @@ from unittest import mock
 
 from joulewise.calibration_bracketing import (
     _D102_GENERATION_DERIVATIONS,
-    ACTIVE_ACCEPTANCE_ID,
-    DEFAULT_ACCEPTANCE_BOUND_PATH,
+    ANCHOR_V3_R7_ACCEPTANCE_ID,
+    ANCHOR_V3_R7_ACCEPTANCE_BOUND_PATH,
     acceptance_generation_operatives,
 )
 from joulewise.calibration_ledger import SESSION_KIND_BRACKET
@@ -47,7 +47,7 @@ SESSION = "derivation-night-1"
 SUCCESSOR_EPOCH = dict(TARGET_EPOCH, os_build="25G99")
 SUCCESSOR_T1_BINDINGS = dict(T1_BINDINGS, os_build="25G99")
 # The envelope in force, read from the registry the tool itself consults.
-OPERATIVES = acceptance_generation_operatives(ACTIVE_ACCEPTANCE_ID)
+OPERATIVES = acceptance_generation_operatives(ANCHOR_V3_R7_ACCEPTANCE_ID)
 LEVEL_SCREEN = Decimal(OPERATIVES["preflight_level_screen_s"])
 BRACKET_SCREEN = Decimal(OPERATIVES["bracket_screen_s"])
 # One unit in the last place OF THE LEVEL SCREEN'S OWN LEXEME -- derived from
@@ -72,6 +72,13 @@ def _tight_grid(count: int, top: Decimal, step: Decimal) -> list[str]:
 class EpochEquivalenceCheckTest(unittest.TestCase):
     """Each test names the clause of issue 316's rule it defends."""
 
+    def test_default_acceptance_remains_r7(self):
+        from joulewise.calibration_bracketing import ANCHOR_V3_R7_ACCEPTANCE_BOUND_PATH
+        args = checker.build_parser().parse_args(["--session-id", "x", "--out", "out"])
+        self.assertEqual(args.acceptance, ANCHOR_V3_R7_ACCEPTANCE_BOUND_PATH)
+        self.assertEqual(checker.reference_envelope(args.acceptance)["acceptance_id"],
+                         "d079_calibration_acceptance_v2_n17_r7")
+
     def run_check(self, fixture, *extra: str, session: str = SESSION):
         """Run the tool exactly as the CLI does, returning (rc, text, record)."""
 
@@ -83,7 +90,7 @@ class EpochEquivalenceCheckTest(unittest.TestCase):
                 "--session-id", session,
                 "--ledger", str(fixture["ledger"]),
                 "--head-pin", str(fixture["pin"]),
-                "--acceptance", str(DEFAULT_ACCEPTANCE_BOUND_PATH),
+                "--acceptance", str(ANCHOR_V3_R7_ACCEPTANCE_BOUND_PATH),
                 "--repo-root", str(fixture["root"]),
                 "--out", str(out),
                 *extra,
@@ -349,7 +356,7 @@ class EpochEquivalenceCheckTest(unittest.TestCase):
         guard, and it is asserted here with the registry actually rewritten.
         """
 
-        row = dict(_D102_GENERATION_DERIVATIONS[ACTIVE_ACCEPTANCE_ID])
+        row = dict(_D102_GENERATION_DERIVATIONS[ANCHOR_V3_R7_ACCEPTANCE_ID])
         for field in ("preflight_level_screen_s", "bracket_screen_s"):
             operatives = dict(row["operatives"])
             operatives[field] = _lexeme(Decimal(operatives[field]) + Decimal("0.001"))
@@ -357,13 +364,13 @@ class EpochEquivalenceCheckTest(unittest.TestCase):
             with self.subTest(field=field):
                 with mock.patch.dict(
                     _D102_GENERATION_DERIVATIONS,
-                    {ACTIVE_ACCEPTANCE_ID: crosswired},
+                    {ANCHOR_V3_R7_ACCEPTANCE_ID: crosswired},
                 ):
                     stream = io.StringIO()
                     with redirect_stdout(stream):
                         code = checker.main(
                             ["--print-envelope-only",
-                             "--acceptance", str(DEFAULT_ACCEPTANCE_BOUND_PATH)]
+                             "--acceptance", str(ANCHOR_V3_R7_ACCEPTANCE_BOUND_PATH)]
                         )
                 self.assertEqual(code, checker.REFUSAL_EXIT)
                 self.assertIn("REFUSED:", stream.getvalue())
@@ -382,7 +389,7 @@ class EpochEquivalenceCheckTest(unittest.TestCase):
         """
 
         authentic = checker.load_calibration_acceptance_bound(
-            DEFAULT_ACCEPTANCE_BOUND_PATH
+            ANCHOR_V3_R7_ACCEPTANCE_BOUND_PATH
         )
         for field in checker.CROSSCHECKED_OPERATIVES:
             ratified = dict(authentic["decimal_derivation"]["ratified_operatives"])
@@ -398,7 +405,7 @@ class EpochEquivalenceCheckTest(unittest.TestCase):
                     return_value=forged,
                 ):
                     with self.assertRaises(checker.EquivalenceRefusal) as caught:
-                        checker.reference_envelope(DEFAULT_ACCEPTANCE_BOUND_PATH)
+                        checker.reference_envelope(ANCHOR_V3_R7_ACCEPTANCE_BOUND_PATH)
                 self.assertIn("disagree", caught.exception.reason)
                 self.assertIn(field, caught.exception.reason)
 
@@ -406,7 +413,7 @@ class EpochEquivalenceCheckTest(unittest.TestCase):
         """n is stated twice too, and the two statements must be the same n."""
 
         authentic = checker.load_calibration_acceptance_bound(
-            DEFAULT_ACCEPTANCE_BOUND_PATH
+            ANCHOR_V3_R7_ACCEPTANCE_BOUND_PATH
         )
         corpus = {**authentic["derivation_corpus"],
                   "n": authentic["derivation_corpus"]["n"] + 1}
@@ -415,7 +422,7 @@ class EpochEquivalenceCheckTest(unittest.TestCase):
             checker, "load_calibration_acceptance_bound", return_value=forged
         ):
             with self.assertRaises(checker.EquivalenceRefusal) as caught:
-                checker.reference_envelope(DEFAULT_ACCEPTANCE_BOUND_PATH)
+                checker.reference_envelope(ANCHOR_V3_R7_ACCEPTANCE_BOUND_PATH)
         self.assertIn("corpus n", caught.exception.reason)
 
     def test_an_out_path_under_configs_calibration_refuses(self) -> None:
@@ -441,7 +448,7 @@ class EpochEquivalenceCheckTest(unittest.TestCase):
         """
 
         predecessor = (
-            DEFAULT_ACCEPTANCE_BOUND_PATH.parent / "calibration_acceptance_d079_v2.json"
+            ANCHOR_V3_R7_ACCEPTANCE_BOUND_PATH.parent / "calibration_acceptance_d079_v2.json"
         )
         self.assertTrue(predecessor.exists())
         values = ["0.033"] * 12
@@ -510,11 +517,11 @@ class EpochEquivalenceCheckTest(unittest.TestCase):
         self.assertFalse(Path(envelope["acceptance_path"]).is_absolute())
         self.assertEqual(
             envelope["acceptance_path"],
-            str(DEFAULT_ACCEPTANCE_BOUND_PATH.resolve().relative_to(checker.REPO_ROOT)),
+            str(ANCHOR_V3_R7_ACCEPTANCE_BOUND_PATH.resolve().relative_to(checker.REPO_ROOT)),
         )
         self.assertEqual(
             envelope["acceptance_file_sha256"],
-            hashlib.sha256(DEFAULT_ACCEPTANCE_BOUND_PATH.read_bytes()).hexdigest(),
+            hashlib.sha256(ANCHOR_V3_R7_ACCEPTANCE_BOUND_PATH.read_bytes()).hexdigest(),
         )
         self.assertEqual(envelope["screen_rule"], "range_equals_screen")
         self.assertIn("no floor is in force under this screen rule", text)
@@ -588,7 +595,7 @@ class EpochEquivalenceCheckTest(unittest.TestCase):
             "bracket_screen_s", "maximum_budgetable_drift_s",
         ):
             self.assertIn(envelope[key], text)
-        self.assertEqual(envelope["acceptance_id"], ACTIVE_ACCEPTANCE_ID)
+        self.assertEqual(envelope["acceptance_id"], ANCHOR_V3_R7_ACCEPTANCE_ID)
         self.assertEqual(envelope["level_screen_s"], OPERATIVES["preflight_level_screen_s"])
         self.assertEqual(envelope["bracket_screen_s"], OPERATIVES["bracket_screen_s"])
         # The retained lexemes are the stored ones, not a reformatting of them.

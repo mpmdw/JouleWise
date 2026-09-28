@@ -6188,6 +6188,24 @@ def applicability_for_row(
     )
 
 
+_ISSUED_D079_IDS = frozenset({
+    "d079",
+    "d079_calibration_acceptance_v2_n19",
+    "d079_calibration_acceptance_v2_n19_r2",
+    "d079_calibration_acceptance_v2_n17_r3",
+    "d079_calibration_acceptance_v2_n17_r4",
+    "d079_calibration_acceptance_v2_n17_r5",
+    "d079_calibration_acceptance_v2_n17_r6",
+    "d079_calibration_acceptance_v2_n17_r7",
+    "d079_calibration_acceptance_v2_n12_25g83_r1",
+})
+# An issued calibration may be held from claim-bearing pack admission.
+_CLAIM_HELD_ACCEPTANCE_IDS = {
+    "d079_calibration_acceptance_v2_n12_25g83_r1":
+    "H1-25G83-CAP-CADENCE (SCI-25G83-CANDIDATE-01-A1 §5.3)",
+}
+
+
 def _issued_d079(tree: Mapping[str, Any]) -> bool:
     policy = tree.get("acceptance_policy")
     if not isinstance(policy, Mapping):
@@ -6200,22 +6218,10 @@ def _issued_d079(tree: Mapping[str, Any]) -> bool:
         issued = nested.get("acceptance_id")
     if issued is None:
         issued = policy.get("issued_artifact_id")
-    # Every issued D-079 generation routes as the issued artifact.  The D-138
-    # reissue re-derived the same corpus at the integrated estimator head; the
-    # anchor-v3 generation re-derived the same LEDGER under a corrected
-    # estimator method.  Neither is a D-102 corpus-GROWTH successor, which is
-    # what `SUCCESSOR_ACCEPTANCE_ONLY` rows exist for.  Earlier ids stay listed
-    # so predecessor packs are unaffected.
-    return issued in {
-        "d079",
-        "d079_calibration_acceptance_v2_n19",
-        "d079_calibration_acceptance_v2_n19_r2",
-        "d079_calibration_acceptance_v2_n17_r3",
-        "d079_calibration_acceptance_v2_n17_r4",
-        "d079_calibration_acceptance_v2_n17_r5",
-        "d079_calibration_acceptance_v2_n17_r6",
-        "d079_calibration_acceptance_v2_n17_r7",
-    }
+    # Retained D-079 generations keep their issued route. The new 25G83
+    # generation is issued but held by H1, so its pack requires the successor
+    # row, which the evidence author refuses until the hold is ruled closed.
+    return issued in _ISSUED_D079_IDS and issued not in _CLAIM_HELD_ACCEPTANCE_IDS
 
 
 def _evidence_directories(pack_root: Path, custody_pack_root: Path) -> tuple[tuple[str, Path], ...]:

@@ -129,6 +129,7 @@ def make_author_fixture(pack_name: str = "d117_floor_qwen25_1p5b_v1"):
         "configs/calibration/calibration_acceptance_d079_v2_n17_r5.json",
         "configs/calibration/calibration_acceptance_d079_v2_n17_r6.json",
         "configs/calibration/calibration_acceptance_d079_v2_n17_r7.json",
+        "configs/calibration/calibration_acceptance_d079_v2_n12_25g83_r1.json",
         "docs/decision_log.md",
         "docs/phase_2/window_runbook.md",
         "joulewise/analysis_manifest_v3.py",
@@ -361,6 +362,32 @@ def make_author_fixture(pack_name: str = "d117_floor_qwen25_1p5b_v1"):
 
 
 class ArmReadinessEvidenceAuthorTests(unittest.TestCase):
+    def test_h_t1_new_issuance_is_held_at_arm(self) -> None:
+        from joulewise.calibration_bracketing import EPOCH_25G83_R1_ACCEPTANCE_ID
+        tree = {"acceptance_policy": {"selection": "issued_d116_artifact_only",
+                                      "issued": EPOCH_25G83_R1_ACCEPTANCE_ID}}
+        successor = {"applicability_rule": "SUCCESSOR_ACCEPTANCE_ONLY"}
+        self.assertFalse(readiness._issued_d079(tree))
+        self.assertEqual(readiness.applicability_for_row(
+            successor, clock_route="DIRECT", successor_acceptance=not readiness._issued_d079(tree)), "REQUIRED")
+        with self.assertRaisesRegex(EvidenceAuthoringError, "no ratified successor-acceptance"):
+            evidence._derive_acceptance_successor(None)
+        with mock.patch.dict(readiness._CLAIM_HELD_ACCEPTANCE_IDS, {}, clear=True):
+            self.assertTrue(readiness._issued_d079(tree))
+            self.assertEqual(readiness.applicability_for_row(
+                successor, clock_route="DIRECT", successor_acceptance=not readiness._issued_d079(tree)), "NOT_APPLICABLE")
+
+    def test_h_t2_r7_stays_admitted(self) -> None:
+        from joulewise.calibration_bracketing import ANCHOR_V3_R7_ACCEPTANCE_ID
+        tree = {"acceptance_policy": {"selection": "issued_d116_artifact_only",
+                                      "issued": ANCHOR_V3_R7_ACCEPTANCE_ID}}
+        self.assertTrue(readiness._issued_d079(tree))
+
+    def test_h_t3_registry_and_admission_sets_match(self) -> None:
+        from joulewise.calibration_bracketing import ISSUED_ACCEPTANCE_REGISTRY
+        self.assertTrue(set(ISSUED_ACCEPTANCE_REGISTRY) <= readiness._ISSUED_D079_IDS)
+        self.assertTrue(set(readiness._CLAIM_HELD_ACCEPTANCE_IDS) <= set(ISSUED_ACCEPTANCE_REGISTRY))
+
     maxDiff = None
 
     def setUp(self) -> None:
@@ -1282,7 +1309,7 @@ class ArmReadinessEvidenceAuthorTests(unittest.TestCase):
                     str(repository),
                 ]
             )
-        self.assertEqual(author_return_code, 0)
+        self.assertEqual(author_return_code, 0, author_output.getvalue())
         authored = readiness.parse_json_bytes(
             author_output.getvalue(), require_canonical=True
         )

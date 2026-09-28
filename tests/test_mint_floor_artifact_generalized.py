@@ -44,7 +44,7 @@ from joulewise.detection_floor import (
     complete_bundle_sha256,
 )
 from joulewise.calibration_bracketing import (
-    DEFAULT_ACCEPTANCE_BOUND_PATH,
+    ANCHOR_V3_R7_ACCEPTANCE_BOUND_PATH,
     PREDECESSOR_ACCEPTANCE_BOUND_PATH,
     build_calibration_bracket_binding,
     calibration_bracket_for_bundles,
@@ -989,7 +989,7 @@ def synthetic_v2_fixture() -> tuple[
     SimpleNamespace,
 ]:
     base_plan, base_absolute, base_comparative = seven_b_components()
-    acceptance = load_calibration_acceptance_bound()
+    acceptance = load_calibration_acceptance_bound(ANCHOR_V3_R7_ACCEPTANCE_BOUND_PATH)
     assert acceptance is not None
     producers = []
     inputs = {}
@@ -1169,7 +1169,7 @@ def synthetic_v2_fixture() -> tuple[
         runtime_identity_sha256 = components[0].source_regime[
             "stack_identity_sha256"
         ]
-        acceptance_sha256 = file_sha256(DEFAULT_ACCEPTANCE_BOUND_PATH)
+        acceptance_sha256 = file_sha256(ANCHOR_V3_R7_ACCEPTANCE_BOUND_PATH)
         producer = {
             "plan": {
                 "plan_id": plan_id,
@@ -1373,7 +1373,7 @@ def _mixed_calibration_basis(
 
 
 def _mixed_common_mode_session() -> SimpleNamespace:
-    acceptance = load_calibration_acceptance_bound()
+    acceptance = load_calibration_acceptance_bound(ANCHOR_V3_R7_ACCEPTANCE_BOUND_PATH)
     assert acceptance is not None
     bracket_screen_s = generalized.bracket_screen_s_for(
         acceptance["acceptance_id"]
@@ -2308,7 +2308,7 @@ def install_production_extracted_v2_cli_fixture(root: Path):
     )
     pinset = load_json(provisional_path)
     acceptance_path = root / "production-acceptance.json"
-    acceptance_path.write_bytes(DEFAULT_ACCEPTANCE_BOUND_PATH.read_bytes())
+    acceptance_path.write_bytes(ANCHOR_V3_R7_ACCEPTANCE_BOUND_PATH.read_bytes())
     acceptance = load_calibration_acceptance_bound(acceptance_path)
     assert acceptance is not None
 

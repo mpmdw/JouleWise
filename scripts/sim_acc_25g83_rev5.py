@@ -16,6 +16,7 @@ sys.path.insert(0, str(ROOT))
 sys.dont_write_bytecode = True
 
 from joulewise.calibration_bracketing import (  # noqa: E402
+    ANCHOR_V3_R7_ACCEPTANCE_BOUND_PATH,
     BRACKET_SCREEN_QUANTUM_S, D125_SCREEN_FLOOR_S,
     PREFLIGHT_LEVEL_SCREEN_QUANTUM_S,
     issued_calibration_allowance_projection, load_calibration_acceptance_bound,
@@ -223,7 +224,7 @@ def main() -> None:
         parser.error("trials must be positive")
     if not 0 <= args.valid_probability <= 1:
         parser.error("valid probability must be in [0, 1]")
-    reference = load_calibration_acceptance_bound()
+    reference = load_calibration_acceptance_bound(ANCHOR_V3_R7_ACCEPTANCE_BOUND_PATH)
     if reference is None:
         raise RuntimeError("production bracket reference is unavailable")
     projection = issued_calibration_allowance_projection(

@@ -23,6 +23,17 @@ from joulewise.calibration_ledger import content_id_from_artifact_hashes
 # rate-aware set-membership estimator, so equality with the stored lexeme would
 # be a defect rather than a proof.
 EXPECTED_BY_ACCEPTANCE_ID = {
+    "d079_calibration_acceptance_v2_n12_25g83_r1": {
+        "stored_lexeme_is_member_value": True,
+        "n": 12,
+        "minimum_s": Decimal("0.024377093921897318"),
+        "minimum_member_id": "d079-epoch-25g83-derivation-w1-20260927-d10",
+        "maximum_s": Decimal("0.03807857930294817"),
+        "maximum_member_id": "d079-epoch-25g83-derivation-w2-20260927-d10",
+        "range_s": Decimal("0.013701485381050852"),
+        "mean_s": Decimal("0.029591582579198539"),
+        "sample_sd_s": Decimal("0.004330477884879059"),
+    },
     "d079_calibration_acceptance_v2_n19": {
         "stored_lexeme_is_member_value": True,
         "n": 19,
@@ -70,8 +81,9 @@ def sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def verify(repo_root: Path, artifact_path: Path) -> None:
+def verify(repo_root: Path, artifact_path: Path, corpus_root: Path | None = None) -> None:
     repo_root = repo_root.resolve(strict=True)
+    corpus_root = (corpus_root or repo_root).resolve(strict=True)
     artifact = json.loads(artifact_path.read_text(encoding="utf-8"))
     banked = EXPECTED_BY_ACCEPTANCE_ID.get(artifact["acceptance_id"])
     if banked is None:
@@ -85,8 +97,8 @@ def verify(repo_root: Path, artifact_path: Path) -> None:
         for row in artifact["prior_observation_set"]["observations"]
     }
     for member in artifact["derivation_corpus"]["members"]:
-        directory = (repo_root / member["source_directory"]).resolve(strict=True)
-        directory.relative_to(repo_root)
+        directory = (corpus_root / member["source_directory"]).resolve(strict=True)
+        directory.relative_to(corpus_root)
         manifest_path = directory / "manifest.json"
         evidence_path = directory / "instrument_evidence.json"
         evidence = json.loads(
@@ -165,9 +177,10 @@ def verify(repo_root: Path, artifact_path: Path) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--repo-root", type=Path, required=True)
+    parser.add_argument("--corpus-root", type=Path)
     parser.add_argument("--artifact", type=Path, required=True)
     args = parser.parse_args()
-    verify(args.repo_root, args.artifact)
+    verify(args.repo_root, args.artifact, args.corpus_root)
 
 
 if __name__ == "__main__":

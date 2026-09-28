@@ -179,7 +179,7 @@ class DeskEpochWatchTests(unittest.TestCase):
         self.assertEqual(set(self.root.iterdir()), set(self.original))
 
     def test_changed_os_build_refuses_and_names_only_changed_field(self) -> None:
-        rc, output = self.run_check(os_build="25G83")
+        rc, output = self.run_check(os_build="25F84")
         self.assertEqual(rc, 3, output)
         self.assertIn("mismatched fields: os_build\n", output)
 
@@ -288,10 +288,8 @@ class DeskEpochWatchTests(unittest.TestCase):
         self.assertEqual(args.ledger, issuer.DEFAULT_LEDGER_PATH)
         self.assertEqual(args.head_pin, issuer.DEFAULT_HEAD_PIN_PATH)
         self.assertEqual(args.acceptance, issuer.DEFAULT_ACCEPTANCE_BOUND_PATH)
-        # Spelled out so the default cannot silently drift off the
-        # ACTIVE generation.  Moved r6 -> r7 by the D-079 r7 issuance,
-        # which repointed DEFAULT_ACCEPTANCE_BOUND_PATH.
-        self.assertEqual(args.acceptance.name, "calibration_acceptance_d079_v2_n17_r7.json")
+        # The desk check follows the active 25G83 issuance.
+        self.assertEqual(args.acceptance.name, "calibration_acceptance_d079_v2_n12_25g83_r1.json")
         result = subprocess.run(
             [
                 sys.executable, "-B",
@@ -2297,7 +2295,7 @@ class BatteryFloatRevisionFiveTests(unittest.TestCase):
             "--head-pin", str(fixture["pin"]), "--repo-root", str(fixture["root"]),
             "--preregistration", str(self.registration),
             "--preregistration-sha256", self.registration_sha,
-            "--predecessor-acceptance", str(issuer.DEFAULT_ACCEPTANCE_BOUND_PATH),
+            "--predecessor-acceptance", str(issuer.ANCHOR_V3_R7_ACCEPTANCE_BOUND_PATH),
             "--registration-session-id", "W1", "--registration-session-id", "W2",
             "--d125-ruling", D125_REFERENCE,
             "--out", str(candidate)], cwd=fixture["root"],
@@ -2364,7 +2362,7 @@ class BatteryFloatRevisionFiveTests(unittest.TestCase):
             "--head-pin", str(fixture["pin"]), "--repo-root", str(fixture["root"]),
             "--preregistration", str(self.registration),
             "--preregistration-sha256", self.registration_sha,
-            "--predecessor-acceptance", str(issuer.DEFAULT_ACCEPTANCE_BOUND_PATH),
+            "--predecessor-acceptance", str(issuer.ANCHOR_V3_R7_ACCEPTANCE_BOUND_PATH),
             *(item for session_id in registration
               for item in ("--registration-session-id", session_id)),
             "--d125-ruling", D125_REFERENCE, "--out", str(out), *extra,

@@ -420,6 +420,26 @@ class RevisionFiveTests(unittest.TestCase):
         self.assertLessEqual(1 - .05 ** (1 / 200), .015)
         self.assertEqual(simulation.exact_binomial_interval_95(0, 200)[0], 0.0)
 
+    def test_revision_five_predecessor_default_and_simulation_are_frozen_to_r7(self) -> None:
+        from joulewise.calibration_bracketing import ANCHOR_V3_R7_ACCEPTANCE_BOUND_PATH
+        args = issuer.build_parser().parse_args([
+            "prepare-candidate", "--ledger", "ledger", "--head-pin", "pin",
+            "--preregistration", "registration", "--preregistration-sha256", "a" * 64,
+            "--registration-session-id", "w1",
+            "--d125-ruling", "ruling", "--out", "out",
+        ])
+        self.assertEqual(args.predecessor_acceptance, ANCHOR_V3_R7_ACCEPTANCE_BOUND_PATH)
+        output = io.StringIO()
+        with patch("sys.argv", ["sim_acc_25g83_rev5.py", "--trials", "1"]), patch.object(
+            simulation, "run", return_value=[]
+        ), patch.object(
+            simulation, "load_calibration_acceptance_bound",
+            wraps=bracketing.load_calibration_acceptance_bound,
+        ) as load, redirect_stdout(output):
+            simulation.main()
+        load.assert_called_once_with(ANCHOR_V3_R7_ACCEPTANCE_BOUND_PATH)
+        self.assertEqual(json.loads(output.getvalue())["reference"], "d079_calibration_acceptance_v2_n17_r7")
+
 
 if __name__ == "__main__":
     unittest.main()
