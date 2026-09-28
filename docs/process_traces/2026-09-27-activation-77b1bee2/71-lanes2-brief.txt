@@ -1,0 +1,15 @@
+ROLE: bookkeeping seat (JouleWise), lane registration and one lane-text correction. Light tier.
+WRITE_SCOPE: ["docs/process/state_kernel.json", "TASK_QUEUE.md", "tests/test_gen_state.py"]
+Exhaustive; NEEDS_SCOPE otherwise. Do not commit. No git fetch/pull/checkout. Do not call Claude.
+WORKING TREE: /Users/edr/code/JouleWise-wt-lanes2-77b1bee2 (branch docs/2026-09-27-77b1bee2-lanes2).
+PRECEDENT: `git show f25bae33` (this activation's earlier registration of A316–A329) — follow its row schema, TASK_QUEUE consistency and the test_gen_state count-comment convention exactly ("2026-09-27 activation 77b1bee2 (second registration): …; N + k = M." prepended).
+FACT SOURCES (cite in each row): docs/process_traces/2026-09-27-activation-77b1bee2/00-activation-record.md items 30 (custody ruling S2), 44–47, and 70-science-gate/21-science-gate-ruling.md §7–§8, 70-science-gate/31-addendum-ruling.md (SF-1..SF-3), 36-s1-regression-consult/.
+
+REGISTER (check none exists first):
+- CALIB-ISSUE-25G83-D138-01 — p0: the D-138 issuing transaction for candidate dbad7cc7 (science gate PROCEED; addendum A1 B1–B4 estimator pins unchanged; disclosures D1–D6); own turn, own gate.
+- ESTIMATOR-CELL-CAP-RESIZE-01 — p0, verity (directive #421): 165,000-cell work cap sized for ≈120 ms frames stops ~1/3 of captures at 128–130 ms; HOLD on claim-bearing windows at 25G83 until re-sized by a pre-written rule (≥24 non-claim captures none stopping) or measured under a registered plan (A1 SF-3); council rules first on sizing rule (no B value) and re-issue membership; re-issue forced.
+- WALLCLOCK-STEP-SOURCE-01 — p0, verity: 3 wall-clock steps (52.0/35.9/5.8 ms) during W1/W2 captures; find the source before claim windows; same HOLD.
+- S1-REGRESSION-01 — p1: S1 row 9 115F/418E; consult + cold ruling S1-REGRESSION-01; fixture repair rounds with full suite on every fix head; S1 not mergeable until green.
+CORRECT (edit existing row text only): ISSUANCE-ARCHIVE-PACKET-01 — the archive layout must be keyed by SESSION ID (`<session_id>/runs/instrument_validation/<attempt_id>`), not plan id (custody final-diff ruling S2; W1/W2 share a plan id).
+VERIFY: /opt/homebrew/bin/python3 scripts/gen_state.py --check (exit 0) and -m unittest tests.test_gen_state OK — exact tails.
+REPORT: claude-codex-report/v1 envelope with the count arithmetic.
