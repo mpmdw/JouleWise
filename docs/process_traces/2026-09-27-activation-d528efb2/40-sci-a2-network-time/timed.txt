@@ -1,0 +1,82 @@
+Timestamp               Ty Process[PID:TID]
+2026-09-27 01:53:09.065 Df timed[381:79fb688] [com.apple.network:path] nw_path_libinfo_path_check [66743416-9EB0-4F93-8B74-C2DE6B307225 Hostname#f489e461:123 tcp, legacy-socket, attribution: developer]
+	libinfo check path: <private>
+2026-09-27 01:53:09.117 Df timed[381:79fb688] [com.apple.timed:data] cmd,ntpPacket,result,0,t1,83b57dee.b72b9856,t2,ee6357f5.2e74bc50,t3,ee6357f5.2e75cc23,t4,83b57dee.bc772ec2,leap,00,delay,00.00,dispersion,00.0b,
+2026-09-27 01:53:09.117 Df timed[381:79fb688] [com.apple.timed:data] cmd,fetchTime,num,0,result,0,mach,17298017673588,tv_sec,1790499189,tv_usec,181476,delay,0.020668,dispersion,0.000168,more,1,ip,2620:149:a0c:4000::1f2,port,123,slept,0,use_service_port,1
+2026-09-27 01:53:09.118 Df timed[381:79fb688] [com.apple.network:path] nw_path_libinfo_path_check [AA8110F0-145A-42F1-80B8-E67F231CD4D0 Hostname#f489e461:123 tcp, legacy-socket, attribution: developer]
+	libinfo check path: <private>
+2026-09-27 01:53:09.144 Df timed[381:79fb688] [com.apple.timed:data] cmd,ntpPacket,result,0,t1,83b57dee.bd6f50ca,t2,ee6357f5.3557ed19,t3,ee6357f5.35586c2c,t4,83b57dee.c35d1b86,leap,00,delay,00.00,dispersion,00.11,
+2026-09-27 01:53:09.144 Df timed[381:79fb688] [com.apple.timed:data] cmd,fetchTime,num,1,result,0,mach,17298018319661,tv_sec,1790499189,tv_usec,208376,delay,0.023152,dispersion,0.000259,more,1,ip,2620:149:a00:3000::31,port,123,slept,0,use_service_port,1
+2026-09-27 01:53:09.145 Df timed[381:79fb688] [com.apple.network:path] nw_path_libinfo_path_check [0CFA9614-BA19-4372-908E-9630CB5BBA16 Hostname#f489e461:123 tcp, legacy-socket, attribution: developer]
+	libinfo check path: <private>
+2026-09-27 01:53:09.167 Df timed[381:79fb688] [com.apple.timed:data] cmd,ntpPacket,result,0,t1,83b57dee.c4352f66,t2,ee6357f5.3b2515c1,t3,ee6357f5.3b2598da,t4,83b57dee.c941e4c9,leap,00,delay,00.00,dispersion,00.11,
+2026-09-27 01:53:09.167 Df timed[381:79fb688] [com.apple.timed:data] cmd,fetchTime,num,2,result,0,mach,17298018872053,tv_sec,1790499189,tv_usec,231038,delay,0.019717,dispersion,0.000259,more,1,ip,2620:149:a00:3000::31,port,123,slept,0,use_service_port,1
+2026-09-27 01:53:09.168 Df timed[381:79fb688] [com.apple.timed:data] cmd,SYNC,rtc_s,15028538.565611999,unc_s,0.000500000,mach,17298018879315
+2026-09-27 01:53:09.168 Df timed[381:79fd773] [com.apple.timed:text] Received time Sun Sep 27 01:53:09 2026±0.02 from "NTP"
+2026-09-27 01:53:09.168 Df timed[381:79fd773] [com.apple.timed:data] cmd,T,src,NTP,rtc_s,15028538.565703291,rtc_unc_s,0.000000000,t_s,812191989.231038570,unc_s,0.020478841,mach,17298018881506
+2026-09-27 01:53:09.168 Df timed[381:79fd773] [com.apple.timed:data] TDTF,SynthesizedClock,rtc,15028538.565703,utc,812191989.216480,utcUnc,0.018145,sf,1.00000624,sfUnc,0.00000841,utcSfCov,0.00029173,logNoise,-13.555955,timeRtc,15028538.565703,timeUtc,812191989.231039,timeUnc,0.020479,timeSource,NTP,predUtc,812191989.163301,predUtcUnc,0.039139,predSf,0.99999250,predSfUnc,0.00001229,measNumber,3656
+2026-09-27 01:53:09.169 Df timed[381:79fb688] [com.apple.timed:data] cmd,SYNC,rtc_s,15028538.566986000,unc_s,0.000500000,mach,17298018912536
+2026-09-27 01:53:09.169 Df timed[381:79fd773] [com.apple.timed:data] cmd,checkActiveTimeSourceRequired,rtc_s,15028538.567153,bb_want_unc_s,inf,want_unc_s,0.050000,bb_want_rtc_s,inf,want_rtc_s,15030131.309052
+2026-09-27 01:53:09.169 Df timed[381:79fd773] [com.apple.timed:text] Want active time in 26.55min. Remaining retry interval: 14.998228min.
+2026-09-27 01:53:09.169 Df timed[381:79fd773] [com.apple.timed:text] Unscheduling wanted job
+2026-09-27 01:53:09.169 Df timed[381:79fd773] [com.apple.timed:text] Scheduling wanted job to fire in 1592.741898 seconds
+2026-09-27 01:53:09.221 Df timed[381:79fd773] [com.apple.settimeofday:] settimeofday({0x6ab8d975,0x356ba}) == 0
+2026-09-27 01:53:09.221 Df timed[381:79fd773] [com.apple.timed:text] Setting system time to Sun Sep 27 01:53:09 2026 from TMTimeSynthesizer
+2026-09-27 01:53:09.223 Df timed[381:79fd773] [com.apple.timed:data] cmd,apply,src,settimeofday,rtc_s,15028538.566734333,rtc_unc_s,0.000500005,t_s,812191989.217510939,unc_s,0.018145142,mach,17298018906496,adjust,0.053197980,success,1,after_m,17298018906504
+2026-09-27 01:53:09.224 Df timed[381:79fd773] [com.apple.timed:data] cmd,rtc_offset,set,1775470650650776606,was,1775470650650573000,now,1775470650650756000,success,1
+2026-09-27 01:53:09.225 Df timed[381:79fd773] [com.apple.timed:data] cmd,SYNC,rtc_s,15028538.574828999,unc_s,0.000500000,mach,17298019100131
+2026-09-27 01:53:09.225 Df timed[381:79fd773] [com.apple.timed:data] cmd,ntp_adjtime:in,modes,2017,offset_us,41604,freq_scaled,409149,maxerror_us,18145
+2026-09-27 01:53:09.225 Df timed[381:79fd773] [com.apple.timed:data] cmd,ntp_adjtime:out,modes,2017,offset_us,41604,freq_scaled,409149,maxerror_us,18145
+2026-09-27 01:53:09.225 Df timed[381:79fd773] [com.apple.timed:data] cmd,apply,src,adjtime,rtc_s,15028538.574625915,rtc_unc_s,0.000500004,t_s,812191989.225402594,unc_s,0.018145179,mach,17298019095257,adjust,0.000041604,success,1,after_m,17298019095264
+2026-09-27 01:53:09.225 Df timed[381:79fd773] [com.apple.timed:data] cmd,rtc_offset,set,1775470650650776679,was,1775470650650756000,now,1775470650650756000,success,1
+2026-09-27 02:20:41.920 Df timed[381:79fb688] [com.apple.network:path] nw_path_libinfo_path_check [AEB833F4-BD45-44A0-958A-B2371C4E3CA2 Hostname#f489e461:123 tcp, legacy-socket, attribution: developer]
+	libinfo check path: <private>
+2026-09-27 02:20:41.974 Df timed[381:79fb688] [com.apple.timed:data] cmd,ntpPacket,result,0,t1,83b58463.858fd67b,t2,ee635e69.fdb1bd2f,t3,ee635e69.fdb2a5b3,t4,83b58463.8b6b3a4f,leap,00,delay,00.00,dispersion,00.0c,
+2026-09-27 02:20:41.974 Df timed[381:79fb688] [com.apple.timed:data] cmd,fetchTime,num,0,result,0,mach,17337685075125,tv_sec,1790500841,tv_usec,991000,delay,0.022865,dispersion,0.000183,more,1,ip,2620:149:a00:4000::31,port,123,slept,0,use_service_port,1
+2026-09-27 02:20:41.975 Df timed[381:79fb688] [com.apple.network:path] nw_path_libinfo_path_check [3DA24FDF-FB70-4E92-86AC-539470C1DC85 Hostname#f489e461:123 tcp, legacy-socket, attribution: developer]
+	libinfo check path: <private>
+2026-09-27 02:20:42.000 Df timed[381:79fb688] [com.apple.timed:data] cmd,ntpPacket,result,0,t1,83b58463.8c4a31e7,t2,ee635e6a.4807c7c,t3,ee635e6a.48225c5,t4,83b58463.921006b7,leap,00,delay,00.00,dispersion,00.08,
+2026-09-27 02:20:42.000 Df timed[381:79fb688] [com.apple.timed:data] cmd,fetchTime,num,1,result,0,mach,17337685697454,tv_sec,1790500842,tv_usec,17598,delay,0.022525,dispersion,0.000122,more,1,ip,2620:149:a0c:4000::1f2,port,123,slept,0,use_service_port,1
+2026-09-27 02:20:42.000 Df timed[381:79fb688] [com.apple.network:path] nw_path_libinfo_path_check [4F3B1692-E304-4806-9286-F836D0786EE7 Hostname#f489e461:123 tcp, legacy-socket, attribution: developer]
+	libinfo check path: <private>
+2026-09-27 02:20:42.022 Df timed[381:79fb688] [com.apple.timed:data] cmd,ntpPacket,result,0,t1,83b58463.92d6f6a9,t2,ee635e6a.a4610df,t3,ee635e6a.a473e1b,t4,83b58463.97cbd124,leap,00,delay,00.00,dispersion,00.08,
+2026-09-27 02:20:42.022 Df timed[381:79fb688] [com.apple.timed:data] cmd,fetchTime,num,2,result,0,mach,17337686235619,tv_sec,1790500842,tv_usec,40140,delay,0.019343,dispersion,0.000122,more,1,ip,2620:149:a0c:4000::1f2,port,123,slept,0,use_service_port,1
+2026-09-27 02:20:42.023 Df timed[381:79fb688] [com.apple.timed:data] cmd,SYNC,rtc_s,15030191.372436000,unc_s,0.000500000,mach,17337686243116
+2026-09-27 02:20:42.023 Df timed[381:7a003a7] [com.apple.timed:text] Received time Sun Sep 27 02:20:42 2026±0.02 from "NTP"
+2026-09-27 02:20:42.023 Df timed[381:7a003a7] [com.apple.timed:data] cmd,T,src,NTP,rtc_s,15030191.372523958,rtc_unc_s,0.000000000,t_s,812193642.040140629,unc_s,0.019967371,mach,17337686245227
+2026-09-27 02:20:42.023 Df timed[381:7a003a7] [com.apple.timed:data] TDTF,SynthesizedClock,rtc,15030191.372524,utc,812193642.038051,utcUnc,0.016460,sf,1.00000750,sfUnc,0.00000839,utcSfCov,0.00027726,logNoise,-13.555955,timeRtc,15030191.372524,timeUtc,812193642.040141,timeUnc,0.019967,timeSource,NTP,predUtc,812193642.033619,predUtcUnc,0.029077,predSf,1.00000624,predSfUnc,0.00001080,measNumber,3657
+2026-09-27 02:20:42.024 Df timed[381:79fb688] [com.apple.timed:data] cmd,SYNC,rtc_s,15030191.373870000,unc_s,0.000500000,mach,17337686278521
+2026-09-27 02:20:42.024 Df timed[381:7a003a7] [com.apple.timed:data] cmd,checkActiveTimeSourceRequired,rtc_s,15030191.374068,bb_want_unc_s,inf,want_unc_s,0.050000,bb_want_rtc_s,inf,want_rtc_s,15031868.366068
+2026-09-27 02:20:42.025 Df timed[381:7a003a7] [com.apple.timed:text] Want active time in 27.95min. Remaining retry interval: 14.998226min.
+2026-09-27 02:20:42.025 Df timed[381:7a003a7] [com.apple.timed:text] Unscheduling wanted job
+2026-09-27 02:20:42.025 Df timed[381:7a003a7] [com.apple.timed:text] Scheduling wanted job to fire in 1676.992000 seconds
+2026-09-27 02:20:42.025 Df timed[381:7a003a7] [com.apple.timed:data] cmd,ntp_adjtime:in,modes,2017,offset_us,4385948,freq_scaled,491554,maxerror_us,16460
+2026-09-27 02:20:42.025 Df timed[381:7a003a7] [com.apple.timed:data] cmd,ntp_adjtime:out,modes,2017,offset_us,4385948,freq_scaled,491554,maxerror_us,16460
+2026-09-27 02:20:42.025 Df timed[381:7a003a7] [com.apple.timed:data] cmd,apply,src,adjtime,rtc_s,15030191.373588083,rtc_unc_s,0.000500006,t_s,812193642.039114952,unc_s,0.016460138,mach,17337686271755,adjust,0.004385948,success,1,after_m,17337686271764
+2026-09-27 02:20:42.025 Df timed[381:7a003a7] [com.apple.timed:data] cmd,rtc_offset,set,1775470650665526869,was,1775470650650756000,now,1775470650665496000,success,1
+Timestamp               Ty Process[PID:TID]
+2026-09-27 10:11:29.188 Df timed[381:7d8fb86] [com.apple.network:path] nw_path_libinfo_path_check [B18518C5-D209-4AF9-8E2E-F83A829B7DD6 Hostname#f489e461:123 tcp, legacy-socket, attribution: developer]
+	libinfo check path: <private>
+2026-09-27 10:11:29.241 Df timed[381:7d8fb86] [com.apple.timed:data] cmd,ntpPacket,result,0,t1,83b5f2ba.c8e9e047,t2,ee63ccc1.4128c046,t3,ee63ccc1.412b4a5b,t4,83b5f2ba.ce68405b,leap,00,delay,00.00,dispersion,00.07,
+2026-09-27 10:11:29.241 Df timed[381:7d8fb86] [com.apple.timed:data] cmd,fetchTime,num,0,result,0,mach,18015619354833,tv_sec,1790529089,tv_usec,254547,delay,0.021421,dispersion,0.000107,more,1,ip,2620:149:a0c:4000::1f2,port,123,slept,0,use_service_port,0
+2026-09-27 10:11:29.242 Df timed[381:7d8fb86] [com.apple.network:path] nw_path_libinfo_path_check [71A14F3C-0649-4CC7-971C-F4721F39A0E8 Hostname#f489e461:123 tcp, legacy-socket, attribution: developer]
+	libinfo check path: <private>
+2026-09-27 10:11:29.267 Df timed[381:7d8fb86] [com.apple.timed:data] cmd,ntpPacket,result,0,t1,83b5f2ba.cf3dd280,t2,ee63ccc1.48250758,t3,ee63ccc1.48258a6c,t4,83b5f2ba.d511952d,leap,00,delay,00.00,dispersion,00.0a,
+2026-09-27 10:11:29.267 Df timed[381:7d8fb86] [com.apple.timed:data] cmd,fetchTime,num,1,result,0,mach,18015619979550,tv_sec,1790529089,tv_usec,281818,delay,0.022755,dispersion,0.000153,more,1,ip,2620:149:a00:3000::31,port,123,slept,0,use_service_port,0
+2026-09-27 10:11:29.268 Df timed[381:7d8fb86] [com.apple.network:path] nw_path_libinfo_path_check [8CD579A5-129F-4724-A1B0-8A58757614FF Hostname#f489e461:123 tcp, legacy-socket, attribution: developer]
+	libinfo check path: <private>
+2026-09-27 10:11:29.295 Df timed[381:7d8fb86] [com.apple.timed:data] cmd,ntpPacket,result,0,t1,83b5f2ba.d5ea0d06,t2,ee63ccc1.4f02f382,t3,ee63ccc1.4f0384af,t4,83b5f2ba.dc0ced4e,leap,00,delay,00.00,dispersion,00.0a,
+2026-09-27 10:11:29.295 Df timed[381:7d8fb86] [com.apple.timed:data] cmd,fetchTime,num,2,result,0,mach,18015620633909,tv_sec,1790529089,tv_usec,308643,delay,0.023961,dispersion,0.000153,more,1,ip,2620:149:a00:3000::31,port,123,slept,0,use_service_port,0
+2026-09-27 10:11:29.295 Df timed[381:7d8fb86] [com.apple.timed:data] cmd,SYNC,rtc_s,15058438.639007000,unc_s,0.000500000,mach,18015620641551
+2026-09-27 10:11:29.295 Df timed[381:7d924c3] [com.apple.timed:text] Received time Sun Sep 27 10:11:29 2026±0.02 from "NTP"
+2026-09-27 10:11:29.295 Df timed[381:7d924c3] [com.apple.timed:data] cmd,T,src,NTP,rtc_s,15058438.639094792,rtc_unc_s,0.000000000,t_s,812221889.254547596,unc_s,0.022029813,mach,18015620643658
+2026-09-27 10:11:29.295 Df timed[381:7d924c3] [com.apple.timed:data] TDTF,SynthesizedClock,rtc,15058438.639095,utc,812221889.270357,utcUnc,0.018358,sf,0.99999627,sfUnc,0.00000856,utcSfCov,0.00030517,logNoise,-13.555955,timeRtc,15058438.639095,timeUtc,812221889.254548,timeUnc,0.022030,timeSource,NTP,predUtc,812221889.306281,predUtcUnc,0.033209,predSf,1.00000620,predSfUnc,0.00001148,measNumber,3706
+2026-09-27 10:11:29.296 Df timed[381:7d8fb86] [com.apple.timed:data] cmd,SYNC,rtc_s,15058438.640349999,unc_s,0.000500000,mach,18015620673965
+2026-09-27 10:11:29.296 Df timed[381:7d924c3] [com.apple.timed:data] cmd,checkActiveTimeSourceRequired,rtc_s,15058438.640548,bb_want_unc_s,inf,want_unc_s,0.050000,bb_want_rtc_s,inf,want_rtc_s,15060020.749130
+2026-09-27 10:11:29.297 Df timed[381:7d924c3] [com.apple.timed:text] Want active time in 26.37min. Remaining retry interval: 14.998165min.
+2026-09-27 10:11:29.297 Df timed[381:7d924c3] [com.apple.timed:text] Unscheduling wanted job
+2026-09-27 10:11:29.297 Df timed[381:7d924c3] [com.apple.timed:text] Scheduling wanted job to fire in 1582.108582 seconds
+2026-09-27 10:11:29.297 Df timed[381:7d924c3] [com.apple.timed:data] cmd,ntp_adjtime:in,modes,2017,offset_us,-35939097,freq_scaled,-244369,maxerror_us,18357
+2026-09-27 10:11:29.297 Df timed[381:7d924c3] [com.apple.timed:data] cmd,ntp_adjtime:out,modes,2017,offset_us,-35939097,freq_scaled,-244369,maxerror_us,18357
+2026-09-27 10:11:29.297 Df timed[381:7d924c3] [com.apple.timed:data] cmd,apply,src,adjtime,rtc_s,15058438.640084999,rtc_unc_s,0.000500005,t_s,812221889.271346927,unc_s,0.018357808,mach,18015620667605,adjust,-0.035939097,success,1,after_m,18015620667617
+2026-09-27 10:11:29.297 Df timed[381:7d924c3] [com.apple.timed:data] cmd,rtc_offset,set,1775470650631261928,was,1775470650657928000,now,1775470650631256000,success,1

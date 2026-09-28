@@ -1,0 +1,22 @@
+# Cold addendum SCI-25G83-CANDIDATE-01-A2: macOS network time was ON during the W1/W2 captures
+
+You are a COLD judge: a fresh session with no loop context. Do not read RUN_STATE.md, TASK_QUEUE.md, CLAUDE*.md, AGENTS.md, memory or skill files. **Write a contamination disclosure first.**
+
+**Background.** The cold science gate SCI-25G83-CANDIDATE-01 (`docs/process_traces/2026-09-27-activation-77b1bee2/70-science-gate/21-science-gate-ruling.md`) ruled the epoch-25G83 calibration candidate `dbad7cc7…b5b2` (12 members from sessions W1 and W2 of 2026-09-27) PROCEED TO ISSUANCE, with disclosures D1–D6; addendum A1 (`docs/process_traces/2026-09-27-activation-77b1bee2/70-science-gate/31-addendum-ruling.md`) added B1–B4, D7 and the H1 hold. Its D3/H4 recorded three captures excluded for wall-clock steps of 52.0, 5.8 and 35.9 ms of unknown cause. The issuing transaction (D-138) has not started.
+
+**New fact** (found by a council seat on 2026-09-27 ≈17:50 PDT; verify it): the macOS time daemon `timed` was syncing to network time throughout both windows. Evidence copied here: `docs/process_traces/2026-09-27-activation-d528efb2/40-sci-a2-network-time/timed.txt` and `docs/process_traces/2026-09-27-activation-d528efb2/40-sci-a2-network-time/applies.txt` (`/usr/bin/log show` output for `timed`). It shows about every 27 minutes an NTP sync followed by a clock correction (`settimeofday` step or `adjtime` slew) of 4–53 ms, and matches each of the three excluded captures (W1-d08 01:53:09 +53.2 ms; W1-d11 02:20:42 +4.39 ms; W2-d07 10:11:29 −35.9 ms). The seat reports that the clock method requires network-time-OFF attestation for claim-bearing captures (`joulewise/uncertainty_evidence.py:903–909, 952–956`) and that the 12 members saw only µs-scale adjustments — both unverified. You may re-run `/usr/bin/log show --predicate 'process == "timed"' --start … --end …` yourself (read-only; always `/usr/bin/log`, never bare `log`).
+
+Primary evidence: the candidate `docs/process_traces/2026-09-27-activation-77b1bee2/60-prepare-record/30-run1/candidate_acceptance_25g83.json`; custody under `/Users/edr/night-custody/d079-epoch-25g83-derivation-w1-20260927` and `…-w2-20260927` (each capture's `instrument_evidence.json` carries its paired wall/monotonic readings and capture times); the registration `configs/calibration/preregistration_d079_epoch_25g83_rev1.md`; code in the read-only checkout `/Users/edr/code/JouleWise-wt-d138-scout-d528efb2` (main `e7c8bcc6`).
+
+**Rule on:**
+1. For each of the 12 members: did any `timed` step or slew fall inside its capture interval (list time, kind, size)? Does the member's clock-alignment uncertainty, as computed, bound the effect on its B? Execute this; do not infer.
+2. Did the registration, runbook or clock method require network time OFF for these calibration (non-claim) captures? Cite. If it did, is this a protocol deviation, and what follows for the candidate: proceed with a new disclosure, stop, or re-derive?
+3. Does any exclusion become outcome-selective in light of the cause (the three clock-step exclusions are now known to be NTP corrections, not random)?
+4. Your verdict for the D-138 issuing transaction: **PROCEED** (with the exact disclosure text D8 to add), or **STOP** (with what must happen instead).
+5. What must be true before ANY future window at 25G83 (non-claim route-R captures and claim-bearing windows): network-time state, how it is attested (the log query? `systemsetup -getusingnetworktime`?), and whether the arm path enforces it today (find the code).
+
+**Protocol.**
+- One non-interactive session: no background tasks, no subagents, every command in the foreground. Use `/opt/homebrew/bin/python3 -B`, never `.venv`. macOS has no `timeout`; use `perl -e 'alarm N; exec @ARGV' …`. Kill any process you start by PID. Run no capture, no powermetrics; change no system setting.
+- Modify NO file in any repository or custody directory except the ruling file below. Scratch under `/tmp/cg-scia2-d528efb2/`.
+- Write the ruling with the Write tool to `/Users/edr/code/JouleWise-wt-bk-77b1bee2/docs/process_traces/2026-09-27-activation-d528efb2/40-sci-a2-network-time/21-ruling.md`. Ending before that file exists is a protocol failure.
+- Budget: 40 minutes. First line `ADDENDUM: SCI-25G83-CANDIDATE-01-A2 ISSUED — PROCEED` or `… ISSUED — STOP`. Plain language, every term glossed at first use. End with a 3-line plain summary.
