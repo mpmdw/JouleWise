@@ -65,7 +65,7 @@ claim_meaning = ("these bytes are an authentic issued calibration, and its numbe
                  "Permission to start a claim-bearing window is separate; H1 withholds it, and H5 to H7 condition it.")
 text = {
   "reason": "issued by the D-138 transaction of epoch 25G83 under design ruling D138-25G83-DESIGN-01, after cold science gate SCI-25G83-CANDIDATE-01 (PROCEED TO ISSUANCE) and addenda SCI-25G83-CANDIDATE-01-A1, -A2 and -A3 (PROCEED); identity and publication approved by the owner on 2026-09-27 (activation d528efb2 record item 17)",
-  "required_verification": "complete: cold science gate SCI-25G83-CANDIDATE-01 over exclusions, per-night diagnostics, the screen-challenge outcome and the D-125 default; addenda A1 and A2; design ruling D138-25G83-DESIGN-01 and the gate of its section 9",
+  "required_verification": "complete: cold science gate SCI-25G83-CANDIDATE-01 over exclusions, per-night diagnostics, the screen-challenge outcome and the D-125 default; addenda A1, A2 and A3. The merge gate of design ruling D138-25G83-DESIGN-01 section 9, as amended by addendum D138-25G83-DESIGN-01-A1, is recorded in the issuing record and is not asserted by these bytes",  # exact text of addendum A1 §5 S3
   "network_time_provenance": {  # content ruled by A3 §4.7 item 1
       "per_member_state": "on",
       "state_source": "after the fact, from the timed log and each capture's paired clock readings",
@@ -78,7 +78,7 @@ text = {
       "preserved_log": {"relative_path": LOG, "plain_text_sha256": LOG_PLAIN_SHA},
       "text": D["D8"]},
   "issuance_record": {
-    "transaction": "D-138 issuance of epoch 25G83, design ruling D138-25G83-DESIGN-01",
+    "transaction": "D-138 issuance of epoch 25G83, design ruling D138-25G83-DESIGN-01 as amended by addendum D138-25G83-DESIGN-01-A1",
     "source_candidate": {"relative_path": CAND, "file_sha256": sha(CAND), "derivation_sha256": cand["derivation_sha256"]},
     "rulings": [{"id": "SCI-25G83-CANDIDATE-01", "relative_path": SCI, "file_sha256": sha(SCI)},
                 {"id": "SCI-25G83-CANDIDATE-01-A1", "relative_path": A1, "file_sha256": sha(A1)},
@@ -87,7 +87,7 @@ text = {
     "disclosures": [{"id": f"D{i}", "text": D[f"D{i}"]} for i in range(1, 9)],
     "holds": [{"id": h, "text": H[h]} for h in ("H1", "H5", "H6", "H7")],
     "claim_eligible_meaning": claim_meaning,
-    "hold_enforcement": "H1 is enforced outside these bytes, at the arm admission list; lifting it changes no byte of this file"}}
+    "hold_enforcement": "H1 is enforced outside these bytes, in code, at three places: this file is not the default calibration; the loader returns it only to a caller that states a non-claim purpose; and the arm admission list refuses a pack that names it. Lifting the hold changes no byte of this file"}}
 assert sha(CAND) == "dbad7cc782945691701c2ee11188179a61b333dbd0a5588b970636716554b5b2"
 open(OUT, "w", encoding="utf-8").write(json.dumps(text, indent=2, ensure_ascii=False) + "\n")
 for x in text["issuance_record"]["disclosures"] + text["issuance_record"]["holds"]: print(x["id"], len(x["text"]), x["text"][:90])
