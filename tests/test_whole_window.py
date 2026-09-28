@@ -1169,6 +1169,24 @@ class TwoScopeRefusalTests(unittest.TestCase):
         self.assertEqual(session._provenance, {})
 
 
+PHYSICAL_CONFIG_TEMPLATE = (
+    Path(__file__).resolve().parent / "fixtures" / "d078_r01" / "config.json"
+)
+
+
+def _physical_config(config: dict) -> dict:
+    """S1 bind + pair, fixture construction only: the test's own config keys
+    laid over a schema-valid physical config (the d078_r01 template with its
+    own tags cleared), so rebind_config binds a config that re-validates
+    before write_passing_pair writes the pair."""
+    physical = json.loads(PHYSICAL_CONFIG_TEMPLATE.read_text(encoding="utf-8"))
+    physical["run_metadata"]["tags"] = []
+    physical["run_metadata"].update(config.get("run_metadata", {}))
+    physical["hardware_target"].update(config.get("hardware_target", {}))
+    physical["run_id"] = config["run_id"]
+    return physical
+
+
 class LaunchLineageWholeWindowTests(unittest.TestCase):
     @staticmethod
     def _lineage(*, plan_id: str = "plan-1") -> dict:
@@ -1293,6 +1311,14 @@ class LaunchLineageWholeWindowTests(unittest.TestCase):
             )
             (path / "summary_metrics.json").write_text(
                 "{}\n",
+                encoding="utf-8",
+            )
+            own_config = json.loads(
+                (path / "config.json").read_text(encoding="utf-8")
+            )
+            own_config["run_id"] = bundle_id
+            (path / "config.json").write_text(
+                json.dumps(_physical_config(own_config)) + "\n",
                 encoding="utf-8",
             )
             _evidence_bundle(path)
