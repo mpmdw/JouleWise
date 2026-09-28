@@ -24,6 +24,7 @@ from joulewise.provenance import (
     prompt_token_ids_sha256,
 )
 from joulewise.schemas import BenchmarkConfig, RunStatus
+from tests.bfgs_fixtures import injected_battery_runner
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -119,6 +120,7 @@ class StrictGateInteractionAmplification(unittest.TestCase):
                 config,
                 self.runs_dir,
                 FakeClock(start=1_783_394_100.0),
+                battery_runner=injected_battery_runner(),
             )
         self.assertEqual(summary.status, RunStatus.SUCCEEDED)
         return bundle

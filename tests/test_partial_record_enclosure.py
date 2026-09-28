@@ -17,12 +17,25 @@ import xml.etree.ElementTree as ET
 
 from joulewise.bundle_read import TracePoint, Window
 from scripts.paper import partial_record_enclosure as enclosure
+from tests.bfgs_fixtures import rebind_config, write_passing_pair
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 STRICT_SEED_BUNDLE = (
     REPO_ROOT / "tests/fixtures/d117_v2_production/strict_seed_bundle"
 )
+STRICT_SEED_SOURCE = STRICT_SEED_BUNDLE
+
+
+def _stamp_pair_boundaries(bundle: Path) -> None:
+    path = bundle / "events.jsonl"
+    rows = [json.loads(line) for line in path.read_text().splitlines()]
+    for row in rows:
+        if row.get("phase") == "idle_baseline" and row.get("event_type") == "stage_started":
+            row["metadata"]["monotonic_ns"] = 30
+        if row.get("phase") == "idle_drift_sentinel" and row.get("event_type") == "stage_completed":
+            row["metadata"]["monotonic_ns"] = 80
+    path.write_text("".join(json.dumps(row) + "\n" for row in rows))
 
 
 class PartialRecordEnclosureTests(unittest.TestCase):
@@ -108,6 +121,9 @@ class PartialRecordEnclosureTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             bundle = Path(directory) / "bundle"
             shutil.copytree(STRICT_SEED_BUNDLE, bundle)
+            rebind_config(bundle)
+            _stamp_pair_boundaries(bundle)
+            write_passing_pair(bundle)
             summary_path = bundle / "summary_metrics.json"
             summary = json.loads(summary_path.read_bytes())
             summary["phase_energy_j"]["decode"] += 1.0
@@ -118,6 +134,9 @@ class PartialRecordEnclosureTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             bundle = Path(directory) / "bundle"
             shutil.copytree(STRICT_SEED_BUNDLE, bundle)
+            rebind_config(bundle)
+            _stamp_pair_boundaries(bundle)
+            write_passing_pair(bundle)
             census = enclosure._bundle_sha256_census
 
             def drift_before_census(path: Path) -> list[dict]:
@@ -133,6 +152,13 @@ class PartialRecordEnclosureTests(unittest.TestCase):
                 self.assert_cli_refusal(bundle, "v2_authentication_input_changed")
 
     def test_phase_summary_window_mismatch_refuses_without_enclosure(self) -> None:
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        STRICT_SEED_BUNDLE = Path(temp.name) / "bundle"
+        shutil.copytree(STRICT_SEED_SOURCE, STRICT_SEED_BUNDLE)
+        rebind_config(STRICT_SEED_BUNDLE)
+        _stamp_pair_boundaries(STRICT_SEED_BUNDLE)
+        write_passing_pair(STRICT_SEED_BUNDLE)
         load_contributions = enclosure._load_contributions
 
         def omit_decode_window(reader):

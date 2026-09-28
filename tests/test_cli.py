@@ -24,6 +24,7 @@ from joulewise.schemas import (
     SUMMARY_REDUCER_VERSION,
     SummaryMetrics,
 )
+from tests.bfgs_fixtures import rebind_config, write_passing_pair
 
 
 def _idle_powermetrics_stream(
@@ -46,6 +47,17 @@ def _idle_powermetrics_stream(
             }
         )
     return b"\0".join(plistlib.dumps(document) for document in documents)
+
+
+def _stamp_pair_boundaries(bundle: Path) -> None:
+    path = bundle / "events.jsonl"
+    rows = [json.loads(line) for line in path.read_text().splitlines()]
+    for row in rows:
+        if row.get("phase") == "idle_baseline" and row.get("event_type") == "stage_started":
+            row["metadata"]["monotonic_ns"] = 30
+        if row.get("phase") == "idle_drift_sentinel" and row.get("event_type") == "stage_completed":
+            row["metadata"]["monotonic_ns"] = 80
+    path.write_text("".join(json.dumps(row) + "\n" for row in rows))
 
 
 class CliTests(unittest.TestCase):
@@ -104,6 +116,9 @@ class CliTests(unittest.TestCase):
                     (bundle / "summary_metrics.json").write_bytes(
                         recorded_summary.read_bytes()
                     )
+                rebind_config(bundle)
+                _stamp_pair_boundaries(bundle)
+                write_passing_pair(bundle)
                 output = Path(tmp) / "replayed.json"
                 with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
                     self.assertEqual(
