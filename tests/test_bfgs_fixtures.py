@@ -13,8 +13,8 @@ from joulewise.bundle import RunBundleWriter
 from joulewise.bundle_read import BundleReader, WindowBatteryRefusal, authenticate_window_members
 from joulewise.clock import FakeClock
 from tests.bfgs_fixtures import (
-    injected_battery_runner, rebind_config, write_capture_evidence,
-    write_charging_pair, write_passing_pair,
+    FIXTURES, injected_battery_runner, injected_battery_runner_at, rebind_config,
+    write_capture_evidence, write_charging_pair, write_passing_pair,
 )
 from tests.test_bundle_read import load_config
 
@@ -117,6 +117,25 @@ class BfgsFixtureTests(unittest.TestCase):
         runner = injected_battery_runner()
         self.assertEqual(runner(battery_float.IOREG_BATTERY_ARGV).stdout,
                          runner(battery_float.IOREG_BATTERY_ARGV).stdout)
+        with self.assertRaises(AssertionError):
+            runner(("/usr/bin/true",))
+
+    def test_h13_runner_at_rewrites_only_the_update_time_line(self) -> None:
+        runner = injected_battery_runner_at(lambda: 1790568378.9)
+        stamped = runner(battery_float.IOREG_BATTERY_ARGV).stdout
+        committed = (FIXTURES / "float.ioreg").read_bytes()
+        changed = [
+            (old, new)
+            for old, new in zip(committed.splitlines(), stamped.splitlines())
+            if old != new
+        ]
+        self.assertEqual(len(committed.splitlines()), len(stamped.splitlines()))
+        self.assertEqual(len(changed), 1)
+        self.assertIn(b'"UpdateTime" = ', changed[0][0])
+        self.assertTrue(changed[0][1].endswith(b'"UpdateTime" = 1790568378'))
+
+    def test_h14_runner_at_refuses_any_other_command_line(self) -> None:
+        runner = injected_battery_runner_at(lambda: 1790568378.9)
         with self.assertRaises(AssertionError):
             runner(("/usr/bin/true",))
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
+import re
 import subprocess
 from typing import Any, Mapping
 
@@ -67,6 +68,31 @@ def injected_battery_runner(*, charging: bool = False):
         if tuple(argv) != battery_float.IOREG_BATTERY_ARGV:
             raise AssertionError(f"unexpected battery probe argv: {argv!r}")
         return subprocess.CompletedProcess(list(argv), 0, raw, b"")
+
+    return run
+
+
+def injected_battery_runner_at(now, *, charging: bool = False):
+    """For a run on a real clock: the committed bytes with a fresh reading time.
+
+    ``now`` is a callable returning wall time in seconds.  At each call the one
+    ``UpdateTime`` line of the committed fixture is rewritten to ``int(now())``,
+    so the reading is as fresh as a live probe's; no other byte changes.
+    """
+    name = "charging-synthetic-from-real.ioreg" if charging else "float.ioreg"
+    raw = (FIXTURES / name).read_bytes()
+
+    def run(argv):
+        if tuple(argv) != battery_float.IOREG_BATTERY_ARGV:
+            raise AssertionError(f"unexpected battery probe argv: {argv!r}")
+        stamped, count = re.subn(
+            rb'("UpdateTime" = )\d+',
+            lambda match: match.group(1) + str(int(now())).encode("ascii"),
+            raw,
+        )
+        if count != 1:
+            raise AssertionError("fixture must hold exactly one UpdateTime line")
+        return subprocess.CompletedProcess(list(argv), 0, stamped, b"")
 
     return run
 
