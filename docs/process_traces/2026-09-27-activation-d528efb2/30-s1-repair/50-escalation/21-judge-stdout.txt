@@ -1,0 +1,35 @@
+RULING: S1-REPAIR-ROUTE-01 ISSUED
+
+The ruling is written to `…/30-s1-repair/50-escalation/21-coldgate-fable-ruling.md` (387 lines, SHA-256 `03dad87b…e844`). The candidate worktree is still clean at `5283d7d0`, the battery guard log stayed at 61 lines, and no process of mine is running.
+
+## What I ruled
+
+1. **Route: exemption parity.** Opus's diagnosis is right and I re-executed it. Giving a test bundle a real-looking config so it can carry battery evidence ends the fixture exemption it had on main, which switches on checks it used to skip. The repair keeps the battery gate and the bundle's identity fully real. The other checks are switched off through one test-only switch in the helper file, granted by test ID, never for a test whose subject is one of those checks. The closed list is five places in four functions, pinned by a sweep test.
+
+2. **Gate property: real, and S1 fixes it before merge.** A bundle carrying a battery pair returned `pass` with its config deleted, rebound to mock, altered by one byte, changed to mock without updating the digest, or replaced by non-JSON. The fix is about twenty lines in `joulewise/bundle_read.py`, with exact text and seven tests in the ruling. I ran it in a scratch copy: the untouched bundle still passes and all five altered ones are refused.
+
+3. **Triage and the last round.** The lead classifies every failing test by script on main's tree into six classes. Order: gate fix, full suite for a real inventory, triage, a pilot of one test per class, then a helper seat, then seats A and B in parallel. This is the last repair round; the lead returns to a cold gate if more than 10 outcomes survive, if a pilot fails, or if the gate fix turns more than 50 tests.
+
+4. **A3:** seven points were wrong, chiefly naming the wrong cause and ordering a broad migration on an acceptance test that proved too little. Its stop conditions, the validator fix and the other item rulings stand.
+
+5. **Split or abandon: neither.** A split leaves a claim path un-gated.
+
+## What you should know
+
+- **Parity fails the literal wording of the charge's soundness test.** Under parity, claim-path code admits a fixture with no environment admission, which a real window could not produce. I ruled that the directive governs what production accepts, not what fixtures contain, and said so openly. If the owner reads it literally, the route becomes end-to-end produced evidence, which I estimate at four to six seat-rounds.
+- **The gate fix breaks three of S1's own tests.** They build their "passing" bundle on a mock config, which is why the suite never saw the hole. I measured seven modules (one of them timed out with no result); the rest of the suite is unmeasured, and the full-suite step measures it before any seat starts.
+- **One class rests on inference, not execution.** Tests that ran the real strict validator on mock bundles (roughly 14 test IDs) need a produced bundle that passes the reducer's cadence and clock checks. Nobody has shown that yet; the pilot and the stop conditions bound it.
+- **Not executed by me:** any full suite, parity on the integration or campaign modules, parity on the golden report, the mock-barrier sibling test, and two of the seven gate tests.
+
+## Deviations
+
+- One test command exceeded the harness's 600-second limit and was moved to the background automatically. I killed it by PID and used none of its output.
+- The harness loaded `CLAUDE.md` and the memory index before my first turn. I opened none of the forbidden files and used none of that context in a ruling.
+- I read the three seats before forming my view, so it is not blind to theirs.
+
+## Plain summary
+
+1. The remaining failures have one cause, so the last round keeps the battery check and bundle identity real and switches the other checks off only through one declared test-only switch.
+2. The battery gate had a real hole, which S1 fixes before merge with text I ran.
+3. S1 is neither split nor abandoned; one final round runs under a hard cap, and the owner may overturn my reading of the directive.
+rc=0
