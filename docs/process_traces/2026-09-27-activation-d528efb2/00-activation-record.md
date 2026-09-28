@@ -343,3 +343,9 @@ Launched by the watchdog at 17:36:30 PDT (attempt 124) after a usage back-off; t
     - **Owner item:** this widens reliance on reading #421 as a rule for production code (19 checks switched off in tests instead of 5). Holding the directive to the letter would mean building five kinds of evidence first, with S1 on hold. Added to the owner email.
     - **Seat H3 launched** (Sol xhigh, [brief](30-s1-repair/84-H3-brief.txt); branch `fix/2026-09-28-s1-r3-H3` at `601a06c5`): parity and the second switch with empty ID lists, helper tests, the sweep, G-1..G-7 and the three §4.3 tests. The replay keyword is dropped.
 113. **Owner FYI sent** (Gmail `1a0e83a2675c3568`): S1's widened reliance on the #421 reading (19 switched-off checks instead of 5; the battery check is never switched off). Silence means the reading stands; the alternative costs several days. The D-138 a/b/c decision is still pending.
+114. **NTP N1 delta re-audit (Astra): DELTA: FINDINGS** ([report](71-ntp-design/36-n1-delta-reaudit-astra.md)).
+    - **D1, BLOCKER:** execution F1 survives for descendants in separate process groups. The fix proves only the original group gone, and production capture children use `start_new_session=True`.
+    - **D2, should-fix, new:** when OFF is refused and the immediate ON also fails, recovery now returns `marker_invalid` with no ON retry, where the pre-fix code restored.
+    - **D3 and D4, nits:** N1's regex can still backtrack, and the saved F1 regression errors on the old revision.
+    - Every other finding is fixed, with executed regressions (42 tests; 19 failures and 6 errors on the old revision).
+    - **The next round would be a second fix round on F1, which is a mandatory cold-gate trigger.** Charge NTP-ENFORCE-DESIGN-01-A1 ([37](71-ntp-design/37-coldgate-fix2-charge.md)) is convened with cold Fable, paired with an Opus contract-lens refuter. No fix-round-2 seat starts before the ruling.
