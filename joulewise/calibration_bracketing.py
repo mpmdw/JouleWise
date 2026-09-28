@@ -149,7 +149,7 @@ EPOCH_25G83_R1_ACCEPTANCE_BOUND_PATH = (
 )
 EPOCH_25G83_R1_ACCEPTANCE_ID = "d079_calibration_acceptance_v2_n12_25g83_r1"
 EPOCH_25G83_R1_ACCEPTANCE_BOUND_SHA256 = (
-    "9e5c735bf7b4d27604bfadd87809750974322258b943fd1afb04d1873e824c06"
+    "80c2303611268b6b94626e001fb5df0e783719744145c9f6a31d4061ddee351b"
 )
 # Multi-generation registry.  Authentication is indexed by the artifact's own
 # `acceptance_id`, so a caller cannot present one generation's bytes under

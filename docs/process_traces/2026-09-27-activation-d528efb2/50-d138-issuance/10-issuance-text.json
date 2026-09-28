@@ -1,5 +1,5 @@
 {
-  "reason": "issued by the D-138 transaction of epoch 25G83 under design ruling D138-25G83-DESIGN-01, after cold science gate SCI-25G83-CANDIDATE-01 (PROCEED TO ISSUANCE) and addenda SCI-25G83-CANDIDATE-01-A1 and -A2 (PROCEED); identity and publication approved by the owner on 2026-09-27 (activation d528efb2 record item 17)",
+  "reason": "issued by the D-138 transaction of epoch 25G83 under design ruling D138-25G83-DESIGN-01, after cold science gate SCI-25G83-CANDIDATE-01 (PROCEED TO ISSUANCE) and addenda SCI-25G83-CANDIDATE-01-A1, -A2 and -A3 (PROCEED); identity and publication approved by the owner on 2026-09-27 (activation d528efb2 record item 17)",
   "required_verification": "complete: cold science gate SCI-25G83-CANDIDATE-01 over exclusions, per-night diagnostics, the screen-challenge outcome and the D-125 default; addenda A1 and A2; design ruling D138-25G83-DESIGN-01 and the gate of its section 9",
   "network_time_provenance": {
     "per_member_state": "on",
@@ -66,7 +66,7 @@
       },
       {
         "id": "D2",
-        "text": "D2. The cap is mis-sized for this epoch. It was sized at ≈120 ms frames; this epoch runs at 128–130 ms and needs 144,037–170,965 cells. The cap excluded on cadence (r = +0.82), not on B (r = −0.05; p = 0.44). The corpus under-represents the longer-cadence group, 25 % against 45 %."
+        "text": "D2. The cap is mis-sized for this epoch. It was sized at ≈120 ms frames; this epoch runs at 128–130 ms and needs 144,037–170,965 cells. The cap excluded on cadence (r = +0.82), not on B (r = −0.05; p = 0.44). The corpus under-represents the longer-cadence group, 25 % against 45 %. A1.1 Classification of F1 (adds to §2.2, §5 and D2). F1 is not a defect in the code that derives the member list, the statistics, or S, C and the level screen, within the meaning of statement item 7(b), and it is not a ground to reject this candidate. The 165,000-cell cap is a stop rule that was registered on 2026-08-15, frozen at its value on 2026-08-18 and pinned by file digest in the registration sealed on 2026-09-25; on 2026-09-27 it behaved exactly as registered; and it enters no number, because a capture that finishes gives the same B to the last digit whether the cap is 165,000, 206,000 or 5,000,000 cells. A gate that nevertheless rejects the candidate on F1 is invoking item 7(b), and item 4's consequences (a) to (d) follow. F1 is never a ground to re-prepare the candidate with a different cap or a different member list. In §5, \"sign of an artifact\" is read as: a registered parameter whose sizing assumption, frames of about 120 ms, no longer holds. The owner may overrule this classification in writing under statement item 10."
       },
       {
         "id": "D3",
@@ -74,7 +74,7 @@
       },
       {
         "id": "D4",
-        "text": "D4. Eight diagnostic B values exist for excluded captures (§2.3 table), computed by this gate with the cap lifted. Never members; disclosed design inputs for any successor."
+        "text": "D4. Eight diagnostic B values exist for excluded captures (§2.3 table), computed by this gate with the cap lifted. Never members; disclosed design inputs for any successor. A1.4 correction: (d) D4: the eight diagnostic B values were computed independently by the judge and by the paired refuter and agree to every printed digit; the addendum judge recomputed one (w2-d02). A successor registration's list of disclosed design inputs names all three seats."
       },
       {
         "id": "D5",

@@ -44,6 +44,13 @@ for l in a3[i[0]:]:
     if not l.startswith(">"): break
     blk.append(l[2:] if l.startswith("> ") else "")
 H["H6"] = clean("\n\n".join(x for x in blk if x.strip()))
+# A1 §7 A1.1 "adds to ... D2" and A1.4(d) corrects D4: carried verbatim (lead, after the issuing-record draft flagged the gap)
+a1_lines = open(A1, encoding="utf-8").read().splitlines()
+a11 = [l for l in a1_lines if l.startswith("> **A1.1 Classification of F1")]
+a14d = [l for l in a1_lines if l.startswith("> (d) D4:")]
+assert len(a11) == 1 and len(a14d) == 1, (a11, a14d)
+D["D2"] = D["D2"] + " " + clean(a11[0][2:])
+D["D4"] = D["D4"] + " A1.4 correction: " + clean(a14d[0][2:])
 for k in ("D1", "D2", "D3", "D4", "D5", "D6"):
     if not D[k].startswith(k + "."): D[k] = k + ". " + D[k] if not D[k].startswith(k) else D[k]
 cand = json.load(open(CAND))
@@ -57,7 +64,7 @@ claim_meaning = ("these bytes are an authentic issued calibration, and its numbe
                  "basis of a reported result. It is a property of the file. It is not permission to start a window. "
                  "Permission to start a claim-bearing window is separate; H1 withholds it, and H5 to H7 condition it.")
 text = {
-  "reason": "issued by the D-138 transaction of epoch 25G83 under design ruling D138-25G83-DESIGN-01, after cold science gate SCI-25G83-CANDIDATE-01 (PROCEED TO ISSUANCE) and addenda SCI-25G83-CANDIDATE-01-A1 and -A2 (PROCEED); identity and publication approved by the owner on 2026-09-27 (activation d528efb2 record item 17)",
+  "reason": "issued by the D-138 transaction of epoch 25G83 under design ruling D138-25G83-DESIGN-01, after cold science gate SCI-25G83-CANDIDATE-01 (PROCEED TO ISSUANCE) and addenda SCI-25G83-CANDIDATE-01-A1, -A2 and -A3 (PROCEED); identity and publication approved by the owner on 2026-09-27 (activation d528efb2 record item 17)",
   "required_verification": "complete: cold science gate SCI-25G83-CANDIDATE-01 over exclusions, per-night diagnostics, the screen-challenge outcome and the D-125 default; addenda A1 and A2; design ruling D138-25G83-DESIGN-01 and the gate of its section 9",
   "network_time_provenance": {  # content ruled by A3 §4.7 item 1
       "per_member_state": "on",
