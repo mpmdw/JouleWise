@@ -35,15 +35,23 @@ file instead.
 
 **S1:** round 2 is done, and the stop conditions are met (same signature twice). The combined head is `5283d7d0` (no merges). Escalation consult **S1-REPAIR-ROUTE-01** is done (Sol, Astra, Opus); its cold judge has been convened. The Opus seat found a possible gate defect: a bundle carrying a pair passes even with its config deleted or set to mock.
 
-**SUCCESSOR'S NEXT EXACT ACTION:** read record 00 from its last item (≈ item 102). Then:
+**SUCCESSOR'S NEXT EXACT ACTION:** read record 00 from its last item (≈ item 117). Then:
 1. **D-138 is STOPPED for good** (HOLD-BY-CONSTRUCTION-01 §6.2: a fresh hold refuter found 3 routes, `refuters/hold-refuter-4-astra.md`). **Wait for Ed's choice** (Gmail `1a0e7c44a348de4e`):
    - (a) withdraw the file and land the rest;
    - (b) a written residual, then the remaining gates: contract refuter 3, the whole suite on `b953f4b0`, the pedagogy pass, the cold final pass, merge;
    - (c) a new design consult.
 
    Search `from:claude2.glaring610@passmail.net is:unread` first. Do not merge or choose without Ed.
-2. **NTP enforcement:** seat N1 is running (branch `feat/2026-09-28-ntp-n1`, report `/tmp/ntp-n1-d528efb2/report.md`, ruling `71-ntp-design/21-coldgate-fable-ruling.md`). Harvest it, then review, the full gate and merge. After the merge NO night launches until the N2/N3 consumers land.
-3. **S1:** finish the triage confirmation (`30-s1-repair/70-triage/01-lead-confirmation.md`); then R3-3, the pilot; then R3-4, seat H3 (`30-s1-repair/50-escalation/21-coldgate-fable-ruling.md` §5.4).
+2. **NTP enforcement (N1):**
+   - The delta re-audit found D1 (F1 surviving for separately grouped capture children). Cold addendum **NTP-ENFORCE-DESIGN-01-A1** (`71-ntp-design/38-coldgate-fix2-ruling.md`) allows ONE more fix round.
+   - Seat fix-2 is running (Sol xhigh; report `/tmp/ntp-n1fix2-d528efb2/report.md`, worktree `JouleWise-wt-ntp-n1-d528efb2`).
+   - **Then:** the lead runs the process-listing regressions outside the sandbox; then a fresh delta re-audit that executes A1 §7.3 rows 1–7 (the baseline suite is item 117); then the full gate and merge.
+   - **If D1's signature survives, there is NO round 3:** a design consult, then a cold gate (A1 §7.4).
+   - **Lead-owed (A1 §7.5), after the seat finishes:** the desk step in NIGHT_HANDBACK for a permanently empty start claim; `network_time_window.py` in N3's scope; the phase-2 scout question about `sampler_teardown.py:164`.
+   - After the merge, NO night launches until N2/N3 land.
+3. **S1:**
+   - Seat H3 is running (Sol xhigh; report `/tmp/s1r3-H3-d528efb2/report.md`, branch `fix/2026-09-28-s1-r3-H3`).
+   - **Then** (addendum A1, `30-s1-repair/83-coldgate-pilot-ruling.md`): the lead fills the parity ID lists; runs pilots P-1/P-2 (T5a) and P-3 (F) at the bench; runs the T1 bench check; then seats A/B (R3-5), the R3-6 checks, the §5.4 literal, the repin, and the full suite.
 4. **Bookkeeping:** merge this records branch (light tier).
 
 **▶▶ ACTIVATION 77b1bee2 — 11:36 → ≈17:35 PDT 09-27 (Opus 5.5; NOTHING ARMED):** [Record 00](docs/process_traces/2026-09-27-activation-77b1bee2/00-activation-record.md) items 1–47+, on branch `docs/2026-09-27-77b1bee2`.
