@@ -3263,14 +3263,11 @@ class SuiteControllerTests(ControllerTestCase):
             self.assertTrue((bundle_path / artifact).exists(), artifact)
 
     def test_run_experiment_suite_uses_repetition_order_seed(self) -> None:
-        # This checks collection ordering; mock bundles cannot enter a
-        # claim-bearing aggregate window under the battery gate.
-        with patch("joulewise.controller.aggregate_experiment", return_value={}):
-            manifest_path, results = run_experiment(
-                make_suite_config("suite-experiment", repetitions=2),
-                self.runs_root,
-                self.clock,
-            )
+        manifest_path, results = run_experiment(
+            make_suite_config("suite-experiment", repetitions=2),
+            self.runs_root,
+            self.clock,
+        )
         self.assertTrue(manifest_path.is_file())
         self.assertEqual(len(results), 2)
         for rep, (bundle_path, summary) in enumerate(results, start=1):
@@ -3283,16 +3280,67 @@ class SuiteControllerTests(ControllerTestCase):
             )
             self.assertEqual(metadata["suite"]["order_row"], rep)
 
+    def test_mock_experiment_aggregate_shows_every_member_not_applicable(self) -> None:
+        manifest_path, results = run_experiment(
+            make_suite_config("suite-mock-admitted", repetitions=2),
+            self.runs_root, self.clock,
+        )
+        manifest = json.loads(manifest_path.read_text())
+        self.assertEqual(len(results), 2)
+        self.assertNotIn("aggregate_error", manifest)
+        self.assertEqual(manifest["aggregate"]["members_total"], 2)
+        self.assertEqual(manifest["aggregate"]["battery_float_members"],
+                         {path.name: "not_applicable" for path, _ in results})
+
     def test_mock_experiment_refuses_at_aggregation(self) -> None:
+        from joulewise.aggregate import aggregate_experiment
         from joulewise.bundle_read import WindowBatteryRefusal
+        manifest_path, results = run_experiment(
+            make_suite_config("suite-mock-refusal", repetitions=2),
+            self.runs_root, self.clock,
+        )
+        manifest = json.loads(manifest_path.read_text())
         with self.assertRaises(WindowBatteryRefusal) as caught:
-            run_experiment(
-                make_suite_config("suite-mock-refusal", repetitions=2),
-                self.runs_root, self.clock,
-            )
-        self.assertEqual(len(caught.exception.members), 1)
+            aggregate_experiment(self.runs_root, manifest)
+        self.assertEqual(len(caught.exception.members), 2)
+        self.assertEqual({row["label"] for row in caught.exception.members},
+                         {path.name for path, _ in results})
         self.assertEqual({row["status"] for row in caught.exception.members},
                          {"not_applicable"})
+
+    def test_charging_experiment_refuses_at_aggregation(self) -> None:
+        from joulewise.bundle_read import WindowBatteryRefusal
+        payload = json.loads(EXAMPLE_CONFIG_PATH.read_text())
+        payload["run_id"] = "charging-experiment"
+        payload["hardware_target"]["telemetry_backend"] = "wall_meter"
+        payload["workload_profile"]["repetitions"] = 2
+        charging = (
+            REPO_ROOT / "tests/fixtures/battery_float/charging-synthetic-from-real.ioreg"
+        ).read_bytes()
+        calls = []
+
+        def runner(argv):
+            calls.append(argv)
+            return subprocess.CompletedProcess(argv, 0, charging, b"")
+
+        def member_run(*args, **kwargs):
+            return run_benchmark(*args, battery_runner=runner, **kwargs)
+
+        with patch("joulewise.controller.run_benchmark", side_effect=member_run):
+            with self.assertRaises(WindowBatteryRefusal) as caught:
+                run_experiment(
+                    BenchmarkConfig.from_mapping(payload), self.runs_root,
+                    FakeClock(1790373526), registry=BatteryBracketTests.Registry(),
+                )
+        self.assertEqual(len(calls), 2)
+        self.assertEqual([row["label"] for row in caught.exception.members],
+                         ["charging-experiment__r1"])
+        self.assertEqual({row["status"] for row in caught.exception.members},
+                         {"battery_float_confounded"})
+        manifest = json.loads(
+            (self.runs_root / "experiments" / "charging-experiment.json").read_text())
+        self.assertNotIn("aggregate", manifest)
+        self.assertEqual(manifest["aggregate_error"]["error_type"], "WindowBatteryRefusal")
 
 
 if __name__ == "__main__":
