@@ -379,3 +379,16 @@ Launched by the watchdog at 17:36:30 PDT (attempt 124) after a usage back-off; t
     **Ruling (lead, implementation level, under A1 §4.2's literal text):** when the proof fails, both records carry `night_chain_alive`, with any earlier abort reason kept inside the evidence. By A1 §7.4, a defect of another kind that round 2 introduced gets one fix round of its own with no cold gate: this is **round 2b**.
 
     **Recorded deviation:** round 2b's writer is an Opus agent that runs outside the codex sandbox, not a Sol seat, because the live process tests cannot run in the sandbox (items 116 and 118). The WRITE_SCOPE is the same nine files; the lead checks the diff scope.
+119. **N1 fix round 2b landed** (Opus writer outside the sandbox; [report](71-ntp-design/44-n1-fix2b-report.md); committed on the N1 branch; it changed only `scripts/run_night.py` and `tests/test_run_night.py`).
+    - **E1:** a proof pass now runs whole with a 1 s timeout per listing, and only if it fits before the 5 s window closes. The evidence is from the last complete pass. **Trade-off, accepted by the lead and flagged to the delta re-audit:** with a registry, a new pass can start only in about the first 0.8 s (about 2.8 s without a registry). That can only add refusals, never a query or ON beside a capture. The clean-up step [K] already waits for registered groups to vanish, so the shorter horizon mainly affects unregistered stragglers.
+    - **E2:** both records carry `night_chain_alive`, with `prior_abort` kept. The watchdog's `refusal.json` is replaced atomically, the one exception to "never rewritten".
+    - **E3:** fixture-only. The stand-in OFF never wrote the marker, and the four deadline tests pass with production-shaped stand-ins (and on the unchanged code). No assertion was weakened.
+    - **The writer reports** all five modules green (`test_run_night` 281/281). The §4.7 regressions, and the new E1/E2 ones, fail by assertion on `3ad82b43`. Red by deletion holds for P2, P3, C5, the never-launched claim and the E2 replace.
+    - **P1 caveat:** deleting P1 alone leaves the driver's same-group case green, because round 1's post-exit group check catches it first. Two live tests were added so that P1's deletion goes red, in recovery and in a same-group case with no signature.
+    - **No case of a capture process alive beside the query or ON** was found. The lead's own module run is in flight.
+120. **S1 pilots P-1, P-2 and P-3 run by the lead at the bench: ALL HOLD** ([filing](30-s1-repair/86-bench-pilots/00-filing.md)).
+    - P-1 is GREEN; RED under the charging pair (`battery_float_confounded`); RED with exactly A1's six reasons off the second list.
+    - P-2 is GREEN (25 sub-tests); RED under the charging pair.
+    - P-3 is GREEN after the T4 build (floor-member bundles copied into the declared roots); RED under the charging pair; **it needs no second switch.**
+    - Stop condition 6a is not met.
+    - **Next, at the bench:** the rule 7 recorder on main; the rule 9 coverage census; the T1 bench check; then fill the ID lists and start seats A and B.
