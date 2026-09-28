@@ -479,12 +479,14 @@ class BundleReader:
                 raise BatteryStatusRefusal("battery_float_evidence_missing", ("not_reached",), None)
             # Authenticate the pair to obtain a digest-bound verdict for the
             # whole-window refusal, while metadata() still rejects non-pass.
-            return battery_float.authenticate_bundle(self._path)
+            return self._pair_verdict_under_bound_config(
+                raw, battery_float.authenticate_bundle(self._path))
         if "battery_float" in raw and isinstance(battery, dict) and (
             "pre" in battery and "post" in battery
             and "not_applicable" not in battery
         ):
-            return battery_float.authenticate_bundle(self._path)
+            return self._pair_verdict_under_bound_config(
+                raw, battery_float.authenticate_bundle(self._path))
         if "battery_float" not in raw:
             digest = complete_bundle_sha256(self._path)
             historical = _historical_bundles()
@@ -505,6 +507,24 @@ class BundleReader:
         else:
             reason = "invalid record"
         raise BatteryStatusRefusal("battery_float_evidence_missing", (reason,), digest)
+
+    def _pair_verdict_under_bound_config(
+        self, metadata: dict[str, Any], verdict: battery_float.PairVerdict,
+    ) -> battery_float.PairVerdict:
+        # A pair is battery evidence only for the run its config describes:
+        # ``pass`` requires config.json bytes that hash to
+        # metadata.config_sha256 and name a physical telemetry backend.
+        if verdict.status != "pass":
+            return verdict
+        mock, detail = self._digest_bound_mock_config(metadata)
+        if mock:
+            reason = "pair recorded under a mock config"
+        elif detail:
+            reason = f"pair not bound ({detail})"
+        else:
+            return verdict
+        raise BatteryStatusRefusal(
+            "battery_float_evidence_missing", (reason,), verdict.bundle_sha256)
 
     def _digest_bound_mock_config(self, metadata: dict[str, Any]) -> tuple[bool, str]:
         try:
