@@ -266,3 +266,4 @@ Launched by the watchdog at 17:36:30 PDT (attempt 124) after a usage back-off; t
     - Confirmed so far: 23 paper-pin rows are outside the cap (step-5 repin). About 37 gate-fix rows fail "pair not bound": round-1/2 fixtures paired unbound configs, so the repair is bind + pair in T1 form, byte-identical assertions, fixture-only in the §E files. 3 NEW rows are S1's own §4.3 tests.
     - Two rows are to be re-run alone (night_gate git-status; the lifecycle race).
     - Still to confirm: T5 57, T2 33, T6 5, T1 3, and 5 rows of `…generalized`. Then R3-3, the pilot.
+93. The two suspected-environmental S1 rows (`test_night_gate…partial_output…` and `test_arm_readiness_lifecycle…race…`) **both PASS alone** on `0c469057` under the guard, so they are load flakes. The RUN_STATE next-action block was refreshed for a successor.

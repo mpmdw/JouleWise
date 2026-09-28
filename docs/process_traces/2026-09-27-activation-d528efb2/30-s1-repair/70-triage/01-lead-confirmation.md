@@ -16,7 +16,7 @@ Activation d528efb2, 2026-09-28 ≈03:25 PDT. The script's proposal is `table-pr
 
    **Repair (T1 form, no parity):** bind first (helper H `rebind_config`), then `write_passing_pair`; assertions byte-identical. This is the §4.3 cure ("the bundle that is meant to pass is built with a bound config"). Two of those files are §E-excluded minter files (`test_mint_floor_artifact*.py`). Only fixture construction may change there, which this is.
 
-3. **Rows that look environmental, to re-run alone before classifying:**
+3. **Rows that were environmental (confirmed): both PASS when re-run alone on `0c469057` under the guard (03:30 PDT), so they are load flakes and outside the repair:**
    - `test_night_gate` (`'?? partial.py' not found in ''`): a git-status assertion; the integration tree may differ from a clean checkout.
    - `test_arm_readiness_lifecycle…race…`: a concurrency test that also failed in the D-138 census under load.
 

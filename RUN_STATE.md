@@ -35,11 +35,18 @@ file instead.
 
 **S1:** round 2 is done, and the stop conditions are met (same signature twice). The combined head is `5283d7d0` (no merges). Escalation consult **S1-REPAIR-ROUTE-01** is done (Sol, Astra, Opus); its cold judge has been convened. The Opus seat found a possible gate defect: a bundle carrying a pair passes even with its config deleted or set to mock.
 
-**SUCCESSOR'S NEXT EXACT ACTION:** read record 00 from its last item. Then:
-1. Harvest the two cold rulings (`11-d138-design/31-addendum-ruling.md`, `30-s1-repair/50-escalation/21-coldgate-fable-ruling.md`).
-2. D-138: fix round 2 per A1; apply the pedagogy fixes; re-run the gates the addendum names; cold final pass; merge.
-3. S1: the next round per the route ruling.
-4. Merge the lane-registration branch `docs/2026-09-27-d528efb2-lanes` and this records branch (light tier).
+**SUCCESSOR'S NEXT EXACT ACTION:** read record 00 from its last item (≈ item 93). Then:
+1. **D-138** (the LAST round is running, or has landed): harvest fix round 3, the Sol xhigh seat on `feat/2026-09-27-d138-25g83-issuance` (report `/tmp/d138-fix3-d528efb2/report.md`; brief `50-d138-issuance-seat/03-fix3-brief.txt`). Then run the gate sequence of `12-hold-consult/21-coldgate-fable-ruling.md` §7:
+   - the RED record, re-run by the lead;
+   - re-hash and independent replay, with item (vi) as restated in §5.3;
+   - the old-epoch replay (byte-identical);
+   - the whole suite, outside the sandbox;
+   - two fresh refuters from different families (**any route means STOP for good, and Ed gets the ruling's §6.2 options**);
+   - the pedagogy pass on the revised records (apply `refuters/pedagogy-pass-2.md` too);
+   - the cold final pass; then the merge.
+2. **S1:** finish the triage confirmation (`30-s1-repair/70-triage/01-lead-confirmation.md`); then R3-3, the pilot (one each of T2, bind + pair, and T5, in scratch); then R3-4, seat H3, per `30-s1-repair/50-escalation/21-coldgate-fable-ruling.md` §5.4.
+3. **Bookkeeping:** merge this records branch (light tier; lanes are already merged into it).
+4. **Lanes:** brief NETWORK-TIME-OFF-ENFORCE-01 from its scout (`70-ntp-enforce-scout/report.md`). It must land before ANY 25G83 window.
 
 **▶▶ ACTIVATION 77b1bee2 — 11:36 → ≈17:35 PDT 09-27 (Opus 5.5; NOTHING ARMED):** [Record 00](docs/process_traces/2026-09-27-activation-77b1bee2/00-activation-record.md) items 1–47+, on branch `docs/2026-09-27-77b1bee2`.
 
