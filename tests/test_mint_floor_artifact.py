@@ -79,12 +79,28 @@ def stack_identity() -> dict:
     }
 
 
+PHYSICAL_CONFIG_TEMPLATE = REPO_ROOT / "tests" / "fixtures" / "d078_r01" / "config.json"
+
+
+def _physical_config(config: dict) -> dict:
+    """S1 bind + pair, fixture construction only: the test's own config keys
+    laid over a schema-valid physical config (the d078_r01 template with its
+    own tags cleared), so rebind_config binds a config that re-validates
+    before write_passing_pair writes the pair."""
+    physical = load_json(PHYSICAL_CONFIG_TEMPLATE)
+    physical["run_metadata"]["tags"] = []
+    physical["run_metadata"].update(config.get("run_metadata", {}))
+    physical["hardware_target"].update(config.get("hardware_target", {}))
+    physical["run_id"] = config["run_id"]
+    return physical
+
+
 def _install_support_bundle(root: Path, bundle_id: str) -> None:
     """Authenticate spec members outside the target report cell."""
     bundle = root / bundle_id
     bundle.mkdir(parents=True)
     config = {"run_id": bundle_id, "hardware_target": {"telemetry_backend": "powermetrics"}}
-    (bundle / "config.json").write_text(json.dumps(config), encoding="utf-8")
+    (bundle / "config.json").write_text(json.dumps(_physical_config(config)), encoding="utf-8")
     (bundle / "metadata.json").write_text(json.dumps({"run_id": bundle_id}), encoding="utf-8")
     (bundle / "summary_metrics.json").write_text(
         json.dumps({"status": "succeeded", "phase_energy_j": {"decode": 0.0}}),
@@ -772,7 +788,7 @@ class AuthenticationTests(unittest.TestCase):
                 },
             }
             (bundle / "config.json").write_text(
-                json.dumps(config), encoding="utf-8"
+                json.dumps(_physical_config(config)), encoding="utf-8"
             )
             (bundle / "metadata.json").write_text(
                 json.dumps({"run_id": bundle_id}), encoding="utf-8"
@@ -936,7 +952,7 @@ class AuthenticationTests(unittest.TestCase):
                     },
                 }
                 (bundle / "config.json").write_text(
-                    json.dumps(config), encoding="utf-8"
+                    json.dumps(_physical_config(config)), encoding="utf-8"
                 )
                 (bundle / "metadata.json").write_text(
                     json.dumps({"run_id": bundle_id}), encoding="utf-8"
@@ -1710,7 +1726,7 @@ class BinderTests(unittest.TestCase):
             },
         }
         (bundle / "config.json").write_text(
-            json.dumps(config, sort_keys=True), encoding="utf-8"
+            json.dumps(_physical_config(config), sort_keys=True), encoding="utf-8"
         )
         (bundle / "metadata.json").write_text(
             json.dumps({"run_id": row["bundle_id"], "stack": stack}, sort_keys=True), encoding="utf-8"
