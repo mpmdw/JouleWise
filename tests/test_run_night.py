@@ -48,18 +48,49 @@ BOOT_UUID = "12345678-1234-5678-9234-567812345678"
 # Keep every new machine-setting/log boundary injected for the whole module;
 # dedicated N1 tests below override individual seams to exercise refusals.
 _network_time_patches = []
+_network_time_marker_dir = None
+
+
+def _fixture_network_time_off(custody_root, plan_id, *, marker_path=None, **paths):
+    """Stand-in OFF that keeps production's side effect: the restore marker.
+
+    Production `set_network_time_off` creates the marker (with the night's
+    paths when the driver passes them) before it touches the setting, and
+    the driver's capture proof reads that marker. A stand-in that skipped it
+    made every real-chain test read "restore marker unreadable" (round 2b,
+    E3). The module's `recover_network_time` stand-in answers
+    "nothing_pending" -- a clean machine -- so a marker left by an earlier
+    test is removed first.
+    """
+    marker_path = network_time_window.RESTORE_PENDING_PATH if marker_path is None else marker_path
+    Path(marker_path).unlink(missing_ok=True)
+    network_time_window.create_restore_marker(
+        custody_root, plan_id, marker_path=marker_path, **paths)
+    return {"exit_code": 0, "stdout": "setUsingNetworkTime: Off\n"}
+
+
+def _fixture_network_time_on(custody_root, plan_id, *, marker_path=None, **_kwargs):
+    """Stand-in ON with production's side effect: a successful ON removes the marker."""
+    marker_path = network_time_window.RESTORE_PENDING_PATH if marker_path is None else marker_path
+    Path(marker_path).unlink(missing_ok=True)
+    return {"exit_code": 0, "stdout": "ON\n"}
 
 
 def setUpModule():
+    global _network_time_marker_dir
+    # A stand-in must never write or read the machine's real restore marker.
+    _network_time_marker_dir = tempfile.TemporaryDirectory(dir="/tmp")
     patches = (
+        mock.patch.object(network_time_window, "RESTORE_PENDING_PATH",
+                          Path(_network_time_marker_dir.name) / "network-time-restore-pending.json"),
         mock.patch.object(network_time_window, "NETWORK_TIME_ENFORCED_KINDS",
                           frozenset({"calibration", "quiet_predicate_evidence", "pack", "unknown"})),
         mock.patch.object(network_time_window, "recover_network_time", return_value="nothing_pending"),
         mock.patch.object(network_time_window, "set_network_time_off",
-                          return_value={"exit_code": 0, "stdout": "setUsingNetworkTime: Off\n"}),
+                          side_effect=_fixture_network_time_off),
         mock.patch.object(network_time_window, "run_window_query", return_value={"exit_code": 0}),
         mock.patch.object(network_time_window, "set_network_time_on",
-                          return_value={"exit_code": 0, "stdout": "ON\n"}),
+                          side_effect=_fixture_network_time_on),
     )
     for patch in patches:
         patch.start()
@@ -67,8 +98,12 @@ def setUpModule():
 
 
 def tearDownModule():
+    global _network_time_marker_dir
     while _network_time_patches:
         _network_time_patches.pop().stop()
+    if _network_time_marker_dir is not None:
+        _network_time_marker_dir.cleanup()
+        _network_time_marker_dir = None
 
 
 def _probe(
@@ -1131,6 +1166,12 @@ runpy.run_path(script, run_name='__main__')
                     self.assertEqual(refusal["evidence"]["check"], expected_check)
                 else:
                     self.assertFalse((self.custody / "night/chain.exited").exists())
+                if stop is not None:
+                    # E2 (round 2b): the two records name one cause, and the
+                    # stop that came first is kept inside its evidence.
+                    self._assert_one_chain_alive_cause(
+                        "night_window_exceeded" if stop == "deadline"
+                        else "night_aborted_agent_present")
             if after_live is not None:
                 after_live(child_pid, marker, events)
         finally:
@@ -1141,6 +1182,20 @@ runpy.run_path(script, run_name='__main__')
                     os.kill(child_pid, signal.SIGKILL)
                 except ProcessLookupError:
                     pass
+
+    def _assert_one_chain_alive_cause(self, prior_reason):
+        night = self.custody / "night"
+        result = json.loads((night / "result.json").read_text())
+        document = json.loads((night / "refusal.json").read_text())
+        refusal = document["refusal"]
+        self.assertEqual(result["verdict"], "REFUSED")
+        self.assertEqual(result["aborted_reason"], "night_chain_alive")
+        self.assertEqual(document["verdict"], "REFUSED")
+        self.assertEqual(refusal["reason"], "night_chain_alive")
+        self.assertEqual(refusal["evidence"]["prior_abort"]["reason"], prior_reason)
+        self.assertIsNotNone(refusal["evidence"]["prior_abort"]["evidence"])
+        self.assertEqual([path.name for path in night.glob("refusal*.json")], ["refusal.json"])
+        self.assertEqual(result["refusal_documents"], ["night/refusal.json"])
 
     def test_journaled_detached_capture_blocks_query_and_on(self):
         self._live_detached_case(journal=True, expected_check="P2")
@@ -1156,6 +1211,33 @@ runpy.run_path(script, run_name='__main__')
 
     def test_same_group_live_child_blocks_query_and_on(self):
         self._live_detached_case(same_group=True)
+
+    def test_same_group_live_child_without_signature_blocks_query_and_on(self):
+        # Round 2b: the same-group survivor lives outside every path of the
+        # night and names no sampler, so P3 cannot see it; only the census of
+        # the chain's own group (P1 and the post-exit census) stands between
+        # it and the query and ON.
+        self._live_detached_case(same_group=True, outside=True)
+
+    def test_recovery_withholds_on_while_same_group_child_without_signature_lives(self):
+        # Round 2b: in recovery nothing runs before the proof, so P1 alone
+        # sees a chain-group survivor that carries no capture signature.
+        # Production call: recover_network_time with the driver's recovery proof.
+        def after(child_pid, marker, events):
+            self.assertTrue(marker.exists())
+            from tests.test_network_time_window import Runner
+            runner = Runner()
+            self.assertIn("capture_proof", inspect.signature(REAL_NT_RECOVER).parameters)
+            with mock.patch.object(self.driver, "_prove_capture_absent",
+                                   side_effect=self.real_capture_proof, create=True):
+                outcome = REAL_NT_RECOVER(marker_path=marker, runner=runner,
+                    boot_probe=lambda: "boot",
+                    capture_proof=getattr(self.driver, "_recovery_capture_proof", None))
+            os.kill(child_pid, 0)
+            self.assertEqual(outcome, "chain_unproved")
+            self.assertNotIn(network_time_window.ON_ARGV, runner.calls)
+            self.assertTrue(marker.exists())
+        self._live_detached_case(same_group=True, outside=True, after_live=after)
 
     def test_census_stop_with_detached_child_blocks_query_and_on(self):
         self._live_detached_case(stop="census")
@@ -1366,6 +1448,60 @@ runpy.run_path(script, run_name='__main__')
         self.assertFalse(proved)
         self.assertEqual(evidence["check"], "P3")
         self.assertEqual(evidence["matches"][0]["pid"], 99999)
+
+    def test_capture_proof_never_starves_a_check_and_keeps_the_failing_check(self):
+        # E1 (round 2b). Counterfactual: P1 and P2 prove, P3 keeps matching.
+        # Round 2's loop gave its last pass the window's remainder (down to
+        # 0.01 s), so that pass's census timed out and P1's timeout evidence
+        # replaced P3's. Production call: _prove_capture_absent with the real
+        # five-second window.
+        self.assertIsNotNone(self.real_capture_proof, "no capture proof on this head")
+        night = self.custody / "night"
+        night.mkdir()
+        marker = {"measurement_root": str(self.root), "custody_root": str(self.custody),
+                  "chain_path": str(self.chain)}
+        row = (f"{os.getpid()} 1 {sys.executable}\n88888 {os.getpid()} /bin/ps\n"
+               f"99999 1 /bin/sh {self.root / 'collector.py'}\n")
+        timeouts = []
+        def census(pgid, timeout_s=1):
+            timeouts.append(("P1", timeout_s))
+            if timeout_s < 0.5:
+                return False, [f"census_failed: TimeoutExpired after {timeout_s} seconds"]
+            return True, []
+        def snapshot(timeout_s):
+            timeouts.append(("P3", timeout_s))
+            return 0, row, "", 88888
+        started = time.monotonic()
+        with mock.patch.object(self.driver, "_group_census", side_effect=census), \
+             mock.patch.object(self.driver, "_process_snapshot", side_effect=snapshot, create=True):
+            proved, evidence = self.real_capture_proof(marker, 12345, night)
+        elapsed = time.monotonic() - started
+        self.assertFalse(proved)
+        self.assertEqual(evidence["check"], "P3")
+        self.assertEqual(evidence["matches"][0]["pid"], 99999)
+        self.assertGreater(len(timeouts), 2)
+        self.assertEqual({timeout for _check, timeout in timeouts}, {1.0}, timeouts)
+        self.assertLessEqual(elapsed, self.driver.GROUP_CENSUS_WINDOW_S + 0.5)
+
+    def test_capture_proof_that_times_out_is_not_proved_and_stays_bounded(self):
+        # E1 (round 2b). A census that genuinely spends its whole timeout is
+        # "not proved", and no pass starts that cannot finish in the window.
+        self.assertIsNotNone(self.real_capture_proof, "no capture proof on this head")
+        night = self.custody / "night"
+        night.mkdir()
+        def census(pgid, timeout_s=1):
+            time.sleep(timeout_s)
+            return False, [f"census_failed: TimeoutExpired after {timeout_s} seconds"]
+        started = time.monotonic()
+        with mock.patch.object(self.driver, "_group_census", side_effect=census), \
+             mock.patch.object(self.driver, "CAPTURE_CHECK_TIMEOUT_S", .2, create=True), \
+             mock.patch.object(self.driver, "GROUP_CENSUS_WINDOW_S", 1):
+            proved, evidence = self.real_capture_proof({}, 12345, night)
+        elapsed = time.monotonic() - started
+        self.assertFalse(proved)
+        self.assertEqual(evidence["check"], "P1")
+        self.assertIn("TimeoutExpired after 0.2 seconds", evidence["census"][0])
+        self.assertLessEqual(elapsed, 1.0 + 0.3)
 
     def test_unproved_capture_uses_refusal_exit_even_if_courier_fails(self):
         _, spawn = self._popen_recorder()

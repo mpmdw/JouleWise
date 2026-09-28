@@ -293,7 +293,7 @@ def _refusal_paths(night_dir: Path) -> list[Path]:
 
 def _write_driver_refusal(
     path: Path, plan: NightPlan, reason: str, detail: str, evidence: Any = None,
-    *, allocated: list[Path] | None = None,
+    *, allocated: list[Path] | None = None, supersede: bool = False,
 ) -> dict[str, Any]:
     """Write one immutable refusal record and return its refusal mapping.
 
@@ -301,6 +301,13 @@ def _write_driver_refusal(
     actually used: a caller that must tell a later writer "this cause is
     already on disk" needs the file's identity, and the mapping alone does not
     carry it.
+
+    `supersede=True` is the one exception to immutability: it atomically
+    replaces the document at `path` (which must already exist). Only the
+    capture proof uses it, when it fails after the deadline watchdog wrote
+    its own document: the night's cause becomes `night_chain_alive`, and the
+    superseded cause travels inside the new evidence as `prior_abort`, so
+    `refusal.json` and `result.json` name one cause (round 2b, E2).
     """
 
     if plan.quiet_admission is not None:
@@ -324,7 +331,16 @@ def _write_driver_refusal(
     defects = validate_refusal(document)
     if defects:
         raise ValueError(f"invalid driver refusal: {defects!r}")
-    written = _write_refusal_bytes(path, _json_bytes(document))
+    if supersede:
+        if not path.is_file():
+            raise FileNotFoundError(f"no refusal document to supersede: {path}")
+        temporary = path.with_name(f".{path.name}.supersede.tmp")
+        temporary.unlink(missing_ok=True)
+        _write_bytes_exclusive(temporary, _json_bytes(document))
+        os.replace(temporary, path)
+        written = path
+    else:
+        written = _write_refusal_bytes(path, _json_bytes(document))
     if allocated is not None:
         allocated.append(written)
     return refusal
@@ -3340,7 +3356,8 @@ def run_night(
                     marker = {"_invalid": "restore marker unreadable"}
                 capture_proven, proof_evidence = _prove_capture_absent(marker, pgid, night_dir)
             if not capture_proven:
-                abort = _refusal_mapping(_CODES["chain_alive"],
+                abort = _capture_unproved_abort(
+                    night_dir, plan, custody_root, abort,
                     "capture process absence could not be proved", proof_evidence)
         if termination_proven and capture_proven:
             try:
@@ -3354,8 +3371,10 @@ def run_night(
                 if not never_launched:
                     capture_proven, proof_evidence = _prove_capture_absent(marker, pgid, night_dir)
                     if not capture_proven:
-                        abort = _refusal_mapping(_CODES["chain_alive"],
-                            "capture process absence could not be proved before ON", proof_evidence)
+                        abort = _capture_unproved_abort(
+                            night_dir, plan, custody_root, abort,
+                            "capture process absence could not be proved before ON",
+                            proof_evidence)
                 if capture_proven:
                     try:
                         on = network_time_window.set_network_time_on(
@@ -3487,6 +3506,43 @@ def _read_started_pgid(path: Path) -> int | None:
     if not isinstance(pgid, int) or isinstance(pgid, bool) or pgid <= 0:
         return None
     return pgid
+
+
+def _capture_unproved_abort(
+    night_dir: Path, plan: NightPlan, custody_root: Path,
+    prior: dict[str, Any] | None, detail: str, proof_evidence: dict[str, Any],
+) -> dict[str, Any]:
+    """The night's one cause when the capture proof fails: `night_chain_alive`.
+
+    A1 §4.2 as ruled by the lead (round 2b): when the proof fails, result.json
+    and refusal.json both carry `night_chain_alive` and the refusal exit
+    status. An earlier abort (the deadline stop, an agent-census stop) is kept
+    inside the new evidence as `prior_abort`. When that earlier cause is
+    already on disk -- the deadline watchdog writes its own document -- the
+    document is superseded in place, so the two records cannot disagree.
+    """
+    evidence = dict(proof_evidence) if isinstance(proof_evidence, Mapping) else {
+        "proof_evidence": proof_evidence}
+    if prior is not None:
+        evidence["prior_abort"] = {key: prior[key]
+                                   for key in ("reason", "detail", "evidence", "document")
+                                   if key in prior}
+    abort = _refusal_mapping(_CODES["chain_alive"], detail, evidence)
+    document = prior.get("document") if isinstance(prior, Mapping) else None
+    if isinstance(document, str) and document:
+        try:
+            _write_driver_refusal(night_dir / document, plan, abort["reason"],
+                                  abort["detail"], abort["evidence"], supersede=True)
+            abort["document"] = document
+        except (OSError, ValueError, TypeError) as error:
+            # Without "document", the result step writes a fresh chain-alive
+            # record; the result still names night_chain_alive.
+            try:
+                _append_log(custody_root, f"chain-alive refusal could not supersede "
+                            f"{document}: {type(error).__name__}: {error}")
+            except Exception:
+                pass
+    return abort
 
 
 def _chain_never_launched(night_dir: Path) -> bool:
@@ -3836,46 +3892,86 @@ def _registry_groups(path: Path) -> set[int] | None:
         return None
 
 
+# Every timed process listing inside one pass of the capture proof gets this
+# whole timeout, never a remainder: a listing given 0.01 s times out and its
+# "not proved" would overwrite the evidence of the check that really failed
+# (round 2b, E1).
+CAPTURE_CHECK_TIMEOUT_S = 1.0
+
+
+def _capture_pass_calls(groups: set[int] | None) -> int:
+    """Worst-case count of timed listings one pass runs: P1, P2, P3.
+
+    P2 with one group is one census; with more, each batch of
+    GROUP_CENSUS_BATCH groups is one census plus one attribution listing.
+    """
+    count = len(groups) if groups else 0
+    p2 = 0 if count == 0 else 1 if count == 1 else 2 * -(-count // GROUP_CENSUS_BATCH)
+    return 1 + p2 + 1
+
+
+def _capture_proof_pass(marker: dict[str, Any], pgid: int, groups: set[int] | None,
+                        timeout_s: float) -> tuple[bool | None, dict[str, Any]]:
+    """One complete P1 -> P2 -> P3 pass. None means "not proved, do not retry"."""
+    try:
+        p1, p1_lines = _group_census(pgid, timeout_s)
+    except Exception as error:
+        return None, {"check": "P1", "error": f"{type(error).__name__}: {error}"}
+    if not p1:
+        return False, {"check": "P1", "pgid": pgid, "census": p1_lines}
+    if groups is None:
+        return False, {"check": "P2", "error": "registry unreadable"}
+    try:
+        census = _group_census_batch(sorted(groups), timeout_s)
+    except Exception as error:
+        return None, {"check": "P2", "error": f"{type(error).__name__}: {error}"}
+    unproved = {group: lines for group, (absent, lines) in census.items() if not absent}
+    if unproved or len(census) != len(groups):
+        return False, {"check": "P2", "groups": unproved,
+                       "error": "incomplete registry census" if len(census) != len(groups) else None}
+    try:
+        clear, evidence = _capture_sweep(marker, timeout_s)
+    except Exception as error:
+        return None, {"check": "P3", "error": f"{type(error).__name__}: {error}"}
+    return (True, {"checks": ["P1", "P2", "P3"]}) if clear else (False, evidence)
+
+
 def _prove_capture_absent(marker: dict[str, Any], pgid: int | None,
                           night_dir: Path) -> tuple[bool, dict[str, Any]]:
-    """Fresh P1, P2 and P3 proof, bounded by the existing five-second window."""
+    """Fresh P1, P2 and P3 proof, repeated inside GROUP_CENSUS_WINDOW_S.
+
+    Every pass is complete: each of its listings runs with the whole
+    CAPTURE_CHECK_TIMEOUT_S. A further pass starts only when its worst case
+    (CAPTURE_CHECK_TIMEOUT_S times `_capture_pass_calls`) still fits before
+    the window ends; otherwise the proof stops and returns the evidence of
+    the last complete pass. A listing that genuinely times out inside a pass
+    is that pass's "not proved". Bound: the first pass always runs, so the
+    whole proof takes at most max(GROUP_CENSUS_WINDOW_S, first pass's worst
+    case) -- 5 s for a night of up to GROUP_CENSUS_BATCH registered groups
+    (worst pass 4 x 1 s) -- plus the reaping of a timed-out listing.
+    """
     if not isinstance(marker, dict) or marker.get("_invalid"):
         return False, {"check": "P3", "error": "restore marker unreadable"}
     if pgid is None:
         return False, {"check": "P1", "error": "chain group unknown"}
+    registry = night_dir / "evidence_processes.jsonl"
     deadline = time.monotonic() + GROUP_CENSUS_WINDOW_S
+    passes = 0
+    evidence: dict[str, Any] = {}
     while True:
-        remaining = max(.01, deadline - time.monotonic())
-        try:
-            p1, p1_lines = _group_census(pgid, min(1., remaining))
-        except Exception as error:
-            return False, {"check": "P1", "error": f"{type(error).__name__}: {error}"}
-        if not p1:
-            evidence = {"check": "P1", "pgid": pgid, "census": p1_lines}
-        else:
-            groups = _registry_groups(night_dir / "evidence_processes.jsonl")
-            if groups is None:
-                evidence = {"check": "P2", "error": "registry unreadable"}
-            else:
-                try:
-                    census = _group_census_batch(sorted(groups), min(1., remaining))
-                except Exception as error:
-                    return False, {"check": "P2", "error": f"{type(error).__name__}: {error}"}
-                unproved = {group: lines for group, (absent, lines) in census.items()
-                            if not absent}
-                if unproved or len(census) != len(groups):
-                    evidence = {"check": "P2", "groups": unproved,
-                                "error": "incomplete registry census" if len(census) != len(groups) else None}
-                else:
-                    try:
-                        clear, evidence = _capture_sweep(marker, min(1., remaining))
-                    except Exception as error:
-                        return False, {"check": "P3", "error": f"{type(error).__name__}: {error}"}
-                    if clear:
-                        return True, {"checks": ["P1", "P2", "P3"]}
-        if time.monotonic() >= deadline:
-            return False, evidence
-        time.sleep(min(GROUP_CENSUS_INTERVAL_S, max(.01, deadline - time.monotonic())))
+        groups = _registry_groups(registry)
+        budget = CAPTURE_CHECK_TIMEOUT_S * _capture_pass_calls(groups)
+        if passes and time.monotonic() + budget > deadline:
+            return False, {**evidence, "passes": passes}
+        proved, evidence = _capture_proof_pass(marker, pgid, groups, CAPTURE_CHECK_TIMEOUT_S)
+        passes += 1
+        if proved:
+            return True, {**evidence, "passes": passes}
+        if proved is None:
+            return False, {**evidence, "passes": passes}
+        if time.monotonic() + GROUP_CENSUS_INTERVAL_S + budget > deadline:
+            return False, {**evidence, "passes": passes}
+        time.sleep(GROUP_CENSUS_INTERVAL_S)
 
 
 def _recovery_capture_proof(marker: dict[str, Any], pgid: int) -> tuple[bool, dict[str, Any]]:
