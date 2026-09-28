@@ -21,6 +21,7 @@ from joulewise.calibration_ledger import (
     LEDGER_SCHEMA,
     CalibrationLedgerSnapshot,
 )
+from joulewise.battery_float import CustodyFailure
 from joulewise.uncertainty_evidence import (
     CLOCK_METHOD_V3,
     SCHEMA_FOR_ANCHOR_METHOD,
@@ -145,12 +146,23 @@ class CandidateDiscoveryModeTests(unittest.TestCase):
                     reader.return_value.metadata.return_value = {"instrument_calibration": {"bindings": {}}}
                     session = AuthenticatedConsumptionSession(root, {"consumer"},
                         calibration_ledger_snapshot=snapshot, **kwargs)
-                    session._prepare(bundle_paths={"consumer": root / "consumer"},
-                                     policy=SimpleNamespace(calibration_bracketing=object()))
-                    self.assertEqual(inspected, [mapped] if replay else [])
-                    self.assertEqual(len(evaluate.call_args.args[0]), 1 if replay else 0)
-                    if not replay:
-                        self.assertIn("calibration_ledger_custody_invalid", session.refusal_reasons)
+                    if replay:
+                        session._prepare(bundle_paths={"consumer": root / "consumer"},
+                                         policy=SimpleNamespace(calibration_bracketing=object()))
+                        self.assertEqual(inspected, [mapped])
+                        self.assertEqual(len(evaluate.call_args.args[0]), 1)
+                    else:
+                        with self.assertRaises(CustodyFailure) as caught:
+                            session._prepare(bundle_paths={"consumer": root / "consumer"},
+                                             policy=SimpleNamespace(calibration_bracketing=object()))
+                        self.assertIs(type(caught.exception), CustodyFailure)
+                        self.assertEqual(
+                            [(row["slot"], row["artifact"], row["expected_sha256"], row["observed_sha256"])
+                             for row in caught.exception.failures],
+                            [("capture", "instrument_evidence.json", evidence_sha, None)],
+                        )
+                        self.assertEqual(inspected, [])
+                        evaluate.assert_not_called()
                     self.assertFalse(original.exists())
 
     def test_issuing_candidate_discovery_reads_present_original(self):
@@ -209,6 +221,65 @@ class CandidateDiscoveryModeTests(unittest.TestCase):
                 )
             self.assertEqual(inspected, [original])
             self.assertEqual(len(evaluate.call_args.args[0]), 1)
+
+    def test_issuing_intact_custody_unloadable_candidate_keeps_custody_invalid_condition(self):
+        from joulewise import calibration_bracketing as bracketing
+        from joulewise.uncertainty_evidence import ACTIVE_CAPTURE_ANCHOR_METHOD
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            original = root / "runs/member"
+            original.mkdir(parents=True)
+            (original / "marker").write_text("original bytes", encoding="utf-8")
+            (original / "manifest.json").write_text(
+                '{"attempt_id":"member-capture"}\n', encoding="utf-8",
+            )
+            manifest_sha = hashlib.sha256((original / "manifest.json").read_bytes()).hexdigest()
+            evidence_sha = write_capture_evidence(
+                original, validation_id="member-capture",
+            )
+            consumer = root / "consumer"
+            consumer.mkdir()
+            (consumer / "metadata.json").write_text("{}\n", encoding="utf-8")
+            _evidence_bundle(consumer)
+            candidate = bracketing.CalibrationCandidate(
+                relative_path=str(original), manifest_sha256=manifest_sha,
+                evidence_sha256=evidence_sha, protocol_id="fixture",
+                capture_wall_time_s=1.0, b_fiducial_s="0.02",
+                bindings={"anchor_method_version": ACTIVE_CAPTURE_ANCHOR_METHOD},
+                attempt_id="member-capture",
+            )
+            snapshot, _ = _fixture_snapshot([candidate])
+            inspected = []
+
+            def inspect_candidate(directory, *, runs_root):
+                inspected.append(directory)
+                self.assertEqual(directory, original)
+                self.assertEqual((directory / "marker").read_text(), "original bytes")
+                self.assertEqual(runs_root, root)
+                return None
+
+            with (
+                patch.object(bracketing, "BundleReader") as reader,
+                patch.object(bracketing, "_load_calibration_candidate_unbounded",
+                             side_effect=inspect_candidate),
+                patch.object(bracketing, "evaluate_calibration_bracket",
+                             return_value=({"b_fiducial_s": None}, ())) as evaluate,
+            ):
+                reader.return_value.measured_window.return_value = SimpleNamespace(start_s=2, end_s=3)
+                reader.return_value.metadata.return_value = {"instrument_calibration": {"bindings": {}}}
+                session = AuthenticatedConsumptionSession(
+                    root, {"consumer"}, calibration_ledger_snapshot=snapshot,
+                    mode="issuing",
+                )
+                session._prepare(
+                    bundle_paths={"consumer": consumer},
+                    policy=SimpleNamespace(calibration_bracketing=object()),
+                )
+            self.assertEqual(inspected, [original])
+            self.assertEqual(len(evaluate.call_args.args[0]), 0)
+            self.assertIn("calibration_ledger_custody_invalid", session.refusal_reasons)
+            self.assertTrue((original / "instrument_evidence.json").is_file())
 
 
 class CampaignManifestVerdictAuthenticationTests(unittest.TestCase):

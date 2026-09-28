@@ -12,7 +12,7 @@ import sys
 import tempfile
 import unittest
 
-from joulewise.bundle_read import TracePoint, Window
+from joulewise.bundle_read import BatteryStatusRefusal, TracePoint, Window
 from joulewise.phase_share import (
     Interval,
     PhaseBoundaryError,
@@ -324,22 +324,38 @@ class PhaseBoundaryEnvelopeTests(unittest.TestCase):
             original = ANALYZER.analyze_bundle(bundle)
             self.assertEqual(
                 original["source_sha256"]["metadata.json"],
-                "7386959d73d0de47c1c551b3de49d2281241f0c82caff18439cfac5ba6ce36c9",
+                "8425a9e6df4504b11534e23a0fa4b8d10e124d325b0a2d0d1fb61923151aa2f2",
             )
 
-            (bundle / "metadata.json").write_bytes(
-                b'{"device": {"rail_manifest": ["total"]}}\n'
-            )
+            metadata_path = bundle / "metadata.json"
+            metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+            metadata["extra_fixture_note"] = "changed"
+            changed_bytes = (json.dumps(metadata, sort_keys=True) + "\n").encode("utf-8")
+            metadata_path.write_bytes(changed_bytes)
             changed = ANALYZER.analyze_bundle(bundle)
 
         self.assertEqual(
             changed["source_sha256"]["metadata.json"],
-            "f49d278b4a17e97784b62daa05afe24da8e3ce64c387baae3f8a3ee57dc12aa8",
+            "f835684c38eb8d22a5429015d1d1e4816aca723401885eb30b804842795f4120",
+        )
+        self.assertEqual(
+            changed["source_sha256"]["metadata.json"],
+            hashlib.sha256(changed_bytes).hexdigest(),
         )
         self.assertNotEqual(
             original["source_sha256"]["metadata.json"],
             changed["source_sha256"]["metadata.json"],
         )
+
+    def test_stripped_metadata_is_refused_for_missing_battery_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            bundle = self._write_bundle(Path(temporary_directory))
+            (bundle / "metadata.json").write_bytes(
+                b'{"device": {"rail_manifest": ["total"]}}\n'
+            )
+            with self.assertRaises(BatteryStatusRefusal) as caught:
+                ANALYZER.analyze_bundle(bundle)
+        self.assertEqual(caught.exception.status, "battery_float_evidence_missing")
 
     def test_unequal_prefill_and_decode_bounds_are_refused(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
