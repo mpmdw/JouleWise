@@ -24,6 +24,16 @@ from joulewise.authentication_io import (
 from joulewise.bundle_read import BundleReader
 from joulewise.reduce import _in_window_sample_count, _window_gap_stats
 from joulewise.whole_window import MAX_BRACKET_CONSUMPTION_SEMANTICS_ID
+from tests.sampler_launch_fence import fenced_load_tests, install_module_fence
+
+
+# Record item 124 (activation d528efb2): no test in this module may start the
+# real sampler or sudo; see tests/sampler_launch_fence.py.
+load_tests = fenced_load_tests
+
+
+def setUpModule():
+    install_module_fence()
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]

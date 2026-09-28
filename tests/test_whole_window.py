@@ -52,6 +52,16 @@ from joulewise.campaign_provenance import (
 from tests.test_calibration_bracketing import _fixture_snapshot
 from tests.test_arm_readiness import LaunchConsumptionV2Tests
 from tests.test_arm_readiness_schemas import TEST_BOOT_SESSION_ID
+from tests.sampler_launch_fence import fenced_load_tests, install_module_fence
+
+
+# Record item 124 (activation d528efb2): no test in this module may start the
+# real sampler or sudo; see tests/sampler_launch_fence.py.
+load_tests = fenced_load_tests
+
+
+def setUpModule():
+    install_module_fence()
 
 
 LOCAL_CROSSING = "clock_bound_exceeds_quarter_window"
