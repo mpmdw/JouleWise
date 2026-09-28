@@ -423,3 +423,13 @@ Launched by the watchdog at 17:36:30 PDT (attempt 124) after a usage back-off; t
       - R5: C7's refusal returns status 6.
     - **R3 is E2 at another call site, so a 2c round would be the second fix round on the same defect: a mandatory cold gate.** Charge NTP-ENFORCE-DESIGN-01-A2 ([47](71-ntp-design/47-coldgate-fix2c-charge.md)) is convened, with cold Fable plus an Opus refuter.
     - **Disclosed by the auditor:** the lead's rule-9 census (item 122) ran whole test modules under the triage recorder, which, like the standard S1 guard, blocks only `ioreg`. Some existing test in `test_whole_window`, `test_run_campaign` or `test_window_duration_margins` started a real `sudo -n /usr/bin/powermetrics`. Earlier whole-suite runs (item 117 and S1 step 0) use no guard at all, so this is existing suite behaviour, not new. **Finding for a hygiene lane: a test that starts the real sampler.** It is to be identified and fenced; the lead does not run those modules again until then. No capture or measurement was in progress.
+125. **S1 seat B landed** (Sol xhigh; [report](30-s1-repair/90-R3-5-seat-B-report.md); committed `d4345946` on `fix/2026-09-28-s1-r3-B`).
+    - 20 of 21 floor T2 IDs are GREEN and RED under the charging pair (`battery_float_confounded`). T1 is GREEN, and RED under the plant. The `floor_extraction.py` mock-barrier sibling is GREEN, and RED when the barrier is removed.
+    - **Golden report:** the lead reran the leaf diff. The old SHA-256 is `c925daf6…` (A3's value). Added: `battery_float_members`, golden-r01..r05, all `pass`. Changed: only 5 `summary_sha256`. No numeric leaf changed, no key was removed, `all_cells_extractable` is still true, and every member is still not excluded. This is **within A3 §5.5's rule.**
+    - **The lead's rerun outside the sandbox:** `test_floor_extraction` 178 tests, 175 ok, 3 fail.
+    - **The 3 failures are returned NEEDS_RULING by ID:**
+      - `…test_failed_adapter_continuity_refuses_but_clean_core_passes`, which asserts `adapter_continuity_failed`;
+      - `…test_later_passed_row_cannot_supersede_failed_whole_window_row`;
+      - `…test_whole_window_rederives_neg8_verdict_from_member_summaries`.
+
+      The last two call `whole_window_refusal_reasons` by name. They are refused at the second-form reasons, and **rule 8 refuses them the second switch** (their subject names a second-form function or reason). **They count under condition 2's cap: 3 of 10.**
