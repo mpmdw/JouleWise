@@ -178,3 +178,58 @@ Launched by the watchdog at 17:36:30 PDT (attempt 124) after a usage back-off; t
     - WALLCLOCK-STEP-SOURCE-01 discharged (cause found);
     - 281 + 5 − 1 = 285; `tests.test_gen_state` OK.
 67. **NETWORK-TIME-OFF-ENFORCE-01 scout** (Sol high; [report](70-ntp-enforce-scout/report.md)) mapped H5/H6 across every 25G83 capture route. **Critical gap:** calibration ledger rows finalize BEFORE the window-wide H6 verdict exists, so the attestation must be designed to act at finalization or refuse admission afterwards. That is a design point for the lane's brief (next session).
+68. **ADDENDUM: D138-25G83-DESIGN-01-A1 ISSUED** (cold Fable, [31](11-d138-design/31-addendum-ruling.md)).
+    - **The hold was open.** The only thing stopping a passing result was an unrelated counting defect, which the judge confirmed by execution.
+    - **Cure R-1..R-5:** issue and register the new file but **R7 stays the default until H1 lifts**. The loader returns a held file only to a caller stating a non-claim purpose, and a held file can never be the default. The judge's scratch build turned both refuters' routes into refusals while keeping the non-claim route-R capture path open.
+    - **Also in the same change:**
+      - fix the doubling-trigger defect;
+      - S2: the tool verifies cited digests, the log, D8 and §7.4 (P6);
+      - S3: exact new `required_verification`, `transaction` and `hold_enforcement` strings;
+      - N1 (L10), N2 (P7), N4, N5, N7;
+      - restore the tests re-pointed for the moved default;
+      - new `tests/test_claim_hold_routes.py` (HR-*) and DT-1..DT-5.
+    - **Old-epoch replay:** met by identity, since the default does not move. The attempt-2 commands are re-run at main and at the fix head and must be byte-identical. The attempt-2 seat's STOP was the correct reading; the lead's contrary reading (item 49) was wrong and is not relied on. A restated condition applies to the later default-moving transaction.
+    - The pedagogy factual flags are adopted.
+    - Revised gate: records on main → fix seat → RED record → re-hash and independent replay → old-epoch replay → whole suite → mutation → two fresh refuters (a hold route still means STOP) → pedagogy → cold final pass → merge → post-merge checks.
+69. **Fix round 2 started.** The records branch was merged into the D-138 branch (`ea92badc`). The lead set the three S3 strings in the issuance-text builder (`6ed6c1d5`; text sha256 `fea34546…`). **Fix-round-2 seat launched** (Sol 6.0 xhigh, 3 h timeout, the addendum's exact §8.2 scope; [brief](50-d138-issuance-seat/02-fix2-brief.txt)). It regenerates the bytes with the tool and prepares the RED record against `325d9f77`.
+70. **RULING: S1-REPAIR-ROUTE-01 ISSUED** (cold Fable, [21](30-s1-repair/50-escalation/21-coldgate-fable-ruling.md)).
+    - **Route: "exemption parity".** One declared test-only switch turns off the exemption-gated production checks, only for listed test IDs whose subject is something else. The battery gate and bundle identity stay real. The list is pinned by a sweep test.
+    - **The gate hole is real and fixed in S1:** a bundle carrying a pair passed with its config deleted, altered or set to mock. The fix is about 20 lines.
+    - **Triage** into classes T1–T6 is done by the lead's script on main's tree.
+    - **Round 3 is the last,** under a hard cap: >50 turned tests at R3-1, or a failed pilot, sends it back to a cold gate before any seat; >10 residual outcomes after R3-6 does the same.
+    - **The owner may overturn** the judge's reading that directive #421 governs what production accepts, not what test fixtures contain.
+71. **R3-0 (lead, bench):** the gate fix applied as `601a06c5` on `fix/2026-09-27-s1-regress` (`bundle_read.py` sha256 `c4039f22…` exact). The six variants of §4.2 reproduce ([script](30-s1-repair/50-escalation/gate-variants.py), [out](30-s1-repair/50-escalation/gate-variants.out)). **R3-1:** the integration tree `0c469057` (= `601a06c5` merged with main `9eab16f8`, in a separate detached worktree; the candidate branch takes no merge) is running the per-ID full suite to `/tmp/s1-r3inv-d528efb2/`. This is the round-3 inventory and the measure of stop condition 5.
+72. **Owner status email** accepted as Gmail `1a0e6ded19991bbf` (00:30 PDT). It covers:
+    - the new calibration file held back by design (R7 stays the default while H1 holds; Ed may say "wait entirely");
+    - the network-time finding (no action needed);
+    - the S1 gate hole found and fixed;
+    - the S1 route's reading of #421, offered for owner overturn (silence means it stands);
+    - later asks: approve the successor registration and name the two files.
+73. **Revised D-138 record texts drafted in scratch** (Opus writer; nothing written in the seat's worktree). Saved as [record-revision-draft](50-d138-issuance-seat/record-revision-draft/):
+    - `prose.md` for the issuing record, plus the D-185 section, row and D-126 note;
+    - all 37 pedagogy items applied, with corrections listed in `CHANGES.md`;
+    - hold claims per design addendum §3 and §7; the old-epoch section per §6; both factual flags fixed;
+    - a new "Design change before merge" section.
+    - Digests, head and old-epoch re-run values are placeholders, filled after fix round 2. A second pedagogy pass is owed on the final texts.
+74. **The lead's whole suite on `325d9f77`:** 7,559 tests, 0 failures, 0 errors, 109 skipped (superseded by fix round 2; recorded).
+75. **D-138 fix round 2 landed** (`8458f797`, Sol xhigh; [report](50-d138-issuance-seat/fix2/report.md)).
+    - **R7 stays the default** (`ACTIVE_ACCEPTANCE_ID = ANCHOR_V3_R7_ACCEPTANCE_ID`). The held file is returned only to a caller that states a non-claim purpose.
+    - The doubling trigger is fixed; S2 (P6), N1 (L10), N2 (P7), N4/N5/N7 are in; `tests/test_claim_hold_routes.py` (HR-*) and DT-1..DT-5 are added; the re-pointed tests are restored.
+    - **New digest X `d6de84b854a4c5d7f6d73dfde2ae0f14d71a483355c7289a36882e0dfcccd5ea`**; input seal `e7363bdd…` unchanged; whole-file seal `8726a11b…`; `--check` rc 0; `required_verification` per S3.
+    - **The RED record was re-run by the lead** ([log](50-d138-issuance-seat/fix2/red_record_lead.log) and per-test logs): HR-1, HR-2, HR-3, HR-5, DT-1, DT-2 and P6 each FAIL on `325d9f77` with a genuine assertion (e.g. HR-2 `…n12_25g83_r1 != …n17_r7`; DT-1 `corpus_doubles_from_12_to_24 unexpectedly found`) and PASS on `8458f797`. **RED_RECORD=PASS.** (The script's display line needs `rg`, which is absent; the logs themselves are complete.)
+76. **Old-epoch replay per design addendum §6 item 1: BYTE-IDENTICAL** ([files](50-d138-issuance-seat/oldepoch-3/)). Attempt 2's commands (`replay.sh`, bracket evaluation of recorded 25F84 member `sw7bfloor-df-ph-decode-abs-r01`) were run at main (`e7c8bcc6`; main `9eab16f8` differs only in docs, RUN_STATE, TASK_QUEUE and `test_gen_state`) and at the fix head `8458f797`. Both give `instrument_calibration_bracket_missing`, exit 1, R7 fresh, and `bracket.json` sha256 `32562d34a87888022cd5dc5f256d81bafed9d987fefee8549762299d42a4da4c` on both sides. The output-digest manifests are identical. The condition is met by identity.
+77. **D-138 gate steps launched on `8458f797`** (addendum §8.1): the lead's whole suite (step 6); the independent replay (step 4, a fresh Astra seat; item (vi) as amended); mutation evidence (step 7, Sol; incl. the §3.4 mutations and N1's combined mutation); fresh refuters (step 8): hold → Opus, contract → Astra. A found hold route still means STOP.
+78. **D-138 round-2 gate results so far** (on `8458f797`):
+    - **Contract refuter 2 (Astra, fresh): no BLOCKER** ([report](50-d138-issuance-seat/refuters/contract-refuter-2-astra.md)). Pins, seals, loader hold, R7 default, table and file agreement, and the doubling thresholds were all confirmed by execution; HR-1..HR-8 and DT-1..DT-5 pass. Two SHOULD-FIX items in the promotion tool (regeneration robustness): deleting citation fields bypasses verification (P5a/b/f), and a bare `{"id":"H1"}` hold list is accepted (P5g). **Fixing them would be a second fix round on the same finding (S2), a mandatory cold-gate trigger, so they go to the cold final pass as a question, not to a seat.**
+    - **Mutation 2 (Sol)** ([report](50-d138-issuance-seat/mutation2/report.md)): every plant is RED except the four R7-freeze mutants (predecessor comparison ×2, preparation default, epoch-check default), which stay GREEN. The lead's reading: equivalent mutants under R-1, since the default IS R7, so pointing a frozen reference at the default changes nothing today; the freezes matter only when the default moves at H1's release. The seat called it a blocker. **Put to the cold final pass.**
+    - **Independent replay 2 (Astra)** ([report](50-d138-issuance-seat/replay2/report.md)): items (i)–(v), the estimator digests, cap, ancestry and diff guard all PASS. **Item (vi) as the addendum wrote it cannot pass:** explicit evaluation re-authenticates without the keyword (`calibration_bracketing.py:1337`) and returns `stale / acceptance_artifact_claim_held`, as the HR tests expect. The non-claim route-R captures stay open as derivation nights, because R7 stays the default. **Put to the cold final pass.**
+79. **Revised D-138 records installed** (`f3c1bb64`): placeholders filled (code head `8458f797`, digest X `d6de84b8…`, seal `8726a11b…`, issuance text `fea34546…`, old-epoch `32562d34…` on both sides); issuing record 359 lines regenerated with verbatim checks; D-185 row, section and D-126 note replaced; doc tests OK. **Second pedagogy pass** launched. The hold refuter 2 (Opus) and the lead's whole suite are still running.
+80. **D-138 hold refuter 2 (Opus, fresh): HOLD: OPEN — 1 route** ([report](50-d138-issuance-seat/refuters/hold-refuter-2-opus.md) + probes).
+    - **BLOCKER B-1:** a pack declaring R7 in `issued` and the held file in `issued_acceptance` (or `issued_artifact_id`) is admitted by `_issued_d079`, which stops at the first declared id. The evidence author then authenticates and certifies the held bytes through `_acceptance_bound_from_authenticated_bytes`, which skips the loader hold. **No number is reachable** (all runtime paths read R7 and refuse at 25G83), but an armed claim window counts under the charge, so **the transaction STOPS again.**
+    - **S-1:** the loader is not the single gate (two direct callers of the authentication primitive).
+    - **S-2:** the HR-6 keyword census misses non-literal forms.
+    - **S-3:** registered operatives are not held.
+    - **S-4:** the hold is keyed by FILE while H1 is keyed by EPOCH, so the planned interim re-issue or an R7 continuation to 25G83 would bypass it.
+    - Plus nits (N-3, a pre-existing test-flag gap).
+    - **Escalation:** the hold has now failed twice with the same signature (round 1: two routes; round 2: one route plus S-1/S-4). Under rule 11 and the standing escalation trigger, the next spend is a CONSULT, not fix round 3. One focused design consult follows, then a cold ruling. Question: close the hold by construction, e.g. epoch-keyed and enforced at the authentication primitive.
+81. **Second pedagogy pass (Opus): PEDAGOGY: FIX** ([findings](50-d138-issuance-seat/refuters/pedagogy-pass-2.md)): 5 MAJOR (§4.2 misstates the missing-file refusal; "ordinary capture" and "close that night" not built; the D-185 validator gloss omits the refusing rule; terms used before their definitions) and 20 MINOR, each with exact replacement text. All first-pass items were either applied or reasoned in CHANGES.md. These go into the final writer pass after the hold redesign. **Consult HOLD-BY-CONSTRUCTION-01 seats** (Sol xhigh, Astra high) are running ([charge](12-hold-consult/00-consult-charge.md)).
