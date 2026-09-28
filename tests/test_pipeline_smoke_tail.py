@@ -11,6 +11,7 @@ from pathlib import Path
 from unittest import mock
 
 from joulewise.analysis_engine import analyze_claims
+from joulewise.bundle_read import WindowBatteryRefusal
 from joulewise.analysis_engine.reason_kinds import (
     CONTRACT_REASON_CODES,
     assert_data_reason_only,
@@ -98,62 +99,22 @@ class PipelineSmokeTailTests(unittest.TestCase):
         """Exercise the real tail and retain the fail-closed mock contradiction."""
 
         with tempfile.TemporaryDirectory() as tmp:
-            fixture = install_synthetic_finalization_fixture(
-                Path(tmp),
-                shared_family=True,
-                runtime_backend="mock",
-                telemetry_backend="mock",
-            )
-            family = fixture["prospective"]["families"][0]
-            self.assertEqual(
-                family["multiplicity"],
-                {"method": "holm", "alpha": 0.05, "q": None, "m": 2},
-            )
-            self.assertEqual(
-                family["contrast_ids"],
-                [
-                    contrast["contrast_id"]
-                    for contrast in fixture["prospective"]["contrasts"]
-                ],
-            )
-            first_member = fixture["prospective"]["contrasts"][0]["members"][0]
-            source_config = json.loads(
-                (fixture["prospective_path"].parent / first_member["config"]).read_text()
-            )
-            self.assertEqual(
-                source_config["hardware_target"]["runtime_backend"], "mock"
-            )
-            self.assertEqual(
-                source_config["hardware_target"]["telemetry_backend"], "mock"
-            )
-
-            code, result, _raw = _run_finalizer(fixture)
-            self.assertEqual(code, 0)
-            self.assertEqual(result["status"], "FINALIZED")
-            finalized_path = Path(result["output"])
-            self.assertTrue(finalized_path.is_file())
-            artifact = analyze_claims(
-                finalized_path,
-                fixture["runs_root"],
-                fixture["floor_path"],
-                strict_validator=lambda path, strict=True: [],
-            )
-            for contrast in artifact["contrasts"]:
-                reasons = contrast["claim_evaluation"]["reason_codes"]
-                self.assertEqual(
-                    reasons.count("mock_telemetry_claim_ineligible"),
-                    1,
-                    contrast["contrast_id"],
+            with self.assertRaises(WindowBatteryRefusal) as caught:
+                install_synthetic_finalization_fixture(
+                    Path(tmp), shared_family=True,
+                    runtime_backend="mock", telemetry_backend="mock",
                 )
-                self.assertTrue(
-                    set(reasons) & CONTRACT_REASON_CODES,
-                    contrast["contrast_id"],
-                )
-            with self.assertRaisesRegex(
-                AssertionError,
-                "contrast .* emitted non-DATA reason code",
-            ):
-                assert_data_reason_only(artifact)
+            self.assertEqual(len(caught.exception.members), 80)
+            runs_root = Path(tmp) / "runs"
+            self.assertEqual(
+                {Path(row["label"]).name for row in caught.exception.members},
+                {path.name for path in runs_root.iterdir()
+                 if path.is_dir() and path.name != "campaign_manifests"},
+            )
+            self.assertEqual(
+                {row["status"] for row in caught.exception.members},
+                {"not_applicable"},
+            )
             self.skipTest(
                 "NEEDS-RULING: config-authenticated mock telemetry is excluded "
                 "by the production claim loader, so the existing canned fixture "

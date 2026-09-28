@@ -708,9 +708,11 @@ class AnalysisFinalizerTests(unittest.TestCase):
         # The pinned id binds the fixture's floor path, which lives under
         # `floors/` since the ruling 97 fixture layout (evidence
         # `aggregate_floor_artifact.path`); a fixture-path change re-pins here.
+        # Moved by the S1 repair: the fixture bundles carry a bound config and a
+        # battery pair, changing only evidence.whole_window_verdict.evaluation_basis_sha256.
         self.assertEqual(
             calculate_manifest_id(legacy_projection),
-            "am-4e496e5f9853a010069ece26a22a184e4f2e3ce7bde1cab8a34217788f8ef963",
+            "am-6e45b5746008dba53dcc16b847c1b4ab46833964f9c54fbd6d8e32da5651ad77",
         )
         self.assertEqual(
             sorted(manifest),
