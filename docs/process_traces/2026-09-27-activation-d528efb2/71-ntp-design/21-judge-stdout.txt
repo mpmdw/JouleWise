@@ -1,0 +1,41 @@
+The ruling is written and issued.
+
+**File:** `/Users/edr/code/JouleWise-wt-bk-77b1bee2/docs/process_traces/2026-09-27-activation-d528efb2/71-ntp-design/21-coldgate-fable-ruling.md`
+**sha256:** `6946e93433b8866abda78e3f8ad2f8e5d654c9a66d9e01750500b0170374e029`
+**Session:** 04:03–04:21 PDT, 18 of 60 minutes. Nothing in the design was executed or prototyped; the ruling is a specification.
+
+## What was ruled
+
+| Item | Ruling |
+|---|---|
+| 1. Architecture | Attestation records plus admission checks, not a pending-to-final ledger. The driver (`scripts/run_night.py`) writes the OFF receipt, raw log query and ON receipt. No verdict is stored: each consumer recomputes it with one function, and a missing record means `network_time_unattested`. |
+| 2. H5 lifecycle | The driver sets OFF just before starting the chain. The 600 s is proved per capture on both clocks. A marker file lets the dead-man job or the next driver run finish the query and restore ON after a crash. |
+| 3. Query window | Opus's proposal is adopted: the query starts 3,600 s before OFF and the witness must be older than OFF. It can only refuse more than A3's text, and it amends two sentences of A3 §4.5. |
+| 4. Seats and order | N1 (module and driver) starts now. N2 (issuer) and N3 (idle nights) start after D-138 merges. N4 (brackets and packs) follows a short scout. Exhaustive WRITE_SCOPEs are in §6.3. |
+| 5. Owner and bench | H5–H7 fold into the successor registration; draft text is in §7.1. Eight live bench checks for the lead are in §7.2. |
+| 6. Risks | Sixteen failure modes, each with its refusal, plus one residual the design cannot refuse (§8). |
+| 7. Disagreements | Seventeen seat disagreements resolved, each with a reason (§9). |
+
+## Things the lead should know
+
+- **Neither design covered in-chain harvest.** The idle-night program writes its summary inside the chain, before the driver's query exists. That route needs its own in-chain query (§4.5).
+- **No night can launch between N1's merge and the first consumer's merge.** The enforced-kinds set starts empty, so the driver refuses every kind until its consumer lands. That is how "in force before the next window" is met.
+- **A new closing condition, NT-C1, is added beside the cap's C1–C9.** The hold cannot lift until the pack route is enforced.
+- **The derivation chain is left unedited.** Its digest is the only one of the candidate files pinned by the registration.
+
+## Executed checks
+
+- `log show` honours explicit UTC offsets: three forms of the same query returned byte-identical output.
+- The header line ends in trailing spaces, and 32 of 226 log lines are continuation lines with no timestamp.
+- A fresh log line is readable in under 1 s (3 of 3 trials, using `logger`, not `timed`).
+- D-138's branch does not touch N1's or N3's files, so those two seats don't collide with it.
+
+## Disclosures
+
+- My latency probe wrote four one-line messages to the system log with `logger`. It changed no setting.
+- I did not run `sudo` or `systemsetup`, so the passwordless OFF/ON commands are unverified by me.
+- No calibration evidence file is tracked in the checkout, so the location of the paired readings is read from the writer's code, not from a real bundle. Seat N1 confirms it.
+- `joulewise/arm_retry.py` was not read; whether it must classify the two new refusal reasons is for N1 to establish.
+
+Both worktrees are unchanged, and the ruling is the only new file, currently untracked.
+rc=0
