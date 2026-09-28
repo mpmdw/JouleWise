@@ -1,0 +1,13 @@
+candidate True | sketch True | issued=R7
+candidate False | sketch False | issued=held
+candidate True | sketch False | issued=R7+nested held
+candidate True | sketch False | issued=R7+flat held
+committed pack d117_contrast_qwen25_1p5b_vs_7b_v1 candidate True sketch True
+committed pack d117_contrast_qwen25_1p5b_vs_7b_v2 candidate True sketch True
+committed pack d117_contrast_qwen25_1p5b_vs_7b_v3 candidate True sketch True
+committed pack d117_floor_qwen25_1p5b_v1 candidate True sketch True
+committed pack d117_floor_qwen25_1p5b_v2 candidate True sketch True
+committed pack d117_floor_qwen25_1p5b_v3 candidate True sketch True
+committed pack d117_floor_qwen25_7b_v1 candidate True sketch True
+committed pack d117_floor_qwen25_7b_v2 candidate True sketch True
+committed pack d117_floor_qwen25_7b_v3 candidate True sketch True
