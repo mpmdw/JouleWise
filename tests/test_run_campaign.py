@@ -8408,6 +8408,7 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
             (bundle / "metadata.json").write_text(
                 json.dumps(
                     {
+                        "run_id": bundle_id,
                         "config_sha256": hashlib.sha256(
                             config_raw
                         ).hexdigest(),
@@ -8458,6 +8459,7 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
             (bundle / "summary_metrics.json").write_text(
                 json.dumps(summary) + "\n", encoding="utf-8"
             )
+            write_passing_pair(bundle)
 
         class SyntheticReduction:
             def __init__(self, value):
