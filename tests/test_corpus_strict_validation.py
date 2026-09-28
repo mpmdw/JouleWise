@@ -16,6 +16,7 @@ from joulewise.clock import FakeClock
 from joulewise.cli import _STRICT_LEGACY_BUNDLE_IDENTITIES, validate_bundle
 from joulewise.controller import run_benchmark
 from joulewise.schemas import BenchmarkConfig
+from tests.bfgs_fixtures import rebind_config, write_passing_pair
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -115,6 +116,9 @@ class RetainedCorpusStrictValidationTests(unittest.TestCase):
                         return_value=dict(clean),
                     ):
                         bundle, _ = run_benchmark(config, runs, FakeClock())
+                    rebind_config(bundle)
+                    write_passing_pair(bundle)
+                    config_data["hardware_target"]["telemetry_backend"] = "powermetrics"
                     metadata_path = bundle / "metadata.json"
                     metadata = json.loads(metadata_path.read_text())
                     metadata["source_provenance"].update(

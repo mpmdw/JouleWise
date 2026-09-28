@@ -31,8 +31,10 @@ from joulewise.controller import (
     _member_gap_note,
     cooldown_gate,
     _cooldown_between_reps,
+    run_benchmark,
     run_experiment,
 )
+from tests.bfgs_fixtures import injected_battery_runner
 from joulewise.environment import evaluate_environment_policy
 from joulewise.interfaces import AdapterResult, PowerSample, ThermalState
 from joulewise.schemas import (
@@ -550,7 +552,7 @@ class ThreeRepMockExperimentTests(unittest.TestCase):
         poisoned_manifest = dict(manifest)
         poisoned_manifest["aggregate"] = {"poison": "must be ignored"}
         self.assertEqual(
-            aggregate_experiment(self.runs_root, poisoned_manifest),
+            aggregate_experiment(self.runs_root, poisoned_manifest, admit_mock_window=True),
             aggregate,
         )
 
@@ -634,7 +636,7 @@ class ThreeRepMockExperimentTests(unittest.TestCase):
         }
 
         self.assertEqual(
-            aggregate_experiment(self.runs_root, minimal_manifest),
+            aggregate_experiment(self.runs_root, minimal_manifest, admit_mock_window=True),
             manifest["aggregate"],
         )
 
@@ -648,7 +650,7 @@ class ThreeRepMockExperimentTests(unittest.TestCase):
             "members": manifest["members"][:2],
         }
 
-        aggregate = aggregate_experiment(self.runs_root, partial_manifest)
+        aggregate = aggregate_experiment(self.runs_root, partial_manifest, admit_mock_window=True)
 
         self.assertEqual(aggregate["members_total"], 2)
         self.assertEqual(aggregate["members_read"], 2)
@@ -709,7 +711,7 @@ class KillAfterRepTwoTests(unittest.TestCase):
         self.assertEqual(manifest["members"], ["exp-aggregate-interrupt__r1"])
         self.assertNotIn("aggregate", manifest)
         self.assertEqual(
-            aggregate_experiment(self.runs_root, manifest)["members_read"],
+            aggregate_experiment(self.runs_root, manifest, admit_mock_window=True)["members_read"],
             1,
         )
 
@@ -735,7 +737,7 @@ class KillAfterRepTwoTests(unittest.TestCase):
             },
         )
         self.assertEqual(
-            aggregate_experiment(self.runs_root, manifest)["members_read"],
+            aggregate_experiment(self.runs_root, manifest, admit_mock_window=True)["members_read"],
             1,
         )
 
@@ -937,6 +939,15 @@ class CooldownThroughExperimentTests(unittest.TestCase):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.runs_root = Path(tmp.name) / "runs"
+        battery_runner = injected_battery_runner()
+        benchmark_patch = patch(
+            "joulewise.controller.run_benchmark",
+            side_effect=lambda *args, **kwargs: run_benchmark(
+                *args, battery_runner=battery_runner, **kwargs
+            ),
+        )
+        benchmark_patch.start()
+        self.addCleanup(benchmark_patch.stop)
 
     def test_cap_hit_lands_in_next_rep_quality_and_metadata(self) -> None:
         data = _example_config_data()

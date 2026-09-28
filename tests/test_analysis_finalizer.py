@@ -49,6 +49,7 @@ from joulewise.whole_window import (
 )
 from tests.test_detection_floor import make_artifact, make_cell, make_regime
 from tests.test_run_campaign import read_all_jsonl, run_campaign_module
+from tests.bfgs_fixtures import rebind_config, write_passing_pair
 from scripts.finalize_analysis_manifest import main as finalize_main
 
 
@@ -59,6 +60,7 @@ def _write_json(path: Path, value: object) -> None:
 
 def _metadata_for_config(config: dict, model_token: str) -> dict:
     return {
+        "run_id": config["run_id"],
         "workload_provenance": {
             "model": {
                 "artifact_identity": {
@@ -301,6 +303,9 @@ def install_synthetic_finalization_fixture(
                 + "\n"
             ).encode()
             (bundle / "summary_metrics.json").write_bytes(summary_raw)
+            if telemetry_backend != "mock":
+                rebind_config(bundle, telemetry_backend=telemetry_backend)
+                write_passing_pair(bundle)
             bundle_paths[member["run_id"]] = bundle
 
     bundle_ids = sorted(bundle_paths)

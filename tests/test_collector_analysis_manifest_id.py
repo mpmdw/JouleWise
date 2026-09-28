@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -37,6 +38,22 @@ from tests.test_run_campaign import (
 
 
 STAGE_NAME = "01_decode_contrast_blocks_01_05"
+
+
+def setUpModule() -> None:
+    temporary = tempfile.TemporaryDirectory()
+    unittest.addModuleCleanup(temporary.cleanup)
+    root = Path(temporary.name)
+    probe = root / "identity-probe"
+    probe.write_text("#!/bin/sh\nprintf 'Tue Sep 8 01:02:03 2026 S\\n'\n")
+    probe.chmod(0o755)
+    environment = patch.dict(os.environ, {
+        "JOULEWISE_CUSTODY_PARENT": str(root / "custody"),
+        "JOULEWISE_ADDITIONAL_CUSTODY_PARENTS": "[]",
+        "JOULEWISE_IDENTITY_PROBE": str(probe),
+    })
+    environment.start()
+    unittest.addModuleCleanup(environment.stop)
 
 
 def _write_json(path: Path, value: object) -> bytes:

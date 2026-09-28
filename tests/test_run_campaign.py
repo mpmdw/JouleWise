@@ -62,6 +62,17 @@ from tests.test_calibration_bracketing import (
     _unissued_acceptance_fixture,
 )
 from tests.test_arm_readiness import LaunchConsumptionV2Tests
+from tests.bfgs_fixtures import (
+    injected_battery_runner,
+    rebind_config,
+    write_capture_evidence,
+    write_passing_pair,
+)
+from joulewise.analysis_engine.registry import (
+    calculate_manifest_id as calculate_axi_manifest_id,
+    normalized_json_bytes as axi_normalized_json_bytes,
+    pairing_projection_sha256,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -1132,6 +1143,75 @@ class CampaignLogTailGrammarTests(unittest.TestCase):
                         log_path, {"new": True}, lock_token=token
                     )
             self.assertEqual(log_path.read_bytes(), before)
+
+
+def paired_entry_real_state(root: Path):
+    """Copy the AXI fixture and bind its manifest to non-mock configs."""
+    fixture = root / "axi_ap_spec"
+    shutil.copytree(ROOT / "tests" / "fixtures" / "axi_ap_spec", fixture)
+    manifest_path = fixture / "analysis_manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    registry_source = ROOT / manifest["registry"]["path"]
+    registry = json.loads(registry_source.read_text(encoding="utf-8"))
+    manifest["registry"]["path"] = "registry.json"
+    configs = {}
+    for entry in manifest["entries"]:
+        name = Path(entry["config"]).name
+        entry["config"] = name
+        if name not in configs:
+            path = fixture / name
+            config = json.loads(path.read_text(encoding="utf-8"))
+            config["hardware_target"]["telemetry_backend"] = "powermetrics"
+            raw = axi_normalized_json_bytes(config)
+            path.write_bytes(raw)
+            configs[name] = (hashlib.sha256(raw).hexdigest(), pairing_projection_sha256(config))
+        entry["config_sha256"], entry["pairing_projection_sha256"] = configs[name]
+    for pair in manifest["pairs"]:
+        entry = next(row for row in manifest["entries"] if row["pair_id"] == pair["pair_id"])
+        pair["pairing_projection_sha256"] = entry["pairing_projection_sha256"]
+    manifest["manifest_id"] = calculate_axi_manifest_id(manifest)
+    raw = axi_normalized_json_bytes(manifest)
+    manifest_path.write_bytes(raw)
+    registry["planned_manifest_id"] = manifest["manifest_id"]
+    registry["planned_manifest_sha256"] = hashlib.sha256(raw).hexdigest()
+    (fixture / "registry.json").write_bytes(axi_normalized_json_bytes(registry))
+    state = run_campaign_module.load_analysis_manifest(fixture)
+    if state is None or not state.valid:
+        raise AssertionError(f"copied AXI fixture is invalid: {state.problems if state else None}")
+    return state
+
+
+def finalize_pair_events(bundle: Path) -> None:
+    events_path = bundle / "events.jsonl"
+    events = [json.loads(line) for line in events_path.read_text().splitlines()]
+    finalized = [row for row in events if row.get("event_type") == "run_finalized"]
+    events = [row for row in events if row.get("event_type") != "run_finalized"] + finalized
+    if finalized:
+        for row in events:
+            if row.get("message") == "fixture boundary":
+                row["timestamp_s"] = finalized[0]["timestamp_s"]
+    events_path.write_text("".join(json.dumps(row) + "\n" for row in events))
+
+
+def paired_entry_child(command, *, env, outer_authentication, bundle_paths):
+    from joulewise.controller import run_benchmark
+    from joulewise.clock import FakeClock
+    from joulewise.schemas import BenchmarkConfig
+
+    bundle = bundle_paths[0]
+    config_path = Path(command[command.index("run") + 1])
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    config["run_id"] = bundle.name
+    config["hardware_target"]["telemetry_backend"] = "mock"
+    run_benchmark(BenchmarkConfig.from_mapping(config), bundle.parent, FakeClock())
+    rebind_config(bundle)
+    write_passing_pair(bundle)
+    finalize_pair_events(bundle)
+    from joulewise.cli import validate_bundle
+    problems = validate_bundle(bundle, strict=True)
+    if problems:
+        raise AssertionError(f"paired AXI fixture invalid: {problems}")
+    return subprocess.CompletedProcess(command, 0)
 
 
 def run_campaign(
@@ -2425,27 +2505,27 @@ class RunCampaignTests(unittest.TestCase):
             self.assertFalse(runs_dir.exists())
 
     def test_non_marker_axi_multi_entry_campaign_records_gate_before_entry_two(self) -> None:
-        state = run_campaign_module.load_analysis_manifest(
-            ROOT / "tests" / "fixtures" / "axi_ap_spec"
-        )
-        self.assertIsNotNone(state)
         binding = run_campaign_module.load_campaign_policy(
             str(TEST_CAMPAIGN_POLICY)
         )
         with tempfile.TemporaryDirectory() as tmp:
+            state = paired_entry_real_state(Path(tmp))
+            self.assertIsNotNone(state)
             runs_dir = Path(tmp) / "runs"
-            result = run_campaign_module.run_axi_spec_campaign(
-                run_campaign_module.argparse.Namespace(
-                    dry_run=False,
-                    cli_cmd=None,
-                    arm_quiet_mode=False,
-                    arm_countdown_s=0,
-                    environment_override=None,
-                ),
-                state,
-                runs_dir=runs_dir,
-                policy_binding=binding,
-            )
+            with patch.object(run_campaign_module, "run_authenticated_campaign_child",
+                              side_effect=paired_entry_child):
+                result = run_campaign_module.run_axi_spec_campaign(
+                    run_campaign_module.argparse.Namespace(
+                        dry_run=False,
+                        cli_cmd=None,
+                        arm_quiet_mode=False,
+                        arm_countdown_s=0,
+                        environment_override=None,
+                    ),
+                    state,
+                    runs_dir=runs_dir,
+                    policy_binding=binding,
+                )
             manifests = list((runs_dir / "campaign_manifests").glob("*.json"))
             self.assertEqual(len(manifests), 1)
             provenance = json.loads(manifests[0].read_text())
@@ -2473,10 +2553,6 @@ class RunCampaignTests(unittest.TestCase):
         # F5 defect shape: the AXI path formerly returned immediately after
         # attempt-ledger/output-identity work, never constructing the core
         # whole-window barrier at all.
-        state = run_campaign_module.load_analysis_manifest(
-            ROOT / "tests" / "fixtures" / "axi_ap_spec"
-        )
-        self.assertIsNotNone(state)
         binding = run_campaign_module.load_campaign_policy(
             str(ROOT / "configs" / "campaign_policies" / "quiet_mac_exploratory.json")
         )
@@ -2528,19 +2604,10 @@ class RunCampaignTests(unittest.TestCase):
             )
 
         with tempfile.TemporaryDirectory() as tmp:
+            state = paired_entry_real_state(Path(tmp))
+            self.assertIsNotNone(state)
             runs_dir = Path(tmp) / "runs"
             log_path = runs_dir / "campaign_log.jsonl"
-            real_subprocess_run = subprocess.run
-
-            def run_child_without_policy_environment(command, *, check, env):
-                clean_env = dict(env or {})
-                for name in (
-                    run_campaign_module.CAMPAIGN_POLICY_PATH_ENV,
-                    run_campaign_module.CAMPAIGN_POLICY_SHA256_ENV,
-                    run_campaign_module.CAMPAIGN_PREFLIGHT_JSON_ENV,
-                ):
-                    clean_env.pop(name, None)
-                return real_subprocess_run(command, check=check, env=clean_env)
 
             with (
                 patch.object(
@@ -2549,9 +2616,9 @@ class RunCampaignTests(unittest.TestCase):
                     return_value=admitted,
                 ),
                 patch.object(
-                    run_campaign_module.subprocess,
-                    "run",
-                    side_effect=run_child_without_policy_environment,
+                    run_campaign_module,
+                    "run_authenticated_campaign_child",
+                    side_effect=paired_entry_child,
                 ),
                 patch.object(
                     run_campaign_module,
@@ -6930,6 +6997,24 @@ def _busy_idle_records(count: int = 5) -> list[dict]:
 
 class AnchorFallbackCampaignGateTests(unittest.TestCase):
     @staticmethod
+    def _install_pair(bundle: Path) -> None:
+        metadata_path = bundle / "metadata.json"
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        metadata["run_id"] = bundle.name
+        metadata_path.write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n")
+        events_path = bundle / "events.jsonl"
+        if events_path.exists():
+            events = [json.loads(line) for line in events_path.read_text().splitlines()]
+            for event in events:
+                if event.get("event_type") == "stage_started" and event.get("phase") == "idle_baseline":
+                    event.setdefault("metadata", {})["monotonic_ns"] = 30
+                if event.get("event_type") == "stage_completed" and event.get("phase") == "idle_drift_sentinel":
+                    event.setdefault("metadata", {})["monotonic_ns"] = 80
+            events_path.write_text("".join(json.dumps(event) + "\n" for event in events))
+        rebind_config(bundle)
+        write_passing_pair(bundle)
+
+    @staticmethod
     def _bind_powermetrics_config(
         bundle: Path, bundle_id: str, metadata: dict
     ) -> None:
@@ -7050,6 +7135,7 @@ class AnchorFallbackCampaignGateTests(unittest.TestCase):
         (bundle / "metadata.json").write_text(
             json.dumps(metadata) + "\n", encoding="utf-8"
         )
+        AnchorFallbackCampaignGateTests._install_pair(bundle)
         return bundle
 
     def _whole_window_evaluate(
@@ -7107,6 +7193,7 @@ class AnchorFallbackCampaignGateTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             bundle = Path(tmp) / "label-disagreement"
             shutil.copytree(Path("tests/fixtures/d078_r01"), bundle)
+            self._install_pair(bundle)
             summary_path = bundle / "summary_metrics.json"
             summary = json.loads(summary_path.read_text(encoding="utf-8"))
             summary["measurement_quality"]["telemetry_source"] = "mock"
@@ -7134,6 +7221,7 @@ class AnchorFallbackCampaignGateTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             bundle = Path(tmp) / "coordinated-mock-labels"
             shutil.copytree(Path("tests/fixtures/d078_r01"), bundle)
+            self._install_pair(bundle)
             summary_path = bundle / "summary_metrics.json"
             summary = json.loads(summary_path.read_text(encoding="utf-8"))
             summary["measurement_quality"]["telemetry_source"] = "mock"
@@ -7651,6 +7739,7 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
     def test_campaign_core_callers_keep_replacement_custody_replay_only(self) -> None:
         from joulewise import calibration_bracketing as bracketing
         from joulewise import calibration_ledger as ledger
+        from joulewise.battery_float import CustodyFailure
 
         # Execute the actual call expressions with fixture locals. This covers
         # all three production edges without starting a hardware campaign.
@@ -7680,11 +7769,15 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
         mapped = replacement / "runs/member"
         mapped.mkdir(parents=True)
         (mapped / "marker").write_text("replacement bytes")
+        evidence_sha256 = write_capture_evidence(
+            mapped, validation_id="fixture-attempt"
+        )
         candidate = bracketing.CalibrationCandidate(
             relative_path=str(original), manifest_sha256="a" * 64,
-            evidence_sha256="b" * 64, protocol_id="fixture",
+            evidence_sha256=evidence_sha256, protocol_id="fixture",
             capture_wall_time_s=1.0, b_fiducial_s="0.02",
             bindings={"anchor_method_version": ACTIVE_CAPTURE_ANCHOR_METHOD},
+            attempt_id="fixture-attempt",
         )
         snapshot, _ = _fixture_snapshot([candidate])
         inspected = []
@@ -7724,7 +7817,17 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
                 reader.return_value.metadata.return_value = {"instrument_calibration": {"bindings": {}}}
                 core = Mock(wraps=run_campaign_module._idle_admission_core_evaluation)
                 namespace["_idle_admission_core_evaluation"] = core
-                result = eval(compile(ast.Expression(call), str(SCRIPT), "eval"), namespace)
+                if expected is None:
+                    with self.assertRaises(CustodyFailure) as caught:
+                        eval(compile(ast.Expression(call), str(SCRIPT), "eval"), namespace)
+                    self.assertEqual(caught.exception.failures, [{
+                        "slot": "capture",
+                        "artifact": "instrument_evidence.json",
+                        "expected_sha256": evidence_sha256,
+                        "observed_sha256": None,
+                    }])
+                else:
+                    result = eval(compile(ast.Expression(call), str(SCRIPT), "eval"), namespace)
                 core.assert_called_once()
                 if expected is None:
                     self.assertNotIn("mode", core.call_args.kwargs)
@@ -7732,10 +7835,11 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
                     self.assertEqual(core.call_args.kwargs.get("mode"), expected)
                 bracket.assert_called_once()
                 self.assertEqual(inspected, [mapped] if expected else [])
-                self.assertEqual(len(evaluate.call_args.args[0]), 1 if expected else 0)
+                if expected:
+                    self.assertEqual(len(evaluate.call_args.args[0]), 1)
+                else:
+                    evaluate.assert_not_called()
                 self.assertEqual(bracket.call_args.kwargs["mode"], expected or "issuing")
-                if expected is None:
-                    self.assertIn("calibration_ledger_custody_invalid", result.core["conditions"])
                 self.assertFalse(original.exists())
 
     def test_campaign_core_mode_counterfactuals(self) -> None:
@@ -7771,8 +7875,11 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
                     script.read_text.return_value = source.replace(original, mutated)
                     result = unittest.TestResult()
                     type(self)("test_campaign_core_callers_keep_replacement_custody_replay_only").run(result)
-                self.assertEqual(result.errors, [])
-                self.assertTrue(result.failures, "counterfactual escaped the regression")
+                for _case, traceback_text in result.errors:
+                    self.assertIn("CustodyFailure", traceback_text)
+                    self.assertIn("capture/instrument_evidence.json", traceback_text)
+                    self.assertIn("observed absent", traceback_text)
+                self.assertTrue(result.failures or result.errors, "counterfactual escaped the regression")
 
     def _drift_bound(
         self,
@@ -8038,6 +8145,7 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
         from types import SimpleNamespace
         from joulewise import calibration_bracketing as bracketing
         from joulewise import calibration_ledger as ledger
+        from joulewise.battery_float import CustodyFailure
         from tests.test_calibration_bracketing import _fixture_snapshot
 
         original_root = self.root / "absent-original"
@@ -8046,11 +8154,15 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
         mapped = replacement / "runs/member"
         mapped.mkdir(parents=True)
         (mapped / "marker").write_text("retained candidate")
+        evidence_sha256 = write_capture_evidence(
+            mapped, validation_id="fixture-attempt"
+        )
         candidate = bracketing.CalibrationCandidate(
             relative_path=str(original), manifest_sha256="a" * 64,
-            evidence_sha256="b" * 64, protocol_id="fixture",
+            evidence_sha256=evidence_sha256, protocol_id="fixture",
             capture_wall_time_s=1.0, b_fiducial_s="0.02",
             bindings={"anchor_method_version": ACTIVE_CAPTURE_ANCHOR_METHOD},
+            attempt_id="fixture-attempt",
         )
         snapshot, _ = _fixture_snapshot([candidate])
         member = self._member("consumer", records=None)
@@ -8086,14 +8198,71 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
             ):
                 reader.return_value.measured_window.return_value = SimpleNamespace(start_s=2, end_s=3)
                 reader.return_value.metadata.return_value = {"instrument_calibration": {"bindings": {}}}
-                result = run_campaign_module._idle_admission_core_evaluation(
-                    [member], binding, whole_window=True, runs_root=self.root,
-                    calibration_ledger_snapshot=snapshot, mode="read_replay")
+                if issuing_counterfactual:
+                    with self.assertRaises(CustodyFailure) as caught:
+                        run_campaign_module._idle_admission_core_evaluation(
+                            [member], binding, whole_window=True, runs_root=self.root,
+                            calibration_ledger_snapshot=snapshot, mode="read_replay")
+                    self.assertEqual(caught.exception.failures, [{
+                        "slot": "capture",
+                        "artifact": "instrument_evidence.json",
+                        "expected_sha256": evidence_sha256,
+                        "observed_sha256": None,
+                    }])
+                else:
+                    result = run_campaign_module._idle_admission_core_evaluation(
+                        [member], binding, whole_window=True, runs_root=self.root,
+                        calibration_ledger_snapshot=snapshot, mode="read_replay")
+                    self.assertNotIn("calibration_ledger_custody_invalid", result.core["conditions"])
                 self.assertEqual(inspected, [] if issuing_counterfactual else [mapped])
-                self.assertEqual(len(evaluate.call_args.args[0]), 0 if issuing_counterfactual else 1)
-                self.assertEqual("calibration_ledger_custody_invalid" in result.core["conditions"],
-                                 issuing_counterfactual)
+                if issuing_counterfactual:
+                    evaluate.assert_not_called()
+                else:
+                    self.assertEqual(len(evaluate.call_args.args[0]), 1)
                 self.assertFalse(original.exists())
+
+    def test_intact_issuing_custody_keeps_candidate_count_mismatch_condition(self):
+        from joulewise import calibration_bracketing as bracketing
+
+        original = self.root / "runs/member"
+        evidence_sha256 = write_capture_evidence(
+            original, validation_id="fixture-attempt"
+        )
+        candidate = bracketing.CalibrationCandidate(
+            relative_path=str(original), manifest_sha256="a" * 64,
+            evidence_sha256=evidence_sha256, protocol_id="fixture",
+            capture_wall_time_s=1.0, b_fiducial_s="0.02",
+            bindings={"anchor_method_version": ACTIVE_CAPTURE_ANCHOR_METHOD},
+            attempt_id="fixture-attempt",
+        )
+        snapshot, _ = _fixture_snapshot([candidate])
+        member = self._member("consumer", records=None)
+        binding = self._binding()
+        metadata_path = member.bundle_path / "metadata.json"
+        metadata = {"run_id": member.bundle_id, **member.metadata}
+        metadata["instrument_calibration"]["bindings"] = {}
+        metadata_path.write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n")
+        (member.bundle_path / "events.jsonl").write_text(
+            "".join(json.dumps(event) + "\n" for event in (
+                {"event_type": "stage_started", "phase": "measured_run", "timestamp_s": 2,
+                 "message": "fixture boundary", "metadata": {}},
+                {"event_type": "stage_completed", "phase": "measured_run", "timestamp_s": 3,
+                 "message": "fixture boundary", "metadata": {}},
+            ))
+        )
+        rebind_config(member.bundle_path)
+        write_passing_pair(member.bundle_path)
+        with (
+            patch.object(bracketing, "_load_calibration_candidate_unbounded",
+                         return_value=None),
+            patch.object(bracketing, "evaluate_calibration_bracket",
+                         return_value=({"status": "failed"}, ())),
+        ):
+            result = run_campaign_module._idle_admission_core_evaluation(
+                [member], binding, whole_window=True, runs_root=self.root,
+                calibration_ledger_snapshot=snapshot, mode="issuing")
+        self.assertIn("calibration_ledger_custody_invalid", result.core["conditions"])
+        self.assertTrue(original.exists())
 
     def test_load_campaign_policy_parses_and_hash_binds_extension(self) -> None:
         path = self._write_extended_sidecar("production")
@@ -9542,16 +9711,41 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
         attempt2_records: list[dict] | None,
         expected_strict_valid: bool = True,
     ):
+        from dataclasses import replace
+        from joulewise.clock import SystemClock
+        from tests import test_controller
         from tests.test_controller import (
             produce_retry_powermetrics_bundle,
         )
+        from tests.bfgs_fixtures import WALL_TIME_S
+
+        class FixtureEpochClock(SystemClock):
+            def __init__(self):
+                self._fixture_offset_s = WALL_TIME_S - time.time()
+                super().__init__()
+
+            def now(self):
+                return super().now() + self._fixture_offset_s
+
+            def stamp(self):
+                stamp = super().stamp()
+                return replace(stamp, epoch_s=stamp.epoch_s + self._fixture_offset_s)
 
         # The shared producer owns the bounded-only --no-sleep policy so
         # direct controller callers receive the same fixture cure.
-        bundle_path, _summary = produce_retry_powermetrics_bundle(
-            self.root / "runs",
-            bundle_id,
-        )
+        actual_run_benchmark = test_controller.run_benchmark
+        battery_runner = injected_battery_runner()
+        with patch.object(
+            test_controller,
+            "run_benchmark",
+            side_effect=lambda *args, **kwargs: actual_run_benchmark(
+                *args, battery_runner=battery_runner, **kwargs
+            ),
+        ), patch.object(test_controller, "SystemClock", FixtureEpochClock):
+            bundle_path, _summary = produce_retry_powermetrics_bundle(
+                self.root / "runs",
+                bundle_id,
+            )
         attempt1_path = bundle_path / "rich_telemetry_idle.jsonl"
         attempt2_path = bundle_path / "rich_telemetry_idle_attempt_2.jsonl"
         for path, replacements in (
@@ -9576,6 +9770,14 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
                 "".join(json.dumps(record) + "\n" for record in produced),
                 encoding="utf-8",
             )
+        rebind_config(bundle_path)
+        write_passing_pair(bundle_path)
+        summary_path = bundle_path / "summary_metrics.json"
+        summary = json.loads(summary_path.read_text(encoding="utf-8"))
+        quality = summary.get("measurement_quality") or {}
+        quality["telemetry_source"] = "powermetrics"
+        summary["measurement_quality"] = quality
+        summary_path.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n")
         config_path = self.root / f"{bundle_id}.json"
         shutil.copy2(bundle_path / "config.json", config_path)
         evaluation = run_campaign_module.evaluate_member(
@@ -9878,8 +10080,10 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
                 json.dumps({"status": "succeeded", **member.summary}) + "\n"
             )
             (member.bundle_path / "metadata.json").write_text(
-                json.dumps(member.metadata) + "\n"
+                json.dumps({"run_id": bundle_id, **member.metadata}) + "\n"
             )
+            rebind_config(member.bundle_path)
+            write_passing_pair(member.bundle_path)
         self._install_whole_window_manifest(binding, manifest_members)
         return binding, run_campaign_module.parse_args(
             [

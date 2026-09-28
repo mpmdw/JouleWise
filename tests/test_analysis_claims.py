@@ -84,6 +84,7 @@ from tests.test_detection_floor import (
     make_regime,
     whole_window_allowance,
 )
+from tests.bfgs_fixtures import rebind_config, write_passing_pair
 
 
 HEX = "a" * 64
@@ -846,6 +847,37 @@ class SensitivityTests(unittest.TestCase):
 
 
 class InputSeamTests(unittest.TestCase):
+    @staticmethod
+    def _install_floor_member(root: Path, bundle_id: str) -> None:
+        bundle = root / bundle_id
+        shutil.copytree(Path("tests/fixtures/d078_r01"), bundle)
+        for name in ("config.json", "metadata.json"):
+            path = bundle / name
+            document = json.loads(path.read_text(encoding="utf-8"))
+            document["run_id"] = bundle_id
+            path.write_text(json.dumps(document, indent=2, sort_keys=True) + "\n")
+        events_path = bundle / "events.jsonl"
+        if events_path.is_file():
+            events = [json.loads(line) for line in events_path.read_text().splitlines()]
+            for event in events:
+                if event.get("event_type") == "stage_started" and event.get("phase") == "idle_baseline":
+                    event.setdefault("metadata", {})["monotonic_ns"] = 30
+                if event.get("event_type") == "stage_completed" and event.get("phase") == "idle_drift_sentinel":
+                    event.setdefault("metadata", {})["monotonic_ns"] = 80
+            events_path.write_text("".join(json.dumps(event) + "\n" for event in events))
+        rebind_config(bundle)
+        write_passing_pair(bundle)
+
+    @classmethod
+    def _install_floor_members(cls, root: Path, artifact: dict) -> None:
+        bundle_ids = set()
+        for cell in artifact["cells"]:
+            bundle_ids.update(row["bundle_id"] for row in cell["absolute"]["bundle_observations"])
+            for block in cell["comparative"]["blocks"]:
+                bundle_ids.update(row["bundle_id"] for row in block["members"])
+        for bundle_id in sorted(bundle_ids):
+            cls._install_floor_member(root, bundle_id)
+
     def _bind_mlx_file_set_floor(
         self,
         observed_metadata: dict,
@@ -953,6 +985,8 @@ class InputSeamTests(unittest.TestCase):
                 ),
             ),
         ):
+            for source in ("a10", "window_c"):
+                self._install_floor_members(Path(tmp) / source, artifact)
             binding = bind_floor_artifact_evidence(
                 artifact,
                 Path(tmp) / "floor.json",
@@ -1042,7 +1076,7 @@ class InputSeamTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             runs_root = Path(tmp)
             bundle = runs_root / "member"
-            shutil.copytree(Path("tests/fixtures/d078_r01"), bundle)
+            self._install_floor_member(runs_root, "member")
             summary_path = bundle / "summary_metrics.json"
             summary = json.loads(summary_path.read_text(encoding="utf-8"))
             summary["measurement_quality"]["telemetry_source"] = "mock"
@@ -1183,6 +1217,7 @@ class InputSeamTests(unittest.TestCase):
                 ),
             ),
         ):
+            self._install_floor_members(Path(tmp) / "runs", artifact)
             binding = bind_floor_artifact_evidence(
                 artifact,
                 Path(tmp) / "floor.json",
