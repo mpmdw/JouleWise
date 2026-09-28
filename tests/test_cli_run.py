@@ -29,8 +29,15 @@ from joulewise.adapters.powermetrics import (
     parse_powermetrics_records,
 )
 from joulewise.clock import FakeClock, SystemClock
-from joulewise.cli import _STRICT_LEGACY_BUNDLE_IDENTITIES, main, validate_bundle
-from joulewise.bundle_read import Window
+from joulewise.cli import (
+    _STRICT_LEGACY_BUNDLE_IDENTITIES,
+    _strict_idle_mean_uncertainty_problems,
+    _strict_reducer_version_dispatch,
+    _strict_summary_differences,
+    main,
+    validate_bundle,
+)
+from joulewise.bundle_read import BundleReader, Window
 from joulewise.controller import run_benchmark
 from joulewise.reduce import reduce_bundle
 from joulewise.schemas import (
@@ -67,6 +74,10 @@ SUCCEEDED_LINE = re.compile(r"^bundle: (\S+) status=succeeded$")
 LEGACY_ALLOWLIST_PAIR = (
     "example-mac-mlx-local__r1",
     "ee80585a2f6cee6aa7e12eb83c318fd88a934be02d5fa2fb2eb7509630640fd5",
+)
+SPOOFED_LEGACY_BATTERY_PROBLEM = (
+    "strict: battery_float_evidence_missing: not_applicable not bound "
+    "(config.json digest does not match metadata.config_sha256)"
 )
 
 
@@ -590,7 +601,10 @@ class StrictValidateTests(CliRunTestCase):
         self.mark_allowlisted_legacy_identity(bundle)
 
         with patch("joulewise.bundle_read._check_config_sha256", return_value=[]):
-            self.assertEqual(validate_bundle(bundle, strict=True), [])
+            self.assertEqual(
+                validate_bundle(bundle, strict=True),
+                [SPOOFED_LEGACY_BATTERY_PROBLEM],
+            )
 
     def test_reducer_0_4_2_dispatch_requires_exact_summary(self) -> None:
         bundle = self.make_bundle("strict-v042-exact")
@@ -903,7 +917,10 @@ class StrictValidateTests(CliRunTestCase):
         )
         self.mark_allowlisted_legacy_identity(bundle)
         with patch("joulewise.bundle_read._check_config_sha256", return_value=[]):
-            self.assertEqual(validate_bundle(bundle, strict=True), [])
+            self.assertEqual(
+                validate_bundle(bundle, strict=True),
+                [SPOOFED_LEGACY_BATTERY_PROBLEM],
+            )
 
     def test_new_summary_missing_summary_provenance_fails_strict(self) -> None:
         bundle = self.make_bundle("strict-new-missing-summary-provenance")
@@ -941,7 +958,18 @@ class StrictValidateTests(CliRunTestCase):
                 with patch(
                     "joulewise.bundle_read._check_config_sha256", return_value=[]
                 ):
-                    self.assertEqual(validate_bundle(bundle, strict=True), [])
+                    self.assertEqual(
+                        validate_bundle(bundle, strict=True),
+                        [SPOOFED_LEGACY_BATTERY_PROBLEM],
+                    )
+
+    def test_spoofed_legacy_identity_dispatch_classification_for_six_pairs(self) -> None:
+        for index, identity in enumerate(sorted(_STRICT_LEGACY_BUNDLE_IDENTITIES)):
+            with self.subTest(identity=identity):
+                bundle = self.make_bundle(f"strict-legacy-classification-{index}")
+                self.assertFalse(BundleReader(bundle).is_frozen_legacy_identity())
+                self.mark_allowlisted_legacy_identity(bundle, identity)
+                self.assertTrue(BundleReader(bundle).is_frozen_legacy_identity())
 
     def test_allowlisted_legacy_fresh_idle_metadata_mismatch_fails_strict(self) -> None:
         bundle = self.make_synchronized_idle_metadata_mismatch_bundle(
@@ -969,6 +997,16 @@ class StrictValidateTests(CliRunTestCase):
 
         self.assertEqual(
             problems,
+            [SPOOFED_LEGACY_BATTERY_PROBLEM],
+        )
+
+    def test_legacy_idle_mismatch_diagnostic_directly(self) -> None:
+        bundle = self.make_synchronized_idle_metadata_mismatch_bundle(
+            "strict-legacy-idle-direct"
+        )
+        fresh = reduce_bundle(bundle).to_dict()
+        self.assertEqual(
+            _strict_idle_mean_uncertainty_problems(fresh),
             [
                 "strict: raw idle trace does not match metadata.idle_baseline "
                 "(idle_metadata_mismatch)"
@@ -1016,7 +1054,23 @@ class StrictValidateTests(CliRunTestCase):
         self.mark_allowlisted_legacy_identity(bundle)
         with patch("joulewise.bundle_read._check_config_sha256", return_value=[]):
             problems = validate_bundle(bundle, strict=True)
-        self.assertTrue(any("missing or not an object" in p for p in problems), problems)
+        self.assertEqual(problems, [SPOOFED_LEGACY_BATTERY_PROBLEM])
+
+    def test_legacy_null_provenance_dispatch_diagnostic_directly(self) -> None:
+        bundle = self.make_bundle("strict-legacy-null-provenance-direct")
+        summary = json.loads((bundle / "summary_metrics.json").read_text())
+        summary["summary_provenance"] = None
+        self.mark_allowlisted_legacy_identity(bundle)
+        problems, _, _, _ = _strict_reducer_version_dispatch(
+            BundleReader(bundle), summary
+        )
+        self.assertEqual(
+            problems,
+            [
+                "strict: summary_metrics.summary_provenance is missing or not an "
+                "object for current-era bundle"
+            ],
+        )
 
     def test_allowlisted_legacy_present_non_object_provenance_fails_strict(self) -> None:
         for value in ("legacy", ["legacy"]):
@@ -1030,7 +1084,13 @@ class StrictValidateTests(CliRunTestCase):
                 self.mark_allowlisted_legacy_identity(bundle)
                 with patch("joulewise.bundle_read._check_config_sha256", return_value=[]):
                     problems = validate_bundle(bundle, strict=True)
-                self.assertTrue(any("missing or not an object" in p for p in problems), problems)
+                self.assertEqual(
+                    problems,
+                    [
+                        "summary provenance is not null or an object",
+                        SPOOFED_LEGACY_BATTERY_PROBLEM,
+                    ],
+                )
 
     def test_allowlisted_legacy_recorded_value_mutations_fail_strict(self) -> None:
         mutations = (
@@ -1055,7 +1115,26 @@ class StrictValidateTests(CliRunTestCase):
                 self.mark_allowlisted_legacy_identity(bundle)
                 with patch("joulewise.bundle_read._check_config_sha256", return_value=[]):
                     problems = validate_bundle(bundle, strict=True)
-                self.assertTrue(any(label in p for p in problems), problems)
+                self.assertEqual(problems, [SPOOFED_LEGACY_BATTERY_PROBLEM])
+
+    def test_legacy_recorded_value_mutations_compare_directly(self) -> None:
+        mutations = (
+            ("energy_token_j", lambda s: s.__setitem__("energy_token_j", 999.0)),
+            (
+                "measurement_quality.token_count_source",
+                lambda s: s["measurement_quality"].__setitem__(
+                    "token_count_source", "edited"
+                ),
+            ),
+            ("gross_energy_j", lambda s: s.__setitem__("gross_energy_j", 999.0)),
+        )
+        for index, (label, mutate) in enumerate(mutations):
+            with self.subTest(field=label):
+                bundle = self.make_bundle(f"strict-legacy-mutation-direct-{index}")
+                fresh = reduce_bundle(bundle).to_dict()
+                stored = json.loads((bundle / "summary_metrics.json").read_text())
+                mutate(stored)
+                self.assertIn(label, _strict_summary_differences(fresh, stored))
 
     def test_current_bundle_spoofed_as_legacy_with_absent_provenance_passes(self) -> None:
         """Pin the adjudicated identity-classification boundary (FIX-B4)."""
@@ -1067,7 +1146,10 @@ class StrictValidateTests(CliRunTestCase):
         )
         self.mark_allowlisted_legacy_identity(bundle)
         with patch("joulewise.bundle_read._check_config_sha256", return_value=[]):
-            self.assertEqual(validate_bundle(bundle, strict=True), [])
+            self.assertEqual(
+                validate_bundle(bundle, strict=True),
+                [SPOOFED_LEGACY_BATTERY_PROBLEM],
+            )
 
     def test_reducer_0_4_1_missing_either_added_field_fails_strict(self) -> None:
         for field in ("remote_cleanup_failed", "runtime_cleanup_ok"):
@@ -1111,7 +1193,10 @@ class StrictValidateTests(CliRunTestCase):
         self.mark_allowlisted_legacy_identity(bundle)
 
         with patch("joulewise.bundle_read._check_config_sha256", return_value=[]):
-            self.assertEqual(validate_bundle(bundle, strict=True), [])
+            self.assertEqual(
+                validate_bundle(bundle, strict=True),
+                [SPOOFED_LEGACY_BATTERY_PROBLEM],
+            )
 
     def test_stored_value_drift_still_fails_strict(self) -> None:
         bundle = self.make_bundle("strict-stored-drift")
