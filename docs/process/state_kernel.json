@@ -1533,7 +1533,17 @@
         "label": "2026-09-27 science-gate addendum A1 §7, binding on the D-138 issuing transaction",
         "path": "docs/process_traces/2026-09-27-activation-77b1bee2/70-science-gate/31-addendum-ruling.md"
       },
-      "dependencies": [],
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "external",
+          "required": "Ed chooses option (a), (b) or (c) of the owner decision brief (Gmail 1a0e7c44a348de4e; correction 1a0e7e46c952decb); the magistrate does not choose",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "ED-D138-OPTION"
+        }
+      ],
       "fallback": null,
       "fences": [],
       "flags": [],
@@ -1542,8 +1552,8 @@
       "lane": "agent",
       "priority": "p0_safety",
       "rank": 330,
-      "status": "queued",
-      "status_note": "Registered 2026-09-27 (activation 77b1bee2, second registration). Own turn and own gate; issuance does not discharge the later claim-window HOLD.",
+      "status": "blocked",
+      "status_note": "Registered 2026-09-27 (activation 77b1bee2, second registration). Own turn and own gate; issuance does not discharge the later claim-window HOLD. Updated 2026-09-28 (record d528efb2 items 45–106): built on feat/2026-09-27-d138-25g83-issuance through three fix rounds under design addendum D138-25G83-DESIGN-01-A1 (item 68) and HOLD-BY-CONSTRUCTION-01 (item 82); last candidate b953f4b0 (item 97). STOPPED FOR GOOD under HOLD-BY-CONSTRUCTION-01 §6.2: the complete fresh hold refutation found three routes (item 101). Owner brief (item 102; correction item 105): (a) withdraw the issued file and land only the loader repair, the tool and the tests; (b) accept a named written residual, which now also needs a ruling on four main-test regressions (items 104, 106); (c) a new design consult. Not merged. The issuing record and the draft decision-log entry exist only on that branch and await the cold final pass (item 59); the second pedagogy pass is owed on the final texts (item 81).",
       "stop_card": null
     },
     "CANONICAL-JSON-ONE-HOME-01": {
@@ -3645,7 +3655,7 @@
       "priority": "p0_safety",
       "rank": 331,
       "status": "queued",
-      "status_note": "Updated 2026-09-27 (activation d528efb2): route R ruled; claim-bearing HOLD remains until C1–C9 closing ruling. Owner must approve the successor registration and name the two calibration files; implementation awaits issuance of the current candidate and network-time enforcement.",
+      "status_note": "Updated 2026-09-27 (activation d528efb2): route R ruled; claim-bearing HOLD remains until C1–C9 closing ruling. Owner must approve the successor registration and name the two calibration files; implementation awaits issuance of the current candidate and network-time enforcement. Updated 2026-09-28 (record d528efb2 items 82, 100–102): issuance of the current candidate (CALIB-ISSUE-25G83-D138-01) is stopped pending Ed's option (a), (b) or (c); HOLD-BY-CONSTRUCTION-01 flags for the cap council that the cap transaction appears to need a re-issue of R7 at 25F84 under the new estimator bytes to serve as the default (item 82); NTP-ENFORCE-DESIGN-01 adds closing condition NT-C1 to the cap's closing ruling (item 100).",
       "stop_card": null
     },
     "EVIDENCE-NIGHT-ENTRY-01": {
@@ -3841,6 +3851,36 @@
       "rank": 69,
       "status": "blocked",
       "status_note": "Registered 2026-09-03 from CR-3 on branch feat/2026-09-02-v5-floor-generator. The magistrate selected option 1: kernel invariant 3 requires BLOCKED because the pack freeze owned by V5-DESK-DAY-01 is a pending hard start dependency.",
+      "stop_card": null
+    },
+    "FULL-SUITE-EVERY-FIX-HEAD-RULE-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-27-activation-77b1bee2/00-activation-record.md item 45 (the lesson, registered for the council, not ratified)",
+          "docs/process_traces/2026-09-27-activation-77b1bee2/00-activation-record.md item 49 (the same rule as a standing rule within the S1-REGRESSION-01 lane only)"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/FULL-SUITE-EVERY-FIX-HEAD-RULE-01/acceptance",
+          "label": "FULL-SUITE-EVERY-FIX-HEAD-RULE-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "A concrete proposed rule names the tiers it binds, the head it runs on, the reference comparison by test ID (including skips and known load flakes), and shows how it would have caught S1 row 9 before the cold final pass. A cold gate or Ed decides adoption; only the authorized decision can amend binding process text."
+      },
+      "authority": {
+        "label": "2026-09-27 activation 77b1bee2 item 45 lesson, registered for the council",
+        "path": "docs/process_traces/2026-09-27-activation-77b1bee2/00-activation-record.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Propose a process rule: a full-tier gate needs a full-suite run on every fix head, merged with the current main and compared with a reference run by test ID, before any refuter, cold gate or final pass; targeted suites alone are never enough. S1's cold final pass said MERGE while the integration tree gave 115 failures and 418 errors, because its gates ran targeted suites only (record 77b1bee2 items 44–45). Treat this as a proposal for independent process review, not as a rule already in force.",
+      "id": "FULL-SUITE-EVERY-FIX-HEAD-RULE-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 339,
+      "status": "queued",
+      "status_note": "Registered 2026-09-28 (Ed's interactive session bc060503, lane sweep P5; source record 77b1bee2 item 45 and the 77b1bee2 RUN_STATE block's bookkeeping step). PROPOSAL ONLY; not ratified; the lane sweep cannot ratify a process rule.",
       "stop_card": null
     },
     "G2A-FIRST-WINDOW-01": {
@@ -5570,8 +5610,8 @@
       "lane": "agent",
       "priority": "p0_safety",
       "rank": 332,
-      "status": "queued",
-      "status_note": "Registered 2026-09-27 (activation d528efb2). P0 Safety; must land before the next 25G83 window of any kind. The registration amendment for windows taking calibration captures is required before arm.",
+      "status": "partial",
+      "status_note": "Registered 2026-09-27 (activation d528efb2). P0 Safety; must land before the next 25G83 window of any kind. The registration amendment for windows taking calibration captures is required before arm. Updated 2026-09-28 (record d528efb2 items 67, 94, 100, 103, 107–108, 111, 114–119, 124, 126–127): the scout found that calibration ledger rows finalize before the window H6 verdict exists (item 67); cold ruling NTP-ENFORCE-DESIGN-01 (item 100) makes the driver own H5 and H6, starts the query window 3,600 s before OFF (the owner may overrule), splits the work into seats N1–N4, and adds closing condition NT-C1 for the cap; night kinds outside NETWORK_TIME_ENFORCED_KINDS refuse to launch and the set is empty at N1's merge, so no night launches between N1's merge and the first consumer's merge. N1 is on feat/2026-09-28-ntp-n1 at 36e8ba6e, unmerged, after fix rounds 1, 2 and 2b (addendum A1, item 115). Delta re-audit 2: executing lens PASS, contract lens five should-fixes (item 124); R3 repeats E2 at another call site, so cold gate NTP-ENFORCE-DESIGN-01-A2 (charge 71-ntp-design/47) is owed before any further fix round; its first convening was stopped by Ed's pause with no verdict and must be rerun (items 126–127). Lead-owed under A1 §7.5 (item 115): the NIGHT_HANDBACK desk step for a permanently empty start claim; network_time_window.py in N3's scope; the phase-2 scout question on sampler_teardown.py:164.",
       "stop_card": null
     },
     "NIGHT-DOCUMENT-HASH-BOUND-01": {
@@ -6205,7 +6245,7 @@
       "priority": "p2_next_slice",
       "rank": 335,
       "status": "queued",
-      "status_note": "Registered 2026-09-27 (activation d528efb2). The two oldepoch probes found a non-stale main-side bracket refusal; an explicit R7 route remains owed.",
+      "status_note": "Registered 2026-09-27 (activation d528efb2). The two oldepoch probes found a non-stale main-side bracket refusal; an explicit R7 route remains owed. Updated 2026-09-28 (record d528efb2 items 68, 76, 98): design addendum D138-25G83-DESIGN-01-A1 keeps R7 as the default, so D-138's old-epoch condition was met by identity (bracket.json sha256 32562d34… equal at main and at fix heads 8458f797 and b953f4b0); this lane applies to the later transaction that moves the default, under the condition restated in that addendum's §6 item 3.",
       "stop_card": null
     },
     "ONE-USE-CONSUMPTION-TEST-01": {
@@ -8549,8 +8589,8 @@
       "lane": "agent",
       "priority": "p1_phase_gate",
       "rank": 333,
-      "status": "queued",
-      "status_note": "Registered 2026-09-27 (activation 77b1bee2, second registration). S1 remains unmergeable. The S1-REGRESSION-01 cold-gate charge exists; its ruling file is not yet present in this tree, so follow the issued ruling when available.",
+      "status": "partial",
+      "status_note": "Registered 2026-09-27 (activation 77b1bee2, second registration). S1 remains unmergeable. Updated 2026-09-28 (record d528efb2 items 11, 32, 40, 47, 54–55, 70–71, 85–86, 110, 112, 120–127): the S1-REGRESSION-01 ruling is issued with addenda A1–A3 (items 11, 32, 40); repair rounds 1 and 2 failed with the same signature (item 47), so escalation S1-REPAIR-ROUTE-01 ruled exemption parity plus a gate fix (item 70), applied as 601a06c5 on fix/2026-09-27-s1-regress (item 71); addendum S1-REPAIR-ROUTE-01-A1 extended the test-only switch after the T5 pilot failed (items 110, 112). Round 3 is the last: ID grants cdfb27ce on fix/2026-09-28-s1-r3-H3 (item 122); seat B landed d4345946 with 3 test IDs returned NEEDS_RULING (item 125); 5 rule-3 test_run_campaign IDs are marked NEEDS_RULING (item 122); seat A and the lead's bind + pair bench work were stopped by Ed's pause, with unverified snapshots wip/2026-09-28-pause-s1-r3-A-partial (b0474eaa) and wip/2026-09-28-pause-s1-r3-L-partial (c1589d94) (items 126–127).",
       "stop_card": null
     },
     "S9-01B-REFUSAL-PRODUCER-CHECK-01": {
@@ -8808,6 +8848,36 @@
       "rank": 312,
       "status": "queued",
       "status_note": "Registered 2026-09-26 (activation f8d6cab1) under Final texts v1.1 text 19; not started; a campaign-cost question, not a correctness gate.",
+      "stop_card": null
+    },
+    "SEAT-WORKTREE-SINGLE-WRITER-RULE-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-27-activation-d528efb2/00-activation-record.md item 57 (the lesson and the false SCOPE_VIOLATION flag)",
+          "docs/process_traces/2026-09-27-activation-d528efb2/00-activation-record.md item 115 (the lead-owed desk step deferred to avoid a second writer)"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/SEAT-WORKTREE-SINGLE-WRITER-RULE-01/acceptance",
+          "label": "SEAT-WORKTREE-SINGLE-WRITER-RULE-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "A concrete proposed rule states what counts as a writer (seat, subagent, bench edit), how a second writer is refused or serialized, and how it would have prevented the item-57 scope flag. A cold gate or Ed decides adoption; only the authorized decision can amend binding process text."
+      },
+      "authority": {
+        "label": "2026-09-27 activation d528efb2 item 57 lesson",
+        "path": "docs/process_traces/2026-09-27-activation-d528efb2/00-activation-record.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Propose a process rule: no second writer works in a worktree while a seat is writing there. During D-138 fix round 1 the wrapper's SCOPE_VIOLATION flag came from the lead's concurrent Opus draft of the decision log and issuing record in the seat's worktree, not from the seat (record d528efb2 item 57); later the lead deferred a NIGHT_HANDBACK edit so as not to add a second writer (item 115). Treat this as a proposal for independent process review, not as a rule already in force.",
+      "id": "SEAT-WORKTREE-SINGLE-WRITER-RULE-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 340,
+      "status": "queued",
+      "status_note": "Registered 2026-09-28 (Ed's interactive session bc060503, lane sweep P5; source record d528efb2 item 57). PROPOSAL ONLY; not ratified; the lane sweep cannot ratify a process rule.",
       "stop_card": null
     },
     "SEC5A-REMOTE-01": {
@@ -9697,6 +9767,36 @@
       "rank": 213,
       "status": "queued",
       "status_note": "2026-09-16 activation 08ca8197: registered at the interactive session b0ae8462's request; registration only; not started; test-only nit, not night-critical. Related: TEST-CANONICAL-PATH-DEPENDENCY-01 (hermetic worktree runs) and ARM-CENSUS-IDLE-INTERACTIVE-01 (the census cure shape it follows).",
+      "stop_card": null
+    },
+    "TEST-REAL-POWERMETRICS-FENCE-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-27-activation-d528efb2/00-activation-record.md item 124 (auditor disclosure: a test started sudo -n /usr/bin/powermetrics during the item-122 census)",
+          "docs/process_traces/2026-09-27-activation-d528efb2/71-ntp-design/45-n1-delta2-exec-opus.md (the executing lens's observation of the sampler rows during that run)"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/TEST-REAL-POWERMETRICS-FENCE-01/acceptance",
+          "label": "TEST-REAL-POWERMETRICS-FENCE-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Every test that starts the real sampler is named by test ID and fenced, so that no test run can start /usr/bin/powermetrics. Until the fence lands, those three modules are not run as whole modules (record d528efb2 item 124)."
+      },
+      "authority": {
+        "label": "2026-09-27 activation d528efb2 item 124 (finding for a hygiene lane)",
+        "path": "docs/process_traces/2026-09-27-activation-d528efb2/00-activation-record.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Find and fence the existing test that starts the real power sampler. During the lead's rule-9 census (record d528efb2 item 122), whole-module runs of tests/test_whole_window.py, tests/test_run_campaign.py or tests/test_window_duration_margins.py started a real `sudo -n /usr/bin/powermetrics`. The triage recorder and the standard S1 guard block only ioreg, and earlier whole-suite runs used no guard, so this is existing suite behaviour, not new (item 124).",
+      "id": "TEST-REAL-POWERMETRICS-FENCE-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 338,
+      "status": "queued",
+      "status_note": "Registered 2026-09-28 (Ed's interactive session bc060503, lane sweep P5, from record d528efb2 item 124). A fence is in progress on branch test/2026-09-28-powermetrics-fence (worktree JouleWise-wt-pmfence-opus0928, from main 9eab16f8; no commit on it at registration). No capture or measurement was in progress when the sampler started (item 124).",
       "stop_card": null
     },
     "TEST-SPEED-01": {
