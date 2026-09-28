@@ -75,11 +75,6 @@ PARITY_TEST_IDS: frozenset[str] = frozenset({
     "tests.test_floor_extraction.SpecMembershipBindingTests.test_referenced_null_manifest_member_not_flagged_unattributable",
     "tests.test_floor_extraction.SpecMembershipBindingTests.test_sibling_campaign_under_runs_root_does_not_force_refusal",
     "tests.test_launch_window.CeremonySkipConsumerTests.test_malformed_and_mismatched_lineage_codes_reach_every_consumer",
-    "tests.test_run_campaign.IdleAdmissionCoreVerdictTests.test_recorded_supersession_resolves_present_retry_and_is_reported",
-    "tests.test_run_campaign.IdleAdmissionCoreVerdictTests.test_whole_window_cli_uses_campaign_membership_and_strict_validation",
-    "tests.test_run_campaign.IdleAdmissionCoreVerdictTests.test_whole_window_invalid_reference_is_excluded_and_cannot_pass",
-    "tests.test_run_campaign.IdleAdmissionCoreVerdictTests.test_whole_window_verdict_honors_and_reports_failed_member_waiver",
-    "tests.test_run_campaign.IdleAdmissionCoreVerdictTests.test_whole_window_verdict_refuses_mismatched_bound_lineage",
 })
 PARITY_SECOND_FORM_TEST_IDS: frozenset[str] = frozenset({
     "tests.test_analysis_integration.AnalysisIntegrationTests.test_complete_strict_current_bundle_set_derives_deterministic_fail_closed_artifact_with_production_telemetry_identity",
