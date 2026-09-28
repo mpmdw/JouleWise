@@ -205,3 +205,9 @@ Launched by the watchdog at 17:36:30 PDT (attempt 124) after a usage back-off; t
     - the S1 gate hole found and fixed;
     - the S1 route's reading of #421, offered for owner overturn (silence means it stands);
     - later asks: approve the successor registration and name the two files.
+73. **Revised D-138 record texts drafted in scratch** (Opus writer; nothing written in the seat's worktree). Saved as [record-revision-draft](50-d138-issuance-seat/record-revision-draft/):
+    - `prose.md` for the issuing record, plus the D-185 section, row and D-126 note;
+    - all 37 pedagogy items applied, with corrections listed in `CHANGES.md`;
+    - hold claims per design addendum §3 and §7; the old-epoch section per §6; both factual flags fixed;
+    - a new "Design change before merge" section.
+    - Digests, head and old-epoch re-run values are placeholders, filled after fix round 2. A second pedagogy pass is owed on the final texts.
