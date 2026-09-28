@@ -34,7 +34,350 @@
    }
   }
  },
- "groups": [],
+ "groups": [
+  {
+   "id": "dx",
+   "title": "Section 2 historical current-method edge result and Figure 2 caption (skeleton :556-606); registry DX-010/011/012/013, D-174 amendment",
+   "entries": [
+    {
+     "id": "dx.capture",
+     "anchor": "The source is the single capture `⟦capture⟧`, re-derived under the current rate-aware anchor `⟦anchor⟧`.",
+     "slots": {
+      "capture": {
+       "class": "bound",
+       "expr": "XD:capture_member_id",
+       "render": "text",
+       "kind": "text"
+      },
+      "anchor": {
+       "class": "bound",
+       "expr": "XD:anchor_method",
+       "render": "text",
+       "kind": "text"
+      }
+     }
+    },
+    {
+     "id": "dx.counts",
+     "anchor": "The ⟦onset_n⟧ onset lags are all positive; ⟦off_neg⟧ of ⟦off_n⟧ offset lags are negative, ⟦off_pos⟧ positive, and ⟦off_zero⟧ zero.",
+     "slots": {
+      "onset_n": {
+       "class": "bound",
+       "expr": "XD:summary.onset_best_fit_lag.count",
+       "render": "integer"
+      },
+      "off_neg": {
+       "class": "bound",
+       "expr": "XD:summary.offset_best_fit_lag.count_negative",
+       "render": "integer",
+       "registry": "DX-013"
+      },
+      "off_n": {
+       "class": "bound",
+       "expr": "XD:summary.offset_best_fit_lag.count",
+       "render": "integer",
+       "registry": "DX-013"
+      },
+      "off_pos": {
+       "class": "bound",
+       "expr": "XD:summary.offset_best_fit_lag.count_positive",
+       "render": "word_int"
+      },
+      "off_zero": {
+       "class": "bound",
+       "expr": "XD:summary.offset_best_fit_lag.count_zero",
+       "render": "word_int"
+      }
+     }
+    },
+    {
+     "id": "dx.medians",
+     "anchor": "Their medians are ⟦onset_median⟧ ms and ⟦offset_median⟧ ms.",
+     "slots": {
+      "onset_median": {
+       "class": "bound",
+       "expr": "XD:summary.onset_best_fit_lag.median_ms",
+       "render": "signed_1",
+       "registry": "DX-010"
+      },
+      "offset_median": {
+       "class": "bound",
+       "expr": "XD:summary.offset_best_fit_lag.median_ms",
+       "render": "signed_1",
+       "registry": "DX-011"
+      }
+     }
+    },
+    {
+     "id": "dx.edges",
+     "anchor": "These are ⟦onset_n⟧ onset and ⟦off_n⟧ offset values (⟦edges⟧ edges) from one capture",
+     "slots": {
+      "onset_n": {
+       "class": "bound",
+       "expr": "XD:summary.onset_best_fit_lag.count",
+       "render": "integer"
+      },
+      "off_n": {
+       "class": "bound",
+       "expr": "XD:summary.offset_best_fit_lag.count",
+       "render": "integer"
+      },
+      "edges": {
+       "class": "bound",
+       "expr": "XD:summary.all_118_worst_excursions.count",
+       "render": "integer"
+      }
+     }
+    },
+    {
+     "id": "dx.caption_axis",
+     "anchor": "The horizontal axis is pulse index ⟦first⟧–⟦last⟧ in command order",
+     "slots": {
+      "first": {
+       "class": "classed",
+       "literal": "0",
+       "reason": "index: first pulse index (0-based)"
+      },
+      "last": {
+       "class": "bound",
+       "expr": "XD:per_pulse|last_index",
+       "render": "integer"
+      }
+     }
+    },
+    {
+     "id": "dx.caption_marks",
+     "anchor": "Blue circles are the ⟦onset_n⟧ fitted onset lags; orange squares are the ⟦off_n⟧ fitted offset lags.",
+     "slots": {
+      "onset_n": {
+       "class": "bound",
+       "expr": "XD:per_pulse[*].onset_best_fit_lag_ms|len",
+       "render": "integer"
+      },
+      "off_n": {
+       "class": "bound",
+       "expr": "XD:per_pulse[*].offset_best_fit_lag_ms|len",
+       "render": "integer"
+      }
+     }
+    },
+    {
+     "id": "dx.caption_medians",
+     "anchor": "Blue and orange dashed horizontal lines mark the respective medians, ⟦onset_median⟧ ms and ⟦offset_median⟧ ms;",
+     "slots": {
+      "onset_median": {
+       "class": "bound",
+       "expr": "XD:summary.onset_best_fit_lag.median_ms",
+       "render": "signed_1",
+       "registry": "DX-010"
+      },
+      "offset_median": {
+       "class": "bound",
+       "expr": "XD:summary.offset_best_fit_lag.median_ms",
+       "render": "signed_1",
+       "registry": "DX-011"
+      }
+     }
+    },
+    {
+     "id": "dx.caption_leader",
+     "anchor": "The leader at pulse index ⟦idx⟧ marks its ⟦lead⟧-ms best-fit onset.",
+     "slots": {
+      "idx": {
+       "class": "classed",
+       "literal": "9",
+       "reason": "index: the leader pulse; the predicate 'leader' checks per_pulse[pulse_index=9] holds the onset maximum"
+      },
+      "lead": {
+       "class": "bound",
+       "expr": "XD:summary.onset_best_fit_lag.max_ms",
+       "render": "signed_int"
+      }
+     }
+    },
+    {
+     "id": "dx.caption_bound",
+     "anchor": "the largest endpoint displacement in an accepted region, ⟦disp⟧ ms on that onset, equals the retained worst edge excursion. Adding the ⟦anchor_ms⟧-ms clock-anchor allowance gives ⟦bound_ms⟧ ms.",
+     "slots": {
+      "disp": {
+       "class": "bound",
+       "expr": "REG:DG-042|strip_unit",
+       "render": "s_to_ms_exact",
+       "registry": "DG-042",
+       "note": "the full-precision residual is replay-fenced (DG-042, check_paper_replay_fence); XD carries it only to 6 decimals, checked by predicate 'worst excursion'"
+      },
+      "anchor_ms": {
+       "class": "bound",
+       "expr": "XD:bound_terms.b_anchor_s",
+       "render": "s_to_ms_exact",
+       "cross": [
+        {
+         "expr": "REG:DG-026|strip_unit",
+         "render": "s_to_ms_exact"
+        }
+       ]
+      },
+      "bound_ms": {
+       "class": "bound",
+       "expr": "XD:bound_terms.b_fiducial_s",
+       "render": "s_to_ms_exact",
+       "cross": [
+        {
+         "expr": "REG:DG-027|strip_unit",
+         "render": "s_to_ms_exact"
+        }
+       ]
+      }
+     }
+    },
+    {
+     "id": "dx.caption_grid",
+     "anchor": "The ⟦grid⟧-ms fitted lag grid reflects the search step;",
+     "slots": {
+      "grid": {
+       "class": "tied",
+       "expr": "CONST:joulewise/powermetrics_fiducial.py#FIT_FINE_STEP_S",
+       "render": "s_to_ms_exact",
+       "why": "method constant: the fine lag-search step"
+      }
+     }
+    },
+    {
+     "id": "dx.source_map",
+     "anchor": "DX-012/013 bind the ⟦on_pos⟧/⟦on_n⟧ and ⟦off_neg⟧/⟦off_n⟧ counts. The same JSON's `per_pulse` array supplies each mark; its `summary.offset_best_fit_lag` supplies the ⟦off_pos⟧ positive and ⟦off_zero⟧ zero counts.",
+     "slots": {
+      "on_pos": {
+       "class": "bound",
+       "expr": "XD:summary.onset_best_fit_lag.count_positive",
+       "render": "integer",
+       "registry": "DX-012"
+      },
+      "on_n": {
+       "class": "bound",
+       "expr": "XD:summary.onset_best_fit_lag.count",
+       "render": "integer",
+       "registry": "DX-012"
+      },
+      "off_neg": {
+       "class": "bound",
+       "expr": "XD:summary.offset_best_fit_lag.count_negative",
+       "render": "integer",
+       "registry": "DX-013"
+      },
+      "off_n": {
+       "class": "bound",
+       "expr": "XD:summary.offset_best_fit_lag.count",
+       "render": "integer",
+       "registry": "DX-013"
+      },
+      "off_pos": {
+       "class": "bound",
+       "expr": "XD:summary.offset_best_fit_lag.count_positive",
+       "render": "word_int"
+      },
+      "off_zero": {
+       "class": "bound",
+       "expr": "XD:summary.offset_best_fit_lag.count_zero",
+       "render": "word_int"
+      }
+     }
+    }
+   ],
+   "predicates": [
+    {
+     "why": "onset median re-derived from the 59 per-pulse onset lags",
+     "lhs": "XD:per_pulse[*].onset_best_fit_lag_ms|median",
+     "rhs": "XD:summary.onset_best_fit_lag.median_ms"
+    },
+    {
+     "why": "offset median re-derived from the 59 per-pulse offset lags",
+     "lhs": "XD:per_pulse[*].offset_best_fit_lag_ms|median",
+     "rhs": "XD:summary.offset_best_fit_lag.median_ms"
+    },
+    {
+     "why": "onset lags all positive (per_pulse)",
+     "lhs": "XD:per_pulse[*].onset_best_fit_lag_ms|count_pos",
+     "rhs": "XD:summary.onset_best_fit_lag.count"
+    },
+    {
+     "why": "negative offsets re-counted from per_pulse",
+     "lhs": "XD:per_pulse[*].offset_best_fit_lag_ms|count_neg",
+     "rhs": "XD:summary.offset_best_fit_lag.count_negative"
+    },
+    {
+     "why": "positive offsets re-counted from per_pulse",
+     "lhs": "XD:per_pulse[*].offset_best_fit_lag_ms|count_pos",
+     "rhs": "XD:summary.offset_best_fit_lag.count_positive"
+    },
+    {
+     "why": "zero offsets re-counted from per_pulse",
+     "lhs": "XD:per_pulse[*].offset_best_fit_lag_ms|count_zero",
+     "rhs": "XD:summary.offset_best_fit_lag.count_zero"
+    },
+    {
+     "why": "negative + positive + zero offsets exhaust the 59 (D-174 amendment)",
+     "lhs": [
+      "XD:summary.offset_best_fit_lag.count_negative",
+      "XD:summary.offset_best_fit_lag.count_positive",
+      "XD:summary.offset_best_fit_lag.count_zero"
+     ],
+     "rhs": "XD:summary.offset_best_fit_lag.count"
+    },
+    {
+     "why": "59 onset + 59 offset = 118 edges",
+     "lhs": [
+      "XD:summary.onset_best_fit_lag.count",
+      "XD:summary.offset_best_fit_lag.count"
+     ],
+     "rhs": "XD:summary.all_118_worst_excursions.count"
+    },
+    {
+     "why": "leader: pulse index 9 carries the onset maximum",
+     "lhs": "XD:per_pulse[pulse_index=9].onset_best_fit_lag_ms",
+     "rhs": "XD:summary.onset_best_fit_lag.max_ms"
+    },
+    {
+     "why": "worst excursion: DG-042 residual (s) x1000 rounds to XD's 6-decimal worst edge excursion",
+     "lhs": "REG:DG-042|strip_unit|float|x1000|round6",
+     "rhs": "XD:bound_terms.max_worst_edge_excursion_ms"
+    }
+   ],
+   "registry_checks": [
+    {
+     "key": "DX-010",
+     "value": "⟦dx.medians.onset_median⟧ ms",
+     "supplier_contains": [
+      "XD#summary.onset_best_fit_lag.median_ms",
+      "R7F_RENDER=signed_1_ms"
+     ]
+    },
+    {
+     "key": "DX-011",
+     "value": "⟦dx.medians.offset_median⟧ ms",
+     "supplier_contains": [
+      "XD#summary.offset_best_fit_lag.median_ms",
+      "R7F_RENDER=signed_1_ms"
+     ]
+    },
+    {
+     "key": "DX-012",
+     "value": "⟦dx.source_map.on_pos⟧ of ⟦dx.source_map.on_n⟧",
+     "supplier_contains": [
+      "XD#summary.onset_best_fit_lag.count_positive",
+      "XD#summary.onset_best_fit_lag.count"
+     ]
+    },
+    {
+     "key": "DX-013",
+     "value": "⟦dx.counts.off_neg⟧ of ⟦dx.counts.off_n⟧",
+     "supplier_contains": [
+      "XD#summary.offset_best_fit_lag.count_negative",
+      "XD#summary.offset_best_fit_lag.count"
+     ]
+    }
+   ]
+  }
+ ],
  "spelled_out_expected_total": 307,
  "unbound_results_provenance": {
   "census": "docs/process_traces/2026-09-27-activation-d528efb2/62-paper-number-census/results_bearing_unpoliced.tsv",
@@ -154,146 +497,6 @@
    "literal": "0.0000010000000000000002",
    "ctx": "in every row is about 1 µs (retained as 0.0000010000000000000002 s for byte-exact replay).",
    "offset": 40,
-   "census_status": "UNPOLICED-REGISTERED"
-  },
-  {
-   "line": 571,
-   "literal": "59",
-   "ctx": "l’s switch-on and switch-off times. The 59",
-   "offset": 40,
-   "census_status": "UNPOLICED-REGISTERED"
-  },
-  {
-   "line": 572,
-   "literal": "49",
-   "ctx": "onset lags are all positive; 49 of 59 offset lags are negativ",
-   "offset": 29,
-   "census_status": "UNPOLICED-REGISTERED"
-  },
-  {
-   "line": 572,
-   "literal": "59",
-   "ctx": "onset lags are all positive; 49 of 59 offset lags are negative, eig",
-   "offset": 35,
-   "census_status": "UNPOLICED-REGISTERED"
-  },
-  {
-   "line": 573,
-   "literal": "+13.0",
-   "ctx": "and two zero. Their medians are +13.0 ms and",
-   "offset": 32,
-   "census_status": "UNPOLICED-REGISTERED"
-  },
-  {
-   "line": 574,
-   "literal": "−5.5",
-   "ctx": "−5.5 ms. These are 59 onset and 59",
-   "offset": 0,
-   "census_status": "UNPOLICED-REGISTERED"
-  },
-  {
-   "line": 574,
-   "literal": "59",
-   "ctx": "−5.5 ms. These are 59 onset and 59 offset values (1",
-   "offset": 19,
-   "census_status": "UNPOLICED-REGISTERED"
-  },
-  {
-   "line": 574,
-   "literal": "59",
-   "ctx": "−5.5 ms. These are 59 onset and 59 offset values (118 edges) fro",
-   "offset": 32,
-   "census_status": "UNPOLICED-REGISTERED"
-  },
-  {
-   "line": 574,
-   "literal": "118",
-   "ctx": "hese are 59 onset and 59 offset values (118 edges) from one capture,",
-   "offset": 40,
-   "census_status": "UNPOLICED-UNREGISTERED"
-  },
-  {
-   "line": 584,
-   "literal": "59",
-   "ctx": "ks mark the scale. Blue circles are the 59 fitted onset lags; orange squ",
-   "offset": 40,
-   "census_status": "UNPOLICED-REGISTERED"
-  },
-  {
-   "line": 585,
-   "literal": "59",
-   "ctx": "the 59 fitted offset lags. The solid",
-   "offset": 4,
-   "census_status": "UNPOLICED-REGISTERED"
-  },
-  {
-   "line": 587,
-   "literal": "+13.0",
-   "ctx": "+13.0 ms and −5.5 ms; they describe",
-   "offset": 0,
-   "census_status": "UNPOLICED-REGISTERED"
-  },
-  {
-   "line": 587,
-   "literal": "−5.5",
-   "ctx": "+13.0 ms and −5.5 ms; they describe this sample",
-   "offset": 13,
-   "census_status": "UNPOLICED-REGISTERED"
-  },
-  {
-   "line": 590,
-   "literal": "+27",
-   "ctx": "The leader at pulse index 9 marks its +27-ms best-fit onset. The accept",
-   "offset": 38,
-   "census_status": "UNPOLICED-UNREGISTERED"
-  },
-  {
-   "line": 592,
-   "literal": "28.93293456111476",
-   "ctx": "region, 28.93293456111476 ms on that onset, equals the ",
-   "offset": 8,
-   "census_status": "UNPOLICED-UNREGISTERED"
-  },
-  {
-   "line": 593,
-   "literal": "1.1349971959968978",
-   "ctx": "excursion. Adding the 1.1349971959968978-ms clock-anchor allowance giv",
-   "offset": 22,
-   "census_status": "UNPOLICED-UNREGISTERED"
-  },
-  {
-   "line": 594,
-   "literal": "30.067931757111657",
-   "ctx": "30.067931757111657 ms. The endpoint displacement",
-   "offset": 0,
-   "census_status": "UNPOLICED-UNREGISTERED"
-  },
-  {
-   "line": 603,
-   "literal": "59",
-   "ctx": "59/59 and 49/59 counts. The same",
-   "offset": 0,
-   "census_status": "UNPOLICED-REGISTERED"
-  },
-  {
-   "line": 603,
-   "literal": "59",
-   "ctx": "59/59 and 49/59 counts. The same JS",
-   "offset": 3,
-   "census_status": "UNPOLICED-REGISTERED"
-  },
-  {
-   "line": 603,
-   "literal": "49",
-   "ctx": "59/59 and 49/59 counts. The same JSON's `p",
-   "offset": 10,
-   "census_status": "UNPOLICED-REGISTERED"
-  },
-  {
-   "line": 603,
-   "literal": "59",
-   "ctx": "59/59 and 49/59 counts. The same JSON's `per_",
-   "offset": 13,
    "census_status": "UNPOLICED-REGISTERED"
   },
   {

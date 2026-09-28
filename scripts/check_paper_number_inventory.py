@@ -500,6 +500,7 @@ def slot_kind(slot: dict) -> str:
 # --------------------------------------------------------------------------
 
 _SLOT = re.compile(r"⟦([A-Za-z0-9_]+)⟧")
+_REF = re.compile(r"⟦([A-Za-z0-9_.]+)⟧")  # entry_id.slot references in registry checks
 
 
 def anchor_regex(anchor: str, slots: dict) -> re.Pattern:
@@ -772,7 +773,7 @@ def _registry_check(rc: dict, registry_text: str, expected: dict, rep: Report) -
     problems = []
 
     def fill(template: str) -> str:
-        for sid in _SLOT.findall(template):
+        for sid in _REF.findall(template):
             if expected.get(sid) is None:
                 problems.append(f"slot {sid} has no expected value")
             template = template.replace(f"⟦{sid}⟧", expected.get(sid) or "?")
