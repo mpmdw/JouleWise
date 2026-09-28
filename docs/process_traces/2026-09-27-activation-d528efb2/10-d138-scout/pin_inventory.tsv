@@ -1,0 +1,34 @@
+path	line	what it names	classification
+configs/calibration/calibration_acceptance_d079_v2_n12_25g83_r1.json	0	PROPOSED issued 25G83 artifact; new file, name subject to identity ruling	must-change
+joulewise/calibration_bracketing.py	137-199	R7 path/id/SHA retained in registry; add n12 25G83 registry path/id/external byte SHA and move ACTIVE/DEFAULT only	must-change
+joulewise/calibration_bracketing.py	377-390	D-102 generation derivations; add converted candidate n12 row, retain R7 n17 row	must-change
+joulewise/calibration_bracketing.py	976-1029	Live-prefix valid-row completeness currently refuses eleven D-126-disposed earlier 25G83 valid rows; authenticate disposition exemption	must-change
+joulewise/arm_readiness.py	6206-6218	Issued D-079 ID allowlist ends at R7; add 25G83 generation	must-change
+scripts/floor_mint_pinsets/schema_v2.json	180-193,716-792,1000-1077	Generation ID enums and two conditional screen/allowance pins; add n12 0.013701 case	must-change
+scripts/issue_calibration_acceptance_generation.py	1795-1801	Revision 5 predecessor asserted equal to ACTIVE; freeze to R7 historical predecessor when ACTIVE advances	must-change
+scripts/epoch_equivalence_check.py	95-99,144-152,699	Historical issue-316 reference hard-pins R7 but CLI default follows ACTIVE; freeze default to R7 or explicitly retire tool	must-change
+tests/test_calibration_bracketing.py	604-617,3267-3321	Live R7 expectation and all-generation historical-only row assertions; assert new default and retain old generation	must-change
+tests/test_floor_mint_pinsets_schema.py	47-74	Expects only n19/n17 schema groups; add n12 acceptance conditional contract	must-change
+tests/test_epoch_continuation.py	1151-1164	Active generation SHA asserted to equal R7 SHA	must-change
+tests/test_issue_calibration_acceptance_generation.py	287-294	Issuer default asserted R7; add historical R7 predecessor regression after default moves	must-change
+tests/test_epoch_equivalence_check.py	49-56,591-593	Historical equivalence tests derive expected screens from ACTIVE; pin them to R7 after swap	must-change
+tests/test_arm_readiness_evidence_author.py	121-131	Synthetic repo copies explicit registered artifact list through R7; include new generation	must-change
+tests/test_calibration_exits.py	1444-1452,3626-3636	Synthetic repo copies/rekeys only R7 while loader default will be n12	must-change
+tests/test_calibration_writer_crash_matrix.py	269-283,313-330	Synthetic repo copies/rekeys only R7 and assumes old digest occurs once in loader source	must-change
+tests/test_mint_floor_artifact_generalized.py	1280-1312	Live default embedded in synthetic producer-plan golden SHA constants; independently rederive	must-change
+tests/test_powermetrics_fiducial.py	1562-1581	Exact R7 artifact assertion may remain historical; add active 25G83 byte/operative invariant	must-change
+tests/verify_calibration_acceptance_corpus.py	22-89	Generation oracle banks through R7 and assumes in-repo member roots; add n12 and external custody-root support	must-change
+tests/test_acc_25g83_rev5.py	228-249	Synthetic candidate admission exists; add real issued-byte and disposed-prior defect regressions	must-change
+configs/calibration/calibration_acceptance_d079_v2_n17_r7.json	3,20-26,637	Issued R7 predecessor id/25F84 epoch/derivation digest; immutable predecessor bytes	history-only
+configs/calibration/preregistration_d079_epoch_25g83_rev1.md	604,612-614,632,648-664	Sealed Revision 5/A-R5b, R7 predecessor and issuance arithmetic; immutable registered history	history-only
+configs/calibration/observation_dispositions.json	1-59	D-126 disposition content IDs and decision; pinned existing registry, read/authenticate, do not rewrite	history-only
+configs/calibration/calibration_ledger_head.json	2-4	Committed W2 ledger head 276/476e2ae8; verify without rewriting for issuance	history-only
+docs/process/NIGHT_HANDBACK.md	516	Dated R7 pin history	history-only
+tests/test_capture_pipeline_era.py	266-280	R7 positive historical issued-ID fixture	history-only
+tests/test_reduce.py	2105	R7 estimator-pin historical assertion	history-only
+tests/test_validate_powermetrics_fiducial_derivation_only.py	53,1183	Explicit R7 derivation-only historical fixture	history-only
+tests/test_mint_floor_artifact_generalized.py	6288-6291	R7 counterfactual synthetic fixture bytes; preserve as old-generation case	history-only
+configs/campaigns/d117_floor_qwen25_1p5b_v2/arm_readiness.freeze.receipts/freeze-0002.json	1	Earlier frozen R2 family, no R7/25G83 acceptance pin; do not re-mint for this issuance	history-only
+configs/campaigns/d117_floor_qwen25_7b_v2/arm_readiness.freeze.receipts/freeze-0002.json	1	Earlier frozen R2 family, no R7/25G83 acceptance pin; do not re-mint for this issuance	history-only
+configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v2/arm_readiness.freeze.receipts/freeze-0002.json	1	Earlier frozen R2 family, no R7/25G83 acceptance pin; do not re-mint for this issuance	history-only
+configs/paper_supply/supply_map.json	1-20	No R7 ID/path/SHA or 25G83 acceptance entry in present map; no issuance pin to swap	history-only
