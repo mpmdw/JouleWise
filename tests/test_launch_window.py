@@ -25,7 +25,7 @@ from joulewise import floor_extraction, whole_window
 from tests import test_arm_readiness as arm_readiness_tests
 from tests.git_fixture import init_git_fixture
 from tests.fixtures.arm_clock import coherent_clock_anchor
-from tests.bfgs_fixtures import rebind_config, write_passing_pair
+from tests.bfgs_fixtures import exemption_parity, rebind_config, write_passing_pair
 
 
 REAL_GO_T0_AUTHENTICATOR = arm_readiness._authenticate_go_t0_evidence
@@ -1878,6 +1878,23 @@ class OperatorConfirmationDigestCliTests(unittest.TestCase):
         verify_arm.assert_not_called()
 
 
+PHYSICAL_CONFIG_TEMPLATE = (
+    Path(__file__).resolve().parent / "fixtures" / "d078_r01" / "config.json"
+)
+
+
+def _schema_valid_physical_config(config: dict) -> dict:
+    """Fixture construction only (S1 R3, bind + pair): the test's own run_id,
+    run_metadata and hardware_target laid over a schema-valid physical config,
+    so ``rebind_config`` binds a config that re-validates before the pair."""
+    physical = json.loads(PHYSICAL_CONFIG_TEMPLATE.read_text(encoding="utf-8"))
+    physical["run_metadata"]["tags"] = []
+    physical["run_metadata"].update(config.get("run_metadata", {}))
+    physical["hardware_target"].update(config.get("hardware_target", {}))
+    physical["run_id"] = config["run_id"]
+    return physical
+
+
 class CeremonySkipConsumerTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
@@ -1894,7 +1911,12 @@ class CeremonySkipConsumerTests(unittest.TestCase):
             },
         }
         (self.bundle / "config.json").write_text(
-            json.dumps(self.config, sort_keys=True, separators=(",", ":")) + "\n"
+            json.dumps(
+                _schema_valid_physical_config(self.config),
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+            + "\n"
         )
         (self.bundle / "metadata.json").write_text(
             json.dumps({
@@ -1949,7 +1971,9 @@ class CeremonySkipConsumerTests(unittest.TestCase):
     def test_malformed_and_mismatched_lineage_codes_reach_every_consumer(self) -> None:
         for code in ("launch_consumption_invalid", "launch_binding_mismatch"):
             error = arm_readiness.LaunchLineageError(code, "injected lineage defect")
-            with self.subTest(code=code, consumer="analysis"), mock.patch.object(
+            with self.subTest(code=code, consumer="analysis"), exemption_parity(
+                self.id()
+            ), mock.patch.object(
                 analysis_inputs,
                 "authenticate_bundle_launch_lineage",
                 side_effect=error,
@@ -1963,7 +1987,9 @@ class CeremonySkipConsumerTests(unittest.TestCase):
                         lambda _path, _strict: [],
                     )
                 self.assertIn(code, str(caught.exception))
-            with self.subTest(code=code, consumer="whole-window"), mock.patch.object(
+            with self.subTest(code=code, consumer="whole-window"), exemption_parity(
+                self.id()
+            ), mock.patch.object(
                 whole_window,
                 "authenticate_bundle_launch_lineage",
                 side_effect=error,
@@ -1976,7 +2002,9 @@ class CeremonySkipConsumerTests(unittest.TestCase):
                     ),
                     (code,),
                 )
-            with self.subTest(code=code, consumer="floor-extraction"), mock.patch.object(
+            with self.subTest(code=code, consumer="floor-extraction"), exemption_parity(
+                self.id()
+            ), mock.patch.object(
                 floor_extraction,
                 "authenticate_bundle_launch_lineage",
                 side_effect=error,

@@ -69,6 +69,23 @@ CONFIG_FIXTURE = (
 )
 
 
+PHYSICAL_CONFIG_TEMPLATE = (
+    Path(__file__).resolve().parent / "fixtures" / "d078_r01" / "config.json"
+)
+
+
+def _schema_valid_physical_config(config: dict) -> dict:
+    """Fixture construction only (S1 R3, bind + pair): the test's own run_id,
+    run_metadata and hardware_target laid over a schema-valid physical config,
+    so ``rebind_config`` binds a config that re-validates before the pair."""
+    physical = json.loads(PHYSICAL_CONFIG_TEMPLATE.read_text(encoding="utf-8"))
+    physical["run_metadata"]["tags"] = []
+    physical["run_metadata"].update(config.get("run_metadata", {}))
+    physical["hardware_target"].update(config.get("hardware_target", {}))
+    physical["run_id"] = config["run_id"]
+    return physical
+
+
 def _evidence_bundle(bundle: Path) -> None:
     config_path = bundle / "config.json"
     config = (
@@ -1293,6 +1310,14 @@ class LaunchLineageWholeWindowTests(unittest.TestCase):
             )
             (path / "summary_metrics.json").write_text(
                 "{}\n",
+                encoding="utf-8",
+            )
+            own_config = json.loads(
+                (path / "config.json").read_text(encoding="utf-8")
+            )
+            own_config["run_id"] = bundle_id
+            (path / "config.json").write_text(
+                json.dumps(_schema_valid_physical_config(own_config)) + "\n",
                 encoding="utf-8",
             )
             _evidence_bundle(path)
