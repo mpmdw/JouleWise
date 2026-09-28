@@ -349,3 +349,19 @@ Launched by the watchdog at 17:36:30 PDT (attempt 124) after a usage back-off; t
     - **D3 and D4, nits:** N1's regex can still backtrack, and the saved F1 regression errors on the old revision.
     - Every other finding is fixed, with executed regressions (42 tests; 19 failures and 6 errors on the old revision).
     - **The next round would be a second fix round on F1, which is a mandatory cold-gate trigger.** Charge NTP-ENFORCE-DESIGN-01-A1 ([37](71-ntp-design/37-coldgate-fix2-charge.md)) is convened with cold Fable, paired with an Opus contract-lens refuter. No fix-round-2 seat starts before the ruling.
+115. **ADDENDUM: NTP-ENFORCE-DESIGN-01-A1 ISSUED** (cold Fable, [38](71-ntp-design/38-coldgate-fix2-ruling.md); probes in [38-probes](71-ntp-design/38-probes/)). It is paired with the Opus contract refuter, **REFUTER: AGREE-WITH-D1** ([39](71-ntp-design/39-a1-contract-refuter-opus.md); [39-probes](71-ntp-design/39-probes/)).
+    - **D1 is real and is F1 again**, reproduced four times by the judge and on three routes by the refuter. The idle night's collector, recorder and sampler each run in their own process group. D1 cannot turn a spoiled capture into a clean one, but it makes the record false.
+    - **The cure:** the driver first ends the registered groups it already owns ([K]), then proves three things fresh before any query or ON:
+      - P1: the chain's group is empty;
+      - P2: every journaled group is empty;
+      - P3: a process-table sweep finds no sampler name and no path of the night.
+
+      A check that cannot answer counts as not proved, which means no query, no ON, the marker stays, and `night_chain_alive`. Recovery gets the same proof injected.
+    - **D2:** an explicit "never launched" start claim. An empty start claim yields `chain_unproved`, not `marker_invalid`.
+    - D3 (a positional regex) and D4 are fixed in the same round.
+    - **Fix round 2 proceeds** in the same nine files, with stop conditions 1–5 of §7.2.
+    - **If D1's signature survives, there is no round 3.** N1 does not merge; a design consult ("who owns the capture processes?") follows, then a cold gate. This is not an owner item.
+    - **Amendments to §4.1, §4.3 and §4.5:** the proof is widened; the marker holds the night's paths; the chain's own ON moves after its proved clean-up. That last change belongs to N3.
+    - **Lead-owed (§7.5):** the probes are copied (done). Still owed: the desk step for a permanently empty start claim, to go into NIGHT_HANDBACK after the seat, so as not to add a second writer; `network_time_window.py` in N3's scope; and the phase-2 scout's question about `sampler_teardown.py:164`.
+    - **Refuter points not taken:** its predicate inside `_terminate_process_group`. The judge keeps C7 unchanged and gates only the query and ON, which is sufficient. Its sampler-teardown point is covered by P3's name match, with the rest deferred to phase 2.
+116. **NTP N1 fix-round-2 seat launched** (Sol xhigh; [brief](71-ntp-design/40-n1-fix2-brief.txt), which carries A1 §4.2, §4.6, §4.7, §5 and §6 verbatim; worktree `JouleWise-wt-ntp-n1-d528efb2` at `3ad82b43`). Xhigh because the work is multi-component and root-cause, and it is the last permitted round.
