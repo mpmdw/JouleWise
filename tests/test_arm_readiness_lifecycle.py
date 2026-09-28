@@ -874,6 +874,10 @@ class ArmReadinessLifecycleTests(unittest.TestCase):
         )
         barrier = threading.Barrier(8)
         outcomes: dict[int, str] = {}
+        # Reason code of each refusal's __cause__: a loser at the one-use
+        # O_EXCL consumption write carries readiness_output_collision, while a
+        # loser at the earlier consumed-file existence check carries none.
+        refusal_causes: list[str | None] = []
         lock = threading.Lock()
 
         def consume(consumer_id: int) -> None:
@@ -883,6 +887,10 @@ class ArmReadinessLifecycleTests(unittest.TestCase):
                 launch_window.launch(args)
             except ArmReadinessError as exc:
                 outcome = exc.reason_code
+                with lock:
+                    refusal_causes.append(
+                        getattr(exc.__cause__, "reason_code", None)
+                    )
             except readiness.LaunchLineageError as exc:
                 outcome = exc.reason_code
             except Exception as exc:
@@ -938,6 +946,14 @@ class ArmReadinessLifecycleTests(unittest.TestCase):
         self.assertEqual(outcomes.count("launch_consumption_invalid"), 1, outcomes)
         self.assertEqual(outcomes.count("readiness_record_consumed"), 7, outcomes)
         self.assertNotIn("readiness_lock_unavailable", outcomes)
+        # ONE-USE-CONSUMPTION-TEST-01: the race must be decided at the one-use
+        # write itself, not only at the existence pre-check.  All seven losers
+        # carried this cause in each of five instrumented bench runs; at least
+        # one is required so a straggler that loses at the pre-check cannot
+        # flake it.
+        self.assertGreaterEqual(
+            refusal_causes.count("readiness_output_collision"), 1, refusal_causes
+        )
         consumption_path = (
             custody
             / pack.name
@@ -959,6 +975,9 @@ class ArmReadinessLifecycleTests(unittest.TestCase):
             "_attested_launch_artifact_references",
             return_value=self.launch_artifact_references(args.launch_manifest),
         ):
+            # A sequential replay is refused before the O_EXCL write by the
+            # consumed-file existence check (ARM_CAPABILITY lifecycle); the
+            # one-use write itself is exercised by the concurrent race above.
             with self.assertRaisesRegex(
                 ArmReadinessError, "already consumed"
             ) as replay:
