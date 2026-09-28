@@ -12,12 +12,15 @@ from unittest import mock
 from joulewise import arm_readiness, identity_pins
 from joulewise.arm_readiness import committed_pack_tree_sha256
 from joulewise.analysis_engine import _resolve_contrast_floor
+from joulewise.analysis_engine import inputs as analysis_inputs_module
 from joulewise.analysis_engine.inputs import (
     AuthenticatedFloorArtifact,
     BundleEvidence,
     FloorEvidenceBinding,
     LoadedAnalysisInputs,
+    _enforce_registered_realized_identity,
     _realized_identity_matches_config,
+    _scan_replacements_and_topups,
     _typed_config,
     floor_request_for_evidence,
     floor_stack_identity,
@@ -28,6 +31,9 @@ try:
     from joulewise.analysis_engine.inputs import _frozen_consumer_identity_set
 except ImportError:  # RED staging: production helper lands with the cure.
     _frozen_consumer_identity_set = None
+from joulewise.analysis_manifest_v3 import (
+    SCHEMA_VERSION as ANALYSIS_MANIFEST_V3_SCHEMA_VERSION,
+)
 from joulewise.identity_pins import scientific_config_identity_sha256
 from joulewise.suite import SuiteManifest, suite_manifest_sha256
 from tests import test_d117_contrast_v5_pack as d117_fixture
@@ -1231,6 +1237,157 @@ class FrozenConsumerIdentitySetTests(unittest.TestCase):
                 }
             )
             self.assertIsNone(floor_request_for_evidence(*case))
+
+
+class RegisteredCohortIdentityExclusionTests(unittest.TestCase):
+    """A130 / audit 13 section 2.2 M4: cheap counterfactual guards.
+
+    Each ``config_hash_mismatch`` exclusion in
+    ``_enforce_registered_realized_identity`` gets one test that fails when
+    that exclusion is deleted.  Before these, the only guard was
+    ``test_analysis_integration`` (a whole-module run of about two minutes);
+    this module was silent against the deletion.
+    """
+
+    MODEL_TAG = "model-under-test"
+
+    def _manifest(self, **extra: Any) -> dict[str, Any]:
+        return {
+            "entries": [
+                {"entry_id": "e1", "model_tag": self.MODEL_TAG},
+                {"entry_id": "e2", "model_tag": self.MODEL_TAG},
+            ],
+            **extra,
+        }
+
+    def _rows(
+        self, second_artifact_sha256: str = "a" * 64, second_status: str = "ok"
+    ) -> dict[str, BundleEvidence]:
+        config = _scalar_config()
+        first = _metadata_for(config, 512)
+        second = _metadata_for(config, 512)
+        artifact = second["workload_provenance"]["model"]["artifact_identity"]
+        artifact["sha256"] = second_artifact_sha256
+        artifact["status"] = second_status
+        return {
+            "e1": _bundle_evidence("run-1", config, first),
+            "e2": _bundle_evidence("run-2", config, second),
+        }
+
+    def _assert_excluded(self, row: BundleEvidence) -> None:
+        self.assertEqual(row.inclusion_status, "excluded")
+        self.assertIn("config_hash_mismatch", row.base_reason_codes)
+
+    def test_agreeing_cohort_is_admitted(self) -> None:
+        # Control: the fixture itself must not trip any exclusion, or the
+        # refusal tests below would pass for the wrong reason.
+        rows = self._rows()
+        result = _enforce_registered_realized_identity(self._manifest(), rows)
+        self.assertIn(self.MODEL_TAG, result)
+        for row in rows.values():
+            self.assertEqual(row.inclusion_status, "included")
+            self.assertEqual(row.base_reason_codes, ())
+
+    def test_cohort_artifact_disagreement_excludes_every_row(self) -> None:
+        rows = self._rows(second_artifact_sha256="b" * 64)
+        result = _enforce_registered_realized_identity(self._manifest(), rows)
+        self.assertNotIn(self.MODEL_TAG, result)
+        for row in rows.values():
+            self._assert_excluded(row)
+
+    def test_unresolvable_realized_identity_excludes_that_row(self) -> None:
+        rows = self._rows(second_status="missing")
+        _enforce_registered_realized_identity(self._manifest(), rows)
+        self._assert_excluded(rows["e2"])
+        self.assertEqual(rows["e1"].inclusion_status, "included")
+
+    def test_cohort_disagreeing_with_frozen_v3_arm_identity_is_excluded(self) -> None:
+        rows = self._rows()
+        config = _scalar_config()
+        frozen = _metadata_for(config, 512)
+        frozen["workload_provenance"]["model"]["artifact_identity"]["sha256"] = (
+            "c" * 64
+        )
+        frozen_identity = realized_scientific_identity(config, frozen)
+        assert frozen_identity is not None
+        manifest = self._manifest(
+            schema_version=ANALYSIS_MANIFEST_V3_SCHEMA_VERSION,
+            arms=[
+                {
+                    "model_tag": self.MODEL_TAG,
+                    "realized_stack_identity": copy.deepcopy(frozen_identity),
+                }
+            ],
+        )
+        result = _enforce_registered_realized_identity(manifest, rows)
+        self.assertNotIn(self.MODEL_TAG, result)
+        for row in rows.values():
+            self._assert_excluded(row)
+
+    def _scan_one_unregistered_bundle(
+        self, candidate_artifact_sha256: str
+    ) -> list[BundleEvidence]:
+        """Run the closed-set scan over one unregistered same-config bundle.
+
+        ``_read_bundle`` (the BundleReader-backed per-bundle loader, guarded
+        by its own tests) is replaced by a stub returning an admitted row, so
+        the only thing under test is the scan's comparison of that row's
+        realized identity against the registered cohort's identity.
+        """
+
+        config = _scalar_config()
+        cohort_metadata = _metadata_for(config, 512)
+        cohort_identity = realized_scientific_identity(config, cohort_metadata)
+        assert cohort_identity is not None
+        candidate_metadata = _metadata_for(config, 512)
+        candidate_metadata["workload_provenance"]["model"]["artifact_identity"][
+            "sha256"
+        ] = candidate_artifact_sha256
+        candidate = _bundle_evidence("extra-run", config, candidate_metadata)
+        with tempfile.TemporaryDirectory(prefix="analysis-scan-identity-") as tmp:
+            root = Path(tmp)
+            (root / "config.json").write_text(json.dumps(config), encoding="utf-8")
+            runs_root = root / "runs"
+            (runs_root / "extra-run").mkdir(parents=True)
+            (runs_root / "extra-run" / "config.json").write_text(
+                json.dumps(config), encoding="utf-8"
+            )
+            manifest = {
+                "entries": [
+                    {
+                        "entry_id": "e1",
+                        "model_tag": self.MODEL_TAG,
+                        "config": "config.json",
+                    }
+                ]
+            }
+            with mock.patch.object(
+                analysis_inputs_module, "_read_bundle", return_value=candidate
+            ) as read_bundle:
+                _effective, extras, _valid, _unmatched, _top_ups = (
+                    _scan_replacements_and_topups(
+                        manifest,
+                        root,
+                        runs_root,
+                        lambda path, strict=True: [],
+                        {},
+                        {self.MODEL_TAG: cohort_identity},
+                        {},
+                    )
+                )
+        read_bundle.assert_called_once()
+        return extras
+
+    def test_unregistered_bundle_matching_cohort_identity_is_admitted(self) -> None:
+        # Control for the scan fixture below.
+        extras = self._scan_one_unregistered_bundle("a" * 64)
+        self.assertEqual([row.bundle_id for row in extras], ["extra-run"])
+        self.assertEqual(extras[0].inclusion_status, "included")
+
+    def test_unregistered_bundle_off_cohort_identity_is_excluded(self) -> None:
+        extras = self._scan_one_unregistered_bundle("b" * 64)
+        self.assertEqual([row.bundle_id for row in extras], ["extra-run"])
+        self._assert_excluded(extras[0])
 
 
 if __name__ == "__main__":
