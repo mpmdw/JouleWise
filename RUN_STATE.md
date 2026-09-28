@@ -10,6 +10,26 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
+**▶▶ ACTIVATION d528efb2 — from 17:36 PDT 09-27 (Opus 5.5; NOTHING ARMED):** [Record 00](docs/process_traces/2026-09-27-activation-d528efb2/00-activation-record.md) is the running log.
+
+**Ed approved the new calibration's name and release** ("Yes re name , go ahead", 17:57 PDT): `d079_calibration_acceptance_v2_n12_25g83_r1`, published only after every gate passes.
+
+**Rulings issued this activation (all cold Fable 5.1):**
+- **SCI-25G83-CANDIDATE-01-A2 — PROCEED.** macOS network time was ON through W1/W2. It caused 4 of the 12 exclusions, but no correction fell inside any member, and the effect on C is at most 8.9 µs. It adds disclosure D8 and conditions H5–H7 on every future 25G83 window: network time OFF before settle (the passwordless setter is installed), per-capture `timed` log attestation, and a first OFF-state comparison.
+- **D138-25G83-DESIGN-01**, the implementation spec for the issuing PR: a loader repair via a new `joulewise/calibration_dispositions.py`, a re-runnable promotion tool, the pin swap, the claim-window hold enforced in code, and the exact WRITE_SCOPE.
+- **CAP-COUNCIL-25G83-01**, on the estimator cap: route R, cap = 10× the largest measured work under a pre-registered rule, two re-issues. Its paired Opus refuter **DISSENTs with 4 blockers**, and cold addendum A1 is convened.
+- **S1-REGRESSION-01-A1:** SF-1 to SF-4 ruled. The S1 repair plan runs: step-0 reference suite on main, seat H landed (`1278f772`), seat P running.
+
+**SUCCESSOR'S NEXT EXACT ACTION** (read record 00 from its last item first):
+1. **D-138**, per the design ruling §8.2:
+   - (a) land the records on main (this bookkeeping PR);
+   - (b) the lead writes the issuance text (D1–D8, H1, H5–H7) and commits it;
+   - (c) the census run with the default moved in memory;
+   - (d) launch the one implementation seat;
+   - then §9 steps 1–11, including the mandatory old-epoch replay (§10 item 2).
+2. **Cap:** harvest addendum A1 and apply it. Ed items (registration approval, two names, the #416 reading) are batched into one email.
+3. **S1:** harvest seat P, then step 2 (merge P+H, checks 3/4/5/7), then seats A–D.
+
 **▶▶ ACTIVATION 77b1bee2 — 11:36 → ≈17:35 PDT 09-27 (Opus 5.5; NOTHING ARMED):** [Record 00](docs/process_traces/2026-09-27-activation-77b1bee2/00-activation-record.md) items 1–47+, on branch `docs/2026-09-27-77b1bee2`.
 
 **MERGED today:**
