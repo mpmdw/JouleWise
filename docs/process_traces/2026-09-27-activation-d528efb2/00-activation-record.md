@@ -178,3 +178,17 @@ Launched by the watchdog at 17:36:30 PDT (attempt 124) after a usage back-off; t
     - WALLCLOCK-STEP-SOURCE-01 discharged (cause found);
     - 281 + 5 − 1 = 285; `tests.test_gen_state` OK.
 67. **NETWORK-TIME-OFF-ENFORCE-01 scout** (Sol high; [report](70-ntp-enforce-scout/report.md)) mapped H5/H6 across every 25G83 capture route. **Critical gap:** calibration ledger rows finalize BEFORE the window-wide H6 verdict exists, so the attestation must be designed to act at finalization or refuse admission afterwards. That is a design point for the lane's brief (next session).
+68. **ADDENDUM: D138-25G83-DESIGN-01-A1 ISSUED** (cold Fable, [31](11-d138-design/31-addendum-ruling.md)).
+    - **The hold was open.** The only thing stopping a passing result was an unrelated counting defect, which the judge confirmed by execution.
+    - **Cure R-1..R-5:** issue and register the new file but **R7 stays the default until H1 lifts**. The loader returns a held file only to a caller stating a non-claim purpose, and a held file can never be the default. The judge's scratch build turned both refuters' routes into refusals while keeping the non-claim route-R capture path open.
+    - **Also in the same change:**
+      - fix the doubling-trigger defect;
+      - S2: the tool verifies cited digests, the log, D8 and §7.4 (P6);
+      - S3: exact new `required_verification`, `transaction` and `hold_enforcement` strings;
+      - N1 (L10), N2 (P7), N4, N5, N7;
+      - restore the tests re-pointed for the moved default;
+      - new `tests/test_claim_hold_routes.py` (HR-*) and DT-1..DT-5.
+    - **Old-epoch replay:** met by identity, since the default does not move. The attempt-2 commands are re-run at main and at the fix head and must be byte-identical. The attempt-2 seat's STOP was the correct reading; the lead's contrary reading (item 49) was wrong and is not relied on. A restated condition applies to the later default-moving transaction.
+    - The pedagogy factual flags are adopted.
+    - Revised gate: records on main → fix seat → RED record → re-hash and independent replay → old-epoch replay → whole suite → mutation → two fresh refuters (a hold route still means STOP) → pedagogy → cold final pass → merge → post-merge checks.
+69. **Fix round 2 started.** The records branch was merged into the D-138 branch (`ea92badc`). The lead set the three S3 strings in the issuance-text builder (`6ed6c1d5`; text sha256 `fea34546…`). **Fix-round-2 seat launched** (Sol 6.0 xhigh, 3 h timeout, the addendum's exact §8.2 scope; [brief](50-d138-issuance-seat/02-fix2-brief.txt)). It regenerates the bytes with the tool and prepares the RED record against `325d9f77`.
