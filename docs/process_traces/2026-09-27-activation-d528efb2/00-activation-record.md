@@ -233,3 +233,17 @@ Launched by the watchdog at 17:36:30 PDT (attempt 124) after a usage back-off; t
     - Plus nits (N-3, a pre-existing test-flag gap).
     - **Escalation:** the hold has now failed twice with the same signature (round 1: two routes; round 2: one route plus S-1/S-4). Under rule 11 and the standing escalation trigger, the next spend is a CONSULT, not fix round 3. One focused design consult follows, then a cold ruling. Question: close the hold by construction, e.g. epoch-keyed and enforced at the authentication primitive.
 81. **Second pedagogy pass (Opus): PEDAGOGY: FIX** ([findings](50-d138-issuance-seat/refuters/pedagogy-pass-2.md)): 5 MAJOR (§4.2 misstates the missing-file refusal; "ordinary capture" and "close that night" not built; the D-185 validator gloss omits the refusing rule; terms used before their definitions) and 20 MINOR, each with exact replacement text. All first-pass items were either applied or reasoned in CHANGES.md. These go into the final writer pass after the hold redesign. **Consult HOLD-BY-CONSTRUCTION-01 seats** (Sol xhigh, Astra high) are running ([charge](12-hold-consult/00-consult-charge.md)).
+82. **RULING: HOLD-BY-CONSTRUCTION-01 ISSUED** (cold Fable; [21](12-hold-consult/21-coldgate-fable-ruling.md); seats Sol xhigh and Astra high in `12-hold-consult/`).
+    - **The hold is keyed to the operating-system BUILD:** one table in a new dependency-free module `joulewise/claim_hold.py`.
+    - **Enforced where authority is created** (G1/G2 on the file side) **and spent:** S1 bracket evaluation, S2 the go receipt in `_authenticate_pack_launch_go`, S3 the manual claim campaign in `run_campaign.py`, plus an identity seam in `validate_powermetrics_fiducial.py`.
+    - **The `allow_claim_held` keyword is deleted.** Non-claim work goes through the derivation night, a go receipt marked not claim-eligible, or a read-only inspection function.
+    - A census test fails on any new reader of calibration files or of the protected functions.
+    - The promotion tool's deletion gaps are fixed now; the four R7-freeze mutants are closed as a test gap; replay item (vi) is restated.
+    - **This is the last round: if a fresh refuter finds a route, D-138 stops for good and goes to the owner with costed options.**
+    - The judge could execute nothing (its shell was unavailable), so the lead's prototype census and the refuters carry the verification.
+    - **Flag for the cap council:** the cap transaction appears to need a re-issue of R7 at 25F84 under the new estimator bytes to serve as the default.
+83. **Lead steps before fix round 3:**
+    - (1) The records were merged into the D-138 branch (`2a7f7dea`).
+    - (4) The issuance text now carries the exact `hold_enforcement` sentence of §4.5 item 4, and `transaction` cites the ruling (`5decbe6b`; text sha256 `8d6a9c74…`).
+    - (2) §4.4 search: the repository holds no pin of `scripts/run_campaign.py` at main (`e31cffe7…`). The search of the custody and launch material, and the check for `validate_powermetrics_fiducial.py`, are still running.
+    - (3) The census prototype (S2 + S3 + the new module) is being built by a Sol seat in the scratch worktree `JouleWise-wt-holdproto-d528efb2`. The lead then runs the whole suite at build 25G83.
