@@ -28,9 +28,8 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Iterable, Mapping, Sequence
 
 from joulewise import clock_reference as _clock_reference
-from joulewise.calibration_bracketing import (
-    CLAIM_HELD_ACCEPTANCE_IDS as _CLAIM_HELD_ACCEPTANCE_IDS,
-)
+from joulewise.calibration_bracketing import claim_hold_for_acceptance_id
+from joulewise.claim_hold import claim_hold_for_os_build, machine_os_build
 from joulewise.identity_pins import (
     IDENTITY_PIN_PROJECTION_RECEIPT_SCHEMA,
     IDENTITY_PIN_PROJECTION_REASON_CODES,
@@ -6208,16 +6207,24 @@ def _issued_d079(tree: Mapping[str, Any]) -> bool:
         return False
     if policy.get("selection") != "issued_d116_artifact_only":
         return False
+    declared = set()
     issued = policy.get("issued")
+    if issued is not None:
+        if not isinstance(issued, str):
+            return False
+        declared.add(issued)
     nested = policy.get("issued_acceptance")
-    if issued is None and isinstance(nested, Mapping):
-        issued = nested.get("acceptance_id")
-    if issued is None:
-        issued = policy.get("issued_artifact_id")
-    # Retained D-079 generations keep their issued route. The new 25G83
-    # generation is issued but held by H1, so its pack requires the successor
-    # row, which the evidence author refuses until the hold is ruled closed.
-    return issued in _ISSUED_D079_IDS and issued not in _CLAIM_HELD_ACCEPTANCE_IDS
+    if isinstance(nested, Mapping) and nested.get("acceptance_id") is not None:
+        if not isinstance(nested["acceptance_id"], str):
+            return False
+        declared.add(nested["acceptance_id"])
+    flat = policy.get("issued_artifact_id")
+    if flat is not None:
+        if not isinstance(flat, str):
+            return False
+        declared.add(flat)
+    return (len(declared) == 1 and next(iter(declared)) in _ISSUED_D079_IDS
+            and claim_hold_for_acceptance_id(next(iter(declared))) is None)
 
 
 def _evidence_directories(pack_root: Path, custody_pack_root: Path) -> tuple[tuple[str, Path], ...]:
@@ -10117,6 +10124,10 @@ def _authenticate_pack_launch_go(
                 raise _go_invalid(f"authorization.{key}")
         if authorization["attempt_id"] != f"{plan['plan_id']}/{binding['attempt_ordinal']}":
             raise _go_invalid("authorization.attempt_id")
+        if authorization["claim_eligible"] and require_current_boot:
+            hold = claim_hold_for_os_build(machine_os_build())
+            if hold is not None:
+                raise _go_invalid("claim_hold: " + hold)
         if authorization["pack_sha256"] != go["pack_sha256"]:
             raise _go_invalid("authorization.pack_sha256")
         if authorization["permitted_chain_sha256"] != go["window_chain_sha256"]:

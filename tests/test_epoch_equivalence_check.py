@@ -74,7 +74,11 @@ class EpochEquivalenceCheckTest(unittest.TestCase):
 
     def test_cli_default_is_frozen_to_r7(self):
         from joulewise.calibration_bracketing import ANCHOR_V3_R7_ACCEPTANCE_BOUND_PATH
-        args = checker.build_parser().parse_args(["--session-id", "x", "--out", "out"])
+        from joulewise.calibration_bracketing import ANCHOR_V3_R6_ACCEPTANCE_ID, ANCHOR_V3_R6_ACCEPTANCE_BOUND_PATH
+        with mock.patch.object(checker, "ACTIVE_ACCEPTANCE_ID", ANCHOR_V3_R6_ACCEPTANCE_ID, create=True), mock.patch.object(
+            checker, "DEFAULT_ACCEPTANCE_BOUND_PATH", ANCHOR_V3_R6_ACCEPTANCE_BOUND_PATH, create=True
+        ):
+            args = checker.build_parser().parse_args(["--session-id", "x", "--out", "out"])
         self.assertEqual(args.acceptance, ANCHOR_V3_R7_ACCEPTANCE_BOUND_PATH)
         self.assertEqual(checker.reference_envelope(args.acceptance)["acceptance_id"],
                          "d079_calibration_acceptance_v2_n17_r7")

@@ -17,6 +17,7 @@ from types import MappingProxyType
 from typing import Any, Mapping, Sequence
 
 from joulewise.authentication_io import read_authentication_input
+from joulewise.claim_hold import claim_hold_for_os_build
 from joulewise import calibration_bracketing as acceptance_module
 from joulewise.calibration_bracketing import EPOCH_CONTINUATION_REGISTRY
 from joulewise.calibration_ledger import (
@@ -209,6 +210,8 @@ def authenticate_epoch_continuation(
     for field, item in epoch.items():
         _require(type(item) is type(artifact["identity_epoch"][field]) and item not in (None, ""), f"continued_identity_epoch.{field}")
     _require(epoch != artifact["identity_epoch"], "continued_identity_epoch_unchanged")
+    _require(claim_hold_for_os_build(epoch.get("os_build")) is None,
+             "continued_identity_epoch_claim_held")
     ruling = value["ruling"]
     _require(ruling["channel"] == "directive issue 316" and ruling["authority"] == "owner", "ruling")
     _require(date.fromisoformat(ruling["d102_addendum_date"]).isoformat() == ruling["d102_addendum_date"], "ruling.d102_addendum_date")

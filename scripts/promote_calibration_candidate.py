@@ -97,25 +97,41 @@ def _validate_text(text: dict[str, Any], candidate: dict[str, Any]) -> None:
     record = text["issuance_record"]
     if not isinstance(record, dict):
         raise ValueError("issuance record missing")
+    def complete_citation(value: Any, digest_field: str = "file_sha256") -> bool:
+        return (isinstance(value, dict)
+                and isinstance(value.get("relative_path"), str)
+                and bool(value["relative_path"])
+                and isinstance(value.get(digest_field), str)
+                and bool(value[digest_field]))
+
     source = record.get("source_candidate")
-    if not isinstance(source, dict) or source.get("file_sha256") != CANDIDATE_SHA256 or source.get("derivation_sha256") != candidate["derivation_sha256"]:
+    if not complete_citation(source) or source.get("file_sha256") != CANDIDATE_SHA256 or source.get("derivation_sha256") != candidate["derivation_sha256"]:
         raise ValueError("issuance record source candidate mismatch")
     disclosures = record.get("disclosures")
     if not isinstance(disclosures, list) or len(disclosures) < 8 or [item.get("id") for item in disclosures if isinstance(item, dict)] != [f"D{n}" for n in range(1, len(disclosures) + 1)] or any(not isinstance(item.get("text"), str) or not item["text"] for item in disclosures if isinstance(item, dict)):
         raise ValueError("issuance disclosures D1..D8 missing or unordered")
     holds = record.get("holds")
-    if not isinstance(holds, list) or "H1" not in [item.get("id") for item in holds if isinstance(item, dict)]:
-        raise ValueError("H1 missing")
+    if (not isinstance(holds, list) or
+            not {"H1", "H5", "H6", "H7"} <= {
+                item.get("id") for item in holds
+                if isinstance(item, dict) and isinstance(item.get("text"), str) and item["text"]
+            }):
+        raise ValueError("H1 H5 H6 H7 holds or text missing")
     rulings = record.get("rulings")
     if not isinstance(rulings, list) or [item.get("id") for item in rulings if isinstance(item, dict)] != list(RULING_IDS) or any(
-        not isinstance(item.get("relative_path"), str)
+        not complete_citation(item)
         or re.fullmatch(r"[0-9a-f]{64}", item.get("file_sha256", "")) is None
-        for item in rulings if isinstance(item, dict)
+        for item in rulings
     ):
         raise ValueError("ruling digests missing")
     provenance = text["network_time_provenance"]
     if not isinstance(provenance, dict) or provenance.get("disclosure_id") != "D8":
         raise ValueError("network time provenance missing D8")
+    source_rulings = provenance.get("source_rulings")
+    if (not isinstance(source_rulings, list) or not source_rulings
+            or any(not complete_citation(item) for item in source_rulings)
+            or not complete_citation(provenance.get("preserved_log"), "plain_text_sha256")):
+        raise ValueError("network time citations incomplete")
     _verify_cited_files(text)
     preserved_log = provenance.get("preserved_log")
     if not isinstance(preserved_log, dict):

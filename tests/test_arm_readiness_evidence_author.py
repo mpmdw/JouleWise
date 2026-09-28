@@ -372,7 +372,8 @@ class ArmReadinessEvidenceAuthorTests(unittest.TestCase):
             successor, clock_route="DIRECT", successor_acceptance=not readiness._issued_d079(tree)), "REQUIRED")
         with self.assertRaisesRegex(EvidenceAuthoringError, "no ratified successor-acceptance"):
             evidence._derive_acceptance_successor(None)
-        with mock.patch.dict(readiness._CLAIM_HELD_ACCEPTANCE_IDS, {}, clear=True):
+        from joulewise.claim_hold import CLAIM_HELD_OS_BUILDS
+        with mock.patch.dict(CLAIM_HELD_OS_BUILDS, {}, clear=True):
             self.assertTrue(readiness._issued_d079(tree))
             self.assertEqual(readiness.applicability_for_row(
                 successor, clock_route="DIRECT", successor_acceptance=not readiness._issued_d079(tree)), "NOT_APPLICABLE")
@@ -386,7 +387,8 @@ class ArmReadinessEvidenceAuthorTests(unittest.TestCase):
     def test_h_t3_registry_and_admission_sets_match(self) -> None:
         from joulewise.calibration_bracketing import ISSUED_ACCEPTANCE_REGISTRY
         self.assertTrue(set(ISSUED_ACCEPTANCE_REGISTRY) <= readiness._ISSUED_D079_IDS)
-        self.assertTrue(set(readiness._CLAIM_HELD_ACCEPTANCE_IDS) <= set(ISSUED_ACCEPTANCE_REGISTRY))
+        from joulewise.calibration_bracketing import REGISTERED_GENERATION_OS_BUILD
+        self.assertEqual(set(REGISTERED_GENERATION_OS_BUILD), set(ISSUED_ACCEPTANCE_REGISTRY))
 
     maxDiff = None
 

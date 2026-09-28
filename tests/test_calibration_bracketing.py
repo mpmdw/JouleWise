@@ -71,6 +71,7 @@ from joulewise.calibration_bracketing import (
     evaluate_calibration_bracket as _evaluate_calibration_bracket,
     issued_calibration_allowance_projection,
     load_calibration_acceptance_bound,
+    inspect_acceptance_without_claim_authority,
     load_calibration_candidate,
     validate_calibration_bracket_binding,
 )
@@ -2999,16 +3000,14 @@ class DoublingTriggerDispositionTests(unittest.TestCase):
     def setUp(self):
         import joulewise.calibration_bracketing as bracket_module
         self.bracket = bracket_module
-        kwargs = ({"allow_claim_held": True}
-                  if hasattr(bracket_module, "CLAIM_HELD_ACCEPTANCE_IDS") else {})
-        self.issued = bracket_module.load_calibration_acceptance_bound(
-            bracket_module.EPOCH_25G83_R1_ACCEPTANCE_BOUND_PATH, **kwargs)
+        self.issued = bracket_module.inspect_acceptance_without_claim_authority(
+            bracket_module.EPOCH_25G83_R1_ACCEPTANCE_BOUND_PATH).artifact
         self.assertIsNotNone(self.issued)
         self.identity = dict(self.issued["identity_epoch"])
 
     def evaluate(self, count, *, artifact=None, identity=None, explicit=True):
         from tests.test_claim_hold_routes import synthetic_bracket
-        hold = getattr(self.bracket, "CLAIM_HELD_ACCEPTANCE_IDS", {})
+        from joulewise.claim_hold import CLAIM_HELD_OS_BUILDS as hold
         with patch.dict(hold, {}, clear=True):
             return synthetic_bracket(
                 artifact or self.issued, identity or self.identity, count,
@@ -3346,10 +3345,9 @@ class GenerationKeyedIssuanceValidationTests(unittest.TestCase):
                 )
                 if acceptance_id == EPOCH_25G83_R1_ACCEPTANCE_ID:
                     self.assertIsNone(load_calibration_acceptance_bound(path))
-                artifact = load_calibration_acceptance_bound(
-                    path,
-                    allow_claim_held=acceptance_id == EPOCH_25G83_R1_ACCEPTANCE_ID,
-                )
+                artifact = (inspect_acceptance_without_claim_authority(path).artifact
+                            if acceptance_id == EPOCH_25G83_R1_ACCEPTANCE_ID
+                            else load_calibration_acceptance_bound(path))
                 self.assertIsNotNone(artifact)
                 self.assertEqual(artifact["acceptance_id"], acceptance_id)
                 self.assertEqual(artifact, json.loads(raw))

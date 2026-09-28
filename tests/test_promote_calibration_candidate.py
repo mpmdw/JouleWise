@@ -78,6 +78,21 @@ class PromotionTests(unittest.TestCase):
     def test_p5_generation_row_matches_code(self):
         self.assertEqual(generation_row_for_registry(self.issued["registered_generation_row"]), bracket._D102_GENERATION_DERIVATIONS[bracket.EPOCH_25G83_R1_ACCEPTANCE_ID])
 
+    def test_p8_citations_and_all_four_holds_are_complete(self):
+        issuance = json.loads(self.issuance_raw)
+        edits = (
+            lambda t: t["issuance_record"]["source_candidate"].pop("relative_path"),
+            lambda t: t["issuance_record"]["rulings"][0].pop("relative_path"),
+            lambda t: t["network_time_provenance"]["source_rulings"][0].pop("file_sha256"),
+            lambda t: t["network_time_provenance"]["preserved_log"].pop("relative_path"),
+            lambda t: t["issuance_record"]["holds"][1].__setitem__("text", ""),
+        )
+        for edit in edits:
+            text = copy.deepcopy(issuance)
+            edit(text)
+            with self.subTest(edit=edit), self.assertRaises(ValueError):
+                promote.promote(self.candidate_raw, json.dumps(text).encode())
+
     def test_p6_cited_evidence_and_disclosure_mutations_refuse(self):
         issuance = json.loads(self.issuance_raw)
         mutations = []

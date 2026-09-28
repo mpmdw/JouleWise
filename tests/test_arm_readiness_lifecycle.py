@@ -894,6 +894,8 @@ class ArmReadinessLifecycleTests(unittest.TestCase):
         with mock.patch.object(
             launch_window, "_install_handoff"
         ), mock.patch.object(
+            readiness, "machine_os_build", return_value="25F84"
+        ), mock.patch.object(
             readiness,
             "_attested_launch_artifact_references",
             return_value=self.launch_artifact_references(args.launch_manifest),

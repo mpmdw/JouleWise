@@ -8986,6 +8986,15 @@ def main(argv: list[str] | None = None) -> int:
             return run_derive_neg8_drift_bound(args)
         if args.whole_window_verdict:
             return run_whole_window_verdict(args)
+        if not args.dry_run:
+            from joulewise.claim_hold import claim_hold_for_os_build, machine_os_build
+            policy = load_campaign_policy(args.campaign_policy)
+            if (policy.idle_admission_extension is not None
+                    and policy.idle_admission_extension.claim_bearing):
+                hold = claim_hold_for_os_build(machine_os_build())
+                if hold is not None:
+                    print(hold, file=sys.stderr)
+                    return 2
         return run_campaign(args)
     except (LaunchLineageError, SupersessionRecorderError) as exc:
         print(f"error: {exc.reason_code}: {exc}", file=sys.stderr)

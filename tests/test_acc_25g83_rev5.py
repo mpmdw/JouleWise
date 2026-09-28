@@ -17,6 +17,7 @@ from unittest.mock import patch
 from scripts import issue_calibration_acceptance_generation as issuer
 from scripts import sim_acc_25g83_rev5 as simulation
 from joulewise import calibration_bracketing as bracketing
+from joulewise.claim_hold import CLAIM_HELD_OS_BUILDS
 from joulewise.calibration_ledger import load_calibration_ledger_snapshot
 from tests.fixtures.epoch_bootstrap import build as build_module
 from tests.fixtures.epoch_bootstrap.build import Slot, add_session, build_derivation_ledger, write_verdict_record
@@ -207,8 +208,11 @@ class RevisionFiveTests(unittest.TestCase):
                     issuer._prepare_candidate(args(superseded))
                 wrong_predecessor = args(sealed)
                 wrong_predecessor.predecessor_acceptance = R6
-                with self.assertRaisesRegex(issuer.PrepareRefusal, "requires r7 predecessor"):
-                    issuer._prepare_candidate(wrong_predecessor)
+                with patch.object(issuer, "ACTIVE_ACCEPTANCE_ID", bracketing.ANCHOR_V3_R6_ACCEPTANCE_ID), patch.object(
+                    issuer, "DEFAULT_ACCEPTANCE_BOUND_PATH", R6
+                ):
+                    with self.assertRaisesRegex(issuer.PrepareRefusal, "requires r7 predecessor"):
+                        issuer._prepare_candidate(wrong_predecessor)
                 registry.write_text("[]\n")
                 # An empty registry now refuses on its digest (§4.6); pinned to
                 # its own digest it still shows the archived rows trip A-7.
@@ -243,6 +247,8 @@ class RevisionFiveTests(unittest.TestCase):
                 {issued["acceptance_id"]: {"file_sha256": "e" * 64}},
             ), patch.object(
                 bracketing, "load_calibration_acceptance_bound", return_value=issued
+            ), patch.dict(
+                CLAIM_HELD_OS_BUILDS, {}, clear=True,
             ):
                 bracket, _ = bracketing.evaluate_calibration_bracket(
                     [], window_start_s=100, window_end_s=110, bindings=bindings,
@@ -424,21 +430,26 @@ class RevisionFiveTests(unittest.TestCase):
 
     def test_revision_five_predecessor_default_and_simulation_are_frozen_to_r7(self) -> None:
         from joulewise.calibration_bracketing import ANCHOR_V3_R7_ACCEPTANCE_BOUND_PATH
-        args = issuer.build_parser().parse_args([
+        with patch.object(issuer, "ACTIVE_ACCEPTANCE_ID", bracketing.ANCHOR_V3_R6_ACCEPTANCE_ID), patch.object(
+            issuer, "DEFAULT_ACCEPTANCE_BOUND_PATH", R6
+        ), patch.object(simulation, "ACTIVE_ACCEPTANCE_ID", bracketing.ANCHOR_V3_R6_ACCEPTANCE_ID, create=True), patch.object(
+            simulation, "DEFAULT_ACCEPTANCE_BOUND_PATH", R6, create=True
+        ):
+            args = issuer.build_parser().parse_args([
             "prepare-candidate", "--ledger", "ledger", "--head-pin", "pin",
             "--preregistration", "registration", "--preregistration-sha256", "a" * 64,
             "--registration-session-id", "w1",
             "--d125-ruling", "ruling", "--out", "out",
-        ])
-        self.assertEqual(args.predecessor_acceptance, ANCHOR_V3_R7_ACCEPTANCE_BOUND_PATH)
-        output = io.StringIO()
-        with patch("sys.argv", ["sim_acc_25g83_rev5.py", "--trials", "1"]), patch.object(
-            simulation, "run", return_value=[]
-        ), patch.object(
-            simulation, "load_calibration_acceptance_bound",
-            wraps=bracketing.load_calibration_acceptance_bound,
-        ) as load, redirect_stdout(output):
-            simulation.main()
+            ])
+            self.assertEqual(args.predecessor_acceptance, ANCHOR_V3_R7_ACCEPTANCE_BOUND_PATH)
+            output = io.StringIO()
+            with patch("sys.argv", ["sim_acc_25g83_rev5.py", "--trials", "1"]), patch.object(
+                simulation, "run", return_value=[]
+            ), patch.object(
+                simulation, "load_calibration_acceptance_bound",
+                wraps=bracketing.load_calibration_acceptance_bound,
+            ) as load, redirect_stdout(output):
+                simulation.main()
         load.assert_called_once_with(ANCHOR_V3_R7_ACCEPTANCE_BOUND_PATH)
         self.assertEqual(json.loads(output.getvalue())["reference"], "d079_calibration_acceptance_v2_n17_r7")
 

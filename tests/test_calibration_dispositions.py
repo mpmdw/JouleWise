@@ -44,8 +44,10 @@ class DispositionTests(unittest.TestCase):
         self.assertEqual(parsed, expected)
 
     def test_l1_issued_loads(self):
-        self.assertIsNotNone(bracket.load_calibration_acceptance_bound(
-            bracket.EPOCH_25G83_R1_ACCEPTANCE_BOUND_PATH, allow_claim_held=True))
+        self.assertIsNone(bracket.load_calibration_acceptance_bound(
+            bracket.EPOCH_25G83_R1_ACCEPTANCE_BOUND_PATH))
+        self.assertIsNotNone(bracket.inspect_acceptance_without_claim_authority(
+            bracket.EPOCH_25G83_R1_ACCEPTANCE_BOUND_PATH))
 
     def test_l2_unlisted_foreign_valid_refuses(self):
         value = self.bound()
@@ -175,8 +177,13 @@ class DispositionTests(unittest.TestCase):
 
         with patch.object(builtins, "open", guarded_open), patch.object(os, "open", guarded_os_open), patch.object(Path, "read_bytes", guarded_read_bytes):
             for acceptance_id, row in bracket.ISSUED_ACCEPTANCE_REGISTRY.items():
-                self.assertIsNotNone(bracket.load_calibration_acceptance_bound(
-                    row["path"], allow_claim_held=True), acceptance_id)
+                self.assertIsNotNone(bracket.inspect_acceptance_without_claim_authority(
+                    row["path"]), acceptance_id)
+                if acceptance_id == bracket.EPOCH_25G83_R1_ACCEPTANCE_ID:
+                    self.assertIsNone(bracket.load_calibration_acceptance_bound(row["path"]))
+                else:
+                    self.assertIsNotNone(bracket.load_calibration_acceptance_bound(
+                        row["path"]), acceptance_id)
 
 
 if __name__ == "__main__":

@@ -1891,6 +1891,8 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     args = parser.parse_args(argv)
+    if args.identity_epoch_json_for_test is not None and not args.sampler_direct_for_test:
+        parser.error("identity epoch test input requires --sampler-direct-for-test")
     if args.battery_probe_fixture_for_test is not None and (
         not args.sampler_direct_for_test or args.time_scale_for_test == 1
     ):

@@ -17,6 +17,7 @@ from types import MappingProxyType
 from typing import Any, Literal, Mapping, Sequence
 
 from joulewise.authentication_io import read_authentication_input
+from joulewise.claim_hold import claim_hold_for_os_build
 from joulewise.calibration_dispositions import (
     decisions_disposing, disposed_content_ids_for,
 )
@@ -149,7 +150,7 @@ EPOCH_25G83_R1_ACCEPTANCE_BOUND_PATH = (
 )
 EPOCH_25G83_R1_ACCEPTANCE_ID = "d079_calibration_acceptance_v2_n12_25g83_r1"
 EPOCH_25G83_R1_ACCEPTANCE_BOUND_SHA256 = (
-    "d6de84b854a4c5d7f6d73dfde2ae0f14d71a483355c7289a36882e0dfcccd5ea"
+    "d7076c78ddab564c9b7eefa9a24b658bdbbdd29b685373de7cb66cf48c565c2e"
 )
 # Multi-generation registry.  Authentication is indexed by the artifact's own
 # `acceptance_id`, so a caller cannot present one generation's bytes under
@@ -209,17 +210,30 @@ ISSUED_ACCEPTANCE_REGISTRY: dict[str, dict[str, Any]] = {
 # Issuance is a later governed transaction. A candidate file never adds an
 # epoch merely by existing on disk; this registry must pin its issued bytes.
 EPOCH_CONTINUATION_REGISTRY: dict[str, dict[str, Any]] = {}
+REGISTERED_GENERATION_OS_BUILD: dict[str, str] = {
+    PREDECESSOR_ACCEPTANCE_ID: "25F84",
+    SUCCESSOR_ACCEPTANCE_ID: "25F84",
+    ANCHOR_V3_ACCEPTANCE_ID: "25F84",
+    ANCHOR_V3_R4_ACCEPTANCE_ID: "25F84",
+    ANCHOR_V3_R5_ACCEPTANCE_ID: "25F84",
+    ANCHOR_V3_R6_ACCEPTANCE_ID: "25F84",
+    ANCHOR_V3_R7_ACCEPTANCE_ID: "25F84",
+    EPOCH_25G83_R1_ACCEPTANCE_ID: "25G83",
+}
+
+
+def claim_hold_for_acceptance_id(acceptance_id: object) -> str | None:
+    """Return the build hold for a registered generation, failing closed."""
+    if not isinstance(acceptance_id, str):
+        return claim_hold_for_os_build(None)
+    return claim_hold_for_os_build(REGISTERED_GENERATION_OS_BUILD.get(acceptance_id))
+
+
 # The LIVE surface: what production loads when no artifact is named.
 ACTIVE_ACCEPTANCE_ID = ANCHOR_V3_R7_ACCEPTANCE_ID
 DEFAULT_ACCEPTANCE_BOUND_PATH = ANCHOR_V3_R7_ACCEPTANCE_BOUND_PATH
-# Issued calibrations that may not yet back any claim. Each entry names its
-# hold. The loader hides a held file from every caller that does not state a
-# non-claim purpose, and a held file can never be the default.
-CLAIM_HELD_ACCEPTANCE_IDS: dict[str, str] = {
-    EPOCH_25G83_R1_ACCEPTANCE_ID:
-    "H1-25G83-CAP-CADENCE (SCI-25G83-CANDIDATE-01-A1 §5.3)",
-}
-if ACTIVE_ACCEPTANCE_ID in CLAIM_HELD_ACCEPTANCE_IDS:
+if (claim_hold_for_acceptance_id(ACTIVE_ACCEPTANCE_ID) is not None
+        or ISSUED_ACCEPTANCE_REGISTRY[ACTIVE_ACCEPTANCE_ID]["path"] != DEFAULT_ACCEPTANCE_BOUND_PATH):
     raise RuntimeError("the default calibration acceptance is claim-held")
 # Authenticates the retained ``schema_fixture_unissued`` genesis bytes; this is
 # not the digest of ``DEFAULT_ACCEPTANCE_BOUND_PATH``.
@@ -587,7 +601,7 @@ def _registered_generation_row_is_complete(generation: Any, *, revision_five: bo
     )
 
 
-def acceptance_generation_operatives(
+def _registered_operatives_unchecked(
     acceptance_id: str,
     *,
     acceptance: Mapping[str, Any] | None = None,
@@ -623,6 +637,17 @@ def acceptance_generation_operatives(
                 f"acceptance_id {acceptance_id!r}"
             )
     return MappingProxyType(operatives)
+
+
+def acceptance_generation_operatives(
+    acceptance_id: str,
+    *,
+    acceptance: Mapping[str, Any] | None = None,
+) -> Mapping[str, str] | None:
+    """Return operatives only for a generation whose build is unheld."""
+    if claim_hold_for_acceptance_id(acceptance_id) is not None:
+        return None
+    return _registered_operatives_unchecked(acceptance_id, acceptance=acceptance)
 
 
 def acceptance_bracket_screen_s(
@@ -840,7 +865,9 @@ def _valid_acceptance_bound(value: Any) -> bool:
     if generation is None or not _registered_generation_row_is_complete(generation, revision_five=revision_five):
         return False
     expected_n = generation["corpus_n"]
-    operative_values = generation["operatives"]
+    operative_values = _registered_operatives_unchecked(value.get("acceptance_id"))
+    if operative_values is None:
+        return False
     prefix_mode = generation["prior_prefix_mode"]
     registered_epoch_catalog_ids = set(generation["epoch_catalog_ids"])
     # The TARGET epoch is the catalog entry that equals the artifact's own
@@ -1196,14 +1223,8 @@ def _valid_acceptance_bound(value: Any) -> bool:
 
 def load_calibration_acceptance_bound(
     path: Path = DEFAULT_ACCEPTANCE_BOUND_PATH,
-    *,
-    allow_claim_held: bool = False,
 ) -> dict[str, Any] | None:
-    """Load the file-pinned D-102 acceptance artifact fail-closed.
-
-    A claim-held generation is returned only to a caller that states a
-    non-claim purpose with ``allow_claim_held=True``.
-    """
+    """Load the file-pinned D-102 acceptance artifact fail-closed."""
 
     try:
         raw = read_authentication_input(
@@ -1211,17 +1232,10 @@ def load_calibration_acceptance_bound(
         )
     except OSError:
         return None
-    artifact = _acceptance_bound_from_authenticated_bytes(raw)
-    if (
-        artifact is not None
-        and artifact.get("acceptance_id") in CLAIM_HELD_ACCEPTANCE_IDS
-        and not allow_claim_held
-    ):
-        return None
-    return artifact
+    return _acceptance_bound_from_authenticated_bytes(raw)
 
 
-def _acceptance_bound_from_authenticated_bytes(
+def _authenticate_acceptance_bytes(
     raw: bytes,
 ) -> dict[str, Any] | None:
     """Parse acceptance bytes only when their role-indexed pin authenticates."""
@@ -1256,6 +1270,11 @@ def _acceptance_bound_from_authenticated_bytes(
         expected_sha256: str | None = GENESIS_FIXTURE_ACCEPTANCE_SHA256
     elif role == "issued":
         registered = ISSUED_ACCEPTANCE_REGISTRY.get(value.get("acceptance_id"))
+        epoch = value.get("identity_epoch")
+        if (registered is None or not isinstance(epoch, Mapping)
+                or REGISTERED_GENERATION_OS_BUILD.get(value.get("acceptance_id"))
+                != epoch.get("os_build")):
+            return None
         expected_sha256 = registered["file_sha256"] if registered else None
     else:
         expected_sha256 = None
@@ -1264,6 +1283,37 @@ def _acceptance_bound_from_authenticated_bytes(
     if not _valid_acceptance_bound(value):
         return None
     return dict(value)
+
+
+def _acceptance_bound_from_authenticated_bytes(raw: bytes) -> dict[str, Any] | None:
+    """Authenticate bytes and refuse authority for a held build."""
+    artifact = _authenticate_acceptance_bytes(raw)
+    if (artifact is not None and
+            claim_hold_for_os_build(artifact["identity_epoch"]["os_build"]) is not None):
+        return None
+    return artifact
+
+
+@dataclass(frozen=True)
+class AcceptanceInspection:
+    artifact: dict[str, Any]
+    claim_hold: str | None
+    file_sha256: str
+
+
+def inspect_acceptance_without_claim_authority(path: Path) -> AcceptanceInspection | None:
+    """Inspect pinned bytes for governance without granting claim authority."""
+    try:
+        raw = read_authentication_input(path, grammar="json", label="calibration acceptance artifact")
+    except OSError:
+        return None
+    artifact = _authenticate_acceptance_bytes(raw)
+    if artifact is None:
+        return None
+    return AcceptanceInspection(
+        artifact, claim_hold_for_os_build(artifact["identity_epoch"]["os_build"]),
+        hashlib.sha256(raw).hexdigest(),
+    )
 
 
 def issued_calibration_allowance_projection(
@@ -2105,7 +2155,7 @@ def evaluate_calibration_bracket(
             else acceptance_bound.get("acceptance_id")
             if isinstance(acceptance_bound, Mapping) else None
         )
-        hold_name = CLAIM_HELD_ACCEPTANCE_IDS.get(requested_id)
+        hold_name = claim_hold_for_acceptance_id(requested_id)
         freshness = {"status": "stale", "reason": (
             "acceptance_artifact_claim_held" if hold_name
             else "acceptance_artifact_missing_or_invalid"
@@ -2271,6 +2321,12 @@ def evaluate_calibration_bracket(
     if stale_fields:
         if continuation_refusals:
             result["acceptance"]["freshness"]["reason"] = "calibration_epoch_continuation_invalid"
+        return result, ("calibration_acceptance_bound_stale",)
+    if (observed_hold := claim_hold_for_os_build(observed_identity.get("os_build"))) is not None:
+        result["acceptance"]["artifact"]["claim_eligible"] = False
+        result["acceptance"]["freshness"] = {
+            "status": "stale", "reason": "observed_epoch_claim_held", "hold": observed_hold,
+        }
         return result, ("calibration_acceptance_bound_stale",)
     observations_by_attempt = ledger_snapshot.observation_by_attempt
     finalized_session_ids = {
@@ -2876,6 +2932,7 @@ def calibration_bracket_for_bundles(
 __all__ = [
     "ACCEPTANCE_BOUND_SCHEMA",
     "ACCEPTANCE_EVALUATION_SCHEMA",
+    "AcceptanceInspection",
     "BRACKET_BINDING_SCHEMA",
     "BRACKET_SCHEMA",
     "CalibrationCandidate",
@@ -2886,6 +2943,7 @@ __all__ = [
     "calibration_bracket_for_bundles",
     "discover_calibration_candidates",
     "evaluate_calibration_bracket",
+    "inspect_acceptance_without_claim_authority",
     "load_calibration_acceptance_bound",
     "load_calibration_candidate",
     "validate_calibration_bracket_binding",
