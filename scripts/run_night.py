@@ -604,6 +604,17 @@ def _complete_chain_launch_failure(descriptor: int, error: OSError) -> str:
     return launch_error
 
 
+def _complete_chain_never_launched(descriptor: int) -> None:
+    try:
+        _write_all(descriptor, _json_bytes({
+            "pid": None, "pgid": None, "epoch_s": time.time(),
+            "popen_attempted": False,
+            "launch_error": "never_launched: network_time_off_unproved",
+        }))
+    finally:
+        os.close(descriptor)
+
+
 def _chain_environment(plan: NightPlan, night_dir: Path) -> dict[str, str]:
     # ARM-side fail-closed point of the bench replay (cold gate #3 ruling 10
     # Q7; brief D6).  The bench driver sets EVIDENCE_POWER_RECORDER_REPLAY in
@@ -3004,7 +3015,7 @@ def run_night(
 ) -> int:
     recovery = network_time_window.recover_network_time(
         marker_path=network_time_window.RESTORE_PENDING_PATH,
-        process_group_absent=_probe_group_absent)
+        capture_proof=_recovery_capture_proof)
     probes = make_probes()
     bind_start_epoch, bind_start_monotonic = time.time(), time.monotonic()
     initial_probe, initial_refusal = agent_census(probes)
@@ -3264,7 +3275,8 @@ def run_night(
 
     try:
         off = network_time_window.set_network_time_off(
-            custody_root, plan.plan_id, marker_path=network_time_window.RESTORE_PENDING_PATH)
+            custody_root, plan.plan_id, marker_path=network_time_window.RESTORE_PENDING_PATH,
+            measurement_root=plan.measurement_root, chain_path=plan.chain_path)
     except (OSError, ValueError) as error:
         try:
             pending = json.loads(network_time_window.RESTORE_PENDING_PATH.read_bytes())
@@ -3273,7 +3285,7 @@ def run_night(
                     custody_root, plan.plan_id, marker_path=network_time_window.RESTORE_PENDING_PATH)
         except Exception:
             pass
-        os.close(claim_descriptor)
+        _complete_chain_never_launched(claim_descriptor)
         _record_chain_exit(night_dir, None, launch_failed=True)
         _write_standard_refusal_result(custody_root, night_dir, plan,
             _CODES["refused_network_time_off_unproved"],
@@ -3289,7 +3301,7 @@ def run_night(
                 custody_root, plan.plan_id, marker_path=network_time_window.RESTORE_PENDING_PATH)
         except Exception:
             pass
-        os.close(claim_descriptor)
+        _complete_chain_never_launched(claim_descriptor)
         _record_chain_exit(night_dir, None, launch_failed=True)
         _write_standard_refusal_result(custody_root, night_dir, plan,
             _CODES["refused_network_time_off_unproved"],
@@ -3312,8 +3324,25 @@ def run_night(
             )
         )
     finally:
-        # No query or ON beside a chain whose process group may still record.
+        # Each authorization reads fresh process evidence after the chain.
+        capture_proven = False
         if termination_proven:
+            if (night_dir / "evidence_processes.jsonl").exists():
+                _evidence_cleanup_error(plan, night_dir)
+            never_launched = _chain_never_launched(night_dir)
+            if never_launched:
+                capture_proven, proof_evidence = True, {"never_launched": True}
+            else:
+                pgid = _read_started_pgid(night_dir / "chain.started")
+                try:
+                    marker = json.loads(network_time_window.RESTORE_PENDING_PATH.read_bytes())
+                except (OSError, ValueError, TypeError):
+                    marker = {"_invalid": "restore marker unreadable"}
+                capture_proven, proof_evidence = _prove_capture_absent(marker, pgid, night_dir)
+            if not capture_proven:
+                abort = _refusal_mapping(_CODES["chain_alive"],
+                    "capture process absence could not be proved", proof_evidence)
+        if termination_proven and capture_proven:
             try:
                 network_time_window.run_window_query(night_dir, who="driver")
             except Exception as error:
@@ -3322,16 +3351,22 @@ def run_night(
                 except Exception:
                     pass
             finally:
-                try:
-                    on = network_time_window.set_network_time_on(
-                        custody_root, plan.plan_id, marker_path=network_time_window.RESTORE_PENDING_PATH)
-                    if on["exit_code"] != 0:
-                        _append_log(custody_root, "network-time ON restore failed")
-                except Exception as error:
+                if not never_launched:
+                    capture_proven, proof_evidence = _prove_capture_absent(marker, pgid, night_dir)
+                    if not capture_proven:
+                        abort = _refusal_mapping(_CODES["chain_alive"],
+                            "capture process absence could not be proved before ON", proof_evidence)
+                if capture_proven:
                     try:
-                        _append_log(custody_root, f"network-time ON receipt failed: {error}")
-                    except Exception:
-                        pass
+                        on = network_time_window.set_network_time_on(
+                            custody_root, plan.plan_id, marker_path=network_time_window.RESTORE_PENDING_PATH)
+                        if on["exit_code"] != 0:
+                            _append_log(custody_root, "network-time ON restore failed")
+                    except Exception as error:
+                        try:
+                            _append_log(custody_root, f"network-time ON receipt failed: {error}")
+                        except Exception:
+                            pass
 
     report = {
         "facts": {"plan_id": plan.plan_id, "receipt_class": plan.receipt_class,
@@ -3368,9 +3403,8 @@ def run_night(
                     str(abort["detail"]),
                     abort["evidence"],
                 )
-            refused = (
-                abort_reason == _CODES["chain_launch_failed"] or not termination_proven
-            )
+            refused = (abort_reason in {_CODES["chain_launch_failed"], _CODES["chain_alive"]}
+                       or not termination_proven)
             verdict = "REFUSED" if refused else "ABORTED"
             base_exit_code = EXIT_REFUSED if refused else EXIT_ABORTED
             aborted_reason = abort_reason
@@ -3431,7 +3465,7 @@ def run_night(
             report=report,
             courier_bin_substitution=courier_substitution,
         )
-    return _finish_reporting(
+    finished = _finish_reporting(
         custody_root,
         night_dir,
         plan,
@@ -3441,6 +3475,7 @@ def run_night(
         report=report,
         courier_bin_substitution=courier_substitution,
     )
+    return EXIT_REFUSED if not capture_proven else finished
 
 
 def _read_started_pgid(path: Path) -> int | None:
@@ -3454,10 +3489,23 @@ def _read_started_pgid(path: Path) -> int | None:
     return pgid
 
 
+def _chain_never_launched(night_dir: Path) -> bool:
+    try:
+        started = json.loads((night_dir / "chain.started").read_bytes())
+        exited = json.loads((night_dir / "chain.exited").read_bytes())
+        return (isinstance(started, dict) and isinstance(exited, dict)
+            and started.get("pid") is None and started.get("pgid") is None
+            and (started.get("popen_attempted") is False
+                 or isinstance(started.get("launch_error"), str) and bool(started["launch_error"]))
+            and exited.get("launch_failed") is True)
+    except (OSError, ValueError, TypeError):
+        return False
+
+
 def dead_man(plan_path: Path, *, courier_bin: Path | None = None) -> int:
     network_time_window.recover_network_time(
         marker_path=network_time_window.RESTORE_PENDING_PATH,
-        process_group_absent=_probe_group_absent)
+        capture_proof=_recovery_capture_proof)
     try:
         plan = _load_plan(plan_path)
     except (OSError, ValueError, TypeError, PlanError) as error:
@@ -3544,7 +3592,7 @@ def dead_man(plan_path: Path, *, courier_bin: Path | None = None) -> int:
     # here may only now be queried and restored.
     network_time_window.recover_network_time(
         marker_path=network_time_window.RESTORE_PENDING_PATH,
-        process_group_absent=_probe_group_absent)
+        capture_proof=_recovery_capture_proof)
 
     probes = make_probes()
     probe, census_refusal = agent_census(probes)
@@ -3695,6 +3743,144 @@ def _attribute_pids(
 
 def _probe_group_absent(pgid: int, timeout_s: float = 1) -> bool:
     return _group_census(pgid, timeout_s)[0]
+
+
+CAPTURE_SAMPLER_NAMES = frozenset({"powermetrics"})
+
+
+def _process_snapshot(timeout_s: float) -> tuple[int, str, str, int]:
+    """Replaceable OS boundary for the one machine-wide capture sweep."""
+    process = subprocess.Popen(
+        ["/bin/ps", "-axww", "-o", "pid=,ppid=,command="],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+    )
+    try:
+        stdout, stderr = process.communicate(timeout=timeout_s)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.communicate()
+        raise
+    return process.returncode, stdout, stderr, process.pid
+
+
+def _capture_signature(command: str, paths: set[str]) -> bool:
+    words = command.split()
+    return (any(Path(word.strip("\"'")).name in CAPTURE_SAMPLER_NAMES for word in words)
+            or any(path in command for path in paths))
+
+
+def _capture_sweep(marker: dict[str, Any], timeout_s: float) -> tuple[bool, dict[str, Any]]:
+    paths: set[str] = set()
+    try:
+        if all(isinstance(marker.get(name), str) and marker[name]
+               for name in ("measurement_root", "custody_root", "chain_path")):
+            for name in ("measurement_root", "custody_root", "chain_path"):
+                path = marker[name]
+                paths.add(path)
+                resolved = marker.get(name + "_resolved")
+                paths.add(resolved if isinstance(resolved, str) and resolved
+                          else str(Path(path).resolve()))
+            written_custody = marker.get("custody_root_written")
+            if isinstance(written_custody, str) and written_custody:
+                paths.add(written_custody)
+    except (OSError, RuntimeError, ValueError) as error:
+        return False, {"check": "P3", "error": f"path resolution: {error}"}
+    try:
+        code, output, stderr, listing_pid = _process_snapshot(timeout_s)
+    except (OSError, subprocess.SubprocessError, ValueError, TypeError, AttributeError) as error:
+        return False, {"check": "P3", "error": f"{type(error).__name__}: {error}"}
+    if code != 0:
+        return False, {"check": "P3", "error": f"ps exit {code}: {stderr}"}
+    if not isinstance(output, str):
+        return False, {"check": "P3", "error": "process output was not text"}
+    rows: dict[int, tuple[int, str]] = {}
+    for line in output.splitlines():
+        fields = line.split(None, 2)
+        if len(fields) != 3 or not fields[0].isdigit() or not fields[1].isdigit() or not fields[2]:
+            return False, {"check": "P3", "error": f"unparsed process row: {line}"}
+        pid, ppid = int(fields[0]), int(fields[1])
+        if pid in rows:
+            return False, {"check": "P3", "error": f"duplicate pid: {pid}"}
+        rows[pid] = (ppid, fields[2])
+    if os.getpid() not in rows or listing_pid not in rows:
+        return False, {"check": "P3", "error": "process list omitted driver or listing child"}
+    excluded = {os.getpid(), listing_pid}
+    parent = os.getpid()
+    while parent in rows:
+        parent = rows[parent][0]
+        if parent <= 0 or parent in excluded:
+            break
+        excluded.add(parent)
+    matches = [{"pid": pid, "command": command} for pid, (_ppid, command) in rows.items()
+               if pid not in excluded and _capture_signature(command, paths)]
+    return not matches, {"check": "P3", "matches": matches}
+
+
+def _registry_groups(path: Path) -> set[int] | None:
+    try:
+        lines = path.read_text().splitlines()
+    except FileNotFoundError:
+        return set()
+    except (OSError, UnicodeError):
+        return None
+    try:
+        groups = set()
+        for line in lines:
+            row = json.loads(line)
+            pgid = row["pgid"]
+            if type(pgid) is not int or pgid <= 1:
+                return None
+            groups.add(pgid)
+        return groups
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+
+
+def _prove_capture_absent(marker: dict[str, Any], pgid: int | None,
+                          night_dir: Path) -> tuple[bool, dict[str, Any]]:
+    """Fresh P1, P2 and P3 proof, bounded by the existing five-second window."""
+    if not isinstance(marker, dict) or marker.get("_invalid"):
+        return False, {"check": "P3", "error": "restore marker unreadable"}
+    if pgid is None:
+        return False, {"check": "P1", "error": "chain group unknown"}
+    deadline = time.monotonic() + GROUP_CENSUS_WINDOW_S
+    while True:
+        remaining = max(.01, deadline - time.monotonic())
+        try:
+            p1, p1_lines = _group_census(pgid, min(1., remaining))
+        except Exception as error:
+            return False, {"check": "P1", "error": f"{type(error).__name__}: {error}"}
+        if not p1:
+            evidence = {"check": "P1", "pgid": pgid, "census": p1_lines}
+        else:
+            groups = _registry_groups(night_dir / "evidence_processes.jsonl")
+            if groups is None:
+                evidence = {"check": "P2", "error": "registry unreadable"}
+            else:
+                try:
+                    census = _group_census_batch(sorted(groups), min(1., remaining))
+                except Exception as error:
+                    return False, {"check": "P2", "error": f"{type(error).__name__}: {error}"}
+                unproved = {group: lines for group, (absent, lines) in census.items()
+                            if not absent}
+                if unproved or len(census) != len(groups):
+                    evidence = {"check": "P2", "groups": unproved,
+                                "error": "incomplete registry census" if len(census) != len(groups) else None}
+                else:
+                    try:
+                        clear, evidence = _capture_sweep(marker, min(1., remaining))
+                    except Exception as error:
+                        return False, {"check": "P3", "error": f"{type(error).__name__}: {error}"}
+                    if clear:
+                        return True, {"checks": ["P1", "P2", "P3"]}
+        if time.monotonic() >= deadline:
+            return False, evidence
+        time.sleep(min(GROUP_CENSUS_INTERVAL_S, max(.01, deadline - time.monotonic())))
+
+
+def _recovery_capture_proof(marker: dict[str, Any], pgid: int) -> tuple[bool, dict[str, Any]]:
+    return _prove_capture_absent(marker, pgid,
+                                 Path(marker["custody_root"]) / "night")
 
 
 def _stop_probe_group(process: subprocess.Popen[Any]) -> bool:

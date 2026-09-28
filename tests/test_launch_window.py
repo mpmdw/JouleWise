@@ -2253,6 +2253,7 @@ class PackNightLaunchBoundaryTests(unittest.TestCase):
              mock.patch.object(driver, "_finish_reporting", side_effect=lambda c, n, p, code, *a, **k: code), \
              mock.patch.object(driver, "observe_identity", return_value=Identity("LIVE", "fixture-start")), \
              mock.patch.object(driver, "_probe_group_absent", return_value=True), \
+             mock.patch.object(driver, "_prove_capture_absent", return_value=(True, {}), create=True), \
              mock.patch.object(driver.subprocess, "Popen", side_effect=spawn), \
              mock.patch.object(t0_evidence, "author_arm_readiness_evidence_t0", side_effect=author), \
              mock.patch.object(arm_readiness, "generate_arm_receipt", side_effect=mint_arm), \

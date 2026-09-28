@@ -37,7 +37,7 @@ OLD_SESSIONS = frozenset({
 OLD_IDLE_PLANS = frozenset()
 _STAMP = re.compile(r"^(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d\.\d+)([+-]\d\d:?\d\d)\b")
 _TIMESTAMP_LIKE = re.compile(r"^\d{4}-\d\d-\d\d(?:[ T]|$)")
-_DATA_CATEGORY = re.compile(r"^\d{4}-\d\d-\d\d .+?\btimed\[\d+\]:? \[com\.apple\.timed:data\](?:\s|$)")
+_DATA_CATEGORY = re.compile(r"^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d\.\d+[+-]\d\d:?\d\d\s+(?:\S+\s+)?timed\[\d+\]:?\s+\[com\.apple\.timed:data\](?:\s|$)")
 
 
 def _run(argv, timeout=30):
@@ -93,15 +93,26 @@ def _command_receipt(argv, plan_id, *, runner=_run, boot_probe=None, clock=_cloc
             "plan_id": plan_id}
 
 
-def create_restore_marker(custody_root, plan_id, *, marker_path=RESTORE_PENDING_PATH):
-    _write_once(marker_path, _json_bytes({"custody_root": str(Path(custody_root).resolve()),
-                                          "plan_id": plan_id}))
+def create_restore_marker(custody_root, plan_id, *, measurement_root=None,
+                          chain_path=None, marker_path=RESTORE_PENDING_PATH):
+    marker = {"custody_root": str(Path(custody_root).resolve()), "plan_id": plan_id}
+    if measurement_root is not None and chain_path is not None:
+        for name, path in (("measurement_root", measurement_root),
+                           ("custody_root", custody_root), ("chain_path", chain_path)):
+            if name == "custody_root":
+                marker[name + "_written"] = str(path)
+            else:
+                marker[name] = str(path)
+            marker[name + "_resolved"] = str(Path(path).resolve())
+    _write_once(marker_path, _json_bytes(marker))
 
 
 def set_network_time_off(custody_root, plan_id, *, runner=_run, boot_probe=None,
-                         clock=_clock, marker_path=RESTORE_PENDING_PATH):
+                         clock=_clock, marker_path=RESTORE_PENDING_PATH,
+                         measurement_root=None, chain_path=None):
     """Create the recovery marker before touching the setting; save even failure."""
-    create_restore_marker(custody_root, plan_id, marker_path=marker_path)
+    create_restore_marker(custody_root, plan_id, measurement_root=measurement_root,
+                          chain_path=chain_path, marker_path=marker_path)
     receipt = _command_receipt(OFF_ARGV, plan_id, runner=runner,
                                boot_probe=boot_probe, clock=clock)
     _write_once(Path(custody_root) / "night/network_time/h5-off.json", _json_bytes(receipt))
@@ -339,29 +350,52 @@ def attestation_required(os_build, session_id):
 
 
 def recover_network_time(*, marker_path=RESTORE_PENDING_PATH, runner=_run,
-                         boot_probe=None, clock=_clock, process_group_absent=None):
+                         boot_probe=None, clock=_clock, process_group_absent=None,
+                         capture_proof=None):
     """Finish an interrupted night only after the chain is proved gone."""
     try:
         marker_path = Path(marker_path)
         if not marker_path.exists():
             return "nothing_pending"
         marker = json.loads(marker_path.read_bytes())
+        if not isinstance(marker, dict) or not isinstance(marker.get("custody_root"), str) or not isinstance(marker.get("plan_id"), str):
+            return "marker_invalid"
+    except (OSError, ValueError, TypeError, UnicodeError):
+        return "marker_invalid"
+    try:
         root = Path(marker["custody_root"])
         night_dir = root / "night"
         started_path = night_dir / "chain.started"
         exited_path = night_dir / "chain.exited"
         if started_path.exists():
-            started = json.loads(started_path.read_bytes())
+            try:
+                started = json.loads(started_path.read_bytes())
+            except (OSError, ValueError, TypeError, UnicodeError):
+                return "chain_unproved"
             pgid = started.get("pgid") if isinstance(started, dict) else None
             if isinstance(pgid, bool) or not isinstance(pgid, int) or pgid <= 0:
                 # The one safe exception is a documented failed Popen: no
                 # process was created, and the exit record says so.
-                exited = json.loads(exited_path.read_bytes()) if exited_path.exists() else None
-                if not (isinstance(started, dict) and started.get("launch_error")
-                        and isinstance(exited, dict) and exited.get("launch_failed") is True):
+                try:
+                    exited = json.loads(exited_path.read_bytes()) if exited_path.exists() else None
+                except (OSError, ValueError, TypeError, UnicodeError):
+                    exited = None
+                never_launched = (isinstance(started, dict)
+                    and started.get("pid") is None and started.get("pgid") is None
+                    and (started.get("popen_attempted") is False
+                         or isinstance(started.get("launch_error"), str) and bool(started["launch_error"]))
+                    and isinstance(exited, dict) and exited.get("launch_failed") is True)
+                if not never_launched:
                     return "chain_unproved"
-            elif process_group_absent is None or not process_group_absent(pgid):
-                return "chain_unproved"
+            else:
+                if capture_proof is None:
+                    return "chain_unproved"
+                try:
+                    proved, _evidence = capture_proof(marker, pgid)
+                except Exception:
+                    return "chain_unproved"
+                if not proved:
+                    return "chain_unproved"
         else:
             # The driver claims chain.started before OFF. A missing claim
             # cannot prove launch never happened.
@@ -373,6 +407,13 @@ def recover_network_time(*, marker_path=RESTORE_PENDING_PATH, runner=_run,
                                  boot_probe=boot_probe, clock=clock)
             except (OSError, ValueError, TypeError, KeyError, OverflowError, UnicodeError):
                 pass
+        if isinstance(pgid, int) and pgid > 0:
+            try:
+                proved, _evidence = capture_proof(marker, pgid)
+            except Exception:
+                return "chain_unproved"
+            if not proved:
+                return "chain_unproved"
         on_records = [window_dir / "h5-on.json", *sorted(window_dir.glob("h5-on-recovery-*.json"))]
         def restored(path):
             try:
@@ -392,7 +433,7 @@ def recover_network_time(*, marker_path=RESTORE_PENDING_PATH, runner=_run,
             return "restore_failed"
         return "restored"
     except Exception:
-        return "marker_invalid"
+        return "chain_unproved"
 
 
 def _evidence_stamps(path):

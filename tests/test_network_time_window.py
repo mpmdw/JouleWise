@@ -225,6 +225,26 @@ class WindowTests(unittest.TestCase):
         self.query(line(9900, "text", "quoted [com.apple.timed:data]"))
         self.assertEqual(self.verdict(), "network_time_unattested")
 
+    def test_witness_category_is_fixed_to_process_field(self):
+        # D3: each timestamped text line puts a fake timed/data pair later
+        # in the message. The actual category is still text.
+        for body in ("quoted timed[11]: [com.apple.timed:data]",
+                     "x timed[1] [com.apple.timed:data] y",
+                     "a b c timed[2]: [com.apple.timed:data]"):
+            with self.subTest(body=body):
+                self.query(line(9900, "text", body))
+                self.assertEqual(self.verdict(), "network_time_unattested")
+
+    def test_positional_category_matches_preserved_real_log_counts(self):
+        archive = (Path(__file__).resolve().parents[1] /
+            "docs/process_traces/2026-09-27-activation-d528efb2/40-sci-a2-network-time/evidence/"
+            "timed-full-20260926T0000-20260927T1840-PDT.syslog.txt.gz")
+        raw = gzip.decompress(archive.read_bytes())
+        self.assertEqual(sum(bool(nt._DATA_CATEGORY.match(value)) for value in raw.decode().splitlines()), 2040)
+        second = Path("/tmp/cg-ntpd-d528efb2/q2_utc.txt")
+        if second.exists():
+            self.assertEqual(sum(bool(nt._DATA_CATEGORY.match(value)) for value in second.read_text().splitlines()), 90)
+
     def test_off_exact_output_and_two_clock_lead(self):
         self.query(line(9900))
         self.assertEqual(self.verdict(), "clean")
@@ -284,12 +304,53 @@ class WindowTests(unittest.TestCase):
         started = self.root / "night/chain.started"
         started.write_text(json.dumps({"pgid": 123}))
         self.assertEqual(nt.recover_network_time(marker_path=self.marker, runner=self.runner,
-            boot_probe=lambda: "boot-1", process_group_absent=lambda pgid: False), "chain_unproved")
+            boot_probe=lambda: "boot-1", capture_proof=lambda marker, pgid: (False, {"check": "P1"})), "chain_unproved")
         self.assertNotIn(nt.ON_ARGV, self.runner.calls)
         self.assertEqual(nt.recover_network_time(marker_path=self.marker, runner=self.runner,
-            boot_probe=lambda: "boot-1", process_group_absent=lambda pgid: True), "restored")
+            boot_probe=lambda: "boot-1", capture_proof=lambda marker, pgid: (True, {})), "restored")
         self.assertFalse(self.marker.exists())
         self.assertTrue((self.window / "h5-on.json").exists())
+
+    def test_known_group_without_injected_capture_proof_refuses(self):
+        (self.root / "night/chain.started").write_text(json.dumps({"pgid": 123}))
+        self.assertEqual(nt.recover_network_time(marker_path=self.marker, runner=self.runner,
+            process_group_absent=lambda pgid: True), "chain_unproved")
+        self.assertNotIn(nt.ON_ARGV, self.runner.calls)
+
+    def test_recovery_reproves_before_on_after_query(self):
+        (self.root / "night/chain.started").write_text(json.dumps({"pgid": 123}))
+        answers = iter(((True, {}), (False, {"check": "P3"})))
+        self.assertEqual(nt.recover_network_time(marker_path=self.marker, runner=self.runner,
+            capture_proof=lambda marker, pgid: next(answers)), "chain_unproved")
+        self.assertNotIn(nt.ON_ARGV, self.runner.calls)
+        self.assertTrue(self.marker.exists())
+
+    def test_empty_start_claim_with_exit_record_still_refuses(self):
+        (self.root / "night/chain.started").write_text("")
+        self.assertEqual(nt.recover_network_time(marker_path=self.marker, runner=self.runner),
+                         "chain_unproved")
+        self.assertNotIn(nt.ON_ARGV, self.runner.calls)
+
+    def test_empty_start_claim_without_exit_record_still_refuses(self):
+        (self.root / "night/chain.started").write_text("")
+        (self.root / "night/chain.exited").unlink()
+        self.assertEqual(nt.recover_network_time(marker_path=self.marker, runner=self.runner),
+                         "chain_unproved")
+        self.assertNotIn(nt.ON_ARGV, self.runner.calls)
+
+    def test_restore_marker_has_written_and_resolved_night_paths(self):
+        other = self.root / "marker-with-paths.json"
+        chain = self.root / "chain.zsh"
+        chain.write_text("exit 0\n")
+        nt.create_restore_marker(self.root, "path-plan",
+            measurement_root=self.root, chain_path=chain, marker_path=other)
+        value = json.loads(other.read_text())
+        self.assertEqual(value["measurement_root"], str(self.root))
+        self.assertEqual(value["measurement_root_resolved"], str(self.root.resolve()))
+        self.assertEqual(value["custody_root_written"], str(self.root))
+        self.assertEqual(value["custody_root_resolved"], str(self.root.resolve()))
+        self.assertEqual(value["chain_path"], str(chain))
+        self.assertEqual(value["chain_path_resolved"], str(chain.resolve()))
 
     def test_exited_child_record_does_not_override_live_group(self):
         # Counterfactual: direct child exits leaving a capture descendant.
@@ -321,11 +382,11 @@ class WindowTests(unittest.TestCase):
         self.assertNotIn(nt.ON_ARGV, self.runner.calls)
         self.assertTrue(self.marker.exists())
 
-    def test_recovery_runner_exception_returns_marker_invalid_without_on(self):
+    def test_recovery_runner_exception_returns_chain_unproved_without_on(self):
         def broken(argv, timeout):
             raise RuntimeError("runner unavailable")
         self.assertEqual(nt.recover_network_time(marker_path=self.marker, runner=broken),
-                         "marker_invalid")
+                         "chain_unproved")
         self.assertTrue(self.marker.exists())
         self.assertEqual(nt.recover_network_time(marker_path=None), "marker_invalid")
 
