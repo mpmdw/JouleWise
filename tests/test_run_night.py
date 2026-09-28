@@ -30,6 +30,7 @@ from zoneinfo import ZoneInfo
 
 from joulewise.measurement_liveness import Identity
 from joulewise import calibration_ledger, night_gate, network_time_window
+REAL_NT_RECOVER = network_time_window.recover_network_time
 from joulewise.night_plan_writer import write_night_plan
 from tests.git_fixture import init_git_fixture
 from tests import battery_float_fixture
@@ -407,6 +408,11 @@ class NightDriverTests(unittest.TestCase):
 
     def setUp(self) -> None:
         self.driver = _load_driver()
+        # These fixture chains prove group behavior in dedicated group tests.
+        # Keep their ordinary return paths independent of the host's pgrep.
+        synthetic_group = mock.patch.object(self.driver, "_probe_group_absent", return_value=True)
+        synthetic_group.start()
+        self.addCleanup(synthetic_group.stop)
         self.temporary = tempfile.TemporaryDirectory()
         self.root = Path(self.temporary.name)
         identity_patch = mock.patch.object(
@@ -748,7 +754,8 @@ runpy.run_path(script, run_name='__main__')
 
     def test_network_time_route_refuses_real_night_until_consumer_lands(self):
         with mock.patch.object(network_time_window, "NETWORK_TIME_ENFORCED_KINDS", frozenset()), \
-             mock.patch.object(network_time_window, "set_network_time_off") as off:
+             mock.patch.object(network_time_window, "set_network_time_off",
+                               return_value={"exit_code": 0, "stdout": "setUsingNetworkTime: Off\n"}) as off:
             code, calls = self._run_night()
         self.assertEqual(code, self.driver.EXIT_REFUSED)
         self.assertEqual(calls, [])
@@ -756,6 +763,17 @@ runpy.run_path(script, run_name='__main__')
         self.assertFalse((self.custody / "night/chain.started").exists())
         refusal = json.loads((self.custody / "night/refusal.json").read_text())
         self.assertEqual(refusal["refusal"]["reason"], "night_refused_network_time_route_unenforced")
+
+    def test_pending_restore_states_write_registered_refusals_before_off(self):
+        for state, reason in (("chain_unproved", "night_chain_alive"),
+                              ("marker_invalid", "night_refused_network_time_marker_invalid")):
+            with self.subTest(state=state):
+                with mock.patch.object(network_time_window, "recover_network_time", return_value=state), \
+                     mock.patch.object(network_time_window, "set_network_time_off") as off:
+                    self.assertEqual(self.driver.run_night(self.plan_path), self.driver.EXIT_REFUSED)
+                off.assert_not_called()
+                self.assertEqual(json.loads((self.custody / "night/refusal.json").read_text())["refusal"]["reason"], reason)
+                (self.custody / "night/refusal.json").unlink()
 
     def test_network_time_off_wrong_output_refuses_and_attempts_on(self):
         with mock.patch.object(network_time_window, "set_network_time_off",
@@ -769,9 +787,59 @@ runpy.run_path(script, run_name='__main__')
         refusal = json.loads((self.custody / "night/refusal.json").read_text())
         self.assertEqual(refusal["refusal"]["reason"], "night_refused_network_time_off_unproved")
 
+    def test_malformed_off_return_attempts_restore_before_refusal(self):
+        with mock.patch.object(network_time_window, "set_network_time_off", return_value=[]), \
+             mock.patch.object(network_time_window, "set_network_time_on",
+                               return_value={"exit_code": 0}) as on:
+            self.assertEqual(self.driver.run_night(self.plan_path), self.driver.EXIT_REFUSED)
+        on.assert_called_once()
+        self.assertEqual(json.loads((self.custody / "night/refusal.json").read_text())["refusal"]["reason"],
+                         "night_refused_network_time_off_unproved")
+
+    def test_wrong_off_output_attempts_on_before_exit_record(self):
+        # Counterfactual: recording the failed launch raises. Production call:
+        # run_night's wrong-OFF-output branch still attempts ON first.
+        events = []
+        def record(*args, **kwargs):
+            events.append("record")
+            raise OSError("record failed")
+        with mock.patch.object(network_time_window, "set_network_time_off",
+                               return_value={"exit_code": 0, "stdout": "wrong\n"}), \
+             mock.patch.object(network_time_window, "set_network_time_on",
+                               side_effect=lambda *a, **k: events.append("on") or {"exit_code": 0}), \
+             mock.patch.object(self.driver, "_record_chain_exit", side_effect=record):
+            with self.assertRaisesRegex(OSError, "record failed"):
+                self.driver.run_night(self.plan_path)
+        self.assertEqual(events, ["on", "record"])
+
+    def test_raised_off_attempts_on_before_exit_record(self):
+        # Counterfactual: OFF published its pending marker, then failed to
+        # save a receipt. Production call: run_night's OFF exception branch.
+        marker = self.root / "pending-network-time.json"
+        events = []
+        def off(*args, **kwargs):
+            marker.write_text(json.dumps({"plan_id": "night-plan",
+                "custody_root": str(self.custody.resolve())}))
+            raise OSError("receipt failed")
+        def record(*args, **kwargs):
+            events.append("record")
+            raise OSError("record failed")
+        with mock.patch.object(network_time_window, "RESTORE_PENDING_PATH", marker), \
+             mock.patch.object(network_time_window, "set_network_time_off", side_effect=off), \
+             mock.patch.object(network_time_window, "set_network_time_on",
+                               side_effect=lambda *a, **k: events.append("on") or {"exit_code": 0}), \
+             mock.patch.object(self.driver, "_record_chain_exit", side_effect=record):
+            with self.assertRaisesRegex(OSError, "record failed"):
+                self.driver.run_night(self.plan_path)
+        self.assertEqual(events, ["on", "record"])
+
     def test_network_time_order_is_off_chain_query_on(self):
         events = []
         _, spawn = self._popen_recorder()
+        original_record = self.driver._write_result
+        def record(*args, **kwargs):
+            events.append("record")
+            return original_record(*args, **kwargs)
         def launch(*args, **kwargs):
             events.append("chain")
             return spawn(*args, **kwargs)
@@ -783,9 +851,139 @@ runpy.run_path(script, run_name='__main__')
              mock.patch.object(network_time_window, "set_network_time_on",
                                side_effect=lambda *a, **k: (events.append("on") or
                                    {"exit_code": 0})), \
+             mock.patch.object(self.driver, "_write_result", side_effect=record), \
              mock.patch.object(self.driver.subprocess, "Popen", launch):
             self.driver.run_night(self.plan_path)
-        self.assertEqual(events, ["off", "chain", "query", "on"])
+        self.assertEqual(events, ["off", "chain", "query", "on", "record"])
+
+    def test_direct_child_exit_with_live_descendant_never_queries_or_restores(self):
+        # Counterfactual: the chain's direct child exits while a descendant
+        # remains in its process group. Production call: run_night ->
+        # _run_chain_once, then its finally H6/H5 path.
+        marker = self.root / "pending-network-time.json"
+        events = []
+        _, spawn = self._popen_recorder()
+        def off(*args, **kwargs):
+            marker.write_text("pending")
+            events.append("off")
+            return {"exit_code": 0, "stdout": "setUsingNetworkTime: Off\n"}
+        with mock.patch.object(network_time_window, "RESTORE_PENDING_PATH", marker), \
+             mock.patch.object(network_time_window, "set_network_time_off", side_effect=off), \
+             mock.patch.object(network_time_window, "run_window_query", side_effect=lambda *a, **k: events.append("query")), \
+             mock.patch.object(network_time_window, "set_network_time_on", side_effect=lambda *a, **k: events.append("on")), \
+             mock.patch.object(self.driver, "_probe_group_absent", return_value=False), \
+             mock.patch.object(self.driver.subprocess, "Popen", side_effect=spawn):
+            code = self.driver.run_night(self.plan_path)
+        self.assertEqual(code, self.driver.EXIT_COURIER_FAILED)
+        self.assertEqual(events, ["off"])
+        self.assertTrue(marker.exists())
+        self.assertFalse((self.custody / "night/chain.exited").exists())
+        self.assertEqual(json.loads((self.custody / "night/refusal.json").read_text())["refusal"]["reason"],
+                         "night_chain_alive")
+
+    def test_query_failure_still_restores_after_proven_chain_end(self):
+        # Counterfactual: log command fails after the capture chain is gone.
+        # Production call: run_night's query/ON finally path.
+        _, spawn = self._popen_recorder()
+        with mock.patch.object(network_time_window, "run_window_query", side_effect=OSError("log failed")), \
+             mock.patch.object(network_time_window, "set_network_time_on",
+                               return_value={"exit_code": 0}) as on, \
+             mock.patch.object(self.driver.subprocess, "Popen", side_effect=spawn):
+            self.driver.run_night(self.plan_path)
+        on.assert_called_once()
+        self.assertTrue((self.custody / "night/chain.exited").exists())
+
+    def test_query_type_error_still_restores_after_proven_chain_end(self):
+        # Counterfactual: a malformed query receipt causes TypeError.
+        # Production call: run_night's H6/H5 finally path.
+        _, spawn = self._popen_recorder()
+        with mock.patch.object(network_time_window, "run_window_query", side_effect=TypeError("bad query")), \
+             mock.patch.object(network_time_window, "set_network_time_on",
+                               return_value={"exit_code": 0}) as on, \
+             mock.patch.object(self.driver.subprocess, "Popen", side_effect=spawn):
+            self.driver.run_night(self.plan_path)
+        on.assert_called_once()
+
+    def test_nonzero_chain_exit_still_queries_and_restores(self):
+        # Production call: run_night after a proved, nonzero chain exit.
+        _, spawn = self._popen_recorder(return_code=2)
+        with mock.patch.object(network_time_window, "run_window_query") as query, \
+             mock.patch.object(network_time_window, "set_network_time_on",
+                               return_value={"exit_code": 0}) as on, \
+             mock.patch.object(self.driver.subprocess, "Popen", side_effect=spawn):
+            self.driver.run_night(self.plan_path)
+        query.assert_called_once()
+        on.assert_called_once()
+        self.assertEqual(json.loads((self.custody / "night/result.json").read_text())["chain_exit_code"], 2)
+
+    def test_proved_census_abort_still_queries_and_restores(self):
+        # Production call: run_night after _run_chain_once proves teardown.
+        abort = {"reason": "night_aborted_agent_present", "detail": "agent seen", "evidence": {}}
+        with mock.patch.object(self.driver, "_run_chain_once", return_value=(-15, abort, 1, [], True)), \
+             mock.patch.object(network_time_window, "run_window_query") as query, \
+             mock.patch.object(network_time_window, "set_network_time_on",
+                               return_value={"exit_code": 0}) as on:
+            self.driver.run_night(self.plan_path)
+        query.assert_called_once()
+        on.assert_called_once()
+
+    def test_proved_deadline_abort_still_queries_and_restores(self):
+        abort = {"reason": "night_window_exceeded", "detail": "deadline", "evidence": {}}
+        with mock.patch.object(self.driver, "_run_chain_once", return_value=(-15, abort, 1, [], True)), \
+             mock.patch.object(network_time_window, "run_window_query") as query, \
+             mock.patch.object(network_time_window, "set_network_time_on",
+                               return_value={"exit_code": 0}) as on:
+            self.driver.run_night(self.plan_path)
+        query.assert_called_once()
+        on.assert_called_once()
+
+    def test_exception_after_off_keeps_marker_when_group_unproved(self):
+        # Counterfactual: an exception after the OFF receipt but before chain
+        # proof. Production call: run_night's H6/H5 finally path.
+        marker = self.root / "pending-network-time.json"
+        def off(*args, **kwargs):
+            marker.write_text("pending")
+            return {"exit_code": 0, "stdout": "setUsingNetworkTime: Off\n"}
+        with mock.patch.object(network_time_window, "RESTORE_PENDING_PATH", marker), \
+             mock.patch.object(network_time_window, "set_network_time_off", side_effect=off), \
+             mock.patch.object(self.driver, "_run_chain_once", side_effect=RuntimeError("chain unknown")), \
+             mock.patch.object(network_time_window, "run_window_query") as query, \
+             mock.patch.object(network_time_window, "set_network_time_on") as on:
+            with self.assertRaisesRegex(RuntimeError, "chain unknown"):
+                self.driver.run_night(self.plan_path)
+        query.assert_not_called()
+        on.assert_not_called()
+        self.assertTrue(marker.exists())
+
+    def test_raised_off_receipt_refuses_after_attempted_restore(self):
+        marker = self.root / "pending-network-time.json"
+        def off(*args, **kwargs):
+            marker.write_text(json.dumps({"plan_id": "night-plan",
+                "custody_root": str(self.custody.resolve())}))
+            raise OSError("receipt failed")
+        with mock.patch.object(network_time_window, "RESTORE_PENDING_PATH", marker), \
+             mock.patch.object(network_time_window, "set_network_time_off", side_effect=off), \
+             mock.patch.object(network_time_window, "set_network_time_on",
+                               return_value={"exit_code": 0}) as on:
+            self.assertEqual(self.driver.run_night(self.plan_path), self.driver.EXIT_REFUSED)
+        on.assert_called_once()
+        self.assertEqual(json.loads((self.custody / "night/refusal.json").read_text())["refusal"]["reason"],
+                         "night_refused_network_time_off_unproved")
+
+    def test_rehearsal_uses_off_query_on_lifecycle(self):
+        self._write_plan(receipt_class="REHEARSAL_STUB")
+        events = []
+        _, spawn = self._popen_recorder()
+        with mock.patch.object(network_time_window, "set_network_time_off",
+                               side_effect=lambda *a, **k: events.append("off") or
+                                   {"exit_code": 0, "stdout": "setUsingNetworkTime: Off\n"}), \
+             mock.patch.object(network_time_window, "run_window_query",
+                               side_effect=lambda *a, **k: events.append("query")), \
+             mock.patch.object(network_time_window, "set_network_time_on",
+                               side_effect=lambda *a, **k: events.append("on") or {"exit_code": 0}), \
+             mock.patch.object(self.driver.subprocess, "Popen", side_effect=spawn):
+            self.driver.run_night(self.plan_path, rehearsal=True)
+        self.assertEqual(events, ["off", "query", "on"])
 
     def test_dead_man_recovers_before_courier_sent_early_return(self):
         sent = self.custody / "night/courier.sent"
@@ -1292,13 +1490,14 @@ runpy.run_path(script, run_name='__main__')
             self.driver.time, "time", return_value=completion_epoch_s
         ), mock.patch.object(self.driver.os, "killpg") as completion_kill_group:
             completion_exit = self.driver.dead_man(self.plan_path)
-        self.assertEqual(completion_exit, self.driver.EXIT_GO)
-        exited = json.loads((night / "chain.exited").read_text())
-        self.assertIs(exited["launch_failed"], True)
-        self.driver.run_courier.assert_called_once()
+        self.assertEqual(completion_exit, self.driver.EXIT_REFUSED)
+        self.assertFalse((night / "chain.exited").exists())
+        self.assertEqual(json.loads((night / "refusal.json").read_text())["refusal"]["reason"],
+                         "night_chain_alive")
+        self.driver.run_courier.assert_not_called()
         completion_kill_group.assert_not_called()
 
-    def test_dead_man_couriers_after_an_empty_start_marker_without_killpg(self) -> None:
+    def test_dead_man_refuses_an_empty_start_marker_without_killpg(self) -> None:
         night = self.custody / "night"
         night.mkdir()
         (night / "chain.started").write_text("", encoding="utf-8")
@@ -1308,12 +1507,39 @@ runpy.run_path(script, run_name='__main__')
             self.driver.time, "time", return_value=completion_epoch_s
         ), mock.patch.object(self.driver.os, "killpg") as kill_group:
             exit_code = self.driver.dead_man(self.plan_path)
-        self.assertEqual(exit_code, self.driver.EXIT_GO)
-        exited = json.loads((night / "chain.exited").read_text())
-        self.assertIs(exited["launch_failed"], True)
-        self.assertEqual(exited["reaped_by"], "dead-man")
+        self.assertEqual(exit_code, self.driver.EXIT_REFUSED)
+        self.assertFalse((night / "chain.exited").exists())
+        self.assertEqual(json.loads((night / "refusal.json").read_text())["refusal"]["reason"],
+                         "night_chain_alive")
         kill_group.assert_not_called()
-        self.driver.run_courier.assert_called_once()
+        self.driver.run_courier.assert_not_called()
+
+    def test_dead_man_unknown_identity_keeps_restore_marker_and_never_runs_on(self):
+        # Counterfactual: driver died after Popen but before start identity
+        # publication. Production calls: dead_man -> recover_network_time,
+        # then the dead-man's own PGID decision.
+        night = self.custody / "night"
+        night.mkdir()
+        (night / "chain.started").write_text("{}")
+        marker = self.root / "pending-network-time.json"
+        marker.write_text(json.dumps({"custody_root": str(self.custody), "plan_id": "night-plan"}))
+        commands = []
+        def runner(argv, timeout):
+            commands.append(tuple(argv))
+            return subprocess.CompletedProcess(argv, 0, b"fixture\n", b"")
+        def recover(**kwargs):
+            return REAL_NT_RECOVER(marker_path=marker, runner=runner,
+                                   process_group_absent=lambda pgid: False)
+        plan = self.driver._load_plan(self.plan_path)
+        completion = plan.t0_epoch_s + plan.window_max_s + self.driver.COURIER_DEADLINE_S
+        with mock.patch.object(network_time_window, "recover_network_time", side_effect=recover), \
+             mock.patch.object(self.driver.time, "time", return_value=completion):
+            self.assertEqual(self.driver.dead_man(self.plan_path), self.driver.EXIT_REFUSED)
+        self.assertEqual(commands, [])
+        self.assertTrue(marker.exists())
+        self.assertFalse((night / "chain.exited").exists())
+        self.assertEqual(json.loads((night / "refusal.json").read_text())["refusal"]["reason"],
+                         "night_chain_alive")
 
     def test_dead_man_couriers_after_a_null_pgid_marker_without_killpg(self) -> None:
         night = self.custody / "night"
@@ -3368,6 +3594,9 @@ class PackNightProducerTests(unittest.TestCase):
         from joulewise import arm_readiness as readiness, arm_readiness_evidence_t0 as author
         self.readiness, self.author = readiness, author
         self.driver = _load_driver()
+        group_probe = mock.patch.object(self.driver, "_probe_group_absent", return_value=True)
+        group_probe.start()
+        self.addCleanup(group_probe.stop)
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name).resolve()

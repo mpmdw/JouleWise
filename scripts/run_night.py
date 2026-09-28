@@ -1003,6 +1003,11 @@ def _run_chain_once(
         if fired is not None:
             return exceeded(fired)
         exit_code = process.wait()
+        if not _probe_group_absent(pgid):
+            return (exit_code, _refusal_mapping(
+                _CODES["chain_alive"],
+                "direct child exited but process-group termination is unproved",
+                {"pgid": pgid}), census_count, census_hits, False)
         _record_chain_exit(night_dir, exit_code)
         return exit_code, None, census_count, census_hits, True
 
@@ -3000,8 +3005,6 @@ def run_night(
     recovery = network_time_window.recover_network_time(
         marker_path=network_time_window.RESTORE_PENDING_PATH,
         process_group_absent=_probe_group_absent)
-    if recovery in {"chain_unproved", "marker_invalid"}:
-        return EXIT_REFUSED
     probes = make_probes()
     bind_start_epoch, bind_start_monotonic = time.time(), time.monotonic()
     initial_probe, initial_refusal = agent_census(probes)
@@ -3015,6 +3018,12 @@ def run_night(
     custody_root = Path(plan.custody_root)
     night_dir = custody_root / "night"
     night_dir.mkdir(parents=True, exist_ok=True)
+    if recovery in {"chain_unproved", "marker_invalid"}:
+        _write_driver_refusal(
+            night_dir / "refusal.json", plan,
+            _CODES["chain_alive"] if recovery == "chain_unproved" else _CODES["refused_network_time_marker_invalid"],
+            "pending network-time restore refused: " + recovery)
+        return EXIT_REFUSED
     existing = _existing_record(night_dir, plan)
     if existing is not None:
         _write_rerun_refusal(night_dir, plan, existing)
@@ -3257,15 +3266,15 @@ def run_night(
         off = network_time_window.set_network_time_off(
             custody_root, plan.plan_id, marker_path=network_time_window.RESTORE_PENDING_PATH)
     except (OSError, ValueError) as error:
-        os.close(claim_descriptor)
-        _record_chain_exit(night_dir, None, launch_failed=True)
         try:
             pending = json.loads(network_time_window.RESTORE_PENDING_PATH.read_bytes())
             if pending.get("plan_id") == plan.plan_id and pending.get("custody_root") == str(custody_root.resolve()):
                 network_time_window.set_network_time_on(
                     custody_root, plan.plan_id, marker_path=network_time_window.RESTORE_PENDING_PATH)
-        except (OSError, ValueError, TypeError):
+        except Exception:
             pass
+        os.close(claim_descriptor)
+        _record_chain_exit(night_dir, None, launch_failed=True)
         _write_standard_refusal_result(custody_root, night_dir, plan,
             _CODES["refused_network_time_off_unproved"],
             f"OFF receipt could not be saved: {type(error).__name__}: {error}",
@@ -3273,18 +3282,20 @@ def run_night(
         return _finish_reporting(custody_root, night_dir, plan, EXIT_REFUSED,
             resolved_courier, deadman_epoch_s=deadman_epoch_s,
             courier_bin_substitution=courier_substitution)
-    if off["exit_code"] != 0 or off["stdout"] != "setUsingNetworkTime: Off\n":
-        os.close(claim_descriptor)
-        _record_chain_exit(night_dir, None, launch_failed=True)
+    if (not isinstance(off, dict) or off.get("exit_code") != 0
+            or off.get("stdout") != "setUsingNetworkTime: Off\n"):
         try:
             network_time_window.set_network_time_on(
                 custody_root, plan.plan_id, marker_path=network_time_window.RESTORE_PENDING_PATH)
-        except (OSError, ValueError):
+        except Exception:
             pass
+        os.close(claim_descriptor)
+        _record_chain_exit(night_dir, None, launch_failed=True)
         _write_standard_refusal_result(custody_root, night_dir, plan,
             _CODES["refused_network_time_off_unproved"],
             "network time OFF command did not return exit 0 and exact output",
-            started_epoch_s, started_monotonic_ns, evidence=off)
+            started_epoch_s, started_monotonic_ns,
+            evidence=off if isinstance(off, dict) else {"malformed_off_receipt": repr(off)})
         return _finish_reporting(custody_root, night_dir, plan, EXIT_REFUSED,
             resolved_courier, deadman_epoch_s=deadman_epoch_s,
             courier_bin_substitution=courier_substitution)
@@ -3302,18 +3313,25 @@ def run_night(
         )
     finally:
         # No query or ON beside a chain whose process group may still record.
-        if termination_proven or (night_dir / "chain.exited").exists():
+        if termination_proven:
             try:
                 network_time_window.run_window_query(night_dir, who="driver")
-            except (OSError, ValueError, KeyError) as error:
-                _append_log(custody_root, f"network-time query failed: {error}")
-            try:
-                on = network_time_window.set_network_time_on(
-                    custody_root, plan.plan_id, marker_path=network_time_window.RESTORE_PENDING_PATH)
-                if on["exit_code"] != 0:
-                    _append_log(custody_root, "network-time ON restore failed")
-            except (OSError, ValueError) as error:
-                _append_log(custody_root, f"network-time ON receipt failed: {error}")
+            except Exception as error:
+                try:
+                    _append_log(custody_root, f"network-time query failed: {error}")
+                except Exception:
+                    pass
+            finally:
+                try:
+                    on = network_time_window.set_network_time_on(
+                        custody_root, plan.plan_id, marker_path=network_time_window.RESTORE_PENDING_PATH)
+                    if on["exit_code"] != 0:
+                        _append_log(custody_root, "network-time ON restore failed")
+                except Exception as error:
+                    try:
+                        _append_log(custody_root, f"network-time ON receipt failed: {error}")
+                    except Exception:
+                        pass
 
     report = {
         "facts": {"plan_id": plan.plan_id, "receipt_class": plan.receipt_class,
@@ -3481,16 +3499,25 @@ def dead_man(plan_path: Path, *, courier_bin: Path | None = None) -> int:
     if started.exists() and not exited.exists():
         pgid = _read_started_pgid(started)
         if pgid is None:
-            _record_chain_exit(
-                night_dir,
-                None,
-                reaped_by="dead-man",
-                launch_failed=True,
-            )
-            _append_log(
-                custody_root,
-                "dead-man found no live process-group identity in chain.started",
-            )
+            try:
+                start_record = json.loads(started.read_bytes())
+            except (OSError, ValueError, TypeError):
+                start_record = None
+            launch_failed = (isinstance(start_record, dict)
+                and start_record.get("pid") is None
+                and start_record.get("pgid") is None
+                and isinstance(start_record.get("launch_error"), str)
+                and bool(start_record["launch_error"]))
+            if not launch_failed:
+                _write_driver_refusal(
+                    night_dir / "refusal.json", plan, _CODES["chain_alive"],
+                    "chain process-group identity is unknown; termination is unproved")
+                _append_log(custody_root,
+                    "dead-man could not prove chain termination from chain.started")
+                _durable_record(custody_root, night_dir, plan)
+                return EXIT_REFUSED
+            _record_chain_exit(night_dir, None, reaped_by="dead-man", launch_failed=True)
+            _append_log(custody_root, "dead-man confirmed chain launch failed")
         else:
             group_alive = True
             try:

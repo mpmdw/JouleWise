@@ -18,10 +18,6 @@ RETRY = {
     "arm_idle_interactive", "arm_notice_mismatch",
     "arm_watchdog_uncertain", "arm_transport",
 }
-NETWORK_TIME_COLD = {
-    "night_refused_network_time_off_unproved",
-    "night_refused_network_time_route_unenforced",
-}
 # Independent literals, not derived from the implementation or renderer.
 COLD = {
     "night_refused_agent_present", "night_refused_not_quiet", "night_refused_battery_float", "night_refused_bind_expired",
@@ -36,6 +32,9 @@ COLD = {
     "night_courier_running", "night_courier_unavailable",
     "night_plan_overruns_deadman", "night_record_exists",
     "night_calibration_refused", "night_window_exceeded",
+    "night_refused_network_time_off_unproved",
+    "night_refused_network_time_route_unenforced",
+    "night_refused_network_time_marker_invalid",
     # Cold gate QPE01-DAEMON-CONTAMINATION-01 ruling 10 Q2 (2026-09-23): the
     # two-consecutive-envelope machine-state abort.  It keeps the
     # registration's exclusion spelling so the refusal document and the
@@ -46,9 +45,10 @@ COLD = {
 
 
 class NetworkTimeRefusalTests(unittest.TestCase):
-    def test_both_network_time_refusals_are_cold_gates(self):
+    def test_network_time_refusals_are_cold_gates(self):
         for reason in ("night_refused_network_time_off_unproved",
-                       "night_refused_network_time_route_unenforced"):
+                       "night_refused_network_time_route_unenforced",
+                       "night_refused_network_time_marker_invalid"):
             with self.subTest(reason=reason):
                 self.assertIn(reason, night_gate.NIGHT_DRIVER_REASON_CODES)
                 self.assertEqual(arm_retry.classify_abort(reason), "cold_gate")
@@ -117,13 +117,13 @@ class ArmRetryTests(unittest.TestCase):
 
     def test_every_cold_assignment_is_explicit(self):
         self.assertEqual(set(arm_retry.COLD_GATE_CODES), COLD)
-        self.assertEqual(set(arm_retry.COLD_GATE_CODES) | NETWORK_TIME_COLD,
+        self.assertEqual(set(arm_retry.COLD_GATE_CODES),
                          night_gate.NIGHT_GATE_REASON_CODES | night_gate.NIGHT_DRIVER_REASON_CODES)
         self.assertEqual(set(arm_retry.INSTALLER_REFUSALS), INSTALLER)
         self.assertEqual(set(arm_retry.OTHER_REFUSALS), {"HOLD_CENSUS", "slot_refused"})
         self.assertFalse(RETRY & (COLD | INSTALLER | {"HOLD_CENSUS", "slot_refused"}))
-        self.assertEqual(set(arm_retry.DISPOSITIONS), RETRY | COLD | NETWORK_TIME_COLD | INSTALLER | {"HOLD_CENSUS", "slot_refused"})
-        for cause in COLD | NETWORK_TIME_COLD | INSTALLER | {"HOLD_CENSUS", "slot_refused"}:
+        self.assertEqual(set(arm_retry.DISPOSITIONS), RETRY | COLD | INSTALLER | {"HOLD_CENSUS", "slot_refused"})
+        for cause in COLD | INSTALLER | {"HOLD_CENSUS", "slot_refused"}:
             self.assertEqual(arm_retry.classify_abort(cause), "cold_gate", cause)
             self.assertEqual(arm_retry.DISPOSITIONS[cause], "cold_gate", cause)
 

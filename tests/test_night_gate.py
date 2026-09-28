@@ -1656,6 +1656,7 @@ class NightGateTests(unittest.TestCase):
                 "night_chain_launch_failed",
                 "night_refused_network_time_off_unproved",
                 "night_refused_network_time_route_unenforced",
+                "night_refused_network_time_marker_invalid",
                 "night_courier_running",
                 "night_courier_unavailable",
                 "night_plan_overruns_deadman",

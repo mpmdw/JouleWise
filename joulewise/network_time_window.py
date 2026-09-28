@@ -36,6 +36,8 @@ OLD_SESSIONS = frozenset({
 # Populated with sealed historic idle plan IDs when that consumer lands.
 OLD_IDLE_PLANS = frozenset()
 _STAMP = re.compile(r"^(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d\.\d+)([+-]\d\d:?\d\d)\b")
+_TIMESTAMP_LIKE = re.compile(r"^\d{4}-\d\d-\d\d(?:[ T]|$)")
+_DATA_CATEGORY = re.compile(r"^\d{4}-\d\d-\d\d .+?\btimed\[\d+\]:? \[com\.apple\.timed:data\](?:\s|$)")
 
 
 def _run(argv, timeout=30):
@@ -147,7 +149,12 @@ def run_window_query(night_dir, *, who="driver", runner=_run, boot_probe=None,
     window_dir = Path(night_dir) / "network_time"
     off_raw = (window_dir / "h5-off.json").read_bytes()
     off = json.loads(off_raw)
-    index = len(_query_records(window_dir)) + 1
+    # Raw output is published before its record. A crash in between leaves an
+    # orphaned raw file, which must remain immutable and cannot own the retry.
+    index = 1
+    while ((window_dir / f"h6-query-{index}.txt").exists()
+           or (window_dir / f"h6-window-{index}.json").exists()):
+        index += 1
     begun = clock()
     argv = query_argv(float(off["epoch_s"]), begun["epoch_s"])
     raw = None
@@ -191,7 +198,7 @@ def _placed_lines(raw):
                                            "%Y-%m-%d %H:%M:%S.%f%z").timestamp()
             except ValueError:
                 parent, valid = None, False
-        elif line[:1].isspace() and parent is not None:
+        elif parent is not None and not _TIMESTAMP_LIKE.match(line):
             pass
         else:
             parent, valid = None, False
@@ -228,6 +235,12 @@ def _read_off(window_dir):
     return json.loads(raw), hashlib.sha256(raw).hexdigest()
 
 
+def _is_data_line(line):
+    # The category must be the syslog category field, not quoted text in a
+    # payload or on a continuation line.
+    return bool(_DATA_CATEGORY.match(line))
+
+
 def _has_valid_run(window_dir):
     try:
         off, off_digest = _read_off(window_dir)
@@ -240,7 +253,8 @@ def _has_valid_run(window_dir):
                 argv = tuple(record["argv"])
                 start = datetime.strptime(record["start_arg"], "%Y-%m-%d %H:%M:%S%z").timestamp()
                 end = datetime.strptime(record["end_arg"], "%Y-%m-%d %H:%M:%S%z").timestamp()
-                if (hashlib.sha256(raw).hexdigest() == record["raw_sha256"]
+                if (isinstance(off, dict) and isinstance(record, dict)
+                        and hashlib.sha256(raw).hexdigest() == record["raw_sha256"]
                         and record["off_sha256"] == off_digest and record["exit_code"] == 0
                         and header and parsed and argv == (*LOG_PREFIX, "--start", record["start_arg"],
                                                             "--end", record["end_arg"])
@@ -248,7 +262,7 @@ def _has_valid_run(window_dir):
                         and start <= off["epoch_s"] - 3600
                         and end >= record["started"]["epoch_s"]
                         and record["boot_id"] == off["boot_id"] and off["boot_id"]
-                        and any("[com.apple.timed:data]" in line and epoch < off["epoch_s"]
+                        and any(_is_data_line(line) and epoch < off["epoch_s"]
                                 for epoch, line in lines)):
                     return True
             except (OSError, ValueError, TypeError, KeyError, OverflowError):
@@ -266,15 +280,21 @@ def capture_verdict(window_dir, first, last):
     except (KeyError, TypeError, ValueError, AttributeError):
         return "network_time_unattested", "invalid_capture_clock"
     try:
-        off, off_digest = _read_off(window_dir)
-    except (OSError, ValueError, TypeError):
+        off_raw = (window_dir / "h5-off.json").read_bytes()
+        off_digest = hashlib.sha256(off_raw).hexdigest()
+        try:
+            off = json.loads(off_raw)
+        except (ValueError, UnicodeError):
+            off = None
+    except OSError:
         return "network_time_unattested", "off_not_proved"
     valid_cover = False
     for path in _query_records(window_dir):
         try:
             record = json.loads(path.read_bytes())
             raw = (window_dir / path.name.replace("h6-window-", "h6-query-").replace(".json", ".txt")).read_bytes()
-            if (hashlib.sha256(raw).hexdigest() != record["raw_sha256"]
+            if (not isinstance(record, dict)
+                    or hashlib.sha256(raw).hexdigest() != record["raw_sha256"]
                     or record["off_sha256"] != off_digest):
                 continue
             placed, header, parsed = _placed_lines(raw)
@@ -288,11 +308,12 @@ def capture_verdict(window_dir, first, last):
                 continue
             start = datetime.strptime(record["start_arg"], "%Y-%m-%d %H:%M:%S%z").timestamp()
             end = datetime.strptime(record["end_arg"], "%Y-%m-%d %H:%M:%S%z").timestamp()
-            if (start != record["start_epoch_s"] or end != record["end_epoch_s"]
+            if (not isinstance(off, dict)
+                    or start != record["start_epoch_s"] or end != record["end_epoch_s"]
                     or start > float(off["epoch_s"]) - 3600
                     or end < float(record["started"]["epoch_s"])
                     or record["boot_id"] != off["boot_id"] or not off["boot_id"]
-                    or not any("[com.apple.timed:data]" in line and epoch < off["epoch_s"]
+                    or not any(_is_data_line(line) and epoch < off["epoch_s"]
                                for epoch, line in placed)):
                 continue
             if (record["started"]["epoch_s"] >= lw + 1
@@ -300,7 +321,7 @@ def capture_verdict(window_dir, first, last):
                 valid_cover = True
         except (OSError, ValueError, TypeError, KeyError, OverflowError):
             continue
-    if (off.get("argv") != list(OFF_ARGV) or off.get("exit_code") != 0
+    if (not isinstance(off, dict) or off.get("argv") != list(OFF_ARGV) or off.get("exit_code") != 0
             or off.get("stdout") != "setUsingNetworkTime: Off\n"):
         return "network_time_unattested", "off_not_proved"
     try:
@@ -320,28 +341,46 @@ def attestation_required(os_build, session_id):
 def recover_network_time(*, marker_path=RESTORE_PENDING_PATH, runner=_run,
                          boot_probe=None, clock=_clock, process_group_absent=None):
     """Finish an interrupted night only after the chain is proved gone."""
-    marker_path = Path(marker_path)
-    if not marker_path.exists():
-        return "nothing_pending"
     try:
+        marker_path = Path(marker_path)
+        if not marker_path.exists():
+            return "nothing_pending"
         marker = json.loads(marker_path.read_bytes())
         root = Path(marker["custody_root"])
         night_dir = root / "night"
-        if (night_dir / "chain.started").exists() and not (night_dir / "chain.exited").exists():
-            started = json.loads((night_dir / "chain.started").read_bytes())
-            pgid = started.get("pgid")
-            if not isinstance(pgid, int) or process_group_absent is None or not process_group_absent(pgid):
+        started_path = night_dir / "chain.started"
+        exited_path = night_dir / "chain.exited"
+        if started_path.exists():
+            started = json.loads(started_path.read_bytes())
+            pgid = started.get("pgid") if isinstance(started, dict) else None
+            if isinstance(pgid, bool) or not isinstance(pgid, int) or pgid <= 0:
+                # The one safe exception is a documented failed Popen: no
+                # process was created, and the exit record says so.
+                exited = json.loads(exited_path.read_bytes()) if exited_path.exists() else None
+                if not (isinstance(started, dict) and started.get("launch_error")
+                        and isinstance(exited, dict) and exited.get("launch_failed") is True):
+                    return "chain_unproved"
+            elif process_group_absent is None or not process_group_absent(pgid):
                 return "chain_unproved"
+        else:
+            # The driver claims chain.started before OFF. A missing claim
+            # cannot prove launch never happened.
+            return "chain_unproved"
         window_dir = night_dir / "network_time"
         if (window_dir / "h5-off.json").exists() and not _has_valid_run(window_dir):
             try:
                 run_window_query(night_dir, who="recovery", runner=runner,
                                  boot_probe=boot_probe, clock=clock)
-            except (OSError, ValueError, KeyError):
+            except (OSError, ValueError, TypeError, KeyError, OverflowError, UnicodeError):
                 pass
         on_records = [window_dir / "h5-on.json", *sorted(window_dir.glob("h5-on-recovery-*.json"))]
-        if any(path.exists() and json.loads(path.read_bytes()).get("exit_code") == 0
-               for path in on_records):
+        def restored(path):
+            try:
+                value = json.loads(path.read_bytes())
+                return isinstance(value, dict) and value.get("exit_code") == 0
+            except (OSError, ValueError, TypeError):
+                return False
+        if any(restored(path) for path in on_records):
             marker_path.unlink(missing_ok=True)
             return "restored"
         receipt = set_network_time_on(root, marker["plan_id"], runner=runner,
@@ -352,7 +391,7 @@ def recover_network_time(*, marker_path=RESTORE_PENDING_PATH, runner=_run,
             marker_path.unlink(missing_ok=True)
             return "restore_failed"
         return "restored"
-    except (OSError, ValueError, TypeError, KeyError):
+    except Exception:
         return "marker_invalid"
 
 
@@ -365,6 +404,18 @@ def _evidence_stamps(path):
         if isinstance(location, dict):
             return location
     raise ValueError("capture has no paired readings")
+
+
+def _estimator_offset_span(stamps):
+    """Mirror uncertainty_evidence._offset_envelope_s's unpadded span."""
+    order = ("pre_spawn", "first_parse", "sampling_started",
+             "sampling_stopped", "post_parse")
+    readings = [stamps[name] for name in order]
+    raw_lowers = [_number(s["epoch_s"]) - _number(s["monotonic_after_s"])
+                  for s in readings]
+    raw_uppers = [_number(s["epoch_s"]) - _number(s["monotonic_before_s"])
+                  for s in readings]
+    return max(raw_uppers) - min(raw_lowers)
 
 
 def main(argv=None):
@@ -386,19 +437,22 @@ def main(argv=None):
         if args.h6:
             row["flagged"] = verdict == "network_time_slew_attested"
         if args.h7:
-            fw, fm = _stamp(first)
-            lw, lm = _stamp(last)
+            evidence = json.loads(path.read_bytes())
+            span = _estimator_offset_span(stamps)
+            baseline = _number(evidence["clock_anchor"]["rate_fit_baseline_s"])
+            if baseline <= 0:
+                raise ValueError("invalid rate-fit baseline")
             try:
                 off, off_digest = _read_off(args.window_dir)
-                state = ("off" if off.get("argv") == list(OFF_ARGV)
+                state = ("off" if isinstance(off, dict) and off.get("argv") == list(OFF_ARGV)
                          and off.get("exit_code") == 0
                          and off.get("stdout") == "setUsingNetworkTime: Off\n"
                          else "unknown")
             except (OSError, ValueError, TypeError):
                 state, off_digest = "unknown", None
             row.update(state=state, h5_off_sha256=off_digest,
-                       standing_rate_ppm=((lw - fw) / (lm - fm) - 1) * 1e6,
-                       drift_term_s=(lw - fw) - (lm - fm))
+                       standing_rate_ppm=span / baseline * 1e6,
+                       drift_term_s=span)
         rows.append(row)
     rows.sort(key=lambda row: (row["verdict"] != "network_time_slew_attested", row["capture"]))
     for row in rows:

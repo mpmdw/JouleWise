@@ -238,6 +238,7 @@ NIGHT_DRIVER_REASON_CODES = frozenset(
         "night_chain_launch_failed",     # chain Popen failed after the once-only start claim
         "night_refused_network_time_off_unproved",  # OFF command or exact output not proved
         "night_refused_network_time_route_unenforced",  # capture consumer not installed
+        "night_refused_network_time_marker_invalid",  # pending restore marker cannot be read
         "night_courier_running",          # dead-man found a fresh courier lock owned by a live process
         "night_courier_unavailable",      # the stamped courier binary is missing or not executable
         "night_plan_overruns_deadman",   # t0 + window_max_s + courier deadline is not before the dead-man hour

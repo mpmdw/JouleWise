@@ -20,6 +20,7 @@ from unittest import mock
 from joulewise import arm_readiness
 from joulewise import arm_readiness_evidence_t0 as t0_evidence
 from joulewise import clock_reference
+from joulewise import network_time_window
 from joulewise.analysis_engine import inputs as analysis_inputs
 from joulewise import floor_extraction, whole_window
 from tests import test_arm_readiness as arm_readiness_tests
@@ -28,6 +29,27 @@ from tests.fixtures.arm_clock import coherent_clock_anchor
 
 
 REAL_GO_T0_AUTHENTICATOR = arm_readiness._authenticate_go_t0_evidence
+
+_network_time_patches = []
+
+
+def setUpModule():
+    for patch in (
+        mock.patch.object(network_time_window, "NETWORK_TIME_ENFORCED_KINDS",
+                          frozenset({"calibration", "quiet_predicate_evidence", "pack", "unknown"})),
+        mock.patch.object(network_time_window, "recover_network_time", return_value="nothing_pending"),
+        mock.patch.object(network_time_window, "set_network_time_off",
+                          return_value={"exit_code": 0, "stdout": "setUsingNetworkTime: Off\n"}),
+        mock.patch.object(network_time_window, "run_window_query", return_value={"exit_code": 0}),
+        mock.patch.object(network_time_window, "set_network_time_on", return_value={"exit_code": 0}),
+    ):
+        patch.start()
+        _network_time_patches.append(patch)
+
+
+def tearDownModule():
+    while _network_time_patches:
+        _network_time_patches.pop().stop()
 
 ROOT = Path(__file__).resolve().parents[1]
 SPEC = importlib.util.spec_from_file_location(
@@ -2076,6 +2098,46 @@ class PackNightLaunchBoundaryTests(unittest.TestCase):
             stack.enter_context(mock.patch.object(owner, name, return_value=value))
         return stack
 
+    def test_integrated_pack_route_refuses_when_enforced_set_is_empty(self):
+        # Counterfactual: pack's capture consumer has not landed. Production
+        # call: run_night, after the pack GO path and before OFF or Popen.
+        from dataclasses import replace
+        from datetime import datetime
+        from types import SimpleNamespace
+        from joulewise import night_gate
+        from tests.test_run_night import _load_driver, ProbeSource, _probe
+
+        driver = _load_driver()
+        plan_path = self.case.inputs["night_plan"]
+        plan = json.loads(plan_path.read_bytes())
+        plan["t0_epoch_s"] = datetime(2026, 9, 2, 1, 0).timestamp()
+        plan["authored_epoch_s"] = plan["t0_epoch_s"] - 1
+        plan_path.write_bytes(arm_readiness.render_json(plan))
+        night = self.fixture.custody / "night"
+        for name in ("go_receipt.json", "go-census.json", "receipt.json"):
+            (night / name).unlink(missing_ok=True)
+        source = ProbeSource(plan["t0_epoch_s"] + 1)
+        source.results[night_gate.BOOT_SESSION_ARGV] = _probe(
+            night_gate.BOOT_SESSION_ARGV, stdout=self.fixture.arm["boot_session_id"] + "\n")
+        probes = replace(source.probes(), checkout_head=lambda: plan["repo_head"],
+                         measurement_head=lambda root: plan["measurement_head"])
+        receipt = SimpleNamespace(verdict="GO", to_json_bytes=lambda: b"{}\n")
+        with mock.patch.object(driver, "make_probes", return_value=probes), \
+             mock.patch.object(driver, "_existing_record", return_value=None), \
+             mock.patch.object(driver, "_prepare_pack_night", return_value={}), \
+             mock.patch.object(driver, "_author_pack_arm", return_value={"path": self.fixture.arm_path}), \
+             mock.patch.object(driver, "evaluate_night", return_value=receipt), \
+             mock.patch.object(driver, "_produce_pack_go", return_value=["/bin/true"]), \
+             mock.patch.object(driver, "_resolve_courier_bin", return_value=(Path("/fixture/courier"), None, None)), \
+             mock.patch.object(driver, "_finish_reporting", side_effect=lambda c, n, p, code, *a, **k: code), \
+             mock.patch.object(network_time_window, "NETWORK_TIME_ENFORCED_KINDS", frozenset()), \
+             mock.patch.object(network_time_window, "set_network_time_off") as off:
+            self.assertEqual(driver.run_night(plan_path), driver.EXIT_REFUSED)
+        off.assert_not_called()
+        self.assertEqual(json.loads((night / "refusal.json").read_bytes())["refusal"]["reason"],
+                         "night_refused_network_time_route_unenforced")
+        self.assertFalse((night / "chain.started").exists())
+
     def test_integrated_driver_arm_go_launcher_consumption_and_replay(self):
         """Real driver/parser/GO/consumer/replay; synthetic ARM and machine probes."""
         from dataclasses import replace
@@ -2190,6 +2252,7 @@ class PackNightLaunchBoundaryTests(unittest.TestCase):
              mock.patch.object(driver, "_resolve_courier_bin", return_value=(Path("/fixture/courier"), None, None)), \
              mock.patch.object(driver, "_finish_reporting", side_effect=lambda c, n, p, code, *a, **k: code), \
              mock.patch.object(driver, "observe_identity", return_value=Identity("LIVE", "fixture-start")), \
+             mock.patch.object(driver, "_probe_group_absent", return_value=True), \
              mock.patch.object(driver.subprocess, "Popen", side_effect=spawn), \
              mock.patch.object(t0_evidence, "author_arm_readiness_evidence_t0", side_effect=author), \
              mock.patch.object(arm_readiness, "generate_arm_receipt", side_effect=mint_arm), \

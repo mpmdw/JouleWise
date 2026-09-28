@@ -1,6 +1,7 @@
 """Injected OS boundary checks for the ruled H5/H6 window records."""
 
 import hashlib
+import gzip
 import io
 import json
 import subprocess
@@ -9,6 +10,7 @@ import unittest
 from datetime import datetime, timezone
 from pathlib import Path
 from contextlib import redirect_stdout
+from unittest import mock
 
 from joulewise import network_time_window as nt
 
@@ -49,6 +51,9 @@ class WindowTests(unittest.TestCase):
             boot_probe=lambda: "boot-1", clock=lambda: {"epoch_s": 10000, "monotonic_s": 10000},
             marker_path=self.marker)
         self.window = self.root / "night/network_time"
+        (self.root / "night/chain.started").write_text(json.dumps({
+            "pid": None, "pgid": None, "launch_error": "fixture Popen failed"}))
+        (self.root / "night/chain.exited").write_text(json.dumps({"launch_failed": True}))
         self.first = {"epoch_s": 10600, "monotonic_before_s": 10600}
         self.last = {"epoch_s": 10610, "monotonic_before_s": 10610}
 
@@ -114,6 +119,40 @@ class WindowTests(unittest.TestCase):
         self.query(line(9900) + line(10421, body="first line") + "  ntp_adjtime continuation\n")
         self.assertEqual(self.verdict(), "network_time_slew_attested")
 
+    def test_unindented_continuation_marker_takes_parent_time(self):
+        # Counterfactual: timed emits a marker on an unindented continuation.
+        # Production call: capture_verdict -> _placed_lines over saved H6 bytes.
+        self.query(line(9900) + line(10421, body="first line") + "ntp_adjtime continuation\n")
+        self.query(line(9900))  # A later clean run cannot erase the marker.
+        self.assertEqual(self.verdict(), "network_time_slew_attested")
+
+    def test_preserved_real_log_unindented_braces_are_placed(self):
+        # The archived 2026-09-27 timed output has five column-zero closing
+        # braces. Read its real bytes; never ask the current system log.
+        archive = (Path(__file__).resolve().parents[1] /
+            "docs/process_traces/2026-09-27-activation-d528efb2/40-sci-a2-network-time/evidence/"
+            "timed-full-20260926T0000-20260927T1840-PDT.syslog.txt.gz")
+        raw = gzip.decompress(archive.read_bytes())
+        self.assertEqual(hashlib.sha256(raw).hexdigest(),
+            "2f9bf739fde57accdce86e27a9494303585c976132e5dc5063a2cd31a5880b5c")
+        self.assertEqual(sum(line == b"}" for line in raw.splitlines()), 5)
+        placed, header, parsed = nt._placed_lines(raw)
+        self.assertTrue(header)
+        self.assertTrue(parsed)
+        self.assertGreater(len(placed), 5)
+
+        bench = Path("/tmp/cg-ntpd-d528efb2/q2_utc.txt")
+        if bench.is_file():
+            # Optional preserved second real query from the ruling bench.
+            second = bench.read_bytes()
+            _, second_header, second_parsed = nt._placed_lines(second)
+            self.assertTrue(second_header)
+            self.assertTrue(second_parsed)
+
+    def test_timestamp_like_invalid_continuation_refuses(self):
+        self.query(line(9900) + "1970-99-99 00:00:00.000000+0000 timed[11] bogus\n")
+        self.assertEqual(self.verdict(), "network_time_unattested")
+
     def test_unplaced_continuation_refuses_clean(self):
         self.query("  orphan\n" + line(9900))
         self.assertEqual(self.verdict(), "network_time_unattested")
@@ -149,6 +188,43 @@ class WindowTests(unittest.TestCase):
         (self.window / "h5-off.json").write_text("{}")
         self.assertEqual(self.verdict(), "network_time_unattested")
 
+    def test_non_object_off_receipt_is_unattested(self):
+        # Counterfactual: h5-off.json decodes to a list; production call is
+        # capture_verdict, which must return a verdict rather than raise.
+        self.query(line(9900))
+        (self.window / "h5-off.json").write_text("[]")
+        try:
+            verdict = self.verdict()
+        except Exception as error:
+            self.fail(f"capture_verdict raised on non-object OFF receipt: {error}")
+        self.assertEqual(verdict, "network_time_unattested")
+
+    def test_invalid_off_json_does_not_hide_authenticated_marker(self):
+        self.query(line(10421, body="ntp_adjtime"))
+        off = self.window / "h5-off.json"
+        off.write_text("{")
+        record = self.window / "h6-window-1.json"
+        value = json.loads(record.read_text())
+        value["off_sha256"] = hashlib.sha256(off.read_bytes()).hexdigest()
+        record.write_text(json.dumps(value))
+        self.assertEqual(self.verdict(), "network_time_slew_attested")
+
+    def test_orphaned_raw_query_file_does_not_block_retry(self):
+        # Counterfactual: crash after h6-query-1.txt exclusive publication,
+        # before h6-window-1.json. Production call: run_window_query.
+        (self.window / "h6-query-1.txt").write_bytes(b"orphaned raw bytes\n")
+        try:
+            self.query(line(9900))
+        except FileExistsError as error:
+            self.fail(f"run_window_query reused the orphaned raw path: {error}")
+        self.assertEqual((self.window / "h6-query-1.txt").read_bytes(), b"orphaned raw bytes\n")
+        self.assertTrue((self.window / "h6-window-2.json").exists())
+        self.assertEqual(self.verdict(), "clean")
+
+    def test_witness_category_in_payload_is_not_a_category(self):
+        self.query(line(9900, "text", "quoted [com.apple.timed:data]"))
+        self.assertEqual(self.verdict(), "network_time_unattested")
+
     def test_off_exact_output_and_two_clock_lead(self):
         self.query(line(9900))
         self.assertEqual(self.verdict(), "clean")
@@ -161,6 +237,49 @@ class WindowTests(unittest.TestCase):
         off.write_text(json.dumps(record))
         self.assertEqual(self.verdict(), "network_time_unattested")
 
+    def test_wall_lead_short_when_monotonic_lead_is_sufficient(self):
+        self.query(line(9900))
+        self.first.update(epoch_s=10599, monotonic_before_s=10600)
+        self.assertEqual(nt.capture_verdict(self.window, self.first, self.last),
+                         ("network_time_unattested", "off_lead_short"))
+
+    def test_receipt_clock_uses_capture_writer_pair_of_python_clocks(self):
+        with mock.patch.object(nt.time, "time", return_value=123.5) as wall, \
+             mock.patch.object(nt.time, "monotonic", return_value=456.25) as elapsed:
+            self.assertEqual(nt._clock(), {"epoch_s": 123.5, "monotonic_s": 456.25})
+        wall.assert_called_once_with()
+        elapsed.assert_called_once_with()
+
+    def test_query_boot_mismatch_refuses_clean(self):
+        self.query(line(9900))
+        path = self.window / "h6-window-1.json"
+        record = json.loads(path.read_text())
+        record["boot_id"] = "next-boot"
+        path.write_text(json.dumps(record))
+        self.assertEqual(self.verdict(), "network_time_unattested")
+
+    def test_marker_interval_matches_original_two_clock_union_plus_lead(self):
+        from joulewise.quiet_predicate_campaign import attestation_window
+        first = {"epoch_s": 1000, "monotonic_before_s": 500}
+        last = {"epoch_s": 1570, "monotonic_before_s": 1100}
+        original = attestation_window({"sampling_started": first, "sampling_stopped": last})
+        *_, lower, upper = nt._interval(first, last)
+        self.assertEqual(lower, original[0] - 179)
+        self.assertEqual(upper, original[1])
+
+    def test_registered_predecessor_builds_are_exactly_old_builds(self):
+        root = Path(__file__).resolve().parents[1] / "configs/calibration"
+        registered = {value["identity_epoch"]["os_build"]
+                      for path in root.rglob("*.json")
+                      if isinstance(value := json.loads(path.read_bytes()), dict)
+                      and isinstance(value.get("identity_epoch"), dict)
+                      and "os_build" in value["identity_epoch"]}
+        self.assertIn("25G83", registered)
+        self.assertEqual(nt.OLD_BUILDS, registered - {"25G83"})
+        historic_sessions = {path.stem for path in (root / "battery_float_verdicts").glob(
+            "d079-epoch-25g83-derivation-w*-20260927.json")}
+        self.assertEqual(nt.OLD_SESSIONS, historic_sessions)
+
     def test_recovery_restores_only_after_chain_proof(self):
         started = self.root / "night/chain.started"
         started.write_text(json.dumps({"pgid": 123}))
@@ -171,6 +290,53 @@ class WindowTests(unittest.TestCase):
             boot_probe=lambda: "boot-1", process_group_absent=lambda pgid: True), "restored")
         self.assertFalse(self.marker.exists())
         self.assertTrue((self.window / "h5-on.json").exists())
+
+    def test_exited_child_record_does_not_override_live_group(self):
+        # Counterfactual: direct child exits leaving a capture descendant.
+        # Production call: recover_network_time at the next driver start.
+        (self.root / "night/chain.started").write_text(json.dumps({"pgid": 123}))
+        (self.root / "night/chain.exited").write_text(json.dumps({"exit_code": 0}))
+        self.assertEqual(nt.recover_network_time(marker_path=self.marker, runner=self.runner,
+            process_group_absent=lambda pgid: False), "chain_unproved")
+        self.assertNotIn(nt.ON_ARGV, self.runner.calls)
+        self.assertTrue(self.marker.exists())
+
+    def test_unknown_pgid_with_exited_record_is_not_proof(self):
+        # Counterfactual: marker exists between Popen and identity publication.
+        # Production call: recover_network_time, including dead-man preflight.
+        (self.root / "night/chain.started").write_text("{}")
+        (self.root / "night/chain.exited").write_text(json.dumps({"exit_code": None}))
+        self.assertEqual(nt.recover_network_time(marker_path=self.marker, runner=self.runner,
+            process_group_absent=lambda pgid: True), "chain_unproved")
+        self.assertNotIn(nt.ON_ARGV, self.runner.calls)
+        self.assertTrue(self.marker.exists())
+
+    def test_missing_start_and_exit_records_do_not_prove_chain_absent(self):
+        # Counterfactual: custody start/exit files are missing after OFF.
+        # Production call: recover_network_time at the next driver start.
+        (self.root / "night/chain.started").unlink()
+        (self.root / "night/chain.exited").unlink()
+        self.assertEqual(nt.recover_network_time(marker_path=self.marker, runner=self.runner,
+            process_group_absent=lambda pgid: True), "chain_unproved")
+        self.assertNotIn(nt.ON_ARGV, self.runner.calls)
+        self.assertTrue(self.marker.exists())
+
+    def test_recovery_runner_exception_returns_marker_invalid_without_on(self):
+        def broken(argv, timeout):
+            raise RuntimeError("runner unavailable")
+        self.assertEqual(nt.recover_network_time(marker_path=self.marker, runner=broken),
+                         "marker_invalid")
+        self.assertTrue(self.marker.exists())
+        self.assertEqual(nt.recover_network_time(marker_path=None), "marker_invalid")
+
+    def test_recovery_attempts_on_when_off_receipt_cannot_drive_query(self):
+        # Counterfactual: malformed saved OFF JSON after a proved chain end.
+        # Production call: recover_network_time must still attempt ON.
+        (self.window / "h5-off.json").write_text("[]")
+        self.assertEqual(nt.recover_network_time(marker_path=self.marker, runner=self.runner,
+            boot_probe=lambda: "boot-1"), "restored")
+        self.assertIn(nt.ON_ARGV, self.runner.calls)
+        self.assertFalse(self.marker.exists())
 
     def test_recovery_requeries_when_only_prior_run_is_invalid(self):
         self.query("")
@@ -212,8 +378,15 @@ class WindowTests(unittest.TestCase):
     def test_report_h6_prints_verdict_without_b_and_h7_prints_rate(self):
         self.query(line(9900))
         capture = self.root / "capture.json"
+        stamps = {
+            name: {"epoch_s": 10600 + index * 2,
+                   "monotonic_before_s": 10600 + index * 2,
+                   "monotonic_after_s": 10600 + index * 2}
+            for index, name in enumerate(("pre_spawn", "first_parse", "sampling_started",
+                                          "sampling_stopped", "post_parse"))}
+        stamps["post_parse"] = dict(self.last, monotonic_after_s=self.last["monotonic_before_s"])
         capture.write_text(json.dumps({"clock_anchor": {"clock_stamps": {
-            "pre_spawn": self.first, "post_parse": self.last}}, "B": "forbidden"}))
+            **stamps}, "rate_fit_baseline_s": 10}, "B": "forbidden"}))
         output = io.StringIO()
         with redirect_stdout(output):
             self.assertEqual(nt.main(["report", "--h6", "--window-dir", str(self.window),
@@ -231,6 +404,30 @@ class WindowTests(unittest.TestCase):
         self.assertEqual(row["h5_off_sha256"], hashlib.sha256((self.window / "h5-off.json").read_bytes()).hexdigest())
         self.assertEqual(row["standing_rate_ppm"], 0)
         self.assertEqual(row["drift_term_s"], 0)
+
+    def test_h7_span_and_rate_match_estimator_over_all_five_pairs(self):
+        # Counterfactual: a middle reading holds the largest offset while
+        # endpoints cancel. Production call: report --h7.
+        from joulewise.clock import ClockStamp
+        from joulewise.uncertainty_evidence import _offset_envelope_s
+        names = ("pre_spawn", "first_parse", "sampling_started", "sampling_stopped", "post_parse")
+        stamps = {}
+        for index, name in enumerate(names):
+            epoch = 10600 + index * 2 + (0.002 if index == 2 else 0)
+            stamps[name] = dict(epoch_s=epoch,
+                monotonic_before_s=10600 + index * 2,
+                monotonic_after_s=10600 + index * 2 + 0.0001,
+                wall_resolution_s=1e-6, monotonic_resolution_s=1e-6)
+        capture = self.root / "five.json"
+        capture.write_text(json.dumps({"clock_anchor": {
+            "clock_stamps": stamps, "rate_fit_baseline_s": 8.0}}))
+        output = io.StringIO()
+        with redirect_stdout(output):
+            nt.main(["report", "--h7", "--window-dir", str(self.window), "--capture", str(capture)])
+        row = json.loads(output.getvalue())
+        expected = _offset_envelope_s([ClockStamp(**stamps[name]) for name in names])[2]
+        self.assertEqual(row["drift_term_s"], expected)
+        self.assertEqual(row["standing_rate_ppm"], expected / 8 * 1e6)
 
 
 if __name__ == "__main__":
