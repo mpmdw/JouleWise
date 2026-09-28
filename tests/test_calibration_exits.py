@@ -810,7 +810,16 @@ def _wait_for_exact_stdout_line(
             pass
 
 
+def setUpModule() -> None:
+    # H6 (A79 CALEXITS-HYGIENE-FIXES-01): the module run is the corpus
+    # owner's lifecycle boundary. Without this reset a reused interpreter's
+    # second module run consumed the first run's cached corpus and passed
+    # with zero fresh public witness executions.
+    _WITNESS_CORPUS_OWNER.reset()
+
+
 def tearDownModule() -> None:
+    _WITNESS_CORPUS_OWNER.reset()
     assert_no_owned_writer_survivors()
 
 
@@ -2107,6 +2116,34 @@ class RefusalInventoryTests(unittest.TestCase):
             executed,
             [case.code for case in cases] + [case.code for case in reversed(cases)],
         )
+
+    def test_module_boundaries_reset_the_witness_corpus_owner(self) -> None:
+        # A reused interpreter must re-execute the public witnesses on each
+        # module run rather than consume a prior run's cached generation.
+        this_module = sys.modules[__name__]
+        cases = WITNESS_CASES[:1]
+        for boundary in (setUpModule, tearDownModule):
+            with self.subTest(boundary=boundary.__name__):
+                owner = WitnessCorpusOwner()
+                executed: list[RefusalCode] = []
+
+                def execute(case: WitnessCase) -> WitnessResult:
+                    executed.append(case.code)
+                    return WitnessResult(case.code, None, ())
+
+                with (
+                    mock.patch.object(this_module, "_WITNESS_CORPUS_OWNER", owner),
+                    mock.patch.object(
+                        this_module, "assert_no_owned_writer_survivors"
+                    ),
+                ):
+                    prior_run = owner.get_or_execute(cases, execute)
+                    boundary()
+                    next_run = owner.get_or_execute(cases, execute)
+                self.assertEqual(executed, [cases[0].code, cases[0].code])
+                self.assertEqual(
+                    (prior_run.generation_id, next_run.generation_id), (1, 2)
+                )
 
     def test_default_writer_origin_never_reads_the_ambient_wall_clock(self) -> None:
         witness = PublicGovernedExitWitnessTests(methodName="runTest")
