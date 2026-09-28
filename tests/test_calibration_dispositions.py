@@ -3,6 +3,7 @@
 import copy
 import hashlib
 import json
+import sys
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -96,10 +97,29 @@ class DispositionTests(unittest.TestCase):
         member = value["derivation_corpus"]["members"][0]
         from joulewise.calibration_ledger import content_id_from_artifact_hashes
         content_id = content_id_from_artifact_hashes({"manifest.json": member["manifest_sha256"], "instrument_evidence.json": member["instrument_evidence_sha256"]})
+        member_row = next(row for row in value["prior_observation_set"]["observations"] if row["content_id"] == content_id)
+        registered_session = member_row["session_id"]
+        member_row["session_id"] = "d079-epoch-25g83-derivation-n1-20260919"
         altered = copy.deepcopy(dispositions.DISPOSITION_DECISIONS)
         altered[dispositions.DISPOSITION_DECISION_ID]["content_ids"] = altered[dispositions.DISPOSITION_DECISION_ID]["content_ids"] | {content_id}
+        reached_completeness = False
+
+        def trace(frame, event, arg):
+            nonlocal reached_completeness
+            if (frame.f_code is bracket._valid_acceptance_bound.__code__
+                    and event == "line" and "registration_valid_ids" in frame.f_locals):
+                reached_completeness = True
+            return trace
+
         with patch.object(dispositions, "DISPOSITION_DECISIONS", altered):
-            self.assertFalse(self.valid(value))
+            previous_trace = sys.gettrace()
+            try:
+                sys.settrace(trace)
+                self.assertFalse(self.valid(value))
+            finally:
+                sys.settrace(previous_trace)
+            self.assertFalse(reached_completeness, "disposed member passed the member guard")
+            member_row["session_id"] = registered_session
             original = dispositions.DISPOSITION_DECISIONS[dispositions.DISPOSITION_DECISION_ID]["content_ids"] - {content_id}
             with patch.object(bracket, "disposed_content_ids_for", return_value=original):
                 self.assertTrue(self.valid(value))
