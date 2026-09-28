@@ -433,3 +433,11 @@ Launched by the watchdog at 17:36:30 PDT (attempt 124) after a usage back-off; t
       - `…test_whole_window_rederives_neg8_verdict_from_member_summaries`.
 
       The last two call `whole_window_refusal_reasons` by name. They are refused at the second-form reasons, and **rule 8 refuses them the second switch** (their subject names a second-form function or reason). **They count under condition 2's cap: 3 of 10.**
+126. **STAND-DOWN** at 09:46 PDT: `standdown.request` said "local STOP file present", exit within 300 s. Every child was stopped: seat A (codex), the cold judge A2, the Opus refuter A2, and the bench bind + pair agent. **Uncommitted partial work stays in place and none of it is trustworthy until re-verified:**
+    - seat A in `JouleWise-wt-s1r3-A-d528efb2`;
+    - the bench agent in `JouleWise-wt-s1r3-L-d528efb2`.
+
+    **Next exact action (successor):**
+    1. Relaunch the cold gate NTP-ENFORCE-DESIGN-01-A2 from charge [47](71-ntp-design/47-coldgate-fix2c-charge.md), paired with the Opus refuter; the cold worktree `JouleWise-wt-cg-ntpfix2c-d528efb2` exists.
+    2. S1: discard or re-run seat A from `cdfb27ce` with brief 88-A, and relaunch the bench bind + pair work in the L worktree. Seat B is done (`d4345946`).
+    3. D-138: still waiting for Ed's a/b/c.
