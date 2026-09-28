@@ -1,0 +1,47 @@
+RED_RECORD fix_base=5decbe6b old1=325d9f77 old2=8458f797
+E-1@325d9f77 FAIL 1 AssertionError: _AcceptancePreflightError not raised
+E-2@325d9f77 FAIL 1
+E-3@325d9f77 FAIL 1 AssertionError: _AcceptancePreflightError not raised
+E-4@8458f797 FAIL 1 AssertionError: True is not false
+E-5@8458f797 FAIL 1 AssertionError: True is not false
+E-6@8458f797 FAIL 1 AssertionError: {'schema_version': 'joulewise.calibration_acceptance_bound.v2', 'acceptance_id': 'd079_calibration_accep
+E-6b@8458f797 FAIL 1 AssertionError: TypeError not raised
+E-6c@8458f797 FAIL 1 AssertionError: mappingproxy({'bracket_screen_s': '0.013701', 'preflight_level_screen_s': '0.038078579302948', 'max_budg
+E-6d@8458f797 FAIL 1 AssertionError: {'schema_version': 'joulewise.calibration_acceptance_bound.v2', 'acceptance_id': 'd079_calibration_accep
+E-6e@8458f797 FAIL 1 AssertionError: ContinuationRefusal not raised
+E-9@8458f797 FAIL 1 AssertionError: SystemExit not raised
+E-1@fix PASS 1
+E-2@fix PASS 1
+E-3@fix PASS 1
+E-4@fix PASS 1
+E-5@fix PASS 1
+E-5c@fix PASS 1
+E-6@fix PASS 1
+E-6b@fix PASS 1
+E-6c@fix PASS 1
+E-6d@fix PASS 1
+E-6e@fix PASS 1
+E-7@fix PASS 1
+E-8@fix PASS 1
+E-9@fix PASS 1
+E-10@fix PASS 1
+E-11@fix PASS 1
+P8@8458f797 FAIL 1 AssertionError: ValueError not raised
+P8@fix PASS 1
+M-G1 FAIL 1 AssertionError: {'schema_version': 'joulewise.calibration_acceptance_bound.v2', 'acceptance_id': 'd079_calibration_accep
+M-G2 FAIL 1 AssertionError: ContinuationRefusal not raised
+M-S1 FAIL 1 + ('calibration_acceptance_bound_stale',)
+M-single-id FAIL 1 AssertionError: True is not false
+M-operatives FAIL 1 AssertionError: mappingproxy({'bracket_screen_s': '0.013701', 'preflight_level_screen_s': '0.038078579302948', 'max_budg
+M-S2 FAIL 1 AssertionError: LaunchLineageError not raised
+M-S3 FAIL 1 AssertionError: 19 != 2
+M-build-entry FAIL 1 'd079_calibration_acceptance_v2_n12_25g83_r1'
+M-R7-predecessor FAIL 1 AssertionError: "requires r7 predecessor" does not match "observation disposition registry unreadable: [Errno 2] No such
+M-R7-prepare-default FAIL 1 AssertionError: Posix[46 chars]onfigs/calibration/calibration_acceptance_d079_v2_n17_r6.json') != Posix[46 chars]onfigs/
+M-R7-epoch-default FAIL 1 AssertionError: Posix[46 chars]onfigs/calibration/calibration_acceptance_d079_v2_n17_r6.json') != Posix[46 chars]onfigs/
+M-R7-simulation FAIL 1   Actual: load_calibration_acceptance_bound(PosixPath('/private/tmp/d138-red-scratch-hjdc2zzu/configs/calibration/calibr
+C-plant-new-reader FAIL 1 'scripts/planted_calibration_reader.py'
+C-plant-unchecked-alias FAIL 1 'joulewise/arm_readiness_evidence.py'
+C-plant-second-pass FAIL 1 AssertionError: 2 != 1
+C-plant-inspection-alias FAIL 1 'joulewise/whole_window.py'
+RED_RECORD_COMPLETE scratch_removed=true
