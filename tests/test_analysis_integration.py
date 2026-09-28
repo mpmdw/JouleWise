@@ -118,7 +118,12 @@ from tests.test_run_campaign import (
     run_campaign_module,
 )
 from tests.test_analysis_finalizer import install_synthetic_finalization_fixture
-from tests.bfgs_fixtures import produce_strict_bundle
+from tests.bfgs_fixtures import (
+    exemption_parity,
+    produce_strict_bundle,
+    rebind_config,
+    write_passing_pair,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -249,6 +254,22 @@ def install_passing_analysis_whole_window(
         (bundle / "summary_metrics.json").write_text(
             json.dumps(summary, indent=2, sort_keys=True) + "\n"
         )
+        # A1 §4.3: main's reference form, labelled, bound and paired (class
+        # T2's fixture form; no admission evidence is written).
+        summary["measurement_quality"] = {"telemetry_source": "powermetrics"}
+        (bundle / "summary_metrics.json").write_text(
+            json.dumps(summary, indent=2, sort_keys=True) + "\n"
+        )
+        config = json.loads(
+            (ROOT / "tests" / "fixtures" / "d078_r01" / "config.json").read_text()
+        )
+        config["run_id"] = bundle_id
+        (bundle / "config.json").write_text(json.dumps(config) + "\n")
+        (bundle / "metadata.json").write_text(json.dumps(
+            {"run_id": bundle_id, "adapters": {"telemetry": {"name": "powermetrics"}}}
+        ) + "\n")
+        rebind_config(bundle)
+        write_passing_pair(bundle)
     covered_ids = sorted([*bundle_ids, *reference_ids])
     # Anchor to the repo-registered production policy: re-derivation resolves
     # tolerances from tracked policy files only (fail-closed on unknown shas).
@@ -1994,14 +2015,6 @@ class AnalysisIntegrationTests(unittest.TestCase):
             bundle_ids,
             source_name="analysis-whole-window-source",
         )
-        for position in ("start", "end"):
-            run_id = f"analysis-whole-window-source-neg8-reference-{position}"
-            shutil.rmtree(cls.runs_root / run_id)
-            with mock.patch(
-                "joulewise.bundle._capture_source_state",
-                return_value=dict(CLEAN_SOURCE_STATE),
-            ), redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-                produce_strict_bundle(cls.runs_root, run_id)
 
     @classmethod
     def tearDownClass(cls):
@@ -2020,7 +2033,7 @@ class AnalysisIntegrationTests(unittest.TestCase):
         manifest = json.loads(self.manifest_path.read_text(encoding="utf-8"))
         target = manifest["entries"][0]
 
-        with mock.patch(
+        with exemption_parity(self.id()), mock.patch(
             "joulewise.analysis_engine.inputs.custody_telemetry_identity",
             return_value=PRODUCTION_TELEMETRY_IDENTITY,
         ):
@@ -2270,7 +2283,7 @@ class AnalysisIntegrationTests(unittest.TestCase):
     def test_complete_strict_current_bundle_set_derives_deterministic_fail_closed_artifact_with_production_telemetry_identity(
         self,
     ):
-        with mock.patch(
+        with exemption_parity(self.id()), mock.patch(
             "joulewise.analysis_engine.inputs.custody_telemetry_identity",
             return_value=PRODUCTION_TELEMETRY_IDENTITY,
         ):
@@ -2868,7 +2881,7 @@ class AnalysisIntegrationTests(unittest.TestCase):
                 json.dumps(manifest, indent=2, sort_keys=True) + "\n",
                 encoding="utf-8",
             )
-            with mock.patch(
+            with exemption_parity(self.id()), mock.patch(
                 "joulewise.analysis_engine.inputs.custody_telemetry_identity",
                 return_value=PRODUCTION_TELEMETRY_IDENTITY,
             ):
@@ -3252,7 +3265,7 @@ class AnalysisIntegrationTests(unittest.TestCase):
                 (),
             )
 
-        with mock.patch(
+        with exemption_parity(self.id()), mock.patch(
             "joulewise.analysis_engine.inputs.custody_telemetry_identity",
             return_value=PRODUCTION_TELEMETRY_IDENTITY,
         ):
@@ -4642,7 +4655,7 @@ class AnalysisIntegrationTests(unittest.TestCase):
             ],
             source_name="replacement-production-whole-window-source",
         )
-        with mock.patch(
+        with exemption_parity(self.id()), mock.patch(
             "joulewise.analysis_engine.inputs.custody_telemetry_identity",
             return_value=PRODUCTION_TELEMETRY_IDENTITY,
         ):
@@ -4794,6 +4807,7 @@ class AnalysisIntegrationTests(unittest.TestCase):
         )
         shutil.rmtree(runs / target["run_id"])
         with (
+            exemption_parity(self.id()),
             mock.patch(
                 "joulewise.analysis_engine.inputs.custody_telemetry_identity",
                 return_value=PRODUCTION_TELEMETRY_IDENTITY,
@@ -5277,7 +5291,7 @@ class AnalysisIntegrationTests(unittest.TestCase):
         )
         with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
             self.assertEqual(run_configured_strict_bundle(config_path, runs), 0)
-        with mock.patch(
+        with exemption_parity(self.id()), mock.patch(
             "joulewise.analysis_engine.inputs.custody_telemetry_identity",
             return_value=PRODUCTION_TELEMETRY_IDENTITY,
         ):
