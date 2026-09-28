@@ -103,6 +103,9 @@ D-180 clause 2; A172 rulings R1–R3 and fix-round-1 R1–R4 (2026-09-15). Exact
 | `night_chain_already_started` | The once-only chain-start record exists. |
 | `night_chain_alive` | The existing chain has not been proved ended. |
 | `night_chain_launch_failed` | Launch failed after the once-only start claim; not pre-arm transport. |
+| `night_refused_network_time_off_unproved` | Network time OFF or its exact command receipt was not proved. |
+| `night_refused_network_time_route_unenforced` | The capture route has no enforced network-time consumer. |
+| `night_refused_network_time_marker_invalid` | A pending network-time restore marker is malformed or unreadable. |
 | `night_courier_running` | The result-delivery process is still running. |
 | `night_courier_unavailable` | The driver's delivery executable is unavailable; not a failed notice send. |
 | `night_plan_overruns_deadman` | Completion/dead-man schedule was refused; retained even if normally unreachable. |
