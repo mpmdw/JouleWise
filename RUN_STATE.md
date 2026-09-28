@@ -10,28 +10,59 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
-**▶▶ ACTIVATION 77b1bee2 — from 11:36 PDT 09-27 (Opus 5.5; NOTHING ARMED; W2 HARVESTED + ADMITTED, #434 MERGED):** [Record 00](docs/process_traces/2026-09-27-activation-77b1bee2/00-activation-record.md) is the running log.
+**▶▶ ACTIVATION d528efb2 — from 17:36 PDT 09-27 (Opus 5.5; NOTHING ARMED):** [Record 00](docs/process_traces/2026-09-27-activation-d528efb2/00-activation-record.md) is the running log.
 
-**W2 is ADMITTED.** It passed the battery check and the cadence check (CONTINUE, 128.5 ms). **#434 merged as `b69c39eb`**, a merge commit that passed the full gate: Sol AUDIT PASS, Opus CONTRACT LENS PASS, cold Fable MERGE, and row 9 at 7,525/0/0.
-- Harvest line: `…w2-20260927: battery=pass verdict_sha256=51f49618…46ec verdict_commit=722f7bd1`.
-- With W1 and W2 together, 12 captures are valid. That is **exactly the Revision 5 floor**, and **W3 is not permitted**.
+**Ed approved the new calibration's name and release** ("Yes re name , go ahead", 17:57 PDT): `d079_calibration_acceptance_v2_n12_25g83_r1`, published only after every gate passes.
 
-**Issuance is BLOCKED on a value-blind tool fault.** `prepare-candidate` refuses whenever custody lies outside a git checkout, and all 24 W1/W2 locators are under `/Users/edr/night-custody` (lane ISSUANCE-CUSTODY-OUTSIDE-REPO-01).
-- **What happens if issuance refuses** is now fixed in writing, before the run. Statement REV5-REFUSAL-BRANCH-01 was settled by a cold gate, a paired refuter and a cold addendum; its sha256 is `8717e33c…39a6`, at `60-prepare-record/00-refusal-branch-final-statement.md`. Ed was emailed.
-- **The repair's design is C**, chosen by the four-model council (Fable and Opus for C, Sol for A, Astra for B; [synthesis](docs/process_traces/2026-09-27-activation-77b1bee2/50-custody-outside-repo/30-lead-synthesis.md)). C changes the issuer only: it adds `--corpus-root`, a naming function bound to the session and the capture, and a read-only `verify-members` command.
-- **The implementation seat** (Sol xhigh) is on `fix/2026-09-27-issuer-corpus-root`, worktree `JouleWise-wt-corpus-root-77b1bee2`.
+**Rulings issued this activation (all cold Fable 5.1):**
+- **SCI-25G83-CANDIDATE-01-A2 — PROCEED.** macOS network time was ON through W1/W2. It caused 4 of the 12 exclusions. No clock step or millisecond correction fell inside any member; two members (W1-d12, W2-d01) moved by 40 µs and 12 µs from microsecond slews, inside their allowance, and the effect on C is at most 8.9 µs. It adds disclosure D8 and three conditions: for every future 25G83 window, H5 (network time OFF before settle; the passwordless setter is installed) and H6 (per-capture `timed` log attestation); and H7, a first comparison of OFF-state captures with the 12 members, reported with the first claim-bearing results.
+- **D138-25G83-DESIGN-01**, the implementation spec for the issuing PR: a loader repair via a new `joulewise/calibration_dispositions.py`, a re-runnable promotion tool, the pin swap, the claim-window hold enforced in code, and the exact WRITE_SCOPE.
+- **CAP-COUNCIL-25G83-01**, on the estimator cap: route R, cap = 10× the largest measured work under a pre-registered rule, two re-issues. Its paired Opus refuter **DISSENTs with 4 blockers**, and cold addendum A1 is convened.
+- **S1-REGRESSION-01-A1:** SF-1 to SF-4 ruled. The S1 repair plan runs: step-0 reference suite on main, seat H landed (`1278f772`), seat P running.
 
-**S1:** steps 2–3 came back GREEN on the tree, with mutants (a), (b) and (c) all RED. The merge candidate is `4aefdd12` (S1 with main merged in), and the one refuter pass (Sol xhigh) is running.
+**SUCCESSOR'S NEXT EXACT ACTION** (read record 00 from its last item first):
+1. **D-138**, per the design ruling §8.2:
+   - (a) land the records on main (this bookkeeping PR);
+   - (b) the lead writes the issuance text (D1–D8, H1, H5–H7) and commits it;
+   - (c) the census run with the default moved in memory;
+   - (d) launch the one implementation seat;
+   - then §9 steps 1–11, including the mandatory old-epoch replay (§10 item 2).
+2. **Cap:** harvest addendum A1 and apply it. Ed items (registration approval, two names, the #416 reading) are batched into one email.
+3. **S1:** harvest seat P, then step 2 (merge P+H, checks 3/4/5/7), then seats A–D.
 
-**SUCCESSOR'S NEXT EXACT ACTION:** read record 00 from its last item. Then:
-1. **Custody repair:** harvest the implementation seat (report `/tmp/corpus-root-impl-77b1bee2/report.md`). Then run the Opus and Sol lenses, then the **fresh cold gate on the final diff** (addendum §6.1, which also serves as statement item 6(c)), then a full-tier PR.
-2. **S1:** harvest the refuter (`/tmp/s1-refuter-77b1bee2/report.md`), classify its findings by the 61 (c)/66 table, then the S1 merge gate (full tier; A4 = V1/V2 re-run by the lead).
-3. **Prepare step,** only after the repair merges:
-   - bring the W2 measurement root to main by digest (statement item 2(d)/(e));
-   - check Ed's replies immediately before (S4) and re-run the dry run (S5);
-   - run `prepare-candidate` with the flag set in the refuter's A.5 plus `--corpus-root /Users/edr/night-custody`;
-   - then the cold science gate (runbook §4.3), then D-138.
-4. **Bookkeeping:** register today's lanes (synthesis ruling 5; record items 10–12) in the state kernel, TASK_QUEUE and `tests/test_gen_state.py`, then merge this branch's bookkeeping PR (light tier).
+**▶▶ ACTIVATION 77b1bee2 — 11:36 → ≈17:35 PDT 09-27 (Opus 5.5; NOTHING ARMED):** [Record 00](docs/process_traces/2026-09-27-activation-77b1bee2/00-activation-record.md) items 1–47+, on branch `docs/2026-09-27-77b1bee2`.
+
+**MERGED today:**
+- #434, the W2 harvest → `b69c39eb`. W2 was admitted, and W1 + W2 hold 12 valid captures, exactly the floor. **W3 is NOT permitted.**
+- #435, bookkeeping plus lanes A316–A329 → `daaff807`.
+- **#436, the issuer custody repair** (design C: `--corpus-root` and `verify-members`) → **`e7c8bcc6`**. Its full gate included a four-model design council, a fix round, an Astra delta and a cold final-diff ruling ("tool repair").
+
+**Calibration candidate for epoch 25G83: CLEARED TO ISSUE.**
+- **The prepare step** ran once (16:25 PDT) from the W2 run checkout at `e7c8bcc6`, under the refusal-branch statement (sha256 `8717e33c…`) and the PREDECESSOR-PATH-01 amendment. It wrote candidate **`dbad7cc7…b5b2`**, n = 12, NOT ISSUED. The record is `60-prepare-record/30-run1/`.
+- **Review:** Astra re-derivation MATCH; the cold science gate SCI-25G83-CANDIDATE-01 ruled **PROCEED TO ISSUANCE**; the Opus refuter CONCURred; addendum A1 was issued.
+- **Values:** S = 0.013701 s, C = 0.019021 s, level screen 0.038079 s. No mark applies.
+- **Binding for D-138:** the four estimator files stay byte-for-byte as run (A1 B1–B4); disclosures D1–D6 travel with it.
+- **HOLD:** no claim-bearing window at 25G83 until the 165k-cell estimator cap is re-sized by a pre-written rule (≥24 non-claim captures, none stopping) or measured under a registered plan (A1 SF-3). The wall-clock steps must also be found.
+- **Owner decision offered (Gmail `1a0e5562aeb51021`):** whether the 3 clock-step exclusions stand under the judge's structural reading. Silence means the reading stands.
+
+**S1 (BFG-S) is NOT mergeable.** Its cold final pass said MERGE, but row 9 on the integration tree gave **115 failures and 418 errors**. The regression is S1's own; its gates ran targeted suites only.
+- The scout (item 45) found 11 groups: fixture debt (most); **G2**, the mock `not_applicable` contract (needs a ruling); **G9**, the paper supply-map repin (needs authority).
+- Consult **S1-REGRESSION-01** is RULED: hold, repair on S1's branch, rule 12a (keyword, two non-claim flows), text 10a (backup-root replay fix), and the G9 bench repin. An addendum on the refuter's SF-1 to SF-4 is pending.
+
+**SUCCESSOR'S NEXT EXACT ACTION:**
+1. **Read record 00 from its last item.** Search Gmail for Ed's replies (the clock-step reading, the predecessor path).
+2. **D-138 issuing transaction** for candidate `dbad7cc7`, in its own turn with its own gate, per runbook §4.4 and decision log D-138:
+   - it swaps the active acceptance to the new generation, with every dependent pin, in one reviewed PR;
+   - it binds A1 B1–B4 (estimator pins unchanged; none of the four unmerged estimator branches);
+   - it carries D1–D6 and the R9 / PREDECESSOR-PATH disclosures.
+3. **Council on the estimator cap** (A1 SF-3; §8 of the science ruling): the sizing rule (no B value), the membership of the re-issue, and the sequencing. **This is required before any claim-bearing window.** It is a lane item, not yet registered in the kernel.
+4. **S1:** cold ruling S1-REGRESSION-01 is ISSUED, the earlier MERGE is void, and the Opus refuter CONCURs with SF-1 to SF-4 (record items 49–50).
+   - **Next:** a cold addendum on SF-1 to SF-4.
+   - **Then the ruling's plan:** reference run on main → production seat (12a keyword and 10a resolver) ∥ fixture-helper seat → 4 repair seats → the lead's 8 checks → the lead's bench repin of 3 supply-map roles (NOT `repin.py`) → the full suite on the head merged with main → refuter, cold gate and final pass, each preceded by a full-suite record.
+5. **Bookkeeping:**
+   - register the new lanes: the cap re-size, the clock-step source, S1-REGRESSION-01, and the archive-lane session-id correction (custody ruling S2);
+   - merge `docs/2026-09-27-77b1bee2` (light tier, touching `tests/test_gen_state.py`);
+   - propose the "full suite on every fix head" lesson to the council.
 
 **▶▶ ACTIVATION 896d11e2 — 08:35 → ≈08:38 PDT 09-27 (Opus 5.5; W2 ARMED, t0 09:00; quiet bookkeeping slice, no seats):** [Record 00](docs/process_traces/2026-09-27-activation-896d11e2/00-activation-record.md), items 1–5. No git operation touched the canonical root. The next exact action is unchanged: the 1c3b3ac9 block below (harvest W2 after 11:35 first).
 

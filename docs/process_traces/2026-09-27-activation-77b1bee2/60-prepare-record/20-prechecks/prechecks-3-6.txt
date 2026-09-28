@@ -1,0 +1,20 @@
+== check 3: item 2(d) digests (expected 23f72c37 / 5dbac530 / 07bcc13b / 51f49618)
+23f72c37cb2483faa1b31a603996b86d6b7b390ce9460f490699501cfc971c7d  runs/calibration_observation_ledger.jsonl
+5dbac530fbaebecfcd730acf1e49f9e2dff315da282382b5e6b5812fcd04aad5  configs/calibration/calibration_ledger_head.json
+07bcc13b6f476c72280a74e21bfc2499b9085f5bf380cf891afa7f341fa535a2  configs/calibration/battery_float_verdicts/d079-epoch-25g83-derivation-w1-20260927.json
+51f4961828a440cbab5c7cf504d7e4536b25243414441dab5fedfb6f28f946ec  configs/calibration/battery_float_verdicts/d079-epoch-25g83-derivation-w2-20260927.json
+== check 4: head pin committed
+722f7bd161f1a1d0ae2ef624f7f29aac3e347d82
+== check 5: interpreter
+lrwxr-xr-x@ 1 edr  staff  10 Sep 27 04:27 .venv/bin/python -> python3.13
+Python 3.13.1
+/Users/edr/night-custody/measurement/JouleWise-measurement-20260927-derivation-w2/.venv/bin/python
+== check 6: disposition registry
+ba1ba3fc596c9ef7f4014131e5cbc2012559f72bab41cafb89e004056790a63c  configs/calibration/observation_dispositions.json
+516:DISPOSITION_REGISTRY_SHA256 = "ba1ba3fc596c9ef7f4014131e5cbc2012559f72bab41cafb89e004056790a63c"
+== C3: predecessor file
+9c3a29f61a6f72bbe5efdfb0eddd1caa14557595522b2abb093b414380b9fe16  configs/calibration/calibration_acceptance_d079_v2_n17_r7.json
+REGULAR_NOT_SYMLINK
+(empty status = clean)
+== preregistration
+81b65f08b19127a106307b9b94616dfeb49d04c3c69f72615cf316792e36ddf1  configs/calibration/preregistration_d079_epoch_25g83_rev1.md

@@ -1,0 +1,28 @@
+2026-09-27T16:00:05Z session_open kind=derivation slots=12
+2026-09-27T16:00:05Z chain_start session=d079-epoch-25g83-derivation-w2-20260927 window=d079-epoch-25g83-derivation-w2-20260927 slots=12 settle_s=600 slot_cadence_s=600 slot_capture_budget_s=480
+2026-09-27T16:10:05Z settle_complete settle_s=600
+2026-09-27T16:10:05Z slot_start slot=d01
+2026-09-27T16:13:41Z slot_end slot=d01 disposition=valid
+2026-09-27T16:20:05Z slot_start slot=d02
+2026-09-27T16:23:43Z slot_end slot=d02 disposition=non-valid
+2026-09-27T16:30:05Z slot_start slot=d03
+2026-09-27T16:33:43Z slot_end slot=d03 disposition=valid
+2026-09-27T16:40:05Z slot_start slot=d04
+2026-09-27T16:43:43Z slot_end slot=d04 disposition=valid
+2026-09-27T16:50:05Z slot_start slot=d05
+2026-09-27T16:53:43Z slot_end slot=d05 disposition=valid
+2026-09-27T17:00:05Z slot_start slot=d06
+2026-09-27T17:03:43Z slot_end slot=d06 disposition=non-valid
+2026-09-27T17:10:05Z slot_start slot=d07
+2026-09-27T17:13:33Z slot_end slot=d07 disposition=non-valid
+2026-09-27T17:20:05Z slot_start slot=d08
+2026-09-27T17:23:44Z slot_end slot=d08 disposition=non-valid
+2026-09-27T17:30:05Z slot_start slot=d09
+2026-09-27T17:33:43Z slot_end slot=d09 disposition=valid
+2026-09-27T17:40:05Z slot_start slot=d10
+2026-09-27T17:43:43Z slot_end slot=d10 disposition=valid
+2026-09-27T17:50:05Z slot_start slot=d11
+2026-09-27T17:53:42Z slot_end slot=d11 disposition=non-valid
+2026-09-27T18:00:05Z slot_start slot=d12
+2026-09-27T18:03:44Z slot_end slot=d12 disposition=non-valid
+2026-09-27T18:03:44Z derivation_night_complete slots=12

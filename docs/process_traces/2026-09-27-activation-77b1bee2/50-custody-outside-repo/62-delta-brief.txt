@@ -1,0 +1,13 @@
+ROLE: DELTA RE-AUDIT of fix round 1 on the custody repair (lane ISSUANCE-CUSTODY-OUTSIDE-REPO-01, JouleWise). Non-author, adversarial, read-only.
+WRITE_SCOPE: []
+Write nothing in any repository; scratch only under /tmp/corpus-delta-77b1bee2/. No git fetch/pull/checkout/commit. Do not call Claude. /opt/homebrew/bin/python3 only.
+OUTCOME-BLIND: no epoch 25G83 W1/W2 measured value; real custody only via path-string projection.
+
+CANDIDATE: /Users/edr/code/JouleWise-wt-corpus-delta-77b1bee2 detached at f783a3fd. Delta under review: `git diff c84b1dc2 f783a3fd`. Fix brief with dictated closures C1–C3: /Users/edr/code/JouleWise-wt-bk-77b1bee2/docs/process_traces/2026-09-27-activation-77b1bee2/50-custody-outside-repo/60-fix1-brief.txt. Prior lens findings: 51-sol-execution-lens.md, 52-opus-contract-lens.md (same directory).
+
+CHECK with executed evidence:
+1. Each closure C1, C2, C3(a)–(e) is implemented exactly as dictated — no more, no less. C1: only the exact four-part `<session>/runs/instrument_validation/<attempt>` remainder is accepted, in BOTH the naming function and verify-members; re-run the Sol lens's nested `P/s/s/...` case (root P/s accepts, root P refuses) and try your own 3-/5-part, wrong-middle, case-variant, trailing-slash, unicode-lookalike and empty-segment cases.
+2. Did the fix round introduce any new defect (fix rounds introduce defects)? Especially: legacy behaviour without --corpus-root unchanged; _repo_relative_custody byte-identical to base 670756f3; guard F2 still holds; the duplicate-attempt refusal (C3a) cannot fire on a legitimate ledger (e.g., retried attempts with the same attempt_id in non-valid rows — check which rows the pre-pass iterates) — say whether W1/W2's real ledger has duplicate attempt_ids among valid rows (project attempt_id + disposition/valid flag only).
+3. Are the new tests defect-shaped (RED under a named cut)? Spot-run 3 cuts yourself.
+4. Same-signature statement: is any finding the same defect class as the Sol lens F1 (path-shape ambiguity)? If so say so explicitly (rule 11).
+Tier findings BLOCKER / SHOULD-FIX / NIT with file:line. Final line: `DELTA: PASS` or `DELTA: FAIL`.

@@ -1,0 +1,13 @@
+ROLE: regression classification scout for BFG-S stream S1 (JouleWise). Read-only.
+WRITE_SCOPE: []
+Write nothing in any repository; scratch only under /tmp/s1-regress-scout-77b1bee2/. No git fetch/pull/checkout/commit. Do not call Claude. /opt/homebrew/bin/python3 only (never .venv). macOS has no `timeout` (perl alarm). Kill anything you start by PID.
+
+FACTS: The full suite on S1's integration tree (c7593edb merged with main daaff807; worktree /Users/edr/code/JouleWise-wt-s1-integ2-77b1bee2) gave 7647 tests, 115 failures, 418 errors (log: /tmp/s1-regress-scout-77b1bee2/row9.log). Main e7c8bcc6 is green (7540/0/0). Spot-check: tests.test_phase_share + tests.test_audit_amplification fail on S1 alone (worktree /Users/edr/code/JouleWise-wt-bfgs-s1-e6f06c96 @ c7593edb) and pass on main. S1's rulings (for intent): /Users/edr/code/JouleWise-wt-bk-77b1bee2/docs/process_traces/2026-09-26-activation-6bec2aa6/40-bfgs-consult/50-coldgate/30-addendum/21-coldgate-fable-addendum-ruling.md (Final texts v1.1) and 2026-09-27-activation-3ba66eeb/{30-sweepclass-samesig,60-s1-fix3}/.
+
+DO:
+1. Parse the log: every failing/erroring test id with its first exception line; group by root-cause signature (e.g., battery gate refuses fixture lacking battery evidence; stale supply-map receipt digest X; missing order_manifest; etc.). Give counts per group and per module.
+2. For each group, find the S1 change that causes it (file:line in `git diff 97082508 204424e6`), and whether the failing test's fixture is (a) a synthetic fixture that should now carry battery evidence, (b) a historical/legacy bundle that should be exempt under the ruled historical set, (c) a pinned digest (receipt/supply-map) that must be regenerated because S1 changed a pinned source, or (d) a real behavioural regression that contradicts the rulings.
+3. Confirm by running one representative test per group on S1 alone and on main.
+4. For each group propose the closure shape and its blast radius (test/fixture-only vs production), and flag any group where closing it would require a production change not ruled, or would weaken the gate.
+5. Explain why V1/V2 (the targeted suites) never caught these.
+REPORT: claude-codex-report/v1 envelope, scout genre; a table of groups; final line `SCOUT: COMPLETE`.

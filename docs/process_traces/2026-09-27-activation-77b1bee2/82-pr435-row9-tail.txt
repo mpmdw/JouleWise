@@ -1,0 +1,4 @@
+MODULE PASS tests.test_window_duration_margins tests=35 failures=0 errors=0 skipped=0 seconds=16.687
+SHARD SUMMARY index=6/6 modules=47 tests=1796 failures=0 errors=0 skipped=33 result=PASS
+WORKERS SUMMARY shards=6 modules=266 tests=7525 failures=0 errors=0 skipped=109 failed_shards=none result=PASS
+rc=0

@@ -1,0 +1,18 @@
+ROLE: fix round 1 seat, custody repair (lane ISSUANCE-CUSTODY-OUTSIDE-REPO-01, JouleWise). Lead-dictated closures; implement exactly these, nothing else.
+WRITE_SCOPE: ["scripts/issue_calibration_acceptance_generation.py", "tests/test_issuer_corpus_root.py", "tests/fixtures/epoch_bootstrap/build.py"]
+WRITE_SCOPE is exhaustive; NEEDS_SCOPE otherwise. Do not commit. No git fetch/pull/checkout/commit. Do not call Claude. Scratch only under /tmp/corpus-fix1-77b1bee2/.
+OUTCOME-BLIND (binding): open no epoch 25G83 W1/W2 measured value; real custody only via the R8 path-string probe below.
+
+WORKING TREE: /Users/edr/code/JouleWise-wt-corpus-root-77b1bee2 (branch fix/2026-09-27-issuer-corpus-root at c84b1dc2, clean).
+FINDINGS (read): /Users/edr/code/JouleWise-wt-bk-77b1bee2/docs/process_traces/2026-09-27-activation-77b1bee2/50-custody-outside-repo/51-sol-execution-lens.md (F1 BLOCKER, F2) and 52-opus-contract-lens.md (S1 + nits).
+
+DICTATED CLOSURES:
+C1 (Sol F1 BLOCKER; lead ruling = the fixed middle part of Fable consult §4.1's diagram): the new naming function accepts ONLY a remainder of exactly four parts `<session_id>/runs/instrument_validation/<attempt_id>` — part[0] == session id, parts[1:3] == ("runs", "instrument_validation"), part[3] == attempt id. Anything else refuses (this replaces the "≥2 parts" rule). verify-members applies the same exact-shape check to each stored source_directory, with the session taken from the member's prior-set row. Tests: the lens's nested `P/s/s/runs/instrument_validation/s-d01` case accepts under root `P/s` only and refuses under `P`; a 3-part and a 5-part remainder refuse; a wrong middle part refuses.
+C2 (Opus S1): add a Revision-5-path test (Revision 5 NOT switched off) in which the corpus parent holds no ledger, head pin, battery verdicts or git, while --repo-root holds them, and prepare-candidate with --corpus-root succeeds; show it goes RED under the mutation "authenticate_battery_epoch (or any repo-root use) receives the corpus root". Add the same-ledger flag-absent vs flag-present equivalence test: identical member ids/order, derivation_input_sha256 and ledger cutoff; differences only in source_directory strings, member_custody note, and derivation_sha256.
+C3 (nits): (a) the pre-pass refuses duplicate attempt_id among valid rows instead of overwriting; (b) verify-members refuses duplicated member entries (by member id and by source_directory); (c) verify-members tests for a missing primary file and for a prior-row session mismatch; (d) remove the hard-coded /tmp scratch path from the test (use tempfile); (e) update the --repo-root help text to say it is the run checkout holding ledger/pin/verdicts and that --corpus-root names only the custody parent.
+Do NOT change: _repo_relative_custody; behaviour without --corpus-root; any other file.
+
+R8 PROBE (repeat, path strings only): project custody_locator/attempt_id/session_id for W1/W2 rows from /Users/edr/night-custody/measurement/JouleWise-measurement-20260927-derivation-w2/runs/calibration_observation_ledger.jsonl; with root /Users/edr/night-custody all 24 accept with the 4-part shape; roots /Users/edr, the W1 night dir, / refuse 24/24.
+
+VERIFY (/opt/homebrew/bin/python3; not sandbox-limited tests may fail on sysctl — report which): tests.test_issuer_corpus_root; tests.test_issue_calibration_acceptance_generation; tests.test_reissue_calibration_acceptance; tests.test_calibration_bracketing — exact tails. Mutation table: every new test RED under a named cut.
+REPORT: claude-codex-report/v1 envelope, implementation genre; per closure C1–C3 the diff location and evidence.

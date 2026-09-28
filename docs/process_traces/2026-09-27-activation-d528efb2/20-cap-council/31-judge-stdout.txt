@@ -1,0 +1,54 @@
+ADDENDUM: CAP-COUNCIL-25G83-01-A1 ISSUED
+
+The ruling is written to `/Users/edr/code/JouleWise-wt-bk-77b1bee2/docs/process_traces/2026-09-27-activation-d528efb2/20-cap-council/31-addendum-ruling.md` (sha256 `6b4bcaeade3f9319…`, untracked, not committed). The session ran 18:29–18:42 PDT; no other file was changed and no process is left running.
+
+## Verdict
+
+The dissent is upheld on all four blockers.
+
+| Item | Ruling | What I checked myself |
+|---|---|---|
+| B1 stop-time check depends on load | Adopted, modified | My replay of w1-d03 at load average 20.2 gave 43.70 s outside the cell loop and 33.73 µs per cell, so the old check reads 101.4 s against its 60 s limit. Cell count matched to the last cell (170,965). |
+| B2 August ruling and the 1,282,827-cell probe | Adopted; August "Option B" overruled for this epoch | Both records exist as cited. The ruling's roster excluded the probe only because the sweep record it names does not contain it. |
+| B3 value computed before the code is frozen | Adopted | All four waiting branches touch pinned estimator files, and none is reviewed by its own commit subject. |
+| B4 directive #416 | Adopted | Fetched the issue body; it requires the full audit at the frozen head that produces the paper numbers, with an independent re-derivation from raw bundles. |
+| S1–S9 | All adopted (S2, S6 modified) | The passwordless network-time setter is installed; the issuer would refuse the successor as written. |
+
+## What replaces what
+
+- **Sizing rule (§4.3):** the new rule uses cell counts only. The measured time check becomes fixed arithmetic, 45 s + cap × 35 µs ≤ 120 s, which gives 104.85 s on the illustrative 1,710,000-cell cap.
+- **Stops:** any stop on the cap or the wall deadline holds the whole window's claim status.
+- **Factor of ten:** kept. The 1.28 M-cell probe is replayed and listed but does not size the cap; under the new cap it would complete at 0.75 of the cap and trip the alarm at 0.5.
+- **Sequence (§6):** name and freeze the code, compute the value, run the two new non-claim windows, issue the successor, freeze the headline pipeline, then the #416 audit, then the closing ruling.
+- **Closing conditions:** nine checkable conditions replace the seven.
+
+One finding nobody had reported: the decision log's "about 440x" deadline margin never existed for real captures. A healthy capture under today's cap took 44.5 of the 120 seconds at load average 20.
+
+## What stands
+
+Route R, the constant cap, the tripwire at half the cap, the membership ruling, and the 5 ms clock limit are unchanged.
+
+## What needs Ed
+
+1. Approval of the successor registration before it is sealed.
+2. Identity of the two calibration files (the interim re-issue and the successor).
+3. Optional: Ed may overrule the factor of ten, the overruling of Option B, or keeping the probe out of the sizing set. All three were chosen with the cell counts known.
+
+The administrator action and the question about the audit are both withdrawn.
+
+## Not checked
+
+- The probe itself was not replayed; I did not find its raw bytes.
+- The August corpus was not replayed under today's code.
+- No timing was taken on a quiet machine; load average was 14–20 throughout.
+- The four waiting branches were not reviewed beyond subject lines and files touched.
+- I read addendum A2 and the D-138 design ruling only in part.
+
+One connector (claude.ai Anthropic Economic Index) needs authorization in claude.ai connector settings; it was not needed here.
+
+## Three-line summary
+
+1. The refuter was right on all four blockers; the sizing rule now uses cell counts and fixed arithmetic only, and any stop holds the whole window.
+2. The cap stays one constant at ten times the largest measured work (about 1.7 million cells); the August ruling against a cap that size is overruled for this epoch.
+3. The order is: freeze the code, compute the value, new captures, then the full three-family audit at the final commit; Ed is asked only to approve the successor registration and name the two files.
+rc=0

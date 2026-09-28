@@ -1,0 +1,23 @@
+== candidate sha256
+dbad7cc782945691701c2ee11188179a61b333dbd0a5588b970636716554b5b2  /Users/edr/night-archive/prepare-25g83-77b1bee2/candidate_acceptance_25g83.json
+== verify-members
+member "d079-epoch-25g83-derivation-w1-20260927-d04": PASS
+member "d079-epoch-25g83-derivation-w1-20260927-d05": PASS
+member "d079-epoch-25g83-derivation-w1-20260927-d06": PASS
+member "d079-epoch-25g83-derivation-w1-20260927-d07": PASS
+member "d079-epoch-25g83-derivation-w1-20260927-d10": PASS
+member "d079-epoch-25g83-derivation-w1-20260927-d12": PASS
+member "d079-epoch-25g83-derivation-w2-20260927-d01": PASS
+member "d079-epoch-25g83-derivation-w2-20260927-d03": PASS
+member "d079-epoch-25g83-derivation-w2-20260927-d04": PASS
+member "d079-epoch-25g83-derivation-w2-20260927-d05": PASS
+member "d079-epoch-25g83-derivation-w2-20260927-d09": PASS
+member "d079-epoch-25g83-derivation-w2-20260927-d10": PASS
+rc=0
+== strings beginning with /
+absolute-string hits: 0 []
+predecessor note: {'relative_path': 'configs/calibration/calibration_acceptance_d079_v2_n17_r7.json', 'file_sha256': '9c3a29f61a6f72bbe5efdfb0eddd1caa14557595522b2abb093b414380b9fe16'}
+candidate_not_issued: True
+member_custody present: True
+== custody digests after
+CUSTODY_UNCHANGED

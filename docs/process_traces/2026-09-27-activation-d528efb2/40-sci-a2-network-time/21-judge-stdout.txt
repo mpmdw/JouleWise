@@ -1,0 +1,57 @@
+`ADDENDUM: SCI-25G83-CANDIDATE-01-A2 ISSUED — PROCEED`
+
+The ruling is written to `/Users/edr/code/JouleWise-wt-bk-77b1bee2/docs/process_traces/2026-09-27-activation-d528efb2/40-sci-a2-network-time/21-ruling.md` (sha256 `b35d072b…ba9c`, 263 lines). It is the only file I created outside scratch, and no process is left running.
+
+## Contamination disclosure
+The harness injected the global and project instruction files and the memory index before my first turn. I opened none of them and took no fact from them. I read both earlier rulings, so everything here is ruled with the B values known.
+
+## What I found
+
+**The new fact is verified.** My own `/usr/bin/log show` pull returns 42 applied corrections across both windows, and all 26 lines of the seat's list are in it. Eight are millisecond-size (1.3–53.2 ms; one step, seven slews), spaced 27–46 minutes apart, not "about every 27". The other 34 are under 0.1 ms.
+
+**1. The 12 members.** Each capture holds 129 paired wall/monotonic readings (5 alignment stamps plus 124 pulse-command stamps), which let me reconstruct each clock directly.
+
+| Members | Corrections inside the capture | Clock movement caused | Covered by the alignment bound? |
+|---|---|---|---|
+| 10 of 12 | none | none; straight line to within 3.6 µs | yes |
+| W1-d12 | three slews at 02:30:38 (+23.5, +34.0, +39.8 µs) | +40.1 µs | yes |
+| W2-d01 | none; tail of a −45.3 µs slew applied 22 s before start | −11.6 µs | yes |
+
+- Both movements sit inside the 250 µs allowance and inside each capture's charged drift term (W1-d12: 1529.5 µs moved, 1536.8 µs charged).
+- S and the level screen are unchanged; C is 8.9 µs (0.05 %) smaller than it would be without the two movements.
+- I did not re-run the estimator; the effect on B is read from the drift term.
+
+**2. Was OFF required?** No. The registration, runbook, capture chain and both gate receipts say nothing about network time. The clock method requires OFF only for claim-bearing captures, and these are `derivation_only`. The seat's code citation is verified word for word. It is not a protocol deviation, but the candidate carries no network-time provenance, which its predecessor did.
+
+**3. Outcome-selective?** No. The timing comes from `timed`'s own timer and the size from network readings with ±16–22 ms stated uncertainty. Three of six in-window corrections landing inside a capture is consistent with chance (p = 0.31).
+
+**A fourth exclusion has the same cause.** W1-d01, recorded as `affine_clock_fit_empty`, caught the tail of a −1.262 ms slew applied 16 s before it started. 470.7 µs landed inside the capture, above the 250 µs allowance.
+
+**4. Verdict: PROCEED.** The ruling gives the exact D8 text, rewordings of D1 and D3, and discharges the "cause is sought" clause of A1's H4. Bindings B1–B4 still apply.
+
+**5. Future windows.** Three new conditions, none of them a condition on issuance:
+- **H5:** network time set OFF before settle for every window, claim-bearing or not, with the command's receipt saved, and restored afterwards.
+- **H6:** each capture checked against the `timed` log from 300 s before its start. The lead is needed because a slew keeps moving the clock after its log line (measured decay: a factor e per 16.5 s).
+- **H7:** the first OFF-state calibration captures are compared with the 12 members, since equivalence of the two states is inferred, not measured.
+
+What the code enforces today, from reading it rather than running it:
+
+| Window kind | Enforcement |
+|---|---|
+| Non-claim (the class W1 and W2 ran under) | None: not set, checked or recorded |
+| Claim-bearing measurement nights | OFF set at arm time only (`arm_readiness_evidence_t0.py:1225`); no per-capture check |
+| Per-capture log check | Exists only in `quiet_predicate_campaign.py`, a different chain |
+| `scheduler_c4_network_time_on` | Declared at `scheduler_gates.py:94`, never emitted |
+
+`systemsetup -getusingnetworktime` cannot serve as the attestation: without admin rights it prints an error and still exits 0, and the passwordless sudoers slice grants only the two set forms.
+
+## Not established
+- The machine's current network-time setting; the log shows 6 corrections between 17:00 and 18:30 today, so it was ON during this session.
+- Whether OFF also silences the small corrections triggered by the push-notification time source.
+- The charge names the code checkout as `e7c8bcc6`; its HEAD is `c772b019`, with `e7c8bcc6` an ancestor and the estimator file at the pinned digest.
+
+## Summary
+1. Proceed with issuance: no clock jump fell inside any member, two members moved by 40 and 12 µs, which their uncertainty already covers, and the largest effect on an operative number is 9 µs on C.
+2. No rule was broken, but four captures, not three, were lost to network-time corrections, and D8 must say so.
+3. Before any further window, network time must be OFF before settle and each capture checked against the log; today the code does this only at arm time for measurement nights.
+rc=0

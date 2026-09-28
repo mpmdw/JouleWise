@@ -1,0 +1,23 @@
+ROLE: mechanical packet assembler for the cold science gate on the epoch-25G83 calibration candidate (JouleWise). You assemble primary artifacts; you do NOT judge, summarize values into conclusions, or omit anything unfavourable.
+WRITE_SCOPE: ["docs/process_traces/2026-09-27-activation-77b1bee2/70-science-gate/packet/**"]
+Write ONLY inside that directory (in the working tree below). No git commit/fetch/pull/checkout. Do not call Claude. Read-only everywhere else (custody, measurement roots, ledgers: never modify).
+
+WORKING TREE: /Users/edr/code/JouleWise-wt-sci-packet-77b1bee2 (branch docs/2026-09-27-77b1bee2-packet).
+CANDIDATE: docs/process_traces/2026-09-27-activation-77b1bee2/60-prepare-record/30-run1/candidate_acceptance_25g83.json (sha256 dbad7cc782945691701c2ee11188179a61b333dbd0a5588b970636716554b5b2); run record 00-run1-record.md there.
+RUNBOOK: docs/phase_2/derivation_night_runbook.md §4.3 lists the packet items 1–8 (it was written for the three-night FAIL route; epoch 25G83 runs Revision 5 with TWO windows W1, W2 — adapt item wording to two sessions and say so).
+REGISTRATION: configs/calibration/preregistration_d079_epoch_25g83_rev1.md (sha256 81b65f08…ddf1) — include Revision 5 + A-R5b sections verbatim by line range.
+SESSIONS: d079-epoch-25g83-derivation-w1-20260927 (custody /Users/edr/night-custody/d079-epoch-25g83-derivation-w1-20260927), d079-epoch-25g83-derivation-w2-20260927 (custody …-w2-20260927). Run checkout (ledger, tools): /Users/edr/night-custody/measurement/JouleWise-measurement-20260927-derivation-w2 at e7c8bcc6.
+ARM/HARVEST RECORDS: W1 arm = docs/process_traces/2026-09-26-activation-22784e38/ (find the W1 arm record/notice) ; W1 harvest = docs/process_traces/2026-09-27-activation-3ba66eeb/00-activation-record.md items 4–13 and 10-w1-harvest/; W2 arm = same 3ba66eeb record (W2 arm items ~24–27, 40-w2-arm/); W2 harvest = docs/process_traces/2026-09-27-activation-77b1bee2/00-activation-record.md items 4–11 and 10-w2-harvest/.
+
+ASSEMBLE into packet/ (one file per item, named NN-*.md or copies), each with a header stating its primary source path and sha256:
+1. Registration: path, committed sha256, the exact line ranges of Revision 5 and A-R5b (copied verbatim), and pointers to both windows' arm records (+ each night's desk-input paste lines if recorded).
+2. The candidate file, whole (copy) + its sha256.
+3. Both sessions' dry-run outputs (harvest-time and the pre-run 60-prepare-record/20-prechecks/check10-dryrun.txt) and both chain logs (<custody>/operator_logs/derivation-chain.log, verbatim copies), including every slot_end/slot_unused/abort line.
+4. The excluded-member list: every non-valid or excluded capture of both sessions with its named mechanism, member_id/attempt_id, manifest_sha256 and instrument_evidence_sha256 (from the ledger rows / evidence), and a mechanical check of the assertion that `affine_clock_fit_empty` is the only registered exclusion mechanism (state what the registration and code actually say — cite lines).
+5. The quantile_proof block copied from the candidate (per p: quantile to 20 dp, forward residual and its bound, agreement digits and bound, method string, working precision).
+6. The screen diagnostics: screen_challenge_member_count and its threshold and which members (ids) exceed it; new-max vs prior max+range; S vs C (bracket screen vs ceiling — state where C is in the candidate and its value) — copy fields, do not judge. Also copy verbatim what the issuer code does with screen challenge under Revision 5 (cite file:line in the run checkout) and what the registration text says about it.
+7. Per-night distribution: for each session the retained member values (B), order, exclusions and clock-residual margins as recorded in the candidate/evidence — a table, diagnostics only.
+8. The registration's known conditions (e.g. display state at t0; the derivation chain's omission of --sleep-display-before-capture) — copy verbatim; plus the W2 battery gauge-step disclosure (77b1bee2 record item 11 S4) and the 50 % valid yield vs ≈79 % assumed.
+Also 00-index.md listing every packet file with sha256.
+
+REPORT: claude-codex-report/v1 envelope, scout genre; list any item you could not assemble and why.
