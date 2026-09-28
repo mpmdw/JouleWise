@@ -4172,7 +4172,19 @@ class WindowDeadlineTests(unittest.TestCase):
         # MARGIN-01). The chain still exits on its own, so the test's duration
         # does not grow; the production inequality below is unchanged.
         self._arm("/bin/sleep 3\nexit 0\n", window_max_s=2, grace_s=8.0)
-        exit_code = self.driver.run_night(self.plan_path)
+        # Keep the driver's own deadline object: its monotonic instant is the
+        # one the driver stops the chain at, on the same clock as the
+        # `monotonic_ns` it records in night/chain.exited.
+        deadlines = []
+        real_deadline = self.driver._WindowDeadline
+
+        def recording_deadline(*args, **kwargs):
+            deadlines.append(real_deadline(*args, **kwargs))
+            return deadlines[-1]
+
+        with mock.patch.object(self.driver, "_WindowDeadline",
+                               side_effect=recording_deadline):
+            exit_code = self.driver.run_night(self.plan_path)
         night = self.custody / "night"
         result = json.loads((night / "result.json").read_text())
         self.assertEqual(self.driver.EXIT_GO, exit_code)
@@ -4182,6 +4194,27 @@ class WindowDeadlineTests(unittest.TestCase):
         self.assertFalse((night / "chain.deadline").exists())
         self.assertEqual([], list(night.glob("refusal*.json")))
         self.driver.run_courier.assert_called_once()
+        # Not vacuous: the chain really ran PAST the window end and closed
+        # INSIDE the allowance (refuter residual, record 79). Both instants are
+        # the driver's own: the window end is its deadline minus the allowance
+        # it placed (deadline_epoch_s - (t0 + window_max_s)), and the chain end
+        # is the monotonic instant it recorded on reaping the chain. A plan
+        # edit that lets the chain finish inside the window fails here, not
+        # silently passes above.
+        self.assertEqual(1, len(deadlines))
+        window_end_epoch_s = self.t0_epoch_s + 2
+        allowance_s = deadlines[0].deadline_epoch_s - window_end_epoch_s
+        self.assertEqual(8.0, allowance_s)
+        window_end_monotonic = deadlines[0].deadline_monotonic - allowance_s
+        exited = json.loads((night / "chain.exited").read_text())
+        self.assertEqual(0, exited["exit_code"])
+        chain_end_monotonic = exited["monotonic_ns"] / 1e9
+        self.assertGreater(
+            chain_end_monotonic, window_end_monotonic,
+            "the chain ended inside the window, so nothing tested the allowance")
+        self.assertLess(
+            chain_end_monotonic, deadlines[0].deadline_monotonic,
+            "the chain was reaped after the driver's own deadline")
         # The real arithmetic, with the real constants.
         plan = self.driver._load_plan(self.plan_path)
         budget_s = float(self.driver._chain_environment(plan, night)["CUSTODY_BUDGET_S"])
