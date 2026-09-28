@@ -7,7 +7,8 @@ import json
 from pathlib import Path
 import re
 import subprocess
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping
+from unittest.mock import patch
 
 from joulewise import battery_float
 
@@ -95,6 +96,81 @@ def injected_battery_runner_at(now, *, charging: bool = False):
         return subprocess.CompletedProcess(list(argv), 0, stamped, b"")
 
     return run
+
+
+def produce_strict_bundle(
+    runs_root: Path | str,
+    run_id: str,
+    *,
+    mutate_config: Callable[[dict[str, Any]], None] | None = None,
+    clock_start: float = 1790373526.0,
+) -> Path:
+    """Run the controller to produce a strict, raw-backed powermetrics bundle."""
+    # Keep test-module imports here: test_powermetrics imports this helper.
+    from joulewise.clock import FakeClock
+    from joulewise.controller import run_benchmark
+    from joulewise.schemas import BenchmarkConfig, RunStatus
+    from tests.test_powermetrics import (
+        FIXTURE_D0_S, SPAWN_ADVANCE_S, documents_to_stream,
+        fixture_documents, rebased_documents,
+    )
+
+    fixture = (Path(__file__).parent / "fixtures" / "powermetrics_sample.plist").read_bytes()
+    config_data = _json(Path(__file__).parent.parent / "configs" / "examples" / "mock_local.json")
+    config_data["run_id"] = run_id
+    config_data["hardware_target"]["telemetry_backend"] = "powermetrics"
+    config_data["workload_profile"]["output_tokens"] = 300
+    config_data["sampling"] = {"power_hz": 2.0, "idle_seconds": 5.0}
+    if mutate_config is not None:
+        mutate_config(config_data)
+    if config_data["hardware_target"]["telemetry_backend"] == "mock":
+        raise ValueError("strict bundle on mock backend")
+    config = BenchmarkConfig.from_mapping(config_data)
+    clock = FakeClock(start=clock_start)
+
+    def fake_run(command, **kwargs):
+        if "-o" in command:
+            Path(command[command.index("-o") + 1]).write_bytes(fixture)
+        return subprocess.CompletedProcess(command, 0, stdout=b"", stderr=b"")
+
+    class FakePopen:
+        def __init__(self, command, **kwargs):
+            self.path = Path(command[command.index("-o") + 1])
+            self.path.write_bytes(
+                documents_to_stream(
+                    rebased_documents(
+                        fixture_documents(),
+                        first_endpoint_s=clock.now() + FIXTURE_D0_S,
+                    )
+                )
+            )
+            self.returncode = None
+            clock.sleep(SPAWN_ADVANCE_S)
+
+        def poll(self):
+            return self.returncode
+
+        def terminate(self):
+            self.returncode = 0
+
+        def kill(self):
+            self.returncode = -9
+
+        def communicate(self, timeout=None):
+            self.returncode = 0
+            return b"", b""
+
+    with (
+        patch("joulewise.adapters.powermetrics.subprocess.run", side_effect=fake_run),
+        patch("joulewise.adapters.powermetrics.subprocess.Popen", FakePopen),
+    ):
+        bundle, summary = run_benchmark(
+            config, Path(runs_root), clock, battery_runner=injected_battery_runner(),
+        )
+    assert summary.status == RunStatus.SUCCEEDED, (
+        f"strict bundle run failed: {summary.status}"
+    )
+    return bundle
 
 
 def _bound_nonmock(root: Path) -> dict[str, Any]:
