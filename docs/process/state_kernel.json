@@ -1455,6 +1455,37 @@
       "status_note": "2026-09-13: registered from activation 24b9d3dd after the second hosted failure (run 34762906269, 3.11) of a test that passes locally and on rerun; part of the deliberately racy maintenance-ON family the GIT-FIXTURE-MAINTENANCE-SWEEP-01 fence keeps excluded by name. Not started; not night-critical.",
       "stop_card": null
     },
+    "CALIB-ISSUE-25G83-D138-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-27-activation-77b1bee2/00-activation-record.md items 46–47 (science verdict and next-turn D-138 issuance)",
+          "docs/process_traces/2026-09-27-activation-77b1bee2/70-science-gate/21-science-gate-ruling.md §§7–8 (D1–D6 and PROCEED to own-gate issuance)",
+          "docs/process_traces/2026-09-27-activation-77b1bee2/70-science-gate/31-addendum-ruling.md §7 (A1 B1–B4 and claim-window HOLD)"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/CALIB-ISSUE-25G83-D138-01/acceptance",
+          "label": "CALIB-ISSUE-25G83-D138-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Issue the science-gate PROCEED candidate (sha256 dbad7cc7…) under D-138 without changing the four estimator files or the 165,000-cell cap. Enforce addendum A1 B1–B4, carry mandatory disclosures D1–D6 and the A1 claim-window hold in the issuing record, and pass the transaction's own gate. Do not fold the later cap resize into issuance."
+      },
+      "authority": {
+        "label": "2026-09-27 science-gate addendum A1 §7, binding on the D-138 issuing transaction",
+        "path": "docs/process_traces/2026-09-27-activation-77b1bee2/70-science-gate/31-addendum-ruling.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Run the D-138 issuing transaction for candidate dbad7cc7 in its own turn with its own gate.",
+      "id": "CALIB-ISSUE-25G83-D138-01",
+      "lane": "agent",
+      "priority": "p0_safety",
+      "rank": 330,
+      "status": "queued",
+      "status_note": "Registered 2026-09-27 (activation 77b1bee2, second registration). Own turn and own gate; issuance does not discharge the later claim-window HOLD.",
+      "stop_card": null
+    },
     "CANONICAL-JSON-ONE-HOME-01": {
       "acceptance": {
         "evidence": [
@@ -3523,6 +3554,37 @@
       "status_note": "2026-09-10 23:40: seat S10 rounds 1-3 committed (c75da300, e1877237, 6d838a10); refuter 170 closed by round 3; refuter 174 and delta 179 in flight; PR not yet opened. 2026-09-11: PR #320 MERGED (main baf7b900), ledger 12/12, replay and CI green; r6 file and derivation digests unchanged and EPOCH_CONTINUATION_REGISTRY has no issued entries (PR #320 body). Post-merge review docs/process_traces/2026-09-11-activation-b23f3cb7/01-postmerge-review-pr320.md: no BLOCKER or code integration defect; VERDICT FOLLOW-UP NEEDED. Follow-ups designated PASS-ROUTE-RUNBOOK-CONTINUATION-01 (F1, runbook PASS route) and IDENTITY-PROBE-LIVE-VERIFY-01 (isolated live-probe test; lead-owned); kernel registration awaits the lead ruling on enum and authority-pointer representation. Existing queued status retained because the schema has no done/completed value. 2026-09-11 seat 03 resume: lead rulings installed; PASS-ROUTE-RUNBOOK-CONTINUATION-01 and IDENTITY-PROBE-LIVE-VERIFY-01 are registered at agent ranks 188 and 189, with live verification marked lead_only.",
       "stop_card": null
     },
+    "ESTIMATOR-CELL-CAP-RESIZE-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-27-activation-77b1bee2/00-activation-record.md items 46–47 (8 of 24 captures stopped; 120 ms sizing versus 128–130 ms frames; SF-3 HOLD)",
+          "docs/process_traces/2026-09-27-activation-77b1bee2/70-science-gate/21-science-gate-ruling.md §§7–8 (D2 and work-cap finding)",
+          "docs/process_traces/2026-09-27-activation-77b1bee2/70-science-gate/31-addendum-ruling.md §§4–5 and §7 (B4, H1–H3, D7)"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/ESTIMATOR-CELL-CAP-RESIZE-01/acceptance",
+          "label": "ESTIMATOR-CELL-CAP-RESIZE-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "HOLD 25G83 claim-bearing windows until a written ruling closes the cap question by route R or M. Route R: council first rules on re-issue membership and a pre-written sizing rule using frame lengths and cell counts only, then a separate D-138 cap change forces re-issue and at least 24 non-claim captures under the new cap stop zero times. Route M: keep the cap under a registered plan that records all attempted and abandoned brackets, causes, cells, frame lengths, diagnostic energy, and the completed-versus-abandoned comparison with uncertainty; limit the claim to the short-frame state when required."
+      },
+      "authority": {
+        "label": "2026-09-27 science-gate addendum A1 §§4–5, SF-2 and SF-3 verity hold",
+        "path": "docs/process_traces/2026-09-27-activation-77b1bee2/70-science-gate/31-addendum-ruling.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Resolve the 165,000-cell estimator work-cap filter before 25G83 claim-bearing windows (verity; directive #421).",
+      "id": "ESTIMATOR-CELL-CAP-RESIZE-01",
+      "lane": "agent",
+      "priority": "p0_safety",
+      "rank": 331,
+      "status": "queued",
+      "status_note": "Registered 2026-09-27 (activation 77b1bee2, second registration). P0 verity under directive #421; HOLD on claim-bearing windows, not on the current issuance. No B value may enter the sizing rule.",
+      "stop_card": null
+    },
     "EVIDENCE-NIGHT-ENTRY-01": {
       "acceptance": {
         "evidence": [
@@ -4705,7 +4767,7 @@
           "label": "ISSUANCE-ARCHIVE-PACKET-01 acceptance",
           "path": "docs/process/state_kernel.json"
         },
-        "summary": "The archive contains the gitignored ledger, head pin, and verdicts beside both night directories, preserving <plan_id>/runs/instrument_validation/<id> layout and verifiable member paths. Complete before any offload of W1/W2 custody."
+        "summary": "The archive contains the gitignored ledger, head pin, and verdicts beside both night directories, preserving <session_id>/runs/instrument_validation/<attempt_id> layout and verifiable member paths. Complete before any offload of W1/W2 custody."
       },
       "authority": {
         "label": "2026-09-27 activation source: ruling 5, ISSUANCE-ARCHIVE-PACKET-01; activation item 15",
@@ -8305,6 +8367,37 @@
       "status_note": "2026-09-20 activation 21752427, touch 6 — registered after slice B2 merged as PR #375 (`790cce67`); successor doc lane from records 33 §4, 44 §4, 47. Keep every process rule verbatim.",
       "stop_card": null
     },
+    "S1-REGRESSION-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-27-activation-77b1bee2/00-activation-record.md items 44–45 (S1 row 9 115F/418E and regression scout)",
+          "docs/process_traces/2026-09-27-activation-77b1bee2/36-s1-regression-consult/13-opus-consult.md §§2–4 (G2, G9 and fixture repair consult)",
+          "docs/process_traces/2026-09-27-activation-77b1bee2/36-s1-regression-consult/20-coldgate-charge.md questions 1–4 (cold ruling charged; full-suite gate on each fix head)"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/S1-REGRESSION-01/acceptance",
+          "label": "S1-REGRESSION-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Classify and repair S1 row 9's 115 failures and 418 errors using the scout and three consults, obtain the charged cold ruling on G2, G9, scope and repair order, then run fixture and any ruled production repair rounds. Preserve original assertions and strict claim gates. Run the full canonical suite on every completed fix head merged with current main before refuter, cold gate and final pass; S1 is not mergeable until the exact final integration head is green."
+      },
+      "authority": {
+        "label": "2026-09-27 activation items 44–45, S1 row 9 failure and regression plan",
+        "path": "docs/process_traces/2026-09-27-activation-77b1bee2/00-activation-record.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Close the S1 full-suite regression before S1 may merge.",
+      "id": "S1-REGRESSION-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 333,
+      "status": "queued",
+      "status_note": "Registered 2026-09-27 (activation 77b1bee2, second registration). S1 remains unmergeable. The S1-REGRESSION-01 cold-gate charge exists; its ruling file is not yet present in this tree, so follow the issued ruling when available.",
+      "stop_card": null
+    },
     "S9-01B-REFUSAL-PRODUCER-CHECK-01": {
       "acceptance": {
         "evidence": [
@@ -10785,6 +10878,37 @@
       "rank": 214,
       "status": "queued",
       "status_note": "2026-09-16 activation 08ca8197: registered at the interactive session b0ae8462's request from Ed's purchase; registration only; not started; waits on the meter's arrival (hardware, Ed's hands) before the desk arm; the logger design, alignment tests and the Phase 0 row can be prepared before it arrives. Not night-critical; no window depends on it.",
+      "stop_card": null
+    },
+    "WALLCLOCK-STEP-SOURCE-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-27-activation-77b1bee2/00-activation-record.md items 46–47 (three clock-step exclusions and SF-3 HOLD)",
+          "docs/process_traces/2026-09-27-activation-77b1bee2/70-science-gate/21-science-gate-ruling.md §§7–8 (D3 and wall-clock recommendation)",
+          "docs/process_traces/2026-09-27-activation-77b1bee2/70-science-gate/31-addendum-ruling.md §5 and §7 (H4 clock-step source and HOLD)"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/WALLCLOCK-STEP-SOURCE-01/acceptance",
+          "label": "WALLCLOCK-STEP-SOURCE-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Identify and document the source of the 52.0, 35.9 and 5.8 ms wall-clock steps. Under either cap route, record abandoned brackets by cause and carry the clock-step filter into the written ruling that closes the claim-window HOLD before any claim-bearing window runs."
+      },
+      "authority": {
+        "label": "2026-09-27 science-gate addendum A1 §5 H4, clock-step verity hold",
+        "path": "docs/process_traces/2026-09-27-activation-77b1bee2/70-science-gate/31-addendum-ruling.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Find the source of three wall-clock steps during W1/W2 captures before 25G83 claim-bearing windows (verity).",
+      "id": "WALLCLOCK-STEP-SOURCE-01",
+      "lane": "agent",
+      "priority": "p0_safety",
+      "rank": 332,
+      "status": "queued",
+      "status_note": "Registered 2026-09-27 (activation 77b1bee2, second registration). P0 verity; three exclusions were 52.0, 35.9 and 5.8 ms. Same 25G83 claim-window HOLD as the cap lane.",
       "stop_card": null
     },
     "WATCHDOG-BOOTID-CLOCK-STEP-01": {
