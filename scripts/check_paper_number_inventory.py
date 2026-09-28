@@ -382,10 +382,6 @@ class Sources:
             value = FUNCS[f](value)
         return value
 
-    def sources_of(self, expr: str) -> list[str]:
-        src = expr.split("|")[0].partition(":")[0]
-        return [] if src in ("CONST", "REG") else [src]
-
 
 def _dec(v: Any) -> Decimal:
     if isinstance(v, bool):
@@ -632,7 +628,6 @@ def run_check(
                     _expected(sources, slot, f"{eid}.{sname}", expected_by_slot, rep)
                 continue
             m = matches[0]
-            line = skeleton_text.count("\n", 0, m.start()) + 1
             for sname, slot in slots.items():
                 sid = f"{eid}.{sname}"
                 span = m.span(sname)
@@ -640,7 +635,7 @@ def run_check(
                 sline = skeleton_text.count("\n", 0, span[0]) + 1
                 cls = slot["class"]
                 exp = _expected(sources, slot, sid, expected_by_slot, rep)
-                n = claim(span, cls if cls != "bound" else "bound", sid, slot_kind(slot))
+                n = claim(span, cls, sid, slot_kind(slot))
                 if slot_kind(slot) != "text" and n != 1:
                     rep.findings.append(Finding(
                         "ERROR", sid, f"slot text {printed!r} covers {n} extracted literals (expected 1)", sline
@@ -659,7 +654,6 @@ def run_check(
                         f"rule {slot.get('render', 'fixed')}) | anchor: {entry['anchor']!r}",
                         sline,
                     ))
-            del line
 
         for pred in group.get("predicates", []):
             _predicate(sources, pred, group["id"], rep)
