@@ -411,3 +411,15 @@ Launched by the watchdog at 17:36:30 PDT (attempt 124) after a usage back-off; t
 123. **S1 R3-5: seats A and B launched** (Sol xhigh, from `cdfb27ce`; briefs [88-A](30-s1-repair/88-R3-5-seat-A-brief.txt) and [88-B](30-s1-repair/88-R3-5-seat-B-brief.txt), each carrying the stop rules (i)–(v), rules 1–11, the class table and the ruled sentence).
     - **Seat A:** T5a 7 IDs, with A1 §4.3's installer; F 4 IDs (the T4 build, then the first form only); T2 2; the campaign T1 2; the `inputs.py` sibling. It does not touch M, R, T6 or the 5 rule-3 IDs.
     - **Seat B:** floor T2 21 IDs (24 outcomes); T1 1; the golden report; the `floor_extraction.py` sibling.
+124. **N1 delta re-audit 2, on head `36e8ba6e`:**
+    - **Executing lens (a fresh Opus instance, outside the sandbox): DELTA: PASS** ([45](71-ntp-design/45-n1-delta2-exec-opus.md)).
+      - All A1 §7.3 rows pass, and D1 and N1 do not survive.
+      - Three nits: the retry horizon is 0.8–2.8 s; a night path matches by prefix; the recorder has no signature.
+    - **Contract lens (Astra): DELTA: FINDINGS** ([46](71-ntp-design/46-n1-delta2-contract-astra.md)), five should-fixes and no blocker:
+      - R1: a missing-key claim is accepted as never launched;
+      - R2: P2's inherited census counts an empty answer with exit 0 as proof;
+      - R3: E2 misses [K]'s refusal;
+      - R4: the first pass is unbounded;
+      - R5: C7's refusal returns status 6.
+    - **R3 is E2 at another call site, so a 2c round would be the second fix round on the same defect: a mandatory cold gate.** Charge NTP-ENFORCE-DESIGN-01-A2 ([47](71-ntp-design/47-coldgate-fix2c-charge.md)) is convened, with cold Fable plus an Opus refuter.
+    - **Disclosed by the auditor:** the lead's rule-9 census (item 122) ran whole test modules under the triage recorder, which, like the standard S1 guard, blocks only `ioreg`. Some existing test in `test_whole_window`, `test_run_campaign` or `test_window_duration_margins` started a real `sudo -n /usr/bin/powermetrics`. Earlier whole-suite runs (item 117 and S1 step 0) use no guard at all, so this is existing suite behaviour, not new. **Finding for a hygiene lane: a test that starts the real sampler.** It is to be identified and fenced; the lead does not run those modules again until then. No capture or measurement was in progress.
