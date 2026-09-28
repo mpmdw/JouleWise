@@ -376,6 +376,704 @@
      ]
     }
    ]
+  },
+  {
+   "id": "s4_overlap",
+   "title": "Section 4 record-overlap worked example and table (skeleton :718-738); registry DG-131/132; source WEX historical.geometry",
+   "entries": [
+    {
+     "id": "s4.r03_prose",
+     "anchor": "In the 1.5B run r03, relative to epoch ⟦origin⟧ s, the phase [⟦ps⟧,⟦pe⟧] overlaps records [⟦a_s⟧,⟦a_e⟧] and [⟦b_s⟧,⟦b_e⟧] for ⟦a_ov⟧ and ⟦b_ov⟧ s: this phase fails the three-record minimum.",
+     "slots": {
+      "origin": {
+       "class": "bound",
+       "expr": "WEX:historical.geometry[0].origin",
+       "render": "integer"
+      },
+      "ps": {
+       "class": "bound",
+       "expr": "WEX:historical.geometry[0].start",
+       "render": "decimal_string"
+      },
+      "pe": {
+       "class": "bound",
+       "expr": "WEX:historical.geometry[0].end",
+       "render": "decimal_string"
+      },
+      "a_s": {
+       "class": "bound",
+       "expr": "WEX:historical.geometry[0].records[1].start",
+       "render": "decimal_string"
+      },
+      "a_e": {
+       "class": "bound",
+       "expr": "WEX:historical.geometry[0].records[1].end",
+       "render": "decimal_string"
+      },
+      "b_s": {
+       "class": "bound",
+       "expr": "WEX:historical.geometry[0].records[2].start",
+       "render": "decimal_string"
+      },
+      "b_e": {
+       "class": "bound",
+       "expr": "WEX:historical.geometry[0].records[2].end",
+       "render": "decimal_string"
+      },
+      "a_ov": {
+       "class": "bound",
+       "render": "positive_overlap_decimal",
+       "inputs": [
+        "WEX:historical.geometry[0].start",
+        "WEX:historical.geometry[0].end",
+        "WEX:historical.geometry[0].records[1].start",
+        "WEX:historical.geometry[0].records[1].end"
+       ],
+       "cross": [
+        {
+         "expr": "WEX:historical.geometry[0].records[1].overlap",
+         "render": "decimal_string"
+        }
+       ]
+      },
+      "b_ov": {
+       "class": "bound",
+       "render": "positive_overlap_decimal",
+       "inputs": [
+        "WEX:historical.geometry[0].start",
+        "WEX:historical.geometry[0].end",
+        "WEX:historical.geometry[0].records[2].start",
+        "WEX:historical.geometry[0].records[2].end"
+       ],
+       "cross": [
+        {
+         "expr": "WEX:historical.geometry[0].records[2].overlap",
+         "render": "decimal_string"
+        }
+       ]
+      }
+     }
+    },
+    {
+     "id": "s4.r08_prose",
+     "anchor": "r08 provides a three-overlap case: relative to epoch ⟦origin⟧ s, its phase is [⟦ps⟧,⟦pe⟧].",
+     "slots": {
+      "origin": {
+       "class": "bound",
+       "expr": "WEX:historical.geometry[1].origin",
+       "render": "integer"
+      },
+      "ps": {
+       "class": "bound",
+       "expr": "WEX:historical.geometry[1].start",
+       "render": "decimal_string"
+      },
+      "pe": {
+       "class": "bound",
+       "expr": "WEX:historical.geometry[1].end",
+       "render": "decimal_string"
+      }
+     }
+    },
+    {
+     "id": "s4.table",
+     "anchor": "| Run | Record index (⟦zb⟧-based) | Start (relative s) | End (relative s) | Positive-overlap duration (s) |\n|---|---:|---:|---:|---:|\n| r03 | ⟦r03_0_idx⟧ | ⟦r03_0_start⟧ | ⟦r03_0_end⟧ | ⟦r03_0_ov⟧ |\n| r03 | ⟦r03_1_idx⟧ | ⟦r03_1_start⟧ | ⟦r03_1_end⟧ | ⟦r03_1_ov⟧ |\n| r03 | ⟦r03_2_idx⟧ | ⟦r03_2_start⟧ | ⟦r03_2_end⟧ | ⟦r03_2_ov⟧ |\n| r03 | ⟦r03_3_idx⟧ | ⟦r03_3_start⟧ | ⟦r03_3_end⟧ | ⟦r03_3_ov⟧ |\n| r08 | ⟦r08_0_idx⟧ | ⟦r08_0_start⟧ | ⟦r08_0_end⟧ | ⟦r08_0_ov⟧ |\n| r08 | ⟦r08_1_idx⟧ | ⟦r08_1_start⟧ | ⟦r08_1_end⟧ | ⟦r08_1_ov⟧ |\n| r08 | ⟦r08_2_idx⟧ | ⟦r08_2_start⟧ | ⟦r08_2_end⟧ | ⟦r08_2_ov⟧ |\n| r08 | ⟦r08_3_idx⟧ | ⟦r08_3_start⟧ | ⟦r08_3_end⟧ | ⟦r08_3_ov⟧ |\n| r08 | ⟦r08_4_idx⟧ | ⟦r08_4_start⟧ | ⟦r08_4_end⟧ | ⟦r08_4_ov⟧ |\n\n",
+     "slots": {
+      "zb": {
+       "class": "classed",
+       "literal": "0",
+       "reason": "notation: 0-based indexing"
+      },
+      "r03_0_idx": {
+       "class": "bound",
+       "expr": "WEX:historical.geometry[0].records[0].index",
+       "render": "integer"
+      },
+      "r03_0_start": {
+       "class": "bound",
+       "expr": "WEX:historical.geometry[0].records[0].start",
+       "render": "decimal_string"
+      },
+      "r03_0_end": {
+       "class": "bound",
+       "expr": "WEX:historical.geometry[0].records[0].end",
+       "render": "decimal_string"
+      },
+      "r03_0_ov": {
+       "class": "bound",
+       "render": "positive_overlap_decimal",
+       "inputs": [
+        "WEX:historical.geometry[0].start",
+        "WEX:historical.geometry[0].end",
+        "WEX:historical.geometry[0].records[0].start",
+        "WEX:historical.geometry[0].records[0].end"
+       ],
+       "cross": [
+        {
+         "expr": "WEX:historical.geometry[0].records[0].overlap",
+         "render": "decimal_string"
+        }
+       ]
+      },
+      "r03_1_idx": {
+       "class": "bound",
+       "expr": "WEX:historical.geometry[0].records[1].index",
+       "render": "integer"
+      },
+      "r03_1_start": {
+       "class": "bound",
+       "expr": "WEX:historical.geometry[0].records[1].start",
+       "render": "decimal_string"
+      },
+      "r03_1_end": {
+       "class": "bound",
+       "expr": "WEX:historical.geometry[0].records[1].end",
+       "render": "decimal_string"
+      },
+      "r03_1_ov": {
+       "class": "bound",
+       "render": "positive_overlap_decimal",
+       "inputs": [
+        "WEX:historical.geometry[0].start",
+        "WEX:historical.geometry[0].end",
+        "WEX:historical.geometry[0].records[1].start",
+        "WEX:historical.geometry[0].records[1].end"
+       ],
+       "cross": [
+        {
+         "expr": "WEX:historical.geometry[0].records[1].overlap",
+         "render": "decimal_string"
+        }
+       ]
+      },
+      "r03_2_idx": {
+       "class": "bound",
+       "expr": "WEX:historical.geometry[0].records[2].index",
+       "render": "integer"
+      },
+      "r03_2_start": {
+       "class": "bound",
+       "expr": "WEX:historical.geometry[0].records[2].start",
+       "render": "decimal_string"
+      },
+      "r03_2_end": {
+       "class": "bound",
+       "expr": "WEX:historical.geometry[0].records[2].end",
+       "render": "decimal_string"
+      },
+      "r03_2_ov": {
+       "class": "bound",
+       "render": "positive_overlap_decimal",
+       "inputs": [
+        "WEX:historical.geometry[0].start",
+        "WEX:historical.geometry[0].end",
+        "WEX:historical.geometry[0].records[2].start",
+        "WEX:historical.geometry[0].records[2].end"
+       ],
+       "cross": [
+        {
+         "expr": "WEX:historical.geometry[0].records[2].overlap",
+         "render": "decimal_string"
+        }
+       ]
+      },
+      "r03_3_idx": {
+       "class": "bound",
+       "expr": "WEX:historical.geometry[0].records[3].index",
+       "render": "integer"
+      },
+      "r03_3_start": {
+       "class": "bound",
+       "expr": "WEX:historical.geometry[0].records[3].start",
+       "render": "decimal_string"
+      },
+      "r03_3_end": {
+       "class": "bound",
+       "expr": "WEX:historical.geometry[0].records[3].end",
+       "render": "decimal_string"
+      },
+      "r03_3_ov": {
+       "class": "bound",
+       "render": "positive_overlap_decimal",
+       "inputs": [
+        "WEX:historical.geometry[0].start",
+        "WEX:historical.geometry[0].end",
+        "WEX:historical.geometry[0].records[3].start",
+        "WEX:historical.geometry[0].records[3].end"
+       ],
+       "cross": [
+        {
+         "expr": "WEX:historical.geometry[0].records[3].overlap",
+         "render": "decimal_string"
+        }
+       ]
+      },
+      "r08_0_idx": {
+       "class": "bound",
+       "expr": "WEX:historical.geometry[1].records[0].index",
+       "render": "integer"
+      },
+      "r08_0_start": {
+       "class": "bound",
+       "expr": "WEX:historical.geometry[1].records[0].start",
+       "render": "decimal_string"
+      },
+      "r08_0_end": {
+       "class": "bound",
+       "expr": "WEX:historical.geometry[1].records[0].end",
+       "render": "decimal_string"
+      },
+      "r08_0_ov": {
+       "class": "bound",
+       "render": "positive_overlap_decimal",
+       "inputs": [
+        "WEX:historical.geometry[1].start",
+        "WEX:historical.geometry[1].end",
+        "WEX:historical.geometry[1].records[0].start",
+        "WEX:historical.geometry[1].records[0].end"
+       ],
+       "cross": [
+        {
+         "expr": "WEX:historical.geometry[1].records[0].overlap",
+         "render": "decimal_string"
+        }
+       ]
+      },
+      "r08_1_idx": {
+       "class": "bound",
+       "expr": "WEX:historical.geometry[1].records[1].index",
+       "render": "integer"
+      },
+      "r08_1_start": {
+       "class": "bound",
+       "expr": "WEX:historical.geometry[1].records[1].start",
+       "render": "decimal_string"
+      },
+      "r08_1_end": {
+       "class": "bound",
+       "expr": "WEX:historical.geometry[1].records[1].end",
+       "render": "decimal_string"
+      },
+      "r08_1_ov": {
+       "class": "bound",
+       "render": "positive_overlap_decimal",
+       "inputs": [
+        "WEX:historical.geometry[1].start",
+        "WEX:historical.geometry[1].end",
+        "WEX:historical.geometry[1].records[1].start",
+        "WEX:historical.geometry[1].records[1].end"
+       ],
+       "cross": [
+        {
+         "expr": "WEX:historical.geometry[1].records[1].overlap",
+         "render": "decimal_string"
+        }
+       ]
+      },
+      "r08_2_idx": {
+       "class": "bound",
+       "expr": "WEX:historical.geometry[1].records[2].index",
+       "render": "integer"
+      },
+      "r08_2_start": {
+       "class": "bound",
+       "expr": "WEX:historical.geometry[1].records[2].start",
+       "render": "decimal_string"
+      },
+      "r08_2_end": {
+       "class": "bound",
+       "expr": "WEX:historical.geometry[1].records[2].end",
+       "render": "decimal_string"
+      },
+      "r08_2_ov": {
+       "class": "bound",
+       "render": "positive_overlap_decimal",
+       "inputs": [
+        "WEX:historical.geometry[1].start",
+        "WEX:historical.geometry[1].end",
+        "WEX:historical.geometry[1].records[2].start",
+        "WEX:historical.geometry[1].records[2].end"
+       ],
+       "cross": [
+        {
+         "expr": "WEX:historical.geometry[1].records[2].overlap",
+         "render": "decimal_string"
+        }
+       ]
+      },
+      "r08_3_idx": {
+       "class": "bound",
+       "expr": "WEX:historical.geometry[1].records[3].index",
+       "render": "integer"
+      },
+      "r08_3_start": {
+       "class": "bound",
+       "expr": "WEX:historical.geometry[1].records[3].start",
+       "render": "decimal_string"
+      },
+      "r08_3_end": {
+       "class": "bound",
+       "expr": "WEX:historical.geometry[1].records[3].end",
+       "render": "decimal_string"
+      },
+      "r08_3_ov": {
+       "class": "bound",
+       "render": "positive_overlap_decimal",
+       "inputs": [
+        "WEX:historical.geometry[1].start",
+        "WEX:historical.geometry[1].end",
+        "WEX:historical.geometry[1].records[3].start",
+        "WEX:historical.geometry[1].records[3].end"
+       ],
+       "cross": [
+        {
+         "expr": "WEX:historical.geometry[1].records[3].overlap",
+         "render": "decimal_string"
+        }
+       ]
+      },
+      "r08_4_idx": {
+       "class": "bound",
+       "expr": "WEX:historical.geometry[1].records[4].index",
+       "render": "integer"
+      },
+      "r08_4_start": {
+       "class": "bound",
+       "expr": "WEX:historical.geometry[1].records[4].start",
+       "render": "decimal_string"
+      },
+      "r08_4_end": {
+       "class": "bound",
+       "expr": "WEX:historical.geometry[1].records[4].end",
+       "render": "decimal_string"
+      },
+      "r08_4_ov": {
+       "class": "bound",
+       "render": "positive_overlap_decimal",
+       "inputs": [
+        "WEX:historical.geometry[1].start",
+        "WEX:historical.geometry[1].end",
+        "WEX:historical.geometry[1].records[4].start",
+        "WEX:historical.geometry[1].records[4].end"
+       ],
+       "cross": [
+        {
+         "expr": "WEX:historical.geometry[1].records[4].overlap",
+         "render": "decimal_string"
+        }
+       ]
+      }
+     }
+    },
+    {
+     "id": "s4.binary64",
+     "anchor": "(the usual ⟦bits⟧-bit floating-point format)",
+     "slots": {
+      "bits": {
+       "class": "classed",
+       "literal": "64",
+       "reason": "notation: IEEE-754 binary64 width"
+      }
+     }
+    }
+   ],
+   "predicates": [
+    {
+     "why": "geometry[0] is run r03",
+     "lhs": "WEX:historical.geometry[0].bundle",
+     "rhs": "p2015-df-ph-decode-abs-r03"
+    },
+    {
+     "why": "geometry[1] is run r08",
+     "lhs": "WEX:historical.geometry[1].bundle",
+     "rhs": "p2015-df-ph-decode-abs-r08"
+    },
+    {
+     "why": "r03 table lists 4 records",
+     "lhs": "WEX:historical.geometry[0].records|len",
+     "rhs": 4
+    },
+    {
+     "why": "r08 table lists 5 records",
+     "lhs": "WEX:historical.geometry[1].records|len",
+     "rhs": 5
+    }
+   ],
+   "registry_checks": [
+    {
+     "key": "DG-131",
+     "value": "phase [⟦s4.r03_prose.ps⟧,⟦s4.r03_prose.pe⟧] relative to ⟦s4.r03_prose.origin⟧ s",
+     "supplier_contains": [
+      "WEX#historical.geometry[0].{start,end,origin,records}",
+      "overlaps [⟦s4.table.r03_0_ov⟧,⟦s4.table.r03_1_ov⟧,⟦s4.table.r03_2_ov⟧,⟦s4.table.r03_3_ov⟧] s"
+     ]
+    },
+    {
+     "key": "DG-132",
+     "value": "phase [⟦s4.r08_prose.ps⟧,⟦s4.r08_prose.pe⟧] relative to ⟦s4.r08_prose.origin⟧ s",
+     "supplier_contains": [
+      "WEX#historical.geometry[1]",
+      "overlaps [⟦s4.table.r08_0_ov⟧,⟦s4.table.r08_1_ov⟧,⟦s4.table.r08_2_ov⟧,⟦s4.table.r08_3_ov⟧,⟦s4.table.r08_4_ov⟧] s"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "a38",
+   "title": "Appendix A.3.8 retained calibration corpus (skeleton :1245-1278); registry DG-128; source S17 (pinned by joulewise.calibration_bracketing.ANCHOR_V3_ACCEPTANCE_BOUND_SHA256)",
+   "entries": [
+    {
+     "id": "a38.heading",
+     "anchor": "#### A.3.8 Retained calibration corpus (⟦first⟧ to ⟦last⟧ instrument-validation captures), diagnostic, not campaign data",
+     "slots": {
+      "first": {
+       "class": "classed",
+       "literal": "2026-07-22",
+       "reason": "date: heading framing (first member's capture date)",
+       "kind": "text"
+      },
+      "last": {
+       "class": "classed",
+       "literal": "2026-07-25",
+       "reason": "date: heading framing (last member's capture date)",
+       "kind": "text"
+      }
+     }
+    },
+    {
+     "id": "a38.intro",
+     "anchor": "These are the ⟦n⟧ per-capture \\(b_{\\mathrm{fiducial}}\\) bounds used by the n17 acceptance generation",
+     "slots": {
+      "n": {
+       "class": "bound",
+       "expr": "S17:derivation_corpus.n",
+       "render": "integer",
+       "registry": "DG-128"
+      }
+     }
+    },
+    {
+     "id": "a38.excluded",
+     "anchor": "⟦n_excl⟧ predecessor members were excluded because",
+     "slots": {
+      "n_excl": {
+       "class": "bound",
+       "expr": "S17:derivation_notes.excluded_predecessor_members|len",
+       "render": "word_int",
+       "case": "capitalize"
+      }
+     }
+    },
+    {
+     "id": "a38.table",
+     "anchor": "| Capture member | \\(b_{\\mathrm{fiducial}}\\) (s) |\n|---|---:|\n| `⟦m0⟧` | ⟦v0⟧ |\n| `⟦m1⟧` | ⟦v1⟧ |\n| `⟦m2⟧` | ⟦v2⟧ |\n| `⟦m3⟧` | ⟦v3⟧ |\n| `⟦m4⟧` | ⟦v4⟧ |\n| `⟦m5⟧` | ⟦v5⟧ |\n| `⟦m6⟧` | ⟦v6⟧ |\n| `⟦m7⟧` | ⟦v7⟧ |\n| `⟦m8⟧` | ⟦v8⟧ |\n| `⟦m9⟧` | ⟦v9⟧ |\n| `⟦m10⟧` | ⟦v10⟧ |\n| `⟦m11⟧` | ⟦v11⟧ |\n| `⟦m12⟧` | ⟦v12⟧ |\n| `⟦m13⟧` | ⟦v13⟧ |\n| `⟦m14⟧` | ⟦v14⟧ |\n| `⟦m15⟧` | ⟦v15⟧ |\n| `⟦m16⟧` | ⟦v16⟧ |\n\n",
+     "slots": {
+      "m0": {
+       "class": "bound",
+       "expr": "S17:derivation_corpus.members[0].member_id",
+       "render": "text",
+       "kind": "text"
+      },
+      "v0": {
+       "class": "bound",
+       "expr": "S17:derivation_corpus.members[0].b_fiducial_s",
+       "render": "decimal_string"
+      },
+      "m1": {
+       "class": "bound",
+       "expr": "S17:derivation_corpus.members[1].member_id",
+       "render": "text",
+       "kind": "text"
+      },
+      "v1": {
+       "class": "bound",
+       "expr": "S17:derivation_corpus.members[1].b_fiducial_s",
+       "render": "decimal_string"
+      },
+      "m2": {
+       "class": "bound",
+       "expr": "S17:derivation_corpus.members[2].member_id",
+       "render": "text",
+       "kind": "text"
+      },
+      "v2": {
+       "class": "bound",
+       "expr": "S17:derivation_corpus.members[2].b_fiducial_s",
+       "render": "decimal_string"
+      },
+      "m3": {
+       "class": "bound",
+       "expr": "S17:derivation_corpus.members[3].member_id",
+       "render": "text",
+       "kind": "text"
+      },
+      "v3": {
+       "class": "bound",
+       "expr": "S17:derivation_corpus.members[3].b_fiducial_s",
+       "render": "decimal_string"
+      },
+      "m4": {
+       "class": "bound",
+       "expr": "S17:derivation_corpus.members[4].member_id",
+       "render": "text",
+       "kind": "text"
+      },
+      "v4": {
+       "class": "bound",
+       "expr": "S17:derivation_corpus.members[4].b_fiducial_s",
+       "render": "decimal_string"
+      },
+      "m5": {
+       "class": "bound",
+       "expr": "S17:derivation_corpus.members[5].member_id",
+       "render": "text",
+       "kind": "text"
+      },
+      "v5": {
+       "class": "bound",
+       "expr": "S17:derivation_corpus.members[5].b_fiducial_s",
+       "render": "decimal_string"
+      },
+      "m6": {
+       "class": "bound",
+       "expr": "S17:derivation_corpus.members[6].member_id",
+       "render": "text",
+       "kind": "text"
+      },
+      "v6": {
+       "class": "bound",
+       "expr": "S17:derivation_corpus.members[6].b_fiducial_s",
+       "render": "decimal_string"
+      },
+      "m7": {
+       "class": "bound",
+       "expr": "S17:derivation_corpus.members[7].member_id",
+       "render": "text",
+       "kind": "text"
+      },
+      "v7": {
+       "class": "bound",
+       "expr": "S17:derivation_corpus.members[7].b_fiducial_s",
+       "render": "decimal_string"
+      },
+      "m8": {
+       "class": "bound",
+       "expr": "S17:derivation_corpus.members[8].member_id",
+       "render": "text",
+       "kind": "text"
+      },
+      "v8": {
+       "class": "bound",
+       "expr": "S17:derivation_corpus.members[8].b_fiducial_s",
+       "render": "decimal_string"
+      },
+      "m9": {
+       "class": "bound",
+       "expr": "S17:derivation_corpus.members[9].member_id",
+       "render": "text",
+       "kind": "text"
+      },
+      "v9": {
+       "class": "bound",
+       "expr": "S17:derivation_corpus.members[9].b_fiducial_s",
+       "render": "decimal_string"
+      },
+      "m10": {
+       "class": "bound",
+       "expr": "S17:derivation_corpus.members[10].member_id",
+       "render": "text",
+       "kind": "text"
+      },
+      "v10": {
+       "class": "bound",
+       "expr": "S17:derivation_corpus.members[10].b_fiducial_s",
+       "render": "decimal_string"
+      },
+      "m11": {
+       "class": "bound",
+       "expr": "S17:derivation_corpus.members[11].member_id",
+       "render": "text",
+       "kind": "text"
+      },
+      "v11": {
+       "class": "bound",
+       "expr": "S17:derivation_corpus.members[11].b_fiducial_s",
+       "render": "decimal_string"
+      },
+      "m12": {
+       "class": "bound",
+       "expr": "S17:derivation_corpus.members[12].member_id",
+       "render": "text",
+       "kind": "text"
+      },
+      "v12": {
+       "class": "bound",
+       "expr": "S17:derivation_corpus.members[12].b_fiducial_s",
+       "render": "decimal_string"
+      },
+      "m13": {
+       "class": "bound",
+       "expr": "S17:derivation_corpus.members[13].member_id",
+       "render": "text",
+       "kind": "text"
+      },
+      "v13": {
+       "class": "bound",
+       "expr": "S17:derivation_corpus.members[13].b_fiducial_s",
+       "render": "decimal_string"
+      },
+      "m14": {
+       "class": "bound",
+       "expr": "S17:derivation_corpus.members[14].member_id",
+       "render": "text",
+       "kind": "text"
+      },
+      "v14": {
+       "class": "bound",
+       "expr": "S17:derivation_corpus.members[14].b_fiducial_s",
+       "render": "decimal_string"
+      },
+      "m15": {
+       "class": "bound",
+       "expr": "S17:derivation_corpus.members[15].member_id",
+       "render": "text",
+       "kind": "text"
+      },
+      "v15": {
+       "class": "bound",
+       "expr": "S17:derivation_corpus.members[15].b_fiducial_s",
+       "render": "decimal_string"
+      },
+      "m16": {
+       "class": "bound",
+       "expr": "S17:derivation_corpus.members[16].member_id",
+       "render": "text",
+       "kind": "text"
+      },
+      "v16": {
+       "class": "bound",
+       "expr": "S17:derivation_corpus.members[16].b_fiducial_s",
+       "render": "decimal_string"
+      }
+     }
+    }
+   ],
+   "predicates": [
+    {
+     "why": "member list length equals derivation_corpus.n",
+     "lhs": "S17:derivation_corpus.members|len",
+     "rhs": "S17:derivation_corpus.n"
+    }
+   ],
+   "registry_checks": [
+    {
+     "key": "DG-128",
+     "value": "⟦a38.intro.n⟧ b_fiducial_s bounds (table)",
+     "supplier_contains": [
+      "S17#derivation_corpus.members[].b_fiducial_s"
+     ]
+    }
+   ]
   }
  ],
  "spelled_out_expected_total": 307,
@@ -637,342 +1335,6 @@
    "literal": "37",
    "ctx": "record width; 37 phases had only two overlaps.",
    "offset": 14,
-   "census_status": "UNPOLICED-REGISTERED"
-  },
-  {
-   "line": 720,
-   "literal": "1784978933",
-   "ctx": "relative to epoch 1784978933 s, the phase [0.267684,0.3887",
-   "offset": 18,
-   "census_status": "UNPOLICED-REGISTERED"
-  },
-  {
-   "line": 720,
-   "literal": "0.267684",
-   "ctx": "ative to epoch 1784978933 s, the phase [0.267684,0.3887181]",
-   "offset": 40,
-   "census_status": "UNPOLICED-REGISTERED"
-  },
-  {
-   "line": 720,
-   "literal": "0.3887181",
-   "ctx": "epoch 1784978933 s, the phase [0.267684,0.3887181]",
-   "offset": 40,
-   "census_status": "UNPOLICED-REGISTERED"
-  },
-  {
-   "line": 721,
-   "literal": "0.1945653",
-   "ctx": "overlaps records [0.1945653,0.3210495] and [0.3210495,0.4",
-   "offset": 18,
-   "census_status": "UNPOLICED-REGISTERED"
-  },
-  {
-   "line": 721,
-   "literal": "0.3210495",
-   "ctx": "overlaps records [0.1945653,0.3210495] and [0.3210495,0.434475] for",
-   "offset": 28,
-   "census_status": "UNPOLICED-REGISTERED"
-  },
-  {
-   "line": 721,
-   "literal": "0.3210495",
-   "ctx": "laps records [0.1945653,0.3210495] and [0.3210495,0.434475] for",
-   "offset": 40,
-   "census_status": "UNPOLICED-REGISTERED"
-  },
-  {
-   "line": 721,
-   "literal": "0.434475",
-   "ctx": "ds [0.1945653,0.3210495] and [0.3210495,0.434475] for",
-   "offset": 40,
-   "census_status": "UNPOLICED-REGISTERED"
-  },
-  {
-   "line": 722,
-   "literal": "0.0533655",
-   "ctx": "0.0533655 and 0.0676686 s: this phase f",
-   "offset": 0,
-   "census_status": "UNPOLICED-REGISTERED"
-  },
-  {
-   "line": 722,
-   "literal": "0.0676686",
-   "ctx": "0.0533655 and 0.0676686 s: this phase fails the three",
-   "offset": 14,
-   "census_status": "UNPOLICED-REGISTERED"
-  },
-  {
-   "line": 724,
-   "literal": "1784981672",
-   "ctx": "a three-overlap case: relative to epoch 1784981672 s, its phase is",
-   "offset": 40,
-   "census_status": "UNPOLICED-REGISTERED"
-  },
-  {
-   "line": 725,
-   "literal": "0.671041",
-   "ctx": "[0.671041,0.807431]. The middle record ",
-   "offset": 1,
-   "census_status": "UNPOLICED-REGISTERED"
-  },
-  {
-   "line": 725,
-   "literal": "0.807431",
-   "ctx": "[0.671041,0.807431]. The middle record lies whol",
-   "offset": 10,
-   "census_status": "UNPOLICED-REGISTERED"
-  },
-  {
-   "line": 730,
-   "literal": "364",
-   "ctx": "| r03 | 364 | 0.0726435 | 0.1945655 | 0 |",
-   "offset": 8,
-   "census_status": "UNPOLICED-REGISTERED"
-  },
-  {
-   "line": 730,
-   "literal": "0.0726435",
-   "ctx": "| r03 | 364 | 0.0726435 | 0.1945655 | 0 |",
-   "offset": 14,
-   "census_status": "UNPOLICED-REGISTERED"
-  },
-  {
-   "line": 730,
-   "literal": "0.1945655",
-   "ctx": "| r03 | 364 | 0.0726435 | 0.1945655 | 0 |",
-   "offset": 26,
-   "census_status": "UNPOLICED-REGISTERED"
-  },
-  {
-   "line": 730,
-   "literal": "0",
-   "ctx": "| r03 | 364 | 0.0726435 | 0.1945655 | 0 |",
-   "offset": 38,
-   "census_status": "UNPOLICED-REGISTERED"
-  },
-  {
-   "line": 731,
-   "literal": "365",
-   "ctx": "| r03 | 365 | 0.1945653 | 0.3210495 | 0.0",
-   "offset": 8,
-   "census_status": "UNPOLICED-REGISTERED"
-  },
-  {
-   "line": 731,
-   "literal": "0.1945653",
-   "ctx": "| r03 | 365 | 0.1945653 | 0.3210495 | 0.0533655 |",
-   "offset": 14,
-   "census_status": "UNPOLICED-REGISTERED"
-  },
-  {
-   "line": 731,
-   "literal": "0.3210495",
-   "ctx": "| r03 | 365 | 0.1945653 | 0.3210495 | 0.0533655 |",
-   "offset": 26,
-   "census_status": "UNPOLICED-REGISTERED"
-  },
-  {
-   "line": 731,
-   "literal": "0.0533655",
-   "ctx": "| r03 | 365 | 0.1945653 | 0.3210495 | 0.0533655 |",
-   "offset": 38,
-   "census_status": "UNPOLICED-REGISTERED"
-  },
-  {
-   "line": 732,
-   "literal": "366",
-   "ctx": "| r03 | 366 | 0.3210495 | 0.434475 | 0.06",
-   "offset": 8,
-   "census_status": "UNPOLICED-REGISTERED"
-  },
-  {
-   "line": 732,
-   "literal": "0.3210495",
-   "ctx": "| r03 | 366 | 0.3210495 | 0.434475 | 0.0676686 |",
-   "offset": 14,
-   "census_status": "UNPOLICED-REGISTERED"
-  },
-  {
-   "line": 732,
-   "literal": "0.434475",
-   "ctx": "| r03 | 366 | 0.3210495 | 0.434475 | 0.0676686 |",
-   "offset": 26,
-   "census_status": "UNPOLICED-REGISTERED"
-  },
-  {
-   "line": 732,
-   "literal": "0.0676686",
-   "ctx": "| r03 | 366 | 0.3210495 | 0.434475 | 0.0676686 |",
-   "offset": 37,
-   "census_status": "UNPOLICED-REGISTERED"
-  },
-  {
-   "line": 733,
-   "literal": "367",
-   "ctx": "| r03 | 367 | 0.434475 | 0.5463145 | 0 |",
-   "offset": 8,
-   "census_status": "UNPOLICED-REGISTERED"
-  },
-  {
-   "line": 733,
-   "literal": "0.434475",
-   "ctx": "| r03 | 367 | 0.434475 | 0.5463145 | 0 |",
-   "offset": 14,
-   "census_status": "UNPOLICED-REGISTERED"
-  },
-  {
-   "line": 733,
-   "literal": "0.5463145",
-   "ctx": "| r03 | 367 | 0.434475 | 0.5463145 | 0 |",
-   "offset": 25,
-   "census_status": "UNPOLICED-REGISTERED"
-  },
-  {
-   "line": 733,
-   "literal": "0",
-   "ctx": "| r03 | 367 | 0.434475 | 0.5463145 | 0 |",
-   "offset": 37,
-   "census_status": "UNPOLICED-REGISTERED"
-  },
-  {
-   "line": 734,
-   "literal": "360",
-   "ctx": "| r08 | 360 | 0.4395304 | 0.5621388 | 0 |",
-   "offset": 8,
-   "census_status": "UNPOLICED-REGISTERED"
-  },
-  {
-   "line": 734,
-   "literal": "0.4395304",
-   "ctx": "| r08 | 360 | 0.4395304 | 0.5621388 | 0 |",
-   "offset": 14,
-   "census_status": "UNPOLICED-REGISTERED"
-  },
-  {
-   "line": 734,
-   "literal": "0.5621388",
-   "ctx": "| r08 | 360 | 0.4395304 | 0.5621388 | 0 |",
-   "offset": 26,
-   "census_status": "UNPOLICED-REGISTERED"
-  },
-  {
-   "line": 734,
-   "literal": "0",
-   "ctx": "| r08 | 360 | 0.4395304 | 0.5621388 | 0 |",
-   "offset": 38,
-   "census_status": "UNPOLICED-REGISTERED"
-  },
-  {
-   "line": 735,
-   "literal": "361",
-   "ctx": "| r08 | 361 | 0.5621388 | 0.6849675 | 0.0",
-   "offset": 8,
-   "census_status": "UNPOLICED-REGISTERED"
-  },
-  {
-   "line": 735,
-   "literal": "0.5621388",
-   "ctx": "| r08 | 361 | 0.5621388 | 0.6849675 | 0.0139265 |",
-   "offset": 14,
-   "census_status": "UNPOLICED-REGISTERED"
-  },
-  {
-   "line": 735,
-   "literal": "0.6849675",
-   "ctx": "| r08 | 361 | 0.5621388 | 0.6849675 | 0.0139265 |",
-   "offset": 26,
-   "census_status": "UNPOLICED-REGISTERED"
-  },
-  {
-   "line": 735,
-   "literal": "0.0139265",
-   "ctx": "| r08 | 361 | 0.5621388 | 0.6849675 | 0.0139265 |",
-   "offset": 38,
-   "census_status": "UNPOLICED-REGISTERED"
-  },
-  {
-   "line": 736,
-   "literal": "362",
-   "ctx": "| r08 | 362 | 0.6849675 | 0.799845 | 0.11",
-   "offset": 8,
-   "census_status": "UNPOLICED-REGISTERED"
-  },
-  {
-   "line": 736,
-   "literal": "0.6849675",
-   "ctx": "| r08 | 362 | 0.6849675 | 0.799845 | 0.1148775 |",
-   "offset": 14,
-   "census_status": "UNPOLICED-REGISTERED"
-  },
-  {
-   "line": 736,
-   "literal": "0.799845",
-   "ctx": "| r08 | 362 | 0.6849675 | 0.799845 | 0.1148775 |",
-   "offset": 26,
-   "census_status": "UNPOLICED-REGISTERED"
-  },
-  {
-   "line": 736,
-   "literal": "0.1148775",
-   "ctx": "| r08 | 362 | 0.6849675 | 0.799845 | 0.1148775 |",
-   "offset": 37,
-   "census_status": "UNPOLICED-REGISTERED"
-  },
-  {
-   "line": 737,
-   "literal": "363",
-   "ctx": "| r08 | 363 | 0.799845 | 0.9133315 | 0.00",
-   "offset": 8,
-   "census_status": "UNPOLICED-REGISTERED"
-  },
-  {
-   "line": 737,
-   "literal": "0.799845",
-   "ctx": "| r08 | 363 | 0.799845 | 0.9133315 | 0.007586 |",
-   "offset": 14,
-   "census_status": "UNPOLICED-REGISTERED"
-  },
-  {
-   "line": 737,
-   "literal": "0.9133315",
-   "ctx": "| r08 | 363 | 0.799845 | 0.9133315 | 0.007586 |",
-   "offset": 25,
-   "census_status": "UNPOLICED-REGISTERED"
-  },
-  {
-   "line": 737,
-   "literal": "0.007586",
-   "ctx": "| r08 | 363 | 0.799845 | 0.9133315 | 0.007586 |",
-   "offset": 37,
-   "census_status": "UNPOLICED-REGISTERED"
-  },
-  {
-   "line": 738,
-   "literal": "364",
-   "ctx": "| r08 | 364 | 0.9133313 | 1.0261726 | 0 |",
-   "offset": 8,
-   "census_status": "UNPOLICED-REGISTERED"
-  },
-  {
-   "line": 738,
-   "literal": "0.9133313",
-   "ctx": "| r08 | 364 | 0.9133313 | 1.0261726 | 0 |",
-   "offset": 14,
-   "census_status": "UNPOLICED-REGISTERED"
-  },
-  {
-   "line": 738,
-   "literal": "1.0261726",
-   "ctx": "| r08 | 364 | 0.9133313 | 1.0261726 | 0 |",
-   "offset": 26,
-   "census_status": "UNPOLICED-REGISTERED"
-  },
-  {
-   "line": 738,
-   "literal": "0",
-   "ctx": "| r08 | 364 | 0.9133313 | 1.0261726 | 0 |",
-   "offset": 38,
    "census_status": "UNPOLICED-REGISTERED"
   },
   {
@@ -1610,132 +1972,6 @@
    "literal": "28.9",
    "ctx": "nted bounds is 0.0289329345611147592 s (28.9 ms). That difference is what ",
    "offset": 40,
-   "census_status": "UNPOLICED-REGISTERED"
-  },
-  {
-   "line": 1247,
-   "literal": "17",
-   "ctx": "These are the 17 per-capture \\(b_{\\mathrm{fidu",
-   "offset": 14,
-   "census_status": "UNPOLICED-REGISTERED"
-  },
-  {
-   "line": 1262,
-   "literal": "0.030067931757111657",
-   "ctx": "| `20260722T145535-e941c821` | 0.030067931757111657 |",
-   "offset": 31,
-   "census_status": "UNPOLICED-REGISTERED"
-  },
-  {
-   "line": 1263,
-   "literal": "0.027365018417518542",
-   "ctx": "| `20260722T194118-9dc0749d` | 0.027365018417518542 |",
-   "offset": 31,
-   "census_status": "UNPOLICED-REGISTERED"
-  },
-  {
-   "line": 1264,
-   "literal": "0.03289849371536248",
-   "ctx": "| `20260722T214220-1acdbbc0` | 0.03289849371536248 |",
-   "offset": 31,
-   "census_status": "UNPOLICED-REGISTERED"
-  },
-  {
-   "line": 1265,
-   "literal": "0.02317490442656863",
-   "ctx": "| `20260722T215127-eeef661a` | 0.02317490442656863 |",
-   "offset": 31,
-   "census_status": "UNPOLICED-REGISTERED"
-  },
-  {
-   "line": 1266,
-   "literal": "0.028744604461883507",
-   "ctx": "| `20260722T232509-82642517` | 0.028744604461883507 |",
-   "offset": 31,
-   "census_status": "UNPOLICED-REGISTERED"
-  },
-  {
-   "line": 1267,
-   "literal": "0.025549688302808828",
-   "ctx": "| `20260723T023058-8732d1c9` | 0.025549688302808828 |",
-   "offset": 31,
-   "census_status": "UNPOLICED-REGISTERED"
-  },
-  {
-   "line": 1268,
-   "literal": "0.026112736870656926",
-   "ctx": "| `20260723T052051-d9358c8a` | 0.026112736870656926 |",
-   "offset": 31,
-   "census_status": "UNPOLICED-REGISTERED"
-  },
-  {
-   "line": 1269,
-   "literal": "0.025120423355537637",
-   "ctx": "| `20260723T194632-d04e038e` | 0.025120423355537637 |",
-   "offset": 31,
-   "census_status": "UNPOLICED-REGISTERED"
-  },
-  {
-   "line": 1270,
-   "literal": "0.025462798878078775",
-   "ctx": "| `20260723T195730-bc4ba14a` | 0.025462798878078775 |",
-   "offset": 31,
-   "census_status": "UNPOLICED-REGISTERED"
-  },
-  {
-   "line": 1271,
-   "literal": "0.027201280356104838",
-   "ctx": "| `20260723T221449-e9ae755e` | 0.027201280356104838 |",
-   "offset": 31,
-   "census_status": "UNPOLICED-REGISTERED"
-  },
-  {
-   "line": 1272,
-   "literal": "0.025993442258292716",
-   "ctx": "| `20260723T223406-314f6d9e` | 0.025993442258292716 |",
-   "offset": 31,
-   "census_status": "UNPOLICED-REGISTERED"
-  },
-  {
-   "line": 1273,
-   "literal": "0.02562670977988252",
-   "ctx": "| `20260724T014109-57844352` | 0.02562670977988252 |",
-   "offset": 31,
-   "census_status": "UNPOLICED-REGISTERED"
-  },
-  {
-   "line": 1274,
-   "literal": "0.02366861961761718",
-   "ctx": "| `20260725T005132-a64711b7` | 0.02366861961761718 |",
-   "offset": 31,
-   "census_status": "UNPOLICED-REGISTERED"
-  },
-  {
-   "line": 1275,
-   "literal": "0.029273357215668885",
-   "ctx": "| `20260725T011533-0b5ec77c` | 0.029273357215668885 |",
-   "offset": 31,
-   "census_status": "UNPOLICED-REGISTERED"
-  },
-  {
-   "line": 1276,
-   "literal": "0.028733193582380412",
-   "ctx": "| `20260725T022712-0a9534f5` | 0.028733193582380412 |",
-   "offset": 31,
-   "census_status": "UNPOLICED-REGISTERED"
-  },
-  {
-   "line": 1277,
-   "literal": "0.026415695490612106",
-   "ctx": "| `20260725T030533-d3f076e5` | 0.026415695490612106 |",
-   "offset": 31,
-   "census_status": "UNPOLICED-REGISTERED"
-  },
-  {
-   "line": 1278,
-   "literal": "0.02501695592329986",
-   "ctx": "| `20260725T060617-97c5cba6` | 0.02501695592329986 |",
-   "offset": 31,
    "census_status": "UNPOLICED-REGISTERED"
   },
   {
