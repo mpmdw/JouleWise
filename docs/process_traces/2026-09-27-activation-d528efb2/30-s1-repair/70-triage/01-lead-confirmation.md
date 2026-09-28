@@ -31,3 +31,12 @@ Activation d528efb2, 2026-09-28 ≈03:25 PDT. The script's proposal is `table-pr
 - The remaining 5 rows of `test_mint_floor_artifact_generalized`.
 
 Then R3-3, the pilot: one each of T2, T4 (or "bind + pair"), and T5 in scratch, each with the planted "charging pair" turning it RED.
+
+## Confirmed at the bench, 2026-09-28 ≈09:45–10:30 PDT (activation d528efb2, items 120–121)
+
+5. **T2 (29 test IDs, 33 outcomes): confirmed T2, none T3.** An AST scan of each test body finds no mention of mock telemetry, mock configs, `production_predicate`, exemption or `telemetry_claim_ineligible`. The ID list is `87-bench-rules/t2-ids.txt`.
+6. **T1, `test_floor_cpu_ledger_rejects_duplicates_reordering_mismatch_and_absence`: stays T1.** In scratch, the fixture's final bundle gets `run_id` plus `write_passing_pair`, and the test is GREEN. With the charging pair it is RED (`environment_admission_missing`; the floor's CPU-admission check does not admit a bundle whose pair fails).
+7. **The remaining rows of `test_mint_floor_artifact_generalized` (6 IDs, 7 outcomes) are bind + pair.** On the candidate `f0766620` every one fails with `battery_float_evidence_missing (pair not bound (config.json does not re-validate: schema_version must be a non-empty string))`.
+8. **Rule 7, second-switch eligibility.** On main's tree (`e7c8bcc6`), a recorder logged every answer of `_current_strict_summary` for the 7 T5a and 4 F IDs (`87-bench-rules/rule7-*`). The answer was **False for every bundle, in all 11 tests** (214–642 calls each). All 11 are eligible under rule 7.
+9. **Rule 8 (never the test's own subject).** An AST scan of each test and the class methods it calls finds no function on the second-form list and no reason that only the second form's right-hand branch can raise. There is one exception: `test_incomplete_pair_is_listed_and_never_converted_to_unpaired_samples_with_production_telemetry_identity` patches `joulewise.analysis_engine.inputs.AuthenticatedConsumptionSession`, the class whose `_prepare` is on the list. **It is withheld from the second list (conservative).** It gets the first form only; if it stays RED, it goes to the per-ID gate.
+10. **Rule 10.** P-3 (an F ID) passes without the second switch, so F IDs get the first form only unless seat A shows a need. Rule 7 already allows all four, so the lead can grant quickly.

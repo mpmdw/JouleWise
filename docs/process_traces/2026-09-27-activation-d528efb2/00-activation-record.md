@@ -392,3 +392,12 @@ Launched by the watchdog at 17:36:30 PDT (attempt 124) after a usage back-off; t
     - P-3 is GREEN after the T4 build (floor-member bundles copied into the declared roots); RED under the charging pair; **it needs no second switch.**
     - Stop condition 6a is not met.
     - **Next, at the bench:** the rule 7 recorder on main; the rule 9 coverage census; the T1 bench check; then fill the ID lists and start seats A and B.
+121. **S1 bench confirmations** ([01-lead-confirmation.md](30-s1-repair/70-triage/01-lead-confirmation.md), items 5–10; [87-bench-rules](30-s1-repair/87-bench-rules/)):
+    - T2 is confirmed: 29 IDs, none T3.
+    - T1 holds, with the pair alone: GREEN, and RED under the plant.
+    - The last `test_mint_floor_artifact_generalized` rows are bind + pair.
+    - **Rule 7:** main answered False on every bundle for all 11 T5a/F IDs.
+    - **Rule 8** withholds the second switch from the `incomplete_pair…_with_production_telemetry_identity` ID.
+    - **Rule 10:** F gets the first form only.
+    - **The planned second list is 6 IDs**, under condition 9's cap of 11.
+    - The rule 9 coverage census is running (recorder on `_current_core_rederivation_reasons` past its early return, candidate `f0766620`).
