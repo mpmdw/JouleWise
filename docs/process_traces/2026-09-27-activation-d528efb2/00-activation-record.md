@@ -52,3 +52,13 @@ Launched by the watchdog at 17:36:30 PDT (attempt 124) after a usage back-off; t
     - **(iv)** D1–D4 each turned exactly the test the ruling names RED ([log](30-s1-repair/22-controller-acceptance-iv-plant.log)). The scratch worktree was removed and production was restored byte-for-byte.
     - Committed as `12a02bf6` on `fix/2026-09-27-s1-regress-P`. Bookkeeping changes per ruling §6: check 9's fence 50 → 51; the check-1 R-list gains one entry; check-5 row; one sentence added to the G-5 PR description.
     - **Returned to the lead (§7):** two `HappyPathTests` in `tests/test_controller.py` (`:1812`, `:2033`) start the real battery probe on `c7593edb` too. They will fail check 6 (hermeticity). They are to be confirmed at step 2/4 and taken to an addendum; not granted yet.
+33. **S1 step 2 (lead, bench) on the linear step-2 head `4b4660de`** (`fix/2026-09-27-s1-regress`: `c7593edb` + P `db4eadf6` + lead `12a02bf6` + H cherry-picked with `-x`; no merge commit, per check 7 (c)). Checks:
+    - **3:** the production diff is 5 of the 6 permitted paths; `supply_map.json` comes at step 5.
+    - **4:** `--check` byte-identical, entries=69; `HISTORICAL_BUNDLE_SET_SHA256` unchanged.
+    - **5, G2 row:** planting T12a-1 (any-member admission) turned `test_12a_1`/`_2`/`_10` RED; planting T12a-4 (gate default `True`) turned `test_12a_4` (6 consumers), `test_12a_8` and `test_12a_11` RED. The scratch worktree was removed.
+    - **7 (a):** `tests.test_bundle_read` + `tests.test_battery_float`, 232/232 OK under the guard.
+    - **7 (b):** empty. **7 (c):** 0 merges.
+    - **2 (k):** clean.
+    - **9:** all 11 paths lie within the 51-path set.
+    - **PASS.** Pushed.
+34. **S1 step 3: seats A, B, C, D launched in parallel** (Sol 6.0 high; [briefs](30-s1-repair/) `03-seat-{A,B,C,D}-brief.txt`; worktrees `JouleWise-wt-s1-{A,B,C,D}-d528efb2` on `fix/2026-09-27-s1-regress-{A..D}` at `4b4660de`; reports `/tmp/s1-{A..D}-d528efb2/report.md`). Seat A carries the lead's 10a issuing decision (item 31) and the call-form list. B and C carry the §E empty-R-list condition. C does G6 first. D injects the runner in every G10 test. All seats run tests only under the ioreg guard. Landing order: cherry-pick each onto `fix/2026-09-27-s1-regress` (no merges).
