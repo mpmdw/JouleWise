@@ -171,3 +171,10 @@ Launched by the watchdog at 17:36:30 PDT (attempt 124) after a usage back-off; t
     - **S3:** the bytes say the §9 gate is "complete" and omit A3.
     - N1: rules (b)/(f) are unobservable, plus nits.
     - **With item 61, two independent refuters found open hold routes, so D-138 STOPS** (design ruling §9 step 6). **Cold design addendum D138-25G83-DESIGN-01-A1 convened** ([charge](11-d138-design/30-addendum-charge.md)): where H1 is enforced (at consumption, declared-equals-active, or NOT moving the default until H1 lifts), the doubling trigger, S2/S3/N1, the old-epoch replay disposition, and the D-185/record claims.
+65. **The lead's whole suite on D-138 `c81f65b8`** (outside the sandbox, per-ID runner): **269 modules, 7,559 tests, 0 failures, 0 errors, 109 skipped. The skipped IDs are identical to main's reference** ([summary](50-d138-issuance-seat/suite-c81f65b8/)). The implementation seat's 242 in-sandbox failures were sandbox artifacts (`pgrep`/`sysctl`). The suite on the later candidate `325d9f77` is running; the design addendum will change the head again anyway.
+66. **Lane registration** (Sol high; `fbf0007d` on `docs/2026-09-27-d528efb2-lanes`, merged into the records branch as `0f86b1a0`):
+    - five lanes registered: NETWORK-TIME-OFF-ENFORCE-01 (P0), NETWORK-TIME-H7-COMPARISON-01, OLD-EPOCH-EXPLICIT-R7-ROUTE-01, BFGS-MOCK-PAIR-01, BFGS-AXI-VISIBILITY-01;
+    - ESTIMATOR-CELL-CAP-RESIZE-01 updated to route R;
+    - WALLCLOCK-STEP-SOURCE-01 discharged (cause found);
+    - 281 + 5 − 1 = 285; `tests.test_gen_state` OK.
+67. **NETWORK-TIME-OFF-ENFORCE-01 scout** (Sol high; [report](70-ntp-enforce-scout/report.md)) mapped H5/H6 across every 25G83 capture route. **Critical gap:** calibration ledger rows finalize BEFORE the window-wide H6 verdict exists, so the attestation must be designed to act at finalization or refuse admission afterwards. That is a design point for the lane's brief (next session).
