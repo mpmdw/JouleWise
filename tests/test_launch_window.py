@@ -1878,6 +1878,24 @@ class OperatorConfirmationDigestCliTests(unittest.TestCase):
         verify_arm.assert_not_called()
 
 
+PHYSICAL_CONFIG_TEMPLATE = (
+    Path(__file__).resolve().parent / "fixtures" / "d078_r01" / "config.json"
+)
+
+
+def _physical_config(config: dict) -> dict:
+    """S1 bind + pair, fixture construction only: the test's own config keys
+    laid over a schema-valid physical config (the d078_r01 template with its
+    own tags cleared), so rebind_config binds a config that re-validates
+    before write_passing_pair writes the pair."""
+    physical = json.loads(PHYSICAL_CONFIG_TEMPLATE.read_text(encoding="utf-8"))
+    physical["run_metadata"]["tags"] = []
+    physical["run_metadata"].update(config.get("run_metadata", {}))
+    physical["hardware_target"].update(config.get("hardware_target", {}))
+    physical["run_id"] = config["run_id"]
+    return physical
+
+
 class CeremonySkipConsumerTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
@@ -1894,7 +1912,9 @@ class CeremonySkipConsumerTests(unittest.TestCase):
             },
         }
         (self.bundle / "config.json").write_text(
-            json.dumps(self.config, sort_keys=True, separators=(",", ":")) + "\n"
+            json.dumps(
+                _physical_config(self.config), sort_keys=True, separators=(",", ":")
+            ) + "\n"
         )
         (self.bundle / "metadata.json").write_text(
             json.dumps({
