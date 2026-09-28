@@ -3,9 +3,11 @@
 import ast
 import inspect
 import json
+import tempfile
 from pathlib import Path
 import unittest
 from unittest import mock
+from tests.bfgs_fixtures import rebind_config, write_passing_pair
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -267,19 +269,30 @@ class CustodyModeInventoryTests(unittest.TestCase):
         class ReachedSession(Exception):
             pass
 
-        for kwargs, expected in (({}, "issuing"), ({"mode": "issuing"}, "issuing"),
-                                 ({"mode": "read_replay"}, "read_replay")):
-            with (
-                self.subTest(kwargs=kwargs),
-                mock.patch.object(floor_extraction, "validate_extraction_spec", return_value=[]),
-                mock.patch.object(floor_extraction, "campaign_cooldown_evidence", return_value={}),
-                mock.patch.object(floor_extraction, "_spec_referenced_bundle_ids", return_value={"member"}),
-                mock.patch.object(floor_extraction, "AuthenticatedConsumptionSession",
-                                  side_effect=ReachedSession) as session,
-            ):
-                with self.assertRaises(ReachedSession):
-                    floor_extraction.extract_cells(Path("/unused"), {"cells": [{}]}, **kwargs)
-                self.assertEqual(session.call_args.kwargs["mode"], expected)
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = Path(tmp) / "member"
+            bundle.mkdir()
+            config = json.loads((REPO_ROOT / "tests/fixtures/d078_r01/config.json").read_text())
+            config["run_id"] = "member"
+            (bundle / "config.json").write_text(json.dumps(config) + "\n")
+            (bundle / "metadata.json").write_text(json.dumps({"run_id": "member"}) + "\n")
+            (bundle / "summary_metrics.json").write_text(json.dumps({"status": "succeeded"}) + "\n")
+            rebind_config(bundle)
+            write_passing_pair(bundle)
+            runs_root = Path(tmp)
+            for kwargs, expected in (({}, "issuing"), ({"mode": "issuing"}, "issuing"),
+                                     ({"mode": "read_replay"}, "read_replay")):
+                with (
+                    self.subTest(kwargs=kwargs),
+                    mock.patch.object(floor_extraction, "validate_extraction_spec", return_value=[]),
+                    mock.patch.object(floor_extraction, "campaign_cooldown_evidence", return_value={}),
+                    mock.patch.object(floor_extraction, "_spec_referenced_bundle_ids", return_value={"member"}),
+                    mock.patch.object(floor_extraction, "AuthenticatedConsumptionSession",
+                                      side_effect=ReachedSession) as session,
+                ):
+                    with self.assertRaises(ReachedSession):
+                        floor_extraction.extract_cells(runs_root, {"cells": [{}]}, **kwargs)
+                    self.assertEqual(session.call_args.kwargs["mode"], expected)
 
     def test_inventory_counterfactual_escapes(self):
         path = "scripts/mint_floor_artifact.py"

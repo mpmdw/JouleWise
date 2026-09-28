@@ -1478,6 +1478,21 @@ class D117Qwen25SevenBPlanTests(unittest.TestCase):
         )
         with tempfile.TemporaryDirectory(prefix="d117-floor-output-identity-") as temp:
             temp_root = Path(temp)
+            from tests.bfgs_fixtures import rebind_config, write_passing_pair
+
+            runs_root = temp_root / "runs"
+            runs_root.mkdir()
+            config_template = load_json(REPO_ROOT / "tests/fixtures/d078_r01/config.json")
+            for bundle_id in floor_extraction._spec_referenced_bundle_ids(spec["cells"]):
+                bundle = runs_root / bundle_id
+                bundle.mkdir()
+                config = deepcopy(config_template)
+                config["run_id"] = bundle_id
+                (bundle / "config.json").write_text(json.dumps(config) + "\n")
+                (bundle / "metadata.json").write_text(json.dumps({"run_id": bundle_id}) + "\n")
+                (bundle / "summary_metrics.json").write_text(json.dumps({"status": "succeeded"}) + "\n")
+                rebind_config(bundle)
+                write_passing_pair(bundle)
             with_reported_spec = temp_root / "with-reported.json"
             floor_only_spec = temp_root / "floor-only.json"
             shutil.copy2(SPEC, with_reported_spec)
@@ -1499,7 +1514,7 @@ class D117Qwen25SevenBPlanTests(unittest.TestCase):
                 with_reported_status = extract_main(
                     [
                         "--runs-root",
-                        str(REPO_ROOT),
+                        str(runs_root),
                         "--spec",
                         str(with_reported_spec),
                         "--out",
@@ -1509,7 +1524,7 @@ class D117Qwen25SevenBPlanTests(unittest.TestCase):
                 floor_only_status = extract_main(
                     [
                         "--runs-root",
-                        str(REPO_ROOT),
+                        str(runs_root),
                         "--spec",
                         str(floor_only_spec),
                         "--out",

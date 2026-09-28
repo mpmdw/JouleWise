@@ -561,6 +561,14 @@ def _write_summary(runs_root: Path, member: str, summary: dict[str, Any]) -> Non
     bundle.joinpath("summary_metrics.json").write_text(
         json.dumps(summary, indent=2, sort_keys=True) + "\n"
     )
+    from tests.bfgs_fixtures import rebind_config, write_passing_pair
+
+    config = json.loads((Path(__file__).parent / "fixtures" / "d078_r01" / "config.json").read_text())
+    config["run_id"] = member
+    bundle.joinpath("config.json").write_text(json.dumps(config) + "\n")
+    bundle.joinpath("metadata.json").write_text(json.dumps({"run_id": member}) + "\n")
+    rebind_config(bundle)
+    write_passing_pair(bundle)
 
 
 class AggregatorPropagationTests(unittest.TestCase):

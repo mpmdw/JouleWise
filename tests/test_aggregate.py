@@ -11,6 +11,8 @@ from pathlib import Path
 from typing import Any
 
 from joulewise.aggregate import aggregate_experiment, student_t_critical_95
+from joulewise import battery_float
+from tests.bfgs_fixtures import rebind_config, write_passing_pair
 
 
 STANDARD_METRICS = (
@@ -32,6 +34,12 @@ def _write_summary(runs_root: Path, member: str, summary: dict[str, Any]) -> Non
     bundle.joinpath("summary_metrics.json").write_text(
         json.dumps(summary, indent=2, sort_keys=True) + "\n"
     )
+    config = json.loads((Path(__file__).parent / "fixtures" / "d078_r01" / "config.json").read_text())
+    config["run_id"] = member
+    bundle.joinpath("config.json").write_text(json.dumps(config) + "\n")
+    bundle.joinpath("metadata.json").write_text(json.dumps({"run_id": member}) + "\n")
+    rebind_config(bundle)
+    write_passing_pair(bundle)
 
 
 def _summary(value: Any, *, status: str = "succeeded", **extra: Any) -> dict[str, Any]:
@@ -313,7 +321,7 @@ class MissingAndMemberProblemTests(AggregateTestCase):
     def test_missing_metric_taxonomy(self) -> None:
         _write_summary(self.runs_root, "null", _summary(None))
         _write_summary(self.runs_root, "failed", {"status": "failed"})
-        (self.runs_root / "bad").mkdir()
+        _write_summary(self.runs_root, "bad", _summary(0.0))
         (self.runs_root / "bad" / "summary_metrics.json").write_text("{not json")
         _write_summary(self.runs_root, "nonnumeric", _summary("not-a-number"))
         _write_summary(self.runs_root, "ok", _summary(12.0))
@@ -445,6 +453,9 @@ class MissingAndMemberProblemTests(AggregateTestCase):
         )
 
     def test_plain_missing_member_directory_is_structured_unreadable(self) -> None:
+        # Keep battery custody valid so the aggregate reaches its summary read.
+        _write_summary(self.runs_root, "missing-dir", _summary(0.0))
+        (self.runs_root / "missing-dir" / "summary_metrics.json").unlink()
         aggregate = aggregate_experiment(self.runs_root, {"members": ["missing-dir"]})
         metric = aggregate["metrics"]["energy_request_j"]
 
@@ -464,6 +475,14 @@ class MissingAndMemberProblemTests(AggregateTestCase):
             metric["missing"],
             [{"member": "missing-dir", "reason": "summary_unreadable"}],
         )
+
+    def test_plain_missing_member_directory_refuses_at_battery_gate(self) -> None:
+        with self.assertRaisesRegex(
+            battery_float.CustodyUnreadable,
+            "missing-dir: missing required artifact: metadata.json",
+        ) as refusal:
+            aggregate_experiment(self.runs_root, {"members": ["missing-dir"]})
+        self.assertEqual(refusal.exception.window_member, "missing-dir")
 
     def test_mixed_status_counts_and_metric_missing_reason(self) -> None:
         _write_summary(self.runs_root, "ok", _summary(3.0))
