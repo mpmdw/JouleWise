@@ -2,7 +2,7 @@ ADDENDUM: SCI-25G83-CANDIDATE-01-A2 ISSUED — PROCEED
 
 # Cold addendum SCI-25G83-CANDIDATE-01-A2 — ruling on network time being ON during the W1 and W2 captures
 
-Judge: cold Fable 5.1 seat, one foreground session, 2026-09-27, started 18:06 PDT (budget 40 minutes).
+Judge: cold Fable 5.1 seat, one foreground session, 2026-09-27 18:06–18:21 PDT (15 of the 40 budgeted minutes).
 The verdict of the science-gate ruling, PROCEED TO ISSUANCE, is unchanged. This addendum adds one disclosure (D8), rewrites the wording of two earlier disclosures (D1, D3), closes one open item of addendum A1 (H4, "the cause of the steps is sought"), and adds two conditions on every future window (H5, H6). It changes no member, no statistic and no operative number.
 
 Inputs, by sha256 as I read them:
@@ -121,7 +121,7 @@ Each member's evidence file has the digest the candidate records for it (12 of 1
 
 - **No member had a step inside its capture. No member had a millisecond-size correction inside its capture or close enough before it to leave a measurable tail.** The closest call is W1-d04: a −12.579 ms slew began 175 s before it. At a decay of e per 16.5 s, 175 s leaves 12,579 × e^(−10.6) = 0.3 µs. Measured excess: +0.1 µs.
 - **Ten members were untouched.** Their wall clock followed a straight line to within 3.6 µs, the measurement noise.
-- **Two members were touched, at microsecond size.** W1-d12 had three slews inside; its clock moved +40.1 µs. W2-d01 had none inside, but caught the tail of a −45.3 µs slew applied 22 s before its start; its clock moved −11.6 µs. The decay law predicts 45.3 × e^(−22/16.5) = 11.9 µs; measured 11.6.
+- **Two members were touched, at microsecond size.** W1-d12 had three slews inside; its clock moved +40.1 µs. W2-d01 had none inside, but caught the tail of a −45.3 µs slew applied 22 s before its start; its clock moved −11.6 µs. The decay law predicts 45.3 × e^(−21.96/16.5) = 12.0 µs; measured 11.6.
 - The seat's report that "the 12 members saw only µs-scale adjustments" is confirmed and sharpened: ten saw none, two saw 40 µs and 12 µs.
 
 ### 3.3 Does each member's clock-alignment bound cover the effect?
@@ -131,7 +131,7 @@ Yes, for all 12, on two separate grounds, both measured.
 1. *The drift term charges the whole movement.* The drift term is measured from the capture's first and last readings, so any correction delivered between them is inside it. For W1-d12 the clock moved 1529.5 µs in total, the 40.1 µs included; the drift term charged is 1536.8 µs. For W2-d01: 1171.6 µs moved, 1173.0 µs charged. For the other ten the same holds with nothing to cover.
 2. *The allowance covers the bend.* A correction bends the straight line. The largest bend any member shows is 40.1 µs (W1-d12), against an allowance of 250 µs that every member is charged in full. The margin is a factor of six.
 
-The clock method's own warning (§2.4) is that a bend *between readings* is invisible to its arithmetic, and that network time OFF is what rules it out. Network time was ON, so that guarantee was absent. In its place I have a measurement: 129 readings per capture, none more than 6.5 s from the next, and a log of every correction. They show no bend above 40.1 µs in any member. The bound holds for these 12 captures as a matter of measured fact, not of design.
+The clock method's own warning (§2.4) is that a bend *between readings* is invisible to its arithmetic, and that network time OFF is what rules it out. Network time was ON, so that guarantee was absent. In its place I have a measurement: 129 readings per capture, none more than 6.6 s from the next, and a log of every correction. They show no bend above 40.1 µs in any member. The bound holds for these 12 captures as a matter of measured fact, not of design.
 
 ### 3.4 Effect on B and on the operative numbers
 
@@ -178,7 +178,7 @@ There is a precedent. The calibration in force before this one (`calibration_acc
 
 **No.** But the count and the description of the exclusions change.
 
-**5.1 A fourth exclusion has the same cause.** W1-d01 was recorded with the registered class `affine_clock_fit_empty` (no straight line fits the readings). Its cause is the −1.262 ms slew applied at 00:39:52, 16 s before its first reading at 00:40:08. My reconstruction shows its wall clock bending by 470.7 µs over the capture's first minute, with a largest departure from the best line of 345 µs. The decay law predicts 1,262 × e^(−16/16.5) = 478 µs. The allowance is 250 µs, so the fit was rightly refused. Neither earlier ruling knew this.
+**5.1 A fourth exclusion has the same cause.** W1-d01 was recorded with the registered class `affine_clock_fit_empty` (no straight line fits the readings). Its cause is the −1.262 ms slew applied at 00:39:52, 16 s before its first reading at 00:40:08. My reconstruction shows its wall clock bending by 470.7 µs over the capture's first minute, with a largest departure from the best line of 345 µs. The decay law predicts 1,262.4 × e^(−16.28/16.5) = 470.7 µs. The allowance is 250 µs, so the fit was rightly refused. Neither earlier ruling knew this.
 
 So four of the 12 exclusions are network-time corrections: W1-d08 (+53.198 ms step inside), W1-d11 (+4.386 ms slew inside), W2-d07 (−35.939 ms slew inside), and W1-d01 (tail of the −1.262 ms slew). The other eight are the work cap.
 
@@ -253,7 +253,7 @@ H5 to H7 are conditions on future windows. They are not conditions on the issuan
 - NOT EXECUTED: reading the refusal-branch statement or decision D-138. I rely on addendum A1's quotations of them.
 - NOT ESTABLISHED: the current network-time setting of the machine. The read command needs rights I do not have. The log shows `timed` still applying corrections between 17:00 and 18:30 today (6 found), so it was ON as of this session.
 - NOT ESTABLISHED: whether network time OFF stops the push-notification-triggered corrections, and whether the frequency setting persists unchanged while OFF. The second rests on a code comment.
-- UNVERIFIED beyond its two fits: the 16.5 s decay. It fits W1-d11 to 43 µs and W2-d07 to 417 µs root-mean-square, and predicts the W2-d01 and W1-d01 tails to within 0.3 µs and 8 µs.
+- UNVERIFIED beyond its two fits: the 16.5 s decay. It fits W1-d11 to 43 µs and W2-d07 to 417 µs root-mean-square, and predicts the W2-d01 and W1-d01 tails to within 0.4 µs and 0.1 µs.
 - NOT ESTABLISHABLE: the B of the four captures lost to corrections.
 
 ## Summary for the owner

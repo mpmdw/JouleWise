@@ -1,0 +1,16 @@
+# Cold addendum CAP-COUNCIL-25G83-01-A1: the paired refuter's dissent
+
+You are a COLD judge: a fresh session with no loop context. Do not read RUN_STATE.md, TASK_QUEUE.md (except rows A331/A332), CLAUDE*.md, AGENTS.md, memory or skill files. **Write a contamination disclosure first.**
+
+**The ruling:** `docs/process_traces/2026-09-27-activation-d528efb2/20-cap-council/21-coldgate-fable-ruling.md` (CAP-COUNCIL-25G83-01, sha256 a90b6e768a2137f1…), with its charges `00-consult-charge.md`, `20-coldgate-charge.md` and the four seats `11`–`14` in the same directory.
+**The paired Opus 5.5 refuter:** `docs/process_traces/2026-09-27-activation-d528efb2/20-cap-council/22-opus-refuter.md` (sha256 8da410811e07e501…): **REFUTER: DISSENT**, 4 BLOCKERs (B1 the sizing rule's stop-time check is load-dependent — re-measured 79.9 s vs a 60 s limit at load average 15; B2 the 2026-08-18 magistrate ruling rejecting a ≈1.55 M-cell cap and an omitted 1,282,827-cell validation capture; B3 the cap is sized before the shipped estimator code is frozen, and branches admitted on B-invariance alone although D-138 requires each to finish review; B4 directive #416 requires a full three-family audit after issuance at the frozen claim-run commit, not a delta pass), 9 SHOULD-FIX and 4 NITs, and a list of what stands.
+**Since the ruling:** cold addendum SCI-25G83-CANDIDATE-01-A2 (`docs/process_traces/2026-09-27-activation-d528efb2/40-sci-a2-network-time/21-ruling.md`) ruled PROCEED on the current candidate and set H5 (network time OFF for every window; the passwordless setter is installed), H6 (per-capture `timed` log attestation) and H7. The D-138 design ruling (`…/11-d138-design/21-coldgate-fable-ruling.md`) enforces the claim-window hold in code.
+Repository (read-only): `/Users/edr/code/JouleWise-wt-d138-scout-d528efb2` (main `e7c8bcc6`). Directive #416 text: `gh issue view 416 --repo mpmdw/JouleWise` (the body is Ed's binding text).
+
+**Rule on:** each BLOCKER and SHOULD-FIX — adopt, adopt modified, or reject — verifying the contested facts yourself (re-execute the cheapest; cite file:line). Where you adopt, give the exact replacement text for the ruling's clause (in particular a complete, load-independent, value-blind replacement for §4.3 if B1/B2 stand, the corrected sequence of §6 if B3 stands, and the audit text if B4 stands). State what of the ruling stands unchanged. Say what, if anything, now needs Ed.
+
+**Protocol.**
+- One non-interactive session: no background tasks, no subagents, every command in the foreground. `/opt/homebrew/bin/python3 -B`; macOS has no `timeout` (use `perl -e 'alarm N; exec @ARGV' …`); kill any process you start by PID. Run no capture or powermetrics; change no system setting.
+- Modify NO file in any repository except the ruling file below. Scratch under `/tmp/cg-capa1-d528efb2/`.
+- Write the ruling with the Write tool to `/Users/edr/code/JouleWise-wt-bk-77b1bee2/docs/process_traces/2026-09-27-activation-d528efb2/20-cap-council/31-addendum-ruling.md`. Ending before that file exists is a protocol failure.
+- Budget: 45 minutes. First line `ADDENDUM: CAP-COUNCIL-25G83-01-A1 ISSUED` (or `ADDENDUM: REFUSED — <reason>`). Plain language, every term glossed at first use. End with a 3-line plain summary.

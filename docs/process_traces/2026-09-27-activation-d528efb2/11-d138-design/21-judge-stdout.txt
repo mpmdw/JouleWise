@@ -1,0 +1,39 @@
+The ruling is written: `RULING: D138-25G83-DESIGN-01 ISSUED`.
+
+**File:** `/Users/edr/code/JouleWise-wt-bk-77b1bee2/docs/process_traces/2026-09-27-activation-d528efb2/11-d138-design/21-coldgate-fable-ruling.md` (sha256 `858e2f4e…c04a0`). No other repository file was modified, and no process is left running. I ran no test suite; the evidence is in-memory probes and code reading.
+
+## What I verified by running it
+
+- **The defect reproduces.** The candidate in issued form fails the loader's validator at `joulewise/calibration_bracketing.py:989`. The cause is exactly the eleven rows set aside by the D-126 disposition decision.
+- **The repaired rule works in memory.** The real issued form validates, nine counterfactuals refuse, and all seven older calibration files still validate.
+- **The transform keeps the input seal** at `e7363bdd…`, and the candidate's bytes are reproduced exactly by the standard JSON serializer.
+
+## Where the three designs disagreed
+
+| Question | Ruling | Reason |
+|---|---|---|
+| Does the loader read the disposition file at load time? | No; it uses a table in code (Opus's design) | The issued file's bytes are already pinned before validation, so a load-time read could only make a correct file refuse later. |
+| Extend the floor-mint pinset schema? | Yes (Sol and Astra) | The schema accepts any identifier string, so leaving the new one out leaves its screen unchecked rather than blocked. |
+| Where do disclosures sit in the file? | `derivation_notes.issuance_record` | Every issued file's `issuance` block has the same three keys. |
+| `candidate_not_issued` | Delete the key | No issued file carries it. |
+| Is the H1 hold enforced in code now? | Yes, in this PR, at the arm admission list in `joulewise/arm_readiness.py` | Merging is what first makes a 25G83 claim window possible. |
+
+The H1 hold blocks every pack naming the new file, including non-claim rehearsal packs; the no-pack windows that gather cap evidence are unaffected. I read the arm routing but did not run it, so the hold test is what proves it.
+
+## Things the lead needs to know before launching the seat
+
+1. **The candidate and both science rulings are not on main.** They must land first, because the promotion tool and its tests read the candidate by path.
+2. **Addendum A2 has issued PROCEED with D8.** The copy I read is the working file, which differs in 5 lines from the committed one. Copy D8, the reworded D1/D3 and H5–H7 from whichever text finally lands, and pin that digest.
+3. **The test-file scope is unconfirmed.** Nobody has run the whole suite with the default moved; the ruling asks the lead to do that once and amend the seat's WRITE_SCOPE before launch.
+4. **Old-epoch measurements go "stale" under the new default.** The ruling makes a before-and-after replay of one 25F84 analysis mandatory before merge.
+
+## Stops
+
+- Any number that differs in the old-epoch replay, or a refusal for any reason other than a stale calibration.
+- Any B1 or B2 mismatch on the four estimator files or the cap.
+- An input seal that does not come out `e7363bdd…`.
+- A hold test that cannot be made to pass as written.
+- A refuter finding a route from the issued file to a claim-bearing result that avoids the admission list.
+
+Contamination disclosure: the harness injected the global and project instruction files and the memory index before the charge. I opened none of the forbidden files and used only the writing standard, as form.
+rc=0
