@@ -1,0 +1,1 @@
+baseline_bad=120 r3_bad=164 turned_by_gate_fix=44 cured_between=0

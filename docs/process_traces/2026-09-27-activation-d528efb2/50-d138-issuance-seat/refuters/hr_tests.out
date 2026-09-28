@@ -1,0 +1,13 @@
+test_hr1_r7_pack_capture_preflight_stays_at_r7 (tests.test_claim_hold_routes.ClaimHoldRouteTests.test_hr1_r7_pack_capture_preflight_stays_at_r7) ... ok
+test_hr2_r7_pack_default_bracket_refuses_new_epoch (tests.test_claim_hold_routes.ClaimHoldRouteTests.test_hr2_r7_pack_default_bracket_refuses_new_epoch) ... ok
+test_hr3_manual_route_cannot_consume_held_file (tests.test_claim_hold_routes.ClaimHoldRouteTests.test_hr3_manual_route_cannot_consume_held_file) ... ok
+test_hr4_clearing_hold_opens_same_explicit_routes (tests.test_claim_hold_routes.ClaimHoldRouteTests.test_hr4_clearing_hold_opens_same_explicit_routes) ... ok
+test_hr5_loader_opt_in_is_explicit (tests.test_claim_hold_routes.ClaimHoldRouteTests.test_hr5_loader_opt_in_is_explicit) ... ok
+test_hr6_no_production_call_opts_in (tests.test_claim_hold_routes.ClaimHoldRouteTests.test_hr6_no_production_call_opts_in) ... ok
+test_hr7_held_default_import_refuses (tests.test_claim_hold_routes.ClaimHoldRouteTests.test_hr7_held_default_import_refuses) ... ok
+test_hr8_derivation_night_remains_open_for_new_epoch (tests.test_claim_hold_routes.ClaimHoldRouteTests.test_hr8_derivation_night_remains_open_for_new_epoch) ... ok
+
+----------------------------------------------------------------------
+Ran 8 tests in 4.068s
+
+OK

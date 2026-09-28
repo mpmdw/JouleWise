@@ -1,0 +1,4 @@
+head=c81f65b8b703f348c0e2375407782028a5d3057b
+cmd=fullsuite_ids.sh (run_module_ids.py per module, 6-way, /opt/homebrew/bin/python3 -B, stdin closed)
+TMPDIR=/tmp/d138-suite-d528efb2/tmp/
+modules=269 rc_lines=269 missing_json=0 tests=7559 failures=0 errors=0 skipped=109 nonzero_modules=0

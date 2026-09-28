@@ -10,25 +10,43 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
-**▶▶ ACTIVATION d528efb2 — from 17:36 PDT 09-27 (Opus 5.5; NOTHING ARMED):** [Record 00](docs/process_traces/2026-09-27-activation-d528efb2/00-activation-record.md) is the running log.
+**▶▶ ACTIVATION d528efb2 — from 17:36 PDT 09-27 (Opus 5.5; NOTHING ARMED):** [Record 00](docs/process_traces/2026-09-27-activation-d528efb2/00-activation-record.md) is the running log (branch `docs/2026-09-27-d528efb2`).
 
-**Ed approved the new calibration's name and release** ("Yes re name , go ahead", 17:57 PDT): `d079_calibration_acceptance_v2_n12_25g83_r1`, published only after every gate passes.
+**Merged:** #437 (bookkeeping + all 25G83 rulings) → `9eab16f8`; the canonical root is fast-forwarded to it.
 
-**Rulings issued this activation (all cold Fable 5.1):**
-- **SCI-25G83-CANDIDATE-01-A2 — PROCEED.** macOS network time was ON through W1/W2. It caused 4 of the 12 exclusions. No clock step or millisecond correction fell inside any member; two members (W1-d12, W2-d01) moved by 40 µs and 12 µs from microsecond slews, inside their allowance, and the effect on C is at most 8.9 µs. It adds disclosure D8 and three conditions: for every future 25G83 window, H5 (network time OFF before settle; the passwordless setter is installed) and H6 (per-capture `timed` log attestation); and H7, a first comparison of OFF-state captures with the 12 members, reported with the first claim-bearing results.
-- **D138-25G83-DESIGN-01**, the implementation spec for the issuing PR: a loader repair via a new `joulewise/calibration_dispositions.py`, a re-runnable promotion tool, the pin swap, the claim-window hold enforced in code, and the exact WRITE_SCOPE.
-- **CAP-COUNCIL-25G83-01**, on the estimator cap: route R, cap = 10× the largest measured work under a pre-registered rule, two re-issues. Its paired Opus refuter **DISSENTs with 4 blockers**, and cold addendum A1 is convened.
-- **S1-REGRESSION-01-A1:** SF-1 to SF-4 ruled. The S1 repair plan runs: step-0 reference suite on main, seat H landed (`1278f772`), seat P running.
+**D-138 (the 25G83 calibration issuance)** is on `feat/2026-09-27-d138-25g83-issuance`, candidate `325d9f77`. Ed approved the name `d079_calibration_acceptance_v2_n12_25g83_r1` and its release after the gates ("Yes re name , go ahead").
+- **Built:**
+  - loader repair and promotion tool;
+  - issued bytes `80c23036…351b` (input seal `e7363bdd…` unchanged);
+  - the pin swap and the H1 hold in the arm admission list;
+  - the issuing record and draft decision **D-185**;
+  - fix round 1 (the mutation survivors).
+- **Gates so far:** the independent replay PASSED (Astra).
+- **STOPPED:** the hold refuter (Astra) and the contract refuter (Opus) each found an open route around H1. A manual no-pack campaign, and packs declaring R7/r6, are judged by the moved default. A cold design addendum **D138-25G83-DESIGN-01-A1** has been convened. It also rules on:
+  - the doubling-trigger defect (the disposed rows may count toward 12→24);
+  - the promotion tool's form-only checks;
+  - the "complete" wording in the bytes;
+  - the old-epoch replay, which has no qualifying baseline.
+- The pedagogy pass returned FIX with 37 exact replacements, to be applied after the addendum.
 
-**SUCCESSOR'S NEXT EXACT ACTION** (read record 00 from its last item first):
-1. **D-138**, per the design ruling §8.2:
-   - (a) land the records on main (this bookkeeping PR);
-   - (b) the lead writes the issuance text (D1–D8, H1, H5–H7) and commits it;
-   - (c) the census run with the default moved in memory;
-   - (d) launch the one implementation seat;
-   - then §9 steps 1–11, including the mandatory old-epoch replay (§10 item 2).
-2. **Cap:** harvest addendum A1 and apply it. Ed items (registration approval, two names, the #416 reading) are batched into one email.
-3. **S1:** harvest seat P, then step 2 (merge P+H, checks 3/4/5/7), then seats A–D.
+**Science:** addenda A2 and A3 said PROCEED. Network time was ON during W1/W2 and caused 4 exclusions, but moved no member. **H5/H6 (network time OFF plus per-capture log attestation) must be enforced in code before any 25G83 window** (lane NETWORK-TIME-OFF-ENFORCE-01, being registered). The `timed` log evidence is preserved in the record, because the system log ages out after about 29 h.
+
+**Cap:** CAP-COUNCIL-25G83-01 + A1 chose route R (cap = 10× the largest measured work under a pre-registered rule; freeze the code, then size, then two re-issues, then the full #416 audit). Ed will later be asked to approve the successor registration and to name two files.
+
+**S1:** round 2 is done, and the stop conditions are met (same signature twice). The combined head is `5283d7d0` (no merges). Escalation consult **S1-REPAIR-ROUTE-01** is done (Sol, Astra, Opus); its cold judge has been convened. The Opus seat found a possible gate defect: a bundle carrying a pair passes even with its config deleted or set to mock.
+
+**SUCCESSOR'S NEXT EXACT ACTION:** read record 00 from its last item (≈ item 93). Then:
+1. **D-138** (the LAST round is running, or has landed): harvest fix round 3, the Sol xhigh seat on `feat/2026-09-27-d138-25g83-issuance` (report `/tmp/d138-fix3-d528efb2/report.md`; brief `50-d138-issuance-seat/03-fix3-brief.txt`). Then run the gate sequence of `12-hold-consult/21-coldgate-fable-ruling.md` §7:
+   - the RED record, re-run by the lead;
+   - re-hash and independent replay, with item (vi) as restated in §5.3;
+   - the old-epoch replay (byte-identical);
+   - the whole suite, outside the sandbox;
+   - two fresh refuters from different families (**any route means STOP for good, and Ed gets the ruling's §6.2 options**);
+   - the pedagogy pass on the revised records (apply `refuters/pedagogy-pass-2.md` too);
+   - the cold final pass; then the merge.
+2. **S1:** finish the triage confirmation (`30-s1-repair/70-triage/01-lead-confirmation.md`); then R3-3, the pilot (one each of T2, bind + pair, and T5, in scratch); then R3-4, seat H3, per `30-s1-repair/50-escalation/21-coldgate-fable-ruling.md` §5.4.
+3. **Bookkeeping:** merge this records branch (light tier; lanes are already merged into it).
+4. **Lanes:** brief NETWORK-TIME-OFF-ENFORCE-01 from its scout (`70-ntp-enforce-scout/report.md`). It must land before ANY 25G83 window.
 
 **▶▶ ACTIVATION 77b1bee2 — 11:36 → ≈17:35 PDT 09-27 (Opus 5.5; NOTHING ARMED):** [Record 00](docs/process_traces/2026-09-27-activation-77b1bee2/00-activation-record.md) items 1–47+, on branch `docs/2026-09-27-77b1bee2`.
 

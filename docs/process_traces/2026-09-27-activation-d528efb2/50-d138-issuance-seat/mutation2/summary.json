@@ -1,0 +1,57 @@
+[
+  {
+    "id": "L4_N1",
+    "path": "joulewise/calibration_bracketing.py",
+    "tests": [
+      "test_calibration_dispositions.DispositionTests.test_l3_l4_declaration_refuses",
+      "test_calibration_dispositions.DispositionTests.test_l10_undeclared_decision_touching_prior_set_refuses"
+    ],
+    "exit_code": 1,
+    "restore_verified": true,
+    "signals": [
+      "FAIL: test_l3_l4_declaration_refuses (test_calibration_dispositions.DispositionTests.test_l3_l4_declaration_refuses)",
+      "  File \"/Users/edr/code/JouleWise-wt-d138-mut2-d528efb2/tests/test_calibration_dispositions.py\", line 70, in test_l3_l4_declaration_refuses",
+      "AssertionError: True is not false : ['D-126-forged']",
+      "FAIL: test_l10_undeclared_decision_touching_prior_set_refuses (test_calibration_dispositions.DispositionTests.test_l10_undeclared_decision_touching_prior_set_refuses)",
+      "  File \"/Users/edr/code/JouleWise-wt-d138-mut2-d528efb2/tests/test_calibration_dispositions.py\", line 150, in test_l10_undeclared_decision_touching_prior_set_refuses",
+      "AssertionError: True is not false",
+      "Ran 2 tests in 0.022s",
+      "FAILED (failures=2)"
+    ]
+  },
+  {
+    "id": "L5",
+    "path": "joulewise/calibration_bracketing.py",
+    "tests": [
+      "test_calibration_dispositions.DispositionTests.test_l5_missing_disposed_row_refuses"
+    ],
+    "exit_code": 1,
+    "restore_verified": true,
+    "signals": [
+      "ERROR: test_l5_missing_disposed_row_refuses (test_calibration_dispositions.DispositionTests.test_l5_missing_disposed_row_refuses)",
+      "  File \"/Users/edr/code/JouleWise-wt-d138-mut2-d528efb2/tests/test_calibration_dispositions.py\", line 83, in test_l5_missing_disposed_row_refuses",
+      "  File \"/Users/edr/code/JouleWise-wt-d138-mut2-d528efb2/tests/test_calibration_dispositions.py\", line 37, in valid_with_count",
+      "  File \"/Users/edr/code/JouleWise-wt-d138-mut2-d528efb2/tests/test_calibration_dispositions.py\", line 28, in valid",
+      "  File \"/Users/edr/code/JouleWise-wt-d138-mut2-d528efb2/joulewise/calibration_bracketing.py\", line 1034, in _valid_acceptance_bound",
+      "  File \"/Users/edr/code/JouleWise-wt-d138-mut2-d528efb2/joulewise/calibration_bracketing.py\", line 1035, in <genexpr>",
+      "Ran 1 test in 0.002s",
+      "FAILED (errors=1)"
+    ]
+  },
+  {
+    "id": "P3_digest",
+    "path": "scripts/promote_calibration_candidate.py",
+    "tests": [
+      "test_promote_calibration_candidate.PromotionTests.test_p3_changed_member_refuses_both_seals"
+    ],
+    "exit_code": 1,
+    "restore_verified": true,
+    "signals": [
+      "FAIL: test_p3_changed_member_refuses_both_seals (test_promote_calibration_candidate.PromotionTests.test_p3_changed_member_refuses_both_seals)",
+      "  File \"/Users/edr/code/JouleWise-wt-d138-mut2-d528efb2/tests/test_promote_calibration_candidate.py\", line 55, in test_p3_changed_member_refuses_both_seals",
+      "AssertionError: \"candidate digest mismatch\" does not match \"candidate seal or role mismatch\"",
+      "Ran 1 test in 0.003s",
+      "FAILED (failures=1)"
+    ]
+  }
+]

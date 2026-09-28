@@ -1,0 +1,26 @@
+identity 25G83: {'estimator_revision': 'joint_loss_sublevel_interval_branch_v2', 'hardware_model': 'Mac15,9', 'os_build': '25G83', 'power_policy': 'ac_high_power', 'pulse_protocol_id': 'powermetrics_pulse_fiducial_v3', 'sampling_interval_ms': 100}
+E d079_calibration_acceptance_v2_n19 -> acceptance_artifact_stale None
+E d079_calibration_acceptance_v2_n19_r2 -> acceptance_artifact_stale None
+E d079_calibration_acceptance_v2_n17_r3 -> acceptance_artifact_stale None
+E d079_calibration_acceptance_v2_n17_r4 -> acceptance_artifact_stale None
+E d079_calibration_acceptance_v2_n17_r5 -> acceptance_artifact_stale None
+E d079_calibration_acceptance_v2_n17_r6 -> acceptance_artifact_stale None
+E d079_calibration_acceptance_v2_n17_r7 -> acceptance_artifact_epoch_mismatch ['os_build']
+E d079_calibration_acceptance_v2_n12_25g83_r1 -> acceptance_artifact_unauthenticated None
+F explicit d079_calibration_acceptance_v2_n19 -> failed ('calibration_acceptance_bound_stale',) None ['os_build']
+F explicit d079_calibration_acceptance_v2_n19_r2 -> failed ('calibration_acceptance_bound_stale',) None ['os_build']
+F explicit d079_calibration_acceptance_v2_n17_r3 -> failed ('calibration_acceptance_bound_stale',) None ['os_build']
+F explicit d079_calibration_acceptance_v2_n17_r4 -> failed ('calibration_acceptance_bound_stale',) None ['os_build']
+F explicit d079_calibration_acceptance_v2_n17_r5 -> failed ('calibration_acceptance_bound_stale',) None ['os_build']
+F explicit d079_calibration_acceptance_v2_n17_r6 -> failed ('calibration_acceptance_bound_stale',) None ['os_build']
+F explicit d079_calibration_acceptance_v2_n17_r7 -> failed ('calibration_acceptance_bound_stale',) None ['os_build']
+F explicit d079_calibration_acceptance_v2_n12_25g83_r1 -> failed ('calibration_acceptance_bound_stale',) acceptance_artifact_claim_held None
+F default -> failed ('calibration_acceptance_bound_stale',) d079_calibration_acceptance_v2_n17_r7 ['os_build']
+G derivation-kind row is derivation: True
+G row naming unknown session kind: unresolved-session
+H census catches 'f(p, allow_claim_held=True)' -> True
+H census catches 'flag=True\nf(p, allow_claim_held=flag)' -> False
+H census catches "f(p, **{'allow_claim_held': True})" -> False
+H census catches 'f(p, allow_claim_held=1)' -> False
+H census catches "import os\nf(p, allow_claim_held=bool(os.environ.get('X')))" -> False
+I hold table type: dict

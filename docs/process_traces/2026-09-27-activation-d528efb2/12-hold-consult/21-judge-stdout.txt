@@ -1,0 +1,39 @@
+The ruling is written, first line `RULING: HOLD-BY-CONSTRUCTION-01 ISSUED`, at:
+
+`/Users/edr/code/JouleWise-wt-bk-77b1bee2/docs/process_traces/2026-09-27-activation-d528efb2/12-hold-consult/21-coldgate-fable-ruling.md`
+
+## Read this before relying on it
+
+**I executed nothing in this session.** Every shell command was returned unrun by the permission service (a service error, not a denial). So there are no probes, no test runs, no prototype, no `git` check of the candidate head, and no wall-clock times. The scratch directory was never created. Every code fact in the ruling is marked as read at `8458f797`, with file and line; results from the refuters and seats are marked as executed by others and not reproduced. The ruling says this at the top and again in its limits section.
+
+The earlier addendum judge had a prototype with the routes run against it; this ruling does not. Three gates stand in for that: a whole-suite run by the lead on a scratch prototype before the seat starts, the RED record, and the fresh refuters.
+
+## What it rules
+
+| Item | Ruling |
+|---|---|
+| Design | The hold moves from a file identifier to the operating-system build. One table in a new module `joulewise/claim_hold.py`; the `allow_claim_held` keyword and the file-keyed table are deleted. |
+| Where enforced | Two file-side gates (the byte authenticator; continuations) and three measurement-side gates (bracket evaluation; the go receipt when `claim_eligible` is true; a claim-bearing manual campaign). A route has to pass one of each. |
+| Non-claim callers | Derivation nights, a go receipt marked not claim-eligible, and a read-only inspection function whose production allowlist is empty. No flag or environment variable lifts the hold. |
+| Seat disagreement | Sol's smaller shape over Astra's separate authority object: every claim consumer already re-reads the pinned file at the moment of use, so possession of the content confers nothing. |
+| Tests | One RED-then-GREEN test per known route (round 1 ×2, B-1 nested and flat, S-1 to S-4), plus the new gates. RED must be an assertion failure, not an import error. |
+| Census | A text-level census over `joulewise/` and `scripts/`, proven by four planted routes. It bounds drift, not deliberate evasion. |
+| Promotion tool | Fix now. |
+| Four R7-freeze mutants | Equivalent today, but a real test gap; close now by patching the default to R6 in those tests. |
+| Replay item (vi) | Restated as three observations; the "fresh" one is made with the hold emptied in the replay's own memory. |
+| Stop rule | This is the last round that changes production logic. Any route found, or any cure needing production logic again, stops the transaction for good and returns it to the owner with costed options. |
+| Gate sequence | Twelve steps from the lead's pre-launch work to post-merge checks. |
+
+## Things the lead must act on
+
+- **Two files are conditional.** `scripts/run_campaign.py` and `scripts/validate_powermetrics_fiducial.py` are live-window entry points, and I could not check whether anything pins their digests. The lead searches first; if pinned, that edit becomes a lane that must merge before the next window of any kind at 25G83.
+- **The issued bytes change again.** The `hold_enforcement` sentence in the file would be false after this round, so the lead edits the issuance text and the file is regenerated, with a new digest and pin.
+- **Test fallout is unknown.** The bench is at 25G83, so tests from main that exercise a claim-eligible go receipt or claim-bearing campaign will start refusing until they patch the machine-build reader. Only the lead's prototype run can list them.
+- **Flag for the cap council, not ruled.** After the cap change, derivation nights appear to need a default that matches the new estimator bytes and does not judge 25G83. Neither the interim re-issue nor R7 as it stands can be that. This was already true under addendum A1.
+
+## Weakest parts
+
+- The go-receipt gate rests on a partial read of `_authenticate_pack_launch_go`; I did not trace that every launch passes through it.
+- The manual-campaign gate rests on a search for `claim_bearing`, not a full read of `main`.
+- The test-identity option is included on my judgment that a hold keyed to a recorded build needs the record protected. The Opus refuter read it as harmless on its own; I verified neither reading.
+rc=0
