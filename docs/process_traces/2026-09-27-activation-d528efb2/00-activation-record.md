@@ -334,3 +334,11 @@ Launched by the watchdog at 17:36:30 PDT (attempt 124) after a usage back-off; t
     - the nits, and `test_launch_window` patched with a pack-refused assertion.
 
     **Lead-owned docs:** the ARM-RETRY-POLICY blocks were regenerated from `render_policy()` in `NIGHT_HANDBACK.md` and the derivation runbook (`f2ec01e9`; `test_arm_retry` OK). The GO-receipt contract paragraph followed in `3ad82b43`, because the first attempt's edit had not applied (the commit message said otherwise, and this is corrected in the next commit). The seat noted that N3's scope omits `network_time_window.py` (for `OLD_IDLE_PLANS`), a scope note for N3. **Gates:** the whole suite on `3ad82b43` and a fresh delta re-audit (Astra) are running.
+112. **ADDENDUM: S1-REPAIR-ROUTE-01-A1 ISSUED** (cold Fable, [83](30-s1-repair/83-coldgate-pilot-ruling.md)).
+    - **Why T5 failed:** the code has two separate "go easy on test bundles" mechanisms, and the ruled switch covered only one. All six refusals come through the second, none concerns the test's subject, and the battery check passed on all 30 bundles.
+    - **Cure:** extend the declared, test-only switch to the second form, by ID, under rules 7 and 8. The judge executed it: 42 of 57 T5 outcomes turn green, and a charging battery or a tampered config still turns tests RED.
+    - **T5 re-classed:** T5a 42; M 7 (mock-refusal subject candidates); F 4 (T4 first); R 4 (NEEDS_RULING).
+    - **Round 3 proceeds now** for NEW, bind + pair, T2, T1 (after one bench check) and the paper pins. T5a waits for the lead's pilots P-1/P-2, and F for P-3. **The lead runs these at the bench, not a seat.**
+    - **Revised stop conditions:** 1, 2 (cap 10, counting surprises only), 6a, 8 (a third form), 9 (the second-form list over 11 IDs).
+    - **Owner item:** this widens reliance on reading #421 as a rule for production code (19 checks switched off in tests instead of 5). Holding the directive to the letter would mean building five kinds of evidence first, with S1 on hold. Added to the owner email.
+    - **Seat H3 launched** (Sol xhigh, [brief](30-s1-repair/84-H3-brief.txt); branch `fix/2026-09-28-s1-r3-H3` at `601a06c5`): parity and the second switch with empty ID lists, helper tests, the sweep, G-1..G-7 and the three §4.3 tests. The replay keyword is dropped.
