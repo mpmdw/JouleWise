@@ -138,3 +138,19 @@ Launched by the watchdog at 17:36:30 PDT (attempt 124) after a usage back-off; t
     - the issuance text omits A1.1's "adds to D2" and A1.4(d)'s correction of D4, and `issuance.reason` does not name A3;
     - the design ruling's §4.1 says one valid row is a named exclusion, but the file shows none.
     - **Lead decision:** rebuild the issuance text with A1.1 appended to D2, A1.4(d) to D4, and A3 in `reason`, then re-issue the bytes by the tool and update the pin. This changes digest X before any refuter or final pass. It happens after fix round 1 releases the worktree.
+57. **D-138 fix round 1 landed** (`5971db61`, Sol high).
+    - L7 now kills the member-arm mutant; lead replant RED.
+    - The Revision 5 sealed case now routes through the default R7 predecessor and asserts its id; the comparison mutant makes it error. Lead replant RED.
+    - Modules 22/22 OK.
+    - The wrapper's SCOPE_VIOLATION flag came from the lead's concurrent Opus draft in the same worktree (the decision log and issuing record), not from the seat. **Lesson:** never run a second writer in a codex seat's worktree.
+58. **D-138 re-issue before review** (`e14e00bb`, lead bench):
+    - The issuance-text builder now carries A1.1 (added to D2), A1.4(d) (the D4 correction) and A3 in `reason`.
+    - Re-produced by the tool: **digest X `80c2303611268b6b94626e001fb5df0e783719744145c9f6a31d4061ddee351b`**, input seal `e7363bdd…` unchanged, whole-file seal `8477d8ce…`. Pin updated; affected modules 148 OK.
+    - B1 re-verified at the new head: four digests equal, cap 165,000, no estimator file in the diff (only test files matched a name grep), no staged branch is an ancestor.
+59. **D-138 records committed** (`290729ec`): the issuing record (266 lines, regenerated from the drafter's generator with the new digests, plus a "re-issue before review" section) and decision-log entry **D-185** (index row + `## D-185` section + a dated note on the D-126 "sole new registry consumer" sentence). The D-185 entry and the amendment note are put to the cold final pass for ratification; the magistrate does not ratify them. Main was merged in: **candidate head `325d9f77`**, which contains main `9eab16f8`.
+60. **D-138 pre-final gates launched on `325d9f77`:**
+    - the lead's whole suite (per-ID runner): `/tmp/d138-final-suite-d528efb2/`;
+    - the contract refuter (Opus, §9 step 6);
+    - the hold refuter (Astra 6 high, §9 step 6; a found route is a STOP);
+    - the pedagogy pass (Opus, §9 step 7).
+    - The lead's earlier suite on `c81f65b8` has 265/269 modules at rc 0 so far. The seat's 242 in-sandbox failures look like sandbox artifacts.
