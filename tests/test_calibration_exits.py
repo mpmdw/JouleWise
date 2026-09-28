@@ -5887,10 +5887,37 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
             "--exit-case logical-producer-delay-immunity"
         )
 
+        # CALEXITS-EVIDENCE-BYTES-01 root cause: the writer's post-teardown
+        # census (scripts/validate_powermetrics_fiducial.py
+        # _powermetrics_process_census) runs the live `ps` and writes every
+        # command naming "powermetrics" into events.jsonl, whose digest
+        # instrument_evidence.json embeds. Concurrent witness runs made the
+        # two captures record DIFFERENT ambient exit cases (T26 S4). Each
+        # capture therefore holds a live ambient decoy whose exit case differs
+        # between the captures, so the adverse condition is present on every
+        # run; only the fixed `ps` fixture keeps it out of the governed bytes.
+        census_by_capture: dict[str, list[list[dict[str, object]]]] = {}
+
         def capture(delay_s: float | None) -> tuple[bytes, bytes, bytes, bytes]:
+            label = "baseline" if delay_s is None else "delayed"
             witness = type(self)(methodName="runTest")
             setup_complete = False
+            decoy: subprocess.Popen | None = None
             try:
+                decoy = subprocess.Popen(
+                    [
+                        sys.executable,
+                        "-c",
+                        "import time; time.sleep(300)",
+                        "/ambient/powermetrics-witness",
+                        "--exit-case",
+                        f"ambient-{label}",
+                    ],
+                    stdin=subprocess.DEVNULL,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    start_new_session=True,
+                )
                 witness.setUp()
                 setup_complete = True
                 marker = witness.repo / "writer-fixtures" / "producer-delay.json"
@@ -5947,6 +5974,9 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
                     [[{"pid": census_pid, "command": census_command}]],
                     "the byte-exactness fixture must select one fixed census case",
                 )
+                census_by_capture[label] = [
+                    row["metadata"]["findings"] for row in census_rows
+                ]
                 return (
                     (custody / "instrument_evidence.json").read_bytes(),
                     events_bytes,
@@ -5954,12 +5984,20 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
                     (custody / "power_trace.csv").read_bytes(),
                 )
             finally:
+                if decoy is not None:
+                    decoy.kill()
+                    decoy.wait(timeout=10)
                 if setup_complete:
                     witness.tearDown()
                 witness.doCleanups()
 
         baseline = capture(None)
         delayed = capture(0.12)
+        self.assertEqual(
+            census_by_capture["delayed"],
+            census_by_capture["baseline"],
+            "the two witness captures recorded different census cases",
+        )
         for artifact, delayed_bytes, baseline_bytes in zip(
             (
                 "instrument_evidence.json",
