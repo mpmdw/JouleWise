@@ -48,6 +48,10 @@ from joulewise.suite import (
     suite_manifest_sha256,
 )
 
+import time
+
+from tests.bfgs_fixtures import injected_battery_runner_at
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 EXAMPLE_CONFIG_PATH = REPO_ROOT / "configs" / "examples" / "mock_local.json"
 SUITE_CONFIG_PATH = REPO_ROOT / "configs" / "examples" / "mock_suite_local.json"
@@ -833,6 +837,7 @@ def _produce_admission_powermetrics_bundle(
             campaign_policy_binding=binding,
             campaign_environment_preflight=preflight,
             post_window_sampling_dwell_s=1.0,
+            battery_runner=injected_battery_runner_at(time.time),
         )
 
 
@@ -2111,6 +2116,7 @@ class HappyPathTests(ControllerTestCase):
                 campaign_policy_binding=binding,
                 campaign_environment_preflight=preflight,
                 post_window_sampling_dwell_s=1.0,
+                battery_runner=injected_battery_runner_at(time.time),
             )
 
         self.assertEqual(summary.status, RunStatus.SUCCEEDED)
