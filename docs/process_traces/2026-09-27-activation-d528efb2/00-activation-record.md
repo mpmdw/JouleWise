@@ -118,3 +118,16 @@ Launched by the watchdog at 17:36:30 PDT (attempt 124) after a usage back-off; t
     - step 5, the mutation evidence: Sol high, scratch worktree;
     - the issuing record and decision-log entry: an Opus subagent under the dictated-fills pattern, writing into the D-138 worktree uncommitted for lead review;
     - step 4, the lead's whole suite: still running.
+52. **D-138 §9 step 2, the independent replay** (Astra 6 high, cross-family; [report](50-d138-issuance-seat/replay/report.md)): **REPLAY: PASS**, all six items plus the extra checks:
+    - `--check` passes and the digest equals the registry pin;
+    - the line diff touches only the §5.5 lines;
+    - S, C and the level screen re-derived in 80-digit arithmetic with an independent t-quantile;
+    - `verify-members` 12 PASS, with custody digests equal before and after;
+    - the D3 re-preparation is byte-equal to `dbad7cc7`;
+    - freshness holds for both epochs;
+    - B1 digests, cap 165,000, no staged estimator branch is an ancestor, and no estimator file is in the diff.
+53. **D-138 §9 step 5, mutation evidence** (Sol high, scratch; [report](50-d138-issuance-seat/mutation/report.md)). Survivors:
+    - **L7:** removing the member arm of the disposed-id guard leaves the disposition module GREEN.
+    - **R7 freeze:** changing the issuer's predecessor comparison to the active id leaves the named test GREEN.
+    - The simulation freeze was outside the seat's scope. The lead planted it (`sim_acc_25g83_rev5.py:227` → default path): `test_revision_five_predecessor_default_and_simulation_are_frozen_to_r7` turns RED, and the file was restored ([log](50-d138-issuance-seat/mutation/lead-sim-freeze-plant.log)).
+    - **Fix round 1** (Sol high; scope: the two test files; each strengthened test must be proven RED under its mutant in a scratch copy; if the L7 arm is unreachable, NEEDS_RULING) is launched.
