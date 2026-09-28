@@ -29,7 +29,7 @@ from unittest import mock
 from zoneinfo import ZoneInfo
 
 from joulewise.measurement_liveness import Identity
-from joulewise import calibration_ledger, night_gate
+from joulewise import calibration_ledger, night_gate, network_time_window
 from joulewise.night_plan_writer import write_night_plan
 from tests.git_fixture import init_git_fixture
 from tests import battery_float_fixture
@@ -39,6 +39,33 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT_PATH = REPO_ROOT / "scripts" / "run_night.py"
 HEAD = "f" * 40
 BOOT_UUID = "12345678-1234-5678-9234-567812345678"
+
+
+# Existing driver fixtures exercise launch, courier and deadline contracts.
+# Keep every new machine-setting/log boundary injected for the whole module;
+# dedicated N1 tests below override individual seams to exercise refusals.
+_network_time_patches = []
+
+
+def setUpModule():
+    patches = (
+        mock.patch.object(network_time_window, "NETWORK_TIME_ENFORCED_KINDS",
+                          frozenset({"calibration", "quiet_predicate_evidence", "pack", "unknown"})),
+        mock.patch.object(network_time_window, "recover_network_time", return_value="nothing_pending"),
+        mock.patch.object(network_time_window, "set_network_time_off",
+                          return_value={"exit_code": 0, "stdout": "setUsingNetworkTime: Off\n"}),
+        mock.patch.object(network_time_window, "run_window_query", return_value={"exit_code": 0}),
+        mock.patch.object(network_time_window, "set_network_time_on",
+                          return_value={"exit_code": 0, "stdout": "ON\n"}),
+    )
+    for patch in patches:
+        patch.start()
+        _network_time_patches.append(patch)
+
+
+def tearDownModule():
+    while _network_time_patches:
+        _network_time_patches.pop().stop()
 
 
 def _probe(
@@ -718,6 +745,56 @@ runpy.run_path(script, run_name='__main__')
         with mock.patch.object(self.driver.subprocess, "Popen", spawn):
             exit_code = self.driver.run_night(self.plan_path, rehearsal=rehearsal)
         return exit_code, calls
+
+    def test_network_time_route_refuses_real_night_until_consumer_lands(self):
+        with mock.patch.object(network_time_window, "NETWORK_TIME_ENFORCED_KINDS", frozenset()), \
+             mock.patch.object(network_time_window, "set_network_time_off") as off:
+            code, calls = self._run_night()
+        self.assertEqual(code, self.driver.EXIT_REFUSED)
+        self.assertEqual(calls, [])
+        off.assert_not_called()
+        self.assertFalse((self.custody / "night/chain.started").exists())
+        refusal = json.loads((self.custody / "night/refusal.json").read_text())
+        self.assertEqual(refusal["refusal"]["reason"], "night_refused_network_time_route_unenforced")
+
+    def test_network_time_off_wrong_output_refuses_and_attempts_on(self):
+        with mock.patch.object(network_time_window, "set_network_time_off",
+                               return_value={"exit_code": 0, "stdout": "setUsingNetworkTime: On\n"}), \
+             mock.patch.object(network_time_window, "set_network_time_on",
+                               return_value={"exit_code": 0}) as on:
+            code, calls = self._run_night()
+        self.assertEqual(code, self.driver.EXIT_REFUSED)
+        self.assertEqual(calls, [])
+        on.assert_called_once()
+        refusal = json.loads((self.custody / "night/refusal.json").read_text())
+        self.assertEqual(refusal["refusal"]["reason"], "night_refused_network_time_off_unproved")
+
+    def test_network_time_order_is_off_chain_query_on(self):
+        events = []
+        _, spawn = self._popen_recorder()
+        def launch(*args, **kwargs):
+            events.append("chain")
+            return spawn(*args, **kwargs)
+        with mock.patch.object(network_time_window, "set_network_time_off",
+                               side_effect=lambda *a, **k: (events.append("off") or
+                                   {"exit_code": 0, "stdout": "setUsingNetworkTime: Off\n"})), \
+             mock.patch.object(network_time_window, "run_window_query",
+                               side_effect=lambda *a, **k: events.append("query")), \
+             mock.patch.object(network_time_window, "set_network_time_on",
+                               side_effect=lambda *a, **k: (events.append("on") or
+                                   {"exit_code": 0})), \
+             mock.patch.object(self.driver.subprocess, "Popen", launch):
+            self.driver.run_night(self.plan_path)
+        self.assertEqual(events, ["off", "chain", "query", "on"])
+
+    def test_dead_man_recovers_before_courier_sent_early_return(self):
+        sent = self.custody / "night/courier.sent"
+        sent.parent.mkdir(exist_ok=True)
+        sent.write_text("delivered")
+        with mock.patch.object(network_time_window, "recover_network_time",
+                               return_value="restored") as recover:
+            self.assertEqual(self.driver.dead_man(self.plan_path), self.driver.EXIT_GO)
+        recover.assert_called_once()
 
     def test_refusal_writes_receipt_and_refusal_without_spawning_chain(self) -> None:
         self.source.census_responses = [

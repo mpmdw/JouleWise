@@ -44,7 +44,7 @@ sys.path.insert(0, str(REPO_ROOT))
 # so importing this driver during preflight catches failures before installation.
 from joulewise import arm_readiness as readiness
 from joulewise import arm_readiness_evidence_t0 as t0_author
-from joulewise import battery_float, night_gate, t0_rehearsal, quiet_admission
+from joulewise import battery_float, night_gate, t0_rehearsal, quiet_admission, network_time_window
 from joulewise.measurement_liveness import observe_identity  # noqa: E402
 
 from joulewise.night_gate import (  # noqa: E402
@@ -1051,6 +1051,7 @@ def _artifact_list(custody_root: Path, night_dir: Path) -> list[dict[str, Any]]:
         night_dir / "evidence_envelopes.jsonl",
         night_dir / "evidence_cleanup.json",
         night_dir / "evidence_outcome.json",
+        *sorted((night_dir / "network_time").glob("*")),
     ]
     artifacts = [entry for path in paths
                  if (entry := _artifact_entry(custody_root, path)) is not None]
@@ -1601,6 +1602,20 @@ def _write_result(
     census_hits: list[dict[str, Any]] | None = None,
     calibration_refusal: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    nt_dir = night_dir / "network_time"
+    on_paths = [path for path in (nt_dir / "h5-on.json",
+                *sorted(nt_dir.glob("h5-on-recovery-*.json"))) if path.exists()]
+    restore = {"status": "not_attempted" if (nt_dir / "h5-off.json").exists()
+               else "not_applicable"}
+    if on_paths:
+        try:
+            raw = on_paths[-1].read_bytes()
+            on = json.loads(raw)
+            restore = {"status": "succeeded" if on["exit_code"] == 0 else "failed",
+                       "receipt": str(on_paths[-1].relative_to(custody_root)),
+                       "sha256": hashlib.sha256(raw).hexdigest(), "exit_code": on["exit_code"]}
+        except (OSError, ValueError, TypeError, KeyError):
+            restore = {"status": "receipt_unreadable"}
     document = {
         "schema": RESULT_SCHEMA,
         "plan_id": plan.plan_id,
@@ -1616,6 +1631,7 @@ def _write_result(
         "census_count": census_count,
         "census_hits": [] if census_hits is None else census_hits,
         "calibration_refusal": calibration_refusal,
+        "network_time_restore": restore,
         "evidence": {"calibration_refusal": calibration_refusal},
         "calibration_code": (calibration_refusal["detail"]
                              if calibration_refusal and calibration_refusal["detail"] != "document_invalid"
@@ -2981,6 +2997,11 @@ def run_night(
     rehearsal: bool = False,
     courier_bin: Path | None = None,
 ) -> int:
+    recovery = network_time_window.recover_network_time(
+        marker_path=network_time_window.RESTORE_PENDING_PATH,
+        process_group_absent=_probe_group_absent)
+    if recovery in {"chain_unproved", "marker_invalid"}:
+        return EXIT_REFUSED
     probes = make_probes()
     bind_start_epoch, bind_start_monotonic = time.time(), time.monotonic()
     initial_probe, initial_refusal = agent_census(probes)
@@ -3086,6 +3107,7 @@ def run_night(
         receipt = evaluate_night(plan, replace(probes, run=first_census))
     if not is_pack or receipt.verdict != "GO":
         _write_bytes_exclusive(night_dir / "receipt.json", receipt.to_json_bytes())
+
     gate_message = f"night gate verdict={receipt.verdict}"
     if receipt.verdict == "REFUSED":
         refusal = _refusal_from_object(receipt.refusal) or {}
@@ -3193,6 +3215,23 @@ def run_night(
                 deadman_epoch_s=deadman_epoch_s, courier_bin_substitution=courier_substitution)
         _write_bytes_exclusive(night_dir / "receipt.json", receipt.to_json_bytes())
 
+    # A kind opens only in the merge that installs its capture consumer. A
+    # rehearsal has no capture but exercises the same control path below.
+    if not rehearsal_effective:
+        kind = ("pack" if is_pack else
+                "quiet_predicate_evidence" if plan.chain_path.endswith("quiet_predicate_evidence.zsh")
+                else "calibration" if plan.chain_path.endswith("calibration_derivation_only.zsh")
+                else "unknown")
+        if kind not in network_time_window.NETWORK_TIME_ENFORCED_KINDS:
+            _write_standard_refusal_result(
+                custody_root, night_dir, plan,
+                _CODES["refused_network_time_route_unenforced"],
+                f"network-time consumer for {kind} is not enforced",
+                started_epoch_s, started_monotonic_ns)
+            return _finish_reporting(custody_root, night_dir, plan, EXIT_REFUSED,
+                resolved_courier, deadman_epoch_s=deadman_epoch_s,
+                courier_bin_substitution=courier_substitution)
+
     claim_descriptor = _claim_chain_start(night_dir)
     if claim_descriptor is None:
         _write_standard_refusal_result(
@@ -3214,20 +3253,67 @@ def run_night(
             courier_bin_substitution=courier_substitution,
         )
 
-    chain_exit_code, abort, census_count, census_hits, termination_proven = (
-        _run_chain_once(
-            chain_path,
-            plan,
-            probes,
-            night_dir,
-            claim_descriptor,
-            command=command,
-            abort_on_census=not rehearsal_effective,
-            **({"shutdown_monotonic": bind_start_monotonic + (
-                plan.t0_epoch_s + plan.window_max_s + WINDOW_SHUTDOWN_GRACE_S - bind_start_epoch)}
-               if plan.quiet_admission is not None else {}),
+    try:
+        off = network_time_window.set_network_time_off(
+            custody_root, plan.plan_id, marker_path=network_time_window.RESTORE_PENDING_PATH)
+    except (OSError, ValueError) as error:
+        os.close(claim_descriptor)
+        _record_chain_exit(night_dir, None, launch_failed=True)
+        try:
+            pending = json.loads(network_time_window.RESTORE_PENDING_PATH.read_bytes())
+            if pending.get("plan_id") == plan.plan_id and pending.get("custody_root") == str(custody_root.resolve()):
+                network_time_window.set_network_time_on(
+                    custody_root, plan.plan_id, marker_path=network_time_window.RESTORE_PENDING_PATH)
+        except (OSError, ValueError, TypeError):
+            pass
+        _write_standard_refusal_result(custody_root, night_dir, plan,
+            _CODES["refused_network_time_off_unproved"],
+            f"OFF receipt could not be saved: {type(error).__name__}: {error}",
+            started_epoch_s, started_monotonic_ns)
+        return _finish_reporting(custody_root, night_dir, plan, EXIT_REFUSED,
+            resolved_courier, deadman_epoch_s=deadman_epoch_s,
+            courier_bin_substitution=courier_substitution)
+    if off["exit_code"] != 0 or off["stdout"] != "setUsingNetworkTime: Off\n":
+        os.close(claim_descriptor)
+        _record_chain_exit(night_dir, None, launch_failed=True)
+        try:
+            network_time_window.set_network_time_on(
+                custody_root, plan.plan_id, marker_path=network_time_window.RESTORE_PENDING_PATH)
+        except (OSError, ValueError):
+            pass
+        _write_standard_refusal_result(custody_root, night_dir, plan,
+            _CODES["refused_network_time_off_unproved"],
+            "network time OFF command did not return exit 0 and exact output",
+            started_epoch_s, started_monotonic_ns, evidence=off)
+        return _finish_reporting(custody_root, night_dir, plan, EXIT_REFUSED,
+            resolved_courier, deadman_epoch_s=deadman_epoch_s,
+            courier_bin_substitution=courier_substitution)
+
+    termination_proven = False
+    try:
+        chain_exit_code, abort, census_count, census_hits, termination_proven = (
+            _run_chain_once(
+                chain_path, plan, probes, night_dir, claim_descriptor,
+                command=command, abort_on_census=not rehearsal_effective,
+                **({"shutdown_monotonic": bind_start_monotonic + (
+                    plan.t0_epoch_s + plan.window_max_s + WINDOW_SHUTDOWN_GRACE_S - bind_start_epoch)}
+                   if plan.quiet_admission is not None else {}),
+            )
         )
-    )
+    finally:
+        # No query or ON beside a chain whose process group may still record.
+        if termination_proven or (night_dir / "chain.exited").exists():
+            try:
+                network_time_window.run_window_query(night_dir, who="driver")
+            except (OSError, ValueError, KeyError) as error:
+                _append_log(custody_root, f"network-time query failed: {error}")
+            try:
+                on = network_time_window.set_network_time_on(
+                    custody_root, plan.plan_id, marker_path=network_time_window.RESTORE_PENDING_PATH)
+                if on["exit_code"] != 0:
+                    _append_log(custody_root, "network-time ON restore failed")
+            except (OSError, ValueError) as error:
+                _append_log(custody_root, f"network-time ON receipt failed: {error}")
 
     report = {
         "facts": {"plan_id": plan.plan_id, "receipt_class": plan.receipt_class,
@@ -3351,6 +3437,9 @@ def _read_started_pgid(path: Path) -> int | None:
 
 
 def dead_man(plan_path: Path, *, courier_bin: Path | None = None) -> int:
+    network_time_window.recover_network_time(
+        marker_path=network_time_window.RESTORE_PENDING_PATH,
+        process_group_absent=_probe_group_absent)
     try:
         plan = _load_plan(plan_path)
     except (OSError, ValueError, TypeError, PlanError) as error:
@@ -3423,6 +3512,12 @@ def dead_man(plan_path: Path, *, courier_bin: Path | None = None) -> int:
                 return EXIT_REFUSED
             _record_chain_exit(night_dir, None, reaped_by="dead-man")
             _append_log(custody_root, "dead-man proved the chain process group was gone")
+
+    # The first recovery call runs before early returns. A chain proved gone
+    # here may only now be queried and restored.
+    network_time_window.recover_network_time(
+        marker_path=network_time_window.RESTORE_PENDING_PATH,
+        process_group_absent=_probe_group_absent)
 
     probes = make_probes()
     probe, census_refusal = agent_census(probes)

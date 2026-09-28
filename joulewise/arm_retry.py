@@ -86,6 +86,8 @@ DISPOSITIONS = {
     **dict.fromkeys(COLD_GATE_CODES, "cold_gate"),
     **dict.fromkeys(INSTALLER_REFUSALS, "cold_gate"),
     **dict.fromkeys(OTHER_REFUSALS, "cold_gate"),
+    "night_refused_network_time_off_unproved": "cold_gate",
+    "night_refused_network_time_route_unenforced": "cold_gate",
 }
 
 

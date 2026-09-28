@@ -18,6 +18,10 @@ RETRY = {
     "arm_idle_interactive", "arm_notice_mismatch",
     "arm_watchdog_uncertain", "arm_transport",
 }
+NETWORK_TIME_COLD = {
+    "night_refused_network_time_off_unproved",
+    "night_refused_network_time_route_unenforced",
+}
 # Independent literals, not derived from the implementation or renderer.
 COLD = {
     "night_refused_agent_present", "night_refused_not_quiet", "night_refused_battery_float", "night_refused_bind_expired",
@@ -39,6 +43,16 @@ COLD = {
     # defaulted it to cold_gate, so nothing about retry policy moves.
     "non_observer_process_busy",
 }
+
+
+class NetworkTimeRefusalTests(unittest.TestCase):
+    def test_both_network_time_refusals_are_cold_gates(self):
+        for reason in ("night_refused_network_time_off_unproved",
+                       "night_refused_network_time_route_unenforced"):
+            with self.subTest(reason=reason):
+                self.assertIn(reason, night_gate.NIGHT_DRIVER_REASON_CODES)
+                self.assertEqual(arm_retry.classify_abort(reason), "cold_gate")
+                self.assertNotIn(reason, arm_retry.ZERO_CAPTURE_MACHINE_REFUSALS)
 INSTALLER = {
     "install_span_closed", "install_outside_span", "plan_t0_in_the_past",
     "night_agent_already_loaded", "plan_outside_custody_root", "night_plan_malformed",
@@ -103,13 +117,13 @@ class ArmRetryTests(unittest.TestCase):
 
     def test_every_cold_assignment_is_explicit(self):
         self.assertEqual(set(arm_retry.COLD_GATE_CODES), COLD)
-        self.assertEqual(set(arm_retry.COLD_GATE_CODES),
+        self.assertEqual(set(arm_retry.COLD_GATE_CODES) | NETWORK_TIME_COLD,
                          night_gate.NIGHT_GATE_REASON_CODES | night_gate.NIGHT_DRIVER_REASON_CODES)
         self.assertEqual(set(arm_retry.INSTALLER_REFUSALS), INSTALLER)
         self.assertEqual(set(arm_retry.OTHER_REFUSALS), {"HOLD_CENSUS", "slot_refused"})
         self.assertFalse(RETRY & (COLD | INSTALLER | {"HOLD_CENSUS", "slot_refused"}))
-        self.assertEqual(set(arm_retry.DISPOSITIONS), RETRY | COLD | INSTALLER | {"HOLD_CENSUS", "slot_refused"})
-        for cause in COLD | INSTALLER | {"HOLD_CENSUS", "slot_refused"}:
+        self.assertEqual(set(arm_retry.DISPOSITIONS), RETRY | COLD | NETWORK_TIME_COLD | INSTALLER | {"HOLD_CENSUS", "slot_refused"})
+        for cause in COLD | NETWORK_TIME_COLD | INSTALLER | {"HOLD_CENSUS", "slot_refused"}:
             self.assertEqual(arm_retry.classify_abort(cause), "cold_gate", cause)
             self.assertEqual(arm_retry.DISPOSITIONS[cause], "cold_gate", cause)
 
