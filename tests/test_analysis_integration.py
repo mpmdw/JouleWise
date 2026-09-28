@@ -12,7 +12,7 @@ import shutil
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
@@ -118,7 +118,12 @@ from tests.test_run_campaign import (
     run_campaign_module,
 )
 from tests.test_analysis_finalizer import install_synthetic_finalization_fixture
-from tests.bfgs_fixtures import produce_strict_bundle
+from tests.bfgs_fixtures import (
+    exemption_parity,
+    produce_strict_bundle,
+    rebind_config,
+    write_passing_pair,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -249,6 +254,20 @@ def install_passing_analysis_whole_window(
         (bundle / "summary_metrics.json").write_text(
             json.dumps(summary, indent=2, sort_keys=True) + "\n"
         )
+        summary["measurement_quality"] = {"telemetry_source": "powermetrics"}
+        (bundle / "summary_metrics.json").write_text(
+            json.dumps(summary, indent=2, sort_keys=True) + "\n"
+        )
+        config = json.loads(
+            (ROOT / "tests" / "fixtures" / "d078_r01" / "config.json").read_text()
+        )
+        config["run_id"] = bundle_id
+        (bundle / "config.json").write_text(json.dumps(config) + "\n")
+        (bundle / "metadata.json").write_text(json.dumps(
+            {"run_id": bundle_id, "adapters": {"telemetry": {"name": "powermetrics"}}}
+        ) + "\n")
+        rebind_config(bundle)
+        write_passing_pair(bundle)
     covered_ids = sorted([*bundle_ids, *reference_ids])
     # Anchor to the repo-registered production policy: re-derivation resolves
     # tolerances from tracked policy files only (fail-closed on unknown shas).
@@ -1495,10 +1514,52 @@ class AnalysisIntegrationTests(unittest.TestCase):
             value.mkdir()
         return artifact, roots
 
+    @staticmethod
+    def _install_paired_floor_members(artifact: dict, roots: dict[str, Path]) -> None:
+        template = json.loads(
+            (ROOT / "tests" / "fixtures" / "d078_r01" / "config.json").read_text()
+        )
+        for cell in artifact["cells"]:
+            components = (
+                ("absolute", "a10", cell["absolute"]["bundle_observations"]),
+                ("comparative", "window_c", [
+                    member
+                    for block in cell["comparative"]["blocks"]
+                    for member in block["members"]
+                ]),
+            )
+            for component, root_id, members in components:
+                for member in members:
+                    run_id = member["bundle_id"]
+                    bundle = roots[root_id] / run_id
+                    bundle.mkdir()
+                    config = copy.deepcopy(template)
+                    config["run_id"] = run_id
+                    (bundle / "config.json").write_text(json.dumps(config) + "\n")
+                    (bundle / "metadata.json").write_text(json.dumps({
+                        "run_id": run_id,
+                        "adapters": {"telemetry": {"name": "powermetrics"}},
+                    }) + "\n")
+                    (bundle / "summary_metrics.json").write_text(json.dumps({
+                        "status": "succeeded",
+                        "gross_energy_j": member["metric_value_j"],
+                        "measurement_quality": {"telemetry_source": "powermetrics"},
+                    }) + "\n")
+                    rebind_config(bundle)
+                    write_passing_pair(bundle)
+                    member["config_sha256"] = hashlib.sha256(
+                        (bundle / "config.json").read_bytes()
+                    ).hexdigest()
+                    member["bundle_sha256"] = complete_bundle_sha256(bundle)
+                cell["provenance"][component]["bundle_sha256s"] = [
+                    member["bundle_sha256"] for member in members
+                ]
+
     def test_b4_salvage_floor_binder_refuses_without_explicit_dispatch_pair(self):
-        with tempfile.TemporaryDirectory() as tmp:
+        with exemption_parity(self.id()), tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             artifact, roots = self._salvage_floor_dispatch_fixture(root)
+            self._install_paired_floor_members(artifact, roots)
             binding = bind_floor_artifact_evidence(
                 artifact,
                 root / "floor.json",
@@ -1509,9 +1570,10 @@ class AnalysisIntegrationTests(unittest.TestCase):
         self.assertFalse(binding.bound_cell_ids)
 
     def test_b4_salvage_floor_binder_rejects_mismatched_dispatch_pair(self):
-        with tempfile.TemporaryDirectory() as tmp:
+        with exemption_parity(self.id()), tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             artifact, roots = self._salvage_floor_dispatch_fixture(root)
+            self._install_paired_floor_members(artifact, roots)
             binding = bind_floor_artifact_evidence(
                 artifact,
                 root / "floor.json",
@@ -1994,14 +2056,6 @@ class AnalysisIntegrationTests(unittest.TestCase):
             bundle_ids,
             source_name="analysis-whole-window-source",
         )
-        for position in ("start", "end"):
-            run_id = f"analysis-whole-window-source-neg8-reference-{position}"
-            shutil.rmtree(cls.runs_root / run_id)
-            with mock.patch(
-                "joulewise.bundle._capture_source_state",
-                return_value=dict(CLEAN_SOURCE_STATE),
-            ), redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-                produce_strict_bundle(cls.runs_root, run_id)
 
     @classmethod
     def tearDownClass(cls):
@@ -2020,7 +2074,7 @@ class AnalysisIntegrationTests(unittest.TestCase):
         manifest = json.loads(self.manifest_path.read_text(encoding="utf-8"))
         target = manifest["entries"][0]
 
-        with mock.patch(
+        with exemption_parity(self.id()), mock.patch(
             "joulewise.analysis_engine.inputs.custody_telemetry_identity",
             return_value=PRODUCTION_TELEMETRY_IDENTITY,
         ):
@@ -2046,8 +2100,49 @@ class AnalysisIntegrationTests(unittest.TestCase):
         self.assertEqual(evidence.inclusion_status, "included")
         self.assertNotIn("config_hash_mismatch", evidence.base_reason_codes)
 
+    def test_real_bundle_mock_identity_is_refused_by_loader_barrier(self):
+        manifest = json.loads(self.manifest_path.read_text(encoding="utf-8"))
+        target = manifest["entries"][0]
+        mock_identity = replace(
+            PRODUCTION_TELEMETRY_IDENTITY, config_backend_class="mock"
+        )
+        with mock.patch(
+            "joulewise.analysis_engine.inputs.custody_telemetry_identity",
+            return_value=mock_identity,
+        ):
+            loaded = load_analysis_inputs(
+                self.manifest_path,
+                self.runs_root,
+                self.floor_path,
+                strict_validator=validate_bundle,
+            )
+        self.assertIn(
+            MOCK_TELEMETRY_CLAIM_REFUSAL,
+            loaded.registered[target["entry_id"]].base_reason_codes,
+        )
+
+    def test_real_bundle_mock_identity_is_refused_by_floor_barrier(self):
+        floor_artifact = json.loads(self.floor_path.read_text(encoding="utf-8"))
+        mock_identity = replace(
+            PRODUCTION_TELEMETRY_IDENTITY, config_backend_class="mock"
+        )
+        with mock.patch(
+            "joulewise.analysis_engine.inputs.custody_telemetry_identity",
+            return_value=mock_identity,
+        ):
+            binding = bind_floor_artifact_evidence(
+                floor_artifact,
+                self.floor_path,
+                {"a10": self.runs_root, "window_c": self.runs_root},
+                strict_validator=lambda _path, _strict: (),
+            )
+        self.assertIn(
+            MOCK_TELEMETRY_CLAIM_REFUSAL,
+            binding.problems_by_cell["cell-1"],
+        )
+
     def test_real_controller_pinned_model_matches_canonical_bytes_and_is_included(self):
-        with tempfile.TemporaryDirectory() as tmp:
+        with exemption_parity(self.id()), tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             base = json.loads(BASE_CONFIG.read_text(encoding="utf-8"))
             base["model"].update(
@@ -2081,6 +2176,8 @@ class AnalysisIntegrationTests(unittest.TestCase):
                 with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
                     code = run_configured_strict_bundle(config_path, runs_root)
                 self.assertEqual(code, 0, config_path.name)
+            for member in sorted(self.runs_root.glob("cell-1-*")):
+                shutil.copytree(member, runs_root / member.name, symlinks=True)
 
             manifest_path = config_dir / "analysis_manifest.json"
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -2270,7 +2367,7 @@ class AnalysisIntegrationTests(unittest.TestCase):
     def test_complete_strict_current_bundle_set_derives_deterministic_fail_closed_artifact_with_production_telemetry_identity(
         self,
     ):
-        with mock.patch(
+        with exemption_parity(self.id()), mock.patch(
             "joulewise.analysis_engine.inputs.custody_telemetry_identity",
             return_value=PRODUCTION_TELEMETRY_IDENTITY,
         ):
@@ -2405,6 +2502,16 @@ class AnalysisIntegrationTests(unittest.TestCase):
                 "artifact_sha256": "3" * 64,
             },
         )
+        attribution_runs = self.root / "attribution-floor-runs"
+        shutil.copytree(self.runs_root, attribution_runs)
+        self._install_paired_floor_members(
+            floor_artifact,
+            {"a10": attribution_runs, "window_c": attribution_runs},
+        )
+        floor_artifact["idle_drift_guard"]["bundle_sha256"] = [
+            row["bundle_sha256"]
+            for row in floor_artifact["cells"][0]["absolute"]["bundle_observations"][:2]
+        ]
         self.assertEqual(validate_floor_artifact(floor_artifact), [])
         cells_by_condition = {
             cell["key"]["condition_family_id"]: cell for cell in cells
@@ -2431,7 +2538,7 @@ class AnalysisIntegrationTests(unittest.TestCase):
                 consumer_stress={},
             )
 
-        with tempfile.TemporaryDirectory() as tmp:
+        with exemption_parity(self.id()), tempfile.TemporaryDirectory() as tmp:
             floor_path = Path(tmp) / "attribution-floor.json"
             floor_path.write_text(
                 json.dumps(floor_artifact, indent=2) + "\n",
@@ -2439,7 +2546,7 @@ class AnalysisIntegrationTests(unittest.TestCase):
             )
             artifact = analyze_claims(
                 self.manifest_path,
-                self.runs_root,
+                attribution_runs,
                 floor_path,
                 strict_validator=validate_bundle,
                 _floor_request_factory=labelled_floor_request,
@@ -2849,7 +2956,7 @@ class AnalysisIntegrationTests(unittest.TestCase):
     def test_named_strata_manifest_preserves_terminal_mock_refusal_with_production_telemetry_identity(
         self,
     ):
-        with tempfile.TemporaryDirectory() as tmp:
+        with exemption_parity(self.id()), tempfile.TemporaryDirectory() as tmp:
             config_dir = Path(tmp) / "configs"
             shutil.copytree(self.config_dir, config_dir)
             manifest_path = config_dir / "analysis_manifest.json"
@@ -3252,7 +3359,7 @@ class AnalysisIntegrationTests(unittest.TestCase):
                 (),
             )
 
-        with mock.patch(
+        with exemption_parity(self.id()), mock.patch(
             "joulewise.analysis_engine.inputs.custody_telemetry_identity",
             return_value=PRODUCTION_TELEMETRY_IDENTITY,
         ):
@@ -4297,7 +4404,7 @@ class AnalysisIntegrationTests(unittest.TestCase):
     def test_claim_output_separation_preserves_declared_root_and_ignores_surplus_symlink(
         self,
     ):
-        with tempfile.TemporaryDirectory() as tmp:
+        with exemption_parity(self.id()), tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             declared_roots = {
                 "a10": root / "a10",
@@ -4305,6 +4412,8 @@ class AnalysisIntegrationTests(unittest.TestCase):
             }
             for declared_root in declared_roots.values():
                 declared_root.mkdir()
+                for member in sorted(self.runs_root.glob("cell-1-*")):
+                    shutil.copytree(member, declared_root / member.name, symlinks=True)
 
             exact_output = root / "exact-claim-verdicts.json"
             analyze_claims(
@@ -4358,7 +4467,7 @@ class AnalysisIntegrationTests(unittest.TestCase):
     def test_cli_output_separation_preserves_exact_and_absent_mapping_and_ignores_surplus_containment(
         self,
     ):
-        with tempfile.TemporaryDirectory() as tmp:
+        with exemption_parity(self.id()), tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             declared_roots = {
                 "a10": root / "a10",
@@ -4366,6 +4475,8 @@ class AnalysisIntegrationTests(unittest.TestCase):
             }
             for declared_root in declared_roots.values():
                 declared_root.mkdir()
+                for member in sorted(self.runs_root.glob("cell-1-*")):
+                    shutil.copytree(member, declared_root / member.name, symlinks=True)
             evidence_args = [
                 "--evidence-root",
                 f"a10={declared_roots['a10']}",
@@ -4642,7 +4753,7 @@ class AnalysisIntegrationTests(unittest.TestCase):
             ],
             source_name="replacement-production-whole-window-source",
         )
-        with mock.patch(
+        with exemption_parity(self.id()), mock.patch(
             "joulewise.analysis_engine.inputs.custody_telemetry_identity",
             return_value=PRODUCTION_TELEMETRY_IDENTITY,
         ):
@@ -4794,6 +4905,7 @@ class AnalysisIntegrationTests(unittest.TestCase):
         )
         shutil.rmtree(runs / target["run_id"])
         with (
+            exemption_parity(self.id()),
             mock.patch(
                 "joulewise.analysis_engine.inputs.custody_telemetry_identity",
                 return_value=PRODUCTION_TELEMETRY_IDENTITY,
@@ -5277,7 +5389,7 @@ class AnalysisIntegrationTests(unittest.TestCase):
         )
         with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
             self.assertEqual(run_configured_strict_bundle(config_path, runs), 0)
-        with mock.patch(
+        with exemption_parity(self.id()), mock.patch(
             "joulewise.analysis_engine.inputs.custody_telemetry_identity",
             return_value=PRODUCTION_TELEMETRY_IDENTITY,
         ):
