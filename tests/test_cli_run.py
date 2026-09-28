@@ -47,6 +47,11 @@ from tests.test_powermetrics import (
     rebased_documents,
 )
 from tests.test_arm_readiness import LaunchConsumptionV2Tests
+from tests.bfgs_fixtures import (
+    injected_battery_runner,
+    rebind_config,
+    write_passing_pair,
+)
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 EXAMPLE_CONFIG_PATH = REPO_ROOT / "configs" / "examples" / "mock_local.json"
@@ -1225,6 +1230,7 @@ class StrictValidateTests(CliRunTestCase):
                 config,
                 self.runs_dir,
                 clock,
+                battery_runner=injected_battery_runner(),
             )
         self.assertEqual(summary.status, RunStatus.SUCCEEDED)
         self.assertTrue((bundle / "raw" / RAW_SAMPLES_NAME).is_file())
@@ -1322,6 +1328,8 @@ class StrictValidateTests(CliRunTestCase):
             json.dumps(config, indent=2, sort_keys=True) + "\n",
             encoding="utf-8",
         )
+        rebind_config(bundle, telemetry_backend="jetson_rails")
+        write_passing_pair(bundle)
 
         problems = validate_bundle(bundle, strict=True)
 
@@ -1543,6 +1551,9 @@ class ReduceVerbTests(CliRunTestCase):
         )
         locator_path = runs_root / arm_readiness.LAUNCH_LINEAGE_LOCATOR_BASENAME
         metadata = json.loads((bundle / "metadata.json").read_text())
+        metadata["config_sha256"] = hashlib.sha256(
+            (bundle / "config.json").read_bytes()
+        ).hexdigest()
         metadata["extra"] = {
             "launch_lineage": lineage,
             "launch_lineage_locator_sha256": hashlib.sha256(

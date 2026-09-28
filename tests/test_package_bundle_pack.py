@@ -18,6 +18,7 @@ from joulewise.controller import run_benchmark
 from joulewise.publication_privacy import verify_public_bundle
 from joulewise.schemas import BenchmarkConfig, RunStatus
 from joulewise.suite import suite_manifest_sha256
+from tests.bfgs_fixtures import injected_battery_runner
 from scripts import package_bundle_pack
 
 
@@ -167,6 +168,7 @@ class BundlePackTests(unittest.TestCase):
                 config,
                 self.runs_dir,
                 FakeClock(start=1_783_394_100.0),
+                battery_runner=injected_battery_runner(),
             )
         self.assertEqual(summary.status, RunStatus.SUCCEEDED)
         self.assertEqual(validate_bundle(bundle, strict=True), [])

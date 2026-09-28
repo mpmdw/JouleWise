@@ -46,6 +46,7 @@ from joulewise.uncertainty_evidence import (
     derive_powermetrics_clock_evidence_v2,
     derive_powermetrics_clock_evidence_v3,
 )
+from tests.bfgs_fixtures import injected_battery_runner
 
 FIXTURE = Path(__file__).resolve().parent / "fixtures" / "powermetrics_sample.plist"
 CORRUPT_PLIST = b"<?xml version='1.0'?><plist><dict><key>timestamp</key>"
@@ -745,7 +746,10 @@ class PowermetricsAdapterTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             with patch("joulewise.adapters.powermetrics.subprocess.run", side_effect=fake_run):
-                bundle_path, summary = run_benchmark(make_config(), Path(tmp), FakeClock())
+                bundle_path, summary = run_benchmark(
+                    make_config(), Path(tmp), FakeClock(),
+                    battery_runner=injected_battery_runner(),
+                )
 
             self.assertEqual(summary.status, RunStatus.FAILED)
             self.assertEqual(summary.failure_reason, FailureReason.PERMISSION_DENIED)
@@ -1930,6 +1934,7 @@ class PowermetricsAdapterTests(unittest.TestCase):
                         config,
                         Path(tmp),
                         FakeClock(start=10.0),
+                        battery_runner=injected_battery_runner(),
                     )
 
                 self.assertTrue(failed_once)
@@ -2096,7 +2101,10 @@ class PowermetricsAdapterTests(unittest.TestCase):
                 patch("joulewise.adapters.powermetrics.subprocess.run", side_effect=fake_run),
                 patch("joulewise.adapters.powermetrics.subprocess.Popen", TruncatedTailPopen),
             ):
-                bundle_path, summary = run_benchmark(config, Path(tmp), clock)
+                bundle_path, summary = run_benchmark(
+                    config, Path(tmp), clock,
+                    battery_runner=injected_battery_runner(),
+                )
 
             self.assertEqual(summary.status, RunStatus.SUCCEEDED)
             self.assertEqual(
