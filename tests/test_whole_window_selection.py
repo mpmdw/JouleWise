@@ -74,6 +74,68 @@ from tests.test_run_campaign import (
     read_all_jsonl,
     run_campaign_module,
 )
+from tests.bfgs_fixtures import (
+    rebind_config, write_capture_evidence, write_passing_pair,
+)
+
+
+_CONFIG_FIXTURE = (
+    Path(__file__).resolve().parents[1]
+    / "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v1"
+    / "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b01-a1.json"
+)
+
+
+def _evidence_bundle(bundle: Path) -> None:
+    events_path = bundle / "events.jsonl"
+    if events_path.exists():
+        events = [json.loads(line) for line in events_path.read_text().splitlines() if line]
+        for event in events:
+            if event.get("event_type") in {"stage_started", "stage_completed"}:
+                event.setdefault("metadata", {}).setdefault(
+                    "monotonic_ns", int(float(event["timestamp_s"]) * 1_000_000_000),
+                )
+        events_path.write_text(
+            "".join(json.dumps(event, sort_keys=True) + "\n" for event in events),
+            encoding="utf-8",
+        )
+    config_path = bundle / "config.json"
+    if not config_path.exists():
+        config = json.loads(_CONFIG_FIXTURE.read_text(encoding="utf-8"))
+        config["run_id"] = bundle.name
+        config_path.write_text(json.dumps(config, sort_keys=True) + "\n", encoding="utf-8")
+    metadata_path = bundle / "metadata.json"
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    metadata["run_id"] = bundle.name
+    metadata["config_sha256"] = hashlib.sha256(config_path.read_bytes()).hexdigest()
+    metadata.setdefault("adapters", {}).setdefault("telemetry", {})["name"] = "powermetrics"
+    metadata_path.write_text(json.dumps(metadata, sort_keys=True) + "\n", encoding="utf-8")
+    rebind_config(bundle)
+    write_passing_pair(bundle)
+
+
+def _evidence_calibration(bundle: Path) -> None:
+    custody = bundle / "calibration"
+    evidence_path = custody / "instrument_evidence.json"
+    evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
+    evidence_sha = write_capture_evidence(
+        custody, validation_id=evidence["validation_id"], evidence=evidence,
+    )
+    manifest_path = custody / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["artifacts"]["instrument_evidence.json"] = evidence_sha
+    manifest_path.write_text(
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    metadata_path = bundle / "metadata.json"
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    metadata["instrument_calibration"]["artifact_sha256"] = evidence_sha
+    metadata["instrument_calibration"]["validation_manifest_sha256"] = (
+        hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+    )
+    metadata_path.write_text(
+        json.dumps(metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
 
 
 def _install_synthetic_calibration_defaults(test: unittest.TestCase) -> None:
@@ -202,6 +264,7 @@ class WholeWindowSelectionTests(unittest.TestCase):
     def _custody_triangle_disagreement(root: Path, bundle_id: str) -> Path:
         bundle = root / bundle_id
         shutil.copytree(Path("tests/fixtures/d078_r01"), bundle)
+        _evidence_bundle(bundle)
         summary_path = bundle / "summary_metrics.json"
         summary = json.loads(summary_path.read_text(encoding="utf-8"))
         summary["measurement_quality"]["telemetry_source"] = "mock"
@@ -234,6 +297,7 @@ class WholeWindowSelectionTests(unittest.TestCase):
             invalid = self._custody_triangle_disagreement(root, "invalid")
             current = root / "current"
             shutil.copytree(Path("tests/fixtures/d078_r01"), current)
+            _evidence_bundle(current)
             current_summary_path = current / "summary_metrics.json"
             current_summary = json.loads(
                 current_summary_path.read_text(encoding="utf-8")
@@ -845,6 +909,7 @@ class WholeWindowSelectionTests(unittest.TestCase):
         summary = {
             "gross_energy_j": 5.0,
             "idle_subtracted_energy_j": 4.5,
+            "measurement_quality": {"telemetry_source": "powermetrics"},
             "energy_anchor_shift_envelopes": {
                 "/gross_energy_j": {"point_j": 5.0, "lower_j": 4.9, "upper_j": 5.1}
             },
@@ -877,6 +942,13 @@ class WholeWindowSelectionTests(unittest.TestCase):
                     )
                     + "\n"
                 )
+                _evidence_bundle(hidden)
+                # Frozen resolution sees this direct path, but it has no
+                # energy summary. The current selection path remains hidden.
+                direct = root / bundle_id
+                direct.mkdir()
+                (direct / "metadata.json").write_text("{}\n", encoding="utf-8")
+                _evidence_bundle(direct)
             manifest = {
                 "attempt_ledger_selection": {
                     "selected_bundles": [
@@ -1402,6 +1474,8 @@ class MaxBracketConsumptionTests(unittest.TestCase):
             measurement_fixture=measurement_fixture,
         )
         cls._install_suite_shape(bundle)
+        _evidence_calibration(bundle)
+        _evidence_bundle(bundle)
         minted = reduce_bundle(
             bundle,
             reducer_version="0.5.2",
@@ -1537,10 +1611,10 @@ class MaxBracketConsumptionTests(unittest.TestCase):
         (directory / "raw").mkdir(parents=True)
         (directory / "raw" / "powermetrics.plist").write_bytes(raw)
         (directory / "events.jsonl").write_bytes(events)
-        evidence_raw = (
-            json.dumps(evidence, indent=2, sort_keys=True) + "\n"
-        ).encode("utf-8")
-        (directory / "instrument_evidence.json").write_bytes(evidence_raw)
+        write_capture_evidence(
+            directory, validation_id=name, evidence=evidence,
+        )
+        evidence_raw = (directory / "instrument_evidence.json").read_bytes()
         manifest = {
             "schema_version": "joulewise.instrument_validation_manifest.v1",
             "validation_id": name,
@@ -1642,6 +1716,20 @@ class MaxBracketConsumptionTests(unittest.TestCase):
                 "timestamp_s": start_s - 0.1,
             },
         )
+        events.insert(1, {
+            "event_type": "stage_started",
+            "message": "battery fixture boundary",
+            "metadata": {"monotonic_ns": 30},
+            "phase": "idle_baseline",
+            "timestamp_s": start_s - 0.05,
+        })
+        events.append({
+            "event_type": "stage_completed",
+            "message": "battery fixture boundary",
+            "metadata": {"monotonic_ns": 80},
+            "phase": "idle_drift_sentinel",
+            "timestamp_s": max(float(row["timestamp_s"]) for row in events) + 0.05,
+        })
         events_path.write_text(
             "".join(
                 json.dumps(row, sort_keys=True) + "\n" for row in events
@@ -1666,6 +1754,7 @@ class MaxBracketConsumptionTests(unittest.TestCase):
             encoding="utf-8",
         )
         (destination / "summary_metrics.json").unlink()
+        _evidence_bundle(destination)
         return destination
 
     @staticmethod
@@ -2197,6 +2286,7 @@ class MaxBracketConsumptionTests(unittest.TestCase):
                 + "\n",
                 encoding="utf-8",
             )
+            _evidence_bundle(bundle)
             session = AuthenticatedConsumptionSession(root, {"member"})
             with (
                 patch(
@@ -2275,6 +2365,7 @@ class MaxBracketConsumptionTests(unittest.TestCase):
                 encoding="utf-8",
             )
             bracket = self._d079_bracket()
+            _evidence_bundle(bundle)
             session = AuthenticatedConsumptionSession(root, {"member"})
             with (
                 patch(
@@ -2647,6 +2738,7 @@ class MaxBracketConsumptionTests(unittest.TestCase):
                 + "\n",
                 encoding="utf-8",
             )
+            _evidence_bundle(bundle)
             session = AuthenticatedConsumptionSession(root, {"member"})
             with (
                 patch(
@@ -2710,6 +2802,7 @@ class MaxBracketConsumptionTests(unittest.TestCase):
                 + "\n",
                 encoding="utf-8",
             )
+            _evidence_bundle(bundle)
             session = AuthenticatedConsumptionSession(root, {"member"})
             with (
                 patch(
@@ -2876,6 +2969,7 @@ class MaxBracketConsumptionTests(unittest.TestCase):
                 + "\n",
                 encoding="utf-8",
             )
+            _evidence_bundle(bundle)
             session = AuthenticatedConsumptionSession(root, {"member"})
             with (
                 patch(
@@ -2944,6 +3038,7 @@ class MaxBracketConsumptionTests(unittest.TestCase):
                 + "\n",
                 encoding="utf-8",
             )
+            _evidence_bundle(bundle)
             session = AuthenticatedConsumptionSession(root, {"member"})
             with (
                 patch(
@@ -3052,6 +3147,8 @@ class SalvageSemanticsDispatchTests(unittest.TestCase):
 
     def test_no_argument_consumers_exclude_salvage_rows(self) -> None:
         args, _failed, bundle_ids = install_real_salvage_window(self.root)
+        for bundle_id in bundle_ids:
+            _evidence_bundle(self.root / bundle_id)
         with d100_real_salvage_leaf_patches(), redirect_stdout(io.StringIO()):
             self.assertEqual(run_campaign_module.run_whole_window_verdict(args), 0)
             reasons = whole_window_refusal_reasons(self.root, set(bundle_ids))
@@ -3069,6 +3166,8 @@ class SalvageSemanticsDispatchTests(unittest.TestCase):
 
     def test_explicit_salvage_dispatch_selects_only_salvage(self) -> None:
         args, _failed, bundle_ids = install_real_salvage_window(self.root)
+        for bundle_id in bundle_ids:
+            _evidence_bundle(self.root / bundle_id)
         with d100_real_salvage_leaf_patches(), redirect_stdout(io.StringIO()):
             self.assertEqual(run_campaign_module.run_whole_window_verdict(args), 0)
             row = read_all_jsonl(self.root / "campaign_log.jsonl")[-1]
@@ -3115,6 +3214,8 @@ class SalvageSemanticsDispatchTests(unittest.TestCase):
 
     def test_multiple_salvage_rows_for_one_basis_conflict_even_if_identical(self) -> None:
         args, _failed, bundle_ids = install_real_salvage_window(self.root)
+        for bundle_id in bundle_ids:
+            _evidence_bundle(self.root / bundle_id)
         with d100_real_salvage_leaf_patches(), redirect_stdout(io.StringIO()):
             self.assertEqual(run_campaign_module.run_whole_window_verdict(args), 0)
             log_path = self.root / "campaign_log.jsonl"
@@ -3138,6 +3239,9 @@ class SalvageSemanticsDispatchTests(unittest.TestCase):
         args_y, _failed_y, bundle_ids_y = install_real_salvage_window(
             root_y, session_id="window-y"
         )
+        for runs_root, bundle_ids in ((root_x, bundle_ids_x), (root_y, bundle_ids_y)):
+            for bundle_id in bundle_ids:
+                _evidence_bundle(runs_root / bundle_id)
         self.assertEqual(bundle_ids_x, bundle_ids_y)
         with d100_real_salvage_leaf_patches(), redirect_stdout(io.StringIO()):
             self.assertEqual(run_campaign_module.run_whole_window_verdict(args_x), 0)

@@ -39,7 +39,11 @@ from scripts import mint_floor_artifact_generalized as generalized_mint
 from scripts.build_d165_dominance_closeout import (
     build_d165_dominance_closeout,
 )
-from tests.test_analysis_finalizer import install_synthetic_finalization_fixture
+from tests.test_analysis_finalizer import (
+    install_synthetic_finalization_fixture as _install_synthetic_finalization_fixture,
+)
+from tests.bfgs_fixtures import rebind_config, write_passing_pair
+from tests.test_run_campaign import run_campaign_module
 from tests.test_d117_contrast_v5_pack import (
     PINNED_DOMINANCE_CRITERION_BYTES,
     frozen_json_bytes,
@@ -54,6 +58,32 @@ from joulewise import dominance_closeout as paper_adapter
 
 ROOT = Path(__file__).resolve().parents[1]
 REAL_BLOCK_FIXTURE = ROOT / "tests/fixtures/fcm_r4_real_blocks/measured_pair.json"
+
+
+def install_synthetic_finalization_fixture(root: Path, **kwargs) -> dict:
+    """Supply bound evidence before the shared fixture mints its verdict."""
+    writer = run_campaign_module.run_whole_window_verdict
+
+    def evidenced_writer(args):
+        for bundle in (Path(root) / "runs").iterdir():
+            if (bundle / "config.json").is_file():
+                rebind_config(bundle)
+                metadata_path = bundle / "metadata.json"
+                metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+                metadata["run_id"] = bundle.name
+                metadata_path.write_text(
+                    json.dumps(metadata, indent=2, sort_keys=True) + "\n",
+                    encoding="utf-8",
+                )
+                write_passing_pair(bundle)
+        return writer(args)
+
+    with mock.patch.object(
+        run_campaign_module, "run_whole_window_verdict", side_effect=evidenced_writer,
+    ):
+        return _install_synthetic_finalization_fixture(root, **kwargs)
+
+
 def authenticated_bracket(operative_bound_s: float) -> dict:
     allowance_s = 0.010818
     return {

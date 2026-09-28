@@ -31,7 +31,10 @@ from joulewise.calibration_ledger import (
 from joulewise.idle_admission import ADAPTER_CONTINUITY_SCHEMA
 from scripts import build_bracket_binding as binding_cli
 from scripts.finalize_analysis_manifest import main as finalize_main
-from tests.test_analysis_finalizer import install_synthetic_finalization_fixture
+from tests.test_analysis_finalizer import (
+    install_synthetic_finalization_fixture as _install_synthetic_finalization_fixture,
+)
+from tests.bfgs_fixtures import rebind_config, write_passing_pair
 from tests import test_calibration_live_three_window as live_three_window_module
 from tests.test_run_campaign import read_all_jsonl, run_campaign_module
 from tests.receipt_corpus import ReceiptCorpus
@@ -39,6 +42,29 @@ from tests.receipt_corpus import ReceiptCorpus
 
 def _write_json(path: Path, value: object) -> None:
     path.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n")
+
+
+def install_synthetic_finalization_fixture(root: Path, **kwargs) -> dict:
+    writer = run_campaign_module.run_whole_window_verdict
+
+    def evidenced_writer(args):
+        for bundle in (Path(root) / "runs").iterdir():
+            if (bundle / "config.json").is_file():
+                rebind_config(bundle)
+                metadata_path = bundle / "metadata.json"
+                metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+                metadata["run_id"] = bundle.name
+                metadata_path.write_text(
+                    json.dumps(metadata, indent=2, sort_keys=True) + "\n",
+                    encoding="utf-8",
+                )
+                write_passing_pair(bundle)
+        return writer(args)
+
+    with mock.patch.object(
+        run_campaign_module, "run_whole_window_verdict", side_effect=evidenced_writer,
+    ):
+        return _install_synthetic_finalization_fixture(root, **kwargs)
 
 
 def _install_cli_fixture(
@@ -348,6 +374,18 @@ def _install_three_window_e2e_fixture(
     identity_by_session = {
         value["session_id"]: value for value in identities.values()
     }
+    for name, identity in identities.items():
+        for slot in ("pre", "post"):
+            attempt_id = f"d117-{name}-{slot}"
+            source_custody = (
+                Path(source.windows[name]["runs_root"])
+                / "instrument_validation" / attempt_id
+            )
+            target_custody = (
+                Path(identity["runs_root"])
+                / "instrument_validation" / attempt_id
+            )
+            shutil.copytree(source_custody, target_custody)
     receipts = ReceiptCorpus(
         json.loads(line)
         for line in source.final_ledger_bytes.splitlines()

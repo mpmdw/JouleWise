@@ -5,6 +5,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import shutil
 import tempfile
 import unittest
 from contextlib import ExitStack
@@ -52,11 +53,38 @@ from joulewise.campaign_provenance import (
 from tests.test_calibration_bracketing import _fixture_snapshot
 from tests.test_arm_readiness import LaunchConsumptionV2Tests
 from tests.test_arm_readiness_schemas import TEST_BOOT_SESSION_ID
+from tests.bfgs_fixtures import (
+    rebind_config, write_capture_evidence, write_passing_pair,
+)
 
 
 LOCAL_CROSSING = "clock_bound_exceeds_quarter_window"
 UNRECORDED_ENVELOPE = "anchor_energy_envelope_unrecorded"
 SENTINEL_J = 987_654_321.125
+CONFIG_FIXTURE = (
+    Path(__file__).resolve().parents[1]
+    / "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v1"
+    / "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b01-a1.json"
+)
+
+
+def _evidence_bundle(bundle: Path) -> None:
+    config_path = bundle / "config.json"
+    config = (
+        json.loads(config_path.read_text(encoding="utf-8"))
+        if config_path.exists()
+        else json.loads(CONFIG_FIXTURE.read_text(encoding="utf-8"))
+    )
+    config.setdefault("hardware_target", {})
+    config["run_id"] = bundle.name
+    config_path.write_text(json.dumps(config, sort_keys=True) + "\n", encoding="utf-8")
+    metadata_path = bundle / "metadata.json"
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8")) if metadata_path.exists() else {}
+    metadata["run_id"] = bundle.name
+    metadata["config_sha256"] = hashlib.sha256(config_path.read_bytes()).hexdigest()
+    metadata_path.write_text(json.dumps(metadata, sort_keys=True) + "\n", encoding="utf-8")
+    rebind_config(bundle)
+    write_passing_pair(bundle)
 
 
 class CandidateDiscoveryModeTests(unittest.TestCase):
@@ -73,11 +101,23 @@ class CandidateDiscoveryModeTests(unittest.TestCase):
             mapped = replacement / "runs/member"
             mapped.mkdir(parents=True)
             (mapped / "marker").write_text("replacement bytes")
+            (mapped / "manifest.json").write_text(
+                '{"attempt_id":"member-capture"}\n', encoding="utf-8",
+            )
+            manifest_sha = hashlib.sha256((mapped / "manifest.json").read_bytes()).hexdigest()
+            evidence_sha = write_capture_evidence(
+                mapped, validation_id="member-capture",
+            )
+            consumer = root / "consumer"
+            consumer.mkdir()
+            (consumer / "metadata.json").write_text("{}\n", encoding="utf-8")
+            _evidence_bundle(consumer)
             candidate = bracketing.CalibrationCandidate(
-                relative_path=str(original), manifest_sha256="a" * 64,
-                evidence_sha256="b" * 64, protocol_id="fixture",
+                relative_path=str(original), manifest_sha256=manifest_sha,
+                evidence_sha256=evidence_sha, protocol_id="fixture",
                 capture_wall_time_s=1.0, b_fiducial_s="0.02",
                 bindings={"anchor_method_version": ACTIVE_CAPTURE_ANCHOR_METHOD},
+                attempt_id="member-capture",
             )
             snapshot, _ = _fixture_snapshot([candidate])
             inspected = []
@@ -112,6 +152,63 @@ class CandidateDiscoveryModeTests(unittest.TestCase):
                     if not replay:
                         self.assertIn("calibration_ledger_custody_invalid", session.refusal_reasons)
                     self.assertFalse(original.exists())
+
+    def test_issuing_candidate_discovery_reads_present_original(self):
+        from joulewise import calibration_bracketing as bracketing
+        from joulewise.uncertainty_evidence import ACTIVE_CAPTURE_ANCHOR_METHOD
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            original = root / "runs/member"
+            original.mkdir(parents=True)
+            (original / "marker").write_text("original bytes", encoding="utf-8")
+            (original / "manifest.json").write_text(
+                '{"attempt_id":"member-capture"}\n', encoding="utf-8",
+            )
+            manifest_sha = hashlib.sha256((original / "manifest.json").read_bytes()).hexdigest()
+            evidence_sha = write_capture_evidence(
+                original, validation_id="member-capture",
+            )
+            consumer = root / "consumer"
+            consumer.mkdir()
+            (consumer / "metadata.json").write_text("{}\n", encoding="utf-8")
+            _evidence_bundle(consumer)
+            candidate = bracketing.CalibrationCandidate(
+                relative_path=str(original), manifest_sha256=manifest_sha,
+                evidence_sha256=evidence_sha, protocol_id="fixture",
+                capture_wall_time_s=1.0, b_fiducial_s="0.02",
+                bindings={"anchor_method_version": ACTIVE_CAPTURE_ANCHOR_METHOD},
+                attempt_id="member-capture",
+            )
+            snapshot, _ = _fixture_snapshot([candidate])
+            inspected = []
+
+            def inspect_candidate(directory, *, runs_root):
+                inspected.append(directory)
+                self.assertEqual(directory, original)
+                self.assertEqual((directory / "marker").read_text(), "original bytes")
+                self.assertEqual(runs_root, root)
+                return candidate
+
+            with (
+                patch.object(bracketing, "BundleReader") as reader,
+                patch.object(bracketing, "_load_calibration_candidate_unbounded",
+                             side_effect=inspect_candidate),
+                patch.object(bracketing, "evaluate_calibration_bracket",
+                             return_value=({"b_fiducial_s": None}, ())) as evaluate,
+            ):
+                reader.return_value.measured_window.return_value = SimpleNamespace(start_s=2, end_s=3)
+                reader.return_value.metadata.return_value = {"instrument_calibration": {"bindings": {}}}
+                session = AuthenticatedConsumptionSession(
+                    root, {"consumer"}, calibration_ledger_snapshot=snapshot,
+                    mode="issuing",
+                )
+                session._prepare(
+                    bundle_paths={"consumer": consumer},
+                    policy=SimpleNamespace(calibration_bracketing=object()),
+                )
+            self.assertEqual(inspected, [original])
+            self.assertEqual(len(evaluate.call_args.args[0]), 1)
 
 
 class CampaignManifestVerdictAuthenticationTests(unittest.TestCase):
@@ -530,6 +627,7 @@ class TwoScopeRefusalTests(unittest.TestCase):
 
         return {
             "status": "succeeded",
+            "energy_uncertainty_status": "bounded",
             "summary_provenance": {"reducer_version": "0.5.2"},
             "measurement_quality": {
                 "cooldown_cap_hit": False,
@@ -567,12 +665,19 @@ class TwoScopeRefusalTests(unittest.TestCase):
         *,
         include_minted_envelopes: bool = True,
     ) -> AuthenticatedConsumptionSession:
+        from tests.test_p2038_production_path import P2038ProductionPathTests
+
+        source_bundle, source_summary = P2038ProductionPathTests().run_mode(
+            root / "measurement-source", "normal",
+        )
+        if source_summary.status.value != "succeeded":
+            raise AssertionError(source_summary.to_dict())
         bundle_paths: dict[str, Path] = {}
         for index, (bundle_id, widened) in enumerate(
             sorted(widened_by_bundle.items())
         ):
             bundle = root / bundle_id
-            bundle.mkdir()
+            shutil.copytree(source_bundle, bundle)
             minted = self._summary(
                 10.0 + index * 0.01,
                 bound_s=0.02,
@@ -584,27 +689,18 @@ class TwoScopeRefusalTests(unittest.TestCase):
                 json.dumps(minted, sort_keys=True) + "\n",
                 encoding="utf-8",
             )
-            (bundle / "metadata.json").write_text(
-                json.dumps(
-                    {
-                        "instrument_calibration": {
-                            "verified_effective_b_fiducial_s": 0.02
-                        },
-                        # Positive claim-bearing presentation (D-146 S3):
-                        # the barrier refuses metadata that does not present
-                        # an active-era capture anchor.
-                        "uncertainty_evidence": {
-                            "schema_version": SCHEMA_FOR_ANCHOR_METHOD[
-                                CLOCK_METHOD_V3
-                            ],
-                            "clock_anchor": {"method": CLOCK_METHOD_V3},
-                        },
-                    },
-                    sort_keys=True,
-                )
-                + "\n",
-                encoding="utf-8",
+            metadata_path = bundle / "metadata.json"
+            metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+            metadata["instrument_calibration"] = {
+                "verified_effective_b_fiducial_s": 0.02
+            }
+            uncertainty = metadata["uncertainty_evidence"]
+            uncertainty["schema_version"] = SCHEMA_FOR_ANCHOR_METHOD[CLOCK_METHOD_V3]
+            uncertainty["clock_anchor"]["method"] = CLOCK_METHOD_V3
+            metadata_path.write_text(
+                json.dumps(metadata, sort_keys=True) + "\n", encoding="utf-8"
             )
+            _evidence_bundle(bundle)
             bundle_paths[bundle_id] = bundle
 
         calibration_snapshot, _candidates = _fixture_snapshot([])
@@ -1128,6 +1224,7 @@ class LaunchLineageWholeWindowTests(unittest.TestCase):
                 "{}\n",
                 encoding="utf-8",
             )
+            _evidence_bundle(path)
             members.append(
                 {"bundle_id": bundle_id, "bundle_path": bundle_id}
             )
@@ -1196,10 +1293,10 @@ class LaunchLineageWholeWindowTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             manifest_path, _lineage = self._write_neg8_corpus(root)
-            (root / "member-0" / "metadata.json").write_text(
-                "{}\n",
-                encoding="utf-8",
-            )
+            metadata_path = root / "member-0" / "metadata.json"
+            metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+            metadata.pop("extra", None)
+            metadata_path.write_text(json.dumps(metadata) + "\n", encoding="utf-8")
             with self.assertRaisesRegex(
                 ValueError,
                 "launch_consumption_missing",

@@ -25,6 +25,7 @@ from joulewise import floor_extraction, whole_window
 from tests import test_arm_readiness as arm_readiness_tests
 from tests.git_fixture import init_git_fixture
 from tests.fixtures.arm_clock import coherent_clock_anchor
+from tests.bfgs_fixtures import rebind_config, write_passing_pair
 
 
 REAL_GO_T0_AUTHENTICATOR = arm_readiness._authenticate_go_t0_evidence
@@ -1886,6 +1887,7 @@ class CeremonySkipConsumerTests(unittest.TestCase):
         self.bundle.mkdir(parents=True)
         self.config = {
             "run_id": self.bundle.name,
+            "hardware_target": {"telemetry_backend": "mock"},
             "run_metadata": {
                 "project": "joulewise",
                 "tags": ["production-window", "launch_lineage_required"],
@@ -1895,11 +1897,20 @@ class CeremonySkipConsumerTests(unittest.TestCase):
             json.dumps(self.config, sort_keys=True, separators=(",", ":")) + "\n"
         )
         (self.bundle / "metadata.json").write_text(
-            '{"extra":{}}\n'
+            json.dumps({
+                "extra": {},
+                "run_id": self.bundle.name,
+                "config_sha256": hashlib.sha256(
+                    (self.bundle / "config.json").read_bytes()
+                ).hexdigest(),
+            }) + "\n"
         )
         (self.bundle / "summary_metrics.json").write_text(
             '{"status":"succeeded"}\n'
         )
+        rebind_config(self.bundle)
+        write_passing_pair(self.bundle)
+        self.config = json.loads((self.bundle / "config.json").read_text())
 
     def test_analysis_input_refuses_missing_launch_consumption(self) -> None:
         with self.assertRaises(analysis_inputs.AnalysisInputError) as caught:

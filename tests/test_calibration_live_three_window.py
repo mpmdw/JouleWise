@@ -59,6 +59,7 @@ from joulewise.uncertainty_evidence import CLOCK_METHOD_V2
 from scripts import validate_powermetrics_fiducial as production_writer
 from tests.git_fixture import init_git_fixture
 from tests.receipt_corpus import ReceiptCorpus
+from tests.bfgs_fixtures import write_capture_evidence
 
 
 _FIXTURE = (
@@ -115,11 +116,18 @@ def _pin_bytes(pin: dict) -> bytes:
     return (json.dumps(pin, sort_keys=True) + "\n").encode("utf-8")
 
 
-def _write_synthetic_custody(custody: Path, label: str) -> None:
+def _write_synthetic_custody(
+    custody: Path, label: str, *, session_id: str | None, slot: str | None
+) -> None:
     for relative in GOVERNED_ARTIFACTS:
+        if relative == "instrument_evidence.json":
+            continue
         path = custody / relative
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(f"{label}:{relative}".encode("utf-8"))
+    write_capture_evidence(
+        custody, validation_id=label, session_id=session_id, slot=slot
+    )
 
 
 class CalibrationLiveThreeWindowTests(unittest.TestCase):
@@ -157,7 +165,7 @@ class CalibrationLiveThreeWindowTests(unittest.TestCase):
         ]:
             raise AssertionError("fixture source acceptance pin drifted")
 
-        base_receipts, acceptance = cls._build_issuance_equivalent_base(source)
+        base_receipts, acceptance = cls._build_issuance_equivalent_base(source, root)
         cls.base_receipts = base_receipts
         cls.acceptance = acceptance
         cls.base_sequence = len(base_receipts)
@@ -258,7 +266,8 @@ class CalibrationLiveThreeWindowTests(unittest.TestCase):
                 ):
                     lifecycle.begin()
                 _write_synthetic_custody(
-                    Path(slots[slot]["custody_locator"]), attempts[slot]
+                    Path(slots[slot]["custody_locator"]), attempts[slot],
+                    session_id=window["session_id"], slot=slot,
                 )
                 lifecycle.capture_wall_time_s = str(
                     window[f"{slot}_capture_s"]
@@ -324,7 +333,7 @@ class CalibrationLiveThreeWindowTests(unittest.TestCase):
 
     @classmethod
     def _build_issuance_equivalent_base(
-        cls, source: dict
+        cls, source: dict, root: Path
     ) -> tuple[ReceiptCorpus, dict]:
         artifact = copy.deepcopy(source)
         artifact["identity_epoch"] = dict(cls.epoch)
@@ -360,7 +369,14 @@ class CalibrationLiveThreeWindowTests(unittest.TestCase):
         for disposition, count in additions.items():
             for index in range(count):
                 attempt_id = f"synthetic-import-{disposition}-{index:02d}"
-                hashes = _content_hashes(attempt_id)
+                custody = root / "imports" / attempt_id
+                _write_synthetic_custody(
+                    custody, attempt_id, session_id=None, slot=None,
+                )
+                hashes = {
+                    relative: hashlib.sha256((custody / relative).read_bytes()).hexdigest()
+                    for relative in ("manifest.json", "instrument_evidence.json")
+                }
                 content_id = content_id_from_artifact_hashes(hashes)
                 if content_id is None:
                     raise AssertionError("synthetic import lacks a content identity")
@@ -370,6 +386,7 @@ class CalibrationLiveThreeWindowTests(unittest.TestCase):
                         "content_id": content_id,
                         "artifact_sha256": hashes,
                         "disposition": disposition,
+                        "custody_locator": str(custody),
                         "bound_s": (
                             "0.040000"
                             if disposition == "systematic-invalid"
@@ -387,7 +404,9 @@ class CalibrationLiveThreeWindowTests(unittest.TestCase):
         for index, member in enumerate(
             sorted(receipt_members, key=lambda row: row["attempt_id"]), start=1
         ):
-            custody = f"/synthetic/d117/import/{member['attempt_id']}"
+            custody = member.get(
+                "custody_locator", f"/synthetic/d117/import/{member['attempt_id']}"
+            )
             reservation = _receipt(
                 {
                     "schema_version": RECEIPT_SCHEMA,
@@ -1177,7 +1196,9 @@ class CalibrationLiveThreeWindowTests(unittest.TestCase):
         first_import = next(
             row
             for row in self.snapshot.observations
-            if row.is_historical_import and row.disposition == "valid"
+            if row.is_historical_import
+            and row.disposition == "valid"
+            and row.attempt_id == "synthetic-import-valid-00"
         )
         leaked = replace(first_import, observation_kind="live-capture")
         leaked_snapshot = replace(
