@@ -401,3 +401,10 @@ Launched by the watchdog at 17:36:30 PDT (attempt 124) after a usage back-off; t
     - **Rule 10:** F gets the first form only.
     - **The planned second list is 6 IDs**, under condition 9's cap of 11.
     - The rule 9 coverage census is running (recorder on `_current_core_rederivation_reasons` past its early return, candidate `f0766620`).
+122. **S1 ID grants** (lead, bench; [01-lead-confirmation.md](30-s1-repair/70-triage/01-lead-confirmation.md), items 11–14; [87-bench-rules](30-s1-repair/87-bench-rules/)):
+    - **The refusal vocabulary is derived and filed.** It has 6 codes from the exemption-gated branches only; a too-broad first derivation was discarded.
+    - **Rule 3** withdraws parity from 5 `test_run_campaign` IDs, whose `_member` fixture carries `environment_admission_failed`. They are marked NEEDS_RULING before any seat starts, so they are outside the cap.
+    - **Rule 9 is met:** green switched-on accept and refuse tests exist.
+    - **Granted** (`cdfb27ce` on `fix/2026-09-28-s1-r3-H3`): 35 first-form IDs and 6 second-form IDs. Both are within condition 9's cap of 11.
+    - **Next:** seats A and B (R3-5) from `cdfb27ce`.
+    - **The bind + pair rows** in `test_floor_mint_estimator`, `test_mint_floor_artifact(_generalized)`, `test_whole_window`, `test_launch_window` and `test_window_duration_margins` are outside A/B's scopes, so the ruling gives them to the lead at the bench.

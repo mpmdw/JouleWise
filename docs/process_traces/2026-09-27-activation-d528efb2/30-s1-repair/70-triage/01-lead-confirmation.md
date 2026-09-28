@@ -40,3 +40,21 @@ Then R3-3, the pilot: one each of T2, T4 (or "bind + pair"), and T5 in scratch, 
 8. **Rule 7, second-switch eligibility.** On main's tree (`e7c8bcc6`), a recorder logged every answer of `_current_strict_summary` for the 7 T5a and 4 F IDs (`87-bench-rules/rule7-*`). The answer was **False for every bundle, in all 11 tests** (214–642 calls each). All 11 are eligible under rule 7.
 9. **Rule 8 (never the test's own subject).** An AST scan of each test and the class methods it calls finds no function on the second-form list and no reason that only the second form's right-hand branch can raise. There is one exception: `test_incomplete_pair_is_listed_and_never_converted_to_unpaired_samples_with_production_telemetry_identity` patches `joulewise.analysis_engine.inputs.AuthenticatedConsumptionSession`, the class whose `_prepare` is on the list. **It is withheld from the second list (conservative).** It gets the first form only; if it stays RED, it goes to the per-ID gate.
 10. **Rule 10.** P-3 (an F ID) passes without the second switch, so F IDs get the first form only unless seat A shows a need. Rule 7 already allows all four, so the lead can grant quickly.
+
+## Rules 3 and 9, and the grants (item 122)
+
+11. **Refusal vocabulary (rule 3 of the ruling in force, §3.3), derived from the syntax trees and filed as `87-bench-rules/refusal-vocabulary.json`.** It lists the codes that the four switched-off functions can return only on their non-exempt branch, including what `environment_admission_refusals`, `current_environment_refusals`, `post_run_environment_refusals` and their helpers return:
+    - `anchor_fallback_member_unusable`
+    - `environment_admission_missing`
+    - `environment_admission_failed`
+    - `cpu_admission_unenforced`
+    - `thermal_pressure_elevated_in_window`
+    - `reducer_wire_unknown`
+
+    A first derivation that took every string literal in the four functions was too broad. It included ungated codes such as `config_hash_mismatch`, `window_evidence_precheck_missing` and `campaign_cooldown_evidence_missing`, which `_member_readiness_reasons` adds whatever the exemption says. It was discarded.
+12. **Rule 3 applied to the 40 candidate grants:** 5 are refused. They are `tests.test_run_campaign.IdleAdmissionCoreVerdictTests.{test_recorded_supersession_resolves_present_retry_and_is_reported, test_whole_window_cli_uses_campaign_membership_and_strict_validation, test_whole_window_invalid_reference_is_excluded_and_cannot_pass, test_whole_window_verdict_honors_and_reports_failed_member_waiver, test_whole_window_verdict_refuses_mismatched_bound_lineage}`. The class's `_member` fixture, which these tests call, contains the literal `environment_admission_failed`. **They are marked NEEDS_RULING by test ID here, before any seat starts**, so they are outside condition 2's cap. Seat A leaves them untouched.
+13. **Rule 9, the coverage census** (`87-bench-rules/rule9-census.txt`, candidate `f0766620`, five of six modules; the slow sweep module was still running). Green tests reach `_current_core_rederivation_reasons` past its early return and **accept**, for example `test_whole_window_selection…test_b1_r1_explicit_minted_fresh_valid_session_is_prepared_and_accepted`. Others **refuse**: `…WholeWindowSelectionTests.test_custody_triangle_disagreement_survives_mixed_current_path` and `…test_minted_semantics_loads_and_refuses_pending_ledger_snapshot`. Rule 9 is met; no PR sentence is owed.
+14. **Grants** on `fix/2026-09-28-s1-r3-H3`: `1d787877`, then `cdfb27ce`.
+    - `PARITY_TEST_IDS` has **35** IDs: T2 24 (29 less the 5 of item 12), T5a 7 and F 4.
+    - `PARITY_SECOND_FORM_TEST_IDS` has **6** (T5a less the incomplete-pair ID).
+    - `tests.test_bfgs_fixtures` passes with the lists filled (23 OK).
