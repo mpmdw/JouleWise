@@ -949,6 +949,29 @@ class AnchorV3ExactTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "unregistered"):
             resolve_anchor_deriver("unknown")
 
+    def test_reconstructor_refuses_unregistered_label_instead_of_falling_back(self) -> None:
+        # A130 / audit 13 section 2.2 M13: cheap counterfactual guard for the
+        # reconstruction resolver.  Replacing its refusal with a fallback to
+        # any registered deriver (the D-078 defect class) was silent against
+        # this module; only test_reduce (whole module ~6.5 min) saw it.
+        from joulewise.uncertainty_evidence import (
+            ANCHOR_RECONSTRUCTION_DERIVERS,
+            resolve_anchor_reconstructor,
+        )
+
+        for method, deriver in ANCHOR_RECONSTRUCTION_DERIVERS.items():
+            with self.subTest(registered=method):
+                self.assertIs(resolve_anchor_reconstructor(method), deriver)
+        for label in (
+            "powermetrics_not_a_registered_anchor_method_v9",
+            "",
+            None,
+            ["unhashable"],
+        ):
+            with self.subTest(unregistered=label):
+                with self.assertRaisesRegex(ValueError, "unregistered"):
+                    resolve_anchor_reconstructor(label)  # type: ignore[arg-type]
+
 
 # --------------------------------------------------------------------------
 # A267 QPE01-CLOCK-DISCIPLINE-ANCHOR-01 — cold-gate regressions 1-5 and 8-12
