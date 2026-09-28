@@ -293,3 +293,9 @@ Launched by the watchdog at 17:36:30 PDT (attempt 124) after a usage back-off; t
     - Night kinds not in `NETWORK_TIME_ENFORCED_KINDS` refuse to launch, and the set is empty at N1's merge. **So no night launches between N1's merge and the first consumer's merge.**
     - New closing condition NT-C1 for the cap's closing ruling.
     - **Seat N1 launched** (Sol 6.0 xhigh, 3 h; branch `feat/2026-09-28-ntp-n1`, worktree `JouleWise-wt-ntp-n1-d528efb2`; [brief](71-ntp-design/30-n1-brief.txt)).
+101. **D-138 hold refutation (Astra xhigh, complete relaunch): HOLD: OPEN — 3 routes** ([report](50-d138-issuance-seat/refuters/hold-refuter-4-astra.md), probes in `hold4-probes/`).
+    - **F1:** `run_campaign(args)`, called directly, reaches the claim-bearing child launch with zero build-reader calls. S3 sits in `main()`, as the ruling placed it; `main()` is the sole production caller.
+    - **F2:** `_authenticate_acceptance_bytes(held bytes)` returns the full held artifact.
+    - **F3:** `_registered_operatives_unchecked(held id)` returns its screen `0.013701`.
+    - The refuter also found that no production caller carries these results through to a claim (the public wrapper and API refuse; inspection output fails re-authentication), and that its coverage is otherwise partial.
+    - **Under HOLD-BY-CONSTRUCTION-01 §6.2, "any route, found by any seat at any gate" means THE TRANSACTION STOPS FOR GOOD.** There is no round 4 and the branch is not merged. The magistrate applies the stop literally. Reading these routes as "not real" would reinterpret a ruled stop condition (rule 11). **The owner receives one brief** with the ruling's options (a) withdraw the issued file and land only the loader repair, the tool and the tests; (b) accept a named written residual; (c) a new design consult, each costed. **The magistrate does not choose.**
