@@ -20,7 +20,7 @@ file instead.
 
 | Work | Branch | Head |
 |---|---|---|
-| The running record, items 1–127 | `docs/2026-09-27-d528efb2` | see the branch tip |
+| The running record, items 1 onward (1–127 at the pause; 128 onward are the 09-28 Opus deskwork session) | `docs/2026-09-27-d528efb2` | see the branch tip |
 | Network-time enforcement, part N1 | `feat/2026-09-28-ntp-n1` | `36e8ba6e` |
 | S1 repair round 3, ID grants (seat H3) | `fix/2026-09-28-s1-r3-H3` | `cdfb27ce` |
 | S1 repair round 3, seat B (finished) | `fix/2026-09-28-s1-r3-B` | `d4345946` |
@@ -42,31 +42,21 @@ Two jobs were stopped with edits not yet committed. Those edits are still in the
 
 **Merged:** #437 (bookkeeping + all 25G83 rulings) → `9eab16f8`; the canonical root is fast-forwarded to it.
 
-**D-138 (the 25G83 calibration issuance)** is on `feat/2026-09-27-d138-25g83-issuance`, candidate `325d9f77`. Ed approved the name `d079_calibration_acceptance_v2_n12_25g83_r1` and its release after the gates ("Yes re name , go ahead").
-- **Built:**
-  - loader repair and promotion tool;
-  - issued bytes `80c23036…351b` (input seal `e7363bdd…` unchanged);
-  - the pin swap and the H1 hold in the arm admission list;
-  - the issuing record and the draft decision-log entry (numbered on that branch only);
-  - fix round 1 (the mutation survivors).
-- **Gates so far:** the independent replay PASSED (Astra).
-- **STOPPED:** the hold refuter (Astra) and the contract refuter (Opus) each found an open route around H1. A manual no-pack campaign, and packs declaring R7/r6, are judged by the moved default. A cold design addendum **D138-25G83-DESIGN-01-A1** has been convened. It also rules on:
-  - the doubling-trigger defect (the disposed rows may count toward 12→24);
-  - the promotion tool's form-only checks;
-  - the "complete" wording in the bytes;
-  - the old-epoch replay, which has no qualifying baseline.
-- The pedagogy pass returned FIX with 37 exact replacements, to be applied after the addendum.
+**D-138 (the 25G83 calibration issuance)** is on `feat/2026-09-27-d138-25g83-issuance`, head `b953f4b0` (issued bytes `d7076c78…`; the earlier candidate `325d9f77` with bytes `80c23036…` is superseded). Ed approved the name `d079_calibration_acceptance_v2_n12_25g83_r1` and its release after the gates ("Yes re name , go ahead").
+- **Built:** the loader repair and promotion tool; the pin swap and the H1 hold; the issuing record and the draft decision-log entry (numbered on that branch only); fix rounds 1 and 2; the hold-by-construction module (ruling HOLD-BY-CONSTRUCTION-01, record item 82).
+- **Rulings issued:** design addendum **D138-25G83-DESIGN-01-A1** (item 68) and **HOLD-BY-CONSTRUCTION-01** (item 82). The first pedagogy pass's 37 items were applied (items 73 and 79); the second pass's 25 items (item 81) wait for the final writer pass.
+- **STOPPED for good** (HOLD-BY-CONSTRUCTION-01 §6.2): a fresh hold refuter found 3 routes (item 101). Contract refuter 3 then returned DISSENT on four main-test regressions at `b953f4b0` (item 104), confirmed by the lead's whole suite (item 106: 6 failures, 9 errors in 5 modules). Ed was sent the a/b/c brief (item 102) and a correction (item 105): option (b) now also needs a ruling on those four regressions and their fixes.
 
-**Science:** addenda A2 and A3 said PROCEED. Network time was ON during W1/W2 and caused 4 exclusions, but moved no member. **H5/H6 (network time OFF plus per-capture log attestation) must be enforced in code before any 25G83 window** (lane NETWORK-TIME-OFF-ENFORCE-01, being registered). The `timed` log evidence is preserved in the record, because the system log ages out after about 29 h.
+**Science:** addenda A2 and A3 said PROCEED. Network time was ON during W1/W2 and caused 4 exclusions; it put no step and no millisecond correction inside any member, and moved two members' clocks by 40 µs and 12 µs, which each member's uncertainty covers six times over (A2 ruling §6). **H5/H6 (network time OFF plus per-capture log attestation) must be enforced in code before any 25G83 window** (lane NETWORK-TIME-OFF-ENFORCE-01, registered in item 66; ruling NTP-ENFORCE-DESIGN-01 and addendum A1, items 100 and 115; part N1 at `36e8ba6e`, awaiting cold gate A2). The `timed` log evidence is preserved in the record, because the system log ages out after about 29 h.
 
 **Cap:** CAP-COUNCIL-25G83-01 + A1 chose route R (cap = 10× the largest measured work under a pre-registered rule; freeze the code, then size, then two re-issues, then the full #416 audit). Ed will later be asked to approve the successor registration and to name two files.
 
-**S1:** round 2 is done, and the stop conditions are met (same signature twice). The combined head is `5283d7d0` (no merges). Escalation consult **S1-REPAIR-ROUTE-01** is done (Sol, Astra, Opus); its cold judge has been convened. The Opus seat found a possible gate defect: a bundle carrying a pair passes even with its config deleted or set to mock.
+**S1:** round 2 met the stop conditions (same signature twice). Escalation ruling **S1-REPAIR-ROUTE-01** and addendum **A1** issued (items 70 and 112; `30-s1-repair/50-escalation/21-coldgate-fable-ruling.md`, `83-coldgate-pilot-ruling.md`). The gate defect the Opus seat found (a paired bundle passing with its config deleted or set to mock) was fixed at the bench as `601a06c5` (item 71). Round 3: seat B landed `d4345946` (item 125); seat A and the lead's bench rows were stopped by the pause (items 126–127).
 
 **SUCCESSOR'S NEXT EXACT ACTION:** read record 00 from its last item (≈ item 117). Then:
 1. **D-138 is STOPPED for good** (HOLD-BY-CONSTRUCTION-01 §6.2: a fresh hold refuter found 3 routes, `refuters/hold-refuter-4-astra.md`). **Wait for Ed's choice** (Gmail `1a0e7c44a348de4e`):
    - (a) withdraw the file and land the rest;
-   - (b) a written residual, then the remaining gates: contract refuter 3, the whole suite on `b953f4b0`, the pedagogy pass, the cold final pass, merge;
+   - (b) a written residual plus a ruling on the four main-test regressions and their fixes (item 105), then the remaining gates: the second pedagogy pass, the cold final pass, merge (contract refuter 3 and the whole suite have already returned, items 104 and 106);
    - (c) a new design consult.
 
    Search `from:claude2.glaring610@passmail.net is:unread` first. Do not merge or choose without Ed.
