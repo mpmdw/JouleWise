@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 from pathlib import Path
@@ -10,7 +11,63 @@ import subprocess
 from typing import Any, Callable, Mapping
 from unittest.mock import patch
 
-from joulewise import battery_float
+from joulewise import battery_float, whole_window
+
+
+# Closed list: the only places where exemption parity changes behaviour.
+PARITY_SWITCHED_OFF = (
+    ("joulewise/analysis_engine/inputs.py", "anchor_fallback_member_unusable"),
+    ("joulewise/floor_extraction.py", "_cpu_admission_bundle_reasons"),
+    ("scripts/run_campaign.py", "_current_member_environment_refusals"),
+    ("scripts/run_campaign.py", "_member_readiness_reasons"),
+)
+
+# Closed list, second form: every function of joulewise/whole_window.py
+# that asks whether a member is a current, non-mock measurement.
+PARITY_SECOND_FORM_SWITCHED_OFF = (
+    "AuthenticatedConsumptionSession._prepare",
+    "_manifest_members",
+    "_reference_energy_evidence",
+    "mint_neg8_drift_bound_artifact",
+    "_derived_neg8_decision",
+    "_manifest_bundle_paths",
+    "_current_core_rederivation_reasons",
+    "_validate_row_uncached",
+    "_row_references_current_strict_member",
+    "whole_window_refusal_reasons",
+    "whole_window_drift_allowances",
+)
+
+# The lead grants IDs from the triage record; this seat never adds one.
+PARITY_TEST_IDS: frozenset[str] = frozenset({
+})
+PARITY_SECOND_FORM_TEST_IDS: frozenset[str] = frozenset({
+})
+
+
+@contextlib.contextmanager
+def exemption_parity(test_id: str):
+    """For one named test, treat every bundle as main treated it.
+
+    First form, for every granted ID: every bundle counts as exempt.
+    Second form, only for IDs on the second list: no bundle counts as a
+    current, non-mock measurement. The battery gate, config binding,
+    mock barrier and strict validation remain real.
+    """
+    if test_id not in PARITY_TEST_IDS:
+        raise AssertionError(f"exemption parity not granted to {test_id}")
+    with contextlib.ExitStack() as stack:
+        stack.enter_context(patch.object(
+            whole_window.CustodyTelemetryIdentity,
+            "production_predicate_exempt",
+            property(lambda self: True),
+        ))
+        if test_id in PARITY_SECOND_FORM_TEST_IDS:
+            stack.enter_context(patch.object(
+                whole_window, "_current_strict_summary",
+                lambda *args, **kwargs: False,
+            ))
+        yield
 
 
 FIXTURES = Path(__file__).parent / "fixtures" / "battery_float"

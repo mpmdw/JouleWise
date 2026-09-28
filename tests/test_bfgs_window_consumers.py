@@ -19,12 +19,106 @@ from unittest.mock import patch
 from joulewise import battery_float
 from joulewise.battery_float import CustodyFailure, CustodyUnreadable
 from joulewise.bundle import RunBundleWriter
-from joulewise.bundle_read import WindowBatteryRefusal, authenticate_window_members
+from joulewise.bundle_read import (
+    BatteryStatusRefusal, BundleReader, WindowBatteryRefusal,
+    authenticate_window_members,
+)
 from joulewise.detection_floor import complete_bundle_sha256
 from joulewise.clock import FakeClock
 from tests.test_bundle_read import load_config
+from tests.bfgs_fixtures import produce_strict_bundle, write_charging_pair
 
 NAMED_RESIDUALS = {"joulewise/analysis_manifest_v3.py"}
+
+
+class BoundPairGateTests(unittest.TestCase):
+    """G-1..G-7: a pair's pass requires a digest-bound physical config."""
+
+    def setUp(self) -> None:
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name)
+
+    def bundle(self, name: str) -> Path:
+        return produce_strict_bundle(self.root, name)
+
+    def assert_missing(self, bundle: Path, reason: str, *, admit_mock=False) -> None:
+        with self.assertRaises(WindowBatteryRefusal) as caught:
+            authenticate_window_members(((bundle.name, bundle),),
+                                        admit_mock_window=admit_mock)
+        self.assertEqual(caught.exception.members[0]["status"],
+                         "battery_float_evidence_missing")
+        self.assertTrue(caught.exception.members[0]["reasons"][0].startswith(reason),
+                        caught.exception.members)
+
+    def make_mock(self, bundle: Path) -> None:
+        config_path = bundle / "config.json"
+        config = json.loads(config_path.read_text())
+        config["hardware_target"]["telemetry_backend"] = "mock"
+        config_path.write_text(json.dumps(config) + "\n")
+        metadata_path = bundle / "metadata.json"
+        metadata = json.loads(metadata_path.read_text())
+        metadata["config_sha256"] = hashlib.sha256(config_path.read_bytes()).hexdigest()
+        metadata_path.write_text(json.dumps(metadata) + "\n")
+
+    def test_g1_untouched_produced_bundle_passes(self) -> None:
+        bundle = self.bundle("g1")
+        self.assertEqual(authenticate_window_members((("g1", bundle),))["g1"].status,
+                         "pass")
+        self.assertIsInstance(BundleReader(bundle).metadata(), dict)
+
+    def test_g2_deleted_config_refused(self) -> None:
+        bundle = self.bundle("g2")
+        (bundle / "config.json").unlink()
+        self.assert_missing(bundle, "pair not bound (config.json cannot be read")
+
+    def test_g3_mock_rebound_pair_refused_even_with_mock_admission(self) -> None:
+        bundle = self.bundle("g3")
+        self.make_mock(bundle)
+        for admit_mock in (False, True):
+            with self.subTest(admit_mock=admit_mock):
+                self.assert_missing(bundle, "pair recorded under a mock config",
+                                    admit_mock=admit_mock)
+
+    def test_g4_changed_config_refused(self) -> None:
+        bundle = self.bundle("g4")
+        config_path = bundle / "config.json"
+        config_path.write_bytes(config_path.read_bytes() + b" ")
+        self.assert_missing(bundle,
+                            "pair not bound (config.json digest does not match metadata.config_sha256)")
+
+    def test_g5_charging_pair_precedes_missing_config(self) -> None:
+        bundle = self.bundle("g5")
+        write_charging_pair(bundle)
+        (bundle / "config.json").unlink()
+        with self.assertRaises(WindowBatteryRefusal) as caught:
+            authenticate_window_members((("g5", bundle),))
+        self.assertEqual(caught.exception.members[0]["status"],
+                         "battery_float_confounded")
+
+    def test_g6_raw_custody_precedes_missing_config(self) -> None:
+        bundle = self.bundle("g6")
+        raw_path = bundle / "raw/battery_float.pre.ioreg"
+        raw = raw_path.read_bytes()
+        raw_path.write_bytes(bytes([raw[0] ^ 1]) + raw[1:])
+        (bundle / "config.json").unlink()
+        with self.assertRaises(CustodyFailure):
+            authenticate_window_members((("g6", bundle),))
+
+    def test_g7_reader_refuses_each_unbound_pair(self) -> None:
+        for label, mutate in (
+            ("deleted", lambda bundle: (bundle / "config.json").unlink()),
+            ("mock", self.make_mock),
+            ("changed", lambda bundle: (bundle / "config.json").write_bytes(
+                (bundle / "config.json").read_bytes() + b" ")),
+        ):
+            with self.subTest(label=label):
+                bundle = self.bundle("g7-" + label)
+                mutate(bundle)
+                with self.assertRaises(BatteryStatusRefusal) as caught:
+                    BundleReader(bundle).metadata()
+                self.assertEqual(caught.exception.status,
+                                 "battery_float_evidence_missing")
 
 
 class WindowMembersTests(unittest.TestCase):
@@ -403,7 +497,7 @@ class WindowMembersTests(unittest.TestCase):
 
     def test_passing_pair_returns_verdict(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            bundle = self.pair_bundle(Path(tmp), "passing")
+            bundle = self.pair_bundle(Path(tmp), "passing", real=True)
             verdicts = authenticate_window_members((("passing", bundle),))
             self.assertEqual(verdicts["passing"].status, "pass")
             self.assertEqual(len(verdicts["passing"].bundle_sha256), 64)
@@ -411,7 +505,7 @@ class WindowMembersTests(unittest.TestCase):
     def test_recorded_member_digests_precede_status_refusals(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            good = self.pair_bundle(root, "recorded-good")
+            good = self.pair_bundle(root, "recorded-good", real=True)
             (good / "summary_metrics.json").write_text("{}\n")
             recorded = {name: hashlib.sha256((good / name).read_bytes()).hexdigest()
                         for name in ("config.json", "metadata.json", "summary_metrics.json")}
@@ -670,7 +764,7 @@ class WindowMembersTests(unittest.TestCase):
         from joulewise.aggregate import aggregate_experiment
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            self.pair_bundle(root, "passing")
+            self.pair_bundle(root, "passing", real=True)
             failed = self.pair_bundle(root, "failed", charging=True)
             (failed / "summary_metrics.json").write_text(json.dumps({"status": "failed"}))
             with self.assertRaises(WindowBatteryRefusal) as caught:

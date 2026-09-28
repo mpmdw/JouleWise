@@ -73,6 +73,10 @@ import subprocess
 import unittest
 from pathlib import Path
 
+from tests.bfgs_fixtures import (
+    PARITY_SECOND_FORM_SWITCHED_OFF, PARITY_SWITCHED_OFF,
+)
+
 ROOT = Path(__file__).resolve().parents[1]
 SWEEP_ROOTS = ("joulewise/", "scripts/", "docs/paper/", "configs/")
 EXCLUDED_ROOTS = ("tests/", "docs/process_traces/", "docs/legacy/")
@@ -833,6 +837,27 @@ def tracked_sources(root=ROOT, replacements=None):
     return files
 
 
+def exemption_parity_sites(files):
+    """Return production callers of the two exact test parity seams."""
+    first, second = set(), set()
+    property_name = "production_predicate_" + "exempt"
+    strict_name = "_current_strict_" + "summary"
+    row_name = "_row_references_current_strict_" + "member"
+    for path, source in files.items():
+        if not path.startswith(("joulewise/", "scripts/")) or not path.endswith(".py"):
+            continue
+        for _, qualname, fn in functions({path: source}):
+            for node, _ in own_nodes(fn):
+                if isinstance(node, ast.Attribute) and node.attr == property_name:
+                    if (path, qualname) != ("joulewise/whole_window.py",
+                                             "CustodyTelemetryIdentity.production_predicate_exempt"):
+                        first.add((path, qualname))
+                if (isinstance(node, ast.Call) and
+                    name_of(node) in {strict_name, row_name}):
+                    second.add((path, qualname))
+    return first, second
+
+
 MOCK_ADMISSION_CALLS = {
     ("joulewise/aggregate.py", "aggregate_experiment", "authenticate_window_members", "forward"),
     ("joulewise/aggregate.py", "aggregate_experiment", "_read_member", "forward"),
@@ -1419,6 +1444,46 @@ class DetectorExamples(unittest.TestCase):
 
 
 class ConsumerSweepTests(unittest.TestCase):
+    def test_exemption_parity_closed_list(self):
+        files = tracked_sources()
+        first, second = exemption_parity_sites(files)
+        self.assertEqual(first, set(PARITY_SWITCHED_OFF))
+        self.assertEqual({name for path, name in second if path == "joulewise/whole_window.py"},
+                         set(PARITY_SECOND_FORM_SWITCHED_OFF))
+        self.assertEqual({path for path, _ in second}, {"joulewise/whole_window.py"})
+
+        first_name = "production_predicate_" + "exempt"
+        strict_name = "_current_strict_" + "summary"
+        test_paths = [path for path in tracked(ROOT) if path.startswith("tests/")
+                      and path.endswith(".py")]
+        first_tests = {path for path in test_paths if first_name in (ROOT / path).read_text()}
+        second_tests = {path for path in test_paths if strict_name in (ROOT / path).read_text()}
+        self.assertLessEqual(first_tests,
+                             {"tests/bfgs_fixtures.py", "tests/test_bfgs_fixtures.py"})
+        self.assertLessEqual(second_tests, {
+            "tests/bfgs_fixtures.py", "tests/test_bfgs_fixtures.py",
+            "tests/test_whole_window_selection.py", "tests/test_whole_window.py",
+        })
+
+        extra_first = dict(files)
+        extra_first["joulewise/aggregate.py"] += (
+            "\ndef parity_mutant(identity):\n"
+            "    return identity.production_predicate_" + "exempt\n"
+        )
+        mutant_first, _ = exemption_parity_sites(extra_first)
+        self.assertIn(("joulewise/aggregate.py", "parity_mutant"),
+                      mutant_first - set(PARITY_SWITCHED_OFF))
+
+        extra_second = dict(files)
+        extra_second["joulewise/aggregate.py"] += (
+            "\ndef parity_second_mutant(summary, bundle):\n"
+            "    return _current_strict_" + "summary(summary, bundle)\n"
+        )
+        _, mutant_second = exemption_parity_sites(extra_second)
+        self.assertIn(("joulewise/aggregate.py", "parity_second_mutant"),
+                      mutant_second - {("joulewise/whole_window.py", name)
+                                       for name in PARITY_SECOND_FORM_SWITCHED_OFF})
+
     def test_12a_9_mock_admission_call_forms_are_closed(self):
         files = tracked_sources()
         calls, violations = mock_admission_calls(files)
