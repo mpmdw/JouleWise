@@ -1,0 +1,40 @@
+P0 candidate sha dbad7cc782945691 text sha 7297cd244df85efe
+P1 --check committed rc 0 issued sha256=80c2303611268b6b94626e001fb5df0e783719744145c9f6a31d4061ddee351b 
+P1b --check one-byte-different rc 1 promotion refused: issued file differs from promotion output
+P1c --out onto different existing bytes rc 1 promotion refused: refusing to overwrite different bytes file untouched True
+P3a member altered -> refused: candidate digest mismatch
+P3b + digest pin patched -> refused: candidate seal or role mismatch
+P3c + both candidate seals recomputed + digest patched -> refused: issuance record source candidate mismatch
+P3d non-candidate role -> refused: candidate seal or role mismatch
+P4a well-formed but WRONG ruling digest -> ACCEPTED
+P4b ruling path to nonexistent file -> ACCEPTED
+P4c D8 text replaced by 'x' -> ACCEPTED
+P4d network_time_provenance text != D8 -> ACCEPTED
+P4e claim_eligible_meaning + hold_enforcement removed -> ACCEPTED
+P4f source_candidate.relative_path wrong -> ACCEPTED
+R SCI-25G83-CANDIDATE-01 ctivation-77b1bee2/70-science-gate/21-science-gate-ruling.md exists True match True
+R SCI-25G83-CANDIDATE-01-A1 27-activation-77b1bee2/70-science-gate/31-addendum-ruling.md exists True match True
+R SCI-25G83-CANDIDATE-01-A2 9-27-activation-d528efb2/40-sci-a2-network-time/21-ruling.md exists True match True
+R SCI-25G83-CANDIDATE-01-A3 vation-d528efb2/40-sci-a2-network-time/31-addendum-ruling.md exists True match True
+R source_candidate docs/process_traces/2026-09-27-activation-77b1bee2/60-prepare-record/30-run1/candidate_acceptance_25g83.json dbad7cc7 fac6e6f8 cand derivation_sha256 fac6e6f8
+R ntp keys ['authenticated_off_admission', 'disclosure_id', 'members_with_correction_during_capture', 'members_with_correction_tail_during_capture', 'per_member_state', 'preserved_log', 'source_rulings', 'state_source', 'text'] text==D8 True
+R issuance_record keys ['claim_eligible_meaning', 'disclosures', 'hold_enforcement', 'holds', 'rulings', 'source_candidate', 'transaction']
+R holds ids ['H1', 'H5', 'H6', 'H7']
+R disclosures ['D1', 'D2', 'D3', 'D4', 'D5', 'D6', 'D7', 'D8']
+R issuance {'status': 'issued', 'claim_eligible': True, 'reason': 'issued by the D-138 transaction of epoch 25G83 under design ruling D138-25G83-DE'}
+R backfill {'status': 'issued', 'production_issuance_blocked': False, 'required_verification': 'complete: cold science gate SCI-25G83-CANDIDATE-01 over exclusions, per-night diagnostics, the screen-challenge outcome and the D-125 default; addenda A1 and A2; design ruling D138-25G83-DESIGN-01 and the gate of its section 9'}
+R top keys order ['schema_version', 'acceptance_id', 'decision_ids', 'artifact_role', 'issuance', 'ledger_cutoff', 'identity_epoch', 'prospective_rederivation', 'derivation_corpus', 'prior_observation_set', 'decimal_derivation', 'backfill_candidate', 'derivation_notes', 'registered_generation_row', 'derivation_input_sha256', 'derivation_sha256']
+R cand keys order  ['schema_version', 'acceptance_id', 'decision_ids', 'candidate_not_issued', 'artifact_role', 'issuance', 'ledger_cutoff', 'identity_epoch', 'prospective_rederivation', 'derivation_corpus', 'prior_observation_set', 'decimal_derivation', 'backfill_candidate', 'derivation_notes', 'registered_generation_row', 'derivation_input_sha256', 'derivation_sha256']
+DIFF removed lines: 10
+    -  "candidate_not_issued": true,
+    -  "artifact_role": "candidate",
+    -    "status": "candidate_not_issued",
+    -    "claim_eligible": false,
+    -    "reason": "prepared by scripts/issue_calibration_acceptance_generation.py prepare-candidate; issuance is 
+    -    "licence": "These bytes license nothing: no measurement window, no claim, no threshold. No tool may load 
+    -    "status": "candidate_not_issued",
+    -    "production_issuance_blocked": true,
+    -    "required_verification": "pending: cold science gate over exclusions, per-night diagnostics, the screen-c
+    -  "derivation_sha256": "fac6e6f89e764dc4b00516d9a35f5d1c1eaca9821e76725f5f1fb66b5b206073"
+DIFF added lines: 121
+NONASCII in issued False

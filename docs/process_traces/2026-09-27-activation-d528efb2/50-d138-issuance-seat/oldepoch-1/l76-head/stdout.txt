@@ -1,0 +1,1 @@
+{"status": "failed", "reasons": ["calibration_ledger_baseline_missing", "calibration_ledger_rollback"]}

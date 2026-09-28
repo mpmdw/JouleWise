@@ -89,3 +89,92 @@ Launched by the watchdog at 17:36:30 PDT (attempt 124) after a usage back-off; t
       - `6ac1b25f` validator fix, sha256 `c23ec725…` exact; the ten variants reproduce ([out](30-s1-repair/40-validator-variants.out)).
     - **R2-2/R2-3:** seats H2 (the builder) and round-2 C and D launched from `6ac1b25f` ([briefs](30-s1-repair/) `05-r2-seat-*`). A and B follow once H2 lands.
 42. **Bookkeeping row 9 on `7e6b18bf`:** 7,540 tests, 0 failures, 5 errors under load (4 `PermissionError` in `test_calibration_exits`, 1 hung-grandchild timing test in `test_night_agent_install`). A standalone rerun of those two modules gave **130/130 OK** ([tail](60-bkpr/row9-rerun-tail.txt)). The branch is docs-only against main, and main's reference run passes them, so the errors are environmental.
+43. **Bookkeeping PR #437 opened** (light tier; gate-ledger 4/4 RUN + 8/8 N/A validated locally and in CI; `gate-ledger`, `fences`, `changes`, `build`, `quick`, `installed-wheel` pass). `gh pr merge` refused because the required hosted test shards are still queued. The repo has no auto-merge, and no admin bypass was used. Merge when the shards report. Further records go on the new branch `docs/2026-09-27-d528efb2` so #437's head stays `e3baaf2d`.
+44. **S1 round 2 progress:**
+    - **H2** landed (`ab71308d`; stacked as `baca189c`): `produce_strict_bundle` + H-8..H-12. Lead plants: H-8 (runner argument removed), H-11 (backend check removed) and H-12 (staleness bound raised in scratch production) each turn RED ([log](30-s1-repair/22-r2-H2-plants.log)). **Deviation recorded for R2-4:** H-9 does not test the builder with a charging reading (the builder has no charging option; the test re-pairs with the existing writer), so the ruling's planted defect "charging flag ignored" cannot be applied.
+    - **D round 2** (`579ac796`): the 11 legacy-identity IDs repaired; all six modules green.
+    - **B round 2** (`22217e16`, partial): seven validator-variant tests added. The golden regeneration fails the leaf-diff rule (all 5 members excluded), and builder-produced floor bundles are refused by later anchor, cadence, clock and environment predicates. Both are A3 §4.1 "refusing predicate" returns, counted toward stop condition 3 at R2-4.
+    - A and C round 2 are running.
+45. **D-138 seat round 1 landed** (`a7b347d2`, committed unchanged). Lead bench checks:
+    - issued file sha256 `9e5c735bf7b4d27604bfadd87809750974322258b943fd1afb04d1873e824c06`; input seal `e7363bdd…` unchanged; whole-file seal `2e0d88b5…`;
+    - `promote_calibration_candidate.py --check` rc 0; `candidate_not_issued` absent; role/status issued; `claim_eligible` true;
+    - B1: the four estimator digests equal A1's; cap 165,000.
+    - **Seat flags:** F1 NEEDS_SCOPE `tests/test_validate_powermetrics_fiducial_derivation_only.py` (a private 25F84 checkout follows the moved default). **Granted** by the lead under the §8.1 amendment rule (test file, R7 re-point only), and the seat was resumed with that one-file grant. F2: sandbox-dependent failures (`pgrep` cannot enumerate processes; `sysctl` gives no OS build) go to the lead's bench full suite outside the sandbox. F3/F4: rerun after commit.
+46. **D-138 seat follow-ups:**
+    - The first resume fixed the private 25F84 checkout; two repository-root preflight tests then needed the same kind of re-point, and the seat returned NEEDS_RULING. Lead ruling: yes, within the §8.1 amendment rule. The matching epoch is the active 25G83 and the differing epoch is 25F84; both refusal assertions stay.
+    - The second resume was refused by the wrapper ("not resumable from NEEDS_SCOPE"), so the two-line change was made at the bench. Module 27/27 OK. Committed with the seat's re-point as `c81f65b8`, which contains main `e7c8bcc6`.
+    - **The lead's whole suite** (per-test-ID runner, outside the sandbox) has been launched on `c81f65b8`, output `/tmp/d138-suite-d528efb2/`. It will be compared to the reference by ID; the seat's in-sandbox run showed 242 failures, many from `pgrep`/`sysctl` being unavailable in the sandbox.
+    - The old-epoch replay scout (Sol high; §10 item 2) is running on main (`/tmp/oldepoch-d528efb2/`).
+47. **S1 round 2, seat A** (`6e41ae1e`, partial): 29 integration IDs and 7 campaign IDs are still refused by later claim predicates (floor custody, admission, provenance, idle admission). 64 integration outcomes remain. **A3 §8 stop conditions 1 (>25 outcomes) and 3 (>5 refusing-predicate returns, with B's) are MET.** Rounds 1 and 2 fail with the same signature: claim-path tests need real-shaped evidence the fixtures cannot supply. Under A3 §8 and the standing escalation rule, **no round 3**. The next spend is a consult followed by a cold gate, once seat C's round 2 lands.
+48. **PR #437 MERGED** as `9eab16f8` (merge commit) once the hosted shards went green (mergeStateStatus CLEAN). The D-138 records are now on main, meeting design ruling §8.2 step 1. The canonical root was fast-forwarded to `9eab16f8` by `git pull --ff-only`, after confirming 0 `com.joulewise.night*` labels loaded and 0 such plists. The change set is docs, RUN_STATE, TASK_QUEUE and `tests/test_gen_state.py` only, so the resident supervisor is not stale.
+49. **Old-epoch replay, attempt 1** ([files](50-d138-issuance-seat/oldepoch-1/)). The Sol scout evaluated the production bracket for 25F84 member `sw7bfloor-df-ph-decode-abs-r01` (window 7bfloor 2026-07-29), but fed the 09-27 W2 ledger:
+    - Main refused with `instrument_calibration_bracket_missing`. The scout read this as a STOP, which misreads the rule: the rule compares main with the head, and a refusal already present on main is no evidence against D-138.
+    - The head gave the ruling's clean case: `calibration_acceptance_bound_stale`, naming the stale default.
+    - With the canonical 76-row ledger, main refused `calibration_ledger_rollback`, and the head refused `…baseline_missing` + `…rollback`.
+    - **Verdict: not yet a qualifying comparison**, because main does not produce the recorded numbers. Attempt 2 (Sol xhigh) is running to reproduce a step that passes on main from the recorded inputs (`/tmp/oldepoch2-d528efb2/`). **D-138 does not merge before a qualifying replay.**
+50. **Old-epoch replay, attempt 2** (Sol xhigh; [report](50-d138-issuance-seat/oldepoch-2/report.md)). The July 7bfloor numbers came from a pre-D-109 floor extraction (`969a4d6`). **No recorded 25F84 input makes a default-acceptance bracket pass on current main:** the July pre/post observations are ledger rows 58/60, `historical-import-v1-finalization`, which current discovery excludes, and every later bracket-session row is 25G83. At the head the replay refuses cleanly with `calibration_acceptance_bound_stale`. An explicit-R7 route exists (`epoch_equivalence_check.py --acceptance`; the generalized minter's manifest path), but no July step used it. **Disposition:** reading this as satisfying ruling §10 item 2 would reinterpret a ruled stop condition, a mandatory cold-gate trigger (rule 11), so the question goes EXPLICITLY into the D-138 cold final pass charge. D-138 does not merge before that ruling.
+51. **D-138 §9 gate steps launched in parallel on `c81f65b8`:**
+    - step 2, the independent replay: Astra 6 high, a different family from the writer; brief `/tmp/d138-replay-d528efb2/brief.txt`;
+    - step 5, the mutation evidence: Sol high, scratch worktree;
+    - the issuing record and decision-log entry: an Opus subagent under the dictated-fills pattern, writing into the D-138 worktree uncommitted for lead review;
+    - step 4, the lead's whole suite: still running.
+52. **D-138 §9 step 2, the independent replay** (Astra 6 high, cross-family; [report](50-d138-issuance-seat/replay/report.md)): **REPLAY: PASS**, all six items plus the extra checks:
+    - `--check` passes and the digest equals the registry pin;
+    - the line diff touches only the §5.5 lines;
+    - S, C and the level screen re-derived in 80-digit arithmetic with an independent t-quantile;
+    - `verify-members` 12 PASS, with custody digests equal before and after;
+    - the D3 re-preparation is byte-equal to `dbad7cc7`;
+    - freshness holds for both epochs;
+    - B1 digests, cap 165,000, no staged estimator branch is an ancestor, and no estimator file is in the diff.
+53. **D-138 §9 step 5, mutation evidence** (Sol high, scratch; [report](50-d138-issuance-seat/mutation/report.md)). Survivors:
+    - **L7:** removing the member arm of the disposed-id guard leaves the disposition module GREEN.
+    - **R7 freeze:** changing the issuer's predecessor comparison to the active id leaves the named test GREEN.
+    - The simulation freeze was outside the seat's scope. The lead planted it (`sim_acc_25g83_rev5.py:227` → default path): `test_revision_five_predecessor_default_and_simulation_are_frozen_to_r7` turns RED, and the file was restored ([log](50-d138-issuance-seat/mutation/lead-sim-freeze-plant.log)).
+    - **Fix round 1** (Sol high; scope: the two test files; each strengthened test must be proven RED under its mutant in a scratch copy; if the L7 arm is unreachable, NEEDS_RULING) is launched.
+54. **S1 round 2 complete.** Seat C's round-2 seat timed out at 5,400 s without a report, but its two modules (`test_phase_share`, `test_whole_window`) are 74/74 OK at the bench (`6bab4c51`). All round-2 landings are stacked linearly: **R2-4 head `5283d7d0`**, no merges, pushed. §5.4's pinned-floor literal is deferred until no other suite runs on the host, as its acceptance 4 requires.
+55. **Escalation consult S1-REPAIR-ROUTE-01 convened** ([charge](30-s1-repair/50-escalation/00-consult-charge.md)). Rounds 1 and 2 failed with the same signature, and A3 §8 stop conditions 1 and 3 are met, so there is no round 3. Blind seats: Sol xhigh, Astra high and Opus (subagent), each answering to `/tmp/s1route-d528efb2/1{1,2,3}-*.md`. A cold Fable judge follows. The question: the route for the ≈100 claim-path outcomes (a richer builder, a committed production-generated claim corpus, re-scoping, or a split, the last only if no claim path is left un-gated).
+56. **D-138 issuing record and decision-log entry drafted** (Opus, dictated-fills; uncommitted in the D-138 worktree). The new decision is **D-185**. Its flags:
+    - the old-epoch seats both read STOP (recorded, with the lead's contrary reading and the cold-gate referral);
+    - the issuance text omits A1.1's "adds to D2" and A1.4(d)'s correction of D4, and `issuance.reason` does not name A3;
+    - the design ruling's §4.1 says one valid row is a named exclusion, but the file shows none.
+    - **Lead decision:** rebuild the issuance text with A1.1 appended to D2, A1.4(d) to D4, and A3 in `reason`, then re-issue the bytes by the tool and update the pin. This changes digest X before any refuter or final pass. It happens after fix round 1 releases the worktree.
+57. **D-138 fix round 1 landed** (`5971db61`, Sol high).
+    - L7 now kills the member-arm mutant; lead replant RED.
+    - The Revision 5 sealed case now routes through the default R7 predecessor and asserts its id; the comparison mutant makes it error. Lead replant RED.
+    - Modules 22/22 OK.
+    - The wrapper's SCOPE_VIOLATION flag came from the lead's concurrent Opus draft in the same worktree (the decision log and issuing record), not from the seat. **Lesson:** never run a second writer in a codex seat's worktree.
+58. **D-138 re-issue before review** (`e14e00bb`, lead bench):
+    - The issuance-text builder now carries A1.1 (added to D2), A1.4(d) (the D4 correction) and A3 in `reason`.
+    - Re-produced by the tool: **digest X `80c2303611268b6b94626e001fb5df0e783719744145c9f6a31d4061ddee351b`**, input seal `e7363bdd…` unchanged, whole-file seal `8477d8ce…`. Pin updated; affected modules 148 OK.
+    - B1 re-verified at the new head: four digests equal, cap 165,000, no estimator file in the diff (only test files matched a name grep), no staged branch is an ancestor.
+59. **D-138 records committed** (`290729ec`): the issuing record (266 lines, regenerated from the drafter's generator with the new digests, plus a "re-issue before review" section) and decision-log entry **D-185** (index row + `## D-185` section + a dated note on the D-126 "sole new registry consumer" sentence). The D-185 entry and the amendment note are put to the cold final pass for ratification; the magistrate does not ratify them. Main was merged in: **candidate head `325d9f77`**, which contains main `9eab16f8`.
+60. **D-138 pre-final gates launched on `325d9f77`:**
+    - the lead's whole suite (per-ID runner): `/tmp/d138-final-suite-d528efb2/`;
+    - the contract refuter (Opus, §9 step 6);
+    - the hold refuter (Astra 6 high, §9 step 6; a found route is a STOP);
+    - the pedagogy pass (Opus, §9 step 7).
+    - The lead's earlier suite on `c81f65b8` has 265/269 modules at rc 0 so far. The seat's 242 in-sandbox failures look like sandbox artifacts.
+61. **D-138 hold refuter (Astra 6 high): HOLD: OPEN — 1 route** ([report](50-d138-issuance-seat/refuters/hold-refuter-astra.md)).
+    - **BLOCKER F1:** a manual claim-bearing campaign (production policy, ordinary configs, no `launch_lineage_required`) passes collection preflight without consulting `_issued_d079`. H1 is enforced only for packs. A tripwire showed campaign launch-authentication, level-screen derivation and mint projection all complete without touching the hold. Under design ruling §9 step 6, **the transaction STOPS until this is closed.**
+    - **SHOULD-FIX F2:** no downstream consumer checks H1 independently.
+    - **Also shown:** the issued prior set holds 23 valid 25G83 rows (12 members + 11 disposed). A synthetic bracket with two new endpoints went stale on the trigger `corpus_doubles_from_12_to_24`, which suggests the disposed rows count toward the doubling trigger. That would stale the calibration after about one new capture: a functional defect to rule on.
+62. **D-138 pedagogy pass (Opus): PEDAGOGY: FIX** ([findings](50-d138-issuance-seat/refuters/pedagogy-pass.md)). 25 defects in the issuing record, 10 in D-185 and 2 in the D-126 note, each with exact replacement text: D-138 never built; "cap question", "cell", "content identifier", pinset/floor mint and historical import unglossed; S/C criteria words defined only later; seat/lead/cold/magistrate undefined; "member" and "owner" used in two senses. Factual flags: the record says both invalid kinds "yield no B", but two systematic-invalid 25F84 rows carry B ≈ 0.0354 / 0.0350 s; design ruling §4.1's "1 named exclusion" is not reconciled with the file's 0; the drafting head is stale. **These are applied in one writer pass after the design addendum, since the texts will change again.**
+63. **S1-REPAIR-ROUTE-01 Opus seat in** ([13](30-s1-repair/50-escalation/13-opus.md)).
+    - **Diagnosis:** one coupling. Binding a non-mock config (needed for the pair) switches off `production_predicate_exempt` (`whole_window.py:989-999`), so repaired fixtures meet every production check main let them skip.
+    - **Recommendation:** "exemption parity" (a test-only helper stubbing the closed list of checks that consult the exemption, never battery code or the test's own subject) plus a four-class triage.
+    - **Gate property found:** a bundle with a pair passes even when its config is deleted or rebound to `mock` (`bundle_read.py:483-487`). A ≈3-line fix inside S1 is proposed for the judge. Sol and Astra seats pending.
+64. **D-138 contract refuter (Opus): REFUTER: DISSENT** ([report](50-d138-issuance-seat/refuters/contract-refuter-opus.md) + probes).
+    - **Authentication is sound:** only the committed bytes load, table and file cannot drift undetected, `--check` reproduces them, and the three R7 freezes are killed.
+    - **BLOCKER B1:** H1 checks the pack's DECLARED acceptance, but preflight and bracket evaluation read the DEFAULT. The merge would remove the epoch barrier for every pack (all nine committed packs declare r6 or older), while H1 covers only packs naming the new id.
+    - **S1:** the no-pack derivation-night route refuses at 25G83 after the move.
+    - **S2:** the promotion tool checks citations for form only (six drifted variants were accepted).
+    - **S3:** the bytes say the §9 gate is "complete" and omit A3.
+    - N1: rules (b)/(f) are unobservable, plus nits.
+    - **With item 61, two independent refuters found open hold routes, so D-138 STOPS** (design ruling §9 step 6). **Cold design addendum D138-25G83-DESIGN-01-A1 convened** ([charge](11-d138-design/30-addendum-charge.md)): where H1 is enforced (at consumption, declared-equals-active, or NOT moving the default until H1 lifts), the doubling trigger, S2/S3/N1, the old-epoch replay disposition, and the D-185/record claims.
+65. **The lead's whole suite on D-138 `c81f65b8`** (outside the sandbox, per-ID runner): **269 modules, 7,559 tests, 0 failures, 0 errors, 109 skipped. The skipped IDs are identical to main's reference** ([summary](50-d138-issuance-seat/suite-c81f65b8/)). The implementation seat's 242 in-sandbox failures were sandbox artifacts (`pgrep`/`sysctl`). The suite on the later candidate `325d9f77` is running; the design addendum will change the head again anyway.
+66. **Lane registration** (Sol high; `fbf0007d` on `docs/2026-09-27-d528efb2-lanes`, merged into the records branch as `0f86b1a0`):
+    - five lanes registered: NETWORK-TIME-OFF-ENFORCE-01 (P0), NETWORK-TIME-H7-COMPARISON-01, OLD-EPOCH-EXPLICIT-R7-ROUTE-01, BFGS-MOCK-PAIR-01, BFGS-AXI-VISIBILITY-01;
+    - ESTIMATOR-CELL-CAP-RESIZE-01 updated to route R;
+    - WALLCLOCK-STEP-SOURCE-01 discharged (cause found);
+    - 281 + 5 − 1 = 285; `tests.test_gen_state` OK.
+67. **NETWORK-TIME-OFF-ENFORCE-01 scout** (Sol high; [report](70-ntp-enforce-scout/report.md)) mapped H5/H6 across every 25G83 capture route. **Critical gap:** calibration ledger rows finalize BEFORE the window-wide H6 verdict exists, so the attestation must be designed to act at finalization or refuse admission afterwards. That is a design point for the lane's brief (next session).
