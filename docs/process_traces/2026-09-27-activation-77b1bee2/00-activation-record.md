@@ -283,3 +283,20 @@
       The clock-step exclusions fall under the same hold.
     - N-1 to N-4 adopted.
     - **Next (a new activation or turn; runbook §4.4):** the D-138 issuing transaction, with its own gate, carrying D1–D6 and A1's binding text.
+48. **Lanes registered** (second seat): CALIB-ISSUE-25G83-D138-01, ESTIMATOR-CELL-CAP-RESIZE-01, WALLCLOCK-STEP-SOURCE-01 and S1-REGRESSION-01, so 277 + 4 = 281. ISSUANCE-ARCHIVE-PACKET-01 is corrected to a session-id layout. Commit `4ae6de80`, merged.
+49. **S1-REGRESSION-01 consult:**
+    - **Seats:** Sol xhigh ([11](36-s1-regression-consult/11-sol-consult.md)), Astra high ([12](36-s1-regression-consult/12-astra-consult.md)) and Opus ([13](36-s1-regression-consult/13-opus-consult.md)). All three say HOLD, and they split on G2.
+    - **The cold Fable ruling** ([21](36-s1-regression-consult/21-coldgate-fable-ruling.md)): **RULING: S1-REGRESSION-01 ISSUED.** The earlier S1 MERGE verdict is **void**. S1 is repaired on its own branch, with the production diff kept whole.
+      - **G2, rule 12a:** a keyword `admit_mock_window`, strict by default, passed by exactly two non-claim flows (campaign completion and the experiment manifest aggregate). Every claim-writing call site is unchanged. The text and 10 defect-shaped tests are in §3.
+      - **G7:** a production regression Astra found and the ruling confirmed. The battery classifier reads the original custody locator, so custody replayed from a backup root raises `CustodyFailure`. **Text 10a** routes it through the mode-aware resolver.
+      - **G9:** the roles are synthetic `test_fixture_non_issuing` fixtures. The lead repins three roles' digests at the bench as the last commit in S1's PR, and the delta refuter recomputes them. `tests/fixtures/paper_custody/repin.py` must **not** be run, because it deletes the `qwen3-8b` pending role.
+      - **Scope:** granted by exact path (39 test files, 2 new helpers, `configs/paper_supply/supply_map.json`). The three §E test files are granted only with byte-identical assertions. `receipt_corpus.py`, the repin helper and the historical set are refused.
+      - **Plan:**
+        1. a reference run on main;
+        2. a production seat and a fixture-helper seat, in parallel;
+        3. four repair seats;
+        4. the lead's eight checks, including an assertion census and planted defects;
+        5. the repin;
+        6. the full suite.
+      - **Standing rule within this lane:** no refuter, cold gate or final pass is charged without a full-suite record on the exact head merged with the day's main. Skips are compared by test id.
+    - The paired Opus refuter is pending.
