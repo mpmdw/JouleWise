@@ -10,6 +10,34 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
+**⏸ PAUSED BY ED — 09:46 PDT 09-28 (interactive session bc060503, Fable 5.1; NOTHING ARMED, NOTHING RUNNING).** Ed ordered every piece of magistrate work paused until he resumes it. This block is the resume pointer, and where it disagrees with the d528efb2 block below, this block is newer and wins.
+
+**What holds the pause.** The file `/Users/edr/night-custody/magistrate/STOP` exists. The watchdog (the launchd job `com.joulewise.magistrate`, which relaunches the headless magistrate every five minutes) checks for that file on every tick and launches nothing while it is there. Its `state.json` reads `STOPPED`. The job itself is still loaded, so deleting the file is the whole resume step.
+
+**How the stop went.** The switch was set at 09:46:23. The magistrate (activation d528efb2, Opus 5.5) stopped its four running children, committed and pushed record item 126, and exited with status 0 at 09:47:24, with no TERM or KILL signal sent. A process listing afterwards showed no Codex seat, no `claude -p` judge, no test run and no `powermetrics`.
+
+**Where the work is** (all on `origin`, checked with `git ls-remote` after the pushes):
+
+| Work | Branch | Head |
+|---|---|---|
+| The running record, items 1–127 | `docs/2026-09-27-d528efb2` | see the branch tip |
+| Network-time enforcement, part N1 | `feat/2026-09-28-ntp-n1` | `36e8ba6e` |
+| S1 repair round 3, ID grants (seat H3) | `fix/2026-09-28-s1-r3-H3` | `cdfb27ce` |
+| S1 repair round 3, seat B (finished) | `fix/2026-09-28-s1-r3-B` | `d4345946` |
+| S1 repair round 3, seat A (stopped mid-run) | `fix/2026-09-28-s1-r3-A` | `cdfb27ce`, no seat commit |
+| S1 repair round 3, the lead's bench work (stopped mid-run) | `fix/2026-09-28-s1-r3-L` | `cdfb27ce`, no bench commit |
+
+Two jobs were stopped with edits not yet committed. Those edits are still in their worktrees, and a copy of each is on `origin` as a snapshot commit: `wip/2026-09-28-pause-s1-r3-A-partial` (`b0474eaa`; 2 test files) and `wip/2026-09-28-pause-s1-r3-L-partial` (`c1589d94`; 4 test files). **Both are unfinished and unverified. Re-run the job or re-verify every line before using any of it.**
+
+**What was lost.** Two reviews of the same question were stopped before either wrote a verdict: the cold judge (a fresh Fable session with no loop context) and its paired Opus refuter, both on charge NTP-ENFORCE-DESIGN-01-A2. The judge's output file was empty. Both must be run again from the start. Their scratch directories under `/tmp` are not durable and are not needed.
+
+**TO RESUME:**
+1. Ed, or a session acting on his instruction, deletes `/Users/edr/night-custody/magistrate/STOP`. The watchdog relaunches the magistrate within five minutes. Check first that no `com.joulewise.night*` label is loaded (`launchctl list`).
+2. The successor reads record 00 from item 126, then does, in order:
+   - **Network-time enforcement:** convene the cold gate NTP-ENFORCE-DESIGN-01-A2 again from [charge 47](docs/process_traces/2026-09-27-activation-d528efb2/71-ntp-design/47-coldgate-fix2c-charge.md), with its Opus refuter. The worktree `JouleWise-wt-cg-ntpfix2c-d528efb2` exists. No third fix round starts before that ruling (record item 124).
+   - **S1:** re-run seat A from `cdfb27ce` with brief `30-s1-repair/88-R3-5-seat-A-brief.txt`, or verify its snapshot; redo the bench work in the L worktree. Seat B is done, with 3 test IDs returned for a ruling (record item 125).
+   - **D-138 (issuing the 25G83 calibration):** still stopped, waiting for Ed's choice of (a), (b) or (c), listed in the block below.
+
 **▶▶ ACTIVATION d528efb2 — from 17:36 PDT 09-27 (Opus 5.5; NOTHING ARMED):** [Record 00](docs/process_traces/2026-09-27-activation-d528efb2/00-activation-record.md) is the running log (branch `docs/2026-09-27-d528efb2`).
 
 **Merged:** #437 (bookkeeping + all 25G83 rulings) → `9eab16f8`; the canonical root is fast-forwarded to it.
