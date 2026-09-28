@@ -1,0 +1,31 @@
+RULING: S1-REGRESSION-01-A2 ISSUED
+
+The ruling is written to `/Users/edr/code/JouleWise-wt-bk-77b1bee2/docs/process_traces/2026-09-27-activation-d528efb2/30-s1-repair/21-coldgate-controller-ruling.md`. It took 22 minutes (19:13 to 19:35 PDT), and the ruling file is the only file changed in any repository.
+
+## What was ruled
+
+1. **The flow is admitted; seat P did not over-admit.** The test calls `run_experiment`, which reaches `joulewise/controller.py:3004`, the experiment manifest aggregate that text 12a (c) item 2 names by file and line. The keyword is passed as `True` at exactly two places (`controller.py:3004`, `scripts/run_campaign.py:9032`), equal to the closed list. The test passes at `c7593edb` and fails at `db4eadf6` with `WindowBatteryRefusal not raised` (`tests/test_controller.py:3288`).
+2. **The assertion is stale, and the file is granted for one class only.** `tests/test_controller.py` is opened for `SuiteControllerTests`, four edits, with exact text in the ruling:
+   - The flagged test keeps its name, exception type and status literal, but now asserts against the strict call of `aggregate_experiment`, the form the figures script uses.
+   - A new test shows the mock experiment's aggregate block with both members `not_applicable`.
+   - A new test shows a real experiment with a charging battery pair still refused through the controller.
+   - The neighbouring ordering test returns to main's bytes, since its patch and comment were a workaround for the behaviour 12a removed.
+3. **No production correction and no production seat.** The lead carries the test edit as one commit on seat P's branch, before the step-2 merge.
+4. **Only bookkeeping clauses change.** The path fence goes from 50 to 51 paths, the assertion census gains one R-list entry, and the planted-defect check gains one row. Texts 12a and 10a are untouched.
+
+The replacement text was run in a scratch copy: the class runs 10 tests, all passing, and four planted production defects each turned a named test red.
+
+## Things you should know
+
+- **Protocol deviation.** One of my commands exceeded the harness's 600-second limit and was moved to the background without my asking. I killed it by PID (60034, 85407, and an orphaned helper 85023) and confirmed nothing of mine was left running. It is disclosed in the ruling's §0.
+- **The example in the charge does not work here.** A mixed window cannot be built through `run_experiment`, because every repetition shares one config. Mixed-window refusal stays covered by seat P's gate-level tests.
+- **Finding outside the charge.** Two other tests in the same file start the real battery probe: `HappyPathTests.test_powermetrics_retry_promotes_admitted_attempt_for_strict_reduce` (`:1812`) and `…thermal_coverage_is_continuous_across_admission_handoff` (`:2033`). They fail under my guard on both commits, so this is not seat P's doing. They will be red under the hermeticity check, and I did not grant their repair because I did not execute one; they need a short addendum.
+- **Battery.** It was never read; every test ran under a guard that blocks `ioreg`, and all attempts were logged and blocked.
+- **Not executed.** I ran no full suite and did not run the whole of `tests.test_controller` or `tests.test_reduce` to completion. Seat P's three untriaged `test_reduce` failures remain untriaged.
+
+## Plain summary
+
+1. Seat P built exactly what was ruled; the failing controller test was written for the older, stricter behaviour and is out of date.
+2. The controller test file is opened for one class with exact, executed text: the old refusal check is kept against the strict call, two new checks are added, and one neighbour returns to main's wording; the lead applies it as one commit and no production code changes.
+3. Separately, two other tests in that file read the real laptop battery when run; that needs its own short ruling before anyone repairs it.
+rc=0
