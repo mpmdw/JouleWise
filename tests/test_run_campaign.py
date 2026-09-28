@@ -74,6 +74,7 @@ from joulewise.analysis_engine.registry import (
     normalized_json_bytes as axi_normalized_json_bytes,
     pairing_projection_sha256,
 )
+from tests.sampler_launch_fence import fenced_load_tests, install_module_fence
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -96,7 +97,13 @@ sys.modules["run_campaign_module"] = run_campaign_module
 spec.loader.exec_module(run_campaign_module)
 
 
+# Record item 124 (activation d528efb2): no test in this module may start the
+# real sampler or sudo; see tests/sampler_launch_fence.py.
+load_tests = fenced_load_tests
+
+
 def setUpModule():
+    install_module_fence()
     # Every subprocess inherits fixture custody and a narrow fake identity probe.
     from joulewise.measurement_liveness import Identity
     import scripts.run_campaign as canonical
