@@ -38,8 +38,9 @@ from scripts.gen_g2_phase_d import (
 )
 from tests.test_analysis_finalizer import (
     _make_sliced_one_block_verdict,
-    install_synthetic_finalization_fixture,
+    install_synthetic_finalization_fixture as _install_synthetic_finalization_fixture,
 )
+from tests.bfgs_fixtures import rebind_config, write_passing_pair
 
 # The finalizer authenticates custody containment lexically and rejects symlinked
 # components below the root as spelled (analysis_manifest_v3.py:1479);
@@ -48,6 +49,29 @@ from tests.test_analysis_finalizer import (
 # process-wide policy or risking mixed lexical spellings in helper-created paths.
 _REAL_TMP = os.path.realpath(tempfile.gettempdir())
 from tests.test_run_campaign import read_all_jsonl, run_campaign_module
+
+
+def install_synthetic_finalization_fixture(root: Path, **kwargs) -> dict:
+    writer = run_campaign_module.run_whole_window_verdict
+
+    def evidenced_writer(args):
+        for bundle in (Path(root) / "runs").iterdir():
+            if (bundle / "config.json").is_file():
+                rebind_config(bundle)
+                metadata_path = bundle / "metadata.json"
+                metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+                metadata["run_id"] = bundle.name
+                metadata_path.write_text(
+                    json.dumps(metadata, indent=2, sort_keys=True) + "\n",
+                    encoding="utf-8",
+                )
+                write_passing_pair(bundle)
+        return writer(args)
+
+    with mock.patch.object(
+        run_campaign_module, "run_whole_window_verdict", side_effect=evidenced_writer,
+    ):
+        return _install_synthetic_finalization_fixture(root, **kwargs)
 
 
 def _write_json(path: Path, value: object) -> None:

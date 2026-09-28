@@ -24,6 +24,7 @@ from joulewise.authentication_io import (
 from joulewise.bundle_read import BundleReader
 from joulewise.reduce import _in_window_sample_count, _window_gap_stats
 from joulewise.whole_window import MAX_BRACKET_CONSUMPTION_SEMANTICS_ID
+from tests.bfgs_fixtures import rebind_config, write_passing_pair
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -515,6 +516,8 @@ class WindowDurationMarginsTests(unittest.TestCase):
         (bundle / "config.json").write_bytes(config_raw)
         self.config_sha_by_id[bundle_id] = hashlib.sha256(config_raw).hexdigest()
         metadata = {
+            "run_id": bundle_id,
+            "config_sha256": self.config_sha_by_id[bundle_id],
             "device": {
                 "rail_manifest": ["cpu_power", "gpu_power", "ane_power"]
             },
@@ -574,6 +577,11 @@ class WindowDurationMarginsTests(unittest.TestCase):
                 },
             ],
         )
+        rebind_config(bundle)
+        write_passing_pair(bundle)
+        self.config_sha_by_id[bundle_id] = hashlib.sha256(
+            (bundle / "config.json").read_bytes()
+        ).hexdigest()
         reader = BundleReader(bundle)
         window = reader.phase_windows()[phase][0]
         curve = reader.summed_curve()

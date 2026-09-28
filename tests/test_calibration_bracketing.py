@@ -111,6 +111,7 @@ from scripts.calibration_ledger_bootstrap import (
     _issued_artifact_bytes,
 )
 from tests.git_fixture import init_git_fixture
+from tests.bfgs_fixtures import write_capture_evidence
 
 
 _REAL_D079_TABLE = Path("/private/tmp/d079-ledger-dispositions.json")
@@ -441,6 +442,7 @@ def _fixture_snapshot(
     candidates: list[CalibrationCandidate],
     *,
     extra_observations: tuple[LedgerObservation, ...] = (),
+    evidence_root: Path | None = None,
 ) -> tuple[CalibrationLedgerSnapshot, list[CalibrationCandidate]]:
     """Build an explicitly synthetic authenticated snapshot for unit tests."""
 
@@ -448,6 +450,21 @@ def _fixture_snapshot(
     observations: list[LedgerObservation] = []
     for index, candidate in enumerate(candidates):
         attempt_id = candidate.attempt_id or f"fixture-attempt-{index}-{candidate.relative_path}"
+        custody_locator = candidate.relative_path
+        if evidence_root is not None:
+            custody = evidence_root / candidate.relative_path
+            custody.mkdir(parents=True, exist_ok=True)
+            (custody / "manifest.json").write_text(
+                json.dumps({"attempt_id": attempt_id}) + "\n", encoding="utf-8"
+            )
+            write_capture_evidence(custody, validation_id=attempt_id)
+            candidate = replace(
+                candidate,
+                relative_path=str(custody),
+                manifest_sha256=hashlib.sha256((custody / "manifest.json").read_bytes()).hexdigest(),
+                evidence_sha256=hashlib.sha256((custody / "instrument_evidence.json").read_bytes()).hexdigest(),
+            )
+            custody_locator = str(custody)
         hashes = {
             "manifest.json": candidate.manifest_sha256,
             "instrument_evidence.json": candidate.evidence_sha256,
@@ -491,7 +508,7 @@ def _fixture_snapshot(
                 capture_wall_time_s=str(candidate.capture_wall_time_s),
                 exact_bound_lexeme_s=bound,
                 disposition="valid",
-                custody_locator=candidate.relative_path,
+                custody_locator=custody_locator,
             )
         )
     all_observations = (*observations, *extra_observations)
@@ -553,6 +570,9 @@ def evaluate_calibration_bracket(
 
 class CalibrationBracketingTests(unittest.TestCase):
     def setUp(self) -> None:
+        self._evidence_tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._evidence_tmp.cleanup)
+        self.evidence_root = Path(self._evidence_tmp.name)
         self.bindings = {field: f"value-{field}" for field in V2_BINDING_FIELDS}
         self.bindings.update(
             {
@@ -1040,7 +1060,9 @@ class CalibrationBracketingTests(unittest.TestCase):
             self.candidate("pre", 99.0, "0.025"),
             self.candidate("post", 111.0, "0.026"),
         ]
-        snapshot, registered = _fixture_snapshot(candidates)
+        snapshot, registered = _fixture_snapshot(
+            candidates, evidence_root=self.evidence_root,
+        )
         imported_hashes = {
             "manifest.json": "12" * 32,
             "instrument_evidence.json": "34" * 32,
@@ -1248,15 +1270,23 @@ class CalibrationBracketingTests(unittest.TestCase):
             session_id = specification["session_id"]
             slot = specification["slot"]
             sequence = operation_sequences[name]
-            manifest = hashlib.sha256(f"manifest:{name}".encode()).hexdigest()
-            evidence = hashlib.sha256(f"evidence:{name}".encode()).hexdigest()
+            attempt_id = f"attempt-{name}"
+            custody = self.evidence_root / name
+            custody.mkdir(parents=True, exist_ok=True)
+            (custody / "manifest.json").write_text(
+                json.dumps({"attempt_id": attempt_id}) + "\n", encoding="utf-8"
+            )
+            write_capture_evidence(
+                custody, validation_id=attempt_id, session_id=session_id, slot=slot,
+            )
+            manifest = hashlib.sha256((custody / "manifest.json").read_bytes()).hexdigest()
+            evidence = hashlib.sha256((custody / "instrument_evidence.json").read_bytes()).hexdigest()
             hashes = {
                 "manifest.json": manifest,
                 "instrument_evidence.json": evidence,
             }
             content_id = content_id_from_artifact_hashes(hashes)
             receipt_digest = hashlib.sha256(f"receipt:{name}".encode()).hexdigest()
-            attempt_id = f"attempt-{name}"
             candidate = replace(
                 self.candidate(name, capture, bound),
                 manifest_sha256=manifest,
@@ -1297,7 +1327,7 @@ class CalibrationBracketingTests(unittest.TestCase):
                     capture_wall_time_s=str(capture),
                     exact_bound_lexeme_s=bound,
                     disposition="valid",
-                    custody_locator=f"/synthetic/{name}",
+                    custody_locator=str(custody),
                     observation_kind=(
                         "bracket-session-finalized" if session_id else "live-capture"
                     ),
@@ -2190,7 +2220,8 @@ class CalibrationBracketingTests(unittest.TestCase):
                 self.candidate("retained-v2", 90.0, "0.025", bindings=v2_bindings),
                 self.candidate("current-pre", 99.0, "0.025"),
                 self.candidate("current-post", 111.0, "0.026"),
-            ]
+            ],
+            evidence_root=self.evidence_root,
         )
         by_attempt = {
             observation.attempt_id: candidate
@@ -2242,7 +2273,8 @@ class CalibrationBracketingTests(unittest.TestCase):
                 self.candidate("retained-v1", 90.0, "0.025", bindings=v1_bindings),
                 self.candidate("current-pre", 99.0, "0.025"),
                 self.candidate("current-post", 111.0, "0.026"),
-            ]
+            ],
+            evidence_root=self.evidence_root,
         )
         by_attempt = {
             observation.attempt_id: candidate
@@ -2320,11 +2352,18 @@ class CalibrationBracketingTests(unittest.TestCase):
     def _derivation_night_row(self) -> LedgerObservation:
         """One valid observation captured to DERIVE a future acceptance."""
 
+        custody = self.evidence_root / "derivation-night"
+        custody.mkdir(parents=True, exist_ok=True)
+        (custody / "manifest.json").write_text(
+            '{"attempt_id":"20260912T031500-derivation"}\n', encoding="utf-8"
+        )
+        write_capture_evidence(
+            custody, validation_id="20260912T031500-derivation",
+            session_id="session-derivation-night-1", slot="slot-03",
+        )
         hashes = {
-            "manifest.json": hashlib.sha256(b"derivation-manifest").hexdigest(),
-            "instrument_evidence.json": hashlib.sha256(
-                b"derivation-evidence"
-            ).hexdigest(),
+            "manifest.json": hashlib.sha256((custody / "manifest.json").read_bytes()).hexdigest(),
+            "instrument_evidence.json": hashlib.sha256((custody / "instrument_evidence.json").read_bytes()).hexdigest(),
         }
         return LedgerObservation(
             sequence=99,
@@ -2344,7 +2383,7 @@ class CalibrationBracketingTests(unittest.TestCase):
             capture_wall_time_s="105.0",
             exact_bound_lexeme_s="0.030",
             disposition="valid",
-            custody_locator="instrument_validation/20260912T031500-derivation",
+            custody_locator=str(custody),
             bracket_session_id="session-derivation-night-1",
             bracket_slot="slot-03",
         )
@@ -2363,7 +2402,7 @@ class CalibrationBracketingTests(unittest.TestCase):
         ]
         row = self._derivation_night_row()
         snapshot, registered = _fixture_snapshot(
-            candidates, extra_observations=(row,)
+            candidates, extra_observations=(row,), evidence_root=self.evidence_root,
         )
         session = SimpleNamespace(
             session_id="session-derivation-night-1",

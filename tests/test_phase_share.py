@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import importlib.util
 import json
 import math
@@ -17,6 +18,7 @@ from joulewise.phase_share import (
     PhaseBoundaryError,
     phase_boundary_envelope,
 )
+from tests.bfgs_fixtures import rebind_config, write_passing_pair
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -241,6 +243,21 @@ class PhaseBoundaryEnvelopeTests(unittest.TestCase):
             ),
             encoding="utf-8",
         )
+        config = json.loads((
+            ROOT / "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v1"
+            / "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b01-a1.json"
+        ).read_text(encoding="utf-8"))
+        config["run_id"] = bundle.name
+        config_path = bundle / "config.json"
+        config_path.write_text(json.dumps(config, sort_keys=True) + "\n", encoding="utf-8")
+        metadata = json.loads((bundle / "metadata.json").read_text(encoding="utf-8"))
+        metadata["run_id"] = bundle.name
+        metadata["config_sha256"] = hashlib.sha256(config_path.read_bytes()).hexdigest()
+        (bundle / "metadata.json").write_text(
+            json.dumps(metadata, sort_keys=True) + "\n", encoding="utf-8"
+        )
+        rebind_config(bundle)
+        write_passing_pair(bundle)
         return bundle
 
     def test_bundle_producer_seals_sources_and_reports_fixture_comparison(self) -> None:

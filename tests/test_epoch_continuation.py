@@ -189,7 +189,9 @@ class EpochContinuationTests(unittest.TestCase):
                 protocol_id=bracket.PROTOCOL_ID, capture_wall_time_s=when,
                 b_fiducial_s=value, bindings=bindings,
             ))
-        ordinary, candidates = _fixture_snapshot(candidates)
+        ordinary, candidates = _fixture_snapshot(
+            candidates, evidence_root=self.root / "candidate-evidence",
+        )
         prior = _synthetic_issued_snapshot(self.artifact)
         night = self.snapshot() if night is None else night
         shifted = {row.attempt_id: replace(row, sequence=row.sequence + prior.head_sequence)

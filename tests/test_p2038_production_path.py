@@ -11,9 +11,11 @@ from __future__ import annotations
 
 import json
 import hashlib
+import inspect
 import math
 import os
 import plistlib
+import subprocess
 import sys
 import tempfile
 import time
@@ -21,6 +23,7 @@ import unittest
 from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
+from tests.bfgs_fixtures import injected_battery_runner, write_capture_evidence
 
 import joulewise.adapters
 from joulewise.adapters.powermetrics import (
@@ -65,6 +68,8 @@ class RateFitFixtureClock:
         self._now = base_s
         self._stamps = iter(profile["clock_stamps"].values())
         self._advance_now = False
+        self._battery_stamps = {"pre": 0, "post": 0}
+        self._post_window_stamps = 0
 
     def now(self) -> float:
         value = self._now
@@ -73,7 +78,41 @@ class RateFitFixtureClock:
         return value
 
     def stamp(self) -> ClockStamp:
-        row = next(self._stamps)
+        for frame in inspect.stack():
+            if frame.function == "_observe_battery_float":
+                phase = frame.frame.f_locals["phase"]
+                index = self._battery_stamps[phase]
+                self._battery_stamps[phase] += 1
+                monotonic_s = (1.0 if phase == "pre" else 1000.0) + index * 0.001
+                return ClockStamp(
+                    epoch_s=self._now,
+                    monotonic_before_s=monotonic_s - 1e-6,
+                    monotonic_after_s=monotonic_s + 1e-6,
+                    wall_resolution_s=1e-6,
+                    monotonic_resolution_s=1e-6,
+                )
+            if frame.function == "_begin_stage":
+                monotonic_s = 100.0 + (self._now - self._base_s)
+                return ClockStamp(
+                    epoch_s=self._now,
+                    monotonic_before_s=monotonic_s - 1e-6,
+                    monotonic_after_s=monotonic_s + 1e-6,
+                    wall_resolution_s=1e-6,
+                    monotonic_resolution_s=1e-6,
+                )
+        row = next(self._stamps, None)
+        if row is None:
+            if self._post_window_stamps >= 4:
+                raise AssertionError("fixture clock requested an unexpected stamp")
+            self._post_window_stamps += 1
+            monotonic_s = 200.1 + 0.1 * self._post_window_stamps
+            return ClockStamp(
+                epoch_s=self._now,
+                monotonic_before_s=monotonic_s - 1e-6,
+                monotonic_after_s=monotonic_s + 1e-6,
+                wall_resolution_s=1e-6,
+                monotonic_resolution_s=1e-6,
+            )
         epoch_s = self._base_s + float(row["epoch_offset_s"])
         monotonic_s = float(row["monotonic_s"])
         self._now = epoch_s
@@ -219,9 +258,11 @@ def install_complete_calibration(directory: Path) -> None:
         },
         "power_policy": {"id": bindings["power_policy"]},
     }
-    evidence_raw = (json.dumps(evidence, indent=2, sort_keys=True) + "\n").encode()
+    write_capture_evidence(
+        directory, validation_id=evidence["validation_id"], evidence=evidence,
+    )
     artifact_path = directory / "instrument_evidence.json"
-    artifact_path.write_bytes(evidence_raw)
+    evidence_raw = artifact_path.read_bytes()
     power_trace_raw = (
         b"timestamp_s,power_w,source,rail,interval_start_s,interval_end_s\n"
     )
@@ -423,6 +464,19 @@ class P2038ProductionPathTests(unittest.TestCase):
         }
         calibration_dir = root / "calibration"
         install_complete_calibration(calibration_dir)
+        fixture_runner = injected_battery_runner()
+
+        def battery_runner(argv):
+            completed = fixture_runner(argv)
+            original = b'"UpdateTime" = 1790373525'
+            if completed.stdout.count(original) != 1:
+                raise AssertionError("battery fixture update time changed")
+            raw = completed.stdout.replace(
+                original, b'"UpdateTime" = ' + str(int(fixture_base_s)).encode("ascii"), 1,
+            )
+            return subprocess.CompletedProcess(
+                completed.args, completed.returncode, raw, completed.stderr,
+            )
         with (
             patch.dict(
                 os.environ,
@@ -449,6 +503,7 @@ class P2038ProductionPathTests(unittest.TestCase):
                 campaign_environment_preflight=preflight,
                 instrument_calibration_dir=calibration_dir,
                 instrument_power_policy="ac_high_power",
+                battery_runner=battery_runner,
             )
 
     def test_real_powermetrics_evidence_path_passes_p2029_p2040_gates(self) -> None:
