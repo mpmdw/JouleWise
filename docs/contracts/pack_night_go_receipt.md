@@ -238,6 +238,19 @@ The unconditional `night_refused_class_unbuilt` fence at
 `joulewise/night_gate.py:1117–1127` is lifted ONLY for a valid `pack_night` plan;
 then evaluate C1–C5 without `no_pack_by_design`.
 
+**Network time (ruling NTP-ENFORCE-DESIGN-01, 2026-09-28).** Before any chain starts, the
+night driver (`scripts/run_night.py`) also refuses:
+- a launch whose capture route has no enforced network-time consumer
+  (`night_refused_network_time_route_unenforced`), meaning the night's kind is absent from
+  `NETWORK_TIME_ENFORCED_KINDS` in `joulewise/network_time_window.py`;
+- a launch where switching macOS network time OFF was not proved by the exact command receipt
+  (`night_refused_network_time_off_unproved`);
+- a launch while a pending restore marker from an earlier run is malformed or unreadable
+  (`night_refused_network_time_marker_invalid`).
+
+Until the pack consumer (phase 2) lands, `pack` is not in the enforced set, so every pack night
+refuses with the first reason.
+
 ## 3. Consumption and replay
 
 `_consume_launch_capability` gains six sentinel-required inputs for
