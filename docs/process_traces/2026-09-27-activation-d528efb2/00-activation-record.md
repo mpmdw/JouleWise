@@ -211,3 +211,9 @@ Launched by the watchdog at 17:36:30 PDT (attempt 124) after a usage back-off; t
     - hold claims per design addendum §3 and §7; the old-epoch section per §6; both factual flags fixed;
     - a new "Design change before merge" section.
     - Digests, head and old-epoch re-run values are placeholders, filled after fix round 2. A second pedagogy pass is owed on the final texts.
+74. **The lead's whole suite on `325d9f77`:** 7,559 tests, 0 failures, 0 errors, 109 skipped (superseded by fix round 2; recorded).
+75. **D-138 fix round 2 landed** (`8458f797`, Sol xhigh; [report](50-d138-issuance-seat/fix2/report.md)).
+    - **R7 stays the default** (`ACTIVE_ACCEPTANCE_ID = ANCHOR_V3_R7_ACCEPTANCE_ID`). The held file is returned only to a caller that states a non-claim purpose.
+    - The doubling trigger is fixed; S2 (P6), N1 (L10), N2 (P7), N4/N5/N7 are in; `tests/test_claim_hold_routes.py` (HR-*) and DT-1..DT-5 are added; the re-pointed tests are restored.
+    - **New digest X `d6de84b854a4c5d7f6d73dfde2ae0f14d71a483355c7289a36882e0dfcccd5ea`**; input seal `e7363bdd…` unchanged; whole-file seal `8726a11b…`; `--check` rc 0; `required_verification` per S3.
+    - **The RED record was re-run by the lead** ([log](50-d138-issuance-seat/fix2/red_record_lead.log) and per-test logs): HR-1, HR-2, HR-3, HR-5, DT-1, DT-2 and P6 each FAIL on `325d9f77` with a genuine assertion (e.g. HR-2 `…n12_25g83_r1 != …n17_r7`; DT-1 `corpus_doubles_from_12_to_24 unexpectedly found`) and PASS on `8458f797`. **RED_RECORD=PASS.** (The script's display line needs `rg`, which is absent; the logs themselves are complete.)
