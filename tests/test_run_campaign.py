@@ -2520,8 +2520,30 @@ class RunCampaignTests(unittest.TestCase):
             state = paired_entry_real_state(Path(tmp))
             self.assertIsNotNone(state)
             runs_dir = Path(tmp) / "runs"
-            with patch.object(run_campaign_module, "run_authenticated_campaign_child",
-                              side_effect=paired_entry_child):
+            # The rebound configs name the powermetrics backend, so the real
+            # cooldown gate would build the real sampler adapter (record
+            # d528efb2 item 124). Refuse at the adapter seam instead.
+            from joulewise import adapters
+            from joulewise.interfaces import AdapterResult
+            from joulewise.schemas import FailureReason, TelemetryBackend
+
+            real_resolve_telemetry = adapters.resolve_telemetry
+
+            def resolve_without_real_sampler(config, clock):
+                if config.hardware_target.telemetry_backend == TelemetryBackend.POWERMETRICS:
+                    return None, AdapterResult(
+                        ok=False,
+                        failure_reason=FailureReason.TELEMETRY_UNAVAILABLE,
+                        message="test fixture: no real sampler",
+                    )
+                return real_resolve_telemetry(config, clock)
+
+            with (
+                patch.object(run_campaign_module, "run_authenticated_campaign_child",
+                             side_effect=paired_entry_child),
+                patch("joulewise.adapters.resolve_telemetry",
+                      side_effect=resolve_without_real_sampler),
+            ):
                 result = run_campaign_module.run_axi_spec_campaign(
                     run_campaign_module.argparse.Namespace(
                         dry_run=False,
