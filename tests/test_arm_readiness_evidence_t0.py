@@ -1160,6 +1160,182 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
             * 1_000_000_000,
         )
 
+    def test_t0_probe_resource_census_pins_the_envelope_shape(self) -> None:
+        """Census the resource, not the wrapper (T0-PROBE-CENSUS-RESOURCE-01).
+
+        The test above counts ``_fresh_probe`` call sites. The thing that
+        actually spends ``_PROBE_TIMEOUT_SECONDS`` is ``_execute_probe``: it
+        starts the subprocess and waits up to that timeout. Cold gate files
+        22-25 (Opus Q2 iv-v, Fable M14/M34) listed four maintainer mistakes
+        that add probe waits between the R1 clock-reference batch and the
+        ``validity_origin`` stamp while the site census stays at twelve.
+        Each is pinned here by reading the module's syntax tree:
+
+        (1) ``_execute_probe`` is reached only by direct calls, exactly one
+            inside ``_fresh_probe`` and one inside ``_boot_probe``; any other
+            mention of the name in an AST field (an alias, a stored callback,
+            a second caller that bypasses ``_fresh_probe``) fails.
+        (2) The author calls ``_boot_probe`` exactly twice, and the window
+            is read from the author's top-level statements: one call sits in
+            a statement BEFORE the first statement that can reach R1 (R1 runs
+            inside a deriver, so that is the first statement naming
+            ``_DERIVERS`` or calling a module function that names it), and
+            one sits in a statement AFTER ``validity_origin = ...``.
+        (3) ``_DERIVERS`` is injective: no deriver function is registered for
+            a second row, which would run its probe sites twice.
+        (4) No post-R1 ``_fresh_probe`` call has a ``for``/``while`` loop or
+            comprehension anywhere above it; only the R1 batch itself
+            (``_fresh_clock_reference_batch``) loops over its server roster.
+        (5) ``def _fresh_probe`` carries no decorator (a retry wrapper would
+            re-run the probe without adding a call site); its single
+            ``_execute_probe`` call is pinned by (1).
+
+        What this does NOT protect: like the census above, it pins the
+        static shape of the provenance arithmetic, never the runtime
+        R1-to-stamp interval. A retry loop inside ``_execute_probe``, a wait
+        in another module, or a deliberately constructed name is invisible
+        here; the runtime question stays with kernel row
+        ``T0-LIVENESS-BOUND-EMPIRICAL-01``.
+        """
+
+        import ast
+        from collections import Counter
+
+        tree = ast.parse(Path(t0.__file__).read_text(encoding="utf-8"))
+        parents: dict[int, ast.AST] = {}
+        for node in ast.walk(tree):
+            for child in ast.iter_child_nodes(node):
+                parents[id(child)] = node
+
+        def ancestors(node: ast.AST) -> list[ast.AST]:
+            chain = []
+            while id(node) in parents:
+                node = parents[id(node)]
+                chain.append(node)
+            return chain
+
+        def enclosing_function(node: ast.AST) -> str:
+            for ancestor in ancestors(node):
+                if isinstance(ancestor, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    return ancestor.name
+            return "<module>"
+
+        def direct_calls(name: str) -> list[ast.Call]:
+            return [
+                node
+                for node in ast.walk(tree)
+                if isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Name)
+                and node.func.id == name
+            ]
+
+        def definition(name: str) -> ast.FunctionDef:
+            found = [
+                node
+                for node in ast.walk(tree)
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+                and node.name == name
+            ]
+            self.assertEqual(len(found), 1, name)
+            self.assertIsInstance(found[0], ast.FunctionDef, name)
+            return found[0]
+
+        # (1) The resource: two direct callers, and no other mention.
+        execute_calls = direct_calls("_execute_probe")
+        self.assertEqual(
+            Counter(enclosing_function(call) for call in execute_calls),
+            Counter({"_fresh_probe": 1, "_boot_probe": 1}),
+        )
+        permitted = {id(call.func) for call in execute_calls} | {
+            id(definition("_execute_probe"))
+        }
+        stray = [
+            (type(node).__name__, field, getattr(node, "lineno", None))
+            for node in ast.walk(tree)
+            if id(node) not in permitted
+            for field, value in ast.iter_fields(node)
+            for item in (value if isinstance(value, list) else [value])
+            if item == "_execute_probe"
+        ]
+        self.assertEqual(stray, [], "non-call mentions of _execute_probe")
+
+        # (2) Both boot probes sit outside the R1-to-validity_origin window.
+        author = definition("author_arm_readiness_evidence_t0")
+        boot_calls = direct_calls("_boot_probe")
+        self.assertEqual(
+            [enclosing_function(call) for call in boot_calls],
+            [author.name, author.name],
+        )
+        statement_index = {id(statement): index for index, statement in enumerate(author.body)}
+
+        def top_level_index(node: ast.AST) -> int:
+            for ancestor in [node, *ancestors(node)]:
+                if id(ancestor) in statement_index:
+                    return statement_index[id(ancestor)]
+            raise AssertionError(f"{ast.dump(node)} is not inside the author body")
+
+        reaches_derivers = {
+            function.name
+            for function in ast.walk(tree)
+            if isinstance(function, ast.FunctionDef)
+            and function is not author
+            and any(
+                isinstance(node, ast.Name) and node.id == "_DERIVERS"
+                for node in ast.walk(function)
+            )
+        }
+        r1_reaching = [
+            index
+            for index, statement in enumerate(author.body)
+            if any(
+                isinstance(node, ast.Name)
+                and (
+                    node.id == "_DERIVERS"
+                    or (
+                        node.id in reaches_derivers
+                        and isinstance(parents.get(id(node)), ast.Call)
+                        and parents[id(node)].func is node
+                    )
+                )
+                for node in ast.walk(statement)
+            )
+        ]
+        self.assertTrue(r1_reaching, "no author statement reaches the derivers")
+        stamp = [
+            index
+            for index, statement in enumerate(author.body)
+            if isinstance(statement, ast.Assign)
+            and [ast.unparse(target) for target in statement.targets] == ["validity_origin"]
+        ]
+        self.assertEqual(len(stamp), 1, "exactly one validity_origin stamp")
+        boot_indices = sorted(top_level_index(call) for call in boot_calls)
+        self.assertLess(boot_indices[0], min(r1_reaching), "first boot probe after R1 can run")
+        self.assertGreater(boot_indices[1], stamp[0], "second boot probe before the stamp")
+
+        # (3) No deriver is registered for a second row.
+        self.assertEqual(
+            len(set(map(id, t0._DERIVERS.values()))),
+            len(t0._DERIVERS),
+            "a deriver is registered for more than one row",
+        )
+
+        # (4) No loop or comprehension above a post-R1 _fresh_probe site.
+        looping = (
+            ast.For, ast.AsyncFor, ast.While,
+            ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp,
+        )
+        looped_sites = [
+            (enclosing_function(call), call.lineno, type(ancestor).__name__)
+            for call in direct_calls("_fresh_probe")
+            if enclosing_function(call) != "_fresh_clock_reference_batch"
+            for ancestor in ancestors(call)
+            if isinstance(ancestor, looping)
+        ]
+        self.assertEqual(looped_sites, [], "post-R1 _fresh_probe site inside a loop")
+
+        # (5) No wrapper on _fresh_probe itself.
+        self.assertEqual(definition("_fresh_probe").decorator_list, [])
+
     def test_mlx_metal_memory_reuses_cached_core_after_module_eviction(self) -> None:
         fake_mlx = ModuleType("mlx")
         fake_mlx.__path__ = []
