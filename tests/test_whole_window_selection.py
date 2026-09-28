@@ -74,6 +74,16 @@ from tests.test_run_campaign import (
     read_all_jsonl,
     run_campaign_module,
 )
+from tests.sampler_launch_fence import fenced_load_tests, install_module_fence
+
+
+# Record item 124 (activation d528efb2): no test in this module may start the
+# real sampler or sudo; see tests/sampler_launch_fence.py.
+load_tests = fenced_load_tests
+
+
+def setUpModule():
+    install_module_fence()
 
 
 def _install_synthetic_calibration_defaults(test: unittest.TestCase) -> None:

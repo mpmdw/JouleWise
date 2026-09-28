@@ -48,6 +48,16 @@ from tests.test_analysis_finalizer import (
 # process-wide policy or risking mixed lexical spellings in helper-created paths.
 _REAL_TMP = os.path.realpath(tempfile.gettempdir())
 from tests.test_run_campaign import read_all_jsonl, run_campaign_module
+from tests.sampler_launch_fence import fenced_load_tests, install_module_fence
+
+
+# Record item 124 (activation d528efb2): no test in this module may start the
+# real sampler or sudo; see tests/sampler_launch_fence.py.
+load_tests = fenced_load_tests
+
+
+def setUpModule():
+    install_module_fence()
 
 
 def _write_json(path: Path, value: object) -> None:

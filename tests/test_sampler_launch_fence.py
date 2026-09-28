@@ -30,6 +30,8 @@ FENCED_MODULES = (
     "test_whole_window.py",
     "test_run_campaign.py",
     "test_window_duration_margins.py",
+    "test_whole_window_selection.py",
+    "test_check_window_provenance.py",
 )
 
 
