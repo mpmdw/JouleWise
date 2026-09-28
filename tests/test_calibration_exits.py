@@ -5945,7 +5945,14 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
                     [
                         sys.executable,
                         "-c",
-                        "import time; time.sleep(300)",
+                        # Exits by itself within 120 s, or as soon as its
+                        # parent dies (reparented to pid 1), so a killed
+                        # test run cannot leave it visible to a census.
+                        "import os, time\n"
+                        "for _ in range(120):\n"
+                        "    if os.getppid() == 1:\n"
+                        "        break\n"
+                        "    time.sleep(1)",
                         "/ambient/powermetrics-witness",
                         "--exit-case",
                         f"ambient-{label}",
