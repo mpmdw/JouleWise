@@ -2332,6 +2332,71 @@ class PackNightConsumerTests(unittest.TestCase):
                                                   require_current_boot=True)
         self.assertEqual(caught.exception.reason_code, "launch_go_receipt_missing")
 
+    def test_historical_v2_replay_refuses_bound_launch_artifact_byte_change(self):
+        # A130 / audit 13 section 2.2 M8: counterfactual guard for the
+        # "bound launch artifact bytes changed" refusal
+        # (launch_binding_mismatch).  A v3 consumption is pre-empted by GO
+        # replay, which rebinds the same three artifacts and refuses first
+        # (launch_go_receipt_invalid); for a historical v2 consumption there
+        # is no GO, so this refusal is the only thing standing between an
+        # in-place rewrite of the launch manifest, window environment or
+        # window chain and a PASS replay.  Both replay entry points are held.
+        self.consume()
+        value = readiness.parse_json_bytes(self.consumption.read_bytes())
+        value["schema_version"] = readiness.CONSUMPTION_RECEIPT_SCHEMA_V2
+        for key in ("go_receipt", "night_plan", "step6_confirmation"):
+            del value[key]
+        self.rewrite_consumption(value)
+        self.inputs["go_receipt"].unlink()
+        readiness.record_launch_lifecycle_event(
+            self.fixture.pack, self.consumption, "start", handoff_token=b"t" * 32
+        )
+        settled = readiness.record_launch_lifecycle_event(
+            self.fixture.pack, self.consumption, "settle"
+        )
+        pack_id = self.fixture.arm["pack"]["pack_id"]
+        replays = {
+            "verify_consumed_launch": lambda: self.verify(require_current_boot=False),
+            "authenticate_launch_lineage": lambda: readiness.authenticate_launch_lineage(
+                settled["launch_lineage"],
+                require_completion=False,
+                require_current_boot=False,
+            ),
+        }
+        # Control: the untouched historical consumption replays on both paths.
+        for replay in replays.values():
+            self.assertEqual(replay()["pack_id"], pack_id)
+
+        manifest_path = self.fixture.manifest_path
+        artifacts = {
+            "launch_manifest": manifest_path,
+            "window_environment": self.fixture.window_root / "window.env",
+            "window_chain": self.fixture.chain_path,
+        }
+        for label, path in artifacts.items():
+            honest = path.read_bytes()
+            if label == "launch_manifest":
+                # Stay a canonical, valid manifest binding the same argv, so
+                # only the digest moves.
+                manifest = dict(readiness.parse_json_bytes(honest, require_canonical=True))
+                manifest["prewindow_command"] = ["/usr/bin/true"]
+                changed = readiness.render_json(manifest)
+            else:
+                changed = honest + b"# changed after consumption\n"
+            self.assertNotEqual(changed, honest)
+            path.write_bytes(changed)
+            try:
+                for entry, replay in replays.items():
+                    with self.subTest(artifact=label, replay=entry):
+                        with self.assertRaises(readiness.LaunchLineageError) as caught:
+                            replay()
+                        self.assertEqual(
+                            caught.exception.reason_code, "launch_binding_mismatch"
+                        )
+                        self.assertIn("bytes changed", str(caught.exception))
+            finally:
+                path.write_bytes(honest)
+
     def test_lineage_reader_forwards_live_and_historical_modes_and_boot_gate(self):
         _path, settled = self.fixture._settle()
         lineage = settled["launch_lineage"]
