@@ -118,5 +118,18 @@ class ClaimHoldCensusTests(unittest.TestCase):
             self.assertNotIn(row["continued_identity_epoch"]["os_build"], CLAIM_HELD_OS_BUILDS)
 
 
+    def test_c8_every_admitted_identifier_is_registered(self):
+        # HOLD-BY-CONSTRUCTION-01-A1 §4.4: an identifier the admission list admits must name a
+        # registered calibration file. Planting a build for the bare "d079" must turn this RED.
+        def admitted():
+            return [
+                identifier for identifier in sorted(arm._ISSUED_D079_IDS)
+                if arm._issued_d079({"acceptance_policy": {
+                    "selection": "issued_d116_artifact_only", "issued": identifier}})
+            ]
+        self.assertTrue(admitted())
+        self.assertEqual(
+            [i for i in admitted() if i not in bracket.ISSUED_ACCEPTANCE_REGISTRY], [])
+
 if __name__ == "__main__":
     unittest.main()

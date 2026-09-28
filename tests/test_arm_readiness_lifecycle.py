@@ -310,7 +310,7 @@ def write_predecessor_pack(
         },
         "acceptance_policy": {
             "selection": "issued_d116_artifact_only",
-            "issued": "d079",
+            "issued": "d079_calibration_acceptance_v2_n17_r7",
         },
         "arm_attachments": {
             "identity_pin_projection": sample_frozen_projection(
@@ -472,7 +472,7 @@ def make_go_fixture(
             "claim_root_leaf": "claim",
             "bound_root_leaf": "bound",
         },
-        "acceptance_policy": {"selection": "issued_d116_artifact_only", "issued": "d079"},
+        "acceptance_policy": {"selection": "issued_d116_artifact_only", "issued": "d079_calibration_acceptance_v2_n17_r7"},
         "arm_attachments": {
             "identity_pin_projection": sample_unprojected_projection(identity_ids),
             "arm_readiness": {

@@ -251,6 +251,22 @@ class ClaimHoldRouteTests(unittest.TestCase):
             del tree["acceptance_policy"]["issued"]
             self.assertTrue(arm._issued_d079(tree))
 
+    def test_e12_bare_legacy_identifier_is_refused(self):
+        # HOLD-BY-CONSTRUCTION-01-A1 §4.4: the bare "d079" names no calibration file, so it has
+        # no registered build and is refused. RED at main 9eab16f8, where it was admitted.
+        tree = {"acceptance_policy": {"selection": "issued_d116_artifact_only", "issued": "d079"}}
+        self.assertFalse(arm._issued_d079(tree))
+        hold_for_id = getattr(bracket, "claim_hold_for_acceptance_id", None)
+        if hold_for_id is not None:
+            from joulewise.claim_hold import UNKNOWN_BUILD_HOLD
+            self.assertEqual(hold_for_id("d079"), UNKNOWN_BUILD_HOLD)
+        # Control: with a build planted for the bare form it is admitted, so the refusal above
+        # is caused by the missing build and nothing else.
+        table = getattr(bracket, "REGISTERED_GENERATION_OS_BUILD", None)
+        if table is not None:
+            with patch.dict(table, {"d079": "25F84"}):
+                self.assertTrue(arm._issued_d079(tree))
+
     def test_e5c_all_nine_committed_packs_stay_admitted(self):
         paths = sorted((ROOT / "configs/campaigns").glob("d117*/plan_tree.json"))
         self.assertEqual(len(paths), 9)
