@@ -307,3 +307,4 @@
     - **SF-4:** add a fence limiting the repair diff's test paths, because check 7's commit-to-commit fence cannot see the repair.
     - Plus three NITs.
 51. **Wrap-up.** This activation stops here, so that **D-138 runs in a fresh turn** (runbook §4.4). No Codex seat, `claude -p` judge or subagent of this activation is still running; each finished and was harvested. The durable pointer is the RUN_STATE top block on `docs/2026-09-27-77b1bee2`.
+52. **Exit email** accepted as Gmail `1a0e56b590fc87f7` (≈17:35 PDT). The activation ends. No children are running and nothing is armed.
