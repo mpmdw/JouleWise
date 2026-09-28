@@ -408,3 +408,6 @@ Launched by the watchdog at 17:36:30 PDT (attempt 124) after a usage back-off; t
     - **Granted** (`cdfb27ce` on `fix/2026-09-28-s1-r3-H3`): 35 first-form IDs and 6 second-form IDs. Both are within condition 9's cap of 11.
     - **Next:** seats A and B (R3-5) from `cdfb27ce`.
     - **The bind + pair rows** in `test_floor_mint_estimator`, `test_mint_floor_artifact(_generalized)`, `test_whole_window`, `test_launch_window` and `test_window_duration_margins` are outside A/B's scopes, so the ruling gives them to the lead at the bench.
+123. **S1 R3-5: seats A and B launched** (Sol xhigh, from `cdfb27ce`; briefs [88-A](30-s1-repair/88-R3-5-seat-A-brief.txt) and [88-B](30-s1-repair/88-R3-5-seat-B-brief.txt), each carrying the stop rules (i)–(v), rules 1–11, the class table and the ruled sentence).
+    - **Seat A:** T5a 7 IDs, with A1 §4.3's installer; F 4 IDs (the T4 build, then the first form only); T2 2; the campaign T1 2; the `inputs.py` sibling. It does not touch M, R, T6 or the 5 rule-3 IDs.
+    - **Seat B:** floor T2 21 IDs (24 outcomes); T1 1; the golden report; the `floor_extraction.py` sibling.
