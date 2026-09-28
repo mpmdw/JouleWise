@@ -1269,6 +1269,126 @@ class CalibrationLedgerTests(unittest.TestCase):
             rolled_back.refusal_reasons,
         )
 
+    def test_pre_slot_readiness_names_a_rolled_back_ledger_rollback(self) -> None:
+        # A130 / audit 13 section 2.2 M9: the rollback taxonomy at the
+        # readiness surface.  The ledger is truncated below its pinned
+        # terminal head; pre-slot readiness must say "rollback", never the
+        # generic "head mismatch".  Two production sites name it: the
+        # snapshot reason and calibration_readiness's own PHYSICAL_BEHIND
+        # branch.  Collapsing BOTH to head-mismatch turns this test red.
+        self._open_bracket_session()
+        abort_bracket_session(
+            self.ledger, session_id="session-alpha", reason="rollback-test"
+        )
+        self._write_pin(
+            terminal_head_pin_for_session(self.ledger, session_id="session-alpha")
+        )
+        # Drop the abort's append-intent and its target together, so the
+        # ledger is a clean proper prefix (no dangling intent, which would
+        # route to recovery-required instead).
+        lines = self.ledger.read_bytes().splitlines(keepends=True)
+        self.ledger.write_bytes(b"".join(lines[:-2]))
+        readiness = calibration_ledger.calibration_readiness(
+            self.ledger,
+            self.pin,
+            phase="pre-slot",
+            session_id="session-alpha",
+            slot="pre",
+            attempt_id="session-alpha-pre",
+            require_committed_pin=False,
+        )
+        self.assertEqual(
+            readiness.pin_relation, calibration_ledger.PinRelation.PHYSICAL_BEHIND
+        )
+        self.assertEqual(readiness.status, "blocked")
+        self.assertEqual(readiness.refusal_code, RefusalCode.LEDGER_ROLLBACK)
+
+    def _readiness_with_rollback_misreported_as_head_mismatch(self, **kwargs):
+        """Evaluate readiness while the snapshot mislabels rollback.
+
+        calibration_readiness does not trust the snapshot's rollback label
+        alone: it recomputes the pin relation and names PHYSICAL_BEHIND as
+        rollback itself.  With a correct snapshot that branch is pre-empted,
+        so the only way to observe it is to hand readiness a snapshot whose
+        rollback reason was collapsed to head-mismatch (the M9 taxonomy
+        collapse, one layer down).
+        """
+
+        original = calibration_ledger.load_calibration_ledger_snapshot
+
+        def misreporting(*args, **inner):
+            snapshot = original(*args, **inner)
+            reasons = set(snapshot.refusal_reasons)
+            self.assertIn("calibration_ledger_rollback", reasons)
+            reasons.discard("calibration_ledger_rollback")
+            reasons.add("calibration_ledger_head_mismatch")
+            return replace(snapshot, refusal_reasons=tuple(sorted(reasons)))
+
+        with mock.patch.object(
+            calibration_ledger,
+            "load_calibration_ledger_snapshot",
+            side_effect=misreporting,
+        ):
+            return calibration_ledger.calibration_readiness(
+                self.ledger, self.pin, require_committed_pin=False, **kwargs
+            )
+
+    def test_readiness_backstop_names_rollback_when_snapshot_says_head_mismatch(
+        self,
+    ) -> None:
+        # A130 / audit 13 section 2.2 M9: counterfactual guards for the two
+        # PHYSICAL_BEHIND -> LEDGER_ROLLBACK branches in calibration_readiness
+        # (pre-slot and terminal).  Collapsing either branch to head-mismatch
+        # turns the matching subtest red.
+        self._open_bracket_session("session-alpha")
+        abort_bracket_session(
+            self.ledger, session_id="session-alpha", reason="rollback-test"
+        )
+        alpha_terminal = self.ledger.read_bytes()
+        self._write_pin(
+            terminal_head_pin_for_session(self.ledger, session_id="session-alpha")
+        )
+        self._open_bracket_session("session-beta")
+        abort_bracket_session(
+            self.ledger, session_id="session-beta", reason="rollback-test"
+        )
+        self._write_pin(
+            terminal_head_pin_for_session(self.ledger, session_id="session-beta")
+        )
+        # Physical ledger rolls back to session-alpha's terminal head: a clean
+        # proper prefix of the pinned session-beta head.
+        self.ledger.write_bytes(alpha_terminal)
+
+        pre_slot_lines = alpha_terminal.splitlines(keepends=True)
+        cases = {
+            "terminal": (
+                alpha_terminal,
+                {"phase": "terminal", "session_id": "session-alpha"},
+            ),
+            # Pre-slot needs the session still open: roll back to just after
+            # session-alpha opened.
+            "pre-slot": (
+                b"".join(pre_slot_lines[:2]),
+                {
+                    "phase": "pre-slot",
+                    "session_id": "session-alpha",
+                    "slot": "pre",
+                    "attempt_id": "session-alpha-pre",
+                },
+            ),
+        }
+        for label, (ledger_bytes, kwargs) in cases.items():
+            with self.subTest(phase=label):
+                self.ledger.write_bytes(ledger_bytes)
+                readiness = self._readiness_with_rollback_misreported_as_head_mismatch(
+                    **kwargs
+                )
+                self.assertEqual(
+                    readiness.pin_relation,
+                    calibration_ledger.PinRelation.PHYSICAL_BEHIND,
+                )
+                self.assertEqual(readiness.refusal_code, RefusalCode.LEDGER_ROLLBACK)
+
     def test_conflicting_session_identity_and_session_fork_refuse(self) -> None:
         self._open_bracket_session()
         self._finalize_bracket_slot("session-alpha", "pre")
