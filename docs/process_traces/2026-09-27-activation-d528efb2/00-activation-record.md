@@ -163,3 +163,11 @@ Launched by the watchdog at 17:36:30 PDT (attempt 124) after a usage back-off; t
     - **Diagnosis:** one coupling. Binding a non-mock config (needed for the pair) switches off `production_predicate_exempt` (`whole_window.py:989-999`), so repaired fixtures meet every production check main let them skip.
     - **Recommendation:** "exemption parity" (a test-only helper stubbing the closed list of checks that consult the exemption, never battery code or the test's own subject) plus a four-class triage.
     - **Gate property found:** a bundle with a pair passes even when its config is deleted or rebound to `mock` (`bundle_read.py:483-487`). A ≈3-line fix inside S1 is proposed for the judge. Sol and Astra seats pending.
+64. **D-138 contract refuter (Opus): REFUTER: DISSENT** ([report](50-d138-issuance-seat/refuters/contract-refuter-opus.md) + probes).
+    - **Authentication is sound:** only the committed bytes load, table and file cannot drift undetected, `--check` reproduces them, and the three R7 freezes are killed.
+    - **BLOCKER B1:** H1 checks the pack's DECLARED acceptance, but preflight and bracket evaluation read the DEFAULT. The merge would remove the epoch barrier for every pack (all nine committed packs declare r6 or older), while H1 covers only packs naming the new id.
+    - **S1:** the no-pack derivation-night route refuses at 25G83 after the move.
+    - **S2:** the promotion tool checks citations for form only (six drifted variants were accepted).
+    - **S3:** the bytes say the §9 gate is "complete" and omit A3.
+    - N1: rules (b)/(f) are unobservable, plus nits.
+    - **With item 61, two independent refuters found open hold routes, so D-138 STOPS** (design ruling §9 step 6). **Cold design addendum D138-25G83-DESIGN-01-A1 convened** ([charge](11-d138-design/30-addendum-charge.md)): where H1 is enforced (at consumption, declared-equals-active, or NOT moving the default until H1 lifts), the doubling trigger, S2/S3/N1, the old-epoch replay disposition, and the D-185/record claims.

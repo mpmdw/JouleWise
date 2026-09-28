@@ -1,0 +1,16 @@
+A0 sha256(new file) 80c2303611268b6b94626e001fb5df0e783719744145c9f6a31d4061ddee351b == pin True
+A1 default loads -> d079_calibration_acceptance_v2_n12_25g83_r1 | ACTIVE d079_calibration_acceptance_v2_n12_25g83_r1
+A1 R7 by path -> d079_calibration_acceptance_v2_n17_r7
+A2 byte-identical copy elsewhere -> d079_calibration_acceptance_v2_n12_25g83_r1
+A3 trailing space -> None
+A4 reserialized indent=1 -> None
+A5 member altered+resealed -> None
+A5b same, with pin swapped to tampered digest (validator alone) -> None
+A6 D8+holds dropped+resealed -> None
+A6b same with pin swapped (validator alone; disclosures unguarded by validator) -> d079_calibration_acceptance_v2_n12_25g83_r1
+A7 R7 content relabelled as new id -> None
+A8 candidate dbad7cc7 -> None dbad7cc7
+A9 new content relabelled as R7 id -> None
+A10 explicit in-memory route, one extra note -> None
+A10b explicit in-memory route, exact -> d079_calibration_acceptance_v2_n12_25g83_r1
+A11 new file loads with disposition-file IO guarded -> True hits []
