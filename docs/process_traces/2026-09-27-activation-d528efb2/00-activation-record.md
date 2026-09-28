@@ -199,3 +199,9 @@ Launched by the watchdog at 17:36:30 PDT (attempt 124) after a usage back-off; t
     - **Round 3 is the last,** under a hard cap: >50 turned tests at R3-1, or a failed pilot, sends it back to a cold gate before any seat; >10 residual outcomes after R3-6 does the same.
     - **The owner may overturn** the judge's reading that directive #421 governs what production accepts, not what test fixtures contain.
 71. **R3-0 (lead, bench):** the gate fix applied as `601a06c5` on `fix/2026-09-27-s1-regress` (`bundle_read.py` sha256 `c4039f22…` exact). The six variants of §4.2 reproduce ([script](30-s1-repair/50-escalation/gate-variants.py), [out](30-s1-repair/50-escalation/gate-variants.out)). **R3-1:** the integration tree `0c469057` (= `601a06c5` merged with main `9eab16f8`, in a separate detached worktree; the candidate branch takes no merge) is running the per-ID full suite to `/tmp/s1-r3inv-d528efb2/`. This is the round-3 inventory and the measure of stop condition 5.
+72. **Owner status email** accepted as Gmail `1a0e6ded19991bbf` (00:30 PDT). It covers:
+    - the new calibration file held back by design (R7 stays the default while H1 holds; Ed may say "wait entirely");
+    - the network-time finding (no action needed);
+    - the S1 gate hole found and fixed;
+    - the S1 route's reading of #421, offered for owner overturn (silence means it stands);
+    - later asks: approve the successor registration and name the two files.
