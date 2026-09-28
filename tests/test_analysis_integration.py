@@ -2103,7 +2103,12 @@ class AnalysisIntegrationTests(unittest.TestCase):
                 bundle_ids,
                 source_name="pinned-controller-loader-source",
             )
-            with mock.patch(
+            # Class T4: the floor members get bundle form under this runs
+            # root (the class corpus's produced, bound and paired
+            # floor-member bundles).
+            for member in sorted(self.runs_root.glob("cell-1-*")):
+                shutil.copytree(member, runs_root / member.name, symlinks=True)
+            with exemption_parity(self.id()), mock.patch(
                 "joulewise.analysis_engine.inputs.custody_telemetry_identity",
                 return_value=PRODUCTION_TELEMETRY_IDENTITY,
             ):
@@ -2444,7 +2449,32 @@ class AnalysisIntegrationTests(unittest.TestCase):
                 consumer_stress={},
             )
 
-        with tempfile.TemporaryDirectory() as tmp:
+        # Class T4: the attribution floor's members get bundle form under the
+        # runs root the claim path reads (a copy of the class corpus), made by
+        # the producer the class corpus uses for its own floor members, so each
+        # is controller-written, config-bound and paired.
+        attribution_runs = self.root / "attribution-floor-runs"
+        shutil.copytree(self.runs_root, attribution_runs, symlinks=True)
+        for member_id in sorted(
+            {
+                observation["bundle_id"]
+                for cell in floor_artifact["cells"]
+                for observation in cell["absolute"]["bundle_observations"]
+            }
+            | {
+                member["bundle_id"]
+                for cell in floor_artifact["cells"]
+                for block in cell["comparative"]["blocks"]
+                for member in block["members"]
+            }
+        ):
+            with mock.patch(
+                "joulewise.bundle._capture_source_state",
+                return_value=dict(CLEAN_SOURCE_STATE),
+            ), redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                produce_strict_bundle(attribution_runs, member_id)
+
+        with exemption_parity(self.id()), tempfile.TemporaryDirectory() as tmp:
             floor_path = Path(tmp) / "attribution-floor.json"
             floor_path.write_text(
                 json.dumps(floor_artifact, indent=2) + "\n",
@@ -2452,7 +2482,7 @@ class AnalysisIntegrationTests(unittest.TestCase):
             )
             artifact = analyze_claims(
                 self.manifest_path,
-                self.runs_root,
+                attribution_runs,
                 floor_path,
                 strict_validator=validate_bundle,
                 _floor_request_factory=labelled_floor_request,
@@ -4310,7 +4340,7 @@ class AnalysisIntegrationTests(unittest.TestCase):
     def test_claim_output_separation_preserves_declared_root_and_ignores_surplus_symlink(
         self,
     ):
-        with tempfile.TemporaryDirectory() as tmp:
+        with exemption_parity(self.id()), tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             declared_roots = {
                 "a10": root / "a10",
@@ -4318,6 +4348,11 @@ class AnalysisIntegrationTests(unittest.TestCase):
             }
             for declared_root in declared_roots.values():
                 declared_root.mkdir()
+                # Class T4: the floor members get bundle form under each
+                # declared root (the class corpus's produced, bound and
+                # paired floor-member bundles).
+                for member in sorted(self.runs_root.glob("cell-1-*")):
+                    shutil.copytree(member, declared_root / member.name, symlinks=True)
 
             exact_output = root / "exact-claim-verdicts.json"
             analyze_claims(
@@ -4371,7 +4406,7 @@ class AnalysisIntegrationTests(unittest.TestCase):
     def test_cli_output_separation_preserves_exact_and_absent_mapping_and_ignores_surplus_containment(
         self,
     ):
-        with tempfile.TemporaryDirectory() as tmp:
+        with exemption_parity(self.id()), tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             declared_roots = {
                 "a10": root / "a10",
@@ -4379,6 +4414,11 @@ class AnalysisIntegrationTests(unittest.TestCase):
             }
             for declared_root in declared_roots.values():
                 declared_root.mkdir()
+                # Class T4: the floor members get bundle form under each
+                # declared root (the class corpus's produced, bound and
+                # paired floor-member bundles).
+                for member in sorted(self.runs_root.glob("cell-1-*")):
+                    shutil.copytree(member, declared_root / member.name, symlinks=True)
             evidence_args = [
                 "--evidence-root",
                 f"a10={declared_roots['a10']}",
