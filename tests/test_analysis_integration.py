@@ -118,6 +118,7 @@ from tests.test_run_campaign import (
     run_campaign_module,
 )
 from tests.test_analysis_finalizer import install_synthetic_finalization_fixture
+from tests.bfgs_fixtures import produce_strict_bundle
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -130,9 +131,26 @@ CLEAN_SOURCE_STATE = {
     "untracked": "clean",
     "diff_sha256": "2" * 64,
 }
-# No strict-valid powermetrics fixture exists in-repo. The positive companions
-# therefore stipulate production telemetry identity while exercising the real
-# strict-valid mock bundles and the real analyze_claims wiring.
+
+
+def produce_configured_strict_bundle(config_path: Path, runs_root: Path) -> Path:
+    source = json.loads(config_path.read_text(encoding="utf-8"))
+    with mock.patch(
+        "joulewise.bundle._capture_source_state",
+        return_value=dict(CLEAN_SOURCE_STATE),
+    ):
+        return produce_strict_bundle(
+            runs_root, source["run_id"],
+            mutate_config=lambda payload: payload.update(copy.deepcopy(source)),
+        )
+
+
+def run_configured_strict_bundle(config_path: Path, runs_root: Path) -> int:
+    return 0 if produce_configured_strict_bundle(config_path, runs_root).is_dir() else 1
+
+
+# Existing positive companions stipulate a production telemetry identity when
+# isolating analysis behavior from identity classification.
 PRODUCTION_TELEMETRY_IDENTITY = CustodyTelemetryIdentity(
     custody_bound_config=True,
     config_backend_class="powermetrics",
@@ -1918,11 +1936,15 @@ class AnalysisIntegrationTests(unittest.TestCase):
         cls.config_dir = cls.root / "configs"
         cls.runs_root = cls.root / "runs"
         cls.floor_path = cls.root / "floor.json"
+        base = json.loads(BASE_CONFIG.read_text(encoding="utf-8"))
+        base["hardware_target"]["telemetry_backend"] = "powermetrics"
+        base_path = cls.root / "strict-base.json"
+        base_path.write_text(json.dumps(base, indent=2, sort_keys=True) + "\n")
         with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
             code = generate_matrix(
                 [
                     "--base",
-                    str(BASE_CONFIG),
+                    str(base_path),
                     "--model-tag",
                     "mock-model",
                     "--out-dir",
@@ -1931,21 +1953,38 @@ class AnalysisIntegrationTests(unittest.TestCase):
             )
         if code != 0:
             raise AssertionError(f"matrix generation failed: {code}")
-        with mock.patch(
-            "joulewise.bundle._capture_source_state",
-            return_value=dict(CLEAN_SOURCE_STATE),
-        ):
-            for config in sorted(cls.config_dir.glob("*.json")):
-                if config.name in SIDECARS:
-                    continue
-                with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-                    code = main(["run", str(config), "--runs-dir", str(cls.runs_root)])
-                if code != 0:
-                    raise AssertionError(f"mock run failed for {config.name}: {code}")
-                run_id = json.loads(config.read_text(encoding="utf-8"))["run_id"]
-                install_explicit_mock_sampler(cls.runs_root / run_id)
+        for config in sorted(cls.config_dir.glob("*.json")):
+            if config.name in SIDECARS:
+                continue
+            generated = json.loads(config.read_text(encoding="utf-8"))
+            with mock.patch(
+                "joulewise.bundle._capture_source_state",
+                return_value=dict(CLEAN_SOURCE_STATE),
+            ), redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                produce_strict_bundle(
+                    cls.runs_root, generated["run_id"],
+                    mutate_config=lambda payload, source=generated: payload.update(copy.deepcopy(source)),
+                )
+        floor_artifact = make_artifact()
+        floor_members = {
+            observation["bundle_id"]
+            for cell in floor_artifact["cells"]
+            for observation in cell["absolute"]["bundle_observations"]
+        }
+        floor_members.update(
+            member["bundle_id"]
+            for cell in floor_artifact["cells"]
+            for block in cell["comparative"]["blocks"]
+            for member in block["members"]
+        )
+        for run_id in sorted(floor_members):
+            with mock.patch(
+                "joulewise.bundle._capture_source_state",
+                return_value=dict(CLEAN_SOURCE_STATE),
+            ), redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                produce_strict_bundle(cls.runs_root, run_id)
         cls.floor_path.write_text(
-            json.dumps(make_artifact(), indent=2) + "\n", encoding="utf-8"
+            json.dumps(floor_artifact, indent=2) + "\n", encoding="utf-8"
         )
         cls.manifest_path = cls.config_dir / "analysis_manifest.json"
         manifest = json.loads(cls.manifest_path.read_text())
@@ -1955,6 +1994,14 @@ class AnalysisIntegrationTests(unittest.TestCase):
             bundle_ids,
             source_name="analysis-whole-window-source",
         )
+        for position in ("start", "end"):
+            run_id = f"analysis-whole-window-source-neg8-reference-{position}"
+            shutil.rmtree(cls.runs_root / run_id)
+            with mock.patch(
+                "joulewise.bundle._capture_source_state",
+                return_value=dict(CLEAN_SOURCE_STATE),
+            ), redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                produce_strict_bundle(cls.runs_root, run_id)
 
     @classmethod
     def tearDownClass(cls):
@@ -2007,6 +2054,7 @@ class AnalysisIntegrationTests(unittest.TestCase):
                 tokenizer_json_sha256="a" * 64,
                 chat_template_sha256="b" * 64,
             )
+            base["hardware_target"]["telemetry_backend"] = "powermetrics"
             base_path = root / "pinned-base.json"
             base_path.write_text(
                 json.dumps(base, indent=2, sort_keys=True) + "\n",
@@ -2031,14 +2079,8 @@ class AnalysisIntegrationTests(unittest.TestCase):
                 if config_path.name in SIDECARS:
                     continue
                 with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-                    code = main(
-                        ["run", str(config_path), "--runs-dir", str(runs_root)]
-                    )
+                    code = run_configured_strict_bundle(config_path, runs_root)
                 self.assertEqual(code, 0, config_path.name)
-                run_id = json.loads(config_path.read_text(encoding="utf-8"))[
-                    "run_id"
-                ]
-                install_explicit_mock_sampler(runs_root / run_id)
 
             manifest_path = config_dir / "analysis_manifest.json"
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -2106,16 +2148,10 @@ class AnalysisIntegrationTests(unittest.TestCase):
                 old_asdict_write_metadata,
             ):
                 with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-                    code = main(
-                        [
-                            "run",
-                            str(config_dir / target["config"]),
-                            "--runs-dir",
-                            str(runs_root),
-                        ]
+                    code = run_configured_strict_bundle(
+                        config_dir / target["config"], runs_root,
                     )
             self.assertEqual(code, 0)
-            install_explicit_mock_sampler(runs_root / target["run_id"])
 
             with mock.patch(
                 "joulewise.analysis_engine.inputs.custody_telemetry_identity",
@@ -3366,16 +3402,10 @@ class AnalysisIntegrationTests(unittest.TestCase):
                         encoding="utf-8",
                     )
                     with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-                        code = main(
-                            [
-                                "run",
-                                str(config_path),
-                                "--runs-dir",
-                                str(evidence_root),
-                            ]
+                        code = run_configured_strict_bundle(
+                            config_path, evidence_root,
                         )
                     self.assertEqual(code, 0)
-                    install_explicit_mock_sampler(evidence_root / run_id)
                     calibration_ids.append(run_id)
                     order_rows[root_id].append(
                         {
@@ -4516,7 +4546,7 @@ class AnalysisIntegrationTests(unittest.TestCase):
         config_path = self.root / "replacement-config.json"
         config_path.write_text(json.dumps(replacement, indent=2) + "\n", encoding="utf-8")
         with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-            self.assertEqual(main(["run", str(config_path), "--runs-dir", str(runs)]), 0)
+            self.assertEqual(run_configured_strict_bundle(config_path, runs), 0)
         install_passing_analysis_whole_window(
             runs,
             [
@@ -4601,10 +4631,7 @@ class AnalysisIntegrationTests(unittest.TestCase):
             json.dumps(replacement, indent=2) + "\n", encoding="utf-8"
         )
         with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-            self.assertEqual(
-                main(["run", str(config_path), "--runs-dir", str(runs)]),
-                0,
-            )
+            self.assertEqual(run_configured_strict_bundle(config_path, runs), 0)
         install_passing_analysis_whole_window(
             runs,
             [
@@ -4679,7 +4706,7 @@ class AnalysisIntegrationTests(unittest.TestCase):
             json.dumps(replacement, indent=2) + "\n", encoding="utf-8"
         )
         with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-            self.assertEqual(main(["run", str(config_path), "--runs-dir", str(runs)]), 0)
+            self.assertEqual(run_configured_strict_bundle(config_path, runs), 0)
 
         artifact = analyze_claims(
             self.manifest_path,
@@ -5171,7 +5198,7 @@ class AnalysisIntegrationTests(unittest.TestCase):
         config_path = self.root / "topup-config.json"
         config_path.write_text(json.dumps(topup, indent=2) + "\n", encoding="utf-8")
         with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-            self.assertEqual(main(["run", str(config_path), "--runs-dir", str(runs)]), 0)
+            self.assertEqual(run_configured_strict_bundle(config_path, runs), 0)
         artifact = analyze_claims(
             self.manifest_path,
             runs,
@@ -5249,10 +5276,7 @@ class AnalysisIntegrationTests(unittest.TestCase):
             json.dumps(topup, indent=2) + "\n", encoding="utf-8"
         )
         with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-            self.assertEqual(
-                main(["run", str(config_path), "--runs-dir", str(runs)]),
-                0,
-            )
+            self.assertEqual(run_configured_strict_bundle(config_path, runs), 0)
         with mock.patch(
             "joulewise.analysis_engine.inputs.custody_telemetry_identity",
             return_value=PRODUCTION_TELEMETRY_IDENTITY,
@@ -5304,7 +5328,7 @@ class AnalysisIntegrationTests(unittest.TestCase):
         config_path = self.root / "sentinel-topup-config.json"
         config_path.write_text(json.dumps(topup, indent=2) + "\n", encoding="utf-8")
         with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-            self.assertEqual(main(["run", str(config_path), "--runs-dir", str(runs)]), 0)
+            self.assertEqual(run_configured_strict_bundle(config_path, runs), 0)
         artifact = analyze_claims(
             self.manifest_path,
             runs,

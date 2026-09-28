@@ -64,6 +64,7 @@ from tests.test_calibration_bracketing import (
 from tests.test_arm_readiness import LaunchConsumptionV2Tests
 from tests.bfgs_fixtures import (
     injected_battery_runner,
+    produce_strict_bundle,
     rebind_config,
     write_capture_evidence,
     write_passing_pair,
@@ -5931,16 +5932,8 @@ class RunCampaignTests(unittest.TestCase):
             result = run_campaign(config_dir, runs_dir)
 
             self.assertEqual(result.returncode, 1)
-            verdict = read_all_jsonl(runs_dir / "campaign_log.jsonl")[-1]
-            self.assertNotEqual(verdict["collection"]["verdict"], "usable")
-            self.assertEqual(verdict["collection"]["verdict"], "invalid")
-            self.assertEqual(
-                verdict["collection"]["categories"]["usable"], ["usable"]
-            )
-            self.assertEqual(
-                verdict["collection"]["categories"]["failed"], ["incomplete"]
-            )
-            self.assertEqual(verdict["collection"]["categories"]["missing"], [])
+            self.assertIn("CustodyUnreadable: incomplete", result.stderr)
+            self.assertIn("missing required artifact: metadata.json", result.stderr)
 
     def test_mixed_complete_incomplete_and_absent_members_are_classified_exactly(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -5961,17 +5954,46 @@ class RunCampaignTests(unittest.TestCase):
             result = run_campaign(config_dir, runs_dir)
 
             self.assertEqual(result.returncode, 1)
-            verdict = read_all_jsonl(runs_dir / "campaign_log.jsonl")[-1]
-            self.assertEqual(verdict["collection"]["verdict"], "blocked")
-            self.assertEqual(
-                verdict["collection"]["categories"],
-                {
-                    "usable": ["mixed__r1"],
-                    "waived": [],
-                    "failed": ["mixed__r2"],
-                    "missing": ["mixed__r3"],
-                },
-            )
+            self.assertIn("CustodyUnreadable: mixed__r2", result.stderr)
+            self.assertIn("missing required artifact: metadata.json", result.stderr)
+
+    def test_incomplete_member_collection_classification_without_bundle_read(self) -> None:
+        def evaluated(bundle_id, *, usable):
+            return SimpleNamespace(bundle_id=bundle_id, usable=usable, waived=False)
+
+        categories = run_campaign_module.classify_campaign_members(
+            [evaluated("usable", usable=True), evaluated("incomplete", usable=False)],
+            [],
+        )
+        verdict, _reasons = run_campaign_module.collection_verdict_for(categories)
+        self.assertNotEqual(verdict, "usable")
+        self.assertEqual(verdict, "invalid")
+        self.assertEqual(categories["usable"], ["usable"])
+        self.assertEqual(categories["failed"], ["incomplete"])
+        self.assertEqual(categories["missing"], [])
+
+        mixed = run_campaign_module.classify_campaign_members(
+            [evaluated("mixed__r1", usable=True),
+             evaluated("mixed__r2", usable=False)],
+            ["mixed__r3"],
+        )
+        mixed_verdict, _reasons = run_campaign_module.collection_verdict_for(mixed)
+        self.assertEqual(mixed_verdict, "blocked")
+        self.assertEqual(mixed, {
+            "usable": ["mixed__r1"], "waived": [],
+            "failed": ["mixed__r2"], "missing": ["mixed__r3"],
+        })
+
+        malformed = run_campaign_module.classify_campaign_members(
+            [evaluated("matrix__r1", usable=False)],
+            ["matrix__r2", "matrix__r3", "matrix__r4", "matrix__r5"],
+        )
+        malformed_verdict, _reasons = run_campaign_module.collection_verdict_for(malformed)
+        self.assertEqual(malformed_verdict, "blocked")
+        self.assertEqual(malformed["failed"], ["matrix__r1"])
+        self.assertEqual(malformed["missing"], [
+            "matrix__r2", "matrix__r3", "matrix__r4", "matrix__r5",
+        ])
 
     def test_reps_one_resume_uses_single_bundle_path(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -6481,20 +6503,8 @@ class RunCampaignTests(unittest.TestCase):
             self.assertIn("matrix__r1", result.stderr)
             rows = read_jsonl(runs_dir / "campaign_log.jsonl")
             self.assertEqual([row["status"] for row in rows], ["incomplete_existing"])
-            verdict = read_all_jsonl(runs_dir / "campaign_log.jsonl")[-1]
-            self.assertEqual(verdict["collection"]["verdict"], "blocked")
-            self.assertEqual(
-                verdict["collection"]["categories"]["failed"], ["matrix__r1"]
-            )
-            self.assertEqual(
-                verdict["collection"]["categories"]["missing"],
-                [
-                    "matrix__r2",
-                    "matrix__r3",
-                    "matrix__r4",
-                    "matrix__r5",
-                ],
-            )
+            self.assertIn("CustodyUnreadable: matrix__r1", result.stderr)
+            self.assertIn("missing required artifact: metadata.json", result.stderr)
 
     def test_config_error_aborts_before_invocation_or_log_writes(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -9711,41 +9721,13 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
         attempt2_records: list[dict] | None,
         expected_strict_valid: bool = True,
     ):
-        from dataclasses import replace
-        from joulewise.clock import SystemClock
-        from tests import test_controller
         from tests.test_controller import (
             produce_retry_powermetrics_bundle,
         )
-        from tests.bfgs_fixtures import WALL_TIME_S
 
-        class FixtureEpochClock(SystemClock):
-            def __init__(self):
-                self._fixture_offset_s = WALL_TIME_S - time.time()
-                super().__init__()
-
-            def now(self):
-                return super().now() + self._fixture_offset_s
-
-            def stamp(self):
-                stamp = super().stamp()
-                return replace(stamp, epoch_s=stamp.epoch_s + self._fixture_offset_s)
-
-        # The shared producer owns the bounded-only --no-sleep policy so
-        # direct controller callers receive the same fixture cure.
-        actual_run_benchmark = test_controller.run_benchmark
-        battery_runner = injected_battery_runner()
-        with patch.object(
-            test_controller,
-            "run_benchmark",
-            side_effect=lambda *args, **kwargs: actual_run_benchmark(
-                *args, battery_runner=battery_runner, **kwargs
-            ),
-        ), patch.object(test_controller, "SystemClock", FixtureEpochClock):
-            bundle_path, _summary = produce_retry_powermetrics_bundle(
-                self.root / "runs",
-                bundle_id,
-            )
+        bundle_path, _summary = produce_retry_powermetrics_bundle(
+            self.root / "runs", bundle_id,
+        )
         attempt1_path = bundle_path / "rich_telemetry_idle.jsonl"
         attempt2_path = bundle_path / "rich_telemetry_idle_attempt_2.jsonl"
         for path, replacements in (
@@ -10864,6 +10846,16 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
         _binding, args = self._install_passing_whole_window_verdict_fixture(
             bound_lineage=lineage
         )
+        for bundle_id in (
+            "p2-neg8-reference-start__r1", "p2-neg8-reference-end__r1",
+        ):
+            shutil.rmtree(self.root / bundle_id)
+            produce_strict_bundle(
+                self.root, bundle_id,
+                mutate_config=lambda config: config["workload_profile"].update(
+                    name="df_rq_mid", prompt_tokens=1024, output_tokens=256,
+                ),
+            )
         calibration_bracket = {
             "schema_version": "joulewise.instrument_calibration_bracket.v1",
             "status": "passed",
@@ -11356,8 +11348,10 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
             json.dumps({"status": "succeeded", **member.summary}) + "\n"
         )
         (member.bundle_path / "metadata.json").write_text(
-            json.dumps(member.metadata) + "\n"
+            json.dumps({"run_id": member.bundle_id, **member.metadata}) + "\n"
         )
+        rebind_config(member.bundle_path)
+        write_passing_pair(member.bundle_path)
         args = run_campaign_module.parse_args(
             [
                 "--whole-window-verdict",
@@ -11527,6 +11521,7 @@ def install_real_salvage_window(
         )
         config_raw = (evaluation.bundle_path / "config.json").read_bytes()
         metadata = dict(evaluation.metadata)
+        metadata["run_id"] = bundle_id
         metadata["config_sha256"] = hashlib.sha256(config_raw).hexdigest()
         metadata["adapters"] = {"telemetry": {"name": "powermetrics"}}
         metadata["instrument_calibration"] = {
@@ -11591,6 +11586,8 @@ def install_real_salvage_window(
             + "\n",
             encoding="utf-8",
         )
+        rebind_config(evaluation.bundle_path)
+        write_passing_pair(evaluation.bundle_path)
         if position is not None:
             reference_rows.append((bundle_id, position, evaluation))
 
