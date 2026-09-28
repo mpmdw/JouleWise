@@ -1,5 +1,12 @@
 {
   "all_cells_extractable": true,
+  "battery_float_members": {
+    "golden-r01": "pass",
+    "golden-r02": "pass",
+    "golden-r03": "pass",
+    "golden-r04": "pass",
+    "golden-r05": "pass"
+  },
   "cells": [
     {
       "anchor_shift_bound_max_j": 0.01,
@@ -9,10 +16,22 @@
       "excluded_slots": [],
       "extractable": true,
       "floor": {
-        "admissible_half_widths_j": [0.01, 0.01, 0.01, 0.01, 0.01],
+        "admissible_half_widths_j": [
+          0.01,
+          0.01,
+          0.01,
+          0.01,
+          0.01
+        ],
         "corner_widened_guarded_floor_j": 0.7649076458135183,
         "corner_widened_unguarded_floor_j": 0.5099384305423456,
-        "deviations_j": [-0.20000000000000284, -0.10000000000000142, 0.0, 0.09999999999999432, 0.19999999999999574],
+        "deviations_j": [
+          -0.20000000000000284,
+          -0.10000000000000142,
+          0.0,
+          0.09999999999999432,
+          0.19999999999999574
+        ],
         "drift_widened_guarded_floor_j": 0.8149076458135184,
         "drift_widened_unguarded_floor_j": 0.5599384305423456,
         "guard_factor": 1.5,
@@ -54,11 +73,19 @@
           "cooldown_verified": true,
           "excluded": false,
           "metric_value_j": 40.0,
-          "operative_anchor_envelope": {"anchor_bound_s": 0.05, "half_width_j": 0.01, "lower_j": 39.99, "max_abs_delta_j": 0.01, "method": "common_trace_shift_plus_independent_edge_corners_v3", "point_j": 40.0, "upper_j": 40.01},
+          "operative_anchor_envelope": {
+            "anchor_bound_s": 0.05,
+            "half_width_j": 0.01,
+            "lower_j": 39.99,
+            "max_abs_delta_j": 0.01,
+            "method": "common_trace_shift_plus_independent_edge_corners_v3",
+            "point_j": 40.0,
+            "upper_j": 40.01
+          },
           "position": null,
           "reasons": [],
           "slot": "golden-r01",
-          "summary_sha256": "bf89b6cabef7d3e28720f834437f289999124720f36b12c93fce21c6a95bd692"
+          "summary_sha256": "1b1da8c892cb34ef911e353cb83d444f9e0d14df20a6d5b3cab8c7844c6106be"
         },
         {
           "anchor_shift_bound_j": 0.01,
@@ -72,11 +99,19 @@
           "cooldown_verified": true,
           "excluded": false,
           "metric_value_j": 40.1,
-          "operative_anchor_envelope": {"anchor_bound_s": 0.05, "half_width_j": 0.01, "lower_j": 40.09, "max_abs_delta_j": 0.01, "method": "common_trace_shift_plus_independent_edge_corners_v3", "point_j": 40.1, "upper_j": 40.11},
+          "operative_anchor_envelope": {
+            "anchor_bound_s": 0.05,
+            "half_width_j": 0.01,
+            "lower_j": 40.09,
+            "max_abs_delta_j": 0.01,
+            "method": "common_trace_shift_plus_independent_edge_corners_v3",
+            "point_j": 40.1,
+            "upper_j": 40.11
+          },
           "position": null,
           "reasons": [],
           "slot": "golden-r02",
-          "summary_sha256": "3a3faccc52e892ce0b71dcc5d17a0af00e7569b046ea92dd08aea2ef66c3d2e9"
+          "summary_sha256": "d5ad79e134ab2c3991fc3ee0fcd69f722052a3eb104554217d5533a57bfdfd4c"
         },
         {
           "anchor_shift_bound_j": 0.01,
@@ -90,11 +125,19 @@
           "cooldown_verified": true,
           "excluded": false,
           "metric_value_j": 40.2,
-          "operative_anchor_envelope": {"anchor_bound_s": 0.05, "half_width_j": 0.01, "lower_j": 40.190000000000005, "max_abs_delta_j": 0.01, "method": "common_trace_shift_plus_independent_edge_corners_v3", "point_j": 40.2, "upper_j": 40.21},
+          "operative_anchor_envelope": {
+            "anchor_bound_s": 0.05,
+            "half_width_j": 0.01,
+            "lower_j": 40.190000000000005,
+            "max_abs_delta_j": 0.01,
+            "method": "common_trace_shift_plus_independent_edge_corners_v3",
+            "point_j": 40.2,
+            "upper_j": 40.21
+          },
           "position": null,
           "reasons": [],
           "slot": "golden-r03",
-          "summary_sha256": "3965adb5d97a9895a7779a5d0bf008f9cbfdac229171b00f65b53aa27bfedf65"
+          "summary_sha256": "7988dabcb8b22c0cd4fbfd4d97c373bb04198178c5c14904715d66ce145b2aa8"
         },
         {
           "anchor_shift_bound_j": 0.01,
@@ -108,11 +151,19 @@
           "cooldown_verified": true,
           "excluded": false,
           "metric_value_j": 40.3,
-          "operative_anchor_envelope": {"anchor_bound_s": 0.05, "half_width_j": 0.01, "lower_j": 40.29, "max_abs_delta_j": 0.01, "method": "common_trace_shift_plus_independent_edge_corners_v3", "point_j": 40.3, "upper_j": 40.309999999999995},
+          "operative_anchor_envelope": {
+            "anchor_bound_s": 0.05,
+            "half_width_j": 0.01,
+            "lower_j": 40.29,
+            "max_abs_delta_j": 0.01,
+            "method": "common_trace_shift_plus_independent_edge_corners_v3",
+            "point_j": 40.3,
+            "upper_j": 40.309999999999995
+          },
           "position": null,
           "reasons": [],
           "slot": "golden-r04",
-          "summary_sha256": "5d9a1f0b50c78274aee512109c7dfe6f22361b0a8c6fcb8c4359f84559358f94"
+          "summary_sha256": "f3508dcc9903cfc6eb7962477161d913597e1895b99f7e1fa81fd22337749439"
         },
         {
           "anchor_shift_bound_j": 0.01,
@@ -126,11 +177,19 @@
           "cooldown_verified": true,
           "excluded": false,
           "metric_value_j": 40.4,
-          "operative_anchor_envelope": {"anchor_bound_s": 0.05, "half_width_j": 0.01, "lower_j": 40.39, "max_abs_delta_j": 0.01, "method": "common_trace_shift_plus_independent_edge_corners_v3", "point_j": 40.4, "upper_j": 40.41},
+          "operative_anchor_envelope": {
+            "anchor_bound_s": 0.05,
+            "half_width_j": 0.01,
+            "lower_j": 40.39,
+            "max_abs_delta_j": 0.01,
+            "method": "common_trace_shift_plus_independent_edge_corners_v3",
+            "point_j": 40.4,
+            "upper_j": 40.41
+          },
           "position": null,
           "reasons": [],
           "slot": "golden-r05",
-          "summary_sha256": "d4c9e16b211484a55dff3d9a9a044c5ff6745f8ae64cdfa92e782c5cccdc1fb4"
+          "summary_sha256": "b846719ddeb32d47e25eec2ef8500cc0f5665a451b813a906b9b870faf9b5a7f"
         }
       ],
       "metric": "gross_energy_j",
@@ -143,7 +202,11 @@
         "claim_family": "gross_energy",
         "derived_repeatability_bound_j": 0.04,
         "observed_trajectory_excursion_j": 0.05,
-        "provenance": {"bound_derivation_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "derived_component": "derived_repeatability_bound_j", "observed_component": "trajectory_excursion_max_j"},
+        "provenance": {
+          "bound_derivation_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "derived_component": "derived_repeatability_bound_j",
+          "observed_component": "trajectory_excursion_max_j"
+        },
         "whole_window_evaluation_basis_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
       },
       "window_class": "request"
@@ -151,7 +214,9 @@
   ],
   "consumption_provenance": null,
   "consumption_semantics_id": "d078_minted_envelopes_v1",
-  "governance": {"d078_gate": "No claim-bearing floor or MDE may be published from corpora recorded before the trace-time-anchor fix; wires without anchor-shift envelopes refuse mechanically. Salvage of pre-anchor corpora is a separate provisional artifact (historical_salvage_provisional, claim_bearing=false)."},
+  "governance": {
+    "d078_gate": "No claim-bearing floor or MDE may be published from corpora recorded before the trace-time-anchor fix; wires without anchor-shift envelopes refuse mechanically. Salvage of pre-anchor corpora is a separate provisional artifact (historical_salvage_provisional, claim_bearing=false)."
+  },
   "idle_admission_refusals": [],
   "manifest_id": null,
   "runs_root": "<RUNS_ROOT>",
@@ -164,7 +229,11 @@
       "claim_family": "gross_energy",
       "derived_repeatability_bound_j": 0.04,
       "observed_trajectory_excursion_j": 0.05,
-      "provenance": {"bound_derivation_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "derived_component": "derived_repeatability_bound_j", "observed_component": "trajectory_excursion_max_j"},
+      "provenance": {
+        "bound_derivation_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "derived_component": "derived_repeatability_bound_j",
+        "observed_component": "trajectory_excursion_max_j"
+      },
       "whole_window_evaluation_basis_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
     }
   }

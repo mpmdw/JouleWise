@@ -115,6 +115,7 @@ from joulewise.whole_window import (
 )
 from joulewise.reduce import _integrate
 from tests.test_arm_readiness import LaunchConsumptionV2Tests
+from tests.bfgs_fixtures import exemption_parity, rebind_config, write_passing_pair
 
 # Whole-window verdict re-derivation anchors NEG-8 tolerances to a
 # repo-REGISTERED campaign policy (the only trust anchor outside bundle
@@ -416,6 +417,33 @@ def write_bundle(runs_root: Path, bundle_id: str, summary: dict) -> None:
     )
 
 
+def bind_passing_claim_bundle(runs_root: Path, bundle_id: str) -> None:
+    """Bind a hand-authored claim member to physical telemetry and its battery pair."""
+    bundle = runs_root / bundle_id
+    config = json.loads(
+        (Path(__file__).parent / "fixtures" / "d078_r01" / "config.json").read_text()
+    )
+    config["run_id"] = bundle_id
+    (bundle / "config.json").write_text(
+        json.dumps(config, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    metadata_path = bundle / "metadata.json"
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    metadata["run_id"] = bundle_id
+    metadata["adapters"] = {"telemetry": {"name": "powermetrics"}}
+    metadata_path.write_text(
+        json.dumps(metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    summary_path = bundle / "summary_metrics.json"
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    summary["measurement_quality"]["telemetry_source"] = "powermetrics"
+    summary_path.write_text(
+        json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    rebind_config(bundle)
+    write_passing_pair(bundle)
+
+
 class _PermissiveStrictValidatorMixin:
     """Neutralise the real D-030 strict validator for the hand-authored,
     summary-only synthetic bundles these gate tests build.
@@ -484,6 +512,7 @@ class D117MintConsumptionProfileTests(
                 bundle_id,
                 make_summary(40.0 + 0.1 * index, anchor_bound=0.01),
             )
+            bind_passing_claim_bundle(runs_root, bundle_id)
         allowance = self._allowance()
         spec = {
             "schema_version": EXTRACTION_SPEC_SCHEMA_VERSION,
@@ -511,11 +540,12 @@ class D117MintConsumptionProfileTests(
         return report
 
     def test_production_extractor_path_matches_checked_in_golden(self) -> None:
-        expected = json.loads(self.FIXTURE_PATH.read_text(encoding="utf-8"))
-        with tempfile.TemporaryDirectory() as tmp:
-            actual = self._production_path_report(Path(tmp))
-        self.assertEqual(validate_d117_mint_consumption_report(actual), [])
-        self.assertEqual(actual, expected)
+        with exemption_parity(self.id()):
+            expected = json.loads(self.FIXTURE_PATH.read_text(encoding="utf-8"))
+            with tempfile.TemporaryDirectory() as tmp:
+                actual = self._production_path_report(Path(tmp))
+            self.assertEqual(validate_d117_mint_consumption_report(actual), [])
+            self.assertEqual(actual, expected)
 
     def _report_with_passing_members(self) -> dict:
         report = json.loads(self.FIXTURE_PATH.read_text(encoding="utf-8"))
@@ -1300,10 +1330,12 @@ class CpuAndWholeWindowClaimBarrierTests(unittest.TestCase):
                 },
             }
             self._bind_powermetrics_config(bundle, "cpu-ledger", metadata)
+            metadata["run_id"] = "cpu-ledger"
             (bundle / "metadata.json").write_text(
                 json.dumps(metadata) + "\n",
                 encoding="utf-8",
             )
+            write_passing_pair(bundle)
             with mock.patch.object(
                 floor_module, "current_environment_refusals", return_value=()
             ):
@@ -1433,6 +1465,7 @@ class CpuAndWholeWindowClaimBarrierTests(unittest.TestCase):
                     anchor_bound=0.004,
                 ),
             )
+            bind_passing_claim_bundle(root, bundle_id)
         if whole_window_row is not None:
             (root / "campaign_log.jsonl").write_text(
                 json.dumps(whole_window_row) + "\n", encoding="utf-8"
@@ -1463,35 +1496,37 @@ class CpuAndWholeWindowClaimBarrierTests(unittest.TestCase):
             )
 
     def test_floor_requires_campaign_bound_whole_window_and_adapter_evidence(self) -> None:
-        # W6 defect shape: valid cells plus cooldowns were extractable with no
-        # NEG-8/adapter verdict at all.
-        with tempfile.TemporaryDirectory() as tmp:
-            report = self._extract_cells_corpus(Path(tmp))
-        self.assertFalse(report["all_cells_extractable"])
-        self.assertIn(
-            "whole_window_neg8_verdict_missing", report["idle_admission_refusals"]
-        )
-        self.assertIn(
-            "adapter_continuity_evidence_missing",
-            report["idle_admission_refusals"],
-        )
+        with exemption_parity(self.id()):
+            # W6 defect shape: valid cells plus cooldowns were extractable with no
+            # NEG-8/adapter verdict at all.
+            with tempfile.TemporaryDirectory() as tmp:
+                report = self._extract_cells_corpus(Path(tmp))
+            self.assertFalse(report["all_cells_extractable"])
+            self.assertIn(
+                "whole_window_neg8_verdict_missing", report["idle_admission_refusals"]
+            )
+            self.assertIn(
+                "adapter_continuity_evidence_missing",
+                report["idle_admission_refusals"],
+            )
 
     def test_failed_adapter_continuity_refuses_but_clean_core_passes(self) -> None:
-        bundle_ids = ["clean-a", "clean-b"]
-        with tempfile.TemporaryDirectory() as tmp:
-            failed = self._extract_cells_corpus(
-                Path(tmp),
-                whole_window_row=self._whole_window_row(
-                    Path(tmp), bundle_ids, adapter="failed", status="failed"
-                ),
-            )
-        self.assertIn("adapter_continuity_failed", failed["idle_admission_refusals"])
-        with tempfile.TemporaryDirectory() as tmp:
-            passed = self._extract_cells_corpus(
-                Path(tmp),
-                whole_window_row=self._whole_window_row(Path(tmp), bundle_ids),
-            )
-        self.assertTrue(passed["all_cells_extractable"])
+        with exemption_parity(self.id()):
+            bundle_ids = ["clean-a", "clean-b"]
+            with tempfile.TemporaryDirectory() as tmp:
+                failed = self._extract_cells_corpus(
+                    Path(tmp),
+                    whole_window_row=self._whole_window_row(
+                        Path(tmp), bundle_ids, adapter="failed", status="failed"
+                    ),
+                )
+            self.assertIn("adapter_continuity_failed", failed["idle_admission_refusals"])
+            with tempfile.TemporaryDirectory() as tmp:
+                passed = self._extract_cells_corpus(
+                    Path(tmp),
+                    whole_window_row=self._whole_window_row(Path(tmp), bundle_ids),
+                )
+            self.assertTrue(passed["all_cells_extractable"])
 
     def test_whole_window_row_covering_only_a_refuses_a_b_join(self) -> None:
         # F4/F16 audit reproduction: the old ANY-intersection join accepted
@@ -1505,58 +1540,67 @@ class CpuAndWholeWindowClaimBarrierTests(unittest.TestCase):
         self.assertIn("whole_window_verdict_coverage_incomplete", reasons)
 
     def test_later_passed_row_cannot_supersede_failed_whole_window_row(self) -> None:
-        # Append order is not causal supersession provenance.  Conflicting
-        # rows over the same covered members must make the join inconclusive.
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            install_synthetic_recovered_manifest(root, ["A", "B"])
-            write_bundle(root, "A", make_summary(40.0))
-            write_bundle(root, "B", make_summary(40.0))
-            failed = self._whole_window_row(
-                root, ["A", "B"], adapter="failed", status="failed"
-            )
-            passed = self._whole_window_row(root, ["A", "B"])
-            (root / "campaign_log.jsonl").write_text(
-                json.dumps(failed) + "\n" + json.dumps(passed) + "\n"
-            )
-            reasons = whole_window_refusal_reasons(
-                root,
-                {"A", "B"},
-                consumption_session=prepared_minted_consumption_session(
-                    root,
-                    {"A", "B"},
-                ),
-            )
-        self.assertEqual(reasons, ("whole_window_verdict_conflict",))
-
-    def test_whole_window_core_rejects_duplicate_member_occurrences(self) -> None:
-        for duplicate_kind in ("bytes", "id"):
-            with self.subTest(duplicate_kind=duplicate_kind), tempfile.TemporaryDirectory() as tmp:
+        with exemption_parity(self.id()):
+            # Append order is not causal supersession provenance.  Conflicting
+            # rows over the same covered members must make the join inconclusive.
+            with tempfile.TemporaryDirectory() as tmp:
                 root = Path(tmp)
                 install_synthetic_recovered_manifest(root, ["A", "B"])
                 write_bundle(root, "A", make_summary(40.0))
-                write_bundle(root, "B", make_summary(40.1))
-                row = self._whole_window_row(root, ["A", "B"])
-                duplicate = json.loads(
-                    json.dumps(row["idle_admission_core"]["members"][0])
+                bind_passing_claim_bundle(root, 'A')
+                write_bundle(root, "B", make_summary(40.0))
+                bind_passing_claim_bundle(root, 'B')
+                failed = self._whole_window_row(
+                    root, ["A", "B"], adapter="failed", status="failed"
                 )
-                if duplicate_kind == "id":
-                    duplicate["cpu_admission"]["sample_count"] = 99
-                row["idle_admission_core"]["members"].append(duplicate)
-                (root / "campaign_log.jsonl").write_text(json.dumps(row) + "\n")
-                reasons = whole_window_refusal_reasons(root, {"A", "B"})
-            self.assertIn("whole_window_verdict_provenance_invalid", reasons)
+                passed = self._whole_window_row(root, ["A", "B"])
+                (root / "campaign_log.jsonl").write_text(
+                    json.dumps(failed) + "\n" + json.dumps(passed) + "\n"
+                )
+                reasons = whole_window_refusal_reasons(
+                    root,
+                    {"A", "B"},
+                    consumption_session=prepared_minted_consumption_session(
+                        root,
+                        {"A", "B"},
+                    ),
+                )
+            self.assertEqual(reasons, ("whole_window_verdict_conflict",))
+
+    def test_whole_window_core_rejects_duplicate_member_occurrences(self) -> None:
+        with exemption_parity(self.id()):
+            for duplicate_kind in ("bytes", "id"):
+                with self.subTest(duplicate_kind=duplicate_kind), tempfile.TemporaryDirectory() as tmp:
+                    root = Path(tmp)
+                    install_synthetic_recovered_manifest(root, ["A", "B"])
+                    write_bundle(root, "A", make_summary(40.0))
+                    bind_passing_claim_bundle(root, 'A')
+                    write_bundle(root, "B", make_summary(40.1))
+                    bind_passing_claim_bundle(root, 'B')
+                    row = self._whole_window_row(root, ["A", "B"])
+                    duplicate = json.loads(
+                        json.dumps(row["idle_admission_core"]["members"][0])
+                    )
+                    if duplicate_kind == "id":
+                        duplicate["cpu_admission"]["sample_count"] = 99
+                    row["idle_admission_core"]["members"].append(duplicate)
+                    (root / "campaign_log.jsonl").write_text(json.dumps(row) + "\n")
+                    reasons = whole_window_refusal_reasons(root, {"A", "B"})
+                self.assertIn("whole_window_verdict_provenance_invalid", reasons)
 
     def test_whole_window_rederives_neg8_verdict_from_member_summaries(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            install_synthetic_recovered_manifest(root, ["A", "B"])
-            write_bundle(root, "A", make_summary(40.0))
-            write_bundle(root, "B", make_summary(45.0))
-            row = self._whole_window_row(root, ["A", "B"])
-            (root / "campaign_log.jsonl").write_text(json.dumps(row) + "\n")
-            reasons = whole_window_refusal_reasons(root, {"A", "B"})
-        self.assertIn("whole_window_verdict_conflict", reasons)
+        with exemption_parity(self.id()):
+            with tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                install_synthetic_recovered_manifest(root, ["A", "B"])
+                write_bundle(root, "A", make_summary(40.0))
+                bind_passing_claim_bundle(root, 'A')
+                write_bundle(root, "B", make_summary(45.0))
+                bind_passing_claim_bundle(root, 'B')
+                row = self._whole_window_row(root, ["A", "B"])
+                (root / "campaign_log.jsonl").write_text(json.dumps(row) + "\n")
+                reasons = whole_window_refusal_reasons(root, {"A", "B"})
+            self.assertIn("whole_window_verdict_conflict", reasons)
 
     def test_whole_window_rejects_forged_bracket_tolerances(self) -> None:
         # Delta re-audit P1 regression: the re-derivation must take its
@@ -1910,25 +1954,27 @@ class CpuAndWholeWindowClaimBarrierTests(unittest.TestCase):
                 self.assertEqual(problem, "provenance")
 
     def test_current_campaign_log_malformed_row_refuses_join(self) -> None:
-        # G3(d): corrupting one history line must conflict instead of cheaply
-        # erasing it while a later well-formed verdict remains.
-        for malformed in ("{not-json", "[]"):
-            with self.subTest(malformed=malformed), tempfile.TemporaryDirectory() as tmp:
-                root = Path(tmp)
-                bundle_ids = ["A", "B"]
-                install_synthetic_recovered_manifest(root, bundle_ids)
-                for bundle_id in bundle_ids:
-                    write_bundle(root, bundle_id, self._powermetrics_summary(40.0))
-                row = self._whole_window_row(root, bundle_ids)
-                log = root / "campaign_log.jsonl"
-                log.write_text(json.dumps(row) + "\n", encoding="utf-8")
-                baseline = whole_window_refusal_reasons(root, set(bundle_ids))
-                self.assertNotEqual(baseline, ("whole_window_verdict_conflict",))
-                log.write_text(
-                    json.dumps(row) + "\n" + malformed + "\n", encoding="utf-8"
-                )
-                reasons = whole_window_refusal_reasons(root, set(bundle_ids))
-            self.assertEqual(reasons, ("whole_window_verdict_conflict",))
+        with exemption_parity(self.id()):
+            # G3(d): corrupting one history line must conflict instead of cheaply
+            # erasing it while a later well-formed verdict remains.
+            for malformed in ("{not-json", "[]"):
+                with self.subTest(malformed=malformed), tempfile.TemporaryDirectory() as tmp:
+                    root = Path(tmp)
+                    bundle_ids = ["A", "B"]
+                    install_synthetic_recovered_manifest(root, bundle_ids)
+                    for bundle_id in bundle_ids:
+                        write_bundle(root, bundle_id, self._powermetrics_summary(40.0))
+                        bind_passing_claim_bundle(root, bundle_id)
+                    row = self._whole_window_row(root, bundle_ids)
+                    log = root / "campaign_log.jsonl"
+                    log.write_text(json.dumps(row) + "\n", encoding="utf-8")
+                    baseline = whole_window_refusal_reasons(root, set(bundle_ids))
+                    self.assertNotEqual(baseline, ("whole_window_verdict_conflict",))
+                    log.write_text(
+                        json.dumps(row) + "\n" + malformed + "\n", encoding="utf-8"
+                    )
+                    reasons = whole_window_refusal_reasons(root, set(bundle_ids))
+                self.assertEqual(reasons, ("whole_window_verdict_conflict",))
 
     def test_manifest_duplicate_invoked_occurrence_refuses(self) -> None:
         # G7(a): duplicate a non-reference invoked occurrence so no unrelated
@@ -1956,36 +2002,38 @@ class CpuAndWholeWindowClaimBarrierTests(unittest.TestCase):
         self.assertIn("whole_window_verdict_provenance_invalid", reasons)
 
     def test_frozen_replay_manifest_duplicate_retains_committed_semantics(self) -> None:
-        # The G7(a) occurrence gate is deliberately absent from frozen 0.5.1
-        # replay; this pins the task's no-replay-drift constraint.
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            bundle_ids = ["A", "middle", "B"]
-            install_synthetic_recovered_manifest(root, bundle_ids)
-            manifest_path = root / "campaign_manifests" / "synthetic-session.json"
-            manifest = json.loads(manifest_path.read_text())
-            manifest["members"].append(
-                json.loads(json.dumps(manifest["members"][1]))
-            )
-            manifest_path.write_text(
-                json.dumps(manifest, indent=2, sort_keys=True) + "\n",
-                encoding="utf-8",
-            )
-            for bundle_id in bundle_ids:
-                write_bundle(root, bundle_id, make_summary(40.0, reducer="0.5.1"))
-            row = self._whole_window_row(root, bundle_ids)
-            (root / "campaign_log.jsonl").write_text(
-                json.dumps(row) + "\n", encoding="utf-8"
-            )
-            reasons = whole_window_refusal_reasons(
-                root,
-                set(bundle_ids),
-                consumption_session=prepared_minted_consumption_session(
+        with exemption_parity(self.id()):
+            # The G7(a) occurrence gate is deliberately absent from frozen 0.5.1
+            # replay; this pins the task's no-replay-drift constraint.
+            with tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                bundle_ids = ["A", "middle", "B"]
+                install_synthetic_recovered_manifest(root, bundle_ids)
+                manifest_path = root / "campaign_manifests" / "synthetic-session.json"
+                manifest = json.loads(manifest_path.read_text())
+                manifest["members"].append(
+                    json.loads(json.dumps(manifest["members"][1]))
+                )
+                manifest_path.write_text(
+                    json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+                    encoding="utf-8",
+                )
+                for bundle_id in bundle_ids:
+                    write_bundle(root, bundle_id, make_summary(40.0, reducer="0.5.1"))
+                    bind_passing_claim_bundle(root, bundle_id)
+                row = self._whole_window_row(root, bundle_ids)
+                (root / "campaign_log.jsonl").write_text(
+                    json.dumps(row) + "\n", encoding="utf-8"
+                )
+                reasons = whole_window_refusal_reasons(
                     root,
                     set(bundle_ids),
-                ),
-            )
-        self.assertEqual(reasons, ())
+                    consumption_session=prepared_minted_consumption_session(
+                        root,
+                        set(bundle_ids),
+                    ),
+                )
+            self.assertEqual(reasons, ())
 
 
 class AbsoluteCellExtractionTests(_PermissiveStrictValidatorMixin, unittest.TestCase):
@@ -5280,156 +5328,158 @@ class EvaluationBasisPlumbingTests(
     def test_explicit_basis_reaches_both_consumers_and_allowance_records(
         self,
     ) -> None:
-        from joulewise import whole_window as whole_module
+        with exemption_parity(self.id()):
+            from joulewise import whole_window as whole_module
 
-        basis_sha256 = "e" * 64
+            basis_sha256 = "e" * 64
 
-        def refusal_consumer(
-            runs_root,
-            referenced_bundle_ids,
-            *,
-            evaluation_basis_sha256=None,
-            consumption_session=None,
-            consumption_semantics_id=None,
-        ):
-            self.assertEqual(evaluation_basis_sha256, basis_sha256)
+            def refusal_consumer(
+                runs_root,
+                referenced_bundle_ids,
+                *,
+                evaluation_basis_sha256=None,
+                consumption_session=None,
+                consumption_semantics_id=None,
+            ):
+                self.assertEqual(evaluation_basis_sha256, basis_sha256)
+                self.assertEqual(
+                    consumption_session.evaluation_basis_sha256,
+                    basis_sha256,
+                )
+                self.assertEqual(
+                    consumption_session.referenced_bundle_ids,
+                    frozenset(referenced_bundle_ids),
+                )
+                self.assertEqual(
+                    consumption_semantics_id,
+                    MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
+                )
+                return ()
+
+            with tempfile.TemporaryDirectory() as tmp:
+                runs_root = Path(tmp)
+                bundle_ids = ["basis-r01", "basis-r02"]
+                install_synthetic_recovered_manifest(runs_root, bundle_ids)
+                for index, bundle_id in enumerate(bundle_ids):
+                    write_bundle(
+                        runs_root,
+                        bundle_id,
+                        make_summary(40.0 + 0.1 * index),
+                    )
+                    bind_passing_claim_bundle(runs_root, bundle_id)
+                spec = {
+                    "schema_version": EXTRACTION_SPEC_SCHEMA_VERSION,
+                    "cells": [
+                        {
+                            "cell_id": "DF-RQ-GROSS-BASIS",
+                            "kind": "absolute",
+                            "metric": "gross_energy_j",
+                            "window_class": "request",
+                            "members": [
+                                {"slot": bundle_id, "bundle_id": bundle_id}
+                                for bundle_id in bundle_ids
+                            ],
+                        }
+                    ],
+                }
+                claim_families = {
+                    family: {
+                        "drift_allowance_j": 0.25,
+                        "trajectory_excursion_max_j": 0.2,
+                        "derived_repeatability_bound_j": 0.1,
+                        "provenance": {},
+                    }
+                    for family in ("gross_energy", "idle_subtracted_energy")
+                }
+                drift_allowances = {
+                    family: {
+                        "claim_family": family,
+                        "allowance_j": row["drift_allowance_j"],
+                        "observed_trajectory_excursion_j": row[
+                            "trajectory_excursion_max_j"
+                        ],
+                        "derived_repeatability_bound_j": row[
+                            "derived_repeatability_bound_j"
+                        ],
+                        "provenance": row["provenance"],
+                    }
+                    for family, row in claim_families.items()
+                }
+                whole_window_row = {
+                    "record_type": "idle_admission_whole_window_verdict",
+                    "bundle_ids": [*bundle_ids, "basis-extra"],
+                    "evaluation_basis": {
+                        "sha256": basis_sha256,
+                        "consumption_semantics_id": MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
+                        "member_occurrences": [
+                            {"bundle_id": bundle_id}
+                            for bundle_id in (*bundle_ids, "basis-extra")
+                        ],
+                    },
+                    "idle_admission_core": {
+                        "neg8_bracket": {
+                            "claim_families": claim_families,
+                            "drift_allowances": drift_allowances,
+                        }
+                    },
+                }
+                (runs_root / "campaign_log.jsonl").write_text(
+                    json.dumps(whole_window_row) + "\n",
+                    encoding="utf-8",
+                )
+                with (
+                    mock.patch(
+                        "joulewise.floor_extraction._whole_window_extraction_refusals",
+                        side_effect=refusal_consumer,
+                    ),
+                    mock.patch(
+                        "joulewise.whole_window.whole_window_refusal_reasons",
+                        return_value=(),
+                    ) as allowance_refusals,
+                    mock.patch(
+                        "joulewise.whole_window._validate_row",
+                        return_value=(True, ()),
+                    ),
+                    mock.patch(
+                        "joulewise.floor_extraction.whole_window_drift_allowances",
+                        wraps=whole_module.whole_window_drift_allowances,
+                    ) as allowance_consumer,
+                ):
+                    report = extract_cells(
+                        runs_root,
+                        spec,
+                        evaluation_basis_sha256=basis_sha256,
+                        consumption_semantics_id=MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
+                    )
+
             self.assertEqual(
-                consumption_session.evaluation_basis_sha256,
+                allowance_consumer.call_args.kwargs["evaluation_basis_sha256"],
                 basis_sha256,
             )
             self.assertEqual(
-                consumption_session.referenced_bundle_ids,
-                frozenset(referenced_bundle_ids),
+                allowance_consumer.call_args.kwargs[
+                    "consumption_session"
+                ].evaluation_basis_sha256,
+                basis_sha256,
             )
             self.assertEqual(
-                consumption_semantics_id,
-                MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
-            )
-            return ()
-
-        with tempfile.TemporaryDirectory() as tmp:
-            runs_root = Path(tmp)
-            bundle_ids = ["basis-r01", "basis-r02"]
-            install_synthetic_recovered_manifest(runs_root, bundle_ids)
-            for index, bundle_id in enumerate(bundle_ids):
-                write_bundle(
-                    runs_root,
-                    bundle_id,
-                    make_summary(40.0 + 0.1 * index),
-                )
-            spec = {
-                "schema_version": EXTRACTION_SPEC_SCHEMA_VERSION,
-                "cells": [
-                    {
-                        "cell_id": "DF-RQ-GROSS-BASIS",
-                        "kind": "absolute",
-                        "metric": "gross_energy_j",
-                        "window_class": "request",
-                        "members": [
-                            {"slot": bundle_id, "bundle_id": bundle_id}
-                            for bundle_id in bundle_ids
-                        ],
-                    }
+                allowance_refusals.call_args.kwargs[
+                    "evaluation_basis_sha256"
                 ],
-            }
-            claim_families = {
-                family: {
-                    "drift_allowance_j": 0.25,
-                    "trajectory_excursion_max_j": 0.2,
-                    "derived_repeatability_bound_j": 0.1,
-                    "provenance": {},
-                }
-                for family in ("gross_energy", "idle_subtracted_energy")
-            }
-            drift_allowances = {
-                family: {
-                    "claim_family": family,
-                    "allowance_j": row["drift_allowance_j"],
-                    "observed_trajectory_excursion_j": row[
-                        "trajectory_excursion_max_j"
-                    ],
-                    "derived_repeatability_bound_j": row[
-                        "derived_repeatability_bound_j"
-                    ],
-                    "provenance": row["provenance"],
-                }
-                for family, row in claim_families.items()
-            }
-            whole_window_row = {
-                "record_type": "idle_admission_whole_window_verdict",
-                "bundle_ids": [*bundle_ids, "basis-extra"],
-                "evaluation_basis": {
-                    "sha256": basis_sha256,
-                    "consumption_semantics_id": MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
-                    "member_occurrences": [
-                        {"bundle_id": bundle_id}
-                        for bundle_id in (*bundle_ids, "basis-extra")
-                    ],
-                },
-                "idle_admission_core": {
-                    "neg8_bracket": {
-                        "claim_families": claim_families,
-                        "drift_allowances": drift_allowances,
-                    }
-                },
-            }
-            (runs_root / "campaign_log.jsonl").write_text(
-                json.dumps(whole_window_row) + "\n",
-                encoding="utf-8",
+                basis_sha256,
             )
-            with (
-                mock.patch(
-                    "joulewise.floor_extraction._whole_window_extraction_refusals",
-                    side_effect=refusal_consumer,
-                ),
-                mock.patch(
-                    "joulewise.whole_window.whole_window_refusal_reasons",
-                    return_value=(),
-                ) as allowance_refusals,
-                mock.patch(
-                    "joulewise.whole_window._validate_row",
-                    return_value=(True, ()),
-                ),
-                mock.patch(
-                    "joulewise.floor_extraction.whole_window_drift_allowances",
-                    wraps=whole_module.whole_window_drift_allowances,
-                ) as allowance_consumer,
-            ):
-                report = extract_cells(
-                    runs_root,
-                    spec,
-                    evaluation_basis_sha256=basis_sha256,
-                    consumption_semantics_id=MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
-                )
-
-        self.assertEqual(
-            allowance_consumer.call_args.kwargs["evaluation_basis_sha256"],
-            basis_sha256,
-        )
-        self.assertEqual(
-            allowance_consumer.call_args.kwargs[
-                "consumption_session"
-            ].evaluation_basis_sha256,
-            basis_sha256,
-        )
-        self.assertEqual(
-            allowance_refusals.call_args.kwargs[
-                "evaluation_basis_sha256"
-            ],
-            basis_sha256,
-        )
-        self.assertEqual(
-            report["whole_window_drift_allowances"]["gross_energy"][
-                "whole_window_evaluation_basis_sha256"
-            ],
-            basis_sha256,
-        )
-        self.assertEqual(
-            report["cells"][0]["whole_window_drift_allowance"][
-                "whole_window_evaluation_basis_sha256"
-            ],
-            basis_sha256,
-        )
+            self.assertEqual(
+                report["whole_window_drift_allowances"]["gross_energy"][
+                    "whole_window_evaluation_basis_sha256"
+                ],
+                basis_sha256,
+            )
+            self.assertEqual(
+                report["cells"][0]["whole_window_drift_allowance"][
+                    "whole_window_evaluation_basis_sha256"
+                ],
+                basis_sha256,
+            )
 
     def test_partial_basis_threading_refuses_session_mismatch(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -5452,130 +5502,134 @@ class EvaluationBasisPlumbingTests(
 
 class ExtractionCliTests(_PermissiveStrictValidatorMixin, unittest.TestCase):
     def test_evaluation_basis_flag_reaches_extract_cells(self) -> None:
-        basis_sha256 = "e" * 64
-        with tempfile.TemporaryDirectory() as tmp:
-            runs_root = Path(tmp) / "runs"
-            runs_root.mkdir()
-            bundle_ids = ["cli-basis-r01", "cli-basis-r02"]
-            install_synthetic_recovered_manifest(runs_root, bundle_ids)
-            for index, bundle_id in enumerate(bundle_ids):
-                write_bundle(
-                    runs_root,
-                    bundle_id,
-                    make_summary(40.0 + 0.1 * index),
-                )
-            spec = {
-                "schema_version": EXTRACTION_SPEC_SCHEMA_VERSION,
-                "cells": [
-                    {
-                        "cell_id": "DF-RQ-GROSS-BASIS",
-                        "kind": "absolute",
-                        "metric": "gross_energy_j",
-                        "window_class": "request",
-                        "members": [
-                            {"slot": bundle_id, "bundle_id": bundle_id}
-                            for bundle_id in bundle_ids
-                        ],
-                    }
-                ],
-            }
-            spec_path = Path(tmp) / "spec.json"
-            spec_path.write_text(json.dumps(spec), encoding="utf-8")
-            out_path = Path(tmp) / "report.json"
-            with (
-                mock.patch(
-                    "scripts.extract_detection_floors.extract_cells",
-                    wraps=extract_cells,
-                ) as extraction,
-                redirect_stdout(io.StringIO()),
-                redirect_stderr(io.StringIO()),
-            ):
-                code = extract_main(
-                    [
-                        "--runs-root",
-                        str(runs_root),
-                        "--spec",
-                        str(spec_path),
-                        "--out",
-                        str(out_path),
-                        "--evaluation-basis-sha256",
-                        basis_sha256,
-                        "--consumption-semantics-id",
-                        MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
-                    ]
-                )
-        self.assertEqual(code, 0)
-        self.assertEqual(
-            extraction.call_args.kwargs["evaluation_basis_sha256"],
-            basis_sha256,
-        )
-        self.assertEqual(
-            extraction.call_args.kwargs["consumption_semantics_id"],
-            MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
-        )
+        with exemption_parity(self.id()):
+            basis_sha256 = "e" * 64
+            with tempfile.TemporaryDirectory() as tmp:
+                runs_root = Path(tmp) / "runs"
+                runs_root.mkdir()
+                bundle_ids = ["cli-basis-r01", "cli-basis-r02"]
+                install_synthetic_recovered_manifest(runs_root, bundle_ids)
+                for index, bundle_id in enumerate(bundle_ids):
+                    write_bundle(
+                        runs_root,
+                        bundle_id,
+                        make_summary(40.0 + 0.1 * index),
+                    )
+                    bind_passing_claim_bundle(runs_root, bundle_id)
+                spec = {
+                    "schema_version": EXTRACTION_SPEC_SCHEMA_VERSION,
+                    "cells": [
+                        {
+                            "cell_id": "DF-RQ-GROSS-BASIS",
+                            "kind": "absolute",
+                            "metric": "gross_energy_j",
+                            "window_class": "request",
+                            "members": [
+                                {"slot": bundle_id, "bundle_id": bundle_id}
+                                for bundle_id in bundle_ids
+                            ],
+                        }
+                    ],
+                }
+                spec_path = Path(tmp) / "spec.json"
+                spec_path.write_text(json.dumps(spec), encoding="utf-8")
+                out_path = Path(tmp) / "report.json"
+                with (
+                    mock.patch(
+                        "scripts.extract_detection_floors.extract_cells",
+                        wraps=extract_cells,
+                    ) as extraction,
+                    redirect_stdout(io.StringIO()),
+                    redirect_stderr(io.StringIO()),
+                ):
+                    code = extract_main(
+                        [
+                            "--runs-root",
+                            str(runs_root),
+                            "--spec",
+                            str(spec_path),
+                            "--out",
+                            str(out_path),
+                            "--evaluation-basis-sha256",
+                            basis_sha256,
+                            "--consumption-semantics-id",
+                            MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
+                        ]
+                    )
+            self.assertEqual(code, 0)
+            self.assertEqual(
+                extraction.call_args.kwargs["evaluation_basis_sha256"],
+                basis_sha256,
+            )
+            self.assertEqual(
+                extraction.call_args.kwargs["consumption_semantics_id"],
+                MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
+            )
 
     def test_cli_relocated_custody_does_not_suppress_floors(self):
-        from joulewise import calibration_ledger as ledger
-        from tests.test_calibration_ledger_custody import planted_replacement, replacement_opens
+        with exemption_parity(self.id()):
+            from joulewise import calibration_ledger as ledger
+            from tests.test_calibration_ledger_custody import planted_replacement, replacement_opens
 
-        with planted_replacement() as (fixture, original, replacement):
-            runs_root = fixture.root / "extraction-runs"
-            runs_root.mkdir()
-            bundle_ids = ["relocated-r01", "relocated-r02", "relocated-r03"]
-            install_synthetic_recovered_manifest(runs_root, bundle_ids)
-            for index, bundle_id in enumerate(bundle_ids):
-                write_bundle(runs_root, bundle_id, make_summary(40.0 + 0.1 * index))
-            spec = {"schema_version": EXTRACTION_SPEC_SCHEMA_VERSION, "cells": [{
-                "cell_id": "RELOCATED", "kind": "absolute", "metric": "gross_energy_j",
-                "window_class": "request", "members": [
-                    {"slot": bundle_id, "bundle_id": bundle_id} for bundle_id in bundle_ids],
-            }]}
-            spec_path = fixture.root / "extraction-spec.json"
-            spec_path.write_text(json.dumps(spec))
+            with planted_replacement() as (fixture, original, replacement):
+                runs_root = fixture.root / "extraction-runs"
+                runs_root.mkdir()
+                bundle_ids = ["relocated-r01", "relocated-r02", "relocated-r03"]
+                install_synthetic_recovered_manifest(runs_root, bundle_ids)
+                for index, bundle_id in enumerate(bundle_ids):
+                    write_bundle(runs_root, bundle_id, make_summary(40.0 + 0.1 * index))
+                    bind_passing_claim_bundle(runs_root, bundle_id)
+                spec = {"schema_version": EXTRACTION_SPEC_SCHEMA_VERSION, "cells": [{
+                    "cell_id": "RELOCATED", "kind": "absolute", "metric": "gross_energy_j",
+                    "window_class": "request", "members": [
+                        {"slot": bundle_id, "bundle_id": bundle_id} for bundle_id in bundle_ids],
+                }]}
+                spec_path = fixture.root / "extraction-spec.json"
+                spec_path.write_text(json.dumps(spec))
 
-            def load_snapshot(**kwargs):
-                return ledger.load_calibration_ledger_snapshot(fixture.ledger, fixture.pin,
-                    require_committed_pin=False, mode=kwargs["mode"])
+                def load_snapshot(**kwargs):
+                    return ledger.load_calibration_ledger_snapshot(fixture.ledger, fixture.pin,
+                        require_committed_pin=False, mode=kwargs["mode"])
 
-            def custody_admission(*args, consumption_session, **kwargs):
-                # Isolate custody from synthetic bundles' other admission gates.
-                return consumption_session.calibration_ledger_snapshot.refusal_reasons
+                def custody_admission(*args, consumption_session, **kwargs):
+                    # Isolate custody from synthetic bundles' other admission gates.
+                    return consumption_session.calibration_ledger_snapshot.refusal_reasons
 
-            for issuing_counterfactual in (False, True):
-                out_path = fixture.root / f"extraction-{issuing_counterfactual}.json"
+                for issuing_counterfactual in (False, True):
+                    out_path = fixture.root / f"extraction-{issuing_counterfactual}.json"
 
-                def extraction(*args, **kwargs):
-                    self.assertEqual(kwargs["mode"], "read_replay")
-                    if issuing_counterfactual:
-                        kwargs["mode"] = "issuing"
-                    return extract_cells(*args, **kwargs)
+                    def extraction(*args, **kwargs):
+                        self.assertEqual(kwargs["mode"], "read_replay")
+                        if issuing_counterfactual:
+                            kwargs["mode"] = "issuing"
+                        return extract_cells(*args, **kwargs)
 
-                with (
-                    self.subTest(issuing_counterfactual=issuing_counterfactual),
-                    replacement_opens(replacement) as opened,
-                    mock.patch("joulewise.whole_window.load_calibration_ledger_snapshot",
-                               side_effect=load_snapshot),
-                    mock.patch("joulewise.floor_extraction._whole_window_extraction_refusals",
-                               side_effect=custody_admission),
-                    mock.patch("scripts.extract_detection_floors.extract_cells", side_effect=extraction),
-                    redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()),
-                ):
-                    code = extract_main(["--runs-root", str(runs_root), "--spec", str(spec_path),
-                                         "--out", str(out_path)])
-                    report = json.loads(out_path.read_text())
-                    cell = report["cells"][0]
-                    if issuing_counterfactual:
-                        self.assertNotEqual(code, 0)
-                        self.assertIsNone(cell["floor"])
-                        self.assertIn("calibration_ledger_custody_invalid", cell["refusal_reasons"])
-                        self.assertEqual(opened, [])
-                    else:
-                        self.assertEqual(code, 0)
-                        self.assertTrue(report["all_cells_extractable"])
-                        self.assertIsNotNone(cell["floor"])
-                        self.assertEqual(cell["n_admitted"], 3)
-                        self.assertTrue(opened)
-                    self.assertFalse(original.exists())
+                    with (
+                        self.subTest(issuing_counterfactual=issuing_counterfactual),
+                        replacement_opens(replacement) as opened,
+                        mock.patch("joulewise.whole_window.load_calibration_ledger_snapshot",
+                                   side_effect=load_snapshot),
+                        mock.patch("joulewise.floor_extraction._whole_window_extraction_refusals",
+                                   side_effect=custody_admission),
+                        mock.patch("scripts.extract_detection_floors.extract_cells", side_effect=extraction),
+                        redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()),
+                    ):
+                        code = extract_main(["--runs-root", str(runs_root), "--spec", str(spec_path),
+                                             "--out", str(out_path)])
+                        report = json.loads(out_path.read_text())
+                        cell = report["cells"][0]
+                        if issuing_counterfactual:
+                            self.assertNotEqual(code, 0)
+                            self.assertIsNone(cell["floor"])
+                            self.assertIn("calibration_ledger_custody_invalid", cell["refusal_reasons"])
+                            self.assertEqual(opened, [])
+                        else:
+                            self.assertEqual(code, 0)
+                            self.assertTrue(report["all_cells_extractable"])
+                            self.assertIsNotNone(cell["floor"])
+                            self.assertEqual(cell["n_admitted"], 3)
+                            self.assertTrue(opened)
+                        self.assertFalse(original.exists())
 
     def test_floor_consumer_accepts_the_reducer_mint_envelope_method(self) -> None:
         from joulewise import floor_extraction as floor_module
@@ -5592,115 +5646,117 @@ class ExtractionCliTests(_PermissiveStrictValidatorMixin, unittest.TestCase):
         self.assertEqual(envelope["method"], ANCHOR_SHIFT_METHOD)
 
     def test_spec_extraction_report_and_exit_codes(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            runs_root = Path(tmp) / "runs"
-            runs_root.mkdir()
-            bundle_ids = ["cli-r01", "cli-r02", "cli-r03"]
-            install_synthetic_recovered_manifest(runs_root, bundle_ids)
-            for index, bundle_id in enumerate(bundle_ids):
-                write_bundle(runs_root, bundle_id, make_summary(40.0 + 0.1 * index))
-            spec = {
-                "schema_version": EXTRACTION_SPEC_SCHEMA_VERSION,
-                "cells": [
-                    {
-                        "cell_id": "DF-RQ-GROSS-MID",
-                        "kind": "absolute",
-                        "metric": "gross_energy_j",
-                        "window_class": "request",
-                        "members": [
-                            {"slot": b, "bundle_id": b} for b in bundle_ids
-                        ],
-                    }
-                ],
-            }
-            spec_path = Path(tmp) / "spec.json"
-            spec_path.write_text(json.dumps(spec), encoding="utf-8")
-            out_path = Path(tmp) / "report.json"
-            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-                code = extract_main(
-                    [
-                        "--runs-root",
-                        str(runs_root),
-                        "--spec",
-                        str(spec_path),
-                        "--out",
-                        str(out_path),
-                    ]
-                )
-            self.assertEqual(code, 0)
-            report = json.loads(out_path.read_text(encoding="utf-8"))
-            self.assertTrue(report["all_cells_extractable"])
-            self.assertEqual(report["cells"][0]["cap_hit_policy"], CAP_HIT_POLICY_EXCLUDE_SAME_SLOT)
-            self.assertEqual(report["cells"][0]["n_admitted"], 3)
-            self.assertTrue(report["cells"][0]["floor"]["smoke_only"])
-            for member in report["cells"][0]["members"]:
-                summary_path = (
-                    runs_root / member["bundle_id"] / "summary_metrics.json"
-                )
-                self.assertEqual(
-                    member["summary_sha256"],
-                    hashlib.sha256(summary_path.read_bytes()).hexdigest(),
-                )
-                self.assertIsNone(member["bundle_sha256"])
+        with exemption_parity(self.id()):
+            with tempfile.TemporaryDirectory() as tmp:
+                runs_root = Path(tmp) / "runs"
+                runs_root.mkdir()
+                bundle_ids = ["cli-r01", "cli-r02", "cli-r03"]
+                install_synthetic_recovered_manifest(runs_root, bundle_ids)
+                for index, bundle_id in enumerate(bundle_ids):
+                    write_bundle(runs_root, bundle_id, make_summary(40.0 + 0.1 * index))
+                    bind_passing_claim_bundle(runs_root, bundle_id)
+                spec = {
+                    "schema_version": EXTRACTION_SPEC_SCHEMA_VERSION,
+                    "cells": [
+                        {
+                            "cell_id": "DF-RQ-GROSS-MID",
+                            "kind": "absolute",
+                            "metric": "gross_energy_j",
+                            "window_class": "request",
+                            "members": [
+                                {"slot": b, "bundle_id": b} for b in bundle_ids
+                            ],
+                        }
+                    ],
+                }
+                spec_path = Path(tmp) / "spec.json"
+                spec_path.write_text(json.dumps(spec), encoding="utf-8")
+                out_path = Path(tmp) / "report.json"
+                with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                    code = extract_main(
+                        [
+                            "--runs-root",
+                            str(runs_root),
+                            "--spec",
+                            str(spec_path),
+                            "--out",
+                            str(out_path),
+                        ]
+                    )
+                self.assertEqual(code, 0)
+                report = json.loads(out_path.read_text(encoding="utf-8"))
+                self.assertTrue(report["all_cells_extractable"])
+                self.assertEqual(report["cells"][0]["cap_hit_policy"], CAP_HIT_POLICY_EXCLUDE_SAME_SLOT)
+                self.assertEqual(report["cells"][0]["n_admitted"], 3)
+                self.assertTrue(report["cells"][0]["floor"]["smoke_only"])
+                for member in report["cells"][0]["members"]:
+                    summary_path = (
+                        runs_root / member["bundle_id"] / "summary_metrics.json"
+                    )
+                    self.assertEqual(
+                        member["summary_sha256"],
+                        hashlib.sha256(summary_path.read_bytes()).hexdigest(),
+                    )
+                    self.assertIsNone(member["bundle_sha256"])
 
-            original = out_path.read_bytes()
-            stderr = io.StringIO()
-            with redirect_stdout(io.StringIO()), redirect_stderr(stderr):
-                code = extract_main(
-                    [
-                        "--runs-root",
-                        str(runs_root),
-                        "--spec",
-                        str(spec_path),
-                        "--out",
-                        str(out_path),
-                    ]
-                )
-            self.assertEqual(code, 2)
-            self.assertIn("refusing to overwrite existing", stderr.getvalue())
-            self.assertEqual(out_path.read_bytes(), original)
+                original = out_path.read_bytes()
+                stderr = io.StringIO()
+                with redirect_stdout(io.StringIO()), redirect_stderr(stderr):
+                    code = extract_main(
+                        [
+                            "--runs-root",
+                            str(runs_root),
+                            "--spec",
+                            str(spec_path),
+                            "--out",
+                            str(out_path),
+                        ]
+                    )
+                self.assertEqual(code, 2)
+                self.assertIn("refusing to overwrite existing", stderr.getvalue())
+                self.assertEqual(out_path.read_bytes(), original)
 
-            inside = runs_root / bundle_ids[0] / "derived-floor.json"
-            stderr = io.StringIO()
-            with redirect_stdout(io.StringIO()), redirect_stderr(stderr):
-                code = extract_main(
-                    [
-                        "--runs-root",
-                        str(runs_root),
-                        "--spec",
-                        str(spec_path),
-                        "--out",
-                        str(inside),
-                    ]
-                )
-            self.assertEqual(code, 2)
-            self.assertIn("outside the immutable stored run bundle", stderr.getvalue())
-            self.assertFalse(inside.exists())
+                inside = runs_root / bundle_ids[0] / "derived-floor.json"
+                stderr = io.StringIO()
+                with redirect_stdout(io.StringIO()), redirect_stderr(stderr):
+                    code = extract_main(
+                        [
+                            "--runs-root",
+                            str(runs_root),
+                            "--spec",
+                            str(spec_path),
+                            "--out",
+                            str(inside),
+                        ]
+                    )
+                self.assertEqual(code, 2)
+                self.assertIn("outside the immutable stored run bundle", stderr.getvalue())
+                self.assertFalse(inside.exists())
 
-            # Remove the campaign evidence: the same spec must now refuse
-            # (exit 1) while still writing the fail-closed report.
-            import shutil
+                # Remove the campaign evidence: the same spec must now refuse
+                # (exit 1) while still writing the fail-closed report.
+                import shutil
 
-            shutil.rmtree(runs_root / "campaign_manifests")
-            refused_path = Path(tmp) / "refused-report.json"
-            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-                code = extract_main(
-                    [
-                        "--runs-root",
-                        str(runs_root),
-                        "--spec",
-                        str(spec_path),
-                        "--out",
-                        str(refused_path),
-                    ]
+                shutil.rmtree(runs_root / "campaign_manifests")
+                refused_path = Path(tmp) / "refused-report.json"
+                with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                    code = extract_main(
+                        [
+                            "--runs-root",
+                            str(runs_root),
+                            "--spec",
+                            str(spec_path),
+                            "--out",
+                            str(refused_path),
+                        ]
+                    )
+                self.assertEqual(code, 1)
+                refused = json.loads(refused_path.read_text(encoding="utf-8"))
+                self.assertFalse(refused["all_cells_extractable"])
+                self.assertIn(
+                    "campaign_cooldown_evidence_missing",
+                    refused["cells"][0]["refusal_reasons"],
                 )
-            self.assertEqual(code, 1)
-            refused = json.loads(refused_path.read_text(encoding="utf-8"))
-            self.assertFalse(refused["all_cells_extractable"])
-            self.assertIn(
-                "campaign_cooldown_evidence_missing",
-                refused["cells"][0]["refusal_reasons"],
-            )
 
     def test_bad_spec_is_a_process_error(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -5723,55 +5779,15 @@ class ExtractionCliTests(_PermissiveStrictValidatorMixin, unittest.TestCase):
             self.assertFalse((Path(tmp) / "report.json").exists())
 
     def test_spec_extraction_via_extract_cells_matches_direct_calls(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            runs_root = Path(tmp)
-            bundle_ids = ["eq-r01", "eq-r02"]
-            install_synthetic_recovered_manifest(runs_root, bundle_ids)
-            for bundle_id in bundle_ids:
-                write_bundle(runs_root, bundle_id, make_summary(40.0, anchor_bound=0.0))
-            spec = {
-                "schema_version": EXTRACTION_SPEC_SCHEMA_VERSION,
-                "cells": [
-                    {
-                        "cell_id": "DF-RQ-GROSS-MID",
-                        "kind": "absolute",
-                        "metric": "gross_energy_j",
-                        "window_class": "request",
-                        "members": [{"slot": b, "bundle_id": b} for b in bundle_ids],
-                    }
-                ],
-            }
-            report = extract_cells(runs_root, spec)
-            direct = extract_absolute_cell(
-                cell_id="DF-RQ-GROSS-MID",
-                metric="gross_energy_j",
-                window_class="request",
-                members=spec["cells"][0]["members"],
-                runs_root=runs_root,
-                cooldowns=campaign_cooldown_evidence(runs_root),
-            )
-            self.assertEqual(report["cells"][0], direct.as_row())
-
-    def test_zero_scatter_with_nonzero_admissible_width_is_labelled_extraction(self) -> None:
-        # Defect shape F2: identical point estimates cannot erase their
-        # nonzero admissible energy-set width.
-        with tempfile.TemporaryDirectory() as tmp:
-            runs_root = Path(tmp)
-            bundle_ids = [f"z-r{index}" for index in range(5)]
-            install_synthetic_recovered_manifest(runs_root, bundle_ids)
-            for bundle_id in bundle_ids:
-                write_bundle(runs_root, bundle_id, make_summary(40.0))
-            report = extract_absolute_cell(
-                cell_id="DF-RQ-GROSS-MID",
-                metric="gross_energy_j",
-                window_class="request",
-                members=[{"slot": b, "bundle_id": b} for b in bundle_ids],
-                runs_root=runs_root,
-                cooldowns=campaign_cooldown_evidence(runs_root),
-            )
-            extraction_artifact = extract_cells(
-                runs_root,
-                {
+        with exemption_parity(self.id()):
+            with tempfile.TemporaryDirectory() as tmp:
+                runs_root = Path(tmp)
+                bundle_ids = ["eq-r01", "eq-r02"]
+                install_synthetic_recovered_manifest(runs_root, bundle_ids)
+                for bundle_id in bundle_ids:
+                    write_bundle(runs_root, bundle_id, make_summary(40.0, anchor_bound=0.0))
+                    bind_passing_claim_bundle(runs_root, bundle_id)
+                spec = {
                     "schema_version": EXTRACTION_SPEC_SCHEMA_VERSION,
                     "cells": [
                         {
@@ -5779,49 +5795,93 @@ class ExtractionCliTests(_PermissiveStrictValidatorMixin, unittest.TestCase):
                             "kind": "absolute",
                             "metric": "gross_energy_j",
                             "window_class": "request",
-                            "members": [
-                                {"slot": bundle_id, "bundle_id": bundle_id}
-                                for bundle_id in bundle_ids
-                            ],
+                            "members": [{"slot": b, "bundle_id": b} for b in bundle_ids],
                         }
                     ],
-                },
+                }
+                report = extract_cells(runs_root, spec)
+                direct = extract_absolute_cell(
+                    cell_id="DF-RQ-GROSS-MID",
+                    metric="gross_energy_j",
+                    window_class="request",
+                    members=spec["cells"][0]["members"],
+                    runs_root=runs_root,
+                    cooldowns=campaign_cooldown_evidence(runs_root),
+                )
+                self.assertEqual(report["cells"][0], direct.as_row())
+
+    def test_zero_scatter_with_nonzero_admissible_width_is_labelled_extraction(self) -> None:
+        with exemption_parity(self.id()):
+            # Defect shape F2: identical point estimates cannot erase their
+            # nonzero admissible energy-set width.
+            with tempfile.TemporaryDirectory() as tmp:
+                runs_root = Path(tmp)
+                bundle_ids = [f"z-r{index}" for index in range(5)]
+                install_synthetic_recovered_manifest(runs_root, bundle_ids)
+                for bundle_id in bundle_ids:
+                    write_bundle(runs_root, bundle_id, make_summary(40.0))
+                    bind_passing_claim_bundle(runs_root, bundle_id)
+                report = extract_absolute_cell(
+                    cell_id="DF-RQ-GROSS-MID",
+                    metric="gross_energy_j",
+                    window_class="request",
+                    members=[{"slot": b, "bundle_id": b} for b in bundle_ids],
+                    runs_root=runs_root,
+                    cooldowns=campaign_cooldown_evidence(runs_root),
+                )
+                extraction_artifact = extract_cells(
+                    runs_root,
+                    {
+                        "schema_version": EXTRACTION_SPEC_SCHEMA_VERSION,
+                        "cells": [
+                            {
+                                "cell_id": "DF-RQ-GROSS-MID",
+                                "kind": "absolute",
+                                "metric": "gross_energy_j",
+                                "window_class": "request",
+                                "members": [
+                                    {"slot": bundle_id, "bundle_id": bundle_id}
+                                    for bundle_id in bundle_ids
+                                ],
+                            }
+                        ],
+                    },
+                )
+            self.assertTrue(report.extractable)
+            self.assertIn(
+                "admissible_set_uncertainty_dominates_point_floor",
+                report.refusal_reasons,
             )
-        self.assertTrue(report.extractable)
-        self.assertIn(
-            "admissible_set_uncertainty_dominates_point_floor",
-            report.refusal_reasons,
-        )
-        assert report.floor is not None
-        self.assertGreaterEqual(report.floor.unguarded_floor_j, 0.01)
-        self.assertTrue(math.isfinite(report.floor.guarded_floor_j))
-        row = report.as_row()
-        self.assertEqual(row["refusal_reasons"], [])
-        self.assertEqual(
-            row["floor_conditions"],
-            ["admissible_set_uncertainty_dominates_point_floor"],
-        )
-        self.assertEqual(row["floor_source"], ATTRIBUTION_FLOOR_SOURCE)
-        self.assertEqual(row["floor_limit_class"], ATTRIBUTION_LIMIT_CLASS)
-        self.assertEqual(
-            row["point_floor_diagnostic"]["label"],
-            "repeatability_diagnostic",
-        )
-        self.assertFalse(
-            row["point_floor_diagnostic"]["published_claim_floor"]
-        )
-        self.assertEqual(
-            row["single_count_discipline"],
-            attribution_single_count_discipline(),
-        )
-        self.assertEqual(
-            extraction_artifact["single_count_discipline"],
-            attribution_single_count_discipline(),
-        )
-        self.assertGreater(
-            row["operative_floor_j"],
-            row["point_floor_diagnostic"]["guarded_floor_j"],
-        )
+            assert report.floor is not None
+            self.assertGreaterEqual(report.floor.unguarded_floor_j, 0.01)
+            self.assertTrue(math.isfinite(report.floor.guarded_floor_j))
+            row = report.as_row()
+            self.assertEqual(row["refusal_reasons"], [])
+            self.assertEqual(
+                row["floor_conditions"],
+                ["admissible_set_uncertainty_dominates_point_floor"],
+            )
+            self.assertEqual(row["floor_source"], ATTRIBUTION_FLOOR_SOURCE)
+            self.assertEqual(row["floor_limit_class"], ATTRIBUTION_LIMIT_CLASS)
+            self.assertEqual(
+                row["point_floor_diagnostic"]["label"],
+                "repeatability_diagnostic",
+            )
+            self.assertFalse(
+                row["point_floor_diagnostic"]["published_claim_floor"]
+            )
+            self.assertEqual(
+                row["single_count_discipline"],
+                attribution_single_count_discipline(),
+            )
+            self.assertEqual(
+                extraction_artifact["single_count_discipline"],
+                attribution_single_count_discipline(),
+            )
+            self.assertGreater(
+                row["operative_floor_j"],
+                row["point_floor_diagnostic"]["guarded_floor_j"],
+            )
 
     def test_point_floor_cannot_replace_widened_published_floor(self) -> None:
         # F2 audit reproduction: ten nearly identical ~100 J point estimates
@@ -5926,44 +5986,46 @@ class ExtractionCliTests(_PermissiveStrictValidatorMixin, unittest.TestCase):
         )
 
     def test_additional_refusal_is_not_rescued_by_attribution_label(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            runs_root = Path(tmp)
-            bundle_ids = [f"label-plus-refusal-r{index}" for index in range(5)]
-            install_synthetic_recovered_manifest(runs_root, bundle_ids)
-            for bundle_id in bundle_ids:
-                write_bundle(runs_root, bundle_id, make_summary(40.0))
-            spec = {
-                "schema_version": EXTRACTION_SPEC_SCHEMA_VERSION,
-                "cells": [
-                    {
-                        "cell_id": "LABEL-PLUS-REFUSAL",
-                        "kind": "absolute",
-                        "metric": "gross_energy_j",
-                        "window_class": "request",
-                        "members": [
-                            {"slot": bundle_id, "bundle_id": bundle_id}
-                            for bundle_id in bundle_ids
-                        ],
-                    }
+        with exemption_parity(self.id()):
+            with tempfile.TemporaryDirectory() as tmp:
+                runs_root = Path(tmp)
+                bundle_ids = [f"label-plus-refusal-r{index}" for index in range(5)]
+                install_synthetic_recovered_manifest(runs_root, bundle_ids)
+                for bundle_id in bundle_ids:
+                    write_bundle(runs_root, bundle_id, make_summary(40.0))
+                    bind_passing_claim_bundle(runs_root, bundle_id)
+                spec = {
+                    "schema_version": EXTRACTION_SPEC_SCHEMA_VERSION,
+                    "cells": [
+                        {
+                            "cell_id": "LABEL-PLUS-REFUSAL",
+                            "kind": "absolute",
+                            "metric": "gross_energy_j",
+                            "window_class": "request",
+                            "members": [
+                                {"slot": bundle_id, "bundle_id": bundle_id}
+                                for bundle_id in bundle_ids
+                            ],
+                        }
+                    ],
+                }
+                with mock.patch(
+                    "joulewise.floor_extraction._whole_window_extraction_refusals",
+                    return_value=("whole_window_verdict_conflict",),
+                ):
+                    artifact = extract_cells(runs_root, spec)
+            cell = artifact["cells"][0]
+            self.assertFalse(cell["extractable"])
+            self.assertIsNone(cell["floor"])
+            self.assertEqual(
+                cell["refusal_reasons"],
+                [
+                    "admissible_set_uncertainty_dominates_point_floor",
+                    "whole_window_verdict_conflict",
                 ],
-            }
-            with mock.patch(
-                "joulewise.floor_extraction._whole_window_extraction_refusals",
-                return_value=("whole_window_verdict_conflict",),
-            ):
-                artifact = extract_cells(runs_root, spec)
-        cell = artifact["cells"][0]
-        self.assertFalse(cell["extractable"])
-        self.assertIsNone(cell["floor"])
-        self.assertEqual(
-            cell["refusal_reasons"],
-            [
-                "admissible_set_uncertainty_dominates_point_floor",
-                "whole_window_verdict_conflict",
-            ],
-        )
-        self.assertNotIn("floor_conditions", cell)
-        self.assertNotIn("single_count_discipline", artifact)
+            )
+            self.assertNotIn("floor_conditions", cell)
+            self.assertNotIn("single_count_discipline", artifact)
 
 
 class CapHitVerificationGateTests(_PermissiveStrictValidatorMixin, unittest.TestCase):
@@ -6060,6 +6122,57 @@ class StrictValidationGateTests(unittest.TestCase):
 
 
 class TelemetryIdentityGateTests(unittest.TestCase):
+    def test_physical_member_exercises_floor_mock_barrier(self) -> None:
+        """The floor's second mock barrier adds its own refusal after gate passage."""
+        from dataclasses import replace
+        from joulewise import floor_extraction as floor_module
+        from joulewise.bundle_read import authenticate_window_members
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            bundle_id = "floor-mock-barrier"
+            install_synthetic_recovered_manifest(root, [bundle_id])
+            write_bundle(root, bundle_id, make_summary(40.0))
+            bind_passing_claim_bundle(root, bundle_id)
+            self.assertEqual(
+                authenticate_window_members([(bundle_id, root / bundle_id)])[bundle_id].status,
+                "pass",
+            )
+            real_identity = floor_module.custody_telemetry_identity
+            self.assertEqual(
+                real_identity(root / bundle_id).config_backend_class,
+                "powermetrics",
+            )
+
+            def mock_only_in_consumer(*args, **kwargs):
+                return replace(
+                    real_identity(*args, **kwargs), config_backend_class="mock"
+                )
+
+            with mock.patch.object(
+                floor_module,
+                "custody_telemetry_identity",
+                side_effect=mock_only_in_consumer,
+            ):
+                report = extract_cells(
+                    root,
+                    {
+                        "schema_version": EXTRACTION_SPEC_SCHEMA_VERSION,
+                        "cells": [{
+                            "cell_id": "floor-mock-barrier",
+                            "kind": "absolute",
+                            "metric": "gross_energy_j",
+                            "window_class": "request",
+                            "members": [{"slot": bundle_id, "bundle_id": bundle_id}],
+                        }],
+                    },
+                    strict_validator=lambda _path, _strict: (),
+                )
+        self.assertIn(
+            MOCK_TELEMETRY_CLAIM_REFUSAL,
+            report["cells"][0]["members"][0]["reasons"],
+        )
+
     def test_v2_anchor_member_refuses_capture_pipeline_superseded(self) -> None:
         """The floor lane pins the shared capture-era barrier independently."""
 
@@ -6194,232 +6307,244 @@ class SpecMembershipBindingTests(_PermissiveStrictValidatorMixin, unittest.TestC
     """A campaign member the spec omits refuses the whole extraction (Fix D)."""
 
     def test_omitting_a_campaign_member_refuses_the_extraction(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            runs_root = Path(tmp)
-            all_ids = [f"plan-r{index:02d}" for index in range(1, 5)]
-            install_synthetic_recovered_manifest(runs_root, all_ids)
-            for bundle_id in all_ids:
-                write_bundle(runs_root, bundle_id, make_summary(40.0, anchor_bound=0.0))
-            # The spec lists only THREE of the four members the campaign ran;
-            # the omitted high-scatter member must not be silently dropped.
-            listed = all_ids[:-1]
-            omitted = all_ids[-1]
-            spec = {
-                "schema_version": EXTRACTION_SPEC_SCHEMA_VERSION,
-                "cells": [
-                    {
-                        "cell_id": "DF-RQ-GROSS-MID",
-                        "kind": "absolute",
-                        "metric": "gross_energy_j",
-                        "window_class": "request",
-                        "members": [{"slot": b, "bundle_id": b} for b in listed],
-                    }
-                ],
-            }
-            report = extract_cells(runs_root, spec)
-        self.assertFalse(report["all_cells_extractable"])
-        refusals = report["spec_membership_refusals"]
-        self.assertEqual([row["bundle_id"] for row in refusals], [omitted])
-        self.assertEqual(
-            refusals[0]["reason"], "campaign_member_omitted_from_spec"
-        )
-        # The per-cell row itself is otherwise clean: the omission is a
-        # spec-vs-campaign integrity refusal, surfaced at the report level.
-        self.assertTrue(report["cells"][0]["extractable"])
+        with exemption_parity(self.id()):
+            with tempfile.TemporaryDirectory() as tmp:
+                runs_root = Path(tmp)
+                all_ids = [f"plan-r{index:02d}" for index in range(1, 5)]
+                install_synthetic_recovered_manifest(runs_root, all_ids)
+                for bundle_id in all_ids:
+                    write_bundle(runs_root, bundle_id, make_summary(40.0, anchor_bound=0.0))
+                    bind_passing_claim_bundle(runs_root, bundle_id)
+                # The spec lists only THREE of the four members the campaign ran;
+                # the omitted high-scatter member must not be silently dropped.
+                listed = all_ids[:-1]
+                omitted = all_ids[-1]
+                spec = {
+                    "schema_version": EXTRACTION_SPEC_SCHEMA_VERSION,
+                    "cells": [
+                        {
+                            "cell_id": "DF-RQ-GROSS-MID",
+                            "kind": "absolute",
+                            "metric": "gross_energy_j",
+                            "window_class": "request",
+                            "members": [{"slot": b, "bundle_id": b} for b in listed],
+                        }
+                    ],
+                }
+                report = extract_cells(runs_root, spec)
+            self.assertFalse(report["all_cells_extractable"])
+            refusals = report["spec_membership_refusals"]
+            self.assertEqual([row["bundle_id"] for row in refusals], [omitted])
+            self.assertEqual(
+                refusals[0]["reason"], "campaign_member_omitted_from_spec"
+            )
+            # The per-cell row itself is otherwise clean: the omission is a
+            # spec-vs-campaign integrity refusal, surfaced at the report level.
+            self.assertTrue(report["cells"][0]["extractable"])
 
     def test_sibling_campaign_under_runs_root_does_not_force_refusal(self) -> None:
-        # Fix round 2: a single runs_root holds SEVERAL calibration campaign
-        # manifests (all analysis_manifest_id null) spanning different
-        # metric/window families.  A per-cell spec that fully covers its OWN
-        # campaign must extract cleanly even though the sibling campaign's
-        # members are never referenced.  The old union-scoped check refused the
-        # whole extraction here (every sibling member read as "omitted").
-        with tempfile.TemporaryDirectory() as tmp:
-            runs_root = Path(tmp)
-            addressed_ids = [f"gross-r{index:02d}" for index in range(1, 4)]
-            sibling_ids = [f"decode-r{index:02d}" for index in range(1, 4)]
-            install_synthetic_recovered_manifest(
-                runs_root, addressed_ids, session_id="gross-campaign"
-            )
-            install_synthetic_recovered_manifest(
-                runs_root, sibling_ids, session_id="decode-campaign"
-            )
-            for bundle_id in addressed_ids + sibling_ids:
-                write_bundle(runs_root, bundle_id, make_summary(40.0, anchor_bound=0.0))
-            # Both campaigns are recovered/attributed, so the union check would
-            # see the sibling members as campaign members.
-            joined = campaign_cooldown_evidence(runs_root)
-            self.assertTrue(set(sibling_ids) <= set(joined))
-            spec = {
-                "schema_version": EXTRACTION_SPEC_SCHEMA_VERSION,
-                "cells": [
-                    {
-                        "cell_id": "DF-RQ-GROSS-MID",
-                        "kind": "absolute",
-                        "metric": "gross_energy_j",
-                        "window_class": "request",
-                        "members": [
-                            {"slot": b, "bundle_id": b} for b in addressed_ids
-                        ],
-                    }
-                ],
-            }
-            report = extract_cells(runs_root, spec)
-        self.assertEqual(report["spec_membership_refusals"], [])
-        self.assertTrue(report["all_cells_extractable"])
-        self.assertTrue(report["cells"][0]["extractable"])
+        with exemption_parity(self.id()):
+            # Fix round 2: a single runs_root holds SEVERAL calibration campaign
+            # manifests (all analysis_manifest_id null) spanning different
+            # metric/window families.  A per-cell spec that fully covers its OWN
+            # campaign must extract cleanly even though the sibling campaign's
+            # members are never referenced.  The old union-scoped check refused the
+            # whole extraction here (every sibling member read as "omitted").
+            with tempfile.TemporaryDirectory() as tmp:
+                runs_root = Path(tmp)
+                addressed_ids = [f"gross-r{index:02d}" for index in range(1, 4)]
+                sibling_ids = [f"decode-r{index:02d}" for index in range(1, 4)]
+                install_synthetic_recovered_manifest(
+                    runs_root, addressed_ids, session_id="gross-campaign"
+                )
+                install_synthetic_recovered_manifest(
+                    runs_root, sibling_ids, session_id="decode-campaign"
+                )
+                for bundle_id in addressed_ids + sibling_ids:
+                    write_bundle(runs_root, bundle_id, make_summary(40.0, anchor_bound=0.0))
+                    bind_passing_claim_bundle(runs_root, bundle_id)
+                # Both campaigns are recovered/attributed, so the union check would
+                # see the sibling members as campaign members.
+                joined = campaign_cooldown_evidence(runs_root)
+                self.assertTrue(set(sibling_ids) <= set(joined))
+                spec = {
+                    "schema_version": EXTRACTION_SPEC_SCHEMA_VERSION,
+                    "cells": [
+                        {
+                            "cell_id": "DF-RQ-GROSS-MID",
+                            "kind": "absolute",
+                            "metric": "gross_energy_j",
+                            "window_class": "request",
+                            "members": [
+                                {"slot": b, "bundle_id": b} for b in addressed_ids
+                            ],
+                        }
+                    ],
+                }
+                report = extract_cells(runs_root, spec)
+            self.assertEqual(report["spec_membership_refusals"], [])
+            self.assertTrue(report["all_cells_extractable"])
+            self.assertTrue(report["cells"][0]["extractable"])
 
     def test_omission_within_addressed_campaign_still_refuses(self) -> None:
-        # The scoping must NOT weaken the audit guard: dropping one member of a
-        # campaign the spec DOES address is still a no-outlier-deletion refusal,
-        # and it names only the dropped member — never a sibling campaign's.
-        with tempfile.TemporaryDirectory() as tmp:
-            runs_root = Path(tmp)
-            addressed_ids = [f"gross-r{index:02d}" for index in range(1, 5)]
-            sibling_ids = [f"decode-r{index:02d}" for index in range(1, 4)]
-            install_synthetic_recovered_manifest(
-                runs_root, addressed_ids, session_id="gross-campaign"
+        with exemption_parity(self.id()):
+            # The scoping must NOT weaken the audit guard: dropping one member of a
+            # campaign the spec DOES address is still a no-outlier-deletion refusal,
+            # and it names only the dropped member — never a sibling campaign's.
+            with tempfile.TemporaryDirectory() as tmp:
+                runs_root = Path(tmp)
+                addressed_ids = [f"gross-r{index:02d}" for index in range(1, 5)]
+                sibling_ids = [f"decode-r{index:02d}" for index in range(1, 4)]
+                install_synthetic_recovered_manifest(
+                    runs_root, addressed_ids, session_id="gross-campaign"
+                )
+                install_synthetic_recovered_manifest(
+                    runs_root, sibling_ids, session_id="decode-campaign"
+                )
+                for bundle_id in addressed_ids + sibling_ids:
+                    write_bundle(runs_root, bundle_id, make_summary(40.0, anchor_bound=0.0))
+                    bind_passing_claim_bundle(runs_root, bundle_id)
+                listed = addressed_ids[:-1]
+                dropped = addressed_ids[-1]
+                spec = {
+                    "schema_version": EXTRACTION_SPEC_SCHEMA_VERSION,
+                    "cells": [
+                        {
+                            "cell_id": "DF-RQ-GROSS-MID",
+                            "kind": "absolute",
+                            "metric": "gross_energy_j",
+                            "window_class": "request",
+                            "members": [{"slot": b, "bundle_id": b} for b in listed],
+                        }
+                    ],
+                }
+                report = extract_cells(runs_root, spec)
+            self.assertFalse(report["all_cells_extractable"])
+            refusals = report["spec_membership_refusals"]
+            self.assertEqual([row["bundle_id"] for row in refusals], [dropped])
+            self.assertEqual(
+                refusals[0]["reason"], "campaign_member_omitted_from_spec"
             )
-            install_synthetic_recovered_manifest(
-                runs_root, sibling_ids, session_id="decode-campaign"
-            )
-            for bundle_id in addressed_ids + sibling_ids:
-                write_bundle(runs_root, bundle_id, make_summary(40.0, anchor_bound=0.0))
-            listed = addressed_ids[:-1]
-            dropped = addressed_ids[-1]
-            spec = {
-                "schema_version": EXTRACTION_SPEC_SCHEMA_VERSION,
-                "cells": [
-                    {
-                        "cell_id": "DF-RQ-GROSS-MID",
-                        "kind": "absolute",
-                        "metric": "gross_energy_j",
-                        "window_class": "request",
-                        "members": [{"slot": b, "bundle_id": b} for b in listed],
-                    }
-                ],
-            }
-            report = extract_cells(runs_root, spec)
-        self.assertFalse(report["all_cells_extractable"])
-        refusals = report["spec_membership_refusals"]
-        self.assertEqual([row["bundle_id"] for row in refusals], [dropped])
-        self.assertEqual(
-            refusals[0]["reason"], "campaign_member_omitted_from_spec"
-        )
 
     def test_omitted_null_manifest_member_refuses_as_unattributable(self) -> None:
-        # Fix round 3 (defect-shaped): a bundle whose provenance is ambiguous
-        # (claimed by TWO campaign manifests -> campaign_cooldown_evidence
-        # collapses it to manifest=None) must NOT be able to slip out of the
-        # completeness check when the spec omits it.  Fix round 2 scoped the
-        # guard by resolved manifest and dropped every null-manifest bundle from
-        # attribution, so an OMITTED unattributable member escaped entirely.
-        # We cannot prove such a member does not belong to the addressed
-        # campaign, so omitting it must fail closed with a distinct reason.
-        with tempfile.TemporaryDirectory() as tmp:
-            runs_root = Path(tmp)
-            addressed_ids = ["gross-r01", "gross-r02"]
-            shared = "shared-r03"
-            # The SAME bundle_id appears in two campaign manifests with
-            # different session ids -> conflicting normalized rows -> the join
-            # resolves it to {manifest: None}.
-            install_synthetic_recovered_manifest(
-                runs_root, addressed_ids + [shared], session_id="gross-campaign"
+        with exemption_parity(self.id()):
+            # Fix round 3 (defect-shaped): a bundle whose provenance is ambiguous
+            # (claimed by TWO campaign manifests -> campaign_cooldown_evidence
+            # collapses it to manifest=None) must NOT be able to slip out of the
+            # completeness check when the spec omits it.  Fix round 2 scoped the
+            # guard by resolved manifest and dropped every null-manifest bundle from
+            # attribution, so an OMITTED unattributable member escaped entirely.
+            # We cannot prove such a member does not belong to the addressed
+            # campaign, so omitting it must fail closed with a distinct reason.
+            with tempfile.TemporaryDirectory() as tmp:
+                runs_root = Path(tmp)
+                addressed_ids = ["gross-r01", "gross-r02"]
+                shared = "shared-r03"
+                # The SAME bundle_id appears in two campaign manifests with
+                # different session ids -> conflicting normalized rows -> the join
+                # resolves it to {manifest: None}.
+                install_synthetic_recovered_manifest(
+                    runs_root, addressed_ids + [shared], session_id="gross-campaign"
+                )
+                install_synthetic_recovered_manifest(
+                    runs_root, ["decode-r01", shared], session_id="decode-campaign"
+                )
+                for bundle_id in addressed_ids + [shared, "decode-r01"]:
+                    write_bundle(runs_root, bundle_id, make_summary(40.0, anchor_bound=0.0))
+                    bind_passing_claim_bundle(runs_root, bundle_id)
+                # Precondition: the shared bundle is genuinely unattributable.
+                joined = campaign_cooldown_evidence(runs_root)
+                self.assertIsNone(joined[shared]["manifest"])
+                # Spec addresses the gross campaign but silently drops the shared,
+                # high-scatter member.
+                spec = {
+                    "schema_version": EXTRACTION_SPEC_SCHEMA_VERSION,
+                    "cells": [
+                        {
+                            "cell_id": "DF-RQ-GROSS-MID",
+                            "kind": "absolute",
+                            "metric": "gross_energy_j",
+                            "window_class": "request",
+                            "members": [
+                                {"slot": b, "bundle_id": b} for b in addressed_ids
+                            ],
+                        }
+                    ],
+                }
+                report = extract_cells(runs_root, spec)
+            self.assertFalse(report["all_cells_extractable"])
+            refusals = report["spec_membership_refusals"]
+            self.assertEqual([row["bundle_id"] for row in refusals], [shared])
+            self.assertEqual(
+                refusals[0]["reason"], "campaign_member_unattributable"
             )
-            install_synthetic_recovered_manifest(
-                runs_root, ["decode-r01", shared], session_id="decode-campaign"
-            )
-            for bundle_id in addressed_ids + [shared, "decode-r01"]:
-                write_bundle(runs_root, bundle_id, make_summary(40.0, anchor_bound=0.0))
-            # Precondition: the shared bundle is genuinely unattributable.
-            joined = campaign_cooldown_evidence(runs_root)
-            self.assertIsNone(joined[shared]["manifest"])
-            # Spec addresses the gross campaign but silently drops the shared,
-            # high-scatter member.
-            spec = {
-                "schema_version": EXTRACTION_SPEC_SCHEMA_VERSION,
-                "cells": [
-                    {
-                        "cell_id": "DF-RQ-GROSS-MID",
-                        "kind": "absolute",
-                        "metric": "gross_energy_j",
-                        "window_class": "request",
-                        "members": [
-                            {"slot": b, "bundle_id": b} for b in addressed_ids
-                        ],
-                    }
-                ],
-            }
-            report = extract_cells(runs_root, spec)
-        self.assertFalse(report["all_cells_extractable"])
-        refusals = report["spec_membership_refusals"]
-        self.assertEqual([row["bundle_id"] for row in refusals], [shared])
-        self.assertEqual(
-            refusals[0]["reason"], "campaign_member_unattributable"
-        )
-        # The addressed cell itself remains clean; the refusal is report-level.
-        self.assertTrue(report["cells"][0]["extractable"])
+            # The addressed cell itself remains clean; the refusal is report-level.
+            self.assertTrue(report["cells"][0]["extractable"])
 
     def test_referenced_null_manifest_member_not_flagged_unattributable(self) -> None:
-        # Complement to the defect fix: a null-manifest member that the spec
-        # DOES reference is not spuriously flagged as unattributable — it faces
-        # its own member gate instead of the completeness refusal.
-        with tempfile.TemporaryDirectory() as tmp:
-            runs_root = Path(tmp)
-            shared = "shared-r03"
-            install_synthetic_recovered_manifest(
-                runs_root, ["gross-r01", "gross-r02", shared], session_id="gross-campaign"
+        with exemption_parity(self.id()):
+            # Complement to the defect fix: a null-manifest member that the spec
+            # DOES reference is not spuriously flagged as unattributable — it faces
+            # its own member gate instead of the completeness refusal.
+            with tempfile.TemporaryDirectory() as tmp:
+                runs_root = Path(tmp)
+                shared = "shared-r03"
+                install_synthetic_recovered_manifest(
+                    runs_root, ["gross-r01", "gross-r02", shared], session_id="gross-campaign"
+                )
+                install_synthetic_recovered_manifest(
+                    runs_root, ["decode-r01", shared], session_id="decode-campaign"
+                )
+                for bundle_id in ["gross-r01", "gross-r02", shared, "decode-r01"]:
+                    write_bundle(runs_root, bundle_id, make_summary(40.0, anchor_bound=0.0))
+                    bind_passing_claim_bundle(runs_root, bundle_id)
+                joined = campaign_cooldown_evidence(runs_root)
+                self.assertIsNone(joined[shared]["manifest"])
+                spec = {
+                    "schema_version": EXTRACTION_SPEC_SCHEMA_VERSION,
+                    "cells": [
+                        {
+                            "cell_id": "DF-RQ-GROSS-MID",
+                            "kind": "absolute",
+                            "metric": "gross_energy_j",
+                            "window_class": "request",
+                            "members": [
+                                {"slot": b, "bundle_id": b}
+                                for b in ["gross-r01", "gross-r02", shared]
+                            ],
+                        }
+                    ],
+                }
+                report = extract_cells(runs_root, spec)
+            self.assertNotIn(
+                "campaign_member_unattributable",
+                {row["reason"] for row in report["spec_membership_refusals"]},
             )
-            install_synthetic_recovered_manifest(
-                runs_root, ["decode-r01", shared], session_id="decode-campaign"
-            )
-            for bundle_id in ["gross-r01", "gross-r02", shared, "decode-r01"]:
-                write_bundle(runs_root, bundle_id, make_summary(40.0, anchor_bound=0.0))
-            joined = campaign_cooldown_evidence(runs_root)
-            self.assertIsNone(joined[shared]["manifest"])
-            spec = {
-                "schema_version": EXTRACTION_SPEC_SCHEMA_VERSION,
-                "cells": [
-                    {
-                        "cell_id": "DF-RQ-GROSS-MID",
-                        "kind": "absolute",
-                        "metric": "gross_energy_j",
-                        "window_class": "request",
-                        "members": [
-                            {"slot": b, "bundle_id": b}
-                            for b in ["gross-r01", "gross-r02", shared]
-                        ],
-                    }
-                ],
-            }
-            report = extract_cells(runs_root, spec)
-        self.assertNotIn(
-            "campaign_member_unattributable",
-            {row["reason"] for row in report["spec_membership_refusals"]},
-        )
 
     def test_full_coverage_has_no_membership_refusal(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            runs_root = Path(tmp)
-            all_ids = [f"plan-r{index:02d}" for index in range(1, 4)]
-            install_synthetic_recovered_manifest(runs_root, all_ids)
-            for bundle_id in all_ids:
-                write_bundle(runs_root, bundle_id, make_summary(40.0, anchor_bound=0.0))
-            spec = {
-                "schema_version": EXTRACTION_SPEC_SCHEMA_VERSION,
-                "cells": [
-                    {
-                        "cell_id": "DF-RQ-GROSS-MID",
-                        "kind": "absolute",
-                        "metric": "gross_energy_j",
-                        "window_class": "request",
-                        "members": [{"slot": b, "bundle_id": b} for b in all_ids],
-                    }
-                ],
-            }
-            report = extract_cells(runs_root, spec)
-        self.assertEqual(report["spec_membership_refusals"], [])
-        self.assertTrue(report["all_cells_extractable"])
+        with exemption_parity(self.id()):
+            with tempfile.TemporaryDirectory() as tmp:
+                runs_root = Path(tmp)
+                all_ids = [f"plan-r{index:02d}" for index in range(1, 4)]
+                install_synthetic_recovered_manifest(runs_root, all_ids)
+                for bundle_id in all_ids:
+                    write_bundle(runs_root, bundle_id, make_summary(40.0, anchor_bound=0.0))
+                    bind_passing_claim_bundle(runs_root, bundle_id)
+                spec = {
+                    "schema_version": EXTRACTION_SPEC_SCHEMA_VERSION,
+                    "cells": [
+                        {
+                            "cell_id": "DF-RQ-GROSS-MID",
+                            "kind": "absolute",
+                            "metric": "gross_energy_j",
+                            "window_class": "request",
+                            "members": [{"slot": b, "bundle_id": b} for b in all_ids],
+                        }
+                    ],
+                }
+                report = extract_cells(runs_root, spec)
+            self.assertEqual(report["spec_membership_refusals"], [])
+            self.assertTrue(report["all_cells_extractable"])
 
 
 class LaunchLineageExtractionTests(unittest.TestCase):
