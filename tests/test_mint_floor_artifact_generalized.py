@@ -414,6 +414,22 @@ def _configure_fixture_core(core: object) -> object:
     return core
 
 
+PHYSICAL_CONFIG_TEMPLATE = REPO_ROOT / "tests" / "fixtures" / "d078_r01" / "config.json"
+
+
+def _physical_config(config: dict) -> dict:
+    """S1 bind + pair, fixture construction only: the test's own config keys
+    laid over a schema-valid physical config (the d078_r01 template with its
+    own tags cleared), so rebind_config binds a config that re-validates
+    before write_passing_pair writes the pair."""
+    physical = load_json(PHYSICAL_CONFIG_TEMPLATE)
+    physical["run_metadata"]["tags"] = []
+    physical["run_metadata"].update(config.get("run_metadata", {}))
+    physical["hardware_target"].update(config.get("hardware_target", {}))
+    physical["run_id"] = config["run_id"]
+    return physical
+
+
 def _write_bundle(
     root: Path,
     *,
@@ -475,7 +491,7 @@ def _write_bundle(
         },
     }
     (bundle / "config.json").write_text(
-        json.dumps(config, sort_keys=True), encoding="utf-8"
+        json.dumps(_physical_config(config), sort_keys=True), encoding="utf-8"
     )
     (bundle / "metadata.json").write_text(
         json.dumps({"run_id": bundle_id}), encoding="utf-8"
