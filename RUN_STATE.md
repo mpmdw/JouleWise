@@ -45,6 +45,12 @@ Two jobs were stopped with edits not yet committed. Those edits are still in the
 - **Rulings owed (magistrate):** S1 NEEDS_RULING IDs (items 140, 143, 145, 149); P0-R4 census decoy (item 146); A129 route A/B/C (item 148); paper numbers: 241 printed results numbers no checker compares, all hand-checked values correct (items 153, 155, 156, verity-germane; inventory-checker proposal); stale-row retirements (item 152).
 - **Next exact action:** Fable reads items 128 onward, rules the route for PR #438 (item 139), then completes or aborts the L cherry-pick and convenes the NTP A2 judge with item 131's refuter file.
 
+**Ed's answers, 09-29 ≈12:00 PDT (interactive session bc060503), which set the resume order:**
+1. The Opus-only restriction is **lifted**. But **everything stays paused, headless sessions included, until Ed has updated his apps**; he had exhausted usage. No seat, judge or lieutenant is to be launched before he says the updates are done.
+2. **D-138:** Ed wants more information before choosing (a)/(b)/(c). The brief is [12-hold-consult/40-owner-brief-2026-09-29.md](docs/process_traces/2026-09-27-activation-d528efb2/12-hold-consult/40-owner-brief-2026-09-29.md); its recommendation is (a). D-138 stays stopped until Ed answers.
+3. The three permission-refused actions (copy the A2 refuter file into `71-ntp-design/48-…`; finish the L cherry-pick; the 44 ignored `.log` files for PR #438) are unblocked once 1 is over; Fable does them first on resume.
+4. **After the updates: resume full-fledged work.** Order: Fable does item 3, rules the owed items above and PR #438's route, final-passes and merges #438, then deletes `/Users/edr/night-custody/magistrate/STOP` so the watchdog relaunches the headless magistrate (within five minutes; check `launchctl list` for no `com.joulewise.night*` label first).
+
 **▶▶ ACTIVATION d528efb2 — from 17:36 PDT 09-27 (Opus 5.5; NOTHING ARMED):** [Record 00](docs/process_traces/2026-09-27-activation-d528efb2/00-activation-record.md) is the running log (branch `docs/2026-09-27-d528efb2`).
 
 **Merged:** #437 (bookkeeping + all 25G83 rulings) → `9eab16f8`; the canonical root is fast-forwarded to it.
