@@ -99,11 +99,11 @@ def render_fixture():
     write_night_plan(plan_path, plan)
     plan_bytes = plan_path.read_bytes()
     # The fixed measurement H is the archived base commit. It predates the
-    # table, so supply only that new tracked file to the current authoring
-    # code. All pre-existing paths still come from H through tracked_bytes.
+    # table and OFF helper, so supply those new tracked files to the current
+    # authoring code. All pre-existing paths still come from H through tracked_bytes.
     original_tracked_bytes = quiet_predicate_campaign.tracked_bytes
     def tracked_bytes(root, head, name):
-        if name == "joulewise/night_kinds.py":
+        if name in {"joulewise/night_kinds.py", "joulewise/network_time_off.py"}:
             return (ROOT / name).read_bytes()
         return original_tracked_bytes(root, head, name)
     with mock.patch.object(quiet_predicate_campaign, "tracked_bytes", side_effect=tracked_bytes):
@@ -266,12 +266,13 @@ class NightKindTests(unittest.TestCase):
         base["chain_sha256"] = base["chain_sha256"].replace(old_wrapper_digest, relocated_wrapper_digest)
         old_manifest = json.loads(base["manifest"])
         new_manifest = json.loads(actual["manifest"])
-        added = "joulewise/night_kinds.py"
+        added = ("joulewise/night_kinds.py", "joulewise/network_time_off.py")
         self.assertEqual(set(new_manifest), set(old_manifest))
         self.assertEqual({k: v for k, v in new_manifest.items() if k != "files"},
                          {k: v for k, v in old_manifest.items() if k != "files"})
         self.assertEqual(new_manifest["files"], old_manifest["files"] | {
-            added: hashlib.sha256((ROOT / added).read_bytes()).hexdigest()})
+            name: hashlib.sha256((ROOT / name).read_bytes()).hexdigest()
+            for name in added})
         self.assertEqual(actual["manifest"],
                          (json.dumps(new_manifest, sort_keys=True, indent=2) + "\n").encode())
         old_digest = hashlib.sha256(base["manifest"]).hexdigest().encode()
@@ -353,7 +354,7 @@ class NightKindTests(unittest.TestCase):
         row = replace(kind_row("quiet_predicate_evidence"), window_max_s=8999)
         original = quiet_predicate_campaign.tracked_bytes
         def tracked(root, head, name):
-            if name == "joulewise/night_kinds.py":
+            if name in {"joulewise/night_kinds.py", "joulewise/network_time_off.py"}:
                 return (ROOT / name).read_bytes()
             return original(root, head, name)
         with mock.patch.object(quiet_predicate_campaign, "kind_row", return_value=row), \

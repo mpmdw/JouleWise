@@ -566,7 +566,7 @@ class CheckWindowProvenanceTests(unittest.TestCase):
         mutated = runbook.replace(
             '  /bin/sleep "$SETTLE_S"', "  /bin/sleep 999", 1
         )
-        with self.assertRaisesRegex(ValueError, "pinned anchor 1556 drifted"):
+        with self.assertRaisesRegex(ValueError, "pinned anchor 1516 drifted"):
             render_generated_region(mutated)
 
     def test_phase_d_byte_comparison_rejects_runsheet_settle_mutation(self) -> None:
