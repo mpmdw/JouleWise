@@ -74,7 +74,6 @@ PARITY_TEST_IDS: frozenset[str] = frozenset({
     "tests.test_floor_extraction.SpecMembershipBindingTests.test_omitting_a_campaign_member_refuses_the_extraction",
     "tests.test_floor_extraction.SpecMembershipBindingTests.test_referenced_null_manifest_member_not_flagged_unattributable",
     "tests.test_floor_extraction.SpecMembershipBindingTests.test_sibling_campaign_under_runs_root_does_not_force_refusal",
-    "tests.test_launch_window.CeremonySkipConsumerTests.test_malformed_and_mismatched_lineage_codes_reach_every_consumer",
 })
 # A2 condition 9 closes this list by name: seven T5a IDs, one used F ID,
 # and the three ruled floor IDs. The other three F slots are retired;
