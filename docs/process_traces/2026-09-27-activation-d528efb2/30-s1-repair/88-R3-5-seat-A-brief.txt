@@ -1,0 +1,107 @@
+SESSION_MODE: delegated
+BRIDGE_ORIGIN: claude
+BRIDGE_HOPS_REMAINING: 0
+WRITE_SCOPE: ["tests/test_analysis_integration.py","tests/test_run_campaign.py","tests/test_pipeline_smoke_tail.py"]
+ROLE: seat A, ROUND 3 (step R3-5) of the S1 (BFG-S) regression repair; this is the LAST repair round. Working tree /Users/edr/code/JouleWise-wt-s1r3-A-d528efb2, branch fix/2026-09-28-s1-r3-A at cdfb27ce (the S1 candidate with the gate fix, seat H3's parity helper and the lead's ID grants).
+AUTHORITY (read whole; later amends earlier): ruling S1-REPAIR-ROUTE-01 /Users/edr/code/JouleWise-wt-bk-77b1bee2/docs/process_traces/2026-09-27-activation-d528efb2/30-s1-repair/50-escalation/21-coldgate-fable-ruling.md; addendum S1-REPAIR-ROUTE-01-A1 /Users/edr/code/JouleWise-wt-bk-77b1bee2/docs/process_traces/2026-09-27-activation-d528efb2/30-s1-repair/83-coldgate-pilot-ruling.md. Triage: /Users/edr/code/JouleWise-wt-bk-77b1bee2/docs/process_traces/2026-09-27-activation-d528efb2/30-s1-repair/70-triage/table-proposal.md and the lead's confirmations /Users/edr/code/JouleWise-wt-bk-77b1bee2/docs/process_traces/2026-09-27-activation-d528efb2/30-s1-repair/70-triage/01-lead-confirmation.md (items 1–14). The lead's executed pilots, with the exact wiring and the installer text applied in scratch: /Users/edr/code/JouleWise-wt-bk-77b1bee2/docs/process_traces/2026-09-27-activation-d528efb2/30-s1-repair/86-bench-pilots/00-filing.md and scratch.diff there. Seat H3's helper (exemption_parity, rebind_config, write_passing_pair, write_charging_pair, produce_strict_bundle) is in tests/bfgs_fixtures.py; the ID lists there are the LEAD's and are final for you.
+SEAT STOP RULES (binding): (i) a repair that seems to need a production edit, or a new injection point, returns NEEDS_RULING; no environment-variable hook is ever added. (ii) No run ID is added to the historical set. (iii) A copied or edited historical bundle gets no exemption by its name. (iv) Never edit a file outside your WRITE_SCOPE. (v) Never write a pair into a bundle whose bound config names mock, never call a pair writer before the rebind.
+A test that still fails after its class rule is returned with its ID and the name of the refusing check. You add no stand-in, you add no ID to the parity list, and you write no admission evidence by hand.
+PARITY RULES 1–6 (ruling §3.3):
+1. **Battery code is never stubbed.** Parity touches one property. Every name banned by the ruling's check 2 stays banned. In a parity test the gate runs for real on every bundle.
+2. **The bundle's identity is always real.** Every bundle a parity test sends down a claim path has a physical config, agreeing backend labels, and a pair written by the controller or by helper H. After §4 the gate enforces the first of these itself.
+3. **Never the test's own subject.** Parity is refused to a test whose subject is an exemption-gated check. The test is mechanical, run by the lead: a test is refused parity if its own source, or the source of a fixture method of its class that it calls, contains a string literal from the **refusal vocabulary**, or calls one of the four functions by name. The refusal vocabulary is every string the four functions can return on their non-exempt branch, including what `environment_admission_refusals` and `post_run_environment_refusals` return. The lead derives it from the syntax trees and files it with the triage record. Members I have seen: `anchor_fallback_member_unusable`, `environment_admission_missing`, `environment_admission_failed`, `reducer_wire_unknown`.
+4. **By test ID only.** No class-wide, module-wide or `setUp`-level use. The helper raises for an ID not on the list.
+5. **Every switched-off check keeps a test that runs it switched on.** Before parity lands, the lead lists, for each of the five places, at least one green test on the candidate that reaches its non-exempt branch and asserts its refusal. If a place has none, a direct test is owed first, written by seat H3.
+6. **No production file changes for parity.** If parity seems to need one, the seat returns `NEEDS_RULING`.
+PARITY RULES 7–11 (addendum A1 §4.4):
+### 4.4 Rules, added to rules 1 to 6 of the ruling in force
+
+7. **The second switch is granted by test ID, and only where main ran without those checks.** The lead's recorder, on main's tree only, wraps `_current_strict_summary` and logs its answer per bundle. An ID is granted only if the answer was false for every bundle the test read on main.
+8. **Never the test's own subject.** Refused to a test whose own source, or a fixture method of its class that it calls, names a function of §4.2, or asserts a reason that only the right-hand branch of §3.1 can raise, or whose subject is the verdict row under current evidence. `test_authenticated_v2_whole_window_source_reaches_claim_consumption` is refused by this rule.
+9. **Every switched-off check keeps a test that runs it switched on.** Before the switch lands, the lead lists green tests on the candidate that reach `_current_core_rederivation_reasons` past its early return: at least one that asserts a refusal and at least one that asserts acceptance. If no accepting test exists, the pull-request description says so in the sentence of §8, and the canary lane owns the gap. The lead does not invent one.
+10. **The first form is not granted where it is not needed.** The pilot test passes without it (Z9). The helper applies it to every granted ID because that is the ruled text and it is harmless there (the test's own stand-in already stipulates a non-exempt identity inside `inputs.py`). No T2 test receives the second switch unless rule 7 grants it.
+11. **No third switch on anyone's authority but a cold gate's.** A refusal that survives both switches is returned by test ID with the name of the refusing check.
+
+THE CLASSES (ruling §5.2):
+### 5.2 The classes
+
+| Class | Mark on main | Repair | Assertions |
+|---|---|---|---|
+| **T1** | no bundle the test read was exempt | the pair alone (`write_passing_pair`) | byte-identical |
+| **T2** | every bundle was exempt, and the test replaced the strict validator itself or never reached it | main's fixture, then `rebind_config`, then `write_passing_pair`, then `exemption_parity`. **Not the builder:** produced bundles carry their own honest refusals (seat B's trial: cadence, clock bound) and cannot hold hand-set values. | byte-identical |
+| **T3** | the test's subject is the refusal of mock bundles on a claim path | the ruling's §3.4, second form, on a mock corpus the test builds for itself; sibling per §5.3 | R-list |
+| **T4** | the gate refuses a floor root that holds no bundle (14 of seat A's integration IDs) | first build the member bundles under each floor root in main's fixture form, rebound and paired; then derive the floor records from them; then as T1 or T2 | byte-identical; pins move only under A3's leaf-diff rule |
+| **T5** | every bundle was exempt, and the test ran the **real** strict validator on main (the mock corpus of the integration module) | the round-2 corpus from the builder stays, and parity is added. If a refusal remains that is recorded in the produced bundle's own summary, seat H3 has **one** bounded task: `produce_strict_bundle` gains a keyword, default unchanged, that replays enough samples at the configured rate for the reducer's own cadence and clock checks to pass. No check is touched and no summary is edited. | byte-identical where the assertion does not name a number that came from mock telemetry; otherwise `NEEDS_RULING` |
+| **T6** | rule 3 of §3.3 refuses parity (the subject is an exemption-gated check), or some bundles were exempt and others not | none under this ruling: `NEEDS_RULING`, counted under the cap | — |
+
+**Where the remaining risk sits.** T1, T2 and T4 rest on executed evidence (Y7, Y8). **T5 does not**: nobody has shown that a produced bundle can pass the reducer's cadence and clock checks. By seat A's table T5 is at most about 13 integration IDs and one campaign ID. It is bounded by the pilot and by stop condition 3.
+
+**The golden report** (A3 §5.5 item 3) is class T2: the five golden members are rebound and paired, the extractor runs under parity, and the report is regenerated under A3's leaf-diff rule, which stands unchanged. The test that compares the golden gets parity by ID. NOT EXECUTED for the golden itself.
+Wiring: a granted test wraps ONLY its own body (or the smallest block that calls the claim path) in `with exemption_parity(self.id()):`, by test ID, never in setUp/setUpClass/class-wide (rule 4). Assertions stay byte-identical.
+PLANTED-DEFECT CHECK for every repaired test: GREEN, and RED under the charging pair (substitute write_charging_pair for write_passing_pair, or write a charging pair onto the produced bundles, as in /Users/edr/code/JouleWise-wt-bk-77b1bee2/docs/process_traces/2026-09-27-activation-d528efb2/30-s1-repair/86-bench-pilots/plant_charging.py). Report the refusing reason seen under the plant.
+Run tests ONLY under the battery guard: PYTHONPATH=/Users/edr/code/JouleWise-wt-bk-77b1bee2/docs/process_traces/2026-09-27-activation-d528efb2/30-s1-repair/guard. /opt/homebrew/bin/python3 -B. No git commit/fetch/pull/checkout/stash (the lead commits). No [QUIET-MAC] work. Never read the laptop battery. Do not call Claude. Do not run the whole suite; run your modules whole.
+REPORT (claude-codex-report/v1, implementation genre): per test ID the class applied, the result, and the plant result; the R-list; every NEEDS_RULING with the test ID and the refusing check's name; per file failing-before → passing-after counts; exact commands and tails.
+YOUR IDS BY CLASS:
+T5a (both switches granted; builder corpus stays; install_passing_analysis_whole_window changed per A1 §4.3, below; wrap each test with exemption_parity):
+  - tests.test_analysis_integration.AnalysisIntegrationTests.test_complete_strict_current_bundle_set_derives_deterministic_fail_closed_artifact_with_production_telemetry_identity
+  - tests.test_analysis_integration.AnalysisIntegrationTests.test_incomplete_pair_is_listed_and_never_converted_to_unpaired_samples_with_production_telemetry_identity
+  - tests.test_analysis_integration.AnalysisIntegrationTests.test_named_strata_manifest_preserves_terminal_mock_refusal_with_production_telemetry_identity
+  - tests.test_analysis_integration.AnalysisIntegrationTests.test_private_stochastic_seam_changes_recorded_policy_identity_with_production_telemetry_identity
+  - tests.test_analysis_integration.AnalysisIntegrationTests.test_real_controller_unpinned_model_is_included_by_loader
+  - tests.test_analysis_integration.AnalysisIntegrationTests.test_unregistered_matching_topup_demotes_but_preserves_fixed_n_analysis_with_production_telemetry_identity
+  - tests.test_analysis_integration.AnalysisIntegrationTests.test_valid_replacement_fills_original_slot_without_sixth_block_with_production_telemetry_identity
+F (class T4 first: give the members bundle form under each declared evidence root, bound and paired, as the lead's P-3 did by copying the class corpus's produced floor-member bundles into the declared roots; then the first switch only. The second switch is NOT granted to F; if an F test stays RED only for reasons of the second form, return it by ID with the reasons and the lead may grant it):
+  - tests.test_analysis_integration.AnalysisIntegrationTests.test_attribution_limited_floor_is_claim_bearing_in_final_artifact
+  - tests.test_analysis_integration.AnalysisIntegrationTests.test_claim_output_separation_preserves_declared_root_and_ignores_surplus_symlink
+  - tests.test_analysis_integration.AnalysisIntegrationTests.test_cli_output_separation_preserves_exact_and_absent_mapping_and_ignores_surplus_containment
+  - tests.test_analysis_integration.AnalysisIntegrationTests.test_real_controller_pinned_model_matches_canonical_bytes_and_is_included
+T2 in this module (granted; wrap):
+  - tests.test_analysis_integration.AnalysisIntegrationTests.test_b4_salvage_floor_binder_refuses_without_explicit_dispatch_pair
+  - tests.test_analysis_integration.AnalysisIntegrationTests.test_b4_salvage_floor_binder_rejects_mismatched_dispatch_pair
+T1 in tests/test_run_campaign.py (the pair alone, no parity):
+  - tests.test_run_campaign.IdleAdmissionCoreVerdictTests.test_derivation_cli_mint_rejects_source_identity_postcondition_failure
+  - tests.test_run_campaign.IdleAdmissionCoreVerdictTests.test_neg8_reference_campaign_corpus_is_accepted_by_derivation_cli
+DO NOT TOUCH (the lead handles them by ID): the M and R rows of addendum A1 §5.1 and the T6 rows:
+  - tests.test_analysis_integration.AnalysisIntegrationTests.test_authenticated_v2_whole_window_source_reaches_claim_consumption
+  - tests.test_analysis_integration.AnalysisIntegrationTests.test_cli_binds_distinct_calibration_bundles_and_preserves_mock_refusal
+  - tests.test_analysis_integration.AnalysisIntegrationTests.test_cli_binds_distinct_calibration_bundles_and_preserves_mock_refusal_with_production_telemetry_identity
+  - tests.test_analysis_integration.AnalysisIntegrationTests.test_complete_strict_current_bundle_set_derives_deterministic_fail_closed_artifact
+  - tests.test_analysis_integration.AnalysisIntegrationTests.test_incomplete_pair_is_listed_and_never_converted_to_unpaired_samples
+  - tests.test_analysis_integration.AnalysisIntegrationTests.test_named_strata_manifest_preserves_terminal_mock_refusal
+  - tests.test_analysis_integration.AnalysisIntegrationTests.test_private_stochastic_seam_changes_recorded_policy_identity
+  - tests.test_analysis_integration.AnalysisIntegrationTests.test_production_request_factory_reaches_predeclared_transport
+  - tests.test_analysis_integration.AnalysisIntegrationTests.test_replacement_with_changed_rep_tag_is_topup_not_slot_fill
+  - tests.test_analysis_integration.AnalysisIntegrationTests.test_unregistered_matching_topup_demotes_but_preserves_fixed_n_analysis
+  - tests.test_analysis_integration.AnalysisIntegrationTests.test_valid_replacement_fills_original_slot_without_sixth_block
+  - tests.test_analysis_integration.AnalysisIntegrationTests.test_authenticated_nested_bundle_conflicts_with_run_id_rejoin
+  - tests.test_analysis_integration.AnalysisIntegrationTests.test_b4_salvage_floor_binder_accepts_correct_pair_after_real_row_validation
+  - tests.test_analysis_integration.AnalysisIntegrationTests.test_finalized_gamma_runs_real_engine_then_isolates_math_layers
+  - tests.test_analysis_integration.AnalysisIntegrationTests.test_governed_transport_finalizes_then_refuses_with_pending_ruling_code
+  - tests.test_analysis_integration.AnalysisIntegrationTests.test_production_two_row_audit_persists_and_stripped_finding_refuses
+and the five rule-3 refusals in tests/test_run_campaign.py (they are NOT granted; leave them failing, list their current failure in your report):
+  - tests.test_run_campaign.IdleAdmissionCoreVerdictTests.test_recorded_supersession_resolves_present_retry_and_is_reported
+  - tests.test_run_campaign.IdleAdmissionCoreVerdictTests.test_whole_window_cli_uses_campaign_membership_and_strict_validation
+  - tests.test_run_campaign.IdleAdmissionCoreVerdictTests.test_whole_window_invalid_reference_is_excluded_and_cannot_pass
+  - tests.test_run_campaign.IdleAdmissionCoreVerdictTests.test_whole_window_verdict_honors_and_reports_failed_member_waiver
+  - tests.test_run_campaign.IdleAdmissionCoreVerdictTests.test_whole_window_verdict_refuses_mismatched_bound_lineage
+A1 §4.3, the installer text you apply in tests/test_analysis_integration.py:
+In `tests/test_analysis_integration.py`, `install_passing_analysis_whole_window` writes each of its two reference directories as on main and then, in this order: adds `"measurement_quality": {"telemetry_source": "powermetrics"}` to the summary; writes a schema-valid `config.json` with the directory's `run_id` (template: `tests/fixtures/d078_r01/config.json`, as in the T2 pilot); writes `metadata.json` with `run_id` and `adapters.telemetry.name = "powermetrics"`; calls `rebind_config`; calls `write_passing_pair`. The two loops of `setUpClass` that replaced the reference directories by produced bundles (round 2, the last hunk of `setUpClass`) are removed. The energies 1.0, 0.99, 1.01 stay byte-identical. This is class T2's fixture form; it writes no admission evidence.
+THE SIBLING for inputs.py (ruling §5.3, your F3):
+A3 told seat A to call "the barrier's own function". There is none (Y12). After §4, a mock bundle cannot pass the gate on any claim path, so the barrier cannot be reached through a public entry with an honest mock bundle.
+
+**Ruled.** The sibling builds a bundle that passes the gate (physical config, pair), and replaces `custody_telemetry_identity` **in the consumer's module** by a function that returns the real identity with `config_backend_class` set to `"mock"`. It asserts that the reason `mock_telemetry_claim_ineligible` appears. This is the **one permitted exception** to check 2's ban on new patches of `custody_telemetry_identity`. It is granted by test ID, and only in this direction: the stand-in makes a real bundle look mock and can only add a refusal. Planted defect: the barrier's two lines removed in a scratch copy turn the sibling RED. One sibling per barrier site (three sites). NOT EXECUTED by me. If it cannot be built without a production edit, the seat returns; the lead then retires the sibling for that site and records the reason ("after the gate fix the gate carries the mock refusal; the barrier stays in place, unchanged, as a second line").
+
+A1 §5.1 (sub-classes of T5), for reference:
+### 5.1 T5 is four kinds of test, not one
+
+The 57 outcomes are 22 test IDs (two IDs carry 25 and 12 sub-test outcomes). Under the route (Z12, Z13):
+
+| Sub-class | Test IDs | Outcomes | What I observed | Rule |
+|---|---|---|---|---|
+| **T5a**, positive tests on the class corpus | 7: the pilot test; and the variants `…_with_production_telemetry_identity` of `complete_strict_current_bundle_set…` (25), `incomplete_pair_is_listed…` (12), `unregistered_matching_topup…`, `private_stochastic_seam…`, `named_strata_manifest…`, `valid_replacement_fills_original_slot…` | 42 | GREEN | Builder corpus stays; references per §4.3; both switches by ID under rules 7 and 8; assertions byte-identical. |
+| **M**, candidates for a mock-refusal subject | 7: the five variants of the rows above **without** `_with_production_telemetry_identity` (`complete_strict…`, `unregistered_matching_topup…`, `private_stochastic_seam…`, `named_strata_manifest…`, `valid_replacement…`) and both `test_cli_binds_distinct_calibration_bundles_and_preserves_mock_refusal…` | 7 | RED: `5 != 0`, `False is not true`, a list difference, `unexpectedly None`. On the candidate two of them fail with `'mock_telemetry_claim_ineligible' not found`. | The lead reads each. Where the subject is the refusal of mock bundles: class **T3** as ruled (R-list, sibling). Otherwise T6. |
+| **F**, a member directory with no bundle form | 4: `test_cli_output_separation…`, `test_claim_output_separation…`, `test_attribution_limited_floor…`, `test_real_controller_pinned_model…` | 4 | RED at the gate: `missing required artifact: metadata.json` for `a10:cell-1-r0`, `runs:cell-1-r0`, `runs:attribution-cond-2m-short_short-r0` | Class **T4** first (give the members bundle form, bound and paired), then T5a. |
+| **R**, residue | 4: `test_incomplete_pair_is_listed…` and `test_replacement_with_changed_rep_tag…` (RED at the gate for `mock-model-r1-short_short`, cause not established by me); `test_authenticated_v2_whole_window_source…` (refused by rule 8); `test_production_request_factory_reaches_predeclared_transport` (`unexpectedly None`, cause not established) | 4 | RED | **T6**, `NEEDS_RULING`, by test ID. |
+
+42 + 7 + 4 + 4 = 57.
+

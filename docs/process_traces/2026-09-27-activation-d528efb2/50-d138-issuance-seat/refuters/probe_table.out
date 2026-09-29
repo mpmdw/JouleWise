@@ -1,0 +1,14 @@
+T0 file sha == pin True rows 11 parsed==table True
+T1 file edited, pin unchanged -> registry digest mismatch: 67593c72711209
+T2 file+module pin edited, table not -> invalid or duplicate row: table mismatch
+T3 caller-supplied digest != module pin -> table equality SKIPPED, returns 10 rows
+T3b issuer _registered_dispositions with patched issuer pin -> 10 rows (no table check)
+T4 mechanism edit -> invalid or duplicate row
+V0 real issued valid True
+V1 table drops one id -> False
+V2 table gains id absent from prior set -> False
+V3 table gains a 25F84 valid prior row id -> True (silent drift; only test D1 catches)
+V4 table gains an invalid W1 row id -> False
+V5 a later decision disposing a row already in this prior set -> False (fail-closed: issued file stops loading)
+C prior 86 valid 53 valid target 23 valid earlier 30 excluded_members 0 declared ['D-126-disposition-25G83-v3-2026-09-25']
+C disposed rows present 11 their sessions ['d079-epoch-25g83-derivation-n1-20260919', 'd079-epoch-25g83-derivation-n2-20260919'] dispositions ['valid']

@@ -1,0 +1,242 @@
+file:line	literal	status	context
+docs/paper/draft-v2-skeleton.md:27	50	UNPOLICED-REGISTERED	50 phases: 33 crossed three reco
+docs/paper/draft-v2-skeleton.md:157	17	UNPOLICED-REGISTERED	derives two constants from its retained 17-capture corpus. Student-\(t\)
+docs/paper/draft-v2-skeleton.md:157	17	UNPOLICED-REGISTERED	cause the spread is estimated from only 17 captures—sets the maximum per
+docs/paper/draft-v2-skeleton.md:157	17	UNPOLICED-REGISTERED	 permitted pre/post difference. For \(n=17\) per-capture bounds, the sam
+docs/paper/draft-v2-skeleton.md:157	2.460856	UNPOLICED-UNREGISTERED	(n-1\) formula of Section 3) is \(s_b = 2.460856\) ms (retained SD operand, \(
+docs/paper/draft-v2-skeleton.md:157	2.460856207694636	UNPOLICED-UNREGISTERED	= 2.460856\) ms (retained SD operand, \(2.460856207694636\) ms) and \(t_{0.995,16}\) is
+docs/paper/draft-v2-skeleton.md:157	10	UNPOLICED-UNREGISTERED	times s_b\times\sqrt{2}\) records about 10 ms (retained as 10.1648347577
+docs/paper/draft-v2-skeleton.md:157	10.164834757777545	UNPOLICED-UNREGISTERED	t{2}\) records about 10 ms (retained as 10.164834757777545 ms for byte-exact replay), pr
+docs/paper/draft-v2-skeleton.md:157	10.164835	UNPOLICED-REGISTERED	or byte-exact replay), printed as the \(10.164835\)-ms maximum permitted pre/po
+docs/paper/draft-v2-skeleton.md:157	9.723589288793850	UNPOLICED-UNREGISTERED	wance** starts from the corpus range, \(9.723589288793850\) ms, rounded to the nearest 
+docs/paper/draft-v2-skeleton.md:157	9.724	UNPOLICED-REGISTERED	ven digit (`ROUND_HALF_EVEN`), giving \(9.724\) ms; Appendix A.3.8 prints t
+docs/paper/draft-v2-skeleton.md:157	17	UNPOLICED-REGISTERED	\(9.724\) ms; Appendix A.3.8 prints the 17 bounds from the retained cali
+docs/paper/draft-v2-skeleton.md:157	9.724	UNPOLICED-REGISTERED	ax(|B_{\mathrm{post}}-B_{\mathrm{pre}}|,9.724\ \mathrm{ms})\), added once. 
+docs/paper/draft-v2-skeleton.md:157	10.164835	UNPOLICED-REGISTERED	t-window bound differ by 4 ms, pass the 10.164835-ms limit, and give \(b=29+\ma
+docs/paper/draft-v2-skeleton.md:157	9.724	UNPOLICED-REGISTERED	164835-ms limit, and give \(b=29+\max(4,9.724)=38.724\) ms. If the post-win
+docs/paper/draft-v2-skeleton.md:537	0.0000010000000000000002	UNPOLICED-REGISTERED	in every row is about 1 µs (retained as 0.0000010000000000000002 s for byte-exact replay).
+docs/paper/draft-v2-skeleton.md:571	59	UNPOLICED-REGISTERED	l’s switch-on and switch-off times. The 59
+docs/paper/draft-v2-skeleton.md:572	49	UNPOLICED-REGISTERED	onset lags are all positive; 49 of 59 offset lags are negativ
+docs/paper/draft-v2-skeleton.md:572	59	UNPOLICED-REGISTERED	onset lags are all positive; 49 of 59 offset lags are negative, eig
+docs/paper/draft-v2-skeleton.md:573	+13.0	UNPOLICED-REGISTERED	and two zero. Their medians are +13.0 ms and
+docs/paper/draft-v2-skeleton.md:574	−5.5	UNPOLICED-REGISTERED	−5.5 ms. These are 59 onset and 59
+docs/paper/draft-v2-skeleton.md:574	59	UNPOLICED-REGISTERED	−5.5 ms. These are 59 onset and 59 offset values (1
+docs/paper/draft-v2-skeleton.md:574	59	UNPOLICED-REGISTERED	−5.5 ms. These are 59 onset and 59 offset values (118 edges) fro
+docs/paper/draft-v2-skeleton.md:574	118	UNPOLICED-UNREGISTERED	hese are 59 onset and 59 offset values (118 edges) from one capture,
+docs/paper/draft-v2-skeleton.md:584	59	UNPOLICED-REGISTERED	ks mark the scale. Blue circles are the 59 fitted onset lags; orange squ
+docs/paper/draft-v2-skeleton.md:585	59	UNPOLICED-REGISTERED	the 59 fitted offset lags. The solid
+docs/paper/draft-v2-skeleton.md:587	+13.0	UNPOLICED-REGISTERED	+13.0 ms and −5.5 ms; they describe
+docs/paper/draft-v2-skeleton.md:587	−5.5	UNPOLICED-REGISTERED	+13.0 ms and −5.5 ms; they describe this sample
+docs/paper/draft-v2-skeleton.md:590	+27	UNPOLICED-UNREGISTERED	The leader at pulse index 9 marks its +27-ms best-fit onset. The accept
+docs/paper/draft-v2-skeleton.md:592	28.93293456111476	UNPOLICED-UNREGISTERED	region, 28.93293456111476 ms on that onset, equals the 
+docs/paper/draft-v2-skeleton.md:593	1.1349971959968978	UNPOLICED-UNREGISTERED	excursion. Adding the 1.1349971959968978-ms clock-anchor allowance giv
+docs/paper/draft-v2-skeleton.md:594	30.067931757111657	UNPOLICED-UNREGISTERED	30.067931757111657 ms. The endpoint displacement
+docs/paper/draft-v2-skeleton.md:603	59	UNPOLICED-REGISTERED	59/59 and 49/59 counts. The same
+docs/paper/draft-v2-skeleton.md:603	59	UNPOLICED-REGISTERED	59/59 and 49/59 counts. The same JS
+docs/paper/draft-v2-skeleton.md:603	49	UNPOLICED-REGISTERED	59/59 and 49/59 counts. The same JSON's `p
+docs/paper/draft-v2-skeleton.md:603	59	UNPOLICED-REGISTERED	59/59 and 49/59 counts. The same JSON's `per_
+docs/paper/draft-v2-skeleton.md:643	50	UNPOLICED-REGISTERED	prompt-processing phases in 50 bundles: 10 from `runs_window
+docs/paper/draft-v2-skeleton.md:643	10	UNPOLICED-REGISTERED	prompt-processing phases in 50 bundles: 10 from `runs_window_a10_2026072
+docs/paper/draft-v2-skeleton.md:644	40	UNPOLICED-REGISTERED	and 40 from `runs_window_c_20260726`
+docs/paper/draft-v2-skeleton.md:645	37	UNPOLICED-REGISTERED	population, 37 of 50 phases overlapped two s
+docs/paper/draft-v2-skeleton.md:645	50	UNPOLICED-REGISTERED	population, 37 of 50 phases overlapped two samplin
+docs/paper/draft-v2-skeleton.md:646	13	UNPOLICED-REGISTERED	13 of 50 overlapped three. Accor
+docs/paper/draft-v2-skeleton.md:646	50	UNPOLICED-REGISTERED	13 of 50 overlapped three. Accordingly
+docs/paper/draft-v2-skeleton.md:647	13	UNPOLICED-REGISTERED	mum (`not_resolvable_sample_count`) and 13 passed
+docs/paper/draft-v2-skeleton.md:667	37	UNPOLICED-REGISTERED	ecords failed the three-record minimum: 37 of the 50 1.5B
+docs/paper/draft-v2-skeleton.md:667	50	UNPOLICED-REGISTERED	led the three-record minimum: 37 of the 50 1.5B
+docs/paper/draft-v2-skeleton.md:668	50	UNPOLICED-REGISTERED	phases and none of the 50 7B phases, which overlapped t
+docs/paper/draft-v2-skeleton.md:690	0.121034145	UNPOLICED-REGISTERED	lasted 0.121034145 s, rendered as 0.121 s for th
+docs/paper/draft-v2-skeleton.md:690	0.121	UNPOLICED-REGISTERED	lasted 0.121034145 s, rendered as 0.121 s for the comparison below. O
+docs/paper/draft-v2-skeleton.md:691	406	UNPOLICED-REGISTERED	run's retained power trace, the 406 sampling records had a record
+docs/paper/draft-v2-skeleton.md:697	405	UNPOLICED-REGISTERED	ument’s physical resolution. Across the 405 differences
+docs/paper/draft-v2-skeleton.md:703	100	UNPOLICED-REGISTERED	dg071-dg075-statistics.md) reports that 100 of 405 boundaries
+docs/paper/draft-v2-skeleton.md:703	405	UNPOLICED-REGISTERED	g075-statistics.md) reports that 100 of 405 boundaries
+docs/paper/draft-v2-skeleton.md:704	0.0000004	UNPOLICED-REGISTERED	e a nonzero gap and that the largest is 0.0000004 s. The enforced endpoint
+docs/paper/draft-v2-skeleton.md:708	0.121	UNPOLICED-REGISTERED	The 0.121-s phase is only barely longer
+docs/paper/draft-v2-skeleton.md:718	37	UNPOLICED-REGISTERED	record width; 37 phases had only two overlaps.
+docs/paper/draft-v2-skeleton.md:720	1784978933	UNPOLICED-REGISTERED	relative to epoch 1784978933 s, the phase [0.267684,0.3887
+docs/paper/draft-v2-skeleton.md:720	0.267684	UNPOLICED-REGISTERED	ative to epoch 1784978933 s, the phase [0.267684,0.3887181]
+docs/paper/draft-v2-skeleton.md:720	0.3887181	UNPOLICED-REGISTERED	epoch 1784978933 s, the phase [0.267684,0.3887181]
+docs/paper/draft-v2-skeleton.md:721	0.1945653	UNPOLICED-REGISTERED	overlaps records [0.1945653,0.3210495] and [0.3210495,0.4
+docs/paper/draft-v2-skeleton.md:721	0.3210495	UNPOLICED-REGISTERED	overlaps records [0.1945653,0.3210495] and [0.3210495,0.434475] for
+docs/paper/draft-v2-skeleton.md:721	0.3210495	UNPOLICED-REGISTERED	laps records [0.1945653,0.3210495] and [0.3210495,0.434475] for
+docs/paper/draft-v2-skeleton.md:721	0.434475	UNPOLICED-REGISTERED	ds [0.1945653,0.3210495] and [0.3210495,0.434475] for
+docs/paper/draft-v2-skeleton.md:722	0.0533655	UNPOLICED-REGISTERED	0.0533655 and 0.0676686 s: this phase f
+docs/paper/draft-v2-skeleton.md:722	0.0676686	UNPOLICED-REGISTERED	0.0533655 and 0.0676686 s: this phase fails the three
+docs/paper/draft-v2-skeleton.md:724	1784981672	UNPOLICED-REGISTERED	a three-overlap case: relative to epoch 1784981672 s, its phase is
+docs/paper/draft-v2-skeleton.md:725	0.671041	UNPOLICED-REGISTERED	[0.671041,0.807431]. The middle record 
+docs/paper/draft-v2-skeleton.md:725	0.807431	UNPOLICED-REGISTERED	[0.671041,0.807431]. The middle record lies whol
+docs/paper/draft-v2-skeleton.md:730	364	UNPOLICED-REGISTERED	| r03 | 364 | 0.0726435 | 0.1945655 | 0 |
+docs/paper/draft-v2-skeleton.md:730	0.0726435	UNPOLICED-REGISTERED	| r03 | 364 | 0.0726435 | 0.1945655 | 0 |
+docs/paper/draft-v2-skeleton.md:730	0.1945655	UNPOLICED-REGISTERED	| r03 | 364 | 0.0726435 | 0.1945655 | 0 |
+docs/paper/draft-v2-skeleton.md:730	0	UNPOLICED-REGISTERED	| r03 | 364 | 0.0726435 | 0.1945655 | 0 |
+docs/paper/draft-v2-skeleton.md:731	365	UNPOLICED-REGISTERED	| r03 | 365 | 0.1945653 | 0.3210495 | 0.0
+docs/paper/draft-v2-skeleton.md:731	0.1945653	UNPOLICED-REGISTERED	| r03 | 365 | 0.1945653 | 0.3210495 | 0.0533655 |
+docs/paper/draft-v2-skeleton.md:731	0.3210495	UNPOLICED-REGISTERED	| r03 | 365 | 0.1945653 | 0.3210495 | 0.0533655 |
+docs/paper/draft-v2-skeleton.md:731	0.0533655	UNPOLICED-REGISTERED	| r03 | 365 | 0.1945653 | 0.3210495 | 0.0533655 |
+docs/paper/draft-v2-skeleton.md:732	366	UNPOLICED-REGISTERED	| r03 | 366 | 0.3210495 | 0.434475 | 0.06
+docs/paper/draft-v2-skeleton.md:732	0.3210495	UNPOLICED-REGISTERED	| r03 | 366 | 0.3210495 | 0.434475 | 0.0676686 |
+docs/paper/draft-v2-skeleton.md:732	0.434475	UNPOLICED-REGISTERED	| r03 | 366 | 0.3210495 | 0.434475 | 0.0676686 |
+docs/paper/draft-v2-skeleton.md:732	0.0676686	UNPOLICED-REGISTERED	| r03 | 366 | 0.3210495 | 0.434475 | 0.0676686 |
+docs/paper/draft-v2-skeleton.md:733	367	UNPOLICED-REGISTERED	| r03 | 367 | 0.434475 | 0.5463145 | 0 |
+docs/paper/draft-v2-skeleton.md:733	0.434475	UNPOLICED-REGISTERED	| r03 | 367 | 0.434475 | 0.5463145 | 0 |
+docs/paper/draft-v2-skeleton.md:733	0.5463145	UNPOLICED-REGISTERED	| r03 | 367 | 0.434475 | 0.5463145 | 0 |
+docs/paper/draft-v2-skeleton.md:733	0	UNPOLICED-REGISTERED	| r03 | 367 | 0.434475 | 0.5463145 | 0 |
+docs/paper/draft-v2-skeleton.md:734	360	UNPOLICED-REGISTERED	| r08 | 360 | 0.4395304 | 0.5621388 | 0 |
+docs/paper/draft-v2-skeleton.md:734	0.4395304	UNPOLICED-REGISTERED	| r08 | 360 | 0.4395304 | 0.5621388 | 0 |
+docs/paper/draft-v2-skeleton.md:734	0.5621388	UNPOLICED-REGISTERED	| r08 | 360 | 0.4395304 | 0.5621388 | 0 |
+docs/paper/draft-v2-skeleton.md:734	0	UNPOLICED-REGISTERED	| r08 | 360 | 0.4395304 | 0.5621388 | 0 |
+docs/paper/draft-v2-skeleton.md:735	361	UNPOLICED-REGISTERED	| r08 | 361 | 0.5621388 | 0.6849675 | 0.0
+docs/paper/draft-v2-skeleton.md:735	0.5621388	UNPOLICED-REGISTERED	| r08 | 361 | 0.5621388 | 0.6849675 | 0.0139265 |
+docs/paper/draft-v2-skeleton.md:735	0.6849675	UNPOLICED-REGISTERED	| r08 | 361 | 0.5621388 | 0.6849675 | 0.0139265 |
+docs/paper/draft-v2-skeleton.md:735	0.0139265	UNPOLICED-REGISTERED	| r08 | 361 | 0.5621388 | 0.6849675 | 0.0139265 |
+docs/paper/draft-v2-skeleton.md:736	362	UNPOLICED-REGISTERED	| r08 | 362 | 0.6849675 | 0.799845 | 0.11
+docs/paper/draft-v2-skeleton.md:736	0.6849675	UNPOLICED-REGISTERED	| r08 | 362 | 0.6849675 | 0.799845 | 0.1148775 |
+docs/paper/draft-v2-skeleton.md:736	0.799845	UNPOLICED-REGISTERED	| r08 | 362 | 0.6849675 | 0.799845 | 0.1148775 |
+docs/paper/draft-v2-skeleton.md:736	0.1148775	UNPOLICED-REGISTERED	| r08 | 362 | 0.6849675 | 0.799845 | 0.1148775 |
+docs/paper/draft-v2-skeleton.md:737	363	UNPOLICED-REGISTERED	| r08 | 363 | 0.799845 | 0.9133315 | 0.00
+docs/paper/draft-v2-skeleton.md:737	0.799845	UNPOLICED-REGISTERED	| r08 | 363 | 0.799845 | 0.9133315 | 0.007586 |
+docs/paper/draft-v2-skeleton.md:737	0.9133315	UNPOLICED-REGISTERED	| r08 | 363 | 0.799845 | 0.9133315 | 0.007586 |
+docs/paper/draft-v2-skeleton.md:737	0.007586	UNPOLICED-REGISTERED	| r08 | 363 | 0.799845 | 0.9133315 | 0.007586 |
+docs/paper/draft-v2-skeleton.md:738	364	UNPOLICED-REGISTERED	| r08 | 364 | 0.9133313 | 1.0261726 | 0 |
+docs/paper/draft-v2-skeleton.md:738	0.9133313	UNPOLICED-REGISTERED	| r08 | 364 | 0.9133313 | 1.0261726 | 0 |
+docs/paper/draft-v2-skeleton.md:738	1.0261726	UNPOLICED-REGISTERED	| r08 | 364 | 0.9133313 | 1.0261726 | 0 |
+docs/paper/draft-v2-skeleton.md:738	0	UNPOLICED-REGISTERED	| r08 | 364 | 0.9133313 | 1.0261726 | 0 |
+docs/paper/draft-v2-skeleton.md:748	37	UNPOLICED-REGISTERED	 map: registry DG-067/068/069 binds the 37/50/13 counts to
+docs/paper/draft-v2-skeleton.md:748	50	UNPOLICED-REGISTERED	p: registry DG-067/068/069 binds the 37/50/13 counts to
+docs/paper/draft-v2-skeleton.md:748	13	UNPOLICED-REGISTERED	registry DG-067/068/069 binds the 37/50/13 counts to
+docs/paper/draft-v2-skeleton.md:792	30	UNPOLICED-REGISTERED	about 30 ms (retained as 0.03006793175
+docs/paper/draft-v2-skeleton.md:792	0.030067931757111657	UNPOLICED-REGISTERED	about 30 ms (retained as 0.030067931757111657 s for byte-exact replay). <!-
+docs/paper/draft-v2-skeleton.md:827	59	UNPOLICED-REGISTERED	The 59 of 59 onsets late and 49 of 5
+docs/paper/draft-v2-skeleton.md:827	59	UNPOLICED-REGISTERED	The 59 of 59 onsets late and 49 of 59 offs
+docs/paper/draft-v2-skeleton.md:827	49	UNPOLICED-REGISTERED	The 59 of 59 onsets late and 49 of 59 offsets early form a on
+docs/paper/draft-v2-skeleton.md:827	59	UNPOLICED-REGISTERED	The 59 of 59 onsets late and 49 of 59 offsets early form a one-dire
+docs/paper/draft-v2-skeleton.md:892	50	UNPOLICED-REGISTERED	50 members of `runs_window_7bflo
+docs/paper/draft-v2-skeleton.md:915	50	UNPOLICED-REGISTERED	(7B) passed in all 50 phases: 33 crossed three reco
+docs/paper/draft-v2-skeleton.md:996	111	UNPOLICED-REGISTERED	22T145535-e941c821`, record 0): *e_0* = 111 242 541 ns; the parsed channe
+docs/paper/draft-v2-skeleton.md:996	242	UNPOLICED-REGISTERED	45535-e941c821`, record 0): *e_0* = 111 242 541 ns; the parsed channel po
+docs/paper/draft-v2-skeleton.md:996	541	UNPOLICED-REGISTERED	5-e941c821`, record 0): *e_0* = 111 242 541 ns; the parsed channel powers
+docs/paper/draft-v2-skeleton.md:996	0.9169149999999999	UNPOLICED-REGISTERED	2 541 ns; the parsed channel powers are 0.9169149999999999 W + 0.00898937 W + 0.0 W, giv
+docs/paper/draft-v2-skeleton.md:996	0.00898937	UNPOLICED-REGISTERED	annel powers are 0.9169149999999999 W + 0.00898937 W + 0.0 W, giving *p_0* = 0.9
+docs/paper/draft-v2-skeleton.md:996	0.0	UNPOLICED-REGISTERED	e 0.9169149999999999 W + 0.00898937 W + 0.0 W, giving *p_0* = 0.925904369
+docs/paper/draft-v2-skeleton.md:996	0.9259043699999999	UNPOLICED-REGISTERED	 + 0.00898937 W + 0.0 W, giving *p_0* = 0.9259043699999999 W; counters 102 + 1 + 0 mJ gi
+docs/paper/draft-v2-skeleton.md:996	102	UNPOLICED-REGISTERED	 *p_0* = 0.9259043699999999 W; counters 102 + 1 + 0 mJ give *E_0* = 0.103
+docs/paper/draft-v2-skeleton.md:996	1	UNPOLICED-REGISTERED	 = 0.9259043699999999 W; counters 102 + 1 + 0 mJ give *E_0* = 0.103 J; 
+docs/paper/draft-v2-skeleton.md:996	0	UNPOLICED-REGISTERED	.9259043699999999 W; counters 102 + 1 + 0 mJ give *E_0* = 0.103 J; and 
+docs/paper/draft-v2-skeleton.md:996	0.103	UNPOLICED-REGISTERED	W; counters 102 + 1 + 0 mJ give *E_0* = 0.103 J; and *p_0* · 0.111242541 s 
+docs/paper/draft-v2-skeleton.md:996	0.111242541	UNPOLICED-REGISTERED	 0 mJ give *E_0* = 0.103 J; and *p_0* · 0.111242541 s = 0.10299995484180416 J, wh
+docs/paper/draft-v2-skeleton.md:996	0.10299995484180416	UNPOLICED-REGISTERED	 = 0.103 J; and *p_0* · 0.111242541 s = 0.10299995484180416 J, which differs from *E_0* b
+docs/paper/draft-v2-skeleton.md:996	4.5	UNPOLICED-UNREGISTERED	84180416 J, which differs from *E_0* by 4.5·10⁻⁸ J, far inside the tolera
+docs/paper/draft-v2-skeleton.md:1004	0.0000010000000000000002	UNPOLICED-REGISTERED	very stamp reports a wall resolution of 0.0000010000000000000002 s (the closest binary64 value
+docs/paper/draft-v2-skeleton.md:1004	4	UNPOLICED-REGISTERED	 to 1 µs) and a monotonic resolution of 4.166666666666666e-8 s, so *r* 
+docs/paper/draft-v2-skeleton.md:1004	0.0000010000000000000002	UNPOLICED-REGISTERED	ion of 4.166666666666666e-8 s, so *r* = 0.0000010000000000000002 s for every stamp.
+docs/paper/draft-v2-skeleton.md:1057	1784298599.0949996	UNPOLICED-UNREGISTERED	 largest raw upper offset *w* − *mb* is 1784298599.0949996 s (at S_stop) and the smalles
+docs/paper/draft-v2-skeleton.md:1057	1784298599.0945535	UNPOLICED-UNREGISTERED	smallest raw lower offset *w* − *ma* is 1784298599.0945535 s (at S_pre); the difference 
+docs/paper/draft-v2-skeleton.md:1057	0.00044608116149902344	UNPOLICED-REGISTERED	 s (at S_pre); the difference is span = 0.00044608116149902344 s (446 µs), the second of the
+docs/paper/draft-v2-skeleton.md:1057	446	UNPOLICED-UNREGISTERED	nce is span = 0.00044608116149902344 s (446 µs), the second of the four t
+docs/paper/draft-v2-skeleton.md:1083	111	UNPOLICED-REGISTERED	ly that amount. Worked example: *e_0* = 111 242 541 ns and *r_pre* = 0.00
+docs/paper/draft-v2-skeleton.md:1083	242	UNPOLICED-REGISTERED	hat amount. Worked example: *e_0* = 111 242 541 ns and *r_pre* = 0.000001
+docs/paper/draft-v2-skeleton.md:1083	541	UNPOLICED-REGISTERED	amount. Worked example: *e_0* = 111 242 541 ns and *r_pre* = 0.0000010000
+docs/paper/draft-v2-skeleton.md:1083	0.0000010000000000000002	UNPOLICED-REGISTERED	e: *e_0* = 111 242 541 ns and *r_pre* = 0.0000010000000000000002 s ≈ 1000 ns, so *k_pre* = 111
+docs/paper/draft-v2-skeleton.md:1083	111	UNPOLICED-REGISTERED	0000000000002 s ≈ 1000 ns, so *k_pre* = 111 241 541 ns; and *k_parse* = (
+docs/paper/draft-v2-skeleton.md:1083	241	UNPOLICED-REGISTERED	000000002 s ≈ 1000 ns, so *k_pre* = 111 241 541 ns; and *k_parse* = (4587
+docs/paper/draft-v2-skeleton.md:1083	541	UNPOLICED-REGISTERED	00002 s ≈ 1000 ns, so *k_pre* = 111 241 541 ns; and *k_parse* = (458737.5
+docs/paper/draft-v2-skeleton.md:1083	458737.509840291	UNPOLICED-REGISTERED	pre* = 111 241 541 ns; and *k_parse* = (458737.509840291 − 458736.4081875)·10⁹ + 1000 
+docs/paper/draft-v2-skeleton.md:1083	458736.4081875	UNPOLICED-REGISTERED	ns; and *k_parse* = (458737.509840291 − 458736.4081875)·10⁹ + 1000 ns = 1.1016537909
+docs/paper/draft-v2-skeleton.md:1083	1.1016537909669094	UNPOLICED-UNREGISTERED	40291 − 458736.4081875)·10⁹ + 1000 ns = 1.1016537909669094·10⁹ ns, i.e. record 0 ended b
+docs/paper/draft-v2-skeleton.md:1083	0.111	UNPOLICED-UNREGISTERED	094·10⁹ ns, i.e. record 0 ended between 0.111 s and 1.102 s after *m_0*. If
+docs/paper/draft-v2-skeleton.md:1083	1.102	UNPOLICED-UNREGISTERED	i.e. record 0 ended between 0.111 s and 1.102 s after *m_0*. If *k_pre* > *
+docs/paper/draft-v2-skeleton.md:1091	1665	UNPOLICED-REGISTERED	ausal rows (two native rows per record; 1665 records give 3330 rows on the
+docs/paper/draft-v2-skeleton.md:1091	3330	UNPOLICED-UNREGISTERED	tive rows per record; 1665 records give 3330 rows on the example capture).
+docs/paper/draft-v2-skeleton.md:1100	0.05247795879145338	UNPOLICED-REGISTERED	exceeded`. On the example capture it is 0.05247795879145338 s.
+docs/paper/draft-v2-skeleton.md:1118	1784757336.5519202	UNPOLICED-REGISTERED	, wall origin the Unix epoch): *A_lo* = 1784757336.5519202 s and *A_hi* = 1784757336.553
+docs/paper/draft-v2-skeleton.md:1118	1784757336.5532944	UNPOLICED-REGISTERED	lo* = 1784757336.5519202 s and *A_hi* = 1784757336.5532944 s after outward rounding, poi
+docs/paper/draft-v2-skeleton.md:1118	1784757336.5526073	UNPOLICED-REGISTERED	er outward rounding, point anchor *A* = 1784757336.5526073 s, and the four terms are
+docs/paper/draft-v2-skeleton.md:1120	0.0006869160344978743	UNPOLICED-REGISTERED	    H      = 0.0006869160344978743
+docs/paper/draft-v2-skeleton.md:1121	0.00044608116149902344	UNPOLICED-REGISTERED	    span   = 0.00044608116149902344
+docs/paper/draft-v2-skeleton.md:1122	0.0000010000000000000002	UNPOLICED-REGISTERED	    r_max  = 0.0000010000000000000002
+docs/paper/draft-v2-skeleton.md:1123	0.000001	UNPOLICED-REGISTERED	    pad    = 0.000001
+docs/paper/draft-v2-skeleton.md:1124	0.0011349971959968977402	UNPOLICED-REGISTERED	    sum    = 0.0011349971959968977402  →  roundup  →  0.00113499719
+docs/paper/draft-v2-skeleton.md:1124	0.0011349971959968978	UNPOLICED-REGISTERED	.0011349971959968977402  →  roundup  →  0.0011349971959968978 s
+docs/paper/draft-v2-skeleton.md:1126	0.0011349971959968978	UNPOLICED-REGISTERED	so *B_anchor* = 0.0011349971959968978 s (1.135 ms). The sum is exac
+docs/paper/draft-v2-skeleton.md:1126	1.135	UNPOLICED-REGISTERED	o *B_anchor* = 0.0011349971959968978 s (1.135 ms). The sum is exact in deci
+docs/paper/draft-v2-skeleton.md:1126	0.0006871223449707031	UNPOLICED-REGISTERED	lo*)/2 from the printed endpoints gives 0.0006871223449707031 s, 0.0000002063105 s above th
+docs/paper/draft-v2-skeleton.md:1126	0.0000002063105	UNPOLICED-REGISTERED	ndpoints gives 0.0006871223449707031 s, 0.0000002063105 s above the exact *H* — less 
+docs/paper/draft-v2-skeleton.md:1126	1.78	UNPOLICED-REGISTERED	binary64 spacing at the epoch magnitude 1.78·10⁹ s, which is 2.4·10⁻⁷ s — 
+docs/paper/draft-v2-skeleton.md:1126	2.4	UNPOLICED-REGISTERED	he epoch magnitude 1.78·10⁹ s, which is 2.4·10⁻⁷ s — because each endpoin
+docs/paper/draft-v2-skeleton.md:1126	1.0000022202281935	UNPOLICED-REGISTERED	printed endpoints. Fitted rate window: [1.0000022202281935, 1.0000022646196323], i.e. th
+docs/paper/draft-v2-skeleton.md:1126	1.0000022646196323	UNPOLICED-REGISTERED	itted rate window: [1.0000022202281935, 1.0000022646196323], i.e. the wall clock ran abo
+docs/paper/draft-v2-skeleton.md:1126	2.2	UNPOLICED-REGISTERED	6196323], i.e. the wall clock ran about 2.2 ppm fast against the monotoni
+docs/paper/draft-v2-skeleton.md:1126	197	UNPOLICED-REGISTERED	st against the monotonic clock over the 197-second capture; 197 rollovers
+docs/paper/draft-v2-skeleton.md:1126	197	UNPOLICED-REGISTERED	onic clock over the 197-second capture; 197 rollovers and 1665 records we
+docs/paper/draft-v2-skeleton.md:1126	1665	UNPOLICED-REGISTERED	e 197-second capture; 197 rollovers and 1665 records were checked.
+docs/paper/draft-v2-skeleton.md:1152	0.0	UNPOLICED-UNREGISTERED	mple capture the idle GPU channel reads 0.0 W throughout the baseline set
+docs/paper/draft-v2-skeleton.md:1152	0.0	UNPOLICED-UNREGISTERED	aseline set, so \(P_{\mathrm{rest}}\) = 0.0 W, the MAD is 0, and the floo
+docs/paper/draft-v2-skeleton.md:1152	0	UNPOLICED-UNREGISTERED	P_{\mathrm{rest}}\) = 0.0 W, the MAD is 0, and the floor engages: σ = 0
+docs/paper/draft-v2-skeleton.md:1152	0.001	UNPOLICED-UNREGISTERED	he MAD is 0, and the floor engages: σ = 0.001 W.
+docs/paper/draft-v2-skeleton.md:1160	40.6667	UNPOLICED-REGISTERED	Example (pulse 0 of the capture): *a* = 40.6667 W, SNR = 40 666.7. All pulse-
+docs/paper/draft-v2-skeleton.md:1160	40	UNPOLICED-REGISTERED	of the capture): *a* = 40.6667 W, SNR = 40 666.7. All pulse-0 fit values
+docs/paper/draft-v2-skeleton.md:1160	666.7	UNPOLICED-REGISTERED	the capture): *a* = 40.6667 W, SNR = 40 666.7. All pulse-0 fit values quote
+docs/paper/draft-v2-skeleton.md:1160	1784757336.5528765	UNPOLICED-REGISTERED	rocessed, under an earlier anchor point 1784757336.5528765 s, about 0.27 ms later than t
+docs/paper/draft-v2-skeleton.md:1160	0.27	UNPOLICED-UNREGISTERED	nchor point 1784757336.5528765 s, about 0.27 ms later than the current poi
+docs/paper/draft-v2-skeleton.md:1214	2	UNPOLICED-UNREGISTERED	e: pulse 0's on-stamp has *ma* − *mb* = 2.500019036233425e-7 s as execu
+docs/paper/draft-v2-skeleton.md:1214	0.0000010000000000000002	UNPOLICED-REGISTERED	e-7 s as executed in binary64 and *r* = 0.0000010000000000000002 s, so *u_on* = 1.125000951811
+docs/paper/draft-v2-skeleton.md:1214	1	UNPOLICED-UNREGISTERED	0.0000010000000000000002 s, so *u_on* = 1.1250009518116714e-6 s. Its re
+docs/paper/draft-v2-skeleton.md:1214	0.014921970702173189	UNPOLICED-REGISTERED	der the earlier anchor noted above) is [0.014921970702173189, 0.017213039063451813] s and 
+docs/paper/draft-v2-skeleton.md:1214	0.017213039063451813	UNPOLICED-REGISTERED	 noted above) is [0.014921970702173189, 0.017213039063451813] s and its offset region is [
+docs/paper/draft-v2-skeleton.md:1214	−0.012269482911167666	UNPOLICED-REGISTERED	9063451813] s and its offset region is [−0.012269482911167666, −0.009886278807582334] s: th
+docs/paper/draft-v2-skeleton.md:1214	−0.009886278807582334	UNPOLICED-REGISTERED	ffset region is [−0.012269482911167666, −0.009886278807582334] s: the instrument reported t
+docs/paper/draft-v2-skeleton.md:1214	16	UNPOLICED-UNREGISTERED	ment reported this pulse starting about 16 ms late and ending about 11 m
+docs/paper/draft-v2-skeleton.md:1214	11	UNPOLICED-UNREGISTERED	rting about 16 ms late and ending about 11 ms early, and the model-defin
+docs/paper/draft-v2-skeleton.md:1214	2.3	UNPOLICED-UNREGISTERED	del-defined allowed onset band is about 2.3 ms wide; it is not a physical
+docs/paper/draft-v2-skeleton.md:1226	0.030067931757111657	UNPOLICED-REGISTERED	hor estimator of A.3.3): *B_fiducial* = 0.030067931757111657 s, of which *B_anchor* = 0.00
+docs/paper/draft-v2-skeleton.md:1226	0.0011349971959968978	UNPOLICED-REGISTERED	67931757111657 s, of which *B_anchor* = 0.0011349971959968978 s and the difference between 
+docs/paper/draft-v2-skeleton.md:1226	0.0289329345611147592	UNPOLICED-REGISTERED	rence between the two printed bounds is 0.0289329345611147592 s (28.9 ms). That difference 
+docs/paper/draft-v2-skeleton.md:1226	28.9	UNPOLICED-REGISTERED	nted bounds is 0.0289329345611147592 s (28.9 ms). That difference is what 
+docs/paper/draft-v2-skeleton.md:1247	17	UNPOLICED-REGISTERED	These are the 17 per-capture \(b_{\mathrm{fidu
+docs/paper/draft-v2-skeleton.md:1262	0.030067931757111657	UNPOLICED-REGISTERED	| `20260722T145535-e941c821` | 0.030067931757111657 |
+docs/paper/draft-v2-skeleton.md:1263	0.027365018417518542	UNPOLICED-REGISTERED	| `20260722T194118-9dc0749d` | 0.027365018417518542 |
+docs/paper/draft-v2-skeleton.md:1264	0.03289849371536248	UNPOLICED-REGISTERED	| `20260722T214220-1acdbbc0` | 0.03289849371536248 |
+docs/paper/draft-v2-skeleton.md:1265	0.02317490442656863	UNPOLICED-REGISTERED	| `20260722T215127-eeef661a` | 0.02317490442656863 |
+docs/paper/draft-v2-skeleton.md:1266	0.028744604461883507	UNPOLICED-REGISTERED	| `20260722T232509-82642517` | 0.028744604461883507 |
+docs/paper/draft-v2-skeleton.md:1267	0.025549688302808828	UNPOLICED-REGISTERED	| `20260723T023058-8732d1c9` | 0.025549688302808828 |
+docs/paper/draft-v2-skeleton.md:1268	0.026112736870656926	UNPOLICED-REGISTERED	| `20260723T052051-d9358c8a` | 0.026112736870656926 |
+docs/paper/draft-v2-skeleton.md:1269	0.025120423355537637	UNPOLICED-REGISTERED	| `20260723T194632-d04e038e` | 0.025120423355537637 |
+docs/paper/draft-v2-skeleton.md:1270	0.025462798878078775	UNPOLICED-REGISTERED	| `20260723T195730-bc4ba14a` | 0.025462798878078775 |
+docs/paper/draft-v2-skeleton.md:1271	0.027201280356104838	UNPOLICED-REGISTERED	| `20260723T221449-e9ae755e` | 0.027201280356104838 |
+docs/paper/draft-v2-skeleton.md:1272	0.025993442258292716	UNPOLICED-REGISTERED	| `20260723T223406-314f6d9e` | 0.025993442258292716 |
+docs/paper/draft-v2-skeleton.md:1273	0.02562670977988252	UNPOLICED-REGISTERED	| `20260724T014109-57844352` | 0.02562670977988252 |
+docs/paper/draft-v2-skeleton.md:1274	0.02366861961761718	UNPOLICED-REGISTERED	| `20260725T005132-a64711b7` | 0.02366861961761718 |
+docs/paper/draft-v2-skeleton.md:1275	0.029273357215668885	UNPOLICED-REGISTERED	| `20260725T011533-0b5ec77c` | 0.029273357215668885 |
+docs/paper/draft-v2-skeleton.md:1276	0.028733193582380412	UNPOLICED-REGISTERED	| `20260725T022712-0a9534f5` | 0.028733193582380412 |
+docs/paper/draft-v2-skeleton.md:1277	0.026415695490612106	UNPOLICED-REGISTERED	| `20260725T030533-d3f076e5` | 0.026415695490612106 |
+docs/paper/draft-v2-skeleton.md:1278	0.02501695592329986	UNPOLICED-REGISTERED	| `20260725T060617-97c5cba6` | 0.02501695592329986 |
+docs/paper/draft-v2-skeleton.md:1284	1784757381.2856488	UNPOLICED-REGISTERED	(1784757381.2856488, 458782.19098725, 458782.1909
+docs/paper/draft-v2-skeleton.md:1284	458782.19098725	UNPOLICED-REGISTERED	(1784757381.2856488, 458782.19098725, 458782.190989791) s;
+docs/paper/draft-v2-skeleton.md:1284	458782.190989791	UNPOLICED-REGISTERED	(1784757381.2856488, 458782.19098725, 458782.190989791) s;
+docs/paper/draft-v2-skeleton.md:1285	1784757382.293089	UNPOLICED-REGISTERED	its off command has (1784757382.293089, 458783.198425958,
+docs/paper/draft-v2-skeleton.md:1285	458783.198425958	UNPOLICED-REGISTERED	its off command has (1784757382.293089, 458783.198425958,
+docs/paper/draft-v2-skeleton.md:1286	458783.198426833	UNPOLICED-REGISTERED	458783.198426833) s. Both resolutions are the 
+docs/paper/draft-v2-skeleton.md:1287	1784757336	UNPOLICED-REGISTERED	The native record-0 label is 1784757336 s and q₀=0, giving the numeri
+docs/paper/draft-v2-skeleton.md:1288	1784757335.99975	UNPOLICED-UNREGISTERED	1784757335.99975 ≤ A ≤ 1784757337.00025 s. Rec
+docs/paper/draft-v2-skeleton.md:1288	1784757337.00025	UNPOLICED-UNREGISTERED	1784757335.99975 ≤ A ≤ 1784757337.00025 s. Record 1 has
+docs/paper/draft-v2-skeleton.md:1289	0.118530666	UNPOLICED-REGISTERED	q₁=0.118530666 s and the same label, giving
+docs/paper/draft-v2-skeleton.md:1290	1784757335.99975	UNPOLICED-UNREGISTERED	1784757335.99975 ≤ A+β(0.118530666) ≤ 17847573
+docs/paper/draft-v2-skeleton.md:1290	0.118530666	UNPOLICED-REGISTERED	1784757335.99975 ≤ A+β(0.118530666) ≤ 1784757337.00025 s.
+docs/paper/draft-v2-skeleton.md:1290	1784757337.00025	UNPOLICED-UNREGISTERED	1784757335.99975 ≤ A+β(0.118530666) ≤ 1784757337.00025 s.
+docs/paper/draft-v2-skeleton.md:1292	0.111241541	UNPOLICED-UNREGISTERED	its causal constants are k_pre=0.111241541 s and
+docs/paper/draft-v2-skeleton.md:1293	1.1016537909669094	UNPOLICED-UNREGISTERED	k_parse=1.1016537909669094 s. All 1665 native labels and
+docs/paper/draft-v2-skeleton.md:1293	1665	UNPOLICED-REGISTERED	k_parse=1.1016537909669094 s. All 1665 native labels and elapsed cou
+docs/paper/draft-v2-skeleton.md:1309	1784757336.5526073	UNPOLICED-REGISTERED	Table A3 uses the current point anchor 1784757336.5526073 s and \(P_{\mathrm{rest}}=0\)
+docs/paper/draft-v2-skeleton.md:1309	0	UNPOLICED-REGISTERED	57336.5526073 s and \(P_{\mathrm{rest}}=0\) W,
+docs/paper/draft-v2-skeleton.md:1310	0.001	UNPOLICED-REGISTERED	σ=0.001 W, pulse height a=42.5514 W. 
+docs/paper/draft-v2-skeleton.md:1310	42.5514	UNPOLICED-REGISTERED	σ=0.001 W, pulse height a=42.5514 W. Every local record is show
+docs/paper/draft-v2-skeleton.md:1313	+0.027	UNPOLICED-REGISTERED	shifts (+0.027,−0.007) s. Display columns ar
+docs/paper/draft-v2-skeleton.md:1313	−0.007	UNPOLICED-REGISTERED	shifts (+0.027,−0.007) s. Display columns are round
+docs/paper/draft-v2-skeleton.md:1342	42.5514	UNPOLICED-REGISTERED	ng a record’s overlap fraction f into ŷ=42.5514 f
+docs/paper/draft-v2-skeleton.md:1343	0.001	UNPOLICED-REGISTERED	then x=(y−ŷ)/0.001 gives its displayed Huber con
+docs/paper/draft-v2-skeleton.md:1346	13724.280240837228	UNPOLICED-REGISTERED	Loss*=13724.280240837228; the no-pulse loss is 478338.
+docs/paper/draft-v2-skeleton.md:1346	478338.47061854997	UNPOLICED-REGISTERED	3724.280240837228; the no-pulse loss is 478338.47061854997.
+docs/paper/draft-v2-skeleton.md:1347	239169.23530927498	UNPOLICED-UNREGISTERED	Thus Loss*<239169.23530927498 passes the half-flat-loss che
+docs/paper/draft-v2-skeleton.md:1348	14410.494252879089	UNPOLICED-REGISTERED	Λ=Loss*+0.05 Loss*=14410.494252879089.

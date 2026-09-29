@@ -1,0 +1,74 @@
+SESSION_MODE: delegated
+BRIDGE_ORIGIN: claude
+BRIDGE_HOPS_REMAINING: 0
+WRITE_SCOPE: ["tests/test_floor_extraction.py","tests/fixtures/d117_postcollection_trust/extraction_report.json"]
+ROLE: seat B, ROUND 3 (step R3-5) of the S1 (BFG-S) regression repair; this is the LAST repair round. Working tree /Users/edr/code/JouleWise-wt-s1r3-B-d528efb2, branch fix/2026-09-28-s1-r3-B at cdfb27ce (the S1 candidate with the gate fix, seat H3's parity helper and the lead's ID grants).
+AUTHORITY (read whole; later amends earlier): ruling S1-REPAIR-ROUTE-01 /Users/edr/code/JouleWise-wt-bk-77b1bee2/docs/process_traces/2026-09-27-activation-d528efb2/30-s1-repair/50-escalation/21-coldgate-fable-ruling.md; addendum S1-REPAIR-ROUTE-01-A1 /Users/edr/code/JouleWise-wt-bk-77b1bee2/docs/process_traces/2026-09-27-activation-d528efb2/30-s1-repair/83-coldgate-pilot-ruling.md. Triage: /Users/edr/code/JouleWise-wt-bk-77b1bee2/docs/process_traces/2026-09-27-activation-d528efb2/30-s1-repair/70-triage/table-proposal.md and the lead's confirmations /Users/edr/code/JouleWise-wt-bk-77b1bee2/docs/process_traces/2026-09-27-activation-d528efb2/30-s1-repair/70-triage/01-lead-confirmation.md (items 1–14). The lead's executed pilots, with the exact wiring and the installer text applied in scratch: /Users/edr/code/JouleWise-wt-bk-77b1bee2/docs/process_traces/2026-09-27-activation-d528efb2/30-s1-repair/86-bench-pilots/00-filing.md and scratch.diff there. Seat H3's helper (exemption_parity, rebind_config, write_passing_pair, write_charging_pair, produce_strict_bundle) is in tests/bfgs_fixtures.py; the ID lists there are the LEAD's and are final for you.
+SEAT STOP RULES (binding): (i) a repair that seems to need a production edit, or a new injection point, returns NEEDS_RULING; no environment-variable hook is ever added. (ii) No run ID is added to the historical set. (iii) A copied or edited historical bundle gets no exemption by its name. (iv) Never edit a file outside your WRITE_SCOPE. (v) Never write a pair into a bundle whose bound config names mock, never call a pair writer before the rebind.
+A test that still fails after its class rule is returned with its ID and the name of the refusing check. You add no stand-in, you add no ID to the parity list, and you write no admission evidence by hand.
+PARITY RULES 1–6 (ruling §3.3):
+1. **Battery code is never stubbed.** Parity touches one property. Every name banned by the ruling's check 2 stays banned. In a parity test the gate runs for real on every bundle.
+2. **The bundle's identity is always real.** Every bundle a parity test sends down a claim path has a physical config, agreeing backend labels, and a pair written by the controller or by helper H. After §4 the gate enforces the first of these itself.
+3. **Never the test's own subject.** Parity is refused to a test whose subject is an exemption-gated check. The test is mechanical, run by the lead: a test is refused parity if its own source, or the source of a fixture method of its class that it calls, contains a string literal from the **refusal vocabulary**, or calls one of the four functions by name. The refusal vocabulary is every string the four functions can return on their non-exempt branch, including what `environment_admission_refusals` and `post_run_environment_refusals` return. The lead derives it from the syntax trees and files it with the triage record. Members I have seen: `anchor_fallback_member_unusable`, `environment_admission_missing`, `environment_admission_failed`, `reducer_wire_unknown`.
+4. **By test ID only.** No class-wide, module-wide or `setUp`-level use. The helper raises for an ID not on the list.
+5. **Every switched-off check keeps a test that runs it switched on.** Before parity lands, the lead lists, for each of the five places, at least one green test on the candidate that reaches its non-exempt branch and asserts its refusal. If a place has none, a direct test is owed first, written by seat H3.
+6. **No production file changes for parity.** If parity seems to need one, the seat returns `NEEDS_RULING`.
+PARITY RULES 7–11 (addendum A1 §4.4):
+### 4.4 Rules, added to rules 1 to 6 of the ruling in force
+
+7. **The second switch is granted by test ID, and only where main ran without those checks.** The lead's recorder, on main's tree only, wraps `_current_strict_summary` and logs its answer per bundle. An ID is granted only if the answer was false for every bundle the test read on main.
+8. **Never the test's own subject.** Refused to a test whose own source, or a fixture method of its class that it calls, names a function of §4.2, or asserts a reason that only the right-hand branch of §3.1 can raise, or whose subject is the verdict row under current evidence. `test_authenticated_v2_whole_window_source_reaches_claim_consumption` is refused by this rule.
+9. **Every switched-off check keeps a test that runs it switched on.** Before the switch lands, the lead lists green tests on the candidate that reach `_current_core_rederivation_reasons` past its early return: at least one that asserts a refusal and at least one that asserts acceptance. If no accepting test exists, the pull-request description says so in the sentence of §8, and the canary lane owns the gap. The lead does not invent one.
+10. **The first form is not granted where it is not needed.** The pilot test passes without it (Z9). The helper applies it to every granted ID because that is the ruled text and it is harmless there (the test's own stand-in already stipulates a non-exempt identity inside `inputs.py`). No T2 test receives the second switch unless rule 7 grants it.
+11. **No third switch on anyone's authority but a cold gate's.** A refusal that survives both switches is returned by test ID with the name of the refusing check.
+
+THE CLASSES (ruling §5.2):
+### 5.2 The classes
+
+| Class | Mark on main | Repair | Assertions |
+|---|---|---|---|
+| **T1** | no bundle the test read was exempt | the pair alone (`write_passing_pair`) | byte-identical |
+| **T2** | every bundle was exempt, and the test replaced the strict validator itself or never reached it | main's fixture, then `rebind_config`, then `write_passing_pair`, then `exemption_parity`. **Not the builder:** produced bundles carry their own honest refusals (seat B's trial: cadence, clock bound) and cannot hold hand-set values. | byte-identical |
+| **T3** | the test's subject is the refusal of mock bundles on a claim path | the ruling's §3.4, second form, on a mock corpus the test builds for itself; sibling per §5.3 | R-list |
+| **T4** | the gate refuses a floor root that holds no bundle (14 of seat A's integration IDs) | first build the member bundles under each floor root in main's fixture form, rebound and paired; then derive the floor records from them; then as T1 or T2 | byte-identical; pins move only under A3's leaf-diff rule |
+| **T5** | every bundle was exempt, and the test ran the **real** strict validator on main (the mock corpus of the integration module) | the round-2 corpus from the builder stays, and parity is added. If a refusal remains that is recorded in the produced bundle's own summary, seat H3 has **one** bounded task: `produce_strict_bundle` gains a keyword, default unchanged, that replays enough samples at the configured rate for the reducer's own cadence and clock checks to pass. No check is touched and no summary is edited. | byte-identical where the assertion does not name a number that came from mock telemetry; otherwise `NEEDS_RULING` |
+| **T6** | rule 3 of §3.3 refuses parity (the subject is an exemption-gated check), or some bundles were exempt and others not | none under this ruling: `NEEDS_RULING`, counted under the cap | — |
+
+**Where the remaining risk sits.** T1, T2 and T4 rest on executed evidence (Y7, Y8). **T5 does not**: nobody has shown that a produced bundle can pass the reducer's cadence and clock checks. By seat A's table T5 is at most about 13 integration IDs and one campaign ID. It is bounded by the pilot and by stop condition 3.
+
+**The golden report** (A3 §5.5 item 3) is class T2: the five golden members are rebound and paired, the extractor runs under parity, and the report is regenerated under A3's leaf-diff rule, which stands unchanged. The test that compares the golden gets parity by ID. NOT EXECUTED for the golden itself.
+Wiring: a granted test wraps ONLY its own body (or the smallest block that calls the claim path) in `with exemption_parity(self.id()):`, by test ID, never in setUp/setUpClass/class-wide (rule 4). Assertions stay byte-identical.
+PLANTED-DEFECT CHECK for every repaired test: GREEN, and RED under the charging pair (substitute write_charging_pair for write_passing_pair, or write a charging pair onto the produced bundles, as in /Users/edr/code/JouleWise-wt-bk-77b1bee2/docs/process_traces/2026-09-27-activation-d528efb2/30-s1-repair/86-bench-pilots/plant_charging.py). Report the refusing reason seen under the plant.
+Run tests ONLY under the battery guard: PYTHONPATH=/Users/edr/code/JouleWise-wt-bk-77b1bee2/docs/process_traces/2026-09-27-activation-d528efb2/30-s1-repair/guard. /opt/homebrew/bin/python3 -B. No git commit/fetch/pull/checkout/stash (the lead commits). No [QUIET-MAC] work. Never read the laptop battery. Do not call Claude. Do not run the whole suite; run your modules whole.
+REPORT (claude-codex-report/v1, implementation genre): per test ID the class applied, the result, and the plant result; the R-list; every NEEDS_RULING with the test ID and the refusing check's name; per file failing-before → passing-after counts; exact commands and tails.
+YOUR IDS BY CLASS:
+T2 (granted; main's fixture, then rebind_config, then write_passing_pair, then exemption_parity by ID; not the builder):
+  - tests.test_floor_extraction.CpuAndWholeWindowClaimBarrierTests.test_current_campaign_log_malformed_row_refuses_join
+  - tests.test_floor_extraction.CpuAndWholeWindowClaimBarrierTests.test_failed_adapter_continuity_refuses_but_clean_core_passes
+  - tests.test_floor_extraction.CpuAndWholeWindowClaimBarrierTests.test_floor_requires_campaign_bound_whole_window_and_adapter_evidence
+  - tests.test_floor_extraction.CpuAndWholeWindowClaimBarrierTests.test_frozen_replay_manifest_duplicate_retains_committed_semantics
+  - tests.test_floor_extraction.CpuAndWholeWindowClaimBarrierTests.test_later_passed_row_cannot_supersede_failed_whole_window_row
+  - tests.test_floor_extraction.CpuAndWholeWindowClaimBarrierTests.test_whole_window_core_rejects_duplicate_member_occurrences
+  - tests.test_floor_extraction.CpuAndWholeWindowClaimBarrierTests.test_whole_window_rederives_neg8_verdict_from_member_summaries
+  - tests.test_floor_extraction.D117MintConsumptionProfileTests.test_production_extractor_path_matches_checked_in_golden
+  - tests.test_floor_extraction.EvaluationBasisPlumbingTests.test_explicit_basis_reaches_both_consumers_and_allowance_records
+  - tests.test_floor_extraction.ExtractionCliTests.test_additional_refusal_is_not_rescued_by_attribution_label
+  - tests.test_floor_extraction.ExtractionCliTests.test_cli_relocated_custody_does_not_suppress_floors
+  - tests.test_floor_extraction.ExtractionCliTests.test_evaluation_basis_flag_reaches_extract_cells
+  - tests.test_floor_extraction.ExtractionCliTests.test_spec_extraction_report_and_exit_codes
+  - tests.test_floor_extraction.ExtractionCliTests.test_spec_extraction_via_extract_cells_matches_direct_calls
+  - tests.test_floor_extraction.ExtractionCliTests.test_zero_scatter_with_nonzero_admissible_width_is_labelled_extraction
+  - tests.test_floor_extraction.SpecMembershipBindingTests.test_full_coverage_has_no_membership_refusal
+  - tests.test_floor_extraction.SpecMembershipBindingTests.test_omission_within_addressed_campaign_still_refuses
+  - tests.test_floor_extraction.SpecMembershipBindingTests.test_omitted_null_manifest_member_refuses_as_unattributable
+  - tests.test_floor_extraction.SpecMembershipBindingTests.test_omitting_a_campaign_member_refuses_the_extraction
+  - tests.test_floor_extraction.SpecMembershipBindingTests.test_referenced_null_manifest_member_not_flagged_unattributable
+  - tests.test_floor_extraction.SpecMembershipBindingTests.test_sibling_campaign_under_runs_root_does_not_force_refusal
+T1 (the pair alone; the lead's bench check made it green by giving the fixture's final bundle a run_id and a passing pair, see 01-lead-confirmation.md item 6):
+  - tests.test_floor_extraction.CpuAndWholeWindowClaimBarrierTests.test_floor_cpu_ledger_rejects_duplicates_reordering_mismatch_and_absence
+THE GOLDEN REPORT (ruling §5.2): **The golden report** (A3 §5.5 item 3) is class T2: the five golden members are rebound and paired, the extractor runs under parity, and the report is regenerated under A3's leaf-diff rule, which stands unchanged. The test that compares the golden gets parity by ID. NOT EXECUTED for the golden itself.
+THE SIBLING for floor_extraction.py (ruling §5.3):
+A3 told seat A to call "the barrier's own function". There is none (Y12). After §4, a mock bundle cannot pass the gate on any claim path, so the barrier cannot be reached through a public entry with an honest mock bundle.
+
+**Ruled.** The sibling builds a bundle that passes the gate (physical config, pair), and replaces `custody_telemetry_identity` **in the consumer's module** by a function that returns the real identity with `config_backend_class` set to `"mock"`. It asserts that the reason `mock_telemetry_claim_ineligible` appears. This is the **one permitted exception** to check 2's ban on new patches of `custody_telemetry_identity`. It is granted by test ID, and only in this direction: the stand-in makes a real bundle look mock and can only add a refusal. Planted defect: the barrier's two lines removed in a scratch copy turn the sibling RED. One sibling per barrier site (three sites). NOT EXECUTED by me. If it cannot be built without a production edit, the seat returns; the lead then retires the sibling for that site and records the reason ("after the gate fix the gate carries the mock refusal; the barrier stays in place, unchanged, as a second line").
+

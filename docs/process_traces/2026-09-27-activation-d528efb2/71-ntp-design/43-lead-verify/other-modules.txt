@@ -1,0 +1,4 @@
+test_network_time_window: Ran 48 tests in 0.121s OK 
+test_night_gate: Ran 104 tests in 1.401s OK 
+test_arm_retry: Ran 37 tests in 0.076s OK 
+test_launch_window: Ran 39 tests in 506.901s OK 

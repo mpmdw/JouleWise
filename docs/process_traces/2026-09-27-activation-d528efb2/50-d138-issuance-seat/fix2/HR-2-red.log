@@ -1,0 +1,21 @@
+F
+======================================================================
+FAIL: test_hr2_r7_pack_default_bracket_refuses_new_epoch (tests.test_claim_hold_routes.ClaimHoldRouteTests.test_hr2_r7_pack_default_bracket_refuses_new_epoch)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/edr/code/JouleWise-wt-d138-impl-d528efb2/tests/test_claim_hold_routes.py", line 127, in test_hr2_r7_pack_default_bracket_refuses_new_epoch
+    self.assertEqual(result["acceptance"]["artifact"]["acceptance_id"],
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                     bracket.ANCHOR_V3_R7_ACCEPTANCE_ID)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'd079_calibration_acceptance_v2_n12_25g83_r1' != 'd079_calibration_acceptance_v2_n17_r7'
+- d079_calibration_acceptance_v2_n12_25g83_r1
+?                                  ^^^^^^^  ^
++ d079_calibration_acceptance_v2_n17_r7
+?                                  ^  ^
+
+
+----------------------------------------------------------------------
+Ran 1 test in 0.004s
+
+FAILED (failures=1)

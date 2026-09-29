@@ -1,0 +1,139 @@
+SESSION_MODE: delegated
+BRIDGE_ORIGIN: claude
+BRIDGE_HOPS_REMAINING: 0
+WRITE_SCOPE: ["joulewise/network_time_window.py","tests/test_network_time_window.py","scripts/run_night.py","tests/test_run_night.py","joulewise/night_gate.py","tests/test_night_gate.py","joulewise/arm_retry.py","tests/test_arm_retry.py","tests/test_launch_window.py"]
+ROLE: NTP seat N1 FIX ROUND 2 (JouleWise). This is the LAST fix round on defect F1/D1 permitted by cold ruling NTP-ENFORCE-DESIGN-01-A1. Working tree /Users/edr/code/JouleWise-wt-ntp-n1-d528efb2, branch feat/2026-09-28-ntp-n1 at 3ad82b43 (rounds 0 and 1 committed). You are the only writer here. NEVER run sudo/systemsetup/sntp; never query the real system log; no capture; never start a process whose file name is the real sampler's (powermetrics); never read the laptop battery. Test child processes must be harmless sleepers that the test itself kills in cleanup. No git writes. Do not call Claude. /opt/homebrew/bin/python3 -B. Run tests with PYTHONPATH=/Users/edr/code/JouleWise-wt-bk-77b1bee2/docs/process_traces/2026-09-27-activation-d528efb2/30-s1-repair/guard (battery guard).
+SANDBOX NOTE: your sandbox may be unable to list processes (ps/pgrep). Per §4.7, the process-listing regressions must then FAIL or report "not run", never skip silently. Write them anyway; the lead runs them outside the sandbox. In your report, say exactly which tests you could not run and why.
+AUTHORITY, read whole: the ruling in force /Users/edr/code/JouleWise-wt-bk-77b1bee2/docs/process_traces/2026-09-27-activation-d528efb2/71-ntp-design/21-coldgate-fable-ruling.md, AS AMENDED by the addendum /Users/edr/code/JouleWise-wt-bk-77b1bee2/docs/process_traces/2026-09-27-activation-d528efb2/71-ntp-design/38-coldgate-fix2-ruling.md (read §3, §4 and §8 in full). The delta re-audit that produced D1–D4 is /Users/edr/code/JouleWise-wt-bk-77b1bee2/docs/process_traces/2026-09-27-activation-d528efb2/71-ntp-design/36-n1-delta-reaudit-astra.md. The paired contract refuter is 39-a1-contract-refuter-opus.md; it is supporting evidence only (its D2 wedge reproduction is at 39-probes/d2_wedge.py). The judge's probes (probe_d1.py, probe_cure.py, probe_d2.py, probe_d3.py, standins/) are at /Users/edr/code/JouleWise-wt-bk-77b1bee2/docs/process_traces/2026-09-27-activation-d528efb2/71-ntp-design/38-probes/. They were written against scratch copies under /tmp/cg-ntpfix2-d528efb2 (old = e7371399, new = 3ad82b43, cure = the judge's prototype, which is NOT an implementation and must not be copied: it bypasses the Popen seam and returns GO where a refusal is required).
+
+The addendum requires this brief to carry §4.2, §4.6, §4.7, §5 and §6 word for word. They follow, then the stop conditions of §7.2.
+
+======== ADDENDUM A1 §4.2 ========
+### 4.2 What counts as proof
+
+**Ruled.** "No capture process can still be running" is proved when all three checks below succeed. Each is taken fresh at the moment of use, each only reads, and a check that cannot answer (time-out, error, a row it cannot parse) counts as **not proved**. A saved answer, such as the exit record or a clean-up record, is never the proof.
+
+| Check | Question | How | Catches |
+|---|---|---|---|
+| **P1** | Is the chain's own group empty? | the existing census | a child that stayed in the group (fix round 1) |
+| **P2** | Is every group in the night's registry empty? | the registry's group numbers, then one census of all of them. Skipped when the night has no registry file. A registry that cannot be read: not proved. | a journaled child in its own group |
+| **P3** | Does any process on the machine carry a capture signature? | one sweep. A process matches when its command line has a word whose last path component is a sampler's file name (a closed list in one constant; today `powermetrics`), or contains one of the night's three paths: the measurement root, the custody root, the chain's path, each both as written in the plan and with links resolved. The sweeping process, its ancestors and its own listing child are left out. | every sampler whoever started it; an unjournaled or orphaned collector or capture writer |
+
+The proof may be repeated for up to 5 s (the driver's existing bound `GROUP_CENSUS_WINDOW_S`) to let a process that is already ending finish. After that it is not proved.
+
+**When it is not proved:** no query, no ON, the marker file stays, and the night's result carries the registered reason `night_chain_alive` with the evidence: which check failed and, for P3, the process numbers and command lines found. The driver's exit status is the refusal status. In my prototype the driver still returned GO (E12), which a reader of the exit status would take for a finished night; the seat must not copy that.
+
+
+======== ADDENDUM A1 §4.6 ========
+### 4.6 Call sites that must change
+
+| # | Where (candidate line numbers) | Change |
+|---|---|---|
+| C1 | `scripts/run_night.py`, a new function beside `_probe_group_absent` (`:3696`) | The proof of §4.2. It returns the answer and the evidence. Its process listing goes through a seam, as `_probe_group_absent` does. My prototype called `subprocess.run` directly and broke 27 existing tests that replace `subprocess.Popen` (E13); the seat must not repeat that. |
+| C2 | `run_night.py:3314–3334`, the block after the chain | The condition becomes "the chain's end is proved **and** the proof of C1 holds". When the start claim records a failed launch, no process was created and the proof is not needed. When C1 fails: the refusal of §4.2. |
+| C3 | the same place, before C1 | [K], for nights that have a registry, under the conditions `_evidence_cleanup_error` already applies (`:1365–1374`). The later call at `:1426` stays and finds the saved record. [K] may itself end unproved, for instance when a sampler runs as root and refuses the signal. The proof then fails and the refusal of §4.2 follows. |
+| C4 | `run_night.py:3005`, `:3458`, `:3545`, the three calls of recovery | Pass the proof to recovery as an injected function. |
+| C5 | `joulewise/network_time_window.py:341–395`, `recover_network_time` | For a known group number: act only when the injected proof holds. Without an injected proof: `chain_unproved`. The module still imports nothing from the project. |
+| C6 | `network_time_window.py:96–108`, the marker file's creation, and the driver's OFF call at `run_night.py:3266` | The marker file also holds the night's three paths, written before OFF. A marker file without them (none can exist from a real night, since no night has launched under this code) is judged with P1, P2 and the sampler names. |
+| C7 | `run_night.py:1005–1012` and `:495–556` | **Unchanged.** "The chain's end is proved" keeps its meaning, and the exit record keeps its meaning, because the report step and the dead-man job read them. The new proof gates only the query and ON. |
+
+All of these are inside the files fix round 1 was allowed to change.
+
+
+======== ADDENDUM A1 §4.7 ========
+### 4.7 The counterfactual inputs the regressions must use
+
+Rules for all of them:
+
+- Each test starts a **real process** through the **production call path**: `run_night`, then `_run_chain_once` with its real `Popen`, a real chain script, and a real child started with `start_new_session=True`. The census and the sweep are real. A stand-in that answers "not empty" (R10) is a picture of today's finding and is not accepted for any row below.
+- Each test asserts that the survivor is **alive**, and for the orphan rows that its parent is 1, **at the moment it asserts** what the driver did. Otherwise a slow machine turns the test into a control.
+- Each test fails **by assertion** on `3ad82b43`. An error raised for another reason is not a failure of the thing tested.
+- A host that cannot list processes must make these tests **fail or report "not run"**. It must not skip them silently. The lead runs them outside the sandbox.
+- No test starts a process whose file name is the real sampler's. The name list is tested in two other ways (rows T3 and T10).
+
+| # | Counterfactual input | Production call site | Expected after the cure |
+|---|---|---|---|
+| T1 | chain ends; child separately grouped, **journaled** with the production `append_event` into `$NIGHT_DIR/evidence_processes.jsonl`, running a script under the measurement root | `run_night` → C2 | only OFF ran; marker file kept; `night_chain_alive`; refusal exit status |
+| T2 | the same, **unjournaled** (the state between lines 1610 and 1612) | the same | the same |
+| T3 | child separately grouped, unjournaled, **outside every path of the night**, whose file name is on the sampler list (a neutral name added for the test) | the same | the same |
+| T4 | the driver **stops** a running chain (agent census refusal, and again at the deadline) while a separately grouped child lives | `_run_chain_once` → `_terminate_process_group` → C2 | no query, no ON |
+| T5 | marker file and start claim of an ended chain, separately grouped child alive; then the child ends | `recover_network_time` from `run_night` (`:3005`) | first `chain_unproved` and no command; then `restored`, one ON receipt, marker file removed |
+| T6 | the same state | `dead_man` (`:3458`, `:3545`) | no ON while the child lives |
+| T7 | the sweep cannot answer: time-out, non-zero exit, a row that does not parse | C1 | not proved |
+| T8 | the driver's own command line contains a path of the night, on an otherwise clean machine | C1 | proved; the driver does not find itself |
+| T9 | control: a chain with no children | `run_night` | off, query, on, on both commits |
+| T10 | by text, no process: the command line the production builder `power_argv()` returns is matched by the production matcher with the production list; and the production list equals the file name of `adapters/powermetrics.py:50` | C1 | matched |
+
+**Red by deletion**, each shown in the round's report: with P3 deleted, T2 and T3 go red; with P2 deleted, a journaled child **without** any signature goes red; with P1 deleted, the same-group case of fix round 1 goes red; with C5 deleted, T5 goes red.
+
+
+======== ADDENDUM A1 §5 ========
+## 5. Ruling 3 — D2's cure. Confirmed, with one amendment.
+
+**The defect, executed (E9).** When OFF is refused, the driver closes the start claim **empty**. If the immediate ON also fails, the marker file stays, as it should. Recovery then tries to read the empty start claim, fails, and answers `marker_invalid`. It never retries ON, and every later driver run refuses its night with `night_refused_network_time_marker_invalid` until a person removes the marker file. The likeliest cause of a refused OFF is a broken password-free rule for `sudo`, and that breaks the immediate ON too. So this is the expected course of the most plausible failure, not a corner.
+
+**Confirmed.** Both branches that refuse after OFF (`run_night.py:3268–3284` and `:3285–3301`) write a complete start claim that says the chain's launch was never attempted, and only then the exit record:
+
+```json
+{"pid": null, "pgid": null, "epoch_s": 1790603668.27,
+ "popen_attempted": false,
+ "launch_error": "never_launched: network_time_off_unproved"}
+```
+
+`launch_error` is kept because the dead-man job's existing test for a failed launch reads it (`run_night.py:3506–3510`). The order of fix round 1 stays: the immediate ON attempt first, then the claim, then the exit record.
+
+Recovery treats a night as **never launched** only when all of these hold: the start claim is an object; its `pid` and `pgid` are both null; it has `popen_attempted` false or a non-empty `launch_error`; and the exit record has `launch_failed` true. Everything else with an unknown group number stays `chain_unproved`. That is F2's refusal, unchanged (E10).
+
+Executed on the prototype (E9): recovery answered `restored`, retried ON and removed the marker file, in both branches; the immediate ON attempt still ran in the driver.
+
+**Amendment: the label.** An empty or unreadable **start claim** must return `chain_unproved`, not `marker_invalid`. `marker_invalid` means the marker file itself cannot be read. Today the two are confused because one catch-all at `network_time_window.py:394` turns every error into `marker_invalid` (E10). The confusion sends a person to repair the wrong file.
+
+**Left as a registered limit, not for round 2.** If the driver is killed in the instant between starting the chain and writing its numbers into the start claim, the claim stays empty for ever and recovery can never act. F2 requires exactly that. Clearing it is a desk action: confirm by hand that no capture process runs, set network time ON, remove the marker file. The lead writes that step into the night hand-back document.
+
+**Regressions.** Through the real driver with injected commands and a spawn that raises if called: (i) OFF returns wrong output, the immediate ON fails, a later recovery with ON working answers `restored`; (ii) the same with the OFF receipt unsavable; (iii) an empty start claim with no exit record: no ON; (iv) an empty start claim **with** an exit record that says `launch_failed`: no ON, because the claim itself says nothing. Rows (i) and (ii) fail by assertion on `3ad82b43`.
+
+
+======== ADDENDUM A1 §6 ========
+## 6. Ruling 4 — D3 and D4: both in round 2
+
+**D3.** Fixed in round 2. It is small, the file is already open, and it is the second time this finding survives (the contract lens's N1), so deferring it would invite a third.
+
+The pattern at `network_time_window.py:40` allows any text before `timed[…]`, so the search can begin again inside the message. The category must be read **by position**: timestamp with offset, then at most one host word, then `timed[number]`, then the category. A pattern that does this, tested in E11:
+
+```
+^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d\.\d+[+-]\d\d:?\d\d\s+(?:\S+\s+)?timed\[\d+\]:?\s+\[com\.apple\.timed:data\](?:\s|$)
+```
+
+It rejected all three attack lines and matched the same 2,040 and 90 real `data` lines as the candidate's pattern. The seat may use it or a field-by-field parse. Regression: the three lines of `probe_d3.py`, each expected `network_time_unattested`; and the two real-log counts, unchanged.
+
+**D4.** Fixed in round 2, as part of T1. The saved F1 test (R10) is replaced by T1, which starts a real child. Wherever a test stands in for the ON command, the stand-in returns a receipt of the shape the driver reads (`{"exit_code": 0}`), so that the old commit fails by assertion and not by a type error.
+
+
+======== STOP CONDITIONS (A1 §7.2) ========
+### 7.2 Scope and the seat's stop conditions
+
+WRITE_SCOPE is the nine files of fix round 1, unchanged: `joulewise/network_time_window.py`, `scripts/run_night.py`, `joulewise/night_gate.py`, `joulewise/arm_retry.py` and their four test files, and `tests/test_launch_window.py`. No new refusal reason is needed.
+
+The brief carries §4.2, §4.6, §4.7, §5 and §6 of this addendum word for word. The seat **stops and reports** instead of going on if any of these occurs:
+
+1. the cure needs a change outside the nine files;
+2. the cure needs any process listing, signal or log query **while a capture may be running**;
+3. an existing test must be weakened or deleted to pass, other than the saved F1 test that T1 replaces;
+4. a regression of §4.7 cannot be made to fail by assertion on `3ad82b43`;
+5. the seat finds a fourth way for a capture process to be alive that P1, P2 and P3 do not see. That is a finding for the lead. The seat does not design a fourth check.
+
+
+======== VERIFY ========
+Run every module in scope whole, plus tests.test_launch_window. Do not run the whole suite. Show each "red by deletion" of §4.7, plus the deletion of the D2 never-launched claim record, turning its named test red by assertion. Show each §4.7 and §5 regression failing by assertion on 3ad82b43: use a git worktree-free method, for example `git show 3ad82b43:<path>` into a /tmp copy; you may not do git writes.
+
+======== REPORT ========
+Use claude-codex-report/v1, implementation genre. For each of D1 (C1–C6), D2, D3 and D4, give:
+- the change, with file:line;
+- each regression, its counterfactual input and its production call site;
+- its old-revision result, stating failed by assertion or errored.
+
+Also report:
+- the red-by-deletion evidence;
+- the tests you could not run in the sandbox;
+- any stop condition met;
+- any NEEDS_SCOPE or NEEDS_RULING.

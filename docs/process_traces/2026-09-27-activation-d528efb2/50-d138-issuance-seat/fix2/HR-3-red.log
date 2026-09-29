@@ -1,0 +1,14 @@
+F
+======================================================================
+FAIL: test_hr3_manual_route_cannot_consume_held_file (tests.test_claim_hold_routes.ClaimHoldRouteTests.test_hr3_manual_route_cannot_consume_held_file)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/edr/code/JouleWise-wt-d138-impl-d528efb2/tests/test_claim_hold_routes.py", line 136, in test_hr3_manual_route_cannot_consume_held_file
+    with self.assertRaises(preflight._AcceptancePreflightError) as default:
+         ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: _AcceptancePreflightError not raised
+
+----------------------------------------------------------------------
+Ran 1 test in 0.003s
+
+FAILED (failures=1)

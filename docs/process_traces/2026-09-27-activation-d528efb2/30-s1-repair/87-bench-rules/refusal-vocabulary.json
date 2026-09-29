@@ -1,0 +1,16 @@
+{
+ "vocabulary": [
+  "anchor_fallback_member_unusable",
+  "environment_admission_missing",
+  "environment_admission_failed",
+  "cpu_admission_unenforced",
+  "thermal_pressure_elevated_in_window",
+  "reducer_wire_unknown"
+ ],
+ "functions": [
+  "_cpu_admission_bundle_reasons",
+  "_current_member_environment_refusals",
+  "_member_readiness_reasons",
+  "anchor_fallback_member_unusable"
+ ]
+}

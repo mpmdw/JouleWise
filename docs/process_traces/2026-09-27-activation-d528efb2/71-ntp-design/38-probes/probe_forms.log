@@ -1,0 +1,7 @@
+FORM_A_JOURNALED {"journal_rows": [{"epoch_s": 1790603619.977563, "kind": "collector", "pgid": 68318}], "groups_from_journal": [68318], "child_pgid": 68318, "groups_absent": {"68318": false}, "chain_group_absent": true}
+FORM_A_UNJOURNALED_GAP {"groups_from_journal": [], "child_alive": true, "registry_would_say_all_absent": true}
+FORM_C_SNAPSHOT {"ps_exit": 0, "rows": 788, "distinct_sess_values": ["0"], "orphan_row": {"pid": 68383, "ppid": 1, "pgid": 68383, "sess": "0", "command": "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/Resources/Python.app/Contents/MacOS/Python -B /tmp/cg-ntpfix2-d528efb2/tmp/tmp2jmn5e1s/cgprobe_capture_standin.py"}, "orphan_ancestry_reaches_chain": false, "found_by_group_of_chain": [], "found_by_command_signature": [68318, 68383], "both_orphans_found_by_signature": true}
+FORM_C_COST_S 0.048
+SLEEPERS_LEFT []
+VERDICT_BOUND {"capture_ended_10_s_before_query": ["clean", "valid_query"], "capture_still_running_at_query": ["network_time_unattested", "no_valid_query"], "capture_ended_half_second_before_query": ["network_time_unattested", "no_valid_query"]}
+PROBE_FORMS_COMPLETE

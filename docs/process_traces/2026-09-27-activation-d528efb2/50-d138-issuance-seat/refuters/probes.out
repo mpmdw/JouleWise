@@ -1,0 +1,40 @@
+PIN d6de84b854a4c5d7f6d73dfde2ae0f14d71a483355c7289a36882e0dfcccd5ea
+SEALS_AND_REGEN PASS
+P4a REFUSED ValueError cited file digest mismatch: docs/process_traces/2026-09-27-activation-77b1bee2/70-science-gate/21-science-gate-ruling.md
+P4b REFUSED ValueError cited file missing: does-not-exist
+P4c REFUSED ValueError network time provenance differs from D8
+P4d REFUSED ValueError network time provenance differs from D8
+P4e REFUSED ValueError claim_eligible_meaning mismatch
+P4f REFUSED ValueError cited file missing: does-not-exist
+P5a_missing_candidate_path ACCEPTED 6239efb5076e74efbcb712617223bb37672d2ae18383a51e917d67e7d5c49b01
+P5b_missing_ntp_source_digest ACCEPTED 3093713fe28b29fc92a8eb17f4dcf6a390c0bc9b8e8292d2dc081d8d3a72e621
+P5c_bad_ntp_digest REFUSED ValueError cited file digest mismatch: docs/process_traces/2026-09-27-activation-d528efb2/40-sci-a2-network-time/21-ruling.md
+P5d_bad_log_digest REFUSED ValueError preserved log plain-text digest mismatch
+P5e_missing_log REFUSED ValueError preserved log missing
+P5f_no_ntp_sources ACCEPTED 1905529b9e2dc5442db9fd7f477be76b52748badde5284471445ba12193f9b66
+P5g_missing_h1_text ACCEPTED b0af0f92f9658e9fbc592a192d8e40b96e499e17cf91abafc3a4f2d944cd2083
+P5h_empty_hold_enforcement REFUSED ValueError hold_enforcement missing
+P5i_outside_root REFUSED ValueError cited path outside repository
+P5j_joint_D8_replacement ACCEPTED 6f7f313c4c33cf7b68db072c10e3cec41c805bba4350002118ecea1944c7d2cf
+DEFAULT d079_calibration_acceptance_v2_n17_r7 EPOCHS ['25F84']
+HOLD_DEFAULT_AND_OPTIN PASS
+AUTH identical_copy LOADED
+AUTH trailing_space REFUSED
+AUTH reserialized REFUSED
+AUTH candidate REFUSED
+AUTH member_resealed REFUSED
+AUTH notes_deleted_resealed REFUSED
+AUTH new_relabelled_r7 REFUSED
+AUTH r7_relabelled_new REFUSED
+TABLE edited_file_old_pin REFUSED registry digest mismatch: 665588eaadb1e09c8fcd6ca888be6c11a9a8eb93fc2726ab21cb0fd4622361bf != pinned ba1ba3fc596c9ef7f4014131e5cbc2012559f72bab41cafb89e004056790a63c
+TABLE edited_file_new_pin REFUSED invalid or duplicate row: table mismatch
+TABLE edited_table_old_file REFUSED invalid or duplicate row: table mismatch
+DOUBLING 1 triggers=[] reasons=('instrument_calibration_bracket_missing',)
+DOUBLING 2 triggers=[] reasons=()
+DOUBLING 4 triggers=[] reasons=()
+DOUBLING 11 triggers=[] reasons=()
+DOUBLING 12 triggers=['corpus_doubles_from_12_to_24'] reasons=('calibration_acceptance_bound_stale',)
+DOUBLING 13 triggers=['corpus_doubles_from_12_to_24'] reasons=('calibration_acceptance_bound_stale',)
+R7_DOUBLING 33 triggers=[]
+R7_DOUBLING 34 triggers=['corpus_doubles_from_17_to_34']
+PROBES_COMPLETE

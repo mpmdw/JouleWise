@@ -1,0 +1,10 @@
+Rule 9 census on candidate f0766620: tests reaching _current_core_rederivation_reasons past its early return
+(detected by a _registered_policy call inside it), with the function's result and the test's outcome.
+ok {'accept': 1, 'refuse': 0} tests.test_whole_window_selection.MaxBracketConsumptionTests.test_b1_r1_explicit_minted_fresh_valid_session_is_prepared_and_accepted
+ok {'accept': 1, 'refuse': 0} tests.test_whole_window_selection.MaxBracketConsumptionTests.test_b1_r3_implicit_minted_without_session_is_refused
+ok {'accept': 1, 'refuse': 0} tests.test_whole_window_selection.MaxBracketConsumptionTests.test_b1_r4_implicit_minted_fresh_valid_session_matches_explicit
+ok {'accept': 1, 'refuse': 0} tests.test_whole_window_selection.MaxBracketConsumptionTests.test_minted_secondary_verifier_refuses_missing_session
+ok {'accept': 0, 'refuse': 1} tests.test_whole_window_selection.MaxBracketConsumptionTests.test_minted_semantics_loads_and_refuses_pending_ledger_snapshot
+ok {'accept': 1, 'refuse': 0} tests.test_whole_window_selection.SalvageSemanticsDispatchTests.test_b5_real_row_rejects_same_policy_binding_substitution
+ok {'accept': 1, 'refuse': 0} tests.test_whole_window_selection.SalvageSemanticsDispatchTests.test_explicit_salvage_dispatch_selects_only_salvage
+ok {'accept': 0, 'refuse': 1} tests.test_whole_window_selection.WholeWindowSelectionTests.test_custody_triangle_disagreement_survives_mixed_current_path

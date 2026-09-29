@@ -1,0 +1,14 @@
+F
+======================================================================
+FAIL: test_hr1_r7_pack_capture_preflight_stays_at_r7 (tests.test_claim_hold_routes.ClaimHoldRouteTests.test_hr1_r7_pack_capture_preflight_stays_at_r7)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/edr/code/JouleWise-wt-d138-impl-d528efb2/tests/test_claim_hold_routes.py", line 117, in test_hr1_r7_pack_capture_preflight_stays_at_r7
+    with self.assertRaises(preflight._AcceptancePreflightError) as caught:
+         ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: _AcceptancePreflightError not raised
+
+----------------------------------------------------------------------
+Ran 1 test in 0.006s
+
+FAILED (failures=1)

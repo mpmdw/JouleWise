@@ -1,0 +1,13 @@
+OFF_WRONG_OUTPUT {"rev": "old", "driver_run": {"exit": 3, "commands_run": ["off", "on"], "chain_started_bytes": "", "chain_exited": {"epoch_s": 1790603666.847121, "exit_code": null, "launch_failed": true, "monotonic_ns": 825228272464625}, "refusal": "night_refused_network_time_off_unproved", "marker_present": true}, "recovery": {"result": "restored", "commands_run": ["query", "on"], "marker_present": false}}
+OFF_RECEIPT_RAISES {"rev": "old", "driver_run": {"exit": 3, "commands_run": ["on"], "chain_started_bytes": "", "chain_exited": {"epoch_s": 1790603666.891988, "exit_code": null, "launch_failed": true, "monotonic_ns": 825228317330916}, "refusal": "night_refused_network_time_off_unproved", "marker_present": true}, "recovery": {"result": "restored", "commands_run": ["on"], "marker_present": false}}
+Traceback (most recent call last):
+  File "/private/tmp/cg-ntpfix2-d528efb2/probe_d2.py", line 79, in <module>
+    f2_retained()
+    ~~~~~~~~~~~^^
+  File "/private/tmp/cg-ntpfix2-d528efb2/probe_d2.py", line 60, in f2_retained
+    (w.root / 'night/chain.exited').unlink()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/pathlib/__init__.py", line 1042, in unlink
+    os.unlink(self)
+    ~~~~~~~~~^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/tmp/cg-ntpfix2-d528efb2/tmp/tmp_igrxnl9/night/chain.exited'

@@ -1,0 +1,45 @@
+RULING: HOLD-BY-CONSTRUCTION-01-A1 ISSUED
+
+Written to `/Users/edr/code/JouleWise-wt-bk-77b1bee2/docs/process_traces/2026-09-27-activation-d528efb2/12-hold-consult/30-d079/01-ruling.md`. No other repository file was modified. All runs were in scratch copies under `/tmp/cg-d079-d528efb2/`; I ran the lifecycle, route and census test files, not the whole suite.
+
+## What I ruled
+
+| Question | Ruling |
+|---|---|
+| (1) Is refusing bare `"d079"` correct? | Yes. It names no registered file, so it has no build, and an unknown build is treated as held. It must not be registered: there are no bytes to copy a build from, so the build cannot be known. |
+| (2) May the fixtures be re-pointed? | Yes, to `d079_calibration_acceptance_v2_n17_r7` (R7, build 25F84). The lead makes it as a test-only commit on `96852358`. It is not a round 4 and does not use the closing pass. |
+| (3) Should `"d079"` leave `_ISSUED_D079_IDS`? | Not in this transaction. It is inert there, and deleting it edits a production file after round 3. Delete the line `    "d079",` as an ordinary change after the merge. |
+
+## What I ran
+
+| Run of `tests.test_arm_readiness_lifecycle` | Result |
+|---|---|
+| main `9eab16f8` | 69 tests, OK, 1 skipped |
+| fix head `96852358` | 69 tests, 3 failures, 1 skipped (the seat's three, reproduced) |
+| fix head with only the two fixture lines changed to R7 | 69 tests, OK, 1 skipped |
+| the three tests on main with the same two-line change | 3 tests, OK |
+
+- **Admission probe:** bare `"d079"` is admitted on main and refused at the fix head. Planting `"d079": "25F84"` in the build table in memory admits it again, so the missing build entry is the sole cause.
+- **No real pack declares it:** the nine committed packs and all 108 `plan_tree.json` files in `/Users/edr/night-custody` declare full identifiers, and none uses the key `issued` at all.
+- **No assertion changes:** the re-point touches two lines, both inside fixture dictionaries.
+
+## Conditions the lead must meet
+
+- The commit touches only three test files: the two fixture lines, plus two new tests I specified but did not write.
+- **E-12** (in `tests/test_claim_hold_routes.py`): bare `"d079"` is refused; RED at main, GREEN at the head.
+- **C-8** (in `tests/test_claim_hold_census.py`): every identifier the admission list admits is a registered file; it must turn RED if `"d079"` is ever given a build entry.
+- If any test needs an assertion edited to pass, that is a stop under §6.2.
+- The issuing record and decision log carry one sentence saying `d079` is listed but refused; the exact wording is in §5 of the ruling.
+
+## Limits
+
+- The custody search covered this machine only.
+- I did not confirm the seat's wording that the failures name `desk.acceptance_successor`; the reason codes I saw were `readiness_row_registry_mismatch` and three dependency codes.
+- I did not check whether anything pins the digest of `joulewise/arm_readiness.py`.
+
+## Summary
+
+1. Refusing bare `d079` is correct: it names no calibration file, so it has no build, and must not be given one.
+2. The lead re-points the two fixture lines to `d079_calibration_acceptance_v2_n17_r7` and adds two tests pinning the refusal; it is test-only, so it is not a fourth round.
+3. `d079` stays in the admitted set for now, inert and documented, and is deleted in an ordinary change after the merge.
+rc=0
