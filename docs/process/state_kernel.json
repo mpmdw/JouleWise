@@ -1556,6 +1556,37 @@
       "status_note": "Registered 2026-09-27 (activation 77b1bee2, second registration). Own turn and own gate; issuance does not discharge the later claim-window HOLD. Updated 2026-09-28 (record d528efb2 items 45–106): built on feat/2026-09-27-d138-25g83-issuance through three fix rounds under design addendum D138-25G83-DESIGN-01-A1 (item 68) and HOLD-BY-CONSTRUCTION-01 (item 82); last candidate b953f4b0 (item 97). STOPPED FOR GOOD under HOLD-BY-CONSTRUCTION-01 §6.2: the complete fresh hold refutation found three routes (item 101). Owner brief (item 102; correction item 105): (a) withdraw the issued file and land only the loader repair, the tool and the tests; (b) accept a named written residual, which now also needs a ruling on four main-test regressions (items 104, 106); (c) a new design consult. Not merged. The issuing record and the draft decision-log entry exist only on that branch and await the cold final pass (item 59); the second pedagogy pass is owed on the final texts (item 81).",
       "stop_card": null
     },
+    "CALIBRATION-RAW-SECOND-COPY-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-29-interactive-ff50b201/40-cap-a2/31-coldgate-erratum-ruling.md section 3.3 (iCloud as the single copy; required before step 18; owner-held offline copy recommended)",
+          "docs/process_traces/2026-09-29-interactive-ff50b201/40-cap-a2/23-sonnet-r7-raw-bytes.md (the three members' raw bytes exist in the iCloud archive only, hash-verified against their manifests, emptied locally by the Ed-authorised 2026-07-28 prune)",
+          "docs/process_traces/2026-09-29-interactive-ff50b201/00-session-record.md items 16 and 17"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/CALIBRATION-RAW-SECOND-COPY-01/acceptance",
+          "label": "CALIBRATION-RAW-SECOND-COPY-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Before step 18 (the cap transaction's closing merge): a copy of the 17 members' raw/powermetrics.plist files (at minimum the three archive-only members 20260725T005132-a64711b7, 20260725T011533-0b5ec77c and 20260725T022712-0a9534f5, about 261 MB; all 17 are about 1.5 GB against 237 GB free) in a directory on this machine outside git and outside iCloud, with a SHA256SUMS file checked against MANIFEST.sha256, its path and digests recorded in the record directory of the cap transaction. Each accepted file's sha256 must equal the digest bound in its member's instrument_evidence.json (location is not authority; the hash is). The lead does the local copy with no owner input. Owner part, recommended and not blocking: an owner-held offline copy of the same files, batched into the one owner message of the cap transaction (P8's name, the successor's name, the offline copy), because a local second copy protects against eviction and account loss, not against loss of this disk. Also inventory whether any other calibration raw bytes are iCloud-only and copy those too."
+      },
+      "authority": {
+        "label": "CAP-COUNCIL-25G83-01-A2-E1 section 3.3 (custody of R7's raw bytes), owner-held copy per record item 17",
+        "path": "docs/process_traces/2026-09-29-interactive-ff50b201/40-cap-a2/31-coldgate-erratum-ruling.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Make a second local copy, outside git and outside iCloud, of the raw powermetrics files of the 17 members of calibration R7 (in particular the three a9 members that exist only in the iCloud archive, and any other iCloud-only calibration raw bytes), and record where they are and their digests, before the cap transaction's closing merge; ask Ed once for an owner-held offline copy.",
+      "id": "CALIBRATION-RAW-SECOND-COPY-01",
+      "lane": "agent",
+      "priority": "p0_safety",
+      "rank": 343,
+      "status": "queued",
+      "status_note": "Registered 2026-09-29 (interactive session ff50b201, Opus 5.5 orchestrator; record 00 item 17 lists the lane); erratum E1 section 3.3; record items 16-17). P0 Safety, owner-involved only for the recommended offline copy (verity: R7's numbers stay re-verifiable from primary bytes only while those bytes exist somewhere, directive #421). The transaction may start with iCloud as the single copy; the closing merge may not.",
+      "stop_card": null
+    },
     "CANONICAL-JSON-ONE-HOME-01": {
       "acceptance": {
         "evidence": [
@@ -1616,34 +1647,35 @@
       "status_note": "2026-09-21: registered by the magistrate from the refuter's finding; not fixed under RETAINED-ROOT-REFUSAL-CLASS-01 (its WRITE_SCOPE excluded the D-183 paragraph). Registration, not a ruling.",
       "stop_card": null
     },
-    "CENSUS-MULTILINE-ARGV-01": {
+    "CAP-W1W2-SET-ASIDE-01": {
       "acceptance": {
         "evidence": [
-          "A regression fixture contains a two-line pgrep -fl entry with a second line beginning import, as specified in docs/process_traces/2026-09-23-interactive-7ec32e8b/07-full-suite-replay-pr385.md.",
-          "Focused census regression passes; docs/process_traces/2026-09-23-interactive-7ec32e8b/07-full-suite-replay-pr385.md records the original ValueError and a clean rerun."
+          "docs/process_traces/2026-09-29-interactive-ff50b201/40-cap-a2/31-coldgate-erratum-ruling.md section 3.2 (B2: the lane, its mechanism text, tests and prohibitions) and section 4 step 3 (placement before step 12)",
+          "docs/process_traces/2026-09-29-interactive-ff50b201/40-cap-a2/22-opus-contract-refuter.md finding B2 (the issuer refuses the 12 W1/W2 rows: the registry knows one decision)",
+          "joulewise/issue_calibration_acceptance_generation.py lines 1430-1442 and 1905-1910 (the foreign-row refusal the lane leaves in force for every other valid row)"
         ],
         "pointer": {
-          "json_pointer": "/tasks/CENSUS-MULTILINE-ARGV-01/acceptance",
-          "label": "CENSUS-MULTILINE-ARGV-01 acceptance",
+          "json_pointer": "/tasks/CAP-W1W2-SET-ASIDE-01/acceptance",
+          "label": "CAP-W1W2-SET-ASIDE-01 acceptance",
           "path": "docs/process/state_kernel.json"
         },
-        "summary": "The parser treats a continuation line beginning with import as part of the preceding process, counts that process once, and does not raise; source: docs/process_traces/2026-09-23-interactive-7ec32e8b/07-full-suite-replay-pr385.md, “Lane handed to the magistrate”."
+        "summary": "On main, after the D-138 option (a) loader-repair merge and before step 12 of the cap transaction (the seal of the successor registration), one reviewed change: (1) adds a second entry to DISPOSITION_DECISIONS in joulewise/calibration_dispositions.py, with the mechanism text fixed in erratum E1 section 3.2 (a valid Revision 5 capture of window W1 or W2, a member of the unregistered 25G83 candidate r1 whose list was fixed under the 165,000-cell cap while 8 of the 24 captures stopped on that cap, set aside from the successor; a valid capture, not a diagnostic, not a member of any registered calibration); (2) appends 12 rows to configs/calibration/observation_dispositions.json, one per valid W1/W2 row, with content identifiers computed by the ledger's own function, and re-pins DISPOSITION_REGISTRY_SHA256 in the same change; (3) rewords the two code comments that call set-aside rows diagnostics that can never be members; (4) adds tests: the registry at the production pin equals the two-decision table and the first decision's 11 identifiers are byte-identical; with a synthetic ledger holding the 12 rows the issuer's foreign-row set is empty and a thirteenth valid same-epoch row is still refused; the bracket's doubling count excludes the 12; an artifact declaring only one of the two decisions while its prior set carries rows of both is refused by the validator. It must NOT (a) label the rows diagnostic or never-a-member in the mechanism text, registry or tests; (b) alter the existing decision, its mechanism text or its 11 identifiers; (c) add any content identifier that is not one of the 12 valid rows (the 8 cap stops and any invalid row are never foreign); (d) make the 12 members of anything; (e) change _foreign_rows or the refusal itself. It touches no pinned estimator file, registers no calibration and adds no continuation. Gate: the ordinary review for issuer code (a contract lens and a refuter on the tests), not the light tier. The successor registration states the corpus-doubling consequence (the 12 do not count toward the trigger) beside the naming of the 12, and the owner sees it at the seal."
       },
       "authority": {
-        "label": "PR #385 full-suite replay, “Lane handed to the magistrate: CENSUS-MULTILINE-ARGV-01”",
-        "path": "docs/process_traces/2026-09-23-interactive-7ec32e8b/07-full-suite-replay-pr385.md"
+        "label": "CAP-COUNCIL-25G83-01-A2-E1 section 3.2 (cold erratum, Fable 5.1, 2026-09-29)",
+        "path": "docs/process_traces/2026-09-29-interactive-ff50b201/40-cap-a2/31-coldgate-erratum-ruling.md"
       },
       "dependencies": [],
       "fallback": null,
       "fences": [],
       "flags": [],
-      "goal": "Make the process census parser handle a process command line containing newline characters in pgrep -fl output: a line without an opening process identifier continues the preceding process entry, which is counted once, so a multiline command does not make the admission census raise an exception (docs/process_traces/2026-09-23-interactive-7ec32e8b/07-full-suite-replay-pr385.md, “Lane handed to the magistrate”).",
-      "id": "CENSUS-MULTILINE-ARGV-01",
+      "goal": "Change the calibration issuer's disposition registry so that the 12 valid captures of the two September cap windows (W1 and W2) are recognised as captures set aside by a reviewed decision, without ever calling them diagnostic and without making them members of any calibration, before the cap transaction's seal step (step 12).",
+      "id": "CAP-W1W2-SET-ASIDE-01",
       "lane": "agent",
-      "priority": "p3_tooling",
-      "rank": 275,
+      "priority": "p0_safety",
+      "rank": 341,
       "status": "queued",
-      "status_note": "2026-09-23 activation 4158e658: routine-tier parser hardening registered from the full-suite replay; the recorded failure was caused by a multiline command argument in the live process table.",
+      "status_note": "Registered 2026-09-29 (interactive session ff50b201, Opus 5.5 orchestrator; record 00 item 17 lists the lane); cold erratum CAP-COUNCIL-25G83-01-A2-E1 section 3.2). P0 Safety: must be on main before the successor registration is sealed. No owner action. May run alongside cap transaction steps 2 and 4-11. Sequencing (kept in this note, not as a dependency, because a pending hard start dependency would force status blocked and the lane may be prepared on the D-138 option (a) branch): it merges after D-138 option (a) (branch feat/2026-09-29-d138-loader-promotion, e9827f33), whose module it builds on.",
       "stop_card": null
     },
     "CGV-HARDEN-01": {
@@ -2676,37 +2708,6 @@
       "status_note": "The supplier branch reached a third same-signature custody failure and is blocked on PAPER-CUSTODY-SEAM-01. It re-lands on that seam, receives its own delta and Opus review, and cannot merge before the D-173 paper-supply cold gate.",
       "stop_card": null
     },
-    "D144-SEATPASS-FOLLOWUPS": {
-      "acceptance": {
-        "evidence": [
-          "SF-1: a non-gating persisted report channel surfaces capture_pipeline_superseded for mixed-era ledger observations on a production surface, with an end-to-end regression proving both the report and that valid v3 claims are NOT refused for retained history",
-          "SF-3: a registry-sync test binds schema_v2.json's generation->screen conditional to the Python acceptance registries",
-          "SF-5: the no-copied-scalar guard covers the mint lane per R2 S1(i) rather than a 3-file allowlist"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/D144-SEATPASS-FOLLOWUPS/acceptance",
-          "label": "D144-SEATPASS-FOLLOWUPS acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "Close the three should-fix findings of the D-144 pre-merge seat pass (ruling: docs/process_traces/2026-08-20-go-session/d144-seatpass-ruling.md); SF-1's shape is ruled non-gating (the one-line guard drop was executably refuted as a false-refusal defect)."
-      },
-      "authority": {
-        "label": "D-144 seat-pass ruling 2026-08-20 (GO; SF dispositions post-debate)",
-        "path": "docs/process_traces/2026-08-20-go-session/d144-seatpass-ruling.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [],
-      "flags": [],
-      "goal": "D-144 seat-pass should-fix follow-ups: SF-1 non-gating superseded-era report channel, SF-3 schema/registry sync test, SF-5 mint-lane-wide scalar guard.",
-      "id": "D144-SEATPASS-FOLLOWUPS",
-      "lane": "agent",
-      "priority": "p2_next_slice",
-      "rank": 65,
-      "status": "queued",
-      "status_note": "Minted 2026-08-20 from the D-144 pre-merge seat pass (both seats GO; nits recorded in the ruling, not queued).",
-      "stop_card": null
-    },
     "D165-E2E-REPLAY-01": {
       "acceptance": {
         "evidence": [
@@ -3068,55 +3069,6 @@
       "rank": 149,
       "status": "active",
       "status_note": "In flight on feat/2026-09-05-decision-log-ratify after ruling 43 ratified ruling 17 as amended.",
-      "stop_card": null
-    },
-    "DG071-PROVENANCE-TEST-01": {
-      "acceptance": {
-        "evidence": [
-          "tests/test_issue_dg071_dg075_statistics.py asserts the exact argv the PROVENANCE_DISCLOSURE names (git log -1 --format=%H -- <script path>, cwd = repository_root) against a mocked subprocess.run",
-          "The real-git fixture is the cold seat's F2 pair (file 40): repository A ends at the producer's last change so it IS HEAD; repository B merges it --no-ff, changes another script, adds an empty commit, and carries a later producer change on a ref HEAD does not reach; every commit carries a distinct pinned timestamp; the shape facts are asserted with git",
-          "An add-only repository shape is retained so the --diff-filter=M refusal kill is not lost (file 41 finding 1)",
-          "The mutant table replayed at the bench kills every named candidate in files 39-41 (HEAD, HEAD^, HEAD~k, unscoped, scripts/ pathspec, glob pathspec, --diff-filter=A, --diff-filter=M, --first-parent, --all, --no-merges) — --follow is not a target",
-          "The PR touches ONLY the test file; the producer, the artifact and the eight values of record are byte-unchanged"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/DG071-PROVENANCE-TEST-01/acceptance",
-          "label": "DG071-PROVENANCE-TEST-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "The DG-071/DG-075 provenance test pins the disclosed git command and exercises it on a history pair derived from the command's axes, so no further fixture enumeration is needed."
-      },
-      "authority": {
-        "label": "Fixture-shape cold gate synthesis (files 38-42, 2026-09-02)",
-        "path": "docs/process_traces/2026-09-02-paper-d-dg071/42-magistrate-synthesis-fixture-shape-gate.md"
-      },
-      "dependencies": [],
-      "fallback": {
-        "action": "The next spend is the Opus seeded generated-history differential with an independent oracle (file 41 Q2), never another hand-added fixture feature.",
-        "condition": "A wrong implementation survives the argv pin + F2 pair + add-only shape.",
-        "pointer": {
-          "anchor": "q2--cure-shape-refute-it-does-not-close-the-class-and-in-one-respect-it-makes-coverage-worse-than-what-is-already-committed",
-          "label": "Opus 5 refutation, Q2 — generated-history differential",
-          "path": "docs/process_traces/2026-09-02-paper-d-dg071/41-coldgate-opus-refutation-fixture-shape.md"
-        }
-      },
-      "fences": [
-        {
-          "authority": {
-            "label": "Fixture-shape cold gate, Q3 (unanimous: test-only cure)",
-            "path": "docs/process_traces/2026-09-02-paper-d-dg071/42-magistrate-synthesis-fixture-shape-gate.md"
-          },
-          "rule": "The cure PR touches only tests/test_issue_dg071_dg075_statistics.py. Any edit to scripts/issue_dg071_dg075_statistics.py changes producer.script_sha256, moves the reference command's answer away from the recorded commit, and voids the byte-identical replay; such an edit is a re-issue, not this row."
-        }
-      ],
-      "flags": [],
-      "goal": "Land the fixture-shape gate's ruled provenance-test shape (argv pin + F2 history pair + add-only shape) as a test-only PR on main after PR #276 merges, closing terra 254 G1-SF1/G1-N1 without a fourth in-PR fix round.",
-      "id": "DG071-PROVENANCE-TEST-01",
-      "lane": "agent",
-      "priority": "p3_hardening_candidates",
-      "rank": 94,
-      "status": "queued",
-      "status_note": "Opened 2026-09-02 by the fixture-shape cold gate (three seats unanimous on merge-now + kernel row). The committed test admits eight of thirteen wrong git-command candidates (file 41 Q4); the artifact and its provenance fields are verified correct by all three seats, so this is a should-fix on regression protection, not a reader-facing defect.",
       "stop_card": null
     },
     "DIRECT-INSTALLER-SUCCESSOR-CHECK-01": {
@@ -3932,35 +3884,6 @@
       "status_note": "T38c 2026-09-08: plan draft landed dd27e53b9895ea19704d4280ea292f4cc164af57 (cherry-pick 6b7e2614). NEEDS_RULING remains: PLAN_ID/NIGHT_ROOT/T0/WINDOW_MAX_S only AFTER rehearsal acceptance; dry sample values are not authorized production values. Production clone readiness follows 99co + amendment. Agent lane is preparation only; actual collection requires zero agents. 2026-09-10: no supported short chain (packet 04); proposed inputs PLAN_ID d117-g2a-prefill-probe-20260912, NIGHT_ROOT /Users/edr/night-custody/d117-g2a-prefill-probe-20260912, t0 2026-09-12T02:56:00-07:00, WINDOW_MAX_S 13500, measurement root /Users/edr/JouleWise-measurement-v5-20260911-g2a at H = the handback commit (inventory row inside H); arm materials 11/12/13 on `feat/2026-09-10-g2a-handback-20260912`; Ed emailed 04:50 (1a08b223b02862e9), silence = full chain; ruling due after rehearsal acceptance. 2026-09-10: BLOCKED — the 09-12 02:56 arm is off; runbook 68 / checklist 13 arm steps superseded until the successor acceptance is issued (record 39).",
       "stop_card": null
     },
-    "G2A-PREFLIGHT-ARGV-ASSERT-01": {
-      "acceptance": {
-        "evidence": [
-          "Add executable preflight refusal assertions for two positional arguments and zero arguments with NIGHT_PLAN populated."
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/G2A-PREFLIGHT-ARGV-ASSERT-01/acceptance",
-          "label": "G2A-PREFLIGHT-ARGV-ASSERT-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "Add executable preflight refusal assertions for two positional arguments and zero arguments with NIGHT_PLAN populated."
-      },
-      "authority": {
-        "label": "T38 dictated task registration and repository verification",
-        "path": "docs/process_traces/2026-09-08-handoff-redo/50-bookkeeping-t38-astra.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [],
-      "flags": [],
-      "goal": "Add executable preflight refusal assertions for two positional arguments and zero arguments with NIGHT_PLAN populated.",
-      "id": "G2A-PREFLIGHT-ARGV-ASSERT-01",
-      "lane": "agent",
-      "priority": "p2_next_slice",
-      "rank": 157,
-      "status": "queued",
-      "status_note": "H2; Routing branch 44519d14 trace 39 R1; accepted test-strength follow-up in trace 99b.",
-      "stop_card": null
-    },
     "GAMMA-CLAIM-RENDERER-01": {
       "acceptance": {
         "evidence": [
@@ -4010,65 +3933,6 @@
       "rank": 142,
       "status": "blocked",
       "status_note": "The gamma branch reached the same caller-controlled custody signature and is blocked on PAPER-CUSTODY-SEAM-01. The floor artifact must come from the supply-map-pinned on-disk object, never the embedded self-reference.",
-      "stop_card": null
-    },
-    "GAMMA-UNIT-ROSTER-GUARD-01": {
-      "acceptance": {
-        "evidence": [
-          "Validation on the freeze path refuses a gamma pack whose unit roster is not exactly the ruled four in the ruled order with the ruled producer references, with regressions for three units, a reordering, and an extra unit",
-          "The arm-side comparison authenticates the receipt's unit list against the ruled roster, not only against the pack's list",
-          "The current gamma generation still validates, freezes and arms unchanged"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/GAMMA-UNIT-ROSTER-GUARD-01/acceptance",
-          "label": "GAMMA-UNIT-ROSTER-GUARD-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "The ruled four-unit ordered gamma roster is checked against the ruling, not against the pack itself."
-      },
-      "authority": {
-        "label": "S9-04 (the gamma four-unit roster is a hand-written literal that nothing checks); ruled roster is D-131 clause 2a",
-        "path": "docs/process_traces/2026-08-27-t26/ruled-not-installed-sweep/SHORTLIST.md"
-      },
-      "dependencies": [
-        {
-          "evidence": {
-            "label": "D-170 item 1 installed: test_satisfied_decision_dependency_requires_named_test_regression fails when a satisfied kind:decision dependency carries no producer-regression pointer (PR #273)",
-            "path": "tests/test_gen_state.py"
-          },
-          "kind": "decision",
-          "required": "D-170 item 1's ruling-status semantics is installed (hard-start decision gate and producer-regression evidence rule); the 2026-09-02 cold-gate ruling section B4 applies this dependency to the existing S9-04 row",
-          "scope": "start",
-          "state": "satisfied",
-          "strength": "hard",
-          "target": "D-170"
-        }
-      ],
-      "fallback": null,
-      "fences": [
-        {
-          "authority": {
-            "label": "D-157 finding F-3 (families are byte-bound into the semantics digest; post-mint correction is a new family generation)",
-            "path": "docs/decision_log.md"
-          },
-          "rule": "Post-mint change to a frozen pack's semantics is a new family generation; land the guard so it refuses NEW packs and reports, never rewrites, an existing one"
-        },
-        {
-          "authority": {
-            "label": "D-131 clause 2a (gamma carries exactly four ordered units)",
-            "path": "docs/decision_log.md"
-          },
-          "rule": "The roster literal is D-131 clause 2a verbatim; this row adds refusals and does not change any pack bytes or the generator's emitted units"
-        }
-      ],
-      "flags": [],
-      "goal": "Enforce D-131 clause 2a's gamma roster mechanically: gamma carries exactly four ordered units (A/decode, A/prefill_p256, B/decode, B/prefill_p256; A references the 1.5B producer and B the 7B producer), but the generator emits them as a hand-written literal tuple and validate_identity_pin_projection (joulewise/identity_pins.py) enforces only exact keys, lifecycle state, null-pins-before-projection and id uniqueness, so a gamma pack with three units, reordered units, or an extra C/decode validates, freezes and arms clean; the arm-side comparison in joulewise/arm_readiness.py checks the receipt's unit list against the pack's own list, self-consistency rather than the ruled roster.",
-      "id": "GAMMA-UNIT-ROSTER-GUARD-01",
-      "lane": "agent",
-      "priority": "p2_next_slice",
-      "rank": 109,
-      "status": "queued",
-      "status_note": "UNBLOCKED 2026-09-03: the only thing holding this row was D-170's hard-start decision gate, and D-170's three installing pull requests (#273 items 1 and 4, #275 item 2, #274 item 3) are all merged to main. Registered 2026-08-27 in the 2026-08-27 T26 end-of-sprint kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md) from S9-04 of the ruled-not-installed sweep (status B, cure CODE, does not gate the mint). Line citations in the SHORTLIST are at the sweep's baseline head 0dd3b6dc, not HEAD. 2026-09-02: the cold-gate ruling section B4 (coldgate-dx-t26a) directed the S9-04 row to register with a hard/start/pending dependency on D-170; the row already existed from the 2026-08-27 wave, so the dependency is added here instead of a duplicate row (dated addendum on the ruling).",
       "stop_card": null
     },
     "GATE-B1-PROVENANCE-BAND-01": {
@@ -4585,35 +4449,6 @@
       "status_note": "Registered 2026-09-26 (activation f8d6cab1) under Final texts v1.1 text 19; not started. Evidence-retention duty until it lands: re-archive `/usr/bin/pmset -g log` to ~/night-archive/pmset-log/ with a .sha256 sidecar at least weekly (the OS log keeps about 7 days). No OS-log battery evidence exists for any capture before 2026-09-19.",
       "stop_card": null
     },
-    "ICLOUD-CUSTODY-LOCATOR-01": {
-      "acceptance": {
-        "evidence": [
-          "Bound custody-locator filesystem discovery in joulewise/calibration_ledger.py without weakening custody refusals."
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/ICLOUD-CUSTODY-LOCATOR-01/acceptance",
-          "label": "ICLOUD-CUSTODY-LOCATOR-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "Bound custody-locator filesystem discovery in joulewise/calibration_ledger.py without weakening custody refusals."
-      },
-      "authority": {
-        "label": "T38 dictated task registration and repository verification",
-        "path": "docs/process_traces/2026-09-08-handoff-redo/50-bookkeeping-t38-astra.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [],
-      "flags": [],
-      "goal": "Bound custody-locator filesystem discovery in joulewise/calibration_ledger.py without weakening custody refusals.",
-      "id": "ICLOUD-CUSTODY-LOCATOR-01",
-      "lane": "agent",
-      "priority": "p2_next_slice",
-      "rank": 156,
-      "status": "queued",
-      "status_note": "H2; Trace 47 C8 (canonical worktree): static finding; _custody_state exists/is_dir on tracked iCloud fixture locators has no budget. No live hang was reproduced.",
-      "stop_card": null
-    },
     "IDENTITY-PROBE-LIVE-VERIFY-01": {
       "acceptance": {
         "evidence": [
@@ -4644,6 +4479,36 @@
       "rank": 189,
       "status": "queued",
       "status_note": "2026-09-11: registered from activation 36d3a823 seat 03 under the lead resume rulings; not started. Lead-owned (Fable magistrate; not delegable). Fixture or mock evidence cannot discharge this live verification.",
+      "stop_card": null
+    },
+    "IDENTITY-SEAM-TEST-OPTION-CLOSE-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-29-interactive-ff50b201/40-cap-a2/21-coldgate-fable-ruling.md section 3.4 item 3 and V9 (the seam: identity replaced without the fake sampler, lines 2046-2059)",
+          "docs/process_traces/2026-09-29-interactive-ff50b201/40-cap-a2/31-coldgate-erratum-ruling.md section 4 step 2 (close the identity seam before step 12, subject to hold ruling section 4.4)"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/IDENTITY-SEAM-TEST-OPTION-CLOSE-01/acceptance",
+          "label": "IDENTITY-SEAM-TEST-OPTION-CLOSE-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "In scripts/validate_powermetrics_fiducial.py (the option is read at lines 2046-2060), passing --identity-epoch-json-for-test without --sampler-direct-for-test is an argument error, beside the existing checks at lines 1894-1901 and in the same shape as the cell-budget seam at lines 2029-2036. Tests: a defect-shaped regression that fails on main (option accepted, recorded build replaced) and passes after; the option with the fake sampler still works. It edits no pinned estimator file. Subject to the hold ruling section 4.4 pin search: if installed launch material or a sealed registration pins the validator's digest, the change carries its re-pin, recorded, and sealing the successor registration after it is the natural place. Not a prerequisite of the D-138 option (a) merge or of the cap transaction's start; it is a prerequisite of step 12 (the seal) and, in every case, of the first claim-bearing window."
+      },
+      "authority": {
+        "label": "CAP-COUNCIL-25G83-01-A2 section 3.4 item 3, as carried by erratum E1 section 4 step 2",
+        "path": "docs/process_traces/2026-09-29-interactive-ff50b201/40-cap-a2/21-coldgate-fable-ruling.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Close the test-only option --identity-epoch-json-for-test in scripts/validate_powermetrics_fiducial.py, which today lets a capture record an operating-system build the machine is not at, without the fake sampler, so that no real capture can carry a false recorded build; the change must land before the successor registration is sealed.",
+      "id": "IDENTITY-SEAM-TEST-OPTION-CLOSE-01",
+      "lane": "agent",
+      "priority": "p0_safety",
+      "rank": 342,
+      "status": "queued",
+      "status_note": "Registered 2026-09-29 (interactive session ff50b201, Opus 5.5 orchestrator; record 00 item 17 lists the lane); cold ruling CAP-COUNCIL-25G83-01-A2 section 3.4 item 3, erratum E1 step 2). P0 Safety: absence of a false build rests on the recorded build being true. No owner action; the lead records the section 4.4 pin search with the change.",
       "stop_card": null
     },
     "INSTALLER-BACKUP-WINDOW-01": {
@@ -5148,45 +5013,6 @@
       "rank": 113,
       "status": "blocked",
       "status_note": "Registered 2026-08-27 in the 2026-08-27 T26 end-of-sprint kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md) from S9-12 of the ruled-not-installed sweep (status C, cure RUNBOOK + W-LIST; gates windows). The ruling text: 'the L10 sacrificial rehearsal re-runs the full edge at the same head before any window is spent' (decision log, WO-CONSUMPTION-EDGE contract ADOPTED, item 4). Ed-hands portions of a live rehearsal are surfaced as NEEDS-ED. 2026-09-02: the cold-gate ruling section B4 (coldgate-dx-t26a) directed the S9-12 row to register with a hard/start/pending dependency on D-170; the row already existed from the 2026-08-27 wave, so the dependency is added here instead of a duplicate row (dated addendum on the ruling).",
-      "stop_card": null
-    },
-    "LINE-AUDIT-GUARD-01": {
-      "acceptance": {
-        "evidence": [
-          "The guard checks every spec's extract individually and the emitted line count against the cited ranges, not merely that the concatenated transcript is non-empty",
-          "A deliberately shifted, shortened, or past-end range makes the audit die, proven by a rehearsal transcript or a regression",
-          "The unchanged current pin set still passes at the executing head, with the transcript retained as 006-* exactly as before"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/LINE-AUDIT-GUARD-01/acceptance",
-          "label": "LINE-AUDIT-GUARD-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "The section 1.1 line audit refuses a truncated, shifted, or short extract instead of passing it on file non-emptiness."
-      },
-      "authority": {
-        "label": "Joint delta re-audit, magistrate adjudication item 4 (kernel follow-ups reaffirmed: strengthen the 006-* audit guard beyond test -s)",
-        "path": "docs/process_traces/2026-08-24-d153-sweep/05-joint-delta-re-audit.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [
-        {
-          "authority": {
-            "label": "Joint delta re-audit adjudication item 4",
-            "path": "docs/process_traces/2026-08-24-d153-sweep/05-joint-delta-re-audit.md"
-          },
-          "rule": "Guard strength only: the pinned range set and the 006-* transcript contract are unchanged - this row adds refusals, it does not re-cut the section 0.3 map"
-        }
-      ],
-      "flags": [],
-      "goal": "Strengthen the S-0 section 1.1 immutable-line-audit guard beyond non-emptiness. The audit pipes each pinned spec through git show BASE-colon-file into nl -ba into sed -n RANGES, concatenates everything into 006-pinned-line-audit.txt, and then checks only test -s - so a SILENTLY TRUNCATED extract passes as long as any single spec emits any byte: a range whose symbol moved, shrank, or was renamed yields fewer lines or nothing at all and the audit still succeeds. Make the guard per-spec and count-bearing: every spec must contribute a non-empty extract, the emitted line count must equal the count the cited ranges demand, and a cited range running past the end of the file at that head must fail closed.",
-      "id": "LINE-AUDIT-GUARD-01",
-      "lane": "agent",
-      "priority": "p2_next_slice",
-      "rank": 98,
-      "status": "queued",
-      "status_note": "Joint delta re-audit adjudication item 4, reaffirmed as a kernel follow-up. Motivating case is B1: PR #187's six scripts/generate_arm_readiness.py citations went stale when PR #188 added +6 lines, and the EXECUTED one is section 1.1's own audit spec, guarded only by test -s - non-emptiness passed over silently truncated extracts. Companion to EPOCH-LINT-01's kind (iii): that row lints coordinates at REVISION time, this row makes the runsheet's own executed guard refuse at RUN time. The B1 citations were themselves remapped at the bench (PR #187 head 9fd5bace); this row cures the guard class, not that instance.",
       "stop_card": null
     },
     "LINEAGE-RELOCATABLE-01": {
@@ -6249,37 +6075,6 @@
       "status_note": "Registered 2026-09-27 (activation d528efb2). The two oldepoch probes found a non-stale main-side bracket refusal; an explicit R7 route remains owed. Updated 2026-09-28 (record d528efb2 items 68, 76, 98): design addendum D138-25G83-DESIGN-01-A1 keeps R7 as the default, so D-138's old-epoch condition was met by identity (bracket.json sha256 32562d34… equal at main and at fix heads 8458f797 and b953f4b0); this lane applies to the later transaction that moves the default, under the condition restated in that addendum's §6 item 3.",
       "stop_card": null
     },
-    "ONE-USE-CONSUMPTION-TEST-01": {
-      "acceptance": {
-        "evidence": [
-          "test_atomic_launch_capability_race_exactly_one_consumer_and_replay_refuses runs unskipped, or a named successor covers the same two assertions",
-          "The reason the original was STRUCTURAL-BLOCKED is stated and shown cured, not worked around by weakening the assertions",
-          "The counterfactual is recorded: with the one-use write removed, the test fails"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/ONE-USE-CONSUMPTION-TEST-01/acceptance",
-          "label": "ONE-USE-CONSUMPTION-TEST-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "A running end-to-end test proves that exactly one consumer wins the launch capability and that replay refuses, with the structural blocker either removed or replaced by a test that does not need it."
-      },
-      "authority": {
-        "label": "decode-identity file 46 NIT-2 (cold Fable ruling on packet 45): the only end-to-end one-use consumption test is unittest.skip STRUCTURAL-BLOCKED",
-        "path": "docs/process_traces/2026-09-03-kernel-batch/02-evidence-index.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [],
-      "flags": [],
-      "goal": "Restore an executable end-to-end test of the one-use consumption write. The only such test is skipped as STRUCTURAL-BLOCKED, so the one-use property that the arm-consumption cure rests on is currently supported by the primitive plus a code-read mapping, not by an executed end-to-end proof.",
-      "id": "ONE-USE-CONSUMPTION-TEST-01",
-      "lane": "agent",
-      "priority": "p2_next_slice",
-      "rank": 128,
-      "status": "queued",
-      "status_note": "Registered 2026-09-03 from the packet-45 cold gate's residual nits. Cited site at the time of the ruling: tests/test_arm_readiness_lifecycle.py:751-755; re-derive before work. The nit is explicit that the one-use claim in Cure C(i) rests on the primitive (E1) and a code-read mapping while this test stays skipped, so the row is scoped to restoring the executed proof, not to re-litigating the cure.",
-      "stop_card": null
-    },
     "P1-001": {
       "acceptance": {
         "evidence": [
@@ -7214,6 +7009,36 @@
       "status_note": "In progress on feat/2026-09-04-paper-custody-seam. Landing and two refuters were followed by fix round 1, a residual delta, and bounded fix round 2; a repeated signature routes back to a consult. All four supplier lanes wait on this seam.",
       "stop_card": null
     },
+    "PAPER-CUSTODY-TEST-SEAM-REFUSAL-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-29-interactive-ff50b201/50-rulings/10-sonnet-packets.md packet A6 (item 5, hardening; the production observation is closed and the seam is test-only)",
+          "docs/process_traces/2026-09-29-interactive-ff50b201/00-session-record.md item 10 (ruling A6: accept the skip, register this hardening as a P1 lane)"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/PAPER-CUSTODY-TEST-SEAM-REFUSAL-01/acceptance",
+          "label": "PAPER-CUSTODY-TEST-SEAM-REFUSAL-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "In joulewise/paper_custody.py, _claim_issuance_gate (lines 597-640) refuses, with a named refusal code, any input whose policy identity is stamped private_test_seam: (the stamp is written at joulewise/analysis_engine/__init__.py lines 93-98 when the test-only _floor_request_factory at lines 457-473 is used; production cli.py lines 2003-2019 cannot pass that hook). Tests: a defect-shaped regression in which a claim built through the test hook reaches the gate and is refused (RED without the new check), and a production-path artifact still passes. The check is a refusal only; it changes no measured or published number. This is verity-germane under directive #421 (it bears on whether an issued claim came from a test hook), so it is mandatory, not optional hardening. The six F/T2 tests that skip floor-record derivation stay accepted and are recorded as not exercising binding (limitation L1, FLOOR-BIND-01)."
+      },
+      "authority": {
+        "label": "Orchestrator ruling A6 on decision packet A6 (session ff50b201 record item 10)",
+        "path": "docs/process_traces/2026-09-29-interactive-ff50b201/50-rulings/10-sonnet-packets.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Make paper custody refuse any claim whose recorded policy identity starts with private_test_seam:, so that a claim produced through a test-only hook can never be issued as a paper claim.",
+      "id": "PAPER-CUSTODY-TEST-SEAM-REFUSAL-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 344,
+      "status": "queued",
+      "status_note": "Registered 2026-09-29 (interactive session ff50b201, Opus 5.5 orchestrator; record 00 item 17 lists the lane); item 10 ruling A6, packet A6). Verity-germane (#421): mandatory. Cheap, refusal-only.",
+      "stop_card": null
+    },
     "PASS-ROUTE-RUNBOOK-CONTINUATION-01": {
       "acceptance": {
         "evidence": [
@@ -7280,36 +7105,6 @@
       "rank": 218,
       "status": "queued",
       "status_note": "2026-09-16 activation 0bd12d79: registered from the interactive session's relay (candidate 1 of 3; candidates 2 and 3 — citing the article in the prospectus methodology / fixed-difficulty RQ, and the heterogeneous-placement simulator note — are recorded in the registration record as doc edits for the prospectus and horizon-plan owners, not registered as lanes); not started; not night-critical; Paper C only.",
-      "stop_card": null
-    },
-    "PINSET-GRAMMAR-EXCLUSION-01": {
-      "acceptance": {
-        "evidence": [
-          "The PR #182 refuter envelope is custodied under docs/process_traces/ and the finding is restated from its own text, not reconstructed",
-          "The exclusion the finding names is fixed or waived with recorded reasons, with a regression if any code changes"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/PINSET-GRAMMAR-EXCLUSION-01/acceptance",
-          "label": "PINSET-GRAMMAR-EXCLUSION-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "The pinset builder's F1 should-fix is closed against the refuter's own custodied wording."
-      },
-      "authority": {
-        "label": "PR #182 pinset-builder cure, refuter round F1 envelope (custodied; recovered post-hoc from the T23 session record)",
-        "path": "docs/process_traces/2026-08-24-pinset-refuter/refuter-envelope.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [],
-      "flags": [],
-      "goal": "Close the F1 should-fix from the PR #182 pinset-builder refuter round, restated from the custodied envelope's own text (docs/process_traces/2026-08-24-pinset-refuter/refuter-envelope.md, section \"The should_fix to carry (F1)\"): the projection-receipt exception is implemented as a WHOLE-DIRECTORY exception. The shared predicate _histsem_tree_has_authoring_custody tests only PurePosixPath(path).parts[0] (joulewise/arm_readiness.py:2906-2918), so every nested path under identity_pin_projection.receipts is excluded from the pre-authoring custody set, and what actually refuses a nested tamper is adjacent machinery (the identity membrane, the PACK_AUTHENTICATION exact-addition fence) rather than this gate. PRIMARY CURE (a): bound the pre-authoring exclusion to the projection freeze grammar - projection-NNNN.json / projection-NNNN.sha256, four or more digits, directly under the directory - the same grammar identity_pins.py:957-964 already enforces. MINIMAL ALTERNATIVE (b): add the nested-authoring-custody case to PreAuthoringProjectionCustodyTests (tests/test_receipt_histsem.py:882-887 is today the only positive projection case) so the layered refusal is pinned by test rather than by adjacency. Refuter severity: should_fix, not blocker - the adjudicated verdict on PR #182 was SOUND FOR MERGE and post-merge follow-up is acceptable.",
-      "id": "PINSET-GRAMMAR-EXCLUSION-01",
-      "lane": "agent",
-      "priority": "p2_next_slice",
-      "rank": 95,
-      "status": "queued",
-      "status_note": "REGISTRATION ANOMALY CURED: the refuter envelope that was nowhere in the repository record at registration was recovered POST-HOC on 2026-08-24 from the T23 session record - PR #182 merged while the refuter (agent task-id afa98fc4eaa4512e1, adjudicated verdict SOUND FOR MERGE) was still running - and is custodied verbatim at docs/process_traces/2026-08-24-pinset-refuter/refuter-envelope.md. The goal is now restated from the envelope's own wording, satisfying the first acceptance clause; what remains is the fix or recorded waiver.",
       "stop_card": null
     },
     "PINSET-REFRESH-LANE-01": {
@@ -8025,6 +7820,37 @@
       "priority": "p1_phase_gate",
       "rank": 240,
       "status": "blocked",
+      "stop_card": null
+    },
+    "R7F-DX-MARKERS-VS-INVENTORY-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-29-interactive-ff50b201/00-session-record.md item 12 (orchestrator ruling: revert the quote; the inventory's 30 dx slots police the DX numbers; reconcile R7F in a follow-up lane; A120 stays verify-first)",
+          "docs/process_traces/2026-09-29-interactive-ff50b201/50-rulings/10-sonnet-packets.md packet D (the five DX values are true; R7F finds no region because the section opens without the curly quote) and packet E (A120 kept out of the retirement set)",
+          "docs/process_traces/2026-09-29-interactive-ff50b201/50-rulings/30-paperinv-sol-report.md (NEEDS_SCOPE: restoring the quote activates R7F's mandatory marker checks and six R7F tests fail)"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/R7F-DX-MARKERS-VS-INVENTORY-01/acceptance",
+          "label": "R7F-DX-MARKERS-VS-INVENTORY-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Decide and land one consistent contract for the DX region: either the paper's DX section carries the markers R7F requires (restoring the DX head's curly quote that DX_STANDING_SENTENCE_HEAD at scripts/check_paper_round7_artifacts.py line 126 starts with, so that R7F finds the region) with the six R7F tests that fail today satisfied, or R7F's marker rules are changed on an authorised basis so that they and the inventory's 30 dx slots do not disagree. Whatever is chosen: the five DX numbers stay policed by the inventory, a mutant such as 49 of 59 to 50 of 59 still fails the checks, and row A120 (R7F-DX-PROSE-SCAN-01) is retired only when this lane's outcome lands. Verity-germane (a wrong DX edit must not pass every checker)."
+      },
+      "authority": {
+        "label": "Orchestrator ruling D on decision packet D (session ff50b201 record items 10 and 12)",
+        "path": "docs/process_traces/2026-09-29-interactive-ff50b201/50-rulings/10-sonnet-packets.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Reconcile the paper checker R7F's mandatory marker rules for the DX section of the paper with the paper-number inventory, so that the DX section is policed by one consistent contract and the R7F scan is no longer vacuous on the real paper.",
+      "id": "R7F-DX-MARKERS-VS-INVENTORY-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 345,
+      "status": "queued",
+      "status_note": "Registered 2026-09-29 (interactive session ff50b201, Opus 5.5 orchestrator; record 00 item 17 lists the lane); items 10 and 12). Follow-up to the paper-number inventory branch feat/2026-09-28-paper-number-inventory (aeaf2556, pushed, awaiting its PR). A120 (R7F-DX-PROSE-SCAN-01) stays verify-first until this lane resolves. Sequencing: starts after the inventory branch merges to main (a note, not a dependency: a pending hard start dependency would force status blocked).",
       "stop_card": null
     },
     "R7F-DX-PROSE-SCAN-01": {
@@ -9739,37 +9565,6 @@
       "status_note": "Registered 2026-09-26 (activation f8d6cab1); not started.",
       "stop_card": null
     },
-    "TEST-PGREP-DIALECT-MULTILINE-01": {
-      "acceptance": {
-        "evidence": [
-          "tests/test_arm_readiness_evidence_t0.py:2690 (test_g4_real_ruled_census_pgrep_dialect) and :2741-2746 (real /usr/bin/pgrep -lf, then int(line.split(' ', 1)[0]) over every stdout line) at main 4c843126",
-          "docs/process_traces/2026-09-15-activation-08ca8197/07-test-pgrep-dialect-lane-registration.md (registration record; the failure text as reported by the interactive session b0ae8462, whose record 23 in docs/process_traces/2026-09-15-interactive-b0ae8462/ carries the evidence once it lands)",
-          "docs/process_traces/2026-09-15-interactive-b0ae8462/04-a173-design-astra.md (A173's own-module cure shape for census parsing, which this nit follows: PID set from pgrep -f, or tolerate non-PID lines)"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/TEST-PGREP-DIALECT-MULTILINE-01/acceptance",
-          "label": "TEST-PGREP-DIALECT-MULTILINE-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "The test takes its PID set from PID-only output (pgrep -f without -l) or tolerates lines whose first token is not an integer (continuation lines of a multi-line argv), so a live process with a multi-line command line containing the pattern can no longer error the test; a regression spawns a decoy child whose argv carries a newline and the pattern and proves the test still reports the decoy's PID and does not raise; the G4 semantics the test kills (M10, a construct pgrep rejects or never matches) are unchanged and its must-die mutant still dies. Not night-critical; test-only."
-      },
-      "authority": {
-        "label": "2026-09-16 interactive session b0ae8462 (P3 nit from its running seats; record 23 in its trace dir); registered by activation 08ca8197 at that session's request (registration, not a ruling)",
-        "path": "docs/process_traces/2026-09-15-activation-08ca8197/07-test-pgrep-dialect-lane-registration.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [],
-      "flags": [],
-      "goal": "Stop test_g4_real_ruled_census_pgrep_dialect (tests/test_arm_readiness_evidence_t0.py:2690) from erroring whenever a live process carries a multi-line argv that contains the pattern. The test runs the real pgrep -lf and parses every stdout line as <pid> <command>; pgrep -lf prints the full command line, so a process launched with a multi-line brief (tonight: Codex seats whose brief text mentions run_campaign) yields continuation lines that start with non-PID text and the parse raises invalid literal for int() with base 10: 'WRITE_SCOPE:'. Cure shape is A173's: take the PID set from pgrep -f (PID-only) or tolerate non-PID lines.",
-      "id": "TEST-PGREP-DIALECT-MULTILINE-01",
-      "lane": "agent",
-      "priority": "p3_hardening_candidates",
-      "rank": 213,
-      "status": "queued",
-      "status_note": "2026-09-16 activation 08ca8197: registered at the interactive session b0ae8462's request; registration only; not started; test-only nit, not night-critical. Related: TEST-CANONICAL-PATH-DEPENDENCY-01 (hermetic worktree runs) and ARM-CENSUS-IDLE-INTERACTIVE-01 (the census cure shape it follows).",
-      "stop_card": null
-    },
     "TEST-REAL-POWERMETRICS-FENCE-01": {
       "acceptance": {
         "evidence": [
@@ -11258,35 +11053,6 @@
       "rank": 204,
       "status": "queued",
       "status_note": "2026-09-15 activation d6888966, cold gate 28 Q2: registered by the magistrate from the Opus pairing refuter's sibling finding; the night-agent installer ruling is applied to the watchdog sibling by registration, not a new ruling; not started. No dependency: do not block this task on the night-agent lane. Lands after INSTALL-WINDOWS-MULTI-01 in its own small PR. Use fake-launchctl fixtures only; never run against the live LaunchAgent because the running magistrate is under it.",
-      "stop_card": null
-    },
-    "WATCHDOG-NITS-01": {
-      "acceptance": {
-        "evidence": [
-          "Review watchdog refusal-event repetition, notice dedupe/ack keys, inline installer classifier, lock existence ordering, and PID/lstart identity residual."
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/WATCHDOG-NITS-01/acceptance",
-          "label": "WATCHDOG-NITS-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "Review watchdog refusal-event repetition, notice dedupe/ack keys, inline installer classifier, lock existence ordering, and PID/lstart identity residual."
-      },
-      "authority": {
-        "label": "T38 dictated task registration and repository verification",
-        "path": "docs/process_traces/2026-09-08-handoff-redo/50-bookkeeping-t38-astra.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [],
-      "flags": [],
-      "goal": "Review watchdog refusal-event repetition, notice dedupe/ack keys, inline installer classifier, lock existence ordering, and PID/lstart identity residual.",
-      "id": "WATCHDOG-NITS-01",
-      "lane": "agent",
-      "priority": "p2_next_slice",
-      "rank": 158,
-      "status": "queued",
-      "status_note": "H2; Traces 23 F2-F4, 24 and 99: nonblocking follow-ups; preserve fail-closed refusal semantics.",
       "stop_card": null
     },
     "WATCHDOG-STALE-EXIT-CLASS-01": {
