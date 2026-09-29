@@ -25,6 +25,26 @@ from tests.test_bundle_read import load_config
 
 
 class BfgsFixtureTests(unittest.TestCase):
+    def test_second_form_grants_are_exactly_the_a2_closed_list(self) -> None:
+        from tests.bfgs_fixtures import PARITY_SECOND_FORM_TEST_IDS, PARITY_TEST_IDS
+
+        # Independent named ledger: a same-count substitution must fail too.
+        expected = frozenset({
+            "tests.test_analysis_integration.AnalysisIntegrationTests.test_complete_strict_current_bundle_set_derives_deterministic_fail_closed_artifact_with_production_telemetry_identity",
+            "tests.test_analysis_integration.AnalysisIntegrationTests.test_incomplete_pair_is_listed_and_never_converted_to_unpaired_samples_with_production_telemetry_identity",
+            "tests.test_analysis_integration.AnalysisIntegrationTests.test_named_strata_manifest_preserves_terminal_mock_refusal_with_production_telemetry_identity",
+            "tests.test_analysis_integration.AnalysisIntegrationTests.test_private_stochastic_seam_changes_recorded_policy_identity_with_production_telemetry_identity",
+            "tests.test_analysis_integration.AnalysisIntegrationTests.test_real_controller_pinned_model_matches_canonical_bytes_and_is_included",
+            "tests.test_analysis_integration.AnalysisIntegrationTests.test_real_controller_unpinned_model_is_included_by_loader",
+            "tests.test_analysis_integration.AnalysisIntegrationTests.test_unregistered_matching_topup_demotes_but_preserves_fixed_n_analysis_with_production_telemetry_identity",
+            "tests.test_analysis_integration.AnalysisIntegrationTests.test_valid_replacement_fills_original_slot_without_sixth_block_with_production_telemetry_identity",
+            "tests.test_floor_extraction.CpuAndWholeWindowClaimBarrierTests.test_failed_adapter_continuity_refuses_but_clean_core_passes",
+            "tests.test_floor_extraction.CpuAndWholeWindowClaimBarrierTests.test_later_passed_row_cannot_supersede_failed_whole_window_row",
+            "tests.test_floor_extraction.CpuAndWholeWindowClaimBarrierTests.test_whole_window_rederives_neg8_verdict_from_member_summaries",
+        })
+        self.assertEqual(PARITY_SECOND_FORM_TEST_IDS, expected)
+        self.assertTrue(expected <= PARITY_TEST_IDS)
+
     def setUp(self) -> None:
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)

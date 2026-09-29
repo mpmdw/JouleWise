@@ -76,13 +76,21 @@ PARITY_TEST_IDS: frozenset[str] = frozenset({
     "tests.test_floor_extraction.SpecMembershipBindingTests.test_sibling_campaign_under_runs_root_does_not_force_refusal",
     "tests.test_launch_window.CeremonySkipConsumerTests.test_malformed_and_mismatched_lineage_codes_reach_every_consumer",
 })
+# A2 condition 9 closes this list by name: seven T5a IDs, one used F ID,
+# and the three ruled floor IDs. The other three F slots are retired;
+# any different ID needs a cold ruling even if the count stays below 11.
 PARITY_SECOND_FORM_TEST_IDS: frozenset[str] = frozenset({
     "tests.test_analysis_integration.AnalysisIntegrationTests.test_complete_strict_current_bundle_set_derives_deterministic_fail_closed_artifact_with_production_telemetry_identity",
+    "tests.test_analysis_integration.AnalysisIntegrationTests.test_incomplete_pair_is_listed_and_never_converted_to_unpaired_samples_with_production_telemetry_identity",
     "tests.test_analysis_integration.AnalysisIntegrationTests.test_named_strata_manifest_preserves_terminal_mock_refusal_with_production_telemetry_identity",
     "tests.test_analysis_integration.AnalysisIntegrationTests.test_private_stochastic_seam_changes_recorded_policy_identity_with_production_telemetry_identity",
+    "tests.test_analysis_integration.AnalysisIntegrationTests.test_real_controller_pinned_model_matches_canonical_bytes_and_is_included",
     "tests.test_analysis_integration.AnalysisIntegrationTests.test_real_controller_unpinned_model_is_included_by_loader",
     "tests.test_analysis_integration.AnalysisIntegrationTests.test_unregistered_matching_topup_demotes_but_preserves_fixed_n_analysis_with_production_telemetry_identity",
     "tests.test_analysis_integration.AnalysisIntegrationTests.test_valid_replacement_fills_original_slot_without_sixth_block_with_production_telemetry_identity",
+    "tests.test_floor_extraction.CpuAndWholeWindowClaimBarrierTests.test_failed_adapter_continuity_refuses_but_clean_core_passes",
+    "tests.test_floor_extraction.CpuAndWholeWindowClaimBarrierTests.test_later_passed_row_cannot_supersede_failed_whole_window_row",
+    "tests.test_floor_extraction.CpuAndWholeWindowClaimBarrierTests.test_whole_window_rederives_neg8_verdict_from_member_summaries",
 })
 
 
