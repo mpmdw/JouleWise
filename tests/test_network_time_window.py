@@ -325,6 +325,28 @@ class WindowTests(unittest.TestCase):
         self.assertNotIn(nt.ON_ARGV, self.runner.calls)
         self.assertTrue(self.marker.exists())
 
+    def _assert_malformed_nonlaunch_refuses(self, claim):
+        (self.root / "night/chain.started").write_text(json.dumps(claim))
+        proof = mock.Mock(return_value=(False, {"check": "P1"}))
+        self.assertEqual(nt.recover_network_time(marker_path=self.marker, runner=self.runner,
+            capture_proof=proof), "chain_unproved")
+        self.assertNotIn(nt.ON_ARGV, self.runner.calls)
+        self.assertTrue(self.marker.exists())
+        proof.assert_not_called()
+
+    def test_R1_recovery_rejects_missing_identity_keys(self):
+        self._assert_malformed_nonlaunch_refuses({"popen_attempted": False})
+
+    def test_R1_recovery_rejects_missing_pid_with_launch_error(self):
+        self._assert_malformed_nonlaunch_refuses({"pgid": None, "launch_error": "failed"})
+
+    def test_R1_recovery_accepts_explicit_null_identity(self):
+        (self.root / "night/chain.started").write_text(json.dumps({
+            "pid": None, "pgid": None, "popen_attempted": False}))
+        self.assertEqual(nt.recover_network_time(marker_path=self.marker, runner=self.runner,
+            boot_probe=lambda: "boot-1"), "restored")
+        self.assertIn(nt.ON_ARGV, self.runner.calls)
+
     def test_empty_start_claim_with_exit_record_still_refuses(self):
         (self.root / "night/chain.started").write_text("")
         self.assertEqual(nt.recover_network_time(marker_path=self.marker, runner=self.runner),

@@ -1374,13 +1374,17 @@ def _acquire_courier_lock(night_dir: Path) -> int | None:
     return None
 
 
-def _evidence_cleanup_error(plan, night_dir):
+def _evidence_cleanup_error(plan, night_dir, *, cleanup_only=False):
     """Best-effort evidence repair; never suppress delivery via Exception.
 
     Consult record 76 (escalation 74a): for ANY content of evidence_outcome.json
     the courier launches, an invalid outcome is replaced by a refused one, and a
     refusal document exists; valid outcomes are never rewritten. Storage that
     cannot be written at all is the caller's prerequisite (ruling 76a).
+
+    Before the capture proof, cleanup_only saves the cleanup record without
+    repairing the outcome or writing a refusal (A2 §3.3). Courier preparation
+    later keeps the full repair behavior, reading that saved cleanup record.
     """
     try:
         def parse_outcome(raw):
@@ -1403,6 +1407,9 @@ def _evidence_cleanup_error(plan, night_dir):
         from joulewise.quiet_predicate_campaign import cleanup_record, write_refusal
         cleanup = cleanup_record(night_dir)
         cleanup_proven = cleanup["cleanup_proven"] is True
+        if cleanup_only:
+            return (None if cleanup_proven else
+                    "evidence collector/recorder/sampler cleanup unproven; report the cleanup record")
         path = night_dir / "evidence_outcome.json"
         try:
             raw = path.read_bytes()
@@ -3344,7 +3351,7 @@ def run_night(
         capture_proven = False
         if termination_proven:
             if (night_dir / "evidence_processes.jsonl").exists():
-                _evidence_cleanup_error(plan, night_dir)
+                _evidence_cleanup_error(plan, night_dir, cleanup_only=True)
             never_launched = _chain_never_launched(night_dir)
             if never_launched:
                 capture_proven, proof_evidence = True, {"never_launched": True}
@@ -3520,6 +3527,8 @@ def _capture_unproved_abort(
     inside the new evidence as `prior_abort`. When that earlier cause is
     already on disk -- the deadline watchdog writes its own document -- the
     document is superseded in place, so the two records cannot disagree.
+    Chain-written documents stay immutable; the driver's evidence names the
+    documents already present as `prior_documents` (A2 §3.3).
     """
     evidence = dict(proof_evidence) if isinstance(proof_evidence, Mapping) else {
         "proof_evidence": proof_evidence}
@@ -3527,6 +3536,9 @@ def _capture_unproved_abort(
         evidence["prior_abort"] = {key: prior[key]
                                    for key in ("reason", "detail", "evidence", "document")
                                    if key in prior}
+    prior_documents = [path.name for path in _refusal_paths(night_dir)]
+    if prior_documents:
+        evidence["prior_documents"] = prior_documents
     abort = _refusal_mapping(_CODES["chain_alive"], detail, evidence)
     document = prior.get("document") if isinstance(prior, Mapping) else None
     if isinstance(document, str) and document:
@@ -3549,10 +3561,7 @@ def _chain_never_launched(night_dir: Path) -> bool:
     try:
         started = json.loads((night_dir / "chain.started").read_bytes())
         exited = json.loads((night_dir / "chain.exited").read_bytes())
-        return (isinstance(started, dict) and isinstance(exited, dict)
-            and started.get("pid") is None and started.get("pgid") is None
-            and (started.get("popen_attempted") is False
-                 or isinstance(started.get("launch_error"), str) and bool(started["launch_error"]))
+        return (network_time_window.chain_never_launched(started) and isinstance(exited, dict)
             and exited.get("launch_failed") is True)
     except (OSError, ValueError, TypeError):
         return False
@@ -3607,11 +3616,7 @@ def dead_man(plan_path: Path, *, courier_bin: Path | None = None) -> int:
                 start_record = json.loads(started.read_bytes())
             except (OSError, ValueError, TypeError):
                 start_record = None
-            launch_failed = (isinstance(start_record, dict)
-                and start_record.get("pid") is None
-                and start_record.get("pgid") is None
-                and isinstance(start_record.get("launch_error"), str)
-                and bool(start_record["launch_error"]))
+            launch_failed = network_time_window.chain_never_launched(start_record)
             if not launch_failed:
                 _write_driver_refusal(
                     night_dir / "refusal.json", plan, _CODES["chain_alive"],
@@ -3762,6 +3767,9 @@ def _census_chunk(chunk: list[int], timeout_s: float) -> dict[int, tuple[bool, l
     if result.returncode not in {0, 1}:
         line = f"census_exit_{result.returncode}: {result.stderr.strip()}"
         return {pgid: (False, [line, *lines]) for pgid in chunk}
+    if result.returncode == 0 and not lines:
+        return {pgid: (False, ["census_ambiguous: exit 0 with no lines"])
+                for pgid in chunk}
     pids = []
     for line in lines:
         token = line.split(None, 1)[0]
@@ -3785,6 +3793,8 @@ def _attribute_pids(
                                 timeout=timeout_s, check=False)
     except (OSError, subprocess.SubprocessError) as error:
         return {}, [f"{type(error).__name__}: {error}"]
+    if result.returncode != 0:
+        return {}, sorted(set(pids))
     attributed: dict[int, list[str]] = {}
     seen = set()
     for line in result.stdout.splitlines():

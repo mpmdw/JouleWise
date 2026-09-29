@@ -349,6 +349,15 @@ def attestation_required(os_build, session_id):
     return os_build not in OLD_BUILDS and session_id not in OLD_SESSIONS | OLD_IDLE_PLANS
 
 
+def chain_never_launched(started):
+    """Accept only an explicit null identity and a documented non-launch."""
+    return (isinstance(started, dict)
+            and "pid" in started and "pgid" in started
+            and started.get("pid") is None and started.get("pgid") is None
+            and (started.get("popen_attempted") is False
+                 or isinstance(started.get("launch_error"), str) and bool(started["launch_error"])))
+
+
 def recover_network_time(*, marker_path=RESTORE_PENDING_PATH, runner=_run,
                          boot_probe=None, clock=_clock, process_group_absent=None,
                          capture_proof=None):
@@ -380,10 +389,7 @@ def recover_network_time(*, marker_path=RESTORE_PENDING_PATH, runner=_run,
                     exited = json.loads(exited_path.read_bytes()) if exited_path.exists() else None
                 except (OSError, ValueError, TypeError, UnicodeError):
                     exited = None
-                never_launched = (isinstance(started, dict)
-                    and started.get("pid") is None and started.get("pgid") is None
-                    and (started.get("popen_attempted") is False
-                         or isinstance(started.get("launch_error"), str) and bool(started["launch_error"]))
+                never_launched = (chain_never_launched(started)
                     and isinstance(exited, dict) and exited.get("launch_failed") is True)
                 if not never_launched:
                     return "chain_unproved"

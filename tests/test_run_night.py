@@ -2100,6 +2100,66 @@ runpy.run_path(script, run_name='__main__')
         self.assertEqual(json.loads((night / "refusal.json").read_text())["refusal"]["reason"],
                          "night_chain_alive")
 
+    def test_R1_driver_rejects_incomplete_nonlaunch_claims(self):
+        night = self.custody / "night"
+        night.mkdir()
+        (night / "chain.exited").write_text('{"launch_failed":true}')
+        for claim in ({"popen_attempted": False}, {"pgid": None, "launch_error": "failed"}):
+            with self.subTest(claim=claim):
+                (night / "chain.started").write_text(json.dumps(claim))
+                self.assertFalse(self.driver._chain_never_launched(night))
+        (night / "chain.started").write_text(json.dumps({
+            "pid": None, "pgid": None, "popen_attempted": False}))
+        self.assertTrue(self.driver._chain_never_launched(night))
+        (night / "chain.exited").write_text('{"launch_failed":false}')
+        self.assertFalse(self.driver._chain_never_launched(night))
+
+    def test_R1_deadman_rejects_incomplete_nonlaunch_claims(self):
+        night = self.custody / "night"
+        night.mkdir()
+        plan = self.driver._load_plan(self.plan_path)
+        completion = plan.t0_epoch_s + plan.window_max_s + self.driver.COURIER_DEADLINE_S
+        for claim in ({"popen_attempted": False}, {"pgid": None, "launch_error": "failed"}):
+            with self.subTest(claim=claim):
+                (night / "chain.started").write_text(json.dumps(claim))
+                with mock.patch.object(self.driver.time, "time", return_value=completion), \
+                     mock.patch.object(network_time_window, "set_network_time_on") as on:
+                    code = self.driver.dead_man(self.plan_path)
+                self.assertEqual(code, self.driver.EXIT_REFUSED)
+                self.assertFalse((night / "chain.exited").exists())
+                on.assert_not_called()
+                self.driver.run_courier.assert_not_called()
+                (night / "refusal.json").unlink()
+
+    def test_R2_empty_successful_batch_is_not_capture_proof(self):
+        with mock.patch.object(self.driver, "_group_census", return_value=(True, [])), \
+             mock.patch.object(self.driver, "_capture_sweep", return_value=(True, {})), \
+             mock.patch.object(self.driver.subprocess, "run",
+                               return_value=subprocess.CompletedProcess([], 0, "", "")):
+            proved, evidence = self.driver._capture_proof_pass({}, 123, {456, 789}, 1)
+        self.assertFalse(proved)
+        self.assertEqual(evidence["check"], "P2")
+        self.assertEqual(set(evidence["groups"]), {456, 789})
+        for lines in evidence["groups"].values():
+            self.assertIn("census_ambiguous", lines[0])
+
+    def test_R2_empty_absent_batch_still_proves_capture_absent(self):
+        with mock.patch.object(self.driver, "_group_census", return_value=(True, [])), \
+             mock.patch.object(self.driver, "_capture_sweep", return_value=(True, {})), \
+             mock.patch.object(self.driver.subprocess, "run",
+                               return_value=subprocess.CompletedProcess([], 1, "", "")):
+            proved, evidence = self.driver._capture_proof_pass({}, 123, {456, 789}, 1)
+        self.assertTrue(proved)
+        self.assertEqual(evidence, {"checks": ["P1", "P2", "P3"]})
+
+    def test_R2_failed_attribution_leaves_every_pid_unresolved(self):
+        # Even apparently valid stdout from a failed ps cannot establish absence.
+        with mock.patch.object(self.driver.subprocess, "run",
+                               return_value=subprocess.CompletedProcess([], 1, "456 101 child\n", "failed")):
+            attributed, unresolved = self.driver._attribute_pids(["101", "102"], 1)
+        self.assertEqual(attributed, {})
+        self.assertEqual(unresolved, ["101", "102"])
+
     def test_dead_man_couriers_after_a_null_pgid_marker_without_killpg(self) -> None:
         night = self.custody / "night"
         night.mkdir()
@@ -6220,6 +6280,151 @@ class EvidenceProbeTests(unittest.TestCase):
 
 
 @unittest.skipUnless(Path('/bin/zsh').is_file(), 'zsh required for calibration probe fixture')
+class CaptureRefusalRecordTests(unittest.TestCase):
+    setUp = EvidenceProbeTests.setUp
+    admitted_night = EvidenceProbeTests.admitted_night
+
+    def _early_cleanup(self, night):
+        # Execute the production [K] call's actual keyword arguments on either
+        # head, so the old head fails an assertion rather than a new-API error.
+        import ast
+        tree = ast.parse(inspect.getsource(self.driver.run_night))
+        call = next(node for node in ast.walk(tree) if isinstance(node, ast.Call)
+                    and isinstance(node.func, ast.Name)
+                    and node.func.id == "_evidence_cleanup_error")
+        kwargs = {item.arg: ast.literal_eval(item.value) for item in call.keywords}
+        return self.driver._evidence_cleanup_error(self.f.plan, night, **kwargs)
+
+    def _failed_proof_result(self, night):
+        abort = self.driver._capture_unproved_abort(night, self.f.plan, self.f.custody,
+            None, "capture process absence could not be proved",
+            {"check": "P3", "matches": [{"pid": 123, "command": "path-signature child"}]})
+        self.driver._write_driver_refusal(night / "refusal.json", self.f.plan,
+            abort["reason"], abort["detail"], abort["evidence"])
+        return self.driver._write_result(self.f.custody, night, self.f.plan, "REFUSED",
+            2, abort["reason"], self.f.plan.t0_epoch_s, 1, "f" * 64, 0)
+
+    def _assert_result_cause(self, result, documents):
+        self.assertEqual(result["verdict"], "REFUSED")
+        self.assertEqual(result["aborted_reason"], "night_chain_alive")
+        self.assertEqual(result["refusal_documents"], documents)
+
+    def test_R3_A_early_cleanup_leaves_verdict_to_failed_proof(self):
+        night = self.admitted_night()
+        (night / "evidence_processes.jsonl").write_text("")
+        self._early_cleanup(night)
+        self.assertEqual(self.driver._refusal_paths(night), [])
+        self.assertFalse((night / "evidence_outcome.json").exists())
+        cleanup = (night / "evidence_cleanup.json").read_bytes()
+        result = self._failed_proof_result(night)
+        document = json.loads((night / "refusal.json").read_bytes())
+        self.assertEqual(document["refusal"]["reason"], "night_chain_alive")
+        self.assertEqual(document["refusal"]["evidence"]["check"], "P3")
+        self._assert_result_cause(result, ["night/refusal.json"])
+        # The later courier call keeps outcome repair and reuses saved cleanup.
+        from joulewise import quiet_predicate_campaign as campaign
+        with mock.patch.object(campaign, "cleanup_groups", side_effect=AssertionError("cleanup repeated")):
+            self.driver._evidence_cleanup_error(self.f.plan, night)
+        self.assertEqual((night / "evidence_cleanup.json").read_bytes(), cleanup)
+        self.assertEqual(json.loads((night / "evidence_outcome.json").read_bytes())["outcome"], "refused")
+        self.assertEqual(len(self.driver._refusal_paths(night)), 1)
+
+    def test_R3_B_chain_refusal_is_immutable_and_named_by_driver(self):
+        from joulewise import quiet_predicate_campaign as campaign
+        night = self.admitted_night()
+        (night / "evidence_processes.jsonl").write_text("")
+        campaign.write_refusal(night, self.f.plan, "chain failed")
+        original = (night / "refusal.json").read_bytes()
+        self._early_cleanup(night)
+        result = self._failed_proof_result(night)
+        self.assertEqual((night / "refusal.json").read_bytes(), original)
+        self.assertEqual(json.loads(original)["refusal"]["reason"], "night_probe_error")
+        refusal = json.loads((night / "refusal-01.json").read_bytes())["refusal"]
+        self.assertEqual(refusal["reason"], "night_chain_alive")
+        self.assertEqual(refusal["evidence"].get("prior_documents"), ["refusal.json"])
+        self._assert_result_cause(result, ["night/refusal-01.json", "night/refusal.json"])
+
+    def test_R3_C_complete_outcome_control(self):
+        night = self.admitted_night()
+        (night / "evidence_processes.jsonl").write_text("")
+        outcome = b'{"outcome":"complete"}'
+        (night / "evidence_outcome.json").write_bytes(outcome)
+        self._early_cleanup(night)
+        self.assertEqual(self.driver._refusal_paths(night), [])
+        result = self._failed_proof_result(night)
+        self._assert_result_cause(result, ["night/refusal.json"])
+        self.assertEqual(json.loads((night / "refusal.json").read_bytes())["refusal"]["reason"],
+                         "night_chain_alive")
+        self.assertEqual((night / "evidence_outcome.json").read_bytes(), outcome)
+
+    def test_R3_real_driver_idle_chain_crash_runs_cleanup_before_failed_proof(self):
+        # No capture is launched: a sleeping, separately grouped Python child
+        # is journaled under the measurement path, and the real chain exits 2.
+        from tests.test_night_gate import EvidenceRegistrationTests, make_plan
+        from joulewise import quiet_predicate_campaign as campaign
+        source = EvidenceRegistrationTests().source()
+        receipt = replace(night_gate.evaluate_night(make_plan(), source.probes()),
+                          plan_id=self.f.plan.plan_id)
+        c5 = next(row for row in receipt.conditions if row.condition_id == "C5")
+        self.assertEqual(c5.measured["payload_kind"], "quiet_predicate_evidence")
+        self.assertEqual(night_gate.validate_receipt(json.loads(receipt.to_json_bytes())), [])
+        NightDriverTests._require_live_process_listing(self)
+        night = self.f.custody / "night"
+        child = Path(self.f.plan.measurement_root) / "harmless_child.py"
+        child.write_text("import time\ntime.sleep(45)\n")
+        pid_path = self.f.root / "child.pid"
+        launcher = self.f.root / "launcher.py"
+        launcher.write_text(
+            "import pathlib,subprocess,sys,time,json\n"
+            f"p=subprocess.Popen([{sys.executable!r},'-B',{str(child)!r}],"
+            "stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,"
+            "start_new_session=True)\n"
+            f"pathlib.Path({str(pid_path)!r}).write_text(str(p.pid))\n"
+            f"pathlib.Path({str(night / 'evidence_processes.jsonl')!r}).write_text("
+            "json.dumps({'kind':'sampler','pgid':p.pid,'epoch_s':time.time()})+'\\n')\n"
+            "raise SystemExit(2)\n")
+        chain = Path(self.f.plan.chain_path)
+        chain.write_text(f"exec {sys.executable} -B {launcher}\n")
+        Path(self.f.plan.chain_sha256_path).write_text(hashlib.sha256(chain.read_bytes()).hexdigest()+"\n")
+        original_cleanup = self.driver._evidence_cleanup_error
+        def cleanup(*args, **kwargs):
+            value = original_cleanup(*args, **kwargs)
+            if not (night / "result.json").exists():
+                self.assertEqual(self.driver._refusal_paths(night), [])
+                self.assertFalse((night / "evidence_outcome.json").exists())
+            return value
+        try:
+            with ExitStack() as stack:
+                for owner, name, replacement in (
+                    (self.driver, "make_probes", mock.Mock(return_value=source.probes())),
+                    (self.driver, "evaluate_night", mock.Mock(return_value=receipt)),
+                    (self.driver, "_resolve_courier_bin", mock.Mock(return_value=(Path('/tmp/fixture-courier'), None, None))),
+                    (self.driver, "run_courier", mock.Mock(return_value={"attempted":1,"sent":True,"heartbeat_seen":True,"last_error":None})),
+                    (self.driver, "_evidence_cleanup_error", cleanup),
+                    # A residue fixture models cleanup unable to signal a root-owned child.
+                    # The capture proof and its process listings stay real.
+                    (campaign, "cleanup_groups", mock.Mock(return_value={"cleanup_proven": False, "residue": [123]})),
+                ):
+                    stack.enter_context(mock.patch.object(owner, name, replacement))
+                query = stack.enter_context(mock.patch.object(network_time_window, "run_window_query"))
+                on = stack.enter_context(mock.patch.object(network_time_window, "set_network_time_on"))
+                code = self.driver.run_night(self.f.plan_path)
+                query.assert_not_called()
+                on.assert_not_called()
+            self.assertEqual(code, self.driver.EXIT_REFUSED)
+            self.assertTrue(network_time_window.RESTORE_PENDING_PATH.exists())
+            self.assertTrue((night / "evidence_cleanup.json").exists())
+            result = json.loads((night / "result.json").read_bytes())
+            self._assert_result_cause(result, ["night/refusal.json"])
+            self.assertEqual(json.loads((night / "refusal.json").read_bytes())["refusal"]["reason"], "night_chain_alive")
+        finally:
+            if pid_path.exists():
+                try:
+                    os.kill(int(pid_path.read_text()), signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+
+
 class CourierDeliveryBoundaryTests(unittest.TestCase):
     setUp = EvidenceProbeTests.setUp
     admitted_night = EvidenceProbeTests.admitted_night
