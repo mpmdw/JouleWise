@@ -1,0 +1,49 @@
+ADDENDUM: S1-REPAIR-ROUTE-01-A1 ISSUED
+
+The ruling is written to `/Users/edr/code/JouleWise-wt-bk-77b1bee2/docs/process_traces/2026-09-27-activation-d528efb2/30-s1-repair/83-coldgate-pilot-ruling.md`. The session ran 06:03 to 06:34 PDT, foreground only.
+
+## Contamination disclosure
+
+The harness loaded the global and project `CLAUDE.md` and the `MEMORY.md` index before my first turn. I opened none of the forbidden files and used none of that content, with two stated exceptions: I followed the writing standard, and for directive #421 I used only the charge's wording.
+
+## What I ruled
+
+**1. Why T5 fails.** Production code is lenient to test bundles in two separate ways, and the ruled switch covers only one.
+- The pilot test gives the same six reasons with parity and without it.
+- All six come from the window-level verdict check, which recomputes the test's hand-written verdict row whenever a member is a current, non-mock measurement (`_current_strict_summary` in `whole_window.py`).
+- The produced bundles have no environment admission, no idle records and no adapter wattage, so the recomputation fails.
+- None of the six bears on the test's subject, which is config identity.
+- With that second leniency switched off, one reason remains: round 2 replaced the two reference bundles with produced ones that carry no anchor-shift envelope.
+
+**2. The route.** Extend the same test-only switch to the second form, by test ID, and restore the two reference bundles to main's hand-written form, bound and paired.
+- The pilot test turns green, with all 30 bundles included and the battery gate at `pass` 30 times.
+- A charging pair and an unbound config each turn it red at the gate.
+- Extending the builder is not done inside S1, and the replay-keyword task is withdrawn.
+- Re-classing to refusal assertions is refused for positive tests. Splitting the rows into a lane is refused.
+
+**3. The 57 rows are 22 test IDs of four kinds.**
+
+| Kind | Test IDs | Outcomes | Status under the route |
+|---|---|---|---|
+| Positive tests on the class corpus | 7 | 42 | Green |
+| Candidates for a mock-refusal subject (class T3) | 7 | 7 | Red; lead reads each |
+| Member directory with no bundle form (class T4 first) | 4 | 4 | Red at the gate |
+| Residue, needs a ruling per ID | 4 | 4 | Red |
+
+**4. Round 3.** It may proceed now for NEW, bind+pair, T2 and the paper pins. I re-ran the pilot's T2 and bind+pair claims and they reproduce. T1 needs one bench check first: one floor row fails with a reason its class says it should not meet. T5 waits for three bench pilots by the lead, including the T4 pilot that was never run. The stop conditions are revised in §5.4 of the ruling.
+
+**5. What the ruling in force got wrong.** The closed list was built from one property name, the "low risk" rating rested on that, the T5 rule expected the wrong refusals, and the triage recorder cannot see the second form. The full list is in §6.
+
+## Limits of my evidence
+
+- My multi-test runs used a corpus copy and applied the second switch process-wide. They support the route; they are not acceptance of any test.
+- I did not execute the helper as written, only the two patches it wraps.
+- I judged the seven mock-refusal candidates by name and error text, without reading them.
+- The pilot worktree is unchanged: head `601a06c5`, same four modified files, same diff digest. The battery was never read; the guard log stayed at 61 lines.
+
+## Plain summary
+
+1. The pilot failed because the code has two separate ways of going easy on test bundles and the ruled switch covered only one; none of the six refusals concerns what the test checks.
+2. Extending the same declared, test-only switch to the second way and restoring two reference bundles turns 42 of the 57 outcomes green, and a charging battery or tampered config still turns the test red.
+3. The rest of round 3 may start now; the owner should know this widens what rests on reading #421 as a rule for production code rather than test fixtures (19 places switched off in tests instead of 5).
+rc=0

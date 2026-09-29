@@ -1,0 +1,47 @@
+ADDENDUM: NTP-ENFORCE-DESIGN-01-A1 ISSUED
+
+The ruling is written to `…/71-ntp-design/38-coldgate-fix2-ruling.md`. Fix round 2 **may proceed**, in the same nine files as round 1. The session ran 06:46–07:11 PDT, inside the 60-minute budget.
+
+## Rulings
+
+1. **D1 is real and is the same defect as F1.** I reproduced it on both commits with the production process-group check (`pgrep`), not a stand-in. The query and ON ran beside a live, separately grouped child in three places:
+   - after the chain ended on its own;
+   - after the driver stopped the chain (`_terminate_process_group` reported "proven" in 0.03 s);
+   - in recovery.
+
+   The `start_new_session=True` claim is correct. The call sites are `quiet_predicate_campaign.py:1610` (recorder and collectors) and `sample_quiet_predicate_evidence.py:758–760` (the power sampler).
+
+2. **D1 cannot turn a spoiled capture into a clean one.** The verdict function already refuses a capture that was still running when the query ran (executed). D1 is a blocker because it breaks ruling §4.3 and makes the saved record false.
+
+3. **The cure changes what is proved.** The proof becomes "nothing that can write a recording is running", shown by three fresh, read-only checks:
+   - the chain's own group is empty;
+   - every group in the night's process journal is empty;
+   - a process-table sweep finds no process naming the sampler or a path of the night.
+
+   The sweep is the check that closes the class. A surviving child becomes an orphan of `launchd`, and macOS shows no session number, so ancestry cannot find it. The journal alone has a gap between starting a child and writing its line.
+
+4. **The cure shape works in a scratch prototype.** It withheld the query and ON in every failing case, left the clean path unchanged, and restored ON once the survivor ended. It is not an implementation: it returns GO where a refusal is required and bypasses the test seam.
+
+5. **D2 is confirmed, and its cure is confirmed with one amendment.** Both OFF-refusal branches write an explicit "never launched" start claim; the immediate ON attempt and F2's refusal are kept (executed). The amendment: an empty start claim must return `chain_unproved`, not `marker_invalid`.
+
+6. **D3 and D4 are fixed in round 2.** For D3 the ruling gives an anchored pattern that rejects the attack lines and matches the same 2,040 and 90 real `data` lines as the candidate's.
+
+7. **If D1's signature survives round 2, there is no round 3.** The next spend is a design consult on who owns the capture processes, then a cold gate. It is not an owner escalation.
+
+8. **Ruling §4.1, §4.3 and §4.5 are amended.** One amendment is for seat N3: the idle-night chain runs its own ON before its clean-up (`:1767` before `:1768`), which is D1's signature inside the chain.
+
+## Things to know
+
+- The post-round-2 re-audit needs a host where `ps` and `pgrep` can list processes. The round-1 auditor's sandbox could not.
+- The regressions must start real children through the production call path. The saved F1 test only replaces the group check with a stand-in, so it is not accepted.
+- My probes and logs are in `/tmp/cg-ntpfix2-d528efb2/`. Copy them into the record before that directory is lost.
+- The record worktree also holds an untracked `39-a1-contract-refuter-opus.md`. It is not mine, and I did not read it.
+- I changed no repository file except the ruling. The candidate worktree is clean at `3ad82b43`, and no probe process is left running.
+- I ran no `sudo`, `systemsetup`, `sntp`, live log query or battery read.
+
+## Summary
+
+1. D1 is real and is F1 again: the driver and recovery check only the chain's own process group, while the idle night's collector, recorder and sampler each run in their own.
+2. Fix round 2 may proceed in the same nine files, with the proof widened to "nothing that can write a recording is running", and with D2, D3 and D4 fixed in the same round.
+3. If the query or ON still runs beside a live capture process after round 2, a design consult and a cold gate follow, not a third round; the owner has nothing to decide.
+rc=0

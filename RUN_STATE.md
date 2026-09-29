@@ -10,25 +10,83 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
-**▶▶ ACTIVATION d528efb2 — from 17:36 PDT 09-27 (Opus 5.5; NOTHING ARMED):** [Record 00](docs/process_traces/2026-09-27-activation-d528efb2/00-activation-record.md) is the running log.
+**▶ RESUMED 2026-09-29 by Ed (session ff50b201, Opus 5.5 orchestrator; record item 160). The pause below is history; the resume order it lists is being executed by that session.**
 
-**Ed approved the new calibration's name and release** ("Yes re name , go ahead", 17:57 PDT): `d079_calibration_acceptance_v2_n12_25g83_r1`, published only after every gate passes.
+**⏸ PAUSED BY ED — 09:46 PDT 09-28 (interactive session bc060503, Fable 5.1; NOTHING ARMED, NOTHING RUNNING).** Ed ordered every piece of magistrate work paused until he resumes it. This block is the resume pointer, and where it disagrees with the d528efb2 block below, this block is newer and wins.
 
-**Rulings issued this activation (all cold Fable 5.1):**
-- **SCI-25G83-CANDIDATE-01-A2 — PROCEED.** macOS network time was ON through W1/W2. It caused 4 of the 12 exclusions. No clock step or millisecond correction fell inside any member; two members (W1-d12, W2-d01) moved by 40 µs and 12 µs from microsecond slews, inside their allowance, and the effect on C is at most 8.9 µs. It adds disclosure D8 and three conditions: for every future 25G83 window, H5 (network time OFF before settle; the passwordless setter is installed) and H6 (per-capture `timed` log attestation); and H7, a first comparison of OFF-state captures with the 12 members, reported with the first claim-bearing results.
-- **D138-25G83-DESIGN-01**, the implementation spec for the issuing PR: a loader repair via a new `joulewise/calibration_dispositions.py`, a re-runnable promotion tool, the pin swap, the claim-window hold enforced in code, and the exact WRITE_SCOPE.
-- **CAP-COUNCIL-25G83-01**, on the estimator cap: route R, cap = 10× the largest measured work under a pre-registered rule, two re-issues. Its paired Opus refuter **DISSENTs with 4 blockers**, and cold addendum A1 is convened.
-- **S1-REGRESSION-01-A1:** SF-1 to SF-4 ruled. The S1 repair plan runs: step-0 reference suite on main, seat H landed (`1278f772`), seat P running.
+**What holds the pause.** The file `/Users/edr/night-custody/magistrate/STOP` exists. The watchdog (the launchd job `com.joulewise.magistrate`, which relaunches the headless magistrate every five minutes) checks for that file on every tick and launches nothing while it is there. Its `state.json` reads `STOPPED`. The job itself is still loaded, so deleting the file is the whole resume step.
 
-**SUCCESSOR'S NEXT EXACT ACTION** (read record 00 from its last item first):
-1. **D-138**, per the design ruling §8.2:
-   - (a) land the records on main (this bookkeeping PR);
-   - (b) the lead writes the issuance text (D1–D8, H1, H5–H7) and commits it;
-   - (c) the census run with the default moved in memory;
-   - (d) launch the one implementation seat;
-   - then §9 steps 1–11, including the mandatory old-epoch replay (§10 item 2).
-2. **Cap:** harvest addendum A1 and apply it. Ed items (registration approval, two names, the #416 reading) are batched into one email.
-3. **S1:** harvest seat P, then step 2 (merge P+H, checks 3/4/5/7), then seats A–D.
+**How the stop went.** The switch was set at 09:46:23. The magistrate (activation d528efb2, Opus 5.5) stopped its four running children, committed and pushed record item 126, and exited with status 0 at 09:47:24, with no TERM or KILL signal sent. A process listing afterwards showed no Codex seat, no `claude -p` judge, no test run and no `powermetrics`.
+
+**Where the work is** (all on `origin`, checked with `git ls-remote` after the pushes):
+
+| Work | Branch | Head |
+|---|---|---|
+| The running record, items 1 onward (1–127 at the pause; 128 onward are the 09-28 Opus deskwork session) | `docs/2026-09-27-d528efb2` | see the branch tip |
+| Network-time enforcement, part N1 | `feat/2026-09-28-ntp-n1` | `36e8ba6e` |
+| S1 repair round 3, ID grants (seat H3) | `fix/2026-09-28-s1-r3-H3` | `cdfb27ce` |
+| S1 repair round 3, seat B (finished) | `fix/2026-09-28-s1-r3-B` | `d4345946` |
+| S1 repair round 3, seat A (stopped mid-run at the pause; re-run and landed 09-28, item 143) | `fix/2026-09-28-s1-r3-A` | `c3137f46` |
+| S1 repair round 3, the lead's bench work (stopped mid-run at the pause; done by an Opus 5.5 worker 09-28, item 140) | `fix/2026-09-28-s1-r3-L` | `478f5709` on `origin` (its parent `76711800` is the 09-28 worker's head), after the orchestrator completed the fence cherry-pick on 09-29 (pushed; fenced module runs: fence 9/9, `test_whole_window` 60/60, `test_window_duration_margins` 34/35, the one error being F2 of item 140, awaiting a ruling) |
+
+Two jobs were stopped with edits not yet committed. Those edits are still in their worktrees, and a copy of each is on `origin` as a snapshot commit: `wip/2026-09-28-pause-s1-r3-A-partial` (`b0474eaa`; 2 test files) and `wip/2026-09-28-pause-s1-r3-L-partial` (`c1589d94`; 4 test files). **Both are unfinished and unverified. Re-run the job or re-verify every line before using any of it.**
+
+**What was lost.** Two reviews of the same question were stopped before either wrote a verdict: the cold judge (a fresh Fable session with no loop context) and its paired Opus refuter, both on charge NTP-ENFORCE-DESIGN-01-A2. The judge's output file was empty. Both must be run again from the start. Their scratch directories under `/tmp` are not durable and are not needed.
+
+**TO RESUME:**
+1. Ed, or a session acting on his instruction, deletes `/Users/edr/night-custody/magistrate/STOP`. The watchdog relaunches the magistrate within five minutes. Check first that no `com.joulewise.night*` label is loaded (`launchctl list`).
+2. The successor reads record 00 from item 126, then does, in order:
+   - **Network-time enforcement:** convene the cold gate NTP-ENFORCE-DESIGN-01-A2 again from [charge 47](docs/process_traces/2026-09-27-activation-d528efb2/71-ntp-design/47-coldgate-fix2c-charge.md), with its Opus refuter. The worktree `JouleWise-wt-cg-ntpfix2c-d528efb2` exists. No third fix round starts before that ruling (record item 124).
+   - **S1:** seat A is already re-run (`c3137f46`, item 143) and the bench work is done (`478f5709` on `origin` with the fence, item 140 and 160); do not re-run seat A from `cdfb27ce`, which would drop the powermetrics fence. Seat B is done, with 3 test IDs returned for a ruling (record item 125).
+   - **D-138 (issuing the 25G83 calibration):** still stopped, waiting for Ed's choice of (a), (b) or (c), listed in the block below.
+
+**Opus 5.5 deskwork session, 09-28 (Ed's order; record 00 items 128 onward; the pause and `STOP` are unchanged, nothing armed).** It supersedes step 2's S1 line above.
+- **Landed, pushed, no PR:** powermetrics test fence `test/2026-09-28-powermetrics-fence` `069df719` (items 132, 136, 146; the whole suite starts no real sampler); S1 seat A `fix/2026-09-28-s1-r3-A` `c3137f46` (fence + cure `8c616dc4`/`3a98d600` below it; 13/15 GREEN, 2 NEEDS_RULING, lens FINDINGS, items 143, 149–150); S1 bench `fix/2026-09-28-s1-r3-L` `478f5709` on `origin` (09-29 fence cherry-pick on top of `76711800`) (29/31, 2 NEEDS_RULING, lens PASS, items 140, 145); test-only: `test/2026-09-28-silent-refusal-tests` `a3d0a4f4` (audit PASS), `…-calexits-evidence-bytes` `5c447604` (audit PASS + a post-review fix), `…-small-test-lanes` `0f242228` (PASS), `…-one-use-consumption` `b53725b3`, `…-wallclock-abort-margin` `1dceb172`; report-only prototype `feat/2026-09-28-paper-number-inventory` `05fca1af` (item 158).
+- **PR #438** (this records branch → main) is open, not merged: row 1 FAIL → fixes → delta FINDINGS with the same signature (item 139), so no second fix round was run; rows 9 PASS (item 144), 11–12 and F5 (ignored `.log` evidence) are Fable's.
+- **Half-done (resolved 09-29, item 160: cherry-pick completed as `478f5709`; refuter file copied to `71-ntp-design/48-a2-contract-refuter-opus.md`):** the L worktree is MID-CHERRY-PICK of the fence (item 140 F6; the permission classifier refused `cherry-pick --continue`); cold gate NTP A2 has only its Opus refuter half (item 131, file in the session scratchpad, not yet in the record).
+- **Rulings owed (magistrate):** S1 NEEDS_RULING IDs (items 140, 143, 145, 149); P0-R4 census decoy (item 146); A129 route A/B/C (item 148); paper numbers: 241 printed results numbers no checker compares, all hand-checked values correct (items 153, 155, 156, verity-germane; inventory-checker proposal); stale-row retirements (item 152).
+- **Next exact action (09-28; DONE or superseded 09-29, item 160):** ~~Fable reads items 128 onward, rules the route for PR #438 (item 139), then completes or aborts the L cherry-pick and convenes the NTP A2 judge with item 131's refuter file.~~ The orchestrator session ff50b201 adopted the #438 route, completed the cherry-pick (`478f5709`) and re-convened the NTP A2 judge; its record is `docs/process_traces/2026-09-29-interactive-ff50b201/`.
+
+**Ed's answers, 09-29 ≈12:00 PDT (interactive session bc060503), which set the resume order:**
+1. The Opus-only restriction is **lifted**. But **everything stays paused, headless sessions included, until Ed has updated his apps**; he had exhausted usage. No seat, judge or lieutenant is to be launched before he says the updates are done.
+2. **D-138: Ed chose (a)** ("definitely a", ≈12:20 PDT 09-29, after the brief [12-hold-consult/40-owner-brief-2026-09-29.md](docs/process_traces/2026-09-27-activation-d528efb2/12-hold-consult/40-owner-brief-2026-09-29.md)). On resume the magistrate re-scopes `feat/2026-09-27-d138-25g83-issuance` (head `b953f4b0`): keep the loader repair, the promotion tool and their tests; drop the file registration, the pin swap and the hold code (`claim_hold.py`, G1/G2/S1/S2/S3, the identity seam); the issued file stays in the record as the candidate and is registered with the cap re-issue. Then the light gate, Fable final pass, merge. The build-keyed hold module may return later as its own lane if a future interim file needs it (Ed did not ask for one).
+5. **Ed's standing statement on gates (09-29 ≈12:20 PDT; exact words in record item 159):** "again, all "gates" are meant solely to prevent death loops of useless investigation or reasoning and infinite tokenm burn, not to stop a component from being refined because we hit a fixec number of rounds, all rules are in service of the science, the usage is just a logistical cap that comes up sometimes." Application: a fixed-round stop rule (such as HOLD-BY-CONSTRUCTION-01 §6.2's "no round 4") is read as an anti-spiral trigger that sends the question to the owner or a cold gate, never as a bar on refining a component whose defect set is shrinking under executed evidence; usage exhaustion is logistics, not a verdict. The resumed session records this as a decision-log entry through the normal route (it is Ed's instruction, quoted; nothing here is ratified by the magistrate). Related record: [stop-conditions-are-antispiral](docs/decision_log.md), the 2026-09-15 statement this restates.
+3. The three permission-refused actions (copy the A2 refuter file into `71-ntp-design/48-…`; finish the L cherry-pick; the 44 ignored `.log` files for PR #438) are unblocked once 1 is over; Fable does them first on resume.
+4. **After the updates: resume full-fledged work.** Order: Fable does item 3, rules the owed items above and PR #438's route, final-passes and merges #438, then deletes `/Users/edr/night-custody/magistrate/STOP` so the watchdog relaunches the headless magistrate (within five minutes; check `launchctl list` for no `com.joulewise.night*` label first).
+
+**▶▶ ACTIVATION d528efb2 — from 17:36 PDT 09-27 (Opus 5.5; NOTHING ARMED):** [Record 00](docs/process_traces/2026-09-27-activation-d528efb2/00-activation-record.md) is the running log (branch `docs/2026-09-27-d528efb2`).
+
+**Merged:** #437 (bookkeeping + all 25G83 rulings) → `9eab16f8`; the canonical root is fast-forwarded to it.
+
+**D-138 (the 25G83 calibration issuance)** is on `feat/2026-09-27-d138-25g83-issuance`, head `b953f4b0` (issued bytes `d7076c78…`; the earlier candidate `325d9f77` with bytes `80c23036…` is superseded). Ed approved the name `d079_calibration_acceptance_v2_n12_25g83_r1` and its release after the gates ("Yes re name , go ahead").
+- **Built:** the loader repair and promotion tool; the pin swap and the H1 hold; the issuing record and the draft decision-log entry (numbered on that branch only); fix rounds 1 and 2; fix round 3, the hold-by-construction module (ruling HOLD-BY-CONSTRUCTION-01, record item 82; items 91 and 95).
+- **Rulings issued:** design addendum **D138-25G83-DESIGN-01-A1** (item 68) and **HOLD-BY-CONSTRUCTION-01** (item 82). The first pedagogy pass's 37 items were applied (items 73 and 79); the second pass's 25 items (item 81) wait for the final writer pass.
+- **STOPPED for good** (HOLD-BY-CONSTRUCTION-01 §6.2): a fresh hold refuter found 3 routes (item 101). Contract refuter 3 then returned DISSENT on four main-test regressions at `b953f4b0` (item 104), confirmed by the lead's whole suite (item 106: 6 failures, 9 errors in 5 modules). Ed was sent the a/b/c brief (item 102) and a correction (item 105): option (b) now also needs a ruling on those four regressions and their fixes.
+
+**Science:** addenda A2 and A3 said PROCEED. Network time was ON during W1/W2 and caused 4 exclusions; it put no step and no millisecond correction inside any member, and moved two members' clocks by 40 µs and 12 µs, which each member's uncertainty covers six times over (A2 ruling §6). **H5/H6 (network time OFF plus per-capture log attestation) must be enforced in code before any 25G83 window** (lane NETWORK-TIME-OFF-ENFORCE-01, registered in item 66; ruling NTP-ENFORCE-DESIGN-01 and addendum A1, items 100 and 115; part N1 at `36e8ba6e`, awaiting cold gate A2). The `timed` log evidence is preserved in the record, because the system log ages out after about 29 h.
+
+**Cap:** CAP-COUNCIL-25G83-01 + A1 chose route R (cap = 10× the largest measured work under a pre-registered rule; freeze the code, then size, then two re-issues, then the full #416 audit). Ed will later be asked to approve the successor registration and to name two files.
+
+**S1:** round 2 met the stop conditions (same signature twice). Escalation ruling **S1-REPAIR-ROUTE-01** and addendum **A1** issued (items 70 and 112; `30-s1-repair/50-escalation/21-coldgate-fable-ruling.md`, `83-coldgate-pilot-ruling.md`). The gate defect the Opus seat found (a paired bundle passing with its config deleted or set to mock) was fixed at the bench as `601a06c5` (item 71). Round 3: seat B landed `d4345946` (item 125); seat A and the lead's bench rows were stopped by the pause (items 126–127), then both were done on 09-28: seat A `c3137f46` (item 143), bench rows `76711800` (item 140; `478f5709` on `origin` after the 09-29 cherry-pick).
+
+**SUCCESSOR'S NEXT EXACT ACTION (as of the 09-28 pause; SUPERSEDED 09-29 by item 160 and the RESUMED line at the top: Ed chose D-138 option (a) (item 159), and the seats listed below as running were stopped by the pause and later re-run or finished, see the PAUSED block's table):** read record 00 from its last item (item 160). The list below is kept as history:
+1. **D-138 is STOPPED for good** (HOLD-BY-CONSTRUCTION-01 §6.2: a fresh hold refuter found 3 routes, `refuters/hold-refuter-4-astra.md`). **Wait for Ed's choice** (Gmail `1a0e7c44a348de4e`):
+   - (a) withdraw the file and land the rest;
+   - (b) a written residual plus a ruling on the four main-test regressions and their fixes (item 105), then the remaining gates: the second pedagogy pass, the cold final pass, merge (contract refuter 3 and the whole suite have already returned, items 104 and 106);
+   - (c) a new design consult.
+
+   Search `from:claude2.glaring610@passmail.net is:unread` first. Do not merge or choose without Ed.
+2. **NTP enforcement (N1):**
+   - The delta re-audit found D1 (F1 surviving for separately grouped capture children). Cold addendum **NTP-ENFORCE-DESIGN-01-A1** (`71-ntp-design/38-coldgate-fix2-ruling.md`) allows ONE more fix round.
+   - Seat fix-2 is running (Sol xhigh; report `/tmp/ntp-n1fix2-d528efb2/report.md`, worktree `JouleWise-wt-ntp-n1-d528efb2`).
+   - **Then:** the lead runs the process-listing regressions outside the sandbox; then a fresh delta re-audit that executes A1 §7.3 rows 1–7 (the baseline suite is item 117); then the full gate and merge.
+   - **If D1's signature survives, there is NO round 3:** a design consult, then a cold gate (A1 §7.4).
+   - **Lead-owed (A1 §7.5), after the seat finishes:** the desk step in NIGHT_HANDBACK for a permanently empty start claim; `network_time_window.py` in N3's scope; the phase-2 scout question about `sampler_teardown.py:164`.
+   - After the merge, NO night launches until N2/N3 land.
+3. **S1:**
+   - Seat H3 is running (Sol xhigh; report `/tmp/s1r3-H3-d528efb2/report.md`, branch `fix/2026-09-28-s1-r3-H3`).
+   - **Then** (addendum A1, `30-s1-repair/83-coldgate-pilot-ruling.md`): the lead fills the parity ID lists; runs pilots P-1/P-2 (T5a) and P-3 (F) at the bench; runs the T1 bench check; then seats A/B (R3-5), the R3-6 checks, the §5.4 literal, the repin, and the full suite.
+4. **Bookkeeping:** merge this records branch (light tier).
 
 **▶▶ ACTIVATION 77b1bee2 — 11:36 → ≈17:35 PDT 09-27 (Opus 5.5; NOTHING ARMED):** [Record 00](docs/process_traces/2026-09-27-activation-77b1bee2/00-activation-record.md) items 1–47+, on branch `docs/2026-09-27-77b1bee2`.
 

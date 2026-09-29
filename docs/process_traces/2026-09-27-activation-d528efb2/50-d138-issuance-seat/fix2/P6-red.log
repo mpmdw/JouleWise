@@ -1,0 +1,59 @@
+FFFFFF
+======================================================================
+FAIL: test_p6_cited_evidence_and_disclosure_mutations_refuse (tests.test_promote_calibration_candidate.PromotionTests.test_p6_cited_evidence_and_disclosure_mutations_refuse) (altered_text='P4a')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/edr/code/JouleWise-wt-d138-impl-d528efb2/tests/test_promote_calibration_candidate.py", line 99, in test_p6_cited_evidence_and_disclosure_mutations_refuse
+    with self.assertRaises(ValueError):
+         ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+AssertionError: ValueError not raised
+
+======================================================================
+FAIL: test_p6_cited_evidence_and_disclosure_mutations_refuse (tests.test_promote_calibration_candidate.PromotionTests.test_p6_cited_evidence_and_disclosure_mutations_refuse) (altered_text='P4b')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/edr/code/JouleWise-wt-d138-impl-d528efb2/tests/test_promote_calibration_candidate.py", line 99, in test_p6_cited_evidence_and_disclosure_mutations_refuse
+    with self.assertRaises(ValueError):
+         ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+AssertionError: ValueError not raised
+
+======================================================================
+FAIL: test_p6_cited_evidence_and_disclosure_mutations_refuse (tests.test_promote_calibration_candidate.PromotionTests.test_p6_cited_evidence_and_disclosure_mutations_refuse) (altered_text='P4c')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/edr/code/JouleWise-wt-d138-impl-d528efb2/tests/test_promote_calibration_candidate.py", line 99, in test_p6_cited_evidence_and_disclosure_mutations_refuse
+    with self.assertRaises(ValueError):
+         ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+AssertionError: ValueError not raised
+
+======================================================================
+FAIL: test_p6_cited_evidence_and_disclosure_mutations_refuse (tests.test_promote_calibration_candidate.PromotionTests.test_p6_cited_evidence_and_disclosure_mutations_refuse) (altered_text='P4d')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/edr/code/JouleWise-wt-d138-impl-d528efb2/tests/test_promote_calibration_candidate.py", line 99, in test_p6_cited_evidence_and_disclosure_mutations_refuse
+    with self.assertRaises(ValueError):
+         ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+AssertionError: ValueError not raised
+
+======================================================================
+FAIL: test_p6_cited_evidence_and_disclosure_mutations_refuse (tests.test_promote_calibration_candidate.PromotionTests.test_p6_cited_evidence_and_disclosure_mutations_refuse) (altered_text='P4e')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/edr/code/JouleWise-wt-d138-impl-d528efb2/tests/test_promote_calibration_candidate.py", line 99, in test_p6_cited_evidence_and_disclosure_mutations_refuse
+    with self.assertRaises(ValueError):
+         ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+AssertionError: ValueError not raised
+
+======================================================================
+FAIL: test_p6_cited_evidence_and_disclosure_mutations_refuse (tests.test_promote_calibration_candidate.PromotionTests.test_p6_cited_evidence_and_disclosure_mutations_refuse) (altered_text='P4f')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/edr/code/JouleWise-wt-d138-impl-d528efb2/tests/test_promote_calibration_candidate.py", line 99, in test_p6_cited_evidence_and_disclosure_mutations_refuse
+    with self.assertRaises(ValueError):
+         ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+AssertionError: ValueError not raised
+
+----------------------------------------------------------------------
+Ran 1 test in 0.050s
+
+FAILED (failures=6)

@@ -1,0 +1,490 @@
+[
+  {
+    "case": "L2",
+    "path": "joulewise/calibration_bracketing.py",
+    "old": "if observation[\"content_id\"] in disposed:\n                continue",
+    "new": "if observation.get(\"session_id\") not in registration_session_ids:\n                continue",
+    "tests": [
+      "test_calibration_dispositions.DispositionTests.test_l2_unlisted_foreign_valid_refuses"
+    ],
+    "baseline": {
+      "cmd": "PYTHONPATH=tests:. /opt/homebrew/bin/python3 -B -m unittest test_calibration_dispositions.DispositionTests.test_l2_unlisted_foreign_valid_refuses",
+      "exit_code": 0,
+      "log": "/tmp/d138-mut-d528efb2/L2-baseline.log",
+      "fail_lines": [],
+      "tail": [
+        ".",
+        "----------------------------------------------------------------------",
+        "Ran 1 test in 0.003s",
+        "",
+        "OK"
+      ]
+    },
+    "mutant": {
+      "cmd": "PYTHONPATH=tests:. /opt/homebrew/bin/python3 -B -m unittest test_calibration_dispositions.DispositionTests.test_l2_unlisted_foreign_valid_refuses",
+      "exit_code": 1,
+      "log": "/tmp/d138-mut-d528efb2/L2-mutant.log",
+      "fail_lines": [
+        "FAIL: test_l2_unlisted_foreign_valid_refuses (test_calibration_dispositions.DispositionTests.test_l2_unlisted_foreign_valid_refuses)",
+        "AssertionError: True is not false"
+      ],
+      "tail": [
+        "AssertionError: True is not false",
+        "",
+        "----------------------------------------------------------------------",
+        "Ran 1 test in 0.002s",
+        "",
+        "FAILED (failures=1)"
+      ]
+    },
+    "restored_bytes": true,
+    "git_diff_quiet": true
+  },
+  {
+    "case": "L4",
+    "path": "joulewise/calibration_bracketing.py",
+    "old": "declared = prior.get(\"disposing_decision_ids\")",
+    "new": "declared = decisions_disposing(set(prior_ids))",
+    "tests": [
+      "test_calibration_dispositions.DispositionTests.test_l3_l4_declaration_refuses"
+    ],
+    "baseline": {
+      "cmd": "PYTHONPATH=tests:. /opt/homebrew/bin/python3 -B -m unittest test_calibration_dispositions.DispositionTests.test_l3_l4_declaration_refuses",
+      "exit_code": 0,
+      "log": "/tmp/d138-mut-d528efb2/L4-baseline.log",
+      "fail_lines": [],
+      "tail": [
+        ".",
+        "----------------------------------------------------------------------",
+        "Ran 1 test in 0.011s",
+        "",
+        "OK"
+      ]
+    },
+    "mutant": {
+      "cmd": "PYTHONPATH=tests:. /opt/homebrew/bin/python3 -B -m unittest test_calibration_dispositions.DispositionTests.test_l3_l4_declaration_refuses",
+      "exit_code": 1,
+      "log": "/tmp/d138-mut-d528efb2/L4-mutant.log",
+      "fail_lines": [
+        "FAIL: test_l3_l4_declaration_refuses (test_calibration_dispositions.DispositionTests.test_l3_l4_declaration_refuses)",
+        "AssertionError: True is not false : ['D-126-forged']"
+      ],
+      "tail": [
+        "AssertionError: True is not false : ['D-126-forged']",
+        "",
+        "----------------------------------------------------------------------",
+        "Ran 1 test in 0.002s",
+        "",
+        "FAILED (failures=1)"
+      ]
+    },
+    "restored_bytes": true,
+    "git_diff_quiet": true
+  },
+  {
+    "case": "L5",
+    "path": "joulewise/calibration_bracketing.py",
+    "old": "if not disposed.issubset(set(prior_ids)):",
+    "new": "disposed = disposed & set(prior_ids)\n        if not disposed.issubset(set(prior_ids)):",
+    "tests": [
+      "test_calibration_dispositions.DispositionTests.test_l5_missing_disposed_row_refuses"
+    ],
+    "baseline": {
+      "cmd": "PYTHONPATH=tests:. /opt/homebrew/bin/python3 -B -m unittest test_calibration_dispositions.DispositionTests.test_l5_missing_disposed_row_refuses",
+      "exit_code": 0,
+      "log": "/tmp/d138-mut-d528efb2/L5-baseline.log",
+      "fail_lines": [],
+      "tail": [
+        ".",
+        "----------------------------------------------------------------------",
+        "Ran 1 test in 0.003s",
+        "",
+        "OK"
+      ]
+    },
+    "mutant": {
+      "cmd": "PYTHONPATH=tests:. /opt/homebrew/bin/python3 -B -m unittest test_calibration_dispositions.DispositionTests.test_l5_missing_disposed_row_refuses",
+      "exit_code": 1,
+      "log": "/tmp/d138-mut-d528efb2/L5-mutant.log",
+      "fail_lines": [
+        "FAIL: test_l5_missing_disposed_row_refuses (test_calibration_dispositions.DispositionTests.test_l5_missing_disposed_row_refuses)",
+        "AssertionError: True is not false"
+      ],
+      "tail": [
+        "AssertionError: True is not false",
+        "",
+        "----------------------------------------------------------------------",
+        "Ran 1 test in 0.002s",
+        "",
+        "FAILED (failures=1)"
+      ]
+    },
+    "restored_bytes": true,
+    "git_diff_quiet": true
+  },
+  {
+    "case": "L6",
+    "path": "joulewise/calibration_bracketing.py",
+    "old": "prior_row_by_content_id[content_id].get(\"session_id\") in registration_session_ids\n            or content_id in member_content_ids",
+    "new": "content_id in member_content_ids",
+    "tests": [
+      "test_calibration_dispositions.DispositionTests.test_l6_disposed_inside_registration_refuses"
+    ],
+    "baseline": {
+      "cmd": "PYTHONPATH=tests:. /opt/homebrew/bin/python3 -B -m unittest test_calibration_dispositions.DispositionTests.test_l6_disposed_inside_registration_refuses",
+      "exit_code": 0,
+      "log": "/tmp/d138-mut-d528efb2/L6-baseline.log",
+      "fail_lines": [],
+      "tail": [
+        ".",
+        "----------------------------------------------------------------------",
+        "Ran 1 test in 0.003s",
+        "",
+        "OK"
+      ]
+    },
+    "mutant": {
+      "cmd": "PYTHONPATH=tests:. /opt/homebrew/bin/python3 -B -m unittest test_calibration_dispositions.DispositionTests.test_l6_disposed_inside_registration_refuses",
+      "exit_code": 1,
+      "log": "/tmp/d138-mut-d528efb2/L6-mutant.log",
+      "fail_lines": [
+        "FAIL: test_l6_disposed_inside_registration_refuses (test_calibration_dispositions.DispositionTests.test_l6_disposed_inside_registration_refuses)",
+        "AssertionError: True is not false"
+      ],
+      "tail": [
+        "AssertionError: True is not false",
+        "",
+        "----------------------------------------------------------------------",
+        "Ran 1 test in 0.002s",
+        "",
+        "FAILED (failures=1)"
+      ]
+    },
+    "restored_bytes": true,
+    "git_diff_quiet": true
+  },
+  {
+    "case": "L7",
+    "path": "joulewise/calibration_bracketing.py",
+    "old": "prior_row_by_content_id[content_id].get(\"session_id\") in registration_session_ids\n            or content_id in member_content_ids",
+    "new": "prior_row_by_content_id[content_id].get(\"session_id\") in registration_session_ids",
+    "tests": [
+      "test_calibration_dispositions.DispositionTests.test_l7_member_in_disposition_table_refuses"
+    ],
+    "baseline": {
+      "cmd": "PYTHONPATH=tests:. /opt/homebrew/bin/python3 -B -m unittest test_calibration_dispositions.DispositionTests.test_l7_member_in_disposition_table_refuses",
+      "exit_code": 0,
+      "log": "/tmp/d138-mut-d528efb2/L7-baseline.log",
+      "fail_lines": [],
+      "tail": [
+        ".",
+        "----------------------------------------------------------------------",
+        "Ran 1 test in 0.003s",
+        "",
+        "OK"
+      ]
+    },
+    "mutant": {
+      "cmd": "PYTHONPATH=tests:. /opt/homebrew/bin/python3 -B -m unittest test_calibration_dispositions.DispositionTests.test_l7_member_in_disposition_table_refuses",
+      "exit_code": 0,
+      "log": "/tmp/d138-mut-d528efb2/L7-mutant.log",
+      "fail_lines": [],
+      "tail": [
+        ".",
+        "----------------------------------------------------------------------",
+        "Ran 1 test in 0.005s",
+        "",
+        "OK"
+      ]
+    },
+    "restored_bytes": true,
+    "git_diff_quiet": true
+  },
+  {
+    "case": "L8",
+    "path": "joulewise/calibration_dispositions.py",
+    "old": "\"748018ce72e41600464dcb9f2fddcc466e2e3c0ebfcf6474828d908239c36b7b\",",
+    "new": "\"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\",",
+    "tests": [
+      "test_calibration_dispositions.DispositionTests.test_d1_registry_and_table_agree",
+      "test_calibration_dispositions.DispositionTests.test_l8_table_missing_row_refuses"
+    ],
+    "baseline": {
+      "cmd": "PYTHONPATH=tests:. /opt/homebrew/bin/python3 -B -m unittest test_calibration_dispositions.DispositionTests.test_d1_registry_and_table_agree test_calibration_dispositions.DispositionTests.test_l8_table_missing_row_refuses",
+      "exit_code": 0,
+      "log": "/tmp/d138-mut-d528efb2/L8-baseline.log",
+      "fail_lines": [],
+      "tail": [
+        "..",
+        "----------------------------------------------------------------------",
+        "Ran 2 tests in 0.003s",
+        "",
+        "OK"
+      ]
+    },
+    "mutant": {
+      "cmd": "PYTHONPATH=tests:. /opt/homebrew/bin/python3 -B -m unittest test_calibration_dispositions.DispositionTests.test_d1_registry_and_table_agree test_calibration_dispositions.DispositionTests.test_l8_table_missing_row_refuses",
+      "exit_code": 1,
+      "log": "/tmp/d138-mut-d528efb2/L8-mutant.log",
+      "fail_lines": [
+        "ERROR: test_d1_registry_and_table_agree (test_calibration_dispositions.DispositionTests.test_d1_registry_and_table_agree)",
+        "FAIL: test_l8_table_missing_row_refuses (test_calibration_dispositions.DispositionTests.test_l8_table_missing_row_refuses)",
+        "AssertionError: False is not true"
+      ],
+      "tail": [
+        "AssertionError: False is not true",
+        "",
+        "----------------------------------------------------------------------",
+        "Ran 2 tests in 0.003s",
+        "",
+        "FAILED (failures=1, errors=1)"
+      ]
+    },
+    "restored_bytes": true,
+    "git_diff_quiet": true
+  },
+  {
+    "case": "P3-digest",
+    "path": "scripts/promote_calibration_candidate.py",
+    "old": "if hashlib.sha256(candidate_raw).hexdigest() != CANDIDATE_SHA256:",
+    "new": "if False:  # mutation: bypass candidate digest",
+    "tests": [
+      "test_promote_calibration_candidate.PromotionTests.test_p3_changed_member_refuses_both_seals"
+    ],
+    "baseline": {
+      "cmd": "PYTHONPATH=tests:. /opt/homebrew/bin/python3 -B -m unittest test_promote_calibration_candidate.PromotionTests.test_p3_changed_member_refuses_both_seals",
+      "exit_code": 0,
+      "log": "/tmp/d138-mut-d528efb2/P3-digest-baseline.log",
+      "fail_lines": [],
+      "tail": [
+        ".",
+        "----------------------------------------------------------------------",
+        "Ran 1 test in 0.002s",
+        "",
+        "OK"
+      ]
+    },
+    "mutant": {
+      "cmd": "PYTHONPATH=tests:. /opt/homebrew/bin/python3 -B -m unittest test_promote_calibration_candidate.PromotionTests.test_p3_changed_member_refuses_both_seals",
+      "exit_code": 1,
+      "log": "/tmp/d138-mut-d528efb2/P3-digest-mutant.log",
+      "fail_lines": [
+        "FAIL: test_p3_changed_member_refuses_both_seals (test_promote_calibration_candidate.PromotionTests.test_p3_changed_member_refuses_both_seals)",
+        "ValueError: candidate seal or role mismatch",
+        "AssertionError: \"candidate digest mismatch\" does not match \"candidate seal or role mismatch\""
+      ],
+      "tail": [
+        "AssertionError: \"candidate digest mismatch\" does not match \"candidate seal or role mismatch\"",
+        "",
+        "----------------------------------------------------------------------",
+        "Ran 1 test in 0.002s",
+        "",
+        "FAILED (failures=1)"
+      ]
+    },
+    "restored_bytes": true,
+    "git_diff_quiet": true
+  },
+  {
+    "case": "P3-seals",
+    "path": "scripts/promote_calibration_candidate.py",
+    "old": "or candidate.get(\"derivation_input_sha256\") != derivation_input_sha256(candidate)\n        or candidate.get(\"derivation_sha256\") != derivation_sha256(candidate)",
+    "new": "or False  # mutation: bypass both candidate seals",
+    "tests": [
+      "test_promote_calibration_candidate.PromotionTests.test_p3_changed_member_refuses_both_seals"
+    ],
+    "baseline": {
+      "cmd": "PYTHONPATH=tests:. /opt/homebrew/bin/python3 -B -m unittest test_promote_calibration_candidate.PromotionTests.test_p3_changed_member_refuses_both_seals",
+      "exit_code": 0,
+      "log": "/tmp/d138-mut-d528efb2/P3-seals-baseline.log",
+      "fail_lines": [],
+      "tail": [
+        ".",
+        "----------------------------------------------------------------------",
+        "Ran 1 test in 0.001s",
+        "",
+        "OK"
+      ]
+    },
+    "mutant": {
+      "cmd": "PYTHONPATH=tests:. /opt/homebrew/bin/python3 -B -m unittest test_promote_calibration_candidate.PromotionTests.test_p3_changed_member_refuses_both_seals",
+      "exit_code": 1,
+      "log": "/tmp/d138-mut-d528efb2/P3-seals-mutant.log",
+      "fail_lines": [
+        "FAIL: test_p3_changed_member_refuses_both_seals (test_promote_calibration_candidate.PromotionTests.test_p3_changed_member_refuses_both_seals)",
+        "ValueError: issuance record source candidate mismatch",
+        "AssertionError: \"candidate seal\" does not match \"issuance record source candidate mismatch\""
+      ],
+      "tail": [
+        "AssertionError: \"candidate seal\" does not match \"issuance record source candidate mismatch\"",
+        "",
+        "----------------------------------------------------------------------",
+        "Ran 1 test in 0.002s",
+        "",
+        "FAILED (failures=1)"
+      ]
+    },
+    "restored_bytes": true,
+    "git_diff_quiet": true
+  },
+  {
+    "case": "H-T1",
+    "path": "joulewise/arm_readiness.py",
+    "old": "\"d079_calibration_acceptance_v2_n12_25g83_r1\":\n    \"H1-25G83-CAP-CADENCE (SCI-25G83-CANDIDATE-01-A1 \u00a75.3)\",",
+    "new": "",
+    "tests": [
+      "test_arm_readiness_evidence_author.ArmReadinessEvidenceAuthorTests.test_h_t1_new_issuance_is_held_at_arm"
+    ],
+    "baseline": {
+      "cmd": "PYTHONPATH=tests:. /opt/homebrew/bin/python3 -B -m unittest test_arm_readiness_evidence_author.ArmReadinessEvidenceAuthorTests.test_h_t1_new_issuance_is_held_at_arm",
+      "exit_code": 0,
+      "log": "/tmp/d138-mut-d528efb2/H-T1-baseline.log",
+      "fail_lines": [],
+      "tail": [
+        ".",
+        "----------------------------------------------------------------------",
+        "Ran 1 test in 0.001s",
+        "",
+        "OK"
+      ]
+    },
+    "mutant": {
+      "cmd": "PYTHONPATH=tests:. /opt/homebrew/bin/python3 -B -m unittest test_arm_readiness_evidence_author.ArmReadinessEvidenceAuthorTests.test_h_t1_new_issuance_is_held_at_arm",
+      "exit_code": 1,
+      "log": "/tmp/d138-mut-d528efb2/H-T1-mutant.log",
+      "fail_lines": [
+        "FAIL: test_h_t1_new_issuance_is_held_at_arm (test_arm_readiness_evidence_author.ArmReadinessEvidenceAuthorTests.test_h_t1_new_issuance_is_held_at_arm)",
+        "AssertionError: True is not false"
+      ],
+      "tail": [
+        "AssertionError: True is not false",
+        "",
+        "----------------------------------------------------------------------",
+        "Ran 1 test in 0.001s",
+        "",
+        "FAILED (failures=1)"
+      ]
+    },
+    "restored_bytes": true,
+    "git_diff_quiet": true
+  },
+  {
+    "case": "R7-issuer-compare",
+    "path": "scripts/issue_calibration_acceptance_generation.py",
+    "old": "if predecessor[\"acceptance_id\"] != ANCHOR_V3_R7_ACCEPTANCE_ID:",
+    "new": "if predecessor[\"acceptance_id\"] != ACTIVE_ACCEPTANCE_ID:",
+    "tests": [
+      "test_acc_25g83_rev5.RevisionFiveTests.test_revision_five_predecessor_default_and_simulation_are_frozen_to_r7"
+    ],
+    "baseline": {
+      "cmd": "PYTHONPATH=tests:. /opt/homebrew/bin/python3 -B -m unittest test_acc_25g83_rev5.RevisionFiveTests.test_revision_five_predecessor_default_and_simulation_are_frozen_to_r7",
+      "exit_code": 0,
+      "log": "/tmp/d138-mut-d528efb2/R7-issuer-compare-baseline.log",
+      "fail_lines": [],
+      "tail": [
+        ".",
+        "----------------------------------------------------------------------",
+        "Ran 1 test in 0.003s",
+        "",
+        "OK"
+      ]
+    },
+    "mutant": {
+      "cmd": "PYTHONPATH=tests:. /opt/homebrew/bin/python3 -B -m unittest test_acc_25g83_rev5.RevisionFiveTests.test_revision_five_predecessor_default_and_simulation_are_frozen_to_r7",
+      "exit_code": 0,
+      "log": "/tmp/d138-mut-d528efb2/R7-issuer-compare-mutant.log",
+      "fail_lines": [],
+      "tail": [
+        ".",
+        "----------------------------------------------------------------------",
+        "Ran 1 test in 0.005s",
+        "",
+        "OK"
+      ]
+    },
+    "restored_bytes": true,
+    "git_diff_quiet": true
+  },
+  {
+    "case": "R7-issuer-default",
+    "path": "scripts/issue_calibration_acceptance_generation.py",
+    "old": "\"--predecessor-acceptance\", type=Path, default=ANCHOR_V3_R7_ACCEPTANCE_BOUND_PATH,",
+    "new": "\"--predecessor-acceptance\", type=Path, default=DEFAULT_ACCEPTANCE_BOUND_PATH,",
+    "tests": [
+      "test_acc_25g83_rev5.RevisionFiveTests.test_revision_five_predecessor_default_and_simulation_are_frozen_to_r7"
+    ],
+    "baseline": {
+      "cmd": "PYTHONPATH=tests:. /opt/homebrew/bin/python3 -B -m unittest test_acc_25g83_rev5.RevisionFiveTests.test_revision_five_predecessor_default_and_simulation_are_frozen_to_r7",
+      "exit_code": 0,
+      "log": "/tmp/d138-mut-d528efb2/R7-issuer-default-baseline.log",
+      "fail_lines": [],
+      "tail": [
+        ".",
+        "----------------------------------------------------------------------",
+        "Ran 1 test in 0.003s",
+        "",
+        "OK"
+      ]
+    },
+    "mutant": {
+      "cmd": "PYTHONPATH=tests:. /opt/homebrew/bin/python3 -B -m unittest test_acc_25g83_rev5.RevisionFiveTests.test_revision_five_predecessor_default_and_simulation_are_frozen_to_r7",
+      "exit_code": 1,
+      "log": "/tmp/d138-mut-d528efb2/R7-issuer-default-mutant.log",
+      "fail_lines": [
+        "FAIL: test_revision_five_predecessor_default_and_simulation_are_frozen_to_r7 (test_acc_25g83_rev5.RevisionFiveTests.test_revision_five_predecessor_default_and_simulation_are_frozen_to_r7)",
+        "AssertionError: Posix[60 chars]/calibration/calibration_acceptance_d079_v2_n12_25g83_r1.json') != Posix[60 chars]/calibration/calibration_acceptance_d079_v2_n17_r7.json')"
+      ],
+      "tail": [
+        "AssertionError: Posix[60 chars]/calibration/calibration_acceptance_d079_v2_n12_25g83_r1.json') != Posix[60 chars]/calibration/calibration_acceptance_d079_v2_n17_r7.json')",
+        "",
+        "----------------------------------------------------------------------",
+        "Ran 1 test in 0.001s",
+        "",
+        "FAILED (failures=1)"
+      ]
+    },
+    "restored_bytes": true,
+    "git_diff_quiet": true
+  },
+  {
+    "case": "R7-epoch-default",
+    "path": "scripts/epoch_equivalence_check.py",
+    "old": "\"--acceptance\", type=Path, default=ANCHOR_V3_R7_ACCEPTANCE_BOUND_PATH,",
+    "new": "\"--acceptance\", type=Path, default=__import__(\"joulewise.calibration_bracketing\", fromlist=[\"DEFAULT_ACCEPTANCE_BOUND_PATH\"]).DEFAULT_ACCEPTANCE_BOUND_PATH,",
+    "tests": [
+      "test_epoch_equivalence_check.EpochEquivalenceCheckTest.test_default_acceptance_remains_r7"
+    ],
+    "baseline": {
+      "cmd": "PYTHONPATH=tests:. /opt/homebrew/bin/python3 -B -m unittest test_epoch_equivalence_check.EpochEquivalenceCheckTest.test_default_acceptance_remains_r7",
+      "exit_code": 0,
+      "log": "/tmp/d138-mut-d528efb2/R7-epoch-default-baseline.log",
+      "fail_lines": [],
+      "tail": [
+        ".",
+        "----------------------------------------------------------------------",
+        "Ran 1 test in 0.001s",
+        "",
+        "OK"
+      ]
+    },
+    "mutant": {
+      "cmd": "PYTHONPATH=tests:. /opt/homebrew/bin/python3 -B -m unittest test_epoch_equivalence_check.EpochEquivalenceCheckTest.test_default_acceptance_remains_r7",
+      "exit_code": 1,
+      "log": "/tmp/d138-mut-d528efb2/R7-epoch-default-mutant.log",
+      "fail_lines": [
+        "FAIL: test_default_acceptance_remains_r7 (test_epoch_equivalence_check.EpochEquivalenceCheckTest.test_default_acceptance_remains_r7)",
+        "AssertionError: Posix[60 chars]/calibration/calibration_acceptance_d079_v2_n12_25g83_r1.json') != Posix[60 chars]/calibration/calibration_acceptance_d079_v2_n17_r7.json')"
+      ],
+      "tail": [
+        "AssertionError: Posix[60 chars]/calibration/calibration_acceptance_d079_v2_n12_25g83_r1.json') != Posix[60 chars]/calibration/calibration_acceptance_d079_v2_n17_r7.json')",
+        "",
+        "----------------------------------------------------------------------",
+        "Ran 1 test in 0.002s",
+        "",
+        "FAILED (failures=1)"
+      ]
+    },
+    "restored_bytes": true,
+    "git_diff_quiet": true
+  }
+]

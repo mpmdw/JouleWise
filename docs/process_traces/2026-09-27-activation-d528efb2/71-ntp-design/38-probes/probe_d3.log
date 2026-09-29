@@ -1,0 +1,7 @@
+D3 auditor_payload {"candidate_verdict": "clean", "candidate_regex_matches": true, "cure_regex_matches": false}
+D3 payload_no_colon {"candidate_verdict": "clean", "candidate_regex_matches": true, "cure_regex_matches": false}
+D3 other_process_then_timed {"candidate_verdict": "clean", "candidate_regex_matches": true, "cure_regex_matches": false}
+D3 fixture_true_data_line True
+D3 preserved_gz {"stamped_lines": 3187, "substring_anywhere": 2040, "candidate_regex": 2040, "cure_regex": 2040, "positional_parse": 2040}
+D3 q2_utc {"stamped_lines": 193, "substring_anywhere": 90, "candidate_regex": 90, "cure_regex": 90, "positional_parse": 90}
+PROBE_D3_COMPLETE

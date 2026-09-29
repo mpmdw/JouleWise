@@ -1,0 +1,8 @@
+OFF_FAILURE 3 started_bytes b'' launch_failed True marker_present True
+RECOVERY_AFTER_OFF_FAILURE marker_invalid on_retried False marker_present True
+NEXT_NIGHT_AFTER_D2 3 new_refusal_reasons ['night_refused_network_time_marker_invalid'] marker_present True
+Traceback (most recent call last):
+  File "/tmp/opus-ntpA1-d528efb2/d2_wedge.py", line 27, in <module>
+    assert result == 'restored', 'a known never-launched chain must permit the failed ON retry'
+           ^^^^^^^^^^^^^^^^^^^^
+AssertionError: a known never-launched chain must permit the failed ON retry

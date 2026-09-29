@@ -1,0 +1,18 @@
+RED worktree head: 325d9f77b3ffb73fd0dd0f876f3ce59d567a092b
+GREEN worktree head: 8458f797d0a7d9854d3799863ff3b9d1fd06285a
+GREEN worktree status:
+HR-1 RED expected fail: /tmp/d138-fix2-d528efb2/red_record.sh: line 32: rg: command not found
+HR-1 GREEN PASS
+HR-2 RED expected fail: /tmp/d138-fix2-d528efb2/red_record.sh: line 32: rg: command not found
+HR-2 GREEN PASS
+HR-3 RED expected fail: /tmp/d138-fix2-d528efb2/red_record.sh: line 32: rg: command not found
+HR-3 GREEN PASS
+HR-5 RED expected fail: /tmp/d138-fix2-d528efb2/red_record.sh: line 32: rg: command not found
+HR-5 GREEN PASS
+DT-1 RED expected fail: /tmp/d138-fix2-d528efb2/red_record.sh: line 32: rg: command not found
+DT-1 GREEN PASS
+DT-2 RED expected fail: /tmp/d138-fix2-d528efb2/red_record.sh: line 32: rg: command not found
+DT-2 GREEN PASS
+P6 RED expected fail: /tmp/d138-fix2-d528efb2/red_record.sh: line 32: rg: command not found
+P6 GREEN PASS
+RED_RECORD=PASS

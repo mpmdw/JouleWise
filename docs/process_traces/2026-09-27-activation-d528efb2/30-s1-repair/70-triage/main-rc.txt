@@ -1,0 +1,15 @@
+tests.test_bfgs_window_consumers rc=1
+tests.test_night_gate rc=1
+tests.test_mint_floor_artifact rc=0
+tests.test_paper_rendering rc=0
+tests.test_paper_reported_energy rc=0
+tests.test_floor_mint_estimator rc=0
+tests.test_window_duration_margins rc=0
+tests.test_whole_window rc=0
+tests.test_floor_extraction rc=0
+tests.test_paper_custody rc=0
+tests.test_mint_floor_artifact_generalized rc=0
+tests.test_analysis_integration rc=0
+tests.test_arm_readiness_lifecycle rc=1
+tests.test_run_campaign rc=0
+tests.test_launch_window rc=0

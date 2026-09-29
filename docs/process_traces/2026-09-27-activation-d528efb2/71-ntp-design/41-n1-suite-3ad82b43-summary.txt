@@ -1,0 +1,4 @@
+head=3ad82b436e2a44d6e6178b914c66b8684dc9f6ab
+cmd=fullsuite_ids.sh (run_module_ids.py per module, 6-way, /opt/homebrew/bin/python3 -B, stdin closed)
+TMPDIR=/tmp/ntp-n1suite-d528efb2/tmp/
+modules=268 rc_lines=268 missing_json=0 tests=7601 failures=1 errors=0 skipped=109 nonzero_modules=1

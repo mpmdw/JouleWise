@@ -1,0 +1,4 @@
+head=5decbe6b960395dce8fcfc5609b88bfcc27b8b26
+cmd=fullsuite_ids.sh (run_module_ids.py per module, 6-way, /opt/homebrew/bin/python3 -B, stdin closed)
+TMPDIR=/tmp/holdproto-suite-d528efb2/tmp/
+modules=270 rc_lines=270 missing_json=0 tests=7575 failures=5 errors=0 skipped=109 nonzero_modules=5

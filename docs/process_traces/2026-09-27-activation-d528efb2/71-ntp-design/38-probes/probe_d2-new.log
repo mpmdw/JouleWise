@@ -1,0 +1,5 @@
+OFF_WRONG_OUTPUT {"rev": "new", "driver_run": {"exit": 3, "commands_run": ["off", "on"], "chain_started_bytes": "", "chain_exited": {"epoch_s": 1790603667.552712, "exit_code": null, "launch_failed": true, "monotonic_ns": 825228978048625}, "refusal": "night_refused_network_time_off_unproved", "marker_present": true}, "recovery": {"result": "marker_invalid", "commands_run": [], "marker_present": true}}
+OFF_RECEIPT_RAISES {"rev": "new", "driver_run": {"exit": 3, "commands_run": ["on"], "chain_started_bytes": "", "chain_exited": {"epoch_s": 1790603667.593777, "exit_code": null, "launch_failed": true, "monotonic_ns": 825229019112625}, "refusal": "night_refused_network_time_off_unproved", "marker_present": true}, "recovery": {"result": "marker_invalid", "commands_run": [], "marker_present": true}}
+F2_EMPTY_CLAIM_NO_EXIT {"rev": "new", "result": "marker_invalid", "commands_run": [], "marker_present": true}
+EMPTY_CLAIM_WITH_EXIT_RECORD {"rev": "new", "result": "marker_invalid", "commands_run": [], "marker_present": true}
+PROBE_D2_COMPLETE

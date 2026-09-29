@@ -1,0 +1,16 @@
+F
+======================================================================
+FAIL: test_dt2_eleven_new_valid_captures_do_not_double (tests.test_calibration_bracketing.DoublingTriggerDispositionTests.test_dt2_eleven_new_valid_captures_do_not_double)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/edr/code/JouleWise-wt-d138-impl-d528efb2/tests/test_calibration_bracketing.py", line 3025, in test_dt2_eleven_new_valid_captures_do_not_double
+    self.assertNotIn("corpus_doubles_from_12_to_24",
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                     result["acceptance"]["prospective_rederivation"]["observed_triggers"])
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'corpus_doubles_from_12_to_24' unexpectedly found in ['corpus_doubles_from_12_to_24']
+
+----------------------------------------------------------------------
+Ran 1 test in 0.016s
+
+FAILED (failures=1)

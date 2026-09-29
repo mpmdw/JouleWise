@@ -1,0 +1,8 @@
+G_CLEAN_CHAIN_NO_CHILDREN {"rev": "cure", "exit": 0, "descendant_alive": false, "journal_exists": false, "commands_run": ["off", "query", "on"], "chain_exited_written": true, "marker_present": false}
+B_COLLECTOR_JOURNALED {"rev": "cure", "exit": 0, "descendant_alive": true, "journal_exists": true, "commands_run": ["off"], "chain_exited_written": true, "marker_present": true}
+C_COLLECTOR_UNJOURNALED {"rev": "cure", "exit": 0, "descendant_alive": true, "journal_exists": false, "commands_run": ["off"], "chain_exited_written": true, "marker_present": true}
+D_SAMPLER_NAME_UNJOURNALED_OUTSIDE_NIGHT_PATHS {"rev": "cure", "exit": 0, "descendant_alive": true, "journal_exists": false, "commands_run": ["off"], "chain_exited_written": true, "marker_present": true}
+F_H_RECOVERY_THEN_LIVENESS {"rev": "cure", "exit": 0, "descendant_alive": true, "journal_exists": false, "commands_run": ["off"], "chain_exited_written": true, "marker_present": true, "recovery_while_alive": {"result": "chain_unproved", "commands_run": [], "marker_present": true}, "recovery_after_survivor_ended": {"result": "restored", "commands_run": ["query", "on"], "marker_present": false, "on_receipts": ["h5-on.json"]}}
+I_PLAIN_SLEEPER_NO_SIGNATURE {"rev": "cure", "exit": 0, "descendant_alive": true, "journal_exists": false, "commands_run": ["off", "query", "on"], "chain_exited_written": true, "marker_present": false}
+SLEEPERS_LEFT []
+PROBE_CURE_COMPLETE

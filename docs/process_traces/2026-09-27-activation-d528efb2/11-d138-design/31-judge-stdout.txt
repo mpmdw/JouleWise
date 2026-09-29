@@ -1,0 +1,36 @@
+ADDENDUM: D138-25G83-DESIGN-01-A1 ISSUED
+
+The ruling is written to `/Users/edr/code/JouleWise-wt-bk-77b1bee2/docs/process_traces/2026-09-27-activation-d528efb2/11-d138-design/31-addendum-ruling.md` (365 lines, sha256 `4ddcd14b…4d0b`). It is the only repository file I changed, and the candidate worktree is still clean at `325d9f77`.
+
+## What I ruled
+
+1. **Where H1 is enforced.** The default calibration file does not move in this transaction: the new file is issued, registered and pinned, but R7 stays the default until the hold lifts. The loader also returns a held file only to a caller that passes `allow_claim_held=True`, and no production file does. The module refuses to import if the default is ever a held file.
+2. **The doubling trigger.** The eleven set-aside rows do count toward it, and wrongly. The count starts at 23 against a threshold of 24, so one new valid capture makes the file stale. The exact fix is in the ruling; after it the file goes stale at the 12th new capture.
+3. **S2, S3, N1 and the nits.** All adopted, some modified, with exact text. S3 changes the issued bytes, so the file digest and pin change. Both factual flags from the pedagogy pass are correct and adopted.
+4. **The old-epoch replay.** The evidence gathered does not satisfy the ruled condition, and I did not reinterpret it to do so. With the default unmoved, the replay is re-run at main and at the fix head and must be byte-identical. The condition is restated explicitly for the later transaction that does move the default.
+5. **D-185 and the issuing record.** Three false sentences about the hold get exact replacements, and all 37 pedagogy fixes are confirmed. A second pedagogy pass follows because new terms enter.
+6. **Gate sequence and write scope.** Thirteen steps and a 23-file exhaustive scope for the fix seat. The stop stands: if the repeated hold refutation finds a route, the transaction stops again.
+
+## Evidence I ran
+
+| Route | Candidate head `325d9f77` | Scratch prototype of the design |
+|---|---|---|
+| Pack naming R7, capture preflight at 25G83 | returns the held file's level screen `0.038078579302948` | refuses on `os_build` |
+| Manual campaign, mint allowance from the held file | returns `0.013701` | returns nothing |
+| Bracket evaluation at 25G83, no file named | judged by the held file, fresh, claim-eligible | judged by R7, stale, refused |
+| Derivation-night route at 25G83 | refused ("ordinary night") | open |
+
+With the trigger fixed and the hold table emptied in memory, a two-endpoint synthetic bracket **passed** as claim-eligible. At the candidate head, the counting defect was the only thing stopping that result. The trigger fix and the hold repair must therefore land in one commit.
+
+## Limits
+
+- **Tests not fully run.** Seven of the 14 affected test modules completed on the prototype: four passed, three failed as expected (they need the keyword or restoring to main's expectations). I did not run the whole suite.
+- **Manual campaign collection is not blocked.** It can still start and collect raw data at 25G83, as on main today. That it cannot yield a result rests on the preflight refusal and on reading the code; I ran no campaign. The next hold refuter carries this as its charge.
+- **Protocol deviation.** One test command exceeded the harness's ten-minute limit and was moved to the background. I stopped it and one later leftover test child by process id. Both are disclosed in §0 of the ruling.
+
+## Summary
+
+1. The hold was open, as both refuters said: moving the default to the new file let it judge windows that never name it, and only an unrelated counting defect stopped a passing result.
+2. The cure is to issue and register the new file but keep R7 as the default until the hold lifts, and to have the loader hand a held file only to code that states it makes no claim.
+3. Before merge: fix the counting defect in the same commit, correct the file's text and the two records, show each new test failing on the old code, and send fresh refuters to look for a route again.
+rc=0

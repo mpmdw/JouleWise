@@ -1,0 +1,39 @@
+candidate_acceptance_25g83.json dbad7cc782945691701c2ee11188179a61b333dbd0a5588b970636716554b5b2
+calibration_acceptance_d079_v2_n12_25g83_r1.json 9e5c735bf7b4d27604bfadd87809750974322258b943fd1afb04d1873e824c06
+i committed bytes and registry pin PASS
+protected schema_version parsed and source text IDENTICAL
+protected acceptance_id parsed and source text IDENTICAL
+protected decision_ids parsed and source text IDENTICAL
+protected ledger_cutoff parsed and source text IDENTICAL
+protected identity_epoch parsed and source text IDENTICAL
+protected prospective_rederivation parsed and source text IDENTICAL
+protected derivation_corpus parsed and source text IDENTICAL
+protected prior_observation_set parsed and source text IDENTICAL
+protected decimal_derivation parsed and source text IDENTICAL
+protected registered_generation_row parsed and source text IDENTICAL
+protected derivation_input_sha256 parsed and source text IDENTICAL
+protected backfill_candidate.candidate_inventory parsed and source text IDENTICAL
+protected derivation_notes.member_custody parsed and source text IDENTICAL
+protected derivation_notes.battery_confounded_sessions parsed and source text IDENTICAL
+protected derivation_notes.battery_verdict_records parsed and source text IDENTICAL
+protected derivation_notes.generation parsed and source text IDENTICAL
+protected derivation_notes.predecessor parsed and source text IDENTICAL
+protected derivation_notes.excluded_members parsed and source text IDENTICAL
+protected derivation_notes.prior_screen_comparison parsed and source text IDENTICAL
+protected derivation_notes.native_frame_cadence_s parsed and source text IDENTICAL
+protected derivation_notes.rule_outcomes parsed and source text IDENTICAL
+protected derivation_notes.preregistration parsed and source text IDENTICAL
+ii PASS protected_paths= 22 diff_operations= [["replace", 8, 9, 8, 8], ["replace", 11, 14, 10, 12], ["replace", 851, 851, 849, 849], ["replace", 857, 858, 855, 856], ["insert", 972, 971, 970, 1082], ["replace", 1003, 1003, 1114, 1114]]
+candidate whole seal fac6e6f89e764dc4b00516d9a35f5d1c1eaca9821e76725f5f1fb66b5b206073 input seal e7363bdd83af94cad15f0554043d35b646168e005125d3d770e7ba91dc9fb011
+issued whole seal 2e0d88b5e0186f43a6d7fc45810e5ca78cb7aa8c75fafce78710e282d5de017b input seal e7363bdd83af94cad15f0554043d35b646168e005125d3d770e7ba91dc9fb011
+estimator joulewise/powermetrics_fiducial.py 386e825440e02bb0720e7b74f0f7503d785fb543a08c45386014eeb4216bab92
+estimator joulewise/uncertainty_evidence.py b583f35affb33394532424295ac70261b895e1b6f2faa6ec87ee89c79cd94ae8
+estimator joulewise/adapters/powermetrics.py 70f47086b2445e88d0cb25ed2d47751dfd99843d0cf1e149f2fe630c5116e5e4
+estimator joulewise/reduce.py 7b9c0d28869040229e113ea2d40ecc69966075fd34052fbb51cfaffbd9ff9fcc
+DETECTION_PROJECTION_CELL_BUDGET 165000
+not_ancestor bda7ffe0 exit 1
+not_ancestor aeea07b6 exit 1
+not_ancestor ea10e3c8 exit 1
+not_ancestor 5135c1d2 exit 1
+estimator diff intersection=[]
+BYTE AND BINDING CHECKS PASS

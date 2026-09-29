@@ -1,0 +1,18 @@
+== D1 rc=1
+FAIL: test_charging_experiment_refuses_at_aggregation (tests.test_controller.SuiteControllerTests.test_charging_experiment_refuses_at_aggregation)
+Ran 10 tests in 17.515s
+FAILED (failures=1)
+== D2 rc=1
+FAIL: test_mock_experiment_refuses_at_aggregation (tests.test_controller.SuiteControllerTests.test_mock_experiment_refuses_at_aggregation)
+Ran 10 tests in 7.669s
+FAILED (failures=1)
+== D3 rc=1
+ERROR: test_mock_experiment_aggregate_shows_every_member_not_applicable (tests.test_controller.SuiteControllerTests.test_mock_experiment_aggregate_shows_every_member_not_applicable)
+ERROR: test_mock_experiment_refuses_at_aggregation (tests.test_controller.SuiteControllerTests.test_mock_experiment_refuses_at_aggregation)
+ERROR: test_run_experiment_suite_uses_repetition_order_seed (tests.test_controller.SuiteControllerTests.test_run_experiment_suite_uses_repetition_order_seed)
+Ran 10 tests in 5.222s
+FAILED (errors=3)
+== D4 rc=1
+ERROR: test_mock_experiment_aggregate_shows_every_member_not_applicable (tests.test_controller.SuiteControllerTests.test_mock_experiment_aggregate_shows_every_member_not_applicable)
+Ran 10 tests in 7.456s
+FAILED (errors=1)

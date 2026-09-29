@@ -1,0 +1,6 @@
+DRIVER_SAME_GROUP_CONTROL {"rev": "old", "exit": 0, "chain_pgid": 65671, "chain_group_absent_by_real_pgrep": false, "descendant_pid": 65675, "descendant_alive": true, "descendant_pgid": 65671, "descendant_ppid": "1", "commands_run": ["off", "query", "on"], "chain_exited_written": true, "marker_present": false}
+DRIVER_SEPARATE_GROUP {"rev": "old", "exit": 0, "chain_pgid": 65776, "chain_group_absent_by_real_pgrep": true, "descendant_pid": 65785, "descendant_alive": true, "descendant_pgid": 65785, "descendant_ppid": "1", "commands_run": ["off", "query", "on"], "chain_exited_written": true, "marker_present": false}
+KILL_PATH {"rev": "old", "termination_proven": true, "seconds": 0.03, "chain_exit": -15, "descendant_alive": true, "descendant_pgid": 65873, "chain_exited_written": true}
+RECOVERY {"rev": "old", "result": "restored", "chain_group_absent_by_real_pgrep": true, "descendant_alive": true, "commands_run": ["query", "on"], "marker_present": false}
+SLEEPERS_LEFT []
+PROBE_D1_COMPLETE

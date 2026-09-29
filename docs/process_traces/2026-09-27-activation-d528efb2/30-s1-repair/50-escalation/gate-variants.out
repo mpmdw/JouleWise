@@ -1,0 +1,30 @@
+== control
+     gate -> {'control': 'pass'}
+     reader.metadata -> pass
+     identity -> {'bound': True, 'mock': False, 'exempt': False, 'triangle': True}
+     strict -> []
+== config_deleted
+     gate -> RAISED WindowBatteryRefusal: window battery refusal: config_deleted: battery_float_evidence_missing (pair not bound (config.json cannot be read: [Errno 2] No such file or directory: '/tmp/c
+     reader.metadata -> RAISED BatteryStatusRefusal: battery_float_evidence_missing: pair not bound (config.json cannot be read: [Errno 2] No such file or directory: '/tmp/cg-s1route-d528efb2/tmpc3mwpt8a/config_de
+     identity -> {'bound': False, 'mock': False, 'exempt': True, 'triangle': True}
+     strict -> ['missing required artifact: config.json', "strict: battery_float_evidence_missing: pair not bound (config.json cannot be read: [Errno 2] No such file or directory: '/tmp/cg-s1route-d528efb2/tmpc3mwpt8a/config_deleted/config.json')"]
+== config_rebound_mock
+     gate -> RAISED WindowBatteryRefusal: window battery refusal: config_rebound_mock: battery_float_evidence_missing (pair recorded under a mock config)
+     reader.metadata -> RAISED BatteryStatusRefusal: battery_float_evidence_missing: pair recorded under a mock config
+     identity -> {'bound': True, 'mock': True, 'exempt': True, 'triangle': False}
+     strict -> ['strict: battery_float_evidence_missing: pair recorded under a mock config']
+== config_byte_changed_unbound
+     gate -> RAISED WindowBatteryRefusal: window battery refusal: config_byte_changed_unbound: battery_float_evidence_missing (pair not bound (config.json digest does not match metadata.config_sha256))
+     reader.metadata -> RAISED BatteryStatusRefusal: battery_float_evidence_missing: pair not bound (config.json digest does not match metadata.config_sha256)
+     identity -> {'bound': False, 'mock': False, 'exempt': True, 'triangle': True}
+     strict -> ["metadata.config_sha256 mismatch: metadata has '51f818c69ded2d043af6dcca4d3fed7dac319d0c3b71d5a84951638607fd7c73', config.json bytes hash to '0a14c4e036502d276e71d531fc295918947c877afb7ee6e38047d24421fd8a2c'", 'strict: battery_float_evidence_missing: pair not bound (config.json digest does not match metadata.config_sha256)']
+== config_mock_unbound
+     gate -> RAISED WindowBatteryRefusal: window battery refusal: config_mock_unbound: battery_float_evidence_missing (pair not bound (config.json digest does not match metadata.config_sha256))
+     reader.metadata -> RAISED BatteryStatusRefusal: battery_float_evidence_missing: pair not bound (config.json digest does not match metadata.config_sha256)
+     identity -> {'bound': False, 'mock': False, 'exempt': True, 'triangle': True}
+     strict -> ["metadata.config_sha256 mismatch: metadata has '51f818c69ded2d043af6dcca4d3fed7dac319d0c3b71d5a84951638607fd7c73', config.json bytes hash to '344050fea846a6a3ebecae69ae4db350ef2d65263106c9b0ae48762e6fe96def'", 'strict: battery_float_evidence_missing: pair not bound (config.json digest does not match metadata.config_sha256)']
+== config_not_json
+     gate -> RAISED WindowBatteryRefusal: window battery refusal: config_not_json: battery_float_evidence_missing (pair not bound (config.json digest does not match metadata.config_sha256))
+     reader.metadata -> RAISED BatteryStatusRefusal: battery_float_evidence_missing: pair not bound (config.json digest does not match metadata.config_sha256)
+     identity -> {'bound': False, 'mock': False, 'exempt': True, 'triangle': True}
+     strict -> ['config.json is not valid JSON: Expecting value: line 1 column 1 (char 0)', "metadata.config_sha256 mismatch: metadata has '51f818c69ded2d043af6dcca4d3fed7dac319d0c3b71d5a84951638607fd7c73', config.json bytes hash to '7ccfa1fbf3940e6f0c0375d87c0f9235a50514e14cb427bdfaf5077987b26ccf'", 'strict: battery_float_evidence_missing: pair not bound (config.json digest does not match metadata.config_sha256)']

@@ -1,0 +1,20 @@
+E0 new epoch 25G83 | R7 epoch 25F84 | differing fields ['os_build']
+E1 new judges ['25G83'] | R7 judges ['25F84']
+H pack d117_contrast_qwen25_1p5b_vs_7b_v1 declares d079_calibration_acceptance_v2_n19 _issued_d079 -> True
+H pack d117_contrast_qwen25_1p5b_vs_7b_v2 declares d079_calibration_acceptance_v2_n19_r2 _issued_d079 -> True
+H pack d117_contrast_qwen25_1p5b_vs_7b_v3 declares d079_calibration_acceptance_v2_n17_r6 _issued_d079 -> True
+H pack d117_floor_qwen25_1p5b_v1 declares d079_calibration_acceptance_v2_n19 _issued_d079 -> True
+H pack d117_floor_qwen25_1p5b_v2 declares d079_calibration_acceptance_v2_n19_r2 _issued_d079 -> True
+H pack d117_floor_qwen25_1p5b_v3 declares d079_calibration_acceptance_v2_n17_r6 _issued_d079 -> True
+H pack d117_floor_qwen25_7b_v1 declares d079_calibration_acceptance_v2_n19 _issued_d079 -> True
+H pack d117_floor_qwen25_7b_v2 declares d079_calibration_acceptance_v2_n19_r2 _issued_d079 -> True
+H pack d117_floor_qwen25_7b_v3 declares d079_calibration_acceptance_v2_n17_r6 _issued_d079 -> True
+H synthetic _v2_n17_r7 issued -> True
+H synthetic _v2_n17_r7 issued_acceptance -> True
+H synthetic _v2_n17_r7 issued_artifact_id -> True
+H synthetic 2_25g83_r1 issued -> False
+H synthetic 2_25g83_r1 issued_acceptance -> False
+H synthetic 2_25g83_r1 issued_artifact_id -> False
+PF head: preflight level screen at 25G83 -> 0.038078579302948
+PF main-equivalent (default=R7) at 25G83 refuses: acceptance_artifact_epoch_mismatch ['os_build']
+PF module constant PREFLIGHT_SYSTEMATIC_SCREEN_S = 0.038078579302948
