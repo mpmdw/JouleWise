@@ -20,7 +20,7 @@ contained by, any such root.
 """
 
 from __future__ import annotations
-
+import json
 import re
 from dataclasses import dataclass
 from decimal import Decimal
@@ -33,6 +33,7 @@ from unittest import mock
 from joulewise import arm_readiness as readiness
 from joulewise import arm_readiness_evidence_t0 as t0_author
 from joulewise import clock_reference
+from joulewise import network_time_off
 
 
 REHEARSAL_RECEIPT_CLASS = "T0_UNATTENDED_SUPERVISED_REHEARSAL"
@@ -678,17 +679,30 @@ def evaluate_g4(bundle: EvidenceBundle) -> GateResult:
             raise ValueError("first exact-Off command result is not mechanically green")
         second_off_artifact, second_off_source = _source_for_row(bundle, "clock.network_time_off")
         evidence.append(second_off_artifact.citation())
-        second_probes = second_off_source.get("probes")
-        if not isinstance(second_probes, list) or len(second_probes) != 1 or not isinstance(second_probes[0], Mapping):
-            raise ValueError("second exact-Off source probe is absent or ambiguous")
-        second = second_probes[0]
-        if (
-            second.get("exit_code") != 0
-            or not isinstance(second.get("argv"), list)
-            or not t0_author._systemsetup_argv(second["argv"], ("-setusingnetworktime", "off"))
-            or second.get("stdout") != readiness.EXPECTED_NETWORK_TIME_OFF_STDOUT
-        ):
-            raise ValueError("second exact-Off command result is not mechanically green")
+        if second_off_source.get("derivation", {}).get("policy") == network_time_off.SCHEMA:
+            refs = [ref for ref in second_off_source.get("input_artifacts", [])
+                    if str(ref.get("path", "")).endswith(network_time_off.RECEIPT_BASENAME)]
+            if len(refs) != 1:
+                raise ValueError("OFF receipt source is absent or ambiguous")
+            artifact = _verify_artifact_reference(bundle, refs[0], label="settled OFF receipt")
+            off = network_time_off.admit(json.loads(artifact.raw))
+            network_time_off.seconds_since_receipt(off, {
+                "epoch_s": value["anchor_realtime_ns"] / 1e9,
+                "monotonic_s": value["r1_batch_finished_monotonic_ns"] / 1e9,
+                "boot_id": first_off["boot_session_id"]})
+            evidence.append(artifact.citation())
+        else:
+            second_probes = second_off_source.get("probes")
+            if not isinstance(second_probes, list) or len(second_probes) != 1 or not isinstance(second_probes[0], Mapping):
+                raise ValueError("second exact-Off source probe is absent or ambiguous")
+            second = second_probes[0]
+            if (
+                second.get("exit_code") != 0
+                or not isinstance(second.get("argv"), list)
+                or not t0_author._systemsetup_argv(second["argv"], ("-setusingnetworktime", "off"))
+                or second.get("stdout") != readiness.EXPECTED_NETWORK_TIME_OFF_STDOUT
+            ):
+                raise ValueError("second exact-Off command result is not mechanically green")
     except (ValueError, readiness.ArmReadinessError, t0_author.T0EvidenceAuthoringError) as exc:
         return _result("G4", name, GateStatus.FAIL, str(exc), *evidence)
     return _result(
