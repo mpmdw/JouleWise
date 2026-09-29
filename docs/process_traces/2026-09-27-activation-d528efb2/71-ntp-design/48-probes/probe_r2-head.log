@@ -1,0 +1,6 @@
+R2 single-group path: (False, [])
+200 raised UnicodeDecodeError
+50 proofpass='P1'
+real pgrep, two absent groups: exit 1 stdout ''
+R2 pass: P1 exit1/empty, P2 batch exit0/empty, P3 clear, ps REAL -> (None, {'check': 'P2', 'error': "UnicodeDecodeError: 'utf-8' codec can't decode byte 0xc8 in position 24: invalid continuation byte"})
+R2 pass: P1 exit1/empty, P2 batch exit0/empty, P3 clear, ps injected exit1/empty -> (True, {'checks': ['P1', 'P2', 'P3']})

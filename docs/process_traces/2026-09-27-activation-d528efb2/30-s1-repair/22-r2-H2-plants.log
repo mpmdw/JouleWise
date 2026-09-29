@@ -1,0 +1,19 @@
+== base rc=0
+Ran 15 tests in 16.831s
+OK
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+== H8 rc=1
+FAIL: test_h10_missing_raw_powermetrics_refuses_strict_validation (tests.test_bfgs_fixtures.BfgsFixtureTests.test_h10_missing_raw_powermetrics_refuses_strict_validation)
+FAIL: test_h8_produced_bundle_passes_gate_and_strict_validation (tests.test_bfgs_fixtures.BfgsFixtureTests.test_h8_produced_bundle_passes_gate_and_strict_validation)
+FAIL: test_h9_produced_bundle_with_charging_reading_is_confounded (tests.test_bfgs_fixtures.BfgsFixtureTests.test_h9_produced_bundle_with_charging_reading_is_confounded)
+Ran 15 tests in 16.837s
+FAILED (failures=3)
+== H11 rc=1
+FAIL: test_h11_mock_mutation_refused_before_bundle_creation (tests.test_bfgs_fixtures.BfgsFixtureTests.test_h11_mock_mutation_refused_before_bundle_creation)
+Ran 15 tests in 11.129s
+FAILED (failures=1)
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+== H12 rc=1
+FAIL: test_h12_stale_reading_fails_the_controller_run (tests.test_bfgs_fixtures.BfgsFixtureTests.test_h12_stale_reading_fails_the_controller_run)
+Ran 15 tests in 11.128s
+FAILED (failures=1)

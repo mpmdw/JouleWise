@@ -5588,17 +5588,18 @@
         "evidence": [
           "docs/process_traces/2026-09-27-activation-d528efb2/40-sci-a2-network-time/21-ruling.md §7 (H5–H7 and chain map)",
           "docs/process_traces/2026-09-27-activation-d528efb2/40-sci-a2-network-time/31-addendum-ruling.md §§4.4–4.5 (final H5/H6 and seven tests)",
-          "docs/process_traces/2026-09-27-activation-d528efb2/20-cap-council/31-addendum-ruling.md K2 and C9 (arm refusal and receipt)"
+          "docs/process_traces/2026-09-27-activation-d528efb2/20-cap-council/31-addendum-ruling.md K2 and C9 (arm refusal and receipt)",
+          "docs/process_traces/2026-09-27-activation-d528efb2/71-ntp-design/21-coldgate-fable-ruling.md §5 (the witness must be older than the OFF receipt; the query starts 3,600 s before it)"
         ],
         "pointer": {
           "json_pointer": "/tasks/NETWORK-TIME-OFF-ENFORCE-01/acceptance",
           "label": "NETWORK-TIME-OFF-ENFORCE-01 acceptance",
           "path": "docs/process/state_kernel.json"
         },
-        "summary": "Implement H5 and H6 in the derivation chain, evidence/pack night path and claim-window arm path before another 25G83 window, claim-bearing or not. Set network time OFF with /usr/bin/sudo -n /usr/sbin/systemsetup -setusingnetworktime off at least 600 s before the first capture; require exit 0 and exact output setUsingNetworkTime: Off, save arguments, exit, output and dual-clock time, then restore ON after the last capture and save its receipt. Run the window timed-log query with a category-matched coverage witness predating the first 180 s lead; a deleted or header-only log cannot attest clean. Save per-capture verdicts, exclude slew/unattested captures, and add all seven defect-shaped tests of A3 §4.5, including the live old-log bench case. Keep any existing immediate per-capture query and require both to pass."
+        "summary": "Implement H5 and H6 in the derivation chain, evidence/pack night path and claim-window arm path before another 25G83 window, claim-bearing or not. Set network time OFF with /usr/bin/sudo -n /usr/sbin/systemsetup -setusingnetworktime off at least 600 s before the first capture; require exit 0 and exact output setUsingNetworkTime: Off, save arguments, exit, output and dual-clock time, then restore ON after the last capture and save its receipt. Run the window timed-log query, which starts 3,600 s before the OFF receipt's wall time and ends when the query is run, with a category-matched coverage witness (a `[com.apple.timed:data]` line) older than the OFF receipt's wall time (as amended by ruling NTP-ENFORCE-DESIGN-01 §5; addendum A3 had said: predating the first 180 s lead); a deleted or header-only log cannot attest clean. Save per-capture verdicts, exclude slew/unattested captures, and add all seven defect-shaped tests of A3 §4.5, including the live old-log bench case. Keep any existing immediate per-capture query and require both to pass."
       },
       "authority": {
-        "label": "SCI-25G83-CANDIDATE-01-A3 §§4.4–4.5; cap-council addendum K2",
+        "label": "SCI-25G83-CANDIDATE-01-A3 §§4.4–4.5, as amended by ruling NTP-ENFORCE-DESIGN-01 §5 (71-ntp-design/21-coldgate-fable-ruling.md); cap-council addendum K2",
         "path": "docs/process_traces/2026-09-27-activation-d528efb2/40-sci-a2-network-time/31-addendum-ruling.md"
       },
       "dependencies": [],
@@ -9773,7 +9774,8 @@
       "acceptance": {
         "evidence": [
           "docs/process_traces/2026-09-27-activation-d528efb2/00-activation-record.md item 124 (auditor disclosure: a test started sudo -n /usr/bin/powermetrics during the item-122 census)",
-          "docs/process_traces/2026-09-27-activation-d528efb2/71-ntp-design/45-n1-delta2-exec-opus.md (the executing lens's observation of the sampler rows during that run)"
+          "docs/process_traces/2026-09-27-activation-d528efb2/71-ntp-design/45-n1-delta2-exec-opus.md (the executing lens's observation of the sampler rows during that run)",
+          "docs/process_traces/2026-09-27-activation-d528efb2/00-activation-record.md items 132 and 136 (the one launching fixture identified; the fence landed at 069df719 on test/2026-09-28-powermetrics-fence; not yet on main)"
         ],
         "pointer": {
           "json_pointer": "/tasks/TEST-REAL-POWERMETRICS-FENCE-01/acceptance",
@@ -9790,13 +9792,13 @@
       "fallback": null,
       "fences": [],
       "flags": [],
-      "goal": "Find and fence the existing test that starts the real power sampler. During the lead's rule-9 census (record d528efb2 item 122), whole-module runs of tests/test_whole_window.py, tests/test_run_campaign.py or tests/test_window_duration_margins.py started a real `sudo -n /usr/bin/powermetrics`. The triage recorder and the standard S1 guard block only ioreg, and earlier whole-suite runs used no guard, so this is existing suite behaviour, not new (item 124).",
+      "goal": "Find and fence the existing test that starts the real power sampler. During the lead's rule-9 census (record d528efb2 item 122), whole-module runs of tests/test_whole_window.py, tests/test_run_campaign.py or tests/test_window_duration_margins.py started a real `sudo -n /usr/bin/powermetrics`. The triage recorder and the standard S1 guard block only ioreg, and earlier whole-suite runs used no guard. Record item 132 then found that the launch is not existing behaviour of main: the one offending test's ID exists on main, but the launch comes only from its fixture `paired_entry_real_state`, which is S1-only (absent at main 9eab16f8, defined at 69870b1d6), so main's suite starts no real sampler and the launch entered with the S1 round-3 branches.",
       "id": "TEST-REAL-POWERMETRICS-FENCE-01",
       "lane": "agent",
       "priority": "p1_phase_gate",
       "rank": 338,
-      "status": "queued",
-      "status_note": "Registered 2026-09-28 (Ed's interactive session bc060503, lane sweep P5, from record d528efb2 item 124). A fence is in progress on branch test/2026-09-28-powermetrics-fence (worktree JouleWise-wt-pmfence-opus0928, from main 9eab16f8; no commit on it at registration). No capture or measurement was in progress when the sampler started (item 124).",
+      "status": "partial",
+      "status_note": "Registered 2026-09-28 (Ed's interactive session bc060503, lane sweep P5, from record d528efb2 item 124). The fence landed on branch test/2026-09-28-powermetrics-fence at 069df719 (record items 132 and 136; from main 9eab16f8; test code only; pushed) and is not yet on main. No capture or measurement was in progress when the sampler started (item 124).",
       "stop_card": null
     },
     "TEST-SPEED-01": {

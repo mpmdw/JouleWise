@@ -1,0 +1,20 @@
+BENCH_REASONS excluded ['adapter_continuity_failed', 'cpu_admission_core_failed', 'environment_admission_failed', 'environment_admission_missing', 'whole_window_verdict_conflict', 'whole_window_verdict_provenance_invalid']
+F
+======================================================================
+FAIL: test_real_controller_unpinned_model_is_included_by_loader (tests.test_analysis_integration.AnalysisIntegrationTests.test_real_controller_unpinned_model_is_included_by_loader)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/edr/code/JouleWise-wt-s1bench-d528efb2/tests/test_analysis_integration.py", line 2052, in test_real_controller_unpinned_model_is_included_by_loader
+    print("BENCH_REASONS", evidence.inclusion_status, sorted(getattr(evidence, "base_reason_codes", ()) or ()), flush=True); self.assertEqual(evidence.inclusion_status, "included")
+                                                                                                                             ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'excluded' != 'included'
+- excluded
+? ^^
++ included
+? ^^
+
+
+----------------------------------------------------------------------
+Ran 1 test in 122.756s
+
+FAILED (failures=1)

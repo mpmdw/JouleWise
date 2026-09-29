@@ -10,6 +10,8 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
+**▶ RESUMED 2026-09-29 by Ed (session ff50b201, Opus 5.5 orchestrator; record item 160). The pause below is history; the resume order it lists is being executed by that session.**
+
 **⏸ PAUSED BY ED — 09:46 PDT 09-28 (interactive session bc060503, Fable 5.1; NOTHING ARMED, NOTHING RUNNING).** Ed ordered every piece of magistrate work paused until he resumes it. This block is the resume pointer, and where it disagrees with the d528efb2 block below, this block is newer and wins.
 
 **What holds the pause.** The file `/Users/edr/night-custody/magistrate/STOP` exists. The watchdog (the launchd job `com.joulewise.magistrate`, which relaunches the headless magistrate every five minutes) checks for that file on every tick and launches nothing while it is there. Its `state.json` reads `STOPPED`. The job itself is still loaded, so deleting the file is the whole resume step.
@@ -24,8 +26,8 @@ file instead.
 | Network-time enforcement, part N1 | `feat/2026-09-28-ntp-n1` | `36e8ba6e` |
 | S1 repair round 3, ID grants (seat H3) | `fix/2026-09-28-s1-r3-H3` | `cdfb27ce` |
 | S1 repair round 3, seat B (finished) | `fix/2026-09-28-s1-r3-B` | `d4345946` |
-| S1 repair round 3, seat A (stopped mid-run) | `fix/2026-09-28-s1-r3-A` | `cdfb27ce`, no seat commit |
-| S1 repair round 3, the lead's bench work (stopped mid-run) | `fix/2026-09-28-s1-r3-L` | `cdfb27ce`, no bench commit |
+| S1 repair round 3, seat A (stopped mid-run at the pause; re-run and landed 09-28, item 143) | `fix/2026-09-28-s1-r3-A` | `c3137f46` |
+| S1 repair round 3, the lead's bench work (stopped mid-run at the pause; done by an Opus 5.5 worker 09-28, item 140) | `fix/2026-09-28-s1-r3-L` | `76711800` on `origin`; `478f5709` after the orchestrator completed the fence cherry-pick on 09-29 (pushed; fenced module runs: fence 9/9, `test_whole_window` 60/60, `test_window_duration_margins` 34/35, the one error being F2 of item 140, awaiting a ruling) |
 
 Two jobs were stopped with edits not yet committed. Those edits are still in their worktrees, and a copy of each is on `origin` as a snapshot commit: `wip/2026-09-28-pause-s1-r3-A-partial` (`b0474eaa`; 2 test files) and `wip/2026-09-28-pause-s1-r3-L-partial` (`c1589d94`; 4 test files). **Both are unfinished and unverified. Re-run the job or re-verify every line before using any of it.**
 
@@ -35,13 +37,13 @@ Two jobs were stopped with edits not yet committed. Those edits are still in the
 1. Ed, or a session acting on his instruction, deletes `/Users/edr/night-custody/magistrate/STOP`. The watchdog relaunches the magistrate within five minutes. Check first that no `com.joulewise.night*` label is loaded (`launchctl list`).
 2. The successor reads record 00 from item 126, then does, in order:
    - **Network-time enforcement:** convene the cold gate NTP-ENFORCE-DESIGN-01-A2 again from [charge 47](docs/process_traces/2026-09-27-activation-d528efb2/71-ntp-design/47-coldgate-fix2c-charge.md), with its Opus refuter. The worktree `JouleWise-wt-cg-ntpfix2c-d528efb2` exists. No third fix round starts before that ruling (record item 124).
-   - **S1:** re-run seat A from `cdfb27ce` with brief `30-s1-repair/88-R3-5-seat-A-brief.txt`, or verify its snapshot; redo the bench work in the L worktree. Seat B is done, with 3 test IDs returned for a ruling (record item 125).
+   - **S1:** seat A is already re-run (`c3137f46`, item 143) and the bench work is done (`478f5709` on `origin` with the fence, item 140 and 160); do not re-run seat A from `cdfb27ce`, which would drop the powermetrics fence. Seat B is done, with 3 test IDs returned for a ruling (record item 125).
    - **D-138 (issuing the 25G83 calibration):** still stopped, waiting for Ed's choice of (a), (b) or (c), listed in the block below.
 
 **Opus 5.5 deskwork session, 09-28 (Ed's order; record 00 items 128 onward; the pause and `STOP` are unchanged, nothing armed).** It supersedes step 2's S1 line above.
-- **Landed, pushed, no PR:** powermetrics test fence `test/2026-09-28-powermetrics-fence` `069df719` (items 132, 136, 146; the whole suite starts no real sampler); S1 seat A `fix/2026-09-28-s1-r3-A` `c3137f46` (fence + cure `8c616dc4`/`3a98d600` below it; 13/15 GREEN, 2 NEEDS_RULING, lens FINDINGS, items 143, 149–150); S1 bench `fix/2026-09-28-s1-r3-L` `76711800` (29/31, 2 NEEDS_RULING, lens PASS, items 140, 145); test-only: `test/2026-09-28-silent-refusal-tests` `a3d0a4f4` (audit PASS), `…-calexits-evidence-bytes` `5c447604` (audit PASS + a post-review fix), `…-small-test-lanes` `0f242228` (PASS), `…-one-use-consumption` `b53725b3`, `…-wallclock-abort-margin` `1dceb172`; report-only prototype `feat/2026-09-28-paper-number-inventory` `05fca1af` (item 158).
+- **Landed, pushed, no PR:** powermetrics test fence `test/2026-09-28-powermetrics-fence` `069df719` (items 132, 136, 146; the whole suite starts no real sampler); S1 seat A `fix/2026-09-28-s1-r3-A` `c3137f46` (fence + cure `8c616dc4`/`3a98d600` below it; 13/15 GREEN, 2 NEEDS_RULING, lens FINDINGS, items 143, 149–150); S1 bench `fix/2026-09-28-s1-r3-L` `478f5709` on `origin` (09-29 fence cherry-pick on top of `76711800`) (29/31, 2 NEEDS_RULING, lens PASS, items 140, 145); test-only: `test/2026-09-28-silent-refusal-tests` `a3d0a4f4` (audit PASS), `…-calexits-evidence-bytes` `5c447604` (audit PASS + a post-review fix), `…-small-test-lanes` `0f242228` (PASS), `…-one-use-consumption` `b53725b3`, `…-wallclock-abort-margin` `1dceb172`; report-only prototype `feat/2026-09-28-paper-number-inventory` `05fca1af` (item 158).
 - **PR #438** (this records branch → main) is open, not merged: row 1 FAIL → fixes → delta FINDINGS with the same signature (item 139), so no second fix round was run; rows 9 PASS (item 144), 11–12 and F5 (ignored `.log` evidence) are Fable's.
-- **Half-done:** the L worktree is MID-CHERRY-PICK of the fence (item 140 F6; the permission classifier refused `cherry-pick --continue`); cold gate NTP A2 has only its Opus refuter half (item 131, file in the session scratchpad, not yet in the record).
+- **Half-done (resolved 09-29, item 160: cherry-pick completed as `478f5709`; refuter file copied to `71-ntp-design/48-a2-contract-refuter-opus.md`):** the L worktree is MID-CHERRY-PICK of the fence (item 140 F6; the permission classifier refused `cherry-pick --continue`); cold gate NTP A2 has only its Opus refuter half (item 131, file in the session scratchpad, not yet in the record).
 - **Rulings owed (magistrate):** S1 NEEDS_RULING IDs (items 140, 143, 145, 149); P0-R4 census decoy (item 146); A129 route A/B/C (item 148); paper numbers: 241 printed results numbers no checker compares, all hand-checked values correct (items 153, 155, 156, verity-germane; inventory-checker proposal); stale-row retirements (item 152).
 - **Next exact action:** Fable reads items 128 onward, rules the route for PR #438 (item 139), then completes or aborts the L cherry-pick and convenes the NTP A2 judge with item 131's refuter file.
 
@@ -57,7 +59,7 @@ Two jobs were stopped with edits not yet committed. Those edits are still in the
 **Merged:** #437 (bookkeeping + all 25G83 rulings) → `9eab16f8`; the canonical root is fast-forwarded to it.
 
 **D-138 (the 25G83 calibration issuance)** is on `feat/2026-09-27-d138-25g83-issuance`, head `b953f4b0` (issued bytes `d7076c78…`; the earlier candidate `325d9f77` with bytes `80c23036…` is superseded). Ed approved the name `d079_calibration_acceptance_v2_n12_25g83_r1` and its release after the gates ("Yes re name , go ahead").
-- **Built:** the loader repair and promotion tool; the pin swap and the H1 hold; the issuing record and the draft decision-log entry (numbered on that branch only); fix rounds 1 and 2; the hold-by-construction module (ruling HOLD-BY-CONSTRUCTION-01, record item 82).
+- **Built:** the loader repair and promotion tool; the pin swap and the H1 hold; the issuing record and the draft decision-log entry (numbered on that branch only); fix rounds 1 and 2; fix round 3, the hold-by-construction module (ruling HOLD-BY-CONSTRUCTION-01, record item 82; items 91 and 95).
 - **Rulings issued:** design addendum **D138-25G83-DESIGN-01-A1** (item 68) and **HOLD-BY-CONSTRUCTION-01** (item 82). The first pedagogy pass's 37 items were applied (items 73 and 79); the second pass's 25 items (item 81) wait for the final writer pass.
 - **STOPPED for good** (HOLD-BY-CONSTRUCTION-01 §6.2): a fresh hold refuter found 3 routes (item 101). Contract refuter 3 then returned DISSENT on four main-test regressions at `b953f4b0` (item 104), confirmed by the lead's whole suite (item 106: 6 failures, 9 errors in 5 modules). Ed was sent the a/b/c brief (item 102) and a correction (item 105): option (b) now also needs a ruling on those four regressions and their fixes.
 
@@ -65,9 +67,9 @@ Two jobs were stopped with edits not yet committed. Those edits are still in the
 
 **Cap:** CAP-COUNCIL-25G83-01 + A1 chose route R (cap = 10× the largest measured work under a pre-registered rule; freeze the code, then size, then two re-issues, then the full #416 audit). Ed will later be asked to approve the successor registration and to name two files.
 
-**S1:** round 2 met the stop conditions (same signature twice). Escalation ruling **S1-REPAIR-ROUTE-01** and addendum **A1** issued (items 70 and 112; `30-s1-repair/50-escalation/21-coldgate-fable-ruling.md`, `83-coldgate-pilot-ruling.md`). The gate defect the Opus seat found (a paired bundle passing with its config deleted or set to mock) was fixed at the bench as `601a06c5` (item 71). Round 3: seat B landed `d4345946` (item 125); seat A and the lead's bench rows were stopped by the pause (items 126–127).
+**S1:** round 2 met the stop conditions (same signature twice). Escalation ruling **S1-REPAIR-ROUTE-01** and addendum **A1** issued (items 70 and 112; `30-s1-repair/50-escalation/21-coldgate-fable-ruling.md`, `83-coldgate-pilot-ruling.md`). The gate defect the Opus seat found (a paired bundle passing with its config deleted or set to mock) was fixed at the bench as `601a06c5` (item 71). Round 3: seat B landed `d4345946` (item 125); seat A and the lead's bench rows were stopped by the pause (items 126–127), then both were done on 09-28: seat A `c3137f46` (item 143), bench rows `76711800` (item 140; `478f5709` on `origin` after the 09-29 cherry-pick).
 
-**SUCCESSOR'S NEXT EXACT ACTION:** read record 00 from its last item (≈ item 117). Then:
+**SUCCESSOR'S NEXT EXACT ACTION:** read record 00 from its last item (item 160). Then:
 1. **D-138 is STOPPED for good** (HOLD-BY-CONSTRUCTION-01 §6.2: a fresh hold refuter found 3 routes, `refuters/hold-refuter-4-astra.md`). **Wait for Ed's choice** (Gmail `1a0e7c44a348de4e`):
    - (a) withdraw the file and land the rest;
    - (b) a written residual plus a ruling on the four main-test regressions and their fixes (item 105), then the remaining gates: the second pedagogy pass, the cold final pass, merge (contract refuter 3 and the whole suite have already returned, items 104 and 106);

@@ -1,0 +1,21 @@
+........F....
+======================================================================
+FAIL: test_revision_five_predecessor_default_and_simulation_are_frozen_to_r7 (tests.test_acc_25g83_rev5.RevisionFiveTests.test_revision_five_predecessor_default_and_simulation_are_frozen_to_r7)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/edr/code/JouleWise-wt-d138-mut-d528efb2/tests/test_acc_25g83_rev5.py", line 440, in test_revision_five_predecessor_default_and_simulation_are_frozen_to_r7
+    load.assert_called_once_with(ANCHOR_V3_R7_ACCEPTANCE_BOUND_PATH)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/unittest/mock.py", line 998, in assert_called_once_with
+    return self.assert_called_with(*args, **kwargs)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/unittest/mock.py", line 986, in assert_called_with
+    raise AssertionError(_error_message()) from cause
+AssertionError: expected call not found.
+Expected: load_calibration_acceptance_bound(PosixPath('/Users/edr/code/JouleWise-wt-d138-mut-d528efb2/configs/calibration/calibration_acceptance_d079_v2_n17_r7.json'))
+  Actual: load_calibration_acceptance_bound()
+
+----------------------------------------------------------------------
+Ran 13 tests in 36.279s
+
+FAILED (failures=1)

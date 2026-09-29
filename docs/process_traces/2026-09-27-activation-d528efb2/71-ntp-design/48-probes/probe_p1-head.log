@@ -1,0 +1,67 @@
+== R3 / E2-signature: pre-existing refusal documents at a failed proof ==
+R3a [K] cleanup_proven=True: K_return=None
+    refusals: [('refusal-01.json', 'night_chain_alive'), ('refusal.json', 'night_probe_error')] | result: REFUSED night_chain_alive ['night/refusal-01.json', 'night/refusal.json']
+R3a [K] cleanup_proven=False: K_return='evidence collector/recorder/sampler cleanup unproven; report the cleanup record'
+    refusals: [('refusal-01.json', 'night_chain_alive'), ('refusal.json', 'night_probe_error')] | result: REFUSED night_chain_alive ['night/refusal-01.json', 'night/refusal.json']
+R3b chain-authored refusal (qpc.py:1804) then proof fails:
+    refusals: [('refusal-01.json', 'night_chain_alive'), ('refusal.json', 'night_probe_error')] | result: REFUSED night_chain_alive ['night/refusal-01.json', 'night/refusal.json']
+    chain_alive doc names the earlier document? False ['check', 'matches']
+R3c head order ([K] :3347 before result), proof passes, agent-census stop:
+    refusals: [('refusal-01.json', 'night_aborted_agent_present'), ('refusal.json', 'night_probe_error')] | result: ABORTED night_aborted_agent_present
+R3d watchdog control (E2 as fixed): [('refusal.json', 'night_chain_alive')] | result: REFUSED night_chain_alive
+== R1: never-launched claim with missing keys ==
+R1 missing_both: driver _chain_never_launched=True recovery=restored calls=['ON']
+R1 missing_pid: driver _chain_never_launched=True recovery=restored calls=['ON']
+R1 explicit_nulls: driver _chain_never_launched=True recovery=restored calls=['ON']
+R1 pid_present: driver _chain_never_launched=False recovery=chain_unproved calls=[]
+== R2: batch census exit 0 with empty output ==
+Traceback (most recent call last):
+  File "/private/tmp/claude-501/-Users-edr-code-JouleWise/bc060503-ff17-4e2b-9fed-a60bee3d7c97/scratchpad/p1/probe_p1.py", line 123, in <module>
+    print("R2 _census_chunk([99990,99991]) exit0/empty ->", d._census_chunk([99990, 99991], 1.0))
+                                                            ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+  File "/private/tmp/claude-501/-Users-edr-code-JouleWise/bc060503-ff17-4e2b-9fed-a60bee3d7c97/scratchpad/p1/tree/scripts/run_night.py", line 3771, in _census_chunk
+    attributed, unresolved = _attribute_pids(pids, timeout_s)
+                             ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/private/tmp/claude-501/-Users-edr-code-JouleWise/bc060503-ff17-4e2b-9fed-a60bee3d7c97/scratchpad/p1/tree/scripts/run_night.py", line 3784, in _attribute_pids
+    result = subprocess.run(argv, capture_output=True, text=True,
+                            timeout=timeout_s, check=False)
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/unittest/mock.py", line 1176, in __call__
+    return self._mock_call(*args, **kwargs)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/unittest/mock.py", line 1180, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/unittest/mock.py", line 1247, in _execute_mock_call
+    result = effect(*args, **kwargs)
+  File "/private/tmp/claude-501/-Users-edr-code-JouleWise/bc060503-ff17-4e2b-9fed-a60bee3d7c97/scratchpad/p1/probe_p1.py", line 121, in fake
+    return real_run(argv, **kw)   # the attribution `ps -p ""` runs for real
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py", line 557, in run
+    stdout, stderr = process.communicate(input, timeout=timeout)
+                     ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py", line 1221, in communicate
+    stdout, stderr = self._communicate(input, endtime, timeout)
+                     ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py", line 2198, in _communicate
+    stderr = self._translate_newlines(stderr,
+                                      self.stderr.encoding,
+                                      self.stderr.errors)
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py", line 1099, in _translate_newlines
+    data = data.decode(encoding, errors)
+UnicodeDecodeError: 'utf-8' codec can't decode byte 0xa6 in position 28: invalid start byte
+== R4 / NIT-1: pass budget and horizon ==
+groups=   0 calls=2 budget=2s last-retry-start<= 2.8s
+groups=   1 calls=3 budget=3s last-retry-start<= 1.8s
+groups=   2 calls=4 budget=4s last-retry-start<= 0.8s
+groups=  12 calls=4 budget=4s last-retry-start<= 0.8s
+groups= 113 calls=4 budget=4s last-retry-start<= 0.8s
+groups= 256 calls=4 budget=4s last-retry-start<= 0.8s
+groups= 257 calls=6 budget=6s last-retry-start<= -1.2s
+groups= 769 calls=10 budget=10s last-retry-start<= -5.2s
+R4 first pass succeeding at +5.4 s -> (True, {'checks': ['P1', 'P2', 'P3'], 'passes': 1})
+== R5: C7 path exit status ==
+R5 _finish_reporting(EXIT_REFUSED, allow_courier=False) -> 6
+== NIT-2: path signature prefix ==
+NIT2 True  /bin/zsh /Users/edr/code/JouleWise-wt-other/run.sh
+NIT2 True  /bin/zsh /Users/edr/code/JouleWise/scripts/x.sh
+NIT2 True  log stream --predicate powermetrics
+NIT2 True  vim /Users/edr/code/JouleWiseNotes.txt
