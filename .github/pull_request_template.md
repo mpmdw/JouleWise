@@ -10,7 +10,7 @@ Impact statement (start each answer with Yes or No, then say why; any Yes makes 
 
 ## Gate ledger
 
-Replace `Tier: full|light` with `Tier: full` or `Tier: light`. Full tier: any PR that changes code or configs, or whose Impact statement has a Yes. Light tier: docs, records or tests only, with every Impact line No; light tier runs no audit rounds. Fill each row as `RUN <repo-relative-path>` or `RUN <commit-sha>` (plain text: no backticks, no `:N`, no `#anchor`, no URL), or with the exact N/A text the row allows. Row 3 names the final head sha, so update it after every push. Authority: D-118 as thinned on 2026-09-29 (summary in docs/process_prune_2026-09-29.md).
+Set the Tier line to `Tier: full` or `Tier: light`. Full tier: any PR that changes code or configs, or whose Impact statement has a Yes. Light tier: docs, records or tests only, with every Impact line No; light tier runs no audit rounds. Fill each row as `RUN <repo-relative-path>` or `RUN <commit-sha>` (plain text: no backticks, no `:N`, no `#anchor`, no URL), or with the exact N/A text the row allows. Row 3 names the final head sha, so update it after every push. Authority: D-118 as thinned on 2026-09-29 (summary in docs/process_prune_2026-09-29.md).
 
 | # | Gate | Evidence |
 | --- | --- | --- |
