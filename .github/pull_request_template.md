@@ -1,6 +1,6 @@
 Tier: full|light
 
-Impact statement (answer each line for this PR):
+Impact statement (start each answer with Yes or No, then say why; any Yes makes this PR full tier):
 (i) Raw-bundle byte or recorded timestamp: TODO
 (ii) Reduced energy, time, token count or correctness score: TODO
 (iii) Admit, refuse, select or exclude decision over bundles, nights, blocks, envelopes or items: TODO
@@ -8,26 +8,17 @@ Impact statement (answer each line for this PR):
 (v) Registration, prospective manifest, analysis plan or estimator constant: TODO
 (vi) Published number or sentence in the paper, README claims or claim renderers: TODO
 
-## Gate ledger (D-118 / D-121)
+## Gate ledger
 
-Replace `Tier: full|light` with `Tier: full` or `Tier: light`. The independent reviewer confirms the tier; any disagreement resolves to full. Fill required rows as `RUN <repo-relative-path>` or `RUN <commit-sha>` (a committed repo-relative artifact at the PR head or a commit sha: no `:N`, no `#anchor`, no URL); Evidence is plain text, no backticks. Full tier requires all twelve rows. Light tier requires rows 1, 9, 11 and 12 with evidence; rows 2–8 and 10 must read `N/A (light tier)`. `NOT-RUN` remains a defect in required rows until filled. The `gate-ledger` check is required on `main`. Item 12 must name the final head sha.
+Replace `Tier: full|light` with `Tier: full` or `Tier: light`. Full tier: any PR that changes code or configs, or whose Impact statement has a Yes. Light tier: docs, records or tests only, with every Impact line No; light tier runs no audit rounds. Fill each row as `RUN <repo-relative-path>` or `RUN <commit-sha>` (plain text: no backticks, no `:N`, no `#anchor`, no URL), or with the exact N/A text the row allows. Row 3 names the final head sha, so update it after every push. Authority: D-118 as thinned on 2026-09-29 (summary in docs/process_prune_2026-09-29.md).
 
-Row labels are keys; the authoritative gate text is D-118 / D-121 in docs/decision_log.md (and D-170 for this ledger).
-
-| # | Gate item | Evidence |
+| # | Gate | Evidence |
 | --- | --- | --- |
-| 1 | Independent audit by a fresh non-author reviewer | NOT-RUN |
-| 2 | Paired distinct lenses: contract + execution (physics if measurement-adjacent) | NOT-RUN |
-| 3 | Lead-written FIX contract with dictated closure shapes; findings triaged and dispositioned, never silently applied | NOT-RUN |
-| 4 | Delta re-audit of every fix round | NOT-RUN |
-| 5 | Same-signature statement from every delta; a surviving class escalates to a consult, not round three | NOT-RUN |
-| 6 | Opus counter-review on the near-final head | NOT-RUN |
-| 7 | Apex Fable code-reading diff gate answering design-level questions; never skipped or downgraded | NOT-RUN |
-| 8 | Overbuild / merge-ability prune | NOT-RUN |
-| 9 | Lead unpiped full-suite replay on the integration tree (not the stale branch), exact tail recorded | NOT-RUN |
-| 10 | Final-head fresh-eyes review after every post-review commit | NOT-RUN |
-| 11 | CI green on final head + post-merge cross-unit integration review | NOT-RUN |
-| 12 | Magistrate terminal review, full session context, of the exact merge candidate (final head sha); not delegable | NOT-RUN |
+| 1 | Independent review by a non-author, with a lens that executes the code (light tier: N/A (light tier)) | NOT-RUN |
+| 2 | Whole suite on the merged tree (current main merged into the head), exact tail recorded (light tier, docs only: N/A (docs only)) | NOT-RUN |
+| 3 | CI green on the final head; evidence is that head's sha | NOT-RUN |
+| 4 | Cold Fable final pass on merge code that touches measurement, calibration or claims (otherwise: N/A (no measurement, calibration or claim code); light tier: N/A (light tier)) | NOT-RUN |
+| 5 | Findings dispositioned: each fixed, deferred to a named lane, or rejected with a reason (light tier: N/A (light tier)) | NOT-RUN |
 
 ## Summary
 

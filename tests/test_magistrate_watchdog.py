@@ -2670,7 +2670,7 @@ class ContractTests(WatchdogTestCase):
             encoding="utf-8"
         )
         ordered = (
-            "normal twelve-row gate",
+            "normal gate ledger",
             "pull --ff-only",
             "five pinned files",
             "stop every background task",
