@@ -992,6 +992,15 @@ class WindowDurationMarginsTests(unittest.TestCase):
             self.runs_root / self.bundle_ids["decode"][0] / "config.json"
         )
         config_path.write_bytes(config_path.read_bytes() + b" ")
+        # Keep battery custody valid so the recorder compares these rebound
+        # bytes with the pack's original pin (A2, bench L F2 ruling).
+        metadata_path = config_path.parent / "metadata.json"
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        metadata["config_sha256"] = hashlib.sha256(config_path.read_bytes()).hexdigest()
+        metadata_path.write_text(
+            json.dumps(metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
+        write_passing_pair(config_path.parent)
         self._assert_record_refuses("member_config_mismatch")
 
     def test_pack_identity_invalid_refuses_without_output(self) -> None:
