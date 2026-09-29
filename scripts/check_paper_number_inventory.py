@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
-"""Paper-number inventory checker (PROTOTYPE; report-only; NOT a gate).
+"""Paper-number inventory checker with bound-slot enforcement and count ratchets.
 
-STATUS.  This is a proposal artefact for a design decision, not an adopted
-gate.  Nothing runs it in CI.  ``--report`` (the default) always exits 0;
-``--strict`` exits 1 on any finding, and on today's skeleton it does exit 1,
-because most numbers are not yet inventoried.  The proposal it prototypes is
-record ``docs/process_traces/2026-09-27-activation-d528efb2/00-*.md`` item 156.
+``--check`` fails on a slot mismatch, missing/ambiguous anchor, refused
+source, invalid binding, failed cross-check, or growth above the inventory's
+unbound-results / unaccounted ceilings. Existing unresolved literals and the
+spelled-out census are informational. ``--report`` always exits 0 (default).
 
 THE PROBLEM IT ADDRESSES.  The existing paper checkers compare a printed number
 with its source only where the number carries a ``[FILL:...]`` marker or sits
@@ -92,7 +91,7 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_INVENTORY = ROOT / "docs" / "paper" / "number-inventory.json"
-SCHEMA = "joulewise-paper-number-inventory/v0-prototype"
+SCHEMA = "joulewise-paper-number-inventory/v1"
 MINUS = "−"
 
 # --------------------------------------------------------------------------
@@ -557,10 +556,12 @@ class Report:
     def unaccounted(self) -> list[Literal]:
         return [l for l in self.literals if l.claim is None]
 
-    def strict_failures(self) -> list[str]:
-        bad = [f"{f.status} {f.where}" for f in self.findings if f.status not in OK_STATUSES]
-        bad += [f"UNACCOUNTED line {l.line} {l.lit!r}" for l in self.unaccounted()]
-        return bad
+    def check_failures(self) -> list[str]:
+        # Stale unresolved contexts and the spelled-out census are diagnostics;
+        # only count growth makes unresolved numeric literals fail the gate.
+        informational = {"STALE", "CLASS_COUNT_CHANGED"}
+        return [f"{f.status} {f.where}" for f in self.findings
+                if f.status not in OK_STATUSES and f.status not in informational]
 
 
 def run_check(
@@ -682,6 +683,15 @@ def run_check(
             "CLASS_COUNT_CHANGED", "spelled-out total",
             f"{len(spelled)} spelled-out numbers, inventory pins {rep.spelled_expected_total}",
         ))
+    counts = rep.counts()
+    for name in ("unbound-results", "unaccounted"):
+        ceiling = inventory.get("ratchet", {}).get(name)
+        if type(ceiling) is not int or ceiling < 0:
+            rep.findings.append(Finding("ERROR", f"ratchet {name}", "missing or invalid ceiling"))
+        elif counts[name] > ceiling:
+            rep.findings.append(Finding(
+                "RATCHET_GROWTH", name, f"{counts[name]} exceeds ceiling {ceiling}",
+            ))
     return rep
 
 
@@ -793,7 +803,7 @@ def _registry_check(rc: dict, registry_text: str, expected: dict, rep: Report) -
 
 
 def format_report(rep: Report, list_spelled: bool = False) -> str:
-    out = ["PAPER-NUMBER-INVENTORY (PROTOTYPE; report-only; not a gate; not in CI)"]
+    out = ["PAPER-NUMBER-INVENTORY (bound-slot check; unresolved count ratchets)"]
     out.append(f"skeleton sha256 {rep.skeleton_sha256}")
     for name, st in rep.sources.items():
         out.append(f"SOURCE {name}: {st}")
@@ -830,8 +840,8 @@ def format_report(rep: Report, list_spelled: bool = False) -> str:
         for l in rep.spelled:
             if not l.claim:
                 out.append(f"SPELLED-NOT-INVENTORIED line {l.line} {l.lit!r} | {l.ctx}")
-    fails = rep.strict_failures()
-    out.append(f"STRICT would {'FAIL' if fails else 'PASS'}: {len(fails)} finding(s)")
+    fails = rep.check_failures()
+    out.append(f"CHECK {'FAIL' if fails else 'PASS'}: {len(fails)} finding(s)")
     return "\n".join(out)
 
 
@@ -839,7 +849,7 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     mode = ap.add_mutually_exclusive_group()
     mode.add_argument("--report", action="store_true", help="report only; always exit 0 (default)")
-    mode.add_argument("--strict", action="store_true", help="exit 1 on any mismatch, refusal or unaccounted literal")
+    mode.add_argument("--check", action="store_true", help="enforce slots, source pins and unresolved count ceilings")
     ap.add_argument("--repo-root", type=Path, default=ROOT)
     ap.add_argument("--inventory", type=Path, default=None)
     ap.add_argument("--skeleton", type=Path, default=None, help="check this file instead of the inventory's skeleton")
@@ -856,7 +866,7 @@ def main(argv: list[str] | None = None) -> int:
     text = args.skeleton.read_text(encoding="utf-8") if args.skeleton else None
     rep = run_check(args.repo_root, text, inventory, overrides)
     print(format_report(rep, args.list_spelled))
-    if args.strict and rep.strict_failures():
+    if args.check and rep.check_failures():
         return 1
     return 0
 
