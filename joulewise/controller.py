@@ -2232,8 +2232,40 @@ class _Execution:
             controller_extra["node_cleanup"] = node_cleanup
         if controller_extra:
             extra["extra"] = controller_extra
+        extra["raw_capture_sha256"] = self._raw_capture_digests()
         self._writer.write_metadata(extra)
         self._metadata_written = True
+
+    def _raw_capture_digests(self) -> dict[str, dict[str, str | int]]:
+        """Bind raw capture bytes on disk immediately before metadata is written.
+
+        Raw capture files are every file under the run's ``RunContext.raw_dir``:
+        native sampler output (including idle/retry/post-idle captures) and
+        workload output preserved by adapters for reduction and re-derivation,
+        such as power plists, runtime events, responses, and tokens. Enumerate
+        that adapter-owned directory rather than maintaining backend filenames.
+        Controller-derived traces, events, logs, outputs, config, and metadata
+        outside ``raw/`` are not raw captures. Include partial captures on
+        failure paths and nested remote-custody files when present.
+
+        Keys are bundle-relative POSIX paths; ``size_bytes`` counts the same
+        bytes fed to SHA-256, rather than a separate filesystem stat.
+        """
+        captures: dict[str, dict[str, str | int]] = {}
+        for path in sorted(self._context.raw_dir.rglob("*")):
+            if not path.is_file():
+                continue
+            digest = hashlib.sha256()
+            size_bytes = 0
+            with path.open("rb") as handle:
+                while chunk := handle.read(1024 * 1024):
+                    digest.update(chunk)
+                    size_bytes += len(chunk)
+            captures[path.relative_to(self._writer.path).as_posix()] = {
+                "sha256": digest.hexdigest(),
+                "size_bytes": size_bytes,
+            }
+        return captures
 
     def _capture_adapter_alignments(self) -> None:
         self._runtime_alignments = _adapter_clock_alignments(self._runtime)

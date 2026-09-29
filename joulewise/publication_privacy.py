@@ -124,6 +124,7 @@ _METADATA_KEYS = frozenset(
         "marker_to_last_sample_phase_bound_s",
         "idle_drift_bound_w",
         "trace_window_margins",
+        "raw_capture_sha256",
         "workload_observed",
         "workload_provenance",
         "suite",
@@ -134,7 +135,8 @@ _METADATA_KEYS = frozenset(
     }
 )
 
-# These metadata fields are scalar provenance or governed numeric evidence.
+# These metadata fields are provenance or governed numeric evidence, including
+# the reviewed raw-capture inventory of relative paths, digests, and byte sizes.
 # Every other reviewed top-level field is replaced as a complete subtree.  The
 # subtree classification is intentional: it covers future values without ever
 # copying an unreviewed nested field into the public artifact.
@@ -148,6 +150,7 @@ _METADATA_RETAIN_KEYS = frozenset(
         "marker_to_last_sample_phase_bound_s",
         "idle_drift_bound_w",
         "trace_window_margins",
+        "raw_capture_sha256",
     }
 )
 
