@@ -92,7 +92,10 @@ def set_network_time_off(path, plan_id, window_id, *, runner=_run,
 def seconds_since_receipt(receipt, now):
     """Minimum elapsed on both clocks; refuse until both prove 600 seconds."""
     admit(receipt)
-    if not isinstance(now, dict) or now.get("boot_id") != receipt["boot_id"]:
+    # The receipt stores the boot session UUID lowercased; callers may pass the
+    # raw sysctl value, which macOS prints in upper case.
+    current = now.get("boot_id") if isinstance(now, dict) else None
+    if not isinstance(current, str) or current.strip().lower() != receipt["boot_id"]:
         raise ValueError("OFF receipt belongs to a different boot")
     elapsed = []
     for name in ("epoch_s", "monotonic_s"):

@@ -67,6 +67,15 @@ class NetworkTimeOffTests(unittest.TestCase):
             with self.subTest(change=change), self.assertRaises(ValueError):
                 nt.seconds_since_receipt(receipt(), {**now, **change})
 
+    def test_raw_uppercase_sysctl_boot_matches_lowercased_receipt(self):
+        # macOS prints kern.bootsessionuuid in upper case; the sampler passes it raw.
+        uuid = "CD5B815A-0F3E-4C2A-9B1D-7E6F5A4B3C2D"
+        stored = {**receipt(), "boot_id": uuid.lower()}
+        now = {"epoch_s": 1600., "monotonic_s": 610., "boot_id": uuid}
+        self.assertEqual(nt.seconds_since_receipt(stored, now), 600)
+        with self.assertRaises(ValueError):
+            nt.seconds_since_receipt(stored, {**now, "boot_id": uuid.replace("CD5B", "CD5C")})
+
     def test_identity_and_symlink_refused(self):
         with tempfile.TemporaryDirectory() as root:
             self.save(root)
