@@ -116,7 +116,13 @@ bar on refining a component whose defects are shrinking.
   keep the machine quiet, since a running agent adds measured joules.
 - The pre-arm triple audit (owner directive, GitHub issue #416): three
   blind audits that re-derive the calibration from raw capture files at the
-  frozen code head before any claim-bearing run.
+  frozen code head before any claim-bearing run. It runs once per frozen
+  code or protocol change, not once per window: the measurement Mac is
+  dedicated, windows run back-to-back at the cadence the science needs
+  (Ed, 2026-09-29: "nights" are metaphorical), and only physics waits sit
+  between them (clean dwell, battery float, recovered idle power, network
+  time OFF). Harvest is automated raw-byte validation plus an independent
+  arithmetic check; full suites, lenses and cold passes run per code change.
 - The cold science gate's raw re-derivation of a candidate calibration:
   every constant recomputed from the raw capture bytes, not read from the
   candidate's own report.
