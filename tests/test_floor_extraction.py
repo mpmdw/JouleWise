@@ -115,6 +115,9 @@ from joulewise.whole_window import (
 )
 from joulewise.reduce import _integrate
 from tests.test_arm_readiness import LaunchConsumptionV2Tests
+from tests.genuine_evidence import (
+    genuine_evidence_builders, genuine_evidence_is_active, populate_whole_window_core,
+)
 from tests.bfgs_fixtures import exemption_parity, rebind_config, write_passing_pair
 
 # Whole-window verdict re-derivation anchors NEG-8 tolerances to a
@@ -540,7 +543,7 @@ class D117MintConsumptionProfileTests(
         return report
 
     def test_production_extractor_path_matches_checked_in_golden(self) -> None:
-        with exemption_parity(self.id()):
+        with genuine_evidence_builders():
             expected = json.loads(self.FIXTURE_PATH.read_text(encoding="utf-8"))
             with tempfile.TemporaryDirectory() as tmp:
                 actual = self._production_path_report(Path(tmp))
@@ -1467,6 +1470,8 @@ class CpuAndWholeWindowClaimBarrierTests(unittest.TestCase):
             )
             bind_passing_claim_bundle(root, bundle_id)
         if whole_window_row is not None:
+            if genuine_evidence_is_active():
+                populate_whole_window_core(root, whole_window_row)
             (root / "campaign_log.jsonl").write_text(
                 json.dumps(whole_window_row) + "\n", encoding="utf-8"
             )
@@ -1496,7 +1501,7 @@ class CpuAndWholeWindowClaimBarrierTests(unittest.TestCase):
             )
 
     def test_floor_requires_campaign_bound_whole_window_and_adapter_evidence(self) -> None:
-        with exemption_parity(self.id()):
+        with genuine_evidence_builders():
             # W6 defect shape: valid cells plus cooldowns were extractable with no
             # NEG-8/adapter verdict at all.
             with tempfile.TemporaryDirectory() as tmp:
@@ -1568,7 +1573,7 @@ class CpuAndWholeWindowClaimBarrierTests(unittest.TestCase):
             self.assertEqual(reasons, ("whole_window_verdict_conflict",))
 
     def test_whole_window_core_rejects_duplicate_member_occurrences(self) -> None:
-        with exemption_parity(self.id()):
+        with genuine_evidence_builders():
             for duplicate_kind in ("bytes", "id"):
                 with self.subTest(duplicate_kind=duplicate_kind), tempfile.TemporaryDirectory() as tmp:
                     root = Path(tmp)
@@ -1589,7 +1594,7 @@ class CpuAndWholeWindowClaimBarrierTests(unittest.TestCase):
                 self.assertIn("whole_window_verdict_provenance_invalid", reasons)
 
     def test_whole_window_rederives_neg8_verdict_from_member_summaries(self) -> None:
-        with exemption_parity(self.id()):
+        with genuine_evidence_builders():
             with tempfile.TemporaryDirectory() as tmp:
                 root = Path(tmp)
                 install_synthetic_recovered_manifest(root, ["A", "B"])
@@ -1954,7 +1959,7 @@ class CpuAndWholeWindowClaimBarrierTests(unittest.TestCase):
                 self.assertEqual(problem, "provenance")
 
     def test_current_campaign_log_malformed_row_refuses_join(self) -> None:
-        with exemption_parity(self.id()):
+        with genuine_evidence_builders():
             # G3(d): corrupting one history line must conflict instead of cheaply
             # erasing it while a later well-formed verdict remains.
             for malformed in ("{not-json", "[]"):
@@ -2002,7 +2007,7 @@ class CpuAndWholeWindowClaimBarrierTests(unittest.TestCase):
         self.assertIn("whole_window_verdict_provenance_invalid", reasons)
 
     def test_frozen_replay_manifest_duplicate_retains_committed_semantics(self) -> None:
-        with exemption_parity(self.id()):
+        with genuine_evidence_builders():
             # The G7(a) occurrence gate is deliberately absent from frozen 0.5.1
             # replay; this pins the task's no-replay-drift constraint.
             with tempfile.TemporaryDirectory() as tmp:
@@ -5328,7 +5333,7 @@ class EvaluationBasisPlumbingTests(
     def test_explicit_basis_reaches_both_consumers_and_allowance_records(
         self,
     ) -> None:
-        with exemption_parity(self.id()):
+        with genuine_evidence_builders():
             from joulewise import whole_window as whole_module
 
             basis_sha256 = "e" * 64
@@ -5502,7 +5507,7 @@ class EvaluationBasisPlumbingTests(
 
 class ExtractionCliTests(_PermissiveStrictValidatorMixin, unittest.TestCase):
     def test_evaluation_basis_flag_reaches_extract_cells(self) -> None:
-        with exemption_parity(self.id()):
+        with genuine_evidence_builders():
             basis_sha256 = "e" * 64
             with tempfile.TemporaryDirectory() as tmp:
                 runs_root = Path(tmp) / "runs"
@@ -5567,7 +5572,7 @@ class ExtractionCliTests(_PermissiveStrictValidatorMixin, unittest.TestCase):
             )
 
     def test_cli_relocated_custody_does_not_suppress_floors(self):
-        with exemption_parity(self.id()):
+        with genuine_evidence_builders():
             from joulewise import calibration_ledger as ledger
             from tests.test_calibration_ledger_custody import planted_replacement, replacement_opens
 
@@ -5646,7 +5651,7 @@ class ExtractionCliTests(_PermissiveStrictValidatorMixin, unittest.TestCase):
         self.assertEqual(envelope["method"], ANCHOR_SHIFT_METHOD)
 
     def test_spec_extraction_report_and_exit_codes(self) -> None:
-        with exemption_parity(self.id()):
+        with genuine_evidence_builders():
             with tempfile.TemporaryDirectory() as tmp:
                 runs_root = Path(tmp) / "runs"
                 runs_root.mkdir()
@@ -5779,7 +5784,7 @@ class ExtractionCliTests(_PermissiveStrictValidatorMixin, unittest.TestCase):
             self.assertFalse((Path(tmp) / "report.json").exists())
 
     def test_spec_extraction_via_extract_cells_matches_direct_calls(self) -> None:
-        with exemption_parity(self.id()):
+        with genuine_evidence_builders():
             with tempfile.TemporaryDirectory() as tmp:
                 runs_root = Path(tmp)
                 bundle_ids = ["eq-r01", "eq-r02"]
@@ -5811,7 +5816,7 @@ class ExtractionCliTests(_PermissiveStrictValidatorMixin, unittest.TestCase):
                 self.assertEqual(report["cells"][0], direct.as_row())
 
     def test_zero_scatter_with_nonzero_admissible_width_is_labelled_extraction(self) -> None:
-        with exemption_parity(self.id()):
+        with genuine_evidence_builders():
             # Defect shape F2: identical point estimates cannot erase their
             # nonzero admissible energy-set width.
             with tempfile.TemporaryDirectory() as tmp:
@@ -5986,7 +5991,7 @@ class ExtractionCliTests(_PermissiveStrictValidatorMixin, unittest.TestCase):
         )
 
     def test_additional_refusal_is_not_rescued_by_attribution_label(self) -> None:
-        with exemption_parity(self.id()):
+        with genuine_evidence_builders():
             with tempfile.TemporaryDirectory() as tmp:
                 runs_root = Path(tmp)
                 bundle_ids = [f"label-plus-refusal-r{index}" for index in range(5)]
@@ -6307,7 +6312,7 @@ class SpecMembershipBindingTests(_PermissiveStrictValidatorMixin, unittest.TestC
     """A campaign member the spec omits refuses the whole extraction (Fix D)."""
 
     def test_omitting_a_campaign_member_refuses_the_extraction(self) -> None:
-        with exemption_parity(self.id()):
+        with genuine_evidence_builders():
             with tempfile.TemporaryDirectory() as tmp:
                 runs_root = Path(tmp)
                 all_ids = [f"plan-r{index:02d}" for index in range(1, 5)]
@@ -6343,7 +6348,7 @@ class SpecMembershipBindingTests(_PermissiveStrictValidatorMixin, unittest.TestC
             self.assertTrue(report["cells"][0]["extractable"])
 
     def test_sibling_campaign_under_runs_root_does_not_force_refusal(self) -> None:
-        with exemption_parity(self.id()):
+        with genuine_evidence_builders():
             # Fix round 2: a single runs_root holds SEVERAL calibration campaign
             # manifests (all analysis_manifest_id null) spanning different
             # metric/window families.  A per-cell spec that fully covers its OWN
@@ -6387,7 +6392,7 @@ class SpecMembershipBindingTests(_PermissiveStrictValidatorMixin, unittest.TestC
             self.assertTrue(report["cells"][0]["extractable"])
 
     def test_omission_within_addressed_campaign_still_refuses(self) -> None:
-        with exemption_parity(self.id()):
+        with genuine_evidence_builders():
             # The scoping must NOT weaken the audit guard: dropping one member of a
             # campaign the spec DOES address is still a no-outlier-deletion refusal,
             # and it names only the dropped member — never a sibling campaign's.
@@ -6427,7 +6432,7 @@ class SpecMembershipBindingTests(_PermissiveStrictValidatorMixin, unittest.TestC
             )
 
     def test_omitted_null_manifest_member_refuses_as_unattributable(self) -> None:
-        with exemption_parity(self.id()):
+        with genuine_evidence_builders():
             # Fix round 3 (defect-shaped): a bundle whose provenance is ambiguous
             # (claimed by TWO campaign manifests -> campaign_cooldown_evidence
             # collapses it to manifest=None) must NOT be able to slip out of the
@@ -6482,7 +6487,7 @@ class SpecMembershipBindingTests(_PermissiveStrictValidatorMixin, unittest.TestC
             self.assertTrue(report["cells"][0]["extractable"])
 
     def test_referenced_null_manifest_member_not_flagged_unattributable(self) -> None:
-        with exemption_parity(self.id()):
+        with genuine_evidence_builders():
             # Complement to the defect fix: a null-manifest member that the spec
             # DOES reference is not spuriously flagged as unattributable — it faces
             # its own member gate instead of the completeness refusal.
@@ -6522,7 +6527,7 @@ class SpecMembershipBindingTests(_PermissiveStrictValidatorMixin, unittest.TestC
             )
 
     def test_full_coverage_has_no_membership_refusal(self) -> None:
-        with exemption_parity(self.id()):
+        with genuine_evidence_builders():
             with tempfile.TemporaryDirectory() as tmp:
                 runs_root = Path(tmp)
                 all_ids = [f"plan-r{index:02d}" for index in range(1, 4)]

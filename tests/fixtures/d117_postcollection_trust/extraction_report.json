@@ -85,7 +85,7 @@
           "position": null,
           "reasons": [],
           "slot": "golden-r01",
-          "summary_sha256": "1b1da8c892cb34ef911e353cb83d444f9e0d14df20a6d5b3cab8c7844c6106be"
+          "summary_sha256": "3ea3648c920a75bc7ca86d989671bf2dee0963b6f0851ed58b456221415e6e9a"
         },
         {
           "anchor_shift_bound_j": 0.01,
@@ -111,7 +111,7 @@
           "position": null,
           "reasons": [],
           "slot": "golden-r02",
-          "summary_sha256": "d5ad79e134ab2c3991fc3ee0fcd69f722052a3eb104554217d5533a57bfdfd4c"
+          "summary_sha256": "ed0b92623aa6b1bba129960982b8e21c25e77e504389fb8a2ca2257ac5f78537"
         },
         {
           "anchor_shift_bound_j": 0.01,
@@ -137,7 +137,7 @@
           "position": null,
           "reasons": [],
           "slot": "golden-r03",
-          "summary_sha256": "7988dabcb8b22c0cd4fbfd4d97c373bb04198178c5c14904715d66ce145b2aa8"
+          "summary_sha256": "aee522907b3ef2ccafd4b632ff2209031d33265ad02e685767309958d1f9a5f3"
         },
         {
           "anchor_shift_bound_j": 0.01,
@@ -163,7 +163,7 @@
           "position": null,
           "reasons": [],
           "slot": "golden-r04",
-          "summary_sha256": "f3508dcc9903cfc6eb7962477161d913597e1895b99f7e1fa81fd22337749439"
+          "summary_sha256": "15507f2b60c5c5b3c4464832294643713c3a733475b0d59b13bab3288afb7cc3"
         },
         {
           "anchor_shift_bound_j": 0.01,
@@ -189,7 +189,7 @@
           "position": null,
           "reasons": [],
           "slot": "golden-r05",
-          "summary_sha256": "b846719ddeb32d47e25eec2ef8500cc0f5665a451b813a906b9b870faf9b5a7f"
+          "summary_sha256": "3b670a221dea407490208044fd8241e3be4ffcbedbbff1754829379c287c53d2"
         }
       ],
       "metric": "gross_energy_j",

@@ -40,11 +40,6 @@ PARITY_SECOND_FORM_SWITCHED_OFF = (
 
 # The lead grants IDs from the triage record; this seat never adds one.
 PARITY_TEST_IDS: frozenset[str] = frozenset({
-    "tests.test_analysis_integration.AnalysisIntegrationTests.test_attribution_limited_floor_is_claim_bearing_in_final_artifact",
-    "tests.test_analysis_integration.AnalysisIntegrationTests.test_b4_salvage_floor_binder_refuses_without_explicit_dispatch_pair",
-    "tests.test_analysis_integration.AnalysisIntegrationTests.test_b4_salvage_floor_binder_rejects_mismatched_dispatch_pair",
-    "tests.test_analysis_integration.AnalysisIntegrationTests.test_claim_output_separation_preserves_declared_root_and_ignores_surplus_symlink",
-    "tests.test_analysis_integration.AnalysisIntegrationTests.test_cli_output_separation_preserves_exact_and_absent_mapping_and_ignores_surplus_containment",
     "tests.test_analysis_integration.AnalysisIntegrationTests.test_complete_strict_current_bundle_set_derives_deterministic_fail_closed_artifact_with_production_telemetry_identity",
     "tests.test_analysis_integration.AnalysisIntegrationTests.test_incomplete_pair_is_listed_and_never_converted_to_unpaired_samples_with_production_telemetry_identity",
     "tests.test_analysis_integration.AnalysisIntegrationTests.test_named_strata_manifest_preserves_terminal_mock_refusal_with_production_telemetry_identity",
@@ -53,31 +48,12 @@ PARITY_TEST_IDS: frozenset[str] = frozenset({
     "tests.test_analysis_integration.AnalysisIntegrationTests.test_real_controller_unpinned_model_is_included_by_loader",
     "tests.test_analysis_integration.AnalysisIntegrationTests.test_unregistered_matching_topup_demotes_but_preserves_fixed_n_analysis_with_production_telemetry_identity",
     "tests.test_analysis_integration.AnalysisIntegrationTests.test_valid_replacement_fills_original_slot_without_sixth_block_with_production_telemetry_identity",
-    "tests.test_floor_extraction.CpuAndWholeWindowClaimBarrierTests.test_current_campaign_log_malformed_row_refuses_join",
     "tests.test_floor_extraction.CpuAndWholeWindowClaimBarrierTests.test_failed_adapter_continuity_refuses_but_clean_core_passes",
-    "tests.test_floor_extraction.CpuAndWholeWindowClaimBarrierTests.test_floor_requires_campaign_bound_whole_window_and_adapter_evidence",
-    "tests.test_floor_extraction.CpuAndWholeWindowClaimBarrierTests.test_frozen_replay_manifest_duplicate_retains_committed_semantics",
     "tests.test_floor_extraction.CpuAndWholeWindowClaimBarrierTests.test_later_passed_row_cannot_supersede_failed_whole_window_row",
-    "tests.test_floor_extraction.CpuAndWholeWindowClaimBarrierTests.test_whole_window_core_rejects_duplicate_member_occurrences",
-    "tests.test_floor_extraction.CpuAndWholeWindowClaimBarrierTests.test_whole_window_rederives_neg8_verdict_from_member_summaries",
-    "tests.test_floor_extraction.D117MintConsumptionProfileTests.test_production_extractor_path_matches_checked_in_golden",
-    "tests.test_floor_extraction.EvaluationBasisPlumbingTests.test_explicit_basis_reaches_both_consumers_and_allowance_records",
-    "tests.test_floor_extraction.ExtractionCliTests.test_additional_refusal_is_not_rescued_by_attribution_label",
-    "tests.test_floor_extraction.ExtractionCliTests.test_cli_relocated_custody_does_not_suppress_floors",
-    "tests.test_floor_extraction.ExtractionCliTests.test_evaluation_basis_flag_reaches_extract_cells",
-    "tests.test_floor_extraction.ExtractionCliTests.test_spec_extraction_report_and_exit_codes",
-    "tests.test_floor_extraction.ExtractionCliTests.test_spec_extraction_via_extract_cells_matches_direct_calls",
-    "tests.test_floor_extraction.ExtractionCliTests.test_zero_scatter_with_nonzero_admissible_width_is_labelled_extraction",
-    "tests.test_floor_extraction.SpecMembershipBindingTests.test_full_coverage_has_no_membership_refusal",
-    "tests.test_floor_extraction.SpecMembershipBindingTests.test_omission_within_addressed_campaign_still_refuses",
-    "tests.test_floor_extraction.SpecMembershipBindingTests.test_omitted_null_manifest_member_refuses_as_unattributable",
-    "tests.test_floor_extraction.SpecMembershipBindingTests.test_omitting_a_campaign_member_refuses_the_extraction",
-    "tests.test_floor_extraction.SpecMembershipBindingTests.test_referenced_null_manifest_member_not_flagged_unattributable",
-    "tests.test_floor_extraction.SpecMembershipBindingTests.test_sibling_campaign_under_runs_root_does_not_force_refusal",
 })
-# A2 condition 9 closes this list by name: seven T5a IDs, one used F ID,
-# and the three ruled floor IDs. The other three F slots are retired;
-# any different ID needs a cold ruling even if the count stays below 11.
+# The A2 condition 9 list is pruned to the unresolved ruled IDs.
+# The other three F slots remain retired; any different ID needs a cold
+# ruling. Evidence conversions remove grants and never add new ones.
 PARITY_SECOND_FORM_TEST_IDS: frozenset[str] = frozenset({
     "tests.test_analysis_integration.AnalysisIntegrationTests.test_complete_strict_current_bundle_set_derives_deterministic_fail_closed_artifact_with_production_telemetry_identity",
     "tests.test_analysis_integration.AnalysisIntegrationTests.test_incomplete_pair_is_listed_and_never_converted_to_unpaired_samples_with_production_telemetry_identity",
@@ -89,7 +65,6 @@ PARITY_SECOND_FORM_TEST_IDS: frozenset[str] = frozenset({
     "tests.test_analysis_integration.AnalysisIntegrationTests.test_valid_replacement_fills_original_slot_without_sixth_block_with_production_telemetry_identity",
     "tests.test_floor_extraction.CpuAndWholeWindowClaimBarrierTests.test_failed_adapter_continuity_refuses_but_clean_core_passes",
     "tests.test_floor_extraction.CpuAndWholeWindowClaimBarrierTests.test_later_passed_row_cannot_supersede_failed_whole_window_row",
-    "tests.test_floor_extraction.CpuAndWholeWindowClaimBarrierTests.test_whole_window_rederives_neg8_verdict_from_member_summaries",
 })
 
 

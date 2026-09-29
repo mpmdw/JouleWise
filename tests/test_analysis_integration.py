@@ -118,6 +118,7 @@ from tests.test_run_campaign import (
     run_campaign_module,
 )
 from tests.test_analysis_finalizer import install_synthetic_finalization_fixture
+from tests.genuine_evidence import genuine_evidence_builders, genuine_evidence_test
 from tests.bfgs_fixtures import (
     exemption_parity,
     produce_strict_bundle,
@@ -1270,6 +1271,7 @@ class AnalysisIntegrationTests(unittest.TestCase):
                     self.assertIn(exception_type.__name__, str(raised.exception))
                     self.assertIs(raised.exception.__cause__, injected)
 
+    @genuine_evidence_test
     def test_authenticated_nested_bundle_conflicts_with_run_id_rejoin(self):
         with tempfile.TemporaryDirectory() as tmp:
             fixture = install_synthetic_finalization_fixture(Path(tmp))
@@ -1517,7 +1519,7 @@ class AnalysisIntegrationTests(unittest.TestCase):
         return artifact, roots
 
     def test_b4_salvage_floor_binder_refuses_without_explicit_dispatch_pair(self):
-        with exemption_parity(self.id()), tempfile.TemporaryDirectory() as tmp:
+        with genuine_evidence_builders(), tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             artifact, roots = self._salvage_floor_dispatch_fixture(root)
             # The floor members get bundle form under each root: the class
@@ -1535,7 +1537,7 @@ class AnalysisIntegrationTests(unittest.TestCase):
         self.assertFalse(binding.bound_cell_ids)
 
     def test_b4_salvage_floor_binder_rejects_mismatched_dispatch_pair(self):
-        with exemption_parity(self.id()), tempfile.TemporaryDirectory() as tmp:
+        with genuine_evidence_builders(), tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             artifact, roots = self._salvage_floor_dispatch_fixture(root)
             # The floor members get bundle form under each root: the class
@@ -1556,6 +1558,7 @@ class AnalysisIntegrationTests(unittest.TestCase):
         self.assertIn("salvage_floor_dispatch_mismatch", binding.global_problems)
         self.assertFalse(binding.bound_cell_ids)
 
+    @genuine_evidence_test
     def test_b4_salvage_floor_binder_accepts_correct_pair_after_real_row_validation(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -1569,6 +1572,9 @@ class AnalysisIntegrationTests(unittest.TestCase):
             )
             roots = {"a10": root / "a10", "window_c": root / "window-c"}
             roots["window_c"].mkdir()
+            # Materialize the comparative members before battery authentication.
+            for member in sorted(self.runs_root.glob("cell-1-*")):
+                shutil.copytree(member, roots["window_c"] / member.name, symlinks=True)
             args, _failed, _bundle_ids = install_real_salvage_window(
                 roots["a10"], ordinary_bundle_ids=ordinary_ids
             )
@@ -1962,69 +1968,72 @@ class AnalysisIntegrationTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls._temporary = tempfile.TemporaryDirectory()
-        cls.root = Path(cls._temporary.name)
-        cls.config_dir = cls.root / "configs"
-        cls.runs_root = cls.root / "runs"
-        cls.floor_path = cls.root / "floor.json"
-        base = json.loads(BASE_CONFIG.read_text(encoding="utf-8"))
-        base["hardware_target"]["telemetry_backend"] = "powermetrics"
-        base_path = cls.root / "strict-base.json"
-        base_path.write_text(json.dumps(base, indent=2, sort_keys=True) + "\n")
-        with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-            code = generate_matrix(
-                [
-                    "--base",
-                    str(base_path),
-                    "--model-tag",
-                    "mock-model",
-                    "--out-dir",
-                    str(cls.config_dir),
-                ]
-            )
-        if code != 0:
-            raise AssertionError(f"matrix generation failed: {code}")
-        for config in sorted(cls.config_dir.glob("*.json")):
-            if config.name in SIDECARS:
-                continue
-            generated = json.loads(config.read_text(encoding="utf-8"))
-            with mock.patch(
-                "joulewise.bundle._capture_source_state",
-                return_value=dict(CLEAN_SOURCE_STATE),
-            ), redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-                produce_strict_bundle(
-                    cls.runs_root, generated["run_id"],
-                    mutate_config=lambda payload, source=generated: payload.update(copy.deepcopy(source)),
+        # Preserve the shared legacy ledger used by the remaining switched
+        # companions; no-switch trial contexts install the extended core.
+        with genuine_evidence_builders(extend_whole_window=False):
+            cls._temporary = tempfile.TemporaryDirectory()
+            cls.root = Path(cls._temporary.name)
+            cls.config_dir = cls.root / "configs"
+            cls.runs_root = cls.root / "runs"
+            cls.floor_path = cls.root / "floor.json"
+            base = json.loads(BASE_CONFIG.read_text(encoding="utf-8"))
+            base["hardware_target"]["telemetry_backend"] = "powermetrics"
+            base_path = cls.root / "strict-base.json"
+            base_path.write_text(json.dumps(base, indent=2, sort_keys=True) + "\n")
+            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                code = generate_matrix(
+                    [
+                        "--base",
+                        str(base_path),
+                        "--model-tag",
+                        "mock-model",
+                        "--out-dir",
+                        str(cls.config_dir),
+                    ]
                 )
-        floor_artifact = make_artifact()
-        floor_members = {
-            observation["bundle_id"]
-            for cell in floor_artifact["cells"]
-            for observation in cell["absolute"]["bundle_observations"]
-        }
-        floor_members.update(
-            member["bundle_id"]
-            for cell in floor_artifact["cells"]
-            for block in cell["comparative"]["blocks"]
-            for member in block["members"]
-        )
-        for run_id in sorted(floor_members):
-            with mock.patch(
-                "joulewise.bundle._capture_source_state",
-                return_value=dict(CLEAN_SOURCE_STATE),
-            ), redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-                produce_strict_bundle(cls.runs_root, run_id)
-        cls.floor_path.write_text(
-            json.dumps(floor_artifact, indent=2) + "\n", encoding="utf-8"
-        )
-        cls.manifest_path = cls.config_dir / "analysis_manifest.json"
-        manifest = json.loads(cls.manifest_path.read_text())
-        bundle_ids = sorted(entry["run_id"] for entry in manifest["entries"])
-        install_passing_analysis_whole_window(
-            cls.runs_root,
-            bundle_ids,
-            source_name="analysis-whole-window-source",
-        )
+            if code != 0:
+                raise AssertionError(f"matrix generation failed: {code}")
+            for config in sorted(cls.config_dir.glob("*.json")):
+                if config.name in SIDECARS:
+                    continue
+                generated = json.loads(config.read_text(encoding="utf-8"))
+                with mock.patch(
+                    "joulewise.bundle._capture_source_state",
+                    return_value=dict(CLEAN_SOURCE_STATE),
+                ), redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                    produce_strict_bundle(
+                        cls.runs_root, generated["run_id"],
+                        mutate_config=lambda payload, source=generated: payload.update(copy.deepcopy(source)),
+                    )
+            floor_artifact = make_artifact()
+            floor_members = {
+                observation["bundle_id"]
+                for cell in floor_artifact["cells"]
+                for observation in cell["absolute"]["bundle_observations"]
+            }
+            floor_members.update(
+                member["bundle_id"]
+                for cell in floor_artifact["cells"]
+                for block in cell["comparative"]["blocks"]
+                for member in block["members"]
+            )
+            for run_id in sorted(floor_members):
+                with mock.patch(
+                    "joulewise.bundle._capture_source_state",
+                    return_value=dict(CLEAN_SOURCE_STATE),
+                ), redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                    produce_strict_bundle(cls.runs_root, run_id)
+            cls.floor_path.write_text(
+                json.dumps(floor_artifact, indent=2) + "\n", encoding="utf-8"
+            )
+            cls.manifest_path = cls.config_dir / "analysis_manifest.json"
+            manifest = json.loads(cls.manifest_path.read_text())
+            bundle_ids = sorted(entry["run_id"] for entry in manifest["entries"])
+            install_passing_analysis_whole_window(
+                cls.runs_root,
+                bundle_ids,
+                source_name="analysis-whole-window-source",
+            )
 
     @classmethod
     def tearDownClass(cls):
@@ -2477,6 +2486,7 @@ class AnalysisIntegrationTests(unittest.TestCase):
         )
         self.assertTrue(validate_claim_verdicts(omitted_loo))
 
+    @genuine_evidence_test
     def test_attribution_limited_floor_is_claim_bearing_in_final_artifact(self):
         manifest = json.loads(self.manifest_path.read_text(encoding="utf-8"))
         target = manifest["contrasts"][0]
@@ -2587,7 +2597,7 @@ class AnalysisIntegrationTests(unittest.TestCase):
             ), redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
                 produce_strict_bundle(attribution_runs, member_id)
 
-        with exemption_parity(self.id()), tempfile.TemporaryDirectory() as tmp:
+        with genuine_evidence_builders(), tempfile.TemporaryDirectory() as tmp:
             floor_path = Path(tmp) / "attribution-floor.json"
             floor_path.write_text(
                 json.dumps(floor_artifact, indent=2) + "\n",
@@ -4453,7 +4463,7 @@ class AnalysisIntegrationTests(unittest.TestCase):
     def test_claim_output_separation_preserves_declared_root_and_ignores_surplus_symlink(
         self,
     ):
-        with exemption_parity(self.id()), tempfile.TemporaryDirectory() as tmp:
+        with genuine_evidence_builders(), tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             declared_roots = {
                 "a10": root / "a10",
@@ -4519,7 +4529,7 @@ class AnalysisIntegrationTests(unittest.TestCase):
     def test_cli_output_separation_preserves_exact_and_absent_mapping_and_ignores_surplus_containment(
         self,
     ):
-        with exemption_parity(self.id()), tempfile.TemporaryDirectory() as tmp:
+        with genuine_evidence_builders(), tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             declared_roots = {
                 "a10": root / "a10",
