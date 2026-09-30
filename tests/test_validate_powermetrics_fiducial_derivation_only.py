@@ -136,6 +136,7 @@ class DerivationOnlyPreflightRefusalTests(unittest.TestCase):
             str(self.root / "matching" / "instrument_validation"),
             "--identity-epoch-json-for-test",
             str(self._identity("matching")),
+            "--sampler-direct-for-test",
         )
         payload = self._refusal(completed)
         self.assertEqual(
@@ -171,6 +172,7 @@ class DerivationOnlyPreflightRefusalTests(unittest.TestCase):
             str(self.root / "standalone" / "instrument_validation"),
             "--identity-epoch-json-for-test",
             str(self._identity("standalone", os_build="25G83")),
+            "--sampler-direct-for-test",
         )
         payload = self._refusal(completed)
         self.assertEqual(
@@ -196,6 +198,7 @@ class DerivationOnlyPreflightRefusalTests(unittest.TestCase):
             str(self.root / "unauthorized" / "instrument_validation"),
             "--identity-epoch-json-for-test",
             str(self._identity("unauthorized", os_build="25G83")),
+            "--sampler-direct-for-test",
         )
         payload = self._refusal(completed)
         self.assertEqual(

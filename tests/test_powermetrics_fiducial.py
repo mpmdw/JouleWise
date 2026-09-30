@@ -1700,6 +1700,7 @@ class FrozenProtocolTests(unittest.TestCase):
                                 "ac_high_power",
                                 "--identity-epoch-json-for-test",
                                 str(identity_path),
+                                "--sampler-direct-for-test",
                                 "--output-root",
                                 str(output_root),
                             ]
@@ -1745,6 +1746,7 @@ class FrozenProtocolTests(unittest.TestCase):
                         "ac_high_power",
                         "--identity-epoch-json-for-test",
                         str(identity_path),
+                        "--sampler-direct-for-test",
                         "--output-root",
                         str(output_root),
                     ]

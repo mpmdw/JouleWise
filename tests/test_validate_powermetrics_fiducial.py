@@ -41,6 +41,28 @@ class ContinuedEpochPreflightTests(unittest.TestCase):
         self.root = Path(self.tmp.name)
         self.artifact = bracket.load_calibration_acceptance_bound()
 
+    def test_identity_fixture_refuses_real_sampler_before_reading_fixture_or_capturing(self):
+        for extra_args in ([], ["--derivation-only"], ["--rederive-from", str(self.root)]):
+            with (
+                self.subTest(extra_args=extra_args),
+                patch.object(writer, "_sysctl_identity") as identity,
+                patch.object(writer, "_sampler_lifetime") as sampler,
+                redirect_stderr(io.StringIO()) as error,
+                self.assertRaises(SystemExit) as raised,
+            ):
+                writer.main([
+                    "--allow-live", "--power-policy", "ac_high_power",
+                    "--sampler-binary", "/usr/bin/powermetrics",
+                    "--identity-epoch-json-for-test", str(self.root / "absent.json"),
+                    "--output-root", str(self.root / "captures"),
+                    *extra_args,
+                ])
+            self.assertEqual(raised.exception.code, 2)
+            self.assertIn("identity epoch fixture requires --sampler-direct-for-test", error.getvalue())
+            identity.assert_not_called()
+            sampler.assert_not_called()
+            self.assertFalse((self.root / "captures").exists())
+
     def _continuation_snapshot(self):
         root = self.root / "night"
         snapshot = load_calibration_ledger_snapshot(
@@ -178,6 +200,7 @@ class ContinuedEpochPreflightTests(unittest.TestCase):
                 rc = writer.main([
                     "--allow-live", "--derivation-only", "--power-policy", CONTINUED_EPOCH["power_policy"],
                     "--identity-epoch-json-for-test", str(identity),
+                    "--sampler-direct-for-test",
                     "--output-root", str(self.root / "captures"),
                 ])
         self.assertEqual(rc, 2, error.getvalue())
@@ -194,6 +217,7 @@ class ContinuedEpochPreflightTests(unittest.TestCase):
                 rc = writer.main([
                     "--allow-live", "--derivation-only", "--power-policy", CONTINUED_EPOCH["power_policy"],
                     "--identity-epoch-json-for-test", str(identity),
+                    "--sampler-direct-for-test",
                     "--output-root", str(self.root / "captures"),
                 ])
         self.assertEqual(rc, 2, error.getvalue())
