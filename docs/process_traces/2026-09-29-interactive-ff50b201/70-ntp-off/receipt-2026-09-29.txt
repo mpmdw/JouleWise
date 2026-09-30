@@ -1,0 +1,8 @@
+argv: /usr/bin/sudo -n /usr/sbin/systemsetup -setusingnetworktime off
+wall_before: 2026-09-29T20:34:38.234081000Z
+monotonic_before: 935639.8535005
+exit: 0
+output: 2026-09-29 13:34:38.280 systemsetup[25324:180752597] ### Error:-99 File:/AppleInternal/Library/BuildRoots/4~CVSrugDU1y1BQluOAwbcrw5V7M6lsMeD-KfSuUA/Library/Caches/com.apple.xbs/TemporaryDirectory.4VW9ci/Sources/Admin/InternetServices.m Line:395
+setUsingNetworkTime: Off
+wall_after: Tue Sep 29 20:34:38 UTC 2026
+monotonic_after: 935639.902607083

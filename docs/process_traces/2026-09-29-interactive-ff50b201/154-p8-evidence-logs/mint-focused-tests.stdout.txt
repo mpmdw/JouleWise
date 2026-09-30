@@ -1,0 +1,24 @@
+.E.
+======================================================================
+ERROR: test_v2_assurance_and_git_containment_are_required_provenance (tests.test_mint_floor_artifact_generalized.V2PinsetAndMintTests.test_v2_assurance_and_git_containment_are_required_provenance)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/edr/code/JouleWise-wt-cap-ff50b201/tests/test_mint_floor_artifact_generalized.py", line 8206, in test_v2_assurance_and_git_containment_are_required_provenance
+    artifact = generalized.mint_multi_cell_authenticated_artifact(
+        pinset_path=path,
+    ...<4 lines>...
+        project_tree_state="clean",
+    )
+  File "/Users/edr/code/JouleWise-wt-cap-ff50b201/scripts/mint_floor_artifact_generalized.py", line 3361, in mint_multi_cell_authenticated_artifact
+    _validate_v2_pin_hashes(loaded)
+    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^
+  File "/Users/edr/code/JouleWise-wt-cap-ff50b201/scripts/mint_floor_artifact_generalized.py", line 1913, in _validate_v2_pin_hashes
+    raise MintError(
+    ...<2 lines>...
+    )
+scripts.mint_floor_artifact_generalized.MintError: aggregate/component hash mismatch: producer pin 0 expected 0873dfbaba8562065ca2156418167b9e3fac8dd93086cb1398e907326686cbc4, observed c071518f6b01d47c3bee886dbe9455789b22e140a2a8f1a926291d37372290ef
+
+----------------------------------------------------------------------
+Ran 3 tests in 0.999s
+
+FAILED (errors=1)

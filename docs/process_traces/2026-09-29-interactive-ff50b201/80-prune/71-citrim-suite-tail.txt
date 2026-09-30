@@ -1,0 +1,3 @@
+SHARD SUMMARY index=6/6 modules=53 tests=1513 failures=0 errors=0 skipped=6 result=PASS
+WORKERS SUMMARY shards=6 modules=265 tests=7275 failures=0 errors=0 skipped=49 failed_shards=none result=PASS
+rc=0

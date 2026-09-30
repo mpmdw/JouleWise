@@ -1,0 +1,24 @@
+The ruling is issued and on disk. Path and digest:
+
+```
+docs/process_traces/2026-09-29-interactive-ff50b201/40-cap-a2/21-coldgate-fable-ruling.md
+sha256 prefix ccef94f0546cde88, 212 lines, first line "ADDENDUM: CAP-COUNCIL-25G83-01-A2 ISSUED"
+```
+
+The judge worktree is clean. I wrote no other repository file. The session ran from about 12:30 to 12:40 PDT, inside the budget.
+
+**Contamination disclosed.** The harness injected the global and project instruction files, the memory index, and five commit subjects before I could act. I opened no memory, skill, state, or queue file. I am the same model family as every judge whose ruling I amend and sat on none of them.
+
+**What the ruling decides, in brief:**
+
+- **Default during the cap windows is R8.** A re-issue of R7 at build 25F84 changing only its pins, identity and notes, keeping all 17 members. The charge's "same 12" was wrong; all three seats caught it. Six admissibility conditions are set, including replay of every member from raw bytes, because the re-issue tool copies stored values and does not recompute them.
+- **R7's cap statements must not be copied as current fact.** The Opus point is adopted as verity-germane. R8 carries a `cap_change` note marking the 165,000 budget and the probe status as history.
+- **The interim 25G83 re-issue is dropped.** r1 stays an unregistered record file. Its identifier is retired because the issuer's default name for a 12-member 25G83 successor would collide with it.
+- **H1 is enforced by absence plus a recorded prohibition.** No 25G83 file is registered on main until one fast-forward closing merge registers the audited successor. The test option that can record a false build must close before the successor registration is sealed.
+- **Tools.** The existing re-issue tool prepares R8 inside the cap transaction. A generalised promotion tool with a committed manifest issues the successor in its own lane.
+- **Seat disagreements resolved.** Successor row wording, the third-window trigger mismatch between A1 and the issuer, the audit checkout boundary, the C6 reading for docs-only differences, and the 300 s versus 180 s clock rule.
+
+**Next three actions,** as the ruling orders them: merge the option (a) re-scope, land the network-time and identity-seam lanes, then open the cap transaction. Only the third needs Ed, to approve the R8 name and the successor's name in one ask.
+
+**Not executed:** any replay, test, or tool run. Every code claim rests on reading the cited lines at main `9eab16f8`.
+rc=0

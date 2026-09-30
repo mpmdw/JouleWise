@@ -1,0 +1,240 @@
+..........................................s...........custody_locator_unreachable reason=timeout locator=/private/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmp1gmlionq budget_s=0.05
+custody_locator_unreachable reason=timeout locator=/private/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmp1gmlionq budget_s=0.05
+..............................................................................................................F...........................................................................................................................................{"arm_blocked": true, "code": "calibration_frozen_protocol_invalid", "exit_id": "correct-preflight", "next_command": "recover_calibration_ledger.py readiness --phase pre-reserve --session-id SESSION --plan PLAN", "status": "refused"}
+..................{"event": "calibration_custody_complete", "elapsed_s": 0.0744139589369297, "observations": 0}
+{"event": "calibration_custody_complete", "elapsed_s": 0.07450758398044854, "observations": 0}
+{"event": "calibration_custody_complete", "elapsed_s": 0.15076412493363023, "observations": 0}
+{"event": "calibration_custody_progress", "artifact": null, "elapsed_s": 0.2318774169543758, "locator": "/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmpt2yl5krs/instrument_validation/session-writer-pre", "observation_id": null, "pid": 71048, "stage": "metadata_probe"}
+{"event": "calibration_custody_complete", "elapsed_s": 0.23728374997153878, "observations": 1}
+{"attempt_id": "session-writer-pre", "event": "calibration_writer_arm_authorized", "session_id": "session-writer", "slot": "pre"}
+.{"arm_blocked": true, "code": "calibration_ledger_malformed", "context": {"detail": "stop after custody-path regression observation"}, "exit_id": "hard-stop-preserved", "next_command": "recover_calibration_ledger.py explain calibration_ledger_malformed", "status": "refused", "terminal_result": "night_stopped_preserved"}
+.{"event": "calibration_custody_complete", "elapsed_s": 0.06918895803391933, "observations": 0}
+{"event": "calibration_custody_complete", "elapsed_s": 0.14455854101106524, "observations": 0}
+{"event": "calibration_custody_progress", "artifact": null, "elapsed_s": 0.22184712497983128, "locator": "/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmpvtl5mnz5/instrument_validation/session-writer-pre", "observation_id": null, "pid": 71075, "stage": "metadata_probe"}
+{"event": "calibration_custody_complete", "elapsed_s": 0.22685258300043643, "observations": 1}
+{"attempt_id": "session-writer-pre", "event": "calibration_writer_arm_authorized", "session_id": "session-writer", "slot": "pre"}
+{"event": "calibration_custody_complete", "elapsed_s": 0.06758583395276219, "observations": 0}
+.{"event": "calibration_custody_complete", "elapsed_s": 0.06838129204697907, "observations": 0}
+{"event": "calibration_custody_complete", "elapsed_s": 0.14045383303891867, "observations": 0}
+{"event": "calibration_custody_progress", "artifact": null, "elapsed_s": 0.21904320805333555, "locator": "/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmpqjs_kaj5/instrument_validation/session-writer-pre", "observation_id": null, "pid": 71098, "stage": "metadata_probe"}
+{"event": "calibration_custody_complete", "elapsed_s": 0.2242807080037892, "observations": 1}
+{"attempt_id": "session-writer-pre", "event": "calibration_writer_arm_authorized", "session_id": "session-writer", "slot": "pre"}
+{"event": "calibration_custody_progress", "artifact": null, "elapsed_s": 0.06442737497854978, "locator": "/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmpqjs_kaj5/instrument_validation/session-writer-pre", "observation_id": null, "pid": 71105, "stage": "metadata_probe"}
+{"event": "calibration_custody_progress", "artifact": "raw/powermetrics.plist", "elapsed_s": 0.06448800000362098, "locator": "/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmpqjs_kaj5/instrument_validation/session-writer-pre", "observation_id": null, "pid": 71105, "stage": "artifact_read"}
+{"event": "calibration_custody_progress", "artifact": "events.jsonl", "elapsed_s": 0.06451583304442465, "locator": "/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmpqjs_kaj5/instrument_validation/session-writer-pre", "observation_id": null, "pid": 71105, "stage": "artifact_read"}
+{"event": "calibration_custody_progress", "artifact": "power_trace.csv", "elapsed_s": 0.06453937501646578, "locator": "/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmpqjs_kaj5/instrument_validation/session-writer-pre", "observation_id": null, "pid": 71105, "stage": "artifact_read"}
+{"event": "calibration_custody_progress", "artifact": "instrument_evidence.json", "elapsed_s": 0.06455591705162078, "locator": "/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmpqjs_kaj5/instrument_validation/session-writer-pre", "observation_id": null, "pid": 71105, "stage": "artifact_read"}
+{"event": "calibration_custody_progress", "artifact": "manifest.json", "elapsed_s": 0.06457945797592402, "locator": "/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmpqjs_kaj5/instrument_validation/session-writer-pre", "observation_id": null, "pid": 71105, "stage": "artifact_read"}
+{"event": "calibration_custody_complete", "elapsed_s": 0.06986720801796764, "observations": 1}
+{"event": "calibration_custody_progress", "artifact": null, "elapsed_s": 0.04911424999590963, "locator": "/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmpqjs_kaj5/instrument_validation/session-writer-pre", "observation_id": "session-writer-pre", "pid": 71119, "stage": "metadata_probe"}
+{"event": "calibration_custody_progress", "artifact": "events.jsonl", "elapsed_s": 0.049177040928043425, "locator": "/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmpqjs_kaj5/instrument_validation/session-writer-pre", "observation_id": "session-writer-pre", "pid": 71119, "stage": "artifact_read"}
+{"event": "calibration_custody_progress", "artifact": "instrument_evidence.json", "elapsed_s": 0.04919508297462016, "locator": "/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmpqjs_kaj5/instrument_validation/session-writer-pre", "observation_id": "session-writer-pre", "pid": 71119, "stage": "artifact_read"}
+{"event": "calibration_custody_progress", "artifact": "manifest.json", "elapsed_s": 0.04920691601000726, "locator": "/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmpqjs_kaj5/instrument_validation/session-writer-pre", "observation_id": "session-writer-pre", "pid": 71119, "stage": "artifact_read"}
+{"event": "calibration_custody_progress", "artifact": "power_trace.csv", "elapsed_s": 0.04922108293976635, "locator": "/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmpqjs_kaj5/instrument_validation/session-writer-pre", "observation_id": "session-writer-pre", "pid": 71119, "stage": "artifact_read"}
+{"event": "calibration_custody_progress", "artifact": "raw/powermetrics.plist", "elapsed_s": 0.04923320794478059, "locator": "/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmpqjs_kaj5/instrument_validation/session-writer-pre", "observation_id": "session-writer-pre", "pid": 71119, "stage": "artifact_read"}
+{"event": "calibration_custody_complete", "elapsed_s": 0.05424879095517099, "observations": 1}
+{"event": "calibration_custody_progress", "artifact": null, "elapsed_s": 0.1078434579540044, "locator": "/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmpqjs_kaj5/instrument_validation/session-writer-pre", "observation_id": "session-writer-pre", "pid": 71121, "stage": "metadata_probe"}
+{"event": "calibration_custody_progress", "artifact": "events.jsonl", "elapsed_s": 0.10790687496773899, "locator": "/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmpqjs_kaj5/instrument_validation/session-writer-pre", "observation_id": "session-writer-pre", "pid": 71121, "stage": "artifact_read"}
+{"event": "calibration_custody_progress", "artifact": "instrument_evidence.json", "elapsed_s": 0.10792220791336149, "locator": "/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmpqjs_kaj5/instrument_validation/session-writer-pre", "observation_id": "session-writer-pre", "pid": 71121, "stage": "artifact_read"}
+{"event": "calibration_custody_progress", "artifact": "manifest.json", "elapsed_s": 0.1079369579674676, "locator": "/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmpqjs_kaj5/instrument_validation/session-writer-pre", "observation_id": "session-writer-pre", "pid": 71121, "stage": "artifact_read"}
+{"event": "calibration_custody_progress", "artifact": "power_trace.csv", "elapsed_s": 0.10795849992427975, "locator": "/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmpqjs_kaj5/instrument_validation/session-writer-pre", "observation_id": "session-writer-pre", "pid": 71121, "stage": "artifact_read"}
+{"event": "calibration_custody_progress", "artifact": "raw/powermetrics.plist", "elapsed_s": 0.10799745796248317, "locator": "/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmpqjs_kaj5/instrument_validation/session-writer-pre", "observation_id": "session-writer-pre", "pid": 71121, "stage": "artifact_read"}
+{"event": "calibration_custody_complete", "elapsed_s": 0.11317066592164338, "observations": 1}
+{"event": "calibration_custody_progress", "artifact": null, "elapsed_s": 0.17541541601531208, "locator": "/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmpqjs_kaj5/instrument_validation/session-writer-post", "observation_id": null, "pid": 71126, "stage": "metadata_probe"}
+{"event": "calibration_custody_complete", "elapsed_s": 0.18053791602142155, "observations": 1}
+{"attempt_id": "session-writer-post", "event": "calibration_writer_arm_authorized", "session_id": "session-writer", "slot": "post"}
+.{"event": "calibration_custody_complete", "elapsed_s": 0.05154841695912182, "observations": 0}
+{"event": "calibration_custody_complete", "elapsed_s": 0.10845858394168317, "observations": 0}
+{"event": "calibration_custody_progress", "artifact": null, "elapsed_s": 0.1703360000392422, "locator": "/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmpvjbp2f1k/instrument_validation/session-writer-pre", "observation_id": null, "pid": 71148, "stage": "metadata_probe"}
+{"event": "calibration_custody_complete", "elapsed_s": 0.17526166699826717, "observations": 1}
+{"attempt_id": "session-writer-pre", "event": "calibration_writer_arm_authorized", "session_id": "session-writer", "slot": "pre"}
+..............F..FFF....FFEF.....................{"event": "calibration_custody_complete", "elapsed_s": 0.05556512507610023, "observations": 0}
+{"event": "calibration_custody_progress", "artifact": null, "elapsed_s": 0.044246750068850815, "locator": "/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmpaybj5ksm/another-root/instrument_validation/ordinary-abandon", "observation_id": null, "pid": 74693, "stage": "metadata_probe"}
+{"event": "calibration_custody_progress", "artifact": "raw/powermetrics.plist", "elapsed_s": 0.044311834033578634, "locator": "/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmpaybj5ksm/another-root/instrument_validation/ordinary-abandon", "observation_id": null, "pid": 74693, "stage": "artifact_read"}
+{"event": "calibration_custody_progress", "artifact": "events.jsonl", "elapsed_s": 0.04433837498072535, "locator": "/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmpaybj5ksm/another-root/instrument_validation/ordinary-abandon", "observation_id": null, "pid": 74693, "stage": "artifact_read"}
+{"event": "calibration_custody_progress", "artifact": "power_trace.csv", "elapsed_s": 0.04435387498233467, "locator": "/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmpaybj5ksm/another-root/instrument_validation/ordinary-abandon", "observation_id": null, "pid": 74693, "stage": "artifact_read"}
+{"event": "calibration_custody_progress", "artifact": "instrument_evidence.json", "elapsed_s": 0.04436370905023068, "locator": "/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmpaybj5ksm/another-root/instrument_validation/ordinary-abandon", "observation_id": null, "pid": 74693, "stage": "artifact_read"}
+{"event": "calibration_custody_progress", "artifact": "manifest.json", "elapsed_s": 0.04438004200346768, "locator": "/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmpaybj5ksm/another-root/instrument_validation/ordinary-abandon", "observation_id": null, "pid": 74693, "stage": "artifact_read"}
+{"event": "calibration_custody_complete", "elapsed_s": 0.04927575006149709, "observations": 1}
+.{"event": "calibration_custody_complete", "elapsed_s": 0.05364345898851752, "observations": 0}
+{"event": "calibration_custody_progress", "artifact": null, "elapsed_s": 0.04361487505957484, "locator": "/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmp1d7iagv5/another-root/instrument_validation/ordinary-abandon", "observation_id": null, "pid": 74701, "stage": "metadata_probe"}
+{"event": "calibration_custody_progress", "artifact": "raw/powermetrics.plist", "elapsed_s": 0.043670292012393475, "locator": "/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmp1d7iagv5/another-root/instrument_validation/ordinary-abandon", "observation_id": null, "pid": 74701, "stage": "artifact_read"}
+{"event": "calibration_custody_progress", "artifact": "events.jsonl", "elapsed_s": 0.04369120905175805, "locator": "/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmp1d7iagv5/another-root/instrument_validation/ordinary-abandon", "observation_id": null, "pid": 74701, "stage": "artifact_read"}
+{"event": "calibration_custody_progress", "artifact": "power_trace.csv", "elapsed_s": 0.04370587505400181, "locator": "/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmp1d7iagv5/another-root/instrument_validation/ordinary-abandon", "observation_id": null, "pid": 74701, "stage": "artifact_read"}
+{"event": "calibration_custody_progress", "artifact": "instrument_evidence.json", "elapsed_s": 0.043721500085666776, "locator": "/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmp1d7iagv5/another-root/instrument_validation/ordinary-abandon", "observation_id": null, "pid": 74701, "stage": "artifact_read"}
+{"event": "calibration_custody_progress", "artifact": "manifest.json", "elapsed_s": 0.043733083992265165, "locator": "/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmp1d7iagv5/another-root/instrument_validation/ordinary-abandon", "observation_id": null, "pid": 74701, "stage": "artifact_read"}
+{"event": "calibration_custody_complete", "elapsed_s": 0.04833633406087756, "observations": 1}
+.{"event": "calibration_custody_complete", "elapsed_s": 0.053632708033546805, "observations": 0}
+{"event": "calibration_custody_progress", "artifact": null, "elapsed_s": 0.04374675010330975, "locator": "/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmphwdyvxpw/another-root/instrument_validation/ordinary-abandon", "observation_id": null, "pid": 74709, "stage": "metadata_probe"}
+{"event": "calibration_custody_progress", "artifact": "raw/powermetrics.plist", "elapsed_s": 0.04381950001697987, "locator": "/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmphwdyvxpw/another-root/instrument_validation/ordinary-abandon", "observation_id": null, "pid": 74709, "stage": "artifact_read"}
+{"event": "calibration_custody_progress", "artifact": "events.jsonl", "elapsed_s": 0.043843625113368034, "locator": "/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmphwdyvxpw/another-root/instrument_validation/ordinary-abandon", "observation_id": null, "pid": 74709, "stage": "artifact_read"}
+{"event": "calibration_custody_progress", "artifact": "power_trace.csv", "elapsed_s": 0.04385825002100319, "locator": "/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmphwdyvxpw/another-root/instrument_validation/ordinary-abandon", "observation_id": null, "pid": 74709, "stage": "artifact_read"}
+{"event": "calibration_custody_progress", "artifact": "instrument_evidence.json", "elapsed_s": 0.043867750093340874, "locator": "/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmphwdyvxpw/another-root/instrument_validation/ordinary-abandon", "observation_id": null, "pid": 74709, "stage": "artifact_read"}
+{"event": "calibration_custody_progress", "artifact": "manifest.json", "elapsed_s": 0.0438834170345217, "locator": "/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmphwdyvxpw/another-root/instrument_validation/ordinary-abandon", "observation_id": null, "pid": 74709, "stage": "artifact_read"}
+{"event": "calibration_custody_complete", "elapsed_s": 0.048443667008541524, "observations": 1}
+.....F...............................................................................................F..........F........FF..
+======================================================================
+ERROR: test_w1w2_set_aside_and_thirteenth_foreign_row_refusal (tests.test_acc_25g83_rev5.RevisionFiveTests.test_w1w2_set_aside_and_thirteenth_foreign_row_refusal)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/edr/code/JouleWise-wt-cap-ff50b201/tests/test_acc_25g83_rev5.py", line 116, in test_w1w2_set_aside_and_thirteenth_foreign_row_refusal
+    candidate = issuer._prepare_candidate(args)
+  File "/Users/edr/code/JouleWise-wt-cap-ff50b201/scripts/issue_calibration_acceptance_generation.py", line 1772, in _prepare_candidate
+    raise PrepareRefusal(
+        f"registration Revision 5 requires r7 predecessor {ACTIVE_ACCEPTANCE_ID}"
+    )
+scripts.issue_calibration_acceptance_generation.PrepareRefusal: registration Revision 5 requires r7 predecessor d079_calibration_acceptance_v2_n17_r8
+
+======================================================================
+FAIL: test_live_probes_report_this_machine_against_the_active_epoch (tests.test_issue_calibration_acceptance_generation.DeskEpochWatchTests.test_live_probes_report_this_machine_against_the_active_epoch)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/edr/code/JouleWise-wt-cap-ff50b201/tests/test_issue_calibration_acceptance_generation.py", line 352, in test_live_probes_report_this_machine_against_the_active_epoch
+    self.assertIsInstance(live["os_build"], str)
+    ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: None is not an instance of <class 'str'>
+
+======================================================================
+FAIL: test_a4_route_refuses_on_digest_and_the_tracked_registry_refuses_on_a7 (tests.test_acc_25g83_rev5.RevisionFiveTests.test_a4_route_refuses_on_digest_and_the_tracked_registry_refuses_on_a7)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/edr/code/JouleWise-wt-cap-ff50b201/tests/test_acc_25g83_rev5.py", line 476, in test_a4_route_refuses_on_digest_and_the_tracked_registry_refuses_on_a7
+    self.assertIn("observation disposition registry digest mismatch", printed)
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'observation disposition registry digest mismatch' not found in 'REFUSED: registration Revision 5 requires r7 predecessor d079_calibration_acceptance_v2_n17_r8\n'
+
+======================================================================
+FAIL: test_full_seal_accepts_and_grep_count_zero_while_malformed_refuses (tests.test_acc_25g83_rev5.RevisionFiveTests.test_full_seal_accepts_and_grep_count_zero_while_malformed_refuses)
+----------------------------------------------------------------------
+scripts.issue_calibration_acceptance_generation.PrepareRefusal: registration Revision 5 requires r7 predecessor d079_calibration_acceptance_v2_n17_r8
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/edr/code/JouleWise-wt-cap-ff50b201/tests/test_acc_25g83_rev5.py", line 214, in test_full_seal_accepts_and_grep_count_zero_while_malformed_refuses
+    with self.assertRaisesRegex(issuer.PrepareRefusal, "pins are malformed"):
+         ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: "pins are malformed" does not match "registration Revision 5 requires r7 predecessor d079_calibration_acceptance_v2_n17_r8"
+
+======================================================================
+FAIL: test_issuer_refuses_unsealed_launch_context_and_disposes_exact_ids (tests.test_acc_25g83_rev5.RevisionFiveTests.test_issuer_refuses_unsealed_launch_context_and_disposes_exact_ids)
+----------------------------------------------------------------------
+scripts.issue_calibration_acceptance_generation.PrepareRefusal: registration Revision 5 requires r7 predecessor d079_calibration_acceptance_v2_n17_r8
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/edr/code/JouleWise-wt-cap-ff50b201/tests/test_acc_25g83_rev5.py", line 275, in test_issuer_refuses_unsealed_launch_context_and_disposes_exact_ids
+    with self.assertRaisesRegex(issuer.PrepareRefusal, "requires registration Revision 5"):
+         ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: "requires registration Revision 5" does not match "registration Revision 5 requires r7 predecessor d079_calibration_acceptance_v2_n17_r8"
+
+======================================================================
+FAIL: test_pinned_estimator_files_match_c034a56f (tests.test_acc_25g83_rev5.RevisionFiveTests.test_pinned_estimator_files_match_c034a56f) (path='joulewise/powermetrics_fiducial.py')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/edr/code/JouleWise-wt-cap-ff50b201/tests/test_acc_25g83_rev5.py", line 340, in test_pinned_estimator_files_match_c034a56f
+    self.assertEqual(hashlib.sha256((ROOT / path).read_bytes()).hexdigest(), digest)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'bcdfeec06a03525cc6f6c700f2e2e6d10341af1323e4f9355b68ee47eb5bd30c' != '386e825440e02bb0720e7b74f0f7503d785fb543a08c45386014eeb4216bab92'
+- bcdfeec06a03525cc6f6c700f2e2e6d10341af1323e4f9355b68ee47eb5bd30c
++ 386e825440e02bb0720e7b74f0f7503d785fb543a08c45386014eeb4216bab92
+
+
+======================================================================
+FAIL: test_w1_futility_and_plateau_inset_refuse_by_mechanism (tests.test_acc_25g83_rev5.RevisionFiveTests.test_w1_futility_and_plateau_inset_refuse_by_mechanism) (label='futility')
+----------------------------------------------------------------------
+scripts.issue_calibration_acceptance_generation.PrepareRefusal: registration Revision 5 requires r7 predecessor d079_calibration_acceptance_v2_n17_r8
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/edr/code/JouleWise-wt-cap-ff50b201/tests/test_acc_25g83_rev5.py", line 371, in test_w1_futility_and_plateau_inset_refuse_by_mechanism
+    with self.assertRaisesRegex(issuer.PrepareRefusal, reason):
+         ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: "W1 futility procedure violation" does not match "registration Revision 5 requires r7 predecessor d079_calibration_acceptance_v2_n17_r8"
+
+======================================================================
+FAIL: test_w1_futility_and_plateau_inset_refuse_by_mechanism (tests.test_acc_25g83_rev5.RevisionFiveTests.test_w1_futility_and_plateau_inset_refuse_by_mechanism) (label='inset')
+----------------------------------------------------------------------
+scripts.issue_calibration_acceptance_generation.PrepareRefusal: registration Revision 5 requires r7 predecessor d079_calibration_acceptance_v2_n17_r8
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/edr/code/JouleWise-wt-cap-ff50b201/tests/test_acc_25g83_rev5.py", line 371, in test_w1_futility_and_plateau_inset_refuse_by_mechanism
+    with self.assertRaisesRegex(issuer.PrepareRefusal, reason):
+         ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: "PLATEAU_INSET_S" does not match "registration Revision 5 requires r7 predecessor d079_calibration_acceptance_v2_n17_r8"
+
+======================================================================
+FAIL: test_w3_refuses_when_w1_w2_valid_count_is_already_twelve (tests.test_acc_25g83_rev5.RevisionFiveTests.test_w3_refuses_when_w1_w2_valid_count_is_already_twelve)
+----------------------------------------------------------------------
+scripts.issue_calibration_acceptance_generation.PrepareRefusal: registration Revision 5 requires r7 predecessor d079_calibration_acceptance_v2_n17_r8
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/edr/code/JouleWise-wt-cap-ff50b201/tests/test_acc_25g83_rev5.py", line 417, in test_w3_refuses_when_w1_w2_valid_count_is_already_twelve
+    with self.assertRaisesRegex(issuer.PrepareRefusal, "W3 was opened despite at least 12 valid"):
+         ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: "W3 was opened despite at least 12 valid" does not match "registration Revision 5 requires r7 predecessor d079_calibration_acceptance_v2_n17_r8"
+
+======================================================================
+FAIL: test_a_record_written_by_the_real_desk_tool_cross_checks_clean (tests.test_epoch_continuation.EpochContinuationTests.test_a_record_written_by_the_real_desk_tool_cross_checks_clean)
+Fresh-eyes 196 B: the witness cross-check must accept the desk tool's
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/edr/code/JouleWise-wt-cap-ff50b201/tests/test_epoch_continuation.py", line 1020, in test_a_record_written_by_the_real_desk_tool_cross_checks_clean
+    self.assertEqual(rc, 0, out)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+AssertionError: 3 != 0 : REFUSED: acceptance /Users/edr/code/JouleWise-wt-cap-ff50b201/configs/calibration/calibration_acceptance_d079_v2_n17_r8.json is generation 'd079_calibration_acceptance_v2_n17_r8'; issue 316 fixes the reference envelope as 'd079_calibration_acceptance_v2_n17_r7' and no other generation's screens may stand in for it
+
+
+======================================================================
+FAIL: test_print_envelope_only_needs_no_session_and_writes_nothing (tests.test_epoch_equivalence_check.EpochEquivalenceCheckTest.test_print_envelope_only_needs_no_session_and_writes_nothing)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/edr/code/JouleWise-wt-cap-ff50b201/tests/test_epoch_equivalence_check.py", line 682, in test_print_envelope_only_needs_no_session_and_writes_nothing
+    "NEVER issues", "never writes an addendum",
+    ^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 3 != 0
+
+======================================================================
+FAIL: test_arm_readiness_recognizes_the_p8_v3_acceptance_generation (tests.test_capture_pipeline_era.CapturePipelineEraTests.test_arm_readiness_recognizes_the_p8_v3_acceptance_generation)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/edr/code/JouleWise-wt-cap-ff50b201/tests/test_capture_pipeline_era.py", line 273, in test_arm_readiness_recognizes_the_p8_v3_acceptance_generation
+    self.assertTrue(_issued_d079({"acceptance_policy": policy}))
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: False is not true
+
+======================================================================
+FAIL: test_derivation_only_cli_dry_preflight_uses_default_and_refuses_r7 (tests.test_issue_p8_pin_delta.P8PinDeltaTests.test_derivation_only_cli_dry_preflight_uses_default_and_refuses_r7) (acceptance='calibration_acceptance_d079_v2_n17_r8.json')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/edr/code/JouleWise-wt-cap-ff50b201/tests/test_issue_p8_pin_delta.py", line 87, in test_derivation_only_cli_dry_preflight_uses_default_and_refuses_r7
+    patch.object(writer, 'load_calibration_ledger_snapshot', return_value=snapshot), \
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'calibration_ledger_custody_invalid' != 'calibration_derivation_only_session_kind_required'
+- calibration_ledger_custody_invalid
++ calibration_derivation_only_session_kind_required
+
+
+======================================================================
+FAIL: test_derivation_only_cli_dry_preflight_uses_default_and_refuses_r7 (tests.test_issue_p8_pin_delta.P8PinDeltaTests.test_derivation_only_cli_dry_preflight_uses_default_and_refuses_r7) (acceptance='calibration_acceptance_d079_v2_n17_r7.json')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/edr/code/JouleWise-wt-cap-ff50b201/tests/test_issue_p8_pin_delta.py", line 87, in test_derivation_only_cli_dry_preflight_uses_default_and_refuses_r7
+    patch.object(writer, 'load_calibration_ledger_snapshot', return_value=snapshot), \
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'calibration_ledger_custody_invalid' != 'calibration_frozen_protocol_invalid'
+- calibration_ledger_custody_invalid
++ calibration_frozen_protocol_invalid
+
+
+----------------------------------------------------------------------
+Ran 500 tests in 540.792s
+
+FAILED (failures=13, errors=1, skipped=1)
+CAP-RULE-25G83-1 R6(iii) elapsed seconds: 7.805565
