@@ -1,0 +1,3 @@
+AUTHENTICATED= 0 TOTAL= 17
+REISSUE_TOOL_MAIN=NOT_USED
+REASON=tool authentication compares superseded instrument-evidence B, while R7 stores re-derived B; E1 §3.1 uses only the tool-shaped delta report
