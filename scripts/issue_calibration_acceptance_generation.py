@@ -110,6 +110,11 @@ from joulewise.calibration_bracketing import (  # noqa: E402
     protocol_sha256,
 )
 from joulewise.calibration_bracketing import _canonical_sha256  # noqa: E402
+from joulewise.calibration_dispositions import (  # noqa: E402
+    DISPOSITION_REGISTRY_PATH, DISPOSITION_DECISION_ID,
+    DISPOSITION_REGISTRY_SHA256, DISPOSITION_MECHANISM,
+    DispositionRegistryError, parse_disposition_registry,
+)
 from joulewise.powermetrics_fiducial import PLATEAU_INSET_S  # noqa: E402
 from joulewise.calibration_ledger import (  # noqa: E402
     DEFAULT_HEAD_PIN_PATH,
@@ -508,17 +513,7 @@ SCREEN_CHALLENGE_MEMBER_LIMIT = 2
 # D-126 cl.2's SUCCESSOR_MINIMUM_CORPUS_SIZE, a corpus-SIZE floor (addendum A-2).
 SUCCESSOR_MINIMUM_CORPUS_SIZE = 19
 REVISION_FIVE_MINIMUM_CORPUS_SIZE = 12
-DISPOSITION_REGISTRY = REPO_ROOT / "configs/calibration/observation_dispositions.json"
-DISPOSITION_DECISION_ID = "D-126-disposition-25G83-v3-2026-09-25"
-# Obligations v1.1 §4.6: the registry is pinned by digest, so a row appended
-# under the fixed decision id and mechanism cannot exempt a session.  Any
-# registry change updates this constant in the same reviewed PR.
-DISPOSITION_REGISTRY_SHA256 = "ba1ba3fc596c9ef7f4014131e5cbc2012559f72bab41cafb89e004056790a63c"
-DISPOSITION_MECHANISM = (
-    "captured under the default-ProcessType launch context (utility QoS, "
-    "timer coalescing, median ≈ 248 ms); disposed as diagnostic, never a "
-    "member; authored after the values were seen and disclosed as such"
-)
+DISPOSITION_REGISTRY = DISPOSITION_REGISTRY_PATH
 # The dispositions an ISSUED artifact's prior set may carry (the validator's
 # `allowed_prior_dispositions` for role `issued`).
 PRIOR_SET_DISPOSITIONS = ("valid", "systematic-invalid", "ordinary-invalid")
@@ -1330,32 +1325,10 @@ def _registered_dispositions(path: Path | None = None) -> dict[str, str]:
         raw = path.read_bytes()
     except OSError as error:
         raise PrepareRefusal(f"observation disposition registry unreadable: {error}") from error
-    observed = hashlib.sha256(raw).hexdigest()
-    if observed != DISPOSITION_REGISTRY_SHA256:
-        raise PrepareRefusal(
-            f"observation disposition registry digest mismatch: {observed} != pinned "
-            f"{DISPOSITION_REGISTRY_SHA256}; not issued"
-        )
     try:
-        rows = json.loads(raw.decode("utf-8"))
-    except ValueError as error:
-        raise PrepareRefusal(f"observation disposition registry unreadable: {error}") from error
-    if not isinstance(rows, list):
-        raise PrepareRefusal("observation disposition registry must be a list")
-    result: dict[str, str] = {}
-    for row in rows:
-        if (not isinstance(row, dict) or set(row) != {
-            "content_id", "disposing_decision_id", "mechanism"
-        } or not isinstance(row["content_id"], str)
-                or not re.fullmatch(r"[0-9a-f]{64}", row["content_id"])
-                or not isinstance(row["disposing_decision_id"], str)
-                or row["disposing_decision_id"] != DISPOSITION_DECISION_ID
-                or not isinstance(row["mechanism"], str)
-                or row["mechanism"] != DISPOSITION_MECHANISM
-                or row["content_id"] in result):
-            raise PrepareRefusal("observation disposition registry has an invalid or duplicate row")
-        result[row["content_id"]] = row["disposing_decision_id"]
-    return result
+        return parse_disposition_registry(raw, expected_sha256=DISPOSITION_REGISTRY_SHA256)
+    except DispositionRegistryError as error:
+        raise PrepareRefusal(f"observation disposition {error}; not issued") from error
 
 
 def _battery_computed_set(

@@ -17,6 +17,9 @@ from types import MappingProxyType
 from typing import Any, Literal, Mapping, Sequence
 
 from joulewise.authentication_io import read_authentication_input
+from joulewise.calibration_dispositions import (
+    decisions_disposing, disposed_content_ids_for,
+)
 from joulewise.bundle_read import BundleReadError, BundleReader
 from joulewise.calibration_ledger import (
     IDENTITY_EPOCH_FIELDS,
@@ -975,12 +978,28 @@ def _valid_acceptance_bound(value: Any) -> bool:
     # ones, and nothing else in the artifact would show it.
     if prefix_mode == PRIOR_PREFIX_MODE_IMPORT_PLUS_LIVE:
         registration_session_ids = set(generation["registration_session_ids"])
+        declared = prior.get("disposing_decision_ids")
+        disposed = disposed_content_ids_for(declared)
+        if disposed is None:
+            return False
+        if decisions_disposing(set(prior_ids)) != (declared if declared is not None else []):
+            return False
+        if not disposed.issubset(set(prior_ids)):
+            return False
+        if any(
+            prior_row_by_content_id[content_id].get("session_id") in registration_session_ids
+            or content_id in member_content_ids
+            for content_id in disposed
+        ):
+            return False
         registration_valid_ids: set[str] = set()
         for observation in prior["observations"]:
             if (
                 observation["disposition"] != "valid"
                 or observation["epoch_id"] != target_epoch_id
             ):
+                continue
+            if observation["content_id"] in disposed:
                 continue
             # A valid same-epoch row from OUTSIDE this registration refuses
             # issuance rather than being silently absorbed into the corpus:
@@ -1021,6 +1040,10 @@ def _valid_acceptance_bound(value: Any) -> bool:
             if excluded_content_id is None:
                 return False
             excluded_content_ids.add(excluded_content_id)
+        # Implied by the completeness equality; kept so that a change to that
+        # equality cannot silently admit a disposed exclusion.
+        if disposed & excluded_content_ids:
+            return False
         if (
             len(excluded_content_ids) != len(excluded)
             or member_content_ids & excluded_content_ids
@@ -2396,9 +2419,17 @@ def evaluate_calibration_bracket(
         for observation in new_observations
     ):
         return result, ("calibration_observation_unclassifiable",)
+    # Rows set aside by a decision this artifact declares are diagnostics that
+    # can never be members, so they do not count toward corpus doubling.
+    disposed_ids = disposed_content_ids_for(
+        artifact["prior_observation_set"].get("disposing_decision_ids")
+    )
+    if disposed_ids is None:
+        return result, ("calibration_acceptance_bound_stale",)
     valid_counts_by_epoch = [
         sum(
             observation.disposition == "valid"
+            and observation.content_id not in disposed_ids
             and dict(observation.identity_epoch) == dict(epoch)
             for observation in distinct_observations.values()
         )

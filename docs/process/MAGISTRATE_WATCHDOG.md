@@ -182,7 +182,7 @@ The program guards every write path against the configured custody root. The mec
 - `standdown.request`: atomic request and exact plan deadlines.
 - `attempts/<activation>/prompt.md`, `attempt-<n>.stream.jsonl`, and `attempt-<n>.stderr.log`.
 - `heartbeat` and an optional unsent-email record, written by the relaunched session under its prompt.
-- `notice.ack`, written by the session after its first email is accepted and consumed by the supervisor.
+- `notice.ack`, written by the session after its launch email is accepted (or after its Gmail search when no email is due, since a quiet relaunch sends none) and consumed by the supervisor.
 - `launchd.out` and `launchd.err`, written by launchd at paths rendered in the plist.
 - Transient atomic replacements named `.<target>.<pid>.<uuid>.tmp` beside any target written through the atomic writer; each is normally replaced into its target after fsync, while a process crash can leave the temporary file for inspection.
 
@@ -192,7 +192,7 @@ No status branch, checkout, plan, night result, `courier.sent`, or repository fi
 
 Installation is authorized only after the built-artifact gauntlet and cold gate pass. The acting magistrate emails Ed the install notice, quotes the D-171 authorization and the stop instructions above, then follows this checklist without waiting for a reply. Do not arm any plan during this handoff.
 
-0. Land the watchdog branch on `main` through the normal twelve-row gate: replay the integration on `int/2026-09-04-watchdog`, open the PR, require CI and the merge gate, and merge only under the lead's authority. Then update the canonical checkout with `git -C /Users/edr/code/JouleWise pull --ff-only`. Before step 1 executes any pinned file, verify SHA-256 byte identity for the five pinned files against the merge commit on `main` that landed this branch, not against the earlier packet exhibits. Run these exact commands, record both digest/path lines for every file, and stop if any command fails. Do not substitute this development worktree for the canonical checkout.
+0. Land the watchdog branch on `main` through the normal gate ledger: replay the integration on `int/2026-09-04-watchdog`, open the PR, require CI and the merge gate, and merge only under the lead's authority. Then update the canonical checkout with `git -C /Users/edr/code/JouleWise pull --ff-only`. Before step 1 executes any pinned file, verify SHA-256 byte identity for the five pinned files against the merge commit on `main` that landed this branch, not against the earlier packet exhibits. Run these exact commands, record both digest/path lines for every file, and stop if any command fails. Do not substitute this development worktree for the canonical checkout.
 
    ```zsh
    cd /Users/edr/code/JouleWise

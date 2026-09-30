@@ -5,20 +5,23 @@ name: gate-ledger
 # Ed's interactive session (T26 cold gate item 2, D-170; interactive
 # record 02a24110 §7).
 # Every fresh PR is red by construction because the template seeds an
-# unresolved Tier choice and twelve NOT-RUN rows; that deliberate nudge
-# keeps an incomplete ledger visible.
+# unresolved Tier choice, TODO Impact lines and NOT-RUN rows; that
+# deliberate nudge keeps an incomplete ledger visible.
 #
 # Read this before touching anything below. This job validates the
-# twelve-row "Gate ledger (D-118 / D-121)" table that
-# .github/pull_request_template.md seeds into every PR body: each key
-# 1-12 present exactly once. Full tier (also the missing-Tier fallback)
-# requires RUN evidence in every row; declared light tier requires RUN
-# evidence in rows 1, 9, 11 and 12 and exact N/A (light tier) in the others.
-# No required row may be empty or NOT-RUN. Every `RUN <path>` must resolve
-# at the PR head under scripts/gen_state.py's pointer rules,
-# every `RUN <sha>` a commit the checkout knows, and item 12 naming the
-# PR's final head sha. It targets the MISTAKE class (a forgotten item);
-# a deliberately pasted block is out of the threat model (D-161).
+# "## Gate ledger" section that .github/pull_request_template.md seeds
+# into every PR body: D-118 as thinned on 2026-09-29 (summary in
+# docs/process_prune_2026-09-29.md). Five rows, each key present once,
+# plus the six Impact lines (i)-(vi), each answered Yes or No. Full tier
+# (also the missing-Tier fallback) needs RUN evidence in rows 1, 2, 3 and
+# 5; row 4 (cold final pass) may read N/A only when every Impact line is
+# No. Light tier needs rows 2 and 3 (row 2 may be N/A (docs only)), N/A
+# (light tier) in rows 1, 4 and 5, and no Impact line answered Yes. Every
+# `RUN <path>` must resolve at the PR head under scripts/gen_state.py's
+# pointer rules, every `RUN <sha>` a commit the checkout knows, and row 3
+# names the PR's final head sha. It targets the MISTAKE class (a
+# forgotten row, a light tier that changes a number); a deliberately
+# pasted block is out of the threat model (D-161).
 # The PR head sha is checked out explicitly because the merge ref is not the PR head.
 #
 # It lives in its own workflow, not ci.yml, because it must also fire on
@@ -53,7 +56,7 @@ jobs:
           # branch resolve with `git cat-file -e <sha>^{commit}`.
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
-      - name: Validate the twelve-row gate ledger in the PR body
+      - name: Validate the gate ledger in the PR body
         # The body is passed through the environment, never interpolated
         # into the script line (a body is attacker-shaped text).
         env:

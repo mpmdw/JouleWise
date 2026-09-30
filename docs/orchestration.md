@@ -30,48 +30,134 @@ lands in this repo.) Binding role and process changes live in
   lenses, test writing, test *auditing* (never of its own tests — a
   fresh instance audits), docs drafting, and review of the lead's own
   consequential decisions. Cross-model review is load-bearing by
-  design: the attributed per-layer catch record (below) shows the two
-  roles consistently catching different classes of defect.
-- **Specialist agents** handle bounded sweeps (for example, docs
-  consistency) and, when a stream genuinely needs
-  mid-stream judgment, as a stream director. AMENDED by D-129
-  (Ed, 2026-08-09): lieutenant-directed executor lanes are the standing
-  default shape under the lead-token economy (current model assignments
-  live in D-129 and the memory index, not here) — the "exception rather
-  than the default" framing below reflects the C-009/C-010 record of
-  its day and is superseded for current operation (see the decision log).
+  design: the recorded catches show the two model families consistently
+  catching different classes of defect.
+- **Specialist agents** handle bounded sweeps and investigations. The
+  lieutenant-directed lanes of D-129 are superseded by the current roles
+  below.
 - **Image-heavy analysis uses the designated image-capable review route** per
   C-012, after the site-observatory stream's image-critique rounds.
 - **Invited-peer validation is allowed to overturn lead designs**; C-014
   recorded two lead designs overturned by an invited peer before
   implementation.
 
-### Current rule-11 topology
+### Current roles (Ed, 2026-09-29)
 
-Three role names recur in the project record:
+The current model for each seat is named in Ed's 2026-09-29 decision, the
+decision-log entry "Gates are anti-spiral, never a bar on refinement;
+network time stays OFF; the 09-29 team", which lands with the 2026-09-29
+records PR; it is not repeated here.
 
-- The **magistrate** is the designated lead. It decomposes work, rules on
-  design questions, adjudicates review findings, performs the final contextual
-  review of the exact merge candidate, and retains merge authority. That last
-  review is non-delegable under D-121.
-- A **lieutenant** coordinates bounded implementation or review lanes and
-  assembles their evidence. It does not decide process-policy changes,
-  measurement or funding scope, calendar commitments, irreversible actions,
-  or whether to add or remove a review mechanism. D-080 records the process-
-  policy subset; D-119 records the measurement, scope, and calendar boundary.
-  Those questions return to the magistrate or Ed, according to the owning
-  decision.
-- A **cold gate** is an independent adjudication from a fresh session that has
-  not inherited the working lane's assumptions. The gate receives a
-  mechanically assembled evidence packet and is paired with a distinct
-  contract-focused reviewer. A repeated defect signature after a fix round
-  sends the next spend to a consult and returns the merge question to this
-  gate (D-087/D-088). Proposed process rules and other triggers named by an
-  owning decision use the same route; the magistrate records the disposition
-  and any dissent rather than serving as a reviewing seat.
+- The **orchestrator** is the designated lead, working in an interactive
+  session with Ed. It decomposes work, rules on design questions,
+  dispositions review findings, reads the exact merge candidate, and holds
+  merge authority. The headless relaunch loop ("magistrate") is held by its
+  STOP file; when it runs, it follows the same rules as the orchestrator.
+- The **default execution seat** implements, audits, and serves as a
+  consult peer. Another model family is used only after a recorded,
+  noticeable weakness of the default seat.
+- **Investigator agents** are dispatched at will for bounded reading and
+  sweeps.
+- A **cold judge** is a fresh session that has not inherited the working
+  lane's assumptions. It rules on a mechanically assembled packet, and it
+  gives the cold final pass on merge code that touches measurement,
+  calibration or claims (ledger row 4). When a cold gate is convened is set
+  out below under "Cold gates, councils and round limits".
 
-These roles distribute reading and coordination; they do not transfer final
-verification, hardware operation, scientific scope, or publication authority.
+The lieutenant role and its list of things it could not decide alone are
+retired by that decision: the orchestrator decides everything except what
+is reserved to a cold gate or to Ed. These roles distribute reading and coordination;
+they do not transfer final verification, hardware operation, scientific
+scope, or publication authority.
+
+### Cold gates, councils and round limits (process prune, 2026-09-29)
+
+Ed authorized this prune on 2026-09-29 (summary and evidence in
+`docs/process_prune_2026-09-29.md`). A gate exists to stop a death loop of
+useless investigation or token burn, or to protect a number; it is never a
+bar on refining a component whose defects are shrinking.
+
+- **When a cold gate is convened.** Only for: (a) a registration, analysis
+  plan or estimator constant; (b) a claim-bearing result (a calibration
+  issued for claim use, a number the paper will print); (c) an irreversible
+  action: deleting evidence, committing a measurement window, publishing;
+  (d) a choice Ed has reserved to himself or to a cold gate. Fixture repair,
+  scope grants, reading a ruling's own clause, process wording and
+  "waiting" turn ends are the orchestrator's calls, recorded in the session
+  record.
+- **Refuter disagreement.** A cold ruling on a claim path is paired with one
+  refuter. If the refuter disagrees, the judge (or the orchestrator, when
+  the finding bears on no number) writes ONE erratum that settles it. There
+  is no refuter on the erratum and no further chain.
+- **No fixed round caps.** The same defect class failing twice in a row
+  sends the next spend to a consult, not a third identical round (D-087,
+  D-088; D-132 says stop rules target doom loops, never a converging
+  component). Any clause that limits rounds must name where the question
+  goes when the limit is reached ("escalate to a consult", "to a cold gate",
+  "to Ed"); a clause that says "stop for good" or "no round N" is read that
+  way (Ed's 2026-09-29 decision).
+- **Councils.** A design question gets two blind seats from different model
+  families (the default execution seat plus one reviewing-family seat). A
+  cold judge is added only when the two disagree on a science question.
+  A four-model council runs only when Ed asks for one (this thins D-184).
+- **No deliberate-adversary ("forger") seats.** Guards against a deliberate
+  forger retire under D-161; the prune reports found the forger seats caught
+  nothing a replay refusal had not already refused. Mistake-shaped fuzz and
+  mutation (delete-the-guard) tests on number-bearing code stay.
+- **Enforcement charges ask first:** "can one setting or one command remove
+  this hazard?" Network time is the example: it stays OFF (Ed,
+  2026-09-29), with one OFF receipt per window at arm, instead of an
+  enforcement machine.
+
+### What the prune keeps, and the number each protects
+
+- The arm notice (Ed can answer NO), the STOP file, and the stand-down
+  fence that clears agent sessions before a window's first capture: they
+  keep the machine quiet, since a running agent adds measured joules.
+- The pre-arm triple audit (owner directive, GitHub issue #416): three
+  blind audits that re-derive the calibration from raw capture files at the
+  frozen code head before any claim-bearing run. It runs once per frozen
+  code or protocol change, not once per window: the measurement Mac is
+  dedicated, windows run back-to-back at the cadence the science needs
+  (Ed, 2026-09-29: "nights" are metaphorical), and only physics waits sit
+  between them (clean dwell, battery float, recovered idle power, network
+  time OFF). Harvest is automated raw-byte validation plus an independent
+  arithmetic check; full suites, lenses and cold passes run per code change.
+- The cold science gate's raw re-derivation of a candidate calibration:
+  every constant recomputed from the raw capture bytes, not read from the
+  candidate's own report.
+- The Impact statement on every pull request: it routes anything that can
+  change a number to the full tier.
+- Write-scope fences on the pinned estimator files, whose digests define the
+  calibration.
+- The whole suite on the merged tree before merge: it has caught failures
+  that every lens and the final pass missed.
+
+### Records
+
+- One running record per session, appended as work happens. A headless
+  relaunch that finds nothing to do writes no record and makes no commit.
+- One `RUN_STATE.md` top block per session, not per relaunch; it is replaced
+  at the session's end, and history lives in the session record.
+- Verbatim quotation is kept for Ed's words only. Rulings, briefs and seat
+  reports are cited by path, not copied.
+- The writing standard (build every term before its first use) binds the
+  paper and owner-facing prose (README, advisor and owner briefs). Internal
+  records, rulings, `RUN_STATE.md` and decision-log entries need to be
+  correct and plain, not explainer-grade; they get no pedagogy pass.
+- Email Ed on a change of state only: arming or standing down a window, a
+  question he must answer, a verdict he asked for, or a fault. A quiet
+  relaunch sends no email.
+
+### The one pruning rule
+
+At the end of every session the orchestrator lists each gate or check that
+ran this session and what it caught that touched a number. Any mechanism with
+no such catch in its last three sessions is proposed for deletion to Ed. This
+replaces the pruning rules that were written and never applied: the
+two-zero-sessions drop and the D-061 per-layer yield tally, the D-080
+standing sweep cadence, the spend guardrails below, and the
+post-large-workload reassessment.
 
 ## The loop, end to end
 
@@ -89,14 +175,13 @@ Every substantial session runs one conductor procedure:
    streams require a confirmed device inventory; anything pinned
    without live validation carries a PROVISIONAL label; measurement
    sessions require a no-agent "quiet machine" lock.
-3. **Per-stream pipeline** — for each reviewable unit: an invited
-   design-argument round (the implementer must argue trade-offs before
-   coding), implementation, then a layered review stack:
-   2–3 fresh-instance counterreview lenses over the diff → lead triage
-   with recorded dispositions → fixes → a dedicated test-amplification
-   round (an independent writer adds edge-case tests) → a
-   writer≠reviewer test audit (a fresh instance hunts tautological,
-   vacuous, or wrong-expectation tests) → the lead's diff gate.
+3. **Per-stream pipeline** — for each reviewable unit: implementation, then
+   an independent review by a non-author with a lens that executes the code
+   (a contract lens as well when a contract changes) → the lead's recorded
+   disposition of every finding (fixed, deferred to a named lane, or
+   rejected with a reason) → fixes → a delta review of the fixes when they
+   touch number-bearing code → the lead's diff read. Docs, records and
+   test-only fix rounds get no delta review; CI checks them.
 
 ### One writer per working tree (the two-writer rule)
 
@@ -156,60 +241,53 @@ This procedure does not expand commit, push, merge, or deployment authority.
    repeatedly caught blockers no other layer saw, including defects
    whose own tests were green because the tests encoded the same wrong
    assumption as the code.
-5. **Merge gate** — multi-commit series land as branch + PR. Before any
-   merge: a pre-merge oversight pass by 2–3 fresh reviewers with
-   distinct angles (deep regression hunt; claim-to-evidence trace;
-   merge-order simulation across sibling PRs), lead triage, fixes, CI
-   green. Gate ledger: twelve-row PR-body table (`.github/pull_request_template.md`), checked by
-   `scripts/check_gate_ledger.py` in the `gate-ledger` workflow, a required status check on `main` since 2026-09-24 (made required in Ed's interactive session, record 02a24110 §7; see D-170 and `docs/process_traces/2026-09-24-interactive-02a24110/01-ed-rulings-harvest-and-reply-miss.md` §7). **Final-head rule:** any commit that lands after the last
-   review round gets one more fresh review before merge — no commit
-   merges unreviewed, however small (its first application caught a
-   crash path in a "trivial" post-review fix).
+5. **Merge gate** — multi-commit series land as branch + PR. The gate
+   ledger is the `## Gate ledger` section of the PR body
+   (`.github/pull_request_template.md`), checked by
+   `scripts/check_gate_ledger.py` in the `gate-ledger` workflow, a required
+   status check on `main` since 2026-09-24 (D-170). It is D-118 thinned on
+   2026-09-29 to six keys, each protecting something real: (1) independent
+   review by a non-author, with a lens that executes the code; (2) the whole
+   suite on the merged tree; (3) CI green on the final head, whose sha the
+   row names; (4) a cold final pass on merge code that touches measurement,
+   calibration or claims; (5) every finding dispositioned (fixed, deferred
+   to a named lane, or rejected with a reason), with no counting of fix
+   rounds; (6) the Impact statement. Rows 1-5 take `RUN <sha-or-path>`
+   evidence. **Final-head rule:** a commit that lands after review and
+   touches number-bearing code gets a fresh review of that commit before
+   merge; a later docs, records or test-only commit needs only green CI.
 
-   **Rule TIER-01 (cold-gated by COUNCIL-407-01 §G5 on 2026-09-24; endorsed by Ed in GitHub issue #415 on 2026-09-25).**
-   1. A change is FULL-TIER if it can alter any of: (i) a raw-bundle byte or recorded timestamp; (ii) a reduced energy, time, token count or correctness score; (iii) an admit, refuse, select or exclude decision over bundles, nights, blocks, envelopes or items; (iv) a unit or an uncertainty; (v) a registration, prospective manifest, analysis plan or estimator constant; (vi) a published number or sentence in the paper, README claims or claim renderers. This includes, without limiting (i)–(vi): `joulewise/clock.py`, `controller.py`, the night driver and chain, collectors and runtime adapters, calibration, scoring, packers, reducers, estimators, admission predicates, arm readiness and census, and everything under `configs/campaigns` and `configs/model_panels`. Everything else is LIGHT-TIER.
-   2. Every PR body carries `Tier: full|light` and a six-line impact statement answering (i)–(vi). The independent reviewer confirms the tier; any disagreement resolves to full.
-   3. FULL-TIER keeps the twelve-row ledger unchanged. LIGHT-TIER requires ledger rows 1, 9, 11 and 12 with evidence, one independent non-author reviewer, CI green and the lead's own read of the diff; rows 2–8 and 10 read `N/A (light tier)`, which the checker accepts only when `Tier: light` is declared.
-   4. Installation is one FULL-TIER PR editing together `docs/orchestration.md` §5 merge gate, `.github/pull_request_template.md`, `scripts/check_gate_ledger.py` with its tests, and the `gate-ledger.yml` header, and reconciling the docs to the actual branch-protection state.
-   5. Revert trigger: for 30 days from installation every material defect found after merge is logged in a tracked file with the tier of the PR that merged it. If any defect that changes a recorded, reduced or published number entered under LIGHT-TIER, TIER-01 is suspended at once (all changes full tier) and may be reinstated only by a new cold gate.
-   6. Day-30 review: the magistrate records light-tier merge count and escape count in the decision log; the rule continues only by a recorded decision.
+   **Rule TIER-01 (cold-gated by COUNCIL-407-01 §G5 on 2026-09-24; endorsed by Ed in GitHub issue #415 on 2026-09-25; light tier thinned 2026-09-29).**
+   1. A change is FULL-TIER if it can alter any of: (i) a raw-bundle byte or recorded timestamp; (ii) a reduced energy, time, token count or correctness score; (iii) an admit, refuse, select or exclude decision over bundles, nights, blocks, envelopes or items; (iv) a unit or an uncertainty; (v) a registration, prospective manifest, analysis plan or estimator constant; (vi) a published number or sentence in the paper, README claims or claim renderers. This includes, without limiting (i)–(vi): `joulewise/clock.py`, `controller.py`, the night driver and chain, collectors and runtime adapters, calibration, scoring, packers, reducers, estimators, admission predicates, arm readiness and census, and everything under `configs/campaigns` and `configs/model_panels`. Any change to code or configs is FULL-TIER; docs, records and tests are LIGHT-TIER.
+   2. Every PR body carries `Tier: full|light` and a six-line Impact statement answering (i)–(vi), each answer starting with Yes or No. The checker refuses a light tier with any Yes. Any disagreement about the tier resolves to full.
+   3. FULL-TIER needs ledger rows 1, 2, 3 and 5 with evidence; row 4 may read `N/A (no measurement, calibration or claim code)` only when every Impact line is No. LIGHT-TIER needs the Impact statement, CI green on the final head (row 3) and, when tests changed, the whole suite (row 2; docs-only PRs write `N/A (docs only)`); rows 1, 4 and 5 read `N/A (light tier)`. A light-tier PR runs no audit rounds.
+   4. Revert trigger: until the day-30 review, every material defect found after merge is logged with the tier of the PR that merged it in `docs/process/tier01_defect_log.md`. If any defect that changes a recorded, reduced or published number entered under LIGHT-TIER, TIER-01 is suspended at once (all changes full tier) and may be reinstated only by a new cold gate.
+   5. Day-30 review 2026-10-25: the orchestrator records the light-tier merge count and escape count in the decision log; the rule continues only by a recorded decision.
 
-   Ruled 2026-09-24 by cold gate COUNCIL-407-01 §G5 as a D-184 addendum;
-   Ed was informed with veto by Gmail `1a0d364481dec249` and endorsed the
-   rule in GitHub issue #415 on 2026-09-25. Installed at the merge of the
-   installation PR on 2026-09-25. The 30-day revert window and the
-   day-30 review run from that merge: day-30 review 2026-10-25. Material
-   defects and the suspension trigger are tracked in
-   `docs/process/tier01_defect_log.md`.
-6. **Integration review** — after parallel streams merge, one dedicated
-   review hunts *interaction* defects no single-stream review can see.
-   Its catches are definitionally unique (first outing: two).
-7. **Bookkeeping** — a single session record (run report) with a
-   verbatim process-trace appendix; the intake pointer and queue
-   refreshed; a delegated docs-consistency sweep before the final
-   commit (its latest pass found 15 real drift items; earlier passes
-   found 5–6). Large documentation batches add the pre-commit
-   docs-verify mode; the `consistency-sweep` skill owns that shape,
-   including the D-043 supersession check.
+6. **Integration review** — only for a merge wave of two or more PRs
+   that change measurement code: one dedicated review hunts *interaction*
+   defects no single-stream review can see. The whole suite on the merged
+   tree (ledger row 2) covers a single PR.
+7. **Bookkeeping** — the one running session record (see "Records" above);
+   the intake pointer and queue refreshed; CI's documentation fences
+   (`tests.test_docs_freshness`, `gen_state --check`) check drift. Records
+   and bookkeeping land as light-tier PRs with no audit rounds.
 8. **Same-session distillation** — lessons fold into the process
    playbooks the same session they are learned. Measured effect: one
    failure mode recurred five times before its fix was distilled, zero
    times after. The current operation-loop also runs its §0
    primary-deliverable check and §8 shipped-check before the session is
    considered done.
-9. **Post-landing verification and close-out** — landed work gets the
-   matching verification workflow with severity-tiered refuters. D-136 retires
+9. **Post-landing verification and close-out** — landed work that can
+   change a number gets the lead's live verification. D-136 retires
    the site lane from routine sessions: agents do not refresh, regenerate, or
    deploy it. The retained `docs/site/DRIFT.md` file is only a reference if Ed
    chooses the manual workflow dispatch; Ed deploys the site after that manual
    regeneration.
-10. **Meta-review (the final step)** — event-driven, not calendar-driven:
-    when a review layer stops earning its keep, when an intervention
-    repeats despite a folded fix, or when the user asks, the loop is
-    reviewed with its own evidence discipline (see Topology for the
-    consensus one such review produced). After large workloads the
-    post-large-workload meta-reassessment (owned by operation-loop §10)
-    always fires, and it runs LAST.
+10. **Mechanism audit (the final step)** — the one pruning rule above: list
+    each gate or check that ran this session and what it caught that
+    touched a number; propose to Ed the deletion of any mechanism with no
+    such catch in its last three sessions.
 
 ### Session-end fixture census
 
@@ -285,18 +363,10 @@ Each fact has exactly one home; everything else points at it:
 
 Instrumentation ledgers close the loop on the process itself:
 
-- **Per-layer yield:** every review layer's unique catches are
-  attributed and tallied per session under D-061 (C-027; replaces the
-  earlier two-zero-sessions auto-drop, which the integration-review
-  zero/zero/five sequence falsified): applicability is decided by
-  PRE-DECLARED mechanical predicates; outcomes are classified
-  accepted-unique-defect / duplicate / clean-verification /
-  false-positive-suppression (suppression is not a catch); severity
-  weights are fixed before the session; three applicable exposures
-  TRIGGER an expected-loss review decision, never automatic deletion;
-  safety/final-head/integration layers are never auto-dropped on
-  zero-defect streaks. (One layer, the default specialist review lens, was
-  dropped under the old rule before D-061.)
+- **Per-layer yield (retired 2026-09-29):** the D-061 per-layer tally was
+  last kept in early September and never fired. The one pruning rule above
+  replaces it: a session-end list of what each gate caught that touched a
+  number.
 - **Delegation calibration:** every delegated unit gets a row — task
   altitude (pinned-spec / design-freedom / judgment-call), outcome
   (assigned by the lead after the gate, never self-labeled), catches,
@@ -316,75 +386,29 @@ Instrumentation ledgers close the loop on the process itself:
 
 ## Council discipline
 
-Councils are expensive instruments. Use a full council for methodology,
-measurement validity, schema/contract changes, claim boundaries, hardware
-protocols, or explicit user requests. For ordinary implementation, use a
-small number of targeted lenses plus lead adjudication.
+Councils are expensive instruments. The shape is set above under "Cold
+gates, councils and round limits": two blind seats from different model
+families, a cold judge only when they disagree on a science question, and
+a four-model council only when Ed asks. For ordinary implementation, use
+one executing review lens plus the lead's disposition.
 
-Every high-impact council must leave a durable scorecard:
+A council leaves one disposition table: finding → ruling → owner →
+artifact, queue row or decision entry. A decision it promotes is written
+to the decision log in the same session.
 
-- unique catches by severity,
-- accepted/rejected/deferred/false-positive counts,
-- lead triage and rework time when practical,
-- shipped artifacts,
-- queue rows created or re-ranked,
-- decision-log IDs promoted, and
-- a disposition table: finding → ruling → owner → artifact/queue/decision
-  target → closure check.
+## Spend guardrails (WO-022) — retired 2026-09-29
 
-Deferred decision-log promotion is itself a tracked obligation, not
-ambient prose in a report.
-
-## Spend guardrails (WO-022; R2 ruled, Ed-ratified 2026-07-13)
-
-The following policy text is the R2-ratified section, landed verbatim per
-audit work order WO-022 (`docs/reviews/2026-07-13-comprehensive-audit/`).
-
-SPEND GUARDRAILS (capstone benchmark bands) — provisional calibration constants; review after two completed arcs; sunset at capstone submission.
-
-1. ACCOUNTING SOURCE. Sol spend: `codex-usage` local accounting (the standing snapshot convention), corroborated by codex-run-v3 manifest `token_usage` rows where populated. The extraction window must cover the full arc — sum incremental snapshots for multi-day arcs; a single trailing-24h view is insufficient. Fable spend: estimated from local usage accounting; each snapshot names its method and price-table version. Price table v2026-07 (pinned until amended): GPT-5.6-sol $5/$30 per M in/out, cached input $0.50; Fable 5 $10/$50, cache reads $1. All figures are estimates, not billing truth, and are recorded as such. Missing data is recorded as `accounting_unknown`, never as zero.
-
-2. DENOMINATOR AND CACHED-TOKEN TREATMENT. Token bands count total tokens (cached + uncached, all directions) exactly as codex-usage reports them — cached tokens are never excluded (exclusion invites cache-heavy gaming). Dollar figures apply cached pricing honestly. Cross-family aggregate ceilings bind in combined estimated dollars, because raw cross-family token sums are not commensurable (C-028: Sol ~180x the token volume, Fable ~3.4x the cost).
-
-3. BOUNDARIES AND ATTRIBUTION. An arc = one council-log C-row, opened at its first delegated session, closed at its closeout snapshot. A work order = one WO/task id. Failed calls, retries, resumes, refuters, fix rounds, delta re-audits, lead usage, and subagents all count against the initiating WO and arc. Arcs and WOs may not be split, renamed, or reopened to reset counters.
-
-4. BANDS. Each dimension is independent. SOFT crossing = record-and-continue: flag in the spend snapshot plus a one-line justification in the council row. HARD crossing = pause-and-ask Ed before any NEW delegated work in that category; in-flight sessions finish; quiet-machine measurement is never interrupted.
-
-   | Scope | Soft | Hard |
-   |---|---|---|
-   | Sol high session | 6M tokens | 12M |
-   | Sol xhigh session | 8M | 16M |
-   | Sol ultra session | 40M | 60M |
-   | Bench-effort WO | 10M / 3 Sol sessions / ~$40 combined | 20M / 6 / ~$80 |
-   | Session-effort WO | 30M / 8 Sol sessions / ~$100 combined | 60M / 12 / ~$200 |
-   | Arc | 100M / 25 Sol sessions / ~$400 combined / 6 Sol active-hours / 2 elapsed days | 200M / 40 / ~$800 / 12 h / 4 days |
-
-   WO dollar figures are best-effort: when per-WO Fable attribution is accounting_unknown, the token/session pair binds. Ultra: at most 2 INTENDED ultra sessions per arc, each with a pre-run recorded statement of why xhigh is insufficient and what bounded subagent work it will perform; an unintended ultra is recorded as an anomaly and still counts.
-
-   Calibration anchors (recorded so recalibration stays honest): healthy xhigh ≈ 2.3–3.5M tokens/session (C-030 post effort-fix; C-028 average); the recorded broken state averaged ~9M. C-028 (330.6M / 59 sessions / ~$1,050 / ~17.5h) crosses every substantive arc HARD dimension — it is the anti-example. The 2026-07-13 comprehensive audit (~30 Sol sessions + ~70 Fable agents, Ed-authorized) crosses arc SOFT on session count only — the intended "exceptional: justify and continue" outcome.
-
-5. CHECKPOINTS (procedural; owner = the Fable lead). (a) At arc open: predeclare one accepted deliverable increment for the arc — a corpus/measurement result, analysis/figure/report increment, evaluator requirement, or cited advancement of a D-060 gate — and classify planned delegated work as deliverable-facing or process-facing (mixed sessions count as process-facing unless separately attributable). (b) Before each next delegated call: check the completed session against its tier band (a lightweight glance, not a full snapshot); no runtime killing is promised — evaluation happens on completed sessions before any resume, replacement, or new call. (c) At WO close and arc close: take the spend snapshot and evaluate all bands. One missed checkpoint blocks new process-facing delegation until reconciled.
-
-6. DELIVERABLE-PROGRESS TRIPWIRE (binds while ANY D-060 gate is unmet). If process-facing combined estimated cost exceeds 33% of arc cost OR $250 — whichever occurs first — HARD pause-and-ask Ed before further process-facing delegation. Independently, an arc that closes with process-facing spend but NO accepted deliverable increment pauses further non-exempt process work even if the 33% threshold was not crossed.
-
-7. EXCEPTIONS AND OVERRIDES. Gate-closing work is deliverable-facing by definition. Correctness-defect and data-preservation work may override the allocation tripwire but is always fully counted. Ed direction is NOT a blanket exemption (the finding's own exemplar — bridge v1/v1.1 — was Ed-directed): it is a recorded override carrying an incremental budget and an expiry, and its spend counts.
-
-8. NAMED-FAILURE BAR FOR PROCESS INNOVATION. Any NEW process layer, tool, skill, wrapper version, or contract version requires a decision-log entry citing: (a) a named recorded failure it addresses, (b) why existing controls did not cover it, (c) the smallest new layer that does, (d) its applicability predicate, (e) its marginal budget, (f) a sunset/retirement condition. Absent that entry, it is D-060 breadth and waits for the gates.
-
-9. KEEP-DEFENDER GUARANTEE. No cap consequence auto-deletes a review layer. Layers with recorded unique catches survive any cap; a cap response batches, rescopes, or seeks Ed approval — never silently drops catch-bearing gates (final-head, integration, lead-live, claim/evidence safeguards).
-
-10. MECHANISM. This policy is PROCEDURAL, not mechanical: no checker script is built now (adding process code during an overengineering correction is self-defeating; the arithmetic is a handful of numbers already recorded at existing snapshot points). Two recorded accounting discrepancies or skipped checkpoints across two arcs constitute the named failure that authorizes an executable checker with tests — via the §8 bar.
-
-11. RECALIBRATION AND OWNERSHIP. Band values are calibration constants: the lead may amend SOFT values at arc close with evidence via a one-line decision-log amendment; HARD values and this section's structure are Ed-owned. Scheduled review after two completed arcs. The whole policy sunsets at capstone submission.
-
-Court amendments (T09, folded at the register): canonical session
-inclusion uses manifest-corroborated sessions with known token records;
-resume rows are deduplicated; non-manifest sessions are reported only as
-a labeled upper bound. The 2026-07-13 audit anchor in section 4 is
-estimated/accounting_unknown until an audit-close spend snapshot receipts
-it (docs/reviews/2026-07-13-comprehensive-audit/receipts/
-WO-022-audit-close-spend.json); only a receipted anchor may be used for
-recalibration.
+The WO-022 spend guardrails (bands, arc snapshots, the 33% process-facing
+tripwire, the named-failure bar and sunset entries for new layers) were
+ratified on 2026-07-13 and never applied: no spend snapshot or
+process-facing classification appears in any record from 2026-09-22 to
+2026-09-29, although the tripwire would have fired on that week's work.
+They are retired by the owner-authorized prune of 2026-09-29
+(`docs/process_prune_2026-09-29.md`) and replaced by the one pruning rule
+under "Cold gates, councils and round limits". The full text is in this
+file at commit `32ff9013`. The anti-spiral rule that remains is: the same
+defect class twice in a row goes to a consult, and usage limits are
+logistics, not verdicts.
 
 ## Historical topology (retained context, not the current role contract)
 
