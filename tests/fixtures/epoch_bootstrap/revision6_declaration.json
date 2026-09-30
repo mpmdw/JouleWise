@@ -99,14 +99,15 @@
       "clean_dwell": {
         "script": "scripts/prewindow_check.sh",
         "script_sha256": "pins.prewindow_check_sha256",
-        "argv": "scripts/prewindow_check.sh --wait",
+        "argv": "scripts/prewindow_check.sh --wait --timeout-s <s>",
         "window_argument": null,
         "required_exit_status": 0,
         "continuous_s": 600,
         "poll_s": 30,
         "reset_on_failed_poll": true,
-        "timeout_min": 45,
-        "on_timeout": "exit status 1; the window does not start",
+        "timeout_s": "ceil(min(2700, remaining derivation start budget in seconds))",
+        "subprocess_timeout_s": "min(2700, remaining derivation start budget in seconds)",
+        "on_timeout": "the window does not start; the script exits 1 at its timeout",
         "named_daemons": [
           "XProtect",
           "mds_stores",
@@ -123,7 +124,7 @@
         "load_average_1min_max": 2.0,
         "ac_power": true,
         "free_disk_gb_min": 20,
-        "no_ps_aux_line_contains": [
+        "no_executable_name_matches": [
           "codex",
           "claude",
           "t3",
@@ -131,6 +132,8 @@
           "run_campaign",
           "window-chain"
         ],
+        "executable_name_source": "ps -A -o comm=",
+        "executable_name_match": "case-insensitive; remove leading whitespace and directory paths; exact name or name followed by hyphen, underscore, period or whitespace and any suffix; spaced names matched as a whole; argument text not matched",
         "load_limit_at_t0_by_night_gate": "one-shot path only; not on the quiet-admission path",
         "may_overlap_network_time_age": true
       }

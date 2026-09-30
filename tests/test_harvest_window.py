@@ -31,6 +31,11 @@ class HarvestWindowTests(unittest.TestCase):
         self.sid = build.SESSION_ID
         self.prereg = build.REPO_ROOT / "configs/calibration/preregistration_d079_epoch_25g83_rev1.md"
         self.prereg_digest = build.PREREGISTRATION_SHA256
+        if not revision6:
+            historical = self.prereg.read_text().split("# Revision 6 (", 1)[0]
+            self.prereg = self.base / "revision5.md"
+            self.prereg.write_text(historical)
+            self.prereg_digest = harvest.digest(self.prereg.read_bytes())
         if revision6:
             from tests.fixtures.epoch_bootstrap.revision6 import declaration, sid
             from tests.test_acc_25g83_rev6 import registration
