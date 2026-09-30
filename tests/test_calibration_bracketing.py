@@ -2648,6 +2648,56 @@ class CalibrationBracketingTests(unittest.TestCase):
             ["corpus_doubles_from_19_to_38"],
         )
 
+    def test_corpus_doubling_excludes_w1w2_and_declaration_counterfactual(self) -> None:
+        import joulewise.calibration_dispositions as dispositions
+        from tests.verify_w1w2_disposition_sources import candidate_members
+
+        artifact = _unissued_acceptance_fixture()
+        epoch_bindings = {**self.bindings, "os_build": "25G83"}
+        candidates = []
+        for index, member in enumerate(artifact["derivation_corpus"]["members"]):
+            candidates.append(replace(
+                self.candidate(f"prior-{index}", 99.0 if index == 0 else
+                               111.0 if index == 1 else 120.0 + index,
+                               "0.025", bindings=epoch_bindings),
+                manifest_sha256=member["manifest_sha256"],
+                evidence_sha256=member["instrument_evidence_sha256"],
+            ))
+        for index in range(7):
+            candidates.append(replace(
+                self.candidate(f"new-{index}", 200.0 + index, "0.025", bindings=epoch_bindings),
+                manifest_sha256=hashlib.sha256(f"new-manifest-{index}".encode()).hexdigest(),
+                evidence_sha256=hashlib.sha256(f"new-evidence-{index}".encode()).hexdigest(),
+            ))
+        for content_id, member in candidate_members().items():
+            candidates.append(replace(
+                # Synthetic in-range bounds isolate doubling from range expansion;
+                # the twelve content identities and hashes are the archived ones.
+                self.candidate(member["member_id"], 300.0, "0.025", bindings=epoch_bindings),
+                content_id=content_id, manifest_sha256=member["manifest_sha256"],
+                evidence_sha256=member["instrument_evidence_sha256"],
+            ))
+        snapshot, registered = _fixture_snapshot(candidates)
+        with _hermetic_estimator_pins() as fixture_factory:
+            for declare, expected in ((True, []), (False, ["corpus_doubles_from_19_to_38"])):
+                def acceptance_fixture():
+                    fixture = fixture_factory()
+                    fixture["identity_epoch"]["os_build"] = "25G83"
+                    fixture["prior_observation_set"]["epoch_catalog"][D079_EPOCH_CATALOG_ID]["os_build"] = "25G83"
+                    fixture["prior_observation_set"]["disposing_decision_ids"] = (
+                        [dispositions.W1W2_SET_ASIDE_DECISION_ID] if declare else []
+                    )
+                    return _reseal(fixture)
+
+                with self.subTest(declare=declare):
+                    result, reasons = _evaluate_with_unissued_acceptance(
+                        registered, acceptance_fixture=acceptance_fixture,
+                        window_start_s=100.0, window_end_s=110.0, bindings=epoch_bindings,
+                        policy=self.policy, ledger_snapshot=snapshot, _allow_unissued_fixture=True,
+                    )
+                    self.assertEqual(result["acceptance"]["prospective_rederivation"]["observed_triggers"], expected)
+                    self.assertEqual(reasons, () if declare else ("calibration_acceptance_bound_stale",))
+
     def test_corpus_doubling_excludes_disposed_diagnostics(self) -> None:
         artifact = _unissued_acceptance_fixture()
         candidates = []

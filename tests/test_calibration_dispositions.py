@@ -16,6 +16,7 @@ from scripts import issue_calibration_acceptance_generation as issuer
 from tests.test_calibration_bracketing import (
     _live_prefix_generation, _registered_generation, _reseal,
 )
+from tests.verify_w1w2_disposition_sources import candidate_members
 
 
 class DispositionTests(unittest.TestCase):
@@ -57,6 +58,71 @@ class DispositionTests(unittest.TestCase):
         parsed = dispositions.parse_disposition_registry(raw, expected_sha256=dispositions.DISPOSITION_REGISTRY_SHA256)
         expected = {content_id: decision_id for decision_id, row in dispositions.DISPOSITION_DECISIONS.items() for content_id in row["content_ids"]}
         self.assertEqual(parsed, expected)
+
+    def test_w1w2_production_registry_preserves_original_bytes_and_exact_roster(self):
+        rows = json.loads(dispositions.DISPOSITION_REGISTRY_PATH.read_bytes())
+        original = rows[:11]
+        original_raw = (json.dumps(original, ensure_ascii=False, indent=2) + "\n").encode()
+        self.assertEqual(hashlib.sha256(original_raw).hexdigest(),
+                         "ba1ba3fc596c9ef7f4014131e5cbc2012559f72bab41cafb89e004056790a63c")
+        self.assertEqual(set(dispositions.DISPOSITION_DECISIONS), {
+            dispositions.DISPOSITION_DECISION_ID, dispositions.W1W2_SET_ASIDE_DECISION_ID,
+        })
+        members = candidate_members()
+        self.assertEqual(len(rows), 23)
+        self.assertEqual({row["content_id"] for row in rows[11:]}, set(members))
+        self.assertEqual({row["disposing_decision_id"] for row in rows[11:]},
+                         {dispositions.W1W2_SET_ASIDE_DECISION_ID})
+        self.assertEqual(dispositions.DISPOSITION_DECISIONS[
+            dispositions.DISPOSITION_DECISION_ID]["content_ids"],
+            frozenset(row["content_id"] for row in original))
+        self.assertEqual(dispositions.W1W2_SET_ASIDE_MECHANISM,
+                         "valid Revision 5 capture of window W1 or W2; member of the "
+                         "unregistered 25G83 candidate r1, whose member list was fixed "
+                         "under the 165,000-cell cap while 8 of the 24 captures stopped "
+                         "on that cap; set aside from the successor under "
+                         "CAP-COUNCIL-25G83-01 addendum A1 S5 and erratum E1; "
+                         "a valid capture, not a diagnostic; not a member of any registered calibration")
+
+    def test_w1w2_missing_registry_row_refuses_and_table_counterfactual(self):
+        rows = json.loads(dispositions.DISPOSITION_REGISTRY_PATH.read_bytes())
+        victim = rows.pop()["content_id"]
+        raw = json.dumps(rows).encode()
+        digest = hashlib.sha256(raw).hexdigest()
+        with patch.object(dispositions, "DISPOSITION_REGISTRY_SHA256", digest):
+            with self.assertRaisesRegex(dispositions.DispositionRegistryError, "table mismatch"):
+                dispositions.parse_disposition_registry(raw, expected_sha256=digest)
+            altered = copy.deepcopy(dispositions.DISPOSITION_DECISIONS)
+            altered[dispositions.W1W2_SET_ASIDE_DECISION_ID]["content_ids"] -= {victim}
+            with patch.object(dispositions, "DISPOSITION_DECISIONS", altered):
+                self.assertEqual(len(dispositions.parse_disposition_registry(
+                    raw, expected_sha256=digest)), 22)
+
+    def test_w1w2_both_decisions_required_and_declaration_counterfactuals(self):
+        value = self.bound()
+        prior = value["prior_observation_set"]
+        epoch_id = next(key for key, epoch in prior["epoch_catalog"].items()
+                        if epoch == value["identity_epoch"])
+        for content_id, member in candidate_members().items():
+            prior["observations"].append({
+                "content_id": content_id, "epoch_id": epoch_id,
+                "disposition": "valid", "attempt_id": member["member_id"],
+                "session_id": member["source_directory"].split("/")[0],
+            })
+        value["backfill_candidate"]["candidate_inventory"]["valid"] += 12
+        count = len(prior["observations"])
+        both = sorted(dispositions.DISPOSITION_DECISIONS)
+        prior["disposing_decision_ids"] = both
+        self.assertTrue(self.valid_with_count(value, count))
+        original_members = copy.deepcopy(value["derivation_corpus"])
+        for sole_decision in both:
+            with self.subTest(sole_decision=sole_decision):
+                prior["disposing_decision_ids"] = [sole_decision]
+                self.assertFalse(self.valid_with_count(value, count))
+                # Only restoring the omitted declaration repairs the same artifact.
+                prior["disposing_decision_ids"] = both
+                self.assertTrue(self.valid_with_count(value, count))
+                self.assertEqual(value["derivation_corpus"], original_members)
 
     def test_l1_synthetic_disposed_diagnostics_validate(self):
         self.assertTrue(self.valid(self.bound()))

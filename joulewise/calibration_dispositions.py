@@ -1,4 +1,4 @@
-"""Reviewed D-126 disposition decisions shared by issuer and loader."""
+"""Reviewed disposition decisions shared by issuer and loader."""
 
 from __future__ import annotations
 
@@ -10,12 +10,22 @@ from typing import Any
 
 DISPOSITION_REGISTRY_RELATIVE_PATH = "configs/calibration/observation_dispositions.json"
 DISPOSITION_REGISTRY_PATH = Path(__file__).resolve().parents[1] / DISPOSITION_REGISTRY_RELATIVE_PATH
-DISPOSITION_REGISTRY_SHA256 = "ba1ba3fc596c9ef7f4014131e5cbc2012559f72bab41cafb89e004056790a63c"
+DISPOSITION_REGISTRY_SHA256 = "4a3d96da947d75c4ca84e4ef79630768e11977d4d8cd3592c36259217389effd"
 DISPOSITION_DECISION_ID = "D-126-disposition-25G83-v3-2026-09-25"
 DISPOSITION_MECHANISM = (
     "captured under the default-ProcessType launch context (utility QoS, "
     "timer coalescing, median ≈ 248 ms); disposed as diagnostic, never a "
     "member; authored after the values were seen and disclosed as such"
+)
+# CAP-COUNCIL-25G83-01-A2-E1 §3.2: these valid captures are set aside
+# from the successor; the unregistered r1 record is their source roster.
+W1W2_SET_ASIDE_DECISION_ID = "CAP-COUNCIL-25G83-01-E1-set-aside-W1W2-2026-09-29"
+W1W2_SET_ASIDE_MECHANISM = (
+    "valid Revision 5 capture of window W1 or W2; member of the unregistered "
+    "25G83 candidate r1, whose member list was fixed under the 165,000-cell "
+    "cap while 8 of the 24 captures stopped on that cap; set aside from the "
+    "successor under CAP-COUNCIL-25G83-01 addendum A1 S5 and erratum E1; "
+    "a valid capture, not a diagnostic; not a member of any registered calibration"
 )
 DISPOSITION_DECISIONS = {
     DISPOSITION_DECISION_ID: {
@@ -32,6 +42,23 @@ DISPOSITION_DECISIONS = {
             "45731bb9943b9f29a3f3d6fc2175c7b66ad11987f88de1868fb79fb8f87d1cdb",
             "150e6e9b1c0b04a440a2b9b63f858fd92a8f0e4f858b512ab7d627ced71b82a3",
             "748018ce72e41600464dcb9f2fddcc466e2e3c0ebfcf6474828d908239c36b7b",
+        }),
+    },
+    W1W2_SET_ASIDE_DECISION_ID: {
+        "mechanism": W1W2_SET_ASIDE_MECHANISM,
+        "content_ids": frozenset({
+            "e055af15ca06ebaad7d3cd3dfc9163840219e6610a2e5e197b3cbbc76d64956f",  # d079-epoch-25g83-derivation-w1-20260927-d04
+            "0af949aecb4d30109a9389637ac2c801ea1258284b0b20be6b5f90eb239c467c",  # d079-epoch-25g83-derivation-w1-20260927-d05
+            "79bda70471f19d75ef63ee4b847b2908eaed554e474c623a2612ae392d82aa2d",  # d079-epoch-25g83-derivation-w1-20260927-d06
+            "554d13ec9e9603e471cadfed74d0cbc36f4625f92e94ea942e7734353b5ea01d",  # d079-epoch-25g83-derivation-w1-20260927-d07
+            "37dd0834396ea4337f510c4f4bddcdfdd6ce60afa495ccf5d79e6646d9d86dd3",  # d079-epoch-25g83-derivation-w1-20260927-d10
+            "c1d9d5369b8317ade1c1d9229b5738b59ec733b51b931d033ccbf386731d132d",  # d079-epoch-25g83-derivation-w1-20260927-d12
+            "641c1240dd6c523b5abb8096d84dfe67b1ad1a1307c2e705578a264530fb838e",  # d079-epoch-25g83-derivation-w2-20260927-d01
+            "a9007b73fd91198f6d87fd5bc0195824543a18c4b751e408d6289b79e2ac2b41",  # d079-epoch-25g83-derivation-w2-20260927-d03
+            "4ff672124f72ca261dd2e9063527abcb08108f588fbc75c45169ae926a7519cc",  # d079-epoch-25g83-derivation-w2-20260927-d04
+            "2d81bed3f4b2f2b7c92b1488b465f53ed932ca982fea9a337086e4032dbbe3b9",  # d079-epoch-25g83-derivation-w2-20260927-d05
+            "4154f1f4001e660d40ba88a60b40f3be11be2128deace4db14d02210eea295b2",  # d079-epoch-25g83-derivation-w2-20260927-d09
+            "372eafc180693b3a21053ce2133472a8918fdf300730c04245cb709bd823ccb0",  # d079-epoch-25g83-derivation-w2-20260927-d10
         }),
     },
 }
