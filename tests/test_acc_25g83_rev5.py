@@ -20,6 +20,8 @@ from joulewise import calibration_bracketing as bracketing
 from joulewise.calibration_ledger import load_calibration_ledger_snapshot
 from tests.fixtures.epoch_bootstrap import build as build_module
 from tests.fixtures.epoch_bootstrap.build import Slot, add_session, build_derivation_ledger, write_verdict_record
+from tests.verify_w1w2_disposition_sources import candidate_members
+from joulewise.calibration_dispositions import W1W2_SET_ASIDE_DECISION_ID
 
 ROOT = Path(__file__).resolve().parents[1]
 PREREG = ROOT / "configs/calibration/preregistration_d079_epoch_25g83_rev1.md"
@@ -64,8 +66,78 @@ IDS_AND_VALUES = [
 
 
 class RevisionFiveTests(unittest.TestCase):
+    def test_w1w2_set_aside_and_thirteenth_foreign_row_refusal(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            fixture = build_derivation_ledger(
+                root / "fixture", [Slot("0.025") for _ in range(12)],
+                second_session=("derivation-night-2", [Slot("0.026") for _ in range(12)]),
+                **recorded_under(sealed_registration()),
+            )
+            snapshot = load_calibration_ledger_snapshot(
+                fixture["ledger"], fixture["pin"], require_committed_pin=True,
+                verify_custody=False, mode="read_replay", repo_root=fixture["root"],
+            )
+            archived = tuple(replace(
+                snapshot.observations[i], attempt_id=member["member_id"],
+                bracket_session_id=member["source_directory"].split("/")[0],
+                content_id=content_id, exact_bound_lexeme_s=member["b_fiducial_s"],
+            ) for i, (content_id, member) in enumerate(candidate_members().items()))
+            original = tuple(replace(
+                snapshot.observations[i], attempt_id=f"archived-original-{i}",
+                bracket_session_id="archived-n1-n2", content_id=content_id,
+                exact_bound_lexeme_s=value,
+            ) for i, (content_id, value) in enumerate(IDS_AND_VALUES))
+            augmented = replace(snapshot, observations=snapshot.observations + original + archived)
+            owners = {"derivation-night-1", "derivation-night-2"}
+            epoch = dict(snapshot.observations[0].identity_epoch)
+            registry = issuer._registered_dispositions()
+            self.assertEqual(issuer._foreign_rows(augmented, owners, epoch, registry), ())
+            original_registry = {key: value for key, value in registry.items()
+                                 if value != W1W2_SET_ASIDE_DECISION_ID}
+            self.assertEqual(len(issuer._foreign_rows(
+                augmented, owners, epoch, original_registry)), 12)
+            sealed = root / "sealed.md"
+            sealed.write_text(sealed_registration())
+            args = issuer.build_parser().parse_args([
+                "prepare-candidate", "--ledger", str(fixture["ledger"]),
+                "--head-pin", str(fixture["pin"]), "--repo-root", str(fixture["root"]),
+                "--preregistration", str(sealed), "--preregistration-sha256",
+                hashlib.sha256(sealed.read_bytes()).hexdigest(),
+                "--predecessor-acceptance", str(R7),
+                "--registration-session-id", "derivation-night-1",
+                "--registration-session-id", "derivation-night-2",
+                "--d125-ruling", "D-125 25G83/v3 Revision 5",
+                "--out", str(root / "candidate.json"),
+            ])
+            with patch.object(issuer, "_derivation_frame_cadence",
+                              return_value={"median_s": .132, "max_s": .144}):
+                with patch.object(issuer, "load_calibration_ledger_snapshot", return_value=augmented):
+                    candidate = issuer._prepare_candidate(args)
+                    # Removing just the reviewed exemption exposes all twelve to A-7.
+                    with patch.object(issuer, "_registered_dispositions", return_value=original_registry):
+                        with self.assertRaisesRegex(issuer.PrepareRefusal, "valid same-epoch observations outside"):
+                            issuer._prepare_candidate(args)
+                    self.assertEqual(issuer._prepare_candidate(args), candidate)
+                extra = replace(archived[0], content_id="f" * 64, attempt_id="foreign-thirteenth")
+                extra_snapshot = replace(augmented, observations=augmented.observations + (extra,))
+                self.assertEqual(issuer._foreign_rows(extra_snapshot, owners, epoch, registry),
+                                 ((extra.attempt_id, extra.bracket_session_id),))
+                with patch.object(issuer, "load_calibration_ledger_snapshot", return_value=extra_snapshot):
+                    with self.assertRaisesRegex(issuer.PrepareRefusal, "valid same-epoch observations outside.*foreign-thirteenth"):
+                        issuer._prepare_candidate(args)
+                # Counterfactual: remove only the thirteenth row, retain all twelve.
+                with patch.object(issuer, "load_calibration_ledger_snapshot", return_value=augmented):
+                    self.assertEqual(issuer._prepare_candidate(args), candidate)
+            self.assertEqual(candidate["prior_observation_set"]["disposing_decision_ids"],
+                             sorted([DECISION_ID, W1W2_SET_ASIDE_DECISION_ID]))
+            member_ids = {member["member_id"] for member in candidate["derivation_corpus"]["members"]}
+            self.assertTrue(member_ids.isdisjoint(row.attempt_id for row in archived))
+            self.assertEqual(len(member_ids), 24)
+
     def test_registry_tracks_all_archived_valid_observations(self) -> None:
-        rows = json.loads(REGISTRY.read_text())
+        rows = [row for row in json.loads(REGISTRY.read_text())
+                if row["disposing_decision_id"] == DECISION_ID]
         self.assertEqual({row["content_id"] for row in rows}, {item[0] for item in IDS_AND_VALUES})
         self.assertEqual({row["disposing_decision_id"] for row in rows}, {DECISION_ID})
         self.assertIn("# Revision 5 (", PREREG.read_text())
@@ -161,6 +233,11 @@ class RevisionFiveTests(unittest.TestCase):
                 bracket_session_id="archived-n1-n2", content_id=content_id,
                 exact_bound_lexeme_s=value,
             ) for i, (content_id, value) in enumerate(IDS_AND_VALUES))
+            foreign += tuple(replace(
+                snapshot.observations[i], attempt_id=member["member_id"],
+                bracket_session_id=member["source_directory"].split("/")[0],
+                content_id=content_id, exact_bound_lexeme_s=member["b_fiducial_s"],
+            ) for i, (content_id, member) in enumerate(candidate_members().items()))
             augmented = replace(snapshot, observations=snapshot.observations + foreign)
             sealed = root / "sealed.md"
             sealed.write_text(sealed_registration())
@@ -222,7 +299,7 @@ class RevisionFiveTests(unittest.TestCase):
             self.assertEqual({row["content_id"] for row in prior["observations"]} &
                              {content_id for content_id, _ in IDS_AND_VALUES},
                              {content_id for content_id, _ in IDS_AND_VALUES})
-            self.assertEqual(prior["disposing_decision_ids"], [DECISION_ID])
+            self.assertEqual(prior["disposing_decision_ids"], sorted([DECISION_ID, W1W2_SET_ASIDE_DECISION_ID]))
             self.assertEqual(candidate["derivation_corpus"]["n"], 24)
             self.assertEqual(candidate["registered_generation_row"]["registration_revision"], 5)
             issued = copy.deepcopy(candidate)
@@ -345,7 +422,7 @@ class RevisionFiveTests(unittest.TestCase):
     def test_tracked_registry_digest_is_the_pinned_constant(self) -> None:
         self.assertEqual(hashlib.sha256(REGISTRY.read_bytes()).hexdigest(),
                          issuer.DISPOSITION_REGISTRY_SHA256)
-        self.assertEqual(len(issuer._registered_dispositions()), 11)
+        self.assertEqual(len(issuer._registered_dispositions()), 23)
 
     def test_an_appended_row_under_the_fixed_id_refuses_on_digest(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -355,7 +432,7 @@ class RevisionFiveTests(unittest.TestCase):
             path.write_text(json.dumps(rows, indent=2) + "\n")
             with self.assertRaisesRegex(issuer.PrepareRefusal,
                                         r"observation disposition registry digest mismatch: [0-9a-f]{64} "
-                                        r"!= pinned ba1ba3fc[0-9a-f]{56}; not issued"):
+                                rf"!= pinned {issuer.DISPOSITION_REGISTRY_SHA256}; not issued"):
                 issuer._registered_dispositions(path)
 
     def test_a4_route_refuses_on_digest_and_the_tracked_registry_refuses_on_a7(self) -> None:
@@ -405,7 +482,7 @@ class RevisionFiveTests(unittest.TestCase):
             # fixed decision id exempt W2 and a clean window is silently
             # dropped (the ruling's A4 route: W2's twelve ids, exit 0, n = 24).
             only_w2 = root / "registry-w2.json"
-            only_w2.write_text(json.dumps(rows[11:], indent=2) + "\n")
+            only_w2.write_text(json.dumps(rows[len(json.loads(REGISTRY.read_text())):], indent=2) + "\n")
             with patch.object(issuer, "DISPOSITION_REGISTRY_SHA256",
                               hashlib.sha256(only_w2.read_bytes()).hexdigest()):
                 code, printed = run(only_w2)

@@ -2419,8 +2419,8 @@ def evaluate_calibration_bracket(
         for observation in new_observations
     ):
         return result, ("calibration_observation_unclassifiable",)
-    # Rows set aside by a decision this artifact declares are diagnostics that
-    # can never be members, so they do not count toward corpus doubling.
+    # Rows set aside by a reviewed decision this artifact declares do not
+    # count toward corpus doubling.
     disposed_ids = disposed_content_ids_for(
         artifact["prior_observation_set"].get("disposing_decision_ids")
     )
