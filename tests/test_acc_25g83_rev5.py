@@ -282,7 +282,10 @@ class RevisionFiveTests(unittest.TestCase):
                     issuer._prepare_candidate(args(superseded))
                 wrong_predecessor = args(sealed)
                 wrong_predecessor.predecessor_acceptance = R6
-                with self.assertRaisesRegex(issuer.PrepareRefusal, "requires r7 predecessor"):
+                with self.assertRaisesRegex(
+                    issuer.PrepareRefusal,
+                    f"requires active predecessor {issuer.ACTIVE_ACCEPTANCE_ID}",
+                ):
                     issuer._prepare_candidate(wrong_predecessor)
                 registry.write_text("[]\n")
                 # An empty registry now refuses on its digest (§4.6); pinned to
