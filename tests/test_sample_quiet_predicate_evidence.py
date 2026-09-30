@@ -15,7 +15,8 @@ from unittest.mock import Mock, patch
 
 from scripts import sample_quiet_predicate_evidence as harness
 from joulewise import battery_float
-from tests.test_battery_float import PairAuthenticationTests, UPDATE, raw as battery_raw
+from tests import test_battery_float as battery_float_tests
+from tests.test_battery_float import UPDATE, raw as battery_raw
 
 
 # Headroom on the kernel-charged CPU ceiling: measured child start-up plus
@@ -150,7 +151,7 @@ def write_authentic_rounds(root, rows):
     for index, row in enumerate(rows):
         out = root / f"fixture-envelope-{index:03d}"
         out.mkdir()
-        pair = PairAuthenticationTests().pair(out)
+        pair = battery_float_tests.PairAuthenticationTests().pair(out)
         for record in pair.values():
             record["session_id"] = row.get("session", "fixture")
         session = {"session": row.get("session", "fixture"), "battery_float": pair,

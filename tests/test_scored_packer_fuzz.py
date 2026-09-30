@@ -12,6 +12,7 @@ names the properties that fail.
 """
 from collections import Counter
 from copy import deepcopy
+import os
 import random
 import unittest
 
@@ -188,6 +189,10 @@ def build_corpus():
     return legal, rows
 
 
+@unittest.skipUnless(
+    os.environ.get("JOULEWISE_FULL_CORPUS") == "1",
+    "full scored corpus (set JOULEWISE_FULL_CORPUS=1)",
+)
 class ScoredPackerFuzzTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

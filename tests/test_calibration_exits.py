@@ -3188,6 +3188,7 @@ class CalibrationExitReliabilityTests(unittest.TestCase):
         sandbox: WitnessSandbox,
         *,
         label: str,
+        read_observation_path: Path | None = None,
     ) -> tuple[subprocess.Popen[str], Path, Path, float]:
         """Start the event-driven fixture on an empty event file, past ready."""
 
@@ -3207,6 +3208,8 @@ class CalibrationExitReliabilityTests(unittest.TestCase):
             "JW_FAKE_INITIAL_ENDPOINT": str(origin),
             "JW_FAKE_SAMPLER_ACK_PATH": str(ack_path),
         }
+        if read_observation_path is not None:
+            env["JW_FAKE_SAMPLER_READ_OBSERVATION_PATH"] = str(read_observation_path)
         process = sandbox.runner.start_owned(
             [sys.executable, FIXTURE_ROOT / "fake_sampler.py", "-o", capture],
             cwd=sandbox.root,
@@ -3235,8 +3238,12 @@ class CalibrationExitReliabilityTests(unittest.TestCase):
 
         sandbox = WitnessSandbox()
         try:
+            read_observation = sandbox.root / "torn-prefix-read.bin"
             process, events_path, ack_path, origin = (
-                self._start_acknowledging_fixture(sandbox, label="torn-event-line")
+                self._start_acknowledging_fixture(
+                    sandbox, label="torn-event-line",
+                    read_observation_path=read_observation,
+                )
             )
             line = (
                 json.dumps(
@@ -3254,11 +3261,19 @@ class CalibrationExitReliabilityTests(unittest.TestCase):
             with events_path.open("ab", buffering=0) as stream:
                 stream.write(line[:split_at])
                 os.fsync(stream.fileno())
-                # Hundreds of times the fixture's 1 ms drain period, so the
-                # torn prefix is certainly read before the remainder lands even
-                # on a heavily loaded runner.  This is the interval in which the
-                # old readline() path destroyed the event.
-                time.sleep(0.25)
+                # Wait for proof the drain retained this exact torn prefix;
+                # a slow host must not make the negative assertion vacuous.
+                _wait_for_semantic_readiness(
+                    lambda: (
+                        True if read_observation.exists()
+                        and read_observation.read_bytes() == line[:split_at]
+                        else None
+                    ),
+                    process=process,
+                    description="torn event prefix retained after drain",
+                    timeout_s=30.0,
+                    teardown=sandbox.close,
+                )
                 self.assertNotIn(
                     1,
                     self._acknowledged_sequences(ack_path),

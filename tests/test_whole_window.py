@@ -50,7 +50,7 @@ from joulewise.campaign_provenance import (
     load_authenticated_campaign_catalog,
 )
 from tests.test_calibration_bracketing import _fixture_snapshot
-from tests.test_arm_readiness import LaunchConsumptionV2Tests
+from tests import test_arm_readiness as arm_readiness_tests
 from tests.test_arm_readiness_schemas import TEST_BOOT_SESSION_ID
 
 
@@ -1032,8 +1032,8 @@ class LaunchLineageWholeWindowTests(unittest.TestCase):
         (path / "metadata.json").write_text("{}\n", encoding="utf-8")
         return path
 
-    def _completed_launch(self) -> tuple[LaunchConsumptionV2Tests, dict]:
-        launch = LaunchConsumptionV2Tests()
+    def _completed_launch(self) -> tuple[arm_readiness_tests.LaunchConsumptionV2Tests, dict]:
+        launch = arm_readiness_tests.LaunchConsumptionV2Tests()
         launch.setUp()
         self.addCleanup(launch.doCleanups)
         consumption_path, settled = launch._settle()
@@ -1051,7 +1051,7 @@ class LaunchLineageWholeWindowTests(unittest.TestCase):
 
     @staticmethod
     def _write_authenticated_marker_bundle(
-        launch: LaunchConsumptionV2Tests,
+        launch: arm_readiness_tests.LaunchConsumptionV2Tests,
         lineage: dict,
         bundle_id: str,
     ) -> tuple[Path, dict]:

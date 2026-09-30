@@ -15,7 +15,8 @@ import unittest
 from unittest.mock import patch, Mock
 from joulewise import battery_float, quiet_predicate_campaign as campaign
 from joulewise import night_gate
-from tests.test_battery_float import PairAuthenticationTests, raw as battery_raw
+from tests import test_battery_float as battery_float_tests
+from tests.test_battery_float import raw as battery_raw
 
 ROOT = Path(__file__).resolve().parents[1]
 PROTOCOL = json.loads((ROOT / campaign.PROTOCOL_PATH).read_text())
@@ -100,7 +101,7 @@ def good_round(busy=0):
 
 def attach_battery_pair(out, session, rows):
     """Complete synthetic collector records with a real authenticated pair."""
-    pair = PairAuthenticationTests().pair(out)
+    pair = battery_float_tests.PairAuthenticationTests().pair(out)
     start = (session.get("start_stamp") or {}).get("monotonic_before_s", 1000.0)
     end_stamp = session.get("end_stamp") or {}
     end = end_stamp.get("monotonic_after_s", end_stamp.get("monotonic_before_s", 1600.0))
@@ -3505,7 +3506,7 @@ class BatteryFloatSummaryTests(unittest.TestCase):
         for index in range(1, 13):
             out = evidence / f'envelope-{index:02d}'
             out.mkdir()
-            pair = PairAuthenticationTests().pair(out)
+            pair = battery_float_tests.PairAuthenticationTests().pair(out)
             session = {'session': 'session-1', 'boot_id': 'boot', 'os_build': '25G83',
                        'battery_float': pair, 'journal_rows': 1,
                        'start_stamp': {'monotonic_before_s': 20e-9, 'monotonic_after_s': 20e-9},

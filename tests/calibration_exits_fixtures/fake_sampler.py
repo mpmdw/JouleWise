@@ -230,6 +230,11 @@ def drain_events(handle) -> int:
             active_on = None
         if isinstance(sequence, int) and not isinstance(sequence, bool):
             acknowledge(handle, sequence, event_type)
+    # Publish the retained tail only after the drain has finished processing.
+    # The negative acknowledgement check must not race the event handler.
+    observed_path = os.environ.get("JW_FAKE_SAMPLER_READ_OBSERVATION_PATH")
+    if observed_path:
+        Path(observed_path).write_bytes(bytes(events_buffer))
     return consumed
 
 

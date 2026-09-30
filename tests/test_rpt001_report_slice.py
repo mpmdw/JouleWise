@@ -432,8 +432,15 @@ class TestRpt001Artifacts(unittest.TestCase):
                 check=True,
                 capture_output=True,
             ).stdout.split(b"\0")
+            # Clone the tracked working tree, including uncommitted deletions.
+            deleted = set(subprocess.run(
+                ["git", "ls-files", "--deleted", "-z"],
+                cwd=REPO,
+                check=True,
+                capture_output=True,
+            ).stdout.split(b"\0"))
             for encoded in tracked:
-                if not encoded:
+                if not encoded or encoded in deleted:
                     continue
                 relative = Path(encoded.decode("utf-8"))
                 source = REPO / relative
