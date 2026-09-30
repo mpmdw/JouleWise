@@ -138,6 +138,19 @@ class GenuineEvidenceTests(unittest.TestCase):
         self.assertTrue(_scientific_config_identity(self.bundle)[1])
         self.assertEqual(_reference_energy_evidence(self.bundle), (None, None, "provenance"))
 
+    def test_calibrated_reference_rederives_and_rejects_primary_byte_mutation(self):
+        from joulewise.whole_window import _reference_energy_evidence
+        from tests.genuine_evidence import write_genuine_reference
+
+        write_genuine_reference(self.bundle, calibrated=True)
+        gross, idle, refusal = _reference_energy_evidence(self.bundle)
+        self.assertIsNone(refusal)
+        self.assertIsNotNone(gross)
+        self.assertIsNotNone(idle)
+        path = self.bundle / "calibration/raw/powermetrics.plist"
+        path.write_bytes(path.read_bytes() + b" ")
+        self.assertEqual(_reference_energy_evidence(self.bundle), (None, None, "provenance"))
+
 
     def test_deferred_core_waits_for_members_before_adapter_evaluation(self):
         import shutil

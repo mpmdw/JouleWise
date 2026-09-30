@@ -118,7 +118,9 @@ from tests.test_run_campaign import (
     run_campaign_module,
 )
 from tests.test_analysis_finalizer import install_synthetic_finalization_fixture
-from tests.genuine_evidence import genuine_evidence_builders, genuine_evidence_test
+from tests.genuine_evidence import (
+    genuine_evidence_builders, genuine_evidence_test, genuine_floor_members_test,
+)
 from tests.bfgs_fixtures import (
     exemption_parity,
     produce_strict_bundle,
@@ -438,7 +440,9 @@ def install_two_row_supersession_counterfactual(
             )
 
         quarantine = root.parent / f"supersession-quarantine-{bundle_id}"
-        quarantine.mkdir()
+        # Quarantine remains in the window's battery/custody inventory. Keep
+        # its event boundaries and raw pair along with the three pinned files.
+        shutil.copytree(canonical, quarantine)
         custody = {}
         for name, field in (
             ("config.json", "config_sha256"),
@@ -446,7 +450,6 @@ def install_two_row_supersession_counterfactual(
             ("summary_metrics.json", "summary_sha256"),
         ):
             raw = (canonical / name).read_bytes()
-            (quarantine / name).write_bytes(raw)
             custody[field] = hashlib.sha256(raw).hexdigest()
         row = {
             "schema_version": OCCURRENCE_SUPERSESSION_SCHEMA,
@@ -733,6 +736,7 @@ class AnalysisIntegrationTests(unittest.TestCase):
         session_patch.start()
         self.addCleanup(session_patch.stop)
 
+    @genuine_floor_members_test
     def test_production_two_row_audit_persists_and_stripped_finding_refuses(self):
         """Insert two bundle ids in reverse lexical order, then call production.
 
@@ -849,6 +853,7 @@ class AnalysisIntegrationTests(unittest.TestCase):
                 errors,
             )
 
+    @genuine_floor_members_test
     def test_finalized_gamma_runs_real_engine_then_isolates_math_layers(self):
         """Real synthetic end-to-end pass followed by isolated math seams."""
 
@@ -1115,6 +1120,7 @@ class AnalysisIntegrationTests(unittest.TestCase):
             )
         )
 
+    @genuine_floor_members_test
     def test_governed_transport_finalizes_then_refuses_with_pending_ruling_code(self):
         with tempfile.TemporaryDirectory() as tmp:
             fixture = install_synthetic_finalization_fixture(
@@ -2922,9 +2928,10 @@ class AnalysisIntegrationTests(unittest.TestCase):
         self.assertTrue(evidence)
         stack = floor_stack_identity(evidence[0].raw_config, evidence[0].metadata)
         self.assertIsNotNone(stack)
+        backend = evidence[0].raw_config["hardware_target"]["telemetry_backend"]
         source = make_cell(cell_id="transport-source", condition="calibration-only")
         source["key"].update(
-            backend="mock",
+            backend=backend,
             metric=contrast["floor_selector"]["metric"],
             window_class=contrast["floor_selector"]["window_class"],
         )
@@ -2935,7 +2942,7 @@ class AnalysisIntegrationTests(unittest.TestCase):
         source["transport_group_id"] = "tg-production-transport"
         group = build_transport_group(
             transport_group_id="tg-production-transport",
-            backend="mock",
+            backend=backend,
             metric=contrast["floor_selector"]["metric"],
             window_class=contrast["floor_selector"]["window_class"],
             stack_identity=stack,
@@ -3572,6 +3579,7 @@ class AnalysisIntegrationTests(unittest.TestCase):
                             config_path, evidence_root,
                         )
                     self.assertEqual(code, 0)
+                    install_explicit_mock_sampler(evidence_root / run_id)
                     calibration_ids.append(run_id)
                     order_rows[root_id].append(
                         {

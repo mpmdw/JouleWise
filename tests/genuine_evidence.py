@@ -124,9 +124,10 @@ def write_genuine_evidence(bundle: Path | str) -> None:
         )):
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(SEED / name, target)
+    skipped_environment = metadata.get("environment", {}).get("capture_skipped") is True
     for name in ("uncertainty_evidence", "environment", "environment_admission",
-                 "campaign_policy", "campaign_environment_preflight", "idle_baseline", "device"):
-        if name not in metadata or (name == "uncertainty_evidence" and
+                 "campaign_policy", "campaign_environment_preflight", "idle_baseline", "idle_drift_bound_w", "device"):
+        if name not in metadata or (name == "environment" and skipped_environment) or (name == "uncertainty_evidence" and
                                   "clock_stamps" not in metadata[name].get("clock_anchor", {})):
             metadata[name] = copy.deepcopy(seed_metadata[name])
     if copied_primary:
@@ -181,6 +182,72 @@ def write_genuine_evidence(bundle: Path | str) -> None:
     write_passing_pair(root)
     window = BundleReader(root).measured_window()
     metadata = _read(metadata_path)
+    if skipped_environment or copied_primary:
+        # FakeClock controller captures explicitly have no environment data.
+        # Replay the seed's idle capture on this run's clock, rather than
+        # attaching an admission attempt from a different epoch.
+        import plistlib
+        from tests.test_powermetrics import documents_to_stream, rebased_documents, energy_consistent
+        from joulewise.adapters.powermetrics import rich_telemetry_jsonl, decode_rich_telemetry, idle_window_gpu_quality
+        documents = [plistlib.loads(part) for part in
+                     (SEED / "raw/powermetrics_idle.plist").read_bytes().split(b"\0")
+                     if part.strip()]
+        # Author quiet CPU evidence in the native wire too. The seed's rich
+        # admission rows were edited independently of its native CPU fields;
+        # copying that label cannot stand in for a quiet primary capture.
+        for document in documents:
+            processor = document["processor"]
+            processor.update(cpu_power=100.0, gpu_power=0.0, ane_power=0.0, combined_power=100.0)
+            processor["clusters"] = [{"name": "synthetic-quiet-cpu", "cpus": [{
+                "cpu": 0, "idle_ratio": 0.9, "down_ratio": 0.0,
+                "idle_ns": round(document["elapsed_ns"] * 0.9), "down_ns": 0,
+            }]}]
+        documents = [energy_consistent(document) for document in documents]
+        duration = sum(row["elapsed_ns"] for row in documents) / 1e9
+        first_endpoint = window.start_s - duration + documents[0]["elapsed_ns"] / 1e9
+        raw = documents_to_stream(rebased_documents(documents, first_endpoint_s=first_endpoint))
+        (root / "raw/powermetrics_idle.plist").write_bytes(raw)
+        (root / "rich_telemetry_idle.jsonl").write_text(
+            rich_telemetry_jsonl(raw, first_record_endpoint_s=first_endpoint), encoding="utf-8",
+        )
+        admission["attempts"][0].update(start_s=window.start_s - duration, end_s=window.start_s)
+        metadata["environment_admission"] = admission
+        metadata["idle_baseline"] = copy.deepcopy(seed_metadata["idle_baseline"])
+        from joulewise.adapters.powermetrics import (
+            parse_powermetrics_records, decode_rich_telemetry, idle_window_gpu_quality,
+        )
+        from joulewise.uncertainty_evidence import derive_idle_drift_evidence
+        from joulewise.idle_dependence import duration_weighted_mean_and_sample_variance
+        from joulewise.idle_admission import IdleAdmissionExtension, evaluate_cpu_idle_admission
+        pre_records = parse_powermetrics_records(raw)
+        mean, variance = duration_weighted_mean_and_sample_variance(
+            [record.combined_power_w for record in pre_records],
+            [record.elapsed_ns / 1e9 for record in pre_records],
+        )
+        metadata["idle_baseline"].update(
+            power_w_mean=mean, power_w_stddev=variance ** 0.5,
+            duration_s=duration, sample_count=len(pre_records),
+            **idle_window_gpu_quality(decode_rich_telemetry(raw)),
+        )
+        admission["attempts"][0]["baseline"] = copy.deepcopy(metadata["idle_baseline"])
+        extension = IdleAdmissionExtension.from_mapping(
+            _read(POLICY)["idle_admission_extension"], profile=policy.profile,
+        )
+        admission["attempts"][0]["cpu_admission"] = evaluate_cpu_idle_admission(
+            [json.loads(line) for line in (root / "rich_telemetry_idle.jsonl").read_text().splitlines()],
+            extension.cpu_criteria, gpu_admitted=admission.get("decision") == "admitted",
+        )
+        post = (root / "raw/powermetrics_idle_post.plist").read_bytes()
+        drift, guard, bound = derive_idle_drift_evidence(
+            pre_power_w=[record.combined_power_w for record in parse_powermetrics_records(raw)],
+            post_power_w=[record.combined_power_w for record in parse_powermetrics_records(post)],
+            pre_power_w_mean=metadata["idle_baseline"]["power_w_mean"],
+            pre_idle_window_suspect=idle_window_gpu_quality(decode_rich_telemetry(raw))["idle_window_suspect"],
+            post_idle_window_suspect=idle_window_gpu_quality(decode_rich_telemetry(post))["idle_window_suspect"],
+            calibration_guard=metadata["uncertainty_evidence"]["idle_drift_guard"],
+        )
+        metadata["uncertainty_evidence"].update(idle_drift=drift, idle_drift_guard=guard)
+        metadata["idle_drift_bound_w"] = bound
     metadata["environment"]["post_run_observation"]["captured_at_s"] = window.end_s
     _write(metadata_path, metadata)
     if not copied_primary:
@@ -206,7 +273,7 @@ def genuine_evidence_builders(*, charging=False, extend_whole_window=True):
     def attach(bundle):
         write_genuine_evidence(bundle)
         if extend_whole_window and Path(bundle).name.endswith(("-neg8-reference-start", "-neg8-reference-end")):
-            write_genuine_reference(bundle)
+            write_genuine_reference(bundle, calibrated=True)
         if charging:
             write_charging_pair(bundle)
 
@@ -221,20 +288,7 @@ def genuine_evidence_builders(*, charging=False, extend_whole_window=True):
 
     def finalization(*args, **kwargs):
         fixture = original_finalization(*args, **kwargs)
-        artifact = _read(fixture["floor_path"])
-        member_ids = set()
-        for cell in artifact["cells"]:
-            member_ids.update(row["bundle_id"] for row in cell["absolute"]["bundle_observations"])
-            member_ids.update(member["bundle_id"] for block in cell["comparative"]["blocks"] for member in block["members"])
-        for bundle_id in sorted(member_ids):
-            bundle = Path(fixture["runs_root"]) / bundle_id
-            if not bundle.exists():
-                bundle.mkdir()
-                attach(bundle)
-                write_genuine_reference(bundle)
-                if charging:
-                    write_charging_pair(bundle)
-        return fixture
+        return materialize_floor_members(fixture, attach=attach)
 
     def row(root, bundle_ids, **kwargs):
         value = original_row(root, bundle_ids, **kwargs)
@@ -286,6 +340,9 @@ def genuine_evidence_builders(*, charging=False, extend_whole_window=True):
     def produce(*args, **kwargs):
         bundle = original_produce(*args, **kwargs)
         attach(bundle)
+        # The controller's mock runtime has a deterministic sampler, but its
+        # legacy fixture metadata predates the governed stack field.
+        analysis.install_explicit_mock_sampler(bundle)
         return bundle
 
     with (
@@ -334,9 +391,12 @@ def populate_whole_window_core(root: Path, row: dict) -> dict:
         admission = metadata.get("environment_admission", {})
         attempts = admission.get("attempts", [])
         final = attempts[-1] if attempts else {}
+        decision = admission.get("decision")
         cpu = evaluate_cpu_idle_admission(
             _load_idle_records(bundle, final.get("attempt", 1)),
-            extension.cpu_criteria, gpu_admitted=admission.get("decision") == "admitted",
+            extension.cpu_criteria,
+            gpu_admitted=(True if decision == "admitted" else
+                          False if decision in {"flagged", "abort"} else None),
         )
         members.append({"bundle_id": bundle_id, "cpu_admission": cpu})
         observations.extend(_adapter_observations(bundle_id, metadata))
@@ -348,7 +408,73 @@ def populate_whole_window_core(root: Path, row: dict) -> dict:
     return row
 
 
-def write_genuine_reference(bundle: Path | str) -> None:
+def write_reference_calibration(bundle: Path | str) -> None:
+    """Attach and independently verify a raw-backed forty-pulse calibration.
+
+    This is bundle-local synthetic instrument evidence. It does not manufacture
+    an issued acceptance, a calibration ledger receipt, or a NEG-8 drift bound.
+    """
+    from tests.test_reduce import self_consistent_calibration
+    from joulewise.powermetrics_fiducial import (
+        MAX_AGE_S, PROTOCOL_V2_ID, PROTOCOL_V2_SHA256,
+        RESIDUAL_REGION_METHOD, capture_wall_time_from_events,
+    )
+    from joulewise.uncertainty_evidence import ACTIVE_CAPTURE_ANCHOR_METHOD
+    from joulewise.reduce import _verify_instrument_calibration
+
+    root = Path(bundle)
+    reader = BundleReader(root)
+    window = reader.measured_window()
+    metadata = _read(root / "metadata.json")
+    config = _read(root / "config.json")
+    evidence, raw, events = self_consistent_calibration(first_endpoint_s=window.start_s - 300.0)
+    device = metadata["device"]
+    binary = device["powermetrics"]
+    packages = metadata["campaign_environment_preflight"]["snapshot"].setdefault("python_packages", {})
+    packages["mlx"] = {"present": True, "version": "0.31.2"}
+    bindings = {
+        "hardware_model": device["hw_model"], "os_build": device["kern_osversion"],
+        "powermetrics_sha256": binary["executable_sha256"],
+        "sampling_interval_ms": 1000.0 / config["sampling"]["power_hz"],
+        "anchor_method_version": ACTIVE_CAPTURE_ANCHOR_METHOD, "mlx_version": "0.31.2",
+        "pulse_protocol_id": PROTOCOL_V2_ID, "power_policy": "ac_high_power",
+        "estimator_revision": RESIDUAL_REGION_METHOD, "protocol_sha256": PROTOCOL_V2_SHA256,
+    }
+    evidence.update(protocol_id=PROTOCOL_V2_ID, bindings=bindings,
+                    capture_wall_time_s=capture_wall_time_from_events(events), max_age_s=MAX_AGE_S)
+    evidence["binding_evidence"] = {
+        "schema_version": "joulewise.instrument_binding_evidence.v1",
+        "binding_vector_sha256": hashlib.sha256(json.dumps(bindings, sort_keys=True, separators=(",", ":")).encode()).hexdigest(),
+        "powermetrics_binary": {"path": binary["executable_path"], "sha256": binary["executable_sha256"]},
+        "power_policy": {"id": "ac_high_power"},
+    }
+    directory = root / "calibration"
+    (directory / "raw").mkdir(parents=True, exist_ok=True)
+    (directory / "raw/powermetrics.plist").write_bytes(raw)
+    (directory / "events.jsonl").write_bytes(events)
+    _write(directory / "instrument_evidence.json", evidence)
+    manifest = {"schema_version": "joulewise.instrument_validation_manifest.v1", "artifacts": {
+        name: hashlib.sha256((directory / name).read_bytes()).hexdigest()
+        for name in ("raw/powermetrics.plist", "events.jsonl", "instrument_evidence.json")
+    }}
+    _write(directory / "manifest.json", manifest)
+    metadata["instrument_calibration"] = {
+        "artifact_path": "calibration/instrument_evidence.json",
+        "artifact_sha256": manifest["artifacts"]["instrument_evidence.json"],
+        "validation_manifest_path": "calibration/manifest.json",
+        "validation_manifest_sha256": hashlib.sha256((directory / "manifest.json").read_bytes()).hexdigest(),
+        "b_fiducial_s": evidence["b_fiducial_s"], "bindings": bindings,
+        "binding_observations": {"powermetrics_sha256": binary["executable_sha256"], "power_policy": "ac_high_power"},
+    }
+    _write(root / "metadata.json", metadata)
+    bound, refusal = _verify_instrument_calibration(BundleReader(root), metadata, metadata["instrument_calibration"])
+    if refusal is not None:
+        raise AssertionError(f"synthetic reference calibration refused: {refusal}")
+    metadata["instrument_calibration"]["verified_effective_b_fiducial_s"] = bound
+    _write(root / "metadata.json", metadata)
+
+
+def write_genuine_reference(bundle: Path | str, *, calibrated=False) -> None:
     """Produce a canonical NEG-8 reference with a freshly reduced summary.
 
     This supplies primary-energy and scientific-config evidence, not a drift
@@ -365,12 +491,75 @@ def write_genuine_reference(bundle: Path | str) -> None:
     _write(root / "config.json", config)
     rebind_config(root)
     write_passing_pair(root)
+    if calibrated:
+        write_reference_calibration(root)
+        # The short seed request is below its idle baseline. Give this
+        # synthetic reference a resolved dual-family signal in PRIMARY
+        # processor power/energy fields, then regenerate both derived views.
+        import plistlib
+        from tests.test_powermetrics import documents_to_stream, energy_consistent
+        from joulewise.adapters.powermetrics import samples_from_raw_powermetrics, rich_telemetry_jsonl
+        path = root / "raw/powermetrics.plist"
+        seed_raw, seed_anchor = _current_primary()
+        metadata = _read(root / "metadata.json")
+        if metadata["uncertainty_evidence"]["clock_anchor"] != seed_anchor:
+            raise ValueError("calibrated synthetic reference requires the seed clock")
+        documents = [plistlib.loads(part) for part in seed_raw.split(b"\0") if part.strip()]
+        for document in documents:
+            processor = document["processor"]
+            for key in ("cpu_power", "gpu_power", "ane_power"):
+                processor[key] *= 100.0
+        raw = documents_to_stream([energy_consistent(document) for document in documents])
+        path.write_bytes(raw)
+        endpoint = _read(root / "metadata.json")["uncertainty_evidence"]["clock_anchor"]["first_sample_end_point_epoch_s"]
+        samples = samples_from_raw_powermetrics(raw, first_record_endpoint_s=endpoint)
+        with (root / "power_trace.csv").open("w", newline="") as stream:
+            writer = csv.writer(stream)
+            writer.writerow(("timestamp_s", "power_w", "source", "rail", "interval_start_s", "interval_end_s"))
+            writer.writerows((sample.timestamp_s, sample.power_w, sample.source, sample.rail,
+                             sample.interval_start_s, sample.interval_end_s) for sample in samples)
+        (root / "rich_telemetry.jsonl").write_text(rich_telemetry_jsonl(raw, first_record_endpoint_s=endpoint))
     _write(root / "summary_metrics.json", reduce_bundle(root, reducer_version="0.5.2").to_dict())
 
 
 def genuine_evidence_is_active() -> bool:
     """Let a fixture finish its deferred row after constructing its members."""
     return _BUILDERS_ACTIVE.get()
+
+
+def materialize_floor_members(fixture: dict, *, attach=write_genuine_evidence) -> dict:
+    """Supply the physical members declared by a synthetic floor artifact."""
+    from tests.bfgs_fixtures import write_charging_pair
+
+    artifact = _read(fixture["floor_path"])
+    member_ids = set()
+    for cell in artifact["cells"]:
+        member_ids.update(row["bundle_id"] for row in cell["absolute"]["bundle_observations"])
+        member_ids.update(member["bundle_id"] for block in cell["comparative"]["blocks"] for member in block["members"])
+    for bundle_id in sorted(member_ids):
+        bundle = Path(fixture["runs_root"]) / bundle_id
+        if not bundle.exists():
+            bundle.mkdir()
+            attach(bundle)
+            write_genuine_reference(bundle)
+            if _CHARGING.get():
+                write_charging_pair(bundle)
+    return fixture
+
+
+def genuine_floor_members_test(method):
+    """Complete declared floor custody before a method hashes its attachments."""
+    @wraps(method)
+    def run(*args, **kwargs):
+        from tests import test_analysis_integration as analysis
+        original = analysis.install_synthetic_finalization_fixture
+
+        def build(*builder_args, **builder_kwargs):
+            return materialize_floor_members(original(*builder_args, **builder_kwargs))
+
+        with patch.object(analysis, "install_synthetic_finalization_fixture", build):
+            return method(*args, **kwargs)
+    return run
 
 
 def genuine_evidence_test(method):
