@@ -2648,6 +2648,75 @@ class CalibrationBracketingTests(unittest.TestCase):
             ["corpus_doubles_from_19_to_38"],
         )
 
+    def test_corpus_doubling_excludes_disposed_diagnostics(self) -> None:
+        artifact = _unissued_acceptance_fixture()
+        candidates = []
+        for index, member in enumerate(artifact["derivation_corpus"]["members"]):
+            candidates.append(
+                replace(
+                    self.candidate(
+                        f"prior-{index}",
+                        (
+                            99.0
+                            if index == 0
+                            else 111.0
+                            if index == 1
+                            else 120.0 + index
+                        ),
+                        "0.025",
+                    ),
+                    manifest_sha256=member["manifest_sha256"],
+                    evidence_sha256=member["instrument_evidence_sha256"],
+                )
+            )
+        for index in range(19):
+            candidates.append(
+                replace(
+                    self.candidate(f"new-{index}", 200.0 + index, "0.025"),
+                    manifest_sha256=hashlib.sha256(
+                        f"new-manifest-{index}".encode()
+                    ).hexdigest(),
+                    evidence_sha256=hashlib.sha256(
+                        f"new-evidence-{index}".encode()
+                    ).hexdigest(),
+                )
+            )
+        snapshot, registered = _fixture_snapshot(candidates)
+        # At 38 valid observations, disposing one diagnostic keeps the
+        # eligible count below the doubling threshold.
+        import joulewise.calibration_dispositions as dispositions
+        disposed_id = registered[-1].content_id
+        self.assertIsNotNone(disposed_id)
+        altered = copy.deepcopy(dispositions.DISPOSITION_DECISIONS)
+        altered[dispositions.DISPOSITION_DECISION_ID]["content_ids"] = frozenset({disposed_id})
+        with _hermetic_estimator_pins() as fixture_factory, patch.object(
+            dispositions, "DISPOSITION_DECISIONS", altered,
+        ):
+            def acceptance_fixture():
+                fixture = fixture_factory()
+                fixture["prior_observation_set"]["disposing_decision_ids"] = [
+                    dispositions.DISPOSITION_DECISION_ID
+                ]
+                return _reseal(fixture)
+
+            result, reasons = _evaluate_with_unissued_acceptance(
+                registered,
+                acceptance_fixture=acceptance_fixture,
+                window_start_s=100.0,
+                window_end_s=110.0,
+                bindings=self.bindings,
+                policy=self.policy,
+                ledger_snapshot=snapshot,
+                _allow_unissued_fixture=True,
+            )
+        self.assertEqual(reasons, ())
+        self.assertEqual(
+            result["acceptance"]["prospective_rederivation"][
+                "observed_triggers"
+            ],
+            [],
+        )
+
     def test_new_abandoned_observation_refuses_with_or_without_content(self) -> None:
         candidates = [
             self.candidate("pre", 99.0, "0.025"),
