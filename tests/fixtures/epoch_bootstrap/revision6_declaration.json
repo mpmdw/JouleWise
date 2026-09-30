@@ -1,0 +1,355 @@
+{
+  "schema": "joulewise-registration-windows/v1",
+  "registration": "D-079 epoch 25G83 Revision 6",
+  "identity_epoch": {
+    "os_build": "25G83",
+    "hardware_model": "Mac15,9",
+    "power_policy": "ac_high_power",
+    "sampling_interval_ms": 100,
+    "estimator_revision": "joint_loss_sublevel_interval_branch_v2",
+    "pulse_protocol_id": "powermetrics_pulse_fiducial_v3"
+  },
+  "predecessor": {
+    "acceptance_id": "d079_calibration_acceptance_v2_n17_r8",
+    "path": "configs/calibration/calibration_acceptance_d079_v2_n17_r8.json",
+    "file_sha256": "TO BE PINNED AT SEAL",
+    "derivation_sha256": "TO BE PINNED AT SEAL",
+    "basis_reading": "read P8 wherever R7 is named as a derivation basis; operatives identical"
+  },
+  "successor_acceptance_id_pattern": "d079_calibration_acceptance_v2_n<N>_25g83_r2",
+  "retired_acceptance_ids": [
+    "d079_calibration_acceptance_v2_n12_25g83_r1"
+  ],
+  "disposing_decision_ids_required": [
+    "D-126-disposition-25G83-v3-2026-09-25",
+    "CAP-COUNCIL-25G83-01-E1-set-aside-W1W2-2026-09-29"
+  ],
+  "disposition_registry_sha256": "4a3d96da947d75c4ca84e4ef79630768e11977d4d8cd3592c36259217389effd",
+  "set_aside_w1w2_content_ids": [
+    "e055af15ca06ebaad7d3cd3dfc9163840219e6610a2e5e197b3cbbc76d64956f",
+    "0af949aecb4d30109a9389637ac2c801ea1258284b0b20be6b5f90eb239c467c",
+    "79bda70471f19d75ef63ee4b847b2908eaed554e474c623a2612ae392d82aa2d",
+    "554d13ec9e9603e471cadfed74d0cbc36f4625f92e94ea942e7734353b5ea01d",
+    "37dd0834396ea4337f510c4f4bddcdfdd6ce60afa495ccf5d79e6646d9d86dd3",
+    "c1d9d5369b8317ade1c1d9229b5738b59ec733b51b931d033ccbf386731d132d",
+    "641c1240dd6c523b5abb8096d84dfe67b1ad1a1307c2e705578a264530fb838e",
+    "a9007b73fd91198f6d87fd5bc0195824543a18c4b751e408d6289b79e2ac2b41",
+    "4ff672124f72ca261dd2e9063527abcb08108f588fbc75c45169ae926a7519cc",
+    "2d81bed3f4b2f2b7c92b1488b465f53ed932ca982fea9a337086e4032dbbe3b9",
+    "4154f1f4001e660d40ba88a60b40f3be11be2128deace4db14d02210eea295b2",
+    "372eafc180693b3a21053ce2133472a8918fdf300730c04245cb709bd823ccb0"
+  ],
+  "sessions": {
+    "session_kind": "derivation",
+    "session_id_pattern": "^d079-epoch-25g83-r6-[0-9]{8}T[0-9]{4}Z$",
+    "session_id_carries_order": false,
+    "order": "ledger_capability_sequence",
+    "sessions_of_this_registration": "every derivation-kind session opened after pins.ledger_head_pin_at_first_window",
+    "windows_of_this_registration": "every session of this registration that is not a null session",
+    "every_session_of_this_registration_must_be_named_at_issuance": true,
+    "a_session_whose_id_does_not_match_the_pattern": "refuse",
+    "null_session": {
+      "definition": "a terminal session of this registration in which no slot has a finalized ledger row (no capture was attempted; every declared slot is unused)",
+      "decided_by": "the issuer, from the ledger; never from the operator's naming",
+      "is_a_window": false,
+      "takes_a_window_label": false,
+      "counts_toward": "nothing: not counted, valid, members, n, max_counting_windows, max_battery_replacement_windows or max_windows_total; not read by STOP-CADENCE or STOP-FUTILITY; not an adverse window",
+      "count_rule_decision": "NEXT_WINDOW, unless STOP-NULL-REPEAT fires",
+      "max_consecutive": 1,
+      "listed_in_r9_record": "by session id and abort reason, with no slot entries",
+      "start_condition_record_required": false,
+      "a_session_with_one_or_more_finalized_slot_rows": "is a window",
+      "source": "D-182 (a zero-capture refusal is not a window and licenses one successor); erratum REV6-25G83-01-E1 F4"
+    },
+    "declared_slots_per_session": 12,
+    "settle_s": 600,
+    "slot_pitch_s": 600,
+    "final_slot_capture_budget_s": 480,
+    "inter_window_min_gap_s": null,
+    "inter_window_max_gap_s": null,
+    "time_of_day_constraint": null
+  },
+  "start_state_conditions": [
+    "previous_window_terminal_processes_exited_evidence_digests_in_ledger",
+    "previous_window_blind_checks_done_and_count_rule_decision_is_NEXT_WINDOW",
+    "agent_census_zero",
+    {
+      "no_thermal_throttling": {
+        "argv": "/usr/bin/pmset -g therm",
+        "every_CPU_Speed_Limit": 100,
+        "checked": "t0"
+      }
+    },
+    "battery_float_predicate_pass_A_R5b",
+    {
+      "network_time_off_receipt": {
+        "argv": "/usr/bin/sudo -n /usr/sbin/systemsetup -setusingnetworktime off",
+        "exit_status": 0,
+        "stdout_exact": "setUsingNetworkTime: Off",
+        "same_boot_as_first_capture": true,
+        "min_age_before_first_capture_s": 600,
+        "clocks": [
+          "wall",
+          "monotonic"
+        ],
+        "receipts_per_window": 1
+      }
+    },
+    {
+      "clean_dwell": {
+        "script": "scripts/prewindow_check.sh",
+        "script_sha256": "pins.prewindow_check_sha256",
+        "argv": "scripts/prewindow_check.sh --wait",
+        "window_argument": null,
+        "required_exit_status": 0,
+        "continuous_s": 600,
+        "poll_s": 30,
+        "reset_on_failed_poll": true,
+        "timeout_min": 45,
+        "on_timeout": "exit status 1; the window does not start",
+        "named_daemons": [
+          "XProtect",
+          "mds_stores",
+          "mdworker",
+          "mdbulkimport",
+          "backupd",
+          "photoanalysisd",
+          "softwareupdated",
+          "Spotlight",
+          "mediaanalysisd"
+        ],
+        "named_daemon_match": "anywhere in a ps aux line, case-insensitive",
+        "cpu_percent_per_named_daemon_max": 5.0,
+        "load_average_1min_max": 2.0,
+        "ac_power": true,
+        "free_disk_gb_min": 20,
+        "no_ps_aux_line_contains": [
+          "codex",
+          "claude",
+          "t3",
+          "mcp-server",
+          "run_campaign",
+          "window-chain"
+        ],
+        "load_limit_at_t0_by_night_gate": "one-shot path only; not on the quiet-admission path",
+        "may_overlap_network_time_age": true
+      }
+    }
+  ],
+  "start_condition_evidence": {
+    "record": "one committed file per window: for each of conditions a to g, the evidence file path and its sha256",
+    "required_for": "every window; not for a null session",
+    "first_session": "conditions a and b are recorded as not applicable",
+    "after_a_null_session": "conditions a and b are read on the null session",
+    "clean_dwell_entry_must_show": {
+      "script_sha256_equals_pin": true,
+      "exit_status": 0,
+      "continuous_clean_s_min": 600
+    },
+    "issuer_refuses_if": [
+      "a window has no record",
+      "a condition has no entry",
+      "a named evidence file is absent",
+      "a named evidence file does not match its sha256",
+      "the clean-dwell entry fails clean_dwell_entry_must_show"
+    ]
+  },
+  "definitions": {
+    "adverse_window": "battery-float window verdict is battery_float_confounded or battery_float_evidence_missing (A-R5b)",
+    "counting_window": "a window that is not adverse",
+    "counted_capture": [
+      "in_a_counting_window",
+      "harness_report_cells_at_least_1",
+      "median_frame_ms_at_least_100_and_at_most_150"
+    ],
+    "valid_capture": [
+      "in_a_counting_window",
+      "ledger_disposition_valid"
+    ],
+    "member": [
+      "in_a_counting_window",
+      "ledger_disposition_valid",
+      "stored_anchor_v3_outcome_resolves",
+      "median_frame_ms_at_least_100_and_at_most_150"
+    ],
+    "counted_source": "the R9 record, committed and named by digest at issuance (harness report mode); the issuer does not recompute cells",
+    "valid_source": "ledger",
+    "member_source": "ledger disposition, stored anchor outcome, and the R9 record's median frame"
+  },
+  "count_rule": {
+    "evaluated": "after each session's blind checks, before any B is read",
+    "totals_are_over": "counting windows so far, in ledger order",
+    "decision_order": [
+      {
+        "clause": 0,
+        "if": "this session is a null session",
+        "then": "NEXT_WINDOW",
+        "unless": "STOP-NULL-REPEAT fires",
+        "then_instead": "STOP_TO_REVIEW"
+      },
+      {
+        "clause": 1,
+        "if": "any stop line fired in this window",
+        "then": "STOP_TO_REVIEW"
+      },
+      {
+        "clause": 2,
+        "if": "this window is adverse",
+        "then": "NEXT_WINDOW"
+      },
+      {
+        "clause": 3,
+        "if": "counted_total >= 24 and members_total >= 12",
+        "then": "CLOSE_AND_DERIVE"
+      },
+      {
+        "clause": 4,
+        "if": "counting_windows_done < 3",
+        "then": "NEXT_WINDOW"
+      },
+      {
+        "clause": 5,
+        "if": "counted_total < 24",
+        "then": "R9_COUNT_NOT_REACHED_TO_REVIEW"
+      },
+      {
+        "clause": 6,
+        "else": "MEMBERS_SHORT_TO_REVIEW"
+      }
+    ],
+    "triggers_explained": [
+      {
+        "id": "T-count",
+        "next_window_if": "counted_total < 24",
+        "source": "A1 R9"
+      },
+      {
+        "id": "T-members",
+        "next_window_if": "members_total < 12",
+        "source": "Rev 5; A2 section 3.6 item 7, read on members"
+      }
+    ],
+    "combination": "any",
+    "max_counting_windows": 3,
+    "max_battery_replacement_windows": 1,
+    "max_windows_total": 4,
+    "issuable_outcome": "CLOSE_AND_DERIVE",
+    "continuation_after_stop_or_review": "only by a sealed amendment to this registration; no command-line ruling",
+    "review_means": "consult, cold gate or owner (D-186); never stop for good"
+  },
+  "stop_lines": [
+    {
+      "id": "STOP-CADENCE",
+      "applies": "every counting window",
+      "fires_if": "median of per-capture median native frame lengths > 150 ms",
+      "consequence": "review",
+      "source": "Rev 5 (W1 only), extended here"
+    },
+    {
+      "id": "STOP-FUTILITY",
+      "applies": "first counting window only",
+      "fires_if": "valid captures in that window < 6",
+      "consequence": "review",
+      "source": "Rev 5"
+    },
+    {
+      "id": "STOP-R9-CELL",
+      "applies": "every window, adverse included",
+      "fires_if": "any capture stopped on the cell count",
+      "consequence": "campaign void; review",
+      "source": "A1 R8(b), R9; cap ruling section 5 item 4"
+    },
+    {
+      "id": "STOP-R9-DEADLINE",
+      "applies": "every window, adverse included",
+      "fires_if": "any capture stopped on the wall deadline",
+      "consequence": "campaign void; review",
+      "source": "A1 R8(b), R9; cap ruling section 5 item 4"
+    },
+    {
+      "id": "STOP-R9-RATIO",
+      "applies": "every window, adverse included",
+      "fires_if": "any capture whose cell search ran has cells / cap > 0.5",
+      "consequence": "campaign void; review",
+      "source": "A1 R8(a), R9; cap ruling section 5 item 4"
+    },
+    {
+      "id": "STOP-R9-FRAME",
+      "applies": "every window, adverse included",
+      "fires_if": "the harness cannot report a median frame for any capture whose finalized ledger row records a digest for its raw sampler bytes (bytes missing, digest mismatch, or no readable frame)",
+      "consequence": "review; R9 not passed; the campaign is not void by this alone; nothing issues",
+      "source": "A1 R9 fifth clause; A1 R0(d); erratum REV6-25G83-01-E1 F3"
+    },
+    {
+      "id": "STOP-BATTERY-SECOND",
+      "applies": "epoch",
+      "fires_if": "a second adverse window",
+      "consequence": "review",
+      "source": "A-R5b"
+    },
+    {
+      "id": "STOP-NULL-REPEAT",
+      "applies": "sessions of this registration, in ledger order",
+      "fires_if": "a null session whose preceding session of this registration was also a null session",
+      "consequence": "review",
+      "source": "D-182 (one successor); erratum REV6-25G83-01-E1 F4"
+    }
+  ],
+  "sampling_dependence": {
+    "computed": "once, by the issuer, over the members, after the last window is terminal and the R9 record is committed",
+    "K": "number of counting windows that contribute at least one member",
+    "q99_plain": {
+      "stored_as": "prediction_99_two_draw_s",
+      "formula": "t(0.995, n - 1) * sample_sd_presentation_s * sqrt(2)",
+      "df": "n - 1",
+      "rule_string": "the sealed TWO_DRAW_PREDICTION_RULE, unchanged"
+    },
+    "q99_within_window": {
+      "stored_as": "prediction_99_within_window_two_draw_s",
+      "s_within": "sqrt( sum over windows j, sum over members i of window j, of (B_ij - m_j)^2, divided by (n - K) ), m_j the mean B of window j's members; same Decimal working precision and same presentation quantum and rounding as sample_sd_presentation_s",
+      "formula": "t(0.995, n - K) * s_within_presentation_s * sqrt(2), binary64, shortest round-trip decimal",
+      "df": "n - K",
+      "rule_string": "prediction_p_within_window_two_draw_s = t(p, n-K) * s_within_presentation_s * sqrt(2), evaluated in binary64 and recorded as its shortest round-tripping decimal",
+      "rule_string_note": "recorded verbatim beside this value; the sealed TWO_DRAW_PREDICTION_RULE string says t(p, n-1) and is never used for it",
+      "which_is_larger": "q99_within_window > q99_plain exactly when MSB / MSW < (r^2 - 1) * (n - K) / (K - 1), r = sqrt((n - 1) / (n - K)) * t(0.995, n - K) / t(0.995, n - 1); q99_within_window / q99_plain <= r; equal when K = 1",
+      "quantile_proof_required_for_df": true
+    },
+    "c_rule": "C = max(predecessor_C, q99_plain, q99_within_window, S)",
+    "thresholds": "none",
+    "report_only": [
+      "per window: member count, median, mean and sample SD of B, start time, start-to-start interval",
+      "range of the window medians divided by S",
+      "ICC = max(0, (MSB - MSW) / (MSB + (n0 - 1) * MSW)), MSB = sum_j n_j (m_j - m)^2 / (K - 1), MSW = s_within^2, n0 = (n - sum_j n_j^2 / n) / (K - 1); not computable if K < 2",
+      "rho1 = Spearman rank correlation, average ranks for ties, over pairs (B of slot s, B of slot s+1) where both slots are members of the same window, pairs pooled over windows; with the pair count; not computable if fewer than 3 pairs"
+    ],
+    "never_changes": [
+      "membership",
+      "S",
+      "the preflight level screen",
+      "which windows run"
+    ]
+  },
+  "pins": {
+    "chain_sha256": "TO BE PINNED AT SEAL",
+    "validator_sha256": "TO BE PINNED AT SEAL",
+    "prewindow_check_sha256": "TO BE PINNED AT SEAL",
+    "estimator_code_sha256": {
+      "joulewise/powermetrics_fiducial.py": "TO BE PINNED AT SEAL",
+      "joulewise/uncertainty_evidence.py": "TO BE PINNED AT SEAL",
+      "joulewise/adapters/powermetrics.py": "TO BE PINNED AT SEAL",
+      "joulewise/reduce.py": "TO BE PINNED AT SEAL"
+    },
+    "cap_cells": "TO BE PINNED AT SEAL",
+    "harness_sha256": "TO BE PINNED AT SEAL",
+    "cap_rule_text_sha256": "TO BE PINNED AT SEAL",
+    "roster_sha256": "TO BE PINNED AT SEAL",
+    "launch_template_sha256": [
+      "e62a461b9f739be6aa57588219674cbb27f574dc40930ee1ee706f230442e5c8",
+      "1570b74587075445ee64fff9b14b718a4b753ec3432db9363455636a2d2fc1fd"
+    ],
+    "ledger_head_pin_at_first_window": {
+      "sequence": "TO BE PINNED AT SEAL",
+      "digest": "TO BE PINNED AT SEAL"
+    }
+  }
+}

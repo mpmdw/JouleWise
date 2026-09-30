@@ -410,7 +410,9 @@ _D102_GENERATION_DERIVATIONS: dict[str, dict[str, Any]] = {
 }
 
 
-def _registered_generation_row_is_complete(generation: Any, *, revision_five: bool = False) -> bool:
+def _registered_generation_row_is_complete(
+    generation: Any, *, revision_five: bool = False, revision_six: bool = False,
+) -> bool:
     """Whether a registered generation row carries every fence it must.
 
     The validator reads its epoch catalog, prior-set size, cutoff sequence,
@@ -442,6 +444,9 @@ def _registered_generation_row_is_complete(generation: Any, *, revision_five: bo
     shape of D-125's ``successor_screen_exceeds_budget_ceiling`` refusal.
     The exact 25G83/v3 registration Revision 5 permits equality, records
     ``zero_headroom``, and still refuses drift above the screen.
+    Revision 6 preserves equality and the 12-member floor and adds its
+    mandatory window-blocked Q99 to the exact maximum. Historical generations
+    keep their original equation.
     """
 
     if not isinstance(generation, Mapping):
@@ -495,10 +500,19 @@ def _registered_generation_row_is_complete(generation: Any, *, revision_five: bo
     drift = _decimal(operatives.get("maximum_budgetable_drift_s"))
     prediction = _decimal(generation["prediction_99_two_draw_s"])
     screen = _decimal(operatives.get("bracket_screen_s"))
+    within = None
+    if revision_six:
+        # Revision 6 adds an independent, mandatory fourth term. An absent or
+        # malformed term must not silently recover the Revision 5 equation.
+        if generation.get("registration_revision") != 6:
+            return False
+        within = _decimal(generation.get("prediction_99_within_window_two_draw_s"))
+        if within is None or within < 0:
+            return False
     expected_drift = (
-        max((item for item in (predecessor, prediction, screen) if item is not None),
+        max((item for item in (predecessor, prediction, screen, within) if item is not None),
             default=None)
-        if revision_five else
+        if revision_five or revision_six else
         max((item for item in (predecessor, prediction) if item is not None),
             default=None)
     )
@@ -507,7 +521,7 @@ def _registered_generation_row_is_complete(generation: Any, *, revision_five: bo
         or prediction is None
         or screen is None
         or drift != expected_drift
-        or not (screen <= drift if revision_five else screen < drift)
+        or not (screen <= drift if revision_five or revision_six else screen < drift)
     ):
         return False
     if not all(
@@ -542,7 +556,7 @@ def _registered_generation_row_is_complete(generation: Any, *, revision_five: bo
         )
         and (
             generation["screen_rule"] != SCREEN_RULE_FLOORED_RANGE_ENVELOPE
-            or generation["corpus_n"] >= (12 if revision_five else ENVELOPE_MINIMUM_CORPUS_N)
+            or generation["corpus_n"] >= (12 if revision_five or revision_six else ENVELOPE_MINIMUM_CORPUS_N)
         )
         and isinstance(session_ids, tuple)
         and all(isinstance(item, str) and item for item in session_ids)
@@ -807,7 +821,14 @@ def _valid_acceptance_bound(value: Any) -> bool:
         and isinstance(generation, Mapping)
         and generation.get("registration_revision") == 5
     )
-    if generation is None or not _registered_generation_row_is_complete(generation, revision_five=revision_five):
+    revision_six = (
+        value.get("identity_epoch") == REVISION_FIVE_EPOCH
+        and isinstance(generation, Mapping)
+        and generation.get("registration_revision") == 6
+    )
+    if generation is None or not _registered_generation_row_is_complete(
+        generation, revision_five=revision_five, revision_six=revision_six,
+    ):
         return False
     expected_n = generation["corpus_n"]
     operative_values = generation["operatives"]
@@ -1043,7 +1064,8 @@ def _valid_acceptance_bound(value: Any) -> bool:
                 or not entry["member_id"]
                 or not _valid_sha256(entry.get("manifest_sha256"))
                 or not _valid_sha256(entry.get("instrument_evidence_sha256"))
-                or entry.get("reason") not in REGISTERED_CORPUS_EXCLUSION_REASONS
+                or entry.get("reason") not in (REGISTERED_CORPUS_EXCLUSION_REASONS |
+                    {"frame_out_of_covered_range", "adverse_window"} if revision_six else REGISTERED_CORPUS_EXCLUSION_REASONS)
             ):
                 return False
             # The exclusion entry carries no content id, so it is matched into
@@ -1094,6 +1116,25 @@ def _valid_acceptance_bound(value: Any) -> bool:
         }
     minimum_id = member_ids[values.index(min(values))]
     maximum_id = member_ids[values.index(max(values))]
+    if revision_six:
+        try:
+            from scripts.issue_calibration_acceptance_generation import PrepareRefusal, within_window_prediction
+            bindings = {}
+            for member in corpus["members"]:
+                content_id = content_id_from_artifact_hashes({
+                    "manifest.json": member["manifest_sha256"],
+                    "instrument_evidence.json": member["instrument_evidence_sha256"],
+                })
+                bindings[member["member_id"]] = prior_row_by_content_id[content_id]["session_id"]
+            expected_within = within_window_prediction(corpus["members"], bindings)
+            if derivation.get("within_window_prediction_derivation") != expected_within:
+                return False
+        except (PrepareRefusal, ValueError, TypeError, KeyError, ArithmeticError):
+            return False
+    if revision_six and statistics.get("prediction_99_within_window_two_draw_s") != generation[
+        "prediction_99_within_window_two_draw_s"
+    ]:
+        return False
     if (
         statistics.get("minimum_s") != expected_statistics["minimum_s"]
         or statistics.get("maximum_s") != expected_statistics["maximum_s"]
@@ -1931,8 +1972,13 @@ def _prior_set_matches_import_cutoff_prefix(
         and isinstance(generation, Mapping)
         and generation.get("registration_revision") == 5
     )
+    revision_six = (
+        artifact.get("identity_epoch") == REVISION_FIVE_EPOCH
+        and isinstance(generation, Mapping)
+        and generation.get("registration_revision") == 6
+    )
     if generation is None or not _registered_generation_row_is_complete(
-        generation, revision_five=revision_five
+        generation, revision_five=revision_five, revision_six=revision_six,
     ):
         return False
     prefix_mode = generation["prior_prefix_mode"]
