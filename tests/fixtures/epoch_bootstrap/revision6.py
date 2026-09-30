@@ -38,7 +38,8 @@ def sid(index):
 
 def commit(root):
     subprocess.run(['git', '-C', str(root), 'add', '.'], check=True, capture_output=True)
-    subprocess.run(['git', '-C', str(root), 'commit', '-qm', 'synthetic Revision 6 harvest'], check=True, capture_output=True)
+    subprocess.run(['git', '-C', str(root), '-c', 'user.email=fixture@example.invalid', '-c', 'user.name=fixture',
+                    'commit', '-qm', 'synthetic Revision 6 harvest'], check=True, capture_output=True)
 
 
 def window_records(root, session, block, *, previous=None, adverse=False):
