@@ -1599,16 +1599,16 @@ class FrozenProtocolTests(unittest.TestCase):
         # stale; the atomic Phase-2 acceptance/pin re-freeze is exactly what
         # cures it, so this unit proves the cured state end to end.
         path = Path(
-            "configs/calibration/calibration_acceptance_d079_v2_n17_r7.json"
+            "configs/calibration/calibration_acceptance_d079_v2_n17_r8.json"
         )
         raw = path.read_bytes()
         self.assertEqual(
             hashlib.sha256(raw).hexdigest(),
-            "9c3a29f61a6f72bbe5efdfb0eddd1caa14557595522b2abb093b414380b9fe16",
+            "52e3d18a087bd8a0f28da6d20c3817da4d3ce532c604d7f049c78aad6a489a13",
         )
         artifact = json.loads(raw)
         self.assertEqual(
-            artifact["acceptance_id"], "d079_calibration_acceptance_v2_n17_r7"
+            artifact["acceptance_id"], "d079_calibration_acceptance_v2_n17_r8"
         )
         self.assertEqual(artifact["derivation_corpus"]["n"], 17)
         derivation = artifact["decimal_derivation"]

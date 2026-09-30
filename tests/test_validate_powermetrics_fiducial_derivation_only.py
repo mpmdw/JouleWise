@@ -50,7 +50,7 @@ from tests.test_validate_powermetrics_fiducial import documented_keys
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 _ACCEPTANCE_RELATIVE = (
-    "configs/calibration/calibration_acceptance_d079_v2_n17_r7.json"
+    "configs/calibration/calibration_acceptance_d079_v2_n17_r8.json"
 )
 # The stall deadline the sampler-ack driver allows a freshly spawned fixture
 # sampler child.  Liveness backstop only; no assertion depends on its value.
@@ -266,7 +266,7 @@ class BatteryFloatPinRegressionTests(unittest.TestCase):
 
     The writer's battery brackets add raw files and one evidence key; the
     sampler set, the protocol v3 bytes, the four estimator-code digests the
-    active r7 acceptance pins, and the registered derivation-chain digest must
+    active P8 acceptance pins, and the registered derivation-chain digest must
     all be what they were before BFG-D.  The literals below were read at
     ``c6814dd8`` and are independent of the implementation.
     """
@@ -1183,7 +1183,7 @@ class CaptureClassificationTests(unittest.TestCase):
     """
 
     SCREEN_BASIS = {
-        "acceptance_id": "d079_calibration_acceptance_v2_n17_r7",
+        "acceptance_id": "d079_calibration_acceptance_v2_n17_r8",
         "artifact_sha256": "a" * 64,
         "preflight_level_screen_s": "0.032898493715362",
         "epoch": {"os_build": "25F84"},

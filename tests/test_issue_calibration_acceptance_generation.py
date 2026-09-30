@@ -291,7 +291,7 @@ class DeskEpochWatchTests(unittest.TestCase):
         # Spelled out so the default cannot silently drift off the
         # ACTIVE generation.  Moved r6 -> r7 by the D-079 r7 issuance,
         # which repointed DEFAULT_ACCEPTANCE_BOUND_PATH.
-        self.assertEqual(args.acceptance.name, "calibration_acceptance_d079_v2_n17_r7.json")
+        self.assertEqual(args.acceptance.name, "calibration_acceptance_d079_v2_n17_r8.json")
         result = subprocess.run(
             [
                 sys.executable, "-B",

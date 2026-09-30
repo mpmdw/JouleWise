@@ -113,7 +113,7 @@ class EpochContinuationTests(unittest.TestCase):
     # cross-check refuses any other acceptance before it compares a single
     # science field.  The s9 tests therefore hand the issuer the witnesses' own
     # generation (a later `--acceptance` overrides the default one above).  The
-    # ACTIVE generation is r7 (D-138 re-issue, 2026-09-22); replaying a witness
+    # ACTIVE generation is P8 (cap pin reissue); replaying a witness
     # against it refuses by name -- pinned by
     # test_s9_witness_against_the_active_generation_refuses_by_name.
     S9_WITNESS_ACCEPTANCE = (
@@ -1010,25 +1010,29 @@ class EpochContinuationTests(unittest.TestCase):
 
         from scripts import epoch_equivalence_check as desk
         self.build()
+        # Issue 316 freezes the desk witness to R7, including its digest.
+        witness_acceptance = bracket.ANCHOR_V3_R7_ACCEPTANCE_BOUND_PATH
         witness = self.root / "desk-record.json"
         rc, out, _ = self.run_cli_of(desk.main, [
             "--session-id", SESSION_ID,
             "--ledger", str(self.fixture["ledger"]), "--head-pin", str(self.fixture["pin"]),
-            "--acceptance", str(bracket.DEFAULT_ACCEPTANCE_BOUND_PATH),
+            "--acceptance", str(witness_acceptance),
             "--repo-root", str(self.fixture["root"]), "--out", str(witness),
         ])
         self.assertEqual(rc, 0, out)
         record = json.loads(witness.read_bytes())
         self.assertIn("acceptance_file_sha256", record["reference_envelope"])
         self.assertIn("screen_rule", record["reference_envelope"])
-        rc, _, error = self.prepare("--equivalence-record", str(witness))
+        rc, _, error = self.prepare("--equivalence-record", str(witness),
+                                    "--acceptance", str(witness_acceptance))
         self.assertEqual((rc, error), (0, ""))
         for field, value in (("acceptance_file_sha256", "0" * 64), ("screen_rule", "floored_range_envelope_screen")):
             with self.subTest(field=field):
                 tampered = copy.deepcopy(record)
                 tampered["reference_envelope"][field] = value
                 witness.write_text(json.dumps(tampered), encoding="utf-8")
-                rc, _, error = self.prepare("--force", "--equivalence-record", str(witness))
+                rc, _, error = self.prepare("--force", "--equivalence-record", str(witness),
+                                            "--acceptance", str(witness_acceptance))
                 self.assertEqual(rc, 3)
                 self.assertIn(f"equivalence_record.reference_envelope.{field}", error)
 
@@ -1157,11 +1161,11 @@ class EpochContinuationTests(unittest.TestCase):
         self.assertEqual(bracket.ISSUED_ACCEPTANCE_REGISTRY, before)
         self.assertEqual({key: hashlib.sha256(entry["path"].read_bytes()).hexdigest() for key, entry in before.items()}, hashes)
         self.assertEqual(bracket.load_calibration_acceptance_bound()["derivation_sha256"], derivation)
-        # Follows the ACTIVE generation: the D-079 r7 issuance moved
-        # ACTIVE_ACCEPTANCE_ID from r6 to r7, so the frozen bytes this
-        # names are r7's.  r6 stays in the registry as history and its
+        # Follows the ACTIVE generation: the cap pin reissue moved
+        # ACTIVE_ACCEPTANCE_ID from r7 to P8, so the frozen bytes this
+        # names are P8's. r6 stays in the registry as history and its
         # own row is still checked by the two assertions above.
-        self.assertEqual(hashes[bracket.ACTIVE_ACCEPTANCE_ID], bracket.ANCHOR_V3_R7_ACCEPTANCE_BOUND_SHA256)
+        self.assertEqual(hashes[bracket.ACTIVE_ACCEPTANCE_ID], bracket.ANCHOR_V3_R8_ACCEPTANCE_BOUND_SHA256)
 
 
 if __name__ == "__main__":

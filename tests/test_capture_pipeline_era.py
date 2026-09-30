@@ -263,22 +263,22 @@ class CapturePipelineEraTests(unittest.TestCase):
             {CLOCK_METHOD_V3},
         )
 
-    def test_arm_readiness_recognizes_the_r7_v3_acceptance_generation(self) -> None:
+    def test_arm_readiness_recognizes_the_p8_v3_acceptance_generation(self) -> None:
         from joulewise.arm_readiness import _issued_d079
 
         policy = {
             "selection": "issued_d116_artifact_only",
-            "issued": "d079_calibration_acceptance_v2_n17_r7",
+            "issued": "d079_calibration_acceptance_v2_n17_r8",
         }
         self.assertTrue(_issued_d079({"acceptance_policy": policy}))
-        # r6 stays recognised (issued generations are never un-issued); the
-        # bracketing counterfactual is the NEXT unissued generation, r8.
+        # r7 stays recognised (issued generations are never un-issued); the
+        # bracketing counterfactual is the next unissued generation, r9.
         self.assertTrue(
             _issued_d079(
                 {
                     "acceptance_policy": {
                         **policy,
-                        "issued": "d079_calibration_acceptance_v2_n17_r6",
+                        "issued": "d079_calibration_acceptance_v2_n17_r7",
                     }
                 }
             )
@@ -288,7 +288,7 @@ class CapturePipelineEraTests(unittest.TestCase):
                 {
                     "acceptance_policy": {
                         **policy,
-                        "issued": "d079_calibration_acceptance_v2_n17_r8",
+                        "issued": "d079_calibration_acceptance_v2_n17_r9",
                     }
                 }
             )

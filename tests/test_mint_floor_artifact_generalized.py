@@ -45,6 +45,7 @@ from joulewise.detection_floor import (
 )
 from joulewise.calibration_bracketing import (
     DEFAULT_ACCEPTANCE_BOUND_PATH,
+    ANCHOR_V3_R7_ACCEPTANCE_BOUND_PATH,
     PREDECESSOR_ACCEPTANCE_BOUND_PATH,
     build_calibration_bracket_binding,
     calibration_bracket_for_bundles,
@@ -988,8 +989,10 @@ def synthetic_v2_fixture() -> tuple[
     dict[str, generalized.V2ProducerInputs],
     SimpleNamespace,
 ]:
+    # E1 §3.6 freezes this independent fixture oracle to R7.
+    # An active-default move must not regenerate historical goldens.
     base_plan, base_absolute, base_comparative = seven_b_components()
-    acceptance = load_calibration_acceptance_bound()
+    acceptance = load_calibration_acceptance_bound(ANCHOR_V3_R7_ACCEPTANCE_BOUND_PATH)
     assert acceptance is not None
     producers = []
     inputs = {}
@@ -1169,7 +1172,7 @@ def synthetic_v2_fixture() -> tuple[
         runtime_identity_sha256 = components[0].source_regime[
             "stack_identity_sha256"
         ]
-        acceptance_sha256 = file_sha256(DEFAULT_ACCEPTANCE_BOUND_PATH)
+        acceptance_sha256 = file_sha256(ANCHOR_V3_R7_ACCEPTANCE_BOUND_PATH)
         producer = {
             "plan": {
                 "plan_id": plan_id,
@@ -1283,8 +1286,8 @@ SYNTHETIC_COMPONENT_SHA256S = (
     "dae1d43209662a471c1ff1d283f151c4296da58a6456177a9543e6b6061391e7",
     "c12749ccf1691860c5635c08de5cafce9edf57f1f81604bead7951bc80925b9c",
 )
-# The synthetic producer plans embed the LIVE issued acceptance (identity and
-# both digests), so these frozen pins move with a D-079 issuance. Re-derived
+# The synthetic producer plans explicitly embed the retained R7 acceptance
+# (identity and both digests); E1 §3.6 keeps this fixture oracle on R7. Re-derived
 # once for the r7 generation d079_calibration_acceptance_v2_n17_r7
 # (file SHA-256 9c3a29f6...) with the independent fixture oracle
 # `_fixture_canonical_sha256`, never with the mint code under test. They were

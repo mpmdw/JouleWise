@@ -144,6 +144,14 @@ ANCHOR_V3_R7_ACCEPTANCE_ID = "d079_calibration_acceptance_v2_n17_r7"
 ANCHOR_V3_R7_ACCEPTANCE_BOUND_SHA256 = (
     "9c3a29f61a6f72bbe5efdfb0eddd1caa14557595522b2abb093b414380b9fe16"
 )
+# P8 is the science-neutral cap-transaction pin reissue of r7.
+ANCHOR_V3_R8_ACCEPTANCE_BOUND_PATH = (
+    _CALIBRATION_CONFIG_DIR / "calibration_acceptance_d079_v2_n17_r8.json"
+)
+ANCHOR_V3_R8_ACCEPTANCE_ID = "d079_calibration_acceptance_v2_n17_r8"
+ANCHOR_V3_R8_ACCEPTANCE_BOUND_SHA256 = (
+    "52e3d18a087bd8a0f28da6d20c3817da4d3ce532c604d7f049c78aad6a489a13"
+)
 # Multi-generation registry.  Authentication is indexed by the artifact's own
 # `acceptance_id`, so a caller cannot present one generation's bytes under
 # another generation's pin, and predecessor packs stay verifiable unchanged.
@@ -193,13 +201,20 @@ ISSUED_ACCEPTANCE_REGISTRY: dict[str, dict[str, Any]] = {
         ),
         "file_sha256": ANCHOR_V3_R7_ACCEPTANCE_BOUND_SHA256,
     },
+    ANCHOR_V3_R8_ACCEPTANCE_ID: {
+        "path": ANCHOR_V3_R8_ACCEPTANCE_BOUND_PATH,
+        "relative_path": (
+            "configs/calibration/calibration_acceptance_d079_v2_n17_r8.json"
+        ),
+        "file_sha256": ANCHOR_V3_R8_ACCEPTANCE_BOUND_SHA256,
+    },
 }
 # Issuance is a later governed transaction. A candidate file never adds an
 # epoch merely by existing on disk; this registry must pin its issued bytes.
 EPOCH_CONTINUATION_REGISTRY: dict[str, dict[str, Any]] = {}
 # The LIVE surface: what production loads when no artifact is named.
-ACTIVE_ACCEPTANCE_ID = ANCHOR_V3_R7_ACCEPTANCE_ID
-DEFAULT_ACCEPTANCE_BOUND_PATH = ANCHOR_V3_R7_ACCEPTANCE_BOUND_PATH
+ACTIVE_ACCEPTANCE_ID = ANCHOR_V3_R8_ACCEPTANCE_ID
+DEFAULT_ACCEPTANCE_BOUND_PATH = ANCHOR_V3_R8_ACCEPTANCE_BOUND_PATH
 # Authenticates the retained ``schema_fixture_unissued`` genesis bytes; this is
 # not the digest of ``DEFAULT_ACCEPTANCE_BOUND_PATH``.
 GENESIS_FIXTURE_ACCEPTANCE_SHA256 = (
@@ -390,6 +405,8 @@ _D102_GENERATION_DERIVATIONS: dict[str, dict[str, Any]] = {
     ANCHOR_V3_R6_ACCEPTANCE_ID: _D102_N17_DERIVATION,
     # r7 is the science-neutral A267 clock-anchor-deriver reissue of r6.
     ANCHOR_V3_R7_ACCEPTANCE_ID: _D102_N17_DERIVATION,
+    # P8 is the science-neutral cap-transaction pin reissue of r7.
+    ANCHOR_V3_R8_ACCEPTANCE_ID: _D102_N17_DERIVATION,
 }
 
 

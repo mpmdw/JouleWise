@@ -1,0 +1,14 @@
+.F......................
+======================================================================
+FAIL: test_authored_evidence_makes_synthetic_pack_freeze_pass (tests.test_arm_readiness_evidence_author.ArmReadinessEvidenceAuthorTests.test_authored_evidence_makes_synthetic_pack_freeze_pass)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/edr/code/JouleWise-wt-cap-ff50b201/tests/test_arm_readiness_evidence_author.py", line 1357, in test_authored_evidence_makes_synthetic_pack_freeze_pass
+    self.assertEqual(author_return_code, 0)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 2 != 0
+
+----------------------------------------------------------------------
+Ran 24 tests in 56.306s
+
+FAILED (failures=1)

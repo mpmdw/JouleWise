@@ -65,6 +65,10 @@ EXPECTED_BY_ACCEPTANCE_ID["d079_calibration_acceptance_v2_n17_r7"] = (
     EXPECTED_BY_ACCEPTANCE_ID["d079_calibration_acceptance_v2_n17_r3"]
 )
 
+# P8 carries the same re-derived member values and banked n17 statistics.
+EXPECTED_BY_ACCEPTANCE_ID["d079_calibration_acceptance_v2_n17_r8"] = (
+    EXPECTED_BY_ACCEPTANCE_ID["d079_calibration_acceptance_v2_n17_r3"]
+)
 
 def sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
