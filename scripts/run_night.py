@@ -1921,6 +1921,7 @@ def _write_standard_refusal_result(
     refusal = _write_driver_refusal(
         night_dir / "refusal.json", plan, reason, detail, evidence
     )
+    _write_refused_start_conditions(plan, night_dir, f"{reason}: {detail}")
     _write_result(
         custody_root,
         night_dir,
@@ -3081,42 +3082,135 @@ def _derivation_budget_remaining(budget):
                budget["latest_chain_start_monotonic_s"] - time.monotonic())
 
 
-def _write_start_conditions(plan, night_dir, manifest, manifest_evidence, budget):
-    if _derivation_budget_remaining(budget) <= 0:
-        raise ValueError("derivation start deadline exceeded before chain claim")
+def _write_start_conditions(plan, night_dir, manifest=None, manifest_evidence=None,
+                            budget=None, *, refusal_reason=None):
+    """Shared Revision 6 interface §1/T; letters follow sealed §6.2."""
+    custody = Path(plan.custody_root)
+    budget = budget if budget is not None else _derivation_start_budget(plan)
+    errors = []
+
     def evidence(path):
-        return {"file": str(path), "sha256": _sha256_path(path)}
-    gate = evidence(night_dir / "receipt.json")
-    prior = manifest["prior_revision6_session"]
-    previous = [manifest_evidence]
+        item = {"path": path.relative_to(custody).as_posix(), "sha256": None}
+        try:
+            if path.is_symlink():
+                raise ValueError("symlink evidence")
+            item["sha256"] = _sha256_path(path)
+        except (OSError, ValueError) as error:
+            errors.append(f"{item['path']}: {error}")
+        return item
+
+    manifest_path = custody / "start_conditions_manifest.json"
+    entries = {
+        "a_prior_session_manifest": evidence(manifest_path),
+        "b_blind_checks": evidence(manifest_path),
+        "c_agent_census": evidence(night_dir / "receipt.json"),
+        "d_thermal": evidence(night_dir / "receipt.json"),
+        "e_battery_float": evidence(night_dir / "receipt.json"),
+        "f_network_time_off_receipt": evidence(night_dir / network_time_off.RECEIPT_BASENAME),
+        "g_clean_dwell": evidence(night_dir / "clean_dwell.output.txt"),
+    }
+    if manifest is None:
+        try:
+            manifest, manifest_evidence = _read_start_manifest(plan)
+        except (OSError, ValueError) as error:
+            errors.append(str(error))
+            manifest = {}
+    if manifest_evidence and entries["a_prior_session_manifest"]["sha256"] != manifest_evidence["sha256"]:
+        errors.append("start-conditions custody changed during admission")
+    prior = manifest.get("prior_revision6_session")
     if prior is not None:
-        previous.append({"file": prior["harvest_file"], "sha256": prior["harvest_sha256"]})
-    if any(_sha256_path(Path(item["file"])) != item["sha256"] for item in previous):
-        raise ValueError("start-conditions custody changed during admission")
-    dwell = json.loads((night_dir / "clean_dwell.json").read_bytes())
-    now = time.time()
-    record = {"schema": "joulewise.derivation_start_conditions.v1",
-              "plan_id": plan.plan_id, "started_epoch_s": now,
-              "started_monotonic_ns": time.monotonic_ns(), "budget": budget,
-              "start_to_start_interval_s": None if prior is None else now - prior["started_epoch_s"],
-              "gap_s": None if prior is None else now - prior["terminal_epoch_s"],
-              "conditions": {
-                  "a": {"evidence": previous, "prior_revision6_session": prior,
-                        "reason": manifest.get("reason")},
-                  "b": {"evidence": previous, "reason": manifest.get("reason")},
-                  "c": {"evidence": [gate]},
-                  "d": {"evidence": [gate]},
-                  "e": {"evidence": [gate]},
-                  "f": {"evidence": [evidence(night_dir / network_time_off.RECEIPT_BASENAME)]},
-                  "g": {"evidence": [evidence(night_dir / "clean_dwell.json"),
-                                     evidence(night_dir / "clean_dwell.output.txt")],
-                        "script_sha256": dwell["script_sha256"],
-                        "exit_status": dwell["exit_status"],
-                        "required_clean_dwell_s": dwell["required_clean_dwell_s"]}}}
-    _write_bytes_exclusive(night_dir / "start_conditions.json",
-                           json.dumps(record, sort_keys=True, allow_nan=False).encode() + b"\n")
+        try:
+            if _sha256_path(Path(prior["harvest_file"])) != prior["harvest_sha256"]:
+                errors.append("start-conditions custody changed during admission")
+        except OSError as error:
+            errors.append(str(error))
+    try:
+        session_id = night_gate.chain_literal(Path(plan.chain_path).read_text(), "SESSION_ID")
+    except (OSError, ValueError) as error:
+        session_id = None
+        errors.append(str(error))
+    try:
+        dwell = json.loads((night_dir / "clean_dwell.json").read_bytes())
+    except (OSError, ValueError) as error:
+        dwell = {}
+        errors.append(str(error))
+    try:
+        off = json.loads((night_dir / network_time_off.RECEIPT_BASENAME).read_bytes())
+    except (OSError, ValueError):
+        off = {}
+    # Use the already-collected gate identity when OFF was never reached.
+    try:
+        gate = json.loads((night_dir / "receipt.json").read_bytes())
+        gate_boot = next((row.get("measured", {}).get("boot_session_uuid")
+                          for row in gate["conditions"] if row["condition_id"] == "C4"), None)
+    except (OSError, ValueError, KeyError, TypeError):
+        gate_boot = None
+    boot = off.get("boot_id") or gate_boot
+    if not boot:
+        try:
+            boot = network_time_off.boot_id()
+        except (OSError, ValueError, subprocess.SubprocessError) as error:
+            errors.append(f"boot identity unavailable: {error}")
+    epoch, monotonic = time.time(), time.monotonic()
+    entries["f_network_time_off_receipt"]["settled_seconds"] = (
+        min(epoch - off["epoch_s"], monotonic - off["monotonic_s"])
+        if all(type(off.get(key)) in (int, float) for key in ("epoch_s", "monotonic_s")) else None)
+    passed = dwell.get("exit_status") == 0 and not dwell.get("timed_out") and not dwell.get("error")
+    entries["g_clean_dwell"].update(
+        script_sha256=dwell.get("script_sha256"), exit=dwell.get("exit_status"),
+        exit_status=dwell.get("exit_status"), continuous_clean_s=600 if passed else 0,
+        passed_epoch_s=dwell.get("ended_epoch_s") if passed else None,
+        deadline_epoch_s=budget["latest_chain_start_epoch_s"],
+        started_epoch_s=dwell.get("started_epoch_s"), ended_epoch_s=dwell.get("ended_epoch_s"),
+        started_monotonic_s=(dwell["started_monotonic_ns"] / 1e9 if "started_monotonic_ns" in dwell else None),
+        ended_monotonic_s=(dwell["ended_monotonic_ns"] / 1e9 if "ended_monotonic_ns" in dwell else None))
+    if not passed:
+        errors.append("clean dwell not admitted")
     if _derivation_budget_remaining(budget) <= 0:
-        raise ValueError("derivation start deadline exceeded while recording start conditions")
+        errors.append("derivation start deadline exceeded before chain claim")
+    reason = refusal_reason or ("; ".join(errors) if errors else None)
+    record = {"schema": "joulewise.revision6.start_conditions.v1",
+              "session_id": session_id, "plan_id": plan.plan_id,
+              "result": "refused" if reason else "admitted", "refusal_reason": reason,
+              "evidence": entries, "boot_id": boot.lower() if boot else None,
+              "chain_start_admitted": None if reason else {"epoch_s": epoch, "monotonic_s": monotonic},
+              "start_to_start_interval_s": epoch - prior["started_epoch_s"] if prior and not reason else None,
+              "gap_s": epoch - prior["terminal_epoch_s"] if prior and not reason else None,
+              "written_epoch_s": epoch, "written_monotonic_s": monotonic}
+    encode = lambda: json.dumps(record, sort_keys=True, ensure_ascii=False, allow_nan=False).encode("utf-8") + b"\n"
+    # Stage the durable bytes before publishing the write-once record. If the
+    # write consumed the remaining runway, publish only a null-session refusal.
+    pending = night_dir / ".start_conditions.pending"
+    pending_created = False
+    try:
+        _write_bytes_exclusive(pending, encode())
+        pending_created = True
+        if reason is None and _derivation_budget_remaining(budget) <= 0:
+            reason = "derivation start deadline exceeded while recording start conditions"
+            record.update(result="refused", refusal_reason=reason, chain_start_admitted=None,
+                          start_to_start_interval_s=None, gap_s=None,
+                          written_epoch_s=time.time(), written_monotonic_s=time.monotonic())
+            _write_bytes_exclusive(night_dir / "start_conditions.json", encode())
+        else:
+            os.link(pending, night_dir / "start_conditions.json")
+    finally:
+        if pending_created:
+            pending.unlink(missing_ok=True)
+    if reason is not None and refusal_reason is None:
+        raise ValueError(reason)
+
+
+def _write_refused_start_conditions(plan, night_dir, reason):
+    if (plan.receipt_class != "DIAGNOSTIC_NO_PACK"
+            or (night_dir / "start_conditions.json").exists()
+            or (night_dir / "chain.started").exists()):
+        return
+    try:
+        if night_gate.probe_payload_kind(Path(plan.chain_path).read_text()) == "quiet_predicate_evidence":
+            return
+    except OSError:
+        pass
+    _write_start_conditions(plan, night_dir, refusal_reason=reason)
 
 
 def _admit_derivation_clean_dwell(plan, night_dir, budget):
@@ -3320,6 +3414,8 @@ def run_night(
             plan.quiet_admission is not None and receipt.refusal is not None)):
         _write_gate_refusal(night_dir / "refusal.json", receipt)
         refusal = _refusal_from_object(receipt.refusal) or {}
+        _write_refused_start_conditions(plan, night_dir,
+            f"{refusal.get('reason')}: {refusal.get('detail', '')}")
         _write_result(
             custody_root,
             night_dir,
