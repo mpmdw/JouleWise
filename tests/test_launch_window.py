@@ -536,9 +536,12 @@ class ProductionArmRelocationLaunchTests(unittest.TestCase):
         arm_sample_anchor=None,
         expected_arm_status="PASS",
     ) -> tuple[tempfile.TemporaryDirectory[str], Path, Path, Path, Path, Path]:
+        from datetime import datetime
+        from joulewise import network_time_off
         from joulewise import arm_readiness_evidence as generic_evidence
         from tests.test_arm_readiness_evidence_author import make_author_fixture
         from tests.test_arm_readiness_evidence_t0 import (
+            SYNTHETIC_UTC_NOW,
             _install_synthetic_identity_inputs,
             _valid_session_receipt,
             author_arm_readiness_evidence_t0,
@@ -581,6 +584,18 @@ class ProductionArmRelocationLaunchTests(unittest.TestCase):
                 portable_launch_program=True,
             )
         )
+        # make_t0_fixture uses live UTC when synthetic_clock=False, while the
+        # in-process author below uses SYNTHETIC_UTC_NOW. Align the OFF receipt
+        # with that author's wall clock, retaining the clock-disable capture's
+        # ordinary-monotonic completion and the same boot. Both author clocks
+        # now have the fixture's full ten-minute history after the receipt.
+        off_path = input_root / network_time_off.RECEIPT_BASENAME
+        off = json.loads(off_path.read_text())
+        author_epoch = datetime.fromisoformat(
+            SYNTHETIC_UTC_NOW.replace("Z", "+00:00")
+        ).timestamp()
+        off["epoch_s"] = author_epoch - (fixture_now / 1e9 - off["monotonic_s"])
+        off_path.write_bytes(arm_readiness.render_json(off))
         template_temporary, template_repository, template_pack, _unused, _arm = (
             make_author_fixture(pack.name)
         )

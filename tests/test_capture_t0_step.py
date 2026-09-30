@@ -25,7 +25,7 @@ from tests.test_arm_readiness_evidence_t0 import (
     author_environment,
     make_t0_fixture,
 )
-from joulewise import arm_readiness as readiness
+from joulewise import network_time_off, arm_readiness as readiness
 
 
 class _Clock:
@@ -240,6 +240,11 @@ class CaptureT0StepTests(unittest.TestCase):
                 return_value=TEST_BOOT_SESSION_ID,
             ),
         ):
+            wall = mock.patch.object(capture.time, "time", side_effect=lambda:
+                __import__("datetime").datetime.fromisoformat(SYNTHETIC_UTC_NOW.replace("Z", "+00:00")).timestamp()
+                + (clock.value - SYNTHETIC_MONOTONIC_NS) / 1e9)
+            wall.start()
+            self.addCleanup(wall.stop)
             for step_id in capture.STEP_ORDER:
                 result = capture._capture_step_for_test(
                     step_id,
@@ -254,6 +259,7 @@ class CaptureT0StepTests(unittest.TestCase):
         self.assertEqual(
             {path.name for path in input_root.iterdir()},
             {
+                "network_time_off.json",
                 "arm-context.json",
                 "clock-disable.json",
                 "clock-reference.json",
@@ -413,6 +419,11 @@ class CaptureT0StepTests(unittest.TestCase):
             (input_root / capture.STEP_FILENAMES[prior]).write_bytes(
                 readiness.render_json(value)
             )
+        (input_root / network_time_off.RECEIPT_BASENAME).write_bytes(readiness.render_json({
+            "schema": network_time_off.SCHEMA, "argv": list(network_time_off.OFF_ARGV),
+            "exit_code": 0, "stdout": network_time_off.EXPECTED_STDOUT, "stderr": "",
+            "plan_id": context.plan_id, "window_id": context.assignments["WINDOW_ID"],
+            "boot_id": TEST_BOOT_SESSION_ID, "epoch_s": 0., "monotonic_s": 0.}))
         invalid_diagnostic = subprocess.CompletedProcess(
             (), 0, b'{"status":"not-ready"}\n', b""
         )
@@ -504,7 +515,8 @@ class CaptureT0StepTests(unittest.TestCase):
             ),
             b"",
         )
-        execute = mock.Mock(return_value=completed)
+        execute = mock.Mock(side_effect=[completed, subprocess.CompletedProcess(
+            (), 0, network_time_off.EXPECTED_STDOUT.encode(), b"")])
         with (
             mock.patch.object(capture, "REPO_ROOT", repository),
             mock.patch.object(
@@ -521,7 +533,7 @@ class CaptureT0StepTests(unittest.TestCase):
                 execute=execute,
                 monotonic_ns=lambda: SYNTHETIC_MONOTONIC_NS,
             )
-        execute.assert_called_once()
+        self.assertEqual(execute.call_count, 2)
         self.assertEqual(result["status"], "PASS")
         reference = json.loads(
             (input_root / "clock-reference.json").read_text(encoding="utf-8")
@@ -557,13 +569,15 @@ class CaptureT0StepTests(unittest.TestCase):
             ),
             b"",
         )
-        execute = mock.Mock(return_value=completed)
+        execute = mock.Mock(side_effect=[completed, subprocess.CompletedProcess(
+            (), 0, network_time_off.EXPECTED_STDOUT.encode(), b"")])
         with (
             mock.patch.object(capture, "REPO_ROOT", repository),
             mock.patch.object(
                 capture,
                 "_current_boot_session_id",
                 side_effect=(
+                    TEST_BOOT_SESSION_ID,
                     TEST_BOOT_SESSION_ID,
                     TEST_BOOT_SESSION_ID,
                     OTHER_BOOT_SESSION_ID,
@@ -584,7 +598,7 @@ class CaptureT0StepTests(unittest.TestCase):
             "evidence_author_t0_capture_boot_probe_failed",
         )
         self.assertEqual(str(caught.exception), "boot session changed during command execution")
-        execute.assert_called_once()
+        self.assertEqual(execute.call_count, 2)
         self.assertFalse((input_root / "clock-reference.json").exists())
 
     def test_capture_module_has_no_prompt_or_stdin_read(self) -> None:
@@ -621,58 +635,27 @@ class CaptureT0StepTests(unittest.TestCase):
         )
         self.assertIn("exactly prove", str(caught.exception))
 
-    def test_clock_disable_nonzero_refuses_command_failed(self) -> None:
-        (
-            _temporary,
-            repository,
-            pack,
-            custody,
-            _context,
-            _input_root,
-            _receipt,
-        ) = self._producer_fixture()
-        reference = subprocess.CompletedProcess(
-            (),
-            0,
-            readiness.render_json(
-                _clock_reference_value(
-                    boot_session_id=TEST_BOOT_SESSION_ID,
-                    anchor_monotonic_raw_ns=SYNTHETIC_MONOTONIC_NS,
-                )
-            ),
-            b"",
-        )
-        with (
-            mock.patch.object(capture, "REPO_ROOT", repository),
-            mock.patch.object(
-                capture,
-                "_current_boot_session_id",
-                return_value=TEST_BOOT_SESSION_ID,
-            ),
-        ):
-            capture._capture_step_for_test(
-                "clock-reference",
-                pack,
-                custody,
-                custody / "window-plan",
-                execute=mock.Mock(return_value=reference),
-                monotonic_ns=lambda: SYNTHETIC_MONOTONIC_NS,
-            )
-            with self.assertRaises(capture.CaptureT0Error) as caught:
-                capture._capture_step_for_test(
-                    "clock-disable",
-                    pack,
-                    custody,
-                    custody / "window-plan",
-                    execute=mock.Mock(
-                        return_value=subprocess.CompletedProcess((), 1, b"", b"failed")
-                    ),
-                    monotonic_ns=lambda: SYNTHETIC_MONOTONIC_NS + 1,
-                )
-        self.assertEqual(
-            caught.exception.reason_code,
-            "evidence_author_t0_capture_command_failed",
-        )
+    def test_clock_disable_failed_receipt_refuses_without_command(self) -> None:
+        _temporary, repository, pack, custody, _context, inputs, _receipt = self._producer_fixture()
+        reference = subprocess.CompletedProcess((), 0, readiness.render_json(
+            _clock_reference_value(boot_session_id=TEST_BOOT_SESSION_ID,
+                                  anchor_monotonic_raw_ns=SYNTHETIC_MONOTONIC_NS)), b"")
+        execute = mock.Mock(side_effect=[reference, subprocess.CompletedProcess(
+            (), 0, network_time_off.EXPECTED_STDOUT.encode(), b"")])
+        with mock.patch.object(capture, "REPO_ROOT", repository), mock.patch.object(
+                capture, "_current_boot_session_id", return_value=TEST_BOOT_SESSION_ID):
+            capture._capture_step_for_test("clock-reference", pack, custody,
+                custody / "window-plan", execute=execute,
+                monotonic_ns=lambda: SYNTHETIC_MONOTONIC_NS)
+            path = inputs / network_time_off.RECEIPT_BASENAME
+            off = json.loads(path.read_bytes())
+            off["exit_code"] = 1
+            path.write_bytes(readiness.render_json(off))
+            execute.reset_mock()
+            with self.assertRaises(capture.CaptureT0Error):
+                capture._capture_step_for_test("clock-disable", pack, custody,
+                    custody / "window-plan", execute=execute)
+            execute.assert_not_called()
 
     def test_capture_paths_contain_no_privileged_network_time_get(self) -> None:
         root = Path(__file__).resolve().parents[1]

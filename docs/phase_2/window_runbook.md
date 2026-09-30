@@ -572,10 +572,10 @@ cleanly with a 0.305 ms span.
 
 macOS gates both the read and the write of this setting behind administrator
 rights (`systemsetup -getusingnetworktime` and
-`systemsetup -setusingnetworktime`). E-4's prior-state read remains an
-interactive Ed action. D-127 authorizes only the exact `off` and `on` writes;
-the capture wrapper and the T-0 author use the `off` vector, and restore uses
-the `on` vector. No wildcard or privileged `get` is authorized.
+`systemsetup -setusingnetworktime`). E-4 is the governed reference/resync arm step.
+D-127 authorizes only the exact `off` and `on` writes;
+the arm step uses ON only for a needed resync and finishes with OFF.
+No wildcard or privileged `get` is authorized.
 
 The tracked D-127 fragment must contain exactly these bytes (final newline
 included; SHA-256
@@ -595,80 +595,50 @@ edr ALL=(root) NOPASSWD: JOULEWISE_NETWORK_TIME
   with that source path and the digest above. Ed alone installs
   `/etc/sudoers.d/joulewise-network-time`; no repository script runs as root.
 - [ ] **ED-OWED:** exercise both exact vectors from a cold credential state,
-  restoring `on` at the end:
+  leaving `off` at the end, between windows only:
 
   ```sh
   /usr/bin/sudo -k
-  /usr/bin/sudo -n /usr/sbin/systemsetup -setusingnetworktime off
   /usr/bin/sudo -n /usr/sbin/systemsetup -setusingnetworktime on
+  /usr/bin/sudo -n /usr/sbin/systemsetup -setusingnetworktime off
   ```
 
   A password prompt, any nonzero exit, or any other permitted
   `systemsetup` argv leaves D-127 unqualified and blocks T-0.
 
-- [ ] **Confirm the system clock is actually correct first.** Disabling
-  automatic time on a wrong clock freezes that error in place for the whole
-  window. Compare the system clock against an independent trusted source and
-  correct it before going further.
-- [ ] Record the current setting so it can be restored:
+- [ ] Run the governed `clock-reference` arm step on empty capture roots.
+  It checks the fixed reference roster against the unchanged 0.5-second
+  ceiling. If needed, it enables network time at arm only and uses a
+  120-second polling budget (each command is bounded to 30 seconds) for the
+  reference check to pass. It then commands OFF and saves
+  a write-once receipt, including failed attempts. No ON command is permitted
+  after the first capture of a window.
+- [ ] The `clock-disable` step uses that saved receipt. It does not issue a
+  second toggle. The T-0 author authenticates the receipt and binds its digest
+  into the `CLOCK_PROBE` source. Exit 0 and exact separate stdout
+  `setUsingNetworkTime: Off` (with newline) are required; the known stderr
+  `Error:-99` diagnostic does not contradict this result.
+- [ ] Complete the existing ≥600-second continuous quiet dwell **after OFF**.
+  Admission requires the same boot and at least 600 seconds on both wall and
+  monotonic clocks. The chain-owned 180-second stage settle remains additional.
+  Missing, failed, stale-boot or insufficiently settled receipts refuse capture.
+- [ ] **Network time stays OFF** after completion, refusal, crash, verdict and
+  both backups. Resync happens only in the arm step. Record the OFF receipt
+  and its identity in close-out; do not restore ON.
 
-  ```sh
-  /usr/bin/sudo /usr/sbin/systemsetup -getusingnetworktime
-  ```
+A manual `/usr/bin/sudo -n /usr/sbin/systemsetup -setusingnetworktime on`
+command is a supervised desk action between windows only. Follow it with the
+arm step's fresh OFF receipt and ≥600-second dwell before any new capture.
+`quiet_window_clock.sh` no longer supplies an ordinary enable/close-out action.
 
-- [ ] Disable automatic network time adjustment:
-
-  ```sh
-  /usr/bin/sudo -n /usr/sbin/systemsetup -setusingnetworktime off
-  ```
-
-- [ ] Preserve the independent-clock comparison and the captured prior
-  `systemsetup` output as source evidence. Require an authenticated exact-key
-  `CLOCK_ATTESTATION` receipt in
-  `ARM_READINESS_CUSTODY_ROOT/PACK_ID/arm_readiness.evidence/`; its irreducible observation
-  is an `OPERATOR_ATTESTATION`, not a hand-entered readiness verdict.
-- [ ] After disabling network time, require the T-0 author's fresh,
-  idempotent D-127 enforcement call
-  `/usr/bin/sudo -n /usr/sbin/systemsetup -setusingnetworktime off` and an
-  authenticated exact-key `CLOCK_PROBE` receipt in the same namespace. The
-  successful exact write, not an operator-entered row value, establishes the
-  current off postcondition. For both receipt kinds, “exact-key” means the top-level
-  object contains exactly `schema_version`, `evidence_id`, `kind`, `status`,
-  `issued_at_utc`, `valid_until_monotonic_ns`, `pack_sha256`, `head_commit`,
-  `facts`, `checks`, `reason_codes`, and `assurance`; unknown or missing keys
-  refuse.
-
-- [ ] Do **not** hand-count a settle here. §5C removed the separate pre-launch
-  settle step: the final 180-second settle is **chain-owned** (the `settle` at
-  the top of `window-chain.zsh`, §6), and §5's ≥10-minute untouched idle
-  covers this administrator action along with every other operator action
-  before the §5C step-2 ledger pair. Your last action is the launch itself;
-  step away immediately after it.
-
-  The readiness row `clock.network_time_off` asks only for that fresh exact
-  enforcement result.
-  It does not introduce another hand-counted settle. The required quiet waits
-  remain §5's completed ≥10-minute untouched idle and the chain-owned
-  180-second settle after the operator's launch.
-- [ ] After the window closes, meaning after `measurement_complete`, the
-  whole-window verdict, and the backup, re-enable it:
-
-  ```sh
-  /usr/bin/sudo -n /usr/sbin/systemsetup -setusingnetworktime on
-  ```
-
-  The restore comes last because re-enabling automatic network time permits
-  the system to slew the wall clock, and the verdict, backup, and close-out
-  steps are still reading clock-anchored evidence and custody metadata. Wake
-  the display, confirm `measurement_complete`, then hand back — the restore
-  is a separate tap after the magistrate's §9 and §11 steps.
-
-- [ ] Record in the close-out that automatic time was disabled, when it was
-  disabled, and when it was restored.
-
-Leaving automatic time off is not a protocol state. It is a temporary machine
-condition the operator owns for one window, and the close-out must show it was
-returned.
+This prospectively replaces H5's restore sentence and H6 log-query admission
+under the owner's 2026-09-29 permanent-OFF ruling. Historical logs and verdicts
+remain interpretable. H7 remains report-only science (state, standing rate,
+drift and predecessor B comparison); its H6-dependent fields are superseded.
+The full drift term, anchor refusals, 250 µs allowance and registration before
+ON/OFF pooling remain unchanged. Clock fits do not prove every correction
+harmless. The sealed restore-recipe registry row must be retired through its
+coordinated registry change before successor freeze/ARM can pass.
 
 ### If a single member still fails the anchor
 
@@ -976,8 +946,8 @@ arming; they do not authorize the live night.
 
 **Order of operations at the machine (each step gates the next):**
 
-1. Complete §5 (machine and operator preflight) and Ed's §5A clock
-   procedure. §5B is **not** a separate manual step before launch: the
+1. Complete §5 (machine and operator preflight); perform §5A through E-4
+   and E-5 below. §5B is **not** a separate manual step before launch: the
    foreground chain performs it after the pre-slot enforcing gate and
    pre-calibration capture, and before member 1.
 2. After all agents are closed, Ed executes the frozen E-step sequence with
@@ -997,7 +967,7 @@ arming; they do not authorize the live night.
    or edits to `arm_readiness.t0.inputs` violate procedure but are not
    mechanically detectable in v1. T-0 capture provenance is
    **TRUSTED-OPERATOR**: deliberate operator fabrication is not defended
-   against. The real binding to a real quiet window is Ed's human §5A tap, the
+   against. The real binding to a real quiet window is Ed's §5A arm invocation, the
    terminal-review attestation, and the single-operator assumption. The
    terminal-review commit attests the reviewed tree and pack, not runtime
    capture provenance.
@@ -1008,29 +978,19 @@ arming; they do not authorize the live night.
    cd "$MEASUREMENT_REPO"
    ```
 
-   - **E-4:** Ed first performs the prior-state read directly in the interactive
-     shell (a password prompt is expected; no repository script performs this
-     privileged read) and preserves its exact `Network Time: On` or
-     `Network Time: Off` output:
+   - **E-4:** run the governed reference/resync arm step on fresh empty capture
+     roots. It finishes with OFF and the write-once receipt before any capture
+     or the existing ≥600-second prewindow dwell:
 
      ```sh
-     /usr/bin/sudo /usr/sbin/systemsetup -getusingnetworktime
-     ```
-
-     Then run the wrapper. At its prompts, enter the independent trusted-clock
-     UTC literal and paste the exact prior-state output. The tool derives the
-     system timestamp, monotonic observation, boot ID, attestation ID, context,
-     and manifest, and records the manual action without executing a privileged
-     read itself:
-
-     ```sh
-     python3 scripts/capture_t0_step.py clock-prior-state \
+     python3 scripts/capture_t0_step.py clock-reference \
        --pack-root "$PACK_ROOT" \
        --custody-root "$ARM_READINESS_CUSTODY_ROOT" \
        --window-plan-root "$WINDOW_PLAN_ROOT"
      ```
 
-   - **E-5:** use D-127's exact noninteractive `off` vector:
+   - **E-5:** publish the exact OFF result from E-4's receipt without toggling
+     again:
 
      ```sh
      python3 scripts/capture_t0_step.py clock-disable \
@@ -1082,7 +1042,7 @@ arming; they do not authorize the live night.
 
    Any nonzero command, invalid result identity, boot change, out-of-order
    call, or existing output path refuses. After E-9a, the private input
-   namespace contains exactly the six captures plus `clock-attestation.json`,
+   namespace contains the six captures plus `network_time_off.json`,
    `arm-context.json`, and `launch-manifest.json`.
 
    The terminal handback record must state:
@@ -1096,7 +1056,7 @@ arming; they do not authorize the live night.
    > capability atomically — I ran no separate consume command.
 
    Bind that attestation to the operator identity, boot UUID, HEAD/tree/pack,
-   all nine input hashes, and the arm/consumption receipts. This is the human
+   all input hashes, and the arm/consumption receipts. This is the human
    record of the trusted-operator ceremony, not mechanically independent
    producer attestation.
 
@@ -2280,7 +2240,7 @@ Record:
 - backup destination and exit status;
 - extraction artifact path and result;
 - whether automatic network time was disabled for this window, when it was
-  disabled, and when it was restored (§5A);
+  disabled, with its OFF receipt (§5A);
 - every calibration attempt, including failed ones, and any retry recorded as
   a deviation;
 - member counts by distinct bundle ID, never by campaign-log line.

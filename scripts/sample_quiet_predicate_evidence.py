@@ -68,9 +68,8 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from joulewise import battery_float, quiet_admission
+from joulewise import battery_float, quiet_admission, network_time_off
 from joulewise.adapters import powermetrics as pm
-from joulewise.arm_readiness import EXPECTED_NETWORK_TIME_OFF_STDOUT
 from joulewise.clock import ClockStamp
 from joulewise.uncertainty_evidence import (
     CLOCK_METHOD_V3_1, NativeAnchorRecord, derive_powermetrics_anchor_v3,
@@ -272,36 +271,29 @@ def parse_frames(data):
     return frames, asdict(dropped) if dropped else None
 
 
-def network_time_provenance(environ=None):
-    """Read the chain's network-time receipt, or say exactly why there is none.
-
-    Returns ``(provenance, reason)``.  ``provenance`` is ``None`` -- which the
-    caller turns into a refusal before any child is launched -- when the
-    environment variable naming the receipt is absent, the receipt cannot be
-    read as JSON, or its recorded ``off`` result is not an exit-0 run whose
-    stdout is EXACTLY ``joulewise.arm_readiness.EXPECTED_NETWORK_TIME_OFF_STDOUT``.
-    The comparator is imported, never retyped (ruling 10 Q1 rule 1), and the
-    comparison is byte equality: the observed ``setUsingNetworkTime: off``
-    (lower case) of a different code path is NOT a match.
-    """
-
+def network_time_provenance(environ=None, *, now=None):
+    """Authenticate prospective OFF custody, window identity, boot and settle."""
     environ = os.environ if environ is None else environ
     path = environ.get(NETWORK_TIME_RECORD_ENV)
     if not path:
         return None, f"{NETWORK_TIME_RECORD_ENV} is not set by the evidence chain"
     try:
         raw = Path(path).read_bytes()
-        control = json.loads(raw)
-        off = control["off"]
-        stdout, exit_code = off["stdout"], off["exit_code"]
-    except (OSError, ValueError, KeyError, TypeError) as exc:
-        return None, f"network time control record unreadable: {type(exc).__name__}: {exc}"
-    if exit_code != 0 or stdout != EXPECTED_NETWORK_TIME_OFF_STDOUT:
-        return None, ("network time OFF not proven by the control record: "
-                      f"exit {exit_code!r}, stdout {stdout!r}")
+        off = network_time_off.read_receipt(path, plan_id=environ.get("NIGHT_PLAN_ID"),
+            window_id=environ.get("NIGHT_PLAN_ID"))
+        if now is None:
+            now = {**network_time_off._clock(), "boot_id": network_time_off.boot_id()}
+        if now.get("boot_id") is None:
+            now = {**now, "boot_id": network_time_off.boot_id()}
+        elapsed = network_time_off.seconds_since_receipt(off, now)
+    except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as exc:
+        return None, f"network time OFF admission failed: {type(exc).__name__}: {exc}"
     return {"state": "off", "method": NETWORK_TIME_PROVENANCE_METHOD,
-            "established_epoch_s": off.get("epoch_s"),
-            "established_monotonic_s": off.get("monotonic_s"),
+            "policy": network_time_off.SCHEMA, "boot_id": off["boot_id"],
+            "plan_id": off["plan_id"], "window_id": off["window_id"],
+            "settled_seconds": elapsed,
+            "established_epoch_s": off["epoch_s"],
+            "established_monotonic_s": off["monotonic_s"],
             "record": Path(path).name,
             "record_sha256": hashlib.sha256(raw).hexdigest()}, NETWORK_TIME_PROVENANCE_REASON
 
@@ -1067,7 +1059,7 @@ def collect(args, *, clock=None, round_runner=production_round, recorder_factory
                             "collector": identity(os.getpid()), "argv": sys.argv,
                             "metadata_errors": [v[1] for v in (boot, build) if isinstance(v, tuple)]})
     metadata = metadata_reader()
-    provenance, provenance_reason = network_time_provenance()
+    provenance, provenance_reason = None, None
     session = {"schema": SCHEMA, "session": session_id, **metadata,
                "state": args.state, "repeat": args.repeat, "load_setting": args.load_cores,
                "duration_s": args.duration_s, "sample_interval_s": args.sample_interval_s,
@@ -1092,6 +1084,11 @@ def collect(args, *, clock=None, round_runner=production_round, recorder_factory
     battery_read("pre")
     envelope_cpu_start = cpu_total()
     start = clock.stamp()
+    provenance, provenance_reason = network_time_provenance(now={
+        "epoch_s": start.epoch_s, "monotonic_s": start.monotonic_before_s,
+        "boot_id": metadata.get("boot_id")})
+    session["network_time_provenance"] = provenance
+    session["network_time_provenance_reason"] = provenance_reason
     scheduled = getattr(args, "envelope_start_mono_s", None)
     deadline = (start.monotonic_before_s if scheduled is None else scheduled) + args.duration_s
     session["scheduled_mono_s"] = scheduled

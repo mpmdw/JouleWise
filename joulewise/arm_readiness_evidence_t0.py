@@ -12,6 +12,7 @@ limitation: v1 cannot detect deliberate operator fabrication.
 from __future__ import annotations
 
 import copy as _copy
+from joulewise import network_time_off as _network_time_off
 import inspect as _inspect
 import json as _json
 import os as _os
@@ -62,6 +63,7 @@ _BROWSER_CENSUS_PATTERN = r"/Contents/MacOS/(Safari|Google Chrome|Chromium|firef
 _MONITOR_CENSUS_PATTERN = r"powermetrics|window-chain|run_campaign|tail -f|(^|/)watch( |$)"
 _RUNNING_REPOSITORY = _Path(__file__).resolve().parents[1]
 _AUTHORING_ARTIFACTS = (
+    "joulewise/network_time_off.py",
     "joulewise/clock_reference.py",
     "joulewise/arm_readiness_evidence_t0.py",
     "scripts/author_arm_evidence_t0.py",
@@ -1226,34 +1228,27 @@ def _derive_clock_probe(context: _Context) -> _DerivedRow:
     kind = "CLOCK_PROBE"
     disable, disable_identity = _capture(context, "clock-disable", kind=kind)
     _capture_ok(disable, kind=kind, label="network-time disable capture")
-    probe = _fresh_probe(
-        context,
-        kind,
-        "network-time off enforcement",
-        (
-            "/usr/bin/sudo",
-            "-n",
-            "/usr/sbin/systemsetup",
-            "-setusingnetworktime",
-            "off",
-        ),
-    )
-    if probe.exit_code != 0:
-        raise _underivable(
-            kind, "fresh D-127 enforcement exited nonzero before setting Off"
-        )
-    if probe.stdout != _readiness.EXPECTED_NETWORK_TIME_OFF_STDOUT:
-        raise _underivable(
-            kind, "fresh D-127 enforcement stdout did not exactly report Off"
-        )
+    path = context.custody_pack_root / _INPUT_DIRECTORY / _network_time_off.RECEIPT_BASENAME
+    try:
+        identity, _raw = _input_identity(path, kind=kind, label="OFF receipt")
+        off = _network_time_off.read_receipt(path,
+            plan_id=context.values["frozen_plan"][2],
+            window_id=context.tree["window_identity"]["window_id"])
+        _network_time_off.seconds_since_receipt(off, {
+            "epoch_s": _datetime.fromisoformat(context.clock.utc_now().replace("Z", "+00:00")).timestamp(),
+            "monotonic_s": context.clock.monotonic_ns() / 1e9,
+            "boot_id": context.boot_session_id})
+        if (disable["stdout"] != off["stdout"] or disable["stderr"] != off["stderr"]
+                or disable["argv"] != off["argv"]
+                or abs(disable["finished_monotonic_ns"] / 1e9 - off["monotonic_s"]) > 1e-6):
+            raise ValueError("clock-disable capture differs from OFF receipt")
+    except (OSError, ValueError, KeyError) as exc:
+        raise _underivable(kind, str(exc)) from exc
     return _DerivedRow(
-        "clock.network_time_off",
-        kind,
-        {"fresh_probe": True, "network_time": "off"},
-        "PROBE",
-        input_artifacts=(disable_identity,),
-        probes=(probe,),
-    )
+        "clock.network_time_off", kind,
+        {"fresh_probe": True, "network_time": "off"}, "PROBE",
+        input_artifacts=(disable_identity, identity),
+        derivation={"policy": _network_time_off.SCHEMA})
 
 
 def _git_message(context: _Context) -> str:

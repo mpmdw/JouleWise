@@ -25,6 +25,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+from joulewise import network_time_off, arm_readiness_evidence_t0 as t0
 from joulewise import arm_readiness as readiness  # noqa: E402
 from joulewise.arm_readiness_evidence_t0 import (  # noqa: E402
     WINDOW_ENV_KEYS,
@@ -621,6 +622,7 @@ def _execute(argv: Sequence[str], *, cwd: Path) -> subprocess.CompletedProcess[b
             stderr=subprocess.PIPE,
             check=False,
             env=GOVERNED_SUBPROCESS_ENVIRONMENT,
+            timeout=30 if "systemsetup" in " ".join(argv) or "collect_clock_reference.py" in " ".join(argv) else None,
         )
     except (OSError, subprocess.SubprocessError) as exc:
         raise _refuse(
@@ -726,6 +728,45 @@ def _validate_result(
             )
 
 
+def _arm_reference(context, execute, monotonic_ns):
+    """Resync only on fresh empty arm roots; OFF even on resync failure."""
+    path = context.input_root / network_time_off.RECEIPT_BASENAME
+    if path.exists() or path.is_symlink() or (context.input_root / "clock-reference.json").exists():
+        raise _refuse("evidence_author_t0_capture_output_collision", "clock arm already attempted")
+    for name in ("RUNS_ROOT", "BOUND_RUNS_ROOT", "CUSTODY_ROOT", "QUARANTINE_ROOT"):
+        if any(Path(context.assignments[name]).iterdir()):
+            raise _refuse("evidence_author_t0_capture_sequence_invalid", "resync requires empty capture roots")
+    deadline = monotonic_ns() + 120_000_000_000
+    resync = False
+    try:
+        for attempt in range(25):
+            completed = execute(_command_for_step(context, "clock-reference"), cwd=context.repository)
+            finished = monotonic_ns()
+            try:
+                legs = t0._validate_reference_object(
+                    json.loads(_text(completed.stdout)), kind="CLOCK_ATTESTATION",
+                    label="arm reference", boot_session_id=context.boot_session_id)
+                t0._reference_agreement(legs, kind="CLOCK_ATTESTATION", label="arm reference")
+                if completed.returncode != 0:
+                    raise ValueError("reference command failed")
+                return completed, finished
+            except (ValueError, t0.T0EvidenceAuthoringError):
+                if finished >= deadline or attempt == 24:
+                    raise _refuse("evidence_author_t0_capture_result_invalid", "arm reference did not converge within 120 seconds")
+                if not resync:
+                    on = execute((*network_time_off.OFF_ARGV[:-1], "on"), cwd=context.repository)
+                    if on.returncode != 0:
+                        raise _refuse("evidence_author_t0_capture_command_failed", "arm resync ON failed")
+                    resync = True
+                time.sleep(min(5, max(0, (deadline - monotonic_ns()) / 1e9)))
+    finally:
+        network_time_off.set_network_time_off(
+            path, context.plan_id, context.assignments["WINDOW_ID"],
+            runner=lambda argv, timeout: execute(argv, cwd=context.repository),
+            boot_probe=_current_boot_session_id,
+            clock=lambda: {"epoch_s": time.time(), "monotonic_s": monotonic_ns() / 1e9})
+
+
 def _capture_step_with_dependencies(
     step_id: str,
     pack_root: Path | str,
@@ -750,8 +791,26 @@ def _capture_step_with_dependencies(
             "boot session changed before command execution",
         )
     started = monotonic_ns()
-    completed = execute(argv, cwd=context.repository)
-    finished = monotonic_ns()
+    try:
+        if step_id == "clock-reference":
+            completed, finished = _arm_reference(context, execute, monotonic_ns)
+        elif step_id == "clock-disable":
+            off = network_time_off.read_receipt(
+                context.input_root / network_time_off.RECEIPT_BASENAME,
+                plan_id=context.plan_id, window_id=context.assignments["WINDOW_ID"])
+            started = finished = round(off["monotonic_s"] * 1e9)
+            completed = subprocess.CompletedProcess(argv, off["exit_code"], off["stdout"], off["stderr"])
+        else:
+            if step_id in {"ledger-readiness", "ledger-reservation"}:
+                off = network_time_off.read_receipt(
+                    context.input_root / network_time_off.RECEIPT_BASENAME,
+                    plan_id=context.plan_id, window_id=context.assignments["WINDOW_ID"])
+                network_time_off.seconds_since_receipt(off,
+                    {"epoch_s": time.time(), "monotonic_s": started / 1e9, "boot_id": starting_boot})
+            completed = execute(argv, cwd=context.repository)
+            finished = monotonic_ns()
+    except (OSError, ValueError, subprocess.SubprocessError) as exc:
+        raise _refuse("evidence_author_t0_capture_result_invalid", str(exc)) from exc
     ending_boot = _current_boot_session_id()
     if ending_boot != starting_boot:
         raise _refuse(
