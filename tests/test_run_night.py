@@ -292,14 +292,19 @@ class ProbeSource:
         )
 
 
-def _load_driver(script_path: Path = SCRIPT_PATH, module_name: str = "run_night_test_module"):
+def _load_driver(script_path: Path = SCRIPT_PATH, module_name: str = "run_night_test_module",
+                 *, inject_clean_dwell: bool = True):
     spec = importlib.util.spec_from_file_location(module_name, script_path)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     # Driver mechanics never invoke a privileged setting command in tests.
     # Receipt/settle refusals are exercised through the real helper separately.
-    module._admit_network_time_off = mock.Mock()
+    if inject_clean_dwell:
+        module._admit_network_time_off = mock.Mock()
+        module._admit_derivation_clean_dwell = mock.Mock()
+        module._read_start_manifest = mock.Mock(return_value=({}, {}))
+        module._write_start_conditions = mock.Mock()
     return module
 
 
@@ -735,6 +740,271 @@ runpy.run_path(script, run_name='__main__')
         self.assertTrue((night / "receipt.json").is_file())
         self.assertTrue((night / "refusal.json").is_file())
         self.assertEqual(calls, [])
+
+    def _run_with_clean_dwell(self, outcome, *, dwell_duration=600, off_age=0,
+                              manifest_case="first", settle_failure=False, off_wall_lag=0, start_record_duration=0):
+        helper = _load_driver(inject_clean_dwell=False)
+        for name in ("_admit_derivation_clean_dwell", "_read_start_manifest",
+                     "_write_start_conditions", "_admit_network_time_off"):
+            setattr(self.driver, name, getattr(helper, name))
+        self._write_plan(window_max_s=9000)
+        script = self.root / "scripts/prewindow_check.sh"
+        script.parent.mkdir(exist_ok=True)
+        script.write_bytes((REPO_ROOT / "scripts/prewindow_check.sh").read_bytes())
+        self.custody.mkdir(exist_ok=True)
+        manifest = {"schema": helper.START_MANIFEST_SCHEMA, "plan_id": "night-plan",
+                    "prior_revision6_session": None, "reason": "first Revision 6 session"}
+        if manifest_case in ("prior", "bad-harvest", "future-prior"):
+            harvest = self.root / "harvest.json"
+            harvest.write_text('{"decision": "NEXT_WINDOW"}\n')
+            manifest = {"schema": helper.START_MANIFEST_SCHEMA, "plan_id": "night-plan",
+                        "prior_revision6_session": {
+                            "session_id": "derivation-prior", "harvest_file": str(harvest),
+                            "harvest_sha256": hashlib.sha256(harvest.read_bytes()).hexdigest(),
+                            "started_epoch_s": self.t0_epoch_s - 10000,
+                            "terminal_epoch_s": self.t0_epoch_s - 200}}
+        if manifest_case == "bad-harvest":
+            manifest["prior_revision6_session"]["harvest_sha256"] = "0" * 64
+        if manifest_case == "future-prior":
+            manifest["prior_revision6_session"]["terminal_epoch_s"] = self.t0_epoch_s + 100
+        if manifest_case == "no-reason":
+            del manifest["reason"]
+        if manifest_case == "wrong-plan":
+            manifest["plan_id"] = "another-night"
+        manifest_path = self.custody / "start_conditions_manifest.json"
+        if manifest_case != "absent":
+            manifest_path.write_text("{" if manifest_case == "malformed" else json.dumps(manifest))
+        output_bytes = b"dwell stdout\ncontinuous clean dwell 600/600s\nstderr\n"
+        clock = {"epoch_s": self.t0_epoch_s + 10, "monotonic_s": 10000.0}
+        events = []
+        off = {"schema": helper.network_time_off.SCHEMA,
+               "argv": list(helper.network_time_off.OFF_ARGV), "exit_code": 0,
+               "stdout": helper.network_time_off.EXPECTED_STDOUT, "stderr": "",
+               "boot_id": "boot", "plan_id": "night-plan", "window_id": "night-plan"}
+        def advance(seconds):
+            events.append(("sleep", seconds))
+            clock["epoch_s"] += seconds
+            clock["monotonic_s"] += seconds
+        def set_off(path, *_):
+            events.append("OFF receipt")
+            off.update({key: clock[key] - off_age for key in clock})
+            off["epoch_s"] += off_wall_lag
+            path.write_text(json.dumps(off))
+            return off
+        def run(argv, **kwargs):
+            events.append("dwell")
+            self.assertEqual(events[:2], ["OFF receipt", "dwell"])
+            self.assertEqual(argv[:3], [str(script), "--wait", "--timeout-s"])
+            self.assertEqual(int(argv[3]), 1310)
+            self.assertEqual(kwargs["timeout"], 1310)
+            self.assertEqual(kwargs["cwd"], str(self.root))
+            self.assertIs(kwargs["stdin"], subprocess.DEVNULL)
+            self.assertIs(kwargs["stderr"], subprocess.STDOUT)
+            kwargs["stdout"].write(output_bytes)
+            advance(dwell_duration)
+            if outcome == "timeout":
+                raise subprocess.TimeoutExpired(argv, kwargs["timeout"])
+            if outcome == "launch error":
+                raise OSError("injected execution failure")
+            return subprocess.CompletedProcess(argv, outcome)
+        original_write = helper._write_bytes_exclusive
+        def write_record(path, payload):
+            original_write(path, payload)
+            if path.name == "start_conditions.json":
+                advance(start_record_duration)
+        chain = mock.Mock(return_value=(0, None, 0, [], True))
+        claim = mock.Mock(return_value=42)
+        real_settle = helper.network_time_off.seconds_since_receipt
+        def settled(receipt, now):
+            events.append("OFF settled")
+            if settle_failure:
+                raise ValueError("injected OFF settle failure")
+            return real_settle(receipt, now)
+        with ExitStack() as stack:
+            for obj, name, kwargs in (
+                (helper.subprocess, "run", {"side_effect": run}),
+                (helper, "_write_bytes_exclusive", {"side_effect": write_record}),
+                (helper.time, "time", {"side_effect": lambda: clock["epoch_s"]}),
+                (helper.time, "monotonic", {"side_effect": lambda: clock["monotonic_s"]}),
+                (helper.time, "monotonic_ns", {"side_effect": lambda: int(clock["monotonic_s"] * 1e9)}),
+                (helper.time, "sleep", {"side_effect": advance}),
+                (helper.network_time_off, "set_network_time_off", {"side_effect": set_off}),
+                (helper.network_time_off, "boot_id", {"return_value": "boot"}),
+                (helper.network_time_off, "seconds_since_receipt", {"side_effect": settled}),
+                (self.driver, "_claim_chain_start", {"new": claim}),
+                (self.driver, "_run_chain_once", {"new": chain}),
+            ):
+                stack.enter_context(mock.patch.object(obj, name, **kwargs))
+            code = self.driver.run_night(self.plan_path)
+        self.dwell_events = events
+        night = self.custody / "night"
+        if not (night / "clean_dwell.json").exists():
+            return code, None, claim, chain
+        record = json.loads((night / "clean_dwell.json").read_bytes())
+        self.assertEqual(record["script_sha256"], hashlib.sha256(script.read_bytes()).hexdigest())
+        self.assertEqual((night / record["output_file"]).read_bytes(), output_bytes)
+        self.assertEqual(record["output_sha256"], hashlib.sha256(output_bytes).hexdigest())
+        self.assertEqual(record["required_clean_dwell_s"], 600)
+        self.assertEqual(record["timeout_s"], 1310)
+        self.assertLessEqual(record["started_epoch_s"], record["ended_epoch_s"])
+        self.assertLessEqual(record["started_monotonic_ns"], record["ended_monotonic_ns"])
+        return code, record, claim, chain
+
+    def test_clean_dwell_pass_preserves_digests_then_starts_chain(self):
+        code, record, claim, chain = self._run_with_clean_dwell(0)
+        self.assertEqual(code, 0)
+        self.assertEqual(record["exit_status"], 0)
+        self.assertFalse(record["timed_out"])
+        self.assertIsNone(record["error"])
+        claim.assert_called_once()
+        chain.assert_called_once()
+        # The durable records forbid a second attempt from overwriting evidence.
+        night = self.custody / "night"
+        before = {path.name: path.read_bytes() for path in
+                  (night / "clean_dwell.json", night / "clean_dwell.output.txt")}
+        with mock.patch.object(self.driver, "_admit_derivation_clean_dwell") as dwell:
+            self.assertEqual(self.driver.run_night(self.plan_path), 3)
+        dwell.assert_not_called()
+        self.assertEqual(before, {name: (night / name).read_bytes() for name in before})
+
+    def test_clean_dwell_failure_refuses_before_chain_claim(self):
+        code, record, claim, chain = self._run_with_clean_dwell(1)
+        self.assertEqual(code, 3)
+        self.assertEqual(record["exit_status"], 1)
+        self.assertFalse(record["timed_out"])
+        claim.assert_not_called()
+        chain.assert_not_called()
+        self.assertIn("clean dwell refused", (self.custody / "night/refusal.json").read_text())
+        # Counterfactual: changing ONLY exit 1 to exit 0 permits the chain.
+        self.custody = self.root / "counterfactual"
+        self._write_plan()
+        self.assertEqual(self._run_with_clean_dwell(0)[0], 0)
+
+    def test_clean_dwell_timeout_refuses_before_chain_claim(self):
+        code, record, claim, chain = self._run_with_clean_dwell("timeout")
+        self.assertEqual(code, 3)
+        self.assertIsNone(record["exit_status"])
+        self.assertTrue(record["timed_out"])
+        claim.assert_not_called()
+        chain.assert_not_called()
+        self.assertIn("clean dwell timed out", (self.custody / "night/refusal.json").read_text())
+        self.custody = self.root / "counterfactual"
+        self._write_plan()
+        self.assertEqual(self._run_with_clean_dwell(0)[0], 0)
+
+    def test_clean_dwell_launch_error_refuses_before_chain_claim(self):
+        code, record, claim, chain = self._run_with_clean_dwell("launch error")
+        self.assertEqual(code, 3)
+        self.assertIsNone(record["exit_status"])
+        self.assertFalse(record["timed_out"])
+        claim.assert_not_called()
+        chain.assert_not_called()
+        self.assertIn("injected execution failure", record["error"])
+        self.custody = self.root / "counterfactual"
+        self._write_plan()
+        self.assertEqual(self._run_with_clean_dwell(0)[0], 0)
+
+    def test_start_manifest_first_window_records_null_prior_and_all_conditions(self):
+        self.assertEqual(self._run_with_clean_dwell(0)[0], 0)
+        night = self.custody / "night"
+        record = json.loads((night / "start_conditions.json").read_bytes())
+        self.assertEqual(set(record["conditions"]), set("abcdefg"))
+        self.assertIsNone(record["conditions"]["a"]["prior_revision6_session"])
+        self.assertIn("first Revision 6", record["conditions"]["a"]["reason"])
+        self.assertIsNone(record["gap_s"])
+        self.assertIsNone(record["start_to_start_interval_s"])
+        self.assertEqual(record["budget"]["latest_chain_start_epoch_s"], self.t0_epoch_s + 1320)
+        self.assertEqual(record["conditions"]["g"]["exit_status"], 0)
+        artifacts = {item["path"] for item in json.loads((night / "result.json").read_bytes())["artifacts"]}
+        self.assertTrue({"start_conditions_manifest.json", "night/start_conditions.json",
+                         "night/clean_dwell.json", "night/clean_dwell.output.txt"} <= artifacts)
+        for condition in record["conditions"].values():
+            for item in condition["evidence"]:
+                self.assertEqual(item["sha256"], hashlib.sha256(Path(item["file"]).read_bytes()).hexdigest())
+
+    def test_start_manifest_prior_session_binds_harvest_and_intervals(self):
+        self.assertEqual(self._run_with_clean_dwell(0, manifest_case="prior")[0], 0)
+        record = json.loads((self.custody / "night/start_conditions.json").read_bytes())
+        self.assertEqual(record["gap_s"], 810)
+        self.assertEqual(record["start_to_start_interval_s"], 10610)
+        self.assertEqual(record["conditions"]["a"]["prior_revision6_session"]["session_id"], "derivation-prior")
+        for key in "ab":
+            self.assertEqual(len(record["conditions"][key]["evidence"]), 2)
+
+    def test_missing_malformed_or_drifted_manifest_refuses_before_chain_claim(self):
+        for case in ("absent", "malformed", "no-reason", "wrong-plan", "bad-harvest", "future-prior"):
+            with self.subTest(case=case):
+                self.custody = self.root / case
+                code, _, claim, chain = self._run_with_clean_dwell(0, manifest_case=case)
+                self.assertEqual(code, 3)
+                claim.assert_not_called()
+                chain.assert_not_called()
+                self.assertEqual(self.dwell_events, [])
+                self.assertFalse((self.custody / "night/start_conditions.json").exists())
+                self.custody = self.root / (case + "-fixed")
+                self.assertEqual(self._run_with_clean_dwell(0)[0], 0)
+
+    def test_off_settle_and_dwell_overlap_in_either_completion_order(self):
+        # OFF may already be settled while dwell runs, or dwell may finish
+        # before the wall clock proves OFF settled. Both clocks remain gates.
+        for label, age, lag, dwell, total in (("off-first", 600, 0, 800, 800),
+                                              ("dwell-first", 0, 100, 600, 700)):
+            with self.subTest(order=label):
+                self.custody = self.root / label
+                code, record, claim, chain = self._run_with_clean_dwell(
+                    0, off_age=age, off_wall_lag=lag, dwell_duration=dwell)
+                self.assertEqual(code, 0)
+                self.assertEqual(sum(event[1] for event in self.dwell_events if isinstance(event, tuple)), total)
+                self.assertEqual(record["ended_epoch_s"] - record["started_epoch_s"], dwell)
+                claim.assert_called_once()
+                chain.assert_called_once()
+
+    def test_off_settle_failure_refuses_even_after_dwell_passes(self):
+        code, record, claim, chain = self._run_with_clean_dwell(0, settle_failure=True)
+        self.assertEqual(code, 3)
+        self.assertEqual(record["exit_status"], 0)
+        claim.assert_not_called()
+        chain.assert_not_called()
+        self.assertFalse((self.custody / "night/start_conditions.json").exists())
+        self.custody = self.root / "settle-fixed"
+        self.assertEqual(self._run_with_clean_dwell(0)[0], 0)
+
+    def test_dwell_deadline_exceeded_refuses_even_with_exit_zero(self):
+        code, record, claim, chain = self._run_with_clean_dwell(0, dwell_duration=1311)
+        self.assertEqual(code, 3)
+        self.assertEqual(record["exit_status"], 0)
+        claim.assert_not_called()
+        chain.assert_not_called()
+        self.assertIn("deadline exceeded", (self.custody / "night/refusal.json").read_text())
+        self.custody = self.root / "deadline-fixed"
+        self.assertEqual(self._run_with_clean_dwell(0, dwell_duration=600)[0], 0)
+
+    def test_start_record_write_cannot_outlive_start_deadline(self):
+        code, _, claim, chain = self._run_with_clean_dwell(0, start_record_duration=711)
+        self.assertEqual(code, 3)
+        claim.assert_not_called()
+        chain.assert_not_called()
+        self.assertIn("deadline exceeded while recording", (self.custody / "night/refusal.json").read_text())
+        self.custody = self.root / "record-write-fixed"
+        self.assertEqual(self._run_with_clean_dwell(0, start_record_duration=0)[0], 0)
+
+    def test_off_settle_cannot_outlive_start_deadline(self):
+        code, _, claim, chain = self._run_with_clean_dwell(0, off_wall_lag=900)
+        self.assertEqual(code, 3)
+        claim.assert_not_called()
+        chain.assert_not_called()
+        self.assertIn("OFF settle exceeds", (self.custody / "night/refusal.json").read_text())
+        self.custody = self.root / "clock-fixed"
+        self.assertEqual(self._run_with_clean_dwell(0, off_wall_lag=0)[0], 0)
+
+    def test_standard_plan_budget_preserves_programmed_span_and_gate_cost(self):
+        plan = replace(self.driver._load_plan(self.plan_path), window_max_s=9000)
+        with mock.patch.object(self.driver.time, "time", return_value=plan.t0_epoch_s + 17), \
+                mock.patch.object(self.driver.time, "monotonic", return_value=123):
+            budget = self.driver._derivation_start_budget(plan)
+            self.assertEqual(budget["programmed_span_s"], 7680)
+            self.assertEqual(budget["latest_chain_start_epoch_s"], plan.t0_epoch_s + 1320)
+            self.assertEqual(self.driver._derivation_budget_remaining(budget), 1303)
 
     def test_real_idle_agent_hit_refuses_without_chain_or_pack_authoring(self) -> None:
         self.source.census_responses = [
@@ -1634,7 +1904,8 @@ runpy.run_path(script, run_name='__main__')
                           and any(isinstance(t, ast.Name) and t.id == '_WRITE_ONCE_RECORDS' for t in node.targets))
         self.assertIn("network_time_off.json", self.driver._WRITE_ONCE_RECORDS)
         self.assertEqual(tuple(name for name in self.driver._WRITE_ONCE_RECORDS
-                               if name != "network_time_off.json"), ast.literal_eval(assignment.value))
+                               if name not in {"network_time_off.json", "clean_dwell.output.txt",
+                                               "clean_dwell.json", "start_conditions.json"}), ast.literal_eval(assignment.value))
 
     def test_v2_existing_quiet_journal_reaches_legacy_evaluator(self):
         night = self.custody / 'night'
