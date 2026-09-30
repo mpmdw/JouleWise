@@ -26,20 +26,23 @@ class HarvestWindowTests(unittest.TestCase):
         self.uninstall_rc = 0
 
     def fixture(self, slots=None, *, verdict_records=True, manual_bad=False,
-                fill_slots=None, abort_reason=None):
+                fill_slots=None, abort_reason=None, no_recording=False):
         self.plan_bytes = harvest.json_bytes({"plan_id": "plan-derivation"})
         original_write = build._write_bundle
         original_append = build.append_bracket_session_receipt
 
         def write_bundle(path, attempt, slot):
             original_write(path, attempt, slot)
+            if no_recording:
+                (path / "raw/powermetrics.plist").unlink()
             if manual_bad:
                 evidence = json.loads((path / "instrument_evidence.json").read_bytes())
                 evidence["battery_float"]["pre"]["probe_error"] = True
                 evidence["battery_float"]["post"]["passed"] = False
                 (path / "instrument_evidence.json").write_bytes(harvest.json_bytes(evidence))
             artifacts = {name: harvest.digest((path / name).read_bytes()) for name in
-                         ("events.jsonl", "instrument_evidence.json", "raw/powermetrics.plist")}
+                         ("events.jsonl", "instrument_evidence.json", "raw/powermetrics.plist")
+                         if (path / name).is_file()}
             (path / "manifest.json").write_bytes(harvest.json_bytes({"artifacts": artifacts}))
 
         def append(*a, **kw):
@@ -94,6 +97,177 @@ class HarvestWindowTests(unittest.TestCase):
     def run_harvest(self, **kw):
         return harvest.harvest(self.args, runner=self.runner, census=lambda **_: Census(),
                                now=lambda: 10000, **kw)
+
+    def revision6_fixture(self, slots=None, **kw):
+        self.fixture(slots, **kw)
+        start = {"schema": "joulewise.revision6.start_conditions.v1",
+                 "session_id": build.SESSION_ID, "plan_id": json.loads(self.plan_bytes)["plan_id"],
+                 "result": "admitted", "refusal_reason": None, "evidence": {},
+                 "boot_id": "synthetic-boot", "written_epoch_s": 100,
+                 "written_monotonic_s": 50,
+                 "chain_start_admitted": {"epoch_s": 100.0, "monotonic_s": 50.0}}
+        (self.night / "night/start_conditions.json").write_bytes(harvest.json_bytes(start))
+        (self.night / "night/chain.exited").write_bytes(harvest.json_bytes(
+            {"exit_code": 0, "epoch_s": 9000.25, "monotonic_ns": 1234567890123}))
+
+    def replay_result(self, *, cells=2, frame=125.0, disposition="valid", trigger=None):
+        return {"cells": cells, "median_frame_ms": frame, "ratio": cells / 100 if cells is not None else None,
+                "disposition": disposition, "trigger": trigger, "replay_failed": frame is None,
+                # Counterfactual input: even future accidental harness fields
+                # cannot cross the harvest's explicitly enumerated projection.
+                "b_fiducial_s": 987654321.012345, "exact_bound": 987654321.012345,
+                "stored B reproduced": True, "elapsed_s": 999.0}
+
+    def archived_r9(self, record):
+        custody = Path(record["custody_root"])
+        path = custody / record["r9_window"]["path"]
+        self.assertEqual(harvest.digest(path.read_bytes()), record["r9_window"]["sha256"])
+        return json.loads(path.read_bytes())
+
+    def assert_blind_records(self, *records):
+        def walk(value):
+            if isinstance(value, dict):
+                for key, child in value.items():
+                    lowered = key.lower()
+                    self.assertFalse(lowered == "b" or "bound" in lowered
+                                     or "b_fiducial" in lowered or "stored b" in lowered, key)
+                    walk(child)
+            elif isinstance(value, list):
+                for child in value:
+                    walk(child)
+        for record in records:
+            walk(record)
+            self.assertNotIn("987654321", harvest.json_bytes(record).decode())
+
+    def test_revision6_record_schema_counts_and_authenticated_timing(self):
+        self.revision6_fixture([build.Slot("987654321.012345", native_frames=True,
+                                           disposition="ordinary-invalid" if i == 1 else "valid")
+                                for i in range(12)])
+        frames = [100.0, 150.0, 120.0, 99.0, 151.0] + [125.0] * 7
+        replies = [self.replay_result(cells=0 if i == 2 else 2, frame=frame,
+                                     disposition="ordinary-invalid" if i == 1 else "valid")
+                   for i, frame in enumerate(frames)]
+        before = harvest.inventory(self.night)
+        with mock.patch.object(harvest.cap_replay_harness, "replay_capture", side_effect=replies) as replay:
+            record = self.run_harvest()
+        r9 = self.archived_r9(record)
+        self.assertEqual(set(r9), {"schema", "session_id", "slots", "captures", "counted", "valid",
+                                   "harness_sha256", "rule_ref"})
+        self.assertEqual(r9["schema"], "joulewise.revision6.r9_window.v1")
+        self.assertEqual((r9["session_id"], r9["slots"], r9["counted"], r9["valid"]),
+                         (build.SESSION_ID, 12, 9, 11))
+        self.assertEqual(r9["harness_sha256"], harvest.digest(Path(harvest.cap_replay_harness.__file__).read_bytes()))
+        self.assertEqual(r9["rule_ref"], "CAP-COUNCIL-25G83-01 R9 as amended; Revision 6 §4")
+        self.assertEqual([row["slot"] for row in r9["captures"]], list(range(1, 13)))
+        for row, call in zip(r9["captures"], replay.call_args_list):
+            self.assertEqual(set(row), {"slot", "capture_id", "content_id", "has_recording", "cells",
+                                       "median_frame_ms", "ratio", "disposition", "cap_trigger",
+                                       "median_frame_reported", "counted"})
+            self.assertEqual(call.args, (self.night / "runs/instrument_validation" / row["capture_id"], "REPORT"))
+            self.assertRegex(row["content_id"], r"^[0-9a-f]{64}$")
+            self.assertTrue(row["has_recording"])
+            self.assertTrue(row["median_frame_reported"])
+        self.assertTrue(r9["captures"][1]["counted"])  # Invalid can still be counted.
+        self.assertEqual(record["stop_flags"], [])
+        self.assertEqual(record["window_end"], {"epoch_s": 9000.25, "monotonic_s": 1234.567890123,
+                         "source": {"path": "night/chain.exited", "sha256": before["night/chain.exited"]["sha256"]}})
+        self.assertEqual(record["start_conditions"], {"path": "night/start_conditions.json",
+                         "sha256": before["night/start_conditions.json"]["sha256"]})
+        self.assertEqual(record["boot_id"], "synthetic-boot")
+        self.assertEqual(Path(record["custody_root"]), self.args.custody / "custody-root")
+        self.assertEqual(before, harvest.inventory(self.night))
+        for reference in (record["start_conditions"], record["window_end"]["source"]):
+            self.assertEqual(harvest.digest((Path(record["custody_root"]) / reference["path"]).read_bytes()),
+                             reference["sha256"])
+        self.assert_blind_records(record, r9)
+        with mock.patch.object(harvest.cap_replay_harness, "replay_capture", side_effect=replies):
+            self.assertEqual(self.run_harvest(), record)
+        self.assertEqual(len([argv for argv in self.calls if "--uninstall" in argv]), 1)
+
+    def test_revision6_missing_reported_frame_flags_stop(self):
+        self.revision6_fixture()
+        with mock.patch.object(harvest.cap_replay_harness, "replay_capture",
+                               return_value=self.replay_result(cells=None, frame=None)):
+            record = self.run_harvest()
+        r9 = self.archived_r9(record)
+        self.assertEqual(record["stop_flags"], ["STOP-R9-FRAME"])
+        self.assertEqual(record["next_window"]["verdict"], "STOP_TO_REVIEW")
+        self.assertEqual((r9["counted"], r9["valid"]), (0, 1))
+        self.assertFalse(r9["captures"][0]["median_frame_reported"])
+        self.assertIsNone(r9["captures"][0]["median_frame_ms"])
+        self.assertEqual(record["retained_captures"], 0)
+        self.assert_blind_records(record, r9)
+
+    def test_revision6_sampler_loss_or_mismatch_is_frame_stop(self):
+        self.revision6_fixture([build.Slot("0.02", native_frames=True), build.Slot("0.03", native_frames=True)])
+        raw_paths = sorted(self.night.glob("runs/instrument_validation/*/raw/powermetrics.plist"))
+        raw_paths[0].unlink()
+        raw_paths[1].write_bytes(b"tampered")
+        record = self.run_harvest()  # Real REPORT input checks, no detector work.
+        r9 = self.archived_r9(record)
+        self.assertEqual(record["stop_flags"], ["STOP-R9-FRAME"])
+        self.assertEqual(r9["counted"], 0)
+        self.assertTrue(all(row["has_recording"] and not row["median_frame_reported"] for row in r9["captures"]))
+
+    def test_revision6_no_recording_does_not_fire_frame_stop(self):
+        self.revision6_fixture([build.Slot("0.02", disposition="ordinary-invalid", native_frames=True)], no_recording=True)
+        with mock.patch.object(harvest.cap_replay_harness, "replay_capture",
+                               return_value=self.replay_result(cells=None, frame=None, disposition="ordinary-invalid")):
+            record = self.run_harvest()
+        r9 = self.archived_r9(record)
+        self.assertFalse(r9["captures"][0]["has_recording"])
+        self.assertEqual(r9["captures"][0]["disposition"], "ordinary-invalid")
+        self.assertEqual((r9["counted"], r9["valid"]), (0, 0))
+        self.assertEqual(record["stop_flags"], [])
+
+    def test_revision6_adverse_window_contributes_no_counts(self):
+        self.revision6_fixture([build.Slot("0.02", native_frames=True, battery_mode="charging")])
+        with mock.patch.object(harvest.cap_replay_harness, "replay_capture", return_value=self.replay_result(frame=None)):
+            record = self.run_harvest()
+        r9 = self.archived_r9(record)
+        self.assertEqual((r9["counted"], r9["valid"]), (0, 0))
+        self.assertEqual(record["stop_flags"], ["STOP-R9-FRAME"])
+
+    def test_revision6_cap_triggers_are_preserved(self):
+        self.revision6_fixture([build.Slot("0.02", native_frames=True)] * 3)
+        replies = [self.replay_result(trigger="evaluated_cell_budget"),
+                   self.replay_result(trigger="wall_deadline"), self.replay_result(cells=60)]
+        with mock.patch.object(harvest.cap_replay_harness, "replay_capture", side_effect=replies):
+            record = self.run_harvest()
+        self.assertEqual(record["stop_flags"], [])
+        self.assertEqual([row["cap_trigger"] for row in self.archived_r9(record)["captures"]],
+                         ["evaluated_cell_budget", "wall_deadline", None])
+
+    def test_revision6_malformed_exit_time_refuses(self):
+        self.revision6_fixture()
+        (self.night / "night/chain.exited").write_text('{"epoch_s":9000}')
+        self.assert_refuses()
+
+    def test_revision6_r9_tampering_refuses_immutable_retry(self):
+        self.revision6_fixture()
+        with mock.patch.object(harvest.cap_replay_harness, "replay_capture", return_value=self.replay_result()):
+            record = self.run_harvest()
+            path = Path(record["custody_root"]) / record["r9_window"]["path"]
+            path.write_text("tampered")
+            with self.assertRaisesRegex(harvest.HarvestRefusal, "overwrite"):
+                self.run_harvest()
+            self.assertEqual(path.read_text(), "tampered")
+
+    def test_revision6_r9_directory_symlink_cannot_write_outside_archive(self):
+        self.revision6_fixture()
+        target = self.base / "protected-custody"
+        target.mkdir()
+        (target / "sentinel").write_bytes(b"unchanged")
+        (self.night / "harvest").symlink_to(target, target_is_directory=True)
+        before = harvest.inventory(target)
+        with mock.patch.object(harvest.cap_replay_harness, "replay_capture", return_value=self.replay_result()):
+            self.assert_refuses()
+        self.assertEqual(harvest.inventory(target), before)
+
+    def test_bound_leak_counterfactual_fails_blind_assertion(self):
+        for key in ("B", "b_fiducial_s", "exact_bound", "stored B reproduced"):
+            with self.subTest(key=key), self.assertRaises(AssertionError):
+                self.assert_blind_records({"captures": [{key: 1}]})
 
     def assert_refuses(self):
         with self.assertRaises((ValueError, harvest.issuer.PrepareRefusal,

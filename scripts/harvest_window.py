@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -27,6 +28,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from scripts import issue_calibration_acceptance_generation as issuer
+from scripts import cap_replay_harness
 from scripts.calibration_cadence_report import native_intervals_ms, STOP_THRESHOLD_MS
 from joulewise import battery_float
 from joulewise.calibration_ledger import artifact_hashes, load_calibration_ledger_snapshot
@@ -101,7 +103,61 @@ def coordinates(plan, night_root):
     return exports
 
 
-def capture_rows(session, *, battery=None):
+def r9_window(session, battery_status):
+    """Project REPORT's work fields explicitly; never copy its whole result."""
+    counting = battery_status == "pass"
+    captures = []
+    stops = set()
+    for number, slot in enumerate(session.declared_slots, 1):
+        observation = session.finalized_slots.get(slot)
+        if observation is None:
+            continue  # An unused slot has no capture identity or recording.
+        replay = cap_replay_harness.replay_capture(Path(observation.custody_locator), "REPORT")
+        recording = bool(observation.artifact_sha256.get("raw/powermetrics.plist"))
+        cells, frame, ratio = (replay[key] for key in ("cells", "median_frame_ms", "ratio"))
+        if not recording:
+            cells, frame, ratio = None, None, None
+        frame_reported = (not isinstance(frame, bool) and isinstance(frame, (int, float))
+                          and math.isfinite(frame) and frame > 0)
+        if not frame_reported:
+            frame = None
+        search_ran = isinstance(cells, int) and not isinstance(cells, bool) and cells >= 1
+        trigger = replay["trigger"] if recording else None
+        if recording and not frame_reported:
+            stops.add("STOP-R9-FRAME")
+        captures.append({"slot": number, "capture_id": observation.attempt_id,
+                         "content_id": observation.content_id, "has_recording": recording,
+                         "cells": cells, "median_frame_ms": frame, "ratio": ratio,
+                         "disposition": replay["disposition"] if recording else observation.classification_disposition,
+                         "cap_trigger": trigger,
+                         "median_frame_reported": frame_reported,
+                         "counted": bool(counting and recording and search_ran
+                                         and frame_reported and 100 <= frame <= 150)})
+    return {"schema": "joulewise.revision6.r9_window.v1", "session_id": session.session_id,
+            "slots": len(session.declared_slots), "captures": captures,
+            "counted": sum(row["counted"] for row in captures),
+            "valid": sum(row.classification_disposition == "valid"
+                         for row in session.finalized_slots.values()) if counting else 0,
+            "harness_sha256": digest(Path(cap_replay_harness.__file__).read_bytes()),
+            "rule_ref": "CAP-COUNCIL-25G83-01 R9 as amended; Revision 6 §4"}, sorted(stops)
+
+
+def window_end(raw):
+    """Amendment T uses the chain exit instant, never harvest write time."""
+    exit_record = json.loads(raw)
+    if not isinstance(exit_record, dict):
+        raise HarvestRefusal("chain exit timing is malformed")
+    epoch, monotonic_ns = exit_record.get("epoch_s"), exit_record.get("monotonic_ns")
+    if (isinstance(epoch, bool) or not isinstance(epoch, (int, float))
+            or not math.isfinite(epoch) or epoch < 0
+            or isinstance(monotonic_ns, bool) or not isinstance(monotonic_ns, int)
+            or monotonic_ns < 0):
+        raise HarvestRefusal("chain exit timing is malformed")
+    return {"epoch_s": float(epoch), "monotonic_s": monotonic_ns / 1_000_000_000,
+            "source": {"path": "night/chain.exited", "sha256": digest(raw)}}
+
+
+def capture_rows(session, *, battery=None, r9_captures=None):
     """Authenticate all finalized captures, including non-valid dispositions.
 
     Call the issuer's primary-byte and clock seams and the battery-verdict
@@ -125,19 +181,27 @@ def capture_rows(session, *, battery=None):
         seen.add(path)
         evidence, manifest = issuer._read_member_evidence(observation)
         hashes = artifact_hashes(path)
-        if any(hashes.get(name) != expected for name, expected in observation.artifact_sha256.items()):
+        # Revision 6 reports sampler loss/mismatch through STOP-R9-FRAME;
+        # all other primary evidence still has to authenticate normally.
+        sampler = "raw/powermetrics.plist"
+        if any(hashes.get(name) != expected for name, expected in observation.artifact_sha256.items()
+               if r9_captures is None or name != sampler):
             raise HarvestRefusal("capture authentication failed")
         artifacts = manifest.get("artifacts")
         if not isinstance(artifacts, dict) or not artifacts:
             raise HarvestRefusal("capture manifest lacks artifact fingerprints")
         for name, expected in artifacts.items():
             if (not isinstance(name, str) or Path(name).is_absolute() or ".." in Path(name).parts
-                    or hashes.get(name) != expected
+                    or ((r9_captures is None or name != sampler) and hashes.get(name) != expected)
                     or observation.artifact_sha256.get(name) != expected):
                 raise HarvestRefusal("manifest authentication failed")
-        if "raw/powermetrics.plist" not in artifacts or "instrument_evidence.json" not in artifacts:
+        if ("instrument_evidence.json" not in artifacts
+                or (r9_captures is None and sampler not in artifacts)):
             raise HarvestRefusal("capture manifest is incomplete")
-        lengths = native_intervals_ms((path / "raw/powermetrics.plist").read_bytes())
+        if r9_captures is None:
+            median_frame = statistics.median(native_intervals_ms((path / sampler).read_bytes()))
+        else:
+            median_frame = r9_captures[observation.attempt_id]["median_frame_ms"]
         resolved, _ = issuer.anchor_v3_replay_outcome(evidence)
         # Independent check of the recorded booleans omitted by the frozen
         # battery validator. Replay and compare, rather than trusting passed.
@@ -149,9 +213,12 @@ def capture_rows(session, *, battery=None):
         valid = observation.classification_disposition == "valid"
         retained = (valid and resolved
                  and battery["status"] == "pass" and all(checks))
+        if r9_captures is not None:
+            retained = retained and median_frame is not None and 100 <= median_frame <= 150
         captures.append({"slot": slot, "attempt_id": observation.attempt_id,
-                         "cadence": "STOP" if statistics.median(lengths) > STOP_THRESHOLD_MS else "CONTINUE",
-                         "median_native_frame_ms": statistics.median(lengths),
+                         "cadence": ("UNREPORTED" if median_frame is None else
+                                     "STOP" if median_frame > STOP_THRESHOLD_MS else "CONTINUE"),
+                         "median_native_frame_ms": median_frame,
                          "clock": "resolved" if resolved else "unresolved",
                          "battery": battery_by_slot[slot]["verdict"],
                          "battery_raw_sha256": {"pre": battery_by_slot[slot]["pre_raw_sha256"],
@@ -228,6 +295,22 @@ def harvest(args, *, runner=subprocess.run, census=measurement_census, now=time.
     preregistration = args.preregistration.resolve()
     if digest(preregistration.read_bytes()) != args.preregistration_sha256:
         raise HarvestRefusal("pre-registration authentication failed")
+    start_path = night_root / "night/start_conditions.json"
+    revision6 = start_path.is_file()
+    r9_record, stop_flags = None, []
+    if revision6:
+        start_raw = start_path.read_bytes()
+        end_raw = (night_root / "night/chain.exited").read_bytes()
+        for name, raw in (("night/start_conditions.json", start_raw), ("night/chain.exited", end_raw)):
+            if digest(raw) != source_inventories["custody-root"][name].get("sha256"):
+                raise HarvestRefusal("window timing evidence changed during authentication")
+        start = json.loads(start_raw)
+        if (not isinstance(start, dict)
+                or start.get("schema") != "joulewise.revision6.start_conditions.v1"
+                or start.get("session_id") != exports["SESSION_ID"]
+                or start.get("result") != "admitted"):
+            raise HarvestRefusal("Revision 6 start conditions disagree with window")
+        end = window_end(end_raw)
     snapshot = load_calibration_ledger_snapshot(
         Path(exports["CALIBRATION_LEDGER"]), Path(exports["LEDGER_HEAD_PIN"]),
         require_committed_pin=True, verify_custody=False, mode="read_replay", repo_root=root)
@@ -258,7 +341,11 @@ def harvest(args, *, runner=subprocess.run, census=measurement_census, now=time.
             tool_commit=plan.measurement_head,
             module_sha256=digest((root / "joulewise/battery_float.py").read_bytes()),
             wall_time_s=json.loads((night_root / "night/chain.exited").read_bytes())["epoch_s"])
-        captures, battery = capture_rows(session, battery=battery_record)
+        r9_captures = None
+        if revision6 and session_id == exports["SESSION_ID"]:
+            r9_record, stop_flags = r9_window(session, battery_record["status"])
+            r9_captures = {row["capture_id"]: row for row in r9_record["captures"]}
+        captures, battery = capture_rows(session, battery=battery_record, r9_captures=r9_captures)
         disposition_valid = sum(row["valid"] for row in captures)
         # Independently count the snapshot's observation inventory, rather
         # than relying solely on the capture traversal's accumulator.
@@ -267,6 +354,8 @@ def harvest(args, *, runner=subprocess.run, census=measurement_census, now=time.
                             and row.classification_disposition == "valid"])
         if ledger_valid != disposition_valid:
             raise HarvestRefusal("independent ledger arithmetic disagrees")
+        medians = [row["median_native_frame_ms"] for row in captures
+                   if row["median_native_frame_ms"] is not None]
         session_rows.append({"session_id": session_id, "declared": len(session.declared_slots),
                              "filled": len(captures), "valid": disposition_valid if battery == "pass" else 0,
                              "disposition_valid": disposition_valid, "independent_count_check": "pass",
@@ -274,7 +363,7 @@ def harvest(args, *, runner=subprocess.run, census=measurement_census, now=time.
                              "battery": battery, "captures": captures,
                              "battery_verdict": battery_record,
                              "manual_crosscheck": "pass" if all(row["manual_crosscheck"] == "pass" for row in captures) else "fail",
-                             "median_of_capture_medians_ms": statistics.median(row["median_native_frame_ms"] for row in captures)})
+                             "median_of_capture_medians_ms": statistics.median(medians) if medians else None})
     # Reuse the exact count-only path behind check --session-ids, including
     # the committed-verdict gate; never call candidate/statistics code.
     code, lines = issuer.registration_dry_run(snapshot, ids, repo_root=root,
@@ -294,13 +383,26 @@ def harvest(args, *, runner=subprocess.run, census=measurement_census, now=time.
               "sessions": session_rows, "valid_captures": sum(row["valid"] for row in session_rows),
               "retained_captures": sum(row["retained"] for row in session_rows),
               "registration_check": {"exit_code": code, "admissible": code == 0},
-              "next_window": next_window(plan, preregistration, session_rows),
+              "next_window": (next_window(plan, preregistration, session_rows) if not revision6 else
+                              {"verdict": "STOP_TO_REVIEW" if stop_flags else "COUNTS_ONLY",
+                               "reason": "revision6_count_rule_owned_by_issuer"}),
               "inventory": source_inventories, "uninstall": {"exit_code": 0}}
+    if revision6:
+        r9_raw = json_bytes(r9_record)
+        record.update(custody_root=str(destination / "custody-root"),
+                      start_conditions={"path": "night/start_conditions.json", "sha256": digest(start_raw)},
+                      r9_window={"path": "harvest/r9_window.json", "sha256": digest(r9_raw)},
+                      window_end=end, boot_id=start.get("boot_id"), stop_flags=stop_flags)
     # A completed retry validates the immutable archive rather than rerunning
     # the installer or overwriting a record.
     if destination.exists():
+        if revision6 and (destination / "custody-root/harvest/r9_window.json").read_bytes() != r9_raw:
+            raise HarvestRefusal("existing R9 record differs; refusing overwrite")
         if (destination / "harvest.json").read_bytes() != json_bytes(record) or any(
-                not copy_matches(rows, inventory(destination / name)) for name, rows in source_inventories.items()):
+                not copy_matches(rows, {path: row for path, row in inventory(destination / name).items()
+                                       if not revision6 or name != "custody-root" or
+                                       (path in rows or path not in {"harvest", "harvest/r9_window.json"})})
+                for name, rows in source_inventories.items()):
             raise HarvestRefusal("existing harvest differs; refusing overwrite")
         return record
     destination.parent.mkdir(parents=True, exist_ok=True)
@@ -317,6 +419,23 @@ def harvest(args, *, runner=subprocess.run, census=measurement_census, now=time.
                 if (inventory(source) != source_inventories[name]
                         or not copy_matches(source_inventories[name], inventory(stage / name))):
                     raise HarvestRefusal("source changed or courier copy disagrees")
+            if revision6:
+                r9_path = stage / "custody-root/harvest/r9_window.json"
+                if r9_path.parent.is_symlink():
+                    raise HarvestRefusal("R9 directory escapes staged custody")
+                r9_path.parent.mkdir(exist_ok=True)
+                with open(r9_path, "xb") as handle:
+                    handle.write(r9_raw)
+                    handle.flush()
+                    os.fsync(handle.fileno())
+                # Adding derived evidence must preserve copied source directory
+                # timestamps, including the root used by immutable retry checks.
+                for directory in (r9_path.parent, stage / "custody-root"):
+                    relative = directory.relative_to(stage / "custody-root")
+                    source = night_root / relative
+                    if source.is_dir():
+                        st = source.stat()
+                        os.utime(directory, ns=(st.st_atime_ns, st.st_mtime_ns))
             with open(stage / "harvest.json", "xb") as handle:
                 handle.write(json_bytes(record))
                 handle.flush()
