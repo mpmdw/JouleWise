@@ -1,0 +1,26 @@
+ERRATUM: REV6-25G83-01-E1 ISSUED. Both output files exist. All eight refuter findings are upheld, and the corrected text passes the ruling's checks: the JSON block parses, and the issuer's pin reader and the chain-pin regex each match exactly once with the text appended to Revisions 1–5.
+
+| Finding | Ruling | What changed in the text |
+|---|---|---|
+| F1 | Upheld; I recomputed it. | §9 now gives the exact condition for when Q99_within is the larger (about 70 % of campaigns with no window effect). The bound is restated as at most 15.7 % at n = 12 in three windows and at most 5.6 % at n ≥ 24. |
+| F2 | Clean dwell (g) is kept. | Each window needs a start-condition record naming the evidence for (a)–(g) by digest, and the issuer refuses any window without it. |
+| F3 | A stop to review with R9 "not passed", not a void. | New stop line `STOP-R9-FRAME` in §4, §8, §11 and the JSON. A missing file shows a storage fault, not that the cap removed a capture. |
+| F4 | Not a window (the D-182 reading). | A "null session" is defined in §0 and the JSON session semantics, with a new clause 0 in the count rule. Two null sessions in a row go to review (`STOP-NULL-REPEAT`). |
+| F5 | Upheld. | §6.2(g) lists the script's five real conditions, the 600 s rule and the 45-minute timeout. |
+| F6 | Upheld. | The t0 load limit is stated as applying on the one-shot gate path only, so (g) is the registered load condition on both paths. |
+| F7 | Dropped, not sourced. | "A few minutes apart" is removed; the text now says the spacing of a bracket's captures is not established. |
+| F8 | Upheld. | Q99_within gets its own recorded rule string with df n − K; the sealed string stays for Q99 alone. |
+
+- **Beyond F1–F8:** the authority list now cites this erratum with its own digest slot, so the seal fills 20 pin slots instead of 19. `STOP-NULL-REPEAT` and the renaming of two JSON keys from "window" to "session" are my additions under F4.
+- **Not verified:** the exact ledger fields behind "has a recording" and "null session". The text defines both in words following the sealed A-R5b phrasing, and WI-13 must map them to fields.
+- **Contamination:** the harness auto-loaded the global and worktree CLAUDE.md and the memory index (titles only) before the charge. I opened no memory, skill or state file, and no ruling rests on that material. The full disclosure is §0 of the erratum.
+
+Files are in `/Users/edr/code/JouleWise-wt-bk-ff50b201/docs/process_traces/2026-09-29-interactive-ff50b201/110-rev6-gate/`:
+- `31-coldgate-erratum.md`
+- `32-revision6-sealable-e1.md` (sha256 `9cf155fe…1bfb9c`)
+
+**Summary**
+1. All eight refuter findings are settled in this one erratum, and the corrected sealable text passes the same checks the ruling ran.
+2. Three decisions were made: an unreportable median frame stops for review without voiding; a session that aborts before any capture is not a window; the clean dwell stays and its evidence is now mandatory at issuance.
+3. Before window C1 is armed, the dwell script must be wired into the derivation driver and tested to confirm its process-name check (`codex|claude|t3|…`) does not match the driver's own process line. Until then the issuer refuses every window.
+rc=0

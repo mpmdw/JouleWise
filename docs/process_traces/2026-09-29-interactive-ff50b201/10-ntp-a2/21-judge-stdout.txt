@@ -1,0 +1,21 @@
+The ruling is issued and written to the required path. The candidate and audit worktrees are untouched, no probe process is left running, and the only new repository file is the ruling itself.
+
+**Verdict.** Addendum NTP-ENFORCE-DESIGN-01-A2 is issued. R3 is E2's defect again, and fix round 2c may proceed with a narrow scope.
+
+**What I found by execution** (scratch archive of head `36e8ba6e`, probes and logs in `/tmp/cg-ntpfix2c-d528efb2/`):
+
+- **R3 reproduced.** On an idle-shaped night whose chain left no outcome, the early clean-up step writes `refusal.json` as `night_probe_error`. A failed proof then lands in `refusal-01.json` while the result names `night_chain_alive`. The proof still refuses, so no query or ON runs. The record misleads rather than lies.
+- **R1 reproduced.** A start claim with the `pid` and `pgid` keys missing is accepted as never launched. Recovery then restores ON without calling the proof. No production writer emits such a claim.
+- **R2 reproduced with an injected census only.** The real `pgrep` answers exit 1 for absent groups, single and batched alike. The real tool never produces R2's input.
+- **R4 and R5 confirmed** as contract nits. R5's exit status 6 dates from the first night driver and is pinned by four inherited tests.
+- **NIT-1 confirmed with real processes.** A path-signature child with two seconds left is refused after four passes at about 0.9 seconds. One with half a second left is waited for.
+
+**Rulings in brief:**
+
+1. **2c scope.** Three cures in the same nine files. The early clean-up step performs only the signal and census and writes no refusal document. The record rule is restated to cover every writer, and a chain-written document is never rewritten but is named by the driver's. R1 requires both keys present and null at three sites. R2 makes an exit-0-empty batch census "not proved". R4, R5, NIT-1 and NIT-2 are registered limits. NIT-3 is N3's.
+2. **NIT-1.** Widen the horizon to about four seconds by asking "does one more listing fit?" before each listing, returning the last complete pass. This is specified with six tests but belongs in its own small round after merge and before the lead's bench checks, not inside 2c.
+3. **Stop conditions.** Four added seat stops and a seven-row delta charge. If E2 survives 2c there is no round 2d. The next step is a bounded consult on the refusal-record model, then a cold gate. The owner has nothing to decide.
+4. **Readiness.** After 2c and a clean delta, N1 is ready for the full gate. N5 and N3's scope are conditions on N3, not on N1. The lead still owes the A1 §7.5 items, including the desk action for a stuck empty start claim, which I could not find in the hand-back document.
+
+**Two disclosures in the ruling.** My first probe run left a mock active on the shared `subprocess.run`, so its "real pgrep" and NIT-1 lines were wrong. I re-ran both cleanly and used only the second run. A grep for item 118 also showed me one line of the orchestrator's later sketch of proposed 2c content. I did not open that item, and the ruling states where my conclusions converge with it and where they differ.
+rc=0

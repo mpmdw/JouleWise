@@ -1,0 +1,15 @@
+Warning: no stdin data received in 3s, proceeding without it. If piping from a slow command, redirect stdin explicitly: < /dev/null to skip, or wait longer.
+The remaining worktree entry is this session's own working directory, which the orchestrator created, so it stays. The three scratch checkouts under `/tmp/cg-s1r8-ff50b201/` are removed and the ruling file is complete.
+
+**Ruling issued:** `docs/process_traces/2026-09-29-interactive-ff50b201/50-rulings/21-coldgate-s1-rule8-ruling.md` in the `ff50b201` records worktree, first line `ADDENDUM: S1-REPAIR-ROUTE-01-A2 ISSUED`. No other repository file was touched. Session ran about 43 minutes of the 60-minute budget, all in the foreground.
+
+**What I decided:**
+
+- **Seat B's three floor IDs: second switch granted.** Rule 8's name clause catches two of them only because they call the verdict function, which is the sole public entry to both branches of the check. By execution: all three fail unmodified, pass with the switch, and go red under a charging pair with the switch on. With the switch on, removing each guarded production check turns its test red. The two-row conflict return at line 6072 is killed by nothing else in 235 tests across the floor and selection modules, so refusing the switch would leave that check with no test at all. Rule 7 holds: on main the second form answered false on every call for all three.
+- **Seat A's F1: rule 8 does not forbid it, switch granted.** The `_prepare` call happens before the switch is entered, its subject is the missing-bundle listing, and A1 §5.1 had already classed it green under both switches. Reproduced: 12 red unmodified, green switched.
+- **Rule 8 rewritten** so that naming a closed-list function triggers an executed three-part check rather than deciding the answer. **Condition 9 rewritten** as a closed list of 11 named IDs, with the three unused F slots retired, so the list cannot grow by count alone.
+- **#421:** no number moves. Coverage of the deep branch is carried by 16 green tests I found by a recorder census. One pre-existing gap is assigned to the canary lane: a current-evidence twin of the two-row conflict test.
+- **Residue after R3-6** goes to a per-ID cold gate with the refusing check named, or to a consult if it is an unexplained mechanism. The owner is asked only the A1 §4.6 policy question, if it arises.
+
+**For the lead, outside this gate's charge:** three `LaunchLineageWholeWindowTests` errors in `test_whole_window` on seat B's tree are battery-gate refusals over unbound configs, which bench L's later fence commit may or may not cover. Not executed by me: rule 7's recorder for F1 on main, and mutants M2 to M5 against the deep-branch census.
+rc=0

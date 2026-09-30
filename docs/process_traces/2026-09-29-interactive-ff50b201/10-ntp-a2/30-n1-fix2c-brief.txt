@@ -1,0 +1,78 @@
+NETWORK-TIME-OFF-ENFORCE-01 N1 — fix round 2c (implementation seat). Worktree /Users/edr/code/JouleWise-wt-ntp-n1-d528efb2, branch feat/2026-09-28-ntp-n1, head 36e8ba6e. Single non-interactive session; foreground only; no subagents.
+WRITE_SCOPE: ["joulewise/network_time_window.py","tests/test_network_time_window.py","scripts/run_night.py","tests/test_run_night.py","joulewise/night_gate.py","tests/test_night_gate.py","joulewise/arm_retry.py","tests/test_arm_retry.py","tests/test_launch_window.py"]
+
+Authority: cold ruling NTP-ENFORCE-DESIGN-01-A2 (file: /Users/edr/code/JouleWise-wt-bk-ff50b201/docs/process_traces/2026-09-29-interactive-ff50b201/10-ntp-a2/21-coldgate-fable-ruling.md — read it IN FULL first; its §3 and §6.1 are quoted below word for word and bind you), amending A1 (/Users/edr/code/JouleWise-wt-bk-77b1bee2/docs/process_traces/2026-09-27-activation-d528efb2/71-ntp-design/38-coldgate-fix2-ruling.md; its §7.2 stop conditions 1–5 stand).
+
+Environment facts: run tests with /opt/homebrew/bin/python3 -B and PYTHONPATH=/Users/edr/code/JouleWise-wt-bk-77b1bee2/docs/process_traces/2026-09-27-activation-d528efb2/30-s1-repair/guard. Never run real systemsetup, sntp, powermetrics, or live log queries; never read the battery. The sandbox cannot run pgrep/sysctl: tests that need the real process listing may fail in the sandbox for that reason only — list them by ID as SANDBOX-ONLY, do not "fix" them; the lead re-runs them outside the sandbox.
+
+Output: commit on the branch (message prefix "NETWORK-TIME-OFF-ENFORCE-01 N1 fix round 2c:"), do not push. Final report: each ruled cure with file:line; each regression named in §3.5 with its result on the new head AND its failing assertion on 36e8ba6e (run in a scratch archive of 36e8ba6e under /tmp/n1fix2c/); each red-by-deletion check executed; the full run of the four N1 test modules + tests/test_launch_window.py; any stop condition hit (then stop and report instead of continuing). Claim nothing you did not execute.
+
+=== Ruling A2 §3 (verbatim) ===
+## 3. Ruling 1 — R3 is E2; round 2c may proceed, with this scope
+
+### 3.1 E2's signature
+
+Item 118's ruling was: when the proof fails, both records carry `night_chain_alive`, with any earlier abort reason kept inside the evidence. The reason behind it: `night_chain_alive` is the cause that leaves the machine in a state a person must act on (a capture may be alive; ON is owed; the marker stays). Whatever stopped the night first is history; the live hazard is the cause of record.
+
+**E2's signature, for every later audit:** *after a failed capture proof, a document the driver wrote names a cause other than `night_chain_alive`, or `result.json` does not name it.*
+
+R3 fits it exactly. The code path is the same (a failed proof, `_capture_unproved_abort`, the result step); the violated rule is the same (item 118); only the earlier writer differs: the [K] step instead of the deadline watchdog. Round 2b fixed the watchdog's document by superseding it and gave the census stop a document of its own, and did not look at the third driver-side writer that runs between OFF and the proof. So a round to fix R3 is the second fix round on E2, and this gate is the one the rules require. Round 2c **may proceed**.
+
+### 3.2 When R3 happens on a real night, and what it damages
+
+[K] writes its document only for an idle night whose chain left no valid `evidence_outcome.json` and for which no refusal document exists yet (F1). That is the night whose chain was killed or crashed, which is the very night in which a capture process is likeliest to survive. The deadline stop is already covered: the watchdog's document exists first, [K] then writes nothing, and round 2b supersedes that document. The uncovered cases are the agent-census stop and a chain that crashed on its own: no document exists, [K] writes `night_probe_error`, the proof fails, and the night ends with `refusal.json` saying "the chain's probe failed" while `refusal-01.json` and `result.json` say "a capture may be alive".
+
+It **cannot** make the query or ON run: in X4 and X5 the proof still refused, no query and no ON ran, and the marker stays (the driver's code at `:3357–3381` gates both on the proof, unchanged). It makes the record **misleading rather than false**: both documents state true facts, but the one named `refusal.json` is the wrong one for a reader who opens only it. It costs no window by itself.
+
+### 3.3 The cure for R3, and the record rule restated
+
+**Ruled.** The early [K] call performs the clean-up only: `cleanup_record` (signal, then census, the registered groups; its saved record is what the later call finds). It **does not** repair `evidence_outcome.json` and **does not** write a refusal document. The later call from the courier's preparation step (`:1453`) keeps today's whole behaviour, which is the behaviour of main before N1 (F2). Implementation: split `_evidence_cleanup_error` into the clean-up part and the outcome-repair part, or give it a flag; the seat chooses.
+
+Then, after a failed proof with no earlier driver stop, no document exists when the result step runs, and it writes `refusal.json` as `night_chain_alive` (X6 shows this shape already works). After a failed proof with an earlier driver stop, round 2b's rule stands unchanged: the census stop's document is written as `night_chain_alive` with `prior_abort`; the watchdog's document is superseded in place. I do **not** widen the supersede exception to any other document, and I do not reverse it: it is implemented, tested, and confined to the driver's own document.
+
+**The record rule, restated so that it covers every writer.** After a failed capture proof:
+
+1. `result.json` says REFUSED and `aborted_reason` = `night_chain_alive`.
+2. Every refusal document **the driver wrote** for the night names `night_chain_alive`. There is exactly one such document; it carries the proof's evidence, and any earlier driver stop inside it as `prior_abort`. It is `refusal.json` unless a chain-written document already holds that name.
+3. A document **the chain wrote** is never rewritten by the driver. It stays listed in `refusal_documents`, and the driver's `night_chain_alive` document names it in its evidence under `prior_documents` (a list of the refusal document names that existed when the driver's document was written). Nothing else about the chain's document changes.
+
+X5's shape (the chain's own `refusal.json` = `night_probe_error`, the driver's `refusal-01.json` = `night_chain_alive`) is therefore **lawful and not E2**: two authors, two true facts, the result record pointing at the live hazard, and the driver's document naming the chain's. A reader who opens only a chain-written `refusal.json` is a reader the courier prompt already tells to read everything listed (F4).
+
+**Why not "one document, always `refusal.json`".** It would require the driver to rewrite a record another program wrote, which is the one thing an immutable record must never suffer, and the driver has no way to tell a chain-written `refusal.json` from a foreign one.
+
+### 3.4 R1 and R2 join the round
+
+**R1.** A never-launched claim is accepted only when the keys `pid` and `pgid` are **present and null**, at all three sites: recovery (`network_time_window.py:384`), the driver (`run_night.py:3553`) and the dead-man job (`:3603–3607`). One predicate in `network_time_window.py` (the module imports nothing from the project; the driver imports it already), taking the start claim only; the exit-record clause stays at each site as today. X1 shows the counterfactual: today `{"popen_attempted": false}` restores ON with no proof.
+
+**R2.** In `_census_chunk`, exit 0 with no lines is **not proved**, with an evidence line `census_ambiguous`; in `_attribute_pids`, a non-zero exit makes every pid unresolved. P2 is the only caller (F6), so nothing else changes. X3 shows the real tool answers exit 1 for absent groups, so no clean night is affected. X2 is the counterfactual.
+
+### 3.5 Scope, in full
+
+- **WRITE_SCOPE:** the nine files of A1 §7.2, unchanged.
+- **In:** R3 (§3.3), R1, R2 (§3.4). A docstring correction for R4 is allowed if the seat is already in that function; **no loop change**.
+- **Out:** R4, R5, NIT-1, NIT-2 (registered limits, §4), NIT-3 (N3).
+- **Regressions, each failing by assertion on `36e8ba6e`:**
+  - R3-A through the production helpers as in X4: after [K], no refusal document; final `refusal.json` = `night_chain_alive`, `result.json` agrees, `refusal_documents` = one name.
+  - R3-B as in X5: the chain's document untouched (`night_probe_error`), the driver's `refusal-01.json` = `night_chain_alive` naming `refusal.json` in `prior_documents`, `result.json` = `night_chain_alive`.
+  - R3-C (X6) unchanged, as a control on both heads.
+  - One case through the **real driver** where [K] fires: a chain that journals a separately grouped, path-signature child and exits leaving no outcome, on an idle-shaped plan whose receipt says `quiet_predicate_evidence`. If the test fixtures cannot produce such a receipt, the seat says so and the helper-level tests stand; the delta then decides (§6.2 row 3).
+  - Round 2b's `_assert_one_chain_alive_cause` for the deadline and census stops: unchanged and still green.
+  - R1: the two malformed claims of X1 → `chain_unproved`, no ON, at recovery and in `_chain_never_launched`; the dead-man's test likewise; complete nulls still accepted.
+  - R2: X2's input → `(False, {"check": "P2", ...})`; a batch answering exit 1 and empty still proved.
+- **Red by deletion:** restoring the document write in the early [K] turns R3-A red; dropping the key-presence test turns R1 red; dropping the exit-0-empty clause turns R2 red.
+
+### 3.6 The seat's stop conditions
+
+A1 §7.2's five stand. Added:
+
+6. the cure needs the driver to rewrite a document the driver process did not write, or a second `supersede=True` call site;
+7. the cure needs any change to `_prove_capture_absent`, `_capture_proof_pass` or `_capture_pass_calls` (NIT-1 and R4 are not this round);
+8. the seat finds another writer of a refusal document that can run between OFF and the result step, other than the watchdog, the census stop, [K] and the chain itself; that is a finding for the lead, and the seat does not cure it;
+9. an inherited assertion must change (R5's four, F7).
+
+
+=== Ruling A2 §6.1 (verbatim) ===
+### 6.1 The seat
+
+§3.6.
+
