@@ -56,3 +56,10 @@ The letters (a)–(g) follow Revision 6 §6.2 as sealed. If §6.2 names evidence
 ## 3. Consumer (issuer, WI-13)
 
 For a Revision 6 campaign the issuer: authenticates both records per session through the harvest record; treats a `refused` start-condition record as a null session; refuses any counting window whose start-condition record is missing, malformed or `refused` while captures exist; applies the count rule and stop lines of the JSON declaration to the sequence of R9 records; never reads B before the last counting window is terminal (Revision 6 §4).
+
+## 4. Amendment T (2026-09-30, orchestrator ruling on WI-13's timing question): explicit window timing evidence
+
+Record-write time never stands in for window timing. Producers supply authenticated timestamps on both clocks:
+- **Start** — the start-condition record gains `"chain_start_admitted": {"epoch_s": <float>, "monotonic_s": <float>}`: the instant the driver admits the chain start (after the settle and the dwell both passed), written in the same write-once record. A `refused` record carries `null`.
+- **End** — the harvest record gains `"window_end": {"epoch_s": <float>, "monotonic_s": <float>, "source": {"path": "night/chain.exited", "sha256": "..."}}`, read from the chain's exit record (the driver's existing `chain.exited` write), authenticated by digest.
+- The issuer computes start times, intervals between windows and gaps only from these fields, same-boot where both clocks are compared (the records carry `boot_id`); across a reboot it uses the wall clock and says so.
