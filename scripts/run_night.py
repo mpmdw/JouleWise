@@ -126,6 +126,9 @@ EXIT_COURIER_FAILED = 6
 _WRITE_ONCE_RECORDS = (
     "receipt.json",
     network_time_off.RECEIPT_BASENAME,
+    "clean_dwell.output.txt",
+    "clean_dwell.json",
+    "start_conditions.json",
     "go_receipt.json",
     "go-census.json",
     "result.json",
@@ -1032,6 +1035,10 @@ def _artifact_list(custody_root: Path, night_dir: Path) -> list[dict[str, Any]]:
         custody_root / "night.log",
         night_dir / "receipt.json",
         night_dir / network_time_off.RECEIPT_BASENAME,
+        custody_root / "start_conditions_manifest.json",
+        night_dir / "start_conditions.json",
+        night_dir / "clean_dwell.json",
+        night_dir / "clean_dwell.output.txt",
         *sorted(custody_root.glob("*/arm_readiness.t0.inputs/network_time_off.json")),
         night_dir / "go_receipt.json",
         night_dir / "go-census.json",
@@ -1914,6 +1921,7 @@ def _write_standard_refusal_result(
     refusal = _write_driver_refusal(
         night_dir / "refusal.json", plan, reason, detail, evidence
     )
+    _write_refused_start_conditions(plan, night_dir, f"{reason}: {detail}")
     _write_result(
         custody_root,
         night_dir,
@@ -2983,7 +2991,7 @@ def smoke_observation_round(interval_s):
     return observation, cost
 
 
-def _admit_network_time_off(plan, night_dir):
+def _admit_network_time_off(plan, night_dir, *, during_settle=None, budget=None):
     if plan.receipt_class == "TRANSACTION_PACK":
         off_path = (night_dir.parent / plan.pack_night["pack_id"] /
                     "arm_readiness.t0.inputs" / network_time_off.RECEIPT_BASENAME)
@@ -2991,10 +2999,284 @@ def _admit_network_time_off(plan, night_dir):
     else:
         off_path = night_dir / network_time_off.RECEIPT_BASENAME
         off = network_time_off.set_network_time_off(off_path, plan.plan_id, plan.plan_id)
-        time.sleep(600)
+    # The receipt starts both clocks. Running the dwell here overlaps the OFF
+    # settle without a background worker or an extra 600-second sleep.
+    if during_settle is not None:
+        during_settle()
+    now = network_time_off._clock()
+    remaining = max(0, 600 - min(now[key] - off[key]
+                                for key in ("epoch_s", "monotonic_s")))
+    if budget is not None and remaining > _derivation_budget_remaining(budget):
+        raise ValueError("OFF settle exceeds derivation start deadline")
+    if remaining and plan.receipt_class != "TRANSACTION_PACK":
+        time.sleep(remaining)
     network_time_off.seconds_since_receipt(
         network_time_off.read_receipt(off_path, plan_id=off["plan_id"], window_id=off["window_id"]),
         {**network_time_off._clock(), "boot_id": network_time_off.boot_id()})
+    return off_path
+
+
+START_MANIFEST_SCHEMA = "joulewise.derivation_start_conditions_manifest.v1"
+# Revision 6's fixed twelve-slot shape, including the chain's own settle.
+DERIVATION_PROGRAMMED_SPAN_S = 600 + 11 * 600 + 480
+
+
+def _validate_start_manifest(value, plan_id):
+    """Arm-time assertions are custody, not a replay of the blind harvest."""
+    if (not isinstance(value, dict) or value.get("schema") != START_MANIFEST_SCHEMA
+            or value.get("plan_id") != plan_id or "prior_revision6_session" not in value):
+        raise ValueError("start-conditions manifest schema/plan/prior is malformed")
+    prior = value["prior_revision6_session"]
+    if prior is None:
+        if (set(value) != {"schema", "plan_id", "prior_revision6_session", "reason"}
+                or not isinstance(value["reason"], str) or not value["reason"].strip()):
+            raise ValueError("first-window manifest requires a reason and null prior")
+    else:
+        if (set(value) != {"schema", "plan_id", "prior_revision6_session"}
+                or not isinstance(prior, dict) or set(prior) != {
+                    "session_id", "harvest_file", "harvest_sha256",
+                    "started_epoch_s", "terminal_epoch_s", "decision_sha256"}
+                or not isinstance(prior["session_id"], str)
+                or not re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9._-]*", prior["session_id"])
+                or not isinstance(prior["harvest_file"], str)
+                or not Path(prior["harvest_file"]).is_absolute()
+                or not isinstance(prior["harvest_sha256"], str)
+                or not re.fullmatch(r"[0-9a-f]{64}", prior["harvest_sha256"])
+                or not isinstance(prior["decision_sha256"], str)
+                or not re.fullmatch(r"[0-9a-f]{64}", prior["decision_sha256"])):
+            raise ValueError("prior-session manifest is malformed")
+        stamps = [prior[key] for key in ("started_epoch_s", "terminal_epoch_s")]
+        if (any(type(stamp) not in (int, float) or not math.isfinite(stamp)
+                or stamp < 0 for stamp in stamps) or stamps[1] < stamps[0]):
+            raise ValueError("prior-session timestamps are malformed")
+    return value
+
+
+def _read_start_manifest(plan):
+    path = Path(plan.custody_root) / "start_conditions_manifest.json"
+    if path.is_symlink():
+        raise ValueError("start-conditions manifest is a symlink")
+    raw = path.read_bytes()
+    value = _validate_start_manifest(json.loads(raw), plan.plan_id)
+    prior = value["prior_revision6_session"]
+    if prior is not None:
+        harvest = Path(prior["harvest_file"])
+        if harvest.is_symlink() or _sha256_path(harvest) != prior["harvest_sha256"]:
+            raise ValueError("prior-session harvest digest mismatch")
+        record = json.loads(harvest.read_bytes())
+        decision = record.get("next_window") if isinstance(record, dict) else None
+        raw_decision = (json.dumps(decision, indent=2, sort_keys=True, allow_nan=False) + "\n").encode()
+        if (not isinstance(decision, dict) or decision.get("verdict") != "NEXT_WINDOW"
+                or hashlib.sha256(raw_decision).hexdigest() != prior["decision_sha256"]
+                or record.get("next_window_sha256") != prior["decision_sha256"]):
+            raise ValueError("prior-session count decision must authenticate and allow NEXT_WINDOW")
+        if prior["terminal_epoch_s"] > time.time():
+            raise ValueError("prior session is not terminal before this start")
+    return value, {"file": str(path), "sha256": hashlib.sha256(raw).hexdigest()}
+
+
+def _derivation_start_budget(plan):
+    now_epoch, now_monotonic = time.time(), time.monotonic()
+    deadline = plan.t0_epoch_s + plan.window_max_s - DERIVATION_PROGRAMMED_SPAN_S
+    return {"programmed_span_s": DERIVATION_PROGRAMMED_SPAN_S,
+            "window_end_epoch_s": plan.t0_epoch_s + plan.window_max_s,
+            "latest_chain_start_epoch_s": deadline,
+            "latest_chain_start_monotonic_s": now_monotonic + deadline - now_epoch}
+
+
+def _derivation_budget_remaining(budget):
+    return min(budget["latest_chain_start_epoch_s"] - time.time(),
+               budget["latest_chain_start_monotonic_s"] - time.monotonic())
+
+
+def _write_start_conditions(plan, night_dir, manifest=None, manifest_evidence=None,
+                            budget=None, *, refusal_reason=None):
+    """Shared Revision 6 interface §1/T; letters follow sealed §6.2."""
+    custody = Path(plan.custody_root)
+    budget = budget if budget is not None else _derivation_start_budget(plan)
+    errors = []
+
+    def evidence(path):
+        item = {"path": path.relative_to(custody).as_posix(), "sha256": None}
+        try:
+            if path.is_symlink():
+                raise ValueError("symlink evidence")
+            item["sha256"] = _sha256_path(path)
+        except (OSError, ValueError) as error:
+            errors.append(f"{item['path']}: {error}")
+        return item
+
+    manifest_path = custody / "start_conditions_manifest.json"
+    entries = {
+        "a_prior_session_manifest": evidence(manifest_path),
+        "b_blind_checks": evidence(manifest_path),
+        "c_agent_census": evidence(night_dir / "receipt.json"),
+        "d_thermal": evidence(night_dir / "receipt.json"),
+        "e_battery_float": evidence(night_dir / "receipt.json"),
+        "f_network_time_off_receipt": evidence(night_dir / network_time_off.RECEIPT_BASENAME),
+        "g_clean_dwell": evidence(night_dir / "clean_dwell.output.txt"),
+    }
+    if manifest is None:
+        try:
+            manifest, manifest_evidence = _read_start_manifest(plan)
+        except (OSError, ValueError) as error:
+            errors.append(str(error))
+            manifest = {}
+    if manifest_evidence and entries["a_prior_session_manifest"]["sha256"] != manifest_evidence["sha256"]:
+        errors.append("start-conditions custody changed during admission")
+    prior = manifest.get("prior_revision6_session")
+    entries["b_blind_checks"]["decision_sha256"] = prior.get("decision_sha256") if prior else None
+    if prior is not None:
+        try:
+            if _sha256_path(Path(prior["harvest_file"])) != prior["harvest_sha256"]:
+                errors.append("start-conditions custody changed during admission")
+        except OSError as error:
+            errors.append(str(error))
+    try:
+        session_id = night_gate.chain_literal(Path(plan.chain_path).read_text(), "SESSION_ID")
+    except (OSError, ValueError) as error:
+        session_id = None
+        errors.append(str(error))
+    try:
+        dwell = json.loads((night_dir / "clean_dwell.json").read_bytes())
+    except (OSError, ValueError) as error:
+        dwell = {}
+        errors.append(str(error))
+    try:
+        off = json.loads((night_dir / network_time_off.RECEIPT_BASENAME).read_bytes())
+    except (OSError, ValueError):
+        off = {}
+    # Use the already-collected gate identity when OFF was never reached.
+    try:
+        gate = json.loads((night_dir / "receipt.json").read_bytes())
+        gate_boot = next((row.get("measured", {}).get("boot_session_uuid")
+                          for row in gate["conditions"] if row["condition_id"] == "C4"), None)
+    except (OSError, ValueError, KeyError, TypeError):
+        gate_boot = None
+    boot = off.get("boot_id") or gate_boot
+    if not boot:
+        try:
+            boot = network_time_off.boot_id()
+        except (OSError, ValueError, subprocess.SubprocessError) as error:
+            errors.append(f"boot identity unavailable: {error}")
+    epoch, monotonic = time.time(), time.monotonic()
+    entries["f_network_time_off_receipt"]["settled_seconds"] = (
+        min(epoch - off["epoch_s"], monotonic - off["monotonic_s"])
+        if all(type(off.get(key)) in (int, float) for key in ("epoch_s", "monotonic_s")) else None)
+    passed = dwell.get("exit_status") == 0 and not dwell.get("timed_out") and not dwell.get("error")
+    entries["g_clean_dwell"].update(
+        script_sha256=dwell.get("script_sha256"), exit=dwell.get("exit_status"),
+        exit_status=dwell.get("exit_status"), continuous_clean_s=600 if passed else 0,
+        passed_epoch_s=dwell.get("ended_epoch_s") if passed else None,
+        deadline_epoch_s=budget["latest_chain_start_epoch_s"],
+        started_epoch_s=dwell.get("started_epoch_s"), ended_epoch_s=dwell.get("ended_epoch_s"),
+        started_monotonic_s=(dwell["started_monotonic_ns"] / 1e9 if "started_monotonic_ns" in dwell else None),
+        ended_monotonic_s=(dwell["ended_monotonic_ns"] / 1e9 if "ended_monotonic_ns" in dwell else None))
+    if not passed:
+        errors.append("clean dwell not admitted")
+    if _derivation_budget_remaining(budget) <= 0:
+        errors.append("derivation start deadline exceeded before chain claim")
+    reason = refusal_reason or ("; ".join(errors) if errors else None)
+    record = {"schema": "joulewise.revision6.start_conditions.v1",
+              "session_id": session_id, "plan_id": plan.plan_id,
+              "result": "refused" if reason else "admitted", "refusal_reason": reason,
+              "evidence": entries, "boot_id": boot.lower() if boot else None,
+              "chain_start_admitted": None if reason else {"epoch_s": epoch, "monotonic_s": monotonic},
+              "start_to_start_interval_s": epoch - prior["started_epoch_s"] if prior and not reason else None,
+              "gap_s": epoch - prior["terminal_epoch_s"] if prior and not reason else None,
+              "written_epoch_s": epoch, "written_monotonic_s": monotonic}
+    encode = lambda: json.dumps(record, sort_keys=True, ensure_ascii=False, allow_nan=False).encode("utf-8") + b"\n"
+    # Stage the durable bytes before publishing the write-once record. If the
+    # write consumed the remaining runway, publish only a null-session refusal.
+    pending = night_dir / ".start_conditions.pending"
+    pending_created = False
+    try:
+        _write_bytes_exclusive(pending, encode())
+        pending_created = True
+        if reason is None and _derivation_budget_remaining(budget) <= 0:
+            reason = "derivation start deadline exceeded while recording start conditions"
+            record.update(result="refused", refusal_reason=reason, chain_start_admitted=None,
+                          start_to_start_interval_s=None, gap_s=None,
+                          written_epoch_s=time.time(), written_monotonic_s=time.monotonic())
+            _write_bytes_exclusive(night_dir / "start_conditions.json", encode())
+        else:
+            os.link(pending, night_dir / "start_conditions.json")
+    finally:
+        if pending_created:
+            pending.unlink(missing_ok=True)
+    if reason is not None and refusal_reason is None:
+        raise ValueError(reason)
+
+
+def _write_refused_start_conditions(plan, night_dir, reason):
+    if (plan.receipt_class != "DIAGNOSTIC_NO_PACK"
+            or (night_dir / "start_conditions.json").exists()
+            or (night_dir / "chain.started").exists()):
+        return
+    try:
+        if night_gate.probe_payload_kind(Path(plan.chain_path).read_text()) == "quiet_predicate_evidence":
+            return
+    except OSError:
+        pass
+    _write_start_conditions(plan, night_dir, refusal_reason=reason)
+
+
+def _admit_derivation_clean_dwell(plan, night_dir, budget):
+    """Revision 6 §6.2(g): retain the complete unattended dwell evidence."""
+    script = Path(plan.measurement_root) / "scripts/prewindow_check.sh"
+    timeout_s = min(45 * 60, _derivation_budget_remaining(budget))
+    if timeout_s <= 0:
+        raise ValueError("derivation start deadline exceeded before clean dwell")
+    command = [str(script), "--wait", "--timeout-s", str(math.ceil(timeout_s))]
+    output_path = night_dir / "clean_dwell.output.txt"
+    script_sha256 = _sha256_path(script)
+    started_epoch_s = time.time()
+    started_monotonic_ns = time.monotonic_ns()
+    exit_status = None
+    timed_out = False
+    error_detail = None
+    # Stream both channels into custody, including bytes written before a
+    # timeout. Bound the script and any hung probe by the remaining runway.
+    with output_path.open("xb") as output:
+        try:
+            completed = subprocess.run(command, cwd=plan.measurement_root,
+                stdin=subprocess.DEVNULL, stdout=output, stderr=subprocess.STDOUT,
+                timeout=timeout_s, check=False)
+            exit_status = completed.returncode
+        except subprocess.TimeoutExpired:
+            timed_out = True
+            error_detail = "clean dwell timed out at derivation start deadline"
+        except (OSError, subprocess.SubprocessError) as error:
+            error_detail = f"clean dwell could not run: {error}"
+        output.flush()
+        os.fsync(output.fileno())
+    ended_epoch_s = time.time()
+    ended_monotonic_ns = time.monotonic_ns()
+    record = {
+        "schema": "joulewise.derivation_clean_dwell.v1",
+        "plan_id": plan.plan_id,
+        "argv": command,
+        "script_path": str(script),
+        "script_sha256": script_sha256,
+        "output_file": output_path.name,
+        "output_sha256": _sha256_path(output_path),
+        "started_epoch_s": started_epoch_s,
+        "ended_epoch_s": ended_epoch_s,
+        "started_monotonic_ns": started_monotonic_ns,
+        "ended_monotonic_ns": ended_monotonic_ns,
+        "exit_status": exit_status,
+        "timed_out": timed_out,
+        "required_clean_dwell_s": 600,
+        "timeout_s": timeout_s,
+        "budget": budget,
+        "error": error_detail,
+    }
+    _write_bytes_exclusive(night_dir / "clean_dwell.json",
+                           json.dumps(record, sort_keys=True).encode("utf-8") + b"\n")
+    if timed_out or error_detail is not None or exit_status != 0:
+        raise ValueError(error_detail or f"clean dwell refused (exit {exit_status})")
+    if _derivation_budget_remaining(budget) <= 0:
+        raise ValueError("derivation start deadline exceeded after clean dwell")
 
 
 def run_night(
@@ -3076,6 +3358,25 @@ def run_night(
             courier_bin_substitution=courier_substitution,
         )
 
+    derivation_admission = None
+    rehearsal_effective = rehearsal or plan.receipt_class == "REHEARSAL_STUB"
+    if (not rehearsal_effective and plan.receipt_class == "DIAGNOSTIC_NO_PACK"
+            and initial_refusal is None and initial_probe.exit_code == 1 and initial_probe.stdout == ""
+            and Path(plan.chain_path).is_file()
+            and night_gate.probe_payload_kind(Path(plan.chain_path).read_text()) != "quiet_predicate_evidence"):
+        try:
+            manifest, manifest_evidence = _read_start_manifest(plan)
+            budget = _derivation_start_budget(plan)
+            _admit_network_time_off(plan, night_dir,
+                during_settle=lambda: _admit_derivation_clean_dwell(plan, night_dir, budget), budget=budget)
+            derivation_admission = (manifest, manifest_evidence, budget)
+        except (OSError, ValueError, subprocess.SubprocessError) as error:
+            _write_standard_refusal_result(custody_root, night_dir, plan,
+                _CODES["probe_error"], str(error), started_epoch_s, started_monotonic_ns)
+            return _finish_reporting(custody_root, night_dir, plan, EXIT_REFUSED,
+                resolved_courier, deadman_epoch_s=deadman_epoch_s,
+                courier_bin_substitution=courier_substitution)
+
     prepared = arm_state = None
     is_pack = plan.receipt_class == "TRANSACTION_PACK"
     if is_pack:
@@ -3094,13 +3395,13 @@ def run_night(
             receipt = _pack_refused_receipt(plan, error, probes)
     elif plan.quiet_admission is not None:
         receipt = bind_until_quiet(plan, probes, night_dir,
-            initial_census=(initial_probe, initial_refusal),
+            initial_census=None if derivation_admission is not None else (initial_probe, initial_refusal),
             start_epoch_s=bind_start_epoch, start_monotonic=bind_start_monotonic)
     else:
         # Reuse the first census for the legacy evaluator's census slot; no
         # filesystem or command probe preceded the driver's initial census.
         original_run = probes.run
-        cached = [initial_probe]
+        cached = [] if derivation_admission is not None else [initial_probe]
         def first_census(argv):
             if tuple(argv) == night_gate.AGENT_CENSUS_ARGV and cached:
                 return cached.pop()
@@ -3140,6 +3441,8 @@ def run_night(
             plan.quiet_admission is not None and receipt.refusal is not None)):
         _write_gate_refusal(night_dir / "refusal.json", receipt)
         refusal = _refusal_from_object(receipt.refusal) or {}
+        _write_refused_start_conditions(plan, night_dir,
+            f"{refusal.get('reason')}: {refusal.get('detail', '')}")
         _write_result(
             custody_root,
             night_dir,
@@ -3205,7 +3508,13 @@ def run_night(
 
     if not rehearsal_effective and night_gate.probe_payload_kind(chain_path.read_text()) != "quiet_predicate_evidence":
         try:
-            _admit_network_time_off(plan, night_dir)
+            if plan.receipt_class == "DIAGNOSTIC_NO_PACK":
+                if derivation_admission is None:
+                    raise ValueError("derivation start admission was not completed before the t0 gate")
+                manifest, manifest_evidence, budget = derivation_admission
+                _write_start_conditions(plan, night_dir, manifest, manifest_evidence, budget)
+            else:
+                _admit_network_time_off(plan, night_dir)
         except (OSError, ValueError, subprocess.SubprocessError) as error:
             _write_standard_refusal_result(custody_root, night_dir, plan,
                 _CODES["probe_error"], str(error), started_epoch_s, started_monotonic_ns)

@@ -21,7 +21,10 @@ mechanism name. The dry run reports no measured value of any kind, because the
 pre-registration forbids examining one before the registration's last session is
 terminal, and this is the tool one runs BETWEEN capture nights.
 
-`prepare-candidate` WRITES EXACTLY ONE FILE, to the path the caller names with
+For Revision 6, `prepare-candidate` first writes the blind campaign R9 record
+at CLOSE and refuses until those bytes are committed; a second invocation can
+read B and write the candidate. The cap-rule text and roster locators are required.
+For historical revisions `prepare-candidate` writes one file, named with
 `--out`; there is no default destination, so this tool cannot write into
 `configs/calibration/` by omission. That file is a CANDIDATE, marked
 `candidate_not_issued: true`, which the production acceptance loader refuses.
@@ -92,7 +95,7 @@ sys.dont_write_bytecode = True
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
 
-from joulewise import battery_float  # noqa: E402
+from joulewise import battery_float, network_time_off  # noqa: E402
 from joulewise.calibration_bracketing import (  # noqa: E402
     ACTIVE_ACCEPTANCE_ID,
     ENVELOPE_MINIMUM_CORPUS_N,
@@ -430,6 +433,7 @@ def check(args: argparse.Namespace) -> int:
     # watch table on a mismatch and break the byte-identity of the watch's own
     # output, which is the property the flag must never touch.
     preregistration_failed = False
+    text = ""
     if args.preregistration is not None:
         try:
             preregistration_bytes = Path(args.preregistration).read_bytes()
@@ -478,10 +482,22 @@ def check(args: argparse.Namespace) -> int:
               and not any(line.startswith("pre-registration: unusable")
                           or "sha256: MISMATCH" in line for line in preregistration_lines)
               else None)
-    dry_run_code, lines = registration_dry_run(
-        snapshot, named, repo_root=args.repo_root, preregistration_sha256=digest,
-        confounded_ids=[session_id for session_id
-                        in getattr(args, "battery_confounded_session_id", ()) if session_id])
+    if args.preregistration is not None and "# Revision 6 (" in text:
+        try:
+            if digest is None:
+                raise PrepareRefusal("Revision 6 requires authenticated preregistration")
+            declaration = revision_six_declaration(text)
+            dry_run_code, lines = revision_six_dry_run(snapshot, named, declaration,
+                getattr(args, "harvest_record", ()), repo_root=Path(args.repo_root),
+                preregistration_sha256=digest,
+                confounded_ids=getattr(args, "battery_confounded_session_id", ()))
+        except PrepareRefusal as refusal:
+            dry_run_code, lines = DRY_RUN_INADMISSIBLE_EXIT, [f"  blocker: {refusal}"]
+    else:
+        dry_run_code, lines = registration_dry_run(
+            snapshot, named, repo_root=args.repo_root, preregistration_sha256=digest,
+            confounded_ids=[session_id for session_id
+                            in getattr(args, "battery_confounded_session_id", ()) if session_id])
     for line in lines:
         print(line)
     if preregistration_failed and digest is None and dry_run_code == 0:
@@ -568,6 +584,16 @@ TWO_DRAW_PREDICTION_RULE = (
     "prediction_p_two_draw_s = t(p, n-1) * sample_sd_presentation_s * sqrt(2), "
     "evaluated in binary64 and recorded as its shortest round-tripping decimal"
 )
+WITHIN_WINDOW_TWO_DRAW_PREDICTION_RULE = (
+    "prediction_p_within_window_two_draw_s = t(p, n-K) * "
+    "s_within_presentation_s * sqrt(2), evaluated in binary64 and "
+    "recorded as its shortest round-tripping decimal"
+)
+# Canonical sha256 of the sealed E1 declaration's policy objects (listed at
+# revision_six_declaration). Pins vary at seal; registered rules do not. An
+# unsupported sealed amendment refuses instead of executing a different rule.
+REVISION_SIX_POLICY_SHA256 = "92de7d3d43486e029a63c1adc2f30252484a4691570e58aa5d8223b9bcb771b1"
+REVISION_SIX_SESSION_ID_PATTERN = r"^d079-epoch-25g83-r6-[0-9]{8}T[0-9]{4}Z$"
 # The pre-registration (`~:131-134`) forbids issuing on a df whose quantile is
 # not PROVEN in the artifact's own record.  Two independent bounds, both
 # checked for the realized df before anything is written.
@@ -1076,6 +1102,668 @@ class PrepareRefusal(Exception):
         super().__init__(reason)
         self.reason = reason
 
+
+def revision_six_declaration(text: str) -> Mapping[str, Any]:
+    """Read the sealed declaration; never supply missing pin values."""
+    sections = re.split(r"(?m)^# Revision 6 \(", text)
+    if len(sections) != 2:
+        raise PrepareRefusal("Revision 6 requires exactly one registration section")
+    section = sections[1]
+    if "TO BE PINNED AT SEAL" in section:
+        raise PrepareRefusal("Revision 6 registration has unfilled seal pins")
+    blocks = re.findall(r"(?m)^```json\s*\n(.*?)^```\s*$", section, re.DOTALL)
+    if len(blocks) != 1:
+        raise PrepareRefusal("Revision 6 requires exactly one JSON declaration")
+    try:
+        declaration = _revision_six_json(blocks[0].encode("utf-8"), "declaration")
+        if declaration["schema"] != "joulewise-registration-windows/v1":
+            raise ValueError("unrecognized schema")
+        if declaration["registration"] != "D-079 epoch 25G83 Revision 6":
+            raise ValueError("unrecognized registration")
+        if declaration["identity_epoch"] != REVISION_FIVE_EPOCH:
+            raise ValueError("identity epoch disagrees with Revision 6")
+        sessions = declaration["sessions"]
+        if (sessions["session_id_pattern"] != REVISION_SIX_SESSION_ID_PATTERN
+                or sessions["session_kind"] != SESSION_KIND_DERIVATION
+                or sessions["order"] != "ledger_capability_sequence"
+                or sessions["declared_slots_per_session"] != 12):
+            raise ValueError("session declaration disagrees with Revision 6")
+        if not section.startswith("sealed "):
+            raise ValueError("Revision 6 registration is not sealed")
+        rule = declaration["count_rule"]
+        if (rule["max_counting_windows"], rule["max_battery_replacement_windows"], rule["max_windows_total"],
+                rule["issuable_outcome"]) != (3, 1, 4, "CLOSE_AND_DERIVE"):
+            raise ValueError("count rule disagrees with Revision 6")
+        if [row["clause"] for row in rule["decision_order"]] != list(range(7)):
+            raise ValueError("count rule clause order disagrees with Revision 6")
+        if (rule["decision_order"][3]["if"] != "counted_total >= 24 and members_total >= 12"
+                or rule["decision_order"][4]["if"] != "counting_windows_done < 3"
+                or rule["decision_order"][5]["if"] != "counted_total < 24"
+                or [row.get("then", row.get("else")) for row in rule["decision_order"]]
+                   != ["NEXT_WINDOW", "STOP_TO_REVIEW", "NEXT_WINDOW", "CLOSE_AND_DERIVE",
+                       "NEXT_WINDOW", "R9_COUNT_NOT_REACHED_TO_REVIEW", "MEMBERS_SHORT_TO_REVIEW"]):
+            raise ValueError("count rule decisions disagree with Revision 6")
+        if [line["id"] for line in declaration["stop_lines"]] != [
+                "STOP-CADENCE", "STOP-FUTILITY", "STOP-R9-CELL", "STOP-R9-DEADLINE", "STOP-R9-RATIO",
+                "STOP-R9-FRAME", "STOP-BATTERY-SECOND", "STOP-NULL-REPEAT"]:
+            raise ValueError("stop lines disagree with Revision 6")
+        if (declaration["predecessor"]["acceptance_id"] != "d079_calibration_acceptance_v2_n17_r8"
+                or declaration["successor_acceptance_id_pattern"] != "d079_calibration_acceptance_v2_n<N>_25g83_r2"
+                or declaration["disposing_decision_ids_required"] != [
+                    "D-126-disposition-25G83-v3-2026-09-25", "CAP-COUNCIL-25G83-01-E1-set-aside-W1W2-2026-09-29"]):
+            raise ValueError("Revision 6 predecessor, successor or disposing decisions disagree")
+        policy = {key: declaration[key] for key in (
+            "sessions", "start_state_conditions", "start_condition_evidence", "definitions",
+            "count_rule", "stop_lines", "sampling_dependence")}
+        if _canonical_sha256(policy) != REVISION_SIX_POLICY_SHA256:
+            raise ValueError("unsupported Revision 6 policy or sealed amendment")
+        pins = declaration["pins"]
+        digests = [pins[key] for key in (
+            "chain_sha256", "validator_sha256", "prewindow_check_sha256",
+            "harness_sha256", "cap_rule_text_sha256", "roster_sha256",
+        )]
+        digests.extend(pins["estimator_code_sha256"][key] for key in ESTIMATOR_CODE_PATHS)
+        digests.extend(pins["launch_template_sha256"])
+        digests.extend(declaration["predecessor"][key] for key in (
+            "file_sha256", "derivation_sha256",
+        ))
+        digests.append(declaration["disposition_registry_sha256"])
+        head = pins["ledger_head_pin_at_first_window"]
+        digests.append(head["digest"])
+        if any(not isinstance(digest, str) or not re.fullmatch(r"[0-9a-f]{64}", digest)
+               for digest in digests):
+            raise ValueError("malformed digest pin")
+        for value, lower in ((head["sequence"], 0), (pins["cap_cells"], 1)):
+            if type(value) is not int or value < lower:
+                raise ValueError("malformed integer pin")
+    except (KeyError, TypeError, ValueError) as error:
+        raise PrepareRefusal(f"Revision 6 declaration malformed: {error}") from error
+    return declaration
+
+
+def revision_six_sessions(
+    snapshot: Any, session_ids: Sequence[str], declaration: Mapping[str, Any],
+) -> tuple[Any, ...]:
+    """Bind every prospective session to the pinned ledger prefix, blind."""
+    head = declaration["pins"]["ledger_head_pin_at_first_window"]
+    sequence = head["sequence"]
+    if (sequence > len(snapshot.receipts)
+            or head["digest"] != (snapshot.receipts[sequence - 1]["receipt_digest"]
+                                  if sequence else "0" * 64)):
+        raise PrepareRefusal("Revision 6 first-window ledger head pin disagrees with ledger")
+    ordered = tuple(sorted((session for session in snapshot.bracket_sessions
+                            if session.session_kind == SESSION_KIND_DERIVATION
+                            and session.capability_sequence > sequence),
+                           key=lambda session: session.capability_sequence))
+    if any(not re.fullmatch(declaration["sessions"]["session_id_pattern"], session.session_id)
+           for session in ordered):
+        raise PrepareRefusal("Revision 6 session-id pattern mismatch or Revision 5/6 mixture")
+    refuse_repeated_sessions(session_ids)
+    if set(session_ids) != {session.session_id for session in ordered} or not ordered:
+        raise PrepareRefusal("Revision 6 requires every session after the first-window ledger head pin")
+    for session in ordered:
+        if session.state not in TERMINAL_SESSION_STATES:
+            raise PrepareRefusal(f"Revision 6 session {session.session_id} is not terminal")
+        if len(session.declared_slots) != declaration["sessions"]["declared_slots_per_session"]:
+            raise PrepareRefusal(f"Revision 6 session {session.session_id} must declare 12 slots")
+    return ordered
+
+
+
+def _revision_six_json(raw: bytes, label: str) -> Mapping[str, Any]:
+    def unique(pairs):
+        result = {}
+        for key, value in pairs:
+            if key in result:
+                raise ValueError("duplicate JSON key")
+            result[key] = value
+        return result
+    try:
+        record = json.loads(raw.decode("utf-8"), object_pairs_hook=unique,
+                            parse_constant=lambda value: (_ for _ in ()).throw(ValueError(value)))
+        if not isinstance(record, dict):
+            raise ValueError("not an object")
+        return record
+    except (UnicodeError, ValueError, TypeError) as error:
+        raise PrepareRefusal(f"Revision 6 {label}: malformed JSON: {error}") from error
+
+
+def _revision_six_bytes(root: Path, reference: Mapping[str, Any]) -> tuple[Path, bytes]:
+    try:
+        parts = _canonical_relative_parts(reference["path"], "Revision 6 evidence path")
+        path = root.joinpath(*parts)
+        if any(root.joinpath(*parts[:i]).is_symlink() for i in range(1, len(parts) + 1)):
+            raise ValueError("symlink evidence path")
+        raw = path.read_bytes()
+        digest = reference["sha256"]
+        if not isinstance(digest, str) or not re.fullmatch(r"[0-9a-f]{64}", digest):
+            raise ValueError("malformed sha256")
+        if hashlib.sha256(raw).hexdigest() != digest:
+            raise ValueError("sha256 disagreement")
+        return path, raw
+    except (OSError, ValueError, TypeError, KeyError) as error:
+        raise PrepareRefusal(f"Revision 6 evidence authentication failed: {error}") from error
+
+
+def _revision_six_committed(path: Path, raw: bytes, repo_root: Path, label: str = "R9") -> str:
+    """R9 must be committed before any member value is consulted."""
+    try:
+        # Custody may be off-checkout. The exact record bytes must occur in
+        # HEAD's tree; the custody locator need not be the commit's pathname.
+        # Its authenticated session id prevents reuse as another window.
+        blob = hashlib.sha1(b"blob " + str(len(raw)).encode("ascii") + b"\0" + raw).hexdigest()
+        result = subprocess.run(["git", "-C", str(repo_root), "ls-tree", "-r", "-z", "HEAD"],
+                                capture_output=True, check=False)
+        matches = []
+        for entry in result.stdout.split(b"\0"):
+            if not entry:
+                continue
+            header, relative = entry.split(b"\t", 1)
+            if header.split()[-1].decode("ascii") == blob:
+                matches.append(relative.decode("utf-8"))
+        if result.returncode or not matches:
+            raise ValueError(f"{label} bytes are not committed at HEAD")
+        commit = subprocess.run(["git", "-C", str(repo_root), "log", "-1", "--format=%H", "--", matches[0]],
+                                capture_output=True, text=True, check=False)
+        if commit.returncode or not re.fullmatch(r"[0-9a-f]{40}\n?", commit.stdout):
+            raise ValueError(f"{label} commit unavailable")
+        return commit.stdout.strip()
+    except (OSError, ValueError) as error:
+        raise PrepareRefusal(f"Revision 6 {error}") from error
+
+
+def revision_six_records(harvest_paths: Sequence[Path], sessions: Sequence[Any],
+                         declaration: Mapping[str, Any], *, repo_root: Path,
+                         require_committed: bool = True) -> dict[str, Mapping[str, Any]]:
+    """Locate fixed interface paths through each automated harvest record.
+
+    The interface fixes the record paths and hashes, not the enclosing harvest
+    key names. Find the unique path/hash references, preserving that distinction.
+    """
+    records = {}
+    by_id = {session.session_id: session for session in sessions}
+    def references(value, wanted):
+        found = []
+        if isinstance(value, dict):
+            if value.get("path") == wanted:
+                found.append(value)
+            for child in value.values():
+                found.extend(references(child, wanted))
+        elif isinstance(value, list):
+            for child in value:
+                found.extend(references(child, wanted))
+        return found
+    for locator in harvest_paths:
+        try:
+            harvest = _revision_six_json(Path(locator).read_bytes(), "harvest")
+            if harvest.get("schema") != "joulewise.harvest_window.v1":
+                raise ValueError("unrecognized harvest schema")
+            root = Path(harvest["custody_root"])
+            if not root.is_absolute() or root.is_symlink():
+                raise ValueError("custody root must be an absolute nonsymlink path")
+            r9_refs = references(harvest, "harvest/r9_window.json")
+            start_refs = references(harvest, "night/start_conditions.json")
+            if len(r9_refs) != 1 or len(start_refs) > 1:
+                raise ValueError("harvest must uniquely name the per-window records")
+            path, raw = _revision_six_bytes(root, r9_refs[0])
+            r9 = _revision_six_json(raw, "R9 record")
+            sid = r9["session_id"]
+            if sid not in by_id or sid in records:
+                raise ValueError("R9 session missing, foreign or repeated")
+            if r9.get("schema") != "joulewise.revision6.r9_window.v1":
+                raise ValueError("unrecognized R9 schema")
+            start = None
+            start_commit = None
+            timing = None
+            if start_refs:
+                start_path, start_raw = _revision_six_bytes(root, start_refs[0])
+                start = _revision_six_json(start_raw, "start-condition record")
+                if (start.get("schema") != "joulewise.revision6.start_conditions.v1"
+                        or start.get("session_id") != sid or start.get("plan_id") != by_id[sid].plan_id
+                        or start.get("result") not in {"admitted", "refused"}):
+                    raise ValueError("start-condition identity or result disagreement")
+            if by_id[sid].finalized_slots:
+                if start is None or start["result"] != "admitted" or start.get("refusal_reason") is not None:
+                    raise ValueError("counting/adverse window requires admitted start conditions")
+                revision_six_start_conditions(start, root, declaration)
+                timing = _revision_six_window_timing(start, harvest, root)
+                if require_committed:
+                    start_commit = _revision_six_committed(start_path, start_raw, repo_root, "start-condition")
+            commit = _revision_six_committed(path, raw, repo_root) if require_committed else None
+            records[sid] = {"r9": r9, "start": start, "timing": timing, "r9_sha256": r9_refs[0]["sha256"],
+                            "r9_commit": commit,
+                            "start_condition_sha256": start_refs[0]["sha256"] if start_refs else None,
+                            "start_condition_commit": start_commit, "harvest_path": str(locator),
+                            "harvest_sha256": hashlib.sha256(Path(locator).read_bytes()).hexdigest(),
+                            "custody_root": str(root)}
+        except (OSError, ValueError, KeyError, TypeError) as error:
+            raise PrepareRefusal(f"Revision 6 harvest record refused: {error}") from error
+    if set(records) != set(by_id):
+        raise PrepareRefusal("Revision 6 harvest/R9 records must cover exactly every named session")
+    previous = None
+    previous_timing = None
+    for session in sessions:
+        entry = records[session.session_id]
+        if session.finalized_slots:
+            start = entry["start"]
+            root = Path(entry["custody_root"])
+            _, raw = _revision_six_bytes(root, next(value for key, value in start["evidence"].items() if key.startswith("a_")))
+            manifest = _revision_six_json(raw, "prior-session manifest")
+            prior = manifest.get("prior_revision6_session")
+            if isinstance(prior, Mapping):
+                prior = prior.get("session_id")
+            if "prior_revision6_session" not in manifest or prior != previous:
+                raise PrepareRefusal("Revision 6 start-condition prior-session manifest disagrees with ledger order")
+            if previous is None and not manifest.get("reason"):
+                raise PrepareRefusal("Revision 6 first-session manifest requires a reason for no prior session")
+            timing = entry["timing"]
+            timing["previous_window_session_id"] = previous_timing[0] if previous_timing else None
+            timing["start_to_start_interval"] = (_revision_six_elapsed(
+                previous_timing[1]["start"], timing["start"], "start-to-start interval")
+                if previous_timing else None)
+            timing["inter_window_gap"] = (_revision_six_elapsed(
+                previous_timing[1]["end"], timing["start"], "inter-window gap")
+                if previous_timing else None)
+            previous_timing = (session.session_id, timing)
+        previous = session.session_id
+    return {session.session_id: records[session.session_id] for session in sessions}
+
+
+def _revision_six_clock(value: Any, boot_id: Any, label: str) -> dict[str, Any]:
+    if (not isinstance(value, Mapping) or not isinstance(boot_id, str)
+            or not boot_id or boot_id != boot_id.strip().lower()):
+        raise PrepareRefusal(f"Revision 6 {label}: missing or malformed timing/boot id")
+    clock = {"boot_id": boot_id}
+    for name in ("epoch_s", "monotonic_s"):
+        number = value.get(name)
+        try:
+            finite = type(number) in (int, float) and math.isfinite(number)
+        except OverflowError:
+            finite = False
+        if not finite:
+            raise PrepareRefusal(f"Revision 6 {label}: missing or malformed {name}")
+        clock[name] = number
+    return clock
+
+
+def _revision_six_elapsed(earlier: Mapping[str, Any], later: Mapping[str, Any],
+                          label: str) -> dict[str, Any]:
+    same_boot = earlier["boot_id"] == later["boot_id"]
+    wall = later["epoch_s"] - earlier["epoch_s"]
+    monotonic = later["monotonic_s"] - earlier["monotonic_s"] if same_boot else None
+    if (not math.isfinite(wall) or wall < 0 or
+            (same_boot and (not math.isfinite(monotonic) or monotonic < 0))):
+        raise PrepareRefusal(f"Revision 6 {label}: timing is reversed or nonfinite")
+    return {"wall_s": wall, "monotonic_s": monotonic,
+            "wall_minus_monotonic_s": wall - monotonic if same_boot else None,
+            "clock_basis": "wall_and_monotonic" if same_boot else "wall_only_across_reboot",
+            "note": ("Same boot: both clocks compared." if same_boot else
+                     "Across a reboot: wall clock used; monotonic clocks are incomparable.")}
+
+
+def _revision_six_window_timing(start: Mapping[str, Any], harvest: Mapping[str, Any],
+                                root: Path) -> dict[str, Any]:
+    admitted = _revision_six_clock(start.get("chain_start_admitted"), start.get("boot_id"), "chain start")
+    window_end = harvest.get("window_end")
+    end = _revision_six_clock(window_end, harvest.get("boot_id"), "window end")
+    source = window_end.get("source")
+    if not isinstance(source, Mapping) or source.get("path") != "night/chain.exited":
+        raise PrepareRefusal("Revision 6 window end must name night/chain.exited")
+    _, raw = _revision_six_bytes(root, source)
+    exited = _revision_six_json(raw, "chain exit")
+    # The existing driver records monotonic nanoseconds, while amendment T
+    # exposes seconds in the harvest record. Authenticate bytes before reading.
+    ns = exited.get("monotonic_ns")
+    epoch = exited.get("epoch_s")
+    try:
+        agrees = (type(ns) is int and type(epoch) in (int, float)
+                  and math.isfinite(epoch) and end["epoch_s"] == epoch
+                  and end["monotonic_s"] == ns / 1_000_000_000)
+    except OverflowError:
+        agrees = False
+    if not agrees:
+        raise PrepareRefusal("Revision 6 window end disagrees with authenticated chain exit clocks")
+    return {"start": admitted, "end": end, "end_source": dict(source),
+            "duration": _revision_six_elapsed(admitted, end, "window duration")}
+
+
+def revision_six_start_conditions(record: Mapping[str, Any], root: Path,
+                                  declaration: Mapping[str, Any]) -> None:
+    try:
+        admitted = _revision_six_clock(record.get("chain_start_admitted"), record.get("boot_id"), "chain start")
+        evidence = record["evidence"]
+        # The interface's sample names are illustrative; its precedence rule
+        # maps evidence to the sealed a-g conditions. Authenticate by letter,
+        # and identify the OFF receipt by its fixed custody path and schema.
+        entries = {}
+        for letter in "abcdefg":
+            matches = [entry for name, entry in evidence.items() if name.startswith(letter + "_")]
+            if len(matches) != 1:
+                raise ValueError(f"start condition {letter} must have exactly one entry")
+            entries[letter] = matches[0]
+        raw = {letter: _revision_six_bytes(root, entry)[1] for letter, entry in entries.items()}
+        blind = _revision_six_json(raw["b"], "blind count decision evidence")
+        prior = blind.get("prior_revision6_session")
+        if prior is not None:
+            if not isinstance(prior, Mapping):
+                raise ValueError("prior blind count decision manifest malformed")
+            if entries["b"].get("decision_sha256") != prior.get("decision_sha256"):
+                raise ValueError("prior blind count decision digest disagreement")
+            harvest_path = Path(prior["harvest_file"])
+            harvest_raw = harvest_path.read_bytes()
+            if hashlib.sha256(harvest_raw).hexdigest() != prior["harvest_sha256"]:
+                raise ValueError("prior harvest digest disagreement")
+            harvest = _revision_six_json(harvest_raw, "prior harvest")
+            decision = harvest["next_window"]
+            decision_raw = (json.dumps(decision, indent=2, sort_keys=True, allow_nan=False) + "\n").encode()
+            if (not isinstance(decision, Mapping) or decision.get("verdict") != "NEXT_WINDOW" or hashlib.sha256(decision_raw).hexdigest() != prior["decision_sha256"]
+                    or harvest.get("next_window_sha256") != prior["decision_sha256"]):
+                raise ValueError("prior count decision does not allow NEXT_WINDOW")
+        elif blind.get("reason") is None:
+            raise ValueError("first blind count decision requires not-applicable reason")
+        dwell = entries["g"]
+        if dwell["script_sha256"] != declaration["pins"]["prewindow_check_sha256"] or type(dwell["exit"]) is not int or dwell["exit"] != 0:
+            raise ValueError("clean dwell script pin or exit disagreement")
+        # passed/deadline are admission instants, not the clean interval. The
+        # pinned script's complete output records its uninterrupted dwell.
+        intervals = re.findall(r"continuous clean dwell (\d+)/600s", raw["g"].decode("utf-8"))
+        if not intervals or int(intervals[-1]) < 600:
+            raise ValueError("clean dwell is below 600 seconds")
+        for value in (dwell["passed_epoch_s"], dwell["deadline_epoch_s"],
+                      record["written_epoch_s"], record["written_monotonic_s"]):
+            if type(value) not in (int, float) or not math.isfinite(value):
+                raise ValueError("malformed start-condition clock")
+        if dwell["passed_epoch_s"] > dwell["deadline_epoch_s"]:
+            raise ValueError("clean dwell passed after deadline")
+        if dwell["passed_epoch_s"] > admitted["epoch_s"]:
+            raise ValueError("chain start admitted before clean dwell passed")
+        off_entries = [(letter, entry) for letter, entry in entries.items()
+                       if entry["path"] == "night/network_time_off.json"]
+        if len(off_entries) != 1:
+            raise ValueError("start conditions must name exactly one network-time OFF receipt")
+        letter, off_entry = off_entries[0]
+        off = _revision_six_json(raw[letter], "network-time OFF")
+        settled = network_time_off.seconds_since_receipt(dict(off), admitted)
+        age = off_entry.get("settled_seconds", settled)
+        if (off["plan_id"] != record["plan_id"] or type(age) not in (int, float)
+                or not math.isfinite(age) or not 600 <= age <= settled):
+            raise ValueError("network-time OFF binding or settle disagreement")
+
+    except (OSError, ValueError, KeyError, TypeError, UnicodeError) as error:
+        raise PrepareRefusal(f"Revision 6 start conditions refused: {error}") from error
+
+
+
+def _revision_six_anchor_outcome(row):
+    # Blind projection: no caller receives or accesses a B field. The file
+    # digest is checked before its stored anchor outcome is interpreted.
+    raw = _read_nofollow_bytes(Path(row.custody_locator), "instrument_evidence.json")
+    if hashlib.sha256(raw).hexdigest() != row.artifact_sha256.get("instrument_evidence.json"):
+        raise PrepareRefusal("Revision 6 stored anchor evidence digest disagreement")
+    record = _revision_six_json(raw, "stored anchor evidence")
+    anchor = {key: record[key] for key in ("clock_anchor", "clock_anchor_resolved") if key in record}
+    return anchor_v3_replay_outcome(anchor)
+
+def revision_six_count_replay(sessions: Sequence[Any], records: Mapping[str, Any],
+                              declaration: Mapping[str, Any], adverse_ids: set[str]) -> dict[str, Any]:
+    """Replay all eight stop predicates and the first-applicable count clause.
+
+    Only ledger dispositions, authenticated stored anchor outcomes, and R9's
+    blind fields are used. Never access a bound lexeme here.
+    """
+    if any(session.state not in TERMINAL_SESSION_STATES for session in sessions):
+        raise PrepareRefusal("Revision 6 count replay requires terminal sessions; B stays unread")
+    counted_total = members_total = valid_total = counting_windows = adverse_windows = windows = 0
+    previous_null = False
+    decision = "NEXT_WINDOW"
+    history, member_ids, excluded = [], set(), []
+    for session in sessions:
+        if decision != "NEXT_WINDOW":
+            raise PrepareRefusal(f"Revision 6 session exists after {decision}")
+        r9 = records[session.session_id]["r9"]
+        try:
+            if (type(r9["slots"]) is not int or r9["slots"] != 12
+                    or r9["harness_sha256"] != declaration["pins"]["harness_sha256"]
+                    or r9["rule_ref"] != "CAP-COUNCIL-25G83-01 R9 as amended; Revision 6 §4"):
+                raise ValueError("R9 slots, harness pin or rule reference disagreement")
+            captures = r9["captures"]
+            if not isinstance(captures, list):
+                raise ValueError("captures must be a list")
+            null = not session.finalized_slots
+            stops = []
+            counted = valid = members = 0
+            adverse = session.session_id in adverse_ids
+            if null:
+                if captures or r9.get("abort_reason") != session.abort_reason or session.state not in TERMINAL_SESSION_STATES:
+                    raise ValueError("null session must list its ledger abort reason and no slots")
+                if previous_null:
+                    stops.append("STOP-NULL-REPEAT")
+                decision = "STOP_TO_REVIEW" if stops else "NEXT_WINDOW"
+            else:
+                windows += 1
+                adverse_windows += int(adverse)
+                counting_windows += int(not adverse)
+                expected = {session.declared_slots.index(slot) + 1: row
+                            for slot, row in session.finalized_slots.items()}
+                seen, frames = set(), []
+                for capture in captures:
+                    slot = capture["slot"]
+                    if type(slot) is not int or slot in seen or slot not in expected:
+                        raise ValueError("R9 slot coverage disagreement")
+                    seen.add(slot)
+                    row = expected[slot]
+                    if (capture["capture_id"] != row.attempt_id or capture["content_id"] != row.content_id
+                            or capture["disposition"] != row.classification_disposition):
+                        raise ValueError("R9 capture identity or disposition disagrees with ledger")
+                    recording = bool(row.artifact_sha256.get("raw/powermetrics.plist"))
+                    if type(capture["has_recording"]) is not bool or capture["has_recording"] != recording:
+                        raise ValueError("R9 recording flag disagrees with ledger")
+                    if not recording:
+                        if (any(capture[key] is not None for key in ("cells", "ratio", "median_frame_ms", "cap_trigger"))
+                                or capture["median_frame_reported"] is not False or capture["counted"] is not False
+                                or not capture.get("ledger_reason")):
+                            raise ValueError("no-recording slot must carry null work fields and its ledger reason")
+                        valid += int(row.classification_disposition == "valid" and not adverse)
+                        continue
+                    trigger = capture["cap_trigger"]
+                    if trigger == "evaluated_cell_budget":
+                        stops.append("STOP-R9-CELL")
+                    elif trigger == "wall_deadline":
+                        stops.append("STOP-R9-DEADLINE")
+                    elif trigger is not None:
+                        raise ValueError("unrecognized R9 cap trigger")
+                    cells = capture["cells"]
+                    if cells is None and capture["median_frame_reported"] is False:
+                        if capture["ratio"] is not None or capture["median_frame_ms"] is not None or capture["counted"] is not False:
+                            raise ValueError("unreported R9 work fields malformed")
+                        stops.append("STOP-R9-FRAME")
+                        valid += int(row.classification_disposition == "valid" and not adverse)
+                        continue
+                    if type(cells) is not int or cells < 0:
+                        raise ValueError("R9 cells malformed")
+                    ratio = capture["ratio"]
+                    if type(ratio) not in (int, float) or not math.isfinite(ratio) or ratio != cells / declaration["pins"]["cap_cells"]:
+                        raise ValueError("R9 ratio disagrees with cells/cap")
+                    if cells and ratio > .5:
+                        stops.append("STOP-R9-RATIO")
+                    reported = capture["median_frame_reported"]
+                    frame = capture["median_frame_ms"]
+                    if type(reported) is not bool:
+                        raise ValueError("R9 frame flag malformed")
+                    if not reported:
+                        if recording:
+                            stops.append("STOP-R9-FRAME")
+                        if frame is not None:
+                            raise ValueError("unreported R9 frame must be null")
+                        covered = False
+                    else:
+                        if type(frame) not in (int, float) or not math.isfinite(frame) or frame <= 0:
+                            raise ValueError("R9 median frame malformed")
+                        frames.append(frame)
+                        covered = 100 <= frame <= 150
+                    is_counted = not adverse and cells >= 1 and covered
+                    if type(capture["counted"]) is not bool or capture["counted"] != is_counted:
+                        raise ValueError("R9 per-capture counted disagreement")
+                    counted += int(is_counted)
+                    is_valid = row.classification_disposition == "valid"
+                    valid += int(is_valid and not adverse)
+                    if is_valid:
+                        if adverse or not covered:
+                            excluded.append({"member_id": row.attempt_id,
+                                "manifest_sha256": row.artifact_sha256["manifest.json"],
+                                "instrument_evidence_sha256": row.artifact_sha256["instrument_evidence.json"],
+                                "reason": "adverse_window" if adverse else "frame_out_of_covered_range"})
+                        else:
+                            resolved, _ = _revision_six_anchor_outcome(row)
+                            if resolved:
+                                members += 1
+                                member_ids.add(row.attempt_id)
+                if seen != set(expected):
+                    raise ValueError("R9 captures do not cover finalized ledger rows")
+                if not adverse and frames and std_statistics.median(frames) > 150:
+                    stops.append("STOP-CADENCE")
+                if not adverse and counting_windows == 1 and valid < 6:
+                    stops.append("STOP-FUTILITY")
+                if adverse_windows > 1:
+                    stops.append("STOP-BATTERY-SECOND")
+                counted_total += counted
+                valid_total += valid
+                members_total += members
+                if stops:
+                    decision = "STOP_TO_REVIEW"
+                elif adverse:
+                    decision = "NEXT_WINDOW"
+                elif counted_total >= 24 and members_total >= 12:
+                    decision = "CLOSE_AND_DERIVE"
+                elif counting_windows < 3:
+                    decision = "NEXT_WINDOW"
+                elif counted_total < 24:
+                    decision = "R9_COUNT_NOT_REACHED_TO_REVIEW"
+                else:
+                    decision = "MEMBERS_SHORT_TO_REVIEW"
+            if type(r9["counted"]) is not int or type(r9["valid"]) is not int or (r9["counted"], r9["valid"]) != (counted, valid):
+                raise ValueError("R9 aggregate counted/valid disagreement")
+            if windows > 4 or counting_windows > 3:
+                raise ValueError("Revision 6 window limit exceeded")
+            history.append({"session_id": session.session_id, "window_label": None if null else f"C{windows}",
+                            "null": null, "adverse": adverse, "counted": counted, "valid": valid,
+                            "members": members, "counted_total": counted_total, "valid_total": valid_total,
+                            "members_total": members_total, "decision": decision, "stops": sorted(set(stops)),
+                            "campaign_void": bool(set(stops) & {"STOP-R9-CELL", "STOP-R9-DEADLINE", "STOP-R9-RATIO"})})
+            previous_null = null
+        except (OSError, KeyError, TypeError, ValueError) as error:
+            raise PrepareRefusal(f"Revision 6 R9 record refused: {error}") from error
+    return {"decision": decision, "sessions": history, "member_ids": member_ids,
+            "excluded": excluded, "counted": counted_total, "members": members_total}
+
+
+def revision_six_campaign_record(sessions, records, declaration, replay):
+    """The single sealed §4 record, assembled without consulting any B."""
+    windows, clock_refusals = [], []
+    captures = []
+    for session in sessions:
+        r9 = records[session.session_id]["r9"]
+        listed = {capture["slot"]: dict(capture) for capture in r9["captures"]}
+        slots = []
+        if session.finalized_slots:
+            for number, slot in enumerate(session.declared_slots, 1):
+                if number in listed:
+                    capture = listed[number]
+                    slots.append(capture)
+                    captures.append(capture)
+                    row = session.finalized_slots[slot]
+                    resolved, detail = _revision_six_anchor_outcome(row)
+                    if not resolved:
+                        clock_refusals.append({"session_id": session.session_id, "slot": number,
+                                               "capture_id": row.attempt_id, "reason": detail})
+                else:
+                    slots.append({"slot": number, "unused": True, "ledger_reason": session.abort_reason,
+                                  "cells": None, "median_frame_ms": None, "ratio": None, "counted": False})
+        windows.append({"session_id": session.session_id, "abort_reason": session.abort_reason,
+                        "null": not session.finalized_slots, "slots": slots,
+                        "counted": r9["counted"], "valid": r9["valid"],
+                        "r9_window_sha256": records[session.session_id]["r9_sha256"]})
+    clauses = {
+        "counted_at_least_24": replay["counted"] >= 24,
+        "zero_cell_stops": all(c["cap_trigger"] != "evaluated_cell_budget" for c in captures),
+        "zero_deadline_stops": all(c["cap_trigger"] != "wall_deadline" for c in captures),
+        "every_search_ratio_at_most_half": all(not c["cells"] or c["ratio"] <= .5 for c in captures),
+        "every_recording_frame_reported": all(not c["has_recording"] or c["median_frame_reported"] for c in captures),
+    }
+    return {"schema": "joulewise.revision6.r9_campaign.v1", "sessions": windows,
+            "counted": replay["counted"], "valid": sum(window["valid"] for window in windows),
+            "members": replay["members"], "clauses": clauses,
+            "clock_movement_or_empty_fit_refusals": clock_refusals,
+            "harness_sha256": declaration["pins"]["harness_sha256"],
+            "cap_rule_text_sha256": declaration["pins"]["cap_rule_text_sha256"]}
+
+
+def revision_six_close_record(args, sessions, records, declaration, replay):
+    """Publish blind CLOSE evidence, then require its commit before reading B."""
+    root = Path(args.repo_root)
+    paths = {"chain": root / "scripts/night_chains/calibration_derivation_only.zsh",
+             "validator": root / "scripts/validate_powermetrics_fiducial.py",
+             "cap_rule_text": getattr(args, "cap_rule_text", None),
+             "roster": getattr(args, "roster", None)}
+    files = {}
+    for name, locator in paths.items():
+        if locator is None:
+            raise PrepareRefusal(f"Revision 6 requires recorded {name} file")
+        path = Path(locator)
+        try:
+            if path.is_symlink():
+                raise OSError("symlink pin file")
+            raw = path.read_bytes()
+        except OSError as error:
+            raise PrepareRefusal(f"Revision 6 {name} pin file unreadable") from error
+        digest = hashlib.sha256(raw).hexdigest()
+        if digest != declaration["pins"][name + "_sha256"]:
+            raise PrepareRefusal(f"Revision 6 {name} file digest disagrees with seal")
+        files[name] = {"path": str(path.resolve()), "sha256": digest}
+    record = revision_six_campaign_record(sessions, records, declaration, replay)
+    record["pinned_files"] = files
+    raw = (json.dumps(record, indent=2, sort_keys=True, allow_nan=False) + "\n").encode()
+    path = Path(args.r9_record) if getattr(args, "r9_record", None) else Path(args.out).with_name("r9_campaign.json")
+    if path.resolve() == Path(args.out).resolve() or path.is_symlink():
+        raise PrepareRefusal("Revision 6 R9 record path overlaps candidate or is a symlink")
+    if path.exists():
+        if path.read_bytes() != raw:
+            raise PrepareRefusal("Revision 6 campaign R9 record differs; refusing overwrite")
+    else:
+        with path.open("xb") as handle:
+            handle.write(raw)
+    commit = _revision_six_committed(path, raw, root, "campaign R9")
+    return {"path": str(path.resolve()), "sha256": hashlib.sha256(raw).hexdigest(), "commit": commit}
+
+
+def revision_six_dry_run(snapshot, session_ids, declaration, harvest_paths, *, repo_root,
+                         preregistration_sha256, confounded_ids=()):
+    lines = ["", "Revision 6 blind count rule"]
+    try:
+        refuse_ledger(snapshot)
+        refuse_named_both(session_ids, confounded_ids)
+        sessions = revision_six_sessions(snapshot, (*session_ids, *confounded_ids), declaration)
+        records = revision_six_records(harvest_paths, sessions, declaration, repo_root=repo_root)
+        window_ids = [session.session_id for session in sessions if session.finalized_slots]
+        epoch = authenticate_battery_epoch(snapshot, window_ids, repo_root=repo_root,
+            target_epoch=declaration["identity_epoch"], preregistration_sha256=preregistration_sha256)
+        if set(confounded_ids) != set(epoch.non_pass_ids):
+            raise PrepareRefusal("Revision 6 battery-confounded set mismatch")
+        replay = revision_six_count_replay(sessions, records, declaration, set(epoch.non_pass_ids))
+        for row in replay["sessions"]:
+            lines.append(f"{row['session_id']}: window={row['window_label']} null={row['null']} "
+                         f"adverse={row['adverse']} counted={row['counted']} valid={row['valid']} "
+                         f"members={row['members']} decision={row['decision']} stops={','.join(row['stops'])}")
+        if epoch.foreign_rows:
+            raise PrepareRefusal("Revision 6 foreign valid same-epoch rows outside registration")
+        if any(row.content_id is None or row.classification_disposition not in PRIOR_SET_DISPOSITIONS
+               for row in snapshot.observations):
+            raise PrepareRefusal("prior set holds pending or unresolved attempts")
+        lines.append(f"counted_total={replay['counted']} members_total={replay['members']} decision={replay['decision']}")
+        return (0 if replay["decision"] in {"NEXT_WINDOW", "CLOSE_AND_DERIVE"}
+                else DRY_RUN_INADMISSIBLE_EXIT), lines
+    except (PrepareRefusal, battery_float.BatteryVerdictRefusal) as refusal:
+        return DRY_RUN_INADMISSIBLE_EXIT, [*lines, f"  blocker: {refusal}"]
 
 def _read_member_evidence(observation: LedgerObservation) -> tuple[Mapping[str, Any], Mapping[str, Any]]:
     """Read a member's primary bytes and authenticate them against its row.
@@ -1591,6 +2279,128 @@ def _corpus_statistics(members: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
         }
 
 
+def within_window_prediction(
+    members: Sequence[Mapping[str, Any]], member_session_ids: Mapping[str, str],
+) -> dict[str, Any]:
+    """Revision 6 arithmetic on already-selected members, with df n minus K.
+
+    Session membership is explicit, never inferred from an operator's paths.
+    The caller must have completed the blind campaign gates before calling.
+    """
+    ids = [member["member_id"] for member in members]
+    if len(set(ids)) != len(ids) or set(ids) != set(member_session_ids):
+        raise PrepareRefusal("within-window prediction requires one session binding per member")
+    windows: dict[str, list[Decimal]] = {}
+    for member in members:
+        session_id = member_session_ids[member["member_id"]]
+        if not isinstance(session_id, str) or not session_id:
+            raise PrepareRefusal("within-window prediction has an absent session binding")
+        value = Decimal(member["b_fiducial_s"])
+        if not value.is_finite():
+            raise PrepareRefusal("within-window prediction has a non-finite member")
+        windows.setdefault(session_id, []).append(value)
+    n, k = len(members), len(windows)
+    df = n - k
+    if df < 1:
+        raise PrepareRefusal("within-window prediction requires positive n-K degrees of freedom")
+    with localcontext() as context:
+        context.prec = DECIMAL_WORK_PRECISION
+        ssw = Decimal(0)
+        for values in windows.values():
+            mean = sum(values, Decimal(0)) / Decimal(len(values))
+            ssw += sum((value - mean) ** 2 for value in values)
+        sd = (ssw / Decimal(df)).sqrt().quantize(
+            PRESENTATION_QUANTUM_S, rounding=ROUND_HALF_EVEN,
+        )
+    proof = build_quantile_proof(df)
+    with localcontext() as context:
+        context.prec = DECIMAL_WORK_PRECISION
+        t995 = student_t_quantile("0.995", df)
+    return {
+        "n": n,
+        "K": k,
+        "degrees_of_freedom": df,
+        "s_within_presentation_s": {
+            "value": str(sd), "label": "rounded_presentation",
+            "rounding_rule": "ROUND_HALF_EVEN to quantum 0.000000000000000001 s",
+        },
+        "prediction_99_within_window_two_draw_s": two_draw_prediction_lexeme(t995, str(sd)),
+        "rule": WITHIN_WINDOW_TWO_DRAW_PREDICTION_RULE,
+        "quantile_method": QUANTILE_METHOD,
+        "quantile_proof": proof,
+    }
+
+
+
+def revision_six_dependence(members, observations, records, screen, within, ceiling_terms):
+    """Report-only window and adjacent-slot diagnostics from the fixed corpus."""
+    by_id = {row.attempt_id: row for row in observations}
+    grouped = {}
+    for member in members:
+        row = by_id[member["member_id"]]
+        grouped.setdefault(row.bracket_session_id, []).append((row, Decimal(member["b_fiducial_s"])))
+    diagnostics, medians, pairs = [], [], []
+    with localcontext() as context:
+        context.prec = DECIMAL_WORK_PRECISION
+        n, k = len(members), len(grouped)
+        mean = sum((value for group in grouped.values() for _, value in group), Decimal(0)) / n
+        ssb = Decimal(0)
+        for sid in records:
+            group = grouped.get(sid, [])
+            timing = records[sid]["timing"]
+            if timing is None:
+                continue
+            window_timing = {"window_start": timing["start"], "window_end": timing["end"],
+                "previous_window_session_id": timing["previous_window_session_id"],
+                "start_to_start_interval": timing["start_to_start_interval"],
+                "inter_window_gap": timing["inter_window_gap"]}
+            if not group:
+                diagnostics.append({"session_id": sid, "member_count": 0, "median_s": None,
+                    "mean_s": None, "sample_sd_s": None, **window_timing})
+                continue
+            values = [value for _, value in group]
+            window_mean = sum(values, Decimal(0)) / len(values)
+            median = std_statistics.median(values)
+            medians.append(median)
+            ssb += len(values) * (window_mean - mean) ** 2
+            sd = ((sum((v - window_mean) ** 2 for v in values) / (len(values) - 1)).sqrt()
+                  if len(values) > 1 else None)
+            diagnostics.append({"session_id": sid, "member_count": len(values),
+                "median_s": str(median), "mean_s": str(window_mean),
+                "sample_sd_s": str(sd) if sd is not None else None,
+                **window_timing})
+            slots = {row.bracket_slot: value for row, value in group}
+            # Fixed derivation slots are s01 ... s12; never bridge a gap.
+            for slot in range(1, 12):
+                left, right = f"d{slot:02d}", f"d{slot + 1:02d}"
+                if left in slots and right in slots:
+                    pairs.append((slots[left], slots[right]))
+        icc = None
+        if k >= 2:
+            msb = ssb / (k - 1)
+            ssw = sum((sum((v - sum((x for _, x in group), Decimal(0)) / len(group)) ** 2
+                            for _, v in group) for group in grouped.values()), Decimal(0))
+            msw = ssw / (n - k)
+            n0 = (Decimal(n) - sum(Decimal(len(g)) ** 2 for g in grouped.values()) / n) / (k - 1)
+            denominator = msb + (n0 - 1) * msw
+            if denominator:
+                icc = str(max(Decimal(0), (msb - msw) / denominator))
+        rho = None
+        if len(pairs) >= 3:
+            def ranks(values):
+                ordered = sorted(values)
+                return [Decimal(ordered.index(v) + 1 + len(ordered) - ordered[::-1].index(v)) / 2 for v in values]
+            left, right = ranks([p[0] for p in pairs]), ranks([p[1] for p in pairs])
+            lm, rm = sum(left) / len(left), sum(right) / len(right)
+            denominator = (sum((v-lm)**2 for v in left) * sum((v-rm)**2 for v in right)).sqrt()
+            if denominator:
+                rho = str(sum((a-lm)*(b-rm) for a, b in zip(left, right)) / denominator)
+        ceiling = max(ceiling_terms.values())
+        return {"windows": diagnostics, "window_median_range_divided_by_S": str((max(medians)-min(medians))/screen),
+                "ICC": icc, "rho1": rho, "rho1_pairs": len(pairs),
+                "Q99": str(ceiling_terms["Q99"]), "Q99_within": within["prediction_99_within_window_two_draw_s"],
+                "ceiling_set_by": [name for name, value in ceiling_terms.items() if value == ceiling]}
+
 def battery_verdict(args: argparse.Namespace) -> int:
     """Write one window's battery-float harvest verdict (obligations v1.1 §4.2).
 
@@ -1738,7 +2548,41 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
     refuse_open_registration(snapshot, session_ids)
     refuse_open_registration(snapshot, named_confounded)
     refuse_ledger(snapshot)
+    revision_six = "# Revision 6 (" in preregistration_text
+    declaration = None
+    rev6_records = rev6_replay = None
+    all_revision_six_ids = ()
+    if revision_six:
+        declaration = revision_six_declaration(preregistration_text)
+        ordered = revision_six_sessions(snapshot, (*session_ids, *named_confounded), declaration)
+        all_revision_six_ids = tuple(session.session_id for session in ordered)
+        if any(getattr(args, field, None) for field in ("ed_ruling", "nights_ruling", "slot_count_ruling")):
+            raise PrepareRefusal("Revision 6 accepts no command-line ruling; a sealed amendment is required")
+        rev6_records = revision_six_records(getattr(args, "harvest_record", ()), ordered, declaration,
+                                           repo_root=Path(args.repo_root))
+        all_rows = _registration_observations(snapshot, all_revision_six_ids)
+        if any(dict(row.identity_epoch) != declaration["identity_epoch"] or row.t1_bindings.get("mlx_version") != "0.31.2"
+               for row in all_rows):
+            raise PrepareRefusal("Revision 6 row identity epoch or MLX pin disagrees with registration")
+        window_ids = tuple(session.session_id for session in ordered if session.finalized_slots)
+        epoch = authenticate_battery_epoch(snapshot, window_ids, repo_root=Path(args.repo_root),
+            target_epoch=declaration["identity_epoch"], preregistration_sha256=args.preregistration_sha256)
+        if set(named_confounded) != set(epoch.non_pass_ids):
+            raise PrepareRefusal("Revision 6 battery-confounded set mismatch")
+        rev6_replay = revision_six_count_replay(ordered, rev6_records, declaration, set(epoch.non_pass_ids))
+        if rev6_replay["decision"] != "CLOSE_AND_DERIVE":
+            stops = sorted({stop for item in rev6_replay["sessions"] for stop in item["stops"]})
+            raise PrepareRefusal("Revision 6 " + rev6_replay["decision"] + ": " + ", ".join(stops) + "; B stays unread")
+        campaign_r9 = revision_six_close_record(args, ordered, rev6_records, declaration, rev6_replay)
+        session_ids = tuple(sid for sid in window_ids if sid not in epoch.non_pass_ids)
+        if hashlib.sha256(Path(args.predecessor_acceptance).read_bytes()).hexdigest() != declaration["predecessor"]["file_sha256"]:
+            raise PrepareRefusal("Revision 6 requires pinned P8 predecessor file digest")
     predecessor = _authenticated_predecessor(Path(args.predecessor_acceptance))
+    if revision_six and (predecessor["acceptance_id"] != declaration["predecessor"]["acceptance_id"]
+            or predecessor["acceptance_id"] != "d079_calibration_acceptance_v2_n17_r8"
+            or predecessor.get("derivation_sha256") != declaration["predecessor"]["derivation_sha256"]
+            or predecessor["prospective_rederivation"]["estimator_code_sha256"] != declaration["pins"]["estimator_code_sha256"]):
+        raise PrepareRefusal("Revision 6 requires pinned P8 predecessor identity, derivation and estimator pins")
     predecessor_statistics = predecessor["decimal_derivation"]["source_statistics"]
     level_screen_threshold = Decimal(
         predecessor["decimal_derivation"]["ratified_operatives"][
@@ -1766,11 +2610,11 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
     if not observations:
         raise PrepareRefusal("registration: its sessions hold no observations")
     target_epoch = registration_target_epoch(snapshot, session_ids)
-    revision_five = target_epoch == REVISION_FIVE_EPOCH
+    revision_five = target_epoch == REVISION_FIVE_EPOCH and not revision_six
     if revision_five:
-        if predecessor["acceptance_id"] != ACTIVE_ACCEPTANCE_ID:
+        if predecessor["acceptance_id"] != "d079_calibration_acceptance_v2_n17_r7":
             raise PrepareRefusal(
-                f"registration Revision 5 requires r7 predecessor {ACTIVE_ACCEPTANCE_ID}"
+                "registration Revision 5 requires historical predecessor d079_calibration_acceptance_v2_n17_r7"
             )
         if "# Revision 5 (" not in preregistration_text:
             raise PrepareRefusal("25G83/v3 identity requires registration Revision 5")
@@ -1794,7 +2638,7 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
             )
         except battery_float.BatteryVerdictRefusal as refusal:
             raise PrepareRefusal(f"{refusal}; not issued") from refusal
-    else:
+    elif not revision_six:
         epoch = unauthenticated_battery_epoch(snapshot, session_ids, target_epoch)
     refuse_battery_policy(battery_epoch_policy(epoch, declared=frozenset(named_confounded)))
     computed_confounded = set(epoch.non_pass_ids)
@@ -1802,10 +2646,10 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
     observations = _registration_observations(snapshot, session_ids)
     if not observations:
         raise PrepareRefusal("registration: its sessions hold no observations")
-    required_minimum = REVISION_FIVE_MINIMUM_CORPUS_SIZE if revision_five else SUCCESSOR_MINIMUM_CORPUS_SIZE
+    required_minimum = REVISION_FIVE_MINIMUM_CORPUS_SIZE if revision_five or revision_six else SUCCESSOR_MINIMUM_CORPUS_SIZE
     minimum = required_minimum if args.minimum_corpus_size is None else args.minimum_corpus_size
     if minimum != required_minimum:
-        if revision_five or minimum != RULED_ALTERNATIVE_CORPUS_SIZE:
+        if revision_five or revision_six or minimum != RULED_ALTERNATIVE_CORPUS_SIZE:
             raise PrepareRefusal(f"--minimum-corpus-size {minimum} is not a ruled floor for this epoch; required {required_minimum}")
         if not args.ed_ruling:
             raise PrepareRefusal(f"corpus-size floor departure to {minimum} requires --ed-ruling")
@@ -1817,7 +2661,7 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
     # schedule is a different experiment, whatever its statistics say.
     distinct_nights = len(set(session_ids))
     permitted_nights = {2, 3} if revision_five else {PREREGISTERED_NIGHT_COUNT}
-    if distinct_nights not in permitted_nights and not args.nights_ruling:
+    if not revision_six and distinct_nights not in permitted_nights and not args.nights_ruling:
         raise PrepareRefusal(
             f"registration names {distinct_nights} sessions, not the "
             f"pre-registered {sorted(permitted_nights) if revision_five else PREREGISTERED_NIGHT_COUNT}; --nights-ruling must "
@@ -1863,9 +2707,19 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
             + f" is not the pre-registered {registered_powermetrics}; the "
             "registration is void"
         )
+    member_observations = observations
+    frame_excluded = []
+    if revision_six:
+        frame_excluded = rev6_replay["excluded"]
+        frame_ids = {entry["member_id"] for entry in frame_excluded}
+        member_observations = tuple(row for row in observations if row.attempt_id not in frame_ids)
     members, excluded, comparisons = _select_members(
-        observations, Path(args.repo_root), level_screen_threshold, args.corpus_root
+        member_observations, Path(args.repo_root), level_screen_threshold, args.corpus_root
     )
+    if revision_six:
+        excluded.extend(frame_excluded)
+        if {row["member_id"] for row in members} != rev6_replay["member_ids"]:
+            raise PrepareRefusal("Revision 6 member selection disagrees with blind count replay")
     n = len(members)
     if revision_five and len(session_ids) == 3:
         first_two = set(session_ids[:2])
@@ -1888,7 +2742,7 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
             + "; not issued (ruling 46 addendum A-7)"
         )
     excursion_count = sum(Decimal(row["b_fiducial_s"]) > Decimal("0.075") for row in members)
-    if revision_five:
+    if revision_five or revision_six:
         over_inset = [row["member_id"] for row in members if Decimal(row["b_fiducial_s"]) > Decimal(str(PLATEAU_INSET_S))]
         if over_inset:
             raise PrepareRefusal(f"member B exceeds PLATEAU_INSET_S = {PLATEAU_INSET_S} s: " + ", ".join(over_inset))
@@ -1899,7 +2753,7 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
 
     challenged = [row for row in comparisons if row["exceeds_prior_level_screen"]]
     statistics = _corpus_statistics(members)
-    if not revision_five and len(challenged) >= SCREEN_CHALLENGE_MEMBER_LIMIT:
+    if not (revision_five or revision_six) and len(challenged) >= SCREEN_CHALLENGE_MEMBER_LIMIT:
         raise PrepareRefusal(
             f"screen challenge: {len(challenged)} retained members exceed "
             f"{level_screen_threshold}; not issued, Ed rules in writing"
@@ -1932,9 +2786,14 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
     ceiling = envelope_ceiling(predecessor_ceiling, Decimal(prediction_99))
     # D-125 / D-126 cl.3: the screen must sit STRICTLY below the ceiling, and
     # the refusal is never cured by lowering the screen (the floor binds it).
+    within = None
+    if revision_six:
+        within = within_window_prediction(members, {row.attempt_id: row.bracket_session_id
+            for row in observations if row.attempt_id in rev6_replay["member_ids"]})
+        ceiling = max(ceiling, screen, Decimal(within["prediction_99_within_window_two_draw_s"]))
     if revision_five:
         ceiling = max(ceiling, screen)
-    if not revision_five and not screen < ceiling:
+    if not (revision_five or revision_six) and not screen < ceiling:
         raise PrepareRefusal(
             "successor_screen_exceeds_budget_ceiling: screen "
             f"{screen} is not strictly below the budget ceiling {ceiling}; "
@@ -2027,8 +2886,8 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
     ]
     # The pinned registry again, for the prior-set inventory only; A-7 was
     # decided from the authenticated epoch above.
-    dispositions = _registered_dispositions() if revision_five else {}
-    if revision_five:
+    dispositions = _registered_dispositions() if revision_five or revision_six else {}
+    if revision_five or revision_six:
         absent_disposed = set(dispositions) - {
             row["content_id"] for row in prior_observations
         }
@@ -2040,7 +2899,10 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
     disposed_prior_ids = sorted({
         dispositions[row["content_id"]] for row in prior_observations
         if row["content_id"] in dispositions
-    }) if revision_five else []
+    }) if revision_five or revision_six else []
+    if revision_six and (set(disposed_prior_ids) != set(declaration["disposing_decision_ids_required"])
+            or declaration["disposition_registry_sha256"] != DISPOSITION_REGISTRY_SHA256):
+        raise PrepareRefusal("Revision 6 requires both disposing decisions and the pinned registry")
     # The production validator recomputes this inventory over the WHOLE prior
     # set, one entry per admissible disposition INCLUDING the zeros, and
     # compares for equality; a count over the registration alone, or with the
@@ -2081,9 +2943,10 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
         "screen_rule": screen_rule,
         "predecessor_ceiling_s": str(predecessor_ceiling),
         "predecessor_acceptance_id": predecessor["acceptance_id"],
-        "registration_session_ids": list(session_ids),
+        "registration_session_ids": list(all_revision_six_ids if revision_six else session_ids),
         "d125_ruling": args.d125_ruling,
         **({"registration_revision": 5} if revision_five else {}),
+        **({"registration_revision": 6, "prediction_99_within_window_two_draw_s": within["prediction_99_within_window_two_draw_s"]} if revision_six else {}),
     }
     decimal_derivation = {
         "numeric_semantics": "decimal_source_lexemes",
@@ -2091,6 +2954,7 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
             **statistics,
             "prediction_95_two_draw_s": prediction_95,
             "prediction_99_two_draw_s": prediction_99,
+            **({"prediction_99_within_window_two_draw_s": within["prediction_99_within_window_two_draw_s"]} if revision_six else {}),
         },
         "rounding": {
             "mode": "ROUND_HALF_EVEN",
@@ -2120,6 +2984,7 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
             "quantile_method": QUANTILE_METHOD,
         },
         "quantile_proof": quantile_proof,
+        **({"within_window_prediction_derivation": within} if revision_six else {}),
         "ratified_operatives": {
             **operatives,
             "allowance_rule": "max(observed_drift_s,bracket_screen_s)",
@@ -2147,7 +3012,14 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
             {"session_id": verdict.session_id, "status": verdict.status,
              "verdict_file_sha256": verdict.file_sha256, "verdict_commit": verdict.commit}
             for verdict in epoch.verdicts
-        ]} if revision_five else {}),
+        ]} if revision_five or revision_six else {}),
+        **({"revision6_campaign_r9": campaign_r9, "revision6_count_replay": {key: value for key, value in rev6_replay.items() if key not in {"member_ids", "excluded"}},
+            "revision6_records": {sid: {key: value for key, value in record.items() if key not in {"r9", "start"}}
+                                  for sid, record in rev6_records.items()},
+            "sampling_dependence": revision_six_dependence(members, observations, rev6_records, screen, within,
+                {"predecessor_C": predecessor_ceiling, "Q99": Decimal(prediction_99),
+                 "Q99_within": Decimal(within["prediction_99_within_window_two_draw_s"]), "S": screen})}
+           if revision_six else {}),
         "generation": (
             "D-079 epoch bootstrap: the first generation derived from live "
             "derivation-only captures under a new identity epoch."
@@ -2170,7 +3042,7 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
         "excluded_members": excluded,
         "prior_screen_comparison": comparisons,
         **({"native_frame_cadence_s": _derivation_frame_cadence(members, observations)} if revision_five else {}),
-        **({"limitation_label": "excursion_limited"} if revision_five and excursion_count >= 2 else {}),
+        **({"limitation_label": "excursion_limited"} if (revision_five or revision_six) and excursion_count >= 2 else {}),
         "rule_outcomes": {
             "d125_ruling": args.d125_ruling,
             "ed_ruling": args.ed_ruling,
@@ -2183,7 +3055,7 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
                 "headroom_status": "zero_headroom" if ceiling == screen else "positive_headroom",
                 "excursion_member_count": excursion_count,
                 "excursion_label": "excursion_limited" if excursion_count >= 2 else None,
-            } if revision_five else {}),
+            } if revision_five or revision_six else {}),
             "screen_challenge_member_count": len(challenged),
             "screen_challenge_threshold_s": str(level_screen_threshold),
             "new_maximum_exceeds_prior_maximum_plus_range": (
@@ -2196,9 +3068,13 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
             "file_sha256": preregistration_sha256,
         },
     }
+    acceptance_id = args.acceptance_id or (f"d079_calibration_acceptance_v2_n{n}_25g83_r2" if revision_six else default_acceptance_id(n, identity_epoch))
+    if revision_six and (not re.fullmatch(declaration["successor_acceptance_id_pattern"].replace("<N>", str(n)), acceptance_id)
+                         or acceptance_id in declaration["retired_acceptance_ids"]):
+        raise PrepareRefusal("Revision 6 successor identifier violates approved pattern or reuses retired r1")
     payload: dict[str, Any] = {
         "schema_version": ACCEPTANCE_BOUND_SCHEMA,
-        "acceptance_id": args.acceptance_id or default_acceptance_id(n, identity_epoch),
+        "acceptance_id": acceptance_id,
         # The production validator demands exactly this pair; the D-079,
         # D-125 and D-126 provenance travels in `derivation_notes` and in the
         # row's `d125_ruling`, where it is machine-checked rather than decorative.
@@ -2263,7 +3139,7 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
             ),
             "epoch_catalog": epoch_catalog,
             "observations": prior_observations,
-            **({"disposing_decision_ids": disposed_prior_ids} if revision_five else {}),
+            **({"disposing_decision_ids": disposed_prior_ids} if revision_five or revision_six else {}),
         },
         "decimal_derivation": decimal_derivation,
         "backfill_candidate": {
@@ -2335,6 +3211,17 @@ def derivation_input_sha256(payload: Mapping[str, Any]) -> str:
         "predecessor_ceiling_s": row["predecessor_ceiling_s"],
         "d125_ruling": row["d125_ruling"],
     }
+    if row.get("registration_revision") == 6:
+        notes = payload["derivation_notes"]
+        sealed["revision6"] = {
+            "registration_session_ids": row["registration_session_ids"],
+            "preregistration_sha256": notes["preregistration"]["file_sha256"],
+            "within_window_prediction_derivation": derivation["within_window_prediction_derivation"],
+            "records": {sid: {key: entry[key] for key in (
+                "harvest_sha256", "r9_sha256", "start_condition_sha256")}
+                for sid, entry in notes["revision6_records"].items()},
+            "count_replay": notes["revision6_count_replay"],
+        }
     return hashlib.sha256(
         json.dumps(sealed, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode()
     ).hexdigest()
@@ -2468,6 +3355,8 @@ def build_parser() -> argparse.ArgumentParser:
             "kinds, states and counts only, never a measured value"
         ),
     )
+    watch.add_argument("--harvest-record", type=Path, action="append", default=[],
+                       help="automated harvest record for each Revision 6 session (repeatable)")
     watch.add_argument(
         "--battery-confounded-session-id", action="append", default=[],
         help="excluded battery-confounded derivation session (repeatable; issuer verifies the exact set)",
@@ -2530,6 +3419,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--registration-session-id", action="append", default=[],
         help="a derivation-kind ledger session of this registration (repeatable)",
     )
+    prepare.add_argument("--cap-rule-text", type=Path, help="sealed cap-rule text file, verified by digest")
+    prepare.add_argument("--roster", type=Path, help="sealed roster file, verified by digest")
+    prepare.add_argument("--r9-record", type=Path, help="campaign R9 output; default: r9_campaign.json beside --out")
+    prepare.add_argument("--harvest-record", type=Path, action="append", default=[],
+                         help="automated harvest record for each Revision 6 session (repeatable)")
     prepare.add_argument(
         "--battery-confounded-session-id", action="append", default=[],
         help="excluded battery-confounded derivation session (repeatable; issuer verifies the exact set)",

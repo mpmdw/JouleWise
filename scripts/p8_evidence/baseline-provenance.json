@@ -1,0 +1,7 @@
+{
+  "source": "/Users/edr/.claude/jobs/d9990b3c/tmp/corpus-v3-baseline-9b6b3f0e.json",
+  "sha256": "ec5172274ef0ab2d863eae7703c6845f79cdd0926330a29cfb8973aabdd6f469",
+  "record_count": 38,
+  "retained_r7_replay_evidence": "docs/process_traces/2026-09-22-activation-59857fe5/08-coldgate-packet-a267-merge-transaction/exhibit-C-executed-evidence.md:165",
+  "meaning": "R7 issuance corpus baseline; the cited replay compared v3 dictionaries and raw sha256 for all 38 records"
+}

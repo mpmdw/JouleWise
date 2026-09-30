@@ -282,7 +282,10 @@ class RevisionFiveTests(unittest.TestCase):
                     issuer._prepare_candidate(args(superseded))
                 wrong_predecessor = args(sealed)
                 wrong_predecessor.predecessor_acceptance = R6
-                with self.assertRaisesRegex(issuer.PrepareRefusal, "requires r7 predecessor"):
+                with self.assertRaisesRegex(
+                    issuer.PrepareRefusal,
+                    "requires historical predecessor d079_calibration_acceptance_v2_n17_r7",
+                ):
                     issuer._prepare_candidate(wrong_predecessor)
                 registry.write_text("[]\n")
                 # An empty registry now refuses on its digest (§4.6); pinned to
@@ -327,10 +330,11 @@ class RevisionFiveTests(unittest.TestCase):
                 )
             self.assertEqual(bracket["acceptance"]["freshness"]["status"], "fresh")
 
-    def test_pinned_estimator_files_match_c034a56f(self) -> None:
-        # SHA-256 of each blob's bytes at c034a56f, before Revision 5.
+    def test_pinned_estimator_files_match_frozen_cap_head(self) -> None:
+        # Frozen cap head 34bfea7c; only powermetrics_fiducial.py rotates.
+        # The R7 registration and member fixture above remain historical.
         expected = {
-            "joulewise/powermetrics_fiducial.py": "386e825440e02bb0720e7b74f0f7503d785fb543a08c45386014eeb4216bab92",
+            "joulewise/powermetrics_fiducial.py": "bcdfeec06a03525cc6f6c700f2e2e6d10341af1323e4f9355b68ee47eb5bd30c",
             "joulewise/uncertainty_evidence.py": "b583f35affb33394532424295ac70261b895e1b6f2faa6ec87ee89c79cd94ae8",
             "joulewise/adapters/powermetrics.py": "70f47086b2445e88d0cb25ed2d47751dfd99843d0cf1e149f2fe630c5116e5e4",
             "joulewise/reduce.py": "7b9c0d28869040229e113ea2d40ecc69966075fd34052fbb51cfaffbd9ff9fcc",

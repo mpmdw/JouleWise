@@ -78,7 +78,7 @@ class PromotionTests(unittest.TestCase):
         self.assertEqual(path.read_bytes(), self.issued_raw)
         self.assertIsNone(bracket.load_calibration_acceptance_bound(path))
         self.assertNotIn(self.issued["acceptance_id"], bracket.ISSUED_ACCEPTANCE_REGISTRY)
-        self.assertEqual(bracket.ACTIVE_ACCEPTANCE_ID, bracket.ANCHOR_V3_R7_ACCEPTANCE_ID)
+        self.assertEqual(bracket.ACTIVE_ACCEPTANCE_ID, bracket.ANCHOR_V3_R8_ACCEPTANCE_ID)
 
     def test_cli_requires_explicit_issuance_text(self):
         script = Path(__file__).resolve().parents[1] / "scripts/promote_calibration_candidate.py"

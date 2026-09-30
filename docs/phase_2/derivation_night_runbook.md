@@ -2534,6 +2534,36 @@ route nothing is ever prepared, and this code decides nothing.
 
 ### 2.2a Record the battery-float verdict before reading any result (Revision 5 windows)
 
+**Automated preservation and count checks (WI-16).** After §2.0 desk recovery
+has made the session terminal and the ledger head equal its committed pin, run:
+
+```zsh
+python3 -B scripts/harvest_window.py \
+  --plan "$NIGHT_ROOT/night_plan.json" \
+  --custody "$HOME/night-archive/harvest-$PLAN_ID" \
+  --preregistration configs/calibration/preregistration_d079_epoch_25g83_rev1.md \
+  --preregistration-sha256 "$PREREGISTRATION_SHA256" \
+  --session-ids "$SESSION_ID"
+```
+
+For W2, repeat `--session-ids` for W1 and W2 in ledger order. The command
+authenticates manifest/ledger/raw bytes, checks cadence/clock/battery verdicts,
+independently checks the valid count and every recorded `probe_error=false` /
+`passed=true` pair, then copies custody and measurement `runs/` with an original
+lstat inventory, uninstalls through the existing path and publishes one archive
+with `harvest.json`. B fields are never accessed; source evidence is retained.
+Choose custody outside watchdog discovery. Authentication failures refuse
+before uninstall/publication; identical retries verify without overwriting.
+After interruption, clear a sibling `.harvest-lock` only when no harvest runs.
+
+The plan's `registration_path` (W1/W2: `night_gate.D166_REGISTRATION_PATH`) supplies the next-window count rule. W1/W2's
+D-166 pointer has no derivation rule, so output is `COUNTS_ONLY`. The record
+authenticates the committed verdict; complete the battery-verdict issuance and
+pin/verdict commit in steps (iii)–(iv) below before running the harvest command.
+Per the owner's 2026-09-29 rule, routine windows need raw-byte validation
+and an independent arithmetic check; full suites, lenses and cold passes run
+once per relevant machinery change.
+
 **Why this step exists.** Every Revision 5 capture brackets itself with two
 readings of the battery (`raw/battery_float.pre.ioreg` and
 `raw/battery_float.post.ioreg`). A window whose readings show the Mac drawing
@@ -3471,3 +3501,38 @@ means. A term is listed only if it does technical work.
 | known condition | §4.3 | A recorded fact about how the corpus was captured that is deliberately not a rule — it edits no membership, moves no threshold, and licenses no re-capture. |
 | cold science gate | §4.3 | A fresh adjudicating seat with no campaign context, ruling on a mechanically assembled packet. |
 | D-138 transaction | §4.4 | The single reviewed commit that swaps the live acceptance and every pin naming it. |
+
+
+## Revision 6 integration admission and CLOSE records
+
+The authenticated sealed registration selects Revision 6. Its session IDs must
+match `d079-epoch-25g83-r6-YYYYMMDDTHHMMZ` (the declaration's exact pattern).
+Harvest takes `--prior-harvest-record PATH` for each preceding session, with
+`--session-ids ID` repeated in ledger order. It computes `next_window` through
+the issuer's count-rule function and records its canonical JSON SHA256.
+The next arm's manifest carries this decision digest; only `NEXT_WINDOW` admits
+another arm, including after a null session. STOP, review, and CLOSE refuse.
+
+The unattended driver orders admission as OFF receipt, clean dwell concurrent
+with the OFF settle, the night gate's t0 checks, then chain start. Thermal and
+battery evidence is collected after the dwell. The exact dwell invocation is:
+
+```sh
+"$MEASUREMENT_ROOT/scripts/prewindow_check.sh" --wait --timeout-s "$TIMEOUT_S"
+```
+
+`TIMEOUT_S` is `ceil(min(2700, latest_chain_start_epoch_s - now_epoch_s,
+latest_chain_start_monotonic_s - now_monotonic_s))`, positive and at most 2700.
+The driver also enforces this remaining budget as the subprocess timeout.
+The seal pins both the script bytes and this invocation; the custody dwell
+record retains the full argv, script digest, exit status, clocks and output.
+
+At `CLOSE_AND_DERIVE`, invoke `prepare-candidate` with the existing registration
+and harvest arguments plus `--cap-rule-text PATH --roster PATH --r9-record PATH`.
+The issuer verifies those files and the tracked chain and validator against
+sealed digests, writes the single blind campaign R9 record, and refuses until
+its exact bytes are committed. The lead commits that record before repeating
+the same invocation to derive a candidate. The campaign record includes every
+slot, totals, all five R9 clause verdicts, harness and rule-text digests, and
+clock movement or empty-fit refusals by slot. This is desk evidence; it does
+not satisfy any live hardware gate.

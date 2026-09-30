@@ -1,0 +1,34 @@
+{
+  "moves": {
+    "joulewise/calibration_bracketing.py": "P8 constants, registry and generation rows, ACTIVE id and default path; retained R7 rows stay",
+    "scripts/floor_mint_pinsets/schema_v2.json": "Add P8 to n17 enum; all older ids stay",
+    "tests/verify_calibration_acceptance_corpus.py": "Add P8 banked n17 row with stored_lexeme_is_member_value=False; R7 stays",
+    "tests/test_calibration_bracketing.py": "Active default digest/id and generation-row mutation tests follow P8",
+    "tests/test_powermetrics_fiducial.py": "Active artifact path, digest and id follow P8",
+    "tests/test_issue_calibration_acceptance_generation.py": "Issuer default predecessor filename follows P8",
+    "tests/test_epoch_continuation.py": "Active artifact digest follows P8",
+    "tests/test_capture_pipeline_era.py": "Active admission expectation follows P8; retained R7 positive; unissued counterfactual moves to r9",
+    "tests/test_promote_calibration_candidate.py": "Promotion must not change ACTIVE P8",
+    "tests/test_validate_powermetrics_fiducial_derivation_only.py": "Default basis fixtures follow P8",
+    "tests/test_calibration_exits.py": "Private writer active artifact copy/re-key follows P8",
+    "tests/test_calibration_writer_crash_matrix.py": "Private writer active artifact copy/re-key follows P8",
+    "tests/test_arm_readiness_evidence_author.py": "Add P8 to all-issued fixture inventory; historical ids stay",
+    "tests/test_acc_25g83_rev5.py": "Four-estimator freeze assertion follows cap head (one rotated digest); historical R7 acceptance fixture remains R7",
+    "tests/test_battery_float_sweep.py": "Classify the new historical B reader; authenticated R7 members and digest-pinned 38-record R7 baseline"
+  },
+  "stays": {
+    "scripts/epoch_equivalence_check.py": "REQUIRED_ACCEPTANCE_ID remains R7; parser explicitly freezes R7 instead of following the active default",
+    "tests/test_epoch_equivalence_check.py": "R7 envelope oracles remain R7, made explicit after default move; added hold \u00a75.2 freeze test",
+    "tests/test_acc_25g83_rev5.py": "Explicit R7 registration/fixture reference per E1; issuer ACTIVE patched to R7 only inside historical tests",
+    "tests/test_mint_floor_artifact_generalized.py": "Explicit R7 fixture oracle (r7 digest 9c3a29f6...) per E1; synthetic_v2_fixture now resolves R7 id and file digest explicitly, preserving all independent golden constants",
+    "tests/test_reduce.py": "Retained R7 reduce.py byte-pin oracle, unchanged pin",
+    "tests/test_issue_p8_pin_delta.py": "R7 source and stale-preflight refusal oracle; P8 active checks",
+    "scripts/issue_p8_pin_delta.py": "Registry-authenticated R7 source, predecessor digest, and historical carried fields",
+    "scripts/verify_p8_replay.py": "R7 member values are the replay targets",
+    "joulewise/arm_readiness.py": "Retained R7 admission stays; required P8 addition BLOCKED outside WRITE_SCOPE",
+    "tests/test_epoch_continuation.py": "Desk-witness case explicitly uses R7 for both desk and continuation issuer; active-default cases move to P8"
+  },
+  "blocked": {
+    "joulewise/arm_readiness.py": "Add d079_calibration_acceptance_v2_n17_r8 to _issued_d079"
+  }
+}

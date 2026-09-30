@@ -28,6 +28,7 @@ set -uo pipefail
 
 WAIT=0
 TIMEOUT_MIN=45
+TIMEOUT_S=""
 WINDOW=""
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)"
 MEASUREMENT_REPO="$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd -P)"
@@ -41,10 +42,22 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --wait) WAIT=1; shift ;;
     --timeout-min) TIMEOUT_MIN="$2"; shift 2 ;;
+    --timeout-s)
+      if [ $# -lt 2 ] || [[ ! "$2" =~ ^[0-9]+$ ]]; then
+        echo "--timeout-s requires a positive integer" >&2; exit 2
+      fi
+      TIMEOUT_S="$2"; shift 2 ;;
     --window) WINDOW="$2"; shift 2 ;;
-    *) echo "usage: $0 [--wait] [--timeout-min N] [--window alpha|beta|gamma]" >&2; exit 2 ;;
+    *) echo "usage: $0 [--wait] [--timeout-min N] [--timeout-s N] [--window alpha|beta|gamma]" >&2; exit 2 ;;
   esac
 done
+if [ -z "$TIMEOUT_S" ]; then
+  TIMEOUT_S=$(( TIMEOUT_MIN * 60 ))
+fi
+if [[ ! "$TIMEOUT_S" =~ ^[0-9]+$ ]] || [ "$TIMEOUT_S" -le 0 ]; then
+  echo "timeout must be a positive number of seconds" >&2
+  exit 2
+fi
 
 case "$WINDOW" in
   "") WINDOW_RUNS_PREFIX=""; STALE_WINDOW_RUNS_PREFIX="" ;;
@@ -146,7 +159,8 @@ check_once() {
 
   # 8. No agent or measurement process already running.
   local procs
-  procs="$(ps aux | grep -E "codex|claude|t3|mcp-server|run_campaign|window-chain" | grep -vc grep)"
+  # Inspect executable names only; paths in driver arguments are not agents.
+  procs="$(ps -A -o comm= | awk '{n=tolower($0); sub(/^[[:space:]]*/, "", n); sub(/^.*\//, "", n); if (n ~ /^(codex|claude|t3|mcp-server|run_campaign|window-chain)([-_.[:space:]].*)?$/) count++} END {print count+0}')"
   if [ "$procs" -gt 0 ]; then
     bad "$procs agent/measurement process(es) already running"
     blocked=1
@@ -172,7 +186,7 @@ fi
 # resets Bash's elapsed-seconds interval; three quick samples are not a
 # substitute for the idle dwell that D-134's T-0 author independently checks.
 wait_started="$SECONDS"
-deadline=$(( wait_started + TIMEOUT_MIN * 60 ))
+deadline=$(( wait_started + TIMEOUT_S ))
 clean_since=-1
 clean_checks=0
 while [ "$SECONDS" -lt "$deadline" ]; do
@@ -180,6 +194,7 @@ while [ "$SECONDS" -lt "$deadline" ]; do
     # The clean interval starts only after a complete successful sample; time
     # spent proving that first sample is not retroactively counted as clean.
     now="$SECONDS"
+    [ "$now" -lt "$deadline" ] || break
     if [ "$clean_since" -lt 0 ]; then
       clean_since="$now"
     fi
@@ -195,9 +210,13 @@ while [ "$SECONDS" -lt "$deadline" ]; do
     clean_checks=0
     bold "  not ready; re-checking in ${INTERVAL_S}s"
   fi
-  sleep "$INTERVAL_S"
+  remaining=$(( deadline - SECONDS ))
+  [ "$remaining" -gt 0 ] || break
+  pause="$INTERVAL_S"
+  [ "$remaining" -ge "$pause" ] || pause="$remaining"
+  sleep "$pause"
 done
 
-bold ""; bold "TIMED OUT after ${TIMEOUT_MIN} min without ${MIN_CLEAN_DWELL_S}s continuous clean time."
+bold ""; bold "TIMED OUT after ${TIMEOUT_S}s without ${MIN_CLEAN_DWELL_S}s continuous clean time."
 bold "Do not launch. Investigate what is keeping the machine busy."
 exit 1

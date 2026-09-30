@@ -52,7 +52,8 @@ from joulewise.calibration_ledger import (  # noqa: E402
     MAX_DECLARED_SESSION_SLOTS,
 )
 from joulewise.night_gate import D166_REGISTRATION_PATH, NightPlan, PlanError  # noqa: E402
-from scripts.run_night import deadman_epoch  # noqa: E402
+from scripts.run_night import (deadman_epoch, START_MANIFEST_SCHEMA,
+                               _validate_start_manifest)  # noqa: E402
 
 RUNSHEET_PATH = (
     REPO_ROOT / "docs/process_traces/2026-08-28-live-smoke/SHAKEDOWN-G2-RUNSHEET.md"
@@ -552,6 +553,18 @@ def build_spec(args: argparse.Namespace) -> tuple[WrapperSpec, Path, bytes]:
     _require_absolute("out path", str(out_path))
     _census_clean("night custody root", plan.custody_root)
     _census_clean("session id", args.session_id)
+    if plan.registration_path:
+        registration = Path(plan.registration_path)
+        if not registration.is_absolute():
+            registration = Path(plan.measurement_root) / registration
+        if "# Revision 6 (" in registration.read_text():
+            from scripts.issue_calibration_acceptance_generation import revision_six_declaration, PrepareRefusal
+            try:
+                declaration = revision_six_declaration(registration.read_text())
+            except PrepareRefusal as error:
+                raise GenerationRefusal(str(error)) from error
+            if not re.fullmatch(declaration["sessions"]["session_id_pattern"], args.session_id):
+                raise GenerationRefusal("Revision 6 session-id pattern mismatch")
 
     measurement_root = _require_absolute("measurement_root", plan.measurement_root)
     runs_root = args.runs_root or f"{plan.custody_root}/runs"
@@ -850,6 +863,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--new-plan", type=Path, help="exclusive-create v4 plan output; never rewrites --plan-template")
     parser.add_argument("--new-plan-id", help="required fresh id, different from the template's id")
     parser.add_argument("--session-id", help="the ledger session this night opens")
+    parser.add_argument("--first-revision6-window-reason",
+                        help="explicit reason for a null prior in the first Revision 6 window")
+    parser.add_argument("--prior-revision6-session", help="previous terminal Revision 6 session id")
+    parser.add_argument("--prior-harvest-json", type=Path, help="WI-16 automated harvest record")
+    parser.add_argument("--prior-started-epoch-s", type=float)
+    parser.add_argument("--prior-terminal-epoch-s", type=float)
     parser.add_argument("--window-id", help="default: the night plan's plan_id")
     parser.add_argument("--evidence-root-id")
     parser.add_argument("--calibration-plan", help="the frozen calibration plan bytes")
@@ -917,7 +936,55 @@ def render_quiet_runsheet(plan):
     )
 
 
-def author_quiet_plan(template_path, policy_path, output_path, new_id):
+def start_manifest_from_args(args, plan_id):
+    prior_args = (args.prior_revision6_session, args.prior_harvest_json,
+                  args.prior_started_epoch_s, args.prior_terminal_epoch_s)
+    if args.first_revision6_window_reason is not None:
+        if any(item is not None for item in prior_args):
+            raise GenerationRefusal("first Revision 6 window cannot also name a prior session")
+        value = {"schema": START_MANIFEST_SCHEMA, "plan_id": plan_id,
+                 "prior_revision6_session": None, "reason": args.first_revision6_window_reason}
+    else:
+        if any(item is None for item in prior_args):
+            raise GenerationRefusal("provide first-revision6-window-reason or all prior-session/harvest/timestamp arguments")
+        path = args.prior_harvest_json.expanduser().resolve(strict=True)
+        raw = path.read_bytes()
+        harvest = json.loads(raw)
+        decision = harvest.get("next_window") if isinstance(harvest, dict) else None
+        decision_raw = (json.dumps(decision, indent=2, sort_keys=True, allow_nan=False) + "\n").encode()
+        decision_sha256 = hashlib.sha256(decision_raw).hexdigest()
+        if (not isinstance(decision, dict) or decision.get("verdict") != "NEXT_WINDOW"
+                or harvest.get("next_window_sha256") != decision_sha256):
+            raise GenerationRefusal("prior harvest count decision must authenticate and allow NEXT_WINDOW")
+        value = {"schema": START_MANIFEST_SCHEMA, "plan_id": plan_id,
+                 "prior_revision6_session": {
+                     "session_id": args.prior_revision6_session, "harvest_file": str(path),
+                     "harvest_sha256": hashlib.sha256(raw).hexdigest(),
+                     "started_epoch_s": args.prior_started_epoch_s,
+                     "terminal_epoch_s": args.prior_terminal_epoch_s,
+                     "decision_sha256": decision_sha256}}
+    return _validate_start_manifest(value, plan_id)
+
+
+def write_start_manifest(custody_root, value, *, verify_only=False):
+    """Identical replay is read-only; a changed manifest requires a fresh arm."""
+    _validate_start_manifest(value, value["plan_id"])
+    path = Path(custody_root) / "start_conditions_manifest.json"
+    payload = (json.dumps(value, sort_keys=True, allow_nan=False) + "\n").encode("utf-8")
+    if path.is_symlink():
+        raise GenerationRefusal("start-conditions manifest is a symlink")
+    if path.exists():
+        if path.read_bytes() != payload:
+            raise GenerationRefusal("start-conditions manifest differs; never overwrite arm custody")
+    elif verify_only:
+        raise GenerationRefusal("start-conditions manifest is absent")
+    else:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("xb") as stream:
+            stream.write(payload)
+
+
+def author_quiet_plan(template_path, policy_path, output_path, new_id, *, manifest=None):
     """Explicit new-plan authoring; template and existing plans are immutable."""
     from dataclasses import replace
     from joulewise.quiet_admission import validate_policy
@@ -942,6 +1009,10 @@ def author_quiet_plan(template_path, policy_path, output_path, new_id):
     runsheet = Path(str(output_path) + ".runsheet.md")
     if output_path.exists() or runsheet.exists():
         raise GenerationRefusal("new-plan outputs already exist; never overwrite sealed artifacts")
+    if manifest is None:
+        raise GenerationRefusal("new-plan authoring requires a start-conditions manifest")
+    _validate_start_manifest(manifest, new_id)
+    write_start_manifest(plan.custody_root, manifest)
     # Exclusive creation remains authoritative if another writer races the precheck.
     with output_path.open("xb") as stream:
         stream.write(payload)
@@ -959,7 +1030,8 @@ def main(argv: list[str] | None = None) -> int:
             if not args.plan_template or not args.new_plan or not args.new_plan_id:
                 raise GenerationRefusal("--quiet-admission-json requires --plan-template, --new-plan and --new-plan-id")
             author_quiet_plan(args.plan_template, args.quiet_admission_json, args.new_plan,
-                              args.new_plan_id)
+                              args.new_plan_id,
+                              manifest=start_manifest_from_args(args, args.new_plan_id))
         except (GenerationRefusal, OSError, ValueError) as error:
             print(f"FAIL {error}", file=sys.stderr)
             return 2
@@ -979,6 +1051,8 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         try:
             spec, out_path, chain_bytes = build_spec(args)
+            manifest = start_manifest_from_args(args, spec.plan_id)
+            write_start_manifest(spec.window_custody_root, manifest, verify_only=args.verify)
             if args.verify:
                 identical, expected_digest, installed_digest = verify(spec, out_path)
                 if not identical:
@@ -993,7 +1067,7 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"VERIFIED {out_path} sha256={expected_digest}")
                 return 0
             digest = emit(spec, out_path, chain_bytes=chain_bytes)
-        except GenerationRefusal as error:
+        except (GenerationRefusal, OSError, ValueError) as error:
             print(f"FAIL {error}", file=sys.stderr)
             return 2
         if spec.slot_count != PRE_REGISTERED_SLOT_COUNT:
