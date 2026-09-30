@@ -25,7 +25,7 @@ from tests import battery_float_fixture
 from tests.git_fixture import init_git_fixture
 from tests.test_night_agent_install import FakeLaunchctl, LABELS, run_fixture_process
 from tests.test_run_night import make_probe_fixture, write_matching_probe_receipt
-from tests.test_magistrate_watchdog import Harness
+from tests_tools.test_magistrate_watchdog import Harness
 from scripts import magistrate_watchdog as wd
 
 

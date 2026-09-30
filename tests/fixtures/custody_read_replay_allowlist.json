@@ -42,13 +42,6 @@
     "reason": "Replay only the durable snapshot with verify_custody=False; guarded finalization retains the explicit issuing custody-state check."
   },
   {
-    "file": "joulewise/window_duration_margins.py",
-    "function": "_authenticate_b_operative",
-    "ordinal": 1,
-    "line": 713,
-    "reason": "Replay-only caller chain: record_window_duration_margins CLI -> record_window_duration_margins -> derive_window_duration_margins -> _authenticate_b_operative; no mint, binding publication, ledger append, or analysis-manifest finalization caller."
-  },
-  {
     "file": "scripts/check_window_provenance.py",
     "function": "_run_assertions.check_f52",
     "ordinal": 1,

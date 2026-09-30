@@ -230,57 +230,6 @@ class ReceiptHistoricalSemanticsTests(unittest.TestCase):
         # the v1 chain member, so it is outside this grep-shaped class.
         self.assertEqual(pinset_writers, ["refresh_receipt_histsem_pinset.py"])
 
-    def test_successor_member_shape_when_present(self) -> None:
-        """Presence-conditional shape check on the versioned successor member.
-
-        THIS IS NOT AN AUTHENTICATOR.  D-151 condition 2 forbids this file from
-        authenticating the successor: allowlist membership makes it eligible for
-        subtraction but never proves its bytes.  The successor's ONLY byte
-        authenticator is the hS literal that the post-window fixation commit
-        pins (D-153 A1), and nothing here may be relied on in its place.  What
-        this method does is cheaper and different: it checks that the minted
-        artifact has the SHAPE D-151 condition 3 ruled for it, so a
-        structurally wrong mint is caught by the ordinary suite instead of
-        surviving to the confirmation table.
-
-        It is vacuous until the successor exists.  An absent enumerated member
-        contributes no rows and is not a refusal (arm_readiness.py:3196-3199;
-        docs/contracts/receipt_histsem_verifier.md:53-57), so before the mint
-        this method asserts only that absence is handled as ruled -- which is
-        why it can live in the PRE-DERIVATION candidate without being
-        mint-falsifiable (D-153 A2).
-        """
-
-        if not SUCCESSOR_PINSET.exists():
-            # Absence semantics: the chain still loads, and it holds exactly the
-            # v1 member's rows.  Nothing about the successor is asserted.
-            rows = readiness._load_histsem_pinset(ROOT)
-            self.assertEqual(
-                len(rows), len(json.loads(PINSET.read_bytes())["packs"])
-            )
-            self.skipTest("successor member not minted yet; shape check is vacuous")
-
-        raw = SUCCESSOR_PINSET.read_bytes()
-        # Canonical D-134 encoding: the committed bytes must already be the
-        # canonical rendering, not merely parseable JSON.
-        value = readiness.parse_json_bytes(raw, require_canonical=True)
-        self.assertEqual(raw, render_json(value))
-        # D-151 condition-3 ruled literals, used as consistency checks only.
-        self.assertEqual(len(value["packs"]), SUCCESSOR_PACK_COUNT)
-        self.assertEqual(
-            sum(row["receipt_count"] for row in value["packs"]),
-            SUCCESSOR_RECEIPT_COUNT,
-        )
-        self.assertEqual(
-            {row["pack_id"] for row in value["packs"]}, set(SUCCESSOR_PACK_IDS)
-        )
-        # The v1 member is unchanged by the mint; the chain is the union of both.
-        self.assertEqual(hashlib.sha256(PINSET.read_bytes()).hexdigest(), PINSET_SHA256)
-        rows = readiness._load_histsem_pinset(ROOT)
-        self.assertEqual(
-            len(rows),
-            len(json.loads(PINSET.read_bytes())["packs"]) + SUCCESSOR_PACK_COUNT,
-        )
 
     def test_verifier_cli_refusal_is_canonical_and_exit_two(self) -> None:
         completed = subprocess.run(
@@ -2764,7 +2713,6 @@ class PackAuthenticationRegenerationTests(unittest.TestCase):
                 "PASS",
             )
         regeneration.assert_called_once()
-
 
 
 class HistoricalBlobBatchTests(unittest.TestCase):

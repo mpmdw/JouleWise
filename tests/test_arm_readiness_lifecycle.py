@@ -2118,60 +2118,6 @@ with mock.patch.object(
                 )
 
     # R-6 -------------------------------------------------------------------
-    @unittest.skip(
-        "STRUCTURAL-BLOCKED: synthetic _v5 fixture omits the family-publication "
-        "marker required before self-predecessor validation"
-    )
-    def test_self_wrong_role_and_ordinal_violations_refuse(self) -> None:
-        """Blocked by the synthetic repository's absent family marker.
-
-        The self-reference leg mints with the pack as its OWN predecessor.  The
-        ruled registry sets ``family_publication_first_generation`` to 5, so a
-        ``_v5`` predecessor engages the family-publication gate FIRST: the mint
-        returns a REFUSE record carrying ``readiness_r1_family_publication``
-        ("marker_absent: registry-installed family has no marker") instead of
-        raising ``readiness_successor_chain_invalid``.  The self-reference
-        property is intact but shadowed.  ``make_go_fixture`` does not copy a
-        production family marker into its synthetic repository, so minting
-        production pack bytes alone cannot flip this test green.
-        """
-
-        repo, pack, predecessor = self.successor_fixture()
-        tree_before = (pack / "plan_tree.json").read_bytes()
-        with self.assertRaises(ArmReadinessError) as caught:
-            self.mint(pack, pack)
-        self.assertEqual(
-            caught.exception.reason_code, "readiness_successor_chain_invalid"
-        )
-        self.assert_no_successor_bytes(pack, tree_before)
-
-        foreign = write_predecessor_pack(
-            repo, "d117_floor_qwen25_7b_v1", "BETA"
-        )
-        git(repo, "add", ".")
-        git(repo, "commit", "-qm", "beta predecessor")
-        with self.assertRaises(ArmReadinessError) as caught:
-            self.mint(pack, foreign)
-        self.assertEqual(
-            caught.exception.reason_code, "readiness_successor_chain_invalid"
-        )
-        self.assertIn("different plan profile", str(caught.exception))
-        self.assert_no_successor_bytes(pack, tree_before)
-
-        result = self.mint(pack, predecessor)
-        recorded = self.read_receipt(result["receipt_path"])["predecessor"]
-        for successor_receipt_id in ("freeze-0001", "freeze-0005"):
-            with self.subTest(successor=successor_receipt_id):
-                with self.assertRaises(ArmReadinessError) as caught:
-                    readiness._authenticate_freeze_predecessor(
-                        pack,
-                        recorded,
-                        successor_receipt_id=successor_receipt_id,
-                        successor_profile="ALPHA",
-                    )
-                self.assertEqual(
-                    caught.exception.reason_code, "readiness_successor_chain_invalid"
-                )
 
     def test_successor_namespace_refuses_an_ordinal_that_skips_its_predecessor(
         self,

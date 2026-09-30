@@ -1741,41 +1741,6 @@ class CalibrationLiveThreeWindowTests(unittest.TestCase):
             ],
         )
 
-    @unittest.skip("U2 successor engine pending")
-    def test_range_expanding_live_observation_requires_successor(self) -> None:
-        vector = self.scenario["staged_successor_vectors"][
-            "range_expanding_live_observation"
-        ]
-        self.assertEqual(
-            vector["expected_trigger"],
-            "new_valid_same_identity_capture_expands_observed_range",
-        )
-
-    @unittest.skip("U2 successor engine pending")
-    def test_d102_observation_count_boundary_requires_successor(self) -> None:
-        vector = self.scenario["staged_successor_vectors"][
-            "d102_count_boundary"
-        ]
-        self.assertEqual(vector["expected_total_valid_same_epoch"], 34)
-        self.assertEqual(
-            vector["expected_trigger"], "corpus_doubles_from_17_to_34"
-        )
-
-    @unittest.skip("U2 successor engine pending")
-    def test_successor_prior_set_refuses_omitted_or_changed_authenticated_prefix(
-        self,
-    ) -> None:
-        vector = self.scenario["staged_successor_vectors"][
-            "successor_prior_set_integrity"
-        ]
-        self.assertEqual(
-            vector["mutations"],
-            [
-                "omit_authenticated_prefix_member",
-                "change_authenticated_prefix_member",
-            ],
-        )
-
 
 if __name__ == "__main__":
     unittest.main()

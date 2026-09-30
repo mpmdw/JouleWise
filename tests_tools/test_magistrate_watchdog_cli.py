@@ -82,7 +82,7 @@ class HandoffCliDefectTests(unittest.TestCase):
         """Counterfactual: corrupt lock plus missing/torn state launches, or an existing
         HOLD_UNSAFE suppresses the corrupt-lock event and next-launch notice.
         """
-        from tests.test_magistrate_watchdog import Harness
+        from tests_tools.test_magistrate_watchdog import Harness
         import datetime as dt
 
         with tempfile.TemporaryDirectory() as temporary:

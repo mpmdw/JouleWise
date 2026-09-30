@@ -34,7 +34,7 @@ from scripts import magistrate_watchdog as wd
 
 
 RETIRED_V1 = (
-    Path(__file__).resolve().parent / "fixtures" / "night_plan_v1_retired.json"
+    Path(__file__).resolve().parents[1] / "tests" / "fixtures" / "night_plan_v1_retired.json"
 )
 
 
@@ -2347,7 +2347,7 @@ class HandoffDefectTests(WatchdogTestCase):
 
 class ContractTests(WatchdogTestCase):
     def test_mutation_m8_failed_lock_seed_removes_new_plist(self) -> None:
-        from tests.test_install_magistrate_watchdog import (
+        from tests_tools.test_install_magistrate_watchdog import (
             InstallMagistrateWatchdogTests,
         )
 
