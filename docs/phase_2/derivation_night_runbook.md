@@ -2534,6 +2534,35 @@ route nothing is ever prepared, and this code decides nothing.
 
 ### 2.2a Record the battery-float verdict before reading any result (Revision 5 windows)
 
+**Automated preservation and count checks (WI-16).** After §2.0 desk recovery
+has made the session terminal and the ledger head equal its committed pin, run:
+
+```zsh
+python3 -B scripts/harvest_window.py \
+  --plan "$NIGHT_ROOT/night_plan.json" \
+  --custody "$HOME/night-archive/harvest-$PLAN_ID" \
+  --preregistration configs/calibration/preregistration_d079_epoch_25g83_rev1.md \
+  --preregistration-sha256 "$PREREGISTRATION_SHA256" \
+  --session-ids "$SESSION_ID"
+```
+
+For W2, repeat `--session-ids` for W1 and W2 in ledger order. The command
+authenticates manifest/ledger/raw bytes, checks cadence/clock/battery verdicts,
+independently checks the valid count and every recorded `probe_error=false` /
+`passed=true` pair, then copies custody and measurement `runs/` with an original
+lstat inventory, uninstalls through the existing path and publishes one archive
+with `harvest.json`. B fields are never accessed; source evidence is retained.
+Choose custody outside watchdog discovery. Authentication failures refuse
+before uninstall/publication; identical retries verify without overwriting.
+After interruption, clear a sibling `.harvest-lock` only when no harvest runs.
+
+The plan's `registration_path` supplies the next-window count rule. W1/W2's
+D-166 pointer has no derivation rule, so output is `COUNTS_ONLY`. The record
+reports committed-verdict readiness; the pin/verdict commit below is still
+required. Per the owner's 2026-09-29 rule, routine windows need raw-byte validation
+and an independent arithmetic check; full suites, lenses and cold passes run
+once per relevant machinery change.
+
 **Why this step exists.** Every Revision 5 capture brackets itself with two
 readings of the battery (`raw/battery_float.pre.ioreg` and
 `raw/battery_float.post.ioreg`). A window whose readings show the Mac drawing
