@@ -802,7 +802,7 @@ def run_workers(worker_count: int, *, split: bool = False) -> int:
     if worker_count < 1:
         raise ValueError("worker count must be at least 1")
 
-    command_prefix = [sys.executable, os.fspath(Path(__file__).resolve())]
+    command_prefix = [sys.executable, "-B", os.fspath(Path(__file__).resolve())]
     processes = []
     with tempfile.TemporaryDirectory(prefix="joulewise-shards-") as temp_dir:
         for index in range(1, worker_count + 1):

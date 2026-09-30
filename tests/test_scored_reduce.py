@@ -24,6 +24,7 @@ import math
 from pathlib import Path
 import random
 import re
+import os
 import unittest
 from unittest.mock import patch
 
@@ -1101,6 +1102,10 @@ class ScoredReduceTests(unittest.TestCase):
                     reducer.reduce(reg, roster, predictions, [], [])
                 self.assertEqual(caught.exception.code, code)
 
+    @unittest.skipUnless(
+        os.environ.get("JOULEWISE_FULL_CORPUS") == "1",
+        "full scored corpus (set JOULEWISE_FULL_CORPUS=1)",
+    )
     def test_differential_oracle_200_nights(self):
         reducer = _reducer()
         nights = 0
