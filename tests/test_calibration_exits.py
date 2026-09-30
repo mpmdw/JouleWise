@@ -5429,6 +5429,7 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
                         "--derivation-only",
                         "--identity-epoch-json-for-test",
                         str(identity),
+                        "--sampler-direct-for-test",
                     ]
                 elif case.observer == "writer-derivation-session":
                     # The ORDINARY writer tuple -- no --derivation-only -- run
