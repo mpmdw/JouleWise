@@ -5,22 +5,22 @@
   "_zero_observation_floor": "Executed zero-rounded observations floored to 0.001 s for load_timing_map positivity: ['tests.test_analysis_ratio', 'tests.test_audit_clock', 'tests.test_audit_report', 'tests.test_env_locks', 'tests.test_floor_mint_pinsets_schema', 'tests.test_midcampaign_cure_generation_docs', 'tests.test_node_worker_subprocess', 'tests.test_scored_packer_fuzz', 'tests.test_ssh_transport'].",
   "exclusive_modules": {
     "tests.test_calibration_exits": {
-      "seconds": 507.842,
+      "seconds": 1117.31,
       "evidence_range_seconds": [
         648,
         2036
       ],
       "fallback_rejection_threshold_seconds": 300,
-      "_evidence": "CI/test trim 2026-09-29: executed local default-run whole-module duration 507.842 s, 48 tests, result PASS, Python 3.14.7 / macOS. Historical evidence_range_seconds remains historical. Dedicated job and fallback-rejection threshold retained."
+      "_evidence": "CI-TRIM-02: current seconds is max unittest total over six main/push runs and both interpreters (1117.310 s, 48 tests). Historical evidence_range_seconds [648, 2036] retained as historical evidence, not re-labelled as the current sample range. Threshold 300 s, dedicated job, and 30-minute ceiling retained."
     },
     "tests.test_calibration_writer_crash_matrix": {
-      "seconds": 281.066,
+      "seconds": 1011.414,
       "evidence_range_seconds": [
         145.911,
         2005
       ],
       "fallback_rejection_threshold_seconds": 300,
-      "_evidence": "CI/test trim 2026-09-29: executed local default-run whole-module duration 281.066 s, 20 tests, result PASS, Python 3.14.7 / macOS. Historical evidence_range_seconds remains historical. Dedicated job and fallback-rejection threshold retained."
+      "_evidence": "CI-TRIM-02: current conservative total sums separately measured unit maxima: 679.554 s heavy + 331.86 s remainder = 1011.414 s across six runs / both interpreters. This is not a serial execution observation. Historical evidence_range_seconds [145.911, 2005] retained; the pre-exclusivity 5317.216 s observation remains superseded (TEST-SPEED-01, 2026-08-23). Dedicated runners and 300 s fallback-rejection threshold retained."
     }
   },
   "split_modules": {
@@ -109,11 +109,11 @@
     "tests.test_calibration_cadence_report": 3.167,
     "tests.test_calibration_custody_store": 0.39,
     "tests.test_calibration_custody_worker": 1.658,
-    "tests.test_calibration_exits": 507.842,
+    "tests.test_calibration_exits": 1117.31,
     "tests.test_calibration_ledger": 9.623,
     "tests.test_calibration_ledger_custody": 54.86,
     "tests.test_calibration_live_three_window": 6.349,
-    "tests.test_calibration_writer_crash_matrix": 281.066,
+    "tests.test_calibration_writer_crash_matrix": 1011.414,
     "tests.test_campaign_generator_core": 1.855,
     "tests.test_capture_pipeline_era": 2.351,
     "tests.test_capture_t0_step": 65.406,
@@ -255,7 +255,7 @@
     "tests.test_receipt_histsem": 2069.667,
     "tests.test_receipt_oracle": 0.378,
     "tests.test_receipt_provenance_analyzer": 0.37,
-    "tests.test_reduce": 343.847,
+    "tests.test_reduce": 771.704,
     "tests.test_rehearse_t0_unattended": 4.42,
     "tests.test_reissue_calibration_acceptance": 0.11,
     "tests.test_render_results_fills": 1.585,
