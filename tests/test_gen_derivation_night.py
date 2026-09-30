@@ -130,6 +130,9 @@ class WrapperFixture:
             "commit", "-q", "-m", "fixture",
         )
         self.head = _git(self.measurement_root, "rev-parse", "HEAD")
+        registration = self.measurement_root / "configs/campaigns/d117_contrast_v5/d166_dominance_criterion_registration.json"
+        registration.parent.mkdir(parents=True, exist_ok=True)
+        registration.write_text("{}\n")
         # The chain preflights these before spending any window time.
         for relative in (
             "runs/calibration_observation_ledger.jsonl",
@@ -250,6 +253,29 @@ class DerivationNightWrapperTests(unittest.TestCase):
         self.addCleanup(self.directory.cleanup)
         self.fixture = WrapperFixture(Path(self.directory.name))
 
+    def test_revision6_registration_enforces_session_pattern(self):
+        from tests.test_acc_25g83_rev6 import declaration, registration
+        path = self.fixture.measurement_root / self.fixture.plan_mapping()["registration_path"]
+        path.write_text(registration(declaration()))
+        refused = self.fixture.emit()
+        self.assertEqual(refused.returncode, 2)
+        self.assertIn("session-id pattern mismatch", refused.stderr)
+        self.assertFalse(self.fixture.out.exists())
+        self.fixture.session_id = "d079-epoch-25g83-r6-20261001T0001Z"
+        self.assertEqual(self.fixture.emit().returncode, 0)
+
+    def test_prior_stop_cannot_arm_even_with_matching_digest(self):
+        harvest = self.fixture.root / "harvest.json"
+        decision = {"verdict": "STOP_TO_REVIEW"}
+        raw = (json.dumps(decision, indent=2, sort_keys=True) + "\n").encode()
+        harvest.write_text(json.dumps({"next_window": decision,
+            "next_window_sha256": hashlib.sha256(raw).hexdigest()}))
+        refused = self.fixture.emit("--prior-revision6-session", "prior", "--prior-harvest-json", str(harvest),
+            "--prior-started-epoch-s", "1000", "--prior-terminal-epoch-s", "2000")
+        self.assertEqual(refused.returncode, 2)
+        self.assertIn("NEXT_WINDOW", refused.stderr)
+        self.assertFalse(self.fixture.out.exists())
+
     def test_first_manifest_is_write_once_and_verify_is_read_only(self):
         emitted = self.fixture.emit()
         self.assertEqual(emitted.returncode, 0, emitted.stderr)
@@ -272,7 +298,7 @@ class DerivationNightWrapperTests(unittest.TestCase):
 
     def test_prior_manifest_hashes_wi16_bytes_and_terminal_timestamps(self):
         harvest = self.fixture.root / "harvest.json"
-        harvest.write_text('{"decision":"NEXT_WINDOW"}\n')
+        harvest.write_text(json.dumps({'next_window': {'verdict': 'NEXT_WINDOW'}, 'next_window_sha256': hashlib.sha256(b'{\n  \"verdict\": \"NEXT_WINDOW\"\n}\n').hexdigest()}) + '\n')
         args = ["--prior-revision6-session", "derivation-prior",
                 "--prior-harvest-json", str(harvest), "--prior-started-epoch-s", "1000",
                 "--prior-terminal-epoch-s", "2000"]
@@ -288,7 +314,7 @@ class DerivationNightWrapperTests(unittest.TestCase):
         harvest.write_text('{"decision":"changed"}\n')
         self.assertEqual(self.fixture.emit(*args).returncode, 2)
         self.assertEqual(path.read_bytes(), before)
-        harvest.write_text('{"decision":"NEXT_WINDOW"}\n')
+        harvest.write_text(json.dumps({'next_window': {'verdict': 'NEXT_WINDOW'}, 'next_window_sha256': hashlib.sha256(b'{\n  \"verdict\": \"NEXT_WINDOW\"\n}\n').hexdigest()}) + '\n')
         self.assertEqual(self.fixture.emit(*args).returncode, 0)
 
     def test_malformed_prior_inputs_refuse_without_arm_outputs(self):
@@ -302,7 +328,8 @@ class DerivationNightWrapperTests(unittest.TestCase):
                 self.assertEqual(self.fixture.emit(*args).returncode, 2)
                 self.assertFalse(self.fixture.out.exists())
                 self.assertFalse((self.fixture.night_root / "start_conditions_manifest.json").exists())
-        harvest.write_text('{}\n')
+        harvest.write_text(json.dumps({'next_window': {'verdict': 'NEXT_WINDOW'},
+            'next_window_sha256': hashlib.sha256((json.dumps({'verdict': 'NEXT_WINDOW'}, indent=2, sort_keys=True) + "\n").encode()).hexdigest()}))
         for extra in (("--prior-terminal-epoch-s", "999"),
                       ("--prior-terminal-epoch-s", "nan"),
                       ("--first-revision6-window-reason", "first")):

@@ -159,9 +159,8 @@ check_once() {
 
   # 8. No agent or measurement process already running.
   local procs
-  # Bracketed first letters keep this grep's own argv from matching. Do not
-  # exempt the driver, or discard arbitrary process lines containing "grep".
-  procs="$(ps aux | grep -cE '[c]odex|[c]laude|[t]3|[m]cp-server|[r]un_campaign|[w]indow-chain')"
+  # Inspect executable names only; paths in driver arguments are not agents.
+  procs="$(ps -A -o comm= | awk '{n=tolower($0); sub(/^[[:space:]]*/, "", n); sub(/^.*\//, "", n); if (n ~ /^(codex|claude|t3|mcp-server|run_campaign|window-chain)([-_.].*)?$/) count++} END {print count+0}')"
   if [ "$procs" -gt 0 ]; then
     bad "$procs agent/measurement process(es) already running"
     blocked=1

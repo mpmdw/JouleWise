@@ -3501,3 +3501,38 @@ means. A term is listed only if it does technical work.
 | known condition | §4.3 | A recorded fact about how the corpus was captured that is deliberately not a rule — it edits no membership, moves no threshold, and licenses no re-capture. |
 | cold science gate | §4.3 | A fresh adjudicating seat with no campaign context, ruling on a mechanically assembled packet. |
 | D-138 transaction | §4.4 | The single reviewed commit that swaps the live acceptance and every pin naming it. |
+
+
+## Revision 6 integration admission and CLOSE records
+
+The authenticated sealed registration selects Revision 6. Its session IDs must
+match `d079-epoch-25g83-r6-YYYYMMDDTHHMMZ` (the declaration's exact pattern).
+Harvest takes `--prior-harvest-record PATH` for each preceding session, with
+`--session-ids ID` repeated in ledger order. It computes `next_window` through
+the issuer's count-rule function and records its canonical JSON SHA256.
+The next arm's manifest carries this decision digest; only `NEXT_WINDOW` admits
+another arm, including after a null session. STOP, review, and CLOSE refuse.
+
+The unattended driver orders admission as OFF receipt, clean dwell concurrent
+with the OFF settle, the night gate's t0 checks, then chain start. Thermal and
+battery evidence is collected after the dwell. The exact dwell invocation is:
+
+```sh
+"$MEASUREMENT_ROOT/scripts/prewindow_check.sh" --wait --timeout-s "$TIMEOUT_S"
+```
+
+`TIMEOUT_S` is `ceil(min(2700, latest_chain_start_epoch_s - now_epoch_s,
+latest_chain_start_monotonic_s - now_monotonic_s))`, positive and at most 2700.
+The driver also enforces this remaining budget as the subprocess timeout.
+The seal pins both the script bytes and this invocation; the custody dwell
+record retains the full argv, script digest, exit status, clocks and output.
+
+At `CLOSE_AND_DERIVE`, invoke `prepare-candidate` with the existing registration
+and harvest arguments plus `--cap-rule-text PATH --roster PATH --r9-record PATH`.
+The issuer verifies those files and the tracked chain and validator against
+sealed digests, writes the single blind campaign R9 record, and refuses until
+its exact bytes are committed. The lead commits that record before repeating
+the same invocation to derive a candidate. The campaign record includes every
+slot, totals, all five R9 clause verdicts, harness and rule-text digests, and
+clock movement or empty-fit refusals by slot. This is desk evidence; it does
+not satisfy any live hardware gate.

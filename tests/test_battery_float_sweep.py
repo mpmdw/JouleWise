@@ -39,9 +39,9 @@ READERS = {
     "scripts/reissue_calibration_acceptance.py": (
         "transitively gated", "members of an authenticated issued acceptance"),
     "scripts/cap_replay_harness.py": (
-        "in-process comparer (R0/R8)", "CAP-COUNCIL-25G83-01 R0/R8 harness: SIZING never touches a stored "
+        "blind harvest / optional comparer (R0/R8)", "CAP-COUNCIL-25G83-01 R0/R8 harness: SIZING never touches a stored "
         "bound; REPORT compares the capture's stored bound in-process for one equality boolean and "
-        "serializes no B (test_cap_replay_harness no-B counterfactuals); harvest copies work fields only "
+        "serializes no B; Revision 6 harvest disables comparison and bound decoding entirely "
         "(orchestrator ruling, session ff50b201)"),
     "scripts/verify_p8_replay.py": (
         "historical", "E1 section 3.3: registry-authenticated R7 members and sha-pinned "

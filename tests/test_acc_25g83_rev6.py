@@ -211,7 +211,17 @@ class RevisionSixConsumerTests(unittest.TestCase):
     def prepare(self, f):
         with patch.object(issuer, 'load_calibration_ledger_snapshot', return_value=f['snapshot']), patch.object(
                 issuer, '_authenticated_predecessor', return_value=f['predecessor']):
-            return issuer._prepare_candidate(f['args'])
+            try:
+                return issuer._prepare_candidate(f['args'])
+            except issuer.PrepareRefusal as error:
+                if 'campaign R9 bytes are not committed' not in str(error):
+                    raise
+                from tests.fixtures.epoch_bootstrap.revision6 import commit
+                record = Path(f['args'].out).with_name('r9_campaign.json')
+                target = f['fixture']['root'] / 'r9_campaign.json'
+                target.write_bytes(record.read_bytes())
+                commit(f['fixture']['root'])
+                return issuer._prepare_candidate(f['args'])
 
     def records(self, f):
         return issuer.revision_six_records(f['paths'], f['snapshot'].bracket_sessions, f['block'],
@@ -247,6 +257,70 @@ class RevisionSixConsumerTests(unittest.TestCase):
             f['args'].acceptance_id = 'd079_calibration_acceptance_v2_n12_25g83_r1'
             with self.assertRaisesRegex(issuer.PrepareRefusal, 'identifier'):
                 self.prepare(f)
+
+    def test_campaign_record_is_blind_committed_before_B_and_pins_are_bytes(self):
+        from tests.fixtures.epoch_bootstrap.revision6 import commit
+        with tempfile.TemporaryDirectory() as tmp:
+            f = self.fixture(Path(tmp)/'case')
+            with patch.object(issuer, 'load_calibration_ledger_snapshot', return_value=f['snapshot']), patch.object(
+                    issuer, '_read_member_evidence', side_effect=AssertionError('B read')):
+                with self.assertRaisesRegex(issuer.PrepareRefusal, 'campaign R9 bytes are not committed'):
+                    issuer._prepare_candidate(f['args'])
+            path = Path(f['args'].out).with_name('r9_campaign.json')
+            record = json.loads(path.read_bytes())
+            self.assertEqual(len(record['clauses']), 5)
+            self.assertTrue(all(record['clauses'].values()))
+            self.assertEqual([len(w['slots']) for w in record['sessions']], [12, 12])
+            self.assertEqual(record['cap_rule_text_sha256'], f['block']['pins']['cap_rule_text_sha256'])
+            self.assertNotIn('b_fiducial', path.read_text())
+            self.assertFalse(Path(f['args'].out).exists())
+            for name, pin_path in record['pinned_files'].items():
+                file = Path(pin_path['path'])
+                original = file.read_bytes()
+                file.write_bytes(original + b'changed')
+                with self.subTest(pin=name), patch.object(issuer, 'load_calibration_ledger_snapshot', return_value=f['snapshot']), patch.object(
+                        issuer, '_read_member_evidence', side_effect=AssertionError('B read')):
+                    with self.assertRaisesRegex(issuer.PrepareRefusal, 'file digest disagrees'):
+                        issuer._prepare_candidate(f['args'])
+                file.write_bytes(original)
+            self.assertEqual(self.prepare(f)['derivation_corpus']['n'], 24)
+
+    def test_no_recording_is_listed_and_not_counted_or_a_stop(self):
+        from dataclasses import replace
+        with tempfile.TemporaryDirectory() as tmp:
+            f = self.fixture(Path(tmp)/'case')
+            sessions = f['snapshot'].bracket_sessions
+            records = self.records(f)
+            first = sessions[0]
+            slot, row = next(iter(first.finalized_slots.items()))
+            hashes = dict(row.artifact_sha256)
+            hashes.pop('raw/powermetrics.plist')
+            slots = dict(first.finalized_slots)
+            slots[slot] = replace(row, artifact_sha256=hashes, disposition='ordinary-invalid')
+            first = replace(first, finalized_slots=slots)
+            r9 = records[first.session_id]['r9']
+            r9['captures'][0].update(has_recording=False, cells=None, ratio=None, median_frame_ms=None,
+                median_frame_reported=False, cap_trigger=None, counted=False, disposition='ordinary-invalid',
+                ledger_reason='ordinary-invalid')
+            r9.update(counted=11, valid=11)
+            result = issuer.revision_six_count_replay([first], records, f['block'], set())
+            self.assertEqual((result['decision'], result['counted']), ('NEXT_WINDOW', 11))
+            self.assertEqual(result['sessions'][0]['stops'], [])
+            r9['captures'][0]['cells'] = 1
+            with self.assertRaises(issuer.PrepareRefusal):
+                issuer.revision_six_count_replay([first], records, f['block'], set())
+
+    def test_revision6_misnamed_session_cannot_dispatch_as_revision5(self):
+        from dataclasses import replace
+        with tempfile.TemporaryDirectory() as tmp:
+            f = self.fixture(Path(tmp)/'case')
+            first, second = f['snapshot'].bracket_sessions
+            misnamed = replace(first, session_id='misnamed-revision6-window')
+            f['snapshot'] = replace(f['snapshot'], bracket_sessions=(misnamed, second))
+            f['args'].registration_session_id = [misnamed.session_id, second.session_id]
+            with patch.object(issuer, 'revision_six_records', side_effect=AssertionError('records read')):
+                with self.assertRaisesRegex(issuer.PrepareRefusal, 'pattern mismatch'):
+                    self.prepare(f)
 
     def test_digest_authentication_precedes_parsing_and_commit_is_required(self):
         from tests.fixtures.epoch_bootstrap.revision6 import rewrite_record, commit
@@ -386,6 +460,9 @@ class RevisionSixConsumerTests(unittest.TestCase):
             result = self.replay(f)
             self.assertEqual([row['window_label'] for row in result['sessions']], [None, 'C1', 'C2'])
             self.assertEqual(result['counted'], 24)
+            first = replace(f['snapshot'].bracket_sessions[0], state='finalized')
+            terminal_null = issuer.revision_six_count_replay([first], self.records(f), f['block'], set())
+            self.assertEqual(terminal_null['decision'], 'NEXT_WINDOW')
             self.assertEqual(self.prepare(f)['derivation_corpus']['n'], 24)
             last = f['snapshot'].bracket_sessions[-1]
             opened = replace(last, state='open')
@@ -428,6 +505,14 @@ class RevisionSixConsumerTests(unittest.TestCase):
                 issued['acceptance_id']: row, 'd079_calibration_acceptance_v2_n17_r8': bracketing._D102_N17_DERIVATION}), patch.dict(
                     bracketing.ISSUED_ACCEPTANCE_REGISTRY, {issued['acceptance_id']: {'file_sha256':'0'*64}}):
                 self.assertTrue(bracketing._valid_acceptance_bound(issued))
+                import builtins
+                original_import = builtins.__import__
+                def unavailable(name, *args, **kwargs):
+                    if name == 'scripts.issue_calibration_acceptance_generation':
+                        raise ImportError('issuer unavailable')
+                    return original_import(name, *args, **kwargs)
+                with patch.object(builtins, '__import__', side_effect=unavailable):
+                    self.assertFalse(bracketing._valid_acceptance_bound(issued))
                 mutations = [lambda p: p['decimal_derivation']['within_window_prediction_derivation'].update(degrees_of_freedom=23),
                     lambda p: p['decimal_derivation']['within_window_prediction_derivation'].update(rule=issuer.TWO_DRAW_PREDICTION_RULE),
                     lambda p: p['decimal_derivation']['within_window_prediction_derivation'].update(prediction_99_within_window_two_draw_s='0.01'),
@@ -515,11 +600,10 @@ class RevisionSixConsumerTests(unittest.TestCase):
             harvest = json.loads(f['paths'][0].read_bytes())
             root = Path(harvest['custody_root'])
             start = json.loads((root/harvest['start_conditions']['path']).read_bytes())
-            original_off = start['evidence']['b_network_time_off_receipt']
-            start['evidence']['b_network_time_off_receipt'] = dict(start['evidence']['a_prior_session_manifest'])
-            start['evidence']['f_launch_context'] = original_off
+            start['evidence']['b_any_blind_name'] = start['evidence'].pop('b_blind_checks')
+            start['evidence']['f_any_off_name'] = start['evidence'].pop('f_network_time_off_receipt')
             issuer.revision_six_start_conditions(start, root, f['block'])
-            start['evidence']['f_launch_context']['sha256'] = 'f'*64
+            start['evidence']['f_any_off_name']['sha256'] = 'f'*64
             with self.assertRaisesRegex(issuer.PrepareRefusal, 'sha256 disagreement'):
                 issuer.revision_six_start_conditions(start, root, f['block'])
 
@@ -624,7 +708,7 @@ class RevisionSixConsumerTests(unittest.TestCase):
             def reboot_start(r):
                 r.update(boot_id='rebooted', written_monotonic_s=2020.0)
                 r['chain_start_admitted']['monotonic_s'] = 2000.0
-                r['evidence']['b_network_time_off_receipt']['sha256'] = hashlib.sha256(off_path.read_bytes()).hexdigest()
+                r['evidence']['f_network_time_off_receipt']['sha256'] = hashlib.sha256(off_path.read_bytes()).hexdigest()
             rewrite_record(path, 'start_conditions', reboot_start)
             h = json.loads(path.read_bytes())
             h['boot_id'] = 'rebooted'

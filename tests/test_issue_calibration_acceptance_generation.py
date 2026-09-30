@@ -1643,7 +1643,8 @@ class PrepareCandidateTest(unittest.TestCase):
         text = issuer.__doc__ or ""
         self.assertNotIn("reserved for S4", text)
         self.assertIn("`check` is READ-ONLY", text)
-        self.assertIn("WRITES EXACTLY ONE FILE", text)
+        self.assertIn("For historical revisions", text)
+        self.assertIn("first writes the blind campaign R9 record", text)
         self.assertIn("no default destination", text)
         self.assertIn("candidate_not_issued", text)
         self.assertIn("D-138 transaction", text)
@@ -1654,7 +1655,7 @@ class PrepareCandidateTest(unittest.TestCase):
         # argparse rewraps the docstring, so normalise before matching.
         parser = issuer.build_parser()
         self.assertIn(
-            "WRITES EXACTLY ONE FILE", " ".join(parser.format_help().split())
+            "first writes the blind campaign R9 record", " ".join(parser.format_help().split())
         )
 
     # 93 wording: the selection string says what the code does
@@ -2297,7 +2298,7 @@ class BatteryFloatRevisionFiveTests(unittest.TestCase):
             "--head-pin", str(fixture["pin"]), "--repo-root", str(fixture["root"]),
             "--preregistration", str(self.registration),
             "--preregistration-sha256", self.registration_sha,
-            "--predecessor-acceptance", str(issuer.DEFAULT_ACCEPTANCE_BOUND_PATH),
+            "--predecessor-acceptance", str(ROOT / "configs/calibration/calibration_acceptance_d079_v2_n17_r7.json"),
             "--registration-session-id", "W1", "--registration-session-id", "W2",
             "--d125-ruling", D125_REFERENCE,
             "--out", str(candidate)], cwd=fixture["root"],
@@ -2364,7 +2365,7 @@ class BatteryFloatRevisionFiveTests(unittest.TestCase):
             "--head-pin", str(fixture["pin"]), "--repo-root", str(fixture["root"]),
             "--preregistration", str(self.registration),
             "--preregistration-sha256", self.registration_sha,
-            "--predecessor-acceptance", str(issuer.DEFAULT_ACCEPTANCE_BOUND_PATH),
+            "--predecessor-acceptance", str(ROOT / "configs/calibration/calibration_acceptance_d079_v2_n17_r7.json"),
             *(item for session_id in registration
               for item in ("--registration-session-id", session_id)),
             "--d125-ruling", D125_REFERENCE, "--out", str(out), *extra,

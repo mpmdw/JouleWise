@@ -553,6 +553,18 @@ def build_spec(args: argparse.Namespace) -> tuple[WrapperSpec, Path, bytes]:
     _require_absolute("out path", str(out_path))
     _census_clean("night custody root", plan.custody_root)
     _census_clean("session id", args.session_id)
+    if plan.registration_path:
+        registration = Path(plan.registration_path)
+        if not registration.is_absolute():
+            registration = Path(plan.measurement_root) / registration
+        if "# Revision 6 (" in registration.read_text():
+            from scripts.issue_calibration_acceptance_generation import revision_six_declaration, PrepareRefusal
+            try:
+                declaration = revision_six_declaration(registration.read_text())
+            except PrepareRefusal as error:
+                raise GenerationRefusal(str(error)) from error
+            if not re.fullmatch(declaration["sessions"]["session_id_pattern"], args.session_id):
+                raise GenerationRefusal("Revision 6 session-id pattern mismatch")
 
     measurement_root = _require_absolute("measurement_root", plan.measurement_root)
     runs_root = args.runs_root or f"{plan.custody_root}/runs"
@@ -937,14 +949,20 @@ def start_manifest_from_args(args, plan_id):
             raise GenerationRefusal("provide first-revision6-window-reason or all prior-session/harvest/timestamp arguments")
         path = args.prior_harvest_json.expanduser().resolve(strict=True)
         raw = path.read_bytes()
-        if not isinstance(json.loads(raw), dict):
-            raise GenerationRefusal("prior harvest must be a JSON object")
+        harvest = json.loads(raw)
+        decision = harvest.get("next_window") if isinstance(harvest, dict) else None
+        decision_raw = (json.dumps(decision, indent=2, sort_keys=True, allow_nan=False) + "\n").encode()
+        decision_sha256 = hashlib.sha256(decision_raw).hexdigest()
+        if (not isinstance(decision, dict) or decision.get("verdict") != "NEXT_WINDOW"
+                or harvest.get("next_window_sha256") != decision_sha256):
+            raise GenerationRefusal("prior harvest count decision must authenticate and allow NEXT_WINDOW")
         value = {"schema": START_MANIFEST_SCHEMA, "plan_id": plan_id,
                  "prior_revision6_session": {
                      "session_id": args.prior_revision6_session, "harvest_file": str(path),
                      "harvest_sha256": hashlib.sha256(raw).hexdigest(),
                      "started_epoch_s": args.prior_started_epoch_s,
-                     "terminal_epoch_s": args.prior_terminal_epoch_s}}
+                     "terminal_epoch_s": args.prior_terminal_epoch_s,
+                     "decision_sha256": decision_sha256}}
     return _validate_start_manifest(value, plan_id)
 
 

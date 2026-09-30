@@ -49,7 +49,7 @@ class PrewindowCheckTests(unittest.TestCase):
             commands = {
                 "ps": "\n".join(
                     ["#!/bin/sh"]
-                    + [f"printf '%s\\n' '{line}'" for line in process_lines]
+                    + [f"printf '%s\\n' '{line.split()[9] if line.startswith('edr ') else line}'" for line in process_lines]
                 ),
                 "uptime": (
                     "#!/bin/sh\nprintf '%s\\n' "
@@ -119,14 +119,16 @@ class PrewindowCheckTests(unittest.TestCase):
         self.assertEqual(refused.returncode, 1)
         self.assertIn("1 agent/measurement process(es) already running", refused.stdout)
 
-    def test_driver_path_containing_agent_string_is_not_exempt(self):
+    def test_driver_arguments_containing_agent_strings_are_allowed(self):
         driver_command = (
             f"edr 201 0.0 0.0 0 0 ?? S 0:00.00 {sys.executable} "
             "/tmp/.claude/checkout/scripts/run_night.py run --plan /tmp/window/plan.json"
         )
-        refused = self._check_lines([driver_command])
-        self.assertEqual(refused.returncode, 1)
-        self.assertIn("1 agent/measurement process(es) already running", refused.stdout)
+        for argument in ("/tmp/claude/x.json", "/tmp/codex/x.json"):
+            admitted = self._check_lines([driver_command + " " + argument])
+            self.assertEqual(admitted.returncode, 0, admitted.stdout + admitted.stderr)
+        self.assertEqual(self._check_lines(["/usr/local/bin/claude"]).returncode, 1)
+        self.assertEqual(self._check_lines(["/usr/local/bin/codex"]).returncode, 1)
         admitted = self._check_lines([driver_command.replace("/.claude/", "/measurement/")])
         self.assertEqual(admitted.returncode, 0, admitted.stdout + admitted.stderr)
 

@@ -757,15 +757,24 @@ runpy.run_path(script, run_name='__main__')
         self.custody.mkdir(exist_ok=True)
         manifest = {"schema": helper.START_MANIFEST_SCHEMA, "plan_id": "night-plan",
                     "prior_revision6_session": None, "reason": "first Revision 6 session"}
-        if manifest_case in ("prior", "bad-harvest", "future-prior"):
+        if manifest_case in ("prior", "bad-harvest", "future-prior", "stop-prior", "bad-decision"):
             harvest = self.root / "harvest.json"
-            harvest.write_text('{"decision": "NEXT_WINDOW"}\n')
+            harvest.write_text(json.dumps({'next_window': {'verdict': 'NEXT_WINDOW'}, 'next_window_sha256': hashlib.sha256(b'{\n  \"verdict\": \"NEXT_WINDOW\"\n}\n').hexdigest()}) + '\n')
             manifest = {"schema": helper.START_MANIFEST_SCHEMA, "plan_id": "night-plan",
                         "prior_revision6_session": {
                             "session_id": "derivation-prior", "harvest_file": str(harvest),
                             "harvest_sha256": hashlib.sha256(harvest.read_bytes()).hexdigest(),
                             "started_epoch_s": self.t0_epoch_s - 10000,
-                            "terminal_epoch_s": self.t0_epoch_s - 200}}
+                            "terminal_epoch_s": self.t0_epoch_s - 200,
+                            "decision_sha256": json.loads(harvest.read_bytes())["next_window_sha256"]}}
+        if manifest_case == "stop-prior":
+            decision = {"verdict": "STOP_TO_REVIEW"}
+            raw = (json.dumps(decision, indent=2, sort_keys=True) + "\n").encode()
+            harvest.write_text(json.dumps({"next_window": decision, "next_window_sha256": hashlib.sha256(raw).hexdigest()}))
+            manifest["prior_revision6_session"].update(harvest_sha256=hashlib.sha256(harvest.read_bytes()).hexdigest(),
+                decision_sha256=hashlib.sha256(raw).hexdigest())
+        if manifest_case == "bad-decision":
+            manifest["prior_revision6_session"]["decision_sha256"] = "0" * 64
         if manifest_case == "bad-harvest":
             manifest["prior_revision6_session"]["harvest_sha256"] = "0" * 64
         if manifest_case == "future-prior":
@@ -810,6 +819,11 @@ runpy.run_path(script, run_name='__main__')
             if outcome == "launch error":
                 raise OSError("injected execution failure")
             return subprocess.CompletedProcess(argv, outcome)
+        real_evaluate = self.driver.evaluate_night
+        def evaluate(*args, **kwargs):
+            events.append("t0 checks")
+            self.assertIn("dwell", events)
+            return real_evaluate(*args, **kwargs)
         original_write = helper._write_bytes_exclusive
         def write_record(path, payload):
             original_write(path, payload)
@@ -837,6 +851,7 @@ runpy.run_path(script, run_name='__main__')
                 (helper.network_time_off, "set_network_time_off", {"side_effect": set_off}),
                 (helper.network_time_off, "boot_id", {"return_value": BOOT_UUID.upper()}),
                 (helper.network_time_off, "seconds_since_receipt", {"side_effect": settled}),
+                (self.driver, "evaluate_night", {"side_effect": evaluate}),
                 (self.driver, "_claim_chain_start", {"new": claim}),
                 (self.driver, "_run_chain_once", {"new": chain}),
             ):
@@ -945,6 +960,8 @@ runpy.run_path(script, run_name='__main__')
             self.assertIsNone(record["chain_start_admitted"])
         for key, item in record["evidence"].items():
             required = {"path", "sha256"}
+            if key == "b_blind_checks":
+                required.add("decision_sha256")
             if key == "f_network_time_off_receipt":
                 required.add("settled_seconds")
             if key == "g_clean_dwell":
@@ -982,13 +999,23 @@ runpy.run_path(script, run_name='__main__')
         manifest = json.loads((self.custody / record["evidence"]["a_prior_session_manifest"]["path"]).read_bytes())
         self.assertIsNone(manifest["prior_revision6_session"])
         self.assertIn("first Revision 6", manifest["reason"])
-        self.assertEqual(record["evidence"]["a_prior_session_manifest"], record["evidence"]["b_blind_checks"])
+        self.assertIsNone(record["evidence"]["b_blind_checks"]["decision_sha256"])
         self.assertIsNone(record["gap_s"])
         self.assertIsNone(record["start_to_start_interval_s"])
         self.assertEqual(record["chain_start_admitted"], {"epoch_s": self.t0_epoch_s + 610, "monotonic_s": 10600.0})
         artifacts = {item["path"] for item in json.loads((self.custody / "night/result.json").read_bytes())["artifacts"]}
         self.assertTrue({"start_conditions_manifest.json", "night/start_conditions.json",
                          "night/clean_dwell.json", "night/clean_dwell.output.txt"} <= artifacts)
+
+    def test_prior_stop_and_decision_tamper_refuse_before_OFF_and_chain(self):
+        for case in ("stop-prior", "bad-decision"):
+            with self.subTest(case=case):
+                self.custody = self.root / case
+                code, record, claim, chain = self._run_with_clean_dwell(0, manifest_case=case)
+                self.assertEqual(code, self.driver.EXIT_REFUSED)
+                claim.assert_not_called()
+                chain.assert_not_called()
+                self.assertNotIn("OFF receipt", self.dwell_events)
 
     def test_start_manifest_prior_session_binds_harvest_and_intervals(self):
         self.assertEqual(self._run_with_clean_dwell(0, manifest_case="prior")[0], 0)
@@ -1135,6 +1162,17 @@ runpy.run_path(script, run_name='__main__')
         self.assertEqual("REFUSED", result["verdict"])
         self.assertEqual("night_refused_agent_present", result["aborted_reason"])
         self.assertFalse((night / "go_receipt.json").exists())
+
+    def test_agent_appearing_during_dwell_refuses_fresh_t0_census(self):
+        self.source.census_responses = [
+            _probe(night_gate.AGENT_CENSUS_ARGV, exit_code=1),
+            _probe(night_gate.AGENT_CENSUS_ARGV, stdout="20 claude\n")]
+        code, calls = self._run_night()
+        self.assertEqual(code, 3)
+        self.assertEqual(calls, [])
+        self.driver._admit_network_time_off.assert_called_once()
+        receipt = json.loads((self.custody / "night/receipt.json").read_bytes())
+        self.assertEqual(receipt["refusal"]["reason"], "night_refused_agent_present")
 
     def test_go_spawns_chain_once_even_if_the_chain_fails(self) -> None:
         exit_code, calls = self._run_night(return_code=17)
@@ -1383,6 +1421,7 @@ runpy.run_path(script, run_name='__main__')
     def test_census_refusal_terminates_group_and_records_abort(self) -> None:
         self.source.census_responses = [
             _probe(night_gate.AGENT_CENSUS_ARGV, exit_code=1),
+            _probe(night_gate.AGENT_CENSUS_ARGV, exit_code=1),
             _probe(night_gate.AGENT_CENSUS_ARGV, stdout="agent\n"),
         ]
         calls, spawn = self._popen_recorder(running_once=True)
@@ -1414,7 +1453,7 @@ runpy.run_path(script, run_name='__main__')
             if argv != night_gate.AGENT_CENSUS_ARGV:
                 return self.source.run(argv)
             processes = [peer]
-            if foreign_after_go and census_calls:
+            if foreign_after_go and len(census_calls) >= 2:
                 processes.append("42 /usr/bin/claude -p inspect /usr/bin/pgrep")
             hits = [line for line in processes if re.search(argv[-1], line)]
             census_calls.append(argv)
@@ -1453,6 +1492,7 @@ runpy.run_path(script, run_name='__main__')
 
     def test_idle_agent_appearing_after_go_still_aborts_real_chain(self) -> None:
         self.source.census_responses = [
+            _probe(night_gate.AGENT_CENSUS_ARGV, exit_code=1),
             _probe(night_gate.AGENT_CENSUS_ARGV, exit_code=1),
             _probe(night_gate.AGENT_CENSUS_ARGV, stdout="20 claude\n"),
         ]
@@ -2107,6 +2147,7 @@ runpy.run_path(script, run_name='__main__')
 
     def test_unproven_chain_termination_records_unkilled_and_spawns_no_courier(self) -> None:
         self.source.census_responses = [
+            _probe(night_gate.AGENT_CENSUS_ARGV, exit_code=1),
             _probe(night_gate.AGENT_CENSUS_ARGV, exit_code=1),
             _probe(night_gate.AGENT_CENSUS_ARGV, stdout="agent\n"),
         ]

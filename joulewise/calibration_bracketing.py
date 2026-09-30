@@ -1119,6 +1119,9 @@ def _valid_acceptance_bound(value: Any) -> bool:
     if revision_six:
         try:
             from scripts.issue_calibration_acceptance_generation import PrepareRefusal, within_window_prediction
+        except ImportError:
+            return False
+        try:
             bindings = {}
             for member in corpus["members"]:
                 content_id = content_id_from_artifact_hashes({

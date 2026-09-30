@@ -126,6 +126,15 @@ class CapReplayHarnessTests(BlindOutputAssertions, unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertEqual(result["need"], 101)
 
+    def test_revision6_report_never_decodes_or_compares_bounds(self):
+        evidence = dict(self.evidence, b_fiducial_s={"opaque": ["not a bound"]})
+        (self.capture / "instrument_evidence.json").write_text(json.dumps(evidence))
+        with patch.object(production, "rederive_detection_from_artifacts", return_value=self.fake_detection()), patch.object(
+                harness, "_stored_reproduced", side_effect=AssertionError("stored bound read")):
+            result = harness.replay_capture(self.capture, "REPORT", compare_stored_bound=False)
+        self.assertNotIn("stored B reproduced", result)
+        self.assertEqual(result["cells"], 101)
+
     def test_clock_refusal_has_no_need_and_reports_native_median(self):
         with patch.object(production, "rederive_detection_from_artifacts",
                           side_effect=ValueError("calibration trace anchor is unresolved")):

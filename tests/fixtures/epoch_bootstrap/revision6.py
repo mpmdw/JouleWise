@@ -54,15 +54,26 @@ def window_records(root, session, block, *, previous=None, adverse=False):
            'exit_code': 0, 'stdout': issuer.network_time_off.EXPECTED_STDOUT, 'stderr': 'Error:-99\n',
            'boot_id': 'synthetic-boot', 'plan_id': session.plan_id, 'window_id': session.window_id,
            'epoch_s': start - 1000, 'monotonic_s': monotonic - 1000}
+    prior = None
+    if previous is not None:
+        prior_source = root / previous / 'harvest.json'
+        prior_path = custody / 'night/prior_harvest.json'
+        prior_path.parent.mkdir(parents=True, exist_ok=True)
+        prior_path.write_bytes(prior_source.read_bytes())
+        prior_harvest = json.loads(prior_path.read_bytes())
+        prior = {'session_id': previous, 'harvest_file': str(prior_path),
+                 'harvest_sha256': hashlib.sha256(prior_path.read_bytes()).hexdigest(),
+                 'decision_sha256': prior_harvest['next_window_sha256']}
+    manifest = {'prior_revision6_session': prior, 'reason': 'first session' if prior is None else None}
+    manifest_ref = write('night/start_conditions_manifest.json', canonical(manifest))
     evidence = {
-        'a_prior_session_manifest': write('night/start_conditions_manifest.json', canonical({
-            'prior_revision6_session': previous, 'reason': 'first session' if previous is None else 'terminal NEXT_WINDOW'})),
-        'b_network_time_off_receipt': {**write('night/network_time_off.json', canonical(off)), 'settled_seconds': 1000.0},
+        'a_prior_session_manifest': manifest_ref,
+        'b_blind_checks': {**manifest_ref, 'decision_sha256': prior['decision_sha256'] if prior else None},
         'c_agent_census': write('night/gate.json', canonical({'agent_census': 0, 'thermal': 100, 'battery': 'pass'})),
     }
     evidence['d_thermal'] = dict(evidence['c_agent_census'])
     evidence['e_battery_float'] = dict(evidence['c_agent_census'])
-    evidence['f_launch_context'] = write('night/launch_context.json', canonical({'ProcessType': 'Interactive'}))
+    evidence['f_network_time_off_receipt'] = {**write('night/network_time_off.json', canonical(off)), 'settled_seconds': 1000.0}
     evidence['g_clean_dwell'] = {**write('night/prewindow_check.out', b'continuous clean dwell 600/600s (check 21)\nREADY after 10 min.\n'),
         'script_sha256': block['pins']['prewindow_check_sha256'], 'exit': 0,
         'passed_epoch_s': start - .1, 'deadline_epoch_s': start}
@@ -87,6 +98,8 @@ def window_records(root, session, block, *, previous=None, adverse=False):
         r9['abort_reason'] = session.abort_reason
     harvest = {'schema': 'joulewise.harvest_window.v1', 'custody_root': str(custody),
                'boot_id': 'synthetic-boot', 'window_end': None,
+               'next_window': {'verdict': 'NEXT_WINDOW'},
+               'next_window_sha256': hashlib.sha256(canonical({'verdict': 'NEXT_WINDOW'})).hexdigest(),
                'start_conditions': write('night/start_conditions.json', canonical(start_record)),
                'r9_window': write('harvest/r9_window.json', canonical(r9))}
     if captures:
@@ -100,10 +113,17 @@ def window_records(root, session, block, *, previous=None, adverse=False):
 
 def build(root, *, slots=None, second_slots=None, third_slots=None, null_first=False):
     block = declaration()
+    pin_files = {"chain": root / 'fixture/scripts/night_chains/calibration_derivation_only.zsh',
+                 "validator": root / 'fixture/scripts/validate_powermetrics_fiducial.py',
+                 "cap_rule_text": root / 'cap-rule.md', "roster": root / 'roster.json'}
+    for name, path in pin_files.items():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes((name + ' synthetic pinned bytes\n').encode())
+        block['pins'][name + '_sha256'] = hashlib.sha256(path.read_bytes()).hexdigest()
     predecessor = json.loads(R7.read_bytes())
     predecessor['acceptance_id'] = 'd079_calibration_acceptance_v2_n17_r8'
     predecessor_path = root / 'p8.json'
-    root.mkdir(parents=True)
+    root.mkdir(parents=True, exist_ok=True)
     predecessor_path.write_bytes(canonical(predecessor))
     block['predecessor'].update(file_sha256=hashlib.sha256(predecessor_path.read_bytes()).hexdigest(),
                                derivation_sha256=predecessor['derivation_sha256'])
@@ -142,6 +162,7 @@ def build(root, *, slots=None, second_slots=None, third_slots=None, null_first=F
         argv += ['--registration-session-id', session.session_id]
     for path in paths:
         argv += ['--harvest-record', str(path)]
+    argv += ['--cap-rule-text', str(pin_files['cap_rule_text']), '--roster', str(pin_files['roster'])]
     return {'args': issuer.build_parser().parse_args(argv), 'snapshot': snapshot, 'block': block,
             'paths': paths, 'predecessor': predecessor, 'fixture': fixture}
 

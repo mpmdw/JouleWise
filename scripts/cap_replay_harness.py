@@ -135,8 +135,9 @@ def _stored_reproduced(detection, evidence: dict) -> bool:
     )
 
 
-def replay_capture(capture: Path, mode: str, *, raw_path: Path | None = None) -> dict:
-    """Return only blind work/cadence information, plus REPORT's boolean."""
+def replay_capture(capture: Path, mode: str, *, raw_path: Path | None = None,
+                   compare_stored_bound: bool = True) -> dict:
+    """REPORT can omit comparison entirely for precommit Revision 6 harvest."""
     if mode not in {"SIZING", "REPORT"}:
         raise ValueError("mode must be SIZING or REPORT")
     started = time.monotonic()
@@ -146,11 +147,12 @@ def replay_capture(capture: Path, mode: str, *, raw_path: Path | None = None) ->
         "disposition": "not_replayed", "trigger": None,
         "reason": None, "replay_failed": False,
     }
-    if mode == "REPORT":
+    if mode == "REPORT" and compare_stored_bound:
         result["stored B reproduced"] = False
     try:
         evidence = _evidence_inputs(
-            retained_bytes(capture / "instrument_evidence.json"), mode
+            retained_bytes(capture / "instrument_evidence.json"),
+            mode if compare_stored_bound else "BLIND"
         )
         if evidence.get("protocol_id") != production.PROTOCOL_ID:
             raise ReplayInputError("protocol_v3_required")
@@ -212,7 +214,7 @@ def replay_capture(capture: Path, mode: str, *, raw_path: Path | None = None) ->
         if (mode == "SIZING" and complete and trigger is None
                 and not result.get("rule_refused")):
             result["need"] = cells
-        if mode == "REPORT":
+        if mode == "REPORT" and compare_stored_bound:
             result["stored B reproduced"] = _stored_reproduced(detection, evidence)
     except ReplayInputError as exc:
         result.update(reason=str(exc), replay_failed=True)

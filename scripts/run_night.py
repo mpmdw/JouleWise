@@ -3035,13 +3035,15 @@ def _validate_start_manifest(value, plan_id):
         if (set(value) != {"schema", "plan_id", "prior_revision6_session"}
                 or not isinstance(prior, dict) or set(prior) != {
                     "session_id", "harvest_file", "harvest_sha256",
-                    "started_epoch_s", "terminal_epoch_s"}
+                    "started_epoch_s", "terminal_epoch_s", "decision_sha256"}
                 or not isinstance(prior["session_id"], str)
                 or not re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9._-]*", prior["session_id"])
                 or not isinstance(prior["harvest_file"], str)
                 or not Path(prior["harvest_file"]).is_absolute()
                 or not isinstance(prior["harvest_sha256"], str)
-                or not re.fullmatch(r"[0-9a-f]{64}", prior["harvest_sha256"])):
+                or not re.fullmatch(r"[0-9a-f]{64}", prior["harvest_sha256"])
+                or not isinstance(prior["decision_sha256"], str)
+                or not re.fullmatch(r"[0-9a-f]{64}", prior["decision_sha256"])):
             raise ValueError("prior-session manifest is malformed")
         stamps = [prior[key] for key in ("started_epoch_s", "terminal_epoch_s")]
         if (any(type(stamp) not in (int, float) or not math.isfinite(stamp)
@@ -3061,8 +3063,13 @@ def _read_start_manifest(plan):
         harvest = Path(prior["harvest_file"])
         if harvest.is_symlink() or _sha256_path(harvest) != prior["harvest_sha256"]:
             raise ValueError("prior-session harvest digest mismatch")
-        if not isinstance(json.loads(harvest.read_bytes()), dict):
-            raise ValueError("prior-session harvest must be a JSON object")
+        record = json.loads(harvest.read_bytes())
+        decision = record.get("next_window") if isinstance(record, dict) else None
+        raw_decision = (json.dumps(decision, indent=2, sort_keys=True, allow_nan=False) + "\n").encode()
+        if (not isinstance(decision, dict) or decision.get("verdict") != "NEXT_WINDOW"
+                or hashlib.sha256(raw_decision).hexdigest() != prior["decision_sha256"]
+                or record.get("next_window_sha256") != prior["decision_sha256"]):
+            raise ValueError("prior-session count decision must authenticate and allow NEXT_WINDOW")
         if prior["terminal_epoch_s"] > time.time():
             raise ValueError("prior session is not terminal before this start")
     return value, {"file": str(path), "sha256": hashlib.sha256(raw).hexdigest()}
@@ -3118,6 +3125,7 @@ def _write_start_conditions(plan, night_dir, manifest=None, manifest_evidence=No
     if manifest_evidence and entries["a_prior_session_manifest"]["sha256"] != manifest_evidence["sha256"]:
         errors.append("start-conditions custody changed during admission")
     prior = manifest.get("prior_revision6_session")
+    entries["b_blind_checks"]["decision_sha256"] = prior.get("decision_sha256") if prior else None
     if prior is not None:
         try:
             if _sha256_path(Path(prior["harvest_file"])) != prior["harvest_sha256"]:
@@ -3350,6 +3358,25 @@ def run_night(
             courier_bin_substitution=courier_substitution,
         )
 
+    derivation_admission = None
+    rehearsal_effective = rehearsal or plan.receipt_class == "REHEARSAL_STUB"
+    if (not rehearsal_effective and plan.receipt_class == "DIAGNOSTIC_NO_PACK"
+            and initial_refusal is None and initial_probe.exit_code == 1 and initial_probe.stdout == ""
+            and Path(plan.chain_path).is_file()
+            and night_gate.probe_payload_kind(Path(plan.chain_path).read_text()) != "quiet_predicate_evidence"):
+        try:
+            manifest, manifest_evidence = _read_start_manifest(plan)
+            budget = _derivation_start_budget(plan)
+            _admit_network_time_off(plan, night_dir,
+                during_settle=lambda: _admit_derivation_clean_dwell(plan, night_dir, budget), budget=budget)
+            derivation_admission = (manifest, manifest_evidence, budget)
+        except (OSError, ValueError, subprocess.SubprocessError) as error:
+            _write_standard_refusal_result(custody_root, night_dir, plan,
+                _CODES["probe_error"], str(error), started_epoch_s, started_monotonic_ns)
+            return _finish_reporting(custody_root, night_dir, plan, EXIT_REFUSED,
+                resolved_courier, deadman_epoch_s=deadman_epoch_s,
+                courier_bin_substitution=courier_substitution)
+
     prepared = arm_state = None
     is_pack = plan.receipt_class == "TRANSACTION_PACK"
     if is_pack:
@@ -3368,13 +3395,13 @@ def run_night(
             receipt = _pack_refused_receipt(plan, error, probes)
     elif plan.quiet_admission is not None:
         receipt = bind_until_quiet(plan, probes, night_dir,
-            initial_census=(initial_probe, initial_refusal),
+            initial_census=None if derivation_admission is not None else (initial_probe, initial_refusal),
             start_epoch_s=bind_start_epoch, start_monotonic=bind_start_monotonic)
     else:
         # Reuse the first census for the legacy evaluator's census slot; no
         # filesystem or command probe preceded the driver's initial census.
         original_run = probes.run
-        cached = [initial_probe]
+        cached = [] if derivation_admission is not None else [initial_probe]
         def first_census(argv):
             if tuple(argv) == night_gate.AGENT_CENSUS_ARGV and cached:
                 return cached.pop()
@@ -3482,11 +3509,7 @@ def run_night(
     if not rehearsal_effective and night_gate.probe_payload_kind(chain_path.read_text()) != "quiet_predicate_evidence":
         try:
             if plan.receipt_class == "DIAGNOSTIC_NO_PACK":
-                manifest, manifest_evidence = _read_start_manifest(plan)
-                budget = _derivation_start_budget(plan)
-                _admit_network_time_off(plan, night_dir,
-                    during_settle=lambda: _admit_derivation_clean_dwell(plan, night_dir, budget),
-                    budget=budget)
+                manifest, manifest_evidence, budget = derivation_admission
                 _write_start_conditions(plan, night_dir, manifest, manifest_evidence, budget)
             else:
                 _admit_network_time_off(plan, night_dir)

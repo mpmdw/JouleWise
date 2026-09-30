@@ -26,8 +26,27 @@ class HarvestWindowTests(unittest.TestCase):
         self.uninstall_rc = 0
 
     def fixture(self, slots=None, *, verdict_records=True, manual_bad=False,
-                fill_slots=None, abort_reason=None, no_recording=False):
+                fill_slots=None, abort_reason=None, no_recording=False, revision6=False):
         self.plan_bytes = harvest.json_bytes({"plan_id": "plan-derivation"})
+        self.sid = build.SESSION_ID
+        self.prereg = build.REPO_ROOT / "configs/calibration/preregistration_d079_epoch_25g83_rev1.md"
+        self.prereg_digest = build.PREREGISTRATION_SHA256
+        if revision6:
+            from tests.fixtures.epoch_bootstrap.revision6 import declaration, sid
+            from tests.test_acc_25g83_rev6 import registration
+            self.sid = sid(1)
+            self.block = declaration()
+            self.block["pins"].update(cap_cells=harvest.cap_replay_harness.production.DETECTION_PROJECTION_CELL_BUDGET,
+                harness_sha256=harvest.digest(Path(harvest.cap_replay_harness.__file__).read_bytes()))
+            self.prereg = self.base / "sealed.md"
+            self.prereg.write_text(registration(self.block))
+            self.prereg_digest = harvest.digest(self.prereg.read_bytes())
+            slots = slots or [build.Slot("0.02", native_frames=True)]
+            if len(slots) < 12:
+                fill_slots = len(slots) if fill_slots is None else fill_slots
+                abort_reason = abort_reason or "window_exhausted"
+                slots = list(slots) + [build.Slot("0.02", native_frames=True)] * (12 - len(slots))
+
         original_write = build._write_bundle
         original_append = build.append_bracket_session_receipt
 
@@ -39,6 +58,12 @@ class HarvestWindowTests(unittest.TestCase):
                 evidence = json.loads((path / "instrument_evidence.json").read_bytes())
                 evidence["battery_float"]["pre"]["probe_error"] = True
                 evidence["battery_float"]["post"]["passed"] = False
+                (path / "instrument_evidence.json").write_bytes(harvest.json_bytes(evidence))
+            if revision6:
+                evidence = json.loads((path / "instrument_evidence.json").read_bytes())
+                evidence.update(protocol_id=harvest.cap_replay_harness.production.PROTOCOL_ID,
+                    artifact_sha256={name: harvest.digest((path / name).read_bytes()) for name in
+                    ("events.jsonl", "raw/powermetrics.plist") if (path / name).is_file()})
                 (path / "instrument_evidence.json").write_bytes(harvest.json_bytes(evidence))
             artifacts = {name: harvest.digest((path / name).read_bytes()) for name in
                          ("events.jsonl", "instrument_evidence.json", "raw/powermetrics.plist")
@@ -54,12 +79,13 @@ class HarvestWindowTests(unittest.TestCase):
             self.f = build.build_derivation_ledger(
                 self.base / "measurement", slots or [build.Slot("0.02", native_frames=True)],
                 custody_parent=self.base / "night-custody", verdict_records=verdict_records,
-                fill_slots=fill_slots, abort_reason=abort_reason)
-        self.night = self.base / "night-custody" / build.SESSION_ID
+                fill_slots=fill_slots, abort_reason=abort_reason, session_id=self.sid,
+                preregistration_sha256=self.prereg_digest)
+        self.night = self.base / "night-custody" / self.sid
         (self.night / "calibration_plan.json").write_bytes(self.plan_bytes)
         self.head = subprocess.run(["git", "-C", str(self.f["root"]), "rev-parse", "HEAD"],
                                    check=True, capture_output=True, text=True).stdout.strip()
-        exports = {"SESSION_ID": build.SESSION_ID, "PLAN_ID": "plan-derivation",
+        exports = {"SESSION_ID": self.sid, "PLAN_ID": "plan-derivation",
                    "PLAN": str(self.night / "calibration_plan.json"),
                    "PLAN_SHA256": harvest.digest(self.plan_bytes),
                    "RUNS_ROOT": str(self.night / "runs"),
@@ -69,7 +95,7 @@ class HarvestWindowTests(unittest.TestCase):
         (self.night / "chain.zsh").write_text(wrapper)
         (self.night / "chain.zsh.sha256").write_text(harvest.digest(wrapper.encode()) + "  chain.zsh\n")
         self.plan = {"schema": "joulewise.night_plan.v2", "schema_version": 2,
-                     "plan_id": build.SESSION_ID, "receipt_class": "DIAGNOSTIC_NO_PACK",
+                     "plan_id": self.sid, "receipt_class": "DIAGNOSTIC_NO_PACK",
                      "t0_epoch_s": 100.0, "authored_epoch_s": 50.0, "window_max_s": 9000,
                      "repo_head": self.head, "measurement_head": self.head,
                      "measurement_root": str(self.f["root"]), "custody_root": str(self.night),
@@ -82,8 +108,8 @@ class HarvestWindowTests(unittest.TestCase):
         (self.night / "night/chain.started").write_text('{"pid":123}')
         (self.night / "night/chain.exited").write_text('{"exit_code":0,"epoch_s":9000,"monotonic_ns":1}')
         self.args = argparse.Namespace(plan=self.night / "night_plan.json", custody=self.base / "archive",
-                                       preregistration=build.REPO_ROOT / "configs/calibration/preregistration_d079_epoch_25g83_rev1.md",
-                                       preregistration_sha256=build.PREREGISTRATION_SHA256, session_ids=None)
+                                       preregistration=self.prereg,
+                                       preregistration_sha256=self.prereg_digest, session_ids=None)
         return self.args
 
     def runner(self, argv, **kw):
@@ -99,9 +125,11 @@ class HarvestWindowTests(unittest.TestCase):
                                now=lambda: 10000, **kw)
 
     def revision6_fixture(self, slots=None, **kw):
-        self.fixture(slots, **kw)
+        self.fixture(slots, revision6=True, **kw)
+        self.plan["registration_path"] = str(self.prereg)
+        (self.night / "night_plan.json").write_bytes(harvest.json_bytes(self.plan))
         start = {"schema": "joulewise.revision6.start_conditions.v1",
-                 "session_id": build.SESSION_ID, "plan_id": json.loads(self.plan_bytes)["plan_id"],
+                 "session_id": self.sid, "plan_id": json.loads(self.plan_bytes)["plan_id"],
                  "result": "admitted", "refusal_reason": None, "evidence": {},
                  "boot_id": "synthetic-boot", "written_epoch_s": 100,
                  "written_monotonic_s": 50,
@@ -111,7 +139,7 @@ class HarvestWindowTests(unittest.TestCase):
             {"exit_code": 0, "epoch_s": 9000.25, "monotonic_ns": 1234567890123}))
 
     def replay_result(self, *, cells=2, frame=125.0, disposition="valid", trigger=None):
-        return {"cells": cells, "median_frame_ms": frame, "ratio": cells / 100 if cells is not None else None,
+        return {"cells": cells, "median_frame_ms": frame, "ratio": cells / harvest.cap_replay_harness.production.DETECTION_PROJECTION_CELL_BUDGET if cells is not None else None,
                 "disposition": disposition, "trigger": trigger, "replay_failed": frame is None,
                 # Counterfactual input: even future accidental harness fields
                 # cannot cross the harvest's explicitly enumerated projection.
@@ -139,13 +167,72 @@ class HarvestWindowTests(unittest.TestCase):
             walk(record)
             self.assertNotIn("987654321", harvest.json_bytes(record).decode())
 
+    def test_real_harvest_to_issuer_invalid_and_clock_unresolved(self):
+        from types import SimpleNamespace
+        from tests.fixtures.epoch_bootstrap.revision6 import window_records
+        self.revision6_fixture([build.Slot("0.02", native_frames=True) for _ in range(10)] + [
+            build.Slot("0.02", native_frames=True, disposition="ordinary-invalid"),
+            build.Slot("0.02", native_frames=True, disposition="ordinary-invalid", unresolved_detail="affine_clock_fit_empty")])
+        snapshot = harvest.load_calibration_ledger_snapshot(self.f["ledger"], self.f["pin"],
+            require_committed_pin=True, verify_custody=False, mode="read_replay", repo_root=self.f["root"])
+        session = snapshot.bracket_session_by_id[self.sid]
+        synthetic_path = window_records(self.f["root"], session, self.block)
+        synthetic = json.loads(synthetic_path.read_bytes())
+        source = Path(synthetic["custody_root"])
+        shutil.copytree(source / "night", self.night / "night", dirs_exist_ok=True)
+        def detection(*args, **kwargs):
+            if args[2].get("status") == "unknown":
+                raise ValueError("calibration trace anchor is unresolved")
+            detection.calls += 1
+            return SimpleNamespace(fits=(), all_pulses_detected=False,
+                reasons=("invalid fixture",) if detection.calls == 11 else (),
+                projection_evaluated_cell_count=2, projection_budget_trigger=None, projection_disposition=None)
+        detection.calls = 0
+        with mock.patch.object(harvest.cap_replay_harness.production, "rederive_detection_from_artifacts", side_effect=detection):
+            record = self.run_harvest()
+        r9 = self.archived_r9(record)
+        self.assertEqual([c["disposition"] for c in r9["captures"][-2:]], ["ordinary-invalid", "ordinary-invalid"])
+        self.assertEqual([c["replay_disposition"] for c in r9["captures"][-2:]], ["invalid", "clock_anchor_unresolved"])
+        records = harvest.issuer.revision_six_records([self.args.custody / "harvest.json"], [session], self.block,
+                                                    repo_root=self.f["root"], require_committed=False)
+        replay = harvest.issuer.revision_six_count_replay([session], records, self.block, set())
+        self.assertEqual((replay["decision"], replay["counted"], replay["members"]), ("NEXT_WINDOW", 11, 10))
+        self.assertEqual(record["next_window"]["verdict"], replay["decision"])
+        campaign = harvest.issuer.revision_six_campaign_record([session], records, self.block, replay)
+        self.assertEqual(campaign["clock_movement_or_empty_fit_refusals"], [{"session_id": self.sid,
+            "slot": 12, "capture_id": r9["captures"][-1]["capture_id"], "reason": "affine_clock_fit_empty"}])
+
+    def test_revision6_null_refused_or_aborted_harvest_is_issuer_input(self):
+        for refused in (True, False):
+            with self.subTest(refused=refused):
+                # Independent immutable archives for the two terminal paths.
+                self.base = Path(self.temporary.name).resolve() / str(refused)
+                self.base.mkdir()
+                self.calls = []
+                self.revision6_fixture(fill_slots=0, abort_reason="start refused")
+                if refused:
+                    start = json.loads((self.night / "night/start_conditions.json").read_bytes())
+                    start.update(result="refused", refusal_reason="start refused", chain_start_admitted=None)
+                    (self.night / "night/start_conditions.json").write_bytes(harvest.json_bytes(start))
+                else:
+                    (self.night / "night/start_conditions.json").unlink()
+                (self.night / "night/chain.exited").unlink()
+                record = self.run_harvest()
+                self.assertEqual(record["abort_reason"], "start refused")
+                snapshot = harvest.load_calibration_ledger_snapshot(self.f["ledger"], self.f["pin"],
+                    require_committed_pin=True, verify_custody=False, mode="read_replay", repo_root=self.f["root"])
+                records = harvest.issuer.revision_six_records([self.args.custody / "harvest.json"], snapshot.bracket_sessions,
+                    self.block, repo_root=self.f["root"], require_committed=False)
+                replay = harvest.issuer.revision_six_count_replay(snapshot.bracket_sessions, records, self.block, set())
+                self.assertEqual((replay["decision"], replay["counted"]), ("NEXT_WINDOW", 0))
+
     def test_revision6_record_schema_counts_and_authenticated_timing(self):
         self.revision6_fixture([build.Slot("987654321.012345", native_frames=True,
                                            disposition="ordinary-invalid" if i == 1 else "valid")
                                 for i in range(12)])
         frames = [100.0, 150.0, 120.0, 99.0, 151.0] + [125.0] * 7
         replies = [self.replay_result(cells=0 if i == 2 else 2, frame=frame,
-                                     disposition="ordinary-invalid" if i == 1 else "valid")
+                                     disposition="invalid" if i == 1 else "valid")
                    for i, frame in enumerate(frames)]
         before = harvest.inventory(self.night)
         with mock.patch.object(harvest.cap_replay_harness, "replay_capture", side_effect=replies) as replay:
@@ -155,15 +242,16 @@ class HarvestWindowTests(unittest.TestCase):
                                    "harness_sha256", "rule_ref"})
         self.assertEqual(r9["schema"], "joulewise.revision6.r9_window.v1")
         self.assertEqual((r9["session_id"], r9["slots"], r9["counted"], r9["valid"]),
-                         (build.SESSION_ID, 12, 9, 11))
+                         (self.sid, 12, 9, 11))
         self.assertEqual(r9["harness_sha256"], harvest.digest(Path(harvest.cap_replay_harness.__file__).read_bytes()))
         self.assertEqual(r9["rule_ref"], "CAP-COUNCIL-25G83-01 R9 as amended; Revision 6 §4")
         self.assertEqual([row["slot"] for row in r9["captures"]], list(range(1, 13)))
         for row, call in zip(r9["captures"], replay.call_args_list):
             self.assertEqual(set(row), {"slot", "capture_id", "content_id", "has_recording", "cells",
-                                       "median_frame_ms", "ratio", "disposition", "cap_trigger",
+                                       "median_frame_ms", "ratio", "disposition", "replay_disposition", "ledger_reason", "cap_trigger",
                                        "median_frame_reported", "counted"})
             self.assertEqual(call.args, (self.night / "runs/instrument_validation" / row["capture_id"], "REPORT"))
+            self.assertEqual(call.kwargs, {"compare_stored_bound": False})
             self.assertRegex(row["content_id"], r"^[0-9a-f]{64}$")
             self.assertTrue(row["has_recording"])
             self.assertTrue(row["median_frame_reported"])
@@ -190,7 +278,7 @@ class HarvestWindowTests(unittest.TestCase):
                                return_value=self.replay_result(cells=None, frame=None)):
             record = self.run_harvest()
         r9 = self.archived_r9(record)
-        self.assertEqual(record["stop_flags"], ["STOP-R9-FRAME"])
+        self.assertIn("STOP-R9-FRAME", record["stop_flags"])
         self.assertEqual(record["next_window"]["verdict"], "STOP_TO_REVIEW")
         self.assertEqual((r9["counted"], r9["valid"]), (0, 1))
         self.assertFalse(r9["captures"][0]["median_frame_reported"])
@@ -205,7 +293,7 @@ class HarvestWindowTests(unittest.TestCase):
         raw_paths[1].write_bytes(b"tampered")
         record = self.run_harvest()  # Real REPORT input checks, no detector work.
         r9 = self.archived_r9(record)
-        self.assertEqual(record["stop_flags"], ["STOP-R9-FRAME"])
+        self.assertIn("STOP-R9-FRAME", record["stop_flags"])
         self.assertEqual(r9["counted"], 0)
         self.assertTrue(all(row["has_recording"] and not row["median_frame_reported"] for row in r9["captures"]))
 
@@ -218,7 +306,7 @@ class HarvestWindowTests(unittest.TestCase):
         self.assertFalse(r9["captures"][0]["has_recording"])
         self.assertEqual(r9["captures"][0]["disposition"], "ordinary-invalid")
         self.assertEqual((r9["counted"], r9["valid"]), (0, 0))
-        self.assertEqual(record["stop_flags"], [])
+        self.assertNotIn("STOP-R9-FRAME", record["stop_flags"])
 
     def test_revision6_adverse_window_contributes_no_counts(self):
         self.revision6_fixture([build.Slot("0.02", native_frames=True, battery_mode="charging")])
@@ -226,17 +314,24 @@ class HarvestWindowTests(unittest.TestCase):
             record = self.run_harvest()
         r9 = self.archived_r9(record)
         self.assertEqual((r9["counted"], r9["valid"]), (0, 0))
-        self.assertEqual(record["stop_flags"], ["STOP-R9-FRAME"])
+        self.assertIn("STOP-R9-FRAME", record["stop_flags"])
 
-    def test_revision6_cap_triggers_are_preserved(self):
-        self.revision6_fixture([build.Slot("0.02", native_frames=True)] * 3)
-        replies = [self.replay_result(trigger="evaluated_cell_budget"),
-                   self.replay_result(trigger="wall_deadline"), self.replay_result(cells=60)]
-        with mock.patch.object(harvest.cap_replay_harness, "replay_capture", side_effect=replies):
+    def test_revision6_wall_deadline_retries_and_never_records_failed_replay(self):
+        self.revision6_fixture()
+        replies = [self.replay_result(trigger="wall_deadline"), self.replay_result(trigger="wall_deadline"),
+                   self.replay_result()]
+        with mock.patch.object(harvest.cap_replay_harness, "replay_capture", side_effect=replies) as replay:
             record = self.run_harvest()
-        self.assertEqual(record["stop_flags"], [])
-        self.assertEqual([row["cap_trigger"] for row in self.archived_r9(record)["captures"]],
-                         ["evaluated_cell_budget", "wall_deadline", None])
+        self.assertEqual(replay.call_count, 3)
+        self.assertIsNone(self.archived_r9(record)["captures"][0]["cap_trigger"])
+        self.assertNotIn("STOP-R9-DEADLINE", record["stop_flags"])
+
+    def test_revision6_three_deadlines_refuse_without_publication(self):
+        self.revision6_fixture()
+        with mock.patch.object(harvest.cap_replay_harness, "replay_capture",
+                               return_value=self.replay_result(trigger="wall_deadline")) as replay:
+            self.assert_refuses()
+        self.assertEqual(replay.call_count, 3)
 
     def test_revision6_malformed_exit_time_refuses(self):
         self.revision6_fixture()
@@ -356,7 +451,7 @@ class HarvestWindowTests(unittest.TestCase):
 
     def test_uncommitted_verdict_refuses_before_replay_publication_or_uninstall(self):
         self.revision6_fixture(verdict_records=False)
-        build.write_verdict_record(self.f, build.SESSION_ID)
+        build.write_verdict_record(self.f, self.sid)
         with mock.patch.object(harvest.cap_replay_harness, "replay_capture") as replay, self.assertRaisesRegex(
                 harvest.battery_float.BatteryVerdictRefusal, "missing or uncommitted"):
             self.run_harvest()

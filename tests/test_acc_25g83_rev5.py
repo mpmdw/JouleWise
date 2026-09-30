@@ -66,15 +66,6 @@ IDS_AND_VALUES = [
 
 
 class RevisionFiveTests(unittest.TestCase):
-    def setUp(self) -> None:
-        # E1 §3.6 preserves this R7 registration/fixture oracle. Exercise the
-        # historical registration with its historical active predecessor;
-        # the shipping issuer still requires the actual active P8 default.
-        historical = patch.object(issuer, "ACTIVE_ACCEPTANCE_ID",
-                                  bracketing.ANCHOR_V3_R7_ACCEPTANCE_ID)
-        historical.start()
-        self.addCleanup(historical.stop)
-
     def test_w1w2_set_aside_and_thirteenth_foreign_row_refusal(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -293,7 +284,7 @@ class RevisionFiveTests(unittest.TestCase):
                 wrong_predecessor.predecessor_acceptance = R6
                 with self.assertRaisesRegex(
                     issuer.PrepareRefusal,
-                    f"requires active predecessor {issuer.ACTIVE_ACCEPTANCE_ID}",
+                    "requires historical predecessor d079_calibration_acceptance_v2_n17_r7",
                 ):
                     issuer._prepare_candidate(wrong_predecessor)
                 registry.write_text("[]\n")

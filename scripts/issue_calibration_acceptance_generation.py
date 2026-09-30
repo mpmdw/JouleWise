@@ -21,7 +21,10 @@ mechanism name. The dry run reports no measured value of any kind, because the
 pre-registration forbids examining one before the registration's last session is
 terminal, and this is the tool one runs BETWEEN capture nights.
 
-`prepare-candidate` WRITES EXACTLY ONE FILE, to the path the caller names with
+For Revision 6, `prepare-candidate` first writes the blind campaign R9 record
+at CLOSE and refuses until those bytes are committed; a second invocation can
+read B and write the candidate. The cap-rule text and roster locators are required.
+For historical revisions `prepare-candidate` writes one file, named with
 `--out`; there is no default destination, so this tool cannot write into
 `configs/calibration/` by omission. That file is a CANDIDATE, marked
 `candidate_not_issued: true`, which the production acceptance loader refuses.
@@ -430,6 +433,7 @@ def check(args: argparse.Namespace) -> int:
     # watch table on a mismatch and break the byte-identity of the watch's own
     # output, which is the property the flag must never touch.
     preregistration_failed = False
+    text = ""
     if args.preregistration is not None:
         try:
             preregistration_bytes = Path(args.preregistration).read_bytes()
@@ -478,7 +482,7 @@ def check(args: argparse.Namespace) -> int:
               and not any(line.startswith("pre-registration: unusable")
                           or "sha256: MISMATCH" in line for line in preregistration_lines)
               else None)
-    if any(sid.startswith("d079-epoch-25g83-r6-") for sid in named):
+    if args.preregistration is not None and "# Revision 6 (" in text:
         try:
             if digest is None:
                 raise PrepareRefusal("Revision 6 requires authenticated preregistration")
@@ -1438,6 +1442,25 @@ def revision_six_start_conditions(record: Mapping[str, Any], root: Path,
                 raise ValueError(f"start condition {letter} must have exactly one entry")
             entries[letter] = matches[0]
         raw = {letter: _revision_six_bytes(root, entry)[1] for letter, entry in entries.items()}
+        blind = _revision_six_json(raw["b"], "blind count decision evidence")
+        prior = blind.get("prior_revision6_session")
+        if prior is not None:
+            if not isinstance(prior, Mapping):
+                raise ValueError("prior blind count decision manifest malformed")
+            if entries["b"].get("decision_sha256") != prior.get("decision_sha256"):
+                raise ValueError("prior blind count decision digest disagreement")
+            harvest_path = Path(prior["harvest_file"])
+            harvest_raw = harvest_path.read_bytes()
+            if hashlib.sha256(harvest_raw).hexdigest() != prior["harvest_sha256"]:
+                raise ValueError("prior harvest digest disagreement")
+            harvest = _revision_six_json(harvest_raw, "prior harvest")
+            decision = harvest["next_window"]
+            decision_raw = (json.dumps(decision, indent=2, sort_keys=True, allow_nan=False) + "\n").encode()
+            if (not isinstance(decision, Mapping) or decision.get("verdict") != "NEXT_WINDOW" or hashlib.sha256(decision_raw).hexdigest() != prior["decision_sha256"]
+                    or harvest.get("next_window_sha256") != prior["decision_sha256"]):
+                raise ValueError("prior count decision does not allow NEXT_WINDOW")
+        elif blind.get("reason") is None:
+            raise ValueError("first blind count decision requires not-applicable reason")
         dwell = entries["g"]
         if dwell["script_sha256"] != declaration["pins"]["prewindow_check_sha256"] or type(dwell["exit"]) is not int or dwell["exit"] != 0:
             raise ValueError("clean dwell script pin or exit disagreement")
@@ -1466,7 +1489,7 @@ def revision_six_start_conditions(record: Mapping[str, Any], root: Path,
                 or not math.isfinite(age) or not 600 <= age <= settled):
             raise ValueError("network-time OFF binding or settle disagreement")
 
-    except (ValueError, KeyError, TypeError, UnicodeError) as error:
+    except (OSError, ValueError, KeyError, TypeError, UnicodeError) as error:
         raise PrepareRefusal(f"Revision 6 start conditions refused: {error}") from error
 
 
@@ -1511,7 +1534,7 @@ def revision_six_count_replay(sessions: Sequence[Any], records: Mapping[str, Any
             counted = valid = members = 0
             adverse = session.session_id in adverse_ids
             if null:
-                if captures or r9.get("abort_reason") != session.abort_reason or session.state != "aborted":
+                if captures or r9.get("abort_reason") != session.abort_reason or session.state not in TERMINAL_SESSION_STATES:
                     raise ValueError("null session must list its ledger abort reason and no slots")
                 if previous_null:
                     stops.append("STOP-NULL-REPEAT")
@@ -1535,12 +1558,13 @@ def revision_six_count_replay(sessions: Sequence[Any], records: Mapping[str, Any
                     recording = bool(row.artifact_sha256.get("raw/powermetrics.plist"))
                     if type(capture["has_recording"]) is not bool or capture["has_recording"] != recording:
                         raise ValueError("R9 recording flag disagrees with ledger")
-                    cells = capture["cells"]
-                    if type(cells) is not int or cells < 0:
-                        raise ValueError("R9 cells malformed")
-                    ratio = capture["ratio"]
-                    if type(ratio) not in (int, float) or not math.isfinite(ratio) or ratio != cells / declaration["pins"]["cap_cells"]:
-                        raise ValueError("R9 ratio disagrees with cells/cap")
+                    if not recording:
+                        if (any(capture[key] is not None for key in ("cells", "ratio", "median_frame_ms", "cap_trigger"))
+                                or capture["median_frame_reported"] is not False or capture["counted"] is not False
+                                or not capture.get("ledger_reason")):
+                            raise ValueError("no-recording slot must carry null work fields and its ledger reason")
+                        valid += int(row.classification_disposition == "valid" and not adverse)
+                        continue
                     trigger = capture["cap_trigger"]
                     if trigger == "evaluated_cell_budget":
                         stops.append("STOP-R9-CELL")
@@ -1548,6 +1572,18 @@ def revision_six_count_replay(sessions: Sequence[Any], records: Mapping[str, Any
                         stops.append("STOP-R9-DEADLINE")
                     elif trigger is not None:
                         raise ValueError("unrecognized R9 cap trigger")
+                    cells = capture["cells"]
+                    if cells is None and capture["median_frame_reported"] is False:
+                        if capture["ratio"] is not None or capture["median_frame_ms"] is not None or capture["counted"] is not False:
+                            raise ValueError("unreported R9 work fields malformed")
+                        stops.append("STOP-R9-FRAME")
+                        valid += int(row.classification_disposition == "valid" and not adverse)
+                        continue
+                    if type(cells) is not int or cells < 0:
+                        raise ValueError("R9 cells malformed")
+                    ratio = capture["ratio"]
+                    if type(ratio) not in (int, float) or not math.isfinite(ratio) or ratio != cells / declaration["pins"]["cap_cells"]:
+                        raise ValueError("R9 ratio disagrees with cells/cap")
                     if cells and ratio > .5:
                         stops.append("STOP-R9-RATIO")
                     reported = capture["median_frame_reported"]
@@ -1619,6 +1655,85 @@ def revision_six_count_replay(sessions: Sequence[Any], records: Mapping[str, Any
             raise PrepareRefusal(f"Revision 6 R9 record refused: {error}") from error
     return {"decision": decision, "sessions": history, "member_ids": member_ids,
             "excluded": excluded, "counted": counted_total, "members": members_total}
+
+
+def revision_six_campaign_record(sessions, records, declaration, replay):
+    """The single sealed §4 record, assembled without consulting any B."""
+    windows, clock_refusals = [], []
+    captures = []
+    for session in sessions:
+        r9 = records[session.session_id]["r9"]
+        listed = {capture["slot"]: dict(capture) for capture in r9["captures"]}
+        slots = []
+        if session.finalized_slots:
+            for number, slot in enumerate(session.declared_slots, 1):
+                if number in listed:
+                    capture = listed[number]
+                    slots.append(capture)
+                    captures.append(capture)
+                    row = session.finalized_slots[slot]
+                    resolved, detail = _revision_six_anchor_outcome(row)
+                    if not resolved:
+                        clock_refusals.append({"session_id": session.session_id, "slot": number,
+                                               "capture_id": row.attempt_id, "reason": detail})
+                else:
+                    slots.append({"slot": number, "unused": True, "ledger_reason": session.abort_reason,
+                                  "cells": None, "median_frame_ms": None, "ratio": None, "counted": False})
+        windows.append({"session_id": session.session_id, "abort_reason": session.abort_reason,
+                        "null": not session.finalized_slots, "slots": slots,
+                        "counted": r9["counted"], "valid": r9["valid"],
+                        "r9_window_sha256": records[session.session_id]["r9_sha256"]})
+    clauses = {
+        "counted_at_least_24": replay["counted"] >= 24,
+        "zero_cell_stops": all(c["cap_trigger"] != "evaluated_cell_budget" for c in captures),
+        "zero_deadline_stops": all(c["cap_trigger"] != "wall_deadline" for c in captures),
+        "every_search_ratio_at_most_half": all(not c["cells"] or c["ratio"] <= .5 for c in captures),
+        "every_recording_frame_reported": all(not c["has_recording"] or c["median_frame_reported"] for c in captures),
+    }
+    return {"schema": "joulewise.revision6.r9_campaign.v1", "sessions": windows,
+            "counted": replay["counted"], "valid": sum(window["valid"] for window in windows),
+            "members": replay["members"], "clauses": clauses,
+            "clock_movement_or_empty_fit_refusals": clock_refusals,
+            "harness_sha256": declaration["pins"]["harness_sha256"],
+            "cap_rule_text_sha256": declaration["pins"]["cap_rule_text_sha256"]}
+
+
+def revision_six_close_record(args, sessions, records, declaration, replay):
+    """Publish blind CLOSE evidence, then require its commit before reading B."""
+    root = Path(args.repo_root)
+    paths = {"chain": root / "scripts/night_chains/calibration_derivation_only.zsh",
+             "validator": root / "scripts/validate_powermetrics_fiducial.py",
+             "cap_rule_text": getattr(args, "cap_rule_text", None),
+             "roster": getattr(args, "roster", None)}
+    files = {}
+    for name, locator in paths.items():
+        if locator is None:
+            raise PrepareRefusal(f"Revision 6 requires recorded {name} file")
+        path = Path(locator)
+        try:
+            if path.is_symlink():
+                raise OSError("symlink pin file")
+            raw = path.read_bytes()
+        except OSError as error:
+            raise PrepareRefusal(f"Revision 6 {name} pin file unreadable") from error
+        digest = hashlib.sha256(raw).hexdigest()
+        if digest != declaration["pins"][name + "_sha256"]:
+            raise PrepareRefusal(f"Revision 6 {name} file digest disagrees with seal")
+        files[name] = {"path": str(path.resolve()), "sha256": digest}
+    record = revision_six_campaign_record(sessions, records, declaration, replay)
+    record["pinned_files"] = files
+    raw = (json.dumps(record, indent=2, sort_keys=True, allow_nan=False) + "\n").encode()
+    path = Path(args.r9_record) if getattr(args, "r9_record", None) else Path(args.out).with_name("r9_campaign.json")
+    if path.resolve() == Path(args.out).resolve() or path.is_symlink():
+        raise PrepareRefusal("Revision 6 R9 record path overlaps candidate or is a symlink")
+    if path.exists():
+        if path.read_bytes() != raw:
+            raise PrepareRefusal("Revision 6 campaign R9 record differs; refusing overwrite")
+    else:
+        with path.open("xb") as handle:
+            handle.write(raw)
+    commit = _revision_six_committed(path, raw, root, "campaign R9")
+    return {"path": str(path.resolve()), "sha256": hashlib.sha256(raw).hexdigest(), "commit": commit}
 
 
 def revision_six_dry_run(snapshot, session_ids, declaration, harvest_paths, *, repo_root,
@@ -2433,8 +2548,7 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
     refuse_open_registration(snapshot, session_ids)
     refuse_open_registration(snapshot, named_confounded)
     refuse_ledger(snapshot)
-    revision_six = bool(any(
-        session.session_id.startswith("d079-epoch-25g83-r6-") for session in snapshot.bracket_sessions))
+    revision_six = "# Revision 6 (" in preregistration_text
     declaration = None
     rev6_records = rev6_replay = None
     all_revision_six_ids = ()
@@ -2459,6 +2573,7 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
         if rev6_replay["decision"] != "CLOSE_AND_DERIVE":
             stops = sorted({stop for item in rev6_replay["sessions"] for stop in item["stops"]})
             raise PrepareRefusal("Revision 6 " + rev6_replay["decision"] + ": " + ", ".join(stops) + "; B stays unread")
+        campaign_r9 = revision_six_close_record(args, ordered, rev6_records, declaration, rev6_replay)
         session_ids = tuple(sid for sid in window_ids if sid not in epoch.non_pass_ids)
         if hashlib.sha256(Path(args.predecessor_acceptance).read_bytes()).hexdigest() != declaration["predecessor"]["file_sha256"]:
             raise PrepareRefusal("Revision 6 requires pinned P8 predecessor file digest")
@@ -2497,9 +2612,9 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
     target_epoch = registration_target_epoch(snapshot, session_ids)
     revision_five = target_epoch == REVISION_FIVE_EPOCH and not revision_six
     if revision_five:
-        if predecessor["acceptance_id"] != ACTIVE_ACCEPTANCE_ID:
+        if predecessor["acceptance_id"] != "d079_calibration_acceptance_v2_n17_r7":
             raise PrepareRefusal(
-                f"registration Revision 5 requires active predecessor {ACTIVE_ACCEPTANCE_ID}"
+                "registration Revision 5 requires historical predecessor d079_calibration_acceptance_v2_n17_r7"
             )
         if "# Revision 5 (" not in preregistration_text:
             raise PrepareRefusal("25G83/v3 identity requires registration Revision 5")
@@ -2898,7 +3013,7 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
              "verdict_file_sha256": verdict.file_sha256, "verdict_commit": verdict.commit}
             for verdict in epoch.verdicts
         ]} if revision_five or revision_six else {}),
-        **({"revision6_count_replay": {key: value for key, value in rev6_replay.items() if key not in {"member_ids", "excluded"}},
+        **({"revision6_campaign_r9": campaign_r9, "revision6_count_replay": {key: value for key, value in rev6_replay.items() if key not in {"member_ids", "excluded"}},
             "revision6_records": {sid: {key: value for key, value in record.items() if key not in {"r9", "start"}}
                                   for sid, record in rev6_records.items()},
             "sampling_dependence": revision_six_dependence(members, observations, rev6_records, screen, within,
@@ -3304,6 +3419,9 @@ def build_parser() -> argparse.ArgumentParser:
         "--registration-session-id", action="append", default=[],
         help="a derivation-kind ledger session of this registration (repeatable)",
     )
+    prepare.add_argument("--cap-rule-text", type=Path, help="sealed cap-rule text file, verified by digest")
+    prepare.add_argument("--roster", type=Path, help="sealed roster file, verified by digest")
+    prepare.add_argument("--r9-record", type=Path, help="campaign R9 output; default: r9_campaign.json beside --out")
     prepare.add_argument("--harvest-record", type=Path, action="append", default=[],
                          help="automated harvest record for each Revision 6 session (repeatable)")
     prepare.add_argument(
