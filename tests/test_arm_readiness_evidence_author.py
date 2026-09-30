@@ -8,6 +8,7 @@ import json
 import os
 import shlex
 import shutil
+import signal
 import time
 import unittest
 from pathlib import Path
@@ -72,7 +73,12 @@ def passing_suites(
 def _copy_primary(repository: Path, relative: str) -> None:
     target = repository / relative
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_bytes((ROOT / relative).read_bytes())
+    body = (ROOT / relative).read_bytes()
+    if relative == "docs/phase_2/window_runbook.md":
+        start = body.index(b"## 5A.")
+        end = body.index(b"\n## ", start + 1)
+        body = body[:start] + (Path(__file__).parent / "fixtures/historical_clock_restore_5a.md").read_bytes() + body[end:]
+    target.write_bytes(body)
 
 
 def _identity_unit(arm: str, model: str) -> dict:
@@ -121,7 +127,7 @@ def make_author_fixture(pack_name: str = "d117_floor_qwen25_1p5b_v1"):
     for relative in (
         # Every registered issued generation is available to the fixture:
         # historical `_v1`/`_v2` packs pin n19/n19_r2, and successor packs may
-        # name any retained n17 r3-r7 issuance.
+        # name any retained n17 r3-r7/P8 issuance.
         "configs/calibration/calibration_acceptance_d079_v2.json",
         "configs/calibration/calibration_acceptance_d079_v2_r2.json",
         "configs/calibration/calibration_acceptance_d079_v2_n17_r3.json",
@@ -129,6 +135,7 @@ def make_author_fixture(pack_name: str = "d117_floor_qwen25_1p5b_v1"):
         "configs/calibration/calibration_acceptance_d079_v2_n17_r5.json",
         "configs/calibration/calibration_acceptance_d079_v2_n17_r6.json",
         "configs/calibration/calibration_acceptance_d079_v2_n17_r7.json",
+        "configs/calibration/calibration_acceptance_d079_v2_n17_r8.json",
         "docs/decision_log.md",
         "docs/phase_2/window_runbook.md",
         "joulewise/analysis_manifest_v3.py",
@@ -864,13 +871,21 @@ class ArmReadinessEvidenceAuthorTests(unittest.TestCase):
         self, repository: Path, *, marker: Path, block_seconds: float
     ) -> None:
         relative = "tests/test_calibration_ledger.py"
+        ready = marker.with_suffix(".ready")
+        release = marker.with_suffix(".release")
+        lifecycle = marker.with_suffix(".fifo")
         grandchild = (
             "import time\n"
             "from pathlib import Path\n"
-            "time.sleep(0.75)\n"
+            f"lifecycle = open({str(lifecycle)!r}, 'wb', buffering=0)\n"
+            "lifecycle.write(b'READY\\n')\n"
+            f"Path({str(ready)!r}).write_text('READY', encoding='utf-8')\n"
+            f"while not Path({str(release)!r}).exists():\n"
+            "    time.sleep(0.01)\n"
             f"Path({str(marker)!r}).write_text('LEAKED', encoding='utf-8')\n"
         )
         raw = (
+            "from pathlib import Path\n"
             "import subprocess\n"
             "import sys\n"
             "import time\n"
@@ -879,12 +894,84 @@ class ArmReadinessEvidenceAuthorTests(unittest.TestCase):
             "class TargetBytesTests(unittest.TestCase):\n"
             "    def test_executes(self):\n"
             f"        subprocess.Popen([sys.executable, '-I', '-B', '-c', {grandchild!r}])\n"
+            "        deadline = time.monotonic() + 30.0\n"
+            f"        while not Path({str(ready)!r}).exists():\n"
+            "            self.assertLess(time.monotonic(), deadline, 'grandchild never ready')\n"
+            "            time.sleep(0.01)\n"
             f"        time.sleep({block_seconds!r})\n"
         ).encode("utf-8")
         (repository / relative).write_bytes(raw)
         git(repository, "add", relative)
         git(repository, "commit", "-qm", "install process-group sentinel")
         git(repository, "update-ref", "refs/remotes/origin/main", "HEAD")
+
+    def _execute_ready_grandchild_suite(self, repository, marker, *, timeout=False):
+        """Begin the timeout only after the grandchild's readiness handshake."""
+        ready = marker.with_suffix(".ready")
+        lifecycle = marker.with_suffix(".fifo")
+        os.mkfifo(lifecycle)
+        reader = os.open(lifecycle, os.O_RDONLY | os.O_NONBLOCK)
+        self.addCleanup(os.close, reader)
+        processes = []
+        real_popen = evidence.subprocess.Popen
+
+        def start(*args, **kwargs):
+            self.assertIs(kwargs.get("start_new_session"), True)
+            process = real_popen(*args, **kwargs)
+            processes.append(process)
+            real_wait = process.wait
+
+            def cleanup():
+                try:
+                    os.killpg(process.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                real_wait(timeout=5.0)
+
+            self.addCleanup(cleanup)
+
+            def wait(timeout=None):
+                deadline = time.monotonic() + 30.0
+                while not ready.exists():
+                    self.assertIsNone(process.poll(), "suite exited before grandchild ready")
+                    self.assertLess(time.monotonic(), deadline, "grandchild never ready")
+                    time.sleep(0.01)
+                return real_wait(timeout=timeout)
+
+            process.wait = wait
+            return process
+
+        test_ids = ("tests.test_calibration_ledger.TargetBytesTests.test_executes",)
+        with mock.patch.object(evidence.subprocess, "Popen", side_effect=start):
+            if timeout:
+                with (
+                    mock.patch.object(evidence, "_SUITE_TIMEOUT_SECONDS", 0.1),
+                    self.assertRaisesRegex(ValueError, "timed out after 0.1 seconds"),
+                ):
+                    evidence._execute_unittest_suite_subprocess(repository, test_ids)
+            else:
+                result = evidence._execute_unittest_suite_subprocess(repository, test_ids)
+                self.assertTrue(result.passed)
+
+        self.assertTrue(ready.exists(), "grandchild never ran")
+        self.assertEqual(len(processes), 1)
+        marker.with_suffix(".release").write_text("RELEASE", encoding="utf-8")
+        deadline = time.monotonic() + 30.0
+        observed = bytearray()
+        while True:
+            self.assertFalse(marker.exists(), "grandchild survived suite cleanup")
+            try:
+                chunk = os.read(reader, 4096)
+            except BlockingIOError:
+                chunk = None
+            if chunk == b"":
+                break  # EOF proves the ready grandchild closed its held writer.
+            if chunk:
+                observed.extend(chunk)
+            self.assertLess(time.monotonic(), deadline, "grandchild lifecycle never closed")
+            time.sleep(0.01)
+        self.assertEqual(bytes(observed), b"READY\n")
+        self.assertFalse(marker.exists())
 
     def test_suite_child_does_not_inherit_parent_poison_or_hostile_locale(self) -> None:
         temporary, repository, _pack, _custody, _arm_path = make_author_fixture()
@@ -918,13 +1005,7 @@ class ArmReadinessEvidenceAuthorTests(unittest.TestCase):
             repository, marker=marker, block_seconds=0.0
         )
 
-        result = evidence._execute_unittest_suite_subprocess(
-            repository,
-            ("tests.test_calibration_ledger.TargetBytesTests.test_executes",),
-        )
-        self.assertTrue(result.passed)
-        time.sleep(1.0)
-        self.assertFalse(marker.exists())
+        self._execute_ready_grandchild_suite(repository, marker)
 
     def test_suite_timeout_kills_delayed_grandchild_process_group(self) -> None:
         temporary, repository, _pack, _custody, _arm_path = make_author_fixture()
@@ -934,16 +1015,7 @@ class ArmReadinessEvidenceAuthorTests(unittest.TestCase):
             repository, marker=marker, block_seconds=5.0
         )
 
-        with (
-            mock.patch.object(evidence, "_SUITE_TIMEOUT_SECONDS", 0.1),
-            self.assertRaisesRegex(ValueError, "timed out after 0.1 seconds"),
-        ):
-            evidence._execute_unittest_suite_subprocess(
-                repository,
-                ("tests.test_calibration_ledger.TargetBytesTests.test_executes",),
-            )
-        time.sleep(1.0)
-        self.assertFalse(marker.exists())
+        self._execute_ready_grandchild_suite(repository, marker, timeout=True)
 
     def _target_sentinel_deriver(self, context) -> evidence._DerivedKind:
         kind = "RECOVERY_LEDGER_TEST"
@@ -1282,7 +1354,7 @@ class ArmReadinessEvidenceAuthorTests(unittest.TestCase):
                     str(repository),
                 ]
             )
-        self.assertEqual(author_return_code, 0)
+        self.assertEqual(author_return_code, 0, author_output.getvalue().decode("utf-8", "replace"))
         authored = readiness.parse_json_bytes(
             author_output.getvalue(), require_canonical=True
         )

@@ -6,6 +6,7 @@ import math
 import os
 from pathlib import Path
 import shutil
+import signal
 import subprocess
 import tempfile
 import time
@@ -14,7 +15,8 @@ import unittest
 from unittest.mock import patch, Mock
 from joulewise import battery_float, quiet_predicate_campaign as campaign
 from joulewise import night_gate
-from tests.test_battery_float import PairAuthenticationTests, raw as battery_raw
+from tests import test_battery_float as battery_float_tests
+from tests.test_battery_float import raw as battery_raw
 
 ROOT = Path(__file__).resolve().parents[1]
 PROTOCOL = json.loads((ROOT / campaign.PROTOCOL_PATH).read_text())
@@ -99,7 +101,7 @@ def good_round(busy=0):
 
 def attach_battery_pair(out, session, rows):
     """Complete synthetic collector records with a real authenticated pair."""
-    pair = PairAuthenticationTests().pair(out)
+    pair = battery_float_tests.PairAuthenticationTests().pair(out)
     start = (session.get("start_stamp") or {}).get("monotonic_before_s", 1000.0)
     end_stamp = session.get("end_stamp") or {}
     end = end_stamp.get("monotonic_after_s", end_stamp.get("monotonic_before_s", 1600.0))
@@ -563,7 +565,7 @@ class FrozenExecutorTests(unittest.TestCase):
                         power['recorder_kind'] = recorder_kind
                     session={'session':'fixture','os_build':'25G83','boot_id':'boot','start_drift_s':0,
                         **stamps(),
-                        'network_time_provenance':{k:v for k,v in provenance().items() if k!='attestation'},
+                        'network_time_provenance':{**{k:v for k,v in provenance().items() if k!='attestation'}, 'policy': campaign.network_time_off.SCHEMA},
                         'power':power,
                         'interior':{'complete_support':True,
                         'power':{'energy_j':{'rail_sum_w':index,'combined_w':index}}}}
@@ -610,7 +612,7 @@ class FrozenExecutorTests(unittest.TestCase):
         # real executables through the same constants).
         def run(argv, **kwargs):
             from subprocess import CompletedProcess
-            if argv[0] == campaign.SUDO:
+            if tuple(argv) == campaign.network_time_off.OFF_ARGV:
                 state = argv[-1]
                 stdout = (EXPECTED_OFF if off_stdout is None else off_stdout) \
                     if state == 'off' else 'setUsingNetworkTime: On\n'
@@ -628,16 +630,16 @@ class FrozenExecutorTests(unittest.TestCase):
                 return real_popen(argv, **kwargs)
             return Child(argv, **kwargs)
         with ExitStack() as stack:
+            # A custody exception intentionally bypasses the executor's tail;
+            # this fixture must restore process signal state between test cases.
+            for signum in (signal.SIGTERM, signal.SIGINT):
+                stack.callback(signal.signal, signum, signal.getsignal(signum))
             enter = stack.enter_context
             tmp = enter(tempfile.TemporaryDirectory())
             enter(patch.object(campaign,'time',clock))
-            if commands:
-                enter(patch.object(campaign,'SUDO',str(commands[0])))
-                enter(patch.object(campaign,'LOG',str(commands[1])))
-                enter(patch.object(campaign.subprocess,'Popen',side_effect=popen))
-            else:
-                enter(patch.object(campaign.subprocess,'run',side_effect=run))
-                enter(patch.object(campaign.subprocess,'Popen',side_effect=Child))
+            enter(patch.object(campaign.subprocess,'run',side_effect=run))
+            enter(patch.object(campaign.subprocess,'Popen',side_effect=Child))
+            enter(patch.object(campaign.network_time_off, 'boot_id', return_value='boot'))
             enter(patch.object(campaign,'group_absent',side_effect=lambda pgid:processes[pgid].returncode is not None))
             enter(patch.object(campaign.os,'killpg',side_effect=terminate))
             enter(patch.object(campaign,'cleanup_groups',side_effect=cleanup))
@@ -684,7 +686,8 @@ class FrozenExecutorTests(unittest.TestCase):
                 # readable artefact is whatever the finally wrote BEFORE the
                 # break, which is exactly what the ordering assertion needs.
                 self.execute_error=exc
-                self.control_text=(Path(tmp)/campaign.NETWORK_TIME_CONTROL_BASENAME).read_text()
+                self.control_text=((Path(tmp)/campaign.NETWORK_TIME_CONTROL_BASENAME).read_text()
+                               if (Path(tmp)/campaign.NETWORK_TIME_CONTROL_BASENAME).exists() else "null")
                 return None, None, None, 0, calls, json.loads(self.control_text), []
             cleanup=json.loads((Path(tmp)/'evidence_cleanup.json').read_text())
             self.assertEqual(cleanup['cleanup_proven'], not final_cleanup_unproven)
@@ -708,13 +711,13 @@ class FrozenExecutorTests(unittest.TestCase):
             # The control record's BYTES are kept too: a test that corrupts it
             # asserts they survived the restore, and an unparsable record must
             # not break the harness before the assertion runs.
-            self.control_text=(Path(tmp)/campaign.NETWORK_TIME_CONTROL_BASENAME).read_text()
+            self.control_text=((Path(tmp)/campaign.NETWORK_TIME_CONTROL_BASENAME).read_text()
+                               if (Path(tmp)/campaign.NETWORK_TIME_CONTROL_BASENAME).exists() else "null")
             try:
                 control=json.loads(self.control_text)
             except ValueError:
                 control=None
-            receipt=Path(tmp)/campaign.NETWORK_TIME_RESTORE_BASENAME
-            self.restore_receipt=json.loads(receipt.read_text()) if receipt.exists() else None
+            self.restore_receipt = None
             sessions=[json.loads(path.read_text())
                       for path in sorted((Path(tmp)/'evidence').glob('envelope-*/session.json'))]
             return rc, summary, outcome, len(refusals), calls, control, sessions
@@ -764,6 +767,29 @@ class FrozenExecutorTests(unittest.TestCase):
         self.assertEqual(rc, 2)
         self.assertEqual(outcome['envelopes_attempted'], 1)
         self.assertEqual(refusals, 1)
+
+
+class PermanentOffExecutorTests(FrozenExecutorTests):
+    def test_missing_off_receipt_prevents_recorder_and_capture(self):
+        def spy(stack, module):
+            stack.enter_context(patch.object(module, "establish_network_time_off",
+                side_effect=lambda root, plan_id: root / "missing-off.json"))
+        rc, _summary, outcome, _refusals, calls, *_ = self.exercise(spy=spy)
+        self.assertEqual(rc, 2)
+        self.assertEqual(calls, [])
+        self.assertIn("missing-off.json", outcome["error"])
+
+    def test_completion_and_interrupt_leave_off_without_log_queries(self):
+        for interrupt in (False, True):
+            with self.subTest(interrupt=interrupt):
+                rc, _summary, outcome, _refusals, _calls, control, _sessions = self.exercise(
+                    interrupt_settle=interrupt)
+                self.assertEqual(rc, 2 if interrupt else 0)
+                self.assertEqual(control["argv"], list(campaign.network_time_off.OFF_ARGV))
+                self.assertNotIn("on", control)
+                self.assertNotIn("network_time_restored", outcome)
+                self.assertEqual(self.timed_logs, [])
+                self.assertFalse(any(entry[0] == "attest" for entry in self.timeline))
 
 
 # --------------------------------------------------------------------------
@@ -828,187 +854,12 @@ class NetworkTimeControlTests(FrozenExecutorTests):
         path = self.command_directory / "sudo-calls.txt"
         return path.read_text().splitlines() if path.exists() else []
 
-    def test_exact_off_stdout_reaches_settle_and_records_both_toggles(self):
-        commands = self.fake_commands()
-        rc, summary, outcome, refusals, calls, control, sessions = self.exercise(
-            commands=commands)
-        self.assertEqual(rc, 0)
-        self.assertEqual(refusals, 0)
-        self.assertEqual(len(self.envelope_directories), 12)
-        self.assertEqual(control["schema"], "joulewise.network_time_control.v1")
-        self.assertEqual(control["off"]["exit_code"], 0)
-        self.assertEqual(control["off"]["stdout"], EXPECTED_OFF)
-        self.assertEqual(control["off"]["argv"][1:],
-                         ["-n", campaign.SYSTEMSETUP, "-setusingnetworktime", "off"])
-        self.assertEqual(control["on"]["exit_code"], 0)
-        self.assertEqual(control["on"]["argv"][-1], "on")
-        self.assertTrue(outcome["network_time_restored"])
-        # The receipt reaches every collector, and OFF precedes the settle.
-        self.assertEqual(self.sudo_calls()[0],
-                         f"-n{campaign.SYSTEMSETUP}-setusingnetworktimeoff")
-        self.assertEqual(self.sudo_calls()[-1],
-                         f"-n{campaign.SYSTEMSETUP}-setusingnetworktimeon")
-        self.assertEqual(summary["retained"], 12)
 
-    def test_lower_case_stdout_or_nonzero_exit_refuses_before_any_envelope(self):
-        for label, kwargs in (("lower case", {"off_stdout": "setUsingNetworkTime: off\n"}),
-                              ("exit 1", {"off_exit": 1})):
-            with self.subTest(case=label):
-                commands = self.fake_commands(**kwargs)
-                rc, summary, outcome, refusals, calls, control, sessions = self.exercise(
-                    commands=commands)
-                self.assertEqual(rc, 2)
-                self.assertEqual(refusals, 1)
-                self.assertEqual(self.envelope_directories, [])
-                self.assertEqual(calls, [])  # no recorder, no collector
-                self.assertEqual(outcome["outcome"], "refused")
-                self.assertIn("network time OFF not established", outcome["error"])
-                # The refused attempt AND the restore are both on the record.
-                self.assertEqual(control["off"]["stdout"],
-                                 kwargs.get("off_stdout", EXPECTED_OFF))
-                self.assertEqual(control["off"]["exit_code"], kwargs.get("off_exit", 0))
-                self.assertEqual(control["on"]["exit_code"], 0)
-                self.assertTrue(outcome["network_time_restored"])
 
-    def test_termination_during_settle_still_restores_network_time(self):
-        commands = self.fake_commands()
-        toggles = []
-        def spy(stack, module):
-            # The real set form still runs; this only reads the clock at the
-            # instant each toggle is issued (item 10 / 05a S3).
-            real = module.set_network_time
-            def watched(state):
-                toggles.append((state, module.time.monotonic()))
-                return real(state)
-            stack.enter_context(patch.object(module, "set_network_time", side_effect=watched))
-        rc, summary, outcome, refusals, calls, control, sessions = self.exercise(
-            commands=commands, interrupt_settle=True, spy=spy)
-        self.assertEqual(rc, 2)
-        self.assertEqual(self.envelope_directories, [])
-        self.assertIn("InterruptedError", outcome["error"])
-        self.assertEqual(control["on"]["exit_code"], 0)
-        self.assertTrue(outcome["network_time_restored"])
-        # Q1 rule 1's PLACEMENT, not just its argv order: the OFF receipt
-        # exists on a night that died inside the settle, and the clock had not
-        # yet advanced by settle_s when the toggle was issued -- so the settle
-        # really does absorb any in-flight slew the daemon had started.  Moving
-        # the toggle after the sleep leaves this night with no OFF receipt at
-        # all, which is what the old assertions (on ``on`` alone) missed.
-        self.assertIsNotNone(control["off"], "the night died inside the settle with no OFF receipt")
-        self.assertEqual(control["off"]["stdout"], EXPECTED_OFF)
-        self.assertEqual(control["off"]["exit_code"], 0)
-        self.assertEqual([state for state, _ in toggles], ["off", "on"])
-        self.assertEqual(toggles[0][1], 0.0)
-        self.assertLess(toggles[0][1], PROTOCOL["settle_s"])
-        self.assertGreaterEqual(toggles[1][1], PROTOCOL["settle_s"])
 
-    def test_failed_restore_is_reported_with_its_own_exit_code(self):
-        commands = self.fake_commands(on_exit=1)
-        rc, summary, outcome, refusals, calls, control, sessions = self.exercise(
-            commands=commands)
-        # The envelopes were captured under a proven OFF; their validity is
-        # unaffected, so the night is not refused.  Only the machine state is
-        # wrong, and it gets its own code so the harvester re-attempts it.
-        self.assertEqual(rc, 3)
-        self.assertEqual(outcome["outcome"], "complete")
-        self.assertFalse(outcome["network_time_restored"])
-        self.assertEqual(control["on"]["exit_code"], 1)
-        self.assertEqual(summary["retained"], 12)
 
-    def test_every_envelope_is_attested_from_the_timed_log(self):
-        commands = self.fake_commands()
-        rc, summary, outcome, refusals, calls, control, sessions = self.exercise(
-            commands=commands)
-        self.assertEqual(len(sessions), 12)
-        for session in sessions:
-            attestation = session["network_time_provenance"]["attestation"]
-            self.assertEqual(attestation["state"], "authenticated")
-            self.assertEqual(attestation["method"], "timed_log_show_predicate_v1")
-            self.assertEqual(attestation["matched_lines"], 0)
-            self.assertEqual(attestation["log"], "timed-log.txt")
-            self.assertEqual(attestation["log_sha256"],
-                             campaign.digest(TIMED_LOG_HEADER.encode()))
-            window = attestation["window_epoch_s"]
-            self.assertAlmostEqual(window[1] - window[0], 602)
-        self.assertEqual(len(self.timed_logs), 12)
-        self.assertEqual([v["excluded"] for v in summary["envelopes"]], [[]] * 12)
 
-    def test_an_applied_slew_inside_a_window_excludes_that_night_envelope(self):
-        """R2.3 and R2.5: the twin corpora, one query format apart.
 
-        The same ten applied corrections were captured twice on the pilot
-        night -- once in `--style compact` (the retained exhibit D) and once
-        in the ruled `--style syslog` (exhibit D2).  Everything the scanner
-        measures is equal across the pair (`matched_lines` 10, marker lines
-        30) and only the BYTES differ, so `log_sha256` differs.  The states
-        differ, and that difference IS the cure: a body in the wrong format
-        did not come from the ruled query, so it is `asserted` with the
-        header reason (R2.3's end-to-end half).  The counterfactual at
-        489b0953 is this pair exactly INVERTED -- the old guard asked only
-        for "Timestamp" and "Process" in the first line, which the compact
-        header carries and the syslog header (lower-case "(process)") does
-        not, so it accepted the format the night never produces and rejected
-        the one it does.
-        """
-        runs = {}
-        for label, fixture, state, exclusion in (
-                ("syslog (the ruled argv)", SYSLOG_FIXTURE, "slew_attested",
-                 "network_time_slew_attested"),
-                ("compact (negative fixture)", COMPACT_FIXTURE, "asserted",
-                 "network_time_unattested")):
-            with self.subTest(case=label):
-                body = fixture.read_text()
-                # Supplementary S3: ruling 14 R3 regression 12's scanner is
-                # `timed_log_matches`, and it reads 10 on BOTH formats.
-                self.assertEqual(campaign.timed_log_matches(body), 10)
-                self.assertEqual(campaign.timed_log_marker_lines(body), 30)
-                commands = self.fake_commands(timed_log=body)
-                rc, summary, outcome, refusals, calls, control, sessions = self.exercise(
-                    commands=commands)
-                self.assertEqual(len(sessions), 12)
-                attestations = [session["network_time_provenance"]["attestation"]
-                                for session in sessions]
-                for attestation in attestations:
-                    self.assertEqual(attestation["state"], state)
-                    self.assertEqual(attestation["matched_lines"], 10)
-                    self.assertEqual(attestation["matched_marker_lines"], 30)
-                    if state == "asserted":
-                        self.assertEqual(attestation["reason"],
-                                         "timed log query returned no header")
-                self.assertEqual(summary["retained"], 0)
-                self.assertEqual([v["excluded"] for v in summary["envelopes"]],
-                                 [[exclusion]] * 12)
-                self.assertEqual(summary["status"], "INCONCLUSIVE")
-                runs[state] = attestations
-        for syslog, compact in zip(runs["slew_attested"], runs["asserted"]):
-            self.assertEqual(syslog["matched_lines"], compact["matched_lines"])
-            self.assertEqual(syslog["matched_marker_lines"], compact["matched_marker_lines"])
-            self.assertNotEqual(syslog["log_sha256"], compact["log_sha256"])
-        self.assertEqual(runs["slew_attested"][0]["log_sha256"],
-                         campaign.digest(SYSLOG_FIXTURE.read_bytes()))
-        self.assertEqual(runs["asserted"][0]["log_sha256"],
-                         campaign.digest(COMPACT_FIXTURE.read_bytes()))
-
-    def test_the_production_commands_are_the_ruled_absolute_argv(self):
-        self.assertEqual(campaign.SUDO, "/usr/bin/sudo")
-        self.assertEqual(campaign.SYSTEMSETUP, "/usr/sbin/systemsetup")
-        self.assertEqual(campaign.LOG, "/usr/bin/log")
-        self.assertEqual(campaign.network_time_argv("off"),
-                         ("/usr/bin/sudo", "-n", "/usr/sbin/systemsetup",
-                          "-setusingnetworktime", "off"))
-        self.assertEqual(campaign.network_time_argv("on"),
-                         ("/usr/bin/sudo", "-n", "/usr/sbin/systemsetup",
-                          "-setusingnetworktime", "on"))
-        self.assertEqual(campaign.EXPECTED_NETWORK_TIME_OFF_STDOUT,
-                         "setUsingNetworkTime: Off\n")
-        argv = campaign.timed_log_argv(1790073429.0, 1790074020.0)
-        self.assertEqual(argv[:8], ("/usr/bin/log", "show", "--info", "--debug",
-                                    "--style", "syslog", "--predicate",
-                                    'process == "timed"'))
-        self.assertEqual(argv[8], "--start")
-        self.assertEqual(argv[10], "--end")
-        for value in (argv[9], argv[11]):
-            self.assertRegex(value, r"^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d$")
 
 
 class TimedLogScannerTests(unittest.TestCase):
@@ -1300,55 +1151,7 @@ class StartDriftCadenceTests(FrozenExecutorTests):
         self.assertAlmostEqual(self.envelope_journal[0]['start_drift_s'], 2.5)
         self.assertEqual([row.get('abort') for row in self.envelope_journal], [None] * 12)
 
-    def test_regression_5_the_attestation_runs_in_the_gap_never_beside_a_capture(self):
-        commands = NetworkTimeControlTests.fake_commands(self)
-        rc, summary, outcome, refusals, calls, control, sessions = self.exercise(
-            commands=commands)
-        self.assertEqual(rc, 0)
-        # Strict alternation: envelope i is attested, with its log on disk,
-        # before envelope i+1 is spawned, and no collector is alive at any
-        # attestation.
-        self.assertEqual([(kind, index) for kind, index, *_ in self.timeline],
-                         [step for index in range(1, 13)
-                          for step in (('spawn', index), ('attest', index))])
-        for step in self.timeline:
-            if step[0] == 'attest':
-                _, index, live, log_written = step
-                self.assertEqual(live, [], f'envelope {index} attested beside a live capture')
-                self.assertTrue(log_written, index)
-        for session in sessions:
-            attestation = session['network_time_provenance']['attestation']
-            self.assertEqual(attestation['window_method'], 'epoch_monotonic_union_v1')
-            stamps = session['power']['anchor']['clock_stamps']
-            self.assertEqual(attestation['window_epoch_s'], campaign.attestation_window(stamps))
 
-    def test_regression_5_a_stepped_wall_clock_keeps_the_window_over_the_capture(self):
-        # The stamps' monotonic pair fixes the capture's LENGTH; a wall step
-        # moves one endpoint's POSITION.  The union covers the true capture
-        # whichever endpoint moved -- a +-1 s window around the two wall
-        # stamps does not when the step ran the clock BACK.
-        for step in (30, -30):
-            with self.subTest(step=step):
-                commands = NetworkTimeControlTests.fake_commands(self)
-                *_, sessions = self.exercise(commands=commands, stepped_stop_s=step)
-                for session in sessions:
-                    stamps = session['power']['anchor']['clock_stamps']
-                    started = stamps['sampling_started']['epoch_s']
-                    stopped = stamps['sampling_stopped']['epoch_s']
-                    span = (stamps['sampling_stopped']['monotonic_before_s']
-                            - stamps['sampling_started']['monotonic_before_s'])
-                    window = session['network_time_provenance']['attestation']['window_epoch_s']
-                    self.assertEqual(window, [min(started, stopped - span) - 1,
-                                              max(stopped, started + span) + 1])
-                    # Both wall readings of the capture's true extent lie
-                    # inside the window; that is what the +-1 s form loses.
-                    for moment in (started, started + span, stopped - span, stopped):
-                        self.assertLessEqual(window[0], moment)
-                        self.assertGreaterEqual(window[1], moment)
-                if step < 0:
-                    narrow = [started - 1, stopped + 1]
-                    self.assertLess(narrow[1], started + span,
-                                    'the +-1 s form would have missed the capture')
 
     def test_regression_5_an_unproven_teardown_refuses_the_query_not_the_night(self):
         self.assertIsNone(campaign.capture_still_live(
@@ -1369,28 +1172,6 @@ class StartDriftCadenceTests(FrozenExecutorTests):
         self.assertEqual(campaign.attestation_exclusions(attestation['state']),
                          ['network_time_unattested'])
 
-    def test_regression_6_a_failed_query_reaches_the_summary_as_unattested(self):
-        # A267 Part 4 already pins the absolute argv and `--info --debug`
-        # (test_the_production_commands_are_the_ruled_absolute_argv), the
-        # exhibit-D ten-match slew path
-        # (test_an_applied_slew_inside_a_window_excludes_that_night_envelope)
-        # and the scanner's zero-match behaviour
-        # (test_exhibit_d_has_ten_applied_corrections_and_a_clean_log_has_none).
-        # What was not covered end to end: a query that EXITS NONZERO must
-        # reach pilot_summary as network_time_unattested.
-        commands = NetworkTimeControlTests.fake_commands(self)
-        (self.command_directory / 'log').write_text(
-            f'#!/bin/sh\nprintf %s "$@" >> "{self.command_directory}/log-calls.txt"\nexit 3\n')
-        rc, summary, outcome, refusals, calls, control, sessions = self.exercise(
-            commands=commands)
-        for session in sessions:
-            attestation = session['network_time_provenance']['attestation']
-            self.assertEqual(attestation['state'], 'asserted')
-            self.assertEqual(attestation['exit_code'], 3)
-        self.assertEqual([v['excluded'] for v in summary['envelopes']],
-                         [['network_time_unattested']] * 12)
-        self.assertEqual(summary['retained'], 0)
-        self.assertEqual(summary['status'], 'INCONCLUSIVE')
 
     def test_regression_8_the_teardown_budget_is_the_gap_not_a_literal(self):
         self.exercise()
@@ -1641,144 +1422,12 @@ class AttestationBudgetTests(FrozenExecutorTests):
             return result
         stack.enter_context(patch.object(module, "cleanup_groups", side_effect=spend))
 
-    def test_a_gap_under_six_seconds_pushes_every_spawn_late_by_six_minus_gap(self):
-        """Ruling 18 Q3 C3: what the sub-6 s band actually costs, executed.
 
-        Below a 6 s gap the two FLOORS (the teardown's 1 s and the query's
-        5 s) add to 6 and overrun the gap.  Both floors are spent here on the
-        harness's fake clock -- the teardown by `_spend_the_whole_teardown_
-        budget`, the query by `attest_burn=5`, which is what a query that
-        times out at its bound costs -- so the overrun is real work, not an
-        injected number.
-
-        The overrun is ``6 - gap`` per slot and it does NOT compound: the
-        collector's deadline is ABSOLUTE (`sample_quiet_predicate_evidence`
-        `deadline = scheduled + duration_s`), so a spawn that is late by d
-        captures for ``envelope_s - d`` and still ends at its scheduled end,
-        and the next slot inherits the same ``6 - gap`` and no more.  Both
-        halves are pinned below, because "the drift accumulates" and "the
-        drift is a constant per-slot lateness" call for different detectors.
-
-        At a 3 s gap the 3 s overrun is over the scaled 2 s abort bar, so the
-        night ends REFUSED at envelope 2 -- the FIRST eligible spawn
-        (envelope 01 follows the settle and tests no pitch).  At a 5 s gap
-        the 1 s overrun is under the bar, every one of the twelve slots is
-        late by exactly 1 s, and the abort never fires: the residual is then
-        a standing per-slot lateness that `start_drift_max_s` (10 s under v2)
-        is the only thing that would ever exclude.
-        """
-        tight = {**PROTOCOL, 'slot_pitch_s': 603, 'start_drift_abort_s': 2}
-        self.assertEqual(campaign.cleanup_budget_s(tight)
-                         + campaign.attestation_timeout_s(tight), 6)
-        rc, summary, outcome, refusals, calls, *_ = self.exercise(
-            protocol=tight, attest_burn=5, spy=self._spend_the_whole_teardown_budget)
-        self.assertEqual(rc, 2)
-        self.assertEqual(refusals, 1)
-        # Envelope 02 is the first spawn the pitch governs, and it never runs.
-        self.assertEqual(sum('collect' in cmd for cmd in calls), 1)
-        self.assertEqual([row['index'] for row in self.envelope_journal], [1, 2])
-        aborted = self.envelope_journal[-1]
-        self.assertEqual(aborted['abort'], 'start_drift_abort')
-        self.assertAlmostEqual(aborted['start_drift_s'], 6 - 3)
-        self.assertEqual(outcome['outcome'], 'refused')
-        self.assertIn('start_drift_abort: envelope 2', outcome['error'])
-        # A 5 s gap: the same 6 s of floors, a 1 s overrun, no abort, and the
-        # SAME 1 s on every later slot -- the lateness does not compound.
-        loose = {**PROTOCOL, 'slot_pitch_s': 605, 'start_drift_abort_s': 2}
-        self.assertEqual(campaign.cleanup_budget_s(loose)
-                         + campaign.attestation_timeout_s(loose), 6)
-        rc, summary, outcome, refusals, *_ = self.exercise(
-            protocol=loose, attest_burn=5, spy=self._spend_the_whole_teardown_budget)
-        self.assertEqual(rc, 0)
-        self.assertEqual(outcome['outcome'], 'complete')
-        self.assertEqual([round(row['start_drift_s'], 6) for row in self.envelope_journal],
-                         [0] + [6 - 5] * 11)
-        self.assertEqual([row.get('abort') for row in self.envelope_journal], [None] * 12)
-        self.assertLess(6 - 5, PROTOCOL['start_drift_max_s'])
-
-    def test_the_bound_is_the_registrations_gap_and_a_timeout_keeps_the_schedule(self):
-        # 620 - 600 = 20 s of gap, 15 s of it is the teardown's budget, and
-        # the query gets the 5 s that leaves; the floor holds a tiny gap open.
-        self.assertEqual(campaign.attestation_timeout_s(PROTOCOL), 5)
-        self.assertEqual(campaign.attestation_timeout_s(SCALED),
-                         campaign.ATTESTATION_TIMEOUT_FLOOR_S)
-        self.assertEqual(campaign.attestation_timeout_s({**PROTOCOL, 'slot_pitch_s': 700}), 5)
-        self.assertNotIn("timeout=300", (ROOT / 'joulewise/quiet_predicate_campaign.py').read_text())
-        # Every query spends its whole 5 s bound and times out: the night
-        # keeps its cadence, the envelopes lose their claim-bearing state, and
-        # the cost of the query is on the record for the next budget.
-        rc, summary, outcome, refusals, calls, control, sessions = self.exercise(attest_burn=5)
-        self.assertEqual(rc, 0)
-        self.assertEqual([kwargs["timeout"] for kwargs in self.attestation_kwargs], [5] * 12)
-        self.assertEqual([v["excluded"] for v in summary["envelopes"]],
-                         [["network_time_unattested"]] * 12)
-        self.assertEqual(summary["retained"], 0)
-        self.assertEqual([row["network_time_attestation_wall_s"]
-                          for row in self.envelope_journal], [5] * 12)
-        starts = [float(a[a.index('--envelope-start-mono-s') + 1]) for a in calls if 'collect' in a]
-        self.assertEqual(starts, [600 + 620 * i for i in range(12)])
-        for row in self.envelope_journal:
-            self.assertLessEqual(abs(row["start_drift_s"]), .02)
 
 
 class ZeroOutputGuardTests(FrozenExecutorTests):
     """Item 2 (05b S1): an empty result is not a clean machine."""
 
-    def test_a_body_without_the_syslog_header_is_asserted_never_authenticated(self):
-        # R2.1: the two LIVE captures of the ruled argv are accepted, and the
-        # bytes that were accepted are the bytes pinned here.
-        self.assertEqual(campaign.digest(SYSLOG_FIXTURE.read_bytes()), SYSLOG_FIXTURE_SHA256)
-        self.assertEqual(campaign.digest(ZERO_MATCH_FIXTURE.read_bytes()),
-                         ZERO_MATCH_FIXTURE_SHA256)
-        for label, path in (("the 191-line capture", SYSLOG_FIXTURE),
-                            ("the zero-match capture", ZERO_MATCH_FIXTURE)):
-            self.assertTrue(campaign.timed_log_has_header(path.read_text()), label)
-        self.assertTrue(campaign.timed_log_has_header(TIMED_LOG_HEADER))
-        # R2.6: `log` pads the header line with four trailing spaces; the
-        # guard tolerates them and their absence alike.  (Counterfactual:
-        # with `==` in place of `.rstrip() ==`, the live captures fail.)
-        self.assertEqual(ZERO_MATCH_FIXTURE.read_text(),
-                         campaign.TIMED_LOG_SYSLOG_HEADER + "    \n")
-        self.assertTrue(campaign.timed_log_has_header(
-            campaign.TIMED_LOG_SYSLOG_HEADER + "    \n"))
-        self.assertTrue(campaign.timed_log_has_header(campaign.TIMED_LOG_SYSLOG_HEADER))
-        # R2.3: the compact style's header is the defect this guard cures.
-        self.assertFalse(campaign.timed_log_has_header(COMPACT_FIXTURE.read_text()))
-        self.assertFalse(campaign.timed_log_has_header(
-            COMPACT_FIXTURE.read_text().splitlines()[0]))
-        # R2.4: no body, an error page, a bare newline, and an entry line
-        # with no header above it (each format's own second line).
-        for body in ("", "<html>error</html>\n", "\n", "2026-09-22 02:28:08.226 Df timed\n",
-                     COMPACT_FIXTURE.read_text().splitlines()[1] + "\n",
-                     SYSLOG_FIXTURE.read_text().splitlines()[1] + "\n"):
-            self.assertFalse(campaign.timed_log_has_header(body), repr(body))
-        for label, body, state in (
-                ("empty", "", "asserted"),
-                ("an error page", "<html>error</html>\n", "asserted"),
-                ("the compact header", COMPACT_FIXTURE.read_text().splitlines()[0] + "\n",
-                 "asserted"),
-                ("header only", TIMED_LOG_HEADER, "authenticated"),
-                # R2.2: the live zero-match capture, end to end.
-                ("the live zero-match capture", ZERO_MATCH_FIXTURE.read_text(),
-                 "authenticated")):
-            with self.subTest(case=label):
-                commands = NetworkTimeControlTests.fake_commands(self, timed_log=body)
-                rc, summary, outcome, refusals, calls, control, sessions = self.exercise(
-                    commands=commands)
-                self.assertEqual(rc, 0)
-                self.assertEqual(len(sessions), 12)
-                for session in sessions:
-                    attestation = session["network_time_provenance"]["attestation"]
-                    self.assertEqual(attestation["state"], state)
-                    self.assertEqual(attestation["exit_code"], 0)
-                    self.assertEqual(attestation["matched_lines"], 0)
-                    if state == "asserted":
-                        self.assertEqual(attestation["reason"],
-                                         "timed log query returned no header")
-                self.assertEqual([v["excluded"] for v in summary["envelopes"]],
-                                 [[] if state == "authenticated"
-                                  else ["network_time_unattested"]] * 12)
-                self.assertEqual(summary["retained"], 12 if state == "authenticated" else 0)
 
 
 class UnreadableSessionRecordTests(FrozenExecutorTests):
@@ -1804,198 +1453,12 @@ class UnreadableSessionRecordTests(FrozenExecutorTests):
                     self.assertEqual(campaign.attestation_exclusions(attestation["state"]),
                                      ["network_time_unattested"])
 
-    def test_a_record_that_vanishes_before_the_annotation_is_journalled_asserted(self):
-        # The annotation reports its own failure, then the summary's custody
-        # gate refuses the lost collector record without writing a summary.
-        def spy(stack, module):
-            real = module.record_attestation
-            def vanishing(out, attestation):
-                (out / "session.json").unlink()
-                return real(out, attestation)
-            stack.enter_context(patch.object(module, "record_attestation",
-                                             side_effect=vanishing))
-        from contextlib import redirect_stdout
-        from io import StringIO
-        output = StringIO()
-        with redirect_stdout(output):
-            self.exercise(spy=spy, tolerate_raise=True)
-        self.assertIsInstance(self.execute_error, battery_float.CustodyFailure)
-        self.assertIn("custody_failure: session.json unreadable: missing", output.getvalue())
 
 
-class ExitCodePrecedenceTests(FrozenExecutorTests):
-    """Item 3 (05b S2, 05a N2): 2 is a refusal; 3 is a machine left wrong."""
-
-    ROWS = (
-        # label, exercise kwargs, outcome, restored, refusals, exit code
-        ("complete, restored", {}, "complete", True, 0, 0),
-        ("complete, restore failed", {"on_exit": 1}, "complete", False, 0, 3),
-        ("partial, restored", {"errors": {3}}, "partial", True, 0, 0),
-        ("partial, restore failed", {"errors": {3}, "on_exit": 1}, "partial", False, 0, 3),
-        ("refused (dead recorder), restored",
-         {"recorder_dead": True}, "refused", True, 1, 2),
-        ("refused (dead recorder), restore failed",
-         {"recorder_dead": True, "on_exit": 1}, "refused", False, 1, 2),
-        ("refused (two cleanup_unproven), restored",
-         {"cleanup_failures": {3, 4}}, "refused", True, 1, 2),
-        ("refused (two cleanup_unproven), restore failed",
-         {"cleanup_failures": {3, 4}, "on_exit": 1}, "refused", False, 1, 2),
-        # `cleanup_proven` as a real axis: twelve complete envelopes, every
-        # slot's teardown proven, and residue that only the night's FINAL
-        # sweep sees.  Before this row every row in the table asserted
-        # `cleanup_proven` True, so the axis was a constant.
-        ("complete envelopes, final cleanup unproven",
-         {"final_cleanup_unproven": True}, "refused", True, 1, 2, False),
-        ("complete envelopes, final cleanup unproven, restore failed",
-         {"final_cleanup_unproven": True, "on_exit": 1}, "refused", False, 1, 2, False),
-    )
-
-    def test_the_truth_table_over_outcome_cleanup_and_restore(self):
-        """R5.3: `cleanup_proven` is an axis of this table, not a constant.
-
-        The last two rows are the ones the table lacked.  Note what the
-        document says on them: the envelopes all completed, but a night whose
-        final teardown cannot be proven is REFUSED by `execute` before the
-        outcome is written, so `outcome` reads `refused` and never
-        `complete`.  The cold gate's phrasing ("a row with outcome ==
-        complete and final cleanup_proven False") describes the envelopes'
-        outcome, which `execute` computes and then overrides; the return code
-        it asks for -- 2 -- is what these rows pin.
-        """
-        for label, kwargs, expected_outcome, restored, refusal_count, code, *proven in self.ROWS:
-            with self.subTest(case=label):
-                rc, summary, outcome, refusals, calls, control, sessions = self.exercise(**kwargs)
-                self.assertEqual(outcome["outcome"], expected_outcome)
-                self.assertIs(outcome["cleanup_proven"], proven[0] if proven else True)
-                # The restore's verdict is on the outcome document on EVERY
-                # path, so collapsing its code into the refusal hides nothing.
-                self.assertIn("network_time_restored", outcome)
-                self.assertIs(outcome["network_time_restored"], restored)
-                self.assertEqual(refusals, refusal_count)
-                self.assertEqual(rc, code, label)
 
 
-class NetworkTimeReceiptTests(FrozenExecutorTests):
-    """Item 4 (05b S3): a toggle that never answers is still on the record."""
-
-    def test_an_off_that_times_out_writes_its_receipt_before_refusing(self):
-        commands = NetworkTimeControlTests.fake_commands(self, off_sleep=5)
-        def spy(stack, module):
-            # The real bound is 30 s; the seam shortens it so the regression
-            # measures the timeout path, not the wall clock.
-            stack.enter_context(patch.object(module, "NETWORK_TIME_SET_TIMEOUT_S", .5))
-        began = time.monotonic()
-        rc, summary, outcome, refusals, calls, control, sessions = self.exercise(
-            commands=commands, spy=spy)
-        self.assertLess(time.monotonic() - began, 4)
-        self.assertEqual(campaign.NETWORK_TIME_SET_TIMEOUT_S, 30)
-        self.assertEqual(rc, 2)
-        self.assertEqual(refusals, 1)
-        self.assertEqual(calls, [])  # no recorder, no collector
-        self.assertEqual(outcome["outcome"], "refused")
-        self.assertIn("network time OFF not established", outcome["error"])
-        self.assertIn("TimeoutExpired", outcome["error"])
-        # The attempt is on the record with an exit code it never got.
-        self.assertEqual(control["off"]["argv"][1:],
-                         ["-n", campaign.SYSTEMSETUP, "-setusingnetworktime", "off"])
-        self.assertIsNone(control["off"]["exit_code"])
-        self.assertIsNone(control["off"]["stdout"])
-        self.assertIn("TimeoutExpired", control["off"]["error"])
-        self.assertIsNotNone(control["off"]["epoch_s"])
-        self.assertIsNotNone(control["off"]["monotonic_s"])
-        # ... and the restore ran anyway, on the same refused path.
-        self.assertEqual(control["on"]["exit_code"], 0)
-        self.assertTrue(outcome["network_time_restored"])
 
 
-class RestoreReceiptTests(FrozenExecutorTests):
-    """Item 5 (05b S4, S5): the restore protects the record and never raises."""
-
-    def receipt(self, exit_code=0):
-        return {"argv": list(campaign.network_time_argv("on")), "exit_code": exit_code,
-                "stdout": "setUsingNetworkTime: On\n", "epoch_s": 1.0, "monotonic_s": 2.0}
-
-    def test_an_unreadable_or_non_dict_record_keeps_its_bytes(self):
-        cases = {"a json list": "[]\n", "json null": "null\n", "a json string": '"off"\n',
-                 "a number": "17\n", "garbage bytes": "{ not json\n"}
-        with tempfile.TemporaryDirectory(dir="/tmp") as tmp:
-            night = Path(tmp)
-            path = night / campaign.NETWORK_TIME_CONTROL_BASENAME
-            sibling = night / campaign.NETWORK_TIME_RESTORE_BASENAME
-            for label, payload in cases.items():
-                with self.subTest(case=label):
-                    path.write_text(payload)
-                    sibling.unlink(missing_ok=True)
-                    with patch.object(campaign, "set_network_time",
-                                      return_value=self.receipt()):
-                        self.assertTrue(campaign.restore_network_time(night))
-                    self.assertEqual(path.read_text(), payload)
-                    written = json.loads(sibling.read_text())
-                    self.assertEqual(written["on"]["exit_code"], 0)
-                    self.assertEqual(written["off"]["state"], "unreadable")
-                    self.assertEqual(written["off"]["record"],
-                                     campaign.NETWORK_TIME_CONTROL_BASENAME)
-                    # The verdict is still the set form's own exit code.
-                    with patch.object(campaign, "set_network_time",
-                                      return_value=self.receipt(exit_code=1)):
-                        self.assertFalse(campaign.restore_network_time(night))
-                    self.assertEqual(path.read_text(), payload)
-
-    def test_no_exception_class_escapes_the_restore(self):
-        with tempfile.TemporaryDirectory(dir="/tmp") as tmp:
-            night = Path(tmp)
-            path = night / campaign.NETWORK_TIME_CONTROL_BASENAME
-            path.write_text(json.dumps({"schema": campaign.NETWORK_TIME_CONTROL_SCHEMA,
-                                        "off": {"exit_code": 0}}))
-            # A toggle that raises is reported, not propagated.
-            with patch.object(campaign, "set_network_time", side_effect=OSError("no sudo")):
-                self.assertFalse(campaign.restore_network_time(night))
-            self.assertIn("OSError", json.loads(path.read_text())["on"]["error"])
-            # A failure that is NOT the toggle (here: a receipt with no exit
-            # code at all) still returns a verdict instead of a traceback.
-            with patch.object(campaign, "set_network_time", return_value=None):
-                self.assertFalse(campaign.restore_network_time(night))
-            self.assertIn("TypeError",
-                          json.loads((night / campaign.NETWORK_TIME_RESTORE_BASENAME)
-                                     .read_text())["on"]["error"])
-            # A write failure does not mask a restore that worked -- and
-            # R5.4: it is no longer silent.  The receipt is the only artifact
-            # that says the machine was put back; a write that cannot land
-            # leaves a hole in the record, and the hole now names itself on
-            # the executor's stdout, which the night log keeps.
-            import io
-            from contextlib import redirect_stdout
-            said = io.StringIO()
-            with patch.object(campaign, "set_network_time", return_value=self.receipt()), \
-                    patch.object(campaign, "write_control_record",
-                                 side_effect=PermissionError("read-only night")), \
-                    redirect_stdout(said):
-                self.assertTrue(campaign.restore_network_time(night))
-            self.assertIn("restore receipt write failed: PermissionError: read-only night",
-                          said.getvalue())
-
-    def test_a_night_whose_record_is_corrupted_still_writes_its_outcome(self):
-        for label, payload in (("a json list", "[]\n"), ("garbage bytes", "{ not json\n")):
-            with self.subTest(case=label):
-                def spy(stack, module, payload=payload):
-                    real = module.write_control_record
-                    def corrupting(path, control):
-                        real(path, control)
-                        # Replace the record between OFF and the restore, the
-                        # way a truncated write or a stray editor would.
-                        if (path.name == campaign.NETWORK_TIME_CONTROL_BASENAME
-                                and control.get("on") is None):
-                            path.write_text(payload)
-                    stack.enter_context(patch.object(module, "write_control_record",
-                                                     side_effect=corrupting))
-                rc, summary, outcome, refusals, calls, control, sessions = self.exercise(spy=spy)
-                self.assertEqual(rc, 0)
-                self.assertEqual(outcome["outcome"], "complete")
-                self.assertTrue(outcome["network_time_restored"])
-                self.assertEqual(summary["retained"], 12)
-                self.assertEqual(self.control_text, payload)
-                self.assertEqual(self.restore_receipt["on"]["exit_code"], 0)
-                self.assertEqual(self.restore_receipt["off"]["state"], "unreadable")
 
 
 class SessionRewriteFailureTests(FrozenExecutorTests):
@@ -2119,53 +1582,11 @@ class SessionRewriteFailureTests(FrozenExecutorTests):
                              ["network_time_unattested"])
             self.assertEqual((out / "session.json").read_bytes(), before)
 
-    def test_a_night_whose_annotations_cannot_land_still_finishes(self):
-        def spy(stack, module):
-            original = module.os.replace
-            def fail_attestation(source, target):
-                if Path(source).name == "session.json.tmp":
-                    raise PermissionError("read-only envelope")
-                return original(source, target)
-            stack.enter_context(patch.object(module.os, "replace",
-                                             side_effect=fail_attestation))
-        rc, summary, outcome, refusals, calls, control, sessions = self.exercise(spy=spy)
-        self.assertEqual(rc, 0)
-        self.assertEqual(outcome["outcome"], "complete")
-        self.assertEqual(refusals, 0)
-        # Every envelope keeps the collector's own session record, unannotated,
-        # and the executor's entry carries the asserted state the summary reads.
-        for session in sessions:
-            self.assertNotIn("attestation", session["network_time_provenance"])
-        self.assertEqual([row["network_time_attestation"] for row in self.envelope_journal],
-                         ["asserted"] * 12)
-        # Ruling 18 C7: the reason is DURABLE.  `session.json` keeps the
-        # collector's unannotated bytes on this path, so the journal row is
-        # the only place a harvester can read why the envelope was withdrawn.
-        for row in self.envelope_journal:
-            self.assertIn("session rewrite failed: PermissionError: read-only envelope",
-                          row["network_time_attestation_reason"])
-        self.assertEqual([v["excluded"] for v in summary["envelopes"]],
-                         [["network_time_unattested"]] * 12)
-        self.assertEqual(summary["retained"], 0)
 
 
 class RestoreOrderTests(FrozenExecutorTests):
     """Item 11 (05a S4): the restore is the FIRST action of the finally."""
 
-    def test_the_restore_precedes_the_cleanup_record_on_every_path(self):
-        def spy(stack, module):
-            # The step that follows the restore in the `finally` cannot run.
-            # If the restore had been ordered after it, the machine would be
-            # left with network time OFF and no receipt saying so.
-            stack.enter_context(patch.object(module, "cleanup_record",
-                                             side_effect=OSError("cleanup journal lost")))
-        rc, summary, outcome, refusals, calls, control, sessions = self.exercise(
-            spy=spy, tolerate_raise=True)
-        self.assertIsInstance(self.execute_error, OSError)
-        self.assertEqual(control["off"]["stdout"], EXPECTED_OFF)
-        self.assertIsNotNone(control["on"], "the restore did not run before cleanup_record")
-        self.assertEqual(control["on"]["exit_code"], 0)
-        self.assertEqual(control["on"]["argv"][-1], "on")
 
 
 class AttestationWindowRecordTests(unittest.TestCase):
@@ -2302,7 +1723,7 @@ class BenchReplayFailClosedTests(unittest.TestCase):
         for row in harness.envelope_journal:
             self.assertIn("start_drift_s", row)
             self.assertIn("cleanup_wall_s", row)
-            self.assertIn("network_time_attestation_wall_s", row)
+            self.assertNotIn("network_time_attestation_wall_s", row)
         self.assertEqual([s["power"]["recorder_kind"] for s in sessions], ["replay"] * 12)
         # L3 (17a N2): and no ENERGY survives the override, so the document's
         # own claim that no number can be lifted from it is true.  The
@@ -2461,7 +1882,13 @@ class BenchReplayFailClosedTests(unittest.TestCase):
         def spy(stack, module):
             stack.enter_context(patch.dict(
                 module.os.environ, {sampler.REPLAY_ENV: "/Users/edr/night-archive/pilot"}))
-            AttestationBudgetTests._spend_the_whole_teardown_budget(stack, module)
+            real_cleanup = module.cleanup_groups
+            def delayed(*args, **kwargs):
+                result = real_cleanup(*args, **kwargs)
+                if kwargs.get("exclude"):
+                    module.time.now += 6
+                return result
+            stack.enter_context(patch.object(module, "cleanup_groups", side_effect=delayed))
 
         rc, _summary, outcome, refusals, *_ = harness.exercise(
             protocol=tight, attest_burn=5, spy=spy)
@@ -2599,15 +2026,15 @@ class BenchReplayFailClosedTests(unittest.TestCase):
         # rebound to the stub, exactly as the bench driver rebinds them.
         from unittest.mock import patch
         with tempfile.TemporaryDirectory() as tmp, \
-                patch.object(campaign, "SUDO", str(self.STUB)), \
-                patch.object(campaign, "SYSTEMSETUP", str(self.STUB)), \
+                patch.object(campaign.subprocess, "run", return_value=without), \
+                patch.object(campaign.network_time_off, "boot_id", return_value="boot"), \
                 patch.dict(os.environ, bare, clear=True):
             with self.assertRaises(ValueError) as caught:
-                campaign.establish_network_time_off(Path(tmp))
+                campaign.establish_network_time_off(Path(tmp), "plan")
             record = json.loads((Path(tmp) / campaign.NETWORK_TIME_CONTROL_BASENAME).read_text())
-        self.assertIn("network time OFF not established", str(caught.exception))
-        self.assertEqual(record["off"]["exit_code"], 2)
-        self.assertEqual(record["off"]["stdout"], "")
+        self.assertIn("network time OFF receipt not admitted", str(caught.exception))
+        self.assertEqual(record["exit_code"], 2)
+        self.assertEqual(record["stdout"], "")
 
     def test_L4_the_drivers_own_guards_each_refuse_what_they_name(self):
         """Lane contract lens 17a N3: the four refusals ahead of the night.
@@ -4079,7 +3506,7 @@ class BatteryFloatSummaryTests(unittest.TestCase):
         for index in range(1, 13):
             out = evidence / f'envelope-{index:02d}'
             out.mkdir()
-            pair = PairAuthenticationTests().pair(out)
+            pair = battery_float_tests.PairAuthenticationTests().pair(out)
             session = {'session': 'session-1', 'boot_id': 'boot', 'os_build': '25G83',
                        'battery_float': pair, 'journal_rows': 1,
                        'start_stamp': {'monotonic_before_s': 20e-9, 'monotonic_after_s': 20e-9},
@@ -4706,6 +4133,7 @@ from types import SimpleNamespace
 from scripts import sample_quiet_predicate_evidence as h
 from joulewise import battery_float
 from tests.test_battery_float import raw
+h.network_time_off.boot_id = lambda: "fixture"
 
 def interrupted(*_):
     raise KeyboardInterrupt('teardown')

@@ -17,6 +17,9 @@ from types import MappingProxyType
 from typing import Any, Literal, Mapping, Sequence
 
 from joulewise.authentication_io import read_authentication_input
+from joulewise.calibration_dispositions import (
+    decisions_disposing, disposed_content_ids_for,
+)
 from joulewise.bundle_read import BundleReadError, BundleReader
 from joulewise.calibration_ledger import (
     IDENTITY_EPOCH_FIELDS,
@@ -141,6 +144,14 @@ ANCHOR_V3_R7_ACCEPTANCE_ID = "d079_calibration_acceptance_v2_n17_r7"
 ANCHOR_V3_R7_ACCEPTANCE_BOUND_SHA256 = (
     "9c3a29f61a6f72bbe5efdfb0eddd1caa14557595522b2abb093b414380b9fe16"
 )
+# P8 is the science-neutral cap-transaction pin reissue of r7.
+ANCHOR_V3_R8_ACCEPTANCE_BOUND_PATH = (
+    _CALIBRATION_CONFIG_DIR / "calibration_acceptance_d079_v2_n17_r8.json"
+)
+ANCHOR_V3_R8_ACCEPTANCE_ID = "d079_calibration_acceptance_v2_n17_r8"
+ANCHOR_V3_R8_ACCEPTANCE_BOUND_SHA256 = (
+    "52e3d18a087bd8a0f28da6d20c3817da4d3ce532c604d7f049c78aad6a489a13"
+)
 # Multi-generation registry.  Authentication is indexed by the artifact's own
 # `acceptance_id`, so a caller cannot present one generation's bytes under
 # another generation's pin, and predecessor packs stay verifiable unchanged.
@@ -190,13 +201,20 @@ ISSUED_ACCEPTANCE_REGISTRY: dict[str, dict[str, Any]] = {
         ),
         "file_sha256": ANCHOR_V3_R7_ACCEPTANCE_BOUND_SHA256,
     },
+    ANCHOR_V3_R8_ACCEPTANCE_ID: {
+        "path": ANCHOR_V3_R8_ACCEPTANCE_BOUND_PATH,
+        "relative_path": (
+            "configs/calibration/calibration_acceptance_d079_v2_n17_r8.json"
+        ),
+        "file_sha256": ANCHOR_V3_R8_ACCEPTANCE_BOUND_SHA256,
+    },
 }
 # Issuance is a later governed transaction. A candidate file never adds an
 # epoch merely by existing on disk; this registry must pin its issued bytes.
 EPOCH_CONTINUATION_REGISTRY: dict[str, dict[str, Any]] = {}
 # The LIVE surface: what production loads when no artifact is named.
-ACTIVE_ACCEPTANCE_ID = ANCHOR_V3_R7_ACCEPTANCE_ID
-DEFAULT_ACCEPTANCE_BOUND_PATH = ANCHOR_V3_R7_ACCEPTANCE_BOUND_PATH
+ACTIVE_ACCEPTANCE_ID = ANCHOR_V3_R8_ACCEPTANCE_ID
+DEFAULT_ACCEPTANCE_BOUND_PATH = ANCHOR_V3_R8_ACCEPTANCE_BOUND_PATH
 # Authenticates the retained ``schema_fixture_unissued`` genesis bytes; this is
 # not the digest of ``DEFAULT_ACCEPTANCE_BOUND_PATH``.
 GENESIS_FIXTURE_ACCEPTANCE_SHA256 = (
@@ -387,10 +405,14 @@ _D102_GENERATION_DERIVATIONS: dict[str, dict[str, Any]] = {
     ANCHOR_V3_R6_ACCEPTANCE_ID: _D102_N17_DERIVATION,
     # r7 is the science-neutral A267 clock-anchor-deriver reissue of r6.
     ANCHOR_V3_R7_ACCEPTANCE_ID: _D102_N17_DERIVATION,
+    # P8 is the science-neutral cap-transaction pin reissue of r7.
+    ANCHOR_V3_R8_ACCEPTANCE_ID: _D102_N17_DERIVATION,
 }
 
 
-def _registered_generation_row_is_complete(generation: Any, *, revision_five: bool = False) -> bool:
+def _registered_generation_row_is_complete(
+    generation: Any, *, revision_five: bool = False, revision_six: bool = False,
+) -> bool:
     """Whether a registered generation row carries every fence it must.
 
     The validator reads its epoch catalog, prior-set size, cutoff sequence,
@@ -422,6 +444,9 @@ def _registered_generation_row_is_complete(generation: Any, *, revision_five: bo
     shape of D-125's ``successor_screen_exceeds_budget_ceiling`` refusal.
     The exact 25G83/v3 registration Revision 5 permits equality, records
     ``zero_headroom``, and still refuses drift above the screen.
+    Revision 6 preserves equality and the 12-member floor and adds its
+    mandatory window-blocked Q99 to the exact maximum. Historical generations
+    keep their original equation.
     """
 
     if not isinstance(generation, Mapping):
@@ -475,10 +500,19 @@ def _registered_generation_row_is_complete(generation: Any, *, revision_five: bo
     drift = _decimal(operatives.get("maximum_budgetable_drift_s"))
     prediction = _decimal(generation["prediction_99_two_draw_s"])
     screen = _decimal(operatives.get("bracket_screen_s"))
+    within = None
+    if revision_six:
+        # Revision 6 adds an independent, mandatory fourth term. An absent or
+        # malformed term must not silently recover the Revision 5 equation.
+        if generation.get("registration_revision") != 6:
+            return False
+        within = _decimal(generation.get("prediction_99_within_window_two_draw_s"))
+        if within is None or within < 0:
+            return False
     expected_drift = (
-        max((item for item in (predecessor, prediction, screen) if item is not None),
+        max((item for item in (predecessor, prediction, screen, within) if item is not None),
             default=None)
-        if revision_five else
+        if revision_five or revision_six else
         max((item for item in (predecessor, prediction) if item is not None),
             default=None)
     )
@@ -487,7 +521,7 @@ def _registered_generation_row_is_complete(generation: Any, *, revision_five: bo
         or prediction is None
         or screen is None
         or drift != expected_drift
-        or not (screen <= drift if revision_five else screen < drift)
+        or not (screen <= drift if revision_five or revision_six else screen < drift)
     ):
         return False
     if not all(
@@ -522,7 +556,7 @@ def _registered_generation_row_is_complete(generation: Any, *, revision_five: bo
         )
         and (
             generation["screen_rule"] != SCREEN_RULE_FLOORED_RANGE_ENVELOPE
-            or generation["corpus_n"] >= (12 if revision_five else ENVELOPE_MINIMUM_CORPUS_N)
+            or generation["corpus_n"] >= (12 if revision_five or revision_six else ENVELOPE_MINIMUM_CORPUS_N)
         )
         and isinstance(session_ids, tuple)
         and all(isinstance(item, str) and item for item in session_ids)
@@ -787,7 +821,14 @@ def _valid_acceptance_bound(value: Any) -> bool:
         and isinstance(generation, Mapping)
         and generation.get("registration_revision") == 5
     )
-    if generation is None or not _registered_generation_row_is_complete(generation, revision_five=revision_five):
+    revision_six = (
+        value.get("identity_epoch") == REVISION_FIVE_EPOCH
+        and isinstance(generation, Mapping)
+        and generation.get("registration_revision") == 6
+    )
+    if generation is None or not _registered_generation_row_is_complete(
+        generation, revision_five=revision_five, revision_six=revision_six,
+    ):
         return False
     expected_n = generation["corpus_n"]
     operative_values = generation["operatives"]
@@ -975,12 +1016,28 @@ def _valid_acceptance_bound(value: Any) -> bool:
     # ones, and nothing else in the artifact would show it.
     if prefix_mode == PRIOR_PREFIX_MODE_IMPORT_PLUS_LIVE:
         registration_session_ids = set(generation["registration_session_ids"])
+        declared = prior.get("disposing_decision_ids")
+        disposed = disposed_content_ids_for(declared)
+        if disposed is None:
+            return False
+        if decisions_disposing(set(prior_ids)) != (declared if declared is not None else []):
+            return False
+        if not disposed.issubset(set(prior_ids)):
+            return False
+        if any(
+            prior_row_by_content_id[content_id].get("session_id") in registration_session_ids
+            or content_id in member_content_ids
+            for content_id in disposed
+        ):
+            return False
         registration_valid_ids: set[str] = set()
         for observation in prior["observations"]:
             if (
                 observation["disposition"] != "valid"
                 or observation["epoch_id"] != target_epoch_id
             ):
+                continue
+            if observation["content_id"] in disposed:
                 continue
             # A valid same-epoch row from OUTSIDE this registration refuses
             # issuance rather than being silently absorbed into the corpus:
@@ -1007,7 +1064,8 @@ def _valid_acceptance_bound(value: Any) -> bool:
                 or not entry["member_id"]
                 or not _valid_sha256(entry.get("manifest_sha256"))
                 or not _valid_sha256(entry.get("instrument_evidence_sha256"))
-                or entry.get("reason") not in REGISTERED_CORPUS_EXCLUSION_REASONS
+                or entry.get("reason") not in (REGISTERED_CORPUS_EXCLUSION_REASONS |
+                    {"frame_out_of_covered_range", "adverse_window"} if revision_six else REGISTERED_CORPUS_EXCLUSION_REASONS)
             ):
                 return False
             # The exclusion entry carries no content id, so it is matched into
@@ -1021,6 +1079,10 @@ def _valid_acceptance_bound(value: Any) -> bool:
             if excluded_content_id is None:
                 return False
             excluded_content_ids.add(excluded_content_id)
+        # Implied by the completeness equality; kept so that a change to that
+        # equality cannot silently admit a disposed exclusion.
+        if disposed & excluded_content_ids:
+            return False
         if (
             len(excluded_content_ids) != len(excluded)
             or member_content_ids & excluded_content_ids
@@ -1054,6 +1116,28 @@ def _valid_acceptance_bound(value: Any) -> bool:
         }
     minimum_id = member_ids[values.index(min(values))]
     maximum_id = member_ids[values.index(max(values))]
+    if revision_six:
+        try:
+            from scripts.issue_calibration_acceptance_generation import PrepareRefusal, within_window_prediction
+        except ImportError:
+            return False
+        try:
+            bindings = {}
+            for member in corpus["members"]:
+                content_id = content_id_from_artifact_hashes({
+                    "manifest.json": member["manifest_sha256"],
+                    "instrument_evidence.json": member["instrument_evidence_sha256"],
+                })
+                bindings[member["member_id"]] = prior_row_by_content_id[content_id]["session_id"]
+            expected_within = within_window_prediction(corpus["members"], bindings)
+            if derivation.get("within_window_prediction_derivation") != expected_within:
+                return False
+        except (PrepareRefusal, ValueError, TypeError, KeyError, ArithmeticError):
+            return False
+    if revision_six and statistics.get("prediction_99_within_window_two_draw_s") != generation[
+        "prediction_99_within_window_two_draw_s"
+    ]:
+        return False
     if (
         statistics.get("minimum_s") != expected_statistics["minimum_s"]
         or statistics.get("maximum_s") != expected_statistics["maximum_s"]
@@ -1891,8 +1975,13 @@ def _prior_set_matches_import_cutoff_prefix(
         and isinstance(generation, Mapping)
         and generation.get("registration_revision") == 5
     )
+    revision_six = (
+        artifact.get("identity_epoch") == REVISION_FIVE_EPOCH
+        and isinstance(generation, Mapping)
+        and generation.get("registration_revision") == 6
+    )
     if generation is None or not _registered_generation_row_is_complete(
-        generation, revision_five=revision_five
+        generation, revision_five=revision_five, revision_six=revision_six,
     ):
         return False
     prefix_mode = generation["prior_prefix_mode"]
@@ -2396,9 +2485,17 @@ def evaluate_calibration_bracket(
         for observation in new_observations
     ):
         return result, ("calibration_observation_unclassifiable",)
+    # Rows set aside by a reviewed decision this artifact declares do not
+    # count toward corpus doubling.
+    disposed_ids = disposed_content_ids_for(
+        artifact["prior_observation_set"].get("disposing_decision_ids")
+    )
+    if disposed_ids is None:
+        return result, ("calibration_acceptance_bound_stale",)
     valid_counts_by_epoch = [
         sum(
             observation.disposition == "valid"
+            and observation.content_id not in disposed_ids
             and dict(observation.identity_epoch) == dict(epoch)
             for observation in distinct_observations.values()
         )

@@ -46,7 +46,7 @@ from tests.test_powermetrics import (
     fixture_documents,
     rebased_documents,
 )
-from tests.test_arm_readiness import LaunchConsumptionV2Tests
+from tests import test_arm_readiness as arm_readiness_tests
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 EXAMPLE_CONFIG_PATH = REPO_ROOT / "configs" / "examples" / "mock_local.json"
@@ -1527,7 +1527,7 @@ class ReduceVerbTests(CliRunTestCase):
     def make_settled_launch_bundle(self, run_id: str) -> tuple[Path, dict]:
         """Use the real consume/start/settle writers to stamp one bundle."""
 
-        launch = LaunchConsumptionV2Tests()
+        launch = arm_readiness_tests.LaunchConsumptionV2Tests()
         launch.setUp()
         self.addCleanup(launch.doCleanups)
         _consumption_path, settled = launch._settle()

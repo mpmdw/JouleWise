@@ -18,6 +18,17 @@ independently of the packet.
 | Frozen packet | `docs/process_traces/2026-08-03-t3-doctrine-gate/PACKET.md`, sha256 `1f027d0714f0669a63405c9e245ad2e98f78034bd6608b4130084593e173b616` |
 | Consult record | `docs/process_traces/2026-08-03-t3-doctrine-gate/inputs/charter-consult-record.md` |
 
+## Convening triggers (process prune, 2026-09-29)
+
+The charter bytes are unchanged, so their digest stays valid. The five
+"mandatory convening triggers" in charter §3 no longer decide WHEN a cold
+gate is convened: since the owner-authorized prune of 2026-09-29, cold gates
+are convened only for registrations, claim-bearing results, irreversible
+actions and owner-reserved choices (`docs/orchestration.md`, "Cold gates,
+councils and round limits"; `docs/process_prune_2026-09-29.md`). §3 still
+tells a judge that a convening reason is not evidence on the merits. Fold
+the new list into the charter at the next byte change that Ed ratifies.
+
 ## Candidate charter v3 (not operative)
 
 | Field | Value |

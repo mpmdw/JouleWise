@@ -24,17 +24,17 @@ G2A_END_MARKER = "<!-- END GENERATED: g2a-governed-bracket -->"
 # These are the magistrate-pinned source anchors.  Validation is deliberately
 # line-and-byte exact; a moved or edited anchor must be reviewed and re-pinned.
 PINNED_ANCHORS = {
-    1407: ".venv/bin/python scripts/recover_calibration_ledger.py readiness \\",
-    1412: ".venv/bin/python scripts/reserve_calibration_window_bracket.py \\",
-    1428: "  --execute",
-    1516: "# First executable action: consume the inherited one-use FD and mint start",
-    1541: 'NEG8_DRIFT_BOUND="$BOUND_RUNS_ROOT/neg8-drift-bound.json"',
-    1556: '  /bin/sleep "$SETTLE_S"',
-    1636: "  settle",
-    1653: "run_stage_list() {",
-    1663: 'cd "$REPO"',
-    1693: 'screen_pre_calibration "$PRE_CAL_CUSTODY"',
-    1727: 'echo "$(timestamp) measurement_complete" >> "$OPERATOR_LOG_ROOT/window-chain.log"',
+    1367: ".venv/bin/python scripts/recover_calibration_ledger.py readiness \\",
+    1372: ".venv/bin/python scripts/reserve_calibration_window_bracket.py \\",
+    1388: "  --execute",
+    1476: "# First executable action: consume the inherited one-use FD and mint start",
+    1501: 'NEG8_DRIFT_BOUND="$BOUND_RUNS_ROOT/neg8-drift-bound.json"',
+    1516: '  /bin/sleep "$SETTLE_S"',
+    1596: "  settle",
+    1613: "run_stage_list() {",
+    1623: 'cd "$REPO"',
+    1653: 'screen_pre_calibration "$PRE_CAL_CUSTODY"',
+    1687: 'echo "$(timestamp) measurement_complete" >> "$OPERATOR_LOG_ROOT/window-chain.log"',
 }
 
 SOURCE_START = "```zsh\n#!/bin/zsh\nset -euo pipefail\n"

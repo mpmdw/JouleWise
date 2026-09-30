@@ -114,7 +114,7 @@ from joulewise.whole_window import (
     whole_window_refusal_reasons,
 )
 from joulewise.reduce import _integrate
-from tests.test_arm_readiness import LaunchConsumptionV2Tests
+from tests import test_arm_readiness as arm_readiness_tests
 
 # Whole-window verdict re-derivation anchors NEG-8 tolerances to a
 # repo-REGISTERED campaign policy (the only trust anchor outside bundle
@@ -6439,7 +6439,7 @@ class LaunchLineageExtractionTests(unittest.TestCase):
             self.assertIn("launch_lineage_conflict", result.refusal_reasons)
 
     def test_direct_extraction_requires_completion_for_marker_bundle(self) -> None:
-        launch = LaunchConsumptionV2Tests()
+        launch = arm_readiness_tests.LaunchConsumptionV2Tests()
         launch.setUp()
         self.addCleanup(launch.doCleanups)
         _consumption_path, settled = launch._settle()

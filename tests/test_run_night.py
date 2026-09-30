@@ -292,11 +292,19 @@ class ProbeSource:
         )
 
 
-def _load_driver(script_path: Path = SCRIPT_PATH, module_name: str = "run_night_test_module"):
+def _load_driver(script_path: Path = SCRIPT_PATH, module_name: str = "run_night_test_module",
+                 *, inject_clean_dwell: bool = True):
     spec = importlib.util.spec_from_file_location(module_name, script_path)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
+    # Driver mechanics never invoke a privileged setting command in tests.
+    # Receipt/settle refusals are exercised through the real helper separately.
+    if inject_clean_dwell:
+        module._admit_network_time_off = mock.Mock()
+        module._admit_derivation_clean_dwell = mock.Mock()
+        module._read_start_manifest = mock.Mock(return_value=({}, {}))
+        module._write_start_conditions = mock.Mock()
     return module
 
 
@@ -380,6 +388,9 @@ class NightDriverTests(unittest.TestCase):
 
     def setUp(self) -> None:
         self.driver = _load_driver()
+        off_admission = mock.patch.object(self.driver, "_admit_network_time_off")
+        self.off_admission_mock = off_admission.start()
+        self.addCleanup(off_admission.stop)
         self.temporary = tempfile.TemporaryDirectory()
         self.root = Path(self.temporary.name)
         identity_patch = mock.patch.object(
@@ -730,6 +741,394 @@ runpy.run_path(script, run_name='__main__')
         self.assertTrue((night / "refusal.json").is_file())
         self.assertEqual(calls, [])
 
+    def _run_with_clean_dwell(self, outcome, *, dwell_duration=600, off_age=0,
+                              manifest_case="first", settle_failure=False, off_wall_lag=0,
+                              start_record_duration=0, missing_evidence=None):
+        helper = _load_driver(inject_clean_dwell=False)
+        for name in ("_admit_derivation_clean_dwell", "_read_start_manifest",
+                     "_write_start_conditions", "_admit_network_time_off"):
+            setattr(self.driver, name, getattr(helper, name))
+        self.chain.write_text("export SESSION_ID='derivation-current'\necho chain\n")
+        self.sidecar.write_text(hashlib.sha256(self.chain.read_bytes()).hexdigest() + "\n")
+        self._write_plan(window_max_s=9000)
+        script = self.root / "scripts/prewindow_check.sh"
+        script.parent.mkdir(exist_ok=True)
+        script.write_bytes((REPO_ROOT / "scripts/prewindow_check.sh").read_bytes())
+        self.custody.mkdir(exist_ok=True)
+        manifest = {"schema": helper.START_MANIFEST_SCHEMA, "plan_id": "night-plan",
+                    "prior_revision6_session": None, "reason": "first Revision 6 session"}
+        if manifest_case in ("prior", "bad-harvest", "future-prior", "stop-prior", "bad-decision"):
+            harvest = self.root / "harvest.json"
+            harvest.write_text(json.dumps({'next_window': {'verdict': 'NEXT_WINDOW'}, 'next_window_sha256': hashlib.sha256(b'{\n  \"verdict\": \"NEXT_WINDOW\"\n}\n').hexdigest()}) + '\n')
+            manifest = {"schema": helper.START_MANIFEST_SCHEMA, "plan_id": "night-plan",
+                        "prior_revision6_session": {
+                            "session_id": "derivation-prior", "harvest_file": str(harvest),
+                            "harvest_sha256": hashlib.sha256(harvest.read_bytes()).hexdigest(),
+                            "started_epoch_s": self.t0_epoch_s - 10000,
+                            "terminal_epoch_s": self.t0_epoch_s - 200,
+                            "decision_sha256": json.loads(harvest.read_bytes())["next_window_sha256"]}}
+        if manifest_case == "stop-prior":
+            decision = {"verdict": "STOP_TO_REVIEW"}
+            raw = (json.dumps(decision, indent=2, sort_keys=True) + "\n").encode()
+            harvest.write_text(json.dumps({"next_window": decision, "next_window_sha256": hashlib.sha256(raw).hexdigest()}))
+            manifest["prior_revision6_session"].update(harvest_sha256=hashlib.sha256(harvest.read_bytes()).hexdigest(),
+                decision_sha256=hashlib.sha256(raw).hexdigest())
+        if manifest_case == "bad-decision":
+            manifest["prior_revision6_session"]["decision_sha256"] = "0" * 64
+        if manifest_case == "bad-harvest":
+            manifest["prior_revision6_session"]["harvest_sha256"] = "0" * 64
+        if manifest_case == "future-prior":
+            manifest["prior_revision6_session"]["terminal_epoch_s"] = self.t0_epoch_s + 100
+        if manifest_case == "no-reason":
+            del manifest["reason"]
+        if manifest_case == "wrong-plan":
+            manifest["plan_id"] = "another-night"
+        manifest_path = self.custody / "start_conditions_manifest.json"
+        if manifest_case != "absent":
+            manifest_path.write_text("{" if manifest_case == "malformed" else json.dumps(manifest))
+        output_bytes = b"dwell stdout\ncontinuous clean dwell 600/600s\nstderr\n"
+        clock = {"epoch_s": self.t0_epoch_s + 10, "monotonic_s": 10000.0}
+        events = []
+        off = {"schema": helper.network_time_off.SCHEMA,
+               "argv": list(helper.network_time_off.OFF_ARGV), "exit_code": 0,
+               "stdout": helper.network_time_off.EXPECTED_STDOUT, "stderr": "",
+               "boot_id": BOOT_UUID, "plan_id": "night-plan", "window_id": "night-plan"}
+        def advance(seconds):
+            events.append(("sleep", seconds))
+            clock["epoch_s"] += seconds
+            clock["monotonic_s"] += seconds
+        def set_off(path, *_):
+            events.append("OFF receipt")
+            off.update({key: clock[key] - off_age for key in clock})
+            off["epoch_s"] += off_wall_lag
+            path.write_text(json.dumps(off))
+            return off
+        def run(argv, **kwargs):
+            events.append("dwell")
+            self.assertEqual(events[:2], ["OFF receipt", "dwell"])
+            self.assertEqual(argv[:3], [str(script), "--wait", "--timeout-s"])
+            self.assertEqual(int(argv[3]), 1310)
+            self.assertEqual(kwargs["timeout"], 1310)
+            self.assertEqual(kwargs["cwd"], str(self.root))
+            self.assertIs(kwargs["stdin"], subprocess.DEVNULL)
+            self.assertIs(kwargs["stderr"], subprocess.STDOUT)
+            kwargs["stdout"].write(output_bytes)
+            advance(dwell_duration)
+            if outcome == "timeout":
+                raise subprocess.TimeoutExpired(argv, kwargs["timeout"])
+            if outcome == "launch error":
+                raise OSError("injected execution failure")
+            return subprocess.CompletedProcess(argv, outcome)
+        real_evaluate = self.driver.evaluate_night
+        def evaluate(*args, **kwargs):
+            events.append("t0 checks")
+            self.assertIn("dwell", events)
+            return real_evaluate(*args, **kwargs)
+        original_write = helper._write_bytes_exclusive
+        def write_record(path, payload):
+            original_write(path, payload)
+            if path.name == ".start_conditions.pending" and start_record_duration:
+                advance(start_record_duration)
+        chain = mock.Mock(return_value=(0, None, 0, [], True))
+        claim = mock.Mock(return_value=42)
+        real_settle = helper.network_time_off.seconds_since_receipt
+        def settled(receipt, now):
+            events.append("OFF settled")
+            if settle_failure:
+                raise ValueError("injected OFF settle failure")
+            result = real_settle(receipt, now)
+            if missing_evidence:
+                (self.custody / missing_evidence).unlink()
+            return result
+        with ExitStack() as stack:
+            for obj, name, kwargs in (
+                (helper.subprocess, "run", {"side_effect": run}),
+                (helper, "_write_bytes_exclusive", {"side_effect": write_record}),
+                (helper.time, "time", {"side_effect": lambda: clock["epoch_s"]}),
+                (helper.time, "monotonic", {"side_effect": lambda: clock["monotonic_s"]}),
+                (helper.time, "monotonic_ns", {"side_effect": lambda: int(clock["monotonic_s"] * 1e9)}),
+                (helper.time, "sleep", {"side_effect": advance}),
+                (helper.network_time_off, "set_network_time_off", {"side_effect": set_off}),
+                (helper.network_time_off, "boot_id", {"return_value": BOOT_UUID.upper()}),
+                (helper.network_time_off, "seconds_since_receipt", {"side_effect": settled}),
+                (self.driver, "evaluate_night", {"side_effect": evaluate}),
+                (self.driver, "_claim_chain_start", {"new": claim}),
+                (self.driver, "_run_chain_once", {"new": chain}),
+            ):
+                stack.enter_context(mock.patch.object(obj, name, **kwargs))
+            code = self.driver.run_night(self.plan_path)
+        self.dwell_events = events
+        night = self.custody / "night"
+        if not (night / "clean_dwell.json").exists():
+            return code, None, claim, chain
+        record = json.loads((night / "clean_dwell.json").read_bytes())
+        self.assertEqual(record["script_sha256"], hashlib.sha256(script.read_bytes()).hexdigest())
+        if missing_evidence != "night/clean_dwell.output.txt":
+            self.assertEqual((night / record["output_file"]).read_bytes(), output_bytes)
+        self.assertEqual(record["output_sha256"], hashlib.sha256(output_bytes).hexdigest())
+        self.assertEqual(record["required_clean_dwell_s"], 600)
+        self.assertEqual(record["timeout_s"], 1310)
+        self.assertLessEqual(record["started_epoch_s"], record["ended_epoch_s"])
+        self.assertLessEqual(record["started_monotonic_ns"], record["ended_monotonic_ns"])
+        return code, record, claim, chain
+
+    def test_clean_dwell_pass_preserves_digests_then_starts_chain(self):
+        code, record, claim, chain = self._run_with_clean_dwell(0)
+        self.assertEqual(code, 0)
+        self.assertEqual(record["exit_status"], 0)
+        self.assertFalse(record["timed_out"])
+        self.assertIsNone(record["error"])
+        claim.assert_called_once()
+        chain.assert_called_once()
+        # The durable records forbid a second attempt from overwriting evidence.
+        night = self.custody / "night"
+        before = {path.name: path.read_bytes() for path in
+                  (night / "clean_dwell.json", night / "clean_dwell.output.txt",
+                   night / "start_conditions.json")}
+        with mock.patch.object(self.driver, "_admit_derivation_clean_dwell") as dwell:
+            self.assertEqual(self.driver.run_night(self.plan_path), 3)
+        dwell.assert_not_called()
+        self.assertEqual(before, {name: (night / name).read_bytes() for name in before})
+
+    def test_clean_dwell_failure_refuses_before_chain_claim(self):
+        code, record, claim, chain = self._run_with_clean_dwell(1)
+        self.assertEqual(code, 3)
+        self.assertEqual(record["exit_status"], 1)
+        self.assertFalse(record["timed_out"])
+        claim.assert_not_called()
+        chain.assert_not_called()
+        self.assertIn("clean dwell refused", (self.custody / "night/refusal.json").read_text())
+        # Counterfactual: changing ONLY exit 1 to exit 0 permits the chain.
+        self.custody = self.root / "counterfactual"
+        self._write_plan()
+        self.assertEqual(self._run_with_clean_dwell(0)[0], 0)
+
+    def test_clean_dwell_timeout_refuses_before_chain_claim(self):
+        code, record, claim, chain = self._run_with_clean_dwell("timeout")
+        self.assertEqual(code, 3)
+        self.assertIsNone(record["exit_status"])
+        self.assertTrue(record["timed_out"])
+        claim.assert_not_called()
+        chain.assert_not_called()
+        self.assertIn("clean dwell timed out", (self.custody / "night/refusal.json").read_text())
+        self.custody = self.root / "counterfactual"
+        self._write_plan()
+        self.assertEqual(self._run_with_clean_dwell(0)[0], 0)
+
+    def test_clean_dwell_launch_error_refuses_before_chain_claim(self):
+        code, record, claim, chain = self._run_with_clean_dwell("launch error")
+        self.assertEqual(code, 3)
+        self.assertIsNone(record["exit_status"])
+        self.assertFalse(record["timed_out"])
+        claim.assert_not_called()
+        chain.assert_not_called()
+        self.assertIn("injected execution failure", record["error"])
+        self.custody = self.root / "counterfactual"
+        self._write_plan()
+        self.assertEqual(self._run_with_clean_dwell(0)[0], 0)
+
+    def _assert_start_conditions_interface(self, *, result):
+        """Small schema check for shared interface §1/T plus sealed §6.2."""
+        path = self.custody / "night/start_conditions.json"
+        raw = path.read_bytes()
+        record = json.loads(raw)
+        self.assertFalse((path.parent / ".start_conditions.pending").exists())
+        self.assertEqual(set(record), {"schema", "session_id", "plan_id", "result", "refusal_reason",
+            "evidence", "chain_start_admitted", "boot_id", "written_epoch_s", "written_monotonic_s",
+            "start_to_start_interval_s", "gap_s"})
+        self.assertEqual(record["schema"], "joulewise.revision6.start_conditions.v1")
+        self.assertEqual(record["session_id"], "derivation-current")
+        self.assertEqual(record["plan_id"], "night-plan")
+        self.assertEqual(record["boot_id"], BOOT_UUID)
+        self.assertEqual(record["result"], result)
+        self.assertEqual(set(record["evidence"]), {"a_prior_session_manifest", "b_blind_checks",
+            "c_agent_census", "d_thermal", "e_battery_float", "f_network_time_off_receipt", "g_clean_dwell"})
+        self.assertEqual(raw, json.dumps(record, sort_keys=True, ensure_ascii=False,
+                                        allow_nan=False).encode("utf-8") + b"\n")
+        for key in ("written_epoch_s", "written_monotonic_s"):
+            self.assertIsInstance(record[key], float)
+            self.assertTrue(math.isfinite(record[key]))
+        if result == "admitted":
+            self.assertIsNone(record["refusal_reason"])
+            self.assertEqual(set(record["chain_start_admitted"]), {"epoch_s", "monotonic_s"})
+            for key in ("epoch_s", "monotonic_s"):
+                self.assertIsInstance(record["chain_start_admitted"][key], float)
+                self.assertLessEqual(record["chain_start_admitted"][key], record["written_" + key])
+        else:
+            self.assertIsInstance(record["refusal_reason"], str)
+            self.assertTrue(record["refusal_reason"])
+            self.assertIsNone(record["chain_start_admitted"])
+        for key, item in record["evidence"].items():
+            required = {"path", "sha256"}
+            if key == "b_blind_checks":
+                required.add("decision_sha256")
+            if key == "f_network_time_off_receipt":
+                required.add("settled_seconds")
+            if key == "g_clean_dwell":
+                required.update({"script_sha256", "exit", "exit_status", "continuous_clean_s",
+                    "passed_epoch_s", "deadline_epoch_s", "started_epoch_s", "ended_epoch_s",
+                    "started_monotonic_s", "ended_monotonic_s"})
+            self.assertEqual(set(item), required)
+            relative = Path(item["path"])
+            self.assertFalse(relative.is_absolute())
+            self.assertNotIn("..", relative.parts)
+            if item["sha256"] is None:
+                self.assertEqual(result, "refused")
+            else:
+                self.assertRegex(item["sha256"], r"^[0-9a-f]{64}$")
+                self.assertEqual(item["sha256"], hashlib.sha256((self.custody / relative).read_bytes()).hexdigest())
+        if result == "admitted":
+            f = record["evidence"]["f_network_time_off_receipt"]
+            self.assertGreaterEqual(f["settled_seconds"], 600)
+            g = record["evidence"]["g_clean_dwell"]
+            self.assertEqual(g["path"], "night/clean_dwell.output.txt")
+            self.assertEqual(g["exit"], 0)
+            self.assertEqual(g["exit_status"], 0)
+            self.assertEqual(g["continuous_clean_s"], 600)
+            self.assertEqual(g["script_sha256"], hashlib.sha256(
+                (self.root / "scripts/prewindow_check.sh").read_bytes()).hexdigest())
+            self.assertEqual(g["passed_epoch_s"], g["ended_epoch_s"])
+            self.assertEqual(g["deadline_epoch_s"], self.t0_epoch_s + 1320)
+            self.assertGreaterEqual(g["ended_monotonic_s"] - g["started_monotonic_s"], 600)
+            self.assertLessEqual(g["passed_epoch_s"], record["chain_start_admitted"]["epoch_s"])
+        return record
+
+    def test_start_manifest_first_window_records_null_prior_and_all_conditions(self):
+        self.assertEqual(self._run_with_clean_dwell(0)[0], 0)
+        record = self._assert_start_conditions_interface(result="admitted")
+        manifest = json.loads((self.custody / record["evidence"]["a_prior_session_manifest"]["path"]).read_bytes())
+        self.assertIsNone(manifest["prior_revision6_session"])
+        self.assertIn("first Revision 6", manifest["reason"])
+        self.assertIsNone(record["evidence"]["b_blind_checks"]["decision_sha256"])
+        self.assertIsNone(record["gap_s"])
+        self.assertIsNone(record["start_to_start_interval_s"])
+        self.assertEqual(record["chain_start_admitted"], {"epoch_s": self.t0_epoch_s + 610, "monotonic_s": 10600.0})
+        artifacts = {item["path"] for item in json.loads((self.custody / "night/result.json").read_bytes())["artifacts"]}
+        self.assertTrue({"start_conditions_manifest.json", "night/start_conditions.json",
+                         "night/clean_dwell.json", "night/clean_dwell.output.txt"} <= artifacts)
+
+    def test_prior_stop_and_decision_tamper_refuse_before_OFF_and_chain(self):
+        for case in ("stop-prior", "bad-decision"):
+            with self.subTest(case=case):
+                self.custody = self.root / case
+                code, record, claim, chain = self._run_with_clean_dwell(0, manifest_case=case)
+                self.assertEqual(code, self.driver.EXIT_REFUSED)
+                claim.assert_not_called()
+                chain.assert_not_called()
+                self.assertNotIn("OFF receipt", self.dwell_events)
+
+    def test_start_manifest_prior_session_binds_harvest_and_intervals(self):
+        self.assertEqual(self._run_with_clean_dwell(0, manifest_case="prior")[0], 0)
+        record = self._assert_start_conditions_interface(result="admitted")
+        self.assertEqual(record["gap_s"], 810)
+        self.assertEqual(record["start_to_start_interval_s"], 10610)
+        for key in ("a_prior_session_manifest", "b_blind_checks"):
+            manifest = json.loads((self.custody / record["evidence"][key]["path"]).read_bytes())
+            prior = manifest["prior_revision6_session"]
+            self.assertEqual(prior["session_id"], "derivation-prior")
+            self.assertEqual(prior["harvest_sha256"], hashlib.sha256(Path(prior["harvest_file"]).read_bytes()).hexdigest())
+
+    def test_refused_start_records_match_interface_without_chain_admission(self):
+        for outcome in (1, "timeout", "launch error"):
+            with self.subTest(outcome=outcome):
+                self.custody = self.root / str(outcome)
+                code, _, claim, chain = self._run_with_clean_dwell(outcome)
+                self.assertEqual(code, 3)
+                self._assert_start_conditions_interface(result="refused")
+                claim.assert_not_called()
+                chain.assert_not_called()
+                before = (self.custody / "night/start_conditions.json").read_bytes()
+                self.assertEqual(self.driver.run_night(self.plan_path), 3)
+                self.assertEqual((self.custody / "night/start_conditions.json").read_bytes(), before)
+
+    def test_missing_condition_evidence_refuses_before_chain_claim(self):
+        for missing in ("night/receipt.json", "night/clean_dwell.output.txt",
+                        "start_conditions_manifest.json", "night/network_time_off.json"):
+            with self.subTest(missing=missing):
+                self.custody = self.root / Path(missing).stem
+                code, _, claim, chain = self._run_with_clean_dwell(0, missing_evidence=missing)
+                self.assertEqual(code, 3)
+                record = self._assert_start_conditions_interface(result="refused")
+                self.assertTrue(any(item["sha256"] is None for item in record["evidence"].values()))
+                claim.assert_not_called()
+                chain.assert_not_called()
+
+    def test_missing_malformed_or_drifted_manifest_refuses_before_chain_claim(self):
+        for case in ("absent", "malformed", "no-reason", "wrong-plan", "bad-harvest", "future-prior"):
+            with self.subTest(case=case):
+                self.custody = self.root / case
+                code, _, claim, chain = self._run_with_clean_dwell(0, manifest_case=case)
+                self.assertEqual(code, 3)
+                claim.assert_not_called()
+                chain.assert_not_called()
+                self.assertEqual(self.dwell_events, [])
+                self._assert_start_conditions_interface(result="refused")
+                self.custody = self.root / (case + "-fixed")
+                self.assertEqual(self._run_with_clean_dwell(0)[0], 0)
+
+    def test_off_settle_and_dwell_overlap_in_either_completion_order(self):
+        # OFF may already be settled while dwell runs, or dwell may finish
+        # before the wall clock proves OFF settled. Both clocks remain gates.
+        for label, age, lag, dwell, total in (("off-first", 600, 0, 800, 800),
+                                              ("dwell-first", 0, 100, 600, 700)):
+            with self.subTest(order=label):
+                self.custody = self.root / label
+                code, record, claim, chain = self._run_with_clean_dwell(
+                    0, off_age=age, off_wall_lag=lag, dwell_duration=dwell)
+                self.assertEqual(code, 0)
+                self.assertEqual(sum(event[1] for event in self.dwell_events if isinstance(event, tuple)), total)
+                self.assertEqual(record["ended_epoch_s"] - record["started_epoch_s"], dwell)
+                claim.assert_called_once()
+                chain.assert_called_once()
+
+    def test_off_settle_failure_refuses_even_after_dwell_passes(self):
+        code, record, claim, chain = self._run_with_clean_dwell(0, settle_failure=True)
+        self.assertEqual(code, 3)
+        self.assertEqual(record["exit_status"], 0)
+        claim.assert_not_called()
+        chain.assert_not_called()
+        self._assert_start_conditions_interface(result="refused")
+        self.custody = self.root / "settle-fixed"
+        self.assertEqual(self._run_with_clean_dwell(0)[0], 0)
+
+    def test_dwell_deadline_exceeded_refuses_even_with_exit_zero(self):
+        code, record, claim, chain = self._run_with_clean_dwell(0, dwell_duration=1311)
+        self.assertEqual(code, 3)
+        self.assertEqual(record["exit_status"], 0)
+        claim.assert_not_called()
+        chain.assert_not_called()
+        self.assertIn("deadline exceeded", (self.custody / "night/refusal.json").read_text())
+        self.custody = self.root / "deadline-fixed"
+        self.assertEqual(self._run_with_clean_dwell(0, dwell_duration=600)[0], 0)
+
+    def test_start_record_write_cannot_outlive_start_deadline(self):
+        code, _, claim, chain = self._run_with_clean_dwell(0, start_record_duration=711)
+        self.assertEqual(code, 3)
+        claim.assert_not_called()
+        chain.assert_not_called()
+        self.assertIn("deadline exceeded while recording", (self.custody / "night/refusal.json").read_text())
+        self._assert_start_conditions_interface(result="refused")
+        self.custody = self.root / "record-write-fixed"
+        self.assertEqual(self._run_with_clean_dwell(0, start_record_duration=0)[0], 0)
+
+    def test_off_settle_cannot_outlive_start_deadline(self):
+        code, _, claim, chain = self._run_with_clean_dwell(0, off_wall_lag=900)
+        self.assertEqual(code, 3)
+        claim.assert_not_called()
+        chain.assert_not_called()
+        self.assertIn("OFF settle exceeds", (self.custody / "night/refusal.json").read_text())
+        self.custody = self.root / "clock-fixed"
+        self.assertEqual(self._run_with_clean_dwell(0, off_wall_lag=0)[0], 0)
+
+    def test_standard_plan_budget_preserves_programmed_span_and_gate_cost(self):
+        plan = replace(self.driver._load_plan(self.plan_path), window_max_s=9000)
+        with mock.patch.object(self.driver.time, "time", return_value=plan.t0_epoch_s + 17), \
+                mock.patch.object(self.driver.time, "monotonic", return_value=123):
+            budget = self.driver._derivation_start_budget(plan)
+            self.assertEqual(budget["programmed_span_s"], 7680)
+            self.assertEqual(budget["latest_chain_start_epoch_s"], plan.t0_epoch_s + 1320)
+            self.assertEqual(self.driver._derivation_budget_remaining(budget), 1303)
+
     def test_real_idle_agent_hit_refuses_without_chain_or_pack_authoring(self) -> None:
         self.source.census_responses = [
             _probe(night_gate.AGENT_CENSUS_ARGV, stdout="20 claude\n")
@@ -763,6 +1162,17 @@ runpy.run_path(script, run_name='__main__')
         self.assertEqual("REFUSED", result["verdict"])
         self.assertEqual("night_refused_agent_present", result["aborted_reason"])
         self.assertFalse((night / "go_receipt.json").exists())
+
+    def test_agent_appearing_during_dwell_refuses_fresh_t0_census(self):
+        self.source.census_responses = [
+            _probe(night_gate.AGENT_CENSUS_ARGV, exit_code=1),
+            _probe(night_gate.AGENT_CENSUS_ARGV, stdout="20 claude\n")]
+        code, calls = self._run_night()
+        self.assertEqual(code, 3)
+        self.assertEqual(calls, [])
+        self.driver._admit_network_time_off.assert_called_once()
+        receipt = json.loads((self.custody / "night/receipt.json").read_bytes())
+        self.assertEqual(receipt["refusal"]["reason"], "night_refused_agent_present")
 
     def test_go_spawns_chain_once_even_if_the_chain_fails(self) -> None:
         exit_code, calls = self._run_night(return_code=17)
@@ -1011,6 +1421,7 @@ runpy.run_path(script, run_name='__main__')
     def test_census_refusal_terminates_group_and_records_abort(self) -> None:
         self.source.census_responses = [
             _probe(night_gate.AGENT_CENSUS_ARGV, exit_code=1),
+            _probe(night_gate.AGENT_CENSUS_ARGV, exit_code=1),
             _probe(night_gate.AGENT_CENSUS_ARGV, stdout="agent\n"),
         ]
         calls, spawn = self._popen_recorder(running_once=True)
@@ -1042,7 +1453,7 @@ runpy.run_path(script, run_name='__main__')
             if argv != night_gate.AGENT_CENSUS_ARGV:
                 return self.source.run(argv)
             processes = [peer]
-            if foreign_after_go and census_calls:
+            if foreign_after_go and len(census_calls) >= 2:
                 processes.append("42 /usr/bin/claude -p inspect /usr/bin/pgrep")
             hits = [line for line in processes if re.search(argv[-1], line)]
             census_calls.append(argv)
@@ -1081,6 +1492,7 @@ runpy.run_path(script, run_name='__main__')
 
     def test_idle_agent_appearing_after_go_still_aborts_real_chain(self) -> None:
         self.source.census_responses = [
+            _probe(night_gate.AGENT_CENSUS_ARGV, exit_code=1),
             _probe(night_gate.AGENT_CENSUS_ARGV, exit_code=1),
             _probe(night_gate.AGENT_CENSUS_ARGV, stdout="20 claude\n"),
         ]
@@ -1620,13 +2032,16 @@ runpy.run_path(script, run_name='__main__')
             night_log,
         )
 
-    def test_legacy_write_once_tuple_matches_base(self):
+    def test_write_once_tuple_adds_off_receipt_to_base(self):
         import ast
         base = ast.parse(subprocess.check_output(
             ['git', 'show', 'a90ab4e8:scripts/run_night.py'], cwd=REPO_ROOT, text=True))
         assignment = next(node for node in base.body if isinstance(node, ast.Assign)
                           and any(isinstance(t, ast.Name) and t.id == '_WRITE_ONCE_RECORDS' for t in node.targets))
-        self.assertEqual(self.driver._WRITE_ONCE_RECORDS, ast.literal_eval(assignment.value))
+        self.assertIn("network_time_off.json", self.driver._WRITE_ONCE_RECORDS)
+        self.assertEqual(tuple(name for name in self.driver._WRITE_ONCE_RECORDS
+                               if name not in {"network_time_off.json", "clean_dwell.output.txt",
+                                               "clean_dwell.json", "start_conditions.json"}), ast.literal_eval(assignment.value))
 
     def test_v2_existing_quiet_journal_reaches_legacy_evaluator(self):
         night = self.custody / 'night'
@@ -1732,6 +2147,7 @@ runpy.run_path(script, run_name='__main__')
 
     def test_unproven_chain_termination_records_unkilled_and_spawns_no_courier(self) -> None:
         self.source.census_responses = [
+            _probe(night_gate.AGENT_CENSUS_ARGV, exit_code=1),
             _probe(night_gate.AGENT_CENSUS_ARGV, exit_code=1),
             _probe(night_gate.AGENT_CENSUS_ARGV, stdout="agent\n"),
         ]
@@ -4723,6 +5139,41 @@ class QuietDriverIntegrationTests(unittest.TestCase):
         fixture.plan_path.unlink()  # fixture-only fresh publication
         write_night_plan(fixture.plan_path, plan)
         return fixture, plan
+
+    def test_initial_agent_then_bind_go_refuses_missing_derivation_admission(self):
+        from dataclasses import replace
+        from tests.test_quiet_admission import metrics
+        fixture, plan = self.fixture(busy_core_max=0.05, sample_interval_s=270)
+        driver = fixture.driver
+        probes = fixture.source.probes()
+        driver.make_probes = lambda: probes
+        receipt = driver.evaluate_night(replace(plan, quiet_admission=None), probes)
+        self.assertEqual(receipt.verdict, "GO")
+        fixture.source.census_responses = [
+            _probe(night_gate.AGENT_CENSUS_ARGV, stdout="20 claude\n")]
+        admission = dict(quiet_admission=plan.quiet_admission, admission_is_capture_evidence=False,
+            bind_deadline_epoch_s=plan.t0_epoch_s+600, go_epoch_s=plan.t0_epoch_s,
+            samples_total=2, samples_quiet_run_at_go=2, quiet_samples_lines=2,
+            quiet_samples_sha256='a'*64, top_consumers_at_decision=metrics(.02)['top_consumers'],
+            load_avg_diagnostic={'raw': '3.7'})
+        driver.bind_until_quiet = mock.Mock(return_value=replace(
+            receipt, schema=night_gate.QUIET_RECEIPT_SCHEMA, admission=admission))
+        with mock.patch.object(driver, '_run_chain_once') as chain, \
+             mock.patch.object(driver, '_finish_reporting', wraps=driver._finish_reporting) as reporting:
+            self.assertEqual(driver.run_night(fixture.plan_path), driver.EXIT_REFUSED)
+        chain.assert_not_called()
+        reporting.assert_called_once()
+        driver._admit_network_time_off.assert_not_called()
+        driver._admit_derivation_clean_dwell.assert_not_called()
+        self.assertEqual(driver.bind_until_quiet.call_args.kwargs['initial_census'][0].stdout,
+                         "20 claude\n")
+        result = json.loads((fixture.custody/'night/result.json').read_bytes())
+        refusal = json.loads((fixture.custody/'night/refusal.json').read_bytes())
+        self.assertEqual(result['verdict'], 'REFUSED')
+        self.assertEqual(result['aborted_reason'], 'night_probe_error')
+        self.assertEqual(refusal['refusal']['reason'], 'night_probe_error')
+        self.assertIn('derivation start admission was not completed', refusal['refusal']['detail'])
+        self.assertFalse((fixture.custody/'night/chain.started').exists())
 
     def test_v4_driver_calls_bind_and_keeps_shutdown_anchored_to_entry(self):
         self.assert_driver_deadlines(540)

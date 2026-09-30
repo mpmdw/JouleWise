@@ -15,7 +15,8 @@ from unittest.mock import Mock, patch
 
 from scripts import sample_quiet_predicate_evidence as harness
 from joulewise import battery_float
-from tests.test_battery_float import PairAuthenticationTests, UPDATE, raw as battery_raw
+from tests import test_battery_float as battery_float_tests
+from tests.test_battery_float import UPDATE, raw as battery_raw
 
 
 # Headroom on the kernel-charged CPU ceiling: measured child start-up plus
@@ -90,15 +91,14 @@ def aligned_fixture():
     return [placed(frames[0], 1000.0, 1001.0), placed(frames[1], 1001.0, 1003.0)]
 
 
-def network_time_control(directory, stdout=None, exit_code=0):
+def network_time_control(directory, stdout=None, exit_code=0, boot_id="fixture"):
     """The chain's OFF receipt, the only admission the collector accepts."""
     path = Path(directory) / "network_time_control.json"
-    path.write_text(json.dumps({"schema": "joulewise.network_time_control.v1",
-        "off": {"argv": ["/usr/bin/sudo", "-n", "/usr/sbin/systemsetup",
-                         "-setusingnetworktime", "off"],
-                "exit_code": exit_code, "epoch_s": 1000.0, "monotonic_s": 10.0,
-                "stdout": harness.EXPECTED_NETWORK_TIME_OFF_STDOUT if stdout is None else stdout},
-        "on": None}))
+    path.write_text(json.dumps({"schema": harness.network_time_off.SCHEMA,
+        "argv": list(harness.network_time_off.OFF_ARGV), "exit_code": exit_code,
+        "epoch_s": 400.0, "monotonic_s": -600.0, "boot_id": boot_id,
+        "plan_id": "plan", "window_id": "window", "stderr": "Error:-99\n",
+        "stdout": harness.network_time_off.EXPECTED_STDOUT if stdout is None else stdout}))
     return path
 
 
@@ -114,6 +114,9 @@ class NetworkTimeOffMixin:
                              {harness.NETWORK_TIME_RECORD_ENV: str(self.network_time_record)})
         patcher.start()
         self.addCleanup(patcher.stop)
+        boot = patch.object(harness.network_time_off, "boot_id", return_value="fixture")
+        boot.start()
+        self.addCleanup(boot.stop)
 
 
 def collect_args(directory, **kwargs):
@@ -148,7 +151,7 @@ def write_authentic_rounds(root, rows):
     for index, row in enumerate(rows):
         out = root / f"fixture-envelope-{index:03d}"
         out.mkdir()
-        pair = PairAuthenticationTests().pair(out)
+        pair = battery_float_tests.PairAuthenticationTests().pair(out)
         for record in pair.values():
             record["session_id"] = row.get("session", "fixture")
         session = {"session": row.get("session", "fixture"), "battery_float": pair,
@@ -889,6 +892,11 @@ def audit(event, args):
         print("OUTSIDE_OUTPUT", path, flush=True)
         raise AssertionError("write outside --out")
 sys.addaudithook(audit)
+from joulewise import network_time_off, quiet_admission
+network_time_off.boot_id = lambda: "fixture"
+# The collector's metadata reads the boot identity through this probe; the
+# fixture OFF receipt was written for boot "fixture".
+quiet_admission.BOOT_ARGV = ("/bin/echo", "fixture")
 sys.argv = [script, *sys.argv[3:]]
 runpy.run_path(script, run_name="__main__")
 '''
@@ -896,7 +904,7 @@ runpy.run_path(script, run_name="__main__")
             completed = subprocess.run(command, capture_output=True, text=True, timeout=20,
                 env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1", "TMPDIR": "/tmp",
                      harness.NETWORK_TIME_RECORD_ENV: str(self.network_time_record)})
-            self.assertEqual(completed.returncode, 0, completed.stderr)
+            self.assertEqual(completed.returncode, 0, completed.stderr + completed.stdout)
             self.assertNotIn("OUTSIDE_OUTPUT", completed.stdout)
             root = Path(tmp)
             rows = [json.loads(line) for line in (root / "rounds.jsonl").read_text().splitlines()]
@@ -935,7 +943,7 @@ runpy.run_path(script, run_name="__main__")
         with tempfile.TemporaryDirectory() as tmp, patch.object(harness.subprocess, "Popen", side_effect=AssertionError("no subprocess")):
             args = collect_args(tmp)
             session, rows = harness.collect(args, clock=FakeClock(), round_runner=fake_round,
-                metadata_reader=lambda: {"boot_id": "fixture-boot", "os_build": "fixture-build"})
+                metadata_reader=lambda: {"boot_id": "fixture", "os_build": "fixture-build"})
             persisted = [json.loads(line) for line in (Path(tmp) / "rounds.jsonl").read_text().splitlines()]
             self.assertEqual(len(rows), 3)
             self.assertEqual([r["status"] for r in rows], ["complete", "complete", "partial"])
@@ -967,7 +975,7 @@ runpy.run_path(script, run_name="__main__")
         factory = Mock(return_value=recorder)
         with tempfile.TemporaryDirectory() as tmp:
             session, rows = harness.collect(collect_args(tmp, power=True), clock=clock,
-                recorder_factory=factory, round_runner=fake_round, metadata_reader=lambda: {})
+                recorder_factory=factory, round_runner=fake_round, metadata_reader=lambda: {"boot_id": "fixture"})
             factory.assert_called_once()
             recorder.start.assert_called_once()
             recorder.finish.assert_called_once()
@@ -976,7 +984,7 @@ runpy.run_path(script, run_name="__main__")
         with tempfile.TemporaryDirectory() as tmp:
             session, rows = harness.collect(collect_args(tmp, power=True), clock=FakeClock(),
                 recorder_factory=factory, round_runner=Mock(side_effect=RuntimeError("test round failed")),
-                metadata_reader=lambda: {})
+                metadata_reader=lambda: {"boot_id": "fixture"})
             recorder.finish.assert_called_once()
             self.assertIn("test round failed", session["error"])
             self.assertEqual(len(rows), 1)
@@ -1020,7 +1028,7 @@ runpy.run_path(script, run_name="__main__")
             "admissible_upper_epoch_s": 1000.002, "effective_clock_anchor_bound_s": .001, "method": "fixture"})
         with tempfile.TemporaryDirectory() as tmp:
             session, rows = harness.collect(collect_args(tmp, power=True), clock=FakeClock(),
-                recorder_factory=Mock(return_value=recorder), round_runner=fake_round, metadata_reader=lambda: {})
+                recorder_factory=Mock(return_value=recorder), round_runner=fake_round, metadata_reader=lambda: {"boot_id": "fixture"})
             self.assertIsNone(session["error"])
             self.assertEqual([r["power"]["coverage_s"] for r in rows], [2, 2, 1])
             self.assertTrue(all(r["power"]["cpu_w"] == 2 for r in rows))
@@ -1040,7 +1048,7 @@ runpy.run_path(script, run_name="__main__")
             args.envelope_start_mono_s = 0
             with patch.object(harness, 'reduce_interior', wraps=harness.reduce_interior) as reduce:
                 session, _ = harness.collect(args, clock=clock, recorder_factory=Mock(return_value=recorder),
-                                             round_runner=fake_round, metadata_reader=lambda: {})
+                                             round_runner=fake_round, metadata_reader=lambda: {"boot_id": "fixture"})
             self.assertEqual(reduce.call_args.args[2:], (1060, 480))
             self.assertEqual(session['start_drift_s'], 2)
             self.assertEqual(session['deadline_mono_s'], 600)
@@ -1832,7 +1840,7 @@ class NetworkTimeProvenanceTests(unittest.TestCase):
             args = collect_args(tmp, power=True)
             session, rows = harness.collect(args, clock=FakeClock(),
                                             round_runner=fake_round,
-                                            metadata_reader=lambda: {})
+                                            metadata_reader=lambda: {"boot_id": "fixture"})
             persisted = json.loads((Path(tmp) / "session.json").read_text())
             plists = list((Path(tmp) / "raw").rglob("*.plist"))
             return session, rows, persisted, plists
@@ -1866,7 +1874,7 @@ class NetworkTimeProvenanceTests(unittest.TestCase):
                     tempfile.TemporaryDirectory(dir="/tmp") as out:
                 session, rows = harness.collect(collect_args(out), clock=FakeClock(),
                                                 round_runner=fake_round,
-                                                metadata_reader=lambda: {})
+                                                metadata_reader=lambda: {"boot_id": "fixture"})
             provenance = session["network_time_provenance"]
             self.assertEqual(provenance["state"], "off")
             self.assertEqual(provenance["method"],
@@ -1874,7 +1882,7 @@ class NetworkTimeProvenanceTests(unittest.TestCase):
             self.assertEqual(provenance["record"], "network_time_control.json")
             self.assertEqual(provenance["record_sha256"],
                              harness.hashlib.sha256(record.read_bytes()).hexdigest())
-            self.assertEqual(provenance["established_epoch_s"], 1000.0)
+            self.assertEqual(provenance["established_epoch_s"], 400.0)
             self.assertEqual(session["network_time_provenance_reason"],
                              "established by the evidence chain before settle")
             self.assertIsNone(session["error"])
@@ -1900,14 +1908,14 @@ class NetworkTimeComparatorTests(unittest.TestCase):
     """
 
     def bodies(self):
-        expected = harness.EXPECTED_NETWORK_TIME_OFF_STDOUT
+        expected = harness.network_time_off.EXPECTED_STDOUT
         return {"a trailing space": expected[:-1] + " \n",
                 "no newline at all": expected.strip(),
                 "a leading newline": "\n" + expected,
                 "surrounding spaces": " " + expected.strip() + " "}
 
     def test_whitespace_variants_of_the_off_stdout_refuse_with_exit_three(self):
-        expected = harness.EXPECTED_NETWORK_TIME_OFF_STDOUT
+        expected = harness.network_time_off.EXPECTED_STDOUT
         with tempfile.TemporaryDirectory(dir="/tmp") as tmp:
             for label, stdout in self.bodies().items():
                 with self.subTest(case=label):
@@ -1918,9 +1926,10 @@ class NetworkTimeComparatorTests(unittest.TestCase):
                     self.assertEqual(stdout.strip(), expected.strip())
                     record = network_time_control(tmp, stdout=stdout)
                     provenance, reason = harness.network_time_provenance(
-                        {harness.NETWORK_TIME_RECORD_ENV: str(record)})
+                        {harness.NETWORK_TIME_RECORD_ENV: str(record)},
+                        now={"epoch_s": 1000., "monotonic_s": 0., "boot_id": "fixture"})
                     self.assertIsNone(provenance)
-                    self.assertIn("network time OFF not proven", reason)
+                    self.assertIn("network time OFF admission failed", reason)
                     out = Path(tmp) / f"out-{abs(hash(label))}"
                     with patch.dict(os.environ,
                                     {harness.NETWORK_TIME_RECORD_ENV: str(record)}):
@@ -1936,7 +1945,8 @@ class NetworkTimeComparatorTests(unittest.TestCase):
             # regression and not a blanket refusal.
             record = network_time_control(tmp)
             provenance, reason = harness.network_time_provenance(
-                {harness.NETWORK_TIME_RECORD_ENV: str(record)})
+                {harness.NETWORK_TIME_RECORD_ENV: str(record)},
+                        now={"epoch_s": 1000., "monotonic_s": 0., "boot_id": "fixture"})
             self.assertEqual(provenance["state"], "off")
 
 

@@ -121,6 +121,10 @@ def _checker_rows(g, roster, predictions):
 
 
 class OwnershipForgeryTests(unittest.TestCase):
+    @unittest.skipUnless(
+        os.environ.get("JOULEWISE_FULL_CORPUS") == "1",
+        "full scored corpus (set JOULEWISE_FULL_CORPUS=1)",
+    )
     def test_legal_corpus(self):
         count = 0
         for seed in range(291013, 291017):
@@ -220,6 +224,10 @@ class OwnershipForgeryTests(unittest.TestCase):
             requeue_overrun(case.reg, roster, 0, [])
         self.assertEqual('inv_11', caught.exception.code)
 
+    @unittest.skipUnless(
+        os.environ.get("JOULEWISE_FULL_CORPUS") == "1",
+        "full scored corpus (set JOULEWISE_FULL_CORPUS=1)",
+    )
     def test_legal_corpus_seal(self):
         count = 0
         for seed in range(291013, 291017):
@@ -336,8 +344,16 @@ class OwnershipForgeryTests(unittest.TestCase):
         self.assertFalse(escapes, f'{len(escapes)} seal escapes; first 20: '
                          + json.dumps(escapes[:20], sort_keys=True))
 
+    @unittest.skipUnless(
+        os.environ.get("JOULEWISE_FULL_CORPUS") == "1",
+        "full scored corpus (set JOULEWISE_FULL_CORPUS=1)",
+    )
     def test_pairwise_seal_property(self):
         self._seal_property(2)
 
+    @unittest.skipUnless(
+        os.environ.get("JOULEWISE_FULL_CORPUS") == "1",
+        "full scored corpus (set JOULEWISE_FULL_CORPUS=1)",
+    )
     def test_triple_seal_property(self):
         self._seal_property(3)

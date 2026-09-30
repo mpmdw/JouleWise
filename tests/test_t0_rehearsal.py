@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import io
+import json
 import tempfile
 import time
 from contextlib import contextmanager
@@ -12,6 +13,7 @@ from unittest import mock
 
 from joulewise import arm_readiness as readiness
 from joulewise import clock_reference
+from joulewise import network_time_off
 from joulewise import t0_rehearsal as rehearsal
 from scripts import rehearse_t0_unattended as cli
 
@@ -823,6 +825,28 @@ class T0RehearsalTests(unittest.TestCase):
         ):
             with self.subTest(case=case):
                 self._assert_single_failure("G3", hid_case=case, message=message)
+
+    def test_g4_replays_one_settled_off_receipt_without_second_toggle(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            builder = FixtureBuilder(Path(temporary))
+            root = builder.build()
+            path = builder.inputs / network_time_off.RECEIPT_BASENAME
+            source_path = builder.sources / "clock-network-time-off.json"
+            source = json.loads(source_path.read_bytes())
+            source["probes"] = []
+            source["derivation"] = {"policy": network_time_off.SCHEMA}
+            value = _clock_value()
+            for boot, expected in ((BOOT_ID, rehearsal.GateStatus.PASS),
+                                   ("other-boot", rehearsal.GateStatus.FAIL)):
+                _write_json(path, {
+                    "schema": network_time_off.SCHEMA, "argv": list(network_time_off.OFF_ARGV),
+                    "exit_code": 0, "stdout": network_time_off.EXPECTED_STDOUT, "stderr": "",
+                    "epoch_s": value["anchor_realtime_ns"] / 1e9 - 900,
+                    "monotonic_s": 0., "boot_id": boot, "plan_id": "plan", "window_id": "window"})
+                source["input_artifacts"] = [_reference(path, root)]
+                _write_json(source_path, source)
+                result = rehearsal.evaluate_g4(fixture_bundle(root))
+                self.assertEqual(result.status, expected, result.message)
 
     def test_g4_empty_r1_intersection_fails_only_clock_mechanics(self) -> None:
         self._assert_single_failure(

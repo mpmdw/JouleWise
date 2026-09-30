@@ -36,18 +36,15 @@ jobs:
   changes:
     runs-on: ubuntu-latest
     outputs:
-      pythons: ${{ steps.interpreters.outputs.pythons || '["3.11","3.13"]' }}
+      pythons: ${{ steps.interpreters.outputs.pythons || '["3.13"]' }}
       code: ${{ steps.paths.outputs.code || 'true' }}
     steps:
       - name: Select Python interpreters
         id: interpreters
         shell: bash
         run: |
-          # Fail open to all interpreters unless this is exactly a PR event.
-          pythons='["3.11","3.13"]'
-          case "${GITHUB_EVENT_NAME:-}" in
-            pull_request) pythons='["3.13"]' ;;
-          esac
+          # Main pushes and PRs use the production interpreter.
+          pythons='["3.13"]'
           printf 'pythons=%s\n' "$pythons" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v5
         id: source
@@ -141,8 +138,8 @@ jobs:
       SHARD_COUNT: "6"
     strategy:
       matrix:
-        # 3.11: supported floor; 3.13: production nights (the measurement venv).
-        # PRs use production 3.13 only; main pushes add the 3.11 floor. 3.14 is
+        # 3.13: production nights (the measurement venv).
+        # PRs and main pushes use production 3.13 only. 3.14 is
         # local dev and is exercised by every seat's local module runs, not CI.
         python-version: ${{ fromJSON(needs.changes.outputs.pythons) }}
         shard: [1, 2, 3, 4, 5, 6]

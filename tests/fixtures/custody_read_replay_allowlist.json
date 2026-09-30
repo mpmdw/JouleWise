@@ -70,6 +70,13 @@
     "reason": "Retained-corpus CLI main -> extract_cells -> AuthenticatedConsumptionSession -> snapshot and bracket candidate discovery; derives extraction reports without mint, ledger append, binding publication, or analysis-manifest finalization."
   },
   {
+    "file": "scripts/harvest_window.py",
+    "function": "harvest",
+    "ordinal": 1,
+    "line": 313,
+    "reason": "Harvest replays the committed terminal ledger with verify_custody=False, authenticates captures and committed battery verdicts separately, and archives copies without ledger append, acceptance issuance, binding publication or analysis-manifest finalization."
+  },
+  {
     "file": "scripts/issue_calibration_acceptance_generation.py",
     "function": "_prepare_candidate",
     "ordinal": 1,
@@ -138,5 +145,12 @@
     "ordinal": 2,
     "line": 6284,
     "reason": "Completed-window replay -> _idle_admission_core_evaluation -> calibration_bracket_for_bundles explicitly permits replacement custody for claim-readiness emission. Live AXI claim-readiness emission and the compatibility wrapper retain the issuing default."
+  },
+  {
+    "file": "tests/fixtures/epoch_bootstrap/revision6.py",
+    "function": "build",
+    "ordinal": 1,
+    "line": 121,
+    "reason": "Synthetic fixture replays a committed ledger with verify_custody=False in a disposable Git root to build Revision 6 test records; it never reads or modifies live evidence."
   }
 ]

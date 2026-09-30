@@ -6,6 +6,11 @@ informed with veto by Gmail `1a0d364481dec249`, endorsed in issue #415 on
 2026-09-25. For 30 days from that merge, record every material defect found
 after merge, including the tier of the PR that merged it.
 
+The light tier was thinned on 2026-09-29 (Impact statement, CI green and,
+for test changes, the whole suite; no audit rounds; see
+`docs/orchestration.md` §5). That makes this log the check on the thinner
+tier: the suspension rule below is unchanged.
+
 | date | defect | PR | tier | changes a number? y/n | found by |
 | --- | --- | --- | --- | --- | --- |
 

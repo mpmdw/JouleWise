@@ -61,7 +61,7 @@ from tests.test_calibration_bracketing import (
     _fixture_snapshot,
     _unissued_acceptance_fixture,
 )
-from tests.test_arm_readiness import LaunchConsumptionV2Tests
+from tests import test_arm_readiness as arm_readiness_tests
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -314,7 +314,7 @@ class CampaignLaunchLineagePreflightTests(unittest.TestCase):
         child.assert_not_called()
 
     def test_consistent_locator_swap_after_outer_preflight_refuses(self) -> None:
-        first = LaunchConsumptionV2Tests(
+        first = arm_readiness_tests.LaunchConsumptionV2Tests(
             methodName="test_v2_claim_is_fsynced_and_replays_from_consumption"
         )
         first.setUp()
@@ -325,7 +325,7 @@ class CampaignLaunchLineagePreflightTests(unittest.TestCase):
             selector.symlink_to(first_root, target_is_directory=True)
             outer = first._authenticate_campaign(selector)
 
-            second = LaunchConsumptionV2Tests(
+            second = arm_readiness_tests.LaunchConsumptionV2Tests(
                 methodName="test_v2_claim_is_fsynced_and_replays_from_consumption"
             )
             second.setUp()

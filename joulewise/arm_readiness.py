@@ -6215,6 +6215,8 @@ def _issued_d079(tree: Mapping[str, Any]) -> bool:
         "d079_calibration_acceptance_v2_n17_r5",
         "d079_calibration_acceptance_v2_n17_r6",
         "d079_calibration_acceptance_v2_n17_r7",
+        # P8: cap-transaction pin re-issue of r7 (CAP-COUNCIL-25G83-01 A2/E1).
+        "d079_calibration_acceptance_v2_n17_r8",
     }
 
 

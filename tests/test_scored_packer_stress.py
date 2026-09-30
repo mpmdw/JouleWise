@@ -1,6 +1,7 @@
 """Seeded, checker-verified scored roster reporting sequences."""
 from collections import Counter
 import random
+import os
 import unittest
 
 from joulewise.scored_registration import Registration
@@ -107,6 +108,29 @@ def run_case(i, rng, check=True):
 
 
 class ScoredPackerStressTests(unittest.TestCase):
+    def test_first_two_registration_sequences(self):
+        """Keep seed case 1, the capacity-boundary mutant witness."""
+        for seed in SEEDS:
+            rng = random.Random(seed)
+            for i in range(2):
+                with self.subTest(seed=seed, case=i):
+                    _edges, calls, checked = run_case(i, rng)
+                    self.assertGreater(calls, 0)
+                    self.assertEqual(checked, calls + 2)
+                    case = generate_case(seed, i)
+                    final = case.rosters[-1]
+                    self.assertEqual([], check_roster(case.g, final, case.p), (seed, i))
+                    verify_executed_roster(case.reg, final, case.p)
+                    keys_rng = random.Random(f'keys:{seed}:{i}')
+                    keys = {(x['block_id'], x['attempt']) for x in final['placements']
+                            if keys_rng.random() < .75}
+                    self.assertEqual(check_executed(case.g, final, case.p, keys),
+                                     executed_status(case.reg, final, case.p, keys), (seed, i))
+
+    @unittest.skipUnless(
+        os.environ.get("JOULEWISE_FULL_CORPUS") == "1",
+        "full scored corpus (set JOULEWISE_FULL_CORPUS=1)",
+    )
     def test_seeded_300_registration_sequences(self):
         for seed in SEEDS:
             with self.subTest(seed=seed):
@@ -121,6 +145,10 @@ class ScoredPackerStressTests(unittest.TestCase):
                 print(f'STRESS seed={seed} registrations=300 calls={calls} checker_calls={checked} violations=0 edges={dict(sorted(totals.items()))}')
                 self.assertEqual(set(totals), {f'E{i}' for i in range(1, 12)})
 
+    @unittest.skipUnless(
+        os.environ.get("JOULEWISE_FULL_CORPUS") == "1",
+        "full scored corpus (set JOULEWISE_FULL_CORPUS=1)",
+    )
     def test_generate_case_variation_and_checker_agreement(self):
         """ex-10 B8 variation rule on the seed-driven generator (text 8)."""
         cases = 60

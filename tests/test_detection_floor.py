@@ -83,7 +83,7 @@ from joulewise.whole_window import (
     neg8_claim_family_for_metric,
 )
 from joulewise.uncertainty_evidence import CLOCK_METHOD_V3, SCHEMA_VERSION_V3
-from tests.test_arm_readiness import LaunchConsumptionV2Tests
+from tests import test_arm_readiness as arm_readiness_tests
 from tests.test_arm_readiness_schemas import TEST_BOOT_SESSION_ID
 
 TOL = 1e-12
@@ -2333,7 +2333,7 @@ class TestArtifactEmitValidate(unittest.TestCase):
             authenticate_floor_artifact_bytes(raw)
 
     def test_floor_consumer_reauthenticates_real_completed_launch_lineage(self):
-        launch = LaunchConsumptionV2Tests()
+        launch = arm_readiness_tests.LaunchConsumptionV2Tests()
         launch.setUp()
         self.addCleanup(launch.doCleanups)
         consumption_path, settled = launch._settle()

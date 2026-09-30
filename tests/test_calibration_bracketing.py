@@ -43,8 +43,8 @@ from joulewise.calibration_bracketing import (
     ANCHOR_V3_R6_ACCEPTANCE_BOUND_PATH,
     ANCHOR_V3_R6_ACCEPTANCE_BOUND_SHA256,
     ANCHOR_V3_R6_ACCEPTANCE_ID,
-    ANCHOR_V3_R7_ACCEPTANCE_BOUND_SHA256,
-    ANCHOR_V3_R7_ACCEPTANCE_ID,
+    ANCHOR_V3_R8_ACCEPTANCE_BOUND_SHA256,
+    ANCHOR_V3_R8_ACCEPTANCE_ID,
     ANCHOR_V3_R5_ACCEPTANCE_ID,
     ISSUED_ACCEPTANCE_REGISTRY,
     PREDECESSOR_ACCEPTANCE_BOUND_PATH,
@@ -612,9 +612,9 @@ class CalibrationBracketingTests(unittest.TestCase):
         # retained earlier generations keep their own registered pins and are
         # asserted below.
         self.assertEqual(
-            hashlib.sha256(raw).hexdigest(), ANCHOR_V3_R7_ACCEPTANCE_BOUND_SHA256
+            hashlib.sha256(raw).hexdigest(), ANCHOR_V3_R8_ACCEPTANCE_BOUND_SHA256
         )
-        self.assertEqual(artifact["acceptance_id"], ANCHOR_V3_R7_ACCEPTANCE_ID)
+        self.assertEqual(artifact["acceptance_id"], ANCHOR_V3_R8_ACCEPTANCE_ID)
         # r6 is RETAINED as an intermediate generation: superseded as the live
         # default, still authenticating byte-identically under its own pin.
         self.assertEqual(
@@ -2648,6 +2648,125 @@ class CalibrationBracketingTests(unittest.TestCase):
             ["corpus_doubles_from_19_to_38"],
         )
 
+    def test_corpus_doubling_excludes_w1w2_and_declaration_counterfactual(self) -> None:
+        import joulewise.calibration_dispositions as dispositions
+        from tests.verify_w1w2_disposition_sources import candidate_members
+
+        artifact = _unissued_acceptance_fixture()
+        epoch_bindings = {**self.bindings, "os_build": "25G83"}
+        candidates = []
+        for index, member in enumerate(artifact["derivation_corpus"]["members"]):
+            candidates.append(replace(
+                self.candidate(f"prior-{index}", 99.0 if index == 0 else
+                               111.0 if index == 1 else 120.0 + index,
+                               "0.025", bindings=epoch_bindings),
+                manifest_sha256=member["manifest_sha256"],
+                evidence_sha256=member["instrument_evidence_sha256"],
+            ))
+        for index in range(7):
+            candidates.append(replace(
+                self.candidate(f"new-{index}", 200.0 + index, "0.025", bindings=epoch_bindings),
+                manifest_sha256=hashlib.sha256(f"new-manifest-{index}".encode()).hexdigest(),
+                evidence_sha256=hashlib.sha256(f"new-evidence-{index}".encode()).hexdigest(),
+            ))
+        for content_id, member in candidate_members().items():
+            candidates.append(replace(
+                # Synthetic in-range bounds isolate doubling from range expansion;
+                # the twelve content identities and hashes are the archived ones.
+                self.candidate(member["member_id"], 300.0, "0.025", bindings=epoch_bindings),
+                content_id=content_id, manifest_sha256=member["manifest_sha256"],
+                evidence_sha256=member["instrument_evidence_sha256"],
+            ))
+        snapshot, registered = _fixture_snapshot(candidates)
+        with _hermetic_estimator_pins() as fixture_factory:
+            for declare, expected in ((True, []), (False, ["corpus_doubles_from_19_to_38"])):
+                def acceptance_fixture():
+                    fixture = fixture_factory()
+                    fixture["identity_epoch"]["os_build"] = "25G83"
+                    fixture["prior_observation_set"]["epoch_catalog"][D079_EPOCH_CATALOG_ID]["os_build"] = "25G83"
+                    fixture["prior_observation_set"]["disposing_decision_ids"] = (
+                        [dispositions.W1W2_SET_ASIDE_DECISION_ID] if declare else []
+                    )
+                    return _reseal(fixture)
+
+                with self.subTest(declare=declare):
+                    result, reasons = _evaluate_with_unissued_acceptance(
+                        registered, acceptance_fixture=acceptance_fixture,
+                        window_start_s=100.0, window_end_s=110.0, bindings=epoch_bindings,
+                        policy=self.policy, ledger_snapshot=snapshot, _allow_unissued_fixture=True,
+                    )
+                    self.assertEqual(result["acceptance"]["prospective_rederivation"]["observed_triggers"], expected)
+                    self.assertEqual(reasons, () if declare else ("calibration_acceptance_bound_stale",))
+
+    def test_corpus_doubling_excludes_disposed_diagnostics(self) -> None:
+        artifact = _unissued_acceptance_fixture()
+        candidates = []
+        for index, member in enumerate(artifact["derivation_corpus"]["members"]):
+            candidates.append(
+                replace(
+                    self.candidate(
+                        f"prior-{index}",
+                        (
+                            99.0
+                            if index == 0
+                            else 111.0
+                            if index == 1
+                            else 120.0 + index
+                        ),
+                        "0.025",
+                    ),
+                    manifest_sha256=member["manifest_sha256"],
+                    evidence_sha256=member["instrument_evidence_sha256"],
+                )
+            )
+        for index in range(19):
+            candidates.append(
+                replace(
+                    self.candidate(f"new-{index}", 200.0 + index, "0.025"),
+                    manifest_sha256=hashlib.sha256(
+                        f"new-manifest-{index}".encode()
+                    ).hexdigest(),
+                    evidence_sha256=hashlib.sha256(
+                        f"new-evidence-{index}".encode()
+                    ).hexdigest(),
+                )
+            )
+        snapshot, registered = _fixture_snapshot(candidates)
+        # At 38 valid observations, disposing one diagnostic keeps the
+        # eligible count below the doubling threshold.
+        import joulewise.calibration_dispositions as dispositions
+        disposed_id = registered[-1].content_id
+        self.assertIsNotNone(disposed_id)
+        altered = copy.deepcopy(dispositions.DISPOSITION_DECISIONS)
+        altered[dispositions.DISPOSITION_DECISION_ID]["content_ids"] = frozenset({disposed_id})
+        with _hermetic_estimator_pins() as fixture_factory, patch.object(
+            dispositions, "DISPOSITION_DECISIONS", altered,
+        ):
+            def acceptance_fixture():
+                fixture = fixture_factory()
+                fixture["prior_observation_set"]["disposing_decision_ids"] = [
+                    dispositions.DISPOSITION_DECISION_ID
+                ]
+                return _reseal(fixture)
+
+            result, reasons = _evaluate_with_unissued_acceptance(
+                registered,
+                acceptance_fixture=acceptance_fixture,
+                window_start_s=100.0,
+                window_end_s=110.0,
+                bindings=self.bindings,
+                policy=self.policy,
+                ledger_snapshot=snapshot,
+                _allow_unissued_fixture=True,
+            )
+        self.assertEqual(reasons, ())
+        self.assertEqual(
+            result["acceptance"]["prospective_rederivation"][
+                "observed_triggers"
+            ],
+            [],
+        )
+
     def test_new_abandoned_observation_refuses_with_or_without_content(self) -> None:
         candidates = [
             self.candidate("pre", 99.0, "0.025"),
@@ -3328,10 +3447,10 @@ class GenerationKeyedIssuanceValidationTests(unittest.TestCase):
         # Both numbers move together so the row stays internally consistent
         # (cutoff = 2 x count); only the comparison against the ARTIFACT can
         # refuse, which is what makes this counterfactual name the right site.
-        rekeyed = dict(_D102_GENERATION_DERIVATIONS[ANCHOR_V3_R7_ACCEPTANCE_ID])
+        rekeyed = dict(_D102_GENERATION_DERIVATIONS[ANCHOR_V3_R8_ACCEPTANCE_ID])
         rekeyed["cutoff_sequence"] = 80
         rekeyed["prior_observation_count"] = 40
-        with _registered_generation(ANCHOR_V3_R7_ACCEPTANCE_ID, rekeyed):
+        with _registered_generation(ANCHOR_V3_R8_ACCEPTANCE_ID, rekeyed):
             self.assertFalse(_valid_acceptance_bound(artifact))
 
     def test_generation_row_missing_a_fence_refuses_rather_than_defaulting(
@@ -3351,11 +3470,11 @@ class GenerationKeyedIssuanceValidationTests(unittest.TestCase):
                 partial = {
                     key: item
                     for key, item in _D102_GENERATION_DERIVATIONS[
-                        ANCHOR_V3_R7_ACCEPTANCE_ID
+                        ANCHOR_V3_R8_ACCEPTANCE_ID
                     ].items()
                     if key != dropped
                 }
-                with _registered_generation(ANCHOR_V3_R7_ACCEPTANCE_ID, partial):
+                with _registered_generation(ANCHOR_V3_R8_ACCEPTANCE_ID, partial):
                     self.assertFalse(_valid_acceptance_bound(artifact))
 
     def test_unimplemented_screen_rule_refuses_instead_of_falling_back(self) -> None:
@@ -3367,16 +3486,16 @@ class GenerationKeyedIssuanceValidationTests(unittest.TestCase):
         from joulewise import calibration_bracketing as module
 
         artifact = load_calibration_acceptance_bound()
-        rekeyed = dict(_D102_GENERATION_DERIVATIONS[ANCHOR_V3_R7_ACCEPTANCE_ID])
+        rekeyed = dict(_D102_GENERATION_DERIVATIONS[ANCHOR_V3_R8_ACCEPTANCE_ID])
         rekeyed["screen_rule"] = "max_range_or_d125_floor"
         with patch.object(
             module,
             "_REGISTERED_SCREEN_RULES",
             frozenset({SCREEN_RULE_RANGE_EQUALS_SCREEN, "max_range_or_d125_floor"}),
-        ), _registered_generation(ANCHOR_V3_R7_ACCEPTANCE_ID, rekeyed):
+        ), _registered_generation(ANCHOR_V3_R8_ACCEPTANCE_ID, rekeyed):
             self.assertFalse(_valid_acceptance_bound(artifact))
         # And the vocabulary fence itself still refuses an unknown name.
-        with _registered_generation(ANCHOR_V3_R7_ACCEPTANCE_ID, rekeyed):
+        with _registered_generation(ANCHOR_V3_R8_ACCEPTANCE_ID, rekeyed):
             self.assertFalse(_valid_acceptance_bound(artifact))
 
     def test_two_epoch_catalog_admits_and_an_unregistered_catalog_refuses(
