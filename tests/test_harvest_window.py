@@ -271,7 +271,8 @@ class HarvestWindowTests(unittest.TestCase):
 
     def assert_refuses(self):
         with self.assertRaises((ValueError, harvest.issuer.PrepareRefusal,
-                                harvest.battery_float.CustodyFailure)):
+                                harvest.battery_float.CustodyFailure,
+                                harvest.battery_float.BatteryVerdictRefusal)):
             self.run_harvest()
         self.assertFalse(self.args.custody.exists())
         self.assertFalse(any("--uninstall" in argv for argv in self.calls))
@@ -344,11 +345,24 @@ class HarvestWindowTests(unittest.TestCase):
         self.assertEqual(result["sessions"][0]["captures"][0]["probe_error_false"], [False, True])
         self.assertEqual(result["sessions"][0]["captures"][0]["passed_true"], [True, False])
 
-    def test_missing_committed_verdict_reports_readiness_without_fake_admission(self):
+    def test_missing_committed_verdict_refuses_before_publication_or_uninstall(self):
         self.fixture(verdict_records=False)
-        result = self.run_harvest()
-        self.assertEqual(result["registration_check"], {"exit_code": 5, "admissible": False})
-        self.assertEqual(result["valid_captures"], 1)
+        with mock.patch.object(harvest.cap_replay_harness, "replay_capture") as replay, self.assertRaisesRegex(
+                harvest.battery_float.BatteryVerdictRefusal, "missing or uncommitted"):
+            self.run_harvest()
+        replay.assert_not_called()
+        self.assertFalse(self.args.custody.exists())
+        self.assertFalse(any("--uninstall" in argv for argv in self.calls))
+
+    def test_uncommitted_verdict_refuses_before_replay_publication_or_uninstall(self):
+        self.revision6_fixture(verdict_records=False)
+        build.write_verdict_record(self.f, build.SESSION_ID)
+        with mock.patch.object(harvest.cap_replay_harness, "replay_capture") as replay, self.assertRaisesRegex(
+                harvest.battery_float.BatteryVerdictRefusal, "missing or uncommitted"):
+            self.run_harvest()
+        replay.assert_not_called()
+        self.assertFalse(self.args.custody.exists())
+        self.assertFalse(any("--uninstall" in argv for argv in self.calls))
 
     def test_open_window_refuses(self):
         self.fixture([build.Slot("0.02", native_frames=True), build.Slot("0.03", native_frames=True)], fill_slots=1)

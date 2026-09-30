@@ -129,7 +129,8 @@ def build(root, *, slots=None, second_slots=None, third_slots=None, null_first=F
     paths = []
     previous = None
     for session in snapshot.bracket_sessions:
-        adverse = bool(session.finalized_slots) and issuer.battery_float.validate_window(session)['status'] != 'pass'
+        adverse = bool(session.finalized_slots) and issuer.battery_float.authenticate_committed_verdict(
+            fixture['root'], session=session, preregistration_sha256=prereg_digest).status != 'pass'
         paths.append(window_records(fixture['root'], session, block, previous=previous, adverse=adverse))
         previous = session.session_id
     commit(fixture['root'])

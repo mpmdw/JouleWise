@@ -10,6 +10,8 @@ from unittest import mock
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 ALLOWLIST = REPO_ROOT / "tests/fixtures/custody_read_replay_allowlist.json"
+# Revision 6's shared fixture replays synthetic committed custody in disposable roots.
+GUARDED_TEST_FILES = ("tests/fixtures/epoch_bootstrap/revision6.py",)
 CUSTODY_CALLS = frozenset({
     "load_calibration_ledger_snapshot", "probe_custody", "_custody_probe_paths",
     "_custody_state", "_custody_reasons", "AuthenticatedConsumptionSession",
@@ -136,8 +138,10 @@ def inventory(source_overrides=None):
     """Return replay (file, qualified function, replay-call ordinal) keys."""
     overrides = source_overrides or {}
     replay, violations = set(), []
-    for directory in ("joulewise", "scripts"):
-        for path in sorted((REPO_ROOT / directory).rglob("*.py")):
+    for paths in ([path for directory in ("joulewise", "scripts")
+                   for path in (REPO_ROOT / directory).rglob("*.py")],
+                  [REPO_ROOT / relative for relative in GUARDED_TEST_FILES]):
+        for path in sorted(paths):
             relative = path.relative_to(REPO_ROOT).as_posix()
             tree = ast.parse(overrides.get(relative, path.read_text()), filename=relative)
             aliases = {

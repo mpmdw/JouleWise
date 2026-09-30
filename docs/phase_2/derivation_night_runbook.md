@@ -2556,10 +2556,11 @@ Choose custody outside watchdog discovery. Authentication failures refuse
 before uninstall/publication; identical retries verify without overwriting.
 After interruption, clear a sibling `.harvest-lock` only when no harvest runs.
 
-The plan's `registration_path` supplies the next-window count rule. W1/W2's
+The plan's `registration_path` (W1/W2: `night_gate.D166_REGISTRATION_PATH`) supplies the next-window count rule. W1/W2's
 D-166 pointer has no derivation rule, so output is `COUNTS_ONLY`. The record
-reports committed-verdict readiness; the pin/verdict commit below is still
-required. Per the owner's 2026-09-29 rule, routine windows need raw-byte validation
+authenticates the committed verdict; complete the battery-verdict issuance and
+pin/verdict commit in steps (iii)–(iv) below before running the harvest command.
+Per the owner's 2026-09-29 rule, routine windows need raw-byte validation
 and an independent arithmetic check; full suites, lenses and cold passes run
 once per relevant machinery change.
 

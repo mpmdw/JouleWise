@@ -3,11 +3,12 @@
 
 Publish one archive directory containing custody-root/, measurement-runs/ and
 harvest.json. No source, ledger pin, verdict file or Git metadata is changed.
-The committed-verdict issuance gate is reported separately from authentication.
+Every window must have an authenticated committed battery verdict before harvest.
 """
 from __future__ import annotations
 
 import argparse
+from dataclasses import asdict
 import hashlib
 import json
 import math
@@ -157,7 +158,7 @@ def window_end(raw):
             "source": {"path": "night/chain.exited", "sha256": digest(raw)}}
 
 
-def capture_rows(session, *, battery=None, r9_captures=None):
+def capture_rows(session, *, battery, r9_captures=None):
     """Authenticate all finalized captures, including non-valid dispositions.
 
     Call the issuer's primary-byte and clock seams and the battery-verdict
@@ -169,9 +170,7 @@ def capture_rows(session, *, battery=None, r9_captures=None):
         raise HarvestRefusal("window has no finalized captures")
     if session.state == "finalized" and set(session.finalized_slots) != set(session.declared_slots):
         raise HarvestRefusal("finalized capture inventory is incomplete")
-    if battery is None:
-        battery = battery_float.validate_window(session)
-    battery_by_slot = {row["slot"]: row for row in battery["slots"]}
+    battery_by_slot = {row.slot: row for row in battery.slots}
     captures = []
     seen = set()
     for slot, observation in session.finalized_slots.items():
@@ -212,7 +211,7 @@ def capture_rows(session, *, battery=None, r9_captures=None):
             checks.append(stored.get("probe_error") is False and stored.get("passed") is True)
         valid = observation.classification_disposition == "valid"
         retained = (valid and resolved
-                 and battery["status"] == "pass" and all(checks))
+                 and battery.status == "pass" and all(checks))
         if r9_captures is not None:
             retained = retained and median_frame is not None and 100 <= median_frame <= 150
         captures.append({"slot": slot, "attempt_id": observation.attempt_id,
@@ -220,14 +219,14 @@ def capture_rows(session, *, battery=None, r9_captures=None):
                                      "STOP" if median_frame > STOP_THRESHOLD_MS else "CONTINUE"),
                          "median_native_frame_ms": median_frame,
                          "clock": "resolved" if resolved else "unresolved",
-                         "battery": battery_by_slot[slot]["verdict"],
-                         "battery_raw_sha256": {"pre": battery_by_slot[slot]["pre_raw_sha256"],
-                                                "post": battery_by_slot[slot]["post_raw_sha256"]},
+                         "battery": battery_by_slot[slot].verdict,
+                         "battery_raw_sha256": {"pre": battery_by_slot[slot].pre_raw_sha256,
+                                                "post": battery_by_slot[slot].post_raw_sha256},
                          "probe_error_false": [stored_battery.get(p, {}).get("probe_error") is False for p in ("pre", "post")],
                          "passed_true": [stored_battery.get(p, {}).get("passed") is True for p in ("pre", "post")],
                          "manual_crosscheck": "pass" if all(checks) else "fail",
                          "valid": valid, "retained": retained})
-    return captures, battery["status"]
+    return captures, battery.status
 
 
 def next_window(plan, preregistration, sessions):
@@ -333,19 +332,16 @@ def harvest(args, *, runner=subprocess.run, census=measurement_census, now=time.
         if any(Path(row.custody_locator).parent != Path(session.runs_root) / "instrument_validation"
                for row in session.finalized_slots.values()):
             raise HarvestRefusal("capture custody locator disagrees with session")
-        # The pure record builder is the existing battery-verdict command's
-        # calculation seam. Embed its record; do not write its Git-governed
-        # destination as a separate, partially published side effect.
-        battery_record = battery_float.verdict_record(
-            session, snapshot=snapshot, preregistration_sha256=args.preregistration_sha256,
-            tool_commit=plan.measurement_head,
-            module_sha256=digest((root / "joulewise/battery_float.py").read_bytes()),
-            wall_time_s=json.loads((night_root / "night/chain.exited").read_bytes())["epoch_s"])
+        # The committed verdict governs counts; harvest is a consumer, not
+        # another producer. Authenticate before replaying any window capture.
+        authenticated_battery = battery_float.authenticate_committed_verdict(
+            root, session=session, preregistration_sha256=args.preregistration_sha256)
+        battery_record = json.loads(json_bytes(asdict(authenticated_battery)))
         r9_captures = None
         if revision6 and session_id == exports["SESSION_ID"]:
             r9_record, stop_flags = r9_window(session, battery_record["status"])
             r9_captures = {row["capture_id"]: row for row in r9_record["captures"]}
-        captures, battery = capture_rows(session, battery=battery_record, r9_captures=r9_captures)
+        captures, battery = capture_rows(session, battery=authenticated_battery, r9_captures=r9_captures)
         disposition_valid = sum(row["valid"] for row in captures)
         # Independently count the snapshot's observation inventory, rather
         # than relying solely on the capture traversal's accumulator.
@@ -465,7 +461,8 @@ def main(argv=None, **injected):
     except HarvestRefusal as error:
         print(f"REFUSED: {error}", file=sys.stderr)
         return 3
-    except (OSError, ValueError, PlanError, issuer.PrepareRefusal, battery_float.CustodyFailure, subprocess.SubprocessError):
+    except (OSError, ValueError, PlanError, issuer.PrepareRefusal, battery_float.CustodyFailure,
+            battery_float.BatteryVerdictRefusal, subprocess.SubprocessError):
         # Primary-file parse errors may include measured content. Never echo it.
         print("REFUSED: harvest authentication, completion, custody or uninstall failed", file=sys.stderr)
         return 3
