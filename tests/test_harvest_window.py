@@ -278,7 +278,7 @@ class HarvestWindowTests(unittest.TestCase):
                                return_value=self.replay_result(cells=None, frame=None)):
             record = self.run_harvest()
         r9 = self.archived_r9(record)
-        self.assertIn("STOP-R9-FRAME", record["stop_flags"])
+        self.assertEqual(record["stop_flags"], ["STOP-FUTILITY", "STOP-R9-FRAME"])
         self.assertEqual(record["next_window"]["verdict"], "STOP_TO_REVIEW")
         self.assertEqual((r9["counted"], r9["valid"]), (0, 1))
         self.assertFalse(r9["captures"][0]["median_frame_reported"])
@@ -293,7 +293,7 @@ class HarvestWindowTests(unittest.TestCase):
         raw_paths[1].write_bytes(b"tampered")
         record = self.run_harvest()  # Real REPORT input checks, no detector work.
         r9 = self.archived_r9(record)
-        self.assertIn("STOP-R9-FRAME", record["stop_flags"])
+        self.assertEqual(record["stop_flags"], ["STOP-FUTILITY", "STOP-R9-FRAME"])
         self.assertEqual(r9["counted"], 0)
         self.assertTrue(all(row["has_recording"] and not row["median_frame_reported"] for row in r9["captures"]))
 
@@ -306,7 +306,7 @@ class HarvestWindowTests(unittest.TestCase):
         self.assertFalse(r9["captures"][0]["has_recording"])
         self.assertEqual(r9["captures"][0]["disposition"], "ordinary-invalid")
         self.assertEqual((r9["counted"], r9["valid"]), (0, 0))
-        self.assertNotIn("STOP-R9-FRAME", record["stop_flags"])
+        self.assertEqual(record["stop_flags"], ["STOP-FUTILITY"])
 
     def test_revision6_adverse_window_contributes_no_counts(self):
         self.revision6_fixture([build.Slot("0.02", native_frames=True, battery_mode="charging")])
@@ -314,7 +314,19 @@ class HarvestWindowTests(unittest.TestCase):
             record = self.run_harvest()
         r9 = self.archived_r9(record)
         self.assertEqual((r9["counted"], r9["valid"]), (0, 0))
-        self.assertIn("STOP-R9-FRAME", record["stop_flags"])
+        self.assertEqual(record["stop_flags"], ["STOP-R9-FRAME"])
+
+    def test_revision6_cap_triggers_are_preserved(self):
+        self.revision6_fixture([build.Slot("0.02", native_frames=True)] * 3)
+        replies = [self.replay_result(trigger="evaluated_cell_budget"),
+                   self.replay_result(cells=60), self.replay_result()]
+        with mock.patch.object(harvest.cap_replay_harness, "replay_capture", side_effect=replies):
+            record = self.run_harvest()
+        r9 = self.archived_r9(record)
+        self.assertEqual([row["cap_trigger"] for row in r9["captures"]],
+                         ["evaluated_cell_budget", None, None])
+        self.assertEqual(record["stop_flags"], ["STOP-FUTILITY", "STOP-R9-CELL"])
+        self.assertEqual(record["next_window"]["verdict"], "STOP_TO_REVIEW")
 
     def test_revision6_wall_deadline_retries_and_never_records_failed_replay(self):
         self.revision6_fixture()

@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 import re
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -44,12 +45,31 @@ class PrewindowCheckTests(unittest.TestCase):
         self.assertEqual(self._check_lines([]).returncode, 0)
 
     def _check_lines(self, process_lines, *args):
+        # Explicit (comm, args) pairs preserve executable names containing spaces.
+        # Legacy fixtures use ps aux rows or a bare executable name.
+        processes = []
+        for line in process_lines:
+            if isinstance(line, tuple):
+                comm, arguments = line
+                full_line = f"edr 201 0.0 0.0 0 0 ?? S 0:00.00 {arguments}"
+            else:
+                arguments = line.split(maxsplit=9)[9] if line.startswith("edr ") else line
+                comm = arguments.split()[0]
+                full_line = line
+            processes.append((comm, arguments, full_line))
+
+        def output(column):
+            return "\n".join(f"printf '%s\\n' {shlex.quote(row[column])}" for row in processes) or ":"
+
         with tempfile.TemporaryDirectory() as directory:
             fake_bin = Path(directory)
             commands = {
-                "ps": "\n".join(
-                    ["#!/bin/sh"]
-                    + [f"printf '%s\\n' '{line.split()[9] if line.startswith('edr ') else line}'" for line in process_lines]
+                "ps": (
+                    '#!/bin/sh\ncase "$*" in\n'
+                    f'  "-A -o comm=")\n{output(0)}\n;;\n'
+                    f'  "-A -o args=")\n{output(1)}\n;;\n'
+                    f'  aux)\n{output(2)}\n;;\n'
+                    '  *) echo "unsupported fake ps columns: $*" >&2; exit 2;;\nesac'
                 ),
                 "uptime": (
                     "#!/bin/sh\nprintf '%s\\n' "
@@ -131,6 +151,20 @@ class PrewindowCheckTests(unittest.TestCase):
         self.assertEqual(self._check_lines(["/usr/local/bin/codex"]).returncode, 1)
         admitted = self._check_lines([driver_command.replace("/.claude/", "/measurement/")])
         self.assertEqual(admitted.returncode, 0, admitted.stdout + admitted.stderr)
+
+    def test_check_8_refuses_executable_names_containing_spaces(self):
+        names = ("Codex (Service)", "T3 Code", "Claude Desktop", "mcp-server worker",
+                 "run_campaign worker", "window-chain worker")
+        for name in names:
+            with self.subTest(comm=name):
+                # Neutral args make this a comm-only match, including app paths.
+                comm = f"/Applications/Worker.app/Contents/MacOS/{name}"
+                refused = self._check_lines([(comm, "worker --plan /tmp/window/plan.json")])
+                self.assertEqual(refused.returncode, 1, refused.stdout + refused.stderr)
+                self.assertIn("1 agent/measurement process(es) already running", refused.stdout)
+        refused = self._check_lines([(name, "worker") for name in names])
+        self.assertEqual(refused.returncode, 1, refused.stdout + refused.stderr)
+        self.assertIn("6 agent/measurement process(es) already running", refused.stdout)
 
 
 if __name__ == "__main__":

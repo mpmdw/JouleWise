@@ -3509,6 +3509,8 @@ def run_night(
     if not rehearsal_effective and night_gate.probe_payload_kind(chain_path.read_text()) != "quiet_predicate_evidence":
         try:
             if plan.receipt_class == "DIAGNOSTIC_NO_PACK":
+                if derivation_admission is None:
+                    raise ValueError("derivation start admission was not completed before the t0 gate")
                 manifest, manifest_evidence, budget = derivation_admission
                 _write_start_conditions(plan, night_dir, manifest, manifest_evidence, budget)
             else:

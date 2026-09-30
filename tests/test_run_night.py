@@ -5140,6 +5140,41 @@ class QuietDriverIntegrationTests(unittest.TestCase):
         write_night_plan(fixture.plan_path, plan)
         return fixture, plan
 
+    def test_initial_agent_then_bind_go_refuses_missing_derivation_admission(self):
+        from dataclasses import replace
+        from tests.test_quiet_admission import metrics
+        fixture, plan = self.fixture(busy_core_max=0.05, sample_interval_s=270)
+        driver = fixture.driver
+        probes = fixture.source.probes()
+        driver.make_probes = lambda: probes
+        receipt = driver.evaluate_night(replace(plan, quiet_admission=None), probes)
+        self.assertEqual(receipt.verdict, "GO")
+        fixture.source.census_responses = [
+            _probe(night_gate.AGENT_CENSUS_ARGV, stdout="20 claude\n")]
+        admission = dict(quiet_admission=plan.quiet_admission, admission_is_capture_evidence=False,
+            bind_deadline_epoch_s=plan.t0_epoch_s+600, go_epoch_s=plan.t0_epoch_s,
+            samples_total=2, samples_quiet_run_at_go=2, quiet_samples_lines=2,
+            quiet_samples_sha256='a'*64, top_consumers_at_decision=metrics(.02)['top_consumers'],
+            load_avg_diagnostic={'raw': '3.7'})
+        driver.bind_until_quiet = mock.Mock(return_value=replace(
+            receipt, schema=night_gate.QUIET_RECEIPT_SCHEMA, admission=admission))
+        with mock.patch.object(driver, '_run_chain_once') as chain, \
+             mock.patch.object(driver, '_finish_reporting', wraps=driver._finish_reporting) as reporting:
+            self.assertEqual(driver.run_night(fixture.plan_path), driver.EXIT_REFUSED)
+        chain.assert_not_called()
+        reporting.assert_called_once()
+        driver._admit_network_time_off.assert_not_called()
+        driver._admit_derivation_clean_dwell.assert_not_called()
+        self.assertEqual(driver.bind_until_quiet.call_args.kwargs['initial_census'][0].stdout,
+                         "20 claude\n")
+        result = json.loads((fixture.custody/'night/result.json').read_bytes())
+        refusal = json.loads((fixture.custody/'night/refusal.json').read_bytes())
+        self.assertEqual(result['verdict'], 'REFUSED')
+        self.assertEqual(result['aborted_reason'], 'night_probe_error')
+        self.assertEqual(refusal['refusal']['reason'], 'night_probe_error')
+        self.assertIn('derivation start admission was not completed', refusal['refusal']['detail'])
+        self.assertFalse((fixture.custody/'night/chain.started').exists())
+
     def test_v4_driver_calls_bind_and_keeps_shutdown_anchored_to_entry(self):
         self.assert_driver_deadlines(540)
 
