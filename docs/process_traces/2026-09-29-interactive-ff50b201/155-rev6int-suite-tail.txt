@@ -1,0 +1,2 @@
+WORKERS SUMMARY shards=6 modules=270 tests=7375 failures=0 errors=0 skipped=49 failed_shards=none result=PASS
+rc=0
