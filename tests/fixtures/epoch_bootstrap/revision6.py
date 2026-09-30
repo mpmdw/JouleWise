@@ -48,11 +48,12 @@ def window_records(root, session, block, *, previous=None, adverse=False):
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(raw)
         return {'path': path, 'sha256': hashlib.sha256(raw).hexdigest()}
-    start = float(session.capability_sequence)
+    start = float(1_800_000_000 + session.capability_sequence * 10_000)
+    monotonic = start - 1_700_000_000
     off = {'schema': 'joulewise.network_time_off.v1', 'argv': list(issuer.network_time_off.OFF_ARGV),
            'exit_code': 0, 'stdout': issuer.network_time_off.EXPECTED_STDOUT, 'stderr': 'Error:-99\n',
            'boot_id': 'synthetic-boot', 'plan_id': session.plan_id, 'window_id': session.window_id,
-           'epoch_s': start - 1000, 'monotonic_s': 0}
+           'epoch_s': start - 1000, 'monotonic_s': monotonic - 1000}
     evidence = {
         'a_prior_session_manifest': write('night/start_conditions_manifest.json', canonical({
             'prior_revision6_session': previous, 'reason': 'first session' if previous is None else 'terminal NEXT_WINDOW'})),
@@ -68,7 +69,9 @@ def window_records(root, session, block, *, previous=None, adverse=False):
     start_record = {'schema': 'joulewise.revision6.start_conditions.v1', 'session_id': session.session_id,
         'plan_id': session.plan_id, 'result': 'admitted' if session.finalized_slots else 'refused',
         'refusal_reason': None if session.finalized_slots else session.abort_reason,
-        'evidence': evidence, 'written_epoch_s': start, 'written_monotonic_s': 1000.0, 'boot_id': 'synthetic-boot'}
+        'evidence': evidence, 'written_epoch_s': start + 20, 'written_monotonic_s': monotonic + 20,
+        'boot_id': 'synthetic-boot',
+        'chain_start_admitted': {'epoch_s': start, 'monotonic_s': monotonic} if session.finalized_slots else None}
     captures = []
     for slot, row in session.finalized_slots.items():
         captures.append({'slot': session.declared_slots.index(slot)+1, 'capture_id': row.attempt_id,
@@ -83,8 +86,13 @@ def window_records(root, session, block, *, previous=None, adverse=False):
     if not captures:
         r9['abort_reason'] = session.abort_reason
     harvest = {'schema': 'joulewise.harvest_window.v1', 'custody_root': str(custody),
+               'boot_id': 'synthetic-boot', 'window_end': None,
                'start_conditions': write('night/start_conditions.json', canonical(start_record)),
                'r9_window': write('harvest/r9_window.json', canonical(r9))}
+    if captures:
+        harvest['window_end'] = {'epoch_s': start + 7200, 'monotonic_s': monotonic + 7200,
+            'source': write('night/chain.exited', canonical({'exit_code': 0, 'epoch_s': start + 7200,
+                'monotonic_ns': int((monotonic + 7200) * 1_000_000_000)}))}
     path = root / session.session_id / 'harvest.json'
     path.write_bytes(canonical(harvest))
     return path

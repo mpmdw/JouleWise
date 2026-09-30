@@ -1310,6 +1310,7 @@ def revision_six_records(harvest_paths: Sequence[Path], sessions: Sequence[Any],
                 raise ValueError("unrecognized R9 schema")
             start = None
             start_commit = None
+            timing = None
             if start_refs:
                 start_path, start_raw = _revision_six_bytes(root, start_refs[0])
                 start = _revision_six_json(start_raw, "start-condition record")
@@ -1321,10 +1322,11 @@ def revision_six_records(harvest_paths: Sequence[Path], sessions: Sequence[Any],
                 if start is None or start["result"] != "admitted" or start.get("refusal_reason") is not None:
                     raise ValueError("counting/adverse window requires admitted start conditions")
                 revision_six_start_conditions(start, root, declaration)
+                timing = _revision_six_window_timing(start, harvest, root)
                 if require_committed:
                     start_commit = _revision_six_committed(start_path, start_raw, repo_root, "start-condition")
             commit = _revision_six_committed(path, raw, repo_root) if require_committed else None
-            records[sid] = {"r9": r9, "start": start, "r9_sha256": r9_refs[0]["sha256"],
+            records[sid] = {"r9": r9, "start": start, "timing": timing, "r9_sha256": r9_refs[0]["sha256"],
                             "r9_commit": commit,
                             "start_condition_sha256": start_refs[0]["sha256"] if start_refs else None,
                             "start_condition_commit": start_commit, "harvest_path": str(locator),
@@ -1335,6 +1337,7 @@ def revision_six_records(harvest_paths: Sequence[Path], sessions: Sequence[Any],
     if set(records) != set(by_id):
         raise PrepareRefusal("Revision 6 harvest/R9 records must cover exactly every named session")
     previous = None
+    previous_timing = None
     for session in sessions:
         entry = records[session.session_id]
         if session.finalized_slots:
@@ -1349,13 +1352,81 @@ def revision_six_records(harvest_paths: Sequence[Path], sessions: Sequence[Any],
                 raise PrepareRefusal("Revision 6 start-condition prior-session manifest disagrees with ledger order")
             if previous is None and not manifest.get("reason"):
                 raise PrepareRefusal("Revision 6 first-session manifest requires a reason for no prior session")
+            timing = entry["timing"]
+            timing["previous_window_session_id"] = previous_timing[0] if previous_timing else None
+            timing["start_to_start_interval"] = (_revision_six_elapsed(
+                previous_timing[1]["start"], timing["start"], "start-to-start interval")
+                if previous_timing else None)
+            timing["inter_window_gap"] = (_revision_six_elapsed(
+                previous_timing[1]["end"], timing["start"], "inter-window gap")
+                if previous_timing else None)
+            previous_timing = (session.session_id, timing)
         previous = session.session_id
-    return records
+    return {session.session_id: records[session.session_id] for session in sessions}
+
+
+def _revision_six_clock(value: Any, boot_id: Any, label: str) -> dict[str, Any]:
+    if (not isinstance(value, Mapping) or not isinstance(boot_id, str)
+            or not boot_id or boot_id != boot_id.strip().lower()):
+        raise PrepareRefusal(f"Revision 6 {label}: missing or malformed timing/boot id")
+    clock = {"boot_id": boot_id}
+    for name in ("epoch_s", "monotonic_s"):
+        number = value.get(name)
+        try:
+            finite = type(number) in (int, float) and math.isfinite(number)
+        except OverflowError:
+            finite = False
+        if not finite:
+            raise PrepareRefusal(f"Revision 6 {label}: missing or malformed {name}")
+        clock[name] = number
+    return clock
+
+
+def _revision_six_elapsed(earlier: Mapping[str, Any], later: Mapping[str, Any],
+                          label: str) -> dict[str, Any]:
+    same_boot = earlier["boot_id"] == later["boot_id"]
+    wall = later["epoch_s"] - earlier["epoch_s"]
+    monotonic = later["monotonic_s"] - earlier["monotonic_s"] if same_boot else None
+    if (not math.isfinite(wall) or wall < 0 or
+            (same_boot and (not math.isfinite(monotonic) or monotonic < 0))):
+        raise PrepareRefusal(f"Revision 6 {label}: timing is reversed or nonfinite")
+    return {"wall_s": wall, "monotonic_s": monotonic,
+            "wall_minus_monotonic_s": wall - monotonic if same_boot else None,
+            "clock_basis": "wall_and_monotonic" if same_boot else "wall_only_across_reboot",
+            "note": ("Same boot: both clocks compared." if same_boot else
+                     "Across a reboot: wall clock used; monotonic clocks are incomparable.")}
+
+
+def _revision_six_window_timing(start: Mapping[str, Any], harvest: Mapping[str, Any],
+                                root: Path) -> dict[str, Any]:
+    admitted = _revision_six_clock(start.get("chain_start_admitted"), start.get("boot_id"), "chain start")
+    window_end = harvest.get("window_end")
+    end = _revision_six_clock(window_end, harvest.get("boot_id"), "window end")
+    source = window_end.get("source")
+    if not isinstance(source, Mapping) or source.get("path") != "night/chain.exited":
+        raise PrepareRefusal("Revision 6 window end must name night/chain.exited")
+    _, raw = _revision_six_bytes(root, source)
+    exited = _revision_six_json(raw, "chain exit")
+    # The existing driver records monotonic nanoseconds, while amendment T
+    # exposes seconds in the harvest record. Authenticate bytes before reading.
+    ns = exited.get("monotonic_ns")
+    epoch = exited.get("epoch_s")
+    try:
+        agrees = (type(ns) is int and type(epoch) in (int, float)
+                  and math.isfinite(epoch) and end["epoch_s"] == epoch
+                  and end["monotonic_s"] == ns / 1_000_000_000)
+    except OverflowError:
+        agrees = False
+    if not agrees:
+        raise PrepareRefusal("Revision 6 window end disagrees with authenticated chain exit clocks")
+    return {"start": admitted, "end": end, "end_source": dict(source),
+            "duration": _revision_six_elapsed(admitted, end, "window duration")}
 
 
 def revision_six_start_conditions(record: Mapping[str, Any], root: Path,
                                   declaration: Mapping[str, Any]) -> None:
     try:
+        admitted = _revision_six_clock(record.get("chain_start_admitted"), record.get("boot_id"), "chain start")
         evidence = record["evidence"]
         # The interface's sample names are illustrative; its precedence rule
         # maps evidence to the sealed a-g conditions. Authenticate by letter,
@@ -1381,16 +1452,15 @@ def revision_six_start_conditions(record: Mapping[str, Any], root: Path,
                 raise ValueError("malformed start-condition clock")
         if dwell["passed_epoch_s"] > dwell["deadline_epoch_s"]:
             raise ValueError("clean dwell passed after deadline")
+        if dwell["passed_epoch_s"] > admitted["epoch_s"]:
+            raise ValueError("chain start admitted before clean dwell passed")
         off_entries = [(letter, entry) for letter, entry in entries.items()
                        if entry["path"] == "night/network_time_off.json"]
         if len(off_entries) != 1:
             raise ValueError("start conditions must name exactly one network-time OFF receipt")
         letter, off_entry = off_entries[0]
         off = _revision_six_json(raw[letter], "network-time OFF")
-        settled = network_time_off.seconds_since_receipt(dict(off), {
-            "epoch_s": record["written_epoch_s"], "monotonic_s": record["written_monotonic_s"],
-            "boot_id": record["boot_id"],
-        })
+        settled = network_time_off.seconds_since_receipt(dict(off), admitted)
         age = off_entry.get("settled_seconds", settled)
         if (off["plan_id"] != record["plan_id"] or type(age) not in (int, float)
                 or not math.isfinite(age) or not 600 <= age <= settled):
@@ -2155,7 +2225,6 @@ def revision_six_dependence(members, observations, records, screen, within, ceil
         row = by_id[member["member_id"]]
         grouped.setdefault(row.bracket_session_id, []).append((row, Decimal(member["b_fiducial_s"])))
     diagnostics, medians, pairs = [], [], []
-    previous_start = None
     with localcontext() as context:
         context.prec = DECIMAL_WORK_PRECISION
         n, k = len(members), len(grouped)
@@ -2163,16 +2232,16 @@ def revision_six_dependence(members, observations, records, screen, within, ceil
         ssb = Decimal(0)
         for sid in records:
             group = grouped.get(sid, [])
-            start_record = records[sid]["start"]
-            if start_record is None or start_record["result"] != "admitted":
+            timing = records[sid]["timing"]
+            if timing is None:
                 continue
-            start = start_record["written_epoch_s"]
-            interval = None if previous_start is None else start - previous_start
-            previous_start = start
+            window_timing = {"window_start": timing["start"], "window_end": timing["end"],
+                "previous_window_session_id": timing["previous_window_session_id"],
+                "start_to_start_interval": timing["start_to_start_interval"],
+                "inter_window_gap": timing["inter_window_gap"]}
             if not group:
                 diagnostics.append({"session_id": sid, "member_count": 0, "median_s": None,
-                    "mean_s": None, "sample_sd_s": None, "start_condition_written_epoch_s": start,
-                    "start_condition_write_interval_s": interval})
+                    "mean_s": None, "sample_sd_s": None, **window_timing})
                 continue
             values = [value for _, value in group]
             window_mean = sum(values, Decimal(0)) / len(values)
@@ -2184,8 +2253,7 @@ def revision_six_dependence(members, observations, records, screen, within, ceil
             diagnostics.append({"session_id": sid, "member_count": len(values),
                 "median_s": str(median), "mean_s": str(window_mean),
                 "sample_sd_s": str(sd) if sd is not None else None,
-                "start_condition_written_epoch_s": start,
-                "start_condition_write_interval_s": interval})
+                **window_timing})
             slots = {row.bracket_slot: value for row, value in group}
             # Fixed derivation slots are s01 ... s12; never bridge a gap.
             for slot in range(1, 12):

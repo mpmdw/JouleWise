@@ -276,7 +276,7 @@ class RevisionSixConsumerTests(unittest.TestCase):
             mutations = [lambda r, key=key: r['evidence'].pop(key) for key in json.loads(original)['evidence']]
             mutations += [lambda r: r['evidence']['g_clean_dwell'].update(script_sha256='f'*64),
                           lambda r: r['evidence']['g_clean_dwell'].update(exit=1),
-                          lambda r: r['evidence']['g_clean_dwell'].update(passed_epoch_s=1e9),
+                          lambda r: r['evidence']['g_clean_dwell'].update(passed_epoch_s=3e9),
                           lambda r: r.update(boot_id='different-boot'),
                           lambda r: r.update(result='refused', refusal_reason='driver refused')]
             for mutate in mutations:
@@ -468,6 +468,15 @@ class RevisionSixConsumerTests(unittest.TestCase):
             self.assertEqual({row['reason'] for row in excluded}, {'adverse_window'})
             self.assertEqual(candidate['registered_generation_row']['registration_session_ids'],
                              [s.session_id for s in f['snapshot'].bracket_sessions])
+            windows = candidate['derivation_notes']['sampling_dependence']['windows']
+            self.assertEqual([w['member_count'] for w in windows], [0, 12, 12])
+            self.assertIsNotNone(windows[0]['window_end'])
+            harvest = json.loads(f['paths'][0].read_bytes())
+            harvest['window_end'] = None
+            from tests.fixtures.epoch_bootstrap.revision6 import canonical
+            f['paths'][0].write_bytes(canonical(harvest))
+            with self.assertRaisesRegex(issuer.PrepareRefusal, 'window end'):
+                self.prepare(f)
             g = self.fixture(Path(tmp)/'frames', third_slots=[Slot('0.027') for _ in range(12)])
             rewrite_record(g['paths'][0], 'r9_window', lambda r: (r['captures'][0].update(
                 median_frame_ms=99, counted=False), r.update(counted=11)))
@@ -513,6 +522,153 @@ class RevisionSixConsumerTests(unittest.TestCase):
             start['evidence']['f_launch_context']['sha256'] = 'f'*64
             with self.assertRaisesRegex(issuer.PrepareRefusal, 'sha256 disagreement'):
                 issuer.revision_six_start_conditions(start, root, f['block'])
+
+    def test_window_timing_uses_admission_and_exit_in_ledger_order(self):
+        from tests.fixtures.epoch_bootstrap.revision6 import rewrite_record, commit
+        with tempfile.TemporaryDirectory() as tmp:
+            f = self.fixture(Path(tmp)/'case')
+            # Write times deliberately differ from admission, and harvest
+            # arguments arrive out of order. Neither determines window timing.
+            rewrite_record(f['paths'][0], 'start_conditions', lambda r: r.update(
+                written_epoch_s=r['written_epoch_s'] + 123, written_monotonic_s=1.0))
+            commit(f['fixture']['root'])
+            f['args'].harvest_record.reverse()
+            candidate = self.prepare(f)
+            windows = candidate['derivation_notes']['sampling_dependence']['windows']
+            first, second = windows
+            self.assertEqual([w['session_id'] for w in windows],
+                             [s.session_id for s in f['snapshot'].bracket_sessions])
+            harvest = json.loads(f['paths'][0].read_bytes())
+            root = Path(harvest['custody_root'])
+            start = json.loads((root/'night/start_conditions.json').read_bytes())
+            self.assertEqual(first['window_start']['epoch_s'], start['chain_start_admitted']['epoch_s'])
+            self.assertEqual(first['window_end']['epoch_s'], harvest['window_end']['epoch_s'])
+            self.assertIsNone(first['start_to_start_interval'])
+            self.assertIsNone(first['inter_window_gap'])
+            for key, earlier in [('start_to_start_interval', first['window_start']),
+                                 ('inter_window_gap', first['window_end'])]:
+                delta = second[key]
+                self.assertEqual(delta['wall_s'], second['window_start']['epoch_s'] - earlier['epoch_s'])
+                self.assertEqual(delta['monotonic_s'], second['window_start']['monotonic_s'] - earlier['monotonic_s'])
+                self.assertEqual(delta['clock_basis'], 'wall_and_monotonic')
+                self.assertEqual(delta['wall_minus_monotonic_s'], 0)
+            self.assertNotIn('start_condition_write_interval_s', first)
+
+    def test_missing_null_and_malformed_window_timing_refuses_before_B(self):
+        from tests.fixtures.epoch_bootstrap.revision6 import canonical, rewrite_record
+        with tempfile.TemporaryDirectory() as tmp:
+            f = self.fixture(Path(tmp)/'case')
+            path = f['paths'][0]
+            h = json.loads(path.read_bytes())
+            start_path = Path(h['custody_root'])/'night/start_conditions.json'
+            original_start, original_harvest = start_path.read_bytes(), path.read_bytes()
+            mutations = [('start', lambda r: r.pop('chain_start_admitted')),
+                ('start', lambda r: r.update(chain_start_admitted=None)),
+                ('harvest', lambda r: r.pop('window_end')),
+                ('harvest', lambda r: r.update(window_end=None)),
+                ('harvest', lambda r: r.pop('boot_id')),
+                ('harvest', lambda r: r['window_end'].pop('source')),
+                ('harvest', lambda r: r['window_end']['source'].update(path='night/other.json')),
+                ('harvest', lambda r: r['window_end']['source'].update(sha256='f'*64)),
+                ('harvest', lambda r: r['window_end'].update(epoch_s=r['window_end']['epoch_s']+1)),
+                ('harvest', lambda r: r['window_end'].update(monotonic_s=r['window_end']['monotonic_s']+1))]
+            for location in ('start', 'harvest'):
+                key = 'chain_start_admitted' if location == 'start' else 'window_end'
+                for clock in ('epoch_s', 'monotonic_s'):
+                    mutations += [(location, lambda r, k=key, c=clock: r[k].pop(c))]
+                    for invalid in (None, True, '1000', float('inf'), float('nan'), 10**400):
+                        # JSON deliberately permits nonfinite fixture values:
+                        # the consumer must fail closed even on those bytes.
+                        mutations += [(location, lambda r, k=key, c=clock, v=invalid: r[k].update({c: v}))]
+            for location, mutate in mutations:
+                with self.subTest(location=location, mutate=mutate):
+                    if location == 'start':
+                        record = json.loads(original_start)
+                        mutate(record)
+                        raw = (json.dumps(record, sort_keys=True) + '\n').encode()
+                        start_path.write_bytes(raw)
+                        changed = copy.deepcopy(h)
+                        changed['start_conditions']['sha256'] = hashlib.sha256(raw).hexdigest()
+                    else:
+                        changed = copy.deepcopy(h)
+                        mutate(changed)
+                    path.write_text(json.dumps(changed, sort_keys=True) + '\n')
+                    with patch.object(issuer, '_revision_six_committed', return_value='a'*40), patch.object(
+                            issuer, '_read_member_evidence', side_effect=AssertionError('B read')):
+                        with self.assertRaises(issuer.PrepareRefusal):
+                            self.prepare(f)
+                    start_path.write_bytes(original_start)
+                    path.write_bytes(original_harvest)
+            # Missing/null timing is permitted on a true null session.
+            null = self.fixture(Path(tmp)/'null', null_first=True)
+            rewrite_record(null['paths'][0], 'start_conditions', lambda r: r.pop('chain_start_admitted'))
+            changed = json.loads(null['paths'][0].read_bytes())
+            changed.pop('window_end')
+            null['paths'][0].write_bytes(canonical(changed))
+            records = issuer.revision_six_records(null['paths'], null['snapshot'].bracket_sessions,
+                null['block'], repo_root=null['fixture']['root'], require_committed=False)
+            self.assertIsNone(records[null['snapshot'].bracket_sessions[0].session_id]['timing'])
+            self.assertIsNone(records[null['snapshot'].bracket_sessions[1].session_id]['timing']['inter_window_gap'])
+
+    def test_cross_reboot_uses_wall_clock_and_explicit_note(self):
+        from tests.fixtures.epoch_bootstrap.revision6 import canonical, rewrite_record, commit
+        with tempfile.TemporaryDirectory() as tmp:
+            f = self.fixture(Path(tmp)/'case')
+            path = f['paths'][1]
+            h = json.loads(path.read_bytes())
+            root = Path(h['custody_root'])
+            off_path = root/'night/network_time_off.json'
+            off = json.loads(off_path.read_bytes())
+            off.update(boot_id='rebooted', monotonic_s=1000.0)
+            off_path.write_bytes(canonical(off))
+            def reboot_start(r):
+                r.update(boot_id='rebooted', written_monotonic_s=2020.0)
+                r['chain_start_admitted']['monotonic_s'] = 2000.0
+                r['evidence']['b_network_time_off_receipt']['sha256'] = hashlib.sha256(off_path.read_bytes()).hexdigest()
+            rewrite_record(path, 'start_conditions', reboot_start)
+            h = json.loads(path.read_bytes())
+            h['boot_id'] = 'rebooted'
+            h['window_end']['monotonic_s'] = 9200.0
+            exited_path = root/'night/chain.exited'
+            exited = json.loads(exited_path.read_bytes())
+            exited['monotonic_ns'] = 9_200_000_000_000
+            exited_path.write_bytes(canonical(exited))
+            h['window_end']['source']['sha256'] = hashlib.sha256(exited_path.read_bytes()).hexdigest()
+            path.write_bytes(canonical(h))
+            commit(f['fixture']['root'])
+            windows = self.prepare(f)['derivation_notes']['sampling_dependence']['windows']
+            for key, earlier in [('start_to_start_interval', windows[0]['window_start']),
+                                 ('inter_window_gap', windows[0]['window_end'])]:
+                delta = windows[1][key]
+                self.assertEqual(delta['wall_s'], windows[1]['window_start']['epoch_s']-earlier['epoch_s'])
+                self.assertIsNone(delta['monotonic_s'])
+                self.assertIsNone(delta['wall_minus_monotonic_s'])
+                self.assertEqual(delta['clock_basis'], 'wall_only_across_reboot')
+                self.assertIn('Across a reboot: wall clock used', delta['note'])
+
+    def test_both_clocks_report_drift_and_refuse_reversed_order(self):
+        earlier = {'epoch_s': 1000.0, 'monotonic_s': 20.0, 'boot_id': 'same'}
+        later = {'epoch_s': 1101.0, 'monotonic_s': 120.0, 'boot_id': 'same'}
+        result = issuer._revision_six_elapsed(earlier, later, 'gap')
+        self.assertEqual((result['wall_s'], result['monotonic_s'], result['wall_minus_monotonic_s']), (101, 100, 1))
+        for clock in ('epoch_s', 'monotonic_s'):
+            broken = dict(later)
+            broken[clock] = earlier[clock]-1
+            with self.assertRaisesRegex(issuer.PrepareRefusal, 'reversed'):
+                issuer._revision_six_elapsed(earlier, broken, 'gap')
+
+    def test_settle_and_dwell_are_measured_at_admission(self):
+        from tests.fixtures.epoch_bootstrap.revision6 import rewrite_record
+        with tempfile.TemporaryDirectory() as tmp:
+            f = self.fixture(Path(tmp)/'case')
+            for clock in ('epoch_s', 'monotonic_s'):
+                def early(r):
+                    r['chain_start_admitted'][clock] -= 401
+                rewrite_record(f['paths'][0], 'start_conditions', early)
+                with self.assertRaises(issuer.PrepareRefusal):
+                    self.records(f)
+                rewrite_record(f['paths'][0], 'start_conditions', lambda r: r['chain_start_admitted'].update(
+                    {clock: r['chain_start_admitted'][clock]+401}))
 
 
 if __name__ == "__main__":
