@@ -1,7 +1,0 @@
-RECORDED_LEDGER= /Users/edr/night-custody/measurement/JouleWise-measurement-20260927-derivation-w2/runs/calibration_observation_ledger.jsonl VALID= True REFUSALS= () SEQUENCE= 276
-IDENTITY_FROM_AUTHENTICATED_LEDGER= {"estimator_revision": "joint_loss_sublevel_interval_branch_v2", "hardware_model": "Mac15,9", "os_build": "25G83", "power_policy": "ac_high_power", "pulse_protocol_id": "powermetrics_pulse_fiducial_v3", "sampling_interval_ms": 100}
-DERIVATION_BASIS= d079_calibration_acceptance_v2_n17_r8 SCREEN= 0.032898493715362
-ORDINARY_PREFLIGHT= acceptance_artifact_epoch_mismatch
-BRACKET_REASONS= ('calibration_acceptance_bound_stale',) FRESHNESS= stale
-NIGHT_INPUTS_STALE_FIELDS= ['os_build']
-N4_RECORDED_LEDGER=PASS (read-only; no sampler; not live machine validation)

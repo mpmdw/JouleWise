@@ -1,1 +1,0 @@
-{"status": "failed", "reasons": ["instrument_calibration_bracket_missing"]}

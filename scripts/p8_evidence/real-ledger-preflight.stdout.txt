@@ -1,5 +1,0 @@
-REAL_LEDGER_VALID= False REFUSALS= ('calibration_ledger_rollback',) SEQUENCE= 76
-DERIVATION_BASIS= d079_calibration_acceptance_v2_n17_r8 SCREEN= 0.032898493715362
-ORDINARY_PREFLIGHT= acceptance_artifact_epoch_mismatch
-NIGHT_INPUTS_STALE_FIELDS= ['os_build']
-R7_DERIVATION_PREFLIGHT= acceptance_artifact_stale
