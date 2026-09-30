@@ -18,6 +18,7 @@ import hashlib
 import subprocess
 import tempfile
 import threading
+import time
 import unittest
 import sys
 from dataclasses import replace
@@ -570,15 +571,12 @@ class DetectorTests(unittest.TestCase):
             "fixture must expose an accepted off-axis excursion missed by axes/diagonals",
         )
 
-    # D-138 parameter ruling, 2026-08-18.  The retired 100,000-cell budget was
-    # calibrated from the 17,505-cell synthetic acceptance trace and is
-    # exhausted by every real corpus-grade capture: the complete retained
-    # unique protocol-v3 corpus (n=34 full 59-pulse convergences) spans
-    # 112,205..137,189 evaluated cells.  These two constants are the ruled
-    # basis; a silent revert of the production default must fail here.
-    RULED_DETECTION_CELL_BUDGET = 165_000
+    # CAP-RULE-25G83-1, 2026-09-30: the recorded sizing-set N_max fixes the
+    # production cap. These two constants are the ruled basis; a silent
+    # revert of the production default must fail here.
+    RULED_DETECTION_CELL_BUDGET = 1_710_000
     RETIRED_DETECTION_CELL_BUDGET = 100_000
-    OBSERVED_CORPUS_MAX_CELLS = 137_189
+    OBSERVED_CORPUS_MAX_CELLS = 170_965
 
     def test_detection_cell_budget_is_the_ruled_corpus_calibrated_value(
         self,
@@ -586,7 +584,7 @@ class DetectorTests(unittest.TestCase):
         self.assertEqual(
             DETECTION_PROJECTION_CELL_BUDGET,
             self.RULED_DETECTION_CELL_BUDGET,
-            "the D-138 detection budget ruling pins 165,000 cells; changing it "
+            "CAP-RULE-25G83-1 pins 1,710,000 cells; changing it "
             "rotates the estimator pin and requires a D-079 reissue plus the "
             "atomic _v2 successor-family re-freeze",
         )
@@ -702,6 +700,41 @@ class DetectorTests(unittest.TestCase):
                 },
             },
         )
+
+    def test_flat_loss_projection_exhausts_production_cap_before_deadline(
+        self,
+    ) -> None:
+        # R6(iii): exercise both production defaults on a flat lower bound.
+        trace, pulses = self.make_case(shift_s=0.0, count=1)
+        started = time.perf_counter()
+        with patch.object(
+            fiducial_module,
+            "_pulse_loss_cell_lower_bound",
+            return_value=0.0,
+        ):
+            detection = detect_pulses(trace, pulses)
+        elapsed_s = time.perf_counter() - started
+        print(f"CAP-RULE-25G83-1 R6(iii) elapsed seconds: {elapsed_s:.6f}")
+        self.assertEqual(
+            detection.projection_budget_trigger,
+            "evaluated_cell_budget",
+        )
+        self.assertEqual(
+            detection.projection_evaluated_cell_count,
+            DETECTION_PROJECTION_CELL_BUDGET,
+        )
+        self.assertEqual(
+            detection.projection_evaluated_cell_budget,
+            DETECTION_PROJECTION_CELL_BUDGET,
+        )
+        self.assertEqual(
+            detection.projection_wall_budget_s,
+            fiducial_module.DETECTION_PROJECTION_WALL_BUDGET_S,
+        )
+        self.assertFalse(detection.all_pulses_detected)
+        self.assertIsNone(detection.b_fiducial_s)
+        self.assertEqual(detection.fits, ())
+        self.assertEqual(detection.reasons, (DETECTION_NONCONVERGENT,))
 
     def test_wall_deadline_is_nonreproducible_host_pathology_diagnostic(
         self,

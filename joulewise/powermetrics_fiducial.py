@@ -85,7 +85,9 @@ REGION_COVERAGE_RESOLUTION_S = 0.0001
 # work instead of exploring hundreds of millions of cells per pulse.
 # Budget exhaustion remains fail-closed: it yields registered invalid evidence,
 # never a partial fit.
-DETECTION_PROJECTION_CELL_BUDGET = 165_000
+# CAP-RULE-25G83-1; value: docs/process_traces/2026-09-29-interactive-ff50b201/
+# 140-cap-rule/20-value.md (2026-09-30).
+DETECTION_PROJECTION_CELL_BUDGET = 1_710_000
 # FROZEN supplementary host-safety deadline.  The evaluated-cell budget above
 # is the primary reproducible mechanism; this deadline only catches unexpected
 # per-cell cost or host pathologies that a cell count cannot bound.
