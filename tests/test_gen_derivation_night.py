@@ -185,6 +185,8 @@ class WrapperFixture:
             [
                 sys.executable, "-B", str(SCRIPT_PATH),
                 "--plan", str(self.plan_path),
+                *(["--first-revision6-window-reason", "first Revision 6 fixture"]
+                  if "--prior-revision6-session" not in extra else []),
                 "--session-id", self.session_id,
                 "--evidence-root-id", "EVR-derivation-20260912",
                 "--calibration-plan", str(self.frozen_plan),
@@ -247,6 +249,78 @@ class DerivationNightWrapperTests(unittest.TestCase):
         self.directory = _census_clean_temporary_directory()
         self.addCleanup(self.directory.cleanup)
         self.fixture = WrapperFixture(Path(self.directory.name))
+
+    def test_first_manifest_is_write_once_and_verify_is_read_only(self):
+        emitted = self.fixture.emit()
+        self.assertEqual(emitted.returncode, 0, emitted.stderr)
+        path = self.fixture.night_root / "start_conditions_manifest.json"
+        before = path.read_bytes()
+        value = json.loads(before)
+        self.assertIsNone(value["prior_revision6_session"])
+        self.assertEqual(value["plan_id"], "derivation-20260912")
+        self.assertTrue(value["reason"])
+        self.assertEqual(self.fixture.emit("--verify").returncode, 0)
+        self.assertEqual(path.read_bytes(), before)
+        refused = self.fixture.emit("--first-revision6-window-reason", "different arm")
+        self.assertEqual(refused.returncode, 2)
+        self.assertEqual(path.read_bytes(), before)
+        self.assertEqual(self.fixture.emit().returncode, 0)
+        path.unlink()
+        self.assertEqual(self.fixture.emit("--verify").returncode, 2)
+        self.assertFalse(path.exists())
+        self.assertEqual(self.fixture.emit().returncode, 0)
+
+    def test_prior_manifest_hashes_wi16_bytes_and_terminal_timestamps(self):
+        harvest = self.fixture.root / "harvest.json"
+        harvest.write_text('{"decision":"NEXT_WINDOW"}\n')
+        args = ["--prior-revision6-session", "derivation-prior",
+                "--prior-harvest-json", str(harvest), "--prior-started-epoch-s", "1000",
+                "--prior-terminal-epoch-s", "2000"]
+        emitted = self.fixture.emit(*args)
+        self.assertEqual(emitted.returncode, 0, emitted.stderr)
+        path = self.fixture.night_root / "start_conditions_manifest.json"
+        prior = json.loads(path.read_bytes())["prior_revision6_session"]
+        self.assertEqual(prior["session_id"], "derivation-prior")
+        self.assertEqual(prior["harvest_file"], str(harvest.resolve()))
+        self.assertEqual(prior["harvest_sha256"], hashlib.sha256(harvest.read_bytes()).hexdigest())
+        self.assertEqual((prior["started_epoch_s"], prior["terminal_epoch_s"]), (1000, 2000))
+        before = path.read_bytes()
+        harvest.write_text('{"decision":"changed"}\n')
+        self.assertEqual(self.fixture.emit(*args).returncode, 2)
+        self.assertEqual(path.read_bytes(), before)
+        harvest.write_text('{"decision":"NEXT_WINDOW"}\n')
+        self.assertEqual(self.fixture.emit(*args).returncode, 0)
+
+    def test_malformed_prior_inputs_refuse_without_arm_outputs(self):
+        harvest = self.fixture.root / "harvest.json"
+        args = ["--prior-revision6-session", "derivation-prior",
+                "--prior-harvest-json", str(harvest), "--prior-started-epoch-s", "1000",
+                "--prior-terminal-epoch-s", "2000"]
+        for raw in ("{", "[]"):
+            with self.subTest(harvest=raw):
+                harvest.write_text(raw)
+                self.assertEqual(self.fixture.emit(*args).returncode, 2)
+                self.assertFalse(self.fixture.out.exists())
+                self.assertFalse((self.fixture.night_root / "start_conditions_manifest.json").exists())
+        harvest.write_text('{}\n')
+        for extra in (("--prior-terminal-epoch-s", "999"),
+                      ("--prior-terminal-epoch-s", "nan"),
+                      ("--first-revision6-window-reason", "first")):
+            with self.subTest(extra=extra):
+                self.assertEqual(self.fixture.emit(*args, *extra).returncode, 2)
+                self.assertFalse(self.fixture.out.exists())
+        self.assertEqual(self.fixture.emit(*args).returncode, 0)
+
+    def test_manifest_arguments_require_explicit_first_or_complete_prior(self):
+        cases = ([], ["--first-revision6-window-reason", " "],
+                 ["--prior-revision6-session", "prior"])
+        for options in cases:
+            with self.subTest(options=options):
+                parsed = GEN.build_parser().parse_args(options)
+                with self.assertRaises((GEN.GenerationRefusal, ValueError)):
+                    GEN.start_manifest_from_args(parsed, "fresh-plan")
+        parsed = GEN.build_parser().parse_args(["--first-revision6-window-reason", "first"])
+        self.assertIsNone(GEN.start_manifest_from_args(parsed, "fresh-plan")["prior_revision6_session"])
 
     # --- emission ---------------------------------------------------------
 
@@ -1135,13 +1209,17 @@ class QuietPlanGeneratorTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             template, policy, target = root/'template.json', root/'policy.json', root/'new.json'
-            template.write_bytes(night_plan_json_bytes(replace(make_plan(), window_max_s=9600)))
+            template.write_bytes(night_plan_json_bytes(replace(make_plan(), window_max_s=9600, custody_root=str(root/'custody'))))
             before = template.read_bytes()
             policy.write_text(json.dumps(POLICY))
             args = ['--quiet-admission-json', str(policy), '--plan-template', str(template),
-                    '--new-plan', str(target), '--new-plan-id', 'fresh-night']
+                    '--new-plan', str(target), '--new-plan-id', 'fresh-night',
+                    '--first-revision6-window-reason', 'first Revision 6 fixture']
             self.assertEqual(GEN.main(args), 0)
             parsed = NightPlan.from_mapping(json.loads(target.read_bytes()))
+            manifest = json.loads((root/'custody/start_conditions_manifest.json').read_bytes())
+            self.assertEqual(manifest['plan_id'], 'fresh-night')
+            self.assertIsNone(manifest['prior_revision6_session'])
             self.assertEqual(parsed.window_max_s, 9600)
             self.assertEqual(parsed.quiet_admission, POLICY)
             self.assertEqual(parsed.quiet_admission['busy_core_max'], 0.0)
