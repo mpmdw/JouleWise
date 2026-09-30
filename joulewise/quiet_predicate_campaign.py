@@ -14,34 +14,15 @@ import subprocess
 import sys
 import time
 
-from joulewise import battery_float, night_gate
+from joulewise import battery_float, night_gate, network_time_off
 from joulewise.night_kinds import kind_row
 from joulewise.arm_readiness import EXPECTED_NETWORK_TIME_OFF_STDOUT
 
 PROTOCOL_PATH = night_gate.QPE01_PILOT_REGISTRATION_PATH
 CHAIN_PATH = night_gate.EVIDENCE_CHAIN_PATH
-# Absolute executables, resolved through module constants (cold gate
-# 2026-09-22, ruling 10 Q1 rules 1 and 4, 14 R4).  The production argv strings
-# are exactly the NOPASSWD sudoers slice's two set forms and the unified-log
-# reader.  The SUDOERS SLICE is the whole of what the machine's NOPASSWD entry
-# grants this chain without a password: ``systemsetup -setusingnetworktime on``
-# and ``... off``, and nothing else -- no read form, no other subcommand.  The
-# zsh ``log`` builtin shadows /usr/bin/log and returns nothing, so
-# the absolute path is load-bearing, not cosmetic.  A test substitutes its own
-# executables by rebinding these names -- PATH cannot fake an absolute path --
-# and a regression pins the production values.
-SUDO = "/usr/bin/sudo"
-SYSTEMSETUP = "/usr/sbin/systemsetup"
+# Retained log readers interpret historical records only.
 LOG = "/usr/bin/log"
-NETWORK_TIME_CONTROL_SCHEMA = "joulewise.network_time_control.v1"
-# One `systemsetup` toggle answers in milliseconds; thirty seconds is the
-# bound past which it is not going to answer at all.  Named here so a
-# regression can shorten it without a fake clock.
-NETWORK_TIME_SET_TIMEOUT_S = 30
-NETWORK_TIME_CONTROL_BASENAME = "network_time_control.json"
-# Where the restore receipt goes when the control record cannot be read or
-# is not an object: a sibling file, so the original bytes survive.
-NETWORK_TIME_RESTORE_BASENAME = "network_time_control.restore.json"
+NETWORK_TIME_CONTROL_BASENAME = network_time_off.RECEIPT_BASENAME
 NETWORK_TIME_RECORD_ENV = "EVIDENCE_NETWORK_TIME_RECORD"
 TIMED_LOG_BASENAME = "timed-log.txt"
 TIMED_LOG_ATTESTATION_METHOD = "timed_log_show_predicate_v1"
@@ -82,7 +63,7 @@ def replay_refusal_error(error):
     return f"{error}; {REPLAY_REFUSAL_REASON}"
 HARNESS_PATHS = ("scripts/sample_quiet_predicate_evidence.py", "joulewise/quiet_admission.py")
 MANIFEST_PATHS = (PROTOCOL_PATH, CHAIN_PATH, *HARNESS_PATHS,
-                  "joulewise/quiet_predicate_campaign.py", "joulewise/night_gate.py",
+                  "joulewise/quiet_predicate_campaign.py", "joulewise/network_time_off.py", "joulewise/night_gate.py",
                   "joulewise/night_kinds.py",
                   "joulewise/night_agent_install.py", "scripts/run_night.py")
 MANIFEST_SCHEMA = "joulewise.night_evidence_manifest.v1"
@@ -340,133 +321,11 @@ def write_refusal(night_dir, plan, detail, reason="night_probe_error"):
                                  "evidence chain refused: " + detail)
 
 
-def network_time_argv(state):
-    """The exact set form of the NOPASSWD sudoers slice; nothing is inferred."""
-    return (SUDO, "-n", SYSTEMSETUP, "-setusingnetworktime", state)
-
-
-def set_network_time(state):
-    """Run one set form and return its receipt: argv, code, stdout, both clocks."""
-    argv = network_time_argv(state)
-    completed = subprocess.run(list(argv), capture_output=True, text=True,
-                               timeout=NETWORK_TIME_SET_TIMEOUT_S)
-    return {"argv": list(argv), "exit_code": completed.returncode, "stdout": completed.stdout,
-            "epoch_s": time.time(), "monotonic_s": time.monotonic()}
-
-
-def establish_network_time_off(night_dir):
-    """Turn network time OFF before settle, or refuse the night (Q1 rules 1-3).
-
-    The method identity of the evidence anchor makes network-time-OFF the
-    structural exclusion of the one window in which the wall clock can move
-    non-affinely; a capture taken with it ON or unknown is validation-only
-    material, not evidence.  The receipt is written BEFORE the verdict so a
-    refused attempt is still on the record, and the exact stdout comparator is
-    imported from ``joulewise.arm_readiness``, never retyped.  Returns the
-    path of the receipt for the collectors' environment.
-    """
-
+def establish_network_time_off(night_dir, plan_id):
     path = night_dir / NETWORK_TIME_CONTROL_BASENAME
-    try:
-        off = set_network_time("off")
-    except Exception as exc:  # noqa: BLE001 - every class refuses the night
-        # A toggle that timed out, or could not be run at all, is still an
-        # ATTEMPT that leaves the machine's network-time state unknown.  The
-        # receipt for it is written BEFORE the refusal for the same reason the
-        # exit-1 receipt is: a night that stopped here must say on its own
-        # record what it did to the machine, and `off: null` says nothing.
-        off = {"argv": list(network_time_argv("off")), "exit_code": None, "stdout": None,
-               "error": f"{type(exc).__name__}: {exc}",
-               "epoch_s": time.time(), "monotonic_s": time.monotonic()}
-        write_control_record(path, {"schema": NETWORK_TIME_CONTROL_SCHEMA, "off": off, "on": None})
-        raise ValueError("network time OFF not established: " + off["error"]) from exc
-    write_control_record(path, {"schema": NETWORK_TIME_CONTROL_SCHEMA, "off": off, "on": None})
-    if off["exit_code"] != 0 or off["stdout"] != EXPECTED_NETWORK_TIME_OFF_STDOUT:
-        raise ValueError("network time OFF not established: "
-                         f"exit {off['exit_code']}, stdout {off['stdout']!r}")
+    network_time_off.set_network_time_off(path, plan_id, plan_id,
+        clock=lambda: {"epoch_s": time.time(), "monotonic_s": time.monotonic()})
     return path
-
-
-def write_control_record(path, control):
-    path.write_text(json.dumps(control, sort_keys=True, indent=2, allow_nan=False) + "\n")
-
-
-def restore_network_time(night_dir):
-    """Turn network time back ON, on every path; report, never hide, failure.
-
-    Runs as the first action of the executor's ``finally`` (after the signal
-    handlers are neutralised), so a refusal, an exception and a SIGTERM all
-    leave the machine as they found it.  The READ form is outside the sudoers
-    slice -- the two ``systemsetup`` set forms the NOPASSWD entry grants -- so
-    the prior state is unknowable without a password and ON is the ruled end
-    state.  A failed restore does NOT invalidate the envelopes already
-    captured under a proven OFF: it is reported as
-    ``network_time_restored: false`` and a distinct exit code.
-
-    Two rules hold the receipt itself.  (1) The ON receipt is added to the
-    control record ONLY when that record is absent (nothing was established
-    yet, so there are no bytes to protect) or reads back as an object.  A record
-    that is unreadable, or parses to a list, a string, a number or ``null``,
-    keeps its bytes and the receipt goes to a sibling
-    ``network_time_control.restore.json``: rewriting it as ``{"off": null,
-    ...}`` would leave an artifact asserting OFF was never established for a
-    night whose every envelope carries the digest of the original bytes.
-    (2) Nothing raises out of here.  This is the ``finally``; an exception
-    escaping it replaces a measured outcome -- the outcome document, the
-    refusal, the summary -- with no outcome at all, which is precisely what a
-    control record parsing to ``null`` used to do (``TypeError`` on item
-    assignment, caught by no except tuple in the call chain).
-    """
-
-    try:
-        path = night_dir / NETWORK_TIME_CONTROL_BASENAME
-        if not path.exists():
-            # Nothing was ever established (a refusal before the toggle): no
-            # bytes to protect, so the restore opens the record itself.
-            control = {"schema": NETWORK_TIME_CONTROL_SCHEMA, "off": None}
-        else:
-            try:
-                control = json.loads(path.read_text())
-            except (OSError, ValueError):
-                control = None
-        try:
-            on = set_network_time("on")
-        except Exception as exc:  # noqa: BLE001 - see rule (2) above
-            on = {"argv": list(network_time_argv("on")), "exit_code": None, "stdout": None,
-                  "error": f"{type(exc).__name__}: {exc}", "epoch_s": None, "monotonic_s": None}
-        try:
-            if isinstance(control, dict):
-                control["on"] = on
-                write_control_record(path, control)
-            else:
-                write_control_record(night_dir / NETWORK_TIME_RESTORE_BASENAME,
-                                     {"schema": NETWORK_TIME_CONTROL_SCHEMA,
-                                      "off": {"state": "unreadable",
-                                              "reason": f"{NETWORK_TIME_CONTROL_BASENAME} is "
-                                                        "not a readable control record",
-                                              "record": NETWORK_TIME_CONTROL_BASENAME},
-                                      "on": on})
-        except Exception as exc:  # noqa: BLE001
-            # The exit code still reports the restore; never mask it here.
-            # But a receipt that could not be written is a hole in the
-            # night's record, and the only place that hole was visible was
-            # the absent file itself: say so on the executor's own stdout,
-            # which the night log keeps.
-            print(f"restore receipt write failed: {type(exc).__name__}: {exc}", flush=True)
-        # Success is the set form's own exit code: no READ form exists in the
-        # slice to confirm the state, and no stdout comparator for ON is ruled.
-        return on["exit_code"] == 0
-    except Exception as exc:  # noqa: BLE001 - rule (2): the finally is sacred
-        try:
-            write_control_record(night_dir / NETWORK_TIME_RESTORE_BASENAME,
-                                 {"schema": NETWORK_TIME_CONTROL_SCHEMA, "off": None,
-                                  "on": {"argv": list(network_time_argv("on")),
-                                         "exit_code": None, "stdout": None,
-                                         "error": f"{type(exc).__name__}: {exc}",
-                                         "epoch_s": None, "monotonic_s": None}})
-        except Exception:  # noqa: BLE001
-            pass
-        return False
 
 
 def timed_log_argv(start_epoch_s, end_epoch_s):
@@ -1303,7 +1162,10 @@ def pilot_summary(directory, protocol, envelopes, observer_cpu_s=None):
         attestation = provenance.get("attestation") if isinstance(provenance, dict) else None
         state = (attestation.get("state") if isinstance(attestation, dict)
                  else entry.get("network_time_attestation"))
-        unattested = attestation_exclusions(state)
+        # New OFF receipts supersede H6; saved legacy records retain H6 replay.
+        unattested = ([] if isinstance(provenance, dict)
+                      and provenance.get("policy") == network_time_off.SCHEMA
+                      else attestation_exclusions(state))
         excluded.extend(unattested)
         if not hard and not unattested:
             clean_busy.extend(busy)
@@ -1623,12 +1485,15 @@ def execute(plan, protocol, night_dir):
         # absorbs any in-flight slew the daemon had already started (a 20 ms
         # adjtime slew completes in seconds).  Failure refuses the night here:
         # no recorder, no envelope, no capture under an unknown clock regime.
-        control_path = establish_network_time_off(night_dir)
+        control_path = establish_network_time_off(night_dir, plan.plan_id)
         env[NETWORK_TIME_RECORD_ENV] = str(control_path)
         print(f"evidence_network_time off record={control_path}", flush=True)
         # Settle belongs inside GO; verify-only never reaches this call.
         print(f"evidence_settle seconds={protocol['settle_s']}", flush=True)
         time.sleep(protocol["settle_s"])
+        network_time_off.seconds_since_receipt(
+            network_time_off.read_receipt(control_path, plan_id=plan.plan_id),
+            {"epoch_s": time.time(), "monotonic_s": time.monotonic(), "boot_id": network_time_off.boot_id()})
         first = go + protocol["settle_s"]
         recorder = launch("recorder", [sys.executable, "-B", "-m", "joulewise.quiet_predicate_campaign",
                                        "record", "--observer-pid", str(os.getpid())])
@@ -1675,24 +1540,6 @@ def execute(plan, protocol, night_dir):
             cleanup = cleanup_groups(journal, children, budget_s=cleanup_budget_s(protocol),
                                      exclude={recorder.pid})
             cleanup_wall_s = time.monotonic() - cleanup_began
-            # Authenticate this envelope's clock discipline now, while the log
-            # store still holds the window (ruling 14 R4); the state joins the
-            # envelope's own provenance and the exclusion vocabulary.  It runs
-            # HERE -- after the teardown, before the next slot's sleep -- so
-            # `log show`'s work inside `logd` can never land in a recorded
-            # window as unattributable observer energy (A269 ruling 10 Q4 ii).
-            # If the teardown did not prove every supervised group gone, a
-            # recorder may still be sampling, and the query is refused rather
-            # than run beside it: the envelope becomes `asserted`.
-            # The query's bound is this registration's gap, and its WALL COST
-            # is journaled: an unmeasured second on the inter-slot path is how
-            # the drift A269 cures got in, and the next night's budget is read
-            # off these numbers, not guessed.
-            attestation_began = time.monotonic()
-            attestation = attest_network_time(out, blocked=capture_still_live(cleanup),
-                                              timeout=attestation_timeout_s(protocol))
-            attestation_wall_s = time.monotonic() - attestation_began
-            record_attestation(out, attestation)
             # This envelope's registered non-observer verdict, taken from the
             # recorder journal as it stands now -- the same rows, the same
             # join and the same integral the summary re-derives from disk
@@ -1723,25 +1570,9 @@ def execute(plan, protocol, night_dir):
             envelopes.append({"index": index, "scheduled_mono_s": scheduled, "actual_mono_s": actual,
                               NON_OBSERVER_EXCLUSION: non_observer,
                               "start_drift_s": actual - scheduled, "collector_exit": code, "cleanup": cleanup,
-                              # The teardown's own wall cost, beside the
-                              # attestation's, for the same reason: the gap is
-                              # 20 s and the next night's budget is read off
-                              # these numbers rather than guessed.
-                              "cleanup_wall_s": cleanup_wall_s,
-                              "network_time_attestation": attestation["state"],
-                              # The attestation's own account of itself, on the
-                              # row (ruling 18 C7).  A rewrite that could not
-                              # land leaves `session.json` unannotated, so
-                              # WITHOUT this key the reason -- which names the
-                              # failure that cost the envelope its claim --
-                              # exists only in the executor's memory and dies
-                              # with the process.
-                              "network_time_attestation_reason": attestation.get("reason"),
-                              "network_time_attestation_wall_s": attestation_wall_s,
-                              "network_time_attestation_matched_lines": attestation["matched_lines"]})
+                              "cleanup_wall_s": cleanup_wall_s})
             append_event(night_dir / "evidence_envelopes.jsonl", envelopes[-1])
-            print(f"envelope_end index={index} rc={code} cleanup_proven={cleanup['cleanup_proven']}"
-                  f" clock_attestation={attestation['state']}", flush=True)
+            print(f"envelope_end index={index} rc={code} cleanup_proven={cleanup['cleanup_proven']}", flush=True)
             consecutive_cleanup_failures = 0 if cleanup["cleanup_proven"] else consecutive_cleanup_failures + 1
             if consecutive_cleanup_failures >= 2:
                 raise ValueError("two consecutive cleanup_unproven envelopes")
@@ -1764,7 +1595,6 @@ def execute(plan, protocol, night_dir):
     finally:
         for signum in old:
             signal.signal(signum, signal.SIG_IGN)
-        network_time_restored = restore_network_time(night_dir)
         cleanup = cleanup_record(night_dir, children)
         # Read off the SESSIONS as well as the environment (execution lens
         # 17b NIT): the outcome document's `recorder_kind` was derived from
@@ -1811,25 +1641,11 @@ def execute(plan, protocol, night_dir):
             "recorder_kind": harness.RECORDER_KIND_REPLAY
                              if os.environ.get(harness.REPLAY_ENV) or replay_sessions
                              else harness.RECORDER_KIND_PRODUCTION,
-            "network_time_restored": network_time_restored})
+            "network_time_policy": network_time_off.SCHEMA})
         for signum, handler in old.items():
             signal.signal(signum, handler)
-    print(f"evidence_end outcome={outcome} cleanup_proven={cleanup['cleanup_proven']}"
-          f" network_time_restored={network_time_restored}", flush=True)
-    # A failed restore leaves the machine, not the measurement, in the wrong
-    # state: the captured envelopes were taken under a proven OFF and stay
-    # valid.  It gets its own code (3, distinct from the refusal 2) so the
-    # harvester re-attempts the restore and surfaces it.
-    #
-    # PRECEDENCE: the refusal wins.  Code 3 means "the envelopes are valid,
-    # the machine is not", so a harvester acting on that documented meaning
-    # must never be handed a night that refused and produced no valid
-    # envelopes -- which is what returning 3 for a refused night whose restore
-    # also failed did.  The restore's own verdict is on
-    # `evidence_outcome.json` (`network_time_restored`) on every path, so
-    # nothing is hidden by giving 2 the precedence.
-    base = 0 if outcome in {"complete", "partial"} and cleanup["cleanup_proven"] else 2
-    return 3 if base == 0 and not network_time_restored else base
+    print(f"evidence_end outcome={outcome} cleanup_proven={cleanup['cleanup_proven']}", flush=True)
+    return 0 if outcome in {"complete", "partial"} and cleanup["cleanup_proven"] else 2
 
 
 def main(argv=None):

@@ -18,7 +18,7 @@
 # USAGE
 #   scripts/quiet_window_clock.sh status    # show clock state and current offset
 #   scripts/quiet_window_clock.sh disable   # BEFORE a window: verify, then pin
-#   scripts/quiet_window_clock.sh enable    # AFTER the window: restore and resync
+#   Network time stays OFF; resync belongs to the governed arm step.
 #
 # SAFETY
 #   `disable` REFUSES to pin the clock if it is currently off by more than
@@ -29,7 +29,7 @@ set -uo pipefail
 
 MAX_OFFSET_S="${MAX_OFFSET_S:-0.5}"   # refuse to pin if |offset| exceeds this
 TIME_SERVER="${TIME_SERVER:-time.apple.com}"
-SETTLE_S="${SETTLE_S:-180}"
+SETTLE_S="${SETTLE_S:-600}"
 
 bold() { printf '\033[1m%s\033[0m\n' "$*"; }
 warn() { printf '\033[33m%s\033[0m\n' "$*"; }
@@ -86,8 +86,7 @@ do_disable() {
     fail ""
     fail "REFUSING: the clock is off by more than ${MAX_OFFSET_S} s."
     fail "Pinning it now would bake that error into the whole window."
-    fail "Fix first:  scripts/quiet_window_clock.sh enable"
-    fail "then wait a minute for it to converge and run 'disable' again."
+    fail "Resync belongs to the governed arm step; do not start a window."
     exit 1
   fi
   echo "  clock is good — safe to pin"
@@ -129,59 +128,20 @@ EOW
   bold ""
   bold "Step 3/3 — settle before collecting"
   cat <<EOF
-  Wait ${SETTLE_S}s before launching, per the run-book settle rule.
-  The chain also settles ${SETTLE_S}s on its own before the pre-calibration,
-  so launching immediately is acceptable if you would rather not wait twice.
+  The governed arm step saves an OFF receipt before the 600-second dwell.
+  This legacy desk helper does not authorize capture or replace that receipt.
+  Network time stays OFF after completion, refusal, or crash.
+  Resync happens only in the arm step, before capture and the dwell.
 
-$(bold "Run window C FIRST.") Its failure mode fires per-member under
-  --max-failures 1, so it shakes down this mitigation cheaply: if members
-  still fail the anchor gate with sync disabled, the adjuster was not
-  network time sync, and you abort ~40 minutes in instead of 3h25 in.
-
-  caffeinate -is /bin/zsh /Users/edr/JouleWise-window-plans/window_c_20260726/window-chain.zsh \\
-                          /Users/edr/JouleWise-window-plans/window_c_20260726
-
-$(bold "Then the second window") (which one depends on the desk checks — window B
-  only if its bracket drift was shown to be clock-related, otherwise window D):
-
-  caffeinate -is /bin/zsh /Users/edr/JouleWise-window-plans/window_d_20260726/window-chain.zsh \\
-                          /Users/edr/JouleWise-window-plans/window_d_20260726
-
-$(warn "DO NOT re-enable sync between windows.") Re-enabling injects exactly the
-  excursion being avoided, right where the next window's calibration sits.
-  Pin once, run every window, restore at the end.
-
-$(warn "AFTER the last window completes, restore normal timekeeping:")
-  scripts/quiet_window_clock.sh enable
-
-  If a window crashes and you stop for the night, still run 'enable' — the
-  clock stays free-running otherwise, drifting ~0.5-1.5 s per day.
 EOF
 }
 
-do_enable() {
-  bold "Re-enabling automatic network time"
-  sudo systemsetup -setusingnetworktime on >/dev/null 2>&1
-  sleep 2
-  local state
-  state="$(sync_state)"
-  echo "  network time synchronisation: ${state:-UNKNOWN}"
-  if [ "$state" != "On" ]; then
-    fail "WARNING: expected On. Check System Settings > General > Date & Time."
-    exit 1
-  fi
-  echo ""
-  show_status
-  echo ""
-  echo "If the offset is still large, give it a minute to converge and re-check."
-}
 
 case "${1:-status}" in
   status)  show_status ;;
   disable) do_disable ;;
-  enable)  do_enable ;;
   *)
-    fail "usage: $0 [status|disable|enable]"
+    fail "usage: $0 [status|disable]"
     exit 2
     ;;
 esac

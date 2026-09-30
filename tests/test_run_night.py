@@ -297,6 +297,9 @@ def _load_driver(script_path: Path = SCRIPT_PATH, module_name: str = "run_night_
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
+    # Driver mechanics never invoke a privileged setting command in tests.
+    # Receipt/settle refusals are exercised through the real helper separately.
+    module._admit_network_time_off = mock.Mock()
     return module
 
 
@@ -380,6 +383,9 @@ class NightDriverTests(unittest.TestCase):
 
     def setUp(self) -> None:
         self.driver = _load_driver()
+        off_admission = mock.patch.object(self.driver, "_admit_network_time_off")
+        self.off_admission_mock = off_admission.start()
+        self.addCleanup(off_admission.stop)
         self.temporary = tempfile.TemporaryDirectory()
         self.root = Path(self.temporary.name)
         identity_patch = mock.patch.object(
@@ -1620,13 +1626,15 @@ runpy.run_path(script, run_name='__main__')
             night_log,
         )
 
-    def test_legacy_write_once_tuple_matches_base(self):
+    def test_write_once_tuple_adds_off_receipt_to_base(self):
         import ast
         base = ast.parse(subprocess.check_output(
             ['git', 'show', 'a90ab4e8:scripts/run_night.py'], cwd=REPO_ROOT, text=True))
         assignment = next(node for node in base.body if isinstance(node, ast.Assign)
                           and any(isinstance(t, ast.Name) and t.id == '_WRITE_ONCE_RECORDS' for t in node.targets))
-        self.assertEqual(self.driver._WRITE_ONCE_RECORDS, ast.literal_eval(assignment.value))
+        self.assertIn("network_time_off.json", self.driver._WRITE_ONCE_RECORDS)
+        self.assertEqual(tuple(name for name in self.driver._WRITE_ONCE_RECORDS
+                               if name != "network_time_off.json"), ast.literal_eval(assignment.value))
 
     def test_v2_existing_quiet_journal_reaches_legacy_evaluator(self):
         night = self.custody / 'night'

@@ -21,6 +21,7 @@ from types import ModuleType, SimpleNamespace
 from typing import Mapping
 from unittest import mock
 
+from joulewise import network_time_off
 import joulewise.arm_readiness as readiness
 import joulewise.arm_readiness_evidence as generic_evidence
 import joulewise.arm_readiness_evidence_t0 as t0
@@ -355,6 +356,7 @@ def make_t0_fixture(
     if real_identity:
         shutil.copytree(ROOT / "joulewise", repository / "joulewise", dirs_exist_ok=True)
     for relative in (
+        "joulewise/network_time_off.py",
         "joulewise/clock_reference.py",
         "joulewise/arm_readiness_evidence_t0.py",
         "joulewise/identity_pins.py",
@@ -638,7 +640,7 @@ def make_t0_fixture(
         ),
         "clock-disable.json": _capture(
             "clock-disable",
-            ["/usr/bin/sudo", "/usr/sbin/systemsetup", "-setusingnetworktime", "off"],
+            list(network_time_off.OFF_ARGV),
             repository,
             time_origin + 300,
             time_origin + 310,
@@ -707,6 +709,17 @@ def make_t0_fixture(
             boot_session_id=boot_session_id,
         ),
     }
+    from datetime import datetime
+    off_finished = captures["clock-disable.json"]["finished_monotonic_ns"]
+    now_epoch = (datetime.fromisoformat(SYNTHETIC_UTC_NOW.replace("Z", "+00:00")).timestamp()
+                 if synthetic_clock else time.time())
+    _write_json(input_root / network_time_off.RECEIPT_BASENAME, {
+        "schema": network_time_off.SCHEMA, "argv": list(network_time_off.OFF_ARGV),
+        "exit_code": 0, "stdout": readiness.EXPECTED_NETWORK_TIME_OFF_STDOUT,
+        "stderr": "", "error": None, "boot_id": boot_session_id,
+        "plan_id": tree["plan"]["plan_id"], "window_id": tree["window_identity"]["window_id"],
+        "epoch_s": now_epoch - (now_monotonic_ns - off_finished) / 1e9,
+        "monotonic_s": off_finished / 1e9})
     for name, value in captures.items():
         _write_json(input_root / name, value)
 
@@ -1148,9 +1161,10 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
         self.assertEqual(sites_by_function.pop("_fresh_clock_reference_batch"), 1)
         post_r1_sites = len(direct_call_names) - 1
         self.assertEqual(sum(sites_by_function.values()), post_r1_sites)
-        self.assertEqual(post_r1_sites, 12, sites_by_function)
+        self.assertEqual(post_r1_sites, 11, sites_by_function)
         self.assertEqual(t0._PROBE_TIMEOUT_SECONDS, 45)
-        self.assertEqual(
+        # The retired second OFF leaves 45 s of the existing budget spare.
+        self.assertGreaterEqual(
             readiness._T0_R1_TO_VALIDITY_ORIGIN_LIVENESS_NS,
             (
                 (post_r1_sites - 1) * t0._PROBE_TIMEOUT_SECONDS
@@ -2123,30 +2137,25 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
                     detail="R1 batch duration is outside 0 through 30000000000 ns",
                 )
 
-    def test_rf21_rf22_fresh_clock_disable_requires_exit_and_exact_stdout(self) -> None:
-        def failing_probe(argv, *, cwd):
-            if "systemsetup" in " ".join(argv):
-                return _probe_result(argv, cwd, exit_code=1, stderr="sudo failed")
-            return passing_probe(argv, cwd=cwd)
+    def test_missing_off_receipt_prevents_arm_evidence(self) -> None:
+        temporary, repository, pack, custody, _context, inputs = make_t0_fixture()
+        self.addCleanup(temporary.cleanup)
+        (inputs / network_time_off.RECEIPT_BASENAME).unlink()
+        with author_environment(repository), self.assertRaises(T0EvidenceAuthoringError) as error:
+            author_arm_readiness_evidence_t0(pack, custody)
+        self.assertEqual(error.exception.kind, "CLOCK_PROBE")
+        self.assertFalse((custody / pack.name / t0._EVIDENCE_DIRECTORY).exists())
 
-        self._assert_clock_refusal(
-            probe=failing_probe,
-            detail="fresh D-127 enforcement exited nonzero before setting Off",
-            kind="CLOCK_PROBE",
-            reason_code="evidence_author_t0_clock_probe_underivable",
-        )
-
-        def wrong_stdout_probe(argv, *, cwd):
-            if "systemsetup" in " ".join(argv):
-                return _probe_result(argv, cwd, stdout="Network Time: Off\n")
-            return passing_probe(argv, cwd=cwd)
-
-        self._assert_clock_refusal(
-            probe=wrong_stdout_probe,
-            detail="fresh D-127 enforcement stdout did not exactly report Off",
-            kind="CLOCK_PROBE",
-            reason_code="evidence_author_t0_clock_probe_underivable",
-        )
+    def test_rf21_rf22_off_receipt_requires_exit_and_exact_stdout(self) -> None:
+        for field, value in (("exit_code", 1), ("stdout", "Network Time: Off\n")):
+            def mutate(inputs, field=field, value=value):
+                path = inputs / network_time_off.RECEIPT_BASENAME
+                off = json.loads(path.read_bytes())
+                off[field] = value
+                _write_json(path, off)
+            self._assert_clock_refusal(
+                mutate=mutate, detail="network time OFF receipt not admitted",
+                kind="CLOCK_PROBE", reason_code="evidence_author_t0_clock_probe_underivable")
 
     def test_rf36_r1_fixed_roster_one_attempt_and_raw_peer_records(self) -> None:
         def substituted_probe(argv, *, cwd):
@@ -2335,16 +2344,10 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
                 self.assertEqual(source["row_id"], row["row_id"])
                 self.assertEqual(source["kind"], receipt["kind"])
                 if row["row_id"] == "clock.network_time_off":
-                    self.assertEqual(
-                        source["probes"][0]["argv"],
-                        [
-                            "/usr/bin/sudo",
-                            "-n",
-                            "/usr/sbin/systemsetup",
-                            "-setusingnetworktime",
-                            "off",
-                        ],
-                    )
+                    self.assertEqual(source["probes"], [])
+                    self.assertEqual(source["derivation"]["policy"], network_time_off.SCHEMA)
+                    self.assertTrue(any(ref["path"].endswith(network_time_off.RECEIPT_BASENAME)
+                                        for ref in source["input_artifacts"]))
                 self.assertEqual(source["facts"][0]["fact_id"], row["predicate_id"])
                 self.assertEqual(source["facts"][0]["value"], fact["value"])
                 independently_observed_rows.append(row["row_id"])
@@ -2852,7 +2855,7 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
     def test_named_refusal_matrix_covers_every_distinct_kind(self) -> None:
         cases = (
             ("CLOCK_ATTESTATION", lambda _r, _p, _c, _x: ( _x / "clock-reference.json").unlink(), {}),
-            ("CLOCK_PROBE", lambda *_args: None, {"probe": lambda argv, *, cwd: _probe_result(argv, cwd, exit_code=1, stderr="sudo refused\n") if "systemsetup" in " ".join(argv) else passing_probe(argv, cwd=cwd)}),
+            ("CLOCK_PROBE", lambda _repo, _pack, _custody, inputs: (inputs / network_time_off.RECEIPT_BASENAME).unlink(), {}),
             ("TERMINAL_REVIEW", lambda *_args: None, {"patch_message": True}),
             ("MAINTENANCE_CENSUS", lambda *_args: None, {"probe": lambda argv, *, cwd: _probe_result(argv, cwd, exit_code=0, stdout="123 XProtect\n") if "XProtect" in " ".join(argv) else passing_probe(argv, cwd=cwd)}),
             ("ROOT_PREFLIGHT", lambda _r, _p, c, _x: (Path(c["claim_runs_root"]) / "campaign.lock").write_text("busy\n"), {}),

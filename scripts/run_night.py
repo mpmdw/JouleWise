@@ -44,7 +44,7 @@ sys.path.insert(0, str(REPO_ROOT))
 # so importing this driver during preflight catches failures before installation.
 from joulewise import arm_readiness as readiness
 from joulewise import arm_readiness_evidence_t0 as t0_author
-from joulewise import battery_float, night_gate, t0_rehearsal, quiet_admission
+from joulewise import battery_float, night_gate, t0_rehearsal, quiet_admission, network_time_off
 from joulewise.measurement_liveness import observe_identity  # noqa: E402
 
 from joulewise.night_gate import (  # noqa: E402
@@ -125,6 +125,7 @@ EXIT_COURIER_FAILED = 6
 
 _WRITE_ONCE_RECORDS = (
     "receipt.json",
+    network_time_off.RECEIPT_BASENAME,
     "go_receipt.json",
     "go-census.json",
     "result.json",
@@ -639,6 +640,11 @@ def _chain_environment(plan: NightPlan, night_dir: Path) -> dict[str, str]:
     environment.pop("NIGHT_VERIFY_ONLY", None)
     environment.pop("NIGHT_RESERVATION_ARGV_ONLY", None)
     environment.pop("EVIDENCE_PROCESS_JOURNAL", None)
+    off_path = night_dir / network_time_off.RECEIPT_BASENAME
+    if plan.receipt_class == "TRANSACTION_PACK":
+        off_path = (night_dir.parent / plan.pack_night["pack_id"] /
+                    "arm_readiness.t0.inputs" / network_time_off.RECEIPT_BASENAME)
+    environment["JOULEWISE_NETWORK_TIME_OFF_RECEIPT"] = str(off_path)
     return environment
 
 
@@ -1025,6 +1031,8 @@ def _artifact_list(custody_root: Path, night_dir: Path) -> list[dict[str, Any]]:
     paths = [
         custody_root / "night.log",
         night_dir / "receipt.json",
+        night_dir / network_time_off.RECEIPT_BASENAME,
+        *sorted(custody_root.glob("*/arm_readiness.t0.inputs/network_time_off.json")),
         night_dir / "go_receipt.json",
         night_dir / "go-census.json",
         *_refusal_paths(night_dir),
@@ -2975,6 +2983,20 @@ def smoke_observation_round(interval_s):
     return observation, cost
 
 
+def _admit_network_time_off(plan, night_dir):
+    if plan.receipt_class == "TRANSACTION_PACK":
+        off_path = (night_dir.parent / plan.pack_night["pack_id"] /
+                    "arm_readiness.t0.inputs" / network_time_off.RECEIPT_BASENAME)
+        off = network_time_off.read_receipt(off_path)
+    else:
+        off_path = night_dir / network_time_off.RECEIPT_BASENAME
+        off = network_time_off.set_network_time_off(off_path, plan.plan_id, plan.plan_id)
+        time.sleep(600)
+    network_time_off.seconds_since_receipt(
+        network_time_off.read_receipt(off_path, plan_id=off["plan_id"], window_id=off["window_id"]),
+        {**network_time_off._clock(), "boot_id": network_time_off.boot_id()})
+
+
 def run_night(
     plan_path: Path,
     *,
@@ -3180,6 +3202,17 @@ def run_night(
             )
         command = ["/bin/zsh", str(chain_path)]
         _append_log(custody_root, "night chain digest verified")
+
+    if not rehearsal_effective and night_gate.probe_payload_kind(chain_path.read_text()) != "quiet_predicate_evidence":
+        try:
+            _admit_network_time_off(plan, night_dir)
+        except (OSError, ValueError, subprocess.SubprocessError) as error:
+            _write_standard_refusal_result(custody_root, night_dir, plan,
+                _CODES["probe_error"], str(error), started_epoch_s, started_monotonic_ns)
+            return _finish_reporting(custody_root, night_dir, plan, EXIT_REFUSED,
+                resolved_courier, deadman_epoch_s=deadman_epoch_s,
+                courier_bin_substitution=courier_substitution)
+
 
     if is_pack:
         try:

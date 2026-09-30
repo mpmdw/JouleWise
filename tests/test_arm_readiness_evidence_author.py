@@ -73,7 +73,12 @@ def passing_suites(
 def _copy_primary(repository: Path, relative: str) -> None:
     target = repository / relative
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_bytes((ROOT / relative).read_bytes())
+    body = (ROOT / relative).read_bytes()
+    if relative == "docs/phase_2/window_runbook.md":
+        start = body.index(b"## 5A.")
+        end = body.index(b"\n## ", start + 1)
+        body = body[:start] + (Path(__file__).parent / "fixtures/historical_clock_restore_5a.md").read_bytes() + body[end:]
+    target.write_bytes(body)
 
 
 def _identity_unit(arm: str, model: str) -> dict:
