@@ -1,0 +1,40 @@
+The ruling is issued and both files are written; Revision 6 can be sealed once its 19 digest slots are filled, and nothing the owner approved was changed.
+
+## What I ruled
+
+- **Spacing (O-7):** the "at least 6 hours apart" phrase in E1 step 12, A1 step 10 and the cap ruling §6 step 7 is superseded for these windows only. The authority is the owner's words in record item 47, quoted verbatim in §6.2, plus this gate's finding that the clause protects no number. The start conditions are:
+  - previous window finished;
+  - its blind checks done and the count rule says NEXT_WINDOW;
+  - no agents;
+  - no thermal throttling;
+  - battery float;
+  - one settled network-time OFF receipt;
+  - a 600 s clean dwell.
+- **Idle power (O-5):** struck. Nothing in the derivation path measures it, and the first capture of a window already gets at least 1,200 s of rest against 403 s for every other capture.
+- **§9 thresholds (O-1 to O-4):** replaced, not sized.
+  - **Why:** the drafted formula is unstable at two windows. In my simulation with no dependence at all, about 1 campaign in 35 had its ceiling C inflated by more than half, and some about twentyfold. It also corrected for the wrong comparison, because a bracket's two captures always sit in the same window.
+  - **Replacement:** one always-computed value from the spread inside windows, Q99_within = t(0.995, n − K) × s_within × √2, taken into the maximum that sets C. It has no threshold and can exceed the plain Q99 by at most 15.7 % (2.7 % at n = 24 in two windows).
+  - **Report-only:** the window-share and serial-correlation statistics are recorded and gate nothing.
+- **"The larger sets C":** yes, this is the conservative direction. I read the bracket code: C only decides whether a bracket is refused and never appears in the reported bound.
+- **Count rule (O-9, O-10):** corrected to three counting windows plus one battery replacement (four in all), as A1 R9 and E1 say, not four plus one. The second trigger reads members, not valid rows, because the issuance floor is on members.
+- **Void rule:** a count shortfall no longer voids the campaign; only a real R9 failure (a cell-count stop, a deadline stop, or a ratio above 0.5) does.
+- **Other open items:** O-6, O-8, O-11, O-12 and O-14 are confirmed as drafted; O-13 is cited by file and digest rather than retyped; O-15 and O-16 are declined.
+
+## What the implementers need to know
+
+- **Validator:** its exact ceiling equation must gain the Q99_within term for revision 6, and the successor's generation row must carry the new value.
+- **Issuer (WI-13):**
+  - it keys its Revision 5 rules on the epoch alone, which Revision 6 shares, so it must tell the two apart by session-id pattern and pinned ledger head;
+  - its command-line ruling flags are not accepted for this registration.
+- **Clean dwell:** I corrected the draft's description to what `scripts/prewindow_check.sh` actually tests (nine named daemons, not an allow-list). I did not verify that the derivation arm path runs it; if it does not, that must be wired before C1.
+- **One slot I could not fill:** the record holding the 8 cap-stop diagnostic B values was not located; it is a path-and-digest slot in §3.
+- **Staleness, noticed but not ruled:** a successor with 24 members goes stale after about 24 more valid captures, roughly 12 claim brackets, under the existing doubling rule.
+
+## Checks run
+
+The sealable text appended to the sealed registration still parses under the issuer's pin reader and the chain-pin test's patterns, and its JSON block loads. No issuer, validator, test suite, capture, `sudo`, `systemsetup` or `powermetrics` was run. The session took about 20 of the 75 budgeted minutes.
+
+Files are in `/Users/edr/code/JouleWise-wt-bk-ff50b201/docs/process_traces/2026-09-29-interactive-ff50b201/110-rev6-gate/`:
+- `21-coldgate-fable-ruling.md`
+- `22-revision6-sealable.md` (sha256 `3fe5153f…`)
+rc=0
