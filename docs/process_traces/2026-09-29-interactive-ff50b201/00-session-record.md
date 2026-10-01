@@ -109,3 +109,16 @@ The running record of the session that resumed JouleWise work after the 09-28 ow
     (this branch: brief 171 as the RUN_STATE top block, recipe 170, verdicts 156/157) go straight to
     main next, so C1's H includes them. Bench files built from recipe §2 at
     /Users/edr/night-plan-staging/r6-bench (all pass `zsh -n`).
+
+59. **C1 ARMED 2026-09-30 17:40:22 PDT** from recipe 170, all six steps rc 0 (outputs in
+    [172-c1-arm/](172-c1-arm/)). Plan `d079-epoch-25g83-r6-derivation-c1-20261001T0137Z`, session
+    `d079-epoch-25g83-r6-20261001T0137Z`, H = `a23e1f82`, plan sha256 `80b69a16…`, t0 18:37:00 PDT
+    (epoch 1790818620), window end 21:07, harvest opens 21:12. Registration d0034003… accepted by the
+    night gate (GAP 1 closed); every pin re-hashed in the clone; identity epoch 25G83; battery gate
+    PASS twice; launchd probe ADMITS; retry_allowed allowed. Notice: Gmail message/thread
+    1a0f4e66672e621f, sent epoch 1790815134; body = step 3 body with an ACTION NEEDED block
+    (close the session, quit ChatGPT.app, then `rm` STOP at 18:29 or later); NO search zero results;
+    open directives #405-#422 read, none a NO (#416 as amended applies before claim-bearing runs,
+    not calibration windows). Owner authorisation for the STOP-present publish: his 09-29 words
+    ([172-c1-arm/owner-arm-auth.txt](172-c1-arm/owner-arm-auth.txt)). One fill error caught: zsh
+    `$NEW_H:c…` gave the empty-file digest; corrected before step 2 (recipe now warns).

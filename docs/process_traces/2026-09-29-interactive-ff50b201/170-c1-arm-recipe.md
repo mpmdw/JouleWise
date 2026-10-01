@@ -505,6 +505,7 @@ Every step is run from a foreground shell and its whole output kept under `$ATTE
 export NEW_H='FILL: git ls-remote https://github.com/mpmdw/JouleWise refs/heads/main, after the seal has merged'
 export NEW_T0='FILL: T0_EPOCH_S from section 1'
 export NEW_LABEL=c1
+# zsh: write "${NEW_H}:path", never "$NEW_H:path" (zsh reads :c as a modifier; C1's first fill produced the empty-file digest e3b0c442…, caught before step2)
 export NEW_PREREG='FILL: shasum -a 256 of the sealed configs/calibration/preregistration_d079_epoch_25g83_rev1.md at NEW_H (git show NEW_H:<path> | shasum -a 256)'
 export NEW_PRIOR_SESSION='' NEW_PRIOR_HARVEST='' NEW_PRIOR_STARTED='' NEW_PRIOR_TERMINAL=''
 # C1's ledger is W2's: 276 rows, pin 276 (configs/calibration/calibration_ledger_head.json on main). Observed 2026-09-30, re-verify with shasum at step1:

@@ -1,0 +1,41 @@
+CHECK: no unfilled placeholder in arm-env.zsh
+CHECK: H, PREREG_SHA256 and T0_EPOCH_S are well formed; t0 is minute aligned and at least 2400 s ahead
+CHECK: session id matches the sealed pattern
+CHECK: no codex, claude or t3 in any id or path (census and clean-dwell substrings, any case)
+CHECK: os_build is 25G83
+CHECK: no com.joulewise.night* label loaded, no plist on disk
+
+
+CHECK: every /Users/edr/night-custody/*/night_plan.json is terminal (prior window included)
+{"classification": "TERMINAL", "evidence": ["/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260919/night/courier.sent", "/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260919/night/result.json", "/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260919/night/chain.exited"], "plan": "/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260919/night_plan.json", "reason": "terminal record present; plan span inactive at observation time (scripts/magistrate_watchdog.plan_span_active)"}
+{"classification": "TERMINAL", "evidence": ["/Users/edr/night-custody/d079-epoch-25g83-derivation-n2-20260919/night/courier.sent", "/Users/edr/night-custody/d079-epoch-25g83-derivation-n2-20260919/night/result.json", "/Users/edr/night-custody/d079-epoch-25g83-derivation-n2-20260919/night/chain.exited"], "plan": "/Users/edr/night-custody/d079-epoch-25g83-derivation-n2-20260919/night_plan.json", "reason": "terminal record present; plan span inactive at observation time (scripts/magistrate_watchdog.plan_span_active)"}
+{"classification": "TERMINAL", "evidence": ["/Users/edr/night-custody/d079-epoch-25g83-derivation-w1-20260927/night/courier.sent", "/Users/edr/night-custody/d079-epoch-25g83-derivation-w1-20260927/night/result.json", "/Users/edr/night-custody/d079-epoch-25g83-derivation-w1-20260927/night/chain.exited"], "plan": "/Users/edr/night-custody/d079-epoch-25g83-derivation-w1-20260927/night_plan.json", "reason": "terminal record present; plan span inactive at observation time (scripts/magistrate_watchdog.plan_span_active)"}
+{"classification": "TERMINAL", "evidence": ["/Users/edr/night-custody/d079-epoch-25g83-derivation-w2-20260927/night/courier.sent", "/Users/edr/night-custody/d079-epoch-25g83-derivation-w2-20260927/night/result.json", "/Users/edr/night-custody/d079-epoch-25g83-derivation-w2-20260927/night/chain.exited"], "plan": "/Users/edr/night-custody/d079-epoch-25g83-derivation-w2-20260927/night_plan.json", "reason": "terminal record present; plan span inactive at observation time (scripts/magistrate_watchdog.plan_span_active)"}
+{"classification": "TERMINAL", "evidence": ["/Users/edr/night-custody/qpe01-pilot-n1-20260920/night/courier.sent", "/Users/edr/night-custody/qpe01-pilot-n1-20260920/night/result.json", "/Users/edr/night-custody/qpe01-pilot-n1-20260920/night/chain.exited", "/Users/edr/night-custody/qpe01-pilot-n1-20260920/night/refusal-01.json", "/Users/edr/night-custody/qpe01-pilot-n1-20260920/night/refusal.json"], "plan": "/Users/edr/night-custody/qpe01-pilot-n1-20260920/night_plan.json", "reason": "terminal record present; plan span inactive at observation time (scripts/magistrate_watchdog.plan_span_active)"}
+{"classification": "TERMINAL", "evidence": ["/Users/edr/night-custody/qpe01-pilot-n1-20260922-0217-20260922-0217-1790068620-d45378c6010b538ca1bb74ae0f2222dceb4df1e4/night/courier.sent", "/Users/edr/night-custody/qpe01-pilot-n1-20260922-0217-20260922-0217-1790068620-d45378c6010b538ca1bb74ae0f2222dceb4df1e4/night/result.json", "/Users/edr/night-custody/qpe01-pilot-n1-20260922-0217-20260922-0217-1790068620-d45378c6010b538ca1bb74ae0f2222dceb4df1e4/night/chain.exited"], "plan": "/Users/edr/night-custody/qpe01-pilot-n1-20260922-0217-20260922-0217-1790068620-d45378c6010b538ca1bb74ae0f2222dceb4df1e4/night_plan.json", "reason": "terminal record present; plan span inactive at observation time (scripts/magistrate_watchdog.plan_span_active)"}
+{"classification": "TERMINAL", "evidence": ["/Users/edr/night-custody/qpe01-pilot-n1-20260922-2100-20260922-2100-1790136000-dbd5cd59517fe6088bd316a2ea1e66e9cb4d9432/night/courier.sent", "/Users/edr/night-custody/qpe01-pilot-n1-20260922-2100-20260922-2100-1790136000-dbd5cd59517fe6088bd316a2ea1e66e9cb4d9432/night/result.json", "/Users/edr/night-custody/qpe01-pilot-n1-20260922-2100-20260922-2100-1790136000-dbd5cd59517fe6088bd316a2ea1e66e9cb4d9432/night/chain.exited"], "plan": "/Users/edr/night-custody/qpe01-pilot-n1-20260922-2100-20260922-2100-1790136000-dbd5cd59517fe6088bd316a2ea1e66e9cb4d9432/night_plan.json", "reason": "terminal record present; plan span inactive at observation time (scripts/magistrate_watchdog.plan_span_active)"}
+{"classification": "TERMINAL", "evidence": ["/Users/edr/night-custody/qpe01-pilot-n1-20260923-0700-20260923-0700-1790172000-26fb4280b1e2b3ab5b239884a2c1abbd5f9e1f15/night/courier.sent", "/Users/edr/night-custody/qpe01-pilot-n1-20260923-0700-20260923-0700-1790172000-26fb4280b1e2b3ab5b239884a2c1abbd5f9e1f15/night/result.json", "/Users/edr/night-custody/qpe01-pilot-n1-20260923-0700-20260923-0700-1790172000-26fb4280b1e2b3ab5b239884a2c1abbd5f9e1f15/night/chain.exited"], "plan": "/Users/edr/night-custody/qpe01-pilot-n1-20260923-0700-20260923-0700-1790172000-26fb4280b1e2b3ab5b239884a2c1abbd5f9e1f15/night_plan.json", "reason": "terminal record present; plan span inactive at observation time (scripts/magistrate_watchdog.plan_span_active)"}
+CHECK: result['verdict'] == 'pass'
+CHECK: staging directory absent before the first battery observation
+CHECK: battery connected, not charging, signed current within 200 mA, gauge age <= 180 s (Revision 6 start condition e)
+CHECK: ioreg -r -c AppleSmartBattery supplies one fresh, top-level battery observation
+CHECK: battery gate observed at 2026-10-01T00:36:47Z
+CHECK: exactly one AppleSmartBattery object; count=1
+CHECK: exactly one complete top-level object; close_count=1
+CHECK: exactly one top-level quoted ExternalConnected; raw=['Yes']
+CHECK: exactly one top-level quoted IsCharging; raw=['No']
+CHECK: exactly one top-level quoted InstantAmperage; raw=['0']
+CHECK: exactly one top-level quoted UpdateTime; raw=['1790815005']
+CHECK: exactly one top-level quoted AppleRawCurrentCapacity; raw=['7587']
+CHECK: exactly one top-level quoted AppleRawMaxCapacity; raw=['7587']
+CHECK: exactly one top-level quoted Amperage; raw=['0']
+CHECK: exactly one top-level quoted Voltage; raw=['12870']
+CHECK: exactly one top-level quoted Temperature; raw=['3056']
+CHECK: exactly one top-level quoted FullyCharged; raw=['Yes']
+CHECK: exactly one top-level quoted CurrentCapacity; raw=['100']
+CHECK: InstantAmperage is signed or unsigned 64-bit two-s complement
+CHECK: InstantAmperage raw=0 signed=0 mA; unsigned64_conversion=False
+CHECK: UpdateTime raw=1790815005 wall_epoch_s=1790815007 age_s=2; 0 <= age <= 180
+CHECK: ExternalConnected=Yes, IsCharging=No, abs(signed InstantAmperage)<=200 mA
+BATTERY GATE PASS
+STEP0 OK

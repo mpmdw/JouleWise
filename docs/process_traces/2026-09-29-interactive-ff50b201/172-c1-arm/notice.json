@@ -1,0 +1,16 @@
+{
+  "accepted": true,
+  "attempt": 1,
+  "blocking_causes": [],
+  "latest_abort_epoch_s": null,
+  "latest_no_epoch_s": null,
+  "measurement_head": "a23e1f82c36a80bcc1cba914a8cb9482ed57f4a9",
+  "message_id": "1a0f4e66672e621f",
+  "thread_id": "1a0f4e66672e621f",
+  "plan_id": "d079-epoch-25g83-r6-derivation-c1-20261001T0137Z",
+  "plan_sha256": "80b69a16410e79517fe03170ae3ef151e188d47be19427f7722e625112acdfd1",
+  "prerequisites_clear": true,
+  "receipt_class": "DIAGNOSTIC_NO_PACK",
+  "sent_epoch_s": 1790815134.0,
+  "veto_clear": true
+}
