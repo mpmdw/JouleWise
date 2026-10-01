@@ -157,6 +157,82 @@ class HarvestWindowTests(unittest.TestCase):
         self.assertEqual(harvest.digest(path.read_bytes()), record["r9_window"]["sha256"])
         return json.loads(path.read_bytes())
 
+    def test_gap1_sealed_revision6_registration_is_not_night_refused_registration(self):
+        from joulewise import night_gate
+        from joulewise.night_plan_writer import night_plan_mapping
+        from tests.test_night_gate import FakeProbeSource, make_plan
+
+        sealed = build.REPO_ROOT / "configs/calibration/preregistration_d079_epoch_25g83_rev1.md"
+        raw = sealed.read_bytes()
+        sha = harvest.digest(raw)
+        self.assertEqual(sha, night_gate.REV6_25G83_REGISTRATION_SHA256)
+        ruled = night_gate.armable_registration(sha)
+        self.assertIsNotNone(ruled)
+        self.assertFalse(ruled["binds_chain"])
+        source = FakeProbeSource(registration_text=raw.decode())
+        source.text[str(sealed)] = raw.decode()
+        plan = night_gate.NightPlan.from_mapping({
+            "schema": "joulewise.night_plan.v2", "schema_version": 2,
+            **night_plan_mapping(make_plan(registration_path=str(sealed))),
+        })
+        receipt = night_gate.evaluate_night(plan, source.probes())
+        self.assertIsNone(receipt.refusal)
+        c1 = next(row for row in receipt.conditions if row.condition_id == "C1")
+        self.assertEqual(c1.status, "PASS")
+        self.assertEqual(c1.measured["registration_sha256"], sha)
+        self.assertEqual(c1.measured["registration_label"], ruled["label"])
+
+        self.revision6_fixture(fill_slots=0, abort_reason="start refused")
+        self.args.preregistration = sealed
+        self.args.preregistration_sha256 = sha
+        self.plan["registration_path"] = str(sealed)
+        self.args.plan.write_bytes(harvest.json_bytes(self.plan))
+        # The registration checks use the real sealed bytes; the synthetic
+        # ledger starts at genesis rather than the sealed first-window pin.
+        sessions = harvest.issuer.revision_six_sessions
+        with mock.patch.object(harvest.issuer, "revision_six_sessions",
+                side_effect=lambda snapshot, ids, declaration: sessions(snapshot, ids, self.block)):
+            record = self.run_harvest()
+        self.assertEqual(record["preregistration_sha256"], sha)
+        self.assertEqual(record["valid_captures"], 0)
+
+    def test_gap2_harvest_accepts_pin_and_own_verdict_commit_but_refuses_extra_or_non_descendant(self):
+        self.fixture(verdict_records=False)
+        measurement_head = self.head
+        build.write_verdict_record(self.f, self.sid, preregistration_sha256=self.prereg_digest)
+        self.f["pin"].write_bytes(self.f["pin"].read_bytes() + b"\n")
+        build._commit(self.f["root"], "Harvest: ledger head pin and battery-float verdict")
+
+        def git(*args):
+            return subprocess.run(["git", "-C", str(self.f["root"]), *args],
+                                  check=True, capture_output=True, text=True).stdout.strip()
+
+        def runner(argv, **kwargs):
+            if argv[0] == "git":
+                return subprocess.run(argv, **kwargs)
+            return self.runner(argv, **kwargs)
+
+        self.head = git("rev-parse", "HEAD")
+        changed = set(git("diff", "--name-only", measurement_head, self.head).splitlines())
+        self.assertEqual(changed, {"configs/calibration/calibration_ledger_head.json",
+                                 harvest.battery_float.verdict_relative_path(self.sid)})
+        record = harvest.harvest(self.args, runner=runner, census=lambda **_: Census(), now=lambda: 10000)
+        self.assertEqual(record["measurement_head"], measurement_head)
+        self.assertEqual(record["harvest_head"], self.head)
+        self.assertEqual(record["valid_captures"], 1)
+
+        (self.f["root"] / "extra.txt").write_text("unexpected change\n")
+        build._commit(self.f["root"], "extra path must refuse")
+        with self.assertRaisesRegex(harvest.HarvestRefusal, "unauthorized path: extra.txt"):
+            harvest.harvest(self.args, runner=runner, census=lambda **_: Census(), now=lambda: 10000)
+
+        unrelated = git("-c", "user.email=fixture@example.invalid", "-c", "user.name=fixture",
+                        "commit-tree", "HEAD^{tree}", "-m", "unrelated root")
+        self.plan["measurement_head"] = unrelated
+        self.args.plan.write_bytes(harvest.json_bytes(self.plan))
+        with self.assertRaisesRegex(harvest.HarvestRefusal, "not an ancestor"):
+            harvest.harvest(self.args, runner=runner, census=lambda **_: Census(), now=lambda: 10000)
+
     def assert_blind_records(self, *records):
         def walk(value):
             if isinstance(value, dict):
