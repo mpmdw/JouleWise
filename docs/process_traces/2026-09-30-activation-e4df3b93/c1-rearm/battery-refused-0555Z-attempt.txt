@@ -1,0 +1,19 @@
+CHECK: ioreg -r -c AppleSmartBattery supplies one fresh, top-level battery observation
+CHECK: battery gate observed at 2026-10-01T04:24:54Z
+CHECK: exactly one AppleSmartBattery object; count=1
+CHECK: exactly one complete top-level object; close_count=1
+CHECK: exactly one top-level quoted ExternalConnected; raw=['Yes']
+CHECK: exactly one top-level quoted IsCharging; raw=['No']
+CHECK: exactly one top-level quoted InstantAmperage; raw=['18446744073709551169']
+CHECK: exactly one top-level quoted UpdateTime; raw=['1790828672']
+CHECK: exactly one top-level quoted AppleRawCurrentCapacity; raw=['5933']
+CHECK: exactly one top-level quoted AppleRawMaxCapacity; raw=['7666']
+CHECK: exactly one top-level quoted Amperage; raw=['18446744073709551169']
+CHECK: exactly one top-level quoted Voltage; raw=['12180']
+CHECK: exactly one top-level quoted Temperature; raw=['3024']
+CHECK: exactly one top-level quoted FullyCharged; raw=['No']
+CHECK: exactly one top-level quoted CurrentCapacity; raw=['82']
+CHECK: InstantAmperage is signed or unsigned 64-bit two-s complement
+CHECK: InstantAmperage raw=18446744073709551169 signed=-447 mA; unsigned64_conversion=True
+CHECK: UpdateTime raw=1790828672 wall_epoch_s=1790828694 age_s=22; 0 <= age <= 180
+CHECK: ExternalConnected=Yes, IsCharging=No, abs(signed InstantAmperage)<=200 mA

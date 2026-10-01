@@ -1,0 +1,16 @@
+21:27:30 cap=81 chg=No I=-339mA upd=1790828817
+21:28:30 cap=81 chg=No I=-357mA upd=1790828877
+21:29:30 cap=81 chg=No I=-362mA upd=1790828937
+21:30:30 cap=81 chg=No I=-352mA upd=1790828997
+21:31:31 cap=81 chg=No I=-443mA upd=1790829057
+21:32:31 cap=81 chg=No I=-384mA upd=1790829117
+21:33:31 cap=81 chg=No I=-624mA upd=1790829177
+21:34:31 cap=81 chg=No I=-385mA upd=1790829237
+21:35:32 cap=81 chg=No I=-372mA upd=1790829297
+21:36:32 cap=81 chg=No I=-205mA upd=1790829357
+21:37:32 cap=81 chg=No I=-209mA upd=1790829417
+21:38:32 cap=81 chg=No I=-191mA upd=1790829477
+21:39:33 cap=81 chg=No I=-196mA upd=1790829537
+FLOAT_REACHED
+
+[exited with code 0]
