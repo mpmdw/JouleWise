@@ -1899,12 +1899,13 @@ class NetworkTimeProvenanceTests(unittest.TestCase):
 
 
 class NetworkTimeComparatorTests(unittest.TestCase):
-    """Item 7 (05b S7): the collector-side comparator is BYTE equality.
+    """Item 7 (05b S7), as amended by #448: the comparator admits the end state.
 
-    The chain-side comparator has its own kill (a lower-case ``off`` refuses
-    before any envelope); this is the one that gates every envelope's
-    provenance, and a ``.strip()`` there would admit a capture whose OFF
-    receipt came from some other code path's formatting.
+    #448 ("accept the end state, not one wording") made the collector-side
+    comparator normalize whitespace and case and admit either ruled wording
+    of "network time is Off".  Whitespace around the ruled bytes therefore
+    admits; a statement of any other end state still refuses with exit 3
+    before an envelope is written.
     """
 
     def bodies(self):
@@ -1914,20 +1915,35 @@ class NetworkTimeComparatorTests(unittest.TestCase):
                 "a leading newline": "\n" + expected,
                 "surrounding spaces": " " + expected.strip() + " "}
 
-    def test_whitespace_variants_of_the_off_stdout_refuse_with_exit_three(self):
+    def provenance(self, record):
+        return harness.network_time_provenance(
+            {harness.NETWORK_TIME_RECORD_ENV: str(record)},
+            now={"epoch_s": 1000., "monotonic_s": 0., "boot_id": "fixture"})
+
+    def test_whitespace_variants_of_the_off_stdout_are_admitted(self):
         expected = harness.network_time_off.EXPECTED_STDOUT
         with tempfile.TemporaryDirectory(dir="/tmp") as tmp:
             for label, stdout in self.bodies().items():
                 with self.subTest(case=label):
-                    # Each variant is strip-equivalent to the ruled bytes and
-                    # unequal to them: exactly what a loosened comparator
-                    # would let through.
                     self.assertNotEqual(stdout, expected)
                     self.assertEqual(stdout.strip(), expected.strip())
                     record = network_time_control(tmp, stdout=stdout)
-                    provenance, reason = harness.network_time_provenance(
-                        {harness.NETWORK_TIME_RECORD_ENV: str(record)},
-                        now={"epoch_s": 1000., "monotonic_s": 0., "boot_id": "fixture"})
+                    provenance, reason = self.provenance(record)
+                    self.assertIsNotNone(provenance, reason)
+                    self.assertEqual(provenance["state"], "off")
+            record = network_time_control(tmp)
+            provenance, reason = self.provenance(record)
+            self.assertEqual(provenance["state"], "off")
+
+    def test_a_stdout_that_does_not_state_off_refuses_with_exit_three(self):
+        cases = {"network time on": "setUsingNetworkTime: On\n",
+                 "empty": "",
+                 "an error": "Error: unable to set network time\n"}
+        with tempfile.TemporaryDirectory(dir="/tmp") as tmp:
+            for label, stdout in cases.items():
+                with self.subTest(case=label):
+                    record = network_time_control(tmp, stdout=stdout)
+                    provenance, reason = self.provenance(record)
                     self.assertIsNone(provenance)
                     self.assertIn("network time OFF admission failed", reason)
                     out = Path(tmp) / f"out-{abs(hash(label))}"
@@ -1941,13 +1957,6 @@ class NetworkTimeComparatorTests(unittest.TestCase):
                     session = json.loads((out / "session.json").read_text())
                     self.assertEqual(session["error_class"], harness.NETWORK_TIME_REFUSAL)
                     self.assertIsNone(session["network_time_provenance"])
-            # The ruled bytes themselves still pass, so this is a comparator
-            # regression and not a blanket refusal.
-            record = network_time_control(tmp)
-            provenance, reason = harness.network_time_provenance(
-                {harness.NETWORK_TIME_RECORD_ENV: str(record)},
-                        now={"epoch_s": 1000., "monotonic_s": 0., "boot_id": "fixture"})
-            self.assertEqual(provenance["state"], "off")
 
 
 class IntegerWindowTests(unittest.TestCase):
