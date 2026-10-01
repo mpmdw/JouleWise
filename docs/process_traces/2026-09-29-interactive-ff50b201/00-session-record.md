@@ -94,3 +94,12 @@ The running record of the session that resumed JouleWise work after the 09-28 ow
     Q2-b the seal test needs main's records (passes at 856cb949); Q3-a naming W1/W2 against the real
     file now refuses (a mixture, as ruled); Q3-b `check --preregistration` without a sha exits 5.
     Carried to the C1 arm: confirm the driver's own processes do not trip check 8 (erratum §5 note 2).
+
+57. **GAP 1-3 round** (commit 88d5d122; Sol 6.1 with one lead ruling: land what harvest.json
+    references, never synthesize). **Fable final pass: MERGE WITH FINDINGS** ([157](157-gaps-fable-final-pass.md);
+    reverted each fix and saw its test go red). Dispositions: Q1-1 (harvest does not compare the run
+    chain with pins.chain_sha256; arm desk check and the CI chain-digest test cover it) deferred to
+    the block-runner lane; Q3-2 (a repeat landing prints REFUSED) handled by a recipe note; Q1 binds_chain
+    False confirmed correct (True would raise on the Markdown registration); Q2-1, Q2-2, Q3-1, Q3-3
+    no change, as Fable recommended. Bench finding: ChatGPT.app's embedded Codex helpers trip check 8;
+    the app must be quit with the interactive session before t0. Battery gate PASS at the bench.

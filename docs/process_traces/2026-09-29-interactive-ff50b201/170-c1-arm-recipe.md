@@ -611,7 +611,7 @@ IDS=(); for s in ${=PRIOR_SESSION_LIST:-} "$SESSION_ID"; do IDS+=(--session-ids 
 Land the records (light tier, ruling 52(3); these bytes must be in HEAD's tree of the next clone because the next harvest requires them committed; GAP 3, fixed in #447):
 
 ```zsh
-"$PY" -B scripts/land_window_records.py --harvest "$ARCH/harvest.json" --repo-root "$MEASUREMENT_ROOT"   # prints the landed paths and the commit sha; rc 3 = REFUSED: HALT
+"$PY" -B scripts/land_window_records.py --harvest "$ARCH/harvest.json" --repo-root "$MEASUREMENT_ROOT"   # prints the landed paths and the commit sha; rc 3 = REFUSED: HALT. A second run after a successful landing also prints REFUSED (git commit: nothing to commit; Fable 157 Q3-2): check `git log -1` names "Harvest $SESSION_ID: window records" before treating it as a fault
 git push origin "HEAD:refs/heads/harvest/$SESSION_ID"
 # PR body: Tier: light; Impact (i)-(vi) each "No: records what code decided, changes no code or number (orchestrator ruling 52(3), record 00-session-record.md item 52)";
 # rows 1, 4, 5 = N/A (light tier); row 2 = N/A (docs only); row 3 = RUN <head sha>. Never without the ledger (memory: pr-body-gate-ledger-required).
