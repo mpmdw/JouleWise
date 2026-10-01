@@ -204,6 +204,54 @@ All agents must still close before the plan span: the unchanged night gate recor
 
 ## Purpose of this night
 
+**Written 2026-10-01 for Revision 6 block 1 (windows C1, C2 and C3).** This
+section and the two that follow it ("Where the results are", "Next lane")
+hold for every window of this block. They name no single plan: the plan id,
+t0, pinned head H and digests of each window are in that window's arm
+notice and arm record. The QPE-01 pilot text these sections held until
+2026-10-01 is kept further down, under headings marked history. Ed asked
+for the rewrite after C1's courier reported the old text stale (his
+2026-10-01 reply on the C1 courier thread). A later block, or a different
+kind of night, rewrites these three sections again before its first arm.
+
+**Which plans this covers.** Plan ids
+`d079-epoch-25g83-r6-derivation-<label>-<t0>`, where `<label>` is `c1`, `c2`
+or `c3` and `<t0>` is the window's start in UTC as `YYYYMMDDTHHMMZ`. Each
+window's calibration session id is `d079-epoch-25g83-r6-<t0>`. The receipt
+class is `DIAGNOSTIC_NO_PACK`.
+
+**What a window is.** One unattended run of the Mac's power sampler
+(`powermetrics`) while the machine idles, with no agent or other work on it.
+At t0 the night driver sets network time Off and records that receipt
+(`night/network_time_off.json`). It then requires 600 s of clean machine
+state (the clean dwell: no busy daemons, load at most 2.0, AC power, no
+agent process), and the night gate runs its own checks. Only then does the
+chain start. The chain (`scripts/night_chains/calibration_derivation_only.zsh`)
+takes 12 captures, slots `d01` to `d12`, one every 600 s. It validates each
+capture and appends it to the calibration observation ledger. The last slot
+reports a ledger head pin candidate, and no number may be claimed until the
+harvest commits that pin. This is a calibration night, not a quiet-predicate
+evidence night, so no `evidence_*` files are expected.
+
+**Why these windows.** The registration is Revision 6 of
+`configs/calibration/preregistration_d079_epoch_25g83_rev1.md` (sealed; its
+sha256 is in each arm notice). It tests two things. The first is the search
+limit of 1,710,000 candidate timing positions per capture, raised from
+165,000 because 8 of the 24 captures in the September windows W1 and W2 hit
+the old limit. The second is whether the 12 or more valid captures the new
+calibration needs can be collected. Revision 6 allows windows back to back,
+up to 3 counting windows plus one replacement. Each window's harvest decides
+from counts only, never from measured values, whether another window
+follows (`next_window.verdict` in `harvest.json`: `NEXT_WINDOW`,
+`CLOSE_AND_DERIVE`, or a stop).
+
+**What a window authorizes.** Nothing by itself. The courier's report, the
+chain's slot lines and the pin candidate are provisional. They authorize no
+cutoff, no block two and no claim. The verdict comes from the result record,
+and the decision to continue comes from the harvest.
+
+## Purpose of plan qpe01-pilot-n1-20260923-0700 (history, superseded 2026-10-01)
+
 Plan `qpe01-pilot-n1-20260923-0700` is the third attempt at QPE-01's
 idle-variance PILOT NIGHT ONE, using the evidence executor (the program the
 chain runs to take the night's measurements). QPE-01 asks how
@@ -1024,7 +1072,7 @@ Armed 2026-09-22 20:12:28 PDT by headless activation ca45291d through the tracke
 
 Armed 2026-09-23 at 05:37:32 PDT by headless activation 4e8918fa (Opus 5.5), through the tracked entry point: check `70c510f35ef9`, then notice (Gmail `1a0ce4522dbdbf03`, `notice.txt` verbatim plus the one correction line of 4158e658 record 01 §3), then veto, publish-install and verify, all rc 0. Triple `(qpe01-pilot-n1-20260923-0700, /Users/edr/JouleWise-measurement-20260923-0700-1790172000-26fb4280b1e2b3ab5b239884a2c1abbd5f9e1f15-qpe01-pilot-n1, 26fb4280b1e2b3ab5b239884a2c1abbd5f9e1f15)`. Custody root `/Users/edr/night-custody/qpe01-pilot-n1-20260923-0700-20260923-0700-1790172000-26fb4280b1e2b3ab5b239884a2c1abbd5f9e1f15`. t0 07:00:00 PDT (1790172000), `window_max_s` 9000, registration `pilot_protocol_v3.json` (`69321c69…3616`), plan sha256 `6193c6b6…b566`. Arm gate on the staged bytes (activation 4158e658, records 05–08): cold Fable 5.1 ARM, Opus 5.5 ARM, Sol 6.0 ARM AFTER CURES (dissent recorded; lane A276). Arm record: `docs/process_traces/2026-09-23-activation-4e8918fa/01-arm-record-qpe01-pilot-n1-20260923-0700.md`. Its divergence 1 records that the helper-termination recipe above misses the `npm exec @openai/codex@<version> mcp-server` wrapper. Owed after the night: harvest, uninstall, and a harvest record that names the F2 `summary.md` sentence.
 
-## Where the results are
+## Where the results were for plan qpe01-pilot-n1-20260923-0700 (history, superseded 2026-10-01)
 
 - Custody root: `/Users/edr/night-custody/qpe01-pilot-n1-20260923-0700-…`,
   the exact directory named in the published plan (its suffix carries t0
@@ -1088,7 +1136,7 @@ Armed 2026-09-23 at 05:37:32 PDT by headless activation 4e8918fa (Opus 5.5), thr
   `python -m joulewise.evidence_night uninstall --candidate <staging>`
   run from the measurement clone. Record its exit code.
 
-## Next lane
+## Next lane of plan qpe01-pilot-n1-20260923-0700 (history, superseded 2026-10-01)
 
 The successor magistrate rebuilds the coordinates from the frozen triple
 `qpe01-pilot-n1-20260923-0700` / the measurement clone named by the
@@ -1148,6 +1196,62 @@ Ed's ruling (c) at
 governs that order: the two 25G83 equivalence nights do not continue the
 three-night D-166 derivation. Every later night requires its own plan and
 the ordinary arm gates.
+
+## Where the results are
+
+- Custody root: `/Users/edr/night-custody/<plan_id>`, the exact directory
+  named in the published plan. The chain wrapper `chain.zsh` and its
+  `chain.zsh.sha256`, `calibration_plan.json`, `identity-epoch.json`,
+  `t1-bindings.json` and `start_conditions_manifest.json` sit at its top.
+- Driver records in `<custody_root>/night/`: `result.json`, then
+  `receipt.json` or `refusal.json` as `result.json` directs;
+  `network_time_off.json`, `clean_dwell.json`, `start_conditions.json`,
+  `chain.started`, `chain.exited`, `censuses.jsonl`, `chain.stdout.log` and
+  `chain.stderr.log`. The result record owns the verdict and the chain exit
+  code; report them as recorded. A pre-start refusal has `verdict` REFUSED,
+  a null `chain_exit_code` and no `chain.started`. Nothing was measured, and
+  the same label is armed again after the fix.
+- Capture sessions: `<custody_root>/runs/`. The calibration observation
+  ledger is `runs/calibration_observation_ledger.jsonl` in the measurement
+  clone named by the plan's `measurement_root`, and its committed head pin is
+  `configs/calibration/calibration_ledger_head.json` in that clone.
+- Driver log: `<custody_root>/night.log`. Launchd streams:
+  `night/launchd.night.out` and `night/launchd.night.err`.
+- Courier records under `<custody_root>/night/`: `courier.sent` (the Gmail
+  message id of the result email actually delivered), `courier.json`,
+  `courier.attempts.jsonl` and `courier.heartbeat`.
+- Results branch: `night-results/<plan_id>` on `origin`, if the driver's
+  push succeeded. Verify it; do not presume it.
+- After harvest: the archive `/Users/edr/night-archive/harvest-<plan_id>`,
+  with `harvest.json`, written by `scripts/harvest_window.py`. The ledger pin
+  and battery-float verdict are committed on branch `harvest/<session_id>`.
+  The window's records land on `main` through
+  `scripts/land_window_records.py`.
+
+## Next lane
+
+The courier harvests, uninstalls and arms nothing. The headless magistrate
+harvests once `night/courier.sent` exists and the time is past t0 + 9300 s
+(`harvest_window.py` refuses earlier). It works under the top block of
+`RUN_STATE.md` (brief
+`docs/process_traces/2026-09-29-interactive-ff50b201/171-magistrate-block-brief.md`
+plus its refusal route) and runs, unedited:
+- section 6 of
+  `docs/process_traces/2026-09-29-interactive-ff50b201/170-c1-arm-recipe.md`
+  for the harvest: pin advance, battery-float verdict, the pin-and-verdict
+  commit, `harvest_window.py`, then `land_window_records.py` and a
+  light-tier PR merged with `--merge`;
+- section 7 of the same recipe for the next window's inputs.
+
+It decides on `next_window.verdict` alone. `NEXT_WINDOW` arms the next label
+(sections 1, 3, 4 and 5, `LEAD_S=5400`), and the arm notice is the
+activation's one email. A pre-start refusal is fixed and the same label
+re-armed (refusal route R1-R5). `CLOSE_AND_DERIVE` ends the block:
+candidate derivation, the cold science gate and the #416 audit belong to the
+orchestrator. Anything else, including a harvest that prints `REFUSED:`, is
+a halt with one email to Ed.
+
+### Standing install and arm rules (every v2 plan)
 
 For every v2 plan, run `scripts/install_night_agent.sh` FROM the checkout
 named by the plan's `measurement_root`, with that checkout at the plan's

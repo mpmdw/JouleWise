@@ -12,6 +12,8 @@ file instead.
 
 **▶▶▶ Revision 6 measurement block 1 (windows C1, C2, C3), written 2026-09-30 by the orchestrator (session ff50b201). THIS BLOCK IS THE MAGISTRATE'S CURRENT INSTRUCTION; the blocks below are history.**
 
+**HALT 2026-10-01 02:10 PDT (activation 838bd086; [record](docs/process_traces/2026-10-01-activation-838bd086/00-session-record.md)):** C1 (plan `d079-epoch-25g83-r6-derivation-c1-20261001T0617Z`) ran GO, chain exit 0. The pin advance (326) and battery verdict (pass) are committed as `029ec385` on `harvest/d079-epoch-25g83-r6-20261001T0617Z`. Then `harvest_window.py` REFUSED with `nonliteral wrapper export`: its export parser rejects the generator's own line `export GIT_OPTIONAL_LOCKS=0 PYTHONDONTWRITEBYTECODE=1`, so every Revision 6 harvest refuses. The C1 night agents are still loaded and nothing is archived. A successor does NOT retry the harvest and does NOT arm C2 until Ed or the orchestrator rules on the harvest-code fix (record item 4) and on re-pinning the measurement clone. Ed's 01:41 instruction (fix the stale NIGHT_HANDBACK sections) is applied in the same PR as this record.
+
 Authority: orchestrator rulings, `docs/process_traces/2026-09-29-interactive-ff50b201/00-session-record.md` items 51-52; plan `160-block-runner-plan.md`; commands `170-c1-arm-recipe.md` (run its sections exactly, unedited). This block is live only while Ed has removed STOP; you are the operator, not a designer.
 
 **Each activation, in this order (a quiet relaunch with nothing to do writes nothing, commits nothing, emails nothing):**
