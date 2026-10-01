@@ -650,3 +650,51 @@ class HarvestWindowTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class WrapperExportParseTests(unittest.TestCase):
+    """The harvest reads the generated wrapper's export lines (C1, 2026-10-01)."""
+
+    FIXTURE = Path(__file__).parent / "fixtures/harvest_wrappers/c1-20261001T0617Z-chain.zsh"
+
+    def test_real_c1_wrapper_with_two_assignment_export_parses(self):
+        # These bytes refused the C1 harvest with "nonliteral wrapper export".
+        raw = self.FIXTURE.read_bytes()
+        self.assertEqual(harvest.digest(raw),
+                         "27924ffd849a50d5237629cd653b3bc6a230d19bd73c5e9420f89c5aa61e91a7")
+        exports = harvest.wrapper_exports(raw.decode())
+        self.assertEqual(exports["GIT_OPTIONAL_LOCKS"], "0")
+        self.assertEqual(exports["PYTHONDONTWRITEBYTECODE"], "1")
+        self.assertEqual(exports["SESSION_ID"], "d079-epoch-25g83-r6-20261001T0617Z")
+        self.assertEqual(exports["WINDOW_CUSTODY_ROOT"],
+                         "/Users/edr/night-custody/d079-epoch-25g83-r6-derivation-c1-20261001T0617Z")
+        self.assertEqual(exports["PLAN_SHA256"],
+                         "9ab4776f3c416284d6d01a5a49587eedcdfbcb8ef61428cdc1046e9b9d74a072")
+
+    def test_generator_wrapper_parses(self):
+        from scripts import gen_derivation_night as gen
+        spec = gen.example_spec(b"#!/bin/zsh\n")
+        exports = harvest.wrapper_exports(gen.render_wrapper(spec))
+        self.assertEqual(exports["GIT_OPTIONAL_LOCKS"], "0")
+        self.assertEqual(exports["PYTHONDONTWRITEBYTECODE"], "1")
+
+    def test_malformed_exports_still_refuse(self):
+        for text, reason in (("export FOO\n", "nonliteral wrapper export"),
+                             ("export A=1 FOO\n", "nonliteral wrapper export"),
+                             ("export 1BAD=x\n", "nonliteral wrapper export"),
+                             ("export A-B=x\n", "nonliteral wrapper export"),
+                             ("export \n", "nonliteral wrapper export"),
+                             ("export A=1 A=2\n", "duplicate wrapper export"),
+                             ("export A=1 B=2\nexport B=3\n", "duplicate wrapper export")):
+            with self.subTest(text=text):
+                with self.assertRaises(harvest.HarvestRefusal) as caught:
+                    harvest.wrapper_exports(text)
+                self.assertEqual(str(caught.exception), reason)
+
+    def test_single_assignment_lines_unchanged(self):
+        self.assertEqual(harvest.wrapper_exports("export A='x y'\nexport B=2\necho export\n"),
+                         {"A": "x y", "B": "2"})
+
+
+if __name__ == "__main__":
+    unittest.main()
