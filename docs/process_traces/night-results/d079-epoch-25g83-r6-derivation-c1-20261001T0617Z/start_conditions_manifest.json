@@ -1,0 +1,1 @@
+{"plan_id": "d079-epoch-25g83-r6-derivation-c1-20261001T0617Z", "prior_revision6_session": null, "reason": "C1 is the first session of Revision 6; no earlier Revision 6 session exists, so start conditions (a) and (b) have nothing to test (Revision 6 section 6.2).", "schema": "joulewise.derivation_start_conditions_manifest.v1"}
