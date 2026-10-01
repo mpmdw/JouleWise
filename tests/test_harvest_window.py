@@ -648,10 +648,6 @@ class HarvestWindowTests(unittest.TestCase):
         self.assertEqual((row["declared"], row["filled"], row["valid"]), (2, 1, 1))
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class WrapperExportParseTests(unittest.TestCase):
     """The harvest reads the generated wrapper's export lines (C1, 2026-10-01)."""
 
