@@ -34,9 +34,26 @@ class NetworkTimeOffTests(unittest.TestCase):
                 self.save(root)
             self.assertEqual(nt.read_receipt(path), value)
 
+    def test_already_off_wording_admitted(self):
+        # C1 2026-09-30: the Mac was already Off and macOS said so in other
+        # words; the window was refused at t0.  Both wordings end Off.
+        for stdout in ("Network Time is already off.\n", "setUsingNetworkTime: Off\n",
+                       "setUsingNetworkTime: off\n", "setUsingNetworkTime: Off",
+                       "  network time is ALREADY off \n"):
+            with self.subTest(stdout=stdout), tempfile.TemporaryDirectory() as root:
+                self.assertEqual(self.save(root, subprocess.CompletedProcess(
+                    nt.OFF_ARGV, 0, stdout.encode(), b""))["stdout"], stdout)
+
+    def test_c1_refused_receipt_is_now_admitted(self):
+        c1 = receipt(stdout="Network Time is already off.\n", stderr="")
+        self.assertIs(nt.admit(c1), c1)
+
     def test_nonzero_and_wrong_stdout_saved_but_refused(self):
-        for code, stdout in ((1, nt.EXPECTED_STDOUT), (0, "setUsingNetworkTime: off\n"),
-                             (0, "setUsingNetworkTime: Off")):
+        for code, stdout in ((1, nt.EXPECTED_STDOUT), (1, "Network Time is already off.\n"),
+                             (0, "setUsingNetworkTime: On\n"), (0, "Network Time is already on.\n"),
+                             (0, ""), (0, "You need administrator access to run this tool... exiting!\n"),
+                             (0, "setUsingNetworkTime: Off\nsetUsingNetworkTime: On\n"),
+                             (0, "Network Time: Off\n"), (0, "not setUsingNetworkTime: Off\n")):
             with self.subTest(code=code, stdout=stdout), tempfile.TemporaryDirectory() as root:
                 with self.assertRaises(ValueError):
                     self.save(root, subprocess.CompletedProcess(nt.OFF_ARGV, code, stdout, ""))
@@ -183,3 +200,20 @@ class ArmResyncTests(unittest.TestCase):
             with self.assertRaises(capture.CaptureT0Error):
                 capture._arm_reference(context, execute, lambda: 1)
             execute.assert_not_called()
+
+
+class SingleComparatorGuardTests(unittest.TestCase):
+    """No module may compare the OFF stdout to a literal again (C1 refusal)."""
+
+    def test_no_raw_equality_against_off_wording(self):
+        import re
+        root = Path(__file__).resolve().parents[1]
+        pattern = re.compile(r"[!=]=\s*(?:\w+\.)*(?:EXPECTED_NETWORK_TIME_OFF_STDOUT|EXPECTED_STDOUT)\b"
+                             r"|(?:EXPECTED_NETWORK_TIME_OFF_STDOUT|EXPECTED_STDOUT)\s*[!=]="
+                             r"|setUsingNetworkTime: Off\\n\"\s*[!=]=|[!=]=\s*\"setUsingNetworkTime")
+        offenders = [f"{path.relative_to(root)}:{number}"
+                     for directory in ("joulewise", "scripts")
+                     for path in sorted((root / directory).rglob("*.py"))
+                     for number, line in enumerate(path.read_text().splitlines(), 1)
+                     if pattern.search(line)]
+        self.assertEqual(offenders, [], "use network_time_off.off_stdout_admitted")

@@ -2147,7 +2147,7 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
         self.assertFalse((custody / pack.name / t0._EVIDENCE_DIRECTORY).exists())
 
     def test_rf21_rf22_off_receipt_requires_exit_and_exact_stdout(self) -> None:
-        for field, value in (("exit_code", 1), ("stdout", "Network Time: Off\n")):
+        for field, value in (("exit_code", 1), ("stdout", "Network Time: Off\n"), ("stdout", "setUsingNetworkTime: On\n")):
             def mutate(inputs, field=field, value=value):
                 path = inputs / network_time_off.RECEIPT_BASENAME
                 off = json.loads(path.read_bytes())
