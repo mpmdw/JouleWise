@@ -103,3 +103,9 @@ The running record of the session that resumed JouleWise work after the 09-28 ow
     False confirmed correct (True would raise on the Markdown registration); Q2-1, Q2-2, Q3-1, Q3-3
     no change, as Fable recommended. Bench finding: ChatGPT.app's embedded Codex helpers trip check 8;
     the app must be quit with the interactive session before t0. Battery gate PASS at the bench.
+
+58. **#447 merged** (`7e466a3f`): Revision 6 sealed plus GAP 1-3. Whole suite on 88d5d122 (main
+    67a38879 merged): 272 modules, 7,380 tests, 0 failures, 49 skips; CI 15/15 green. The records
+    (this branch: brief 171 as the RUN_STATE top block, recipe 170, verdicts 156/157) go straight to
+    main next, so C1's H includes them. Bench files built from recipe §2 at
+    /Users/edr/night-plan-staging/r6-bench (all pass `zsh -n`).
