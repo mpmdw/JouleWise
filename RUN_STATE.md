@@ -22,6 +22,8 @@ file instead.
 3. Once both are merged: brief step 5 `NEXT_WINDOW` for C2, as the ruling above says. The arm notice is the activation's one email; the activation's Opus 5.5 lead writes it (Ed's 21:49 instruction).
 B stays unread (Ed, 02:35: "i mean don't read it").
 
+**HALT 2026-10-01 ≈03:05 PDT (activation 6e0bd311; [record](docs/process_traces/2026-10-01-activation-6e0bd311/00-session-record.md)): handoff step 1 hit a failing check, so nothing was merged or armed and Ed was emailed.** #451 head `fa210d0f`, job `test (3.13, 6)`: 4 subtests of `test_sample_quiet_predicate_evidence` `test_whitespace_variants_of_the_off_stdout_refuse_with_exit_three` fail, because whitespace variants of the OFF stdout are now admitted. The cause is on main since #448 (`f0e211cb`; its CI run 36814461403 failed the same four subtests; later docs-only pushes skipped tests, so main looks green). The fix is a design call on the network-time comparator (stale test, or #448 too loose), for Ed or the orchestrator. **A successor sends no further email about this** and does not fix it: while #451's head check is red, exit quietly. When a fix lands and #451 is green, resume at handoff step 1. For #450, `gh run rerun --failed` reuses the old merge sha; close and reopen it after #451 merges instead.
+
 Authority: orchestrator rulings, `docs/process_traces/2026-09-29-interactive-ff50b201/00-session-record.md` items 51-52; plan `160-block-runner-plan.md`; commands `170-c1-arm-recipe.md` (run its sections exactly, unedited). This block is live only while Ed has removed STOP; you are the operator, not a designer.
 
 **Each activation, in this order (a quiet relaunch with nothing to do writes nothing, commits nothing, emails nothing):**

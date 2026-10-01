@@ -1,0 +1,39 @@
+2026-10-01T09:56:34.2587881Z FAIL: test_whitespace_variants_of_the_off_stdout_refuse_with_exit_three (test_sample_quiet_predicate_evidence.NetworkTimeComparatorTests.test_whitespace_variants_of_the_off_stdout_refuse_with_exit_three) (case='a trailing space')
+2026-10-01T09:56:34.2589974Z ----------------------------------------------------------------------
+2026-10-01T09:56:34.2590617Z Traceback (most recent call last):
+2026-10-01T09:56:34.2599362Z   File "/home/runner/work/JouleWise/JouleWise/tests/test_sample_quiet_predicate_evidence.py", line 1931, in test_whitespace_variants_of_the_off_stdout_refuse_with_exit_three
+2026-10-01T09:56:34.2600455Z     self.assertIsNone(provenance)
+2026-10-01T09:56:34.2600731Z     ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+2026-10-01T09:56:34.2602200Z AssertionError: {'state': 'off', 'method': 'systemsetup_setusingnetworktime_off_exact_stdout', 'policy': 'joulewise.network_time_off.v1', 'boot_id': 'fixture', 'plan_id': 'plan', 'window_id': 'window', 'settled_seconds': 600.0, 'established_epoch_s': 400.0, 'established_monotonic_s': -600.0, 'record': 'network_time_control.json', 'record_sha256': '8f11201c4cde24e0c4ad2
+2026-10-01T09:56:34.2604049Z 
+2026-10-01T09:56:34.2604178Z ======================================================================
+2026-10-01T09:56:34.2605203Z FAIL: test_whitespace_variants_of_the_off_stdout_refuse_with_exit_three (test_sample_quiet_predicate_evidence.NetworkTimeComparatorTests.test_whitespace_variants_of_the_off_stdout_refuse_with_exit_three) (case='no newline at all')
+2026-10-01T09:56:34.2607005Z ----------------------------------------------------------------------
+2026-10-01T09:56:34.2607603Z Traceback (most recent call last):
+2026-10-01T09:56:34.2609046Z   File "/home/runner/work/JouleWise/JouleWise/tests/test_sample_quiet_predicate_evidence.py", line 1931, in test_whitespace_variants_of_the_off_stdout_refuse_with_exit_three
+2026-10-01T09:56:34.2609905Z     self.assertIsNone(provenance)
+2026-10-01T09:56:34.2610165Z     ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+2026-10-01T09:56:34.2611621Z AssertionError: {'state': 'off', 'method': 'systemsetup_setusingnetworktime_off_exact_stdout', 'policy': 'joulewise.network_time_off.v1', 'boot_id': 'fixture', 'plan_id': 'plan', 'window_id': 'window', 'settled_seconds': 600.0, 'established_epoch_s': 400.0, 'established_monotonic_s': -600.0, 'record': 'network_time_control.json', 'record_sha256': '9a21f0f1c5e41ee305746
+2026-10-01T09:56:34.2613025Z 
+2026-10-01T09:56:34.2613382Z ======================================================================
+2026-10-01T09:56:34.2614362Z FAIL: test_whitespace_variants_of_the_off_stdout_refuse_with_exit_three (test_sample_quiet_predicate_evidence.NetworkTimeComparatorTests.test_whitespace_variants_of_the_off_stdout_refuse_with_exit_three) (case='a leading newline')
+2026-10-01T09:56:34.2615883Z ----------------------------------------------------------------------
+2026-10-01T09:56:34.2616472Z Traceback (most recent call last):
+2026-10-01T09:56:34.2617837Z   File "/home/runner/work/JouleWise/JouleWise/tests/test_sample_quiet_predicate_evidence.py", line 1931, in test_whitespace_variants_of_the_off_stdout_refuse_with_exit_three
+2026-10-01T09:56:34.2619035Z     self.assertIsNone(provenance)
+2026-10-01T09:56:34.2619299Z     ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+2026-10-01T09:56:34.2620756Z AssertionError: {'state': 'off', 'method': 'systemsetup_setusingnetworktime_off_exact_stdout', 'policy': 'joulewise.network_time_off.v1', 'boot_id': 'fixture', 'plan_id': 'plan', 'window_id': 'window', 'settled_seconds': 600.0, 'established_epoch_s': 400.0, 'established_monotonic_s': -600.0, 'record': 'network_time_control.json', 'record_sha256': 'bc9409703cd5cbc4c922e
+2026-10-01T09:56:34.2622151Z 
+2026-10-01T09:56:34.2622267Z ======================================================================
+2026-10-01T09:56:34.2623481Z FAIL: test_whitespace_variants_of_the_off_stdout_refuse_with_exit_three (test_sample_quiet_predicate_evidence.NetworkTimeComparatorTests.test_whitespace_variants_of_the_off_stdout_refuse_with_exit_three) (case='surrounding spaces')
+2026-10-01T09:56:34.2624487Z ----------------------------------------------------------------------
+2026-10-01T09:56:34.2624827Z Traceback (most recent call last):
+2026-10-01T09:56:34.2625606Z   File "/home/runner/work/JouleWise/JouleWise/tests/test_sample_quiet_predicate_evidence.py", line 1931, in test_whitespace_variants_of_the_off_stdout_refuse_with_exit_three
+2026-10-01T09:56:34.2626355Z     self.assertIsNone(provenance)
+2026-10-01T09:56:34.2626759Z     ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+2026-10-01T09:56:34.2628202Z AssertionError: {'state': 'off', 'method': 'systemsetup_setusingnetworktime_off_exact_stdout', 'policy': 'joulewise.network_time_off.v1', 'boot_id': 'fixture', 'plan_id': 'plan', 'window_id': 'window', 'settled_seconds': 600.0, 'established_epoch_s': 400.0, 'established_monotonic_s': -600.0, 'record': 'network_time_control.json', 'record_sha256': '4a8034725844aa69d2d4f
+2026-10-01T09:56:34.2629574Z 
+2026-10-01T09:56:34.2629722Z ----------------------------------------------------------------------
+2026-10-01T09:56:34.2630048Z Ran 95 tests in 35.929s
+2026-10-01T09:56:34.2630193Z 
+2026-10-01T09:56:34.2630290Z FAILED (failures=4, skipped=4)
