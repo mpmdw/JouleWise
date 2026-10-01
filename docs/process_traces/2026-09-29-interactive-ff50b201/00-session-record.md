@@ -86,3 +86,11 @@ The running record of the session that resumed JouleWise work after the 09-28 ow
     suites passed at the bench (392 tests, one pre-existing skip). The lead reverted one test skip the
     seat had added for its sandbox. Main was merged in at 856cb949. The GAP 1-3 round (recipe 170 §8)
     was launched on the same branch.
+
+56. **Seal cold gate: SEAL ACCEPTED WITH FINDINGS** ([156](156-rev6-seal-fable-verdict.md), charge
+    [156a](156a-rev6-seal-fable-charge.md); Fable 5.1). All five findings are non-blocking record notes:
+    Q1-a "sealed … at 46643f1d" names the parent the pins came from (every pinned file is identical at
+    bf017893); Q1-b "remaining derivation start budget" is the driver's t0 + window_max_s − 7,680 s;
+    Q2-b the seal test needs main's records (passes at 856cb949); Q3-a naming W1/W2 against the real
+    file now refuses (a mixture, as ruled); Q3-b `check --preregistration` without a sha exits 5.
+    Carried to the C1 arm: confirm the driver's own processes do not trip check 8 (erratum §5 note 2).

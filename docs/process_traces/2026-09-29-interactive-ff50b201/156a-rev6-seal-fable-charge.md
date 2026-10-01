@@ -1,0 +1,13 @@
+Cold registration gate, Revision 6 SEAL (JouleWise). You are Fable 5.1, judging cold. Read only; write only your verdict file.
+
+Subject: commit bf017893 on branch feat/2026-09-30-revision6-seal, checked out at /Users/edr/code/JouleWise-wt-seal-ff50b201 (its HEAD is 856cb949 = bf017893 merged with main 67a38879; the seal's own diff is `git -C /Users/edr/code/JouleWise-wt-seal-ff50b201 diff 46643f1d bf017893`). Newer uncommitted edits in that worktree belong to a separate running round; ignore any uncommitted change.
+
+Authority: the ruled sealable text docs/process_traces/2026-09-29-interactive-ff50b201/110-rev6-gate/32-revision6-sealable-e1.md (Part A), the ruling 21-coldgate-fable-ruling.md and erratum 31-coldgate-erratum.md in the same directory, and the final-pass note 3 in docs/process_traces/2026-09-29-interactive-ff50b201/153-rev6int-fable-final-pass.md (the only text change allowed beyond filling slots: §6.2(g) check 8 by executable name via `ps -A -o comm=`, spaced names matched, and the driver argv `--wait --timeout-s <s>`, in prose and JSON). The owner approved sealing in advance (00-session-record.md item 46).
+
+Decide:
+Q1. Is the Revision 6 section appended to configs/calibration/preregistration_d079_epoch_25g83_rev1.md exactly Part A, with only slot fills, the status/heading line, and the note-3 edit? Is the note-3 edit a faithful description of what scripts/prewindow_check.sh (check 8) and the driver that invokes it actually do (find the driver call site in code)?
+Q2. Does every pinned value equal what it claims (recompute sha256 yourself), and does each pin point at the artifact the issuer's Revision 6 pin verification authenticates (scripts/issue_calibration_acceptance_generation.py, revision_six_* functions)? Is the ledger head pin (sequence 276) the right first-window pin?
+Q3. The issuer diff: REVISION_SIX_POLICY_SHA256 changed, and revision_six_sessions gained allow_empty used only by revision_six_dry_run; check() now runs the dry run with no named session when a Revision 6 registration is given. Can any of this issue, admit or count something the ruled text does not allow, or read B (rule R11)?
+Q4. The test edits read the pre-Revision-6 prefix for historical tests. Do any of them weaken a guard on Revisions 1-5?
+
+Output: write /private/tmp/claude-501/-Users-edr-code-JouleWise/ff50b201-b458-48cc-8d86-bb1b4bb19e19/scratchpad/fable-seal/verdict.md with, first line, exactly one of `VERDICT: SEAL ACCEPTED` or `VERDICT: SEAL ACCEPTED WITH FINDINGS` or `VERDICT: SEAL REFUSED`, then one short section per question with file:line evidence and any finding marked blocking or non-blocking. Claim nothing you did not execute or read.
