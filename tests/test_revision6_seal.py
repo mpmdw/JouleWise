@@ -50,9 +50,16 @@ class RevisionSixSealTests(unittest.TestCase):
                 self.assertEqual(digest, hashlib.sha256((ROOT / relative).read_bytes()).hexdigest())
         self.assertEqual(pins["cap_cells"], 1710000)
         self.assertEqual(pins["cap_cells"], powermetrics_fiducial.DETECTION_PROJECTION_CELL_BUDGET)
+        # The registration pins the ledger head as it stood before the first window.
+        # Each harvest then advances the live pin (recipe section 6), so the live pin
+        # equals the registered one until C1 is harvested and only moves forward after.
         head = json.loads((ROOT / "configs/calibration/calibration_ledger_head.json").read_bytes())
-        self.assertEqual(pins["ledger_head_pin_at_first_window"],
-                         {"sequence": head["sequence"], "digest": head["head_digest"]})
+        first = pins["ledger_head_pin_at_first_window"]
+        self.assertEqual(set(first), {"sequence", "digest"})
+        if head["sequence"] == first["sequence"]:
+            self.assertEqual(head["head_digest"], first["digest"])
+        else:
+            self.assertGreater(head["sequence"], first["sequence"])
         for pattern in (issuer._PREREGISTRATION_OS_BUILD, issuer._PREREGISTRATION_POWERMETRICS,
                         r"\bchain digest\s+([0-9a-f]{64})\b"):
             self.assertEqual(len(re.findall(pattern, raw.decode())), 1)

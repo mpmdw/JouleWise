@@ -75,22 +75,45 @@ def copy_matches(original, copied):
     return comparable(original) == comparable(copied)
 
 
+_EXPORT_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")
+
+
+def wrapper_exports(text):
+    """Read every NAME=value assignment on the wrapper's export lines.
+
+    One export line may carry several assignments (the generator writes
+    `export GIT_OPTIONAL_LOCKS=0 PYTHONDONTWRITEBYTECODE=1`). A word without
+    `=`, a name that is not a shell identifier, or an unquoted shell operator
+    (`;`, `&`, `|`, a redirection) refuses; so does a name exported twice
+    anywhere in the wrapper.
+    """
+    exports = {}
+    for line in text.splitlines():
+        if not line.startswith("export "):
+            continue
+        lexer = shlex.shlex(line, posix=True, punctuation_chars=True)
+        lexer.whitespace_split = True
+        lexer.commenters = ""
+        parts = list(lexer)
+        if len(parts) < 2 or parts[0] != "export":
+            raise HarvestRefusal("nonliteral wrapper export")
+        for word in parts[1:]:
+            key, sep, value = word.partition("=")
+            if not sep or not _EXPORT_NAME.match(key):
+                raise HarvestRefusal("nonliteral wrapper export")
+            if key in exports:
+                raise HarvestRefusal("duplicate wrapper export")
+            exports[key] = value
+    return exports
+
+
 def coordinates(plan, night_root):
     wrapper = Path(plan.chain_path)
     raw = wrapper.read_bytes()
     sidecar = Path(plan.chain_sha256_path).read_text().split()
     if len(sidecar) != 2 or sidecar[0] != digest(raw) or sidecar[1] != wrapper.name:
         raise HarvestRefusal("wrapper authentication failed")
-    exports = {}
-    for line in raw.decode().splitlines():
-        if line.startswith("export "):
-            parts = shlex.split(line)
-            if len(parts) != 2 or "=" not in parts[1]:
-                raise HarvestRefusal("nonliteral wrapper export")
-            key, value = parts[1].split("=", 1)
-            if key in exports:
-                raise HarvestRefusal("duplicate wrapper export")
-            exports[key] = value
+    exports = wrapper_exports(raw.decode())
     for name in ("SESSION_ID", "PLAN", "PLAN_ID", "PLAN_SHA256", "RUNS_ROOT",
                  "CALIBRATION_LEDGER", "LEDGER_HEAD_PIN", "WINDOW_CUSTODY_ROOT"):
         if not exports.get(name):
