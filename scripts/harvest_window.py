@@ -305,8 +305,25 @@ def harvest(args, *, runner=subprocess.run, census=measurement_census, now=time.
     if not any(runs_root == source or source in runs_root.parents for source in sources):
         raise HarvestRefusal("window captures fall outside archived evidence roots")
     head = runner(["git", "-C", str(root), "rev-parse", "HEAD"], capture_output=True, text=True, check=False, timeout=10)
-    if head.returncode or head.stdout.strip() != plan.measurement_head:
-        raise HarvestRefusal("measurement HEAD mismatch")
+    if head.returncode:
+        raise HarvestRefusal("measurement HEAD unavailable")
+    harvest_head = head.stdout.strip()
+    if harvest_head != plan.measurement_head:
+        ancestor = runner(["git", "-C", str(root), "merge-base", "--is-ancestor",
+                           plan.measurement_head, harvest_head],
+                          capture_output=True, text=True, check=False, timeout=10)
+        if ancestor.returncode:
+            raise HarvestRefusal("measurement_head is not an ancestor of harvest HEAD")
+        changed = runner(["git", "-C", str(root), "diff", "--name-only", "--no-renames", "-z",
+                          plan.measurement_head, harvest_head],
+                         capture_output=True, text=True, check=False, timeout=10)
+        if changed.returncode:
+            raise HarvestRefusal("measurement HEAD path comparison failed")
+        allowed = {"configs/calibration/calibration_ledger_head.json",
+                   battery_float.verdict_relative_path(exports["SESSION_ID"])}
+        extra = sorted(set(changed.stdout.split("\0")) - allowed - {""})
+        if extra:
+            raise HarvestRefusal("measurement HEAD changed unauthorized path: " + ", ".join(extra))
     preregistration = args.preregistration.resolve()
     if digest(preregistration.read_bytes()) != args.preregistration_sha256:
         raise HarvestRefusal("pre-registration authentication failed")
@@ -435,6 +452,7 @@ def harvest(args, *, runner=subprocess.run, census=measurement_census, now=time.
     record = {"schema": "joulewise.harvest_window.v1", "plan_id": plan.plan_id,
               "harvest_tool_sha256": digest(Path(__file__).read_bytes()),
               "plan_sha256": digest(plan_raw), "measurement_head": plan.measurement_head,
+              "harvest_head": harvest_head,
               "preregistration_sha256": args.preregistration_sha256,
               "ledger_head": {"sequence": snapshot.head_sequence, "head_digest": snapshot.head_digest},
               "sessions": session_rows, "valid_captures": sum(row["valid"] for row in session_rows),

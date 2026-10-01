@@ -326,18 +326,15 @@ class RegistrationSeamTests(unittest.TestCase):
         ]
         self.assertEqual([], offenders)
 
-    def test_real_pre_registration_refuses_but_d166_passes_c1(self) -> None:
-        """T4 documents the registration seam; it already passes on main.
+    def test_sealed_revision6_and_d166_registrations_pass_c1(self) -> None:
+        """T4: Revision 6's cold ruling admits the sealed preregistration.
 
         Only machine probes are fixtures: registration text and the gate's
         digest constant are real, with no constant mock or live capture.
         """
         root = Path(__file__).resolve().parents[1]
         pre_registration = "configs/calibration/preregistration_d079_epoch_25g83_rev1.md"
-        for path, expected_status in (
-            (pre_registration, "FAIL"),
-            (night_gate.D166_REGISTRATION_PATH, "PASS"),
-        ):
+        for path in (pre_registration, night_gate.D166_REGISTRATION_PATH):
             with self.subTest(path=path):
                 source = FakeProbeSource()
                 registration_path = str(Path(make_plan().measurement_root) / path)
@@ -346,13 +343,12 @@ class RegistrationSeamTests(unittest.TestCase):
                     make_plan(registration_path=path), source.probes()
                 )
                 c1 = next(row for row in receipt.conditions if row.condition_id == "C1")
-                self.assertEqual(c1.status, expected_status)
+                self.assertEqual(c1.status, "PASS")
                 self.assertIn(registration_path, source.read_calls)
-                if expected_status == "FAIL":
-                    self.assertEqual(receipt.refusal.reason, "night_refused_registration")
-                else:
-                    self.assertIsNone(receipt.refusal)
-                    self.assertEqual(c1.measured["detail"], "D-166 registration hash passed")
+                self.assertIsNone(receipt.refusal)
+                sha = hashlib.sha256((root / path).read_bytes()).hexdigest()
+                self.assertEqual(c1.measured["registration_label"],
+                                 night_gate.RULED_REGISTRATIONS[sha]["label"])
 
 
 class NightGateTests(unittest.TestCase):
@@ -1891,11 +1887,13 @@ class EvidenceRegistrationTests(unittest.TestCase):
         # ruling 31 and synthesis 35, which its `ruling` string already names.
         # 2026-09-23 (fix round 1, Fable lens N1): v3 re-serialised in the
         # canonical form v2 uses (sorted keys, indent 2); digest re-pinned.
+        # 2026-09-30: add the sealed Revision 6 digest under cold registration
+        # gate REV6-25G83-01 and erratum REV6-25G83-01-E1 (GAP 1).
         # Any membership/metadata amendment needs its cold-gate ruling and a
         # dated update here.
         serialized = json.dumps(night_gate.RULED_REGISTRATIONS, sort_keys=True, separators=(',', ':'))
         self.assertEqual(hashlib.sha256(serialized.encode()).hexdigest(),
-                         '9ad277ce180bc5289e2e29391c20312a95a0847f72ba09bfeb32ade841e851a6')
+                         'e70f35b226fe1f8b768fc93f2fab15206713cf0b629908411585daaa8fec4e76')
 
     def test_the_gate_share_equals_the_registrations_t0_share(self):
         # Fix round 1 (lens N6): ruling 10 makes the GATE constant binding,

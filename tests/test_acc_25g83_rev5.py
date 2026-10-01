@@ -34,7 +34,7 @@ LAUNCH_CONDITION = re.compile(r"template at commit \S+, template digests \S+ and
 
 def registration_with_launch_pins(commit: str, night: str, probe: str) -> str:
     """Derive each seal fixture from the current registration's operating sentence."""
-    text = PREREG.read_text()
+    text = PREREG.read_text().split("# Revision 6 (", 1)[0]
     condition = f"template at commit {commit}, template digests {night} and {probe}."
     result, count = LAUNCH_CONDITION.subn(condition, text)
     if count != 1:

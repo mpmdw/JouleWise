@@ -473,10 +473,11 @@ def check(args: argparse.Namespace) -> int:
         print(line)
     # The epoch-watch output above is byte-identical whether or not a
     # registration was named; the dry run only ever APPENDS.
-    # An empty `--session-ids` value names no session, so it is not a request
-    # for a dry run; it must leave the watch output byte-identical.
+    # An empty `--session-ids` value leaves the historical watch unchanged.
+    # A named Revision 6 registration also authenticates its prospective
+    # zero-session state before the first window.
     named = [session_id for session_id in args.session_ids if session_id]
-    if not named:
+    if not named and not (args.preregistration is not None and "# Revision 6 (" in text):
         return 3 if errors or mismatches or preregistration_failed else 0
     digest = (args.preregistration_sha256 if args.preregistration is not None
               and not any(line.startswith("pre-registration: unusable")
@@ -592,7 +593,7 @@ WITHIN_WINDOW_TWO_DRAW_PREDICTION_RULE = (
 # Canonical sha256 of the sealed E1 declaration's policy objects (listed at
 # revision_six_declaration). Pins vary at seal; registered rules do not. An
 # unsupported sealed amendment refuses instead of executing a different rule.
-REVISION_SIX_POLICY_SHA256 = "92de7d3d43486e029a63c1adc2f30252484a4691570e58aa5d8223b9bcb771b1"
+REVISION_SIX_POLICY_SHA256 = "dfa1ec736de6a9a8cab71a7d2e0bd0732df3ad733af8a2908fa58e4ceb0bfeff"
 REVISION_SIX_SESSION_ID_PATTERN = r"^d079-epoch-25g83-r6-[0-9]{8}T[0-9]{4}Z$"
 # The pre-registration (`~:131-134`) forbids issuing on a df whose quantile is
 # not PROVEN in the artifact's own record.  Two independent bounds, both
@@ -1183,6 +1184,7 @@ def revision_six_declaration(text: str) -> Mapping[str, Any]:
 
 def revision_six_sessions(
     snapshot: Any, session_ids: Sequence[str], declaration: Mapping[str, Any],
+    *, allow_empty: bool = False,
 ) -> tuple[Any, ...]:
     """Bind every prospective session to the pinned ledger prefix, blind."""
     head = declaration["pins"]["ledger_head_pin_at_first_window"]
@@ -1199,7 +1201,7 @@ def revision_six_sessions(
            for session in ordered):
         raise PrepareRefusal("Revision 6 session-id pattern mismatch or Revision 5/6 mixture")
     refuse_repeated_sessions(session_ids)
-    if set(session_ids) != {session.session_id for session in ordered} or not ordered:
+    if set(session_ids) != {session.session_id for session in ordered} or (not ordered and not allow_empty):
         raise PrepareRefusal("Revision 6 requires every session after the first-window ledger head pin")
     for session in ordered:
         if session.state not in TERMINAL_SESSION_STATES:
@@ -1742,7 +1744,8 @@ def revision_six_dry_run(snapshot, session_ids, declaration, harvest_paths, *, r
     try:
         refuse_ledger(snapshot)
         refuse_named_both(session_ids, confounded_ids)
-        sessions = revision_six_sessions(snapshot, (*session_ids, *confounded_ids), declaration)
+        sessions = revision_six_sessions(snapshot, (*session_ids, *confounded_ids), declaration,
+                                         allow_empty=True)
         records = revision_six_records(harvest_paths, sessions, declaration, repo_root=repo_root)
         window_ids = [session.session_id for session in sessions if session.finalized_slots]
         epoch = authenticate_battery_epoch(snapshot, window_ids, repo_root=repo_root,
