@@ -83,15 +83,19 @@ def wrapper_exports(text):
 
     One export line may carry several assignments (the generator writes
     `export GIT_OPTIONAL_LOCKS=0 PYTHONDONTWRITEBYTECODE=1`). A word without
-    `=`, or a name that is not a shell identifier, refuses; so does a name
-    exported twice anywhere in the wrapper.
+    `=`, a name that is not a shell identifier, or an unquoted shell operator
+    (`;`, `&`, `|`, a redirection) refuses; so does a name exported twice
+    anywhere in the wrapper.
     """
     exports = {}
     for line in text.splitlines():
         if not line.startswith("export "):
             continue
-        parts = shlex.split(line)
-        if len(parts) < 2:
+        lexer = shlex.shlex(line, posix=True, punctuation_chars=True)
+        lexer.whitespace_split = True
+        lexer.commenters = ""
+        parts = list(lexer)
+        if len(parts) < 2 or parts[0] != "export":
             raise HarvestRefusal("nonliteral wrapper export")
         for word in parts[1:]:
             key, sep, value = word.partition("=")

@@ -681,7 +681,11 @@ class WrapperExportParseTests(unittest.TestCase):
                              ("export A-B=x\n", "nonliteral wrapper export"),
                              ("export \n", "nonliteral wrapper export"),
                              ("export A=1 A=2\n", "duplicate wrapper export"),
-                             ("export A=1 B=2\nexport B=3\n", "duplicate wrapper export")):
+                             ("export A=1 B=2\nexport B=3\n", "duplicate wrapper export"),
+                             ("export A=1;export B=2\n", "nonliteral wrapper export"),
+                             ("export A=1 && B=2\n", "nonliteral wrapper export"),
+                             ("export A=1 >x\n", "nonliteral wrapper export"),
+                             ("export A=1 # note\n", "nonliteral wrapper export")):
             with self.subTest(text=text):
                 with self.assertRaises(harvest.HarvestRefusal) as caught:
                     harvest.wrapper_exports(text)
@@ -690,6 +694,9 @@ class WrapperExportParseTests(unittest.TestCase):
     def test_single_assignment_lines_unchanged(self):
         self.assertEqual(harvest.wrapper_exports("export A='x y'\nexport B=2\necho export\n"),
                          {"A": "x y", "B": "2"})
+        # Quoted operators are literal value bytes, not shell syntax.
+        self.assertEqual(harvest.wrapper_exports("export A='a;b|c' B=\"x&y\"\n"),
+                         {"A": "a;b|c", "B": "x&y"})
 
 
 if __name__ == "__main__":
