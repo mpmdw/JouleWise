@@ -674,7 +674,7 @@ def evaluate_g4(bundle: EvidenceBundle) -> GateResult:
             first_off.get("exit_code") != 0
             or not isinstance(first_off.get("argv"), list)
             or not t0_author._systemsetup_argv(first_off["argv"], ("-setusingnetworktime", "off"))
-            or first_off.get("stdout") != readiness.EXPECTED_NETWORK_TIME_OFF_STDOUT
+            or not readiness.network_time_off_stdout_admitted(first_off.get("stdout"))
         ):
             raise ValueError("first exact-Off command result is not mechanically green")
         second_off_artifact, second_off_source = _source_for_row(bundle, "clock.network_time_off")
@@ -700,7 +700,7 @@ def evaluate_g4(bundle: EvidenceBundle) -> GateResult:
                 second.get("exit_code") != 0
                 or not isinstance(second.get("argv"), list)
                 or not t0_author._systemsetup_argv(second["argv"], ("-setusingnetworktime", "off"))
-                or second.get("stdout") != readiness.EXPECTED_NETWORK_TIME_OFF_STDOUT
+                or not readiness.network_time_off_stdout_admitted(second.get("stdout"))
             ):
                 raise ValueError("second exact-Off command result is not mechanically green")
     except (ValueError, readiness.ArmReadinessError, t0_author.T0EvidenceAuthoringError) as exc:

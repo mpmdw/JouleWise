@@ -639,7 +639,7 @@ def _validate_result(
     context: CaptureContext, step_id: str, stdout: str, stderr: str
 ) -> None:
     if step_id == "clock-disable":
-        if stdout != readiness.EXPECTED_NETWORK_TIME_OFF_STDOUT:
+        if not readiness.network_time_off_stdout_admitted(stdout):
             raise _refuse(
                 "evidence_author_t0_capture_result_invalid",
                 "E-5 stdout does not exactly prove the ruled Off postcondition",

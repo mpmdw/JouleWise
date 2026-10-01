@@ -28,6 +28,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Iterable, Mapping, Sequence
 
 from joulewise import clock_reference as _clock_reference
+from joulewise import network_time_off as _network_time_off
 from joulewise.identity_pins import (
     IDENTITY_PIN_PROJECTION_RECEIPT_SCHEMA,
     IDENTITY_PIN_PROJECTION_REASON_CODES,
@@ -101,8 +102,10 @@ CONTRACT_ID = "D-134"
 ROW_REGISTRY_RELATIVE_PATH = Path("configs/arm_readiness/d117_row_registry_v2.json")
 _T0_EVIDENCE_SOURCE_SCHEMA = "joulewise.arm_readiness_t0_evidence_source.v1"
 _T0_INPUT_DIRECTORY = "arm_readiness.t0.inputs"
-EXPECTED_NETWORK_TIME_OFF_STDOUT = "setUsingNetworkTime: Off\n"
-"""Ed must bench-verify these exact sudo bytes before this value gates a window."""
+# One source for the OFF wording: the receipt module.  Comparators must call
+# ``network_time_off_stdout_admitted``; never compare stdout to the constant.
+EXPECTED_NETWORK_TIME_OFF_STDOUT = _network_time_off.EXPECTED_STDOUT
+network_time_off_stdout_admitted = _network_time_off.off_stdout_admitted
 # Launch-recipe receipts and sources are canonical JSON records measured in
 # kilobytes.  Freeze generous ceilings here so reconciliation never slurps an
 # attacker-sized artifact before its digest can fail closed.
