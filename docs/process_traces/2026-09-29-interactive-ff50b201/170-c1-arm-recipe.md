@@ -574,6 +574,17 @@ The last check is the plan-span boundary the watchdog uses; both lines must read
 
 STOP release: `/Users/edr/night-custody/magistrate/STOP` holds the headless magistrate. Remove it only after the interactive session is closed and the plan span has begun (**t0 - 8 min or later**: the watchdog fences relaunch from then, so no magistrate starts before the window ends). Earlier removal can relaunch a magistrate while the arm is still being worked (owner action: `rm /Users/edr/night-custody/magistrate/STOP`). The first magistrate activation after the window finds its terminal state at t0 + 9300 s or later.
 
+## 5.1 Pre-arm admission probe (added 2026-09-30 after C1 refused at t0; run before section 4's notice)
+
+The t0 driver runs the passwordless network-time setter and admits its stdout. Run the same command and the same admission now, so a wording or permission mismatch fails hours before t0. The setter is idempotent and network time stays Off between windows, so this changes no machine state. Its output is a probe, not the window's receipt; the window's one receipt is still written at t0.
+
+```zsh
+OUT="$(/usr/bin/sudo -n /usr/sbin/systemsetup -setusingnetworktime off 2>&1)"; RC=$?
+print -r -- "rc=$RC stdout=$OUT"
+"$PY" -B -c 'import sys; from joulewise.network_time_off import off_stdout_admitted as ok; sys.exit(0 if int(sys.argv[1]) == 0 and ok(sys.argv[2]) else 3)' "$RC" "$OUT" \
+  && print "OFF probe admitted" || print "REFUSED: OFF probe not admitted (pre-start: refusal route R3)"
+```
+
 ## 6. Harvest one window (the magistrate runs this, in this order; it is the light-tier path)
 
 All commands run against the window just finished. `source` its frozen env first. The window is terminal when `night/result.json` and `night/courier.sent` exist and `now > T0_EPOCH_S + 9300` (`night/chain.exited` exists unless the session was null). Run on Opus headless with no other agent alive; no measured value is read.
@@ -658,7 +669,7 @@ Status 2026-09-30: GAP 1, 2 and 3 are fixed by PR #447 (night gate admits the se
 5. **Rev 6 step scripts are not tracked.** Only the W1/W2 Revision 5 bench scripts are in the repo; the ones in §2 exist only in this file. Step0 is checked against nothing on main.
 6. **No v4 plan.** `--new-plan` needs a sealed quiet-admission policy and a ruled `cutoff_authority`; none is tracked. The v2 route in §2 is what W1/W2 used and Revision 6 §6.2 allows it.
 7. **Epoch watch not scripted.** W2's `issue_calibration_acceptance_generation.py check` expectations (rc 3, os_build mismatch, sampler digest lines) belonged to Revision 5; there is no Revision 6 expected-output spec. Step2 replaces it with the declaration comparisons (identity epoch, every pin, cell budget, ledger pin), which are stronger.
-8. **Passwordless OFF cannot be tested at arm.** `systemsetup -get...` needs a password; the only proof is the driver's receipt at t0. A failure is a null session (`probe_error`), not a burned capture. Optional read-only hint: `sudo -n -l` and look for `setusingnetworktime`.
+8. **Passwordless OFF is tested at arm (corrected 2026-09-30).** The getter needs a password, but the setter is passwordless and idempotent; section 5.1 runs it and admits its stdout. C1 was refused at t0 because this line said it could not be tested and the admission accepted only the On-to-Off wording while the Mac was already Off.
 9. **STOP file.** `step4` requires no `standdown.request`, and with the owner-pause STOP present it needs the owner's recorded words (`owner-arm-auth.txt`). Whether the 09-29 instruction to resume work already covers this is Ed's or the orchestrator's call.
 10. **Null session timing.** A refused start has no `chain_start_admitted`; no command or rule says what `--prior-started-epoch-s` is after it. §7 stops on it; the brief halts on any null session.
 11. **Spacing.** Discovery and harvest both open at t0 + 9300 s; with harvest, PR and CI, the next arm's 5400 s lead and its own t0 the start-to-start interval is about 4 hours, not the 2.5 of the cadence audit, unless `window_max_s` is trimmed (changes plan digests; Ed's call).
