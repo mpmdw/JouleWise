@@ -37,7 +37,7 @@ class IssuerCorpusRootTests(unittest.TestCase):
             encoding="utf-8",
         )
         cls.prereg_sha = hashlib.sha256(cls.prereg.read_bytes()).hexdigest()
-        sealed = registration.read_text(encoding="utf-8")
+        sealed = registration.read_text(encoding="utf-8").split("# Revision 6 (", 1)[0]
         sealed = sealed.replace("<PR-L-MERGE-SHA>", "a" * 40)
         sealed = sealed.replace("<TEMPLATE-SHA256:night>", "b" * 64)
         sealed = sealed.replace("<TEMPLATE-SHA256:probe>", "c" * 64)

@@ -152,7 +152,7 @@ class DeskEpochWatchTests(unittest.TestCase):
         `or preregistration_failed` from the rc condition fails this test.
         """
 
-        text = PREREGISTRATION.read_text(encoding="utf-8")
+        text = PREREGISTRATION.read_text(encoding="utf-8").split("# Revision 6 (", 1)[0]
         registered = issuer.preregistration_epoch_pins(text)[1]
         rotated = self.root / "preregistration_rotated.md"
         rotated.write_text(text.replace(registered, "0" * 64), encoding="utf-8")
@@ -1802,8 +1802,8 @@ class PrepareCandidateTest(unittest.TestCase):
             ["check", "--ledger", str(fixture["ledger"]),
              "--head-pin", str(fixture["pin"]), "--acceptance", str(R6),
              "--repo-root", str(fixture["root"]),
-             "--preregistration", str(PREREGISTRATION),
-             "--preregistration-sha256", PREREGISTRATION_SHA256, *extra]
+             "--preregistration", str(self.historical_preregistration),
+             "--preregistration-sha256", self.historical_preregistration_sha256, *extra]
         )
         with redirect_stdout(stream):
             code = issuer.check(args)
@@ -1816,7 +1816,13 @@ class PrepareCandidateTest(unittest.TestCase):
         the epoch-watch table still prints in full above it.
         """
 
-        code, text = self.check_exit(self.wide, "--session-ids", SESSION)
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = build_derivation_ledger(
+                Path(tmp) / "historical-watch", [Slot(v) for v in _grid(20, "0.0200", "0.0006")],
+                verdict_records=True,
+                preregistration_sha256=self.historical_preregistration_sha256,
+            )
+            code, text = self.check_exit(fixture, "--session-ids", SESSION)
         self.assertEqual(code, 0)
         self.assertIn("MISMATCH", text)
         self.assertIn("Desk epoch watch", text)
@@ -2310,7 +2316,7 @@ class BatteryFloatRevisionFiveTests(unittest.TestCase):
         cls._tmp = tempfile.TemporaryDirectory()
         cls.addClassCleanup(cls._tmp.cleanup)
         cls.root = Path(cls._tmp.name)
-        text = PREREGISTRATION.read_text(encoding="utf-8")
+        text = PREREGISTRATION.read_text(encoding="utf-8").split("# Revision 6 (", 1)[0]
         text = text.replace("<PR-L-MERGE-SHA>", "a" * 40)
         text = text.replace("<TEMPLATE-SHA256:night>", "b" * 64)
         text = text.replace("<TEMPLATE-SHA256:probe>", "c" * 64)

@@ -52,6 +52,9 @@ D166_REGISTRATION_SHA256 = (
 D166_REGISTRATION_PATH = (
     "configs/campaigns/d117_contrast_v5/d166_dominance_criterion_registration.json"
 )
+REV6_25G83_REGISTRATION_SHA256 = (
+    "d0034003a7e61683696b88662825d909dc4bb8ad23678edad6bbc8dfd4877b78"
+)
 # 2026-09-22 (A269 cold gate 10 Q2(a), synthesised in 15): the current pilot
 # registration is v2.  It adds ``slot_pitch_s`` (the schedule pitch the cure-2
 # cadence reads), ``start_drift_abort_s`` (the in-chain abort threshold) and
@@ -92,6 +95,14 @@ EVIDENCE_CHAIN_PATH = kind_row("quiet_predicate_evidence").chain_source_path
 RULED_REGISTRATIONS = {
     D166_REGISTRATION_SHA256: {"label": "D-166 dominance criterion", "ruling": "D-165/D-166", "binds_chain": False,
         "records": ("docs/decision_log.md#D-165", "docs/decision_log.md#D-166")},
+    REV6_25G83_REGISTRATION_SHA256: {
+        "label": "D-079 epoch 25G83 Revision 6 (sealed 2026-09-30)",
+        "ruling": "cold registration gate REV6-25G83-01 and erratum REV6-25G83-01-E1",
+        # This flag selects the QPE JSON chain_source_sha256 interface, not
+        # Revision 6's Markdown declaration and derivation-chain pin.
+        "binds_chain": False,
+        "records": ("docs/process_traces/2026-09-29-interactive-ff50b201/110-rev6-gate/21-coldgate-fable-ruling.md",
+                    "docs/process_traces/2026-09-29-interactive-ff50b201/110-rev6-gate/31-coldgate-erratum.md")},
     QPE01_PILOT_REGISTRATION_V1_SHA256: {"label": "QPE-01 idle-variance pilot protocol v1",
         "ruling": "cold gate 10 Q1/Q2 (2026-09-19); sizing ruling 46b", "binds_chain": True,
         "superseded_by": QPE01_PILOT_REGISTRATION_V2_SHA256,
