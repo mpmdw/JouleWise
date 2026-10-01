@@ -583,7 +583,7 @@ source "/Users/edr/night-plan-staging/$PLAN_ID/arm-env.zsh"
 cd "$MEASUREMENT_ROOT"
 test -f "$NIGHT_ROOT/night/result.json" && test -f "$NIGHT_ROOT/night/courier.sent"
 python3 -c 'import os,sys,time; sys.exit(0 if time.time() > int(os.environ["T0_EPOCH_S"]) + 9300 else 1)'
-test "$(git -C "$MEASUREMENT_ROOT" rev-parse HEAD)" = "$H"     # the clone is still at H (GAP 2: the commit below moves it)
+test "$(git -C "$MEASUREMENT_ROOT" rev-parse HEAD)" = "$H"     # the clone is still at H before the pin/verdict commit (harvest then accepts H plus that commit only: GAP 2, fixed in #447)
 ( cd "$NIGHT_ROOT" && shasum -a 256 -c chain.zsh.sha256 )
 RL=("$PY" -B scripts/recover_calibration_ledger.py --ledger "$CALIBRATION_LEDGER" --head-pin "$LEDGER_HEAD_PIN")
 PIN_JSON="$("${RL[@]}" terminal-pin --session-id "$SESSION_ID")"; print -r -- "$PIN_JSON"
@@ -608,12 +608,10 @@ IDS=(); for s in ${=PRIOR_SESSION_LIST:-} "$SESSION_ID"; do IDS+=(--session-ids 
 "$PY" -c 'import json,sys; h=json.load(open(sys.argv[1])); print(h["next_window"]["verdict"], h["valid_captures"], h["stop_flags"], h["window_end"]["epoch_s"])' "$ARCH/harvest.json"
 ```
 
-Land the records (light tier, ruling 52(3); these bytes must be in HEAD's tree of the next clone because the next harvest requires them committed, GAP 3):
+Land the records (light tier, ruling 52(3); these bytes must be in HEAD's tree of the next clone because the next harvest requires them committed; GAP 3, fixed in #447):
 
 ```zsh
-REC="docs/process_traces/2026-09-30-rev6-block1/$SESSION_ID"; mkdir -p "$REC"
-cp "$ARCH/custody-root/harvest/r9_window.json" "$ARCH/custody-root/night/start_conditions.json" "$ARCH/harvest.json" "$REC/"
-git add "$REC"; git commit -m "Harvest $SESSION_ID: R9 window record, start-condition record and harvest record"
+"$PY" -B scripts/land_window_records.py --harvest "$ARCH/harvest.json" --repo-root "$MEASUREMENT_ROOT"   # prints the landed paths and the commit sha; rc 3 = REFUSED: HALT
 git push origin "HEAD:refs/heads/harvest/$SESSION_ID"
 # PR body: Tier: light; Impact (i)-(vi) each "No: records what code decided, changes no code or number (orchestrator ruling 52(3), record 00-session-record.md item 52)";
 # rows 1, 4, 5 = N/A (light tier); row 2 = N/A (docs only); row 3 = RUN <head sha>. Never without the ledger (memory: pr-body-gate-ledger-required).
@@ -648,6 +646,9 @@ PY
 Then: `NEW_H` = `git ls-remote https://github.com/mpmdw/JouleWise refs/heads/main` (must contain the merged pin commit: step2 of the next arm and the clone's head-equals-pin check both refuse otherwise), `NEW_LABEL` c2 or c3, `NEW_PREREG` unchanged, `NEW_T0` from §1 with `LEAD_S=5400`, and `PRIOR_HARVEST_LIST` / `PRIOR_SESSION_LIST` for the next harvest are the harvest.json paths and session ids of every earlier window in ledger order. Then run §3 to §5 again. No cold gate, no lens, no new notice beyond the one `retry_allowed` needs.
 
 ## 8. GAPs
+
+Status 2026-09-30: GAP 1, 2 and 3 are fixed by PR #447 (night gate admits the sealed registration; harvest accepts H plus the pin/verdict commit; `scripts/land_window_records.py`). The check-8 hazard found at the bench: the ChatGPT desktop app runs `Codex (Renderer)`, `Codex (Service)` and `codex` helpers, which check 8 flags (correctly), so ChatGPT.app must be quit before t0 with the interactive session. `check --preregistration` without `--preregistration-sha256` now exits 5 on the sealed file (Fable 156 Q3-b).
+
 
 1. **Registration acceptance (blocks the arm at t0).** The night gate accepts only digests in `RULED_REGISTRATIONS` (`joulewise/night_gate.py`); the sealed Revision 6 file is not there, so a plan pointing at it is refused at t0 (`night_refused_registration`, a null session after the OFF receipt and dwell). A plan pointing at the D-166 file passes the gate, but `harvest_window.py` (lines 316-320) then refuses every Revision 6 harvest ("Revision 6 plan registration digest disagrees with harvest"). One of the two must change in the seal or a follow-up before C1 arms: code in a measurement path, full tier. Step2 fails closed on it.
 2. **Harvest refuses its own prerequisite (blocks the first harvest, not the arm).** `harvest_window.py` requires the measurement clone's `HEAD` to equal `plan.measurement_head` (= H), while `battery_float.load_committed_verdict` requires the pin and verdict committed at that clone's `HEAD`. After the §6 commit `HEAD` is not H, so the harvest prints "measurement HEAD mismatch". The tests pass because their fixtures commit before building the plan. Needs a code fix (for example: `measurement_head` must be an ancestor of HEAD and the only paths changed since are the pin and the verdict) before C1's harvest. The magistrate must halt on it, never edit.
