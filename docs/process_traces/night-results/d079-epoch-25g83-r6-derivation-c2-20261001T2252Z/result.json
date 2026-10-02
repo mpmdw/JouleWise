@@ -1,0 +1,71 @@
+{
+  "aborted_reason": null,
+  "artifacts": [
+    {
+      "path": "night.log",
+      "sha256": "4c827b635144080e44216275ee1c49df461e3faeb9b4babf988bc3fd87ae8288"
+    },
+    {
+      "path": "night/receipt.json",
+      "sha256": "9b2900fefa877ce1c6b8c22a64b819b7404f87af9b16447a3ae39f66195cbad3"
+    },
+    {
+      "path": "night/network_time_off.json",
+      "sha256": "09e0a209d3a0088aeaec05eac29d6824497f8a0e068d6448e956da247a194782"
+    },
+    {
+      "path": "start_conditions_manifest.json",
+      "sha256": "a14b2e990cf71554731e3f8f0471a484d9ac98019103a0df85b52e8eef5b864e"
+    },
+    {
+      "path": "night/start_conditions.json",
+      "sha256": "e46d5fcedf00b8e0a4112c30c3aed15403b6d17f6af3348cd457dba257263eb5"
+    },
+    {
+      "path": "night/clean_dwell.json",
+      "sha256": "615a0700fee29f32b5d9bdf0d9ed993841cb2d301cfbfa8802fdb8054a398e08"
+    },
+    {
+      "path": "night/clean_dwell.output.txt",
+      "sha256": "72f42b6712951615b283346bf9888e502354165b05e8e29fd83b8bc0e5b512dc"
+    },
+    {
+      "path": "night/chain.started",
+      "sha256": "a2d765b5e2b47d6b5de62379620aec76c5b382b65b939fa5b49e70edd9250d7d"
+    },
+    {
+      "path": "night/chain.exited",
+      "sha256": "4a92a57932cde0ad021ac8127bc624236a2d0dfe780ae347c28770c7a0d20073"
+    },
+    {
+      "path": "night/censuses.jsonl",
+      "sha256": "b6234e7bedbc17c6b791aec0e8d67ae12a7eb1034703e8c8787b14c651caffd6"
+    },
+    {
+      "path": "night/chain.stdout.log",
+      "sha256": "3f1bc2e94a299380e0ecd37a42983ec0c79d3eef7bbcb732c50ce4338187a486"
+    },
+    {
+      "path": "night/chain.stderr.log",
+      "sha256": "0556b5fea6ef50e09fbb3b91f30df3f660df08c93582a94eedc64dde12e3846b"
+    }
+  ],
+  "calibration_code": null,
+  "calibration_refusal": null,
+  "census_count": 248,
+  "census_hits": [],
+  "chain_exit_code": 0,
+  "chain_sha256": "e19d86cb0e45914a0969c818d80e7d8a83e9291b576d390476e9c670506be911",
+  "ended_epoch_s": 1790903182.822079,
+  "ended_monotonic_ns": 1124745023013125,
+  "evidence": {
+    "calibration_refusal": null
+  },
+  "plan_id": "d079-epoch-25g83-r6-derivation-c2-20261001T2252Z",
+  "receipt_class": "DIAGNOSTIC_NO_PACK",
+  "refusal_documents": [],
+  "schema": "joulewise.unattended_night_result.v1",
+  "started_epoch_s": 1790895121.1721869,
+  "started_monotonic_ns": 1116683347592125,
+  "verdict": "GO"
+}
