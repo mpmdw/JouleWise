@@ -1,0 +1,14 @@
+The ruling is complete and written. Nothing else remains to request.
+
+**Ruling: COLD SCIENCE GATE: ADMIT**, written to `docs/process_traces/rev6-derivation-block1/packet/RULING-judge.md`. It is the only file changed in the worktree.
+
+**What I verified, by re-derivation from primary artifacts:**
+
+- **Membership.** The ledger (chain-linked, all 376 receipt digests recompute, head equals pin) shows exactly two derivation sessions opened after the pinned head, each with 12 declared and 12 valid finalized slots and no abort. All 24 members' manifest and evidence bytes hash to the ledger rows and the candidate. Every raw `b_fiducial_s` lexeme matches the ledger and candidate. Every clock anchor is anchor-v3, resolved. All median frames lie within 100 to 150 ms. The 23 valid 25G83 rows outside the sessions are exactly the set-aside registry rows, so no foreign row exists. The sanctioned verify-members run gives 24 PASS.
+- **Statistics.** Min, max, range, mean, sample SD, per-window figures, s_within, ICC, rho1 and the median-range ratio all recompute exactly in Decimal.
+- **Quantiles and predictions.** My own closed-form Student-t code (own arctan, Machin pi, bisection, no shared code with the issuer) matches all four published quantiles to all 20 places. The three binary64 products reproduce exactly.
+- **Operatives.** S = 0.014531, C = 0.01550217418713139 (set by the window-blocked Q99), excess 0.00097117418713139, level screen 0.036462861644980, all equal to the candidate. Both derivation digests recompute with the issuer's canonicalization.
+- **Refusal triggers.** None should have fired: no B above 0.25 s or 0.075 s, no exclusions, all five R9 clauses true slot by slot, both battery verdicts pass from raw ioreg bytes, every pin matches the sealed value, count rule replays to CLOSE_AND_DERIVE, and blindness ordering of commits holds.
+- **Diagnostics.** Screen challenge count 4 is recorded as a diagnostic, not a veto, as Revision 5 and 6 require.
+
+**Non-blocking observations recorded for the D-138 gate**, the first being the one judgment call: both windows' network-time receipts read "Network Time is already off." while the sealed registration text says exactly "setUsingNetworkTime: Off". The driver's recognizer was changed after the seal to accept both macOS wordings of the OFF end state, and the physical condition is met with wide margin. I ruled this does not defeat window admission, since the sealed text's own "stays OFF" requirement makes the "already off" wording unavoidable without the optional resync, but the wording gap should be closed by erratum or ruling before issuance. The other observations are the vacuous thermal check on this build, two zero-capture refusals preceding C1, the gitignored chain logs missing from the committed packet, absolute paths embedded in the R9 record, and a selection string that omits the frame-range condition. None changes a member, statistic or operative.

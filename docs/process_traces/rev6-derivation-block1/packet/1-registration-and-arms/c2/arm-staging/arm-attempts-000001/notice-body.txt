@@ -1,0 +1,47 @@
+To: claude2.glaring610@passmail.net
+Subject: NIGHT NOTICE — d079-epoch-25g83-r6-derivation-c2-20261001T2252Z (DIAGNOSTIC_NO_PACK) — attempt 1
+
+Ed,
+
+No action is needed unless you want to stop this window; reply NO to this message (or post NO on a directive issue) and it is stopped. Your NO overrides.
+
+What this is. Window C2 of the calibration campaign registered as Revision 6 (sealed registration sha256 d0034003a7e61683696b88662825d909dc4bb8ad23678edad6bbc8dfd4877b78). A window is one unattended measurement run: 12 captures of the Mac's power sampler (powermetrics) while the machine idles with no agent or other work on it. Revision 6 allows windows back to back (no 6 hour gap), up to 3 counting windows plus one replacement; each window's own blind checks decide whether another follows.
+Why. Two things are being tested at once: the search limit of 1,710,000 candidate timing positions per capture (raised from 165,000 because 8 of the 24 W1/W2 captures hit the old limit), and whether the 12 or more valid captures the new calibration needs can be collected. The decision after each window is made from counts only, never from the measured values.
+Network time is OFF (set 2026-09-29) and the driver re-issues and waits 600 s on it at the window's start; the machine must also be clean for 600 s (no busy daemons, load at most 2.0, AC power, no agent process in the process list) before the chain starts.
+Prior window: d079-epoch-25g83-r6-20261001T0617Z; its harvest /Users/edr/night-archive/harvest-d079-epoch-25g83-r6-derivation-c1-20261001T0617Z/harvest.json decided NEXT_WINDOW (the start-conditions manifest pins that decision by digest).
+Ledger head at this arm: sequence 326 digest 335b4171e1c2b073f9b346fd56ace769c97c936ce25878844528f329b71bd6de.
+
+Keep every agent session closed and the machine untouched from t0 - 8 minutes through completion. The interactive session must be closed by the REQUEST time below; an announcement does not end a process.
+
+Times (local = UTC):
+  install close EXCLUDED: 2026-10-01T15:42:00-07:00 = 2026-10-01T22:42:00+00:00 (epoch 1790894520.0)
+  REQUEST / interactive closed BEFORE: 2026-10-01T15:44:00-07:00 = 2026-10-01T22:44:00+00:00 (epoch 1790894640.0)
+  TERM: 2026-10-01T15:46:00-07:00 = 2026-10-01T22:46:00+00:00 (epoch 1790894760.0)
+  KILL: 2026-10-01T15:47:00-07:00 = 2026-10-01T22:47:00+00:00 (epoch 1790894820.0)
+  t0 (driver starts: OFF receipt, 600 s dwell, gate): 2026-10-01T15:52:00-07:00 = 2026-10-01T22:52:00+00:00 (epoch 1790895120.0)
+  window end: 2026-10-01T18:22:00-07:00 = 2026-10-02T01:22:00+00:00 (epoch 1790904120.0)
+  completion / harvest opens: 2026-10-01T18:27:00-07:00 = 2026-10-02T01:27:00+00:00 (epoch 1790904420.0)
+  daily dead-man: 2026-10-01T19:27:00-07:00 = 2026-10-02T02:27:00+00:00 (epoch 1790908020.0)
+
+Identifiers:
+  receipt_class: DIAGNOSTIC_NO_PACK   attempt: 1
+  plan_id: d079-epoch-25g83-r6-derivation-c2-20261001T2252Z 
+  session_id: d079-epoch-25g83-r6-20261001T2252Z
+  repo_head = measurement_head = H: f54473f3acaf63aa2e329027bcb2e8bd83579db7
+  clone: /Users/edr/night-custody/measurement/JouleWise-measurement-20261001T2252Z-r6-c2 
+  custody: /Users/edr/night-custody/d079-epoch-25g83-r6-derivation-c2-20261001T2252Z
+  plan sha256: be05b87a5bfa0e8a7ef8858e1e6039cb73de7ca455c203a1529d11ab8c393728  authored_epoch_s: 1790889723.0
+  registration: configs/calibration/preregistration_d079_epoch_25g83_rev1.md sha256 d0034003a7e61683696b88662825d909dc4bb8ad23678edad6bbc8dfd4877b78
+  frozen calibration plan: configs/campaigns/d117_floor_qwen25_1p5b_v3/calibration_plan.json sha256 9ab4776f3c416284d6d01a5a49587eedcdfbcb8ef61428cdc1046e9b9d74a072
+   /Users/edr/night-custody/d079-epoch-25g83-r6-derivation-c2-20261001T2252Z/calibration_plan.json sha256 9ab4776f3c416284d6d01a5a49587eedcdfbcb8ef61428cdc1046e9b9d74a072
+   /Users/edr/night-custody/d079-epoch-25g83-r6-derivation-c2-20261001T2252Z/chain.zsh sha256 e19d86cb0e45914a0969c818d80e7d8a83e9291b576d390476e9c670506be911
+   /Users/edr/night-custody/d079-epoch-25g83-r6-derivation-c2-20261001T2252Z/identity-epoch.json sha256 b8a1094c24d1795e39fc527ce96ba9e1a4ba2bda66d4250f35a462e28a90b607
+   /Users/edr/night-custody/d079-epoch-25g83-r6-derivation-c2-20261001T2252Z/t1-bindings.json sha256 8dcdfb009d9cf6c7d218bf19667ad1b88f6a9747c6822c02fd2997ef9a1e9d98
+   /Users/edr/night-custody/d079-epoch-25g83-r6-derivation-c2-20261001T2252Z/start_conditions_manifest.json sha256 a14b2e990cf71554731e3f8f0471a484d9ac98019103a0df85b52e8eef5b864e
+   /Users/edr/night-custody/measurement/JouleWise-measurement-20261001T2252Z-r6-c2/scripts/night_chains/calibration_derivation_only.zsh sha256 b5beea464d392621631d9e5060e2c63c804676b28a5b2aea58b714c5cbead6fb
+   /Users/edr/night-custody/measurement/JouleWise-measurement-20261001T2252Z-r6-c2/scripts/prewindow_check.sh sha256 d8458eea588a746fb574dd39430f80d242c6a1c5746f7e6b676f78214bd7c9aa
+   com.joulewise.night ProcessType=Interactive /Users/edr/night-plan-staging/d079-epoch-25g83-r6-derivation-c2-20261001T2252Z/rendered-agents/com.joulewise.night.plist sha256 54ee96a551b13aa09a99d40454ff3fafd97607e4fb01a88cf72e1b6fdbe223a2
+   com.joulewise.night-probe.d079-epoch-25g83-r6-derivation-c2-20261001T2252Z ProcessType=Interactive /Users/edr/night-plan-staging/d079-epoch-25g83-r6-derivation-c2-20261001T2252Z/rendered-agents/com.joulewise.night-probe.d079-epoch-25g83-r6-derivation-c2-20261001T2252Z.plist sha256 fb3bd3f4728c96d99136d2c299aaa08f5d06f34ad191212453475748adc3f0e1
+   com.joulewise.night.deadman ProcessType=Interactive /Users/edr/night-plan-staging/d079-epoch-25g83-r6-derivation-c2-20261001T2252Z/rendered-agents/com.joulewise.night.deadman.plist sha256 5a2cd7e36f70524e718e93db85cd57a7347f086bc0926ce08432f7fbf336fe48
+
+No model runs. No measured value is read before the session is terminal. A refusal at start is a null session, not a window.

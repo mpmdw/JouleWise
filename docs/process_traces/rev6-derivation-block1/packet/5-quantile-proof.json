@@ -1,0 +1,71 @@
+{
+ "source": "2-candidate/candidate_acceptance_25g83_rev6.json",
+ "decimal_derivation.quantile_proof": {
+  "degrees_of_freedom": 23,
+  "probabilities": [
+   "0.975",
+   "0.995"
+  ],
+  "quantiles": {
+   "0.975": "2.06865761041904865151",
+   "0.995": "2.80733568376999900293"
+  },
+  "forward_residuals": {
+   "0.975": "2.400E-80",
+   "0.995": "2.600E-81"
+  },
+  "forward_residual_bound": "1E-30",
+  "closed_form_agreement_digits": {
+   "0.975": 56,
+   "0.995": 56
+  },
+  "closed_form_agreement_bound": 30,
+  "closed_form_method": "Abramowitz & Stegun 26.7.3 (odd df) / 26.7.4 (even df) finite closed form, inverted by bisection; pi by Machin's formula",
+  "precision": 80,
+  "bounds_origin": "issuer-declared bounds, stated in the pre-registration's quantile-proof clause and recorded here in the candidate: a forward residual of at most 1e-30 and agreement of at least 30 significant digits between the two routes, each chosen tighter than the 20 published digits the artifact records and looser than the agreement the implementation realizes"
+ },
+ "decimal_derivation.two_draw_prediction_derivation": {
+  "rule": "prediction_p_two_draw_s = t(p, n-1) * sample_sd_presentation_s * sqrt(2), evaluated in binary64 and recorded as its shortest round-tripping decimal",
+  "degrees_of_freedom": 23,
+  "t_975_quantile": "2.06865761041904865151",
+  "t_995_quantile": "2.80733568376999900293",
+  "quantile_method": "regularized incomplete beta (Lentz continued fraction) inverted by bisection in 80-digit decimal; exact for both even and odd degrees of freedom"
+ },
+ "decimal_derivation.within_window_prediction_derivation": {
+  "n": 24,
+  "K": 2,
+  "degrees_of_freedom": 22,
+  "s_within_presentation_s": {
+   "value": "0.003888840415839957",
+   "label": "rounded_presentation",
+   "rounding_rule": "ROUND_HALF_EVEN to quantum 0.000000000000000001 s"
+  },
+  "prediction_99_within_window_two_draw_s": "0.01550217418713139",
+  "rule": "prediction_p_within_window_two_draw_s = t(p, n-K) * s_within_presentation_s * sqrt(2), evaluated in binary64 and recorded as its shortest round-tripping decimal",
+  "quantile_method": "regularized incomplete beta (Lentz continued fraction) inverted by bisection in 80-digit decimal; exact for both even and odd degrees of freedom",
+  "quantile_proof": {
+   "degrees_of_freedom": 22,
+   "probabilities": [
+    "0.975",
+    "0.995"
+   ],
+   "quantiles": {
+    "0.975": "2.07387306790402616585",
+    "0.995": "2.81875606060014349853"
+   },
+   "forward_residuals": {
+    "0.975": "1.700E-80",
+    "0.995": "1.400E-81"
+   },
+   "forward_residual_bound": "1E-30",
+   "closed_form_agreement_digits": {
+    "0.975": 55,
+    "0.995": 57
+   },
+   "closed_form_agreement_bound": 30,
+   "closed_form_method": "Abramowitz & Stegun 26.7.3 (odd df) / 26.7.4 (even df) finite closed form, inverted by bisection; pi by Machin's formula",
+   "precision": 80,
+   "bounds_origin": "issuer-declared bounds, stated in the pre-registration's quantile-proof clause and recorded here in the candidate: a forward residual of at most 1e-30 and agreement of at least 30 significant digits between the two routes, each chosen tighter than the 20 published digits the artifact records and looser than the agreement the implementation realizes"
+  }
+ }
+}

@@ -1,0 +1,17 @@
+{
+  "com.joulewise.night": {
+    "ProcessType": "Interactive",
+    "path": "/Users/edr/night-plan-staging/d079-epoch-25g83-r6-derivation-c2-20261001T2252Z/rendered-agents/com.joulewise.night.plist",
+    "rendered_plist_sha256": "54ee96a551b13aa09a99d40454ff3fafd97607e4fb01a88cf72e1b6fdbe223a2"
+  },
+  "com.joulewise.night-probe.d079-epoch-25g83-r6-derivation-c2-20261001T2252Z": {
+    "ProcessType": "Interactive",
+    "path": "/Users/edr/night-plan-staging/d079-epoch-25g83-r6-derivation-c2-20261001T2252Z/rendered-agents/com.joulewise.night-probe.d079-epoch-25g83-r6-derivation-c2-20261001T2252Z.plist",
+    "rendered_plist_sha256": "fb3bd3f4728c96d99136d2c299aaa08f5d06f34ad191212453475748adc3f0e1"
+  },
+  "com.joulewise.night.deadman": {
+    "ProcessType": "Interactive",
+    "path": "/Users/edr/night-plan-staging/d079-epoch-25g83-r6-derivation-c2-20261001T2252Z/rendered-agents/com.joulewise.night.deadman.plist",
+    "rendered_plist_sha256": "5a2cd7e36f70524e718e93db85cd57a7347f086bc0926ce08432f7fbf336fe48"
+  }
+}

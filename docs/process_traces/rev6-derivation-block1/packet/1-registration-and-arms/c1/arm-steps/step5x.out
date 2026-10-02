@@ -1,0 +1,7 @@
+-	0	com.joulewise.night
+-	0	com.joulewise.night.deadman
+{"deadman_calendar": {"Hour": 2, "Minute": 52}, "deadman_epoch_s": 1790848320.0, "install_close_epoch_s": 1790834820.0, "install_spans_today": [[1790751600.0, 1790838000.0]], "night_calendar": {"Day": 30, "Hour": 23, "Minute": 17, "Month": 9}, "t0_epoch_s": 1790835420.0}
+plan-identical
+chain.zsh: OK
+t0 1790835420.0 span active before t0-8m? False (expect False)
+span active at t0-8m?    True (expect True)

@@ -1,0 +1,24 @@
+I agree with the judge's ADMIT: the candidate correctly applies the Revision 6 rules to these 24 captures. Both of my files are written, and they are the only changes in the worktree.
+
+**Phase 1** (`REFUTER-independent.md`, verdict YES):
+- **Members:** I checked all 24 against the raw evidence files and the ledger rows. Exactly the right 24 are in, none missing or extra, and no exclusion was due.
+- **Statistics:** min, max, range, mean and SD match the candidate digit for digit. So does the spread inside each window, used for the second Q99.
+- **t values:** my own method shares no maths with the issuer's two methods, and matches all four of its values at the 20 printed decimal places. The degrees of freedom are right: 23 for the plain values and 22 for the within-window one.
+- **S and C:** S = 0.014531. C = 0.01550217418713139, set by the within-window Q99, with the predecessor's ceiling read from the P8 file. All match.
+- **Refusals:** none should have fired, and none did. Four values exceed the old 0.032898… screen. That would have blocked issuance under Revision 1, but Revisions 5 and 6 made it a recorded diagnostic only, and the candidate treats it that way.
+
+**Main finding (F1): the network-time check.** Both windows were admitted with a network-time-OFF record reading `Network Time is already off.` The sealed text requires exactly `setUsingNetworkTime: Off`. The code was changed to accept the second wording in commit `2431dcaa`, about 6 hours after the Revision 6 seal, and the registration was never amended. Network time was in fact off and had been for ≥600 s, so no number moves. But it breaks the sealed wording, so it needs a correction notice (erratum) or written ruling.
+
+**Second finding (F2): missing logs.** Nine `.log` chain logs listed in the packet's manifest are missing from the committed packet, because `.gitignore` excludes them.
+
+**Phase 2** (`REFUTER-on-ruling.md`, first line `REFUTER: AGREE`). The ruling appeared about a minute into polling. Every figure in it matches mine. The judge found both F1 and F2. On F1 it reached the same conclusion I did, and requires an erratum or written ruling before the successor is issued. I also checked the judge's claims that went beyond my Phase 1:
+- all 376 ledger digests recompute;
+- 47 valid and 25 ordinary-invalid 25G83 rows;
+- the thermal check passes only because the `CPU_Speed_Limit` field it reads is empty.
+
+I list three small problems with the ruling, none of which changes the verdict:
+- **Typo:** it prints MSB as 1.36e-5; the true value is 1.36e-8, which is what its own F = 0.0009 implies.
+- **Independence:** its "independent" t-value check uses the same formula family as the issuer's second method; only the code is new.
+- **Voiding sentence:** its F1 reasoning doesn't address §5's line that "a change to any of them voids this revision". The erratum should say why that line doesn't apply.
+
+I did not open the chain logs in the custody folders myself, because my brief limited reads to the member evidence folders. So I could not confirm the judge's slot-by-slot reading of them. It is consistent with everything I did check.

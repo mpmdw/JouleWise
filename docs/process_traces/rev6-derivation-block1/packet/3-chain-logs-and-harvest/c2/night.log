@@ -1,0 +1,7 @@
+2026-10-01T15:52:01.172192-07:00 night driver started
+2026-10-01T16:02:34.661858-07:00 night gate verdict=GO
+2026-10-01T16:02:34.662037-07:00 night chain digest verified
+2026-10-01T18:06:22.831570-07:00 night result verdict=GO
+2026-10-01T18:06:32.105487-07:00 durable record pushed branch=night-results/d079-epoch-25g83-r6-derivation-c2-20261001T2252Z
+2026-10-01T18:07:26.608745-07:00 courier attempt=1 heartbeat=True sent=True
+2026-10-01T18:07:28.344591-07:00 durable record pushed branch=night-results/d079-epoch-25g83-r6-derivation-c2-20261001T2252Z
