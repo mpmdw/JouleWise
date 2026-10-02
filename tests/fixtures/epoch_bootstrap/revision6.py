@@ -36,6 +36,11 @@ def sid(index):
     return f'd079-epoch-25g83-r6-20261001T{index:04d}Z'
 
 
+def night_plan_of(session_id):
+    """The night plan id a window's harvest record carries (distinct from its session id)."""
+    return f'night-{session_id}'
+
+
 def commit(root):
     subprocess.run(['git', '-C', str(root), 'add', '.'], check=True, capture_output=True)
     subprocess.run(['git', '-C', str(root), '-c', 'user.email=fixture@example.invalid', '-c', 'user.name=fixture',
@@ -52,7 +57,7 @@ def window_records(root, session, block, *, previous=None, adverse=False, night_
     start = float(1_800_000_000 + session.capability_sequence * 10_000)
     # Production shape: the night plan's id differs from the ledger session's
     # calibration plan id, and the window's records carry the night plan's.
-    night_plan_id = night_plan_id or f'night-{session.session_id}'
+    night_plan_id = night_plan_id or night_plan_of(session.session_id)
     monotonic = start - 1_700_000_000
     off = {'schema': 'joulewise.network_time_off.v1', 'argv': list(issuer.network_time_off.OFF_ARGV),
            'exit_code': 0, 'stdout': issuer.network_time_off.EXPECTED_STDOUT, 'stderr': 'Error:-99\n',
@@ -115,7 +120,12 @@ def window_records(root, session, block, *, previous=None, adverse=False, night_
     return path
 
 
-def build(root, *, slots=None, second_slots=None, third_slots=None, null_first=False):
+def build(root, *, slots=None, second_slots=None, third_slots=None, null_first=False,
+          corpus_root=False, custody_names=None):
+    """``corpus_root`` puts member custody outside the repository, as production
+    does: ``<root>/night-custody/<night plan id>/runs/instrument_validation/<capture>``,
+    the night plan id being the one each window's harvest record carries.
+    ``custody_names`` overrides a session's directory name (negative tests)."""
     block = declaration()
     pin_files = {"chain": root / 'fixture/scripts/night_chains/calibration_derivation_only.zsh',
                  "validator": root / 'fixture/scripts/validate_powermetrics_fiducial.py',
@@ -138,7 +148,11 @@ def build(root, *, slots=None, second_slots=None, third_slots=None, null_first=F
     prereg_digest = hashlib.sha256(prereg.read_bytes()).hexdigest()
     slots = slots if slots is not None else [Slot('0.025') for _ in range(12)]
     second_slots = second_slots if second_slots is not None else [Slot('0.026') for _ in range(12)]
+    custody_parent = root / 'night-custody' if corpus_root else None
+    names = {sid(i): night_plan_of(sid(i)) for i in (1, 2, 3)}
+    names.update(custody_names or {})
     fixture = build_derivation_ledger(root / 'fixture', slots, session_id=sid(1),
+        custody_parent=custody_parent, custody_names=names if corpus_root else None,
         fill_slots=0 if null_first else None, abort_reason='zero capture refusal' if null_first else None,
         second_session=(sid(2), second_slots), third_session=(sid(3), third_slots) if third_slots is not None else None,
         verdict_records=True, preregistration_sha256=prereg_digest)
@@ -167,6 +181,8 @@ def build(root, *, slots=None, second_slots=None, third_slots=None, null_first=F
     for path in paths:
         argv += ['--harvest-record', str(path)]
     argv += ['--cap-rule-text', str(pin_files['cap_rule_text']), '--roster', str(pin_files['roster'])]
+    if corpus_root:
+        argv += ['--corpus-root', str(custody_parent.resolve())]
     return {'args': issuer.build_parser().parse_args(argv), 'snapshot': snapshot, 'block': block,
             'paths': paths, 'predecessor': predecessor, 'fixture': fixture}
 
