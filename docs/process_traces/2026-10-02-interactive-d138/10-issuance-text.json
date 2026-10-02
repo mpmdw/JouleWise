@@ -1,0 +1,97 @@
+{
+  "reason": "D-138 transaction for identity epoch 25G83, Revision 6 block 1: the candidate d079_calibration_acceptance_v2_n24_25g83_r2, admitted by the cold science gate (ADMIT, refuter AGREE) and by erratum E-NT1 (ADOPT, refuter AGREE), promoted with every derived field unchanged and made the live default.",
+  "required_verification": "complete: cold science gate ADMIT (Claude Fable 5.1) with refuter AGREE (Claude Opus 5.5) on the candidate bytes; cold erratum E-NT1 ADOPT (Claude Fable 5.1) with refuter AGREE (Claude Opus 5.5). The D-138 pull request's merge gates are recorded in its ledger, not in these bytes.",
+  "network_time_provenance": {
+    "disclosure_id": "D1",
+    "text": "Network-time OFF receipts. Both counting windows' receipts (sessions d079-epoch-25g83-r6-20261001T0617Z and d079-epoch-25g83-r6-20261001T2252Z) record exit 0 and the standard output 'Network Time is already off.', empty standard error, the same boot as the first capture and more than 600 s of settling on both clocks. Revision 6 section 5 as sealed named only the other OFF statement, 'setUsingNetworkTime: Off'; the recognizer admitting both was widened in commit 2431dcaa after the seal. Erratum E-NT1 (cold Fable judge ADOPT, Opus refuter AGREE) reads the condition as the OFF end state in either wording; the registered operating condition is unchanged and no number changes.",
+    "erratum": {
+      "id": "E-NT1",
+      "relative_path": "docs/process_traces/2026-10-02-interactive/42-erratum-nt1.md",
+      "file_sha256": "7282cdd8ccaf7d101174c20907919cc1104bc5323e4f66d4bab14be4822211b6"
+    },
+    "receipts": [
+      {
+        "session_id": "d079-epoch-25g83-r6-20261001T0617Z",
+        "relative_path": "docs/process_traces/rev6-derivation-block1/packet/3-chain-logs-and-harvest/c1/night/network_time_off.json",
+        "file_sha256": "243d3796607950fda398abf914dec6e032a391b57ee16e2dfa702a685fbeaf27"
+      },
+      {
+        "session_id": "d079-epoch-25g83-r6-20261001T2252Z",
+        "relative_path": "docs/process_traces/rev6-derivation-block1/packet/3-chain-logs-and-harvest/c2/night/network_time_off.json",
+        "file_sha256": "09e0a209d3a0088aeaec05eac29d6824497f8a0e068d6448e956da247a194782"
+      }
+    ]
+  },
+  "issuance_record": {
+    "source_candidate": {
+      "relative_path": "docs/process_traces/rev6-derivation-block1/candidate_acceptance_25g83_rev6.json",
+      "file_sha256": "aa59ebb25dcb4f1bace8d529d7d96ecf4969fec77ab54a51bac5120272a69884",
+      "derivation_sha256": "677f37ce6e455cfe3a638c4281d84a2f228a5c446b916b92816a7ee8670abcef"
+    },
+    "rulings": [
+      {
+        "id": "SCI-25G83-REV6-B1",
+        "relative_path": "docs/process_traces/rev6-derivation-block1/packet/RULING-judge.md",
+        "file_sha256": "9a3b835597593158cec266a95e1d9e558f639612d918529a8d8c560680a007f1"
+      },
+      {
+        "id": "SCI-25G83-REV6-B1-REFUTER",
+        "relative_path": "docs/process_traces/rev6-derivation-block1/packet/REFUTER-on-ruling.md",
+        "file_sha256": "76f30fc494ae14c3341ee4a13836e3526d21d768734775c2a72d3fcf7b45c8b6"
+      },
+      {
+        "id": "E-NT1",
+        "relative_path": "docs/process_traces/2026-10-02-interactive/41-erratum-nt1-ruling.md",
+        "file_sha256": "a3c04696d702d0c340b07afa228969a42f68d3445c4830bf1606b9824e91dac4"
+      },
+      {
+        "id": "E-NT1-REFUTER",
+        "relative_path": "docs/process_traces/2026-10-02-interactive/41r-erratum-nt1-refuter.md",
+        "file_sha256": "a6243c99d1bae0c298610a4bc2ff9e64134fd413bd5b2694ba9a927fe9081836"
+      }
+    ],
+    "disclosures": [
+      {
+        "id": "D1",
+        "text": "Network-time OFF receipts. Both counting windows' receipts (sessions d079-epoch-25g83-r6-20261001T0617Z and d079-epoch-25g83-r6-20261001T2252Z) record exit 0 and the standard output 'Network Time is already off.', empty standard error, the same boot as the first capture and more than 600 s of settling on both clocks. Revision 6 section 5 as sealed named only the other OFF statement, 'setUsingNetworkTime: Off'; the recognizer admitting both was widened in commit 2431dcaa after the seal. Erratum E-NT1 (cold Fable judge ADOPT, Opus refuter AGREE) reads the condition as the OFF end state in either wording; the registered operating condition is unchanged and no number changes."
+      },
+      {
+        "id": "D2",
+        "text": "Thermal start condition (d) is satisfied vacuously on this build: 'pmset -g therm' prints no CPU_Speed_Limit line, the receipts store cpu_speed_limit null, and the night gate's existing thermal predicate passed (cold science gate ruling section 6 item 2)."
+      },
+      {
+        "id": "D3",
+        "text": "Two zero-capture attempts at label C1 preceded the admitted C1: plan d079-epoch-25g83-r6-derivation-c1-20261001T0137Z was refused at t0 (night_probe_error, the receipt wording of D1) and plan ...-c1-20261001T0555Z was stopped by the bench battery gate before publication. Neither opened a ledger session or captured anything; erratum E-NT1 rules the chain within the terms of D-182, amendment A-R5b and the owner's 2026-09-30 refusal route."
+      },
+      {
+        "id": "D4",
+        "text": "The nine chain logs listed in the cold-gate packet's MANIFEST.sha256 were excluded by .gitignore when the packet was first committed and were force-added at commit 7c0d4a0f; their digests equal the MANIFEST lines and the custody originals (ruling section 6 item 4)."
+      },
+      {
+        "id": "D5",
+        "text": "The R9 campaign record embeds absolute worktree paths under pinned_files, so it cannot be regenerated byte-identically from another checkout; every digest and slot entry matches (ruling section 6 item 5)."
+      },
+      {
+        "id": "D6",
+        "text": "The candidate's derivation_corpus.selection text omits Revision 6 section 8's median-frame condition (100 to 150 ms). All 24 valid captures lie in that range, so the omission excluded nothing; the condition was applied through the count replay and the issuer's frame_excluded path (ruling section 6 item 6)."
+      },
+      {
+        "id": "D7",
+        "text": "The cold science gate ruling's section 4.1 ICC row misprints the between-window mean square by a factor of 1000; its F and ICC (zero) are consistent with the correct value, and the figure is report-only (refuter on the ruling, defect 1)."
+      },
+      {
+        "id": "D8",
+        "text": "The ruling's quantile route shares the closed-form mathematics of the issuer's second route; the refuter's route (hypergeometric series, exact half-integer gamma, Gauss-Legendre pi) shares none and reproduces all four quantiles to 20 decimal places (refuter on the ruling, defect 2)."
+      },
+      {
+        "id": "D9",
+        "text": "H7, the first comparison of network-time-OFF captures with the network-time-ON captures of W1 and W2, is report-only science under Revision 6 section 5; this issuance neither computes it nor depends on it."
+      },
+      {
+        "id": "D10",
+        "text": "Scope of the default move. This file becomes the live default and judges identity epoch 25G83. A result recorded under build 25F84 evaluates stale against it; re-evaluating such a result under P8 (d079_calibration_acceptance_v2_n17_r8, still registered) needs an explicit route, which is lane A335 (OLD-EPOCH-EXPLICIT-R7-ROUTE-01) and is not part of this transaction."
+      }
+    ],
+    "claim_eligible_meaning": "these bytes are an authentic issued calibration for identity epoch 25G83, and its numbers may serve as the timing-uncertainty basis of a reported result captured under that epoch. It is a property of the file. It is not permission to start a window; a claim-bearing window starts only under its own sealed registration."
+  }
+}
