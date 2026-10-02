@@ -1247,8 +1247,9 @@ It decides on `next_window.verdict` alone. `NEXT_WINDOW` arms the next label
 (sections 1, 3, 4 and 5, `LEAD_S=5400`), and the arm notice is the
 activation's one email. A pre-start refusal is fixed and the same label
 re-armed (refusal route R1-R5). `CLOSE_AND_DERIVE` ends the block:
-candidate derivation, the cold science gate and the #416 audit belong to the
-orchestrator. Anything else, including a harvest that prints `REFUSED:`, is
+the magistrate lands the records and launches a fresh headless derivation
+seat (candidate, R9 record, cold science gate), then a second seat for D-138;
+none of it waits for Ed (RUN_STATE amendment of 2026-10-02). Anything else, including a harvest that prints `REFUSED:`, is
 a halt with one email to Ed.
 
 ### Standing install and arm rules (every v2 plan)
