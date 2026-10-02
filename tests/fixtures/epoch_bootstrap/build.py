@@ -154,6 +154,7 @@ def build_derivation_ledger(
     slots: Sequence[Slot],
     *,
     custody_parent: Path | None = None,
+    custody_names: Mapping[str, str] | None = None,
     session_id: str = SESSION_ID,
     session_kind: str = SESSION_KIND_DERIVATION,
     second_session: tuple[str, Sequence[Slot]] | None = None,
@@ -173,6 +174,10 @@ def build_derivation_ledger(
     counterfactual: valid, target-epoch rows that belong to no registered
     session.
 
+    ``custody_names`` names a session's directory under ``custody_parent``
+    (default: the session id). Revision 6 production names it by the night
+    plan id, which differs from the session id.
+
     ``verdict_records`` writes each recordable session's battery-float
     harvest verdict (obligations v1.1 §4.2) and commits it with the terminal
     pin in the same commit, as the harvest's step (iv) does.
@@ -191,7 +196,8 @@ def build_derivation_ledger(
         custody_parent.mkdir(parents=True, exist_ok=True)
         custody_parent = custody_parent.resolve()
     def session_runs(session_id: str) -> Path:
-        path = (custody_parent / session_id / "runs") if custody_parent else runs
+        name = (custody_names or {}).get(session_id, session_id)
+        path = (custody_parent / name / "runs") if custody_parent else runs
         path.mkdir(parents=True, exist_ok=True)
         return path
     ledger = runs / "calibration_observation_ledger.jsonl"

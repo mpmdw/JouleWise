@@ -1,0 +1,28 @@
+PR #456 (origin/fix/2026-10-02-rev6-custody-plan-id @ 7a9bdf93e) merged with origin/main
+merged sha: bd199ae6f7e04df6c4bfb2b4a9c5bf7530255c5a
+
+SHARD SUMMARY index=1/6 modules=1 tests=73 failures=0 errors=0 skipped=1 result=PASS
+SHARD SUMMARY index=2/6 modules=53 tests=1538 failures=0 errors=0 skipped=19 result=PASS
+SHARD SUMMARY index=4/6 modules=55 tests=1412 failures=3 errors=0 skipped=2 result=FAIL
+SHARD SUMMARY index=5/6 modules=55 tests=1038 failures=3 errors=0 skipped=12 result=FAIL
+SHARD SUMMARY index=3/6 modules=55 tests=1454 failures=8 errors=0 skipped=5 result=FAIL
+SHARD SUMMARY index=6/6 modules=55 tests=1817 failures=38 errors=0 skipped=4 result=FAIL
+exclusive tests.test_calibration_exits: Ran 48 tests, OK
+exclusive tests.test_calibration_writer_crash_matrix: Ran 20 tests, OK
+TOTAL tests: 7400 (7332 shards + 48 + 20); failures: 52; errors: 0
+
+Failure classification (52 = 46 + 3 + 3, all known local-only classes)
+module | failures | class | regression?
+test_night_kinds | 15 | battery fixture in child Pythons | no
+test_evidence_night | 23 | battery fixture in child Pythons | no
+test_run_night | 8 | battery fixture in child Pythons | no
+test_install_night_agent | 3 | UpdateTime stale | no
+test_sample_quiet_predicate_evidence | 3 | load worker startup timed out (contention); serial rerun: Ran 96 OK | no
+Unclassified failures: 0 (base rerun not needed)
+
+## Findings disposition (ledger row 5)
+- Sol F1 (environment): live epoch-probe test fails only in the Codex sandbox (sysctl kern.osversion not permitted), identically on base; lead reran it outside the sandbox at 7a9bdf93: OK. Rejected as not a defect.
+- Sol F2 (residual, pre-existing): verify-members trusts artifact-supplied bindings; base had the same trust for session_id/source_directory. Deferred to lane REV6-ISSUER-PROVENANCE-01.
+- Sol F3 (baseline drift): informational; review used exact parent 420e1f07. No action.
+- Fable NIT (PR body understated digest coverage of revision6_records plan_id): fixed in the PR body.
+- Whole suite: 52 failures, all pre-existing local-environment classes (46 battery fixture, 3 UpdateTime stale, 3 contention timeouts that pass serially: 96/96). Deferred to lane TEST-LOCAL-ENV-ISOLATION-01.
