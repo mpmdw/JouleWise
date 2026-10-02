@@ -1320,8 +1320,11 @@ def revision_six_records(harvest_paths: Sequence[Path], sessions: Sequence[Any],
             if start_refs:
                 start_path, start_raw = _revision_six_bytes(root, start_refs[0])
                 start = _revision_six_json(start_raw, "start-condition record")
+                # run_night.py writes the night plan's id; the ledger session
+                # carries the calibration plan's id, which the harvest bound to
+                # this night plan when it wrote the record.
                 if (start.get("schema") != "joulewise.revision6.start_conditions.v1"
-                        or start.get("session_id") != sid or start.get("plan_id") != by_id[sid].plan_id
+                        or start.get("session_id") != sid or start.get("plan_id") != harvest.get("plan_id")
                         or start.get("result") not in {"admitted", "refused"}):
                     raise ValueError("start-condition identity or result disagreement")
             if by_id[sid].finalized_slots:
