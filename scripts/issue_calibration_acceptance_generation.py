@@ -947,8 +947,15 @@ def _canonical_relative_parts(value: str, label: str) -> tuple[str, ...]:
 
 def _corpus_relative_custody(
     custody_locator: str, attempt_id: str, session_id: str, corpus_root: Path,
+    *, night_plan_id: str | None = None,
 ) -> str:
-    """Name a canonical capture beneath its session in the declared corpus."""
+    """Name a canonical capture beneath its session in the declared corpus.
+
+    Revision 5 custody directories are named by session id. Revision 6 custody
+    directories are named by the night plan id (run_night.py's PLAN_ID), which
+    the caller takes from the session's authenticated harvest record and passes
+    as ``night_plan_id``; it then replaces the session id as the first part.
+    """
 
     label = f"member {attempt_id}: custody {custody_locator}"
     try:
@@ -971,8 +978,11 @@ def _corpus_relative_custody(
         parts = relative.parts
         if len(parts) != 4:
             raise ValueError("custody path must have exactly four parts")
-        if parts[0] != session_id:
-            raise ValueError("first path part does not equal the session id")
+        if night_plan_id is None:
+            if parts[0] != session_id:
+                raise ValueError("first path part does not equal the session id")
+        elif not isinstance(night_plan_id, str) or not night_plan_id or parts[0] != night_plan_id:
+            raise ValueError("first path part does not equal the session's night plan id")
         if parts[1:3] != ("runs", "instrument_validation"):
             raise ValueError("custody path must pass through runs/instrument_validation")
         if parts[3] != attempt_id:
@@ -1339,6 +1349,7 @@ def revision_six_records(harvest_paths: Sequence[Path], sessions: Sequence[Any],
                             "r9_commit": commit,
                             "start_condition_sha256": start_refs[0]["sha256"] if start_refs else None,
                             "start_condition_commit": start_commit, "harvest_path": str(locator),
+                            "plan_id": harvest.get("plan_id"),
                             "harvest_sha256": hashlib.sha256(Path(locator).read_bytes()).hexdigest(),
                             "custody_root": str(root)}
         except (OSError, ValueError, KeyError, TypeError) as error:
@@ -1946,6 +1957,7 @@ def _select_members(
     repo_root: Path,
     level_screen_threshold: Decimal,
     corpus_root: Path | None = None,
+    night_plan_ids: Mapping[str, Any] | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, str]], list[dict[str, Any]]]:
     """Split the registration's VALID rows into members and named exclusions.
 
@@ -1967,6 +1979,10 @@ def _select_members(
                 raise PrepareRefusal(f"duplicate valid attempt id {row.attempt_id}")
             corpus_paths[row.attempt_id] = _corpus_relative_custody(
                 row.custody_locator, row.attempt_id, row.bracket_session_id, corpus_root,
+                # A missing plan id refuses ("" never names a path part); it
+                # never falls back to the Revision 5 session-id rule.
+                **({} if night_plan_ids is None else {
+                    "night_plan_id": night_plan_ids.get(row.bracket_session_id) or ""}),
             )
     for observation in ordered:
         if observation.classification_disposition != "valid":
@@ -2720,7 +2736,8 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
         frame_ids = {entry["member_id"] for entry in frame_excluded}
         member_observations = tuple(row for row in observations if row.attempt_id not in frame_ids)
     members, excluded, comparisons = _select_members(
-        member_observations, Path(args.repo_root), level_screen_threshold, args.corpus_root
+        member_observations, Path(args.repo_root), level_screen_threshold, args.corpus_root,
+        {sid: record["plan_id"] for sid, record in rev6_records.items()} if revision_six else None,
     )
     if revision_six:
         excluded.extend(frame_excluded)
@@ -3005,6 +3022,12 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
             "Stored member paths are relative to the directory holding one directory "
             "per session. Verify with issue_calibration_acceptance_generation.py "
             "verify-members --artifact <file> --corpus-root <dir>."
+        ) if not revision_six else (
+            "Stored member paths are relative to the directory holding one directory "
+            "per Revision 6 night plan, named by the plan_id of the session's harvest "
+            "record (revision6_records). Verify with "
+            "issue_calibration_acceptance_generation.py "
+            "verify-members --artifact <file> --corpus-root <dir>."
         )} if args.corpus_root is not None else {}),
         **({"battery_confounded_sessions": [
             {"session_id": verdict.session_id, "status": verdict.status,
@@ -3235,8 +3258,14 @@ def derivation_input_sha256(payload: Mapping[str, Any]) -> str:
 
 def _verify_corpus_member(
     member: Mapping[str, Any], prior_rows: list[Any], corpus_root: Path,
+    night_plan_ids: Mapping[str, Any] | None = None,
 ) -> bool:
-    """Authenticate primary bytes and their session-bound prior-set identity."""
+    """Authenticate primary bytes and their session-bound prior-set identity.
+
+    ``night_plan_ids`` (Revision 6 artifacts only) maps each session to the
+    night plan id its harvest record carried; the custody directory is named
+    by that id instead of the session id.
+    """
 
     member_id = member.get("member_id")
     stored = member.get("source_directory")
@@ -3256,14 +3285,18 @@ def _verify_corpus_member(
         if content_id is None or len(matches) != 1:
             return False
         session_id = matches[0].get("session_id")
-        if (not isinstance(session_id, str) or len(parts) != 4
-                or parts[0] != session_id
+        if not isinstance(session_id, str):
+            return False
+        first = session_id if night_plan_ids is None else night_plan_ids.get(session_id)
+        if (not isinstance(first, str) or not first or len(parts) != 4
+                or parts[0] != first
                 or parts[1:3] != ("runs", "instrument_validation")
                 or parts[3] != member_id):
             return False
         root = Path(corpus_root).resolve(strict=True)
         canonical = _corpus_relative_custody(
             str(root.joinpath(*parts)), member_id, session_id, root,
+            **({} if night_plan_ids is None else {"night_plan_id": first}),
         )
         if canonical != stored:
             return False
@@ -3293,6 +3326,14 @@ def verify_members(args: argparse.Namespace) -> int:
         prior_rows = artifact["prior_observation_set"]["observations"]
         if not isinstance(members, list) or not members or not isinstance(prior_rows, list):
             raise ValueError("malformed corpus tables")
+        night_plan_ids = None
+        row = artifact.get("registered_generation_row")
+        if isinstance(row, Mapping) and row.get("registration_revision") == 6:
+            records = artifact["derivation_notes"]["revision6_records"]
+            if not isinstance(records, Mapping):
+                raise ValueError("malformed Revision 6 records")
+            night_plan_ids = {sid: record.get("plan_id") for sid, record in records.items()
+                              if isinstance(record, Mapping)}
     except (OSError, ValueError, KeyError, TypeError) as error:
         print(f"REFUSED: artifact unreadable or malformed ({type(error).__name__})")
         return 3
@@ -3306,7 +3347,7 @@ def verify_members(args: argparse.Namespace) -> int:
         source = member.get("source_directory") if isinstance(member, Mapping) else None
         unique = member_ids.count(member_id) == 1 and sources.count(source) == 1
         passed = unique and isinstance(member, Mapping) and _verify_corpus_member(
-            member, prior_rows, args.corpus_root,
+            member, prior_rows, args.corpus_root, night_plan_ids,
         )
         print(f"member {json.dumps(member_id)}: {'PASS' if passed else 'FAIL'}")
         all_pass &= passed
