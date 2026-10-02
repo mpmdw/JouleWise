@@ -1,0 +1,23 @@
+I agree with the judge's ruling (**REFUTER E-NT1: AGREE**), but its erratum text needs two corrections before it is appended. My output is `docs/process_traces/2026-10-02-interactive/41r-erratum-nt1-refuter.md`; it is uncommitted, and its first line is the verdict.
+
+**Phase 1 (written before I opened the ruling).** I reached the same answers as the judge on my own:
+- **Question 1, ADOPT, with amended text.** Network time stays OFF between windows and the ON-then-OFF resync is optional. So a window that skips the resync can only ever print "Network Time is already off.", and the literal "exactly `setUsingNetworkTime: Off`" reading contradicts the rest of §5.
+- **The receipts.** Both windows' receipts show exit 0, empty stderr and the same boot as the first capture. They were taken about 1,244 s and 1,247 s before it on both clocks, against a 600 s minimum.
+- **Issuance.** The issuer does read stdout, through the same recognizer; the R9 record never reads the receipt.
+- **Question 2, WITHIN TERMS.** The ledger after the pinned head (row 276) holds only the two admitted sessions. Neither refused attempt captured anything or could have selected on a measured value. The two refusals had different signatures, so no bound applied.
+
+**Phase 2 (the ruling).** The judge ruled ADOPT and WITHIN TERMS, with the same corrections to the proposal I made. The ruling also checked two things I didn't, both sound: the ledger row-276 digest against the pin, and keeping the §7 JSON byte-identical so the issuer's sealed policy digest still verifies.
+
+It has two real defects. Neither touches these windows, whose receipts are single-line with empty stderr:
+1. **Multi-line output.** The adopted text says "a multi-line output … is refused", but the code admits a statement wrapped across lines. For example, `setUsingNetworkTime:\nOff\n` → True. What the code actually refuses is output carrying a second statement, such as Off followed by On.
+2. **Standard error.** The text keeps the sealed stderr rule (only the `Error:-99` line tolerated), but the code accepts any stderr. No code checks for `Error:-99` at all. The ruling says it found "no remaining difference" between text and code.
+
+The D-138 seat should replace "a multi-line output" with "an output that states anything besides one admitted statement", and add one sentence recording the stderr gap (or have the code narrowed; that's the seat's or Ed's call).
+
+Smaller findings:
+- The ruling credits 0137Z's re-arm to D-182, but that refusal was a code defect, not machine state. Ed's 09-30 refusal route (R1/R3/R4) licensed it; D-182's conditions were met anyway, so the conclusion stands.
+- It quotes a D-182 paragraph outside the charge's read limits and doesn't disclose that.
+- It cites a check-table row that doesn't contain the night-gate time. I verified that time myself.
+- The charge itself pairs the seal commit `46643f1d` with the file hash `d0034003…`, but the Revision 6 text with that hash first exists at `bf017893`. Both commits predate the recognizer change, so nothing follows from it.
+
+**Disclosure:** the harness loaded CLAUDE.md and the memory index into my context before I started; I opened no memory file. I also read all of D-182 rather than only the rule and Terms, and my answers don't rest on the extra paragraphs.

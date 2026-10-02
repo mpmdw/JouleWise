@@ -1,0 +1,15 @@
+The ruling is written at `docs/process_traces/2026-10-02-interactive/41-erratum-nt1-ruling.md` (uncommitted, as the charge requires).
+
+**Line 1:** `ERRATUM E-NT1: ADOPT …` with amended text. **Line 2:** `CHAIN: WITHIN TERMS`.
+
+**Question 1, adopted with three amendments.** The receipts prove the registered state: exit 0, OFF stated, same boot (boot id equal to the window's start-condition record, and the receipt's wall-minus-monotonic offset matches the first capture's clock anchor within 5 ms), and 1243 s and 1246 s before the first capture on both clocks. A literal reading of "exactly `setUsingNetworkTime: Off`" contradicts §5's own "stays OFF" and "resync allowed only in the arm step" clauses, since a Mac that stays OFF can only ever print the other sentence. The proposed text diverged from the code in three places, so I rewrote it to match: the comparator collapses internal whitespace runs, strips any number of trailing periods, and compares without the period. The adopted text also lists what is refused.
+
+**Two findings the next step must respect:**
+- The issuer hashes the §7 JSON policy block (digest `dfa1ec73…`, verified equal). Editing `stdout_exact` in place would make the issuer refuse every issuance. The erratum must be appended as text, with the JSON left byte-identical.
+- The seal provenance in the charge is off by one commit. At `46643f1d` the markdown still held the Revision 5 text; the Revision 6 wording entered at `bf017893` (16:47 PDT). Both predate the widening, so nothing turns on it.
+
+**Question 2, within terms.** The ledger after the pinned head (seq 276, digest matches) holds exactly two session opens, 0617Z and 2252Z, and no row names 0137Z or 0555Z. Neither attempt is a session or null session, so STOP-NULL-REPEAT never engaged. 0137Z has no `runs/` directory, no `chain.started`, null chain exit and digest, and was refused 5 ms after its receipt. 0555Z was stopped by the pre-publication battery gate and never became an armed plan. Spacing was 10072 s and 1303 s, each re-arm a new plan id, and the two refusal signatures differ, so the owner's R5 bound never fired.
+
+**Process deviation recorded:** the owner's route said convene the gate, then proceed. The proceed came first. This does not change any member, statistic, operative, or either window's admission.
+
+Contamination disclosure is in the file. The harness injected the global and project CLAUDE.md and the memory index into my context before I began. I also read the route text from `RUN_STATE.md` at commit `835aaba3` via git show to verify the charge's quotation.
