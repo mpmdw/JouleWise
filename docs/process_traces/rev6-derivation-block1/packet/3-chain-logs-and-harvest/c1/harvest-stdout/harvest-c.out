@@ -1,0 +1,25 @@
+ M configs/calibration/calibration_ledger_head.json
+?? configs/calibration/battery_float_verdicts/d079-epoch-25g83-r6-20261001T0617Z.json
+[detached HEAD 029ec385] Harvest d079-epoch-25g83-r6-20261001T0617Z: ledger head pin and battery-float verdict
+ Committer: Ed R <edr@Eds-MacBook-Pro.local>
+Your name and email address were configured automatically based
+on your username and hostname. Please check that they are accurate.
+You can suppress this message by setting them explicitly:
+
+    git config --global user.name "Your Name"
+    git config --global user.email you@example.com
+
+After doing this, you may fix the identity used for this commit with:
+
+    git commit --amend --reset-author
+
+ 2 files changed, 172 insertions(+), 2 deletions(-)
+ create mode 100644 configs/calibration/battery_float_verdicts/d079-epoch-25g83-r6-20261001T0617Z.json
+remote: 
+remote: Create a pull request for 'harvest/d079-epoch-25g83-r6-20261001T0617Z' on GitHub by visiting:        
+remote:      https://github.com/mpmdw/JouleWise/pull/new/harvest/d079-epoch-25g83-r6-20261001T0617Z        
+remote: 
+To https://github.com/mpmdw/JouleWise
+ * [new branch]        HEAD -> harvest/d079-epoch-25g83-r6-20261001T0617Z
+REFUSED: nonliteral wrapper export
+harvest rc=3

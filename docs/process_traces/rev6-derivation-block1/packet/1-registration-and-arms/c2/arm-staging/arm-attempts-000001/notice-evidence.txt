@@ -1,0 +1,1 @@
+sent epoch: 1790889831; message id: 1a0f95a0c11c429c; thread id: 1a0f95a0c11c429c; accepted body sha256: c47132a3d90461f38cb63007e8a289a34c282c6475e7c41856ead2242c4a8229 (notice-sent-body.txt = step3 notice-body.txt minus the To/Subject header lines plus one paragraph on the overnight stall, per the 13:20 handoff); unreadable-thread limitation: none

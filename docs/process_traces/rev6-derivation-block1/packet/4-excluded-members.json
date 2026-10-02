@@ -1,0 +1,177 @@
+{
+ "source": "2-candidate/candidate_acceptance_25g83_rev6.json",
+ "derivation_notes.excluded_members": [],
+ "r9_campaign.clock_movement_or_empty_fit_refusals": [],
+ "derivation_corpus.selection": "every observation of the registration's derivation-kind sessions whose ledger disposition is valid and whose stored anchor-v3 record, read from primary evidence bytes authenticated against its ledger row, reports a RESOLVED clock anchor; the member value is that bundle's own b_fiducial_s lexeme, cross-checked against the row's exact bound lexeme, and no value is re-derived here",
+ "derivation_corpus.members": [
+  {
+   "member_id": "d079-epoch-25g83-r6-20261001T0617Z-d01",
+   "source_directory": "d079-epoch-25g83-r6-derivation-c1-20261001T0617Z/runs/instrument_validation/d079-epoch-25g83-r6-20261001T0617Z-d01",
+   "b_fiducial_s": "0.025463179772367898",
+   "manifest_sha256": "ffa228c80f6b6afba66796514acdafba47b6fdab1b7a489d10babad1aecd9aa4",
+   "instrument_evidence_sha256": "84467205e85f611a11cce4b126159138de1eeedf1a9005f7460152ea0b4f2d8e"
+  },
+  {
+   "member_id": "d079-epoch-25g83-r6-20261001T0617Z-d02",
+   "source_directory": "d079-epoch-25g83-r6-derivation-c1-20261001T0617Z/runs/instrument_validation/d079-epoch-25g83-r6-20261001T0617Z-d02",
+   "b_fiducial_s": "0.02766399977693898",
+   "manifest_sha256": "6bf4bd870ebcfa735715f9aac7006a9ee56a5b0deb92557b4e65eabe2863e8a5",
+   "instrument_evidence_sha256": "e69d116ea43ccbf11e47c3053d273d7257cdde0392abe31a8d7a279aed1c49e0"
+  },
+  {
+   "member_id": "d079-epoch-25g83-r6-20261001T0617Z-d03",
+   "source_directory": "d079-epoch-25g83-r6-derivation-c1-20261001T0617Z/runs/instrument_validation/d079-epoch-25g83-r6-20261001T0617Z-d03",
+   "b_fiducial_s": "0.03460915378691863",
+   "manifest_sha256": "038c90c6fa4662b681139e0dd3f85a0a4a89bae1176d4a718696bdbb3d0e7939",
+   "instrument_evidence_sha256": "7376e41367e62ae03dfa8245f07a67735328ccd5becbb22cd6dda96a1cc16d07"
+  },
+  {
+   "member_id": "d079-epoch-25g83-r6-20261001T0617Z-d04",
+   "source_directory": "d079-epoch-25g83-r6-derivation-c1-20261001T0617Z/runs/instrument_validation/d079-epoch-25g83-r6-20261001T0617Z-d04",
+   "b_fiducial_s": "0.027892564073153783",
+   "manifest_sha256": "35594a4234d9ca45f1b8f89d0c133cfb7d71dd360d787481ee1a25aae24fdbec",
+   "instrument_evidence_sha256": "c926082aed4f0e170e26c1294193dd02bb8f6dafac03f986eeee7b0966b58346"
+  },
+  {
+   "member_id": "d079-epoch-25g83-r6-20261001T0617Z-d05",
+   "source_directory": "d079-epoch-25g83-r6-derivation-c1-20261001T0617Z/runs/instrument_validation/d079-epoch-25g83-r6-20261001T0617Z-d05",
+   "b_fiducial_s": "0.0274417652193393",
+   "manifest_sha256": "8dbc7c76b942e30c03ae69ae72e32a6f6ef56f731d2bd26a4eda43fd7f418694",
+   "instrument_evidence_sha256": "a42cc0358995ddb8232b6824184f5f41268e525b69fcd79981202ac469b60d0b"
+  },
+  {
+   "member_id": "d079-epoch-25g83-r6-20261001T0617Z-d06",
+   "source_directory": "d079-epoch-25g83-r6-derivation-c1-20261001T0617Z/runs/instrument_validation/d079-epoch-25g83-r6-20261001T0617Z-d06",
+   "b_fiducial_s": "0.02790192270133949",
+   "manifest_sha256": "ecd1695118400563f7018e156437e6ac70fe2e358d0fd2638d5eb5edff41ef2a",
+   "instrument_evidence_sha256": "c095a865ec19e9a9a0637671241aeef83906ed0215d063d0b0ba2ef07fcd3ced"
+  },
+  {
+   "member_id": "d079-epoch-25g83-r6-20261001T0617Z-d07",
+   "source_directory": "d079-epoch-25g83-r6-derivation-c1-20261001T0617Z/runs/instrument_validation/d079-epoch-25g83-r6-20261001T0617Z-d07",
+   "b_fiducial_s": "0.02193176218569716",
+   "manifest_sha256": "36be3fca1710abc1ed9d73527dfeb5699288bc181a144e0e9dda00a2d7a35a8d",
+   "instrument_evidence_sha256": "6011ec4493a2f3c6850d4504ac6607ce6f61150584952c1e95cd0d9e11d3069b"
+  },
+  {
+   "member_id": "d079-epoch-25g83-r6-20261001T0617Z-d08",
+   "source_directory": "d079-epoch-25g83-r6-derivation-c1-20261001T0617Z/runs/instrument_validation/d079-epoch-25g83-r6-20261001T0617Z-d08",
+   "b_fiducial_s": "0.030373696240460962",
+   "manifest_sha256": "32c15c2a58b5ad13ad11315bb0f1ff9cd703f01dd60aff1737a479883cb93669",
+   "instrument_evidence_sha256": "58593e967f54ce8e696d6ce08891c7d5672c4b726ccb6c2b421184b40831c7a2"
+  },
+  {
+   "member_id": "d079-epoch-25g83-r6-20261001T0617Z-d09",
+   "source_directory": "d079-epoch-25g83-r6-derivation-c1-20261001T0617Z/runs/instrument_validation/d079-epoch-25g83-r6-20261001T0617Z-d09",
+   "b_fiducial_s": "0.033858213964584355",
+   "manifest_sha256": "59bec3d4a86da859358052ff24e23dcdb16916625e740013ae971164bdc85800",
+   "instrument_evidence_sha256": "5ad23e40e67f4f5f0c881997f336820fc0f5483491ed2f3356c77f35204488ff"
+  },
+  {
+   "member_id": "d079-epoch-25g83-r6-20261001T0617Z-d10",
+   "source_directory": "d079-epoch-25g83-r6-derivation-c1-20261001T0617Z/runs/instrument_validation/d079-epoch-25g83-r6-20261001T0617Z-d10",
+   "b_fiducial_s": "0.025533661955889533",
+   "manifest_sha256": "e15e38f6f0f70bd73828d5bf5d1aafb865ad388c263c4778ea09c2086bd3b8c4",
+   "instrument_evidence_sha256": "dcd4a3508ad41890417ee5cdbc364818921ab7f53a4b01db1c07dd3a3efeaa3b"
+  },
+  {
+   "member_id": "d079-epoch-25g83-r6-20261001T0617Z-d11",
+   "source_directory": "d079-epoch-25g83-r6-derivation-c1-20261001T0617Z/runs/instrument_validation/d079-epoch-25g83-r6-20261001T0617Z-d11",
+   "b_fiducial_s": "0.030402083768569316",
+   "manifest_sha256": "3c4aca723f999460beb308c1d1d5168f053cb2f3981415e2df9c224a7324d052",
+   "instrument_evidence_sha256": "a490122836286a74014e74ccfb9f5a20706938c4860f45319db744fc15e46049"
+  },
+  {
+   "member_id": "d079-epoch-25g83-r6-20261001T0617Z-d12",
+   "source_directory": "d079-epoch-25g83-r6-derivation-c1-20261001T0617Z/runs/instrument_validation/d079-epoch-25g83-r6-20261001T0617Z-d12",
+   "b_fiducial_s": "0.027971479139464784",
+   "manifest_sha256": "6078e31bebce300a767d46dec564f30770ed310491495f042f89c5f2e60cfcec",
+   "instrument_evidence_sha256": "8a216400dd25cc78187cd70da0812574553fc82de7b75f8d8b9d467642add970"
+  },
+  {
+   "member_id": "d079-epoch-25g83-r6-20261001T2252Z-d01",
+   "source_directory": "d079-epoch-25g83-r6-derivation-c2-20261001T2252Z/runs/instrument_validation/d079-epoch-25g83-r6-20261001T2252Z-d01",
+   "b_fiducial_s": "0.028443395186875983",
+   "manifest_sha256": "303df759a7842b8669ecb06d78617092a49b44c50409e27397dcd18107b3759b",
+   "instrument_evidence_sha256": "546ec916a685b0351a02cffc91ae2a2f9999b8592fcfebf387373d4a4eff4208"
+  },
+  {
+   "member_id": "d079-epoch-25g83-r6-20261001T2252Z-d02",
+   "source_directory": "d079-epoch-25g83-r6-derivation-c2-20261001T2252Z/runs/instrument_validation/d079-epoch-25g83-r6-20261001T2252Z-d02",
+   "b_fiducial_s": "0.024007067914171086",
+   "manifest_sha256": "ea564863541da5e38b73d807125407bfc498ba5fb4068ce70be4da4d69e806ee",
+   "instrument_evidence_sha256": "8c5ef35f060671754dd9ae7ea1441521fda4a3d2491c7ce80548460a2fd2a47b"
+  },
+  {
+   "member_id": "d079-epoch-25g83-r6-20261001T2252Z-d03",
+   "source_directory": "d079-epoch-25g83-r6-derivation-c2-20261001T2252Z/runs/instrument_validation/d079-epoch-25g83-r6-20261001T2252Z-d03",
+   "b_fiducial_s": "0.027381927068597392",
+   "manifest_sha256": "9d2e23ea70f57cbdf4ba7eb60357b05f72053ff09548e1808575ace3d9ca1518",
+   "instrument_evidence_sha256": "7053ad1d367594a6cbdb43e16afcf97ae1cddb21c134c0e5710038a26959ce86"
+  },
+  {
+   "member_id": "d079-epoch-25g83-r6-20261001T2252Z-d04",
+   "source_directory": "d079-epoch-25g83-r6-derivation-c2-20261001T2252Z/runs/instrument_validation/d079-epoch-25g83-r6-20261001T2252Z-d04",
+   "b_fiducial_s": "0.03633250571256254",
+   "manifest_sha256": "95786017344d0f59560d4808e71a8db0cc464c1a01d445945c27cf2578167ef5",
+   "instrument_evidence_sha256": "1b68c04cad537fe50b9fab1015d1f34a5b041e5570d65f642d8826e4c4ccb593"
+  },
+  {
+   "member_id": "d079-epoch-25g83-r6-20261001T2252Z-d05",
+   "source_directory": "d079-epoch-25g83-r6-derivation-c2-20261001T2252Z/runs/instrument_validation/d079-epoch-25g83-r6-20261001T2252Z-d05",
+   "b_fiducial_s": "0.028114814464204912",
+   "manifest_sha256": "ab8ec4c8f445885f767aa044d0553062ab11596ca4f71c098a5c5bc417388bb2",
+   "instrument_evidence_sha256": "9f7f84daacbe0e397a74956e41052dddb3536ad1fbe220993c550af28b3b011a"
+  },
+  {
+   "member_id": "d079-epoch-25g83-r6-20261001T2252Z-d06",
+   "source_directory": "d079-epoch-25g83-r6-derivation-c2-20261001T2252Z/runs/instrument_validation/d079-epoch-25g83-r6-20261001T2252Z-d06",
+   "b_fiducial_s": "0.024958379592343757",
+   "manifest_sha256": "680ac8d1c2f0974104e584c80c0cc5c32e71918c57402a8ce321a99e3fa32932",
+   "instrument_evidence_sha256": "2c045f1209d34877ac2659d47b9e21855ff4f8a9c7e6b5f8928b6888e071b4bb"
+  },
+  {
+   "member_id": "d079-epoch-25g83-r6-20261001T2252Z-d07",
+   "source_directory": "d079-epoch-25g83-r6-derivation-c2-20261001T2252Z/runs/instrument_validation/d079-epoch-25g83-r6-20261001T2252Z-d07",
+   "b_fiducial_s": "0.030679289625902346",
+   "manifest_sha256": "e3933e030fdfd1d654d70c721df82555a74858e405f286f38931fcfbd0dcd905",
+   "instrument_evidence_sha256": "774a70d7e16b13cd1abf9ec4f18ba4dfbeb0d74c031dd1a3b16ba346775173d9"
+  },
+  {
+   "member_id": "d079-epoch-25g83-r6-20261001T2252Z-d08",
+   "source_directory": "d079-epoch-25g83-r6-derivation-c2-20261001T2252Z/runs/instrument_validation/d079-epoch-25g83-r6-20261001T2252Z-d08",
+   "b_fiducial_s": "0.03646286164497997",
+   "manifest_sha256": "9bf0f7ebb3c0d5df8d21d5355d5aebb0b772d2836fab5d1592684acd7cc59836",
+   "instrument_evidence_sha256": "a55073c90150e53e3004e47298c98abe7486858a17b35568ee8d6a4e6b39a8e4"
+  },
+  {
+   "member_id": "d079-epoch-25g83-r6-20261001T2252Z-d09",
+   "source_directory": "d079-epoch-25g83-r6-derivation-c2-20261001T2252Z/runs/instrument_validation/d079-epoch-25g83-r6-20261001T2252Z-d09",
+   "b_fiducial_s": "0.025013543792252485",
+   "manifest_sha256": "14bb9aa62b26d262130a00f72f25dfd5b5a63804ce4e8b3a056f748cf5e0c98b",
+   "instrument_evidence_sha256": "26248d3b12102a460784336549094a1d3d60db22ff407623faf4723afe93ee3e"
+  },
+  {
+   "member_id": "d079-epoch-25g83-r6-20261001T2252Z-d10",
+   "source_directory": "d079-epoch-25g83-r6-derivation-c2-20261001T2252Z/runs/instrument_validation/d079-epoch-25g83-r6-20261001T2252Z-d10",
+   "b_fiducial_s": "0.029091074834746312",
+   "manifest_sha256": "ec17ff3920f50641572ff35e638f8a78b8bb92b462abbf9a0da0cf0f9c6c57e4",
+   "instrument_evidence_sha256": "00cde32d4e8cc01524aaae1f72b9cf8c62edf654569c64b357979960e911086d"
+  },
+  {
+   "member_id": "d079-epoch-25g83-r6-20261001T2252Z-d11",
+   "source_directory": "d079-epoch-25g83-r6-derivation-c2-20261001T2252Z/runs/instrument_validation/d079-epoch-25g83-r6-20261001T2252Z-d11",
+   "b_fiducial_s": "0.024497152758604247",
+   "manifest_sha256": "8d4e7f4fe6e44fc43c6cc25500fd34909d6f23bb1aeea30c9940067371ffe91e",
+   "instrument_evidence_sha256": "7ce3dce167fdb9c4945fe97df739999a56ee74b41895f8f64e499e5df160b8f3"
+  },
+  {
+   "member_id": "d079-epoch-25g83-r6-20261001T2252Z-d12",
+   "source_directory": "d079-epoch-25g83-r6-derivation-c2-20261001T2252Z/runs/instrument_validation/d079-epoch-25g83-r6-20261001T2252Z-d12",
+   "b_fiducial_s": "0.026633405691469065",
+   "manifest_sha256": "4f29772036953ebdf39807ffbb36f3d484f2f602507700b091644d5aaf0e8b4e",
+   "instrument_evidence_sha256": "a2be2707f474ea14c1f4cf1fd63e58a7d25df9a482681cec7b24b75c17362d7f"
+  }
+ ],
+ "assertion_to_check": "affine_clock_fit_empty is the ONLY registered exclusion mechanism; an unresolved anchor with any other reason must refuse issuance, not exclude (runbook \u00a74.3 item 4). Check against the issuer code and registration \u00a78."
+}

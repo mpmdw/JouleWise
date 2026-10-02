@@ -1,0 +1,11 @@
+{
+  "plan_id": "d079-epoch-25g83-r6-derivation-c1-20261001T0137Z",
+  "receipt_class": "DIAGNOSTIC_NO_PACK",
+  "refusal": {
+    "detail": "network time OFF receipt not admitted",
+    "evidence": null,
+    "reason": "night_probe_error"
+  },
+  "schema": "joulewise.night_refusal.v1",
+  "verdict": "REFUSED"
+}

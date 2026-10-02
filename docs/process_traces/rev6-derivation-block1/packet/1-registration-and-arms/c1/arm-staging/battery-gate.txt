@@ -1,0 +1,40 @@
+CHECK: ioreg -r -c AppleSmartBattery supplies one fresh, top-level battery observation
+CHECK: battery gate observed at 2026-10-01T04:46:04Z
+CHECK: exactly one AppleSmartBattery object; count=1
+CHECK: exactly one complete top-level object; close_count=1
+CHECK: exactly one top-level quoted ExternalConnected; raw=['Yes']
+CHECK: exactly one top-level quoted IsCharging; raw=['No']
+CHECK: exactly one top-level quoted InstantAmperage; raw=['0']
+CHECK: exactly one top-level quoted UpdateTime; raw=['1790829921']
+CHECK: exactly one top-level quoted AppleRawCurrentCapacity; raw=['5867']
+CHECK: exactly one top-level quoted AppleRawMaxCapacity; raw=['7691']
+CHECK: exactly one top-level quoted Amperage; raw=['0']
+CHECK: exactly one top-level quoted Voltage; raw=['12191']
+CHECK: exactly one top-level quoted Temperature; raw=['3002']
+CHECK: exactly one top-level quoted FullyCharged; raw=['No']
+CHECK: exactly one top-level quoted CurrentCapacity; raw=['80']
+CHECK: InstantAmperage is signed or unsigned 64-bit two-s complement
+CHECK: InstantAmperage raw=0 signed=0 mA; unsigned64_conversion=False
+CHECK: UpdateTime raw=1790829921 wall_epoch_s=1790829964 age_s=43; 0 <= age <= 180
+CHECK: ExternalConnected=Yes, IsCharging=No, abs(signed InstantAmperage)<=200 mA
+BATTERY GATE PASS
+CHECK: ioreg -r -c AppleSmartBattery supplies one fresh, top-level battery observation
+CHECK: battery gate observed at 2026-10-01T04:48:48Z
+CHECK: exactly one AppleSmartBattery object; count=1
+CHECK: exactly one complete top-level object; close_count=1
+CHECK: exactly one top-level quoted ExternalConnected; raw=['Yes']
+CHECK: exactly one top-level quoted IsCharging; raw=['No']
+CHECK: exactly one top-level quoted InstantAmperage; raw=['0']
+CHECK: exactly one top-level quoted UpdateTime; raw=['1790830101']
+CHECK: exactly one top-level quoted AppleRawCurrentCapacity; raw=['5867']
+CHECK: exactly one top-level quoted AppleRawMaxCapacity; raw=['7691']
+CHECK: exactly one top-level quoted Amperage; raw=['0']
+CHECK: exactly one top-level quoted Voltage; raw=['12193']
+CHECK: exactly one top-level quoted Temperature; raw=['3000']
+CHECK: exactly one top-level quoted FullyCharged; raw=['No']
+CHECK: exactly one top-level quoted CurrentCapacity; raw=['80']
+CHECK: InstantAmperage is signed or unsigned 64-bit two-s complement
+CHECK: InstantAmperage raw=0 signed=0 mA; unsigned64_conversion=False
+CHECK: UpdateTime raw=1790830101 wall_epoch_s=1790830128 age_s=27; 0 <= age <= 180
+CHECK: ExternalConnected=Yes, IsCharging=No, abs(signed InstantAmperage)<=200 mA
+BATTERY GATE PASS

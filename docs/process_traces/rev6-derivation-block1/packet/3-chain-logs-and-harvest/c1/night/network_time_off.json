@@ -1,0 +1,19 @@
+{
+  "argv": [
+    "/usr/bin/sudo",
+    "-n",
+    "/usr/sbin/systemsetup",
+    "-setusingnetworktime",
+    "off"
+  ],
+  "boot_id": "cd5b815a-df9b-4fc7-921a-8e97d8aba867",
+  "epoch_s": 1790835422.2803211,
+  "error": null,
+  "exit_code": 0,
+  "monotonic_s": 1056984.266683375,
+  "plan_id": "d079-epoch-25g83-r6-derivation-c1-20261001T0617Z",
+  "schema": "joulewise.network_time_off.v1",
+  "stderr": "",
+  "stdout": "Network Time is already off.\n",
+  "window_id": "d079-epoch-25g83-r6-derivation-c1-20261001T0617Z"
+}

@@ -1,0 +1,11 @@
+Window C2 (`d079-epoch-25g83-r6-derivation-c2-20261001T2252Z`) finished with verdict **GO** and chain exit code **0**. I emailed Ed, and the message was accepted.
+
+- **Records read:** `result.json` and `receipt.json` both say GO. There was no refusal, abort or calibration refusal, and no reporting errors. There are no `refusal*`, `rerun.refusal*`, `chain.deadline` or `chain.unkilled` files, so nothing suggests a duplicate launch. The driver's process checks ran 248 times and found no agent or other process running on the machine.
+- **Captures (provisional):** the session was reserved and all 12 slots, d01 to d12, were reported valid. Slot d12 reported the candidate for the pinned head of the calibration ledger: sequence 376, digest `a5b825b7…cbf57014`. No measured number counts until the harvest commits that pin, and none of this authorizes a cutoff or block two.
+- **Results branch:** `night-results/d079-epoch-25g83-r6-derivation-c2-20261001T2252Z` exists on origin at `617cad80`. I checked it with `git ls-remote`.
+- **Watchdog:** state age 120.838 s (alive), last decision HOLD_CENSUS. Both are in the email.
+- **Files written:** `night/courier.heartbeat` (pid 1474, epoch 1790903199) before anything else, and `night/courier.sent` (Gmail id `1a0fa26d0f0d8d3e`) after the email was accepted.
+
+**Next step:** under the handback's next lane, the courier harvests, uninstalls and arms nothing, so I stopped here. The headless magistrate harvests once `courier.sent` exists (it does now) and the time is past t0 + 9300 s. It then arms C3 or ends the block, depending on what the harvest returns as `next_window.verdict`.
+
+**Not connected this session:** the Codex MCP server failed to start (`npx` not found on PATH). Several other connectors, including HubSpot, need authorization in their claude.ai connector settings. None of these affected this delivery.

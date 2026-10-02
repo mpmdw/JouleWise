@@ -1,0 +1,124 @@
+"""Mechanical assembly of the Revision 6 block 1 cold science gate packet (runbook §4.3).
+Copies primary artifacts and writes jq-style extracts of the candidate; computes nothing new."""
+import hashlib, json, os, shutil, sys
+WT = "/Users/edr/code/JouleWise-derive-rev6b1"
+TR = f"{WT}/docs/process_traces/rev6-derivation-block1"
+P = f"{TR}/packet"
+STG = "/Users/edr/night-plan-staging"
+CUS = "/Users/edr/night-custody"
+ARC = "/Users/edr/night-archive"
+W = {
+    "c1": dict(session="d079-epoch-25g83-r6-20261001T0617Z", plan="d079-epoch-25g83-r6-derivation-c1-20261001T0617Z",
+               steps=[f"{WT}/docs/process_traces/2026-09-30-activation-e4df3b93/c1-rearm/step{s}.out" for s in ("0","1","2","3","3b","4","5","5_1","5x")]),
+    "c2": dict(session="d079-epoch-25g83-r6-20261001T2252Z", plan="d079-epoch-25g83-r6-derivation-c2-20261001T2252Z",
+               steps=[f"{STG}/r6-bench/step{s}.c2.out" for s in ("0","1","2","3","3b","4","5","5_1")]),
+}
+src_log = []
+def cp(src, dst):
+    os.makedirs(os.path.dirname(dst), exist_ok=True)
+    shutil.copyfile(src, dst)
+    src_log.append((os.path.relpath(dst, P), src))
+def dump(obj, dst, src):
+    os.makedirs(os.path.dirname(dst), exist_ok=True)
+    with open(dst, "w") as f:
+        json.dump(obj, f, indent=1, sort_keys=False); f.write("\n")
+    src_log.append((os.path.relpath(dst, P), src))
+if os.path.exists(P):
+    sys.exit("packet dir exists; refusing to overwrite")
+# item 1: registration + arm records
+cp(f"{WT}/configs/calibration/preregistration_d079_epoch_25g83_rev1.md", f"{P}/1-registration-and-arms/preregistration_d079_epoch_25g83_rev1.md")
+for lab, w in W.items():
+    base = f"{P}/1-registration-and-arms/{lab}"
+    for s in w["steps"]:
+        cp(s, f"{base}/arm-steps/{os.path.basename(s)}")
+    sd = f"{STG}/{w['plan']}"
+    for name in ("arm-env.zsh", "battery-gate.txt", "schedule.json", "render-context.json"):
+        cp(f"{sd}/{name}", f"{base}/arm-staging/{name}")
+    for name in sorted(os.listdir(f"{sd}/arm-attempts/000001")):
+        cp(f"{sd}/arm-attempts/000001/{name}", f"{base}/arm-staging/arm-attempts-000001/{name}")
+    cd = f"{CUS}/{w['plan']}"
+    for name in ("night_plan.json", "calibration_plan.json", "chain.zsh", "chain.zsh.sha256", "chain.zsh.chain-source.sha256",
+                 "identity-epoch.json", "t1-bindings.json", "start_conditions_manifest.json", "night_probe_receipt.json",
+                 "night_probe_receipt.pending.json.process.json", "night-probe.out", "night-probe.err"):
+        cp(f"{cd}/{name}", f"{base}/custody-arm/{name}")
+# item 2: candidate
+for name in ("candidate_acceptance_25g83_rev6.json", "invocation.md", "prepare-candidate-run3.out.txt", "verify-members.out.txt", "r9_campaign.json"):
+    cp(f"{TR}/{name}", f"{P}/2-candidate/{name}")
+# item 3: chain logs, night records, harvest outputs
+for lab, w in W.items():
+    base = f"{P}/3-chain-logs-and-harvest/{lab}"
+    cd = f"{CUS}/{w['plan']}"
+    cp(f"{cd}/night.log", f"{base}/night.log")
+    cp(f"{cd}/operator_logs/derivation-chain.log", f"{base}/operator_logs/derivation-chain.log")
+    for name in sorted(os.listdir(f"{cd}/night")):
+        cp(f"{cd}/night/{name}", f"{base}/night/{name}")
+    cp(f"{ARC}/harvest-{w['plan']}/custody-root/harvest/r9_window.json", f"{base}/harvest/r9_window.json")
+    for name in ("harvest-a.out", "harvest-b.out", "harvest-c.out", "harvest-pin.env"):
+        s = f"{STG}/{w['plan']}/{name}"
+        if os.path.exists(s):
+            cp(s, f"{base}/harvest-stdout/{name}")
+    cp(f"{WT}/configs/calibration/battery_float_verdicts/{w['session']}.json", f"{base}/battery_float_verdict.json")
+cp("/Users/edr/night-custody/measurement/JouleWise-measurement-20261001T2252Z-r6-c2/runs/calibration_observation_ledger.jsonl",
+   f"{P}/3-chain-logs-and-harvest/calibration_observation_ledger.jsonl")
+cp(f"{WT}/configs/calibration/calibration_ledger_head.json", f"{P}/3-chain-logs-and-harvest/calibration_ledger_head.json")
+# earlier non-registered C1 arm attempts (not sessions of the registration; no ledger rows)
+old = f"{CUS}/d079-epoch-25g83-r6-derivation-c1-20261001T0137Z"
+cp(f"{old}/night.log", f"{P}/3-chain-logs-and-harvest/unregistered-attempts/c1-20261001T0137Z/night.log")
+for name in sorted(os.listdir(f"{old}/night")):
+    if os.path.isfile(f"{old}/night/{name}"):
+        cp(f"{old}/night/{name}", f"{P}/3-chain-logs-and-harvest/unregistered-attempts/c1-20261001T0137Z/night/{name}")
+cp(f"{STG}/d079-epoch-25g83-r6-derivation-c1-20261001T0555Z/battery-gate.txt", f"{P}/3-chain-logs-and-harvest/unregistered-attempts/c1-20261001T0555Z/battery-gate.txt")
+cp(f"{WT}/docs/process_traces/2026-09-30-activation-e4df3b93/c1-rearm/battery-refused-0555Z-attempt.txt", f"{P}/3-chain-logs-and-harvest/unregistered-attempts/c1-20261001T0555Z/battery-refused-0555Z-attempt.txt")
+# items 4-7: extracts of the candidate (the candidate in 2-candidate/ is the source of truth)
+C = json.load(open(f"{TR}/candidate_acceptance_25g83_rev6.json"))
+R9 = json.load(open(f"{TR}/r9_campaign.json"))
+cand = "2-candidate/candidate_acceptance_25g83_rev6.json"
+dn, dd = C["derivation_notes"], C["decimal_derivation"]
+dump({"source": cand, "derivation_notes.excluded_members": dn["excluded_members"],
+      "r9_campaign.clock_movement_or_empty_fit_refusals": R9["clock_movement_or_empty_fit_refusals"],
+      "derivation_corpus.selection": C["derivation_corpus"]["selection"],
+      "derivation_corpus.members": C["derivation_corpus"]["members"],
+      "assertion_to_check": "affine_clock_fit_empty is the ONLY registered exclusion mechanism; an unresolved anchor with any other reason must refuse issuance, not exclude (runbook §4.3 item 4). Check against the issuer code and registration §8."},
+     f"{P}/4-excluded-members.json", cand + " + 2-candidate/r9_campaign.json")
+dump({"source": cand, "decimal_derivation.quantile_proof": dd["quantile_proof"],
+      "decimal_derivation.two_draw_prediction_derivation": dd["two_draw_prediction_derivation"],
+      "decimal_derivation.within_window_prediction_derivation": dd["within_window_prediction_derivation"]},
+     f"{P}/5-quantile-proof.json", cand)
+dump({"source": cand, "derivation_notes.rule_outcomes": dn["rule_outcomes"],
+      "derivation_notes.prior_screen_comparison": dn["prior_screen_comparison"],
+      "derivation_notes.predecessor": dn["predecessor"],
+      "decimal_derivation.rounding": dd["rounding"],
+      "decimal_derivation.ratified_operatives": dd["ratified_operatives"],
+      "decimal_derivation.source_statistics": dd["source_statistics"],
+      "registered_generation_row": C["registered_generation_row"]},
+     f"{P}/6-screen-diagnostics-and-S-vs-C.json", cand)
+anchor_keys = ("status", "anchor_only_bound_s", "effective_clock_anchor_bound_s", "min_l_infinity_residual_upper_bound_s",
+               "model_departure_allowance_s", "numeric_padding_s", "epoch_representation_term_s", "wall_minus_monotonic_span_s",
+               "rate_lower", "rate_upper", "rate_limit_ppm", "records_checked", "native_rollover_count", "first_parse_lag_s")
+rows = []
+for m in C["derivation_corpus"]["members"]:
+    ev = json.load(open(f"{CUS}/{m['source_directory']}/instrument_evidence.json"))
+    ca = ev["clock_anchor"]
+    rows.append({"member_id": m["member_id"], "b_fiducial_s": m["b_fiducial_s"],
+                 "clock_anchor_resolved": ev.get("clock_anchor_resolved"),
+                 "clock_anchor": {k: ca.get(k) for k in anchor_keys},
+                 "residual_median_s_diagnostic_only": ev.get("residual_median_s_diagnostic_only"),
+                 "residual_p95_s_diagnostic_only": ev.get("residual_p95_s_diagnostic_only")})
+dump({"note": "Diagnostics only; they authorize no trimming (runbook §4.3 item 7). Per-member fields copied verbatim from each member's instrument_evidence.json under --corpus-root /Users/edr/night-custody (path = corpus_root/source_directory); member order is the candidate's.",
+      "derivation_notes.sampling_dependence": dn["sampling_dependence"],
+      "derivation_notes.revision6_count_replay": dn["revision6_count_replay"],
+      "derivation_notes.revision6_records": dn["revision6_records"],
+      "r9_campaign.sessions": R9["sessions"],
+      "members_in_candidate_order": rows},
+     f"{P}/7-per-window-distribution-order-clock-anchor.json", cand + " + member instrument_evidence.json + 2-candidate/r9_campaign.json")
+reg = open(f"{WT}/configs/calibration/preregistration_d079_epoch_25g83_rev1.md").read().splitlines(keepends=True)
+i = next(n for n, l in enumerate(reg) if l.startswith("## Known conditions (recorded, not rules)"))
+j = next(n for n in range(i + 1, len(reg)) if reg[n].startswith("## "))
+os.makedirs(P, exist_ok=True)
+open(f"{P}/8-known-conditions.md", "w").write(f"<!-- verbatim extract: registration lines {i+1}-{j} of 1-registration-and-arms/preregistration_d079_epoch_25g83_rev1.md -->\n" + "".join(reg[i:j]))
+src_log.append(("8-known-conditions.md", f"registration lines {i+1}-{j}"))
+with open(f"{P}/SOURCES.tsv", "w") as f:
+    f.write("packet_path\tsource\n")
+    for a, b in src_log:
+        f.write(f"{a}\t{b}\n")
+print(len(src_log), "items")
