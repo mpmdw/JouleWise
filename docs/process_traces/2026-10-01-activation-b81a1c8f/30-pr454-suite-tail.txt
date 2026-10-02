@@ -1,0 +1,42 @@
+Whole suite on aaaf44ee (head of #454 = origin/main 96e13107 + fix), run by activation b81a1c8f 2026-10-01 20:20-20:53 PDT
+Method: CI's own shard runner (.github/workflows/ci.yml 'Unit tests' body), SHARD_COUNT=6, all six shards in parallel, plus the two exclusive modules; interpreter /Users/edr/code/JouleWise/.venv/bin/python -B.
+(A serial 'unittest discover -s tests' run started 18:41 hit the 90-min background limit before finishing; replaced by this run.)
+
+Exclusive modules:
+Ran 48 tests in 469.302s
+OK
+Ran 20 tests in 218.930s
+OK
+
+Ordinary shards: 276 modules, 7407 tests, 52 failures, 0 errors, 43 skipped. Failing modules:
+MODULE FAIL tests.test_sample_quiet_predicate_evidence tests=96 failures=3 errors=0 skipped=0 seconds=89.825
+MODULE FAIL tests.test_run_night tests=255 failures=8 errors=0 skipped=0 seconds=126.237
+MODULE FAIL tests.test_install_night_agent tests=65 failures=3 errors=0 skipped=0 seconds=74.946
+MODULE FAIL tests.test_evidence_night tests=166 failures=23 errors=0 skipped=0 seconds=217.802
+MODULE FAIL tests.test_night_kinds tests=15 failures=15 errors=0 skipped=0 seconds=0.423
+
+Disposition of all 52 failures (none in a module this PR changes):
+- 46 (test_night_kinds 15, test_evidence_night 23, test_run_night 8): 'test interpreter must load the battery fixture in child Pythons' - local interpreter environment. Identical counts on base 96e13107 (night_kinds+evidence_night: 181 tests, 38 failures; run_night+sample_quiet serial: 351 tests, 8 failures).
+- 3 (test_install_night_agent): 'battery not at float: ProbeError: UpdateTime stale: ~85779 s' - test reaches the live battery probe under a shifted clock. Identical 3 failures on base 96e13107. Live ioreg UpdateTime was 52 s old at the time.
+- 3 (test_sample_quiet_predicate_evidence): 'load worker startup timed out' under six-shard contention; the module passes serially on aaaf44ee.
+Deferred lane: TEST-LOCAL-ENV-ISOLATION-01 (battery fixture in child interpreters; live battery probe in install tests). Hosted CI on aaaf44ee passed every test shard.
+
+Per-shard tails:
+== shard1.log
+ORDINARY SHARD ESTIMATES 2069.667,1851.486,1851.486,1851.486,1851.486,1851.485
+== shard2.log
+ORDINARY SHARD ESTIMATES 2069.667,1851.486,1851.486,1851.486,1851.486,1851.485
+ORDINARY SHARD ESTIMATES 2069.667,1851.486,1851.486,1851.486,1851.486,1851.485
+MODULE FAIL tests.test_sample_quiet_predicate_evidence tests=96 failures=3 errors=0 skipped=0 seconds=89.825
+== shard3.log
+ORDINARY SHARD ESTIMATES 2069.667,1851.486,1851.486,1851.486,1851.486,1851.485
+MODULE FAIL tests.test_run_night tests=255 failures=8 errors=0 skipped=0 seconds=126.237
+== shard4.log
+ORDINARY SHARD ESTIMATES 2069.667,1851.486,1851.486,1851.486,1851.486,1851.485
+== shard5.log
+ORDINARY SHARD ESTIMATES 2069.667,1851.486,1851.486,1851.486,1851.486,1851.485
+MODULE FAIL tests.test_install_night_agent tests=65 failures=3 errors=0 skipped=0 seconds=74.946
+== shard6.log
+ORDINARY SHARD ESTIMATES 2069.667,1851.486,1851.486,1851.486,1851.486,1851.485
+MODULE FAIL tests.test_evidence_night tests=166 failures=23 errors=0 skipped=0 seconds=217.802
+MODULE FAIL tests.test_night_kinds tests=15 failures=15 errors=0 skipped=0 seconds=0.423
