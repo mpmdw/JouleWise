@@ -134,7 +134,7 @@ class HarvestWindowTests(unittest.TestCase):
         self.plan["registration_path"] = str(self.prereg)
         (self.night / "night_plan.json").write_bytes(harvest.json_bytes(self.plan))
         start = {"schema": "joulewise.revision6.start_conditions.v1",
-                 "session_id": self.sid, "plan_id": json.loads(self.plan_bytes)["plan_id"],
+                 "session_id": self.sid, "plan_id": self.plan["plan_id"],
                  "result": "admitted", "refusal_reason": None, "evidence": {},
                  "boot_id": "synthetic-boot", "written_epoch_s": 100,
                  "written_monotonic_s": 50,
@@ -257,7 +257,7 @@ class HarvestWindowTests(unittest.TestCase):
         snapshot = harvest.load_calibration_ledger_snapshot(self.f["ledger"], self.f["pin"],
             require_committed_pin=True, verify_custody=False, mode="read_replay", repo_root=self.f["root"])
         session = snapshot.bracket_session_by_id[self.sid]
-        synthetic_path = window_records(self.f["root"], session, self.block)
+        synthetic_path = window_records(self.f["root"], session, self.block, night_plan_id=self.plan["plan_id"])
         synthetic = json.loads(synthetic_path.read_bytes())
         source = Path(synthetic["custody_root"])
         shutil.copytree(source / "night", self.night / "night", dirs_exist_ok=True)

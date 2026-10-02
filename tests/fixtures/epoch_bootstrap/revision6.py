@@ -42,7 +42,7 @@ def commit(root):
                     'commit', '-qm', 'synthetic Revision 6 harvest'], check=True, capture_output=True)
 
 
-def window_records(root, session, block, *, previous=None, adverse=False):
+def window_records(root, session, block, *, previous=None, adverse=False, night_plan_id=None):
     custody = root / session.session_id
     def write(path, raw):
         target = custody / path
@@ -50,10 +50,13 @@ def window_records(root, session, block, *, previous=None, adverse=False):
         target.write_bytes(raw)
         return {'path': path, 'sha256': hashlib.sha256(raw).hexdigest()}
     start = float(1_800_000_000 + session.capability_sequence * 10_000)
+    # Production shape: the night plan's id differs from the ledger session's
+    # calibration plan id, and the window's records carry the night plan's.
+    night_plan_id = night_plan_id or f'night-{session.session_id}'
     monotonic = start - 1_700_000_000
     off = {'schema': 'joulewise.network_time_off.v1', 'argv': list(issuer.network_time_off.OFF_ARGV),
            'exit_code': 0, 'stdout': issuer.network_time_off.EXPECTED_STDOUT, 'stderr': 'Error:-99\n',
-           'boot_id': 'synthetic-boot', 'plan_id': session.plan_id, 'window_id': session.window_id,
+           'boot_id': 'synthetic-boot', 'plan_id': night_plan_id, 'window_id': night_plan_id,
            'epoch_s': start - 1000, 'monotonic_s': monotonic - 1000}
     prior = None
     if previous is not None:
@@ -79,7 +82,7 @@ def window_records(root, session, block, *, previous=None, adverse=False):
         'script_sha256': block['pins']['prewindow_check_sha256'], 'exit': 0,
         'passed_epoch_s': start - .1, 'deadline_epoch_s': start}
     start_record = {'schema': 'joulewise.revision6.start_conditions.v1', 'session_id': session.session_id,
-        'plan_id': session.plan_id, 'result': 'admitted' if session.finalized_slots else 'refused',
+        'plan_id': night_plan_id, 'result': 'admitted' if session.finalized_slots else 'refused',
         'refusal_reason': None if session.finalized_slots else session.abort_reason,
         'evidence': evidence, 'written_epoch_s': start + 20, 'written_monotonic_s': monotonic + 20,
         'boot_id': 'synthetic-boot',
@@ -97,7 +100,7 @@ def window_records(root, session, block, *, previous=None, adverse=False):
         'rule_ref': 'CAP-COUNCIL-25G83-01 R9 as amended; Revision 6 §4'}
     if not captures:
         r9['abort_reason'] = session.abort_reason
-    harvest = {'schema': 'joulewise.harvest_window.v1', 'custody_root': str(custody),
+    harvest = {'schema': 'joulewise.harvest_window.v1', 'custody_root': str(custody), 'plan_id': night_plan_id,
                'boot_id': 'synthetic-boot', 'window_end': None,
                'next_window': {'verdict': 'NEXT_WINDOW'},
                'next_window_sha256': hashlib.sha256(canonical({'verdict': 'NEXT_WINDOW'})).hexdigest(),
