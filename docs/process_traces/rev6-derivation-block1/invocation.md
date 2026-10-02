@@ -60,3 +60,34 @@ by the night plan id (`d079-epoch-25g83-r6-derivation-c1-20261001T0617Z`), while
 session-id rule. This is a code defect in the issuer's Revision 6 member-path handling (the same
 plan-id versus session-id class as #454), not an argument error. The refusal came before any
 member value was read or printed.
+
+## Run 3 (derivation seat, 2026-10-02, after merging `origin/main` with PR #456)
+
+Operator: headless derivation seat (Claude Opus 5.5, `claude -p`). The worktree merged
+`origin/main` (merge commit `7d7f6e6dc1503962a726ab5718d66e30901b3001`), which brings PR #456:
+`scripts/issue_calibration_acceptance_generation.py` now resolves member custody by
+`night_plan_id`. Same cwd, same interpreter, argv byte-identical to the block above.
+
+- exit code: 0
+- stdout (complete, kept as `prepare-candidate-run3.out.txt`, sha256 `2ce731274de349832cd32da7b445e549aa19f311cf4153139a221e8a6c105416`):
+  ```
+  candidate written (NOT ISSUED): docs/process_traces/rev6-derivation-block1/candidate_acceptance_25g83_rev6.json
+  corpus n: 24
+  screen_rule: floored_range_envelope_screen
+  ```
+- stderr: (empty; sha256 `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`)
+- wrote: `candidate_acceptance_25g83_rev6.json`, sha256 `aa59ebb25dcb4f1bace8d529d7d96ecf4969fec77ab54a51bac5120272a69884`.
+  `r9_campaign.json` was not rewritten (sha256 still `8be16a2038ec60ef525766f2914d50c00002a9fa279323d06b3d7c98690318a2`).
+
+## `verify-members` on the run 3 candidate
+
+```
+cwd: /Users/edr/code/JouleWise-derive-rev6b1
+/Users/edr/night-custody/measurement/JouleWise-measurement-20261001T2252Z-r6-c2/.venv/bin/python scripts/issue_calibration_acceptance_generation.py verify-members --artifact docs/process_traces/rev6-derivation-block1/candidate_acceptance_25g83_rev6.json --corpus-root /Users/edr/night-custody
+```
+
+- exit code: 0
+- stdout: 24 lines, every one `member "<attempt id>": PASS` (12 for session
+  `d079-epoch-25g83-r6-20261001T0617Z`, d01-d12; 12 for `d079-epoch-25g83-r6-20261001T2252Z`,
+  d01-d12). Kept as `verify-members.out.txt`, sha256 `d05ecd617f7903ee9c81dda9ba9ba865b59c83ae2785ab450432c169869c13b4`.
+- stderr: (empty)
