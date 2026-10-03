@@ -1,0 +1,67 @@
+{
+  "aborted_reason": null,
+  "artifacts": [
+    {
+      "path": "night.log",
+      "sha256": "9ec061c996428d6e5de7cc5eee7672c74e08d93395f93491d14b5b369a71c846"
+    },
+    {
+      "path": "night/receipt.json",
+      "sha256": "f76eb7e42e53fe3380f0a514e54f8b368f1910d297170ff7685ebb2bd1d16480"
+    },
+    {
+      "path": "night/network_time_off.json",
+      "sha256": "02dda47d55e9e3f6d5df7265db834dd94d2d149db04b1e01b49bb8f9a7c00239"
+    },
+    {
+      "path": "night/start_conditions.json",
+      "sha256": "22164ac970f483a21e6b1f6a5b1d6224fdd74c4681c86c9bf8a9438381052281"
+    },
+    {
+      "path": "night/clean_dwell.json",
+      "sha256": "79f5feaa4aa69308c6b8f2bf493f7a278f908747b419c8d2076e772a842dbe11"
+    },
+    {
+      "path": "night/clean_dwell.output.txt",
+      "sha256": "31e7c05082299437f3dcaa33b3a789e468961243e81aa6138d44b721abfad854"
+    },
+    {
+      "path": "night/chain.started",
+      "sha256": "80c5e7dbe2036b7fb6c9f2aaa71f69a25e5fbb8f3471551b5deeb6e5ee073531"
+    },
+    {
+      "path": "night/chain.exited",
+      "sha256": "3cf5c89df0f3d263fc1f2a70742b3c0e34f9054aa401508b5d4ac2e52afc21a8"
+    },
+    {
+      "path": "night/censuses.jsonl",
+      "sha256": "c7fdc59ff8149af34388c3a4c55dc5be1170820a11b36bb238da73a993eb1ce7"
+    },
+    {
+      "path": "night/chain.stdout.log",
+      "sha256": "beeb679b2beebe3a81a1e7a9df4c45064562ffe634b723a26d75ea3b46c63710"
+    },
+    {
+      "path": "night/chain.stderr.log",
+      "sha256": "ea302d583bc708aa5c1c811423dced3a0a689cc53edd7961142f4c1498bd23ee"
+    }
+  ],
+  "calibration_code": null,
+  "calibration_refusal": null,
+  "census_count": 50,
+  "census_hits": [],
+  "chain_exit_code": 1,
+  "chain_sha256": "4c65aafb2ec5ff95cc3813ac5ba856bf0b1e8b5c4f60b3e58fccd05d522cbd71",
+  "ended_epoch_s": 1791018224.017013,
+  "ended_monotonic_ns": 1239786582236541,
+  "evidence": {
+    "calibration_refusal": null
+  },
+  "plan_id": "d117-g2a-prefill-probe-20261003T0820Z",
+  "receipt_class": "DIAGNOSTIC_NO_PACK",
+  "refusal_documents": [],
+  "schema": "joulewise.unattended_night_result.v1",
+  "started_epoch_s": 1791015600.7571259,
+  "started_monotonic_ns": 1237163314041500,
+  "verdict": "GO"
+}
