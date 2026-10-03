@@ -1,0 +1,26 @@
+Warning: no stdin data received in 3s, proceeding without it. If piping from a slow command, redirect stdin explicitly: < /dev/null to skip, or wait longer.
+I agree with the judge: the refuter record is written, and its first line is `REFUTER G2A-25G83-B2: AGREE`. The ruling is `SEAL: ADMIT`, conditional on eight exact text changes (T1–T8) and two fixes to the harvest code (C1, C2) that must be in the arm head before the seal record is written.
+
+**Phase 1 (written before I opened the ruling).** My provisional call was also ADMIT, with two harvest defects that I reproduced in scratch tests built on the lane's test setup:
+- **Clock-check failures are ignored for members.** A member whose clock-movement check failed is still counted as valid, so the window can return SELECT. The registration says that member is invalid. Neither the strict validator nor the harvest acts on the failed status.
+- **Wrong verdict after a clean chain.** If the chain exits 0 but the harvest then finds a member invalid, the result is REFUSED (`chain_summary_byte_mismatch`) instead of RECOVER. Re-running the harvest gives the same refusal every time.
+
+Everything else checked out:
+- The seven G2-a test files pass: 102 tests and 52 subtests.
+- `gen_g2_phase_d.py --check` passes.
+- The span is 17,248 s and `window_max_s` is 19,980 s, as registered.
+- The screen literal is 0.036462861644980, derived from the acceptance in force.
+- The selector picks the correct rung in all four cases I ran, including the fallback to 4096.
+- The pinned hashes and the 376-record ledger match.
+- A prefill count below 3 does not invalidate a member.
+
+**Phase 2.** The judge found both defects on its own and caught one I missed: as written, the recovery window has no usable ledger source or arm head, because the first window's harvest moves the ledger pin past the only registered source. I found nothing in the ruling that could select a wrong rung, spend a window by rule, or contradict D-166. My findings on it:
+- **Re-arms still need a new seal (should go in with T6).** T6 lets only a recovery window use a new arm head. Re-arming after a null window, or after a RECOVER that made no capture (the reservation still moves the pin), would therefore need a new cold seal. That costs a gate, not a number; replacement text is in the record.
+- **Before arming:** the seal record should cite one real member bundle produced at the arm head whose clock anchor is `bounded`. I found no real member bundle using the clock method members will use at that head. If such members routinely fail the check, the new validity rule (C1) would make every window RECOVER.
+- **Minor points:**
+  - When any member is invalid, T4 drops the byte check against the chain's own summary copy.
+  - The alternative chain variant (T2b) would also need a summarizer change.
+  - The ruling doesn't address my point that §8's "printed per member class" overstates what the selector does. I offered replacement text as an optional ninth change.
+
+Both trace files (`51-seal-ruling.md` and `51r-seal-refuter.md`) are untracked in the worktree. I made no git writes, ran no captures, and kept scratch files under `/tmp/cg-g2a-b2-refuter/`.
+rc=0

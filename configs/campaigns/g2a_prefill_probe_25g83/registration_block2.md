@@ -33,7 +33,7 @@ what the result may and may not be used for.
 **Worked example of the count.** A Qwen3-1.7B prefill that lasts 0.33 s can overlap 4 records
 (for instance records covering 0.00-0.10, 0.10-0.20, 0.20-0.30 and 0.30-0.40 s when the phase runs
 from 0.05 to 0.38 s); it is reducible (4 ≥ 3) but does not qualify (4 < 5). A prefill lasting
-0.45 s overlaps at least 5 records and qualifies. The probe measures this count directly at each
+0.45 s overlaps at least 5 records (with records exactly 100 ms long) and qualifies. The probe measures this count directly at each
 rung; nothing about energy is used.
 
 ## 2. The block
@@ -79,12 +79,17 @@ the arm record and the seal record (§12).
   `gen_g2_phase_d.py --check`. Its sha256 sidecar is pinned in the plan.
 - **Network time.** §5.
 - **Ledger.** The measurement clone's calibration observation ledger is restored byte-exact from
-  the retained Revision 6 C2 clone
+  the retained ledger whose head equals the committed pin
+  `configs/calibration/calibration_ledger_head.json` at the arm head. At the seal that is the
+  Revision 6 C2 clone
   (`/Users/edr/night-custody/measurement/JouleWise-measurement-20261001T2252Z-r6-c2/runs/calibration_observation_ledger.jsonl`,
-  file sha256 `3c9b6844e22958a6ba0eaee28cfab63642f3d0310f15b9bbc9e82363a2d772fb`, 376 records),
-  whose head equals the committed pin `configs/calibration/calibration_ledger_head.json` at H
-  (sequence 376 unless a later merged harvest advanced it; the arm recipe re-reads it). A ledger
-  that fails custody audit or does not match the pin refuses the arm.
+  file sha256 `3c9b6844e22958a6ba0eaee28cfab63642f3d0310f15b9bbc9e82363a2d772fb`, 376 records,
+  pin sequence 376). Every harvest of a window whose chain opened a bracket session advances the
+  pin. Once such an advance is merged (this is always the case for a recovery window), the source
+  is that harvest's archived `derived/terminal-ledger.jsonl`, whose head equals the merged pin;
+  the arm record names the source path and its sha256. Using the source this rule names is not a
+  change to this section. A ledger that fails custody audit or does not match the pin refuses the
+  arm.
 
 A change to any item in this section after the seal voids the seal for windows not yet armed; a
 new seal is required.
@@ -153,12 +158,17 @@ Registered as the physical state, in two parts:
   allowance, and the acceptance still fresh. A bracket that does not pass leaves the window
   incomplete (§7). The ledger's `physical_ahead` terminal state is the expected hand-back
   boundary, not evidence that the bracket passed.
-- **Member.** A member is valid when its bundle passes strict validation from its raw evidence
-  (`joulewise/cli.py` strict validator, re-reducing raw artifacts), every capture-level admission
-  passes (including §5(b)'s binding part), and it is enclosed by the window's pre and post
-  brackets. A member whose prefill phase overlaps fewer than 3 records is VALID: its reducer
-  outcome `not_resolvable_sample_count` is a result, and its count is recorded. Validity never
-  depends on the member's count or on any energy.
+- **Member.** A member is valid when all of these hold: its `summary_metrics.json` status is
+  `succeeded`; its bundle passes strict validation from its raw evidence (`joulewise/cli.py`
+  strict validator, re-reducing raw artifacts); and §5(b)'s binding part passes, read as
+  `uncertainty_evidence.clock_anchor.status` equal to `bounded` in the member's `metadata.json`
+  (any other status, or no such record, makes the member invalid). Enclosure by the window's pre
+  and post brackets is judged once for the window, over its valid members: a failure makes the
+  window RECOVER (§7), it does not make one member invalid. A member whose prefill phase overlaps
+  fewer than 3 records is VALID: its reducer outcome `not_resolvable_sample_count` is a result,
+  and its count is recorded. Validity never depends on the member's count or on any energy; in
+  particular the reducer's per-phase eligibility flag, which a low count turns off, is not a
+  validity test.
 - **Rung evaluable.** A small-model rung is evaluable when it has at least 5 valid members. The
   configured roster has exactly 5 small members per rung, so a rung is evaluable only when all
   five are valid.
@@ -167,11 +177,14 @@ Registered as the physical state, in two parts:
 
 The harvest (`scripts/harvest_g2a_window.py`) writes one mechanical verdict per window:
 
-- **SELECT**: both brackets pass and all four small-model rungs are evaluable. The window is
-  *complete*; the analysis plan (§8) runs on it. The block ends.
+- **SELECT**: the chain exited 0, the OFF receipt of §5(a) is admitted by the harvest, both
+  brackets pass and all four small-model rungs are evaluable. The window is *complete*; the
+  analysis plan (§8) runs on it. The block ends.
 - **RECOVER**: the chain started and the window is not complete (a pre-screen stop, a bracket
-  failure, any small-model rung with fewer than 5 valid members, a nonzero or missing chain exit).
-  The harvest names the cause codes.
+  failure, any small-model rung with fewer than 5 valid members, a nonzero or missing chain exit,
+  an OFF receipt the harvest does not admit). A large-model stage that fails stops the chain
+  before the post bracket, so it also ends RECOVER: the large model never gates the selection
+  rule of §8, but its four stages are part of the one chain. The harvest names the cause codes.
 - **NULL**: the chain never started (`night/chain.started` absent: night-gate refusal, OFF receipt
   failure, clean dwell timeout, admission budget exceeded). This is a **null window**: it is not a
   sweep and consumes nothing in this section.
@@ -179,11 +192,11 @@ The harvest (`scripts/harvest_g2a_window.py`) writes one mechanical verdict per 
   through the standing refusal route (R3) and the harvest re-run; it is never a science outcome.
 
 A null window is re-armed with a new plan id after its named cause is gone, under
-the standing re-arm rules; the same refusal signature twice in a row sends the next step to a
+the standing re-arm rules; the same refusal reason code in the driver's result record twice in a row sends the next step to a
 consult (Sol 6.1 plus Opus), not a third arm.
 
-A RECOVER window whose chain made no capture (no directory under the probe root's
-`runs/instrument_validation/` and no member directory under `runs/`) took no data; for the
+A RECOVER window whose chain made no capture (in the harvest's archive copy of the probe root,
+no file named `powermetrics*.plist` in any `raw/` directory under `runs/`) took no data; for the
 allowance below it counts like a null window. After any other **RECOVER**, at most one recovery
 window runs: a fresh, complete sweep with its own plan id,
 bracket session, probe root and inputs regenerated by the same producer command (same prompt bytes,
@@ -197,8 +210,13 @@ blind window.
 
 ## 8. Analysis plan
 
-- **Input.** Only the authenticated four-row summary and counts receipt of the SELECT window, as
-  regenerated byte-identically by the harvest from raw bundles.
+- **Input.** Only the four-row summary and counts receipt that the harvest regenerates from the
+  SELECT window's raw bundles, counting valid members only (§6). The copy of those two files that
+  the chain wrote is a check, not an input. When every roster member is valid, the regenerated
+  bytes must equal the chain's copy; a difference is REFUSED (a tooling fault). When the harvest
+  found a member invalid, the two differ by construction; the harvest records the difference and
+  the verdict follows §7 from the regenerated summary (RECOVER if a small-model rung is left with
+  fewer than 5 valid members, otherwise unaffected).
 - **Computation.** `scripts/select_g2a_prefill_length.py` on that summary, unmodified: the rule
   is shortest qualifying rung, where a rung qualifies when it has at least 5 small-model members
   and every one of them has an overlapping-record count of at least 5; the reducer floor is read
@@ -233,9 +251,12 @@ blind window.
 
 The harvest prints paths, shas, member counts (how many members, not their record counts) and the
 verdict, never an energy, a fiducial bound, a drift value or a per-member overlap count; those stay
-in the archived files. The verdict and the selection are computed by code from fixed rules; no
-person or agent reads a measured value to decide anything in this block. The selected rung is the
-one result this block exists to produce and is recorded as a parameter.
+in the archived files. The verdict and the selection are computed by code from fixed rules. No
+person or agent reads a per-member overlap count, or a row of any window's summary, before the
+block ends (a SELECT, or the consult of §7). Naming the cause of a RECOVER, as §7 requires, may
+read that window's bracket and admission evidence (fiducial bound, drift, clock outcome, logs);
+it never reads an overlap count. The selected rung is the one result this block exists to
+produce and is recorded as a parameter.
 
 ## 11. Changes after the seal
 
@@ -250,3 +271,13 @@ Pinned at the seal (the seal record lists each with its sha256 at H): this file;
 `scripts/generate_g2a_probe_inputs.py`, `scripts/summarize_g2a_prefill_probe.py`,
 `scripts/select_g2a_prefill_length.py`, `scripts/harvest_g2a_window.py`, `scripts/run_night.py`,
 `configs/model_panels/qwen3_4bit.json`, the D-166 registration file and the acceptance file.
+
+H must contain a harvest that applies §6's member rule as written (a member whose clock anchor
+status is not `bounded` is invalid) and §8's input rule (a member found invalid at harvest gives
+the §7 verdict, never REFUSED for a summary byte difference); the seal record cites the tests
+that show both. The harvest and the selector are run from a checkout whose pinned files match
+the seal record. Any later window of this block (a recovery window, or the re-arm of a null window or of a
+RECOVER window that made no capture) is armed from a head H′ that differs from H only by the
+merged pin advances of this block's earlier harvests and by gated fixes that make code agree
+with this text (§11); the seal record is extended with the H′ pins and no new seal is needed. Any
+other difference needs a new seal.

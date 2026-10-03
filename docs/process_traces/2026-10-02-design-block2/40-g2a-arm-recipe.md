@@ -214,7 +214,7 @@ grep -q "$REG_SHA256" docs/process_traces/2026-10-02-design-block2/52-seal-recor
 print -- "CHECK: screen literals derive from the live acceptance; span literal; window covers span + 2700"
 "$PY" -B scripts/gen_g2_phase_d.py --check
 SPAN="$("$PY" -B -c 'from scripts.gen_g2_phase_d import NIGHT_PROGRAMMED_SPAN_S as s; print(s)')"
-(( WINDOW_MAX_S >= SPAN + 2700 )) || { echo "WINDOW_MAX_S below span + 2700"; exit 3; }
+(( WINDOW_MAX_S == (SPAN + 2700 + 59) / 60 * 60 )) || { echo "WINDOW_MAX_S is not the registered span + 2700 rounded up to a minute"; exit 3; }
 print -- "CHECK: probe inputs built and bound to this window (ids are the harvest's)"
 "$PY" -B scripts/generate_g2a_probe_inputs.py build-probes --root "$G2A_ROOT" --panel "$PANEL" --small-members 5 --large-members 1
 "$PY" -B scripts/generate_g2a_probe_inputs.py bind-window --root "$G2A_ROOT" \
@@ -430,9 +430,10 @@ read from `selection.json` by the next design seat, never typed into RUN_STATE b
 | Verdict | Next |
 |---|---|
 | SELECT | Block 2 is complete. Email Ed once (block complete, selection record path and sha). Launch a design seat (RUN_STATE item 7) for the desk day (rung pin, `_v5` pack generation, re-proof) and the next block. |
-| RECOVER, a capture was made | One recovery window (label `w2`) under the same registration, after the cause codes are named in the session record and any removable cause is removed through R3. Ledger seed = this window's archived terminal ledger `$ARCH/derived/terminal-ledger.jsonl` after its pin advance is merged; `NEW_LEDGER_SHA` from the archive's `SHA256SUMS`. If `w2` also ends RECOVER: stop the block; launch a consult seat (Sol 6.1 plus Opus, blind) and email Ed once. |
-| RECOVER, no capture made | Treated like NULL for the allowance (registration §7). |
-| NULL | Re-arm with a new t0 (fresh plan id) once the named cause is gone. Same refusal signature twice in a row: consult, not a third arm. |
+| RECOVER, `capture_made` true | Name the cause from `harvest.json` cause codes and member `clock_anchor_status` fields plus bracket/admission evidence only (registration §10: never an overlap count or a summary row). If the cause is systematic and not removable by re-arming (for example most members' clock anchors not `bounded`), do NOT arm `w2`: stop the block, launch a consult seat (Sol 6.1 plus Opus, blind), email Ed once. Otherwise one recovery window (label `w2`) after any removable cause is removed through R3. |
+| RECOVER, `capture_made` false | Counts like NULL for the allowance (registration §7). |
+| NULL | Re-arm with a new t0 (fresh plan id) once the named cause is gone. The same refusal reason code in the driver's result record twice in a row: consult, not a third arm. |
+| Every later window | Arm head H′ = a main head that differs from the sealed H only by merged pin advances of this block's harvests and gated fixes that make code agree with the registration (registration §12, T6 with refuter D1); append the H′ pins to the seal record before arming. Ledger seed = the previous harvest's archived `$ARCH/derived/terminal-ledger.jsonl` once its pin advance is merged (registration §3, T5); `NEW_LEDGER_SHA` from that archive's `SHA256SUMS`; for a NULL window that opened no session, the previous seed is unchanged. If `w2` also ends RECOVER: stop the block, consult seat, email Ed once. |
 | REFUSED | Tooling fault: fix through R3 (gated PR), re-run the harvest into a fresh archive root. |
 
 ## 8. Gaps

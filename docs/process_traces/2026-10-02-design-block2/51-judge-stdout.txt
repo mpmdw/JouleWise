@@ -1,0 +1,25 @@
+Warning: no stdin data received in 3s, proceeding without it. If piping from a slow command, redirect stdin explicitly: < /dev/null to skip, or wait longer.
+The ruling is written: `docs/process_traces/2026-10-02-design-block2/51-seal-ruling.md`, first line `SEAL: ADMIT`.
+
+The admit is conditional on eight exact text replacements (T1–T8) and two harvest fixes (C1, C2) being in the arm head before the seal record is written. Neither needs a second cold gate; the code fixes can go into PR 458, which is not yet merged.
+
+**What holds**
+- **D-166:** carried unchanged — ladder, count floor 5, five small members per rung, reducer floor 3 with drift refusal, 4096 fallback, two-way refusal wording, large model non-gating.
+- **Low counts:** a prefill count below 3 stays valid and does not stop the chain (run on the real reducer, validator and campaign runner).
+- **Network time:** OFF state plus the binding within-capture clock check is the right physical test; making the offset comparison binding would protect no number in this block.
+- **Literals:** span 17,248 s, window 19,980 s, screen `0.036462861644980` from the acceptance in force; `gen_g2_phase_d.py --check` passes; 91 lane tests pass.
+
+**Major findings (no blocker)**
+- **F1 — clock rule not enforced for members.** The registration says a clock-refused member is invalid, but the harvest only reports the clock outcome and still counts it. On the fixture, five such members at 512 still gave `SELECT` at 512. Fix is in code (C1); T3 makes the text mechanical.
+- **F2 — REFUSED where the text says RECOVER.** After a chain that completed, any member the harvest finds invalid gives `REFUSED chain_summary_byte_mismatch`, and re-running cannot cure it. This becomes the normal path once C1 lands, so C2 and T4 go with it.
+- **F3 — the recovery window cannot be armed as written.** The first harvest advances the ledger pin past 376, so the only registered restore source no longer matches and §3 then demands a new seal. T5 and T6 give the recovery window a ledger source and arm head.
+- **F4 — a failed large-model stage costs the whole sweep.** It stops the chain before the post bracket, losing twenty valid small members. This does not contradict D-166, but §1's "never gate" hides it.
+
+**Decision for the seat before the seal record:** T2 comes in two variants. T2a states the F4 behaviour honestly and needs no chain change; T2b applies only if the lane changes the chain so a failed large stage is logged and the post bracket still runs. Apply exactly one, matching the chain at H.
+
+The remaining findings are five minor and four nits, with recommended (not required) code changes listed in the ruling.
+
+**Contamination:** the harness injected both `CLAUDE.md` files and the memory index before the charge; I opened none of them and no ruling rests on them. The refuter's `51r-seal-refuter.md` appeared mid-session and I did not read it. The disclosure also lists files read beyond the charge and listed files read only in part.
+
+**Not executed:** the whole suite, any live command, and the real strict validator on a real clock-refused bundle (F1's last link rests on code reading plus the repo's own reducer test). §9's statement about directive #416 is unverified by this gate.
+rc=0
