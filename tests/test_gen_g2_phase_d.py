@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import os
 import subprocess
 import importlib.util
@@ -10,7 +11,9 @@ import re
 import shutil
 import tempfile
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
+from unittest import mock
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -162,6 +165,54 @@ class G2aNightChainTests(unittest.TestCase):
                 f"{hashlib.sha256(contents).hexdigest()}  night-chain.zsh\n",
             )
             self.assertTrue(output.stat().st_mode & 0o111)
+
+    def test_screen_check_detects_stale_source_and_rendered_literals(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            runbook = root / "window_runbook.md"
+            runsheet = root / "runsheet.md"
+            current_runbook = self.generator.RUNBOOK_PATH.read_text()
+            for source in ("runbook", "runsheet-source", "runsheet-generated", "both-stale"):
+                with self.subTest(source=source):
+                    runbook.write_text(current_runbook)
+                    runsheet.write_text(self.runsheet)
+                    target = runbook if source == "runbook" else runsheet
+                    text = target.read_text()
+                    if source == "both-stale":
+                        for path in (runbook, runsheet):
+                            path.write_text(re.sub(
+                                r"(?m)^((?:export )?PRE_CAL_FIDUCIAL_MAX_S=).+$",
+                                r"\g<1>0.0", path.read_text()))
+                        text = target.read_text()
+                    elif source == "runsheet-generated":
+                        start = text.index(self.generator.G2A_BEGIN_MARKER)
+                        text = text[:start] + re.sub(
+                            r"(?m)^PRE_CAL_FIDUCIAL_MAX_S=.+$",
+                            "PRE_CAL_FIDUCIAL_MAX_S=0.0", text[start:], count=1)
+                    else:
+                        text = re.sub(r"(?m)^((?:export )?PRE_CAL_FIDUCIAL_MAX_S=).+$",
+                                      r"\g<1>0.0", text, count=1)
+                    target.write_text(text)
+                    with (mock.patch.object(self.generator, "REPO_ROOT", root),
+                          mock.patch.object(self.generator, "RUNBOOK_PATH", runbook),
+                          mock.patch.object(self.generator, "RUNSHEET_PATH", runsheet),
+                          redirect_stdout(io.StringIO()) as output):
+                        self.assertEqual(self.generator.main(["--check"]), 1)
+                        self.assertIn("FAIL", output.getvalue())
+                        self.assertEqual(self.generator.main([]), 0)
+                        self.assertEqual(self.generator.main(["--check"]), 0)
+                    self.assertEqual(runbook.read_text(), current_runbook)
+                    self.assertEqual(runsheet.read_text(), self.runsheet)
+
+    def test_emission_derives_screen_even_from_stale_source(self) -> None:
+        from scripts.validate_powermetrics_fiducial import _derive_preflight_systematic_screen_s
+
+        stale = re.sub(r"(?m)^((?:export )?PRE_CAL_FIDUCIAL_MAX_S=).+$",
+                       r"\g<1>0.0", self.runsheet)
+        chain = self.generator.render_g2a_night_chain(stale, "20261003")
+        assignments = re.findall(r"(?m)^(?:export )?PRE_CAL_FIDUCIAL_MAX_S=(.+)$", chain)
+        self.assertEqual(assignments, [str(_derive_preflight_systematic_screen_s())] * 2)
+        self.assertNotIn("# acceptance artifact d079_calibration_acceptance_v2_n17_r3", chain)
 
 
 if __name__ == "__main__":

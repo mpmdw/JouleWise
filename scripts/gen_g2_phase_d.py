@@ -16,6 +16,36 @@ RUNSHEET_PATH = (
     REPO_ROOT
     / "docs/process_traces/2026-08-28-live-smoke/SHAKEDOWN-G2-RUNSHEET.md"
 )
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+
+def authenticated_screen_source(source: str) -> str:
+    """Refresh source literals through the writer's authenticated derivation.
+
+    Used on both source documents before rendering, so --check detects a stale
+    source even when its generated copy agrees with it.
+    """
+    from scripts.validate_powermetrics_fiducial import (
+        DEFAULT_ACCEPTANCE_BOUND_PATH,
+        _derive_preflight_systematic_screen_s,
+    )
+
+    record: dict = {}
+    screen = _derive_preflight_systematic_screen_s(preflight_record=record)
+    source, count = re.subn(
+        r"^((?:export )?PRE_CAL_FIDUCIAL_MAX_S=)[^\n]+$",
+        lambda match: match[1] + str(screen), source, flags=re.MULTILINE,
+    )
+    if count == 0:
+        raise ValueError("pre-calibration screen source literal is missing")
+    acceptance_sha = hashlib.sha256(DEFAULT_ACCEPTANCE_BOUND_PATH.read_bytes()).hexdigest()
+    source = re.sub(
+        r"^# acceptance artifact [^\n]+$",
+        f"# acceptance artifact {record['acceptance_id']} (sha {acceptance_sha[:8]}...).",
+        source, flags=re.MULTILINE,
+    )
+    return source
 BEGIN_MARKER = "<!-- BEGIN GENERATED: g2-phase-d-governed-chain -->"
 END_MARKER = "<!-- END GENERATED: g2-phase-d-governed-chain -->"
 G2A_BEGIN_MARKER = "<!-- BEGIN GENERATED: g2a-governed-bracket -->"
@@ -120,6 +150,7 @@ def render_g2a_night_chain(runsheet: str, night_date: str) -> str:
 
     if re.fullmatch(r"[0-9]{8}", night_date) is None:
         raise ValueError("--night-date must be YYYYMMDD")
+    runsheet = authenticated_screen_source(runsheet)
     blocks = inventory_g2a_shell_blocks(runsheet)
     expected_ranges = [(1534, 1598), (328, 351), (374, 385), (389, 564), (575, 587)]
     observed_ranges = [(start, end) for start, end, _body in blocks]
@@ -399,17 +430,22 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.night_date is not None:
         raise SystemExit("--night-date is only valid with --emit-chain")
-    runbook = RUNBOOK_PATH.read_text(encoding="utf-8")
+    runbook_original = RUNBOOK_PATH.read_text(encoding="utf-8")
+    runbook = authenticated_screen_source(runbook_original)
     runsheet = RUNSHEET_PATH.read_text(encoding="utf-8")
+    refreshed_runsheet = authenticated_screen_source(runsheet)
     g2a_generated = render_g2a_generated_region(runbook)
     expected = replace_marked_region(
-        runsheet,
+        refreshed_runsheet,
         g2a_generated,
         begin_marker=G2A_BEGIN_MARKER,
         end_marker=G2A_END_MARKER,
     )
     expected = replace_generated_region(expected, render_generated_region(runbook))
     if args.check:
+        if runbook != runbook_original:
+            print(f"FAIL acceptance-derived screen drift: {RUNBOOK_PATH.relative_to(REPO_ROOT)}")
+            return 1
         # Check executable source fences as well as the generated bracket bytes.
         try:
             render_g2a_night_chain(runsheet, "20260830")
@@ -421,6 +457,9 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         print("PASS generated Phase D matches pinned runbook bytes")
         return 0
+    if runbook != runbook_original:
+        RUNBOOK_PATH.write_text(runbook, encoding="utf-8")
+        print(f"updated {RUNBOOK_PATH.relative_to(REPO_ROOT)}")
     if runsheet != expected:
         RUNSHEET_PATH.write_text(expected, encoding="utf-8")
         print(f"updated {RUNSHEET_PATH.relative_to(REPO_ROOT)}")

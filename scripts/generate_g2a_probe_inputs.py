@@ -692,6 +692,8 @@ def _authenticate_ledger_and_acceptance(
         )
     except Exception as exc:  # noqa: BLE001 - ledger exposes typed and parse failures
         raise G2AProbeError(f"calibration_ledger_refused: {type(exc).__name__}: {exc}") from exc
+    if snapshot.refusal_reasons:
+        raise G2AProbeError("calibration_ledger_refused: " + ", ".join(snapshot.refusal_reasons))
     return {
         "ledger": {
             "path": _display_path(ledger),

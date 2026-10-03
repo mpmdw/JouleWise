@@ -689,10 +689,10 @@ member is collected:
 
 1. Read `b_fiducial_s` from the newly minted
    `RUNS_ROOT/instrument_validation/<id>/instrument_evidence.json`.
-2. Require `b_fiducial_s <= 0.032898493715362` (32.898493715 ms). This is the
-   larger, and so the more conservative, of the prior observed maximum
-   (33.558756680 ms) and the 95% Student-t upper level for a new observation
-   over the same n=19 corpus (33.353749299 ms).
+2. Require `b_fiducial_s <= PRE_CAL_FIDUCIAL_MAX_S`. The frozen literal comes
+   from the authenticated writer derivation below. Regenerate the sources
+   with `scripts/gen_g2_phase_d.py` and require its `--check` to pass before
+   freezing and hashing the chain for the window.
 3. If the value exceeds the threshold, **abort before member 1** and go to
    the retry rules below. Do not proceed and hope the post-calibration
    agrees; it will not save the window, and every member collected after a
@@ -700,13 +700,13 @@ member is collected:
 4. If the value passes, continue the chain unchanged.
 
 The threshold is a derived, provenance-bound number, not a house style: it is
-valid only for Mac15,9 / macOS 25F84 /
+valid only for the active acceptance's `identity_epoch`, including its
 `ac_high_power` / 100 ms cadence / `joint_loss_sublevel_interval_branch_v2`
 bindings, and it is re-derived when any of those change (D-079 clause 3).
 
 **Single source of truth.** This value is *derived from* the issued D-079
-calibration-acceptance artifact (`d079_calibration_acceptance_v2_n17_r3`, sha
-`73f02263…`), not independently chosen. The only stored comparison is two-way:
+calibration-acceptance artifact (the `acceptance_id` and authenticated bytes
+identified next to the generated literal), not independently chosen. The comparison is two-way:
 the chain's frozen `PRE_CAL_FIDUCIAL_MAX_S` literal must equal the
 acceptance-derived value. Then execute the writer's authenticated
 `_derive_preflight_systematic_screen_s()` path and require its runtime result
@@ -1559,10 +1559,10 @@ calibrate_slot() {
 
 # D-079 clause 3: pre-flight calibration screen. Refuses an out-of-family
 # pre-calibration before any member is collected. Derived from the issued
-# acceptance artifact d079_calibration_acceptance_v2_n17_r3 (sha 73f02263...).
+# acceptance artifact d079_calibration_acceptance_v2_n24_25g83_r2 (sha f949f511...).
 # If a successor acceptance issues before arm, regenerate and re-hash this
 # chain with it (freeze-plan Q4); bindings and derivation are in §5B.
-PRE_CAL_FIDUCIAL_MAX_S=0.032898493715362
+PRE_CAL_FIDUCIAL_MAX_S=0.036462861644980
 
 screen_pre_calibration() {
   local dir="$1"

@@ -95,6 +95,40 @@ def _sha256(path: Path) -> str:
 
 
 class GenerateG2AProbeInputsTests(unittest.TestCase):
+    def test_stale_76_row_ledger_refuses_against_current_acceptance(self) -> None:
+        from joulewise.calibration_bracketing import load_calibration_acceptance_bound
+        from joulewise.calibration_ledger import load_calibration_ledger_snapshot
+
+        ledger = ROOT / "tests/fixtures/d117_v2_production/issued/calibration_observation_ledger.jsonl"
+        pin = ROOT / "configs/calibration/calibration_ledger_head.json"
+        acceptance = load_calibration_acceptance_bound()
+        self.assertEqual(len(ledger.read_text().splitlines()), 76)
+        cutoff = acceptance["ledger_cutoff"]
+        snapshot = load_calibration_ledger_snapshot(
+            ledger, pin, baseline_sequence=cutoff["sequence"],
+            baseline_digest=cutoff["head_digest"], require_committed_pin=True,
+            verify_custody=False, repo_root=ROOT,
+        )
+        self.assertEqual(snapshot.head_sequence, 76)
+        self.assertIn("calibration_ledger_rollback", snapshot.refusal_reasons)
+        self.assertIn("calibration_ledger_baseline_missing", snapshot.refusal_reasons)
+        with self.assertRaisesRegex(probe.G2AProbeError, "calibration_ledger_refused.*calibration_ledger_rollback"):
+            probe._authenticate_ledger_and_acceptance(ledger=ledger, head_pin=pin, acceptance=acceptance)
+
+    def test_any_ledger_snapshot_refusal_is_fatal(self) -> None:
+        from types import SimpleNamespace
+
+        ledger, pin = self.root / "ledger.jsonl", self.root / "pin.json"
+        ledger.parent.mkdir(parents=True)
+        ledger.write_bytes(b"ledger bytes authenticated by snapshot seam\n")
+        pin.write_bytes(b"pin bytes authenticated by snapshot seam\n")
+        with mock.patch("joulewise.calibration_ledger.load_calibration_ledger_snapshot",
+                        return_value=SimpleNamespace(refusal_reasons=("calibration_ledger_pending",),
+                                                     head_sequence=76, head_digest="3" * 64)):
+            with self.assertRaisesRegex(probe.G2AProbeError, "calibration_ledger_pending"):
+                probe._authenticate_ledger_and_acceptance(
+                    ledger=ledger, head_pin=pin, acceptance=ACCEPTANCE)
+
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
