@@ -201,7 +201,8 @@ class RevisionSixPromotionTests(unittest.TestCase):
                     'file_sha256': promote.REV6_CANDIDATE_SHA256,
                     'derivation_sha256': self.candidate['derivation_sha256']},
                 'rulings': [{'id': key, **citation} for key in promote.REV6_RULING_IDS],
-                'disclosures': [{'id': 'D1', 'text': 'synthetic OFF receipts'}],
+                'disclosures': [{'id': 'D1', 'text': 'synthetic OFF receipts'}] + [
+                    {'id': f'D{n}', 'text': f'synthetic disclosure {n}'} for n in range(2, 11)],
                 'claim_eligible_meaning': promote.REV6_CLAIM_ELIGIBLE_MEANING,
             },
             'network_time_provenance': {
@@ -279,6 +280,8 @@ class RevisionSixPromotionTests(unittest.TestCase):
             ('disclosures_empty', lambda t: t['issuance_record'].update(disclosures=[])),
             ('disclosure_order', lambda t: t['issuance_record']['disclosures'][0].update(id='D2')),
             ('disclosure_text_empty', lambda t: t['issuance_record']['disclosures'][0].update(text='')),
+            ('disclosure_last_missing', lambda t: t['issuance_record']['disclosures'].pop()),
+            ('disclosure_extra', lambda t: t['issuance_record']['disclosures'].append({'id': 'D11', 'text': 'extra'})),
             ('claim_meaning', lambda t: t['issuance_record'].update(claim_eligible_meaning=promote.CLAIM_ELIGIBLE_MEANING)),
             ('provenance_disclosure_id', lambda t: t['network_time_provenance'].update(disclosure_id='D2')),
             ('provenance_text', lambda t: t['network_time_provenance'].update(text='different')),

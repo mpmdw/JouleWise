@@ -48,8 +48,10 @@ def snapshot(root):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--reference-ref", default="HEAD",
-                        help="Committed predecessor tree; the uncommitted issuance is compared to it.")
+    # The last main commit before the D-138 Revision 6 issuance, where P8 is
+    # still the default; HEAD would compare the issuance with itself.
+    parser.add_argument("--reference-ref", default="384696d2a69cf899f191fc6a52b0adbbad37fa22",
+                        help="Committed pre-issuance tree whose default is P8; the issuance is compared to it.")
     args = parser.parse_args()
     archive = subprocess.run(["git", "archive", args.reference_ref], cwd=ROOT,
                              check=True, capture_output=True).stdout

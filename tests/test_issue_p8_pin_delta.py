@@ -32,7 +32,9 @@ class P8PinDeltaTests(unittest.TestCase):
             if key not in ('generation', 'predecessor', 'reissue_delta'):
                 self.assertEqual(new['derivation_notes'][key], value)
         self.assertTrue(bracket._valid_acceptance_bound(new))
-        self.assertEqual(bracket.load_calibration_acceptance_bound(), new)
+        # P8 by name: the D-138 Revision 6 transaction moved the live default
+        # to the 25G83 n24 generation; P8 stays registered and loadable.
+        self.assertEqual(bracket.load_calibration_acceptance_bound(issuer.P8_PATH), new)
 
     def test_member_value_change_cannot_pass_delta_or_production_validator(self):
         with redirect_stdout(io.StringIO()):
@@ -51,8 +53,13 @@ class P8PinDeltaTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'freeze/cap'):
                 issuer.build_p8()
 
-    def test_default_derivation_basis_accepts_p8_and_explicit_r7_is_stale(self):
+    def test_default_derivation_basis_follows_the_live_default_explicit_p8_valid_r7_stale(self):
+        # Since the D-138 Revision 6 transaction the default basis is the
+        # live 25G83 n24 generation; P8 named explicitly is still a valid basis.
         screen, basis = writer._derivation_only_screen_basis()
+        self.assertEqual(basis['acceptance_id'], bracket.EPOCH_25G83_R2_ACCEPTANCE_ID)
+        self.assertEqual(str(screen), '0.036462861644980')
+        screen, basis = writer._derivation_only_screen_basis(acceptance_path=issuer.P8_PATH)
         self.assertEqual(basis['acceptance_id'], issuer.P8_ID)
         self.assertEqual(str(screen), '0.032898493715362')
         with self.assertRaises(writer._AcceptancePreflightError) as raised:

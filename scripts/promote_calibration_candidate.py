@@ -42,6 +42,9 @@ REV6_RULING_IDS = (
     "SCI-25G83-REV6-B1", "SCI-25G83-REV6-B1-REFUTER",
     "E-NT1", "E-NT1-REFUTER",
 )
+# The lead-authored text's disclosures D1..D10; D1 is the network-time one.
+REV6_DISCLOSURE_IDS = tuple(f"D{n}" for n in range(1, 11))
+REV6_NETWORK_TIME_DISCLOSURE_ID = "D1"
 REV6_CLAIM_ELIGIBLE_MEANING = (
     "these bytes are an authentic issued calibration for identity epoch 25G83, "
     "and its numbers may serve as the timing-uncertainty basis of a reported "
@@ -65,6 +68,8 @@ def _promotable_generations() -> dict[str, dict[str, Any]]:
             "acceptance_id": REV6_ACCEPTANCE_ID, "input_sha256": REV6_INPUT_SHA256,
             "candidate": REV6_CANDIDATE, "candidate_sha256": REV6_CANDIDATE_SHA256,
             "ruling_ids": REV6_RULING_IDS,
+            "disclosure_ids": REV6_DISCLOSURE_IDS,
+            "network_time_disclosure_id": REV6_NETWORK_TIME_DISCLOSURE_ID,
             "claim_eligible_meaning": REV6_CLAIM_ELIGIBLE_MEANING,
             "text_schema": "rev6",
         },
@@ -224,7 +229,7 @@ def _validate_rev6_text(text: dict[str, Any], candidate: dict[str, Any], generat
             or any(not isinstance(item, dict)
                    or not isinstance(item.get("text"), str) or not item["text"].strip()
                    for item in disclosures)
-            or [item.get("id") for item in disclosures] != [f"D{n}" for n in range(1, len(disclosures) + 1)]):
+            or [item.get("id") for item in disclosures] != list(generation["disclosure_ids"])):
         raise ValueError("issuance disclosures D1..Dn missing or unordered")
     if record["claim_eligible_meaning"] != generation["claim_eligible_meaning"]:
         raise ValueError("claim_eligible_meaning mismatch")
@@ -235,7 +240,8 @@ def _validate_rev6_text(text: dict[str, Any], candidate: dict[str, Any], generat
         raise ValueError("rev6 network time provenance fields incomplete")
     disclosure_text = {item["id"]: item["text"] for item in disclosures}
     disclosure_id = provenance["disclosure_id"]
-    if (not isinstance(disclosure_id, str) or disclosure_id not in disclosure_text
+    if (disclosure_id != generation["network_time_disclosure_id"]
+            or disclosure_id not in disclosure_text
             or provenance["text"] != disclosure_text[disclosure_id]):
         raise ValueError("network time provenance differs from its disclosure")
     if not complete_citation(provenance["erratum"]):

@@ -21,3 +21,5 @@ The shape it must meet: cold erratum CAP-COUNCIL-25G83-01-A2-E1 §4 steps 15 and
 ## Output
 
 The report envelope your wrapper requires, with `verdict.decision` MERGE or BLOCK and each finding as {id, severity (blocker|major|minor|nit), file:line, claim, evidence you executed}. BLOCK only for a defect that can make a number, a member, an admission decision or the live default wrong. Do not claim anything you did not execute.
+
+WRITE_SCOPE: []

@@ -12,7 +12,7 @@ The n17 enum cannot carry the successor: n17 applies screen `0.009724`, while th
 
 Corpus verification reads `/Users/edr/night-custody`: it checks manifest/evidence hashes, stored scalar equality, prior-set membership and banked statistics for all 24 members. It does not replay the estimator or validate live hardware.
 
-NEEDS_SCOPE: `tests/test_calibration_live_three_window.py` still loads the live default into an older import-only synthetic issuance. The required authoring regression refuses that synthetic document. Preserve its prior P8 behavior with an explicit P8 source; this file is outside the write scope and was not changed.
+RESOLVED (lead, after the seat's NEEDS_SCOPE): `tests/test_calibration_live_three_window.py` now loads P8 explicitly for its older import-only synthetic issuance; numerical and digest assertions unchanged.
 
 ## Intake sweep
 
@@ -200,3 +200,20 @@ NEEDS_SCOPE: `tests/test_calibration_live_three_window.py` still loads the live 
 | `tests/verify_registered_calibration_snapshot.py:40` | `assert b.load_calibration_acceptance_bound()['acceptance_id'] == b.ACTIVE_ACCEPTANCE_ID` | moves | Validate the new default while comparing all eight retained rows and loaded bytes to the predecessor export. |
 | `tests/verify_registered_calibration_snapshot.py:41` | `print(json.dumps({'default': b.ACTIVE_ACCEPTANCE_ID, 'rows': rows}, sort_keys=True))` | moves | Validate the new default while comparing all eight retained rows and loaded bytes to the predecessor export. |
 | `tests/verify_registered_calibration_snapshot.py:62` | `assert baseline["default"] == "d079_calibration_acceptance_v2_n17_r8"` | stays | The committed predecessor export must keep its historical P8 default. |
+
+## Lead addendum (after the Fable final pass, finding F4)
+
+The post-edit sweep above (77 hits) was taken before two later test changes: the lead's explicit P8
+load in `tests/test_calibration_live_three_window.py` (stays: names P8 as P8 for a historical
+import-only fixture) and the new `tests/test_d138_rev6_issuance.py` (moves: pins the live default).
+The final tree has 87 hits; the 10 extra are all in those two test files and are classed as stated.
+Non-test hits are unchanged (Fable final pass, finding F4, verified by execution).
+
+Final census at the merge head (Sol review R1, recomputed by the reviewer): 87 hits, 46 moves and
+41 stays; no production hit is misclassified.
+
+Missed by this grep, caught by the whole suite: `tests/test_issue_p8_pin_delta.py` asserts P8 as the
+live default through the no-argument loader and `issuer.P8_ID`, neither of which the pattern
+matches. Two of its tests failed on the merged tree; the lead re-pointed them (P8 named by path; the
+default derivation basis asserted to be the live 25G83 generation, with P8 by path still a valid
+basis and R7 stale).
