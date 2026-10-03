@@ -1,0 +1,31 @@
+**FINAL PASS: MERGE.** I found no defect of kinds (1)–(7) in PR #458 at `d5b28bb8`. The verdict file is written at `docs/process_traces/2026-10-02-design-block2/36-fable-final-pass.md`.
+
+**Contamination:** this seat was not fully cold. The harness auto-injected the global and project `CLAUDE.md` and the `MEMORY.md` index before the charge. I opened none of the forbidden files and used none of the injected text as evidence. Of the named lane documents I read only the registration, `31` and `33`.
+
+What I ran and what it showed, by question:
+
+1. **Revision 6 unchanged.** The driver now switches on the registration's sha256. The real C1 and C2 plans on disk carry the sealed Revision 6 registration, so they take the unchanged path with the fixed 7680 s span. Admission tests give the same results at base and head, and all 9 driver mutants went red.
+2. **G2-a start conditions enforced.** A non-Revision-6 chain still goes through the OFF receipt, the clean dwell, the 600 s test on both clocks, and the night gate. A mutant that skipped the OFF receipt and dwell went red. A missing span literal refuses before the OFF command. The registered window leaves 2732 s of runway against the dwell's 2700 s cap.
+3. **Screen correct.** Both literals in an emitted chain equal the live derivation from the `f949f511…` acceptance. `--check` fails on a stale literal in either source, and a chain emitted from a stale source still carries the live value.
+4. **Inspection writes nothing.** Argv-only and verify-only runs against a scratch tree left a full inventory identical. The argv is 36 words ending `--verify-only`, with no `--execute`.
+5. **SELECT is guarded.** Sixteen probes on the unmutated harvester all gave RECOVER or REFUSED where they should; these covered nonzero or missing exit, open or missing session, failed bracket, altered registration or chain, and a foreign session or inventory. Validity never reads the count.
+6. **Low-count members stay valid.** The real campaign test passes with `max_failures=1`. The clock-anchor status is computed from capture stamps, not phase counts.
+7. **Stdout is custody-only.** It carries the verdict, the valid-member total, paths and digests; the in-process callees print nothing to stdout.
+
+The four estimator files, `validate_powermetrics_fiducial.py`, `run_campaign.py` and `scripts/night_chains/**` are untouched.
+
+Findings, none blocking:
+
+- **F1 (minor):** eight harvester guards are correct but unpinned; 8 of my 22 harvester mutants left the lane's 30 tests green. One of them is the registered "chain exited 0" SELECT condition. My probe file at `/tmp/g2a-fable-final/probe_harvest.py` can be lifted into the test module.
+- **F2 (minor):** the harvester's four real seams (frozen-input authentication, ledger replay, strict validation, bracket decision) have only run against fixtures. A fault there gives REFUSED or RECOVER, never SELECT.
+- **F3 (minor):** a derivation chain registered under D-166 now refuses before OFF. That fails closed, but the example plan in `gen_derivation_night.py:703` still shows that combination.
+- **F4–F7 (nits):** stale allowlist line numbers, reordered refusal text, JSON `false` read as exit 0, and a possibly stuck re-run after a pin advance. The last two are from reading only.
+
+Not executed:
+
+- `tests.test_night_agent_install`: about 11 minutes; Sol ran it green at `8a8635a7` and the installer has not changed since.
+- `run_night.py preflight` on the authored plan.
+- The harvester's real seams on real data, since no G2-a window exists yet.
+- Anything live, and the whole test suite.
+- Eight installer tests inside `tests.test_run_night`: they fail at a battery-fixture setup assertion before any installer code runs, so they gave no evidence either way.
+rc=0

@@ -1,0 +1,22 @@
+# Whole suite, PR #458 head 8a8635a7 (= merged tree: main b317866d unchanged), CI shard runner x6 + two exclusives, canonical .venv python, 2026-10-02 20:52-21:19 PDT
+
+SHARD SUMMARY index=1/6 modules=1 tests=73 failures=0 errors=0 skipped=1 result=PASS
+SHARD SUMMARY index=2/6 modules=54 tests=1214 failures=0 errors=0 skipped=14 result=PASS
+SHARD SUMMARY index=3/6 modules=55 tests=1623 failures=8 errors=0 skipped=10 result=FAIL
+SHARD SUMMARY index=4/6 modules=55 tests=1452 failures=0 errors=0 skipped=3 result=PASS
+SHARD SUMMARY index=5/6 modules=56 tests=1467 failures=6 errors=0 skipped=3 result=FAIL
+SHARD SUMMARY index=6/6 modules=56 tests=1552 failures=40 errors=1 skipped=12 result=FAIL
+tests.test_calibration_exits: Ran 48 tests in 512.985s OK
+tests.test_calibration_writer_crash_matrix: Ran 20 tests in 269.368s OK
+
+Total 7,449 tests. 54 failures + 1 error (55 ids), by module:
+  23 test_evidence_night
+  15 test_night_kinds
+   8 test_run_night
+   3 test_sample_quiet_predicate_evidence
+   3 test_install_night_agent
+   3 test_arm_readiness_evidence_author
+
+Classification: 46 = known local-only 'battery fixture in child Pythons' (test_evidence_night 23, test_night_kinds 15, test_run_night 8; the 8 test_run_night ids are identical to base b317866d, compared by id); 3 = known install_night_agent UpdateTime stale; 3 test_sample_quiet_predicate_evidence + 3 test_arm_readiness_evidence_author = six-way contention: both modules re-run serially on the same head: Ran 120 tests, OK.
+
+Later commits 4cacd72b and d5b28bb8 (authoring fence, docs span, harvest C1/C2/T8): affected modules re-run on the final head (see 33-findings-disposition.md); CI runs the full matrix on the final head.

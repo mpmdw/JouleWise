@@ -300,7 +300,7 @@ export REHEARSAL_PRE_ATTEMPT_ID=d117-g2-arm-abort-pre-throwaway-20260829
 export REHEARSAL_POST_ATTEMPT_ID=d117-g2-arm-abort-post-throwaway-20260829
 export POWER_POLICY=ac_high_power
 export SETTLE_S=600
-export PRE_CAL_FIDUCIAL_MAX_S=0.032898493715362
+export PRE_CAL_FIDUCIAL_MAX_S=0.036462861644980
 ```
 
 The two arms consume distinct ids. The rehearsal arm is the earlier,
@@ -447,10 +447,10 @@ calibrate_slot() {
 
 # D-079 clause 3: pre-flight calibration screen. Refuses an out-of-family
 # pre-calibration before any member is collected. Derived from the issued
-# acceptance artifact d079_calibration_acceptance_v2_n17_r3 (sha 73f02263...).
+# acceptance artifact d079_calibration_acceptance_v2_n24_25g83_r2 (sha f949f511...).
 # If a successor acceptance issues before arm, regenerate and re-hash this
 # chain with it (freeze-plan Q4); bindings and derivation are in §5B.
-PRE_CAL_FIDUCIAL_MAX_S=0.032898493715362
+PRE_CAL_FIDUCIAL_MAX_S=0.036462861644980
 
 screen_pre_calibration() {
   local dir="$1"
@@ -1038,10 +1038,10 @@ calibrate_slot() {
 
 # D-079 clause 3: pre-flight calibration screen. Refuses an out-of-family
 # pre-calibration before any member is collected. Derived from the issued
-# acceptance artifact d079_calibration_acceptance_v2_n17_r3 (sha 73f02263...).
+# acceptance artifact d079_calibration_acceptance_v2_n24_25g83_r2 (sha f949f511...).
 # If a successor acceptance issues before arm, regenerate and re-hash this
 # chain with it (freeze-plan Q4); bindings and derivation are in §5B.
-PRE_CAL_FIDUCIAL_MAX_S=0.032898493715362
+PRE_CAL_FIDUCIAL_MAX_S=0.036462861644980
 
 screen_pre_calibration() {
   local dir="$1"
@@ -1594,7 +1594,7 @@ export REHEARSAL_PRE_ATTEMPT_ID=d117-g2-arm-abort-pre-throwaway-20260829
 export REHEARSAL_POST_ATTEMPT_ID=d117-g2-arm-abort-post-throwaway-20260829
 export POWER_POLICY=ac_high_power
 export SETTLE_S=600
-export PRE_CAL_FIDUCIAL_MAX_S=0.032898493715362
+export PRE_CAL_FIDUCIAL_MAX_S=0.036462861644980
 ```
 
 ## Status publication guard (added 2026-09-08)
@@ -1855,3 +1855,20 @@ exec /bin/zsh "$REPO/scripts/night_chains/calibration_derivation_only.zsh" \
   --slot-custody-locator '/Users/edr/night-custody/derivation-20260912/runs/instrument_validation/derivation-20260912-epoch-d12'
 ```
 <!-- END GENERATED: derivation-night-wrapper -->
+
+## G2-a 25G83 night integration desk recipe
+
+Use window runbook §14 for the one-command `--new-g2a-window` authoring,
+inspection and `harvest_g2a_window.py` commands. Bind this runsheet's prospective
+G2-a inputs before inspection, using the retained C2 physical ledger seed
+(376 rows) and its committed pin in the selected measurement clone; the old
+76-row seed refuses. No ledger seed is embedded or repaired by the generator.
+
+The authoring command writes the D-166 v2 `DIAGNOSTIC_NO_PACK` plan, chain and
+sidecar with absolute clone/custody coordinates. Its literal programmed span is
+17248 s, with a minimum 18148 s window (the block-2 registration uses 19980 s),
+and it prints the full desk/collection/
+harvest schedule. Review that schedule before the existing installer/arm recipe.
+Generic physical admission needs no Revision 6 prior-session manifest. Harvest
+uses the dedicated G2-a replay path and preserves complete source custody;
+operator pin review/commit and all live gates remain lead-owned.

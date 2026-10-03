@@ -782,6 +782,24 @@ def finalized_observation_rows(ledger_path):
     return rows
 
 
+def reservation_inspection_source(plan):
+    """Recognize the pinned G2-a surface; retain derivation source checks."""
+    from joulewise import night_gate
+    chain = Path(plan.chain_path)
+    text = chain.read_text()
+    if re.search(r"^export NIGHT_CHAIN_INTERFACE=", text, re.MULTILINE):
+        if (night_gate.chain_literal(text, "NIGHT_CHAIN_INTERFACE") != "g2a-reservation-v1"
+                or "NIGHT_VERIFY_ONLY" not in text or "NIGHT_RESERVATION_ARGV_ONLY" not in text):
+            raise ValueError("G2-a chain lacks reservation inspection surface")
+        return chain
+    source = Path(plan.measurement_root) / "scripts/night_chains/calibration_derivation_only.zsh"
+    if "NIGHT_VERIFY_ONLY" not in source.read_text() or "calibration_derivation_only.zsh" not in text:
+        raise ValueError("chain does not support reservation verify-only mode")
+    if "NIGHT_RESERVATION_ARGV_ONLY" not in source.read_text():
+        raise ValueError("input_digests: chain lacks reservation argument inspection")
+    return source
+
+
 def probe_bindings(plan, plan_path, python):
     """Bind the actual reservation inputs and the effective interpreters."""
     chain = Path(plan.chain_path)
@@ -798,11 +816,7 @@ def probe_bindings(plan, plan_path, python):
     if not re.fullmatch(r"[0-9a-f]{64}", head) or physical != head:
         raise ValueError("ledger_head_sha256 mismatch")
     root = Path(plan.measurement_root)
-    source = root / "scripts/night_chains/calibration_derivation_only.zsh"
-    if "NIGHT_VERIFY_ONLY" not in source.read_text() or "calibration_derivation_only.zsh" not in chain.read_text():
-        raise ValueError("chain does not support reservation verify-only mode")
-    if "NIGHT_RESERVATION_ARGV_ONLY" not in source.read_text():
-        raise ValueError("input_digests: chain lacks reservation argument inspection")
+    source = reservation_inspection_source(plan)
     inputs = reservation_input_digests(plan, plan_path)
     return {"plan_id": plan.plan_id, "plan_sha256": _digest(plan_path),
             "input_digests": inputs,
@@ -1291,10 +1305,14 @@ def validate_install(args, repo):
                 str(manifest_path): "sha256:" + manifest_sha}}, sort_keys=True))
         else:
             source = Path(plan.measurement_root) / "scripts/night_chains/calibration_derivation_only.zsh"
-            if source.is_file() and "NIGHT_RESERVATION_ARGV_ONLY" in source.read_text():
+            g2a_inspection = re.search(r"^export NIGHT_CHAIN_INTERFACE=", chain_text, re.MULTILINE)
+            if (g2a_inspection or
+                    (source.is_file() and "NIGHT_RESERVATION_ARGV_ONLY" in source.read_text())):
                 try:
+                    if g2a_inspection:
+                        reservation_inspection_source(plan)
                     print(json.dumps({"input_digests": reservation_input_digests(plan, args.plan)}, sort_keys=True))
-                except subprocess.SubprocessError as exc:
+                except (ValueError, OSError, subprocess.SubprocessError) as exc:
                     raise Refused(2, "reservation inspection failed: " + str(exc))
             else:
                 print(json.dumps({"input_digests": None, "detail": "no reservation inspection surface"}))
