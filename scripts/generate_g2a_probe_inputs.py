@@ -692,6 +692,8 @@ def _authenticate_ledger_and_acceptance(
         )
     except Exception as exc:  # noqa: BLE001 - ledger exposes typed and parse failures
         raise G2AProbeError(f"calibration_ledger_refused: {type(exc).__name__}: {exc}") from exc
+    if snapshot.refusal_reasons:
+        raise G2AProbeError("calibration_ledger_refused: " + ", ".join(snapshot.refusal_reasons))
     return {
         "ledger": {
             "path": _display_path(ledger),
@@ -1159,6 +1161,7 @@ def check_inputs(
     ledger: Path,
     head_pin: Path,
     campaign_policy: Path,
+    at_reservation: bool = False,
 ) -> None:
     root = root.resolve()
     inventory_path = root / WINDOW_PLAN_LEAF / INVENTORY_NAME
@@ -1230,9 +1233,35 @@ def check_inputs(
         raise G2AProbeError("identity_epoch_mismatch")
     if t1 != current_t1:
         raise G2AProbeError("t1_bindings_mismatch")
-    ledger_binding = _authenticate_ledger_and_acceptance(
-        ledger=ledger, head_pin=head_pin, acceptance=acceptance
-    )
+    if at_reservation:
+        # A harvested window has appended receipts. Authenticate the exact
+        # frozen prefix using the SAME enforcing check as admission; full-tail
+        # and bracket custody authentication belongs to the harvest seam.
+        from joulewise.calibration_ledger import _scan_physical_ledger
+        frozen = _read_json(plan_path, label="calibration_plan")
+        binding = frozen["calibration_ledger"]
+        raw = ledger.read_bytes()
+        physical = _scan_physical_ledger(raw)
+        try:
+            # Governed abandonment may retain raw residue between receipts;
+            # physical receipt offsets, rather than line counts, own the cut.
+            start = physical.offsets[binding["head_sequence"] - 1]
+            prefix = raw[:raw.index(b'\n', start) + 1]
+        except (IndexError, TypeError, ValueError) as error:
+            raise G2AProbeError("calibration_ledger_frozen_prefix_mismatch") from error
+        if (_sha256_bytes(prefix) != binding["sha256"]
+                or binding["path"] != _display_path(ledger)):
+            raise G2AProbeError("calibration_ledger_frozen_prefix_mismatch")
+        with tempfile.TemporaryDirectory(prefix="g2a-reserved-ledger-") as temporary:
+            pinned_ledger = Path(temporary) / "ledger.jsonl"
+            pinned_ledger.write_bytes(prefix)
+            ledger_binding = _authenticate_ledger_and_acceptance(
+                ledger=pinned_ledger, head_pin=head_pin, acceptance=acceptance)
+        ledger_binding["ledger"]["path"] = _display_path(ledger)
+    else:
+        ledger_binding = _authenticate_ledger_and_acceptance(
+            ledger=ledger, head_pin=head_pin, acceptance=acceptance
+        )
 
     ladder = _read_ladder(ladder_path)
     tokenizer = _load_runtime_tokenizer(models["small"])
@@ -1294,6 +1323,36 @@ def check_inputs(
         raise G2AProbeError("calibration_plan_id_mismatch")
 
 
+def harvest_roster(value):
+    stages = value['stages']
+    expected = [(role, length) for role in ('small', 'large') for length in (512, 1024, 2048, 4096)]
+    if len(stages) != len(expected):
+        raise G2AProbeError('roster_stage_mismatch')
+    ids = []
+    for stage, (role, length) in zip(stages, expected):
+        count = 5 if role == 'small' else 1
+        members = stage['members']
+        wanted = [_run_id(role, length, rep) for rep in range(1, count + 1)]
+        if (stage['stage_id'] != f'{role}-p{length}' or stage['model_role'] != role
+                or stage['prefill_tokens'] != length or [row['run_id'] for row in members] != wanted):
+            raise G2AProbeError('roster_member_mismatch')
+        ids.extend(wanted)
+    return ids
+
+
+def check_harvest_inputs(*, measurement_root, root, ledger, head_pin, runner=subprocess.run):
+    """Keep committed-pin and relative-path authentication in the owning clone."""
+    result = runner([str(measurement_root / '.venv/bin/python'), '-B',
+        str(measurement_root / 'scripts/generate_g2a_probe_inputs.py'), 'check',
+        '--root', str(root), '--panel', str(measurement_root / 'configs/model_panels/qwen3_4bit.json'),
+        '--ledger', str(ledger), '--head-pin', str(head_pin),
+        '--campaign-policy', str(measurement_root / 'configs/campaign_policies/quiet_mac_p2_production.json'),
+        '--at-reservation'], cwd=measurement_root, capture_output=True, text=True, check=False, timeout=300)
+    if result.returncode:
+        raise G2AProbeError('harvest_frozen_input_authentication_failed')
+
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
@@ -1321,6 +1380,8 @@ def build_parser() -> argparse.ArgumentParser:
     check.add_argument("--ledger", type=Path, required=True)
     check.add_argument("--head-pin", type=Path, required=True)
     check.add_argument("--campaign-policy", type=Path, required=True)
+    check.add_argument("--at-reservation", action="store_true",
+                       help="harvest replay of the frozen ledger prefix; caller authenticates full tail")
     return parser
 
 
@@ -1355,6 +1416,7 @@ def main(argv: list[str] | None = None) -> int:
                 ledger=args.ledger,
                 head_pin=args.head_pin,
                 campaign_policy=args.campaign_policy,
+                at_reservation=args.at_reservation,
             )
             print("PASS G2-a inputs authenticate with no config warnings")
         return 0

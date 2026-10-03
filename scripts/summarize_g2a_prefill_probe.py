@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import sys
 from pathlib import Path
 from typing import Any, Sequence
@@ -368,6 +369,7 @@ def summarize(
     config_root: Path,
     input_inventory: Path,
     runs_root: Path,
+    valid_run_ids: set[str] | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Return authenticated member rows and the selector's four-row summary."""
 
@@ -471,6 +473,8 @@ def summarize(
                 model_name=stage["model_name"],
                 prefill_tokens=expected_length,
             )
+            if valid_run_ids is not None and run_id not in valid_run_ids:
+                continue
             summary_path = runs_root / run_id / "summary_metrics.json"
             if not summary_path.is_file():
                 continue
@@ -531,6 +535,37 @@ def summarize(
     return member_rows, summary_rows
 
 
+def network_time_capture_report(off, captures):
+    rows = []
+    for run_id, path in captures:
+        calibration = (path / 'instrument_evidence.json').is_file()
+        metadata_path = path / ('instrument_evidence.json' if calibration else 'metadata.json')
+        try:
+            data = _load_json(metadata_path, label="capture_clock")[0] if metadata_path.is_file() else None
+        except (OSError, ProbeSummaryError):
+            data = None  # Strict-invalid members still belong in a RECOVER report.
+        usable = isinstance(data, dict)
+        data = data if usable else {}
+        evidence = data.get('uncertainty_evidence')
+        anchor = data.get('clock_anchor') if calibration else (
+            evidence.get('clock_anchor') if isinstance(evidence, dict) else None)
+        anchor = anchor if isinstance(anchor, dict) and anchor else {'status': 'not recorded'}
+        clock = data.get('clock') if isinstance(data.get('clock'), dict) else {}
+        row = {'capture_id': run_id, 'within_capture': anchor, 'offset_comparison': 'not comparable',
+               'metadata_status': 'present' if usable else 'unreadable' if metadata_path.is_file() else 'missing'}
+        # SystemClock.info records Python time.monotonic offsets. OFF uses
+        # that same source. Other clock kinds (or calibration events lacking
+        # a source declaration) cannot establish this cross-capture comparison.
+        if off and clock.get('kind') == 'system':
+            offsets = [clock.get(f'wall_minus_monotonic_{position}_s') for position in ('start', 'end')]
+            if all(type(x) in (int, float) and math.isfinite(x) for x in offsets):
+                delta = max(abs(x - (off['epoch_s'] - off['monotonic_s'])) for x in offsets)
+                row.update(offset_comparison='comparable', monotonic_source='python.time.monotonic',
+                           receipt_offset_difference_s=delta, flagged_above_0_015_s=delta > 0.015)
+        rows.append(row)
+    return {'off_receipt': off, 'captures': rows}
+
+
 def _summary_bytes(rows: list[dict[str, Any]]) -> bytes:
     return (
         json.dumps(rows, ensure_ascii=True, indent=2, sort_keys=True) + "\n"
@@ -555,7 +590,7 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main(argv: Sequence[str] | None = None) -> int:
+def main(argv: Sequence[str] | None = None, *, valid_run_ids: set[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
         if args.counts_output.resolve() == args.summary_output.resolve():
@@ -566,6 +601,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             config_root=args.config_root,
             input_inventory=args.input_inventory,
             runs_root=args.runs_root,
+            valid_run_ids=valid_run_ids,
         )
         summary_raw = _summary_bytes(summary_rows)
         receipt = {

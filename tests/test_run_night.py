@@ -179,7 +179,7 @@ print(json.dumps({'verify_only':'ok', 'ledger_head_sha256':'a'*64,
     pin.write_text(json.dumps({"head_digest": "a" * 64}))
     for name in ("frozen-plan.json", "identity.json", "t1.json"):
         (measurement / name).write_text("{}\n")
-    exports = {"SESSION_ID": "stub-session", "WINDOW_ID": "window", "PLAN_ID": "frozen-plan",
+    exports = {"NIGHT_PROGRAMMED_SPAN_S": "1", "SESSION_ID": "stub-session", "WINDOW_ID": "window", "PLAN_ID": "frozen-plan",
                "PLAN_SHA256": "b" * 64, "PLAN": str(measurement / "frozen-plan.json"),
                "EVIDENCE_ROOT_ID": "stub-evidence", "RUNS_ROOT": str(measurement / "runs"),
                "WINDOW_CUSTODY_ROOT": str(root / "window"), "CALIBRATION_LEDGER": str(ledger),
@@ -401,7 +401,7 @@ class NightDriverTests(unittest.TestCase):
         self.custody = self.root / "custody"
         self.custody.mkdir()
         self.chain = self.root / "chain.zsh"
-        self.chain.write_text("echo chain\n", encoding="utf-8")
+        self.chain.write_text("export NIGHT_PROGRAMMED_SPAN_S=1\necho chain\n", encoding="utf-8")
         self.sidecar = self.root / "chain.zsh.sha256"
         # GNU shasum form, exactly what `gen_g2_phase_d.py --emit-chain` writes;
         # both the gate and the driver must read it.
@@ -500,7 +500,7 @@ class NightDriverTests(unittest.TestCase):
         # Exactly the same chain stimulus on the base: exit 2 plus a complete
         # seat-A document. Environment plumbing is tested independently below.
         chain = Path(plan.chain_path)
-        chain.write_text("export JOULEWISE_NIGHT_PLAN_ID=" + shlex.quote(plan.plan_id) +
+        chain.write_text("export NIGHT_PROGRAMMED_SPAN_S=1\nexport JOULEWISE_NIGHT_PLAN_ID=" + shlex.quote(plan.plan_id) +
             "\nexport JOULEWISE_CALIBRATION_REFUSAL_PATH=" +
             shlex.quote(str(self.custody / "night/calibration-refusal.json")) +
             "\nexec " + shlex.quote(sys.executable) + " " +
@@ -595,7 +595,7 @@ class NightDriverTests(unittest.TestCase):
         plan = self.driver._load_plan(self.plan_path)
         chain = Path(plan.chain_path)
         chain.write_text(
-            "export JOULEWISE_NIGHT_PLAN_ID=" + shlex.quote(plan.plan_id)
+            "export NIGHT_PROGRAMMED_SPAN_S=1\nexport JOULEWISE_NIGHT_PLAN_ID=" + shlex.quote(plan.plan_id)
             + '\nexport JOULEWISE_CALIBRATION_REFUSAL_PATH="$NIGHT_DIR/calibration-refusal.json"'
             + "\nexport JOULEWISE_NIGHT_CUSTODY_BUDGET_S=3"
             + "\nexec " + shlex.quote(sys.executable) + " -B "
@@ -743,12 +743,20 @@ runpy.run_path(script, run_name='__main__')
 
     def _run_with_clean_dwell(self, outcome, *, dwell_duration=600, off_age=0,
                               manifest_case="first", settle_failure=False, off_wall_lag=0,
-                              start_record_duration=0, missing_evidence=None):
+                              start_record_duration=0, missing_evidence=None,
+                              revision6=True, programmed_span=7680):
+        self.registration.write_bytes((REPO_ROOT / (
+            "configs/calibration/preregistration_d079_epoch_25g83_rev1.md" if revision6
+            else night_gate.D166_REGISTRATION_PATH)).read_bytes())
         helper = _load_driver(inject_clean_dwell=False)
         for name in ("_admit_derivation_clean_dwell", "_read_start_manifest",
                      "_write_start_conditions", "_admit_network_time_off"):
             setattr(self.driver, name, getattr(helper, name))
-        self.chain.write_text("export SESSION_ID='derivation-current'\necho chain\n")
+        if not revision6:
+            self.driver._read_start_manifest = mock.Mock(side_effect=AssertionError("manifest read"))
+        literal = (f"export NIGHT_PROGRAMMED_SPAN_S={programmed_span}\n"
+                   if not revision6 and programmed_span is not None else "")
+        self.chain.write_text(("export SESSION_ID='derivation-current'\n" if revision6 else "") + literal + "echo chain\n")
         self.sidecar.write_text(hashlib.sha256(self.chain.read_bytes()).hexdigest() + "\n")
         self._write_plan(window_max_s=9000)
         script = self.root / "scripts/prewindow_check.sh"
@@ -807,8 +815,14 @@ runpy.run_path(script, run_name='__main__')
             events.append("dwell")
             self.assertEqual(events[:2], ["OFF receipt", "dwell"])
             self.assertEqual(argv[:3], [str(script), "--wait", "--timeout-s"])
-            self.assertEqual(int(argv[3]), 1310)
-            self.assertEqual(kwargs["timeout"], 1310)
+            if revision6:
+                self.assertEqual(int(argv[3]), 1310)
+            else:
+                self.assertEqual(int(argv[3]), 9000 - programmed_span - 10)
+            if revision6:
+                self.assertEqual(kwargs["timeout"], 1310)
+            else:
+                self.assertEqual(kwargs["timeout"], 9000 - programmed_span - 10)
             self.assertEqual(kwargs["cwd"], str(self.root))
             self.assertIs(kwargs["stdin"], subprocess.DEVNULL)
             self.assertIs(kwargs["stderr"], subprocess.STDOUT)
@@ -867,7 +881,10 @@ runpy.run_path(script, run_name='__main__')
             self.assertEqual((night / record["output_file"]).read_bytes(), output_bytes)
         self.assertEqual(record["output_sha256"], hashlib.sha256(output_bytes).hexdigest())
         self.assertEqual(record["required_clean_dwell_s"], 600)
-        self.assertEqual(record["timeout_s"], 1310)
+        if revision6:
+            self.assertEqual(record["timeout_s"], 1310)
+        else:
+            self.assertEqual(record["timeout_s"], 9000 - programmed_span - 10)
         self.assertLessEqual(record["started_epoch_s"], record["ended_epoch_s"])
         self.assertLessEqual(record["started_monotonic_ns"], record["ended_monotonic_ns"])
         return code, record, claim, chain
@@ -1121,6 +1138,7 @@ runpy.run_path(script, run_name='__main__')
         self.assertEqual(self._run_with_clean_dwell(0, off_wall_lag=0)[0], 0)
 
     def test_standard_plan_budget_preserves_programmed_span_and_gate_cost(self):
+        self.registration.write_bytes((REPO_ROOT / "configs/calibration/preregistration_d079_epoch_25g83_rev1.md").read_bytes())
         plan = replace(self.driver._load_plan(self.plan_path), window_max_s=9000)
         with mock.patch.object(self.driver.time, "time", return_value=plan.t0_epoch_s + 17), \
                 mock.patch.object(self.driver.time, "monotonic", return_value=123):
@@ -1128,6 +1146,28 @@ runpy.run_path(script, run_name='__main__')
             self.assertEqual(budget["programmed_span_s"], 7680)
             self.assertEqual(budget["latest_chain_start_epoch_s"], plan.t0_epoch_s + 1320)
             self.assertEqual(self.driver._derivation_budget_remaining(budget), 1303)
+
+    def test_generic_calibration_uses_literal_budget_without_manifest(self):
+        code, dwell, claim, chain = self._run_with_clean_dwell(
+            0, revision6=False, programmed_span=7000, manifest_case="absent")
+        self.driver._read_start_manifest.assert_not_called()
+        self.assertEqual(code, 0)
+        self.assertEqual(dwell["budget"]["programmed_span_s"], 7000)
+        self.assertEqual(dwell["budget"]["latest_chain_start_epoch_s"], self.t0_epoch_s + 2000)
+        record = json.loads((self.custody / "night/start_conditions.json").read_bytes())
+        self.assertEqual(record["schema"], "joulewise.calibration.start_conditions.v1")
+        self.assertNotIn("a_prior_session_manifest", record["evidence"])
+        claim.assert_called_once()
+        chain.assert_called_once()
+
+    def test_generic_missing_span_refuses_before_OFF(self):
+        code, _, claim, chain = self._run_with_clean_dwell(
+            0, revision6=False, programmed_span=None, manifest_case="absent")
+        self.assertEqual(code, 3)
+        self.assertEqual(self.dwell_events, [])
+        claim.assert_not_called()
+        chain.assert_not_called()
+        self.assertIn("NIGHT_PROGRAMMED_SPAN_S", (self.custody / "night/refusal.json").read_text())
 
     def test_real_idle_agent_hit_refuses_without_chain_or_pack_authoring(self) -> None:
         self.source.census_responses = [
@@ -4370,7 +4410,9 @@ class WindowDeadlineTests(unittest.TestCase):
         })
 
     def _write_chain(self, body: str) -> None:
-        self.chain.write_text(body, encoding="utf-8")
+        # A non-Revision-6 calibration chain declares its programmed span (lane
+        # G2A-NIGHT-25G83-01 R1); these tests exercise the window deadline.
+        self.chain.write_text("export NIGHT_PROGRAMMED_SPAN_S=1\n" + body, encoding="utf-8")
         self.sidecar.write_text(
             hashlib.sha256(self.chain.read_bytes()).hexdigest() + "  chain.zsh\n",
             encoding="utf-8")

@@ -689,10 +689,10 @@ member is collected:
 
 1. Read `b_fiducial_s` from the newly minted
    `RUNS_ROOT/instrument_validation/<id>/instrument_evidence.json`.
-2. Require `b_fiducial_s <= 0.032898493715362` (32.898493715 ms). This is the
-   larger, and so the more conservative, of the prior observed maximum
-   (33.558756680 ms) and the 95% Student-t upper level for a new observation
-   over the same n=19 corpus (33.353749299 ms).
+2. Require `b_fiducial_s <= PRE_CAL_FIDUCIAL_MAX_S`. The frozen literal comes
+   from the authenticated writer derivation below. Regenerate the sources
+   with `scripts/gen_g2_phase_d.py` and require its `--check` to pass before
+   freezing and hashing the chain for the window.
 3. If the value exceeds the threshold, **abort before member 1** and go to
    the retry rules below. Do not proceed and hope the post-calibration
    agrees; it will not save the window, and every member collected after a
@@ -700,13 +700,13 @@ member is collected:
 4. If the value passes, continue the chain unchanged.
 
 The threshold is a derived, provenance-bound number, not a house style: it is
-valid only for Mac15,9 / macOS 25F84 /
+valid only for the active acceptance's `identity_epoch`, including its
 `ac_high_power` / 100 ms cadence / `joint_loss_sublevel_interval_branch_v2`
 bindings, and it is re-derived when any of those change (D-079 clause 3).
 
 **Single source of truth.** This value is *derived from* the issued D-079
-calibration-acceptance artifact (`d079_calibration_acceptance_v2_n17_r3`, sha
-`73f02263…`), not independently chosen. The only stored comparison is two-way:
+calibration-acceptance artifact (the `acceptance_id` and authenticated bytes
+identified next to the generated literal), not independently chosen. The comparison is two-way:
 the chain's frozen `PRE_CAL_FIDUCIAL_MAX_S` literal must equal the
 acceptance-derived value. Then execute the writer's authenticated
 `_derive_preflight_systematic_screen_s()` path and require its runtime result
@@ -1559,10 +1559,10 @@ calibrate_slot() {
 
 # D-079 clause 3: pre-flight calibration screen. Refuses an out-of-family
 # pre-calibration before any member is collected. Derived from the issued
-# acceptance artifact d079_calibration_acceptance_v2_n17_r3 (sha 73f02263...).
+# acceptance artifact d079_calibration_acceptance_v2_n24_25g83_r2 (sha f949f511...).
 # If a successor acceptance issues before arm, regenerate and re-hash this
 # chain with it (freeze-plan Q4); bindings and derivation are in §5B.
-PRE_CAL_FIDUCIAL_MAX_S=0.032898493715362
+PRE_CAL_FIDUCIAL_MAX_S=0.036462861644980
 
 screen_pre_calibration() {
   local dir="$1"
@@ -2288,3 +2288,83 @@ and the a10 recorded deviation". The question is whether a post calibration
 that fails for a reason other than `clock_anchor_unresolved` may be retried
 once after a settle, or must abort the window as the current text requires.
 Undecided; the current text stands.
+
+## 14. G2-a diagnostic night authoring and harvest (25G83)
+
+At the desk, retain the C2 physical ledger seed (376 rows) in the measurement
+clone, with its committed head pin; the old 76-row seed refuses against the
+current acceptance. Prepare and bind the G2-a inputs with the producer recipe
+in the G2 runsheet before inspection. Use a new window ID and fresh custody
+roots. This remains `DIAGNOSTIC_NO_PACK`, under the D-166 registration.
+
+With `T0_EPOCH_S` set to the reviewed minute-aligned start at least 2400 s
+ahead, and the literal clone head in `MEASUREMENT_HEAD`, one command publishes
+the v2 night plan, executable chain and SHA-256 sidecar:
+
+```sh
+/Users/edr/code/JouleWise/.venv/bin/python -B scripts/gen_g2_phase_d.py \
+  --new-g2a-window "$NIGHT_ROOT/night_plan.json" \
+  --t0-epoch-s "$T0_EPOCH_S" --window-max-s "$WINDOW_MAX_S" \
+  --plan-id "$WINDOW_ID" \
+  --measurement-root "$MEASUREMENT_ROOT" --measurement-head "$MEASUREMENT_HEAD" \
+  --night-root "$NIGHT_ROOT" --g2a-root "$G2A_ROOT"
+```
+
+All paths must be absolute; the clone is a descendant of
+`/Users/edr/night-custody/measurement/`. IDs and paths containing `codex`,
+`claude` or `t3` in any case refuse. Existing outputs refuse. The printed
+schedule includes install close, stand-down, t0, latest chain start, window
+end and harvest open. `NIGHT_PROGRAMMED_SPAN_S=17248` reserves code-defined
+waits plus variable-work allowances sized from the runsheet's documented
+per-member cadence; its complete sizing arithmetic is beside the constant in
+`scripts/gen_g2_phase_d.py`. The command refuses a window shorter than that
+span plus 900 s; the block-2 registration sets `WINDOW_MAX_S` to the span plus
+2700 s (the clean dwell's cap), rounded up to a minute: 19980 s. The plan may be
+written to a staging directory and published into the night root after the arm
+notice (the block-2 arm recipe does this).
+
+Check the new custody before the existing reviewed installer/arming procedure:
+
+```sh
+/bin/zsh -n "$NIGHT_ROOT/chain.zsh"
+/Users/edr/code/JouleWise/.venv/bin/python -B scripts/run_night.py \
+  preflight --plan "$NIGHT_ROOT/night_plan.json"
+NIGHT_RESERVATION_ARGV_ONLY=1 NIGHT_VERIFY_ONLY=1 \
+  /bin/zsh "$NIGHT_ROOT/chain.zsh" > "$NIGHT_ROOT/reservation-argv.nul"
+```
+
+Argv inspection precedes all chain mutations and reports the same reservation
+arguments execution uses, with `--verify-only`. `NIGHT_VERIFY_ONLY=1` alone
+runs that reservation's verify-only path. Installer render-only also inspects
+the arguments without executing reservation. Desk checks are fixture/tooling
+evidence; the lead still owns live verification and the clean machine window.
+The generic admission preserves network-time OFF, its 600 s settle on both
+clocks, the overlapping clean dwell, and the physical night gate. It writes
+`night/start_conditions.json` without requiring a Revision 6 prior manifest.
+
+After the printed harvest-open boundary (`window end + 300 s`), delivery and
+process-group clearance, run the dedicated harvester from the reviewed code:
+
+```sh
+/Users/edr/code/JouleWise/.venv/bin/python -B scripts/harvest_g2a_window.py \
+  --plan "$NIGHT_ROOT/night_plan.json" --archive-root "$ARCHIVE_ROOT" \
+  --operator-identity "$OPERATOR_IDENTITY"
+```
+
+The fresh archive contains complete source custody and `SHA256SUMS` before
+replay. Derived files authenticate frozen inputs and their reservation ledger
+prefix, the full physical ledger, bracket custody/verdict, all 24 strict member
+bundles, regenerated summary bytes and clock outcomes. Low prefill counts are
+valid reducer outcomes; D-166's selector decides their consequence. `SELECT`
+runs the selector when brackets pass and each rung has five valid small members;
+its registered 4096 fallback can still be returned. `RECOVER` names incomplete
+window causes. `REFUSED` identifies an archive or authentication tooling fault;
+a refusal before archive publication prints a separate temporary JSON report.
+Clock offset comparisons above 0.015 s are report-only, and undeclared or
+different monotonic sources are marked "not comparable".
+
+The governed recovery/terminal-pin procedure advances the clone's pin after
+authenticated harvest (aborting an open session when required). Review and
+commit that file change separately as the operator; the harvester never commits.
+Its stdout contains custody paths, hashes, member totals and the verdict;
+measurement values remain in the archived files.
