@@ -28,3 +28,16 @@ Step: block-2 handoff item 1, arm `w1` (recipe 40).
 - R3: one full-tier PR carries both fixes and this record; re-arm `w1` with a
   new t0 at the merged head (the abandoned attempt's unpublished directories
   for plan d117-g2a-prefill-probe-20261003T0742Z are left in place).
+
+## PR #460 gates
+
+- Sol 6.1 high executing review (head b39d7015): `11-sol-executing-review.md`, VERDICT PASS, no findings.
+- Fable cold final pass (head b39d7015): `21-fable-final-pass.md`, PASS. Findings: (1) seal record not
+  yet extended: done after merge as a records commit (below); (2) state that w1 itself arms from H′:
+  done in that extension; (3) leftover directories harmless: no action; (4) nit, test does not assert
+  the ledger pins: rejected; both seats verified those exports byte-identical, including measurement roots
+  that contain the runsheet id.
+- Fable cold ruling on registration §11/§12 classification: `31-fable-s12-ruling.md`,
+  RULING EXTEND-SEAL-WITH-H-PRIME (a §11 fix; no new seal). Conditions: re-verify at the merged head that
+  only `scripts/gen_g2_phase_d.py` differs among the nine pins; append H′ pins to record 52 before arming;
+  say plainly that w1 arms from H′.
