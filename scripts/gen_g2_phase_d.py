@@ -323,8 +323,11 @@ def author_g2a_window(args, *, now=time.time):
         raise ValueError("window_max_s must cover NIGHT_PROGRAMMED_SPAN_S + 900")
     night = args.night_root.resolve()
     output = args.new_g2a_window.resolve()
-    if output.parent != night:
-        raise ValueError("plan output must be in --night-root")
+    # The plan may be staged outside the night root: the arm recipe publishes it
+    # into custody (os.replace to <night root>/night_plan.json) only after the
+    # arm notice is accepted, as the Revision 6 arm does.
+    if output.name != "night_plan.json":
+        raise ValueError("plan output must be named night_plan.json")
     chain = night / "chain.zsh"
     sidecar = night / "chain.zsh.sha256"
     if any(path.exists() for path in (output, chain, sidecar)):

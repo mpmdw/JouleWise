@@ -1866,7 +1866,8 @@ G2-a inputs before inspection, using the retained C2 physical ledger seed
 
 The authoring command writes the D-166 v2 `DIAGNOSTIC_NO_PACK` plan, chain and
 sidecar with absolute clone/custody coordinates. Its literal programmed span is
-33556 s, with a minimum 34456 s window, and it prints the full desk/collection/
+17248 s, with a minimum 18148 s window (the block-2 registration uses 19980 s),
+and it prints the full desk/collection/
 harvest schedule. Review that schedule before the existing installer/arm recipe.
 Generic physical admission needs no Revision 6 prior-session manifest. Harvest
 uses the dedicated G2-a replay path and preserves complete source custody;

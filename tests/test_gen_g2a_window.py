@@ -204,6 +204,22 @@ class G2aAuthoringTests(unittest.TestCase):
             self.assertEqual({key: schedule[key] for key in expected}, json.loads(json.dumps(expected)))
             self.assertEqual(subprocess.run(['/bin/zsh', '-n', plan.chain_path]).returncode, 0)
 
+    def test_plan_may_be_staged_outside_the_night_root_for_later_publication(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            args = self.args(base)
+            (base/'stage').mkdir()
+            args.new_g2a_window = base/'stage/night_plan.json'
+            with redirect_stdout(io.StringIO()):
+                plan = generator.author_g2a_window(args, now=lambda: 3000)
+            self.assertTrue((base/'stage/night_plan.json').is_file())
+            self.assertFalse((base/'night/night_plan.json').exists())
+            self.assertEqual(Path(plan.custody_root), (base/'night').resolve())
+            self.assertEqual(Path(plan.chain_path), (base/'night/chain.zsh').resolve())
+            args.new_g2a_window = base/'stage/other.json'
+            with self.assertRaises(ValueError), redirect_stdout(io.StringIO()):
+                generator.author_g2a_window(args, now=lambda: 3000)
+
     def test_authoring_fences_refuse_before_publication(self):
         cases = [('plan_id', 'night-CODEX'), ('plan_id', 'night-claude'), ('plan_id', 'night-T3'),
                  ('g2a_root', Path('/tmp/ClAuDe-probe')), ('night_root', Path('/tmp/t3')),

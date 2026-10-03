@@ -2304,7 +2304,7 @@ the v2 night plan, executable chain and SHA-256 sidecar:
 ```sh
 /Users/edr/code/JouleWise/.venv/bin/python -B scripts/gen_g2_phase_d.py \
   --new-g2a-window "$NIGHT_ROOT/night_plan.json" \
-  --t0-epoch-s "$T0_EPOCH_S" --window-max-s 34456 \
+  --t0-epoch-s "$T0_EPOCH_S" --window-max-s "$WINDOW_MAX_S" \
   --plan-id "$WINDOW_ID" \
   --measurement-root "$MEASUREMENT_ROOT" --measurement-head "$MEASUREMENT_HEAD" \
   --night-root "$NIGHT_ROOT" --g2a-root "$G2A_ROOT"
@@ -2314,10 +2314,14 @@ All paths must be absolute; the clone is a descendant of
 `/Users/edr/night-custody/measurement/`. IDs and paths containing `codex`,
 `claude` or `t3` in any case refuse. Existing outputs refuse. The printed
 schedule includes install close, stand-down, t0, latest chain start, window
-end and harvest open. `NIGHT_PROGRAMMED_SPAN_S=33556` reserves code-defined
-waits and declared conservative variable-work allowances; its complete sizing
-arithmetic is beside the constant in `scripts/gen_g2_phase_d.py`. The minimum
-window is that span plus 900 s. Longer windows preserve the same span.
+end and harvest open. `NIGHT_PROGRAMMED_SPAN_S=17248` reserves code-defined
+waits plus variable-work allowances sized from the runsheet's documented
+per-member cadence; its complete sizing arithmetic is beside the constant in
+`scripts/gen_g2_phase_d.py`. The command refuses a window shorter than that
+span plus 900 s; the block-2 registration sets `WINDOW_MAX_S` to the span plus
+2700 s (the clean dwell's cap), rounded up to a minute: 19980 s. The plan may be
+written to a staging directory and published into the night root after the arm
+notice (the block-2 arm recipe does this).
 
 Check the new custody before the existing reviewed installer/arming procedure:
 
