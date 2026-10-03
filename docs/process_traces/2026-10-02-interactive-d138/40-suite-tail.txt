@@ -1,0 +1,36 @@
+PR #457 whole suite on the merged tree, CI's shard runner (the "Unit tests" step body of .github/workflows/ci.yml),
+SHARD_COUNT=6 SHARD_INDEX=1..6 in parallel plus the two exclusive modules, /Users/edr/code/JouleWise/.venv/bin/python -B,
+detached worktree /Users/edr/code/JouleWise-d138-suite.
+
+== Final run: head 53d7f25cc3a145f6692b2c5ee839cd9a97ef8f47 (fix round + origin/main f08b58cc merged) ==
+SHARD SUMMARY index=1/6 modules=1 tests=73 failures=0 errors=0 skipped=1 result=PASS
+SHARD SUMMARY index=2/6 modules=54 tests=1440 failures=0 errors=0 skipped=14 result=PASS
+SHARD SUMMARY index=3/6 modules=55 tests=1555 failures=8 errors=0 skipped=5 result=FAIL
+SHARD SUMMARY index=4/6 modules=54 tests=1493 failures=0 errors=0 skipped=6 result=PASS
+SHARD SUMMARY index=5/6 modules=55 tests=1080 failures=6 errors=0 skipped=14 result=FAIL
+SHARD SUMMARY index=6/6 modules=56 tests=1700 failures=38 errors=0 skipped=3 result=FAIL
+exclusive tests.test_calibration_exits: Ran 48 tests in 495.080s, OK
+exclusive tests.test_calibration_writer_crash_matrix: Ran 20 tests in 249.495s, OK
+TOTAL tests: 7409 (7341 shards + 48 + 20); failures: 52; errors: 0
+
+Failure classification (52 = 46 + 3 + 3, all known local-only classes)
+module | failures | class | regression?
+test_evidence_night | 23 | battery fixture in child Pythons | no
+test_night_kinds | 15 | battery fixture in child Pythons | no
+test_run_night | 8 | battery fixture in child Pythons | no
+test_install_night_agent | 3 | UpdateTime stale ("battery not at float: ProbeError: UpdateTime stale") | no
+test_sample_quiet_predicate_evidence | 3 | load worker startup timed out (contention); serial rerun at 53d7f25c: Ran 96, OK | no
+Unclassified failures: 0
+
+== First run: head fa77d7b067bdecc28e3ac7b83c89f59b13ac5ded (before the fix round) ==
+SHARD SUMMARY index=1/6 modules=1 tests=73 failures=0 errors=0 skipped=1 result=PASS
+SHARD SUMMARY index=2/6 modules=54 tests=1440 failures=0 errors=0 skipped=14 result=PASS
+SHARD SUMMARY index=3/6 modules=55 tests=1555 failures=8 errors=0 skipped=5 result=FAIL
+SHARD SUMMARY index=4/6 modules=54 tests=1493 failures=0 errors=0 skipped=6 result=PASS
+SHARD SUMMARY index=5/6 modules=55 tests=1080 failures=6 errors=0 skipped=14 result=FAIL
+SHARD SUMMARY index=6/6 modules=56 tests=1700 failures=40 errors=0 skipped=3 result=FAIL
+exclusive tests.test_calibration_exits: OK; tests.test_calibration_writer_crash_matrix: OK
+failures: 54 = the same 52 known local-only failures + 2 in tests.test_issue_p8_pin_delta
+(test_recorded_script_reproduces_issued_bytes_and_preserves_science,
+test_default_derivation_basis_accepts_p8_and_explicit_r7_is_stale: both asserted P8 as the live default).
+Fixed in the fix round (P8 named by path; finding S1 in 50-findings-disposition.md); module 5/5 OK at 53d7f25c.

@@ -34,6 +34,48 @@ CLAIM_ELIGIBLE_MEANING = (
     "to start a claim-bearing window is separate; H1 withholds it, and H5 "
     "to H7 condition it."
 )
+REV6_CANDIDATE = ROOT / "docs/process_traces/rev6-derivation-block1/candidate_acceptance_25g83_rev6.json"
+REV6_CANDIDATE_SHA256 = "aa59ebb25dcb4f1bace8d529d7d96ecf4969fec77ab54a51bac5120272a69884"
+REV6_INPUT_SHA256 = "2adb4ff430a0b956c2cdcb56c9b747d2c31d7dc00ea9c21538e86675a09128e1"
+REV6_ACCEPTANCE_ID = "d079_calibration_acceptance_v2_n24_25g83_r2"
+REV6_RULING_IDS = (
+    "SCI-25G83-REV6-B1", "SCI-25G83-REV6-B1-REFUTER",
+    "E-NT1", "E-NT1-REFUTER",
+)
+# The lead-authored text's disclosures D1..D10; D1 is the network-time one.
+REV6_DISCLOSURE_IDS = tuple(f"D{n}" for n in range(1, 11))
+REV6_NETWORK_TIME_DISCLOSURE_ID = "D1"
+REV6_CLAIM_ELIGIBLE_MEANING = (
+    "these bytes are an authentic issued calibration for identity epoch 25G83, "
+    "and its numbers may serve as the timing-uncertainty basis of a reported "
+    "result captured under that epoch. It is a property of the file. It is not "
+    "permission to start a window; a claim-bearing window starts only under "
+    "its own sealed registration."
+)
+
+
+def _promotable_generations() -> dict[str, dict[str, Any]]:
+    # Build the r1 entry from its legacy names, preserving import/patch hooks.
+    # Selection is by the file digest, never by a candidate's asserted id.
+    return {
+        CANDIDATE_SHA256: {
+            "acceptance_id": ACCEPTANCE_ID, "input_sha256": INPUT_SHA256,
+            "candidate": CANDIDATE, "candidate_sha256": CANDIDATE_SHA256,
+            "ruling_ids": RULING_IDS, "claim_eligible_meaning": CLAIM_ELIGIBLE_MEANING,
+            "text_schema": "r1",
+        },
+        REV6_CANDIDATE_SHA256: {
+            "acceptance_id": REV6_ACCEPTANCE_ID, "input_sha256": REV6_INPUT_SHA256,
+            "candidate": REV6_CANDIDATE, "candidate_sha256": REV6_CANDIDATE_SHA256,
+            "ruling_ids": REV6_RULING_IDS,
+            "disclosure_ids": REV6_DISCLOSURE_IDS,
+            "network_time_disclosure_id": REV6_NETWORK_TIME_DISCLOSURE_ID,
+            "claim_eligible_meaning": REV6_CLAIM_ELIGIBLE_MEANING,
+            "text_schema": "rev6",
+        },
+    }
+
+
 PROTECTED = (
     "schema_version", "acceptance_id", "decision_ids", "ledger_cutoff",
     "identity_epoch", "prospective_rederivation", "derivation_corpus",
@@ -86,7 +128,7 @@ def _verify_cited_files(value: Any) -> None:
             _verify_cited_files(item)
 
 
-def _validate_text(text: dict[str, Any], candidate: dict[str, Any]) -> None:
+def _validate_r1_text(text: dict[str, Any], candidate: dict[str, Any], generation: dict[str, Any]) -> None:
     if set(text) != {"reason", "required_verification", "network_time_provenance", "issuance_record"}:
         raise ValueError("issuance text fields incomplete")
     if not isinstance(text["reason"], str) or not text["reason"]:
@@ -104,7 +146,7 @@ def _validate_text(text: dict[str, Any], candidate: dict[str, Any]) -> None:
                 and bool(value[digest_field]))
 
     source = record.get("source_candidate")
-    if not complete_citation(source) or source.get("file_sha256") != CANDIDATE_SHA256 or source.get("derivation_sha256") != candidate["derivation_sha256"]:
+    if not complete_citation(source) or source.get("file_sha256") != generation["candidate_sha256"] or source.get("derivation_sha256") != candidate["derivation_sha256"]:
         raise ValueError("issuance record source candidate mismatch")
     disclosures = record.get("disclosures")
     if not isinstance(disclosures, list) or len(disclosures) < 8 or [item.get("id") for item in disclosures if isinstance(item, dict)] != [f"D{n}" for n in range(1, len(disclosures) + 1)] or any(not isinstance(item.get("text"), str) or not item["text"] for item in disclosures if isinstance(item, dict)):
@@ -117,7 +159,7 @@ def _validate_text(text: dict[str, Any], candidate: dict[str, Any]) -> None:
             }):
         raise ValueError("H1 H5 H6 H7 holds or text missing")
     rulings = record.get("rulings")
-    if not isinstance(rulings, list) or [item.get("id") for item in rulings if isinstance(item, dict)] != list(RULING_IDS) or any(
+    if not isinstance(rulings, list) or [item.get("id") for item in rulings if isinstance(item, dict)] != list(generation["ruling_ids"]) or any(
         not complete_citation(item)
         or re.fullmatch(r"[0-9a-f]{64}", item.get("file_sha256", "")) is None
         for item in rulings
@@ -146,18 +188,92 @@ def _validate_text(text: dict[str, Any], candidate: dict[str, Any]) -> None:
     d8_text = disclosures[7]["text"]
     if provenance.get("text") != d8_text:
         raise ValueError("network time provenance differs from D8")
-    if record.get("claim_eligible_meaning") != CLAIM_ELIGIBLE_MEANING:
+    if record.get("claim_eligible_meaning") != generation["claim_eligible_meaning"]:
         raise ValueError("claim_eligible_meaning mismatch")
     if not isinstance(record.get("hold_enforcement"), str) or not record["hold_enforcement"].strip():
         raise ValueError("hold_enforcement missing")
 
 
+def _validate_rev6_text(text: dict[str, Any], candidate: dict[str, Any], generation: dict[str, Any]) -> None:
+    if set(text) != {"reason", "required_verification", "network_time_provenance", "issuance_record"}:
+        raise ValueError("issuance text fields incomplete")
+    if not isinstance(text["reason"], str) or not text["reason"].strip():
+        raise ValueError("issuance reason missing")
+    if not isinstance(text["required_verification"], str) or not text["required_verification"].startswith("complete: "):
+        raise ValueError("required_verification must begin 'complete: '")
+    record = text["issuance_record"]
+    if not isinstance(record, dict) or set(record) != {
+        "source_candidate", "rulings", "disclosures", "claim_eligible_meaning",
+    }:
+        raise ValueError("rev6 issuance record fields incomplete or forbidden")
+
+    def complete_citation(value: Any) -> bool:
+        return (isinstance(value, dict)
+                and isinstance(value.get("relative_path"), str)
+                and bool(value["relative_path"])
+                and isinstance(value.get("file_sha256"), str)
+                and re.fullmatch(r"[0-9a-f]{64}", value["file_sha256"]) is not None)
+
+    source = record["source_candidate"]
+    if (not complete_citation(source)
+            or source.get("file_sha256") != generation["candidate_sha256"]
+            or source.get("derivation_sha256") != candidate["derivation_sha256"]):
+        raise ValueError("issuance record source candidate mismatch")
+    rulings = record["rulings"]
+    if (not isinstance(rulings, list) or len(rulings) != len(generation["ruling_ids"])
+            or any(not complete_citation(item) for item in rulings)
+            or [item.get("id") for item in rulings] != list(generation["ruling_ids"])):
+        raise ValueError("rev6 ruling digests missing or unordered")
+    disclosures = record["disclosures"]
+    if (not isinstance(disclosures, list) or not disclosures
+            or any(not isinstance(item, dict)
+                   or not isinstance(item.get("text"), str) or not item["text"].strip()
+                   for item in disclosures)
+            or [item.get("id") for item in disclosures] != list(generation["disclosure_ids"])):
+        raise ValueError("issuance disclosures D1..Dn missing or unordered")
+    if record["claim_eligible_meaning"] != generation["claim_eligible_meaning"]:
+        raise ValueError("claim_eligible_meaning mismatch")
+    provenance = text["network_time_provenance"]
+    if not isinstance(provenance, dict) or set(provenance) != {
+        "disclosure_id", "text", "erratum", "receipts",
+    }:
+        raise ValueError("rev6 network time provenance fields incomplete")
+    disclosure_text = {item["id"]: item["text"] for item in disclosures}
+    disclosure_id = provenance["disclosure_id"]
+    if (disclosure_id != generation["network_time_disclosure_id"]
+            or disclosure_id not in disclosure_text
+            or provenance["text"] != disclosure_text[disclosure_id]):
+        raise ValueError("network time provenance differs from its disclosure")
+    if not complete_citation(provenance["erratum"]):
+        raise ValueError("network time erratum citation incomplete")
+    receipts = provenance["receipts"]
+    sessions = candidate["registered_generation_row"]["registration_session_ids"]
+    if (not isinstance(receipts, list) or len(receipts) != 2
+            or any(not complete_citation(item)
+                   or not isinstance(item.get("session_id"), str) for item in receipts)
+            or sorted(item["session_id"] for item in receipts) != sorted(sessions)):
+        raise ValueError("network time receipts must cite both counting sessions")
+    _verify_cited_files(text)
+
+
+def _validate_text(
+    text: dict[str, Any], candidate: dict[str, Any], *, generation: dict[str, Any] | None = None,
+) -> None:
+    if generation is None:
+        generation = _promotable_generations()[CANDIDATE_SHA256]
+    if generation["text_schema"] == "rev6":
+        _validate_rev6_text(text, candidate, generation)
+    else:
+        _validate_r1_text(text, candidate, generation)
+
+
 def promote(candidate_raw: bytes, issuance_raw: bytes) -> bytes:
-    if hashlib.sha256(candidate_raw).hexdigest() != CANDIDATE_SHA256:
+    generation = _promotable_generations().get(hashlib.sha256(candidate_raw).hexdigest())
+    if generation is None:
         raise ValueError("candidate digest mismatch")
     candidate = _parse(candidate_raw)
     if (
-        candidate.get("acceptance_id") != ACCEPTANCE_ID
+        candidate.get("acceptance_id") != generation["acceptance_id"]
         or candidate.get("artifact_role") != "candidate"
         or candidate.get("candidate_not_issued") is not True
         or candidate.get("derivation_input_sha256") != derivation_input_sha256(candidate)
@@ -165,7 +281,7 @@ def promote(candidate_raw: bytes, issuance_raw: bytes) -> bytes:
     ):
         raise ValueError("candidate seal or role mismatch")
     issuance = _parse(issuance_raw)
-    _validate_text(issuance, candidate)
+    _validate_text(issuance, candidate, generation=generation)
     issued: dict[str, Any] = {}
     for key, value in candidate.items():
         if key == "candidate_not_issued":
@@ -187,7 +303,7 @@ def promote(candidate_raw: bytes, issuance_raw: bytes) -> bytes:
             value["issuance_record"] = issuance["issuance_record"]
         issued[key] = value
     issued["derivation_input_sha256"] = derivation_input_sha256(issued)
-    if issued["derivation_input_sha256"] != INPUT_SHA256:
+    if issued["derivation_input_sha256"] != generation["input_sha256"]:
         raise ValueError("STOP: derivation input seal differs from ruled digest")
     issued["derivation_sha256"] = derivation_sha256(issued)
     for key in PROTECTED:

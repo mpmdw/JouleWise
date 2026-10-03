@@ -152,6 +152,14 @@ ANCHOR_V3_R8_ACCEPTANCE_ID = "d079_calibration_acceptance_v2_n17_r8"
 ANCHOR_V3_R8_ACCEPTANCE_BOUND_SHA256 = (
     "52e3d18a087bd8a0f28da6d20c3817da4d3ce532c604d7f049c78aad6a489a13"
 )
+# Revision 6 block 1 successor issued by the D-138 transaction.
+EPOCH_25G83_R2_ACCEPTANCE_BOUND_PATH = (
+    _CALIBRATION_CONFIG_DIR / "calibration_acceptance_d079_v2_n24_25g83_r2.json"
+)
+EPOCH_25G83_R2_ACCEPTANCE_ID = "d079_calibration_acceptance_v2_n24_25g83_r2"
+EPOCH_25G83_R2_ACCEPTANCE_BOUND_SHA256 = (
+    "f949f511254e03b50b0be1cea37f74c1e8e6b4c49926c6c197024beea07b3660"
+)
 # Multi-generation registry.  Authentication is indexed by the artifact's own
 # `acceptance_id`, so a caller cannot present one generation's bytes under
 # another generation's pin, and predecessor packs stay verifiable unchanged.
@@ -208,13 +216,20 @@ ISSUED_ACCEPTANCE_REGISTRY: dict[str, dict[str, Any]] = {
         ),
         "file_sha256": ANCHOR_V3_R8_ACCEPTANCE_BOUND_SHA256,
     },
+    EPOCH_25G83_R2_ACCEPTANCE_ID: {
+        "path": EPOCH_25G83_R2_ACCEPTANCE_BOUND_PATH,
+        "relative_path": (
+            "configs/calibration/calibration_acceptance_d079_v2_n24_25g83_r2.json"
+        ),
+        "file_sha256": EPOCH_25G83_R2_ACCEPTANCE_BOUND_SHA256,
+    },
 }
 # Issuance is a later governed transaction. A candidate file never adds an
 # epoch merely by existing on disk; this registry must pin its issued bytes.
 EPOCH_CONTINUATION_REGISTRY: dict[str, dict[str, Any]] = {}
 # The LIVE surface: what production loads when no artifact is named.
-ACTIVE_ACCEPTANCE_ID = ANCHOR_V3_R8_ACCEPTANCE_ID
-DEFAULT_ACCEPTANCE_BOUND_PATH = ANCHOR_V3_R8_ACCEPTANCE_BOUND_PATH
+ACTIVE_ACCEPTANCE_ID = EPOCH_25G83_R2_ACCEPTANCE_ID
+DEFAULT_ACCEPTANCE_BOUND_PATH = EPOCH_25G83_R2_ACCEPTANCE_BOUND_PATH
 # Authenticates the retained ``schema_fixture_unissued`` genesis bytes; this is
 # not the digest of ``DEFAULT_ACCEPTANCE_BOUND_PATH``.
 GENESIS_FIXTURE_ACCEPTANCE_SHA256 = (
@@ -392,6 +407,38 @@ _D102_N17_DERIVATION: dict[str, Any] = {
     "predecessor_ceiling_s": None,
     "registration_session_ids": (),
 }
+# Revision 6 block 1 successor issued by the D-138 transaction.
+_D102_25G83_R2_DERIVATION: dict[str, Any] = {
+    "corpus_n": 24,
+    "corpus_doubling_trigger": "corpus_doubles_from_24_to_48",
+    "prediction_95_two_draw_s": "0.01112705033143238",
+    "prediction_99_two_draw_s": "0.015100307220104515",
+    "operatives": {
+        "bracket_screen_s": "0.014531",
+        "preflight_level_screen_s": "0.036462861644980",
+        "max_budgetable_excess_s": "0.00097117418713139",
+        "maximum_budgetable_drift_s": "0.01550217418713139",
+    },
+    "epoch_catalog_ids": (D079_EPOCH_CATALOG_ID, "d079_epoch_25g83"),
+    "prior_prefix_mode": PRIOR_PREFIX_MODE_IMPORT_PLUS_LIVE,
+    "prior_observation_count": 110,
+    "cutoff_sequence": 376,
+    "screen_rule": SCREEN_RULE_FLOORED_RANGE_ENVELOPE,
+    "predecessor_ceiling_s": "0.010164834757777545",
+    "predecessor_acceptance_id": "d079_calibration_acceptance_v2_n17_r8",
+    "registration_session_ids": (
+        "d079-epoch-25g83-r6-20261001T0617Z",
+        "d079-epoch-25g83-r6-20261001T2252Z",
+    ),
+    "d125_ruling": (
+        "docs/decision_log.md, D-125 addendum (2026-09-25): Revision 5 screen "
+        "and ceiling for epoch 25G83/v3 (ACCEPTANCE-25G83-02 §5 R5(i), R9), "
+        "as carried by Revision 6 §8-§9 of "
+        "configs/calibration/preregistration_d079_epoch_25g83_rev1.md"
+    ),
+    "registration_revision": 6,
+    "prediction_99_within_window_two_draw_s": "0.01550217418713139",
+}
 _D102_GENERATION_DERIVATIONS: dict[str, dict[str, Any]] = {
     PREDECESSOR_ACCEPTANCE_ID: _D102_N19_DERIVATION,
     SUCCESSOR_ACCEPTANCE_ID: _D102_N19_DERIVATION,
@@ -407,6 +454,8 @@ _D102_GENERATION_DERIVATIONS: dict[str, dict[str, Any]] = {
     ANCHOR_V3_R7_ACCEPTANCE_ID: _D102_N17_DERIVATION,
     # P8 is the science-neutral cap-transaction pin reissue of r7.
     ANCHOR_V3_R8_ACCEPTANCE_ID: _D102_N17_DERIVATION,
+    # Revision 6 block 1 successor issued by the D-138 transaction.
+    EPOCH_25G83_R2_ACCEPTANCE_ID: _D102_25G83_R2_DERIVATION,
 }
 
 

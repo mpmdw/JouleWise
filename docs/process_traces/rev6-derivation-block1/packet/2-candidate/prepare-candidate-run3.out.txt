@@ -1,0 +1,3 @@
+candidate written (NOT ISSUED): docs/process_traces/rev6-derivation-block1/candidate_acceptance_25g83_rev6.json
+corpus n: 24
+screen_rule: floored_range_envelope_screen

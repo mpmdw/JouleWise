@@ -1,0 +1,27 @@
+NIGHT_DATE=20261001T2252Z PLAN_ID=d079-epoch-25g83-r6-derivation-c2-20261001T2252Z
+CHECK: measurement root has the R16 custody prefix and expected W2 basename
+CHECK: test "${remote_main%%$'\t'*}" = "$H"
+CHECK: measurement and night roots are absent; staging contains only step0 battery evidence
+CHECK: test "$(git rev-parse HEAD)" = "$H"
+Python 3.13.1
+
+[notice] A new release of pip is available: 24.3.1 -> 26.2.1
+[notice] To update, run: pip install --upgrade pip
+WARNING: The candidate selected for download or install is a yanked version: 'charset-normalizer' candidate (version 3.4.8 at https://files.pythonhosted.org/packages/11/49/fe5a8572a70cd9cba79f80af9388ac8c5c914ed4459b956f940244e499a5/charset_normalizer-3.4.8-cp313-cp313-macosx_10_13_universal2.whl (from https://pypi.org/simple/charset-normalizer/) (requires-python:>=3.7))
+Reason for being yanked: <none given>
+
+[notice] A new release of pip is available: 24.3.1 -> 26.2.1
+[notice] To update, run: pip install --upgrade pip
+CHECK: installed packages equal env/mac-measurement-lock.txt
+lock matches
+CHECK: test ! -e "$CALIBRATION_LEDGER"; test ! -L "$CALIBRATION_LEDGER"
+CHECK: test -f "$LEDGER_SOURCE"; test ! -L "$LEDGER_SOURCE"
+CHECK: sha256 of $LEDGER_SOURCE equals LEDGER_SOURCE_EXPECTED_SHA256
+CHECK: byte equality /Users/edr/night-archive/harvest-d079-epoch-25g83-r6-derivation-c1-20261001T0617Z/measurement-runs/calibration_observation_ledger.jsonl /Users/edr/night-custody/measurement/JouleWise-measurement-20261001T2252Z-r6-c2/runs/calibration_observation_ledger.jsonl
+20701b42557a217764c58d60fbc50daec45e5efe49c7f6cdd30811b0105c7ea5  /Users/edr/night-archive/harvest-d079-epoch-25g83-r6-derivation-c1-20261001T0617Z/measurement-runs/calibration_observation_ledger.jsonl
+20701b42557a217764c58d60fbc50daec45e5efe49c7f6cdd30811b0105c7ea5  /Users/edr/night-custody/measurement/JouleWise-measurement-20261001T2252Z-r6-c2/runs/calibration_observation_ledger.jsonl
+CHECK: not s.refusal_reasons, s.refusal_reasons
+CHECK: (s.head_sequence,s.head_digest)==(p["sequence"],p["head_digest"])
+authenticated head-equals-pin 326 335b4171e1c2b073f9b346fd56ace769c97c936ce25878844528f329b71bd6de
+CHECK: test -z "$(git status --porcelain=v1 --untracked-files=all)"
+STEP1 OK

@@ -1,0 +1,4 @@
+{"attestation_reason":"Harvest d079-epoch-25g83-r6-20261001T0617Z: terminal session, chain exit recorded, courier sent; desk pin advance to sequence 326","executed":true,"head_digest":"335b4171e1c2b073f9b346fd56ace769c97c936ce25878844528f329b71bd6de","ledger_schema":"joulewise.calibration_observation_ledger.v1","operator_identity":"magistrate-20261001-0156","previous_head_digest":"476e2ae857d4d6279bfa3c59c39bb5bc6f983d282948ce0abb95e3df62d49737","previous_sequence":276,"sequence":326}
+== battery verdict
+d079-epoch-25g83-r6-20261001T0617Z: battery=pass
+battery-verdict rc=0

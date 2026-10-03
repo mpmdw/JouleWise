@@ -170,8 +170,9 @@ class RevisionSixArithmeticTests(unittest.TestCase):
 
     def test_fourth_term_exact_equation_and_all_registered_generations(self):
         for row in bracketing._D102_GENERATION_DERIVATIONS.values():
-            self.assertTrue(bracketing._registered_generation_row_is_complete(row))
-        self.assertEqual(len(bracketing._D102_GENERATION_DERIVATIONS), 8)
+            self.assertTrue(bracketing._registered_generation_row_is_complete(
+                row, revision_six=row.get("registration_revision") == 6))
+        self.assertEqual(len(bracketing._D102_GENERATION_DERIVATIONS), 9)
         row = copy.deepcopy(bracketing._D102_N17_DERIVATION)
         row.update(corpus_n=12, prior_prefix_mode="import_plus_live",
                    screen_rule=bracketing.SCREEN_RULE_FLOORED_RANGE_ENVELOPE,

@@ -1,0 +1,49 @@
+{
+  "aborted_reason": "night_probe_error",
+  "artifacts": [
+    {
+      "path": "night.log",
+      "sha256": "1615877ece4403f92f48ce5e53418415c5d18441dd4ae396ca24f8810372f8fa"
+    },
+    {
+      "path": "night/network_time_off.json",
+      "sha256": "1f877794412582acd2cbab85fe52305df33cf7acee81b5baaa244b739b3d9de4"
+    },
+    {
+      "path": "start_conditions_manifest.json",
+      "sha256": "454324c59318ef98eb009c2b4dc25aa90223576bb6e06d4ab63ccc45d4024f17"
+    },
+    {
+      "path": "night/start_conditions.json",
+      "sha256": "c4eb5f87daa167140c1220d56d8136912aae630506bebd1f12f9d5a766dc7f98"
+    },
+    {
+      "path": "night/refusal.json",
+      "sha256": "075e77183516e7527b9e7941e5fc07d85aff46d51eec9e82f9a6107db598e18e"
+    },
+    {
+      "path": "night/censuses.jsonl",
+      "sha256": "edaad1df8c818c7e5188e30707a164506851ffc355b3601a5710b0637324ac9d"
+    }
+  ],
+  "calibration_code": null,
+  "calibration_refusal": null,
+  "census_count": 0,
+  "census_hits": [],
+  "chain_exit_code": null,
+  "chain_sha256": null,
+  "ended_epoch_s": 1790818622.392853,
+  "ended_monotonic_ns": 1040184326017208,
+  "evidence": {
+    "calibration_refusal": null
+  },
+  "plan_id": "d079-epoch-25g83-r6-derivation-c1-20261001T0137Z",
+  "receipt_class": "DIAGNOSTIC_NO_PACK",
+  "refusal_documents": [
+    "night/refusal.json"
+  ],
+  "schema": "joulewise.unattended_night_result.v1",
+  "started_epoch_s": 1790818622.3272069,
+  "started_monotonic_ns": 1040184260370125,
+  "verdict": "REFUSED"
+}

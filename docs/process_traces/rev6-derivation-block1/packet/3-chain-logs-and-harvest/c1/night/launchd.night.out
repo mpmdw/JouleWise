@@ -1,0 +1,10 @@
+I've emailed Ed the night report. The night ran cleanly: the verdict is GO and the chain exited with code 0.
+
+- **Delivery:** the email went only to claude2.glaring610@passmail.net (Gmail message id `1a0f69864566e8fd`). After it was accepted I wrote `night/courier.sent`. The heartbeat file was written first, as asked. The two files show different process ids (87577 and 87751) because each shell command runs as its own process.
+- **What ran:** the gate said GO at 23:27:35 PDT and the chain finished at 01:31:19 PDT. All 248 checks for agent processes came back empty, and the driver confirmed the chain was fully stopped. There were no refusals, no calibration refusal, no overrun, no duplicate launch and no driver reporting errors.
+- **Captures:** the chain log reports all 12 calibration slots (d01–d12) as "valid", plus a candidate ledger pin at sequence 326. These stay provisional, and nothing can be claimed from them until the harvest commits that pin.
+- **Results branch:** `night-results/d079-epoch-25g83-r6-derivation-c1-20261001T0617Z` exists on origin at `ccceec4b`.
+- **Watchdog:** the state file was 126.855 seconds old (alive, under the 900-second limit) and its last decision was HOLD_CENSUS.
+- **Handback:** `NIGHT_HANDBACK.md` was never rewritten for this night. Its purpose, results and next-lane sections still describe the QPE-01 pilot plan `qpe01-pilot-n1-20260923-0700`, so I reported from the result record and said so in the email.
+
+**I did not harvest, uninstall or arm anything.** For this window, section 6 of arm recipe record 170 gives the harvest to the headless magistrate with no other agent running. The harvest script refuses to run before about 01:52 PDT (t0 + 9300 s), and the out-of-date handback doesn't authorize any next step for this plan. The two scheduled jobs are still installed until that harvest removes them.

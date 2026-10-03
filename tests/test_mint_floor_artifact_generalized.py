@@ -44,7 +44,6 @@ from joulewise.detection_floor import (
     complete_bundle_sha256,
 )
 from joulewise.calibration_bracketing import (
-    DEFAULT_ACCEPTANCE_BOUND_PATH,
     ANCHOR_V3_R7_ACCEPTANCE_BOUND_PATH,
     PREDECESSOR_ACCEPTANCE_BOUND_PATH,
     build_calibration_bracket_binding,
@@ -2311,7 +2310,8 @@ def install_production_extracted_v2_cli_fixture(root: Path):
     )
     pinset = load_json(provisional_path)
     acceptance_path = root / "production-acceptance.json"
-    acceptance_path.write_bytes(DEFAULT_ACCEPTANCE_BOUND_PATH.read_bytes())
+    # This production-extracted v2 fixture is the frozen R7 oracle.
+    acceptance_path.write_bytes(ANCHOR_V3_R7_ACCEPTANCE_BOUND_PATH.read_bytes())
     acceptance = load_calibration_acceptance_bound(acceptance_path)
     assert acceptance is not None
 

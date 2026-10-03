@@ -1,0 +1,224 @@
+{
+ "source": "2-candidate/candidate_acceptance_25g83_rev6.json",
+ "derivation_notes.rule_outcomes": {
+  "d125_ruling": "docs/decision_log.md, D-125 addendum (2026-09-25): Revision 5 screen and ceiling for epoch 25G83/v3 (ACCEPTANCE-25G83-02 \u00a75 R5(i), R9), as carried by Revision 6 \u00a78-\u00a79 of configs/calibration/preregistration_d079_epoch_25g83_rev1.md",
+  "ed_ruling": null,
+  "minimum_corpus_size": 12,
+  "retained_n": 24,
+  "quantized_range_s": "0.014531",
+  "screen_floor_bound": false,
+  "screen_rule": "floored_range_envelope_screen",
+  "headroom_status": "positive_headroom",
+  "excursion_member_count": 0,
+  "excursion_label": null,
+  "screen_challenge_member_count": 4,
+  "screen_challenge_threshold_s": "0.032898493715362",
+  "new_maximum_exceeds_prior_maximum_plus_range": false,
+  "prior_maximum_plus_range_s": "0.04262208300415633"
+ },
+ "derivation_notes.prior_screen_comparison": [
+  {
+   "member_id": "d079-epoch-25g83-r6-20261001T0617Z-d01",
+   "b_fiducial_s": "0.025463179772367898",
+   "exceeds_prior_level_screen": false
+  },
+  {
+   "member_id": "d079-epoch-25g83-r6-20261001T0617Z-d02",
+   "b_fiducial_s": "0.02766399977693898",
+   "exceeds_prior_level_screen": false
+  },
+  {
+   "member_id": "d079-epoch-25g83-r6-20261001T0617Z-d03",
+   "b_fiducial_s": "0.03460915378691863",
+   "exceeds_prior_level_screen": true
+  },
+  {
+   "member_id": "d079-epoch-25g83-r6-20261001T0617Z-d04",
+   "b_fiducial_s": "0.027892564073153783",
+   "exceeds_prior_level_screen": false
+  },
+  {
+   "member_id": "d079-epoch-25g83-r6-20261001T0617Z-d05",
+   "b_fiducial_s": "0.0274417652193393",
+   "exceeds_prior_level_screen": false
+  },
+  {
+   "member_id": "d079-epoch-25g83-r6-20261001T0617Z-d06",
+   "b_fiducial_s": "0.02790192270133949",
+   "exceeds_prior_level_screen": false
+  },
+  {
+   "member_id": "d079-epoch-25g83-r6-20261001T0617Z-d07",
+   "b_fiducial_s": "0.02193176218569716",
+   "exceeds_prior_level_screen": false
+  },
+  {
+   "member_id": "d079-epoch-25g83-r6-20261001T0617Z-d08",
+   "b_fiducial_s": "0.030373696240460962",
+   "exceeds_prior_level_screen": false
+  },
+  {
+   "member_id": "d079-epoch-25g83-r6-20261001T0617Z-d09",
+   "b_fiducial_s": "0.033858213964584355",
+   "exceeds_prior_level_screen": true
+  },
+  {
+   "member_id": "d079-epoch-25g83-r6-20261001T0617Z-d10",
+   "b_fiducial_s": "0.025533661955889533",
+   "exceeds_prior_level_screen": false
+  },
+  {
+   "member_id": "d079-epoch-25g83-r6-20261001T0617Z-d11",
+   "b_fiducial_s": "0.030402083768569316",
+   "exceeds_prior_level_screen": false
+  },
+  {
+   "member_id": "d079-epoch-25g83-r6-20261001T0617Z-d12",
+   "b_fiducial_s": "0.027971479139464784",
+   "exceeds_prior_level_screen": false
+  },
+  {
+   "member_id": "d079-epoch-25g83-r6-20261001T2252Z-d01",
+   "b_fiducial_s": "0.028443395186875983",
+   "exceeds_prior_level_screen": false
+  },
+  {
+   "member_id": "d079-epoch-25g83-r6-20261001T2252Z-d02",
+   "b_fiducial_s": "0.024007067914171086",
+   "exceeds_prior_level_screen": false
+  },
+  {
+   "member_id": "d079-epoch-25g83-r6-20261001T2252Z-d03",
+   "b_fiducial_s": "0.027381927068597392",
+   "exceeds_prior_level_screen": false
+  },
+  {
+   "member_id": "d079-epoch-25g83-r6-20261001T2252Z-d04",
+   "b_fiducial_s": "0.03633250571256254",
+   "exceeds_prior_level_screen": true
+  },
+  {
+   "member_id": "d079-epoch-25g83-r6-20261001T2252Z-d05",
+   "b_fiducial_s": "0.028114814464204912",
+   "exceeds_prior_level_screen": false
+  },
+  {
+   "member_id": "d079-epoch-25g83-r6-20261001T2252Z-d06",
+   "b_fiducial_s": "0.024958379592343757",
+   "exceeds_prior_level_screen": false
+  },
+  {
+   "member_id": "d079-epoch-25g83-r6-20261001T2252Z-d07",
+   "b_fiducial_s": "0.030679289625902346",
+   "exceeds_prior_level_screen": false
+  },
+  {
+   "member_id": "d079-epoch-25g83-r6-20261001T2252Z-d08",
+   "b_fiducial_s": "0.03646286164497997",
+   "exceeds_prior_level_screen": true
+  },
+  {
+   "member_id": "d079-epoch-25g83-r6-20261001T2252Z-d09",
+   "b_fiducial_s": "0.025013543792252485",
+   "exceeds_prior_level_screen": false
+  },
+  {
+   "member_id": "d079-epoch-25g83-r6-20261001T2252Z-d10",
+   "b_fiducial_s": "0.029091074834746312",
+   "exceeds_prior_level_screen": false
+  },
+  {
+   "member_id": "d079-epoch-25g83-r6-20261001T2252Z-d11",
+   "b_fiducial_s": "0.024497152758604247",
+   "exceeds_prior_level_screen": false
+  },
+  {
+   "member_id": "d079-epoch-25g83-r6-20261001T2252Z-d12",
+   "b_fiducial_s": "0.026633405691469065",
+   "exceeds_prior_level_screen": false
+  }
+ ],
+ "derivation_notes.predecessor": {
+  "acceptance_id": "d079_calibration_acceptance_v2_n17_r8",
+  "relative_path": "/Users/edr/code/JouleWise-derive-rev6b1/configs/calibration/calibration_acceptance_d079_v2_n17_r8.json",
+  "file_sha256": "52e3d18a087bd8a0f28da6d20c3817da4d3ce532c604d7f049c78aad6a489a13",
+  "derivation_sha256": "911d06c3db6e35a4d3a128a52ed47f0c483330a0429d9d87c2ad672185ed1acd",
+  "maximum_budgetable_drift_s": "0.010164834757777545",
+  "relationship": "envelope predecessor under D-125 cl.2: the successor ceiling is max(predecessor ceiling, own Q99) and can never fall"
+ },
+ "decimal_derivation.rounding": {
+  "mode": "ROUND_HALF_EVEN",
+  "operative_bracket_screen": {
+   "source": "decimal_derivation.source_statistics.range_s",
+   "quantum_s": "0.000001",
+   "value_s": "0.014531",
+   "numeric_role": "operative_comparator",
+   "floor_s": "0.010818",
+   "floor_bound": false
+  },
+  "preflight_level_screen": {
+   "source": "decimal_derivation.source_statistics.maximum_s",
+   "quantum_s": "0.000000000000001",
+   "value_s": "0.036462861644980",
+   "numeric_role": "operative_comparator"
+  }
+ },
+ "decimal_derivation.ratified_operatives": {
+  "bracket_screen_s": "0.014531",
+  "preflight_level_screen_s": "0.036462861644980",
+  "max_budgetable_excess_s": "0.00097117418713139",
+  "maximum_budgetable_drift_s": "0.01550217418713139",
+  "allowance_rule": "max(observed_drift_s,bracket_screen_s)",
+  "operative_bound_rule": "max(pre_b_fiducial_s,post_b_fiducial_s)+calibration_drift_allowance_s",
+  "embedding_count": 1
+ },
+ "decimal_derivation.source_statistics": {
+  "minimum_s": "0.02193176218569716",
+  "minimum_member_id": "d079-epoch-25g83-r6-20261001T0617Z-d07",
+  "maximum_s": "0.03646286164497997",
+  "maximum_member_id": "d079-epoch-25g83-r6-20261001T2252Z-d08",
+  "range_s": "0.01453109945928281",
+  "mean_presentation_s": {
+   "value": "0.028444120869643095",
+   "label": "rounded_presentation",
+   "rounding_rule": "ROUND_HALF_EVEN to quantum 0.000000000000000001 s"
+  },
+  "sample_sd_presentation_s": {
+   "value": "0.003803438860221064",
+   "label": "rounded_presentation",
+   "rounding_rule": "ROUND_HALF_EVEN to quantum 0.000000000000000001 s"
+  },
+  "prediction_95_two_draw_s": "0.01112705033143238",
+  "prediction_99_two_draw_s": "0.015100307220104515",
+  "prediction_99_within_window_two_draw_s": "0.01550217418713139"
+ },
+ "registered_generation_row": {
+  "corpus_n": 24,
+  "corpus_doubling_trigger": "corpus_doubles_from_24_to_48",
+  "prediction_95_two_draw_s": "0.01112705033143238",
+  "prediction_99_two_draw_s": "0.015100307220104515",
+  "operatives": {
+   "bracket_screen_s": "0.014531",
+   "preflight_level_screen_s": "0.036462861644980",
+   "max_budgetable_excess_s": "0.00097117418713139",
+   "maximum_budgetable_drift_s": "0.01550217418713139"
+  },
+  "epoch_catalog_ids": [
+   "d079_epoch",
+   "d079_epoch_25g83"
+  ],
+  "prior_prefix_mode": "import_plus_live",
+  "prior_observation_count": 110,
+  "cutoff_sequence": 376,
+  "screen_rule": "floored_range_envelope_screen",
+  "predecessor_ceiling_s": "0.010164834757777545",
+  "predecessor_acceptance_id": "d079_calibration_acceptance_v2_n17_r8",
+  "registration_session_ids": [
+   "d079-epoch-25g83-r6-20261001T0617Z",
+   "d079-epoch-25g83-r6-20261001T2252Z"
+  ],
+  "d125_ruling": "docs/decision_log.md, D-125 addendum (2026-09-25): Revision 5 screen and ceiling for epoch 25G83/v3 (ACCEPTANCE-25G83-02 \u00a75 R5(i), R9), as carried by Revision 6 \u00a78-\u00a79 of configs/calibration/preregistration_d079_epoch_25g83_rev1.md",
+  "registration_revision": 6,
+  "prediction_99_within_window_two_draw_s": "0.01550217418713139"
+ }
+}

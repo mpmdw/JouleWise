@@ -1,0 +1,232 @@
+gui/501/com.joulewise.night = {
+	active count = 0
+	path = /Users/edr/Library/LaunchAgents/com.joulewise.night.plist
+	type = LaunchAgent
+	state = not running
+
+	program = /Users/edr/night-custody/measurement/JouleWise-measurement-20261001T0617Z-r6-c1/.venv/bin/python
+	arguments = {
+		/Users/edr/night-custody/measurement/JouleWise-measurement-20261001T0617Z-r6-c1/.venv/bin/python
+		/Users/edr/night-custody/measurement/JouleWise-measurement-20261001T0617Z-r6-c1/scripts/run_night.py
+		run
+		--plan
+		/Users/edr/night-custody/d079-epoch-25g83-r6-derivation-c1-20261001T0617Z/night_plan.json
+		--courier-bin
+		/Users/edr/.local/share/claude/versions/2.1.286
+	}
+
+	working directory = /Users/edr/night-custody/measurement/JouleWise-measurement-20261001T0617Z-r6-c1
+
+	stdout path = /Users/edr/night-custody/d079-epoch-25g83-r6-derivation-c1-20261001T0617Z/night/launchd.night.out
+	stderr path = /Users/edr/night-custody/d079-epoch-25g83-r6-derivation-c1-20261001T0617Z/night/launchd.night.err
+	inherited environment = {
+		SSH_AUTH_SOCK => /var/run/com.apple.launchd.0wjjIwnQda/Listeners
+	}
+
+	default environment = {
+		PATH => /usr/bin:/bin:/usr/sbin:/sbin
+	}
+
+	environment = {
+		OSLogRateLimit => 64
+		PATH => /Users/edr/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin
+		XPC_SERVICE_NAME => com.joulewise.night
+	}
+
+	domain = gui/501 [100026]
+	asid = 100026
+	minimum runtime = 10
+	exit timeout = 5
+	runs = 0
+	last exit code = (never exited)
+
+	event triggers = {
+		com.joulewise.night.268435489 => {
+			keepalive = 0
+			service = com.joulewise.night
+			stream = com.apple.launchd.calendarinterval
+			monitor = com.apple.UserEventAgent-Aqua
+			descriptor = {
+				"Minute" => 17
+				"Hour" => 23
+				"Day" => 30
+				"Month" => 9
+			}
+		}
+	}
+
+	event channels = {
+		"com.apple.launchd.calendarinterval" = {
+			port = 0x0
+			active = 0
+			managed = 1
+			reset = 0
+			hide = 0
+			watching = 1
+		}
+	}
+
+	spawn type = interactive (4)
+	jetsam priority = 40
+	jetsam memory limit (active) = (unlimited)
+	jetsam memory limit (inactive) = (unlimited)
+	jetsamproperties category = daemon
+	jetsam thread limit = 32
+	cpumon = default
+
+	properties = inferred program
+}
+gui/501/com.joulewise.night.deadman = {
+	active count = 0
+	path = /Users/edr/Library/LaunchAgents/com.joulewise.night.deadman.plist
+	type = LaunchAgent
+	state = not running
+
+	program = /Users/edr/night-custody/measurement/JouleWise-measurement-20261001T0617Z-r6-c1/.venv/bin/python
+	arguments = {
+		/Users/edr/night-custody/measurement/JouleWise-measurement-20261001T0617Z-r6-c1/.venv/bin/python
+		/Users/edr/night-custody/measurement/JouleWise-measurement-20261001T0617Z-r6-c1/scripts/run_night.py
+		dead-man
+		--plan
+		/Users/edr/night-custody/d079-epoch-25g83-r6-derivation-c1-20261001T0617Z/night_plan.json
+		--courier-bin
+		/Users/edr/.local/share/claude/versions/2.1.286
+	}
+
+	working directory = /Users/edr/night-custody/measurement/JouleWise-measurement-20261001T0617Z-r6-c1
+
+	stdout path = /Users/edr/night-custody/d079-epoch-25g83-r6-derivation-c1-20261001T0617Z/night/launchd.deadman.out
+	stderr path = /Users/edr/night-custody/d079-epoch-25g83-r6-derivation-c1-20261001T0617Z/night/launchd.deadman.err
+	inherited environment = {
+		SSH_AUTH_SOCK => /var/run/com.apple.launchd.0wjjIwnQda/Listeners
+	}
+
+	default environment = {
+		PATH => /usr/bin:/bin:/usr/sbin:/sbin
+	}
+
+	environment = {
+		OSLogRateLimit => 64
+		PATH => /Users/edr/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin
+		XPC_SERVICE_NAME => com.joulewise.night.deadman
+	}
+
+	domain = gui/501 [100026]
+	asid = 100026
+	minimum runtime = 10
+	exit timeout = 5
+	runs = 0
+	last exit code = (never exited)
+
+	event triggers = {
+		com.joulewise.night.deadman.268435490 => {
+			keepalive = 0
+			service = com.joulewise.night.deadman
+			stream = com.apple.launchd.calendarinterval
+			monitor = com.apple.UserEventAgent-Aqua
+			descriptor = {
+				"Minute" => 52
+				"Hour" => 2
+			}
+		}
+	}
+
+	event channels = {
+		"com.apple.launchd.calendarinterval" = {
+			port = 0x0
+			active = 0
+			managed = 1
+			reset = 0
+			hide = 0
+			watching = 1
+		}
+	}
+
+	spawn type = interactive (4)
+	jetsam priority = 40
+	jetsam memory limit (active) = (unlimited)
+	jetsam memory limit (inactive) = (unlimited)
+	jetsamproperties category = daemon
+	jetsam thread limit = 32
+	cpumon = default
+
+	properties = inferred program
+}
+{
+  "EnvironmentVariables" => {
+    "PATH" => "/Users/edr/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+  }
+  "Label" => "com.joulewise.night"
+  "ProcessType" => "Interactive"
+  "ProgramArguments" => [
+    0 => "/Users/edr/night-custody/measurement/JouleWise-measurement-20261001T0617Z-r6-c1/.venv/bin/python"
+    1 => "/Users/edr/night-custody/measurement/JouleWise-measurement-20261001T0617Z-r6-c1/scripts/run_night.py"
+    2 => "run"
+    3 => "--plan"
+    4 => "/Users/edr/night-custody/d079-epoch-25g83-r6-derivation-c1-20261001T0617Z/night_plan.json"
+    5 => "--courier-bin"
+    6 => "/Users/edr/.local/share/claude/versions/2.1.286"
+  ]
+  "RunAtLoad" => false
+  "StandardErrorPath" => "/Users/edr/night-custody/d079-epoch-25g83-r6-derivation-c1-20261001T0617Z/night/launchd.night.err"
+  "StandardOutPath" => "/Users/edr/night-custody/d079-epoch-25g83-r6-derivation-c1-20261001T0617Z/night/launchd.night.out"
+  "StartCalendarInterval" => {
+    "Day" => 30
+    "Hour" => 23
+    "Minute" => 17
+    "Month" => 9
+  }
+  "WorkingDirectory" => "/Users/edr/night-custody/measurement/JouleWise-measurement-20261001T0617Z-r6-c1"
+}
+{
+  "EnvironmentVariables" => {
+    "PATH" => "/Users/edr/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+  }
+  "Label" => "com.joulewise.night.deadman"
+  "ProcessType" => "Interactive"
+  "ProgramArguments" => [
+    0 => "/Users/edr/night-custody/measurement/JouleWise-measurement-20261001T0617Z-r6-c1/.venv/bin/python"
+    1 => "/Users/edr/night-custody/measurement/JouleWise-measurement-20261001T0617Z-r6-c1/scripts/run_night.py"
+    2 => "dead-man"
+    3 => "--plan"
+    4 => "/Users/edr/night-custody/d079-epoch-25g83-r6-derivation-c1-20261001T0617Z/night_plan.json"
+    5 => "--courier-bin"
+    6 => "/Users/edr/.local/share/claude/versions/2.1.286"
+  ]
+  "RunAtLoad" => false
+  "StandardErrorPath" => "/Users/edr/night-custody/d079-epoch-25g83-r6-derivation-c1-20261001T0617Z/night/launchd.deadman.err"
+  "StandardOutPath" => "/Users/edr/night-custody/d079-epoch-25g83-r6-derivation-c1-20261001T0617Z/night/launchd.deadman.out"
+  "StartCalendarInterval" => {
+    "Hour" => 2
+    "Minute" => 52
+  }
+  "WorkingDirectory" => "/Users/edr/night-custody/measurement/JouleWise-measurement-20261001T0617Z-r6-c1"
+}
+{"deadman_calendar": {"Hour": 2, "Minute": 52}, "deadman_epoch_s": 1790848320.0, "install_close_epoch_s": 1790834820.0, "install_spans_today": [[1790751600.0, 1790838000.0]], "night_calendar": {"Day": 30, "Hour": 23, "Minute": 17, "Month": 9}, "t0_epoch_s": 1790835420.0}
+CHECK: byte equality /Users/edr/night-custody/d079-epoch-25g83-r6-derivation-c1-20261001T0617Z/night_plan.json /Users/edr/night-plan-staging/d079-epoch-25g83-r6-derivation-c1-20261001T0617Z/arm-attempts/000001/plan.json
+CHECK: {'com.joulewise.night', 'com.joulewise.night.deadman'} <= labels
+CHECK: com.joulewise.night plist Label matches loaded label
+CHECK: com.joulewise.night installed ProcessType is Interactive
+CHECK: com.joulewise.night installed bytes equal pre-notice render and probe context digests
+CHECK: plist['StartCalendarInterval'] == expected[key], (label, plist['StartCalendarInterval'])
+CHECK: os.environ['PLAN'] in plist['ProgramArguments'], plist['ProgramArguments']
+CHECK: plist['ProgramArguments'] == rendered['ProgramArguments'], (label, plist['ProgramArguments'])
+CHECK: plist['ProgramArguments'][0] == os.environ['PY']
+CHECK: plist['WorkingDirectory'] == os.environ['MEASUREMENT_ROOT']
+CHECK: com.joulewise.night.deadman plist Label matches loaded label
+CHECK: com.joulewise.night.deadman installed ProcessType is Interactive
+CHECK: com.joulewise.night.deadman installed bytes equal pre-notice render and probe context digests
+CHECK: plist['StartCalendarInterval'] == expected[key], (label, plist['StartCalendarInterval'])
+CHECK: os.environ['PLAN'] in plist['ProgramArguments'], plist['ProgramArguments']
+CHECK: plist['ProgramArguments'] == rendered['ProgramArguments'], (label, plist['ProgramArguments'])
+CHECK: plist['ProgramArguments'][0] == os.environ['PY']
+CHECK: plist['WorkingDirectory'] == os.environ['MEASUREMENT_ROOT']
+installed calendars match plan
+post-install night/ baseline: []
+bee393575ac6129765619cb322f9c8ffbed4072232288838d02d94a303d4bdf8  /Users/edr/night-custody/d079-epoch-25g83-r6-derivation-c1-20261001T0617Z/night_plan.json
+27924ffd849a50d5237629cd653b3bc6a230d19bd73c5e9420f89c5aa61e91a7  /Users/edr/night-custody/d079-epoch-25g83-r6-derivation-c1-20261001T0617Z/chain.zsh
+1d5394aa557d061893a88821898be903f9a053d37123bcc6904329a0cc0e7727  /Users/edr/night-custody/d079-epoch-25g83-r6-derivation-c1-20261001T0617Z/night_probe_receipt.json
+ARMED 2026-09-30T21:49:50-0700
+chain.zsh: OK
+EXIT RULE: magistrate and all owned agents must exit BEFORE T0 - 480 = 2026-09-30 23:09:00 PDT (2026-10-01 06:09:00 UTC; epoch 1790834940).
+STEP5 OK

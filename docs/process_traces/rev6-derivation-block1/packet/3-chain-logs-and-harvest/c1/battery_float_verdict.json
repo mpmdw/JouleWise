@@ -1,0 +1,170 @@
+{
+  "battery_float_module_sha256": "4b4d7bb206250cc0078d2a6b0b34d4e7e6305ff1d3a8b72f93528016d935e7e5",
+  "computed_wall_time_s": 1790845008.423608,
+  "identity_epoch": {
+    "estimator_revision": "joint_loss_sublevel_interval_branch_v2",
+    "hardware_model": "Mac15,9",
+    "os_build": "25G83",
+    "power_policy": "ac_high_power",
+    "pulse_protocol_id": "powermetrics_pulse_fiducial_v3",
+    "sampling_interval_ms": 100
+  },
+  "ledger_head": {
+    "head_digest": "335b4171e1c2b073f9b346fd56ace769c97c936ce25878844528f329b71bd6de",
+    "sequence": 326
+  },
+  "policy_id": "bfg-01",
+  "preregistration_sha256": "d0034003a7e61683696b88662825d909dc4bb8ad23678edad6bbc8dfd4877b78",
+  "schema": "joulewise.battery_float_verdict.v1",
+  "session_id": "d079-epoch-25g83-r6-20261001T0617Z",
+  "session_kind": "derivation",
+  "session_state": "finalized",
+  "slots": [
+    {
+      "attempt_id": "d079-epoch-25g83-r6-20261001T0617Z-d01",
+      "delta_q_mah": 0,
+      "instrument_evidence_sha256": "84467205e85f611a11cce4b126159138de1eeedf1a9005f7460152ea0b4f2d8e",
+      "post_raw_sha256": "015e87266abf3def2f84b92ab3021a91e567db6c7be62c04db71d2ede46000a3",
+      "post_update_age_s": 43.0689160823822,
+      "pre_raw_sha256": "874e9de00669c43f70f75a5800e49431c916de490e1e301d8726179599707f0e",
+      "pre_update_age_s": 24.63471007347107,
+      "reasons": [],
+      "slot": "d01",
+      "verdict": "pass"
+    },
+    {
+      "attempt_id": "d079-epoch-25g83-r6-20261001T0617Z-d02",
+      "delta_q_mah": 0,
+      "instrument_evidence_sha256": "e69d116ea43ccbf11e47c3053d273d7257cdde0392abe31a8d7a279aed1c49e0",
+      "post_raw_sha256": "0460489bd0e6456a038741d46a8222236a3cdcdfdae69177334fc27af483ef79",
+      "post_update_age_s": 42.94956111907959,
+      "pre_raw_sha256": "d2007049f6d886721e5d19193790e3bb911c9d9616d82961a8bb32fc6e598617",
+      "pre_update_age_s": 24.780357837677002,
+      "reasons": [],
+      "slot": "d02",
+      "verdict": "pass"
+    },
+    {
+      "attempt_id": "d079-epoch-25g83-r6-20261001T0617Z-d03",
+      "delta_q_mah": 0,
+      "instrument_evidence_sha256": "7376e41367e62ae03dfa8245f07a67735328ccd5becbb22cd6dda96a1cc16d07",
+      "post_raw_sha256": "b04de6bab873227a19834a0da61d716c54a9d341128348c0c8ce52f741af5d7e",
+      "post_update_age_s": 42.959640979766846,
+      "pre_raw_sha256": "2494d5cc4bf00f7f5d49d5767b0eda6a46a740c529323fa62ecd00fd7b5f3ed3",
+      "pre_update_age_s": 24.547279119491577,
+      "reasons": [],
+      "slot": "d03",
+      "verdict": "pass"
+    },
+    {
+      "attempt_id": "d079-epoch-25g83-r6-20261001T0617Z-d04",
+      "delta_q_mah": 0,
+      "instrument_evidence_sha256": "c926082aed4f0e170e26c1294193dd02bb8f6dafac03f986eeee7b0966b58346",
+      "post_raw_sha256": "21dd3ed635ec8519b03509a4d1cf6583ecd38b77b6db726fddedcb1c00697eb3",
+      "post_update_age_s": 43.99810791015625,
+      "pre_raw_sha256": "47f56a5ea8ac66fff10206a1682d0f22ec2d0eba447d39f6c0e1234c673d45a5",
+      "pre_update_age_s": 25.58915090560913,
+      "reasons": [],
+      "slot": "d04",
+      "verdict": "pass"
+    },
+    {
+      "attempt_id": "d079-epoch-25g83-r6-20261001T0617Z-d05",
+      "delta_q_mah": 0,
+      "instrument_evidence_sha256": "a42cc0358995ddb8232b6824184f5f41268e525b69fcd79981202ac469b60d0b",
+      "post_raw_sha256": "6b9d4275290113a495f641f5a872d16c5b698483613b17427e80d3ad86e27e3b",
+      "post_update_age_s": 44.99917221069336,
+      "pre_raw_sha256": "6f118996e31b12d2a973cbad1233c33d7b611d3a65250c0f6fa4bace00c8e8eb",
+      "pre_update_age_s": 26.084627866744995,
+      "reasons": [],
+      "slot": "d05",
+      "verdict": "pass"
+    },
+    {
+      "attempt_id": "d079-epoch-25g83-r6-20261001T0617Z-d06",
+      "delta_q_mah": -1,
+      "instrument_evidence_sha256": "c095a865ec19e9a9a0637671241aeef83906ed0215d063d0b0ba2ef07fcd3ced",
+      "post_raw_sha256": "315c6cd706ee216e4501c8e9951d25496f937d4f653bbba9db88b39474651315",
+      "post_update_age_s": 44.06180810928345,
+      "pre_raw_sha256": "6330ff5cb4fbb161736763034f0eb3095d3562312136db16e2066355b1aa1d21",
+      "pre_update_age_s": 25.754688024520874,
+      "reasons": [],
+      "slot": "d06",
+      "verdict": "pass"
+    },
+    {
+      "attempt_id": "d079-epoch-25g83-r6-20261001T0617Z-d07",
+      "delta_q_mah": 0,
+      "instrument_evidence_sha256": "6011ec4493a2f3c6850d4504ac6607ce6f61150584952c1e95cd0d9e11d3069b",
+      "post_raw_sha256": "c005727f85b880b2dd87ba0d454c135b44241df9e3324756428991c62647b40b",
+      "post_update_age_s": 43.98124694824219,
+      "pre_raw_sha256": "71b808cebd218471567eaeacf1c23af2915b40f4fef28460226066110c65904a",
+      "pre_update_age_s": 25.481580018997192,
+      "reasons": [],
+      "slot": "d07",
+      "verdict": "pass"
+    },
+    {
+      "attempt_id": "d079-epoch-25g83-r6-20261001T0617Z-d08",
+      "delta_q_mah": 0,
+      "instrument_evidence_sha256": "58593e967f54ce8e696d6ce08891c7d5672c4b726ccb6c2b421184b40831c7a2",
+      "post_raw_sha256": "b2e9b5795fed540efbe4782717e6bcd1bfe1df74a992ae6cee2932d8405c5f25",
+      "post_update_age_s": 44.00331497192383,
+      "pre_raw_sha256": "92220118c8fe71fc9148862c777913ffc2ccea0004b9c4fe7ff7af9a86463d3f",
+      "pre_update_age_s": 25.98421812057495,
+      "reasons": [],
+      "slot": "d08",
+      "verdict": "pass"
+    },
+    {
+      "attempt_id": "d079-epoch-25g83-r6-20261001T0617Z-d09",
+      "delta_q_mah": 0,
+      "instrument_evidence_sha256": "5ad23e40e67f4f5f0c881997f336820fc0f5483491ed2f3356c77f35204488ff",
+      "post_raw_sha256": "fd84811853f2a9bc1717385a27844b435b5b3c916fadc7386891a807327d8695",
+      "post_update_age_s": 44.0516312122345,
+      "pre_raw_sha256": "2e3aad5240f65b2b91338a5def085789db5fe040ee301cf03f8750585a41cab1",
+      "pre_update_age_s": 25.72569489479065,
+      "reasons": [],
+      "slot": "d09",
+      "verdict": "pass"
+    },
+    {
+      "attempt_id": "d079-epoch-25g83-r6-20261001T0617Z-d10",
+      "delta_q_mah": 0,
+      "instrument_evidence_sha256": "dcd4a3508ad41890417ee5cdbc364818921ab7f53a4b01db1c07dd3a3efeaa3b",
+      "post_raw_sha256": "9e916ae897b8a085be830e900fbd364931dc3dc3d4d0ca5f06e7b6489f3baafe",
+      "post_update_age_s": 45.052273988723755,
+      "pre_raw_sha256": "f936ab5034cb1cfd11199e1d5b5a0401ba2914002cac6c1c9359f9c2e6b7bf1e",
+      "pre_update_age_s": 26.12137794494629,
+      "reasons": [],
+      "slot": "d10",
+      "verdict": "pass"
+    },
+    {
+      "attempt_id": "d079-epoch-25g83-r6-20261001T0617Z-d11",
+      "delta_q_mah": 0,
+      "instrument_evidence_sha256": "a490122836286a74014e74ccfb9f5a20706938c4860f45319db744fc15e46049",
+      "post_raw_sha256": "480a5f6e9921508eeabe27ed7e5041709aa7caa8d81679682694a8e409ddaa6c",
+      "post_update_age_s": 45.05192708969116,
+      "pre_raw_sha256": "67ad9d7c8035de8cf7aa9bf8e864e5bf5d9c5a622bd6f508eb944a68a6025a0a",
+      "pre_update_age_s": 26.362327098846436,
+      "reasons": [],
+      "slot": "d11",
+      "verdict": "pass"
+    },
+    {
+      "attempt_id": "d079-epoch-25g83-r6-20261001T0617Z-d12",
+      "delta_q_mah": -1,
+      "instrument_evidence_sha256": "8a216400dd25cc78187cd70da0812574553fc82de7b75f8d8b9d467642add970",
+      "post_raw_sha256": "2f5182c4f886abaf41de00a81b9732d2d9746459597125cc7d2d77c54fa92785",
+      "post_update_age_s": 44.01411986351013,
+      "pre_raw_sha256": "070386c146baa39fd8fba4159272e42dc0b2b86509be993b1a225669b2936e38",
+      "pre_update_age_s": 25.854923009872437,
+      "reasons": [],
+      "slot": "d12",
+      "verdict": "pass"
+    }
+  ],
+  "status": "pass",
+  "tool_commit": "f0e211cbb5b6715cd9c67c3d56dd2fa8c0e4e67a"
+}

@@ -1,0 +1,16 @@
+{
+  "authored_epoch_s": 1790889723.0,
+  "chain_path": "/Users/edr/night-custody/d079-epoch-25g83-r6-derivation-c2-20261001T2252Z/chain.zsh",
+  "chain_sha256_path": "/Users/edr/night-custody/d079-epoch-25g83-r6-derivation-c2-20261001T2252Z/chain.zsh.sha256",
+  "custody_root": "/Users/edr/night-custody/d079-epoch-25g83-r6-derivation-c2-20261001T2252Z",
+  "measurement_head": "f54473f3acaf63aa2e329027bcb2e8bd83579db7",
+  "measurement_root": "/Users/edr/night-custody/measurement/JouleWise-measurement-20261001T2252Z-r6-c2",
+  "plan_id": "d079-epoch-25g83-r6-derivation-c2-20261001T2252Z",
+  "receipt_class": "DIAGNOSTIC_NO_PACK",
+  "registration_path": "configs/calibration/preregistration_d079_epoch_25g83_rev1.md",
+  "repo_head": "f54473f3acaf63aa2e329027bcb2e8bd83579db7",
+  "schema": "joulewise.night_plan.v2",
+  "schema_version": 2,
+  "t0_epoch_s": 1790895120.0,
+  "window_max_s": 9000
+}

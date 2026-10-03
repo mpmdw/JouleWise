@@ -267,8 +267,8 @@ class CalibrationWriterCrashMatrixTests(unittest.TestCase):
             cls.repo / "configs" / "calibration" / "powermetrics_fiducial",
         )
         shutil.copy2(
-            REPO_ROOT / "configs" / "calibration" / "calibration_acceptance_d079_v2_n17_r8.json",
-            cls.repo / "configs" / "calibration" / "calibration_acceptance_d079_v2_n17_r8.json",
+            REPO_ROOT / "configs" / "calibration" / "calibration_acceptance_d079_v2_n24_25g83_r2.json",
+            cls.repo / "configs" / "calibration" / "calibration_acceptance_d079_v2_n24_25g83_r2.json",
         )
         # This private synthetic repository must authenticate the estimator
         # bytes it actually copied, which are this checkout's bytes rather than
@@ -280,7 +280,7 @@ class CalibrationWriterCrashMatrixTests(unittest.TestCase):
             cls.repo
             / "configs"
             / "calibration"
-            / "calibration_acceptance_d079_v2_n17_r8.json"
+            / "calibration_acceptance_d079_v2_n24_25g83_r2.json"
         )
         acceptance = json.loads(acceptance_path.read_text(encoding="utf-8"))
         estimator_paths = tuple(
@@ -315,7 +315,7 @@ class CalibrationWriterCrashMatrixTests(unittest.TestCase):
                 REPO_ROOT
                 / "configs"
                 / "calibration"
-                / "calibration_acceptance_d079_v2_n17_r8.json"
+                / "calibration_acceptance_d079_v2_n24_25g83_r2.json"
             ).read_bytes()
         ).hexdigest()
         new_acceptance_sha256 = hashlib.sha256(
@@ -371,7 +371,7 @@ class CalibrationWriterCrashMatrixTests(unittest.TestCase):
 
     def setUp(self) -> None:
         self.epoch = {
-            "os_build": "25F84",
+            "os_build": "25G83",
             "hardware_model": "Mac15,9",
             "power_policy": "ac_high_power",
             "sampling_interval_ms": 100,

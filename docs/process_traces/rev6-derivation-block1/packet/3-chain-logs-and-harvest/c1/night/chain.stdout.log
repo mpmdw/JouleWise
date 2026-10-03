@@ -1,0 +1,535 @@
+{"custody_elapsed_s": 3.0391770000569522, "frozen_plan": {"path": "/Users/edr/night-custody/d079-epoch-25g83-r6-derivation-c1-20261001T0617Z/calibration_plan.json", "plan_id": "plan-d117-floor-qwen25-1p5b-decode-p128-prefill-rider-v3", "proposed_session_id": "d079-epoch-25g83-r6-20261001T0617Z", "sha256": "9ab4776f3c416284d6d01a5a49587eedcdfbcb8ef61428cdc1046e9b9d74a072"}, "pre_reserve_readiness": "ready"}
+{
+  "receipt": {
+    "declared_slots": [
+      "d01",
+      "d02",
+      "d03",
+      "d04",
+      "d05",
+      "d06",
+      "d07",
+      "d08",
+      "d09",
+      "d10",
+      "d11",
+      "d12"
+    ],
+    "event": "bracket-session-open",
+    "evidence_root_id": "evidence-d079-epoch-25g83-r6-derivation-c1-20261001T0617Z",
+    "ledger_schema": "joulewise.calibration_observation_ledger.v1",
+    "plan_id": "plan-d117-floor-qwen25-1p5b-decode-p128-prefill-rider-v3",
+    "plan_sha256": "9ab4776f3c416284d6d01a5a49587eedcdfbcb8ef61428cdc1046e9b9d74a072",
+    "predecessor_digest": "225001644faa48fa25f0a66f2b3526084de0840f7be337392beacc32cd852755",
+    "receipt_digest": "ffeab48eae2da7bba40ff3de41b01cf9dca9b0e4139b2dae492906cb3d5c4525",
+    "runs_root": "/Users/edr/night-custody/d079-epoch-25g83-r6-derivation-c1-20261001T0617Z/runs",
+    "schema_version": "joulewise.calibration_window_bracket_session.v1",
+    "sequence": 278,
+    "session_id": "d079-epoch-25g83-r6-20261001T0617Z",
+    "session_kind": "derivation",
+    "slots": {
+      "d01": {
+        "attempt_id": "d079-epoch-25g83-r6-20261001T0617Z-d01",
+        "custody_locator": "/Users/edr/night-custody/d079-epoch-25g83-r6-derivation-c1-20261001T0617Z/runs/instrument_validation/d079-epoch-25g83-r6-20261001T0617Z-d01",
+        "expected_time_role": "d01",
+        "identity_epoch": {
+          "estimator_revision": "joint_loss_sublevel_interval_branch_v2",
+          "hardware_model": "Mac15,9",
+          "os_build": "25G83",
+          "power_policy": "ac_high_power",
+          "pulse_protocol_id": "powermetrics_pulse_fiducial_v3",
+          "sampling_interval_ms": 100
+        },
+        "t1_bindings": {
+          "anchor_method_version": "powermetrics_native_second_rate_aware_set_membership_v1",
+          "estimator_revision": "joint_loss_sublevel_interval_branch_v2",
+          "hardware_model": "Mac15,9",
+          "mlx_version": "0.31.2",
+          "os_build": "25G83",
+          "power_policy": "ac_high_power",
+          "powermetrics_sha256": "b762e5bf7628e77d279012882c096e922633a47aa38bd5f05c0381cfb21330c5",
+          "protocol_sha256": "9eaf92f85136e234c56ea3ffd34392a73c313d4a092cabf308f5f5aaff9a31b1",
+          "pulse_protocol_id": "powermetrics_pulse_fiducial_v3",
+          "sampling_interval_ms": 100
+        }
+      },
+      "d02": {
+        "attempt_id": "d079-epoch-25g83-r6-20261001T0617Z-d02",
+        "custody_locator": "/Users/edr/night-custody/d079-epoch-25g83-r6-derivation-c1-20261001T0617Z/runs/instrument_validation/d079-epoch-25g83-r6-20261001T0617Z-d02",
+        "expected_time_role": "d02",
+        "identity_epoch": {
+          "estimator_revision": "joint_loss_sublevel_interval_branch_v2",
+          "hardware_model": "Mac15,9",
+          "os_build": "25G83",
+          "power_policy": "ac_high_power",
+          "pulse_protocol_id": "powermetrics_pulse_fiducial_v3",
+          "sampling_interval_ms": 100
+        },
+        "t1_bindings": {
+          "anchor_method_version": "powermetrics_native_second_rate_aware_set_membership_v1",
+          "estimator_revision": "joint_loss_sublevel_interval_branch_v2",
+          "hardware_model": "Mac15,9",
+          "mlx_version": "0.31.2",
+          "os_build": "25G83",
+          "power_policy": "ac_high_power",
+          "powermetrics_sha256": "b762e5bf7628e77d279012882c096e922633a47aa38bd5f05c0381cfb21330c5",
+          "protocol_sha256": "9eaf92f85136e234c56ea3ffd34392a73c313d4a092cabf308f5f5aaff9a31b1",
+          "pulse_protocol_id": "powermetrics_pulse_fiducial_v3",
+          "sampling_interval_ms": 100
+        }
+      },
+      "d03": {
+        "attempt_id": "d079-epoch-25g83-r6-20261001T0617Z-d03",
+        "custody_locator": "/Users/edr/night-custody/d079-epoch-25g83-r6-derivation-c1-20261001T0617Z/runs/instrument_validation/d079-epoch-25g83-r6-20261001T0617Z-d03",
+        "expected_time_role": "d03",
+        "identity_epoch": {
+          "estimator_revision": "joint_loss_sublevel_interval_branch_v2",
+          "hardware_model": "Mac15,9",
+          "os_build": "25G83",
+          "power_policy": "ac_high_power",
+          "pulse_protocol_id": "powermetrics_pulse_fiducial_v3",
+          "sampling_interval_ms": 100
+        },
+        "t1_bindings": {
+          "anchor_method_version": "powermetrics_native_second_rate_aware_set_membership_v1",
+          "estimator_revision": "joint_loss_sublevel_interval_branch_v2",
+          "hardware_model": "Mac15,9",
+          "mlx_version": "0.31.2",
+          "os_build": "25G83",
+          "power_policy": "ac_high_power",
+          "powermetrics_sha256": "b762e5bf7628e77d279012882c096e922633a47aa38bd5f05c0381cfb21330c5",
+          "protocol_sha256": "9eaf92f85136e234c56ea3ffd34392a73c313d4a092cabf308f5f5aaff9a31b1",
+          "pulse_protocol_id": "powermetrics_pulse_fiducial_v3",
+          "sampling_interval_ms": 100
+        }
+      },
+      "d04": {
+        "attempt_id": "d079-epoch-25g83-r6-20261001T0617Z-d04",
+        "custody_locator": "/Users/edr/night-custody/d079-epoch-25g83-r6-derivation-c1-20261001T0617Z/runs/instrument_validation/d079-epoch-25g83-r6-20261001T0617Z-d04",
+        "expected_time_role": "d04",
+        "identity_epoch": {
+          "estimator_revision": "joint_loss_sublevel_interval_branch_v2",
+          "hardware_model": "Mac15,9",
+          "os_build": "25G83",
+          "power_policy": "ac_high_power",
+          "pulse_protocol_id": "powermetrics_pulse_fiducial_v3",
+          "sampling_interval_ms": 100
+        },
+        "t1_bindings": {
+          "anchor_method_version": "powermetrics_native_second_rate_aware_set_membership_v1",
+          "estimator_revision": "joint_loss_sublevel_interval_branch_v2",
+          "hardware_model": "Mac15,9",
+          "mlx_version": "0.31.2",
+          "os_build": "25G83",
+          "power_policy": "ac_high_power",
+          "powermetrics_sha256": "b762e5bf7628e77d279012882c096e922633a47aa38bd5f05c0381cfb21330c5",
+          "protocol_sha256": "9eaf92f85136e234c56ea3ffd34392a73c313d4a092cabf308f5f5aaff9a31b1",
+          "pulse_protocol_id": "powermetrics_pulse_fiducial_v3",
+          "sampling_interval_ms": 100
+        }
+      },
+      "d05": {
+        "attempt_id": "d079-epoch-25g83-r6-20261001T0617Z-d05",
+        "custody_locator": "/Users/edr/night-custody/d079-epoch-25g83-r6-derivation-c1-20261001T0617Z/runs/instrument_validation/d079-epoch-25g83-r6-20261001T0617Z-d05",
+        "expected_time_role": "d05",
+        "identity_epoch": {
+          "estimator_revision": "joint_loss_sublevel_interval_branch_v2",
+          "hardware_model": "Mac15,9",
+          "os_build": "25G83",
+          "power_policy": "ac_high_power",
+          "pulse_protocol_id": "powermetrics_pulse_fiducial_v3",
+          "sampling_interval_ms": 100
+        },
+        "t1_bindings": {
+          "anchor_method_version": "powermetrics_native_second_rate_aware_set_membership_v1",
+          "estimator_revision": "joint_loss_sublevel_interval_branch_v2",
+          "hardware_model": "Mac15,9",
+          "mlx_version": "0.31.2",
+          "os_build": "25G83",
+          "power_policy": "ac_high_power",
+          "powermetrics_sha256": "b762e5bf7628e77d279012882c096e922633a47aa38bd5f05c0381cfb21330c5",
+          "protocol_sha256": "9eaf92f85136e234c56ea3ffd34392a73c313d4a092cabf308f5f5aaff9a31b1",
+          "pulse_protocol_id": "powermetrics_pulse_fiducial_v3",
+          "sampling_interval_ms": 100
+        }
+      },
+      "d06": {
+        "attempt_id": "d079-epoch-25g83-r6-20261001T0617Z-d06",
+        "custody_locator": "/Users/edr/night-custody/d079-epoch-25g83-r6-derivation-c1-20261001T0617Z/runs/instrument_validation/d079-epoch-25g83-r6-20261001T0617Z-d06",
+        "expected_time_role": "d06",
+        "identity_epoch": {
+          "estimator_revision": "joint_loss_sublevel_interval_branch_v2",
+          "hardware_model": "Mac15,9",
+          "os_build": "25G83",
+          "power_policy": "ac_high_power",
+          "pulse_protocol_id": "powermetrics_pulse_fiducial_v3",
+          "sampling_interval_ms": 100
+        },
+        "t1_bindings": {
+          "anchor_method_version": "powermetrics_native_second_rate_aware_set_membership_v1",
+          "estimator_revision": "joint_loss_sublevel_interval_branch_v2",
+          "hardware_model": "Mac15,9",
+          "mlx_version": "0.31.2",
+          "os_build": "25G83",
+          "power_policy": "ac_high_power",
+          "powermetrics_sha256": "b762e5bf7628e77d279012882c096e922633a47aa38bd5f05c0381cfb21330c5",
+          "protocol_sha256": "9eaf92f85136e234c56ea3ffd34392a73c313d4a092cabf308f5f5aaff9a31b1",
+          "pulse_protocol_id": "powermetrics_pulse_fiducial_v3",
+          "sampling_interval_ms": 100
+        }
+      },
+      "d07": {
+        "attempt_id": "d079-epoch-25g83-r6-20261001T0617Z-d07",
+        "custody_locator": "/Users/edr/night-custody/d079-epoch-25g83-r6-derivation-c1-20261001T0617Z/runs/instrument_validation/d079-epoch-25g83-r6-20261001T0617Z-d07",
+        "expected_time_role": "d07",
+        "identity_epoch": {
+          "estimator_revision": "joint_loss_sublevel_interval_branch_v2",
+          "hardware_model": "Mac15,9",
+          "os_build": "25G83",
+          "power_policy": "ac_high_power",
+          "pulse_protocol_id": "powermetrics_pulse_fiducial_v3",
+          "sampling_interval_ms": 100
+        },
+        "t1_bindings": {
+          "anchor_method_version": "powermetrics_native_second_rate_aware_set_membership_v1",
+          "estimator_revision": "joint_loss_sublevel_interval_branch_v2",
+          "hardware_model": "Mac15,9",
+          "mlx_version": "0.31.2",
+          "os_build": "25G83",
+          "power_policy": "ac_high_power",
+          "powermetrics_sha256": "b762e5bf7628e77d279012882c096e922633a47aa38bd5f05c0381cfb21330c5",
+          "protocol_sha256": "9eaf92f85136e234c56ea3ffd34392a73c313d4a092cabf308f5f5aaff9a31b1",
+          "pulse_protocol_id": "powermetrics_pulse_fiducial_v3",
+          "sampling_interval_ms": 100
+        }
+      },
+      "d08": {
+        "attempt_id": "d079-epoch-25g83-r6-20261001T0617Z-d08",
+        "custody_locator": "/Users/edr/night-custody/d079-epoch-25g83-r6-derivation-c1-20261001T0617Z/runs/instrument_validation/d079-epoch-25g83-r6-20261001T0617Z-d08",
+        "expected_time_role": "d08",
+        "identity_epoch": {
+          "estimator_revision": "joint_loss_sublevel_interval_branch_v2",
+          "hardware_model": "Mac15,9",
+          "os_build": "25G83",
+          "power_policy": "ac_high_power",
+          "pulse_protocol_id": "powermetrics_pulse_fiducial_v3",
+          "sampling_interval_ms": 100
+        },
+        "t1_bindings": {
+          "anchor_method_version": "powermetrics_native_second_rate_aware_set_membership_v1",
+          "estimator_revision": "joint_loss_sublevel_interval_branch_v2",
+          "hardware_model": "Mac15,9",
+          "mlx_version": "0.31.2",
+          "os_build": "25G83",
+          "power_policy": "ac_high_power",
+          "powermetrics_sha256": "b762e5bf7628e77d279012882c096e922633a47aa38bd5f05c0381cfb21330c5",
+          "protocol_sha256": "9eaf92f85136e234c56ea3ffd34392a73c313d4a092cabf308f5f5aaff9a31b1",
+          "pulse_protocol_id": "powermetrics_pulse_fiducial_v3",
+          "sampling_interval_ms": 100
+        }
+      },
+      "d09": {
+        "attempt_id": "d079-epoch-25g83-r6-20261001T0617Z-d09",
+        "custody_locator": "/Users/edr/night-custody/d079-epoch-25g83-r6-derivation-c1-20261001T0617Z/runs/instrument_validation/d079-epoch-25g83-r6-20261001T0617Z-d09",
+        "expected_time_role": "d09",
+        "identity_epoch": {
+          "estimator_revision": "joint_loss_sublevel_interval_branch_v2",
+          "hardware_model": "Mac15,9",
+          "os_build": "25G83",
+          "power_policy": "ac_high_power",
+          "pulse_protocol_id": "powermetrics_pulse_fiducial_v3",
+          "sampling_interval_ms": 100
+        },
+        "t1_bindings": {
+          "anchor_method_version": "powermetrics_native_second_rate_aware_set_membership_v1",
+          "estimator_revision": "joint_loss_sublevel_interval_branch_v2",
+          "hardware_model": "Mac15,9",
+          "mlx_version": "0.31.2",
+          "os_build": "25G83",
+          "power_policy": "ac_high_power",
+          "powermetrics_sha256": "b762e5bf7628e77d279012882c096e922633a47aa38bd5f05c0381cfb21330c5",
+          "protocol_sha256": "9eaf92f85136e234c56ea3ffd34392a73c313d4a092cabf308f5f5aaff9a31b1",
+          "pulse_protocol_id": "powermetrics_pulse_fiducial_v3",
+          "sampling_interval_ms": 100
+        }
+      },
+      "d10": {
+        "attempt_id": "d079-epoch-25g83-r6-20261001T0617Z-d10",
+        "custody_locator": "/Users/edr/night-custody/d079-epoch-25g83-r6-derivation-c1-20261001T0617Z/runs/instrument_validation/d079-epoch-25g83-r6-20261001T0617Z-d10",
+        "expected_time_role": "d10",
+        "identity_epoch": {
+          "estimator_revision": "joint_loss_sublevel_interval_branch_v2",
+          "hardware_model": "Mac15,9",
+          "os_build": "25G83",
+          "power_policy": "ac_high_power",
+          "pulse_protocol_id": "powermetrics_pulse_fiducial_v3",
+          "sampling_interval_ms": 100
+        },
+        "t1_bindings": {
+          "anchor_method_version": "powermetrics_native_second_rate_aware_set_membership_v1",
+          "estimator_revision": "joint_loss_sublevel_interval_branch_v2",
+          "hardware_model": "Mac15,9",
+          "mlx_version": "0.31.2",
+          "os_build": "25G83",
+          "power_policy": "ac_high_power",
+          "powermetrics_sha256": "b762e5bf7628e77d279012882c096e922633a47aa38bd5f05c0381cfb21330c5",
+          "protocol_sha256": "9eaf92f85136e234c56ea3ffd34392a73c313d4a092cabf308f5f5aaff9a31b1",
+          "pulse_protocol_id": "powermetrics_pulse_fiducial_v3",
+          "sampling_interval_ms": 100
+        }
+      },
+      "d11": {
+        "attempt_id": "d079-epoch-25g83-r6-20261001T0617Z-d11",
+        "custody_locator": "/Users/edr/night-custody/d079-epoch-25g83-r6-derivation-c1-20261001T0617Z/runs/instrument_validation/d079-epoch-25g83-r6-20261001T0617Z-d11",
+        "expected_time_role": "d11",
+        "identity_epoch": {
+          "estimator_revision": "joint_loss_sublevel_interval_branch_v2",
+          "hardware_model": "Mac15,9",
+          "os_build": "25G83",
+          "power_policy": "ac_high_power",
+          "pulse_protocol_id": "powermetrics_pulse_fiducial_v3",
+          "sampling_interval_ms": 100
+        },
+        "t1_bindings": {
+          "anchor_method_version": "powermetrics_native_second_rate_aware_set_membership_v1",
+          "estimator_revision": "joint_loss_sublevel_interval_branch_v2",
+          "hardware_model": "Mac15,9",
+          "mlx_version": "0.31.2",
+          "os_build": "25G83",
+          "power_policy": "ac_high_power",
+          "powermetrics_sha256": "b762e5bf7628e77d279012882c096e922633a47aa38bd5f05c0381cfb21330c5",
+          "protocol_sha256": "9eaf92f85136e234c56ea3ffd34392a73c313d4a092cabf308f5f5aaff9a31b1",
+          "pulse_protocol_id": "powermetrics_pulse_fiducial_v3",
+          "sampling_interval_ms": 100
+        }
+      },
+      "d12": {
+        "attempt_id": "d079-epoch-25g83-r6-20261001T0617Z-d12",
+        "custody_locator": "/Users/edr/night-custody/d079-epoch-25g83-r6-derivation-c1-20261001T0617Z/runs/instrument_validation/d079-epoch-25g83-r6-20261001T0617Z-d12",
+        "expected_time_role": "d12",
+        "identity_epoch": {
+          "estimator_revision": "joint_loss_sublevel_interval_branch_v2",
+          "hardware_model": "Mac15,9",
+          "os_build": "25G83",
+          "power_policy": "ac_high_power",
+          "pulse_protocol_id": "powermetrics_pulse_fiducial_v3",
+          "sampling_interval_ms": 100
+        },
+        "t1_bindings": {
+          "anchor_method_version": "powermetrics_native_second_rate_aware_set_membership_v1",
+          "estimator_revision": "joint_loss_sublevel_interval_branch_v2",
+          "hardware_model": "Mac15,9",
+          "mlx_version": "0.31.2",
+          "os_build": "25G83",
+          "power_policy": "ac_high_power",
+          "powermetrics_sha256": "b762e5bf7628e77d279012882c096e922633a47aa38bd5f05c0381cfb21330c5",
+          "protocol_sha256": "9eaf92f85136e234c56ea3ffd34392a73c313d4a092cabf308f5f5aaff9a31b1",
+          "pulse_protocol_id": "powermetrics_pulse_fiducial_v3",
+          "sampling_interval_ms": 100
+        }
+      }
+    },
+    "window_id": "d079-epoch-25g83-r6-derivation-c1-20261001T0617Z"
+  },
+  "schema_version": "joulewise.calibration_window_bracket_reservation.v1",
+  "status": "reserved",
+  "terminal_head_pin": null,
+  "terminal_head_pin_status": "deferred_until_terminal_slot_finalization",
+  "terminal_result": "operation_completed"
+}
+{
+  "validation_id": "d079-epoch-25g83-r6-20261001T0617Z-d01",
+  "status": "valid",
+  "b_fiducial_s": 0.025463179772367898,
+  "output": "/Users/edr/night-custody/d079-epoch-25g83-r6-derivation-c1-20261001T0617Z/runs/instrument_validation/d079-epoch-25g83-r6-20261001T0617Z-d01",
+  "ledger_head_pin_candidate": null,
+  "claim_evaluation_blocked_until_pin_commit": true,
+  "custody_elapsed_s": 6.608453291933984,
+  "observations": 86,
+  "custody_passes": 2,
+  "bracket_session": {
+    "session_id": "d079-epoch-25g83-r6-20261001T0617Z",
+    "slot": "d01",
+    "attempt_id": "d079-epoch-25g83-r6-20261001T0617Z-d01"
+  }
+}
+{
+  "validation_id": "d079-epoch-25g83-r6-20261001T0617Z-d02",
+  "status": "valid",
+  "b_fiducial_s": 0.02766399977693898,
+  "output": "/Users/edr/night-custody/d079-epoch-25g83-r6-derivation-c1-20261001T0617Z/runs/instrument_validation/d079-epoch-25g83-r6-20261001T0617Z-d02",
+  "ledger_head_pin_candidate": null,
+  "claim_evaluation_blocked_until_pin_commit": true,
+  "custody_elapsed_s": 6.726208665873855,
+  "observations": 87,
+  "custody_passes": 2,
+  "bracket_session": {
+    "session_id": "d079-epoch-25g83-r6-20261001T0617Z",
+    "slot": "d02",
+    "attempt_id": "d079-epoch-25g83-r6-20261001T0617Z-d02"
+  }
+}
+{
+  "validation_id": "d079-epoch-25g83-r6-20261001T0617Z-d03",
+  "status": "valid",
+  "b_fiducial_s": 0.03460915378691863,
+  "output": "/Users/edr/night-custody/d079-epoch-25g83-r6-derivation-c1-20261001T0617Z/runs/instrument_validation/d079-epoch-25g83-r6-20261001T0617Z-d03",
+  "ledger_head_pin_candidate": null,
+  "claim_evaluation_blocked_until_pin_commit": true,
+  "custody_elapsed_s": 6.814834916964173,
+  "observations": 88,
+  "custody_passes": 2,
+  "bracket_session": {
+    "session_id": "d079-epoch-25g83-r6-20261001T0617Z",
+    "slot": "d03",
+    "attempt_id": "d079-epoch-25g83-r6-20261001T0617Z-d03"
+  }
+}
+{
+  "validation_id": "d079-epoch-25g83-r6-20261001T0617Z-d04",
+  "status": "valid",
+  "b_fiducial_s": 0.027892564073153783,
+  "output": "/Users/edr/night-custody/d079-epoch-25g83-r6-derivation-c1-20261001T0617Z/runs/instrument_validation/d079-epoch-25g83-r6-20261001T0617Z-d04",
+  "ledger_head_pin_candidate": null,
+  "claim_evaluation_blocked_until_pin_commit": true,
+  "custody_elapsed_s": 7.360545207979158,
+  "observations": 89,
+  "custody_passes": 2,
+  "bracket_session": {
+    "session_id": "d079-epoch-25g83-r6-20261001T0617Z",
+    "slot": "d04",
+    "attempt_id": "d079-epoch-25g83-r6-20261001T0617Z-d04"
+  }
+}
+{
+  "validation_id": "d079-epoch-25g83-r6-20261001T0617Z-d05",
+  "status": "valid",
+  "b_fiducial_s": 0.0274417652193393,
+  "output": "/Users/edr/night-custody/d079-epoch-25g83-r6-derivation-c1-20261001T0617Z/runs/instrument_validation/d079-epoch-25g83-r6-20261001T0617Z-d05",
+  "ledger_head_pin_candidate": null,
+  "claim_evaluation_blocked_until_pin_commit": true,
+  "custody_elapsed_s": 6.981677040923387,
+  "observations": 90,
+  "custody_passes": 2,
+  "bracket_session": {
+    "session_id": "d079-epoch-25g83-r6-20261001T0617Z",
+    "slot": "d05",
+    "attempt_id": "d079-epoch-25g83-r6-20261001T0617Z-d05"
+  }
+}
+{
+  "validation_id": "d079-epoch-25g83-r6-20261001T0617Z-d06",
+  "status": "valid",
+  "b_fiducial_s": 0.02790192270133949,
+  "output": "/Users/edr/night-custody/d079-epoch-25g83-r6-derivation-c1-20261001T0617Z/runs/instrument_validation/d079-epoch-25g83-r6-20261001T0617Z-d06",
+  "ledger_head_pin_candidate": null,
+  "claim_evaluation_blocked_until_pin_commit": true,
+  "custody_elapsed_s": 7.074359833961353,
+  "observations": 91,
+  "custody_passes": 2,
+  "bracket_session": {
+    "session_id": "d079-epoch-25g83-r6-20261001T0617Z",
+    "slot": "d06",
+    "attempt_id": "d079-epoch-25g83-r6-20261001T0617Z-d06"
+  }
+}
+{
+  "validation_id": "d079-epoch-25g83-r6-20261001T0617Z-d07",
+  "status": "valid",
+  "b_fiducial_s": 0.02193176218569716,
+  "output": "/Users/edr/night-custody/d079-epoch-25g83-r6-derivation-c1-20261001T0617Z/runs/instrument_validation/d079-epoch-25g83-r6-20261001T0617Z-d07",
+  "ledger_head_pin_candidate": null,
+  "claim_evaluation_blocked_until_pin_commit": true,
+  "custody_elapsed_s": 7.168626416940242,
+  "observations": 92,
+  "custody_passes": 2,
+  "bracket_session": {
+    "session_id": "d079-epoch-25g83-r6-20261001T0617Z",
+    "slot": "d07",
+    "attempt_id": "d079-epoch-25g83-r6-20261001T0617Z-d07"
+  }
+}
+{
+  "validation_id": "d079-epoch-25g83-r6-20261001T0617Z-d08",
+  "status": "valid",
+  "b_fiducial_s": 0.030373696240460962,
+  "output": "/Users/edr/night-custody/d079-epoch-25g83-r6-derivation-c1-20261001T0617Z/runs/instrument_validation/d079-epoch-25g83-r6-20261001T0617Z-d08",
+  "ledger_head_pin_candidate": null,
+  "claim_evaluation_blocked_until_pin_commit": true,
+  "custody_elapsed_s": 7.265170000027865,
+  "observations": 93,
+  "custody_passes": 2,
+  "bracket_session": {
+    "session_id": "d079-epoch-25g83-r6-20261001T0617Z",
+    "slot": "d08",
+    "attempt_id": "d079-epoch-25g83-r6-20261001T0617Z-d08"
+  }
+}
+{
+  "validation_id": "d079-epoch-25g83-r6-20261001T0617Z-d09",
+  "status": "valid",
+  "b_fiducial_s": 0.033858213964584355,
+  "output": "/Users/edr/night-custody/d079-epoch-25g83-r6-derivation-c1-20261001T0617Z/runs/instrument_validation/d079-epoch-25g83-r6-20261001T0617Z-d09",
+  "ledger_head_pin_candidate": null,
+  "claim_evaluation_blocked_until_pin_commit": true,
+  "custody_elapsed_s": 7.357661749934778,
+  "observations": 94,
+  "custody_passes": 2,
+  "bracket_session": {
+    "session_id": "d079-epoch-25g83-r6-20261001T0617Z",
+    "slot": "d09",
+    "attempt_id": "d079-epoch-25g83-r6-20261001T0617Z-d09"
+  }
+}
+{
+  "validation_id": "d079-epoch-25g83-r6-20261001T0617Z-d10",
+  "status": "valid",
+  "b_fiducial_s": 0.025533661955889533,
+  "output": "/Users/edr/night-custody/d079-epoch-25g83-r6-derivation-c1-20261001T0617Z/runs/instrument_validation/d079-epoch-25g83-r6-20261001T0617Z-d10",
+  "ledger_head_pin_candidate": null,
+  "claim_evaluation_blocked_until_pin_commit": true,
+  "custody_elapsed_s": 7.464095375034958,
+  "observations": 95,
+  "custody_passes": 2,
+  "bracket_session": {
+    "session_id": "d079-epoch-25g83-r6-20261001T0617Z",
+    "slot": "d10",
+    "attempt_id": "d079-epoch-25g83-r6-20261001T0617Z-d10"
+  }
+}
+{
+  "validation_id": "d079-epoch-25g83-r6-20261001T0617Z-d11",
+  "status": "valid",
+  "b_fiducial_s": 0.030402083768569316,
+  "output": "/Users/edr/night-custody/d079-epoch-25g83-r6-derivation-c1-20261001T0617Z/runs/instrument_validation/d079-epoch-25g83-r6-20261001T0617Z-d11",
+  "ledger_head_pin_candidate": null,
+  "claim_evaluation_blocked_until_pin_commit": true,
+  "custody_elapsed_s": 7.559428000124171,
+  "observations": 96,
+  "custody_passes": 2,
+  "bracket_session": {
+    "session_id": "d079-epoch-25g83-r6-20261001T0617Z",
+    "slot": "d11",
+    "attempt_id": "d079-epoch-25g83-r6-20261001T0617Z-d11"
+  }
+}
+{
+  "validation_id": "d079-epoch-25g83-r6-20261001T0617Z-d12",
+  "status": "valid",
+  "b_fiducial_s": 0.027971479139464784,
+  "output": "/Users/edr/night-custody/d079-epoch-25g83-r6-derivation-c1-20261001T0617Z/runs/instrument_validation/d079-epoch-25g83-r6-20261001T0617Z-d12",
+  "ledger_head_pin_candidate": {
+    "sequence": 326,
+    "head_digest": "335b4171e1c2b073f9b346fd56ace769c97c936ce25878844528f329b71bd6de",
+    "ledger_schema": "joulewise.calibration_observation_ledger.v1"
+  },
+  "claim_evaluation_blocked_until_pin_commit": true,
+  "custody_elapsed_s": 7.651518374914303,
+  "observations": 97,
+  "custody_passes": 2,
+  "bracket_session": {
+    "session_id": "d079-epoch-25g83-r6-20261001T0617Z",
+    "slot": "d12",
+    "attempt_id": "d079-epoch-25g83-r6-20261001T0617Z-d12"
+  }
+}
