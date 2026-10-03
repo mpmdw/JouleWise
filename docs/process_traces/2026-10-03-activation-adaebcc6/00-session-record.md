@@ -53,3 +53,28 @@ Step: RUN_STATE 07:20 pointer (activation a7a0ed6a): carry the w1 R3 fix through
   lacked rows in `tests/fixtures/custody_read_replay_allowlist.json`. R3 by the lead: two rows
   added, harvest ordinal renumbered (old 2 → 3), line hints refreshed; fixture only, no code.
   Local: 7 tests OK. Every other CI job was green on `313a9da0`.
+- CI green on `9e2b1004` (15/15). PR #461 merged `8b8bc34e` (= H′ 2).
+- Re-harvest of w1 (recipe §6 from a worktree at `8b8bc34e`, `--read-only-sources`, fresh root
+  `~/night-archive/harvest-d117-g2a-prefill-probe-20261003T0820Z-r2`): rc 0, `verdict=RECOVER`,
+  cause codes `bracket_incomplete`, `chain_nonzero_or_missing_exit`,
+  `rung_valid_small_members_shortfall`, `capture_made` true; harvest.json sha256 `4d61aa97…103f`.
+  The measurement clone was unchanged and its pin was not advanced. The derived terminal ledger
+  (`a0e34885…a5e9`, 384 rows) is byte-identical to the trial run.
+- §7 cause naming (cause codes and admission evidence only): the chain stopped at the first member on
+  the controller's C-2 refusal (`controller.py:447`), a code defect removed by #461. No member ran, so
+  no `clock_anchor_status` exists; that is not the systematic "most anchors not bounded" case. The cause
+  is removable, so: one recovery window, `w2`.
+- Landing (light tier, this branch `harvest/d117-g2a-prefill-probe-20261003T0820Z-r2`): pin
+  `configs/calibration/calibration_ledger_head.json` 376 → 384 (bytes of the archive's
+  `derived/terminal-pin.json`); `windows/<plan>/harvest.json` (r2), `harvest-r1-refused.json`,
+  `SHA256SUMS`; seal record 52 entry "H′ 2" (Fable F7). Recipe deviation: the archive's
+  `SHA256SUMS` lists source bytes only, so `w2`'s `NEW_LEDGER_SHA` is taken from `harvest.json`
+  `outputs["terminal-ledger.jsonl"]` (the same sha256 the harvest printed). Local pin-sensitive
+  tests (revision6_seal, gen_g2a_window, summarize, harvest_g2a_window, d138_rev6_issuance,
+  harvest_window, bracket_binding_cli): 138 OK.
+- Lane `G2A-ATTACH-GUARD-TESTS-01`: Sol seat done (nine mutation-killing tests, F3/F4/F6); branch
+  `tests/2026-10-03-g2a-attach-guard-tests` (`c38791cc`), pushed, PR not yet opened. Do not merge it
+  before `w2` arms (it changes `controller.py` and `recover_calibration_ledger.py`; neither is
+  seal-pinned, but the measurement clone must be cut first). It needs main merged in (custody
+  allowlist fixture), a Sol executing review and a Fable final pass (it changes calibration-script
+  behaviour: lock unlink).
