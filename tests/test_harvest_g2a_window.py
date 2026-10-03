@@ -509,6 +509,102 @@ class G2aHarvestTests(unittest.TestCase):
         self.assertEqual(snapshot.bracket_session_by_id[self.value['session_id']].state, 'aborted')
         self.assertEqual(snapshot.head_sequence, 8)  # open, claim, pre final, abort: two records each
 
+    def test_crash_after_pre_with_uncommitted_seed_pin_refuses_first_ledger_load(self):
+        self.crash_after_pre()
+        # Same parsed seed, different uncommitted bytes: physical prefix and
+        # open-session shape alone must not authenticate the pin.
+        self.pin.write_bytes(self.pin.read_bytes() + b' ')
+        before = self.ledger.read_bytes(), self.pin.read_bytes()
+        record = self.run_harvest()
+        self.assertEqual((record['verdict'], record['cause_codes']),
+                         ('REFUSED', ['ledger_authentication_failed']))
+        self.assertEqual((self.ledger.read_bytes(), self.pin.read_bytes()), before)
+        self.assertEqual(self.commands, [])
+        self.validate_bundle.assert_not_called()
+
+    def add_foreign_open_session_tail(self):
+        """Build a hash-valid foreign tail that the governed writer would refuse."""
+        rows = [json.loads(line) for line in self.ledger.read_bytes().splitlines()]
+        original = rows[1]  # the original session's open business record
+        identity = dict(original, session_id='foreign-session', window_id='foreign-window')
+        slots = {slot: dict(value, attempt_id='foreign-'+slot,
+                           custody_locator=str(self.f.g2a/'runs/instrument_validation'/('foreign-'+slot)))
+                 for slot, value in original['slots'].items()}
+        foreign = real_ledger._new_bracket_session_record(
+            sequence=len(rows)+2, predecessor_digest=rows[-1]['receipt_digest'],
+            event=real_ledger.BRACKET_SESSION_OPEN_EVENT, session_identity=identity,
+            fields={'slots': slots})
+        core = real_ledger._target_core(foreign)
+        intent = real_ledger._new_append_intent(receipts=rows, byte_offset=len(self.ledger.read_bytes()),
+            target_core=core, operation_key=real_ledger._operation_key_for_core(core))
+        foreign = real_ledger._new_bracket_session_record(
+            sequence=len(rows)+2, predecessor_digest=intent['receipt_digest'],
+            event=real_ledger.BRACKET_SESSION_OPEN_EVENT, session_identity=identity,
+            fields={'slots': slots})
+        with self.ledger.open('ab') as handle:
+            for row in (intent, foreign):
+                handle.write(real_ledger.canonical_json_bytes(row) + b'\n')
+        snapshot = real_ledger.load_calibration_ledger_snapshot(
+            self.ledger, self.pin, repo_root=self.f.measurement, require_committed_pin=True)
+        self.assertEqual(set(snapshot.refusal_reasons), {
+            'calibration_ledger_head_mismatch', 'calibration_ledger_bracket_session_open'})
+        self.assertEqual({session.session_id for session in snapshot.bracket_sessions},
+                         {self.value['session_id'], 'foreign-session'})
+        self.assertFalse(snapshot.is_governed_open_bracket_extension)
+        return snapshot
+
+    def test_crash_after_pre_with_foreign_tail_refuses_first_ledger_load(self):
+        self.crash_after_pre()
+        self.add_foreign_open_session_tail()
+        before = self.ledger.read_bytes(), self.pin.read_bytes()
+        record = self.run_harvest()
+        self.assertEqual((record['verdict'], record['cause_codes']),
+                         ('REFUSED', ['ledger_authentication_failed']))
+        self.assertEqual((self.ledger.read_bytes(), self.pin.read_bytes()), before)
+        self.assertEqual(self.commands, [])
+        self.validate_bundle.assert_not_called()
+
+    def test_read_only_sources_recovery_rechecks_foreign_tail_before_creating_copies(self):
+        self.crash_after_pre()
+        snapshot = self.add_foreign_open_session_tail()
+        before = tree(self.f.measurement), tree(self.f.g2a), tree(self.f.night)
+        # Isolate recovery's independent guard: let only the earlier harvest
+        # check see an admitted snapshot. Recovery reloads the real foreign tail.
+        self.load_calibration_ledger_snapshot.side_effect = None
+        self.load_calibration_ledger_snapshot.return_value = SimpleNamespace(
+            bracket_session_by_id=snapshot.bracket_session_by_id,
+            refusal_reasons=snapshot.refusal_reasons, is_governed_open_bracket_extension=True)
+        with mock.patch.object(recovery, 'abort_calibration_session',
+                               wraps=real_ledger.abort_calibration_session) as abort, redirect_stdout(io.StringIO()):
+            code = harvest.main(['--plan', str(self.args.plan), '--archive-root', str(self.args.archive_root),
+                '--operator-identity', self.args.operator_identity, '--read-only-sources'],
+                now=self.now, clear=lambda _: True, runner=self.runner)
+        self.assertEqual(code, 3)
+        record = harvest.read(self.args.archive_root/'harvest.json')
+        self.assertEqual(record['verdict'], 'REFUSED')
+        self.assertEqual(record['fault']['type'], 'CalibrationLedgerError')
+        abort.assert_not_called()
+        for name in ('terminal-ledger.jsonl', 'terminal-pin.json', 'terminal-ledger.jsonl.lock'):
+            self.assertFalse((self.args.archive_root/'derived'/name).exists(), name)
+        self.assertEqual((tree(self.f.measurement), tree(self.f.g2a), tree(self.f.night)), before)
+
+    def test_read_only_harvest_removes_terminal_lock_without_changing_ledger_bytes(self):
+        self.crash_after_pre()
+        before = tree(self.f.measurement), tree(self.f.g2a), tree(self.f.night)
+        self.args.read_only_sources = True
+        terminal_bytes = []
+        for name in ('archive', 'archive-repeat'):
+            self.args.archive_root = self.f.base/name
+            record = self.run_harvest()
+            self.assertEqual(record['verdict'], 'RECOVER', record.get('fault'))
+            derived = self.args.archive_root/'derived'
+            self.assertFalse((derived/'terminal-ledger.jsonl.lock').exists())
+            self.assertNotIn('terminal-ledger.jsonl.lock', record['outputs'])
+            terminal_bytes.append((derived/'terminal-ledger.jsonl').read_bytes())
+        self.assertEqual(terminal_bytes[0], terminal_bytes[1])
+        self.assertTrue(terminal_bytes[0].startswith(self.ledger.read_bytes()))
+        self.assertEqual((tree(self.f.measurement), tree(self.f.g2a), tree(self.f.night)), before)
+
     def test_crash_after_pre_capture_with_zero_members_uses_governed_source_abort_before_pin(self):
         self.crash_after_pre()
         def runner(argv, **kwargs):
