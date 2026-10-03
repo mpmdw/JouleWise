@@ -1,0 +1,22 @@
+The final pass is complete and the record is written. Verdict: **FINAL PASS: MERGE**.
+
+**Output file:** `docs/process_traces/2026-10-02-interactive-d138/31-fable-final-pass.md` in this worktree, first line `FINAL PASS: MERGE`, uncommitted as the charge requires.
+
+**What the executed checks established**
+
+- The live file `calibration_acceptance_d079_v2_n24_25g83_r2.json` is the admitted candidate `aa59ebb2…9884` changed only in issuance fields. All 24 members, every statistic and operative, the cutoff, the prior set and the ruled `derivation_input_sha256` are byte-identical, and the issued `derivation_sha256` recomputes. The promotion tool's `--check` reproduces the committed bytes exactly.
+- The promotion tool refuses every wrong candidate, drifted seal, drifted citation, wrong ruling set and foreign field I tried, and the r1 entry's checks are unchanged.
+- Nine generations authenticate, the default loads and validates, the code's generation row equals the file's, P8 keeps screen 0.009724 and r2 carries 0.014531, and the pinset schema puts r2 in its own enum. A 25G83 identity evaluates fresh and a 25F84 identity stale against the default. The snapshot verifier passes against the pre-issuance base.
+- The non-test pin sweep matches the classification record exactly. Every remaining P8 reference is P8-as-P8: its constants, registry entry, the n17 row, r2's predecessor pointer, the Revision 6 predecessor checks and the n17 pinset enum.
+- The erratum and all ten disclosures state facts the receipts, commits, ruling and refuter support. On the D10 deferral, every judging route either refuses a 25F84 result against r2 with a named reason or routes a result carrying P8 bytes to P8. No silent path exists.
+- Only five non-test, non-docs files changed. The four pinned estimator files, the fiducial validator, the derivation chain, the sealed registration, the dispositions registry and P8 are untouched by digest.
+- 265 tests across nine modules pass.
+
+**Findings, none blocking**
+
+- Major: the Revision 6 text validator in `scripts/promote_calibration_candidate.py` has no minimum disclosure count, so a text missing D10 would promote. The live file carries D1–D10 and derived fields are seal-protected, so science is unaffected. Worth a follow-up fix.
+- Minor: `tests/verify_registered_calibration_snapshot.py` needs `--reference-ref` pointing at a pre-issuance commit now; its default fails after this merge.
+- Minor, forward-looking: the issuer's `--predecessor-acceptance` default is now r2 while Revision 6 requires P8, so a future block 2 run must pass P8 explicitly or it refuses.
+- Two nits recorded in the file.
+
+Contamination disclosure is in the record: the harness injected the global and project CLAUDE.md and the memory index before I read anything. I opened no memory, skill, RUN_STATE, TASK_QUEUE, AGENTS or CLAUDE.local files.
