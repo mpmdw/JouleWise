@@ -11,7 +11,7 @@
 | Cold seal ruling | F7: no-capture class not recorded | minor | **Fixed** in `d5b28bb8`: `capture_made` from `raw/powermetrics*.plist` in the archive copy; tests `test_t8_*` |
 | Cold seal ruling | F8: author command accepts any window ≥ span + 900 | minor | **Fixed in the arm recipe** (step2 requires `WINDOW_MAX_S` to equal span + 2700 rounded up); code unchanged (tests use the minimum) |
 | Cold seal ruling | F9: NULL only after the completion boundary | minor | **Rejected**: the next arm's discovery treats the plan span as active until the same boundary, so an earlier NULL saves no time |
-| Cold seal ruling | F10/F11: summarizer zero-member rung `0` vs `null`; `windows[0]` | nit | **Deferred** to lane G2A-SUMMARY-NITS-01 (unreachable through the harvest: the selector runs only on SELECT, configs fix one prefill window) |
+| Cold seal ruling | F10/F11: summarizer zero-member rung `0` vs `null`; `windows[0]` | nit | **Deferred** to lane G2A-FOLLOWUPS-01 (unreachable through the harvest: the selector runs only on SELECT, configs fix one prefill window) |
 | Cold seal ruling | F4, F5, F6, F12, F13, T1-T8 | text | **Applied** to the registration (T2a chosen: no chain change) |
 | Seal refuter [51r](51r-seal-refuter.md) | D1: later windows other than recovery need a head rule | minor | **Applied** inside T6 |
 | Seal refuter | D2: no real member bundle at H shown with a `bounded` anchor | risk | **Disclosed** in the seal record; the recipe routes a systematic non-bounded RECOVER to a consult, not to `w2`. A live member capture is outside this seat's authority (no powermetrics) |
@@ -20,3 +20,13 @@
 | Lead | WindowDeadlineTests chain fixture lacked the span literal (5 regressions) | regression | **Fixed** in `8a8635a7` |
 | Lead | NULL verdict for a window whose chain never started | design | **Added** in `8a8635a7` with a test |
 | Lead | `--new-g2a-window` forced the plan into the night root (published before the arm notice) | design | **Fixed** in `4cacd72b`: plan may be staged; test `test_plan_may_be_staged_outside_the_night_root_for_later_publication` |
+| Sol delta review [32](32-sol-delta-review.md) (MERGE) | G2AD-01: wrong-filename negative test masked by existing outputs (mutant survived) | should_fix | **Fixed** in `a7aa3029`: fresh coordinates and a filename-specific assertion; the lead re-ran the mutant (guard removed): the test fails |
+| Fable final pass [36](36-fable-final-pass.md) (MERGE) | F1: eight harvester guards correct but unpinned (8 surviving mutants) | minor | **Fixed** in `2b49b041`: the judge's 16 probes lifted into `tests/test_harvest_g2a_window.py` as `test_guard_*` (46 tests OK) |
+| Fable final pass | F2: real seams (input auth, ledger replay, strict validation, bracket decision) only exercised with fixtures | minor | **Accepted** (as Sol F3): any fault there yields REFUSED or RECOVER, never SELECT; the first real harvest exercises them |
+| Fable final pass | F3: a derivation chain registered under D-166 now refuses before OFF (no span literal); the derivation generator's example plan still shows D-166 | minor | **Rejected as a defect, recorded**: fails closed; every Revision 6 window carries the Revision 6 registration (C1, C2 did); the example text is historical (pre-seal W2). Example refresh deferred to lane G2A-FOLLOWUPS-01 |
+| Fable final pass | F4: allowlist line numbers stale | nit | **Fixed** in `2b49b041` (143, 174) |
+| Fable final pass | F5: Revision 6 refusal text lists missing evidence in a different order | nit | **Rejected**: outcome and record keys identical |
+| Fable final pass | F6: `exit_code` JSON `false` equals 0 | nit | **Rejected**: the driver writes integers; string `"0"` already gives RECOVER |
+| Fable final pass | F7: a harvest failing after the pin advance cannot be re-run cleanly | nit | **Deferred** to lane G2A-FOLLOWUPS-01 (fail-closed; recipe §7 REFUSED → R3) |
+
+Lane G2A-FOLLOWUPS-01 (named here; registered in RUN_STATE's block-2 handoff): seal F10/F11 (summarizer zero-member `null`, single prefill window assertion), Fable F3 example refresh, Fable F7 post-advance re-harvest.
