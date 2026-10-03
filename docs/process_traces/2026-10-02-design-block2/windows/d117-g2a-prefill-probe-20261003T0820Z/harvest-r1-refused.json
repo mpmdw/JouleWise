@@ -1,0 +1,16 @@
+{
+  "archive_root": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261003T0820Z",
+  "cause_codes": [
+    "archive_or_authentication_fault"
+  ],
+  "fault": {
+    "detail": "calibration_session_not_terminal: bracket session is not terminal; use terminal_head_pin_for_session only after closure",
+    "type": "CalibrationLedgerError"
+  },
+  "members": [],
+  "pin_advance": null,
+  "plan_id": "d117-g2a-prefill-probe-20261003T0820Z",
+  "plan_sha256": "2a8328afad4530ff49ef671f4fb60567dcc4e321db97b322f9bfe13aeb93e15e",
+  "schema": "joulewise.harvest_g2a_window.v1",
+  "verdict": "REFUSED"
+}

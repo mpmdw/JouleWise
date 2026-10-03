@@ -76,6 +76,38 @@ Pins at H′ (re-verified against the table above at `0fbadb63`):
 
 The arm head may be a later main commit that differs from H′ by records only; the arm record names it.
 
+### H′ 2 (2026-10-03, activation adaebcc6): the recovery window `w2` arms from H′ 2
+
+H′ 2 = `8b8bc34e554c28160275e32137985afd8e40e886` (merge of PR #461). `w1` (plan
+`d117-g2a-prefill-probe-20261003T0820Z`) ran: the chain crashed 0.33 s into its first member because
+`joulewise/controller.py` refused the window's own Revision 5 pre-bracket capture as instrument
+calibration (C-2), and the first harvest REFUSED on the never-closed bracket session. PR #461 fixed
+both (Sol executing review PASS; cold Fable final pass PASS,
+`docs/process_traces/2026-10-03-activation-adaebcc6/21-fable-final-pass.md`). That final pass answered
+the §11/§12 question directly (its Q4): the change only makes code agree with §4 and §6 (members run
+under the pre bracket and are judged by the existing bracketing decision), the registration is
+unchanged, no erratum and no further cold gate; its F7 condition is this entry. Its Q5 confirmed the
+re-harvest verdict RECOVER (`capture_made` true) and that the next window is the one recovery window.
+
+Re-harvest (§7 REFUSED row, fresh archive root, `--read-only-sources`):
+`~/night-archive/harvest-d117-g2a-prefill-probe-20261003T0820Z-r2/harvest.json` sha256
+`4d61aa97cff8205f3655a2597d018c79c3a1e599c37b58af8bf58c8516bb103f`, verdict RECOVER; terminal ledger
+`derived/terminal-ledger.jsonl` sha256 `a0e348855f1201bd3f8b19263c7e1cb0075a65a12163cadf873f2b04bad7a5e9`
+(384 records); pin advance 376 → 384, head digest `03c61af5…c29e`, merged with this entry. That
+terminal ledger is `w2`'s seed (§3, T5).
+
+Pins at H′ 2:
+
+| File | sha256 at H′ 2 |
+|---|---|
+| `scripts/gen_g2_phase_d.py` | `9bc31627c0cc5da78fe8f091951979a710c069e6dcd2eb66e5a5a9e9dd202cb8` (changed by #461) |
+| `scripts/harvest_g2a_window.py` | `ac5ebd53cdc36804c2da63a91dcee69647ac452350575a6b00215e27c93d92ff` (changed by #461) |
+| the other seven pinned files | unchanged from the table above (re-verified at `8b8bc34e`) |
+| `configs/campaigns/g2a_prefill_probe_25g83/registration_block2.md` | `8e45a0e0f7ac7431c809ac780954308e7df813e57d6c4c2643641d0c5bcda5b8` (unchanged) |
+
+The `w2` arm head may be a later main commit that differs from H′ 2 by records and this pin advance only;
+the arm record names it.
+
 ## Disclosures
 
 1. **D2 (refuter): no real member bundle at H has been shown with a `bounded` clock anchor.** C1
