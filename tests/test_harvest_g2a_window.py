@@ -16,7 +16,7 @@ from scripts import summarize_g2a_prefill_probe as summary
 from tests.test_gen_g2a_window import G2aFixture, tree
 from tests import test_generate_g2a_probe_inputs as producer_tests
 from tests.test_generate_g2a_probe_inputs import IDENTITY, T1, ACCEPTANCE
-from tests.test_summarize_g2a_prefill_probe import retained_metadata, retained_summary
+from tests.test_summarize_g2a_prefill_probe import retained_metadata, retained_summary, runner_config_bytes
 from joulewise import calibration_ledger as real_ledger
 from scripts import recover_calibration_ledger as recovery
 from tests.git_fixture import init_git_fixture
@@ -52,11 +52,12 @@ class G2aHarvestTests(unittest.TestCase):
             for member in stage['members']:
                 path = self.f.g2a/'runs'/member['run_id']
                 path.mkdir(parents=True)
-                (path/'config.json').write_bytes((self.f.g2a/'prefill-probe-configs'/member['config_path']).read_bytes())
+                config_raw = runner_config_bytes((self.f.g2a/'prefill-probe-configs'/member['config_path']).read_bytes())
+                (path/'config.json').write_bytes(config_raw)
                 data = retained_summary(6)
                 data['status'] = 'succeeded'
                 (path/'summary_metrics.json').write_text(json.dumps(data)+'\n')
-                meta = retained_metadata(member['run_id'], rung)
+                meta = retained_metadata(member['run_id'], rung, config_raw)
                 meta['uncertainty_evidence'] = {'clock_anchor': {'status': 'bounded'}}
                 (path/'metadata.json').write_text(json.dumps(meta)+'\n')
         night = self.f.night/'night'
@@ -123,6 +124,19 @@ class G2aHarvestTests(unittest.TestCase):
         advance = self.commands[-1]
         self.assertIn('--execute', advance)
         self.assertEqual(advance[advance.index('--operator-identity')+1], 'fixture-operator')
+
+    def test_nondefault_run_config_mismatch_refuses_summary_even_if_metadata_rebound(self):
+        path = self.f.g2a/'runs/g2a-small-p0512-r01'
+        config = harvest.read(path/'config.json')
+        config['sampling']['power_hz'] += 1
+        raw = runner_config_bytes(json.dumps(config).encode())
+        (path/'config.json').write_bytes(raw)
+        metadata = harvest.read(path/'metadata.json')
+        metadata['config_sha256'] = hashlib.sha256(raw).hexdigest()
+        (path/'metadata.json').write_text(json.dumps(metadata)+'\n')
+        record = self.run_harvest()
+        self.assertEqual(record['verdict'], 'REFUSED')
+        self.assertEqual(record['cause_codes'], ['summary_regeneration_failed'])
 
     def test_counts_under_three_are_valid_and_selector_uses_registered_floor(self):
         run_id = 'g2a-small-p0512-r01'

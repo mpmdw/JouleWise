@@ -9,6 +9,9 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+from joulewise.bundle import RunBundleWriter
+from joulewise.clock import FakeClock
+from joulewise.schemas import BenchmarkConfig
 from scripts import generate_g2a_probe_inputs as probe
 from scripts import issue_g2a_prefill_prompt_pin as issuer
 from scripts import select_g2a_prefill_length as selector
@@ -90,10 +93,23 @@ RETAINED_SUMMARY_KEYS = frozenset(
 )
 
 
-def retained_metadata(run_id: str, rung: dict[str, object]) -> dict[str, object]:
+def runner_config_bytes(config_raw: bytes) -> bytes:
+    """Get real bundle-writer bytes without running a workload or telemetry."""
+    config = BenchmarkConfig.from_mapping(json.loads(config_raw))
+    with tempfile.TemporaryDirectory() as temporary, mock.patch(
+        "joulewise.bundle._capture_source_state", return_value={}
+    ):
+        writer = RunBundleWriter.create(Path(temporary), config, FakeClock())
+        raw = (writer.path / "config.json").read_bytes()
+        assert writer.config_sha256 == hashlib.sha256(raw).hexdigest()
+        return raw
+
+
+def retained_metadata(run_id: str, rung: dict[str, object], config_raw: bytes) -> dict[str, object]:
     value: dict[str, object] = {key: None for key in RETAINED_METADATA_KEYS}
     value.update(
         run_id=run_id,
+        config_sha256=hashlib.sha256(config_raw).hexdigest(),
         workload_provenance={
             "prompt": {
                 "realized_token_count": rung["prefill_tokens"],
@@ -171,7 +187,8 @@ class SummarizeG2APrefillProbeTests(unittest.TestCase):
             for member in stage["members"]:
                 run_root = root / "summary-root" / member["run_id"]
                 config_raw = (root / "config-root" / member["config_path"]).read_bytes()
-                (run_root / "config.json").write_bytes(config_raw)
+                run_config_raw = runner_config_bytes(config_raw)
+                (run_root / "config.json").write_bytes(run_config_raw)
                 summary_path = run_root / "summary_metrics.json"
                 original = json.loads(summary_path.read_text(encoding="utf-8"))
                 count = original["window_evidence_precheck"]["phase"]["prefill"][
@@ -181,7 +198,7 @@ class SummarizeG2APrefillProbeTests(unittest.TestCase):
                     json.dumps(retained_summary(count)) + "\n", encoding="utf-8"
                 )
                 (run_root / "metadata.json").write_text(
-                    json.dumps(retained_metadata(member["run_id"], rung)) + "\n",
+                    json.dumps(retained_metadata(member["run_id"], rung, run_config_raw)) + "\n",
                     encoding="utf-8",
                 )
         inventory_path.write_text(
@@ -313,6 +330,23 @@ class SummarizeG2APrefillProbeTests(unittest.TestCase):
         self.assertEqual(row["small_minimum_count"], 0)
         self.assertFalse(row["all_small_count_ge_5"])
 
+    def test_empty_rungs_emit_null_minimum_and_selector_reports_measurement_refusal(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            config_root, inventory, runs_root = self.copy_fixture(temporary)
+            members, rows = summarizer.summarize(config_root=config_root, input_inventory=inventory,
+                                                runs_root=runs_root, valid_run_ids=set())
+            self.assertEqual(members, [])
+            self.assertTrue(all(row["small_members"] == 0 and row["small_minimum_count"] is None
+                                and row["all_small_count_ge_5"] is False for row in rows))
+            raw = summarizer._summary_bytes(rows)
+            summary = Path(temporary) / "empty-summary.json"
+            summary.write_bytes(raw)
+            output = Path(temporary) / "empty-selection.json"
+            self.assertEqual(selector.main(["--summary", str(summary), "--output", str(output)]), 0)
+            record = json.loads(output.read_bytes())
+            self.assertEqual(record["status"], "refused")
+            self.assertEqual(record["refusal"]["code"], "no_g2a_prefill_rung_qualifies")
+
     def test_wrong_run_id_refuses_even_when_the_mutated_config_hash_is_rebound(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -349,6 +383,53 @@ class SummarizeG2APrefillProbeTests(unittest.TestCase):
                 root, config_root, inventory, runs_root
             )
         self.assertEqual(code, 2)
+
+    def test_runner_normalized_config_binds_input_run_and_metadata_hashes(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            config_root, inventory_path, runs_root = self.copy_fixture(temporary)
+            inventory = json.loads(inventory_path.read_bytes())
+            member = inventory["stages"][0]["members"][0]
+            input_raw = (config_root / member["config_path"]).read_bytes()
+            run_raw = (runs_root / member["run_id"] / "config.json").read_bytes()
+            normalized = json.loads(run_raw)
+            self.assertNotEqual(input_raw, run_raw)
+            self.assertNotEqual(member["config_sha256"], hashlib.sha256(run_raw).hexdigest())
+            for section, field in (("hardware_target", "host"), ("interconnect", "link_speed_mbps"),
+                                   ("interconnect", "notes"), ("run_metadata", "ambient_temp_c"),
+                                   ("run_metadata", "notes"), ("workload_profile", "dataset_ref"),
+                                   ("workload_profile", "prompt_tokens")):
+                self.assertNotIn(field, json.loads(input_raw)[section])
+                self.assertIsNone(normalized[section][field])
+            rows, _ = summarizer.summarize(config_root=config_root, input_inventory=inventory_path,
+                                          runs_root=runs_root)
+            self.assertEqual(rows[0]["config_sha256"], hashlib.sha256(run_raw).hexdigest())
+            self.assertEqual(rows[0]["config_sha256"],
+                             json.loads((runs_root / member["run_id"] / "metadata.json").read_bytes())["config_sha256"])
+
+    def test_nondefault_run_config_change_refuses_even_with_metadata_hash_rebound(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            config_root, inventory, runs_root = self.copy_fixture(temporary)
+            run_root = runs_root / "g2a-small-p0512-r01"
+            config = json.loads((run_root / "config.json").read_bytes())
+            config["sampling"]["power_hz"] += 1
+            raw = runner_config_bytes(json.dumps(config).encode())
+            (run_root / "config.json").write_bytes(raw)
+            metadata = json.loads((run_root / "metadata.json").read_bytes())
+            metadata["config_sha256"] = hashlib.sha256(raw).hexdigest()
+            (run_root / "metadata.json").write_text(json.dumps(metadata) + "\n")
+            with self.assertRaisesRegex(summarizer.ProbeSummaryError, "run_provenance_mismatch: .*: config_sha256"):
+                summarizer.summarize(config_root=config_root, input_inventory=inventory, runs_root=runs_root)
+
+    def test_metadata_config_hash_must_bind_observed_run_bytes(self) -> None:
+        for digest in (None, "0" * 64):
+            with self.subTest(digest=digest), tempfile.TemporaryDirectory() as temporary:
+                config_root, inventory, runs_root = self.copy_fixture(temporary)
+                path = runs_root / "g2a-small-p0512-r01" / "metadata.json"
+                metadata = json.loads(path.read_bytes())
+                metadata["config_sha256"] = digest
+                path.write_text(json.dumps(metadata) + "\n")
+                with self.assertRaisesRegex(summarizer.ProbeSummaryError, "metadata.config_sha256"):
+                    summarizer.summarize(config_root=config_root, input_inventory=inventory, runs_root=runs_root)
 
     def test_extra_config_refuses(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -531,11 +612,10 @@ class SummarizeG2APrefillProbeTests(unittest.TestCase):
                 for member in stage["members"]:
                     run_root = runs_root / member["run_id"]
                     run_root.mkdir(parents=True)
-                    (run_root / "config.json").write_bytes(
-                        (config_root / member["config_path"]).read_bytes()
-                    )
+                    run_config_raw = runner_config_bytes((config_root / member["config_path"]).read_bytes())
+                    (run_root / "config.json").write_bytes(run_config_raw)
                     (run_root / "metadata.json").write_text(
-                        json.dumps(retained_metadata(member["run_id"], rung)) + "\n"
+                        json.dumps(retained_metadata(member["run_id"], rung, run_config_raw)) + "\n"
                     )
                     (run_root / "summary_metrics.json").write_text(
                         json.dumps(retained_summary(6)) + "\n"
