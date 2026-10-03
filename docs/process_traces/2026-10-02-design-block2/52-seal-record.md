@@ -35,8 +35,10 @@ Recorded 2026-10-02 by the block-2 design seat (Opus 5.5).
 ## Pins (registration §12)
 
 H is the first main commit containing both PR #458 and this record (RUN_STATE's block-2 HANDOFF
-names it). At H these files have these digests (computed from PR #458's final head `d5b28bb8`
-and the issued files; the arm's step2 re-hashes what it needs at H):
+names it). At H these files have these digests (computed from PR #458 at `d5b28bb8`; later
+commits in that PR touched tests and records only; re-verified by the lead after #458 merged as
+`08de38b9`, on this branch merged with it, all nine equal; the arm's step2 re-hashes what it needs
+at H):
 
 | File | sha256 |
 |---|---|
