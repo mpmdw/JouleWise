@@ -78,3 +78,25 @@ Step: RUN_STATE 07:20 pointer (activation a7a0ed6a): carry the w1 R3 fix through
   seal-pinned, but the measurement clone must be cut first). It needs main merged in (custody
   allowlist fixture), a Sol executing review and a Fable final pass (it changes calibration-script
   behaviour: lock unlink).
+- PR #462 (landing) CI 15/15 green, merged `1d6b5668`. Canonical root fast-forwarded to `1d6b5668`
+  (no night agent loaded, no plist on disk) before the arm; no canonical git operation after it.
+- **ARMED `w2` 09:20:59 PDT.** Plan `d117-g2a-prefill-probe-20261003T1748Z`, plan sha256
+  `360ab1eaad674d9ed3670c71df1bd1a67dad97df6d0510aa3e9de676a028c282`, H = `1d6b5668` (H′ 2 plus
+  #462 records and pin advance only), t0 1791049680 (10:48 PDT), WINDOW_MAX_S 19980, harvest opens
+  1791069960 (16:26 PDT), dead-man 17:26 PDT. Clone
+  `/Users/edr/night-custody/measurement/JouleWise-measurement-20261003T1748Z-g2a-w2`; chain sha256
+  `6e2c503f…c0c5` (carries `JOULEWISE_G2A_PRE_BRACKET_PLAN`); ledger seed = r2 archive terminal
+  ledger `a0e34885…a5e9`, head 384 = committed pin. Frozen env
+  `/Users/edr/night-plan-staging/d117-g2a-prefill-probe-20261003T1748Z/arm-env.zsh` sha256
+  `22a9012c…6d10`. Steps 0-5 OK (outputs `/Users/edr/night-plan-staging/g2a-bench/step*.w2.out`):
+  battery gate PASS twice; §5.1 OFF probe admitted; launchd probe admitted (cadence median 131 ms,
+  custody pass 4.07 s); only `com.joulewise.night` and `.deadman` loaded.
+- Notice: Gmail `1a102906f2322608` (sent 1791044382); NO search empty before publication;
+  `notice.ack` written (watchdog queue was empty). Deviation: step3's interactive-session
+  heuristic matched this magistrate's own Codex MCP helper (argv contains
+  `mcp_servers.claude.enabled`), not an interactive session, so the sent body
+  (`notice-body.sent.txt`, sha256 `7f5c9e82…4387`) replaces that false "ACTION NEEDED" paragraph and
+  adds one w1-outcome paragraph; the generated `notice-body.txt` is kept unchanged. Follow-up
+  (R3, recipe/bench text): the step3 `interactive` test should exclude `codex` command lines.
+- Exit: this activation exits well before t0 − 8 min (10:40 PDT). Its Sol seats are finished; the
+  only children left are its MCP helpers, which exit with it.
