@@ -1429,6 +1429,14 @@ with output.open('wb', buffering=0) as handle:
 def _install_fake_writer_dependencies(repo: Path) -> Path:
     """Install bounded process fixtures while keeping the production CLI real."""
 
+    # Revision 6 validation recomputes the within-window record through the
+    # issuer; its prior set also cites the immutable disposition registry.
+    (repo / "scripts").mkdir(exist_ok=True)
+    shutil.copy2(REPO_ROOT / "scripts/issue_calibration_acceptance_generation.py",
+                 repo / "scripts/issue_calibration_acceptance_generation.py")
+    (repo / "configs/calibration").mkdir(parents=True, exist_ok=True)
+    shutil.copy2(REPO_ROOT / "configs/calibration/observation_dispositions.json",
+                 repo / "configs/calibration/observation_dispositions.json")
     mlx = repo / "mlx"
     mlx.mkdir(exist_ok=True)
     (mlx / "__init__.py").write_text("", encoding="utf-8")
@@ -1448,7 +1456,7 @@ def _rekey_private_writer_acceptance(repo: Path) -> None:
         repo
         / "configs"
         / "calibration"
-        / "calibration_acceptance_d079_v2_n17_r8.json"
+        / "calibration_acceptance_d079_v2_n24_25g83_r2.json"
     )
     acceptance = json.loads(acceptance_path.read_text(encoding="utf-8"))
     estimator_paths = tuple(
@@ -3642,11 +3650,11 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
             REPO_ROOT
             / "configs"
             / "calibration"
-            / "calibration_acceptance_d079_v2_n17_r8.json",
+            / "calibration_acceptance_d079_v2_n24_25g83_r2.json",
             self.repo
             / "configs"
             / "calibration"
-            / "calibration_acceptance_d079_v2_n17_r8.json",
+            / "calibration_acceptance_d079_v2_n24_25g83_r2.json",
         )
         _rekey_private_writer_acceptance(self.repo)
         self.pin = self.repo / "configs" / "calibration" / "calibration_ledger_head.json"
@@ -3692,7 +3700,7 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
         )
         self.fake_sampler = _install_fake_writer_dependencies(self.repo)
         self.epoch = {
-            "os_build": "25F84",
+            "os_build": "25G83",
             "hardware_model": "Mac15,9",
             "power_policy": "ac_high_power",
             "sampling_interval_ms": 100,
@@ -4435,7 +4443,7 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
 
     def _actual_writer_bindings(self) -> tuple[dict, dict]:
         epoch = {
-            "os_build": "25F84",
+            "os_build": "25G83",
             "hardware_model": "Mac15,9",
             "power_policy": "ac_high_power",
             "sampling_interval_ms": 100,
@@ -5412,7 +5420,7 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
                             self.repo
                             / "configs"
                             / "calibration"
-                            / "calibration_acceptance_d079_v2_n17_r8.json"
+                            / "calibration_acceptance_d079_v2_n24_25g83_r2.json"
                         ).read_text(encoding="utf-8")
                     )
                     epoch = dict(acceptance["identity_epoch"])

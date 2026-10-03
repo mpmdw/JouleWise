@@ -50,7 +50,7 @@ from tests.test_validate_powermetrics_fiducial import documented_keys
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 _ACCEPTANCE_RELATIVE = (
-    "configs/calibration/calibration_acceptance_d079_v2_n17_r8.json"
+    "configs/calibration/calibration_acceptance_d079_v2_n24_25g83_r2.json"
 )
 # The stall deadline the sampler-ack driver allows a freshly spawned fixture
 # sampler child.  Liveness backstop only; no assertion depends on its value.
@@ -171,7 +171,7 @@ class DerivationOnlyPreflightRefusalTests(unittest.TestCase):
             "--output-root",
             str(self.root / "standalone" / "instrument_validation"),
             "--identity-epoch-json-for-test",
-            str(self._identity("standalone", os_build="25G83")),
+            str(self._identity("standalone", os_build="25G99")),
             "--sampler-direct-for-test",
         )
         payload = self._refusal(completed)
@@ -197,7 +197,7 @@ class DerivationOnlyPreflightRefusalTests(unittest.TestCase):
             "--output-root",
             str(self.root / "unauthorized" / "instrument_validation"),
             "--identity-epoch-json-for-test",
-            str(self._identity("unauthorized", os_build="25G83")),
+            str(self._identity("unauthorized", os_build="25G99")),
             "--sampler-direct-for-test",
         )
         payload = self._refusal(completed)
@@ -266,7 +266,7 @@ class BatteryFloatPinRegressionTests(unittest.TestCase):
 
     The writer's battery brackets add raw files and one evidence key; the
     sampler set, the protocol v3 bytes, the four estimator-code digests the
-    active P8 acceptance pins, and the registered derivation-chain digest must
+    active Revision 6 acceptance pins, and the registered derivation-chain digest must
     all be what they were before BFG-D.  The literals below were read at
     ``c6814dd8`` and are independent of the implementation.
     """
@@ -357,7 +357,7 @@ class DerivationOnlyLiveCaptureTests(unittest.TestCase):
         captures = []
         for duration in (0.0, 2.0):
             self._rekey_acceptance()
-            epoch, t1 = self._epoch("25G83")
+            epoch, t1 = self._epoch("25G99")
             token = f"battery-duration-{int(duration)}"
             declared = derivation_session_slots(2)
             ledger, pin, session_id, custody = self._session(
@@ -645,7 +645,7 @@ class DerivationOnlyLiveCaptureTests(unittest.TestCase):
         """
 
         self._rekey_acceptance()
-        epoch, t1 = self._epoch("25G83")
+        epoch, t1 = self._epoch("25G99")
         declared = derivation_session_slots(2)
         ledger, pin, session_id, custody = self._session(
             "battery-exit-before-post", slots=declared,
@@ -766,7 +766,7 @@ class DerivationOnlyLiveCaptureTests(unittest.TestCase):
         """
 
         self._rekey_acceptance()
-        epoch, t1 = self._epoch("25G83")
+        epoch, t1 = self._epoch("25G99")
         ledger, pin, session_id, custody = self._session(
             "bracket-kind",
             slots=BRACKET_SESSION_SLOTS,
@@ -797,7 +797,7 @@ class DerivationOnlyLiveCaptureTests(unittest.TestCase):
         """Kills the screen-basis and `preflight_systematic_screen_s = None`
         clauses together.
 
-        A 25G83 capture judged by r6's 25F84 level screen is D-102 cl.2's
+        A synthetic 25G99 capture judged by the issued 25G83 screen is D-102 cl.2's
         "a threshold that judges itself" inverted: it fits the NEW screen to
         the OLD one.  This test asserts the disposition is `valid`, that the
         hashed evidence and manifest carry `derivation_only`, `screen_basis`
@@ -807,7 +807,7 @@ class DerivationOnlyLiveCaptureTests(unittest.TestCase):
         """
 
         acceptance = self._rekey_acceptance()
-        epoch, t1 = self._epoch("25G83")
+        epoch, t1 = self._epoch("25G99")
         declared = derivation_session_slots(2)
         ledger, pin, session_id, custody = self._session(
             "derivation-valid",
@@ -887,7 +887,7 @@ class DerivationOnlyLiveCaptureTests(unittest.TestCase):
         """Run `slot_count` real derivation slots to success, in order."""
 
         self._rekey_acceptance()
-        epoch, t1 = self._epoch("25G83")
+        epoch, t1 = self._epoch("25G99")
         declared = derivation_session_slots(2)
         ledger, pin, session_id, custody = self._session(
             name,

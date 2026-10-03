@@ -57,7 +57,7 @@ class FloorMintPinsetsSchemaTests(unittest.TestCase):
         )
         self.assertEqual(
             set(conditionals["finalProducer"]),
-            {"n19AcceptanceIds", "n17AcceptanceIds"},
+            {"n19AcceptanceIds", "n17AcceptanceIds", "n24Epoch25G83AcceptanceIds"},
         )
 
         ids_by_screen: dict[str, set[str]] = {}

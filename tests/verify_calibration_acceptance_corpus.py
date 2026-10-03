@@ -70,6 +70,17 @@ EXPECTED_BY_ACCEPTANCE_ID["d079_calibration_acceptance_v2_n17_r8"] = (
     EXPECTED_BY_ACCEPTANCE_ID["d079_calibration_acceptance_v2_n17_r3"]
 )
 
+# Revision 6 members retain the scalars stored by their original captures.
+EXPECTED_BY_ACCEPTANCE_ID["d079_calibration_acceptance_v2_n24_25g83_r2"] = {'stored_lexeme_is_member_value': True,
+ 'n': 24,
+ 'minimum_s': Decimal('0.02193176218569716'),
+ 'minimum_member_id': 'd079-epoch-25g83-r6-20261001T0617Z-d07',
+ 'maximum_s': Decimal('0.03646286164497997'),
+ 'maximum_member_id': 'd079-epoch-25g83-r6-20261001T2252Z-d08',
+ 'range_s': Decimal('0.01453109945928281'),
+ 'mean_s': Decimal('0.028444120869643095'),
+ 'sample_sd_s': Decimal('0.003803438860221064')}
+
 def sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 

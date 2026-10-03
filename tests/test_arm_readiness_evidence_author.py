@@ -136,6 +136,8 @@ def make_author_fixture(pack_name: str = "d117_floor_qwen25_1p5b_v1"):
         "configs/calibration/calibration_acceptance_d079_v2_n17_r6.json",
         "configs/calibration/calibration_acceptance_d079_v2_n17_r7.json",
         "configs/calibration/calibration_acceptance_d079_v2_n17_r8.json",
+        "configs/calibration/calibration_acceptance_d079_v2_n24_25g83_r2.json",
+        "configs/calibration/observation_dispositions.json",
         "docs/decision_log.md",
         "docs/phase_2/window_runbook.md",
         "joulewise/analysis_manifest_v3.py",
@@ -149,6 +151,8 @@ def make_author_fixture(pack_name: str = "d117_floor_qwen25_1p5b_v1"):
         "joulewise/receipt_oracle.py",
         "scripts/floor_mint_pinsets/schema_v2.json",
         "scripts/mint_floor_artifact_generalized.py",
+        # Revision 6 acceptance validation imports the within-window derivation.
+        "scripts/issue_calibration_acceptance_generation.py",
         "scripts/recover_calibration_ledger.py",
         "tests/test_calibration_ledger.py",
         # RECOVERY_LEDGER_TEST runs `tests.test_calibration_ledger` as a focused

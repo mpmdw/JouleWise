@@ -179,7 +179,7 @@ class DeskEpochWatchTests(unittest.TestCase):
         self.assertEqual(set(self.root.iterdir()), set(self.original))
 
     def test_changed_os_build_refuses_and_names_only_changed_field(self) -> None:
-        rc, output = self.run_check(os_build="25G83")
+        rc, output = self.run_check(os_build="25F84")
         self.assertEqual(rc, 3, output)
         self.assertIn("mismatched fields: os_build\n", output)
 
@@ -289,9 +289,8 @@ class DeskEpochWatchTests(unittest.TestCase):
         self.assertEqual(args.head_pin, issuer.DEFAULT_HEAD_PIN_PATH)
         self.assertEqual(args.acceptance, issuer.DEFAULT_ACCEPTANCE_BOUND_PATH)
         # Spelled out so the default cannot silently drift off the
-        # ACTIVE generation.  Moved r6 -> r7 by the D-079 r7 issuance,
-        # which repointed DEFAULT_ACCEPTANCE_BOUND_PATH.
-        self.assertEqual(args.acceptance.name, "calibration_acceptance_d079_v2_n17_r8.json")
+        # ACTIVE generation, moved to the Revision 6 block 1 successor.
+        self.assertEqual(args.acceptance.name, "calibration_acceptance_d079_v2_n24_25g83_r2.json")
         result = subprocess.run(
             [
                 sys.executable, "-B",
@@ -356,8 +355,8 @@ class DeskEpochWatchTests(unittest.TestCase):
         if live["os_build"] == self.epoch["os_build"]:
             self.assertEqual(rows["os_build"][2], "match")
         else:
-            # The truth on this machine today: 25G83 observed against the r6
-            # epoch's 25F84. The watch must name the field and refuse.
+            # A different machine build must be named as a mismatch against
+            # the active epoch. The watch must name the field and refuse.
             self.assertEqual(rows["os_build"][2], "MISMATCH")
             self.assertEqual(rc, 3, output)
             self.assertIn("os_build", output.splitlines()[-1])

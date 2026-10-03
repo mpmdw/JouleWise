@@ -27,6 +27,7 @@ from joulewise.calibration_bracketing import (
     ANCHOR_V3_R7_ACCEPTANCE_ID,
     ANCHOR_V3_R7_ACCEPTANCE_BOUND_PATH,
     ANCHOR_V3_R8_ACCEPTANCE_BOUND_PATH,
+    EPOCH_25G83_R2_ACCEPTANCE_BOUND_PATH,
     acceptance_generation_operatives,
 )
 from joulewise.calibration_ledger import SESSION_KIND_BRACKET
@@ -433,14 +434,17 @@ class EpochEquivalenceCheckTest(unittest.TestCase):
         self.assertEqual(code, checker.REFUSAL_EXIT)
         self.assertIn("never writes into an acceptance directory", stream.getvalue())
 
-    def test_reference_stays_r7_when_the_active_default_moves_to_p8(self) -> None:
+    def test_reference_stays_r7_when_the_active_default_moves(self) -> None:
         # Hold ruling §5.2: a different registered default cannot move the
         # equivalence envelope frozen by identifier for issue 316.
-        with mock.patch.object(checker, "DEFAULT_ACCEPTANCE_BOUND_PATH", ANCHOR_V3_R8_ACCEPTANCE_BOUND_PATH):
-            args = checker.build_parser().parse_args(["--print-envelope-only"])
-            self.assertEqual(args.acceptance, ANCHOR_V3_R7_ACCEPTANCE_BOUND_PATH)
-            self.assertEqual(checker.reference_envelope(args.acceptance)["acceptance_id"],
-                             ANCHOR_V3_R7_ACCEPTANCE_ID)
+        for live_default in (ANCHOR_V3_R8_ACCEPTANCE_BOUND_PATH, EPOCH_25G83_R2_ACCEPTANCE_BOUND_PATH):
+            with self.subTest(default=live_default), mock.patch.object(
+                checker, "DEFAULT_ACCEPTANCE_BOUND_PATH", live_default
+            ):
+                args = checker.build_parser().parse_args(["--print-envelope-only"])
+                self.assertEqual(args.acceptance, ANCHOR_V3_R7_ACCEPTANCE_BOUND_PATH)
+                self.assertEqual(checker.reference_envelope(args.acceptance)["acceptance_id"],
+                                 ANCHOR_V3_R7_ACCEPTANCE_ID)
 
     def test_another_authenticated_generation_is_refused_as_the_reference(self) -> None:
         """Issue 316 names r6; the n19 predecessor authenticates but is not it.

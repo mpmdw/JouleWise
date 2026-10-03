@@ -78,7 +78,7 @@ class PromotionTests(unittest.TestCase):
         self.assertEqual(path.read_bytes(), self.issued_raw)
         self.assertIsNone(bracket.load_calibration_acceptance_bound(path))
         self.assertNotIn(self.issued["acceptance_id"], bracket.ISSUED_ACCEPTANCE_REGISTRY)
-        self.assertEqual(bracket.ACTIVE_ACCEPTANCE_ID, bracket.ANCHOR_V3_R8_ACCEPTANCE_ID)
+        self.assertEqual(bracket.ACTIVE_ACCEPTANCE_ID, bracket.EPOCH_25G83_R2_ACCEPTANCE_ID)
 
     def test_cli_requires_explicit_issuance_text(self):
         script = Path(__file__).resolve().parents[1] / "scripts/promote_calibration_candidate.py"
@@ -179,6 +179,160 @@ class PromotionTests(unittest.TestCase):
         with patch.object(promote, "derivation_input_sha256", side_effect=drift_on_issued):
             with self.assertRaisesRegex(ValueError, "STOP: derivation input seal"):
                 promote.promote(self.candidate_raw, self.issuance_raw)
+
+
+class RevisionSixPromotionTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name).resolve()
+        self.candidate_raw = promote.REV6_CANDIDATE.read_bytes()
+        self.candidate = json.loads(self.candidate_raw)
+        (self.root / 'candidate.json').write_bytes(self.candidate_raw)
+        citation_raw = b'synthetic rev6 citation\n'
+        (self.root / 'citation.txt').write_bytes(citation_raw)
+        citation = {'relative_path': 'citation.txt',
+                    'file_sha256': hashlib.sha256(citation_raw).hexdigest()}
+        self.text = {
+            'reason': 'synthetic Revision 6 issuance',
+            'required_verification': 'complete: synthetic Revision 6 verification',
+            'issuance_record': {
+                'source_candidate': {'relative_path': 'candidate.json',
+                    'file_sha256': promote.REV6_CANDIDATE_SHA256,
+                    'derivation_sha256': self.candidate['derivation_sha256']},
+                'rulings': [{'id': key, **citation} for key in promote.REV6_RULING_IDS],
+                'disclosures': [{'id': 'D1', 'text': 'synthetic OFF receipts'}],
+                'claim_eligible_meaning': promote.REV6_CLAIM_ELIGIBLE_MEANING,
+            },
+            'network_time_provenance': {
+                'disclosure_id': 'D1', 'text': 'synthetic OFF receipts',
+                'erratum': dict(citation),
+                'receipts': [{'session_id': session, **citation} for session in
+                             self.candidate['registered_generation_row']['registration_session_ids']],
+            },
+        }
+        root_patch = patch.object(promote, 'ROOT', self.root)
+        root_patch.start()
+        self.addCleanup(root_patch.stop)
+
+    def promote_text(self, text):
+        return promote.promote(self.candidate_raw, json.dumps(text).encode())
+
+    def test_rev6_write_check_reload_and_protected_fields(self):
+        path = self.root / 'issued.json'
+        issuance = self.root / 'issuance.json'
+        issuance.write_text(json.dumps(self.text))
+        runner = ('import sys; from pathlib import Path; '
+                  'from scripts import promote_calibration_candidate as p; '
+                  'p.ROOT = Path(sys.argv.pop(1)); p.main()')
+        import sys
+        common = [sys.executable, '-B', '-c', runner, str(self.root),
+                  '--candidate', str(self.root / 'candidate.json'),
+                  '--issuance-text', str(issuance)]
+        for action in ('--out', '--check'):
+            result = subprocess.run(common + [action, str(path)], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.stdout.strip(),
+                f'issued sha256={hashlib.sha256(path.read_bytes()).hexdigest()}')
+        issued = json.loads(path.read_bytes())
+        self.assertEqual(issued['artifact_role'], 'issued')
+        self.assertTrue(issued['issuance']['claim_eligible'])
+        self.assertEqual(issued['derivation_input_sha256'], promote.REV6_INPUT_SHA256)
+        for key in promote.PROTECTED:
+            self.assertEqual(issued[key], self.candidate[key], key)
+            self.assertEqual(json.dumps(issued[key]), json.dumps(self.candidate[key]), key)
+        for key, value in self.candidate['derivation_notes'].items():
+            self.assertEqual(issued['derivation_notes'][key], value, key)
+        self.assertEqual(issued['backfill_candidate']['candidate_inventory'],
+                         self.candidate['backfill_candidate']['candidate_inventory'])
+        # Synthetic text is not the lead's issued pin. Authenticate this temporary
+        # file under a temporary registry pin, then restore the production pin.
+        with patch.dict(bracket.ISSUED_ACCEPTANCE_REGISTRY, {
+            issued['acceptance_id']: {'path': path, 'relative_path': 'issued.json',
+                                     'file_sha256': hashlib.sha256(path.read_bytes()).hexdigest()},
+        }):
+            loaded = bracket.load_calibration_acceptance_bound(path)
+            self.assertEqual(loaded, issued)
+            self.assertTrue(bracket._valid_acceptance_bound(loaded))
+
+    def test_rev6_schema_counterfactuals_red_then_restored(self):
+        mutations = []
+        for key in self.text:
+            mutations.append((f'top_missing_{key}', lambda t, key=key: t.pop(key)))
+        mutations += [
+            ('top_extra', lambda t: t.update(extra=True)),
+            ('reason_empty', lambda t: t.update(reason='')),
+            ('verification_prefix', lambda t: t.update(required_verification='pending')),
+        ]
+        for key in self.text['issuance_record']:
+            mutations.append((f'record_missing_{key}',
+                lambda t, key=key: t['issuance_record'].pop(key)))
+        mutations += [
+            ('source_path_missing', lambda t: t['issuance_record']['source_candidate'].pop('relative_path')),
+            ('source_file_digest', lambda t: t['issuance_record']['source_candidate'].update(file_sha256='f'*64)),
+            ('source_derivation_digest', lambda t: t['issuance_record']['source_candidate'].update(derivation_sha256='f'*64)),
+            ('ruling_order', lambda t: t['issuance_record']['rulings'].reverse()),
+            ('ruling_id', lambda t: t['issuance_record']['rulings'][0].update(id='unknown')),
+            ('ruling_count', lambda t: t['issuance_record']['rulings'].pop()),
+            ('holds_present', lambda t: t['issuance_record'].update(holds=[])),
+            ('hold_enforcement_present', lambda t: t['issuance_record'].update(hold_enforcement='none')),
+            ('disclosures_empty', lambda t: t['issuance_record'].update(disclosures=[])),
+            ('disclosure_order', lambda t: t['issuance_record']['disclosures'][0].update(id='D2')),
+            ('disclosure_text_empty', lambda t: t['issuance_record']['disclosures'][0].update(text='')),
+            ('claim_meaning', lambda t: t['issuance_record'].update(claim_eligible_meaning=promote.CLAIM_ELIGIBLE_MEANING)),
+            ('provenance_disclosure_id', lambda t: t['network_time_provenance'].update(disclosure_id='D2')),
+            ('provenance_text', lambda t: t['network_time_provenance'].update(text='different')),
+            ('provenance_extra', lambda t: t['network_time_provenance'].update(extra=True)),
+            ('receipt_count', lambda t: t['network_time_provenance']['receipts'].pop()),
+            ('receipt_session_missing', lambda t: t['network_time_provenance']['receipts'][0].pop('session_id')),
+            ('receipt_session_unknown', lambda t: t['network_time_provenance']['receipts'][0].update(session_id='other')),
+            ('receipt_session_duplicate', lambda t: t['network_time_provenance']['receipts'][1].update(
+                session_id=t['network_time_provenance']['receipts'][0]['session_id'])),
+            ('receipt_digest_wrong', lambda t: t['network_time_provenance']['receipts'][0].update(file_sha256='f'*64)),
+            ('erratum_digest_wrong', lambda t: t['network_time_provenance']['erratum'].update(file_sha256='f'*64)),
+        ]
+        for key in self.text['network_time_provenance']:
+            mutations.append((f'provenance_missing_{key}', lambda t, key=key: t['network_time_provenance'].pop(key)))
+        for index in range(4):
+            for field in ('relative_path', 'file_sha256'):
+                mutations.append((f'ruling_{index}_missing_{field}', lambda t, index=index, field=field:
+                    t['issuance_record']['rulings'][index].pop(field)))
+            mutations.append((f'ruling_{index}_digest_malformed', lambda t, index=index:
+                t['issuance_record']['rulings'][index].update(file_sha256='bad')))
+            mutations.append((f'ruling_{index}_digest_wrong', lambda t, index=index:
+                t['issuance_record']['rulings'][index].update(file_sha256='f'*64)))
+        for surface in ('erratum', 'receipts'):
+            for field in ('relative_path', 'file_sha256'):
+                def remove(t, surface=surface, field=field):
+                    item = t['network_time_provenance'][surface]
+                    (item[0] if isinstance(item, list) else item).pop(field)
+                mutations.append((f'{surface}_missing_{field}', remove))
+        baseline = self.promote_text(self.text)
+        for name, mutate in mutations:
+            with self.subTest(clause=name):
+                text = copy.deepcopy(self.text)
+                mutate(text)
+                with self.assertRaises(ValueError) as refused:
+                    self.promote_text(text)
+                self.assertEqual(self.promote_text(self.text), baseline)
+                print(f'W1 RED {name}: {refused.exception}; RESTORED=PASS')
+
+    def test_rev6_unknown_candidate_digest_red_then_restored(self):
+        baseline = self.promote_text(self.text)
+        with self.assertRaisesRegex(ValueError, 'candidate digest mismatch'):
+            promote.promote(self.candidate_raw + b' ', json.dumps(self.text).encode())
+        self.assertEqual(self.promote_text(self.text), baseline)
+        print('W1 RED unknown_candidate_sha: candidate digest mismatch; RESTORED=PASS')
+
+    def test_rev6_input_seal_stop_red_then_restored(self):
+        baseline = self.promote_text(self.text)
+        def drift(value):
+            return 'f'*64 if value.get('artifact_role') == 'issued' else derivation_input_sha256(value)
+        with patch.object(promote, 'derivation_input_sha256', side_effect=drift):
+            with self.assertRaisesRegex(ValueError, 'STOP: derivation input seal differs from ruled digest'):
+                self.promote_text(self.text)
+        self.assertEqual(self.promote_text(self.text), baseline)
+        print('W1 RED rev6_input_seal: STOP: derivation input seal differs from ruled digest; RESTORED=PASS')
 
 
 if __name__ == "__main__":

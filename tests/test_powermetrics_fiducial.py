@@ -1599,18 +1599,18 @@ class FrozenProtocolTests(unittest.TestCase):
         # stale; the atomic Phase-2 acceptance/pin re-freeze is exactly what
         # cures it, so this unit proves the cured state end to end.
         path = Path(
-            "configs/calibration/calibration_acceptance_d079_v2_n17_r8.json"
+            "configs/calibration/calibration_acceptance_d079_v2_n24_25g83_r2.json"
         )
         raw = path.read_bytes()
         self.assertEqual(
             hashlib.sha256(raw).hexdigest(),
-            "52e3d18a087bd8a0f28da6d20c3817da4d3ce532c604d7f049c78aad6a489a13",
+            "f949f511254e03b50b0be1cea37f74c1e8e6b4c49926c6c197024beea07b3660",
         )
         artifact = json.loads(raw)
         self.assertEqual(
-            artifact["acceptance_id"], "d079_calibration_acceptance_v2_n17_r8"
+            artifact["acceptance_id"], "d079_calibration_acceptance_v2_n24_25g83_r2"
         )
-        self.assertEqual(artifact["derivation_corpus"]["n"], 17)
+        self.assertEqual(artifact["derivation_corpus"]["n"], 24)
         derivation = artifact["decimal_derivation"]
         rounding = derivation["rounding"]["preflight_level_screen"]
         expected = Decimal(
@@ -2264,7 +2264,7 @@ os._exit(23)
             output_root = symlinked_root / "instrument_validation"
             attempt_id = "session-writer-pre"
             epoch = {
-                "os_build": "25F84",
+                "os_build": "25G83",
                 "hardware_model": "Mac15,9",
                 "power_policy": "ac_high_power",
                 "sampling_interval_ms": 100,
@@ -2324,7 +2324,7 @@ os._exit(23)
                     validation_script,
                     "_sysctl_identity",
                     side_effect=lambda name: (
-                        "25F84" if name == "kern.osversion" else "Mac15,9"
+                        "25G83" if name == "kern.osversion" else "Mac15,9"
                     ),
                 ),
                 patch.object(
