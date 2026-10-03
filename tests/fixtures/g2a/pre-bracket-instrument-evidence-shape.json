@@ -1,0 +1,236 @@
+{
+  "acceptance_preflight": {
+    "acceptance_id": "fixture",
+    "continuation_refusals": [],
+    "judged_epochs": [
+      {
+        "estimator_revision": "fixture",
+        "hardware_model": "fixture",
+        "os_build": "fixture",
+        "power_policy": "fixture",
+        "pulse_protocol_id": "fixture",
+        "sampling_interval_ms": 0
+      }
+    ],
+    "judged_epochs_basis": "fixture"
+  },
+  "all_pulses_detected": true,
+  "anchor_method_version": "fixture",
+  "artifact_sha256": {
+    "events.jsonl": "fixture",
+    "power_trace.csv": "fixture",
+    "raw/powermetrics.plist": "fixture"
+  },
+  "b_fiducial_s": 0,
+  "baseline_w": 0,
+  "battery_float": {
+    "post": {
+      "amperage_ma": 0,
+      "apple_raw_current_capacity_mah": 0,
+      "apple_raw_max_capacity_mah": 0,
+      "argv": [
+        "fixture"
+      ],
+      "attempt_id": "fixture",
+      "current_capacity_pct": 0,
+      "exit_code": 0,
+      "external_connected": true,
+      "external_connected_raw": "fixture",
+      "fully_charged": false,
+      "instant_amperage_ma": 0,
+      "instant_amperage_raw": "fixture",
+      "is_charging": false,
+      "is_charging_raw": "fixture",
+      "limit_ma": 0,
+      "max_update_age_s": 0,
+      "monotonic_after_ns": 0,
+      "monotonic_before_ns": 0,
+      "object_count": 0,
+      "passed": true,
+      "phase": "fixture",
+      "plan_id": null,
+      "policy_id": "fixture",
+      "probe_error": false,
+      "property_lines": [
+        "fixture"
+      ],
+      "raw_path": "fixture",
+      "raw_stdout_sha256": "fixture",
+      "reasons": [],
+      "schema": "fixture",
+      "session_id": "fixture",
+      "slot": "fixture",
+      "stderr": "fixture",
+      "temperature_raw": 0,
+      "timed_out": false,
+      "update_age_s": 0,
+      "update_time_raw": "fixture",
+      "update_time_s": 0,
+      "voltage_mv": 0,
+      "wall_time_s": 0
+    },
+    "pre": {
+      "amperage_ma": 0,
+      "apple_raw_current_capacity_mah": 0,
+      "apple_raw_max_capacity_mah": 0,
+      "argv": [
+        "fixture"
+      ],
+      "attempt_id": "fixture",
+      "current_capacity_pct": 0,
+      "exit_code": 0,
+      "external_connected": true,
+      "external_connected_raw": "fixture",
+      "fully_charged": false,
+      "instant_amperage_ma": 0,
+      "instant_amperage_raw": "fixture",
+      "is_charging": false,
+      "is_charging_raw": "fixture",
+      "limit_ma": 0,
+      "max_update_age_s": 0,
+      "monotonic_after_ns": 0,
+      "monotonic_before_ns": 0,
+      "object_count": 0,
+      "passed": true,
+      "phase": "fixture",
+      "plan_id": null,
+      "policy_id": "fixture",
+      "probe_error": false,
+      "property_lines": [
+        "fixture"
+      ],
+      "raw_path": "fixture",
+      "raw_stdout_sha256": "fixture",
+      "reasons": [],
+      "schema": "fixture",
+      "session_id": "fixture",
+      "slot": "fixture",
+      "stderr": "fixture",
+      "temperature_raw": 0,
+      "timed_out": false,
+      "update_age_s": 0,
+      "update_time_raw": "fixture",
+      "update_time_s": 0,
+      "voltage_mv": 0,
+      "wall_time_s": 0
+    }
+  },
+  "binding_evidence": {
+    "binding_vector_sha256": "fixture",
+    "power_policy": {
+      "id": "fixture"
+    },
+    "powermetrics_binary": {
+      "path": "fixture",
+      "sha256": "fixture"
+    },
+    "schema_version": "fixture"
+  },
+  "bindings": {
+    "anchor_method_version": "fixture",
+    "estimator_revision": "fixture",
+    "hardware_model": "fixture",
+    "mlx_version": "fixture",
+    "os_build": "fixture",
+    "power_policy": "fixture",
+    "powermetrics_sha256": "fixture",
+    "protocol_sha256": "fixture",
+    "pulse_protocol_id": "fixture",
+    "sampling_interval_ms": 0
+  },
+  "capture_wall_time_s": 0,
+  "clock_anchor": {
+    "admissible_lower_epoch_s": 0,
+    "admissible_upper_epoch_s": 0,
+    "anchor_lower_epoch_s": 0,
+    "anchor_only_bound_s": 0,
+    "anchor_upper_epoch_s": 0,
+    "arithmetic": "fixture",
+    "clock_stamps": {
+      "first_parse": {
+        "epoch_s": 0,
+        "monotonic_after_s": 0,
+        "monotonic_before_s": 0,
+        "monotonic_resolution_s": 0,
+        "wall_resolution_s": 0
+      },
+      "post_parse": {
+        "epoch_s": 0,
+        "monotonic_after_s": 0,
+        "monotonic_before_s": 0,
+        "monotonic_resolution_s": 0,
+        "wall_resolution_s": 0
+      },
+      "pre_spawn": {
+        "epoch_s": 0,
+        "monotonic_after_s": 0,
+        "monotonic_before_s": 0,
+        "monotonic_resolution_s": 0,
+        "wall_resolution_s": 0
+      },
+      "sampling_started": {
+        "epoch_s": 0,
+        "monotonic_after_s": 0,
+        "monotonic_before_s": 0,
+        "monotonic_resolution_s": 0,
+        "wall_resolution_s": 0
+      },
+      "sampling_stopped": {
+        "epoch_s": 0,
+        "monotonic_after_s": 0,
+        "monotonic_before_s": 0,
+        "monotonic_resolution_s": 0,
+        "wall_resolution_s": 0
+      }
+    },
+    "effective_clock_anchor_bound_s": 0,
+    "epoch_representation_term_s": 0,
+    "first_parse_lag_s": 0,
+    "first_sample_end_point_epoch_s": 0,
+    "method": "fixture",
+    "min_l_infinity_residual_upper_bound_s": 0,
+    "model_departure_allowance_s": 0,
+    "native_rollover_count": 0,
+    "numeric_padding_s": 0,
+    "rate_fit_baseline_s": 0,
+    "rate_limit_ppm": 0,
+    "rate_lower": 0,
+    "rate_upper": 0,
+    "records_checked": 0,
+    "stamp_resolution_s": 0,
+    "status": "fixture",
+    "wall_minus_monotonic_lower_s": 0,
+    "wall_minus_monotonic_span_s": 0,
+    "wall_minus_monotonic_upper_s": 0
+  },
+  "clock_anchor_resolved": true,
+  "max_age_s": 0,
+  "protocol_id": "fixture",
+  "pulse_count": 0,
+  "pulses": [
+    {
+      "amplitude_w": 0,
+      "delta_off_s": 0,
+      "delta_on_s": 0,
+      "detected": true,
+      "offset_residual_lower_s": 0,
+      "offset_residual_upper_s": 0,
+      "onset_residual_lower_s": 0,
+      "onset_residual_upper_s": 0,
+      "pulse_index": 0,
+      "reasons": [],
+      "robust_snr": 0
+    }
+  ],
+  "reasons": [],
+  "residual_median_s_diagnostic_only": 0,
+  "residual_p95_s_diagnostic_only": 0,
+  "residual_region_coverage_assumption": "fixture",
+  "residual_region_coverage_resolution_s": 0,
+  "residual_region_method": "fixture",
+  "robust_sigma_w": 0,
+  "schema_version": "fixture",
+  "spurious_plateau_count": 0,
+  "status": "fixture",
+  "validation_id": "fixture"
+}

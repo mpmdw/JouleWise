@@ -296,6 +296,8 @@ def run_benchmark(
         power_policy=instrument_power_policy,
         runtime_powermetrics_sha256=runtime_powermetrics_sha256,
         runtime_power_policy=runtime_power_policy,
+        g2a_context=(config, runs_root, Path(os.environ["JOULEWISE_G2A_PRE_BRACKET_PLAN"]))
+        if "JOULEWISE_G2A_PRE_BRACKET_PLAN" in os.environ else None,
     )
     config, suite_preparation, suite_preparation_failure = (
         _prepare_suite_manifest_for_new_bundle(config)
@@ -370,6 +372,7 @@ def _load_instrument_calibration_attachment(
     power_policy: str | None,
     runtime_powermetrics_sha256: str | None = None,
     runtime_power_policy: str | None = None,
+    g2a_context: tuple[BenchmarkConfig, Path, Path] | None = None,
 ) -> _InstrumentCalibrationAttachment | None:
     """Authenticate a validation directory before a bundle is created."""
 
@@ -436,6 +439,11 @@ def _load_instrument_calibration_attachment(
         raise ValueError("instrument calibration evidence is invalid JSON") from exc
     from joulewise.calibration_bracketing import REVISION_FIVE_EPOCH  # noqa: PLC0415
 
+    bracket_provenance = None
+    if g2a_context is not None:
+        bracket_provenance = _authenticate_g2a_pre_bracket_attachment(
+            resolved_root, files, evidence, *g2a_context
+        )
     if isinstance(evidence, dict) and (
         "battery_float" in evidence
         or any(
@@ -443,7 +451,7 @@ def _load_instrument_calibration_attachment(
             and all(epoch.get(field) == value for field, value in REVISION_FIVE_EPOCH.items())
             for epoch in (evidence.get("identity_epoch"), evidence.get("bindings"))
         )
-    ):
+    ) and bracket_provenance is None:
         raise ValueError("revision_five evidence cannot be attached as instrument calibration")
     bindings = evidence.get("bindings") if isinstance(evidence, dict) else None
     bound = evidence.get("b_fiducial_s") if isinstance(evidence, dict) else None
@@ -504,8 +512,70 @@ def _load_instrument_calibration_attachment(
                 "powermetrics_sha256": runtime_powermetrics_sha256,
                 "power_policy": runtime_power_policy,
             },
+            **({"g2a_pre_bracket": bracket_provenance} if bracket_provenance else {}),
         },
     )
+
+
+def _authenticate_g2a_pre_bracket_attachment(
+    directory: Path, files: dict[str, bytes], evidence: Any,
+    config: BenchmarkConfig, runs_root: Path, plan_path: Path,
+) -> dict[str, Any]:
+    """Admit only a registered diagnostic member's ordinary, ledger-bound pre slot.
+
+    C-2's legacy readers remain closed. A derivation observation cannot use
+    this path, even after its epoch has an issued acceptance (D-102 clause 2).
+    This attachment supplies bindings; the member's own telemetry supplies
+    its within-capture clock anchor, and harvest still judges the whole bracket.
+    """
+    from joulewise.calibration_ledger import (  # noqa: PLC0415
+        SESSION_KIND_BRACKET, load_calibration_ledger_snapshot,
+    )
+
+    repo = Path(__file__).resolve().parents[1]
+    raw = plan_path.read_bytes()
+    plan = json.loads(raw)
+    if (plan.get("schema_version") != "joulewise.g2a_probe_plan.v1"
+            or plan.get("status", {}).get("diagnostic") is not True
+            or plan.get("status", {}).get("claim_eligible") is not False
+            or plan.get("window_id") != os.environ.get("JOULEWISE_NIGHT_PLAN_ID")
+            or plan_path.resolve().parent.parent / "runs" != runs_root.resolve()):
+        raise ValueError("G2-a pre attachment requires its frozen diagnostic window")
+    members = [member for stage in plan["stages"] for member in stage["members"]
+               if member["run_id"] == config.to_dict().get("run_id")]
+    if len(members) != 1:
+        raise ValueError("G2-a pre attachment requires a registered member")
+    member = members[0]
+    config_path = Path(plan["config_root"]) / member["config_path"]
+    config_raw = config_path.read_bytes()
+    if (hashlib.sha256(config_raw).hexdigest() != member["config_sha256"]
+            or BenchmarkConfig.from_mapping(json.loads(config_raw)).to_dict() != config.to_dict()):
+        raise ValueError("G2-a pre attachment member config mismatch")
+    ledger_ref, pin_ref = plan["calibration_ledger"], plan["ledger_head_pin"]
+    snapshot = load_calibration_ledger_snapshot(
+        repo / ledger_ref["path"], repo / pin_ref["path"], repo_root=repo,
+        baseline_sequence=ledger_ref["head_sequence"], baseline_digest=ledger_ref["head_digest"],
+        require_committed_pin=True, verify_custody=True, mode="issuing",
+    )
+    session = snapshot.bracket_session_by_id.get(plan["session_id"])
+    if (not snapshot.is_governed_open_bracket_extension or session is None
+            or session.session_kind != SESSION_KIND_BRACKET or session.state != "open"
+            or session.window_id != plan["window_id"] or session.plan_id != plan["plan_id"]
+            or session.plan_sha256 != hashlib.sha256(raw).hexdigest()
+            or session.evidence_root_id != plan["evidence_root_id"]
+            or Path(session.runs_root).resolve() != runs_root.resolve()):
+        raise ValueError("G2-a pre attachment requires an authenticated ordinary bracket session")
+    pre = session.finalized_slots.get("pre")
+    if (pre is None or pre.disposition != "valid" or pre.is_historical_import
+            or Path(pre.custody_locator).resolve() != directory
+            or not isinstance(evidence, dict) or evidence.get("validation_id") != pre.attempt_id
+            or any(hashlib.sha256(files.get(name, b"")).hexdigest() != digest
+                   for name, digest in pre.artifact_sha256.items())
+            or any(evidence.get("bindings", {}).get(key) != value
+                   for key, value in pre.t1_bindings.items())):
+        raise ValueError("G2-a pre attachment does not match the finalized pre slot")
+    return {"session_id": session.session_id, "slot": "pre",
+            "plan_sha256": session.plan_sha256, "receipt_digest": pre.receipt_digest}
 
 
 def _runtime_power_policy_observation(

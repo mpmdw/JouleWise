@@ -70,6 +70,59 @@ _AUTOMATIC_ABORT_REFUSALS = {
 }
 
 
+def recover_harvest_copy(
+    ledger: Path, head_pin: Path, *, repo_root: Path, session_id: str,
+    plan: Path, destination: Path, operator_identity: str,
+) -> dict[str, Any]:
+    """Close and pin a derived copy, anchored to the source's committed pin.
+
+    This is archival recovery, not a relaxed source-ledger admission: verify
+    the committed source pin and its complete physical extension first, then
+    run the existing governed abort and pin advancement on byte-exact copies.
+    Original locators and capture custody remain intact and read-only.
+    """
+    source_bytes = (ledger.read_bytes(), head_pin.read_bytes())
+    snapshot = load_calibration_ledger_snapshot(
+        ledger, head_pin, repo_root=repo_root, require_committed_pin=True,
+        verify_custody=True, mode="read_replay",
+    )
+    session = snapshot.bracket_session_by_id.get(session_id)
+    pin_sequence = snapshot.committed_head_sequence
+    pin_digest = snapshot.committed_head_digest
+    prefix_matches = (pin_sequence is not None and pin_digest is not None
+        and (pin_sequence == 0 and pin_digest == "0" * 64
+             or 0 < pin_sequence <= len(snapshot.receipts)
+             and snapshot.receipts[pin_sequence - 1]["receipt_digest"] == pin_digest))
+    if (session is None or not prefix_matches
+            or set(snapshot.refusal_reasons) - {
+                RefusalCode.LEDGER_HEAD_MISMATCH.value,
+                RefusalCode.LEDGER_BRACKET_SESSION_OPEN.value,
+            }
+            or session.state == "open" and not snapshot.is_governed_open_bracket_extension):
+        raise CalibrationLedgerError(RefusalCode.PIN_ADVANCEMENT_UNSAFE)
+    copied_ledger = destination / "terminal-ledger.jsonl"
+    copied_pin = destination / "terminal-pin.json"
+    for path, raw in ((copied_ledger, source_bytes[0]), (copied_pin, source_bytes[1])):
+        with path.open("xb") as handle:
+            handle.write(raw)
+    if session.state == "open":
+        abort_calibration_session(
+            copied_ledger, copied_pin, session_id=session_id, plan_path=plan,
+            reason="g2a_harvest_incomplete", require_committed_pin=False, repo_root=repo_root,
+        )
+    terminal = terminal_head_pin_for_session(copied_ledger, session_id=session_id)
+    if (terminal["sequence"], terminal["head_digest"]) != (pin_sequence, pin_digest):
+        advance_calibration_head_pin(
+            copied_ledger, copied_pin, session_id=session_id,
+            expected_sequence=terminal["sequence"], expected_digest=terminal["head_digest"],
+            operator_identity=operator_identity, attestation_reason="authenticated G2-a harvest terminal copy",
+            execute=True, require_committed_pin=False, repo_root=repo_root,
+        )
+    if source_bytes != (ledger.read_bytes(), head_pin.read_bytes()):
+        raise CalibrationLedgerError(RefusalCode.PIN_ADVANCEMENT_UNSAFE)
+    return dict(terminal)
+
+
 def _audit_refusal(
     reasons: tuple[str, ...], *, active_operation_id: str | None = None
 ) -> RefusalCode:

@@ -107,6 +107,9 @@ def integrated_g2a_chain(chain: str, *, measurement_root: Path, g2a_root: Path,
         f"export JOULEWISE_NIGHT_PLAN_ID={shlex.quote(plan_id)}\n"
         f"export JOULEWISE_CALIBRATION_REFUSAL_PATH={shlex.quote(str(night_root / 'night/calibration-refusal.json'))}\n"
         "export JOULEWISE_NIGHT_CUSTODY_BUDGET_S=120\n"
+        # Opt in only this diagnostic chain to the authenticated ordinary pre
+        # slot attachment. Legacy/derivation callers retain the C-2 refusal.
+        'export JOULEWISE_G2A_PRE_BRACKET_PLAN="$G2A_FROZEN_PLAN"\n'
         f"export G2A_PLAN_ID={shlex.quote('plan-' + plan_id + '-g2a-probe-v1')}\n"
         'G2A_PLAN_SHA256="$(/usr/bin/shasum -a 256 "$G2A_FROZEN_PLAN" | /usr/bin/awk \'{print $1}\')"\n'
         "reservation_argv=(\n" + argv + "  --custody-budget-s 120 --pre-reserve-strict\n)\n"

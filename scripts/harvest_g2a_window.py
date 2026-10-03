@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 from joulewise import calibration_bracketing as brackets, network_time_off, night_gate
-from joulewise.calibration_ledger import head_pin_for_receipt, load_calibration_ledger_snapshot
+from joulewise.calibration_ledger import load_calibration_ledger_snapshot, terminal_head_pin_for_session
 from joulewise.cli import validate_bundle
 from joulewise.schemas import CampaignPolicy
 from scripts import generate_g2a_probe_inputs as inputs, summarize_g2a_prefill_probe as summary
@@ -18,6 +18,7 @@ from scripts import select_g2a_prefill_length as selector
 from scripts.generate_g2a_probe_inputs import harvest_roster as roster
 from scripts.summarize_g2a_prefill_probe import network_time_capture_report as clock_report
 from scripts.harvest_window import inventory, copy_matches
+from scripts.recover_calibration_ledger import recover_harvest_copy
 
 class HarvestRefusal(ValueError):
     pass
@@ -136,15 +137,29 @@ def harvest(args, *, now=time.time, clear=group_clear, runner=subprocess.run):
         inputs.check_harvest_inputs(measurement_root=root, root=g2a, ledger=ledger, head_pin=pin)
         if value['window_id'] != plan.plan_id or value['session_id'] != plan.plan_id + '-calibration':
             raise HarvestRefusal('window_identity_mismatch')
-        physical = [json.loads(line) for line in ledger.read_bytes().splitlines() if line.strip()]
-        candidate = head_pin_for_receipt(physical[-1])
-        scratch_pin = derived / 'physical-head-pin.json'
-        write(scratch_pin, candidate)
-        snap = load_calibration_ledger_snapshot(ledger, scratch_pin, require_committed_pin=False,
+        # Authenticate against the committed seed first. A mid-session receipt
+        # is never a head-pin candidate. The governed open extension can be
+        # assessed as incomplete before recovery closes it below.
+        snap = load_calibration_ledger_snapshot(ledger, pin, require_committed_pin=True,
             mode='read_replay', repo_root=root, baseline_sequence=read(frozen)['calibration_ledger']['head_sequence'],
             baseline_digest=read(frozen)['calibration_ledger']['head_digest'])
-        if set(snap.refusal_reasons) - {'calibration_ledger_bracket_session_open'}:
-            raise HarvestRefusal('ledger_authentication_failed')
+        session = snap.bracket_session_by_id.get(value['session_id'])
+        if session and session.state == 'open':
+            if not snap.is_governed_open_bracket_extension:
+                raise HarvestRefusal('ledger_authentication_failed')
+        else:
+            if set(snap.refusal_reasons) - {'calibration_ledger_head_mismatch'}:
+                raise HarvestRefusal('ledger_authentication_failed')
+            if session:
+                candidate = terminal_head_pin_for_session(ledger, session_id=value['session_id'])
+                scratch_pin = derived / 'physical-head-pin.json'
+                write(scratch_pin, candidate)
+                snap = load_calibration_ledger_snapshot(ledger, scratch_pin, require_committed_pin=False,
+                    mode='read_replay', repo_root=root,
+                    baseline_sequence=read(frozen)['calibration_ledger']['head_sequence'],
+                    baseline_digest=read(frozen)['calibration_ledger']['head_digest'])
+            if snap.refusal_reasons:
+                raise HarvestRefusal('ledger_authentication_failed')
         valid, captures = set(), []
         for run_id in ids:
             path = runs / run_id
@@ -239,17 +254,29 @@ def harvest(args, *, now=time.time, clear=group_clear, runner=subprocess.run):
         if any(inventory(source) != original[name] for name, source in sources.items()) or not clear(night):
             raise HarvestRefusal('source_or_process_ownership_changed')
         if session:
-            procedure = [root / 'scripts/recover_calibration_ledger.py', '--ledger', ledger, '--head-pin', pin]
-            if session.state == 'open':
-                command(runner, root, [*procedure, 'abort-session', '--session-id', value['session_id'],
-                        '--plan', frozen, '--reason', 'g2a_harvest_incomplete'])
-            terminal = command(runner, root, [*procedure, 'terminal-pin', '--session-id', value['session_id']])
-            command(runner, root, [*procedure, 'advance-head-pin', '--session-id', value['session_id'],
-                '--expected-sequence', terminal['sequence'], '--expected-digest', terminal['head_digest'],
-                '--operator-identity', args.operator_identity, '--attestation-reason', 'authenticated G2-a harvest terminal', '--execute'])
-            shutil.copy2(ledger, derived / 'terminal-ledger.jsonl')
-            shutil.copy2(pin, derived / 'terminal-pin.json')
-            record['pin_advance'] = {'path': str(pin), 'sha256': sha(pin), 'needs_operator_commit': True}
+            if getattr(args, 'read_only_sources', False):
+                terminal = recover_harvest_copy(ledger, pin, repo_root=root,
+                    session_id=value['session_id'], plan=frozen, destination=derived,
+                    operator_identity=args.operator_identity)
+                record['pin_advance'] = {'path': str(derived / 'terminal-pin.json'),
+                    'sha256': sha(derived / 'terminal-pin.json'), 'needs_operator_commit': True,
+                    'source_pin_unchanged': True, 'source_path': str(pin),
+                    'sequence': terminal['sequence'], 'head_digest': terminal['head_digest']}
+            else:
+                procedure = [root / 'scripts/recover_calibration_ledger.py', '--ledger', ledger, '--head-pin', pin]
+                if session.state == 'open':
+                    command(runner, root, [*procedure, 'abort-session', '--session-id', value['session_id'],
+                            '--plan', frozen, '--reason', 'g2a_harvest_incomplete'])
+                terminal = command(runner, root, [*procedure, 'terminal-pin', '--session-id', value['session_id']])
+                command(runner, root, [*procedure, 'advance-head-pin', '--session-id', value['session_id'],
+                    '--expected-sequence', terminal['sequence'], '--expected-digest', terminal['head_digest'],
+                    '--operator-identity', args.operator_identity, '--attestation-reason', 'authenticated G2-a harvest terminal', '--execute'])
+                shutil.copy2(ledger, derived / 'terminal-ledger.jsonl')
+                shutil.copy2(pin, derived / 'terminal-pin.json')
+                record['pin_advance'] = {'path': str(pin), 'sha256': sha(pin), 'needs_operator_commit': True}
+        if getattr(args, 'read_only_sources', False) and any(
+                inventory(source) != original[name] for name, source in sources.items()):
+            raise HarvestRefusal('source_or_process_ownership_changed')
         record['outputs'] = {path.name: sha(path) for path in sorted(derived.iterdir()) if path.is_file()}
     except Exception as error:
         # Parse and replay exceptions can contain measured data. Custody-only
@@ -265,6 +292,8 @@ def main(argv=None, **injected):
     parser.add_argument('--plan', type=Path, required=True)
     parser.add_argument('--archive-root', type=Path, required=True)
     parser.add_argument('--operator-identity', required=True)
+    parser.add_argument('--read-only-sources', action='store_true',
+        help='run governed ledger closure and pin advancement on derived copies; preserve all sources')
     args = parser.parse_args(argv)
     try:
         record = harvest(args, **injected)
