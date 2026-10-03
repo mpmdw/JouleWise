@@ -30,3 +30,21 @@ Step: RUN_STATE 07:20 pointer (activation a7a0ed6a): carry the w1 R3 fix through
 - Sol executing review (`11-sol-review.md`): VERDICT PASS, no findings. Its one flag (direct real
   CLI blocked by the sandbox's `sysctl` denial) is covered by the lead's unsandboxed trial
   re-harvest above.
+- Fable final pass (`21-fable-final-pass.md`): FABLE FINAL PASS: PASS. Q5 confirms the registered
+  verdict is RECOVER and that the next window is the one recovery window (`w2`), not a w1 re-run.
+  Dispositions:
+  - F1 (harvest open-session guards unpinned by tests), F2 (five secondary attachment bindings
+    unpinned, including the original C-2 vector "same bytes at another path"), F3 (docstring:
+    the attachment also supplies the bound), F4 (stale B-reader inventory in
+    `tests/test_battery_float_sweep.py`), F6 (zero-byte `.lock` listed among harvest outputs):
+    deferred to the named lane `G2A-ATTACH-GUARD-TESTS-01` (tests and wording only, light tier).
+    The behaviour is correct: Fable's and Sol's scratch probes refuse every case.
+  - F5 (nothing reads `g2a_pre_bracket`): no change. Claim exclusion rests on registration §9 and
+    the separate probe root.
+  - F7 (seal record needs H′ 2 pins for `scripts/harvest_g2a_window.py` and
+    `scripts/gen_g2_phase_d.py` before the re-harvest is recorded and `w2` is armed): done in
+    the post-merge seal-record commit.
+  - F8 (about 4.5 s custody pass per member, inside the span): informational.
+  - F9 (the next window is the only recovery window; seal disclosure D2 is still untested): carried.
+    Also carried: before any claim window on 25G83 uses a similar path, a battery verdict check
+    for an ordinary bracket capture's bound (Fable Q2).
