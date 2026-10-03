@@ -216,9 +216,17 @@ class G2aAuthoringTests(unittest.TestCase):
             self.assertFalse((base/'night/night_plan.json').exists())
             self.assertEqual(Path(plan.custody_root), (base/'night').resolve())
             self.assertEqual(Path(plan.chain_path), (base/'night/chain.zsh').resolve())
+        with tempfile.TemporaryDirectory() as temporary:
+            # Fresh coordinates, so only the filename rule can refuse (delta review G2AD-01).
+            base = Path(temporary)
+            args = self.args(base)
+            (base/'stage').mkdir()
             args.new_g2a_window = base/'stage/other.json'
-            with self.assertRaises(ValueError), redirect_stdout(io.StringIO()):
+            with self.assertRaisesRegex(ValueError, 'plan output must be named night_plan.json'), \
+                    redirect_stdout(io.StringIO()):
                 generator.author_g2a_window(args, now=lambda: 3000)
+            self.assertEqual(sorted(p.name for p in base.iterdir()), ['stage'])
+            self.assertEqual(list((base/'stage').iterdir()), [])
 
     def test_authoring_fences_refuse_before_publication(self):
         cases = [('plan_id', 'night-CODEX'), ('plan_id', 'night-claude'), ('plan_id', 'night-T3'),
