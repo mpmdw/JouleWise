@@ -41,3 +41,35 @@ Step: block-2 handoff item 1, arm `w1` (recipe 40).
   RULING EXTEND-SEAL-WITH-H-PRIME (a §11 fix; no new seal). Conditions: re-verify at the merged head that
   only `scripts/gen_g2_phase_d.py` differs among the nine pins; append H′ pins to record 52 before arming;
   say plainly that w1 arms from H′.
+
+## Re-arm and ARM of `w1` (2026-10-02 23:52 PDT)
+
+- PR #460 merged `0fbadb63` (H′). Seal record 52 extended with the H′ 1 pins in `56bb058f` (only
+  `scripts/gen_g2_phase_d.py` moved, `69903ae2…` → `76a7f043…`; the other eight pins and the
+  registration `8e45a0e0…a5b8` are unchanged, re-verified at `0fbadb63`).
+- Bench regenerated from the merged recipe (the first attempt's outputs are kept under
+  `/Users/edr/night-plan-staging/g2a-bench/attempt1-20261003T0742Z/`).
+- Arm: plan `d117-g2a-prefill-probe-20261003T0820Z`, plan sha256 `2a8328af…e15e`, arm head
+  `56bb058fd8920ba1ae42cde2bd108c6bfd756caa` (= H′ plus the seal-record commit), chain sha256 `4c65aafb…bd71`,
+  t0 1791015600 (2026-10-03 01:20 PDT), WINDOW_MAX_S 19980, window end 1791035580 (06:53 PDT), harvest
+  opens 1791035880 (06:58 PDT), dead-man 07:58 PDT. Ledger seed: C2 clone ledger `3c9b6844…72fb`,
+  head == pin 376.
+- step0 PASS (battery gate PASS), step1 PASS, step2 PASS (chain `G2A_ROOT` = the real probe root),
+  §5.1 OFF probe admitted ("Network Time is already off."), step3 PASS (census saw Ed's interactive
+  Claude session pid 65135, so the notice carries the /exit sentence), notice sent by Gmail: message and
+  thread `1a100885e626fe83`, sent epoch 1791010307, sent body sha256 `b797e57d…a121`
+  (`$ATTEMPT_DIR/notice-body.sent.txt`); NO search empty; step3b PASS; step4 PASS (published,
+  launchd probe admits, installed); step5 PASS; §5: `com.joulewise.night` + `.deadman` loaded,
+  schedule t0 matches, plan bytes equal the attempt copy, chain sidecar OK, plan span inactive at
+  t0−481 and active at t0−480.
+- Step outputs: `/Users/edr/night-plan-staging/g2a-bench/step{0,1,2,3,3b,4,5}.w1.out`, `step5_1.w1.out`;
+  frozen env `/Users/edr/night-plan-staging/d117-g2a-prefill-probe-20261003T0820Z/arm-env.zsh`.
+- Magistrate exits well before t0 − 8 min (01:12 PDT). The notice_pending queue was empty at launch
+  and at send, so no notice.ack was written.
+
+## Gates and checks this session (pruning rule)
+
+- Recipe step2 argv-only inspection: caught the generator defect (a window that would have been NULL).
+  It touched an admission outcome, not a measured number.
+- Sol executing review, Fable final pass, Fable §12 ruling, CI matrix: all PASS on #460; none
+  changed a number.
