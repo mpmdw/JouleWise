@@ -48,3 +48,8 @@ Step: RUN_STATE 07:20 pointer (activation a7a0ed6a): carry the w1 R3 fix through
   - F9 (the next window is the only recovery window; seal disclosure D2 is still untested): carried.
     Also carried: before any claim window on 25G83 uses a similar path, a battery verdict check
     for an ordinary bracket capture's bound (Fable Q2).
+- CI on `313a9da0`: shard 5 red, `tests.test_custody_mode_inventory` (3 failures): the new
+  `read_replay` snapshot calls (harvest ordinal 2 at line 157, `recover_harvest_copy` ordinal 1)
+  lacked rows in `tests/fixtures/custody_read_replay_allowlist.json`. R3 by the lead: two rows
+  added, harvest ordinal renumbered (old 2 → 3), line hints refreshed; fixture only, no code.
+  Local: 7 tests OK. Every other CI job was green on `313a9da0`.
