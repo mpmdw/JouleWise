@@ -80,8 +80,24 @@ calibration refusal (N4), no G2-a harvester (N5).
 
 | Item | What | Status |
 |---|---|---|
-| Lane G2A-NIGHT-25G83-01 | brief [03](03-lane-g2a-integration-brief.md); branch `feat/2026-10-02-g2a-night-integration` | launched |
-| Registration | `configs/campaigns/g2a_prefill_probe_25g83/registration_block2.md` | drafted |
-| Arm recipe | `docs/process_traces/2026-10-02-design-block2/40-g2a-arm-recipe.md` | after the lane |
-| Seal | cold Fable gate + Opus refuter | after the lane merges (pins need H) |
-| Handoff | RUN_STATE top block | last |
+| Lane G2A-NIGHT-25G83-01 | briefs [03](03-lane-g2a-integration-brief.md), [04](04-lane-continuation-brief.md); reports [21](21-sol-lane-report-round1.md), [22](22-sol-lane-report-round2.md); PR #458 | Sol review MERGE ([31](31-sol-review.md)); delta review MERGE ([32](32-sol-delta-review.md)); suite [34](34-suite-tail.txt); dispositions [33](33-findings-disposition.md); Fable final pass [36](36-fable-final-pass.md) |
+| Registration | `configs/campaigns/g2a_prefill_probe_25g83/registration_block2.md` | SEALED: judge ADMIT [51](51-seal-ruling.md), refuter AGREE [51r](51r-seal-refuter.md), seal record [52](52-seal-record.md) |
+| Arm recipe | [40](40-g2a-arm-recipe.md) | written; step4 transformation dry-tested |
+| Handoff | RUN_STATE top block | after both PRs merge |
+
+## 6. Lead decisions during the build (beyond §4)
+
+7. **Programmed span 17,248 s, not 33,556 s.** The seat sized every member at code worst cases
+   (10 and 5 tokens/s decode, the 300 s cooldown cap and an idle retry on every member), which
+   would have held the dedicated machine about 9.6 h for a chain of about 3 h, because harvest
+   and the next arm wait for the window end. Resized from the runsheet's documented cadence
+   (≈148 s per member at idle 30 s → 112 s of non-idle work; allowances 240 s small, 300 s large).
+   An overrun is stopped by the driver's window expiry and is a RECOVER, not a wrong number.
+8. **NULL verdict** added to the harvester for a window whose chain never started.
+9. **Plan staging.** The authoring command may write the plan outside the night root, so the arm
+   publishes it only after the notice is accepted, as the Revision 6 arm does.
+10. **T2a, not T2b** (seal ruling): no chain change for large-stage containment; a failed 8B stage
+    ends the window RECOVER. Containment would need a chain and summarizer change (refuter D4)
+    for a failure mode with no evidence of occurring.
+11. **F9 rejected**: an early NULL saves no time, because the next arm's discovery treats the
+    plan span as active until the same boundary.
