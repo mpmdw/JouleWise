@@ -81,6 +81,13 @@ NIGHT_PROGRAMMED_SPAN_S = programmed_span_s()
 def integrated_g2a_chain(chain: str, *, measurement_root: Path, g2a_root: Path,
                          night_root: Path, plan_id: str) -> str:
     """Specialize reviewed shell bytes and put inspection before mutation."""
+    # Rename the runsheet window id first, then pin the explicit paths: a real
+    # window root contains the plan id, which begins with the runsheet id, so
+    # renaming after pinning would rewrite the root a second time.
+    old_id = re.search(r"^export G2A_WINDOW_ID=(.+)$", chain, re.MULTILINE)[1]
+    chain = re.sub(r"^export (G2A_[A-Z_]+)=(.*)$",
+        lambda row: ('export ' + row[1] + '=' + shlex.quote(row[2].replace(old_id, plan_id))
+                     if old_id in row[2] else row[0]), chain, flags=re.MULTILINE)
     values = {"CALIBRATION_LEDGER": measurement_root / "runs/calibration_observation_ledger.jsonl",
               "LEDGER_HEAD_PIN": measurement_root / "configs/calibration/calibration_ledger_head.json",
               "G2A_ROOT": g2a_root}
@@ -90,10 +97,6 @@ def integrated_g2a_chain(chain: str, *, measurement_root: Path, g2a_root: Path,
                               chain, flags=re.MULTILINE)
         if count != 1:
             raise ValueError(f"{name}: expected one source export")
-    old_id = re.search(r"^export G2A_WINDOW_ID=(.+)$", chain, re.MULTILINE)[1]
-    chain = re.sub(r"^export (G2A_[A-Z_]+)=(.*)$",
-        lambda row: ('export ' + row[1] + '=' + shlex.quote(row[2].replace(old_id, plan_id))
-                     if old_id in row[2] else row[0]), chain, flags=re.MULTILINE)
     # The array is the single reservation argv used by inspection and execution.
     start = chain.index('"$PY" "$REPO/scripts/reserve_calibration_window_bracket.py" \\\n')
     end = chain.index("  --execute\n", start) + len("  --execute\n")

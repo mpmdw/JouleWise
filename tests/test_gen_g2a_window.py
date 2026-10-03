@@ -137,6 +137,26 @@ class G2aInspectionTests(unittest.TestCase):
         self.assertFalse(self.f.reservation.with_suffix('.CALLED').exists())
         self.assertFalse((self.f.g2a/'runs').exists())
 
+    def test_root_containing_the_plan_id_is_exported_unchanged(self):
+        # Production shape: the root is named by the plan id, which begins with
+        # the runsheet window id (block 2 w1 arm, 2026-10-03: root was doubled).
+        plan_id = 'd117-g2a-prefill-probe-20261003T0742Z'
+        root = self.f.base / 'night-g2a' / plan_id
+        (root / 'window-plan').mkdir(parents=True)
+        for name in ('calibration_plan.json', 'identity-epoch.json', 't1-bindings.json'):
+            (root / 'window-plan' / name).write_bytes((self.f.g2a / 'window-plan' / name).read_bytes())
+        generator.emit_g2a_night_chain(self.f.chain, '20261003', measurement_root=self.f.measurement,
+            g2a_root=root, night_root=self.f.night, plan_id=plan_id)
+        text = self.f.chain.read_text()
+        self.assertEqual([line for line in text.splitlines() if line.startswith('export G2A_ROOT=')],
+                         ['export G2A_ROOT=' + str(root)])
+        self.assertIn('export G2A_WINDOW_ID=' + plan_id + '\n', text)
+        result = self.run_chain(NIGHT_RESERVATION_ARGV_ONLY='1', NIGHT_VERIFY_ONLY='1')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        argv = result.stdout.decode().split('\0')[:-1]
+        self.assertEqual(argv[argv.index('--runs-root')+1], str(root / 'runs'))
+        self.assertEqual(argv[argv.index('--session-id')+1], plan_id + '-calibration')
+
     def test_probe_bindings_accept_g2a_without_derivation_wrapper(self):
         with self.f.environment():
             binding = install.probe_bindings(self.f.plan, self.f.plan_path, sys.executable)
