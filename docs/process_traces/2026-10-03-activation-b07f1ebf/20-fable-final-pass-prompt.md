@@ -1,0 +1,7 @@
+Cold final pass (gate-ledger row 4) on JouleWise PR #460, head b39d7015, base 4205713c. You have no prior context; judge only from the repository in this directory. Read-only: do not edit, commit or push anything.
+
+The PR changes code that generates a measurement night's chain: `scripts/gen_g2_phase_d.py` `integrated_g2a_chain` now renames the runsheet window id in `G2A_*` exports before pinning G2A_ROOT, CALIBRATION_LEDGER and LEDGER_HEAD_PIN. Previously the pin came first, so a real root named by the plan id (which begins with the runsheet id) had its suffix doubled, and the window would have refused at its input assertions. It also adds a regression test (`tests/test_gen_g2a_window.py`) and one recipe line (`docs/process_traces/2026-10-02-design-block2/40-g2a-arm-recipe.md`, step2 argv-only inspection now passes MEASUREMENT_HEAD="$H", as `scripts/run_night.py` `_chain_environment` does).
+
+Run `git diff 4205713c b39d7015`. Decide whether the change is correct and whether it could alter any captured byte, measured value, admission decision other than the intended one, or the registration (`configs/campaigns/g2a_prefill_probe_25g83/registration_block2.md`). You may run tests with /Users/edr/night-custody/measurement/JouleWise-measurement-20261003T0742Z-g2a-w1/.venv/bin/python -B -m unittest tests.test_gen_g2a_window.
+
+End with exactly one line `FABLE FINAL PASS: PASS` or `FABLE FINAL PASS: REFUSE`, preceded by findings (severity, file:line, reason).
