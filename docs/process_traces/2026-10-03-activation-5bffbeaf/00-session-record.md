@@ -41,3 +41,20 @@ records, next step by verdict).
 
 R3 fix on branch `fix/2026-10-03-g2a-w2-summary-config-provenance` (Sol 6.1 seat), gates, merge; then
 re-harvest into a fresh root (`-r2`), then recipe §7 by verdict.
+
+## p2048 r03 diagnosis (Sonnet 5.5 investigation, read-only), 16:55 PDT
+
+- r03 failed in stage `idle_baseline`, before any p2048 prefill: "idle environment admission failed
+  after one retry" → `FailureReason.UNKNOWN_ERROR` → status failed → CLI exit 3. No traceback; designed abort.
+- Both idle attempts failed only on `cpu_busy_ratio_p95_exceeded` (1.0 and 0.896 vs limit 0.5; GPU
+  admitted both times). r01, r02 and p1024-r05 passed at 0.23-0.26.
+- Rich telemetry shows E-cluster CPU 0 ≈85 % busy from ≈+60 s of attempt 1 through attempt 2. Unified log:
+  `dasd` at 12:55:00 PDT (4 s before r03 started) scheduled `com.apple.mediaanalysisd.photos.maintenance`
+  and `com.apple.duetexpertd.anchormodeldataharvesting`; duetexpertd/knowledgeconstructiond/cloudd/
+  mediaanalysisd/spotlightknowledged log volume jumped from ≈0 to thousands of lines per minute. Agent census
+  214 samples empty; thermal nominal; memory pressure 3 %.
+- Classification: machine state (macOS background maintenance), removable by re-arming; ≈85 % confidence on
+  the specific process (no task sampler in the capture). Design note: attempt 2 starts 0.5 s after
+  attempt 1, so the retry cannot outwait a multi-minute burst.
+- Bearing on §7: this is input for the cause naming after the corrected harvest. §7 still says a second
+  RECOVER stops the block for a consult.
