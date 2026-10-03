@@ -1,9 +1,14 @@
 # Registration G2A-25G83-B2: the G2-a prefill resolvability probe on macOS build 25G83 (measurement block 2), with its analysis plan
 
-Status: DRAFT, written 2026-10-02 by the block-2 design seat (Opus 5.5, headless orchestrator seat
-holding the orchestrator's design authority, RUN_STATE item 7). It becomes binding when a cold
-Fable registration gate seals it (§12). Every rule below is fixed before any data of this block
-exists. No value measured by this block appears in this file or may be added to it.
+Status: SEALED 2026-10-02. Written by the block-2 design seat (Opus 5.5, headless orchestrator
+seat holding the orchestrator's design authority, RUN_STATE item 7); sealed by the cold
+registration gate G2A-25G83-B2 (Fable 5.1, `SEAL: ADMIT`,
+`docs/process_traces/2026-10-02-design-block2/51-seal-ruling.md`) with its required changes T1-T8
+applied verbatim (T2a), the paired Opus refuter's AGREE and its change D1 applied inside T6
+(`51r-seal-refuter.md`); pins in the seal record
+`docs/process_traces/2026-10-02-design-block2/52-seal-record.md`. Every rule below was fixed before
+any data of this block existed. No value measured by this block appears in this file or may be
+added to it.
 
 ## 1. What this block measures, and why it is needed
 
