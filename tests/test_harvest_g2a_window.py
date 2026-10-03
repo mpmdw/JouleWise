@@ -17,6 +17,9 @@ from tests.test_gen_g2a_window import G2aFixture, tree
 from tests import test_generate_g2a_probe_inputs as producer_tests
 from tests.test_generate_g2a_probe_inputs import IDENTITY, T1, ACCEPTANCE
 from tests.test_summarize_g2a_prefill_probe import retained_metadata, retained_summary
+from joulewise import calibration_ledger as real_ledger
+from scripts import recover_calibration_ledger as recovery
+from tests.git_fixture import init_git_fixture
 
 
 class G2aHarvestTests(unittest.TestCase):
@@ -68,7 +71,8 @@ class G2aHarvestTests(unittest.TestCase):
         (night/'network_time_off.json').write_text(json.dumps(off)+'\n')
         self.session = SimpleNamespace(state='finalized', finalized_slots={},
             plan_sha256=harvest.sha(wp/'calibration_plan.json'), runs_root=str(self.f.g2a/'runs'))
-        self.snapshot = SimpleNamespace(refusal_reasons=(), bracket_session_by_id={self.value['session_id']: self.session})
+        self.snapshot = SimpleNamespace(refusal_reasons=(), bracket_session_by_id={self.value['session_id']: self.session},
+                                        is_governed_open_bracket_extension=True)
         self.args = SimpleNamespace(plan=self.f.plan_path, archive_root=self.f.base/'archive', operator_identity='fixture-operator')
         self.now = lambda: self.f.plan.t0_epoch_s+self.f.plan.window_max_s+300
         self.commands = []
@@ -76,7 +80,7 @@ class G2aHarvestTests(unittest.TestCase):
         self.addCleanup(self.stack.close)
         for obj, name, kwargs in (
             (producer, 'check_harvest_inputs', {'return_value': None}),
-            (harvest, 'head_pin_for_receipt', {'return_value': {'sequence': 1, 'head_digest': 'b'*64}}),
+            (harvest, 'terminal_head_pin_for_session', {'return_value': {'sequence': 1, 'head_digest': 'b'*64}, 'create': True}),
             (harvest, 'load_calibration_ledger_snapshot', {'return_value': self.snapshot}),
             (harvest, 'validate_bundle', {'return_value': []}),
             (harvest.brackets, 'build_calibration_bracket_binding', {'return_value': {'fixture': True}}),
@@ -444,6 +448,83 @@ class G2aHarvestTests(unittest.TestCase):
         self.session.state = 'open'
         record = self.run_harvest()
         self.assertEqual(record['verdict'], 'RECOVER'); self.assertIn('bracket_incomplete', record['cause_codes'])
+
+    def crash_after_pre(self):
+        """Leave the real mid-session slot-finalization tail that crashed w1."""
+        for run_id in producer.harvest_roster(self.value):
+            harvest.shutil.rmtree(self.f.g2a/'runs'/run_id)
+        self.ledger.write_bytes(b'')
+        self.pin.write_text(json.dumps({'sequence': 0, 'head_digest': real_ledger.GENESIS_DIGEST,
+                                       'ledger_schema': real_ledger.LEDGER_SCHEMA})+'\n')
+        init_git_fixture(self.f.measurement, '-q')
+        subprocess.run(['git', 'add', str(self.pin.relative_to(self.f.measurement))],
+                       cwd=self.f.measurement, check=True, capture_output=True)
+        subprocess.run(['git', '-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid',
+                        'commit', '-qm', 'fixture seed'], cwd=self.f.measurement, check=True, capture_output=True)
+        frozen = self.f.g2a/'window-plan/calibration_plan.json'
+        plan = harvest.read(frozen)
+        plan['calibration_ledger'].update(head_sequence=0, head_digest=real_ledger.GENESIS_DIGEST)
+        frozen.write_text(json.dumps(plan)+'\n')
+        self.value['calibration_plan']['sha256'] = harvest.sha(frozen)
+        (self.f.g2a/'window-plan/g2a-input-inventory.json').write_text(json.dumps(self.value)+'\n')
+        capture = self.f.g2a/'runs/instrument_validation/fixture-pre'
+        (capture/'raw').mkdir(parents=True)
+        (capture/'raw/powermetrics.plist').write_bytes(b'synthetic calibration capture')
+        (capture/'events.jsonl').write_text('{"timestamp_s":99.0}\n')
+        (capture/'instrument_evidence.json').write_text('{"b_fiducial_s":0.025}\n')
+        (capture/'manifest.json').write_text('{"fixture":true}\n')
+        real_ledger.append_bracket_session_receipt(self.ledger, head_pin_path=self.pin,
+            repo_root=self.f.measurement, session_id=self.value['session_id'], window_id=self.value['window_id'],
+            plan_id=self.value['calibration_plan']['plan_id'], plan_sha256=harvest.sha(frozen),
+            evidence_root_id=self.value['evidence_root_id'], runs_root=self.f.g2a/'runs',
+            slots={slot: {'attempt_id':'fixture-'+slot,
+                'custody_locator':str(self.f.g2a/'runs/instrument_validation'/('fixture-'+slot)),
+                'identity_epoch':IDENTITY, 't1_bindings':T1} for slot in ('pre','post')})
+        real_ledger.claim_bracket_session_slot(self.ledger, session_id=self.value['session_id'],
+                                              slot='pre', attempt_id='fixture-pre')
+        real_ledger.finalize_bracket_session_slot(self.ledger, session_id=self.value['session_id'],
+            slot='pre', disposition='valid', custody_locator=str(capture),
+            artifact_sha256=real_ledger.artifact_hashes(capture), identity_epoch=IDENTITY,
+            t1_bindings=T1, capture_wall_time_s='99.0', exact_bound_lexeme_s='0.025')
+        self.load_calibration_ledger_snapshot.side_effect = real_ledger.load_calibration_ledger_snapshot
+        self.terminal_head_pin_for_session.side_effect = real_ledger.terminal_head_pin_for_session
+        (self.f.night/'night/chain.exited').write_text('{"exit_code":1}\n')
+
+    def test_crash_after_pre_capture_with_zero_members_recovers_and_closes_copied_session(self):
+        self.crash_after_pre()
+        before = tree(self.f.measurement), tree(self.f.g2a), tree(self.f.night)
+        self.args.read_only_sources = True
+        record = self.run_harvest()
+        self.assertEqual(record['verdict'], 'RECOVER', record.get('fault'))
+        self.assertEqual(record['cause_codes'], ['bracket_incomplete', 'chain_nonzero_or_missing_exit',
+                                                'rung_valid_small_members_shortfall'])
+        self.assertTrue(record['capture_made'])
+        self.assertFalse(any(row['valid'] for row in record['members']))
+        self.assertEqual(self.commands, [])
+        self.assertEqual((tree(self.f.measurement), tree(self.f.g2a), tree(self.f.night)), before)
+        copied = self.args.archive_root/'derived/terminal-ledger.jsonl'
+        pin = self.args.archive_root/'derived/terminal-pin.json'
+        snapshot = real_ledger.load_calibration_ledger_snapshot(copied, pin, require_committed_pin=False)
+        self.assertEqual(snapshot.refusal_reasons, ())
+        self.assertEqual(snapshot.bracket_session_by_id[self.value['session_id']].state, 'aborted')
+        self.assertEqual(snapshot.head_sequence, 8)  # open, claim, pre final, abort: two records each
+
+    def test_crash_after_pre_capture_with_zero_members_uses_governed_source_abort_before_pin(self):
+        self.crash_after_pre()
+        def runner(argv, **kwargs):
+            self.commands.append(argv)
+            stdout = io.StringIO()
+            with mock.patch.object(recovery, 'REPO_ROOT', self.f.measurement), redirect_stdout(stdout):
+                code = recovery.main(list(map(str, argv[3:])))
+            return subprocess.CompletedProcess(argv, code, stdout.getvalue(), '')
+        record = harvest.harvest(self.args, now=self.now, clear=lambda _: True, runner=runner)
+        self.assertEqual(record['verdict'], 'RECOVER', record.get('fault'))
+        self.assertTrue(record['capture_made'])
+        self.assertEqual([next(x for x in ('abort-session','terminal-pin','advance-head-pin') if x in argv)
+                          for argv in self.commands], ['abort-session','terminal-pin','advance-head-pin'])
+        snapshot = real_ledger.load_calibration_ledger_snapshot(self.ledger, self.pin, require_committed_pin=False)
+        self.assertEqual(snapshot.refusal_reasons, ())
+        self.assertEqual(snapshot.bracket_session_by_id[self.value['session_id']].state, 'aborted')
     def test_guard_missing_session_never_selects(self):
         self.snapshot.bracket_session_by_id = {}
         record = self.run_harvest()

@@ -102,6 +102,12 @@ class G2aInspectionTests(unittest.TestCase):
             env.update(flags)
             return subprocess.run(['/bin/zsh', str(self.f.chain)], env=env, capture_output=True, check=False)
 
+    def test_diagnostic_chain_explicitly_binds_member_attachment_to_frozen_pre_bracket_plan(self):
+        text = self.f.chain.read_text()
+        self.assertEqual(text.count('export JOULEWISE_G2A_PRE_BRACKET_PLAN="$G2A_FROZEN_PLAN"'), 1)
+        self.assertLess(text.index('export JOULEWISE_G2A_PRE_BRACKET_PLAN='), text.index('run_stage()'))
+        self.assertIn('--instrument-calibration-dir "$calibration_dir"', text)
+
     def test_argv_only_precedes_all_mutation_and_describes_actual_reservation(self):
         before = tree(self.f.base)
         result = self.run_chain(NIGHT_VERIFY_ONLY='1', NIGHT_RESERVATION_ARGV_ONLY='1')
