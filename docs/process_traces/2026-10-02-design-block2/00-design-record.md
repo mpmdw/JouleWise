@@ -101,3 +101,19 @@ calibration refusal (N4), no G2-a harvester (N5).
     for a failure mode with no evidence of occurring.
 11. **F9 rejected**: an early NULL saves no time, because the next arm's discovery treats the
     plan span as active until the same boundary.
+
+## 7. Gates that ran this session and what each caught (the pruning rule)
+
+| Gate or check | What it caught that touched a number or a window |
+|---|---|
+| Sol readiness scout (12) | Eight defects that would have refused or mis-run the window, including the stale 25F84 pre-calibration screen (a wrong admission threshold) and the stale 76-row ledger seed |
+| Lead review of the lane | Span 33,556 s (would have held the machine ~9 h per window); WindowDeadlineTests regression; NULL verdict missing; plan published before the arm notice |
+| Whole suite (34) | Nothing beyond the known local-only classes |
+| Sol executing review (31) | Stale span text in the runbook (doc only) |
+| Cold registration gate (51) | Clock-refused members counted toward the selection (C1); REFUSED instead of RECOVER (C2); no ledger source or head for a recovery window (F3). C1 touches the selected number directly |
+| Opus seal refuter (51r) | Later-window head rule for null re-arms (D1); C1 has no real-member evidence yet (D2) |
+| Sol delta review (32) | A masked negative test (no number) |
+| Cold Fable final pass (36) | Eight harvester guards unpinned by tests (a later edit could have removed the chain-exit SELECT condition silently) |
+| CI | Nothing |
+
+Session end: `done.json` SEALED; RUN_STATE HANDOFF `56faf8a1`; nothing left running.
