@@ -57,6 +57,25 @@ the Revision 6 C2 clone ledger, sha256 `3c9b6844…72fb`, 376 records, pin seque
 
 Later windows append their H′ pins below (registration §12, T6 with D1).
 
+### H′ 1 (2026-10-03, activation b07f1ebf): `w1` itself arms from H′
+
+H′ = `0fbadb63945dab8c6b24427f0c76b80762734776` (merge of PR #460). The first `w1` arm attempt
+(t0 1791013320, plan `d117-g2a-prefill-probe-20261003T0742Z`) stopped at recipe step2 before anything
+was published: the generator doubled the plan-id suffix of `G2A_ROOT`, so the chain would have refused
+at its input assertions. PR #460 fixed this (Sol executing review PASS, Fable final pass PASS), and the
+cold Fable ruling `docs/process_traces/2026-10-03-activation-b07f1ebf/31-fable-s12-ruling.md` classified
+it as a §11 fix: RULING EXTEND-SEAL-WITH-H-PRIME, no new seal. So `w1` is armed from H′, not from H.
+
+Pins at H′ (re-verified against the table above at `0fbadb63`):
+
+| File | sha256 at H′ |
+|---|---|
+| `scripts/gen_g2_phase_d.py` | `76a7f043558df361b5ab191d5b3cdc327f39e0c702599fed6faac925243c7c46` (changed by #460) |
+| the other eight pinned files | unchanged from the table above |
+| `configs/campaigns/g2a_prefill_probe_25g83/registration_block2.md` | `8e45a0e0f7ac7431c809ac780954308e7df813e57d6c4c2643641d0c5bcda5b8` (unchanged) |
+
+The arm head may be a later main commit that differs from H′ by records only; the arm record names it.
+
 ## Disclosures
 
 1. **D2 (refuter): no real member bundle at H has been shown with a `bounded` clock anchor.** C1
