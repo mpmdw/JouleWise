@@ -1855,3 +1855,19 @@ exec /bin/zsh "$REPO/scripts/night_chains/calibration_derivation_only.zsh" \
   --slot-custody-locator '/Users/edr/night-custody/derivation-20260912/runs/instrument_validation/derivation-20260912-epoch-d12'
 ```
 <!-- END GENERATED: derivation-night-wrapper -->
+
+## G2-a 25G83 night integration desk recipe
+
+Use window runbook §14 for the one-command `--new-g2a-window` authoring,
+inspection and `harvest_g2a_window.py` commands. Bind this runsheet's prospective
+G2-a inputs before inspection, using the retained C2 physical ledger seed
+(376 rows) and its committed pin in the selected measurement clone; the old
+76-row seed refuses. No ledger seed is embedded or repaired by the generator.
+
+The authoring command writes the D-166 v2 `DIAGNOSTIC_NO_PACK` plan, chain and
+sidecar with absolute clone/custody coordinates. Its literal programmed span is
+33556 s, with a minimum 34456 s window, and it prints the full desk/collection/
+harvest schedule. Review that schedule before the existing installer/arm recipe.
+Generic physical admission needs no Revision 6 prior-session manifest. Harvest
+uses the dedicated G2-a replay path and preserves complete source custody;
+operator pin review/commit and all live gates remain lead-owned.

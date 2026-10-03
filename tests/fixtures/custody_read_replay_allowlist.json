@@ -70,6 +70,20 @@
     "reason": "Retained-corpus CLI main -> extract_cells -> AuthenticatedConsumptionSession -> snapshot and bracket candidate discovery; derives extraction reports without mint, ledger append, binding publication, or analysis-manifest finalization."
   },
   {
+    "file": "scripts/harvest_g2a_window.py",
+    "function": "harvest",
+    "ordinal": 1,
+    "line": 127,
+    "reason": "G2-a harvest replays the full physical ledger only after a verified byte archive, authenticating the frozen baseline and capture custody for a diagnostic report. Subsequent abort and pin advancement use recover_calibration_ledger.py's governed issuing procedures, not this replay snapshot."
+  },
+  {
+    "file": "scripts/harvest_g2a_window.py",
+    "function": "harvest",
+    "ordinal": 2,
+    "line": 153,
+    "reason": "G2-a harvest re-evaluates retained member and pre/post bracket custody against live acceptance for its archived diagnostic verdict; no claim mint, binding publication or analysis-manifest finalization. Governed terminal-pin writes reauthenticate independently through the recovery CLI."
+  },
+  {
     "file": "scripts/harvest_window.py",
     "function": "harvest",
     "ordinal": 1,

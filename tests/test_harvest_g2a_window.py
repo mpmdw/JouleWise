@@ -1,0 +1,339 @@
+"""Fixture-only G2-a harvest orchestration; no live hardware evidence claimed."""
+from contextlib import ExitStack, redirect_stdout
+import copy
+import hashlib
+import io
+import json
+import os
+from pathlib import Path
+import subprocess
+from types import SimpleNamespace
+import unittest
+from unittest import mock
+from scripts import harvest_g2a_window as harvest
+from scripts import generate_g2a_probe_inputs as producer
+from scripts import summarize_g2a_prefill_probe as summary
+from tests.test_gen_g2a_window import G2aFixture, tree
+from tests import test_generate_g2a_probe_inputs as producer_tests
+from tests.test_generate_g2a_probe_inputs import IDENTITY, T1, ACCEPTANCE
+from tests.test_summarize_g2a_prefill_probe import retained_metadata, retained_summary
+
+
+class G2aHarvestTests(unittest.TestCase):
+    def setUp(self):
+        self.f = G2aFixture()
+        self.addCleanup(self.f.close)
+        self.p = producer_tests.GenerateG2AProbeInputsTests('test_any_ledger_snapshot_refusal_is_fatal')
+        self.p.setUp()
+        self.addCleanup(self.p.doCleanups)
+        self.p.root = self.f.g2a
+        wp = self.f.g2a/'window-plan'
+        for name in ('calibration_plan.json', 'identity-epoch.json', 't1-bindings.json'):
+            (wp/name).unlink()
+        self.p._build()
+        self.ledger = self.f.measurement/'runs/calibration_observation_ledger.jsonl'
+        self.pin = self.f.measurement/'configs/calibration/calibration_ledger_head.json'
+        self.binding = {'ledger': {'path': str(self.ledger), 'sha256': harvest.sha(self.ledger),
+                        'head_sequence': 1, 'head_digest': 'b'*64},
+                        'head_pin': {'path': str(self.pin), 'sha256': harvest.sha(self.pin)}}
+        with mock.patch.object(producer, '_derive_live_vectors', return_value=(IDENTITY, T1, ACCEPTANCE)), \
+                mock.patch.object(producer, '_authenticate_ledger_and_acceptance', return_value=self.binding):
+            producer.bind_window(root=self.f.g2a, ledger=self.ledger, head_pin=self.pin,
+                campaign_policy=producer.REPO_ROOT/'configs/campaign_policies/quiet_mac_p2_production.json',
+                power_policy='ac_high_power', window_id=self.f.plan_id,
+                session_id=self.f.plan_id+'-calibration', evidence_root_id='evidence-'+self.f.plan_id)
+        self.value = harvest.read(wp/'g2a-input-inventory.json')
+        ladder = harvest.read(wp/'prefill-prompt-ladder.json')
+        for stage in self.value['stages']:
+            rung = next(row for row in ladder['rungs'] if row['prefill_tokens'] == stage['prefill_tokens'])
+            for member in stage['members']:
+                path = self.f.g2a/'runs'/member['run_id']
+                path.mkdir(parents=True)
+                (path/'config.json').write_bytes((self.f.g2a/'prefill-probe-configs'/member['config_path']).read_bytes())
+                data = retained_summary(6)
+                data['status'] = 'succeeded'
+                (path/'summary_metrics.json').write_text(json.dumps(data)+'\n')
+                (path/'metadata.json').write_text(json.dumps(retained_metadata(member['run_id'], rung))+'\n')
+        night = self.f.night/'night'
+        night.mkdir()
+        (night/'courier.sent').write_text('delivered\n')
+        (night/'chain.started').write_text('{"pgid": 999999}\n')
+        (night/'chain.exited').write_text('{"exit_code":0}\n')
+        off = {'schema': harvest.network_time_off.SCHEMA, 'argv': list(harvest.network_time_off.OFF_ARGV),
+            'exit_code': 0, 'stdout': 'Network Time is already Off.\n', 'stderr': '',
+            'plan_id': self.f.plan_id, 'window_id': self.f.plan_id, 'boot_id': 'fixture-boot',
+            'epoch_s': 1000., 'monotonic_s': 900.}
+        (night/'network_time_off.json').write_text(json.dumps(off)+'\n')
+        self.session = SimpleNamespace(state='finalized', finalized_slots={},
+            plan_sha256=harvest.sha(wp/'calibration_plan.json'), runs_root=str(self.f.g2a/'runs'))
+        self.snapshot = SimpleNamespace(refusal_reasons=(), bracket_session_by_id={self.value['session_id']: self.session})
+        self.args = SimpleNamespace(plan=self.f.plan_path, archive_root=self.f.base/'archive', operator_identity='fixture-operator')
+        self.now = lambda: self.f.plan.t0_epoch_s+self.f.plan.window_max_s+300
+        self.commands = []
+        self.stack = ExitStack()
+        self.addCleanup(self.stack.close)
+        for obj, name, kwargs in (
+            (producer, 'check_harvest_inputs', {'return_value': None}),
+            (harvest, 'head_pin_for_receipt', {'return_value': {'sequence': 1, 'head_digest': 'b'*64}}),
+            (harvest, 'load_calibration_ledger_snapshot', {'return_value': self.snapshot}),
+            (harvest, 'validate_bundle', {'return_value': []}),
+            (harvest.brackets, 'build_calibration_bracket_binding', {'return_value': {'fixture': True}}),
+            (harvest.brackets, 'calibration_bracket_for_bundles', {'return_value': ({'status': 'passed'}, ())}),
+        ):
+            setattr(self, name, self.stack.enter_context(mock.patch.object(obj, name, **kwargs)))
+        self.check_inputs = self.check_harvest_inputs
+
+    def runner(self, argv, **kwargs):
+        self.commands.append(argv)
+        if 'advance-head-pin' in argv:
+            self.pin.write_text(json.dumps({'sequence': 1, 'head_digest': 'b'*64, 'advanced': True})+'\n')
+        if 'abort-session' in argv:
+            self.ledger.write_bytes(self.ledger.read_bytes()+b'{"fixture_abort":true}\n')
+        result = {'sequence': 1, 'head_digest': 'b'*64} if 'terminal-pin' in argv else {}
+        return subprocess.CompletedProcess(argv, 0, json.dumps(result), '')
+
+    def run_harvest(self, **kwargs):
+        return harvest.harvest(self.args, now=self.now, clear=lambda _: True, runner=self.runner, **kwargs)
+
+    def test_complete_window_selects_archives_every_byte_and_advances_via_governed_procedure(self):
+        before = tree(self.f.g2a)
+        record = self.run_harvest()
+        self.assertEqual(record['verdict'], 'SELECT')
+        self.assertEqual(sum(row['valid'] for row in record['members']), 24)
+        self.assertEqual(tree(self.f.g2a), before)
+        self.assertTrue(record['pin_advance']['needs_operator_commit'])
+        self.assertEqual(harvest.sha(Path(record['selection']['path'])), record['selection']['sha256'])
+        self.assertEqual(harvest.read(record['selection']['path'])['selected_prefill_tokens'], 512)
+        for line in (self.args.archive_root/'SHA256SUMS').read_text().splitlines():
+            expected, name = line.split('  ', 1)
+            self.assertEqual(harvest.sha(self.args.archive_root/name), expected)
+        self.check_inputs.assert_called_once()
+        self.assertEqual(self.check_inputs.call_args.kwargs['measurement_root'], self.f.measurement)
+        self.assertEqual(self.validate_bundle.call_count, 24)
+        self.assertTrue(all(call.kwargs['strict'] for call in self.validate_bundle.call_args_list))
+        self.assertEqual(self.calibration_bracket_for_bundles.call_args.kwargs['mode'], 'read_replay')
+        self.assertEqual([next(x for x in ('terminal-pin', 'advance-head-pin') if x in argv) for argv in self.commands],
+                         ['terminal-pin', 'advance-head-pin'])
+        advance = self.commands[-1]
+        self.assertIn('--execute', advance)
+        self.assertEqual(advance[advance.index('--operator-identity')+1], 'fixture-operator')
+
+    def test_counts_under_three_are_valid_and_selector_uses_registered_floor(self):
+        run_id = 'g2a-small-p0512-r01'
+        path = self.f.g2a/'runs'/run_id/'summary_metrics.json'
+        data = harvest.read(path)
+        data['window_evidence_precheck']['phase']['prefill']['windows'][0]['in_window_sample_count'] = 2
+        path.write_text(json.dumps(data)+'\n')
+        record = self.run_harvest()
+        self.assertEqual(record['verdict'], 'SELECT')
+        self.assertTrue(next(row for row in record['members'] if row['run_id'] == run_id)['valid'])
+        receipt = harvest.read(self.args.archive_root/'derived/counts.json')
+        self.assertEqual(next(row for row in receipt['runs'] if row['run_id'] == run_id)['in_window_sample_count'], 2)
+        self.assertEqual(harvest.read(record['selection']['path'])['selected_prefill_tokens'], 1024)
+
+    def test_time_delivery_and_process_gates_precede_archive_and_authentication(self):
+        for case in ('early', 'delivery', 'alive'):
+            with self.subTest(case=case):
+                marker = self.f.night/'night/courier.sent'
+                if case == 'delivery':
+                    marker.unlink()
+                with self.assertRaises(harvest.HarvestRefusal):
+                    harvest.harvest(self.args, now=lambda: self.now()-(1 if case == 'early' else 0),
+                                    clear=lambda _: case != 'alive', runner=self.runner)
+                if case == 'delivery':
+                    marker.write_text('delivered\n')
+                self.assertFalse(self.args.archive_root.exists())
+                self.check_inputs.assert_not_called()
+        self.assertEqual(self.run_harvest()['verdict'], 'SELECT')
+
+    def test_open_pre_screen_stop_recovers_and_uses_governed_abort_then_terminal_pin(self):
+        self.session.state = 'open'
+        self.snapshot.refusal_reasons = ('calibration_ledger_bracket_session_open',)
+        log = self.f.g2a/'operator-logs/window-chain.log'
+        log.parent.mkdir()
+        log.write_text('pre_calibration_screen=failed\n')
+        (self.f.night/'night/chain.exited').write_text('{"exit_code":1}\n')
+        original = self.ledger.read_bytes()
+        record = self.run_harvest()
+        self.assertEqual(record['verdict'], 'RECOVER')
+        self.assertIn('pre_screen_stop', record['cause_codes'])
+        self.assertIn('abort-session', self.commands[0])
+        self.assertEqual((self.args.archive_root/'physical-ledger/ledger.jsonl').read_bytes(), original)
+        self.assertNotEqual((self.args.archive_root/'derived/terminal-ledger.jsonl').read_bytes(), original)
+
+    def test_member_shortfall_recovers_and_summary_counts_only_valid_members(self):
+        bad = 'g2a-small-p0512-r01'
+        self.validate_bundle.side_effect = lambda path, **_: ['raw_mismatch'] if path.name == bad else []
+        record = self.run_harvest()
+        self.assertEqual(record['verdict'], 'RECOVER')
+        self.assertIn('rung_valid_small_members_shortfall', record['cause_codes'])
+        self.assertEqual(harvest.read(self.args.archive_root/'derived/summary.json')[0]['small_members'], 4)
+        self.assertNotIn('selection', record)
+
+    def test_invalid_member_clock_metadata_preserves_recovery_verdict(self):
+        bad = 'g2a-small-p0512-r01'
+        (self.f.g2a/'runs'/bad/'metadata.json').write_text('{broken fixture metadata')
+        self.validate_bundle.side_effect = lambda path, **_: ['metadata_invalid'] if path.name == bad else []
+        record = self.run_harvest()
+        self.assertEqual(record['verdict'], 'RECOVER')
+        rows = harvest.read(self.args.archive_root/'derived/network-time.json')['captures']
+        row = next(row for row in rows if row['capture_id'] == bad)
+        self.assertEqual(row['metadata_status'], 'unreadable')
+        self.assertEqual(row['offset_comparison'], 'not comparable')
+
+    def test_post_bracket_failure_recovers_without_selector(self):
+        self.calibration_bracket_for_bundles.return_value = ({'status': 'failed'}, ('post_bracket_failure',))
+        record = self.run_harvest()
+        self.assertEqual(record['verdict'], 'RECOVER')
+        self.assertEqual(record['cause_codes'], ['post_bracket_failure'])
+        self.assertNotIn('selection', record)
+
+    def test_valid_low_counts_at_every_rung_selects_registered_collect_4096_fallback(self):
+        for stage in self.value['stages'][:4]:
+            for member in stage['members']:
+                path = self.f.g2a/'runs'/member['run_id']/'summary_metrics.json'
+                value = retained_summary(2)
+                value['status'] = 'succeeded'
+                path.write_text(json.dumps(value)+'\n')
+        record = self.run_harvest()
+        self.assertEqual(record['verdict'], 'SELECT')
+        selection = harvest.read(record['selection']['path'])
+        self.assertEqual(selection['collection_prefill_tokens'], 4096)
+        self.assertEqual(selection['refusal']['fallback_action'], 'collect_at_4096')
+        self.assertIsNone(selection['selected_prefill_tokens'])
+        self.assertEqual(sum(row['valid'] for row in record['members']), 24)
+
+    def test_window_refused_before_chain_start_is_null_without_session_or_selection(self):
+        (self.f.night/'night/chain.started').unlink()
+        (self.f.night/'night/chain.exited').unlink()
+        record = self.run_harvest()
+        self.assertEqual(record['verdict'], 'NULL')
+        self.assertEqual(record['cause_codes'], ['chain_never_started'])
+        self.assertNotIn('selection', record)
+        self.assertIsNone(record['pin_advance'])
+        self.assertEqual(self.commands, [])
+        self.assertEqual(harvest.read(self.args.archive_root/'harvest.json')['verdict'], 'NULL')
+
+    def test_missing_or_unadmitted_OFF_receipt_recovers(self):
+        (self.f.night/'night/network_time_off.json').unlink()
+        record = self.run_harvest()
+        self.assertEqual(record['verdict'], 'RECOVER')
+        self.assertIn('network_time_off_not_admitted', record['cause_codes'])
+
+    def test_unfinalized_calibration_capture_retains_its_clock_outcome(self):
+        self.session.state = 'open'
+        self.snapshot.refusal_reasons = ('calibration_ledger_bracket_session_open',)
+        (self.f.night/'night/chain.exited').write_text('{"exit_code":1}\n')
+        attempt = self.f.g2a/'runs/instrument_validation/partial-calibration'
+        (attempt/'raw').mkdir(parents=True)
+        (attempt/'raw/powermetrics.plist').write_bytes(b'fixture partial capture')
+        (attempt/'instrument_evidence.json').write_text(json.dumps({'clock_anchor': {'status': 'unresolved'}})+'\n')
+        self.assertEqual(self.run_harvest()['verdict'], 'RECOVER')
+        rows = harvest.read(self.args.archive_root/'derived/network-time.json')['captures']
+        row = next(row for row in rows if row['capture_id'] == attempt.name)
+        self.assertEqual(row['within_capture']['status'], 'unresolved')
+        self.assertEqual(row['offset_comparison'], 'not comparable')
+
+    def test_archive_coordinate_inside_source_refuses_without_changing_evidence(self):
+        before = tree(self.f.g2a)
+        output = io.StringIO()
+        with redirect_stdout(output):
+            code = harvest.main(['--plan', str(self.args.plan), '--archive-root', str(self.f.g2a/'bad-archive'),
+                '--operator-identity', self.args.operator_identity], now=self.now, clear=lambda _: True, runner=self.runner)
+        self.assertEqual(code, 3)
+        self.assertEqual(tree(self.f.g2a), before)
+        report = Path(output.getvalue().split('harvest=', 1)[1].split(' sha256=', 1)[0])
+        self.addCleanup(lambda: harvest.shutil.rmtree(report.parent))
+        self.assertEqual(harvest.read(report)['verdict'], 'REFUSED')
+
+    def test_authentication_fault_refuses_and_preserves_archive_without_advancing_pin(self):
+        self.check_inputs.side_effect = producer.G2AProbeError('fixture_binding_fault')
+        before = self.pin.read_bytes()
+        record = self.run_harvest()
+        self.assertEqual(record['verdict'], 'REFUSED')
+        self.assertEqual(self.pin.read_bytes(), before)
+        self.assertEqual(self.commands, [])
+        self.assertTrue((self.args.archive_root/'SHA256SUMS').exists())
+
+    def test_existing_counts_and_summary_must_match_regenerated_bytes(self):
+        wp = self.f.g2a/'window-plan'
+        summary.main(['--config-root', str(self.f.g2a/'prefill-probe-configs'), '--input-inventory',
+            str(wp/'g2a-input-inventory.json'), '--runs-root', str(self.f.g2a/'runs'), '--counts-output',
+            str(wp/'d166-prefill-counts-receipt.json'), '--summary-output', str(wp/'d166-prefill-resolvability-summary.json')])
+        self.assertEqual(self.run_harvest()['verdict'], 'SELECT')
+
+    def test_summary_byte_tamper_refuses_with_original_bytes_archived(self):
+        path = self.f.g2a/'window-plan/d166-prefill-resolvability-summary.json'
+        path.write_text('[]\n')
+        record = self.run_harvest()
+        self.assertEqual(record['verdict'], 'REFUSED')
+        self.assertEqual(self.commands, [])
+        self.assertEqual((self.args.archive_root/'g2a-root/window-plan'/path.name).read_bytes(), path.read_bytes())
+
+    def test_roster_omission_refuses_before_capture_validation(self):
+        path = self.f.g2a/'window-plan/g2a-input-inventory.json'
+        value = harvest.read(path)
+        value['stages'][0]['members'].pop()
+        path.write_text(json.dumps(value)+'\n')
+        self.assertEqual(self.run_harvest()['verdict'], 'REFUSED')
+        self.validate_bundle.assert_not_called()
+
+    def test_copy_corruption_refuses_before_any_authentication(self):
+        copytree = harvest.shutil.copytree
+        def corrupt(source, target, *args, **kwargs):
+            result = copytree(source, target, *args, **kwargs)
+            target = Path(target)
+            (target/'extra-fault').write_text('copy fault\n')
+            return result
+        with mock.patch.object(harvest.shutil, 'copytree', side_effect=corrupt), self.assertRaises(harvest.HarvestRefusal):
+            self.run_harvest()
+        self.check_inputs.assert_not_called()
+        self.assertFalse(self.args.archive_root.exists())
+
+    def test_archive_preserves_literal_symlink_without_following_it(self):
+        link = self.f.g2a/'retained-link'
+        link.symlink_to('window-plan/calibration_plan.json')
+        self.assertEqual(self.run_harvest()['verdict'], 'SELECT')
+        archived = self.args.archive_root/'g2a-root/retained-link'
+        self.assertTrue(archived.is_symlink())
+        self.assertEqual(os.readlink(archived), os.readlink(link))
+
+    def test_stdout_is_custody_only(self):
+        output = io.StringIO()
+        with redirect_stdout(output):
+            code = harvest.main(['--plan', str(self.args.plan), '--archive-root', str(self.args.archive_root),
+                    '--operator-identity', self.args.operator_identity], now=self.now, clear=lambda _: True, runner=self.runner)
+        self.assertEqual(code, 0)
+        text = output.getvalue()
+        self.assertIn('verdict=SELECT members=24/24', text)
+        self.assertNotRegex(text, r'energy|fiducial|drift|in_window_sample_count|small_minimum_count')
+
+
+class G2aClockReportTests(unittest.TestCase):
+    def test_comparable_system_clock_delta_and_different_sources(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            paths = []
+            for name, kind, offset in (('steady', 'system', 100.01), ('moved', 'system', 100.02), ('synthetic', 'fake', 100.02)):
+                path = root/name
+                path.mkdir()
+                (path/'metadata.json').write_text(json.dumps({'clock': {'kind': kind,
+                    'wall_minus_monotonic_start_s': offset, 'wall_minus_monotonic_end_s': offset},
+                    'uncertainty_evidence': {'clock_anchor': {'status': 'bounded'}}}))
+                paths.append((name, path))
+            record = harvest.clock_report({'epoch_s': 1000., 'monotonic_s': 900.}, paths)
+        rows = record['captures']
+        self.assertFalse(rows[0]['flagged_above_0_015_s'])
+        self.assertTrue(rows[1]['flagged_above_0_015_s'])
+        self.assertEqual(rows[2]['offset_comparison'], 'not comparable')
+        self.assertEqual(rows[0]['within_capture']['status'], 'bounded')
+
+    def test_group_probe_refuses_alive_and_unknown_and_accepts_gone(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as temporary:
+            night = Path(temporary)
+            (night/'chain.started').write_text('{"pgid":12345}')
+            for error, expected in ((None, False), (PermissionError(), False), (ProcessLookupError(), True)):
+                with mock.patch.object(harvest.os, 'killpg', side_effect=error):
+                    self.assertEqual(harvest.group_clear(night), expected)

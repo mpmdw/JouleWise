@@ -1,6 +1,7 @@
 {
   "_provenance": "RE-MEASURED 2026-09-29, CI/test trim. Local whole-module MODULE PASS/FAIL seconds from PYTHONDONTWRITEBYTECODE=1 python3 -B scripts/shard_tests.py --workers 6 on macOS / Python 3.14.7 (system python3; no venv), branch test/2026-09-29-ci-trim, base 32ff901374024defa97fc3d137c5a699423676e7. Hosted run 36382310251 could not be fetched (api.github.com unreachable). Every one of 261 currently discovered modules has an executed local observation. These are default-run timings: JOULEWISE_FULL_CORPUS unset; the scored random corpora are opt-in, while named regressions and stress cases 0 and 1 remain enabled. Failed module observations: ['tests.test_axi_controller_events', 'tests.test_axi_mock_spec', 'tests.test_collector_analysis_manifest_id', 'tests.test_issue_calibration_acceptance_generation', 'tests.test_run_night']. Module durations exclude import time and are scheduling hints, not hardware or claim evidence. The retained split_modules declared-test/remainder weights are historical CI-TRIM-02 (2026-09-15) observations; this run measured whole modules and did not remeasure those units.",
   "unknown_module_weight_seconds": 40.514,
+  "_g2a_lane_2026_10_02_observations": "Executed with /Users/edr/code/JouleWise/.venv/bin/python -B -m unittest: tests.test_gen_g2a_window, 10 tests, OK, 5.024 s; tests.test_harvest_g2a_window, 20 tests, OK, 10.486 s. Fixture/tooling scheduling hints only; no live hardware evidence.",
   "_unknown_module_weight_rationale": "Arithmetic MEAN of 259 executed local default-run whole-module timings, excluding the two exclusive calibration modules, rounded to milliseconds. This is a scheduling hint for new modules; discovery still determines coverage. Legacy default_module_weight() callers retain the median fallback.",
   "_zero_observation_floor": "Executed zero-rounded observations floored to 0.001 s for load_timing_map positivity: ['tests.test_analysis_ratio', 'tests.test_audit_clock', 'tests.test_audit_report', 'tests.test_env_locks', 'tests.test_floor_mint_pinsets_schema', 'tests.test_midcampaign_cure_generation_docs', 'tests.test_node_worker_subprocess', 'tests.test_scored_packer_fuzz', 'tests.test_ssh_transport'].",
   "exclusive_modules": {
@@ -175,6 +176,7 @@
     "tests.test_gen_derivation_night": 48.36,
     "tests.test_gen_evidence_night": 6.49,
     "tests.test_gen_g2_phase_d": 0.266,
+    "tests.test_gen_g2a_window": 5.024,
     "tests.test_gen_state": 4.97,
     "tests.test_generate_g2a_probe_inputs": 0.93,
     "tests.test_generate_matrix": 8.524,
@@ -182,6 +184,7 @@
     "tests.test_gensuite": 6.763,
     "tests.test_git_fixture_hygiene": 0.019,
     "tests.test_git_fixture_maintenance": 7.839,
+    "tests.test_harvest_g2a_window": 10.486,
     "tests.test_identity_pins": 20.269,
     "tests.test_idle_admission": 2.826,
     "tests.test_idle_dependence": 0.049,

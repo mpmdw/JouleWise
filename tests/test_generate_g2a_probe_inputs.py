@@ -4,6 +4,7 @@ import copy
 import hashlib
 import importlib.util
 import json
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -216,6 +217,53 @@ class GenerateG2AProbeInputsTests(unittest.TestCase):
     def _build_and_bind(self) -> None:
         self._build()
         self._bind()
+
+    def test_harvest_check_authenticates_frozen_prefix_after_appended_receipts(self) -> None:
+        self._build()
+        ledger = self.root.parent / "physical-ledger.jsonl"
+        prefix = (ROOT / 'tests/fixtures/d117_v2_production/issued/calibration_observation_ledger.jsonl').read_bytes()
+        ledger.write_bytes(prefix)
+        binding = copy.deepcopy(LEDGER_BINDING)
+        binding["ledger"].update(path=probe._display_path(ledger), sha256=probe._sha256_bytes(prefix), head_sequence=76)
+        vectors = (copy.deepcopy(IDENTITY), copy.deepcopy(T1), copy.deepcopy(ACCEPTANCE))
+        with mock.patch.object(probe, "_derive_live_vectors", return_value=vectors), \
+                mock.patch.object(probe, "_authenticate_ledger_and_acceptance", return_value=binding):
+            probe.bind_window(root=self.root, ledger=ledger,
+                head_pin=ROOT / "configs/calibration/calibration_ledger_head.json", campaign_policy=POLICY,
+                power_policy="ac_high_power", window_id="window-g2a-test", session_id="session-g2a-test",
+                evidence_root_id="evidence-g2a-test")
+        ledger.write_bytes(prefix + b'{"appended_fixture_receipt":true}\n')
+        def authenticate(**kwargs):
+            self.assertEqual(kwargs["ledger"].read_bytes(), prefix)
+            value = copy.deepcopy(binding)
+            value["ledger"]["path"] = str(kwargs["ledger"])
+            return value
+        arguments = dict(root=self.root, panel_path=PANEL, ledger=ledger,
+            head_pin=ROOT / "configs/calibration/calibration_ledger_head.json", campaign_policy=POLICY,
+            at_reservation=True)
+        with mock.patch.object(probe, "_derive_live_vectors", return_value=vectors), \
+                mock.patch.object(probe, "_authenticate_ledger_and_acceptance", side_effect=authenticate) as enforcing:
+            probe.check_inputs(**arguments)
+            enforcing.assert_called_once()
+            ledger.write_bytes(prefix.replace(b'"sequence":1', b'"sequence":9', 1) + b'{"appended_fixture_receipt":true}\n')
+            with self.assertRaisesRegex(probe.G2AProbeError, "calibration_ledger_frozen_prefix_mismatch"):
+                probe.check_inputs(**arguments)
+            self.assertEqual(enforcing.call_count, 1)
+
+    def test_harvest_check_routes_through_owning_clone_and_refuses_cli_failure(self) -> None:
+        clone = Path('/test/measurement-clone')
+        runner = mock.Mock(return_value=subprocess.CompletedProcess([], 0, 'PASS fixture', ''))
+        kwargs = dict(measurement_root=clone, root=self.root, ledger=clone/'runs/ledger.jsonl',
+                      head_pin=clone/'configs/calibration/calibration_ledger_head.json', runner=runner)
+        probe.check_harvest_inputs(**kwargs)
+        argv = runner.call_args.args[0]
+        self.assertEqual(argv[:4], [str(clone/'.venv/bin/python'), '-B',
+                                  str(clone/'scripts/generate_g2a_probe_inputs.py'), 'check'])
+        self.assertEqual(argv[-1], '--at-reservation')
+        self.assertEqual(runner.call_args.kwargs['cwd'], clone)
+        runner.return_value = subprocess.CompletedProcess([], 1, '', 'fixture refusal')
+        with self.assertRaisesRegex(probe.G2AProbeError, 'harvest_frozen_input_authentication_failed'):
+            probe.check_harvest_inputs(**kwargs)
 
     def _inventory(self) -> dict:
         return json.loads(

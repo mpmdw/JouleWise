@@ -3075,10 +3075,25 @@ def _read_start_manifest(plan):
     return value, {"file": str(path), "sha256": hashlib.sha256(raw).hexdigest()}
 
 
+def _revision6_window(plan):
+    if plan.registration_path is None:
+        return False
+    path = Path(plan.registration_path)
+    if not path.is_absolute():
+        path = Path(plan.measurement_root) / path
+    return _sha256_path(path) == night_gate.REV6_25G83_REGISTRATION_SHA256
+
+
 def _derivation_start_budget(plan):
+    span = DERIVATION_PROGRAMMED_SPAN_S
+    if not _revision6_window(plan):
+        literal = night_gate.chain_literal(Path(plan.chain_path).read_text(), "NIGHT_PROGRAMMED_SPAN_S")
+        if not re.fullmatch(r"[1-9][0-9]*", literal):
+            raise ValueError("NIGHT_PROGRAMMED_SPAN_S must be a positive literal integer")
+        span = int(literal)
     now_epoch, now_monotonic = time.time(), time.monotonic()
-    deadline = plan.t0_epoch_s + plan.window_max_s - DERIVATION_PROGRAMMED_SPAN_S
-    return {"programmed_span_s": DERIVATION_PROGRAMMED_SPAN_S,
+    deadline = plan.t0_epoch_s + plan.window_max_s - span
+    return {"programmed_span_s": span,
             "window_end_epoch_s": plan.t0_epoch_s + plan.window_max_s,
             "latest_chain_start_epoch_s": deadline,
             "latest_chain_start_monotonic_s": now_monotonic + deadline - now_epoch}
@@ -3093,8 +3108,19 @@ def _write_start_conditions(plan, night_dir, manifest=None, manifest_evidence=No
                             budget=None, *, refusal_reason=None):
     """Shared Revision 6 interface §1/T; letters follow sealed §6.2."""
     custody = Path(plan.custody_root)
-    budget = budget if budget is not None else _derivation_start_budget(plan)
     errors = []
+    try:
+        revision6 = _revision6_window(plan)
+    except OSError as error:
+        revision6 = False
+        errors.append(str(error))
+    if budget is None:
+        try:
+            budget = _derivation_start_budget(plan)
+        except (OSError, ValueError) as error:
+            errors.append(str(error))
+            budget = {"latest_chain_start_epoch_s": plan.t0_epoch_s,
+                      "latest_chain_start_monotonic_s": time.monotonic()}
 
     def evidence(path):
         item = {"path": path.relative_to(custody).as_posix(), "sha256": None}
@@ -3108,24 +3134,26 @@ def _write_start_conditions(plan, night_dir, manifest=None, manifest_evidence=No
 
     manifest_path = custody / "start_conditions_manifest.json"
     entries = {
-        "a_prior_session_manifest": evidence(manifest_path),
-        "b_blind_checks": evidence(manifest_path),
         "c_agent_census": evidence(night_dir / "receipt.json"),
         "d_thermal": evidence(night_dir / "receipt.json"),
         "e_battery_float": evidence(night_dir / "receipt.json"),
         "f_network_time_off_receipt": evidence(night_dir / network_time_off.RECEIPT_BASENAME),
         "g_clean_dwell": evidence(night_dir / "clean_dwell.output.txt"),
     }
-    if manifest is None:
+    if revision6:
+        entries = {"a_prior_session_manifest": evidence(manifest_path),
+                   "b_blind_checks": evidence(manifest_path), **entries}
+    if revision6 and manifest is None:
         try:
             manifest, manifest_evidence = _read_start_manifest(plan)
         except (OSError, ValueError) as error:
             errors.append(str(error))
             manifest = {}
-    if manifest_evidence and entries["a_prior_session_manifest"]["sha256"] != manifest_evidence["sha256"]:
+    if revision6 and manifest_evidence and entries["a_prior_session_manifest"]["sha256"] != manifest_evidence["sha256"]:
         errors.append("start-conditions custody changed during admission")
-    prior = manifest.get("prior_revision6_session")
-    entries["b_blind_checks"]["decision_sha256"] = prior.get("decision_sha256") if prior else None
+    prior = (manifest or {}).get("prior_revision6_session") if revision6 else None
+    if revision6:
+        entries["b_blind_checks"]["decision_sha256"] = prior.get("decision_sha256") if prior else None
     if prior is not None:
         try:
             if _sha256_path(Path(prior["harvest_file"])) != prior["harvest_sha256"]:
@@ -3133,7 +3161,8 @@ def _write_start_conditions(plan, night_dir, manifest=None, manifest_evidence=No
         except OSError as error:
             errors.append(str(error))
     try:
-        session_id = night_gate.chain_literal(Path(plan.chain_path).read_text(), "SESSION_ID")
+        session_id = (night_gate.chain_literal(Path(plan.chain_path).read_text(), "SESSION_ID")
+                      if revision6 else plan.plan_id)
     except (OSError, ValueError) as error:
         session_id = None
         errors.append(str(error))
@@ -3177,7 +3206,8 @@ def _write_start_conditions(plan, night_dir, manifest=None, manifest_evidence=No
     if _derivation_budget_remaining(budget) <= 0:
         errors.append("derivation start deadline exceeded before chain claim")
     reason = refusal_reason or ("; ".join(errors) if errors else None)
-    record = {"schema": "joulewise.revision6.start_conditions.v1",
+    record = {"schema": ("joulewise.revision6.start_conditions.v1" if revision6
+                         else "joulewise.calibration.start_conditions.v1"),
               "session_id": session_id, "plan_id": plan.plan_id,
               "result": "refused" if reason else "admitted", "refusal_reason": reason,
               "evidence": entries, "boot_id": boot.lower() if boot else None,
@@ -3365,7 +3395,8 @@ def run_night(
             and Path(plan.chain_path).is_file()
             and night_gate.probe_payload_kind(Path(plan.chain_path).read_text()) != "quiet_predicate_evidence"):
         try:
-            manifest, manifest_evidence = _read_start_manifest(plan)
+            manifest, manifest_evidence = (_read_start_manifest(plan) if _revision6_window(plan)
+                                           else (None, None))
             budget = _derivation_start_budget(plan)
             _admit_network_time_off(plan, night_dir,
                 during_settle=lambda: _admit_derivation_clean_dwell(plan, night_dir, budget), budget=budget)

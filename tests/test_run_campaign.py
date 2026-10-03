@@ -11989,5 +11989,33 @@ class D100MembershipRepairTests(unittest.TestCase):
         )
 
 
+class G2aLowCountCampaignTests(unittest.TestCase):
+    def test_unresolvable_prefill_is_strict_valid_and_does_not_spend_failure_budget(self):
+        """Actual mock capture/reducer/CLI and campaign, never live evidence."""
+        from joulewise.cli import validate_bundle
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            configs, runs = root / "configs", root / "runs"
+            configs.mkdir()
+            for index in (1, 2):
+                value = json.loads(BASE_CONFIG.read_bytes())
+                value["run_id"] = f"g2a-short-prefill-{index}"
+                value["workload_profile"].update(prompt_tokens=1, output_tokens=512)
+                (configs / f"{index}.json").write_text(json.dumps(value) + "\n")
+            result = run_campaign(configs, runs, max_failures=1)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            for index in (1, 2):
+                path = runs / f"g2a-short-prefill-{index}"
+                self.assertEqual(validate_bundle(path, strict=True), [])
+                summary = json.loads((path / "summary_metrics.json").read_bytes())
+                self.assertEqual(summary["status"], "succeeded")
+                self.assertEqual(summary["measurement_quality"]["phase_identifiability"]["prefill"],
+                                 "not_resolvable_sample_count")
+                self.assertLess(summary["window_evidence_precheck"]["phase"]["prefill"]["windows"][0][
+                    "in_window_sample_count"], 3)
+            rows = read_jsonl(runs / "campaign_log.jsonl")
+            self.assertEqual([row["status"] for row in rows], ["ok", "ok"])
+
+
 if __name__ == "__main__":
     unittest.main()

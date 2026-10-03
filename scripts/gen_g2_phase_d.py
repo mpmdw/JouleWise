@@ -5,8 +5,14 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import json
+import math
 import re
+import shlex
+import subprocess
 import sys
+import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 
@@ -18,6 +24,99 @@ RUNSHEET_PATH = (
 )
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
+
+# Code-defined fixed work: 9 settles, 8 stage countdowns, 24 captures at
+# idle=75, warmup dwell=5, post dwell=1 (producer + production policy), two
+# 59-pulse captures (3*BASELINE_S + 3*(1+1.5) + pulse_schedule(59)[-1][1]
+# = 196.703125), and two calibration display/countdown pauses (20+5).
+# Variable work (model load, warmup, prefill, 512-token decode, cooldown,
+# admission, reduction, custody) is sized from the runsheet's documented
+# historical cadence, never from bundle timing: about 148 s per member at the
+# then idle of 30 s ("preparation budget" in SHAKEDOWN-G2-RUNSHEET.md), so
+# about 148 - 30 - 5 - 1 = 112 s of non-idle work per member. Allowance:
+# small member 240 s (2 x 112, rounded up), large member 300 s (bigger load,
+# slower decode). Per stage 180 s (input/admission/order/census 120 + final
+# reduction/logging 60). Shared 1440 s: reservation 120 + two writers' custody
+# passes 2*(WRITER_CUSTODY_PASSES+1)*120 + terminal custody, input
+# authentication and summary 3*120. Calibration readiness, allocation,
+# overshoot and pin custody 420 s.
+# ceil(7947.40625 + 20*240 + 4*300 + 8*180 + 1440 + 420) = 17248 seconds.
+# Orchestrator ruling (block-2 design record 00, item 7): a first sizing from
+# code worst cases (10 and 5 tokens/s decode, the 300 s cooldown cap and an idle
+# retry on EVERY member) gave 33556 s and would have held the machine about
+# nine hours for a chain of about three. An overrun is still refused by the
+# driver's window expiry; the harvest then returns RECOVER.
+SMALL_MEMBER_ALLOWANCE_S = 240
+LARGE_MEMBER_ALLOWANCE_S = 300
+
+
+def programmed_span_s():
+    """Size from prospective producer/policy/protocol code, without telemetry."""
+    from scripts import generate_g2a_probe_inputs as producer
+    from joulewise.powermetrics_fiducial import (
+        BASELINE_S, WARMUP_PULSE_COUNT, PULSE_DURATION_S, PULSE_COUNT, pulse_schedule,
+    )
+    from joulewise.night_agent_install import WRITER_CUSTODY_PASSES
+
+    panel = producer.load_model_panel(REPO_ROOT / "configs/model_panels/qwen3_4bit.json")
+    rung = {"prefill_tokens": max(producer.PREFILL_LENGTHS), "prompt_text": "sizing only",
+            "prompt_token_ids": [0], "prompt_token_ids_sha256": "0" * 64,
+            "prompt_text_utf8_sha256": "0" * 64}
+    configs = {role: producer._config_for(role=role, entry=panel.get(producer.EXPECTED_MODEL_IDS[role]),
+        rung=rung, run_id="sizing", panel_sha="0" * 64) for role in producer.MODEL_ROLES}
+    policy = json.loads((REPO_ROOT / "configs/campaign_policies/quiet_mac_p2_production.json").read_bytes())
+    rungs = len(producer.PREFILL_LENGTHS)
+    capture = 3 * BASELINE_S + WARMUP_PULSE_COUNT * (PULSE_DURATION_S + 1.5) + pulse_schedule(PULSE_COUNT)[-1][1]
+    member_dwells = sum(count * (configs[role]["sampling"]["idle_seconds"]
+        + configs[role]["sampling"]["warmup_seconds"] + policy["post_window_sampling_dwell_s"])
+        for role, count in (("small", 5), ("large", 1)))
+    fixed = (1 + 2 * rungs) * 600 + 2 * rungs * 20 + rungs * member_dwells + 2 * capture + 2 * (20 + 5)
+    return math.ceil(fixed + 5*rungs*SMALL_MEMBER_ALLOWANCE_S + rungs*LARGE_MEMBER_ALLOWANCE_S + 2*rungs*180
+                     + 120 + 2*(WRITER_CUSTODY_PASSES+1)*120 + 3*120 + 420)
+
+
+NIGHT_PROGRAMMED_SPAN_S = programmed_span_s()
+
+
+def integrated_g2a_chain(chain: str, *, measurement_root: Path, g2a_root: Path,
+                         night_root: Path, plan_id: str) -> str:
+    """Specialize reviewed shell bytes and put inspection before mutation."""
+    values = {"CALIBRATION_LEDGER": measurement_root / "runs/calibration_observation_ledger.jsonl",
+              "LEDGER_HEAD_PIN": measurement_root / "configs/calibration/calibration_ledger_head.json",
+              "G2A_ROOT": g2a_root}
+    for name, value in values.items():
+        chain, count = re.subn(r"^export " + name + r"=.*$",
+                              lambda _: "export " + name + "=" + shlex.quote(str(value)),
+                              chain, flags=re.MULTILINE)
+        if count != 1:
+            raise ValueError(f"{name}: expected one source export")
+    old_id = re.search(r"^export G2A_WINDOW_ID=(.+)$", chain, re.MULTILINE)[1]
+    chain = re.sub(r"^export (G2A_[A-Z_]+)=(.*)$",
+        lambda row: ('export ' + row[1] + '=' + shlex.quote(row[2].replace(old_id, plan_id))
+                     if old_id in row[2] else row[0]), chain, flags=re.MULTILINE)
+    # The array is the single reservation argv used by inspection and execution.
+    start = chain.index('"$PY" "$REPO/scripts/reserve_calibration_window_bracket.py" \\\n')
+    end = chain.index("  --execute\n", start) + len("  --execute\n")
+    argv = chain[start:end].removesuffix("  --execute\n")
+    header = (
+        f"export NIGHT_PROGRAMMED_SPAN_S={NIGHT_PROGRAMMED_SPAN_S}\n"
+        "export NIGHT_CHAIN_INTERFACE=g2a-reservation-v1\n"
+        f"export JOULEWISE_NIGHT_PLAN_ID={shlex.quote(plan_id)}\n"
+        f"export JOULEWISE_CALIBRATION_REFUSAL_PATH={shlex.quote(str(night_root / 'night/calibration-refusal.json'))}\n"
+        "export JOULEWISE_NIGHT_CUSTODY_BUDGET_S=120\n"
+        f"export G2A_PLAN_ID={shlex.quote('plan-' + plan_id + '-g2a-probe-v1')}\n"
+        'G2A_PLAN_SHA256="$(/usr/bin/shasum -a 256 "$G2A_FROZEN_PLAN" | /usr/bin/awk \'{print $1}\')"\n'
+        "reservation_argv=(\n" + argv + "  --custody-budget-s 120 --pre-reserve-strict\n)\n"
+        'if [[ "${NIGHT_RESERVATION_ARGV_ONLY:-0}" = 1 ]]; then\n'
+        '  printf \'%s\\0\' "${reservation_argv[@]}" --verify-only\n  exit 0\nfi\n'
+        'if [[ "${NIGHT_VERIFY_ONLY:-0}" = 1 ]]; then\n'
+        '  exec "${reservation_argv[@]}" --verify-only\nfi\n'
+    )
+    chain = chain[:start] + '"${reservation_argv[@]}" --execute\n' + chain[end:]
+    chain = re.sub(r"^G2A_PLAN_(?:ID|SHA256)=.*\n", "", chain, flags=re.MULTILINE)
+    # All exports are non-mutating; the first mkdir remains after both branches.
+    first_mutation = chain.index('/bin/mkdir -p "$G2A_RUNS_ROOT"')
+    return chain[:first_mutation] + header + chain[first_mutation:]
 
 
 def authenticated_screen_source(source: str) -> str:
@@ -177,16 +276,81 @@ def render_g2a_night_chain(runsheet: str, night_date: str) -> str:
     return "".join(pieces)
 
 
-def emit_g2a_night_chain(output_path: Path, night_date: str) -> None:
+def emit_g2a_night_chain(output_path: Path, night_date: str, *, measurement_root: Path | None = None,
+                         g2a_root: Path | None = None, night_root: Path | None = None,
+                         plan_id: str | None = None) -> None:
     """Write an executable chain and its GNU-format SHA-256 sidecar."""
 
     chain = render_g2a_night_chain(RUNSHEET_PATH.read_text(encoding="utf-8"), night_date)
+    chain = integrated_g2a_chain(chain,
+        measurement_root=(measurement_root or Path(f"/Users/edr/night-custody/measurement/JouleWise-measurement-g2a-{night_date}")).resolve(),
+        g2a_root=(g2a_root or Path(f"/Users/edr/JouleWise-shakedown-g2/g2-a-{night_date}")).resolve(),
+        night_root=(night_root or output_path.absolute().parent).resolve(),
+        plan_id=plan_id or f"d117-g2a-prefill-probe-{night_date}")
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(chain, encoding="utf-8")
     output_path.chmod(0o755)
     digest = hashlib.sha256(chain.encode("utf-8")).hexdigest()
     sidecar = output_path.with_name(f"{output_path.name}.sha256")
     sidecar.write_text(f"{digest}  {output_path.name}\n", encoding="utf-8")
+
+
+def author_g2a_window(args, *, now=time.time):
+    from joulewise.night_gate import NightPlan, D166_REGISTRATION_PATH
+    from joulewise.night_plan_writer import write_night_plan
+    from scripts.run_night import schedule
+
+    for name in ("t0_epoch_s", "window_max_s", "plan_id", "measurement_root",
+                 "measurement_head", "night_root", "g2a_root"):
+        if getattr(args, name) is None:
+            raise ValueError(f"--new-g2a-window requires --{name.replace('_', '-')}")
+    roots = [args.measurement_root, args.night_root, args.g2a_root, args.new_g2a_window]
+    if any(re.search(r"codex|claude|t3", str(value), re.IGNORECASE)
+           for value in [args.plan_id, *roots]):
+        raise ValueError("plan id and paths must not contain codex, claude or t3")
+    if any(not path.is_absolute() for path in roots):
+        raise ValueError("window paths must be absolute")
+    if any(re.search(r"codex|claude|t3", str(path.resolve()), re.IGNORECASE) for path in roots):
+        raise ValueError("resolved paths must not contain codex, claude or t3")
+    measurement = args.measurement_root.resolve()
+    parent = Path("/Users/edr/night-custody/measurement")
+    if parent not in measurement.parents:
+        raise ValueError("measurement root must be inside /Users/edr/night-custody/measurement/")
+    authored = now()
+    if args.t0_epoch_s % 60 or args.t0_epoch_s < authored + 2400:
+        raise ValueError("t0 must be minute-aligned and at least 2400 s ahead")
+    if args.window_max_s < NIGHT_PROGRAMMED_SPAN_S + 900:
+        raise ValueError("window_max_s must cover NIGHT_PROGRAMMED_SPAN_S + 900")
+    night = args.night_root.resolve()
+    output = args.new_g2a_window.resolve()
+    if output.parent != night:
+        raise ValueError("plan output must be in --night-root")
+    chain = night / "chain.zsh"
+    sidecar = night / "chain.zsh.sha256"
+    if any(path.exists() for path in (output, chain, sidecar)):
+        raise ValueError("window outputs already exist")
+    head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=REPO_ROOT,
+                          check=True, capture_output=True, text=True).stdout.strip()
+    plan = NightPlan(plan_id=args.plan_id, receipt_class="DIAGNOSTIC_NO_PACK",
+        t0_epoch_s=args.t0_epoch_s, window_max_s=args.window_max_s, authored_epoch_s=authored,
+        repo_head=head, measurement_root=str(measurement), measurement_head=args.measurement_head,
+        chain_path=str(chain), chain_sha256_path=str(sidecar), custody_root=str(night),
+        registration_path=D166_REGISTRATION_PATH)
+    result = schedule(plan)
+    result.update(stand_down_epoch_s=plan.t0_epoch_s - 480,
+        latest_chain_start_epoch_s=plan.t0_epoch_s + plan.window_max_s - NIGHT_PROGRAMMED_SPAN_S,
+        window_end_epoch_s=plan.t0_epoch_s + plan.window_max_s,
+        harvest_open_epoch_s=plan.t0_epoch_s + plan.window_max_s + 300)
+    # Validate all coordinates and scheduling before publishing any output.
+    from joulewise.night_plan_writer import night_plan_json_bytes
+    night_plan_json_bytes(plan)
+    date = datetime.fromtimestamp(plan.t0_epoch_s, timezone.utc).strftime("%Y%m%d")
+    emit_g2a_night_chain(chain, date, measurement_root=measurement,
+                         g2a_root=args.g2a_root.resolve(), night_root=night, plan_id=args.plan_id)
+    write_night_plan(output, plan)
+    print(json.dumps(result, sort_keys=True))
+    print(f"plan={output} chain={chain} sha256={sidecar}")
+    return plan
 
 
 def _replace_once(source: str, old: str, new: str, *, label: str) -> str:
@@ -417,15 +581,34 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--night-date", metavar="YYYYMMDD", help="date substituted into G2-a exports"
     )
+    parser.add_argument("--new-g2a-window", type=Path, metavar="PLAN")
+    parser.add_argument("--t0-epoch-s", type=int)
+    parser.add_argument("--window-max-s", type=int)
+    parser.add_argument("--plan-id")
+    parser.add_argument("--measurement-root", type=Path)
+    parser.add_argument("--measurement-head")
+    parser.add_argument("--night-root", type=Path)
+    parser.add_argument("--g2a-root", type=Path)
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if args.new_g2a_window is not None:
+        if args.emit_chain is not None or args.check or args.night_date is not None:
+            raise SystemExit("--new-g2a-window cannot combine with --emit-chain, --check or --night-date")
+        try:
+            author_g2a_window(args)
+        except (ValueError, OSError, subprocess.SubprocessError) as error:
+            print(f"FAIL {error}", file=sys.stderr)
+            return 1
+        return 0
     if args.emit_chain is not None:
         if args.night_date is None:
             raise SystemExit("--emit-chain requires --night-date YYYYMMDD")
-        emit_g2a_night_chain(args.emit_chain, args.night_date)
+        emit_g2a_night_chain(args.emit_chain, args.night_date,
+            measurement_root=args.measurement_root, g2a_root=args.g2a_root,
+            night_root=args.night_root, plan_id=args.plan_id)
         print(f"emitted {args.emit_chain}")
         return 0
     if args.night_date is not None:
