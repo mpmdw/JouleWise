@@ -1,0 +1,67 @@
+{
+  "aborted_reason": null,
+  "artifacts": [
+    {
+      "path": "night.log",
+      "sha256": "b42ace6c374df6dffa0def1d0e6e8a16a40761822ee27e93d4887928d12edfc0"
+    },
+    {
+      "path": "night/receipt.json",
+      "sha256": "675bff8446aa9a44a9ff3b8ecb46856ae1aa8a8f2cb8f17cc0c21b4b3d80e9f7"
+    },
+    {
+      "path": "night/network_time_off.json",
+      "sha256": "89ff372f7807d779b0bb40a6df695c90f4a801c236c6122a3d10faa6dd32eed2"
+    },
+    {
+      "path": "night/start_conditions.json",
+      "sha256": "243d7c4149658c5070be5724e4c579f19d15cdd2d149473871a5ef8251c4c8ba"
+    },
+    {
+      "path": "night/clean_dwell.json",
+      "sha256": "cc2e625de742b551c608d36b4738bc4758a723e389177a9783006253f8fd447d"
+    },
+    {
+      "path": "night/clean_dwell.output.txt",
+      "sha256": "98d200f98b8dfbdaaeea61f68b67d385f9ef046c5b7347a3d86567125471e1dd"
+    },
+    {
+      "path": "night/chain.started",
+      "sha256": "b2d5f63bfd0b6a610d42a154b743eb500335232e1bd4ba84ee6c1ab4e1bcfe54"
+    },
+    {
+      "path": "night/chain.exited",
+      "sha256": "2ae176698a42d55443b66d02a4c3a09abfebbb389f1b9723bcbc81f3e19c4007"
+    },
+    {
+      "path": "night/censuses.jsonl",
+      "sha256": "1a5856cda560aa9d7e8491a0b37f86ec6ead531ae32a6469a9697b62b7415401"
+    },
+    {
+      "path": "night/chain.stdout.log",
+      "sha256": "3ac2b6e1cb5e13333c413cd31899156fdc4a49beb2a2b70cc9c266b00861c746"
+    },
+    {
+      "path": "night/chain.stderr.log",
+      "sha256": "2c09e8ca1185a10ba90f89759845a9342815553ee5d0db1192a22c60821b3f90"
+    }
+  ],
+  "calibration_code": null,
+  "calibration_refusal": null,
+  "census_count": 213,
+  "census_hits": [],
+  "chain_exit_code": 1,
+  "chain_sha256": "6e2c503f74cccb0e10ab788c8f2024f4f21aad479e2a8a2301a3157aa3ddc0c5",
+  "ended_epoch_s": 1791057535.0582888,
+  "ended_monotonic_ns": 1279097747993208,
+  "evidence": {
+    "calibration_refusal": null
+  },
+  "plan_id": "d117-g2a-prefill-probe-20261003T1748Z",
+  "receipt_class": "DIAGNOSTIC_NO_PACK",
+  "refusal_documents": [],
+  "schema": "joulewise.unattended_night_result.v1",
+  "started_epoch_s": 1791049680.598368,
+  "started_monotonic_ns": 1271243263200041,
+  "verdict": "GO"
+}
