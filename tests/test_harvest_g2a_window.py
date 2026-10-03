@@ -53,7 +53,9 @@ class G2aHarvestTests(unittest.TestCase):
                 data = retained_summary(6)
                 data['status'] = 'succeeded'
                 (path/'summary_metrics.json').write_text(json.dumps(data)+'\n')
-                (path/'metadata.json').write_text(json.dumps(retained_metadata(member['run_id'], rung))+'\n')
+                meta = retained_metadata(member['run_id'], rung)
+                meta['uncertainty_evidence'] = {'clock_anchor': {'status': 'bounded'}}
+                (path/'metadata.json').write_text(json.dumps(meta)+'\n')
         night = self.f.night/'night'
         night.mkdir()
         (night/'courier.sent').write_text('delivered\n')
@@ -202,6 +204,87 @@ class G2aHarvestTests(unittest.TestCase):
         self.assertEqual(selection['refusal']['fallback_action'], 'collect_at_4096')
         self.assertIsNone(selection['selected_prefill_tokens'])
         self.assertEqual(sum(row['valid'] for row in record['members']), 24)
+
+    def set_anchor(self, run_id, status):
+        path = self.f.g2a/'runs'/run_id/'metadata.json'
+        value = harvest.read(path)
+        value['uncertainty_evidence'] = {'clock_anchor': {'status': status}}
+        path.write_text(json.dumps(value)+'\n')
+
+    def write_chain_copies(self):
+        wp = self.f.g2a/'window-plan'
+        summary.main(['--config-root', str(self.f.g2a/'prefill-probe-configs'), '--input-inventory',
+            str(wp/'g2a-input-inventory.json'), '--runs-root', str(self.f.g2a/'runs'), '--counts-output',
+            str(wp/'d166-prefill-counts-receipt.json'), '--summary-output', str(wp/'d166-prefill-resolvability-summary.json')])
+
+    def test_c1_clock_refused_small_members_are_invalid_and_window_recovers(self):
+        small = [m['run_id'] for m in self.value['stages'][0]['members']]
+        for run_id in small:
+            self.set_anchor(run_id, 'unknown')
+        record = self.run_harvest()
+        self.assertEqual(record['verdict'], 'RECOVER')
+        self.assertIn('rung_valid_small_members_shortfall', record['cause_codes'])
+        rows = {row['run_id']: row for row in record['members']}
+        for run_id in small:
+            self.assertFalse(rows[run_id]['valid'])
+            self.assertEqual(rows[run_id]['clock_anchor_status'], 'unknown')
+        self.assertNotIn('selection', record)
+
+    def test_c1_missing_anchor_record_is_invalid(self):
+        run_id = self.value['stages'][0]['members'][0]['run_id']
+        path = self.f.g2a/'runs'/run_id/'metadata.json'
+        value = harvest.read(path); value['uncertainty_evidence'] = None
+        path.write_text(json.dumps(value)+'\n')
+        record = self.run_harvest()
+        self.assertEqual(record['verdict'], 'RECOVER')
+        self.assertEqual(next(r for r in record['members'] if r['run_id'] == run_id)['clock_anchor_status'], 'not recorded')
+
+    def test_c1_clock_refused_large_member_leaves_select(self):
+        large = next(s for s in self.value['stages'] if s['members'][0]['run_id'].startswith('g2a-large'))
+        self.set_anchor(large['members'][0]['run_id'], 'unknown')
+        record = self.run_harvest()
+        self.assertEqual(record['verdict'], 'SELECT')
+        self.assertEqual(sum(row['valid'] for row in record['members']), 23)
+
+    def test_c1_low_count_with_bounded_anchor_stays_valid(self):
+        run_id = 'g2a-small-p0512-r01'
+        path = self.f.g2a/'runs'/run_id/'summary_metrics.json'
+        data = harvest.read(path)
+        data['window_evidence_precheck']['phase']['prefill']['windows'][0]['in_window_sample_count'] = 2
+        path.write_text(json.dumps(data)+'\n')
+        record = self.run_harvest()
+        self.assertTrue(next(row for row in record['members'] if row['run_id'] == run_id)['valid'])
+
+    def test_c2_chain_copy_with_invalid_small_member_recovers_not_refused(self):
+        self.write_chain_copies()
+        self.set_anchor(self.value['stages'][0]['members'][0]['run_id'], 'unknown')
+        record = self.run_harvest()
+        self.assertEqual(record['verdict'], 'RECOVER')
+        self.assertIn('rung_valid_small_members_shortfall', record['cause_codes'])
+        self.assertEqual(set(record['chain_summary_copy'].values()), {'differs_invalid_members_excluded'})
+
+    def test_c2_chain_copy_with_invalid_large_member_selects(self):
+        self.write_chain_copies()
+        large = next(s for s in self.value['stages'] if s['members'][0]['run_id'].startswith('g2a-large'))
+        self.set_anchor(large['members'][0]['run_id'], 'unknown')
+        record = self.run_harvest()
+        self.assertEqual(record['verdict'], 'SELECT')
+        self.assertIn('differs_invalid_members_excluded', record['chain_summary_copy'].values())
+
+    def test_c2_chain_copy_equal_when_all_valid(self):
+        self.write_chain_copies()
+        record = self.run_harvest()
+        self.assertEqual(record['verdict'], 'SELECT')
+        self.assertEqual(set(record['chain_summary_copy'].values()), {'equal'})
+
+    def test_t8_capture_made_is_recorded_from_the_archive_copy(self):
+        self.assertFalse(self.run_harvest()['capture_made'])
+
+    def test_t8_capture_file_under_raw_sets_capture_made(self):
+        raw = self.f.g2a/'runs'/'g2a-small-p0512-r01'/'raw'
+        raw.mkdir(parents=True, exist_ok=True)
+        (raw/'powermetrics.plist').write_bytes(b'fixture')
+        self.assertTrue(self.run_harvest()['capture_made'])
 
     def test_window_refused_before_chain_start_is_null_without_session_or_selection(self):
         (self.f.night/'night/chain.started').unlink()

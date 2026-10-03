@@ -32,6 +32,15 @@ def write(path, value):
     with Path(path).open('xb') as handle:
         handle.write((json.dumps(value, indent=2, sort_keys=True, allow_nan=False) + '\n').encode())
 
+def anchor_status(path):
+    try:
+        evidence = read(path / 'metadata.json').get('uncertainty_evidence')
+    except (OSError, ValueError, AttributeError):
+        return 'not recorded'
+    anchor = evidence.get('clock_anchor') if isinstance(evidence, dict) else None
+    status = anchor.get('status') if isinstance(anchor, dict) else None
+    return status if isinstance(status, str) else 'not recorded'
+
 def group_clear(night):
     started = night / 'chain.started'
     if started.is_symlink():
@@ -141,9 +150,14 @@ def harvest(args, *, now=time.time, clear=group_clear, runner=subprocess.run):
             path = runs / run_id
             problems = validate_bundle(path, strict=True) if path.exists() else ['member_missing']
             succeeded = path.exists() and (path / 'summary_metrics.json').is_file() and read(path / 'summary_metrics.json').get('status') == 'succeeded'
-            if not problems and succeeded:
+            clock_status = anchor_status(path)
+            # Registration section 6 (seal T3, condition C1): the within-capture
+            # clock admission binds members; only a 'bounded' anchor is valid.
+            # The reducer's per-phase eligibility flag is never consulted here.
+            if not problems and succeeded and clock_status == 'bounded':
                 valid.add(run_id)
-            record['members'].append({'run_id': run_id, 'valid': run_id in valid, 'problems': problems})
+            record['members'].append({'run_id': run_id, 'valid': run_id in valid, 'problems': problems,
+                                      'clock_anchor_status': clock_status})
             if path.exists():
                 captures.append((run_id, path))
         session = snap.bracket_session_by_id.get(value['session_id'])
@@ -167,9 +181,22 @@ def harvest(args, *, now=time.time, clear=group_clear, runner=subprocess.run):
                 str(wp / 'g2a-input-inventory.json'), '--runs-root', str(runs), '--counts-output', str(counts),
                 '--summary-output', str(out)], valid_run_ids=valid):
             raise HarvestRefusal('summary_regeneration_failed')
+        # Registration section 8 (seal T4, condition C2): the harvest's regeneration over
+        # valid members is the input; the chain's copy is a check. Equality is required
+        # only when every roster member is valid; otherwise the copies differ by
+        # construction, the difference is recorded and the verdict follows section 7.
+        all_valid = len(valid) == len(ids)
+        chain_copy = {}
         for produced, name in ((counts, 'd166-prefill-counts-receipt.json'), (out, 'd166-prefill-resolvability-summary.json')):
-            if (wp / name).exists() and (wp / name).read_bytes() != produced.read_bytes():
+            if not (wp / name).exists():
+                chain_copy[name] = 'absent'
+            elif (wp / name).read_bytes() == produced.read_bytes():
+                chain_copy[name] = 'equal'
+            elif all_valid:
                 raise HarvestRefusal('chain_summary_byte_mismatch')
+            else:
+                chain_copy[name] = 'differs_invalid_members_excluded'
+        record['chain_summary_copy'] = chain_copy
         off_path = night / network_time_off.RECEIPT_BASENAME
         off = read(off_path) if off_path.exists() else None
         if off and (off.get('schema') != network_time_off.SCHEMA
@@ -201,6 +228,9 @@ def harvest(args, *, now=time.time, clear=group_clear, runner=subprocess.run):
         if log.exists() and 'pre_calibration_screen=failed' in log.read_text():
             causes.append('pre_screen_stop')
         record.update(verdict='RECOVER' if causes else 'SELECT', cause_codes=sorted(set(causes)))
+        # Registration section 7 (seal T8): a RECOVER window with no capture file in
+        # the archive copy counts like a null window for the recovery allowance.
+        record['capture_made'] = any((args.archive_root / 'g2a-root' / 'runs').glob('**/raw/powermetrics*.plist'))
         if not causes:
             selection = derived / 'selection.json'
             if selector.main(['--summary', str(out), '--output', str(selection)]):
