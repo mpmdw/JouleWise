@@ -391,6 +391,88 @@ class G2aHarvestTests(unittest.TestCase):
         self.assertIn('verdict=SELECT members=24/24', text)
         self.assertNotRegex(text, r'energy|fiducial|drift|in_window_sample_count|small_minimum_count')
 
+    # Guards pinned from the cold Fable final pass on PR #458 (record 36, finding F1; its probes, lifted).
+    def _causes(self, record): return record['verdict'], record['cause_codes']
+    def test_guard_h3_non_succeeded_member_is_invalid(self):
+        run_id = 'g2a-small-p0512-r01'; path = self.f.g2a/'runs'/run_id/'summary_metrics.json'
+        data = harvest.read(path); data['status'] = 'failed'; path.write_text(json.dumps(data)+'\n')
+        record = self.run_harvest()
+        self.assertFalse(next(r for r in record['members'] if r['run_id'] == run_id)['valid'])
+        self.assertEqual(self._causes(record), ('RECOVER', ['rung_valid_small_members_shortfall']))
+        self.assertNotIn('selection', record)
+    def test_guard_h4a_nonzero_exit_recovers(self):
+        (self.f.night/'night/chain.exited').write_text('{"exit_code":1}\n')
+        record = self.run_harvest()
+        self.assertEqual(self._causes(record), ('RECOVER', ['chain_nonzero_or_missing_exit'])); self.assertNotIn('selection', record)
+    def test_guard_h4b_missing_exit_recovers(self):
+        (self.f.night/'night/chain.exited').unlink()
+        record = self.run_harvest()
+        self.assertEqual(self._causes(record), ('RECOVER', ['chain_nonzero_or_missing_exit'])); self.assertNotIn('selection', record)
+    def test_guard_h4c_exit_code_true_or_string_zero_is_not_zero(self):
+        (self.f.night/'night/chain.exited').write_text('{"exit_code":"0"}\n')
+        self.assertEqual(self.run_harvest()['verdict'], 'RECOVER')
+    def test_guard_h9_altered_registration_refuses_before_archive(self):
+        reg = self.f.measurement/harvest.night_gate.D166_REGISTRATION_PATH
+        reg.write_bytes(reg.read_bytes()+b' ')
+        with self.assertRaises(harvest.HarvestRefusal): self.run_harvest()
+        self.assertFalse(self.args.archive_root.exists())
+    def test_guard_h10_chain_changed_after_sidecar_refuses_before_archive(self):
+        self.f.chain.write_text(self.f.chain.read_text()+'# changed\n')
+        with self.assertRaises(harvest.HarvestRefusal): self.run_harvest()
+        self.assertFalse(self.args.archive_root.exists())
+    def test_guard_h14_ledger_refusal_reason_refuses(self):
+        self.snapshot.refusal_reasons = ('calibration_ledger_head_mismatch',)
+        record = self.run_harvest()
+        self.assertEqual(self._causes(record), ('REFUSED', ['ledger_authentication_failed'])); self.assertEqual(self.commands, [])
+    def test_guard_h15_session_bound_to_other_plan_or_runs_root_refuses(self):
+        self.session.plan_sha256 = '0'*64
+        record = self.run_harvest()
+        self.assertEqual(self._causes(record), ('REFUSED', ['bracket_session_binding_mismatch'])); self.assertEqual(self.commands, [])
+    def test_guard_h18_inventory_for_other_window_refuses(self):
+        path = self.f.g2a/'window-plan/g2a-input-inventory.json'
+        value = harvest.read(path); value['window_id'] = 'other-window'; path.write_text(json.dumps(value)+'\n')
+        record = self.run_harvest()
+        self.assertEqual(self._causes(record), ('REFUSED', ['window_identity_mismatch'])); self.assertEqual(self.commands, [])
+    def test_guard_h22_source_changed_during_harvest_refuses_without_pin_advance(self):
+        real = harvest.selector.main
+        def main(argv):
+            (self.f.g2a/'runs/late-file').write_text('x'); return real(argv)
+        with mock.patch.object(harvest.selector, 'main', side_effect=main):
+            record = self.run_harvest()
+        self.assertEqual(self._causes(record), ('REFUSED', ['source_or_process_ownership_changed'])); self.assertEqual(self.commands, [])
+    def test_guard_open_session_never_selects(self):
+        self.session.state = 'open'
+        record = self.run_harvest()
+        self.assertEqual(record['verdict'], 'RECOVER'); self.assertIn('bracket_incomplete', record['cause_codes'])
+    def test_guard_missing_session_never_selects(self):
+        self.snapshot.bracket_session_by_id = {}
+        record = self.run_harvest()
+        self.assertEqual(record['verdict'], 'RECOVER'); self.assertIn('bracket_incomplete', record['cause_codes']); self.assertEqual(self.commands, [])
+    def test_guard_bracket_status_failed_with_empty_reasons_never_selects(self):
+        self.calibration_bracket_for_bundles.return_value = ({'status': 'failed'}, ())
+        record = self.run_harvest()
+        self.assertEqual(self._causes(record), ('RECOVER', ['bracket_not_passed']))
+    def test_guard_plan_outside_night_root_refuses(self):
+        other = self.f.base/'elsewhere'; other.mkdir(); copy = other/'night_plan.json'; copy.write_bytes(self.f.plan_path.read_bytes())
+        self.args.plan = copy
+        with self.assertRaises(harvest.HarvestRefusal): self.run_harvest()
+    def test_guard_bracket_judged_over_valid_members_only_and_all_24_strict(self):
+        record = self.run_harvest()
+        bundles = self.calibration_bracket_for_bundles.call_args.args[1]
+        self.assertEqual(len(bundles), 24); self.assertEqual(record['verdict'], 'SELECT')
+    def test_guard_main_stdout_shape_for_select(self):
+        import io, re
+        from contextlib import redirect_stdout
+        out = io.StringIO()
+        with redirect_stdout(out):
+            code = harvest.main(['--plan', str(self.args.plan), '--archive-root', str(self.args.archive_root),
+                                 '--operator-identity', 'fixture-operator'], now=self.now, clear=lambda _: True, runner=self.runner)
+        self.assertEqual(code, 0)
+        lines = out.getvalue().splitlines()
+        self.assertEqual(lines[0], 'verdict=SELECT members=24/24')
+        for line in lines[1:]:
+            self.assertRegex(line, r'^(harvest|path)=\S+ sha256=[0-9a-f]{64}$')
+
 
 class G2aClockReportTests(unittest.TestCase):
     def test_comparable_system_clock_delta_and_different_sources(self):
