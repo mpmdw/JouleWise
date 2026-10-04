@@ -63,3 +63,20 @@ The step3 interactive-session heuristic already excludes `codex` lines (block-3 
   prospectively register ladder-specific `prefill-p<L>` identities, historical p512 bytes unchanged; one length
   per family. The round-1 span projection (whole window × L/512) is rejected as a plan; round 2 builds a
   component estimate. Round 2 brief [20](20-sol-floors-r2-brief.md).
+
+## Next-block consult (blind, one round): Sol 6.1 xhigh [31](31-sol-next-block-consult.md), Opus 5.5 [32](32-opus-next-block-consult.md)
+
+Both seats: register option (a), one qualification block with a pack-bound rehearsal occurrence `r1`, an
+arm-and-expire control and the real-pack G2-b `s1`; neither G2-b alone (D-176 §4: G2-a discharges no gate;
+the T-0 liveness row needs the rehearsal's receipt bundle) nor straight to ALPHA (the first real `_v5` bytes at
+the new prefill length must meet validate/reduce/finalizer before claim custody; `CAMPAIGN_TRANSACTION` needs
+G2-b's verdict). Both: land the launch-realization recheck and the unattended one-block stop BEFORE `s1`, so
+G2-b runs the claim head; both name G10 (Ed-owned privileged-anchor positive control) as an open owner link.
+They differ on recovery: Sol allows no capture-bearing recovery (Q3 fence), Opus allows one `s2` after a named,
+removed cause. Not a science disagreement on the measurement; the orchestrator rules it at registration.
+Opus adds: seal the claim analysis plan before the `s1` harvest is opened (blindness). Sol adds: pre-register an
+outcome-independent environmental diagnostic before claims.
+Issuer review [19r](19-sol-issuer-review.md) FAIL: F1 (block-3 provenance from editable declarations) and F2 (a
+permitted validity-filtered SELECT refused). **F1 disposition:** fix by anchoring to the records committed on main
+(`windows/<plan_id>/harvest.json`, `selection.json`), the archive's own `SHA256SUMS`, and the frozen plan's policy;
+coordinated multi-file forgery is outside the threat model (D-161). **F2:** fix. Round 3 brief [22](22-sol-issuer-r3-brief.md).
