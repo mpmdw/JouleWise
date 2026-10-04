@@ -1847,7 +1847,20 @@ class RunCampaignTests(unittest.TestCase):
         self.assertEqual(binding.policy.policy_id, "quiet-mac-p2-production")
         self.assertEqual(binding.policy.profile.value, "production")
         self.assertEqual(binding.policy.idle_admission.on_fail.value, "abort")
+        self.assertEqual(binding.policy.idle_admission.retry_backoff_s, 0)
         self.assertEqual(binding.policy.post_window_sampling_dwell_s, 1.0)
+
+    def test_block3_policy_is_loaded_with_raw_byte_hash_and_backoff(self) -> None:
+        from scripts.gen_g2_phase_d import G2A_CAMPAIGN_POLICY_PATH
+
+        path = ROOT / G2A_CAMPAIGN_POLICY_PATH
+        binding = run_campaign_module.load_campaign_policy(str(path))
+        self.assertEqual(binding.policy.policy_id, "quiet-mac-p2-g2a-b3")
+        self.assertEqual(binding.policy.profile.value, "production")
+        self.assertEqual(binding.policy.policy_version, "environment-guard-cooldown-v2")
+        self.assertEqual(binding.policy.idle_admission.retry_backoff_s, 300)
+        self.assertEqual(binding.sha256, hashlib.sha256(path.read_bytes()).hexdigest())
+        self.assertEqual(binding.to_metadata()["sha256"], binding.sha256)
 
     def test_campaign_policy_rejects_subsecond_post_window_dwell(self) -> None:
         from joulewise.schemas import SchemaError

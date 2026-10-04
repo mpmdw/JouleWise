@@ -1340,13 +1340,35 @@ def harvest_roster(value):
     return ids
 
 
+def harvest_campaign_policy_path(*, measurement_root: Path, inventory: Mapping[str, Any]) -> Path:
+    """Resolve the window's policy inside its owning measurement checkout."""
+    reference = inventory.get("campaign_policy")
+    if not isinstance(reference, dict):
+        raise G2AProbeError("campaign_policy_malformed")
+    _require_exact_keys(reference, HASH_REFERENCE_KEYS, "campaign_policy")
+    path = Path(_require_nonempty(reference.get("path"), "campaign_policy_path"))
+    measurement_root = measurement_root.resolve()
+    path = (measurement_root / path).resolve()
+    try:
+        relative = path.relative_to(measurement_root)
+    except ValueError as exc:
+        raise G2AProbeError("campaign_policy_path_outside_policy_directory") from exc
+    if relative.parts[:2] != ("configs", "campaign_policies"):
+        raise G2AProbeError("campaign_policy_path_outside_policy_directory")
+    if _sha256_path(path) != _require_sha256(reference.get("sha256"), "campaign_policy_sha256"):
+        raise G2AProbeError("campaign_policy_sha256_mismatch")
+    return path
+
+
 def check_harvest_inputs(*, measurement_root, root, ledger, head_pin, runner=subprocess.run):
     """Keep committed-pin and relative-path authentication in the owning clone."""
+    inventory = _read_json(root / "window-plan" / INVENTORY_NAME, label="input_inventory")
+    campaign_policy = harvest_campaign_policy_path(measurement_root=measurement_root, inventory=inventory)
     result = runner([str(measurement_root / '.venv/bin/python'), '-B',
         str(measurement_root / 'scripts/generate_g2a_probe_inputs.py'), 'check',
         '--root', str(root), '--panel', str(measurement_root / 'configs/model_panels/qwen3_4bit.json'),
         '--ledger', str(ledger), '--head-pin', str(head_pin),
-        '--campaign-policy', str(measurement_root / 'configs/campaign_policies/quiet_mac_p2_production.json'),
+        '--campaign-policy', str(campaign_policy),
         '--at-reservation'], cwd=measurement_root, capture_output=True, text=True, check=False, timeout=300)
     if result.returncode:
         raise G2AProbeError('harvest_frozen_input_authentication_failed')

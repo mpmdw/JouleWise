@@ -67,9 +67,11 @@ class G2aFixture:
         reg = self.measurement / night_gate.D166_REGISTRATION_PATH
         reg.parent.mkdir(parents=True)
         reg.write_bytes((ROOT / night_gate.D166_REGISTRATION_PATH).read_bytes())
-        policy = self.measurement / 'configs/campaign_policies/quiet_mac_p2_production.json'
-        policy.parent.mkdir(parents=True, exist_ok=True)
-        policy.write_bytes((ROOT / 'configs/campaign_policies/quiet_mac_p2_production.json').read_bytes())
+        for relative in (Path('configs/campaign_policies/quiet_mac_p2_production.json'),
+                         generator.G2A_CAMPAIGN_POLICY_PATH):
+            policy = self.measurement / relative
+            policy.parent.mkdir(parents=True, exist_ok=True)
+            policy.write_bytes((ROOT / relative).read_bytes())
         self.chain = self.night / 'chain.zsh'
         generator.emit_g2a_night_chain(self.chain, '20261003', measurement_root=self.measurement,
                                       g2a_root=self.g2a, night_root=self.night, plan_id=self.plan_id)
@@ -179,7 +181,11 @@ class G2aInspectionTests(unittest.TestCase):
         text = self.f.chain.read_text()
         self.assertEqual(night_gate.chain_literal(text, 'JOULEWISE_CALIBRATION_REFUSAL_PATH'),
                          str(self.f.night/'night/calibration-refusal.json'))
-        self.assertEqual(night_gate.chain_literal(text, 'NIGHT_PROGRAMMED_SPAN_S'), '17248')
+        self.assertEqual(night_gate.chain_literal(text, 'NIGHT_PROGRAMMED_SPAN_S'), '18868')
+        expected = str(self.f.measurement / generator.G2A_CAMPAIGN_POLICY_PATH)
+        self.assertEqual(night_gate.chain_literal(text, 'POLICY'), expected)
+        self.assertEqual(text.count('export POLICY='), 1)
+        self.assertEqual(text.count(expected), 1)
 
     def test_installer_render_only_succeeds_without_running_reservation(self):
         real_run = subprocess.run
@@ -204,13 +210,36 @@ class G2aAuthoringTests(unittest.TestCase):
         from scripts import generate_g2a_probe_inputs as producer
         with mock.patch.object(producer, '_validate_panel', side_effect=AssertionError('local model files')), \
                 mock.patch.object(producer, '_load_runtime_tokenizer', side_effect=AssertionError('tokenizer load')):
-            self.assertEqual(generator.programmed_span_s(), 17248)
+            self.assertEqual(generator.programmed_span_s(), 18868)
+        self.assertEqual(generator.IDLE_RETRY_ALLOWANCE_COUNT, 4)
+
+    def test_programmed_span_reads_block3_dwells_and_retry_backoff(self):
+        original = Path.read_bytes
+
+        def policy_bytes(path):
+            raw = original(path)
+            if path == ROOT / generator.G2A_CAMPAIGN_POLICY_PATH:
+                value = json.loads(raw)
+                value['post_window_sampling_dwell_s'] += 2
+                value['idle_admission']['retry_backoff_s'] += 10
+                return json.dumps(value).encode()
+            return raw
+
+        with mock.patch.object(Path, 'read_bytes', policy_bytes):
+            self.assertEqual(generator.programmed_span_s(), 18868 + 24*2 + 4*10)
+
+    def test_integrated_chain_requires_exactly_one_policy_export(self):
+        chain = 'export G2A_WINDOW_ID=fixture\nexport CALIBRATION_LEDGER=x\nexport LEDGER_HEAD_PIN=y\nexport G2A_ROOT=z\n'
+        for policy_rows in ('', 'export POLICY=x\nexport POLICY=y\n'):
+            with self.subTest(rows=policy_rows), self.assertRaisesRegex(ValueError, 'POLICY: expected one source export'):
+                generator.integrated_g2a_chain(chain + policy_rows, measurement_root=ROOT,
+                    g2a_root=Path('/tmp/g2a'), night_root=Path('/tmp/night'), plan_id='fixture')
 
     def args(self, base):
         return SimpleNamespace(new_g2a_window=base/'night/night_plan.json', night_root=base/'night',
             g2a_root=base/'g2a', plan_id='d117-g2a-20261003',
             measurement_root=Path('/Users/edr/night-custody/measurement/JouleWise-measurement-g2a-20261003'),
-            measurement_head=HEAD, t0_epoch_s=6000, window_max_s=18148)
+            measurement_head=HEAD, t0_epoch_s=6000, window_max_s=19768)
 
     def test_one_command_authors_v2_plan_chain_sidecar_and_schedule(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -224,7 +253,7 @@ class G2aAuthoringTests(unittest.TestCase):
             self.assertEqual(value['registration_path'], night_gate.D166_REGISTRATION_PATH)
             schedule = json.loads(output.getvalue().splitlines()[0])
             self.assertEqual(schedule['latest_chain_start_epoch_s'], 6900)
-            self.assertEqual(schedule['harvest_open_epoch_s'], 24448)
+            self.assertEqual(schedule['harvest_open_epoch_s'], 26068)
             self.assertEqual(schedule['stand_down_epoch_s'], 5520)
             expected = run_night.schedule(plan)
             self.assertEqual({key: schedule[key] for key in expected}, json.loads(json.dumps(expected)))

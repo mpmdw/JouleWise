@@ -1108,6 +1108,15 @@ class _Execution:
         if admission is not None and admission.enabled:
             self._enforce_post_capture_admission_guard(1)
             if not attempts[-1]["admitted"]:
+                if admission.retry_backoff_s > 0:
+                    assert self._environment_admission is not None
+                    backoff_start_s = self._clock.now()
+                    self._clock.sleep(admission.retry_backoff_s)
+                    self._environment_admission["retry_backoff"] = {
+                        "requested_s": admission.retry_backoff_s,
+                        "start_s": backoff_start_s,
+                        "end_s": self._clock.now(),
+                    }
                 observation = self._admission_guard_observation("before_attempt_2")
                 environment_reason = self._admission_environment_failure(observation)
                 if environment_reason is not None:
