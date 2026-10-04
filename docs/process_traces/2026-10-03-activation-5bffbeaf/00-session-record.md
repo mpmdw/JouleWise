@@ -58,3 +58,34 @@ re-harvest into a fresh root (`-r2`), then recipe §7 by verdict.
   attempt 1, so the retry cannot outwait a multi-minute burst.
 - Bearing on §7: this is input for the cause naming after the corrected harvest. §7 still says a second
   RECOVER stops the block for a consult.
+
+## R3: PR #463 (branch `fix/2026-10-03-g2a-w2-summary-config-provenance`)
+
+- Implementation: Sol 6.1 xhigh seat, `9644edb0` (brief `10-`, report `11-`). The seat's sandbox
+  could not write the git index, so the lead committed its five-file diff after reading it. It also
+  includes a real-data replay on a /tmp copy of w2: 12 members bind; summary and selection exit 0.
+- Independent executing review: Sol 6.1 high (`12-`). Verdict FAIL on one MAJOR (F1). Provenance
+  passed 15/15 tamper combinations and a 32-leaf field sweep; writer bytes equal `_config_sha256`; the
+  parent counterfactual fails.
+- Cold Fable final pass (`21-`), on `9644edb0`: **PASS**, with findings 1-6.
+- Dispositions:
+  - Sol F1 (MAJOR) and Fable 2 (MINOR), the same point: the null `small_minimum_count` for an empty
+    rung let the standalone selector or pin issuer select from an incomplete ladder. **Fixed** in
+    `577318dc` by reverting that hunk to main's behaviour; the test now pins the selector refusal.
+    Sol delta check (`13-`): PASS. The Fable pass stands for the head: the delta only removes the hunk
+    Fable flagged, so the merged code is 9644edb0 minus that hunk.
+  - Fable 3 (MAJOR, outside the diff; w2 will be RECOVER because the chain exited 1): **no change**. It
+    is the registration applied as written; see the trial re-harvest below.
+  - Fable 4 (MINOR; the issuer reads the live runs root): **deferred** to the block-2 desk-day lane
+    (prompt-pin issuance), which must keep `/Users/edr/night-g2a/<plan>` in place or re-point it. Fails closed.
+  - Fable 5 (NIT; only SchemaError is caught around `from_mapping`): **rejected**. Every other
+    exception fails closed (harvest REFUSED or issuer crash).
+  - Fable 6 (NIT; redundant input-hash check, loop-invariant config_root): **rejected**. Harmless, and
+    out of proportion for an R3.
+  - Seat F1 (scope): `joulewise/window_duration_margins.py:553` compares run config bytes to the
+    pack pin. That is the pack path, not G2-a. **Deferred** to lane `RUN-CONFIG-NORMALIZED-PIN-01`:
+    check before the next pack window that uses `record_window_duration_margins.py` whether pack pins
+    are normalized bytes.
+- Trial re-harvest, fix worktree `47490d14`, `--read-only-sources`, into `/tmp/trial-reharvest-5bffbeaf`:
+  rc 0, **RECOVER**, causes `bracket_incomplete`, `chain_nonzero_or_missing_exit`,
+  `rung_valid_small_members_shortfall`, capture_made true; measurement clone unchanged.
