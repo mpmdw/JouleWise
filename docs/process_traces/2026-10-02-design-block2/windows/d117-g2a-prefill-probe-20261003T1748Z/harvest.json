@@ -1,0 +1,203 @@
+{
+  "archive_root": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261003T1748Z-r2",
+  "capture_made": true,
+  "cause_codes": [
+    "bracket_incomplete",
+    "chain_nonzero_or_missing_exit",
+    "rung_valid_small_members_shortfall"
+  ],
+  "chain_summary_copy": {
+    "d166-prefill-counts-receipt.json": "absent",
+    "d166-prefill-resolvability-summary.json": "absent"
+  },
+  "members": [
+    {
+      "clock_anchor_status": "bounded",
+      "problems": [],
+      "run_id": "g2a-small-p0512-r01",
+      "valid": true
+    },
+    {
+      "clock_anchor_status": "bounded",
+      "problems": [],
+      "run_id": "g2a-small-p0512-r02",
+      "valid": true
+    },
+    {
+      "clock_anchor_status": "bounded",
+      "problems": [],
+      "run_id": "g2a-small-p0512-r03",
+      "valid": true
+    },
+    {
+      "clock_anchor_status": "bounded",
+      "problems": [],
+      "run_id": "g2a-small-p0512-r04",
+      "valid": true
+    },
+    {
+      "clock_anchor_status": "bounded",
+      "problems": [],
+      "run_id": "g2a-small-p0512-r05",
+      "valid": true
+    },
+    {
+      "clock_anchor_status": "bounded",
+      "problems": [],
+      "run_id": "g2a-small-p1024-r01",
+      "valid": true
+    },
+    {
+      "clock_anchor_status": "bounded",
+      "problems": [],
+      "run_id": "g2a-small-p1024-r02",
+      "valid": true
+    },
+    {
+      "clock_anchor_status": "bounded",
+      "problems": [],
+      "run_id": "g2a-small-p1024-r03",
+      "valid": true
+    },
+    {
+      "clock_anchor_status": "bounded",
+      "problems": [],
+      "run_id": "g2a-small-p1024-r04",
+      "valid": true
+    },
+    {
+      "clock_anchor_status": "bounded",
+      "problems": [],
+      "run_id": "g2a-small-p1024-r05",
+      "valid": true
+    },
+    {
+      "clock_anchor_status": "bounded",
+      "problems": [],
+      "run_id": "g2a-small-p2048-r01",
+      "valid": true
+    },
+    {
+      "clock_anchor_status": "bounded",
+      "problems": [],
+      "run_id": "g2a-small-p2048-r02",
+      "valid": true
+    },
+    {
+      "clock_anchor_status": "not recorded",
+      "problems": [],
+      "run_id": "g2a-small-p2048-r03",
+      "valid": false
+    },
+    {
+      "clock_anchor_status": "not recorded",
+      "problems": [
+        "member_missing"
+      ],
+      "run_id": "g2a-small-p2048-r04",
+      "valid": false
+    },
+    {
+      "clock_anchor_status": "not recorded",
+      "problems": [
+        "member_missing"
+      ],
+      "run_id": "g2a-small-p2048-r05",
+      "valid": false
+    },
+    {
+      "clock_anchor_status": "not recorded",
+      "problems": [
+        "member_missing"
+      ],
+      "run_id": "g2a-small-p4096-r01",
+      "valid": false
+    },
+    {
+      "clock_anchor_status": "not recorded",
+      "problems": [
+        "member_missing"
+      ],
+      "run_id": "g2a-small-p4096-r02",
+      "valid": false
+    },
+    {
+      "clock_anchor_status": "not recorded",
+      "problems": [
+        "member_missing"
+      ],
+      "run_id": "g2a-small-p4096-r03",
+      "valid": false
+    },
+    {
+      "clock_anchor_status": "not recorded",
+      "problems": [
+        "member_missing"
+      ],
+      "run_id": "g2a-small-p4096-r04",
+      "valid": false
+    },
+    {
+      "clock_anchor_status": "not recorded",
+      "problems": [
+        "member_missing"
+      ],
+      "run_id": "g2a-small-p4096-r05",
+      "valid": false
+    },
+    {
+      "clock_anchor_status": "not recorded",
+      "problems": [
+        "member_missing"
+      ],
+      "run_id": "g2a-large-p0512-r01",
+      "valid": false
+    },
+    {
+      "clock_anchor_status": "not recorded",
+      "problems": [
+        "member_missing"
+      ],
+      "run_id": "g2a-large-p1024-r01",
+      "valid": false
+    },
+    {
+      "clock_anchor_status": "not recorded",
+      "problems": [
+        "member_missing"
+      ],
+      "run_id": "g2a-large-p2048-r01",
+      "valid": false
+    },
+    {
+      "clock_anchor_status": "not recorded",
+      "problems": [
+        "member_missing"
+      ],
+      "run_id": "g2a-large-p4096-r01",
+      "valid": false
+    }
+  ],
+  "outputs": {
+    "bracket.json": "cdf6d142b8bb173e060a1b7ea8fccc53879fb7eb1101345d246301ad1e9013f6",
+    "counts.json": "bc3869255f67fb4f452f825b007a0b9ba4229cc3b0871402decb189eb6deedfa",
+    "network-time.json": "15c02e4f1ec016c18102627f8e787283bb95ff4e3a4bc103a0642d863bba3653",
+    "summary.json": "cda554eb6114281066bb104ea336e434a29cdd76625ea921a172bb98ae9c29bf",
+    "terminal-ledger.jsonl": "84bb9aee4a9358c13491832e12e9e504c02fb838d1a167974a235e8d2942475b",
+    "terminal-ledger.jsonl.lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "terminal-pin.json": "0e21b8aa001ed1220e6924443fb789f92f5ca4a9129b06ad68d14913bf958b6b"
+  },
+  "pin_advance": {
+    "head_digest": "94d61596ba5a17095ca6c0d77b2ece80064877fd2bfa379fc051fd6b1003b82d",
+    "needs_operator_commit": true,
+    "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261003T1748Z-r2/derived/terminal-pin.json",
+    "sequence": 392,
+    "sha256": "0e21b8aa001ed1220e6924443fb789f92f5ca4a9129b06ad68d14913bf958b6b",
+    "source_path": "/Users/edr/night-custody/measurement/JouleWise-measurement-20261003T1748Z-g2a-w2/configs/calibration/calibration_ledger_head.json",
+    "source_pin_unchanged": true
+  },
+  "plan_id": "d117-g2a-prefill-probe-20261003T1748Z",
+  "plan_sha256": "360ab1eaad674d9ed3670c71df1bd1a67dad97df6d0510aa3e9de676a028c282",
+  "schema": "joulewise.harvest_g2a_window.v1",
+  "verdict": "RECOVER"
+}

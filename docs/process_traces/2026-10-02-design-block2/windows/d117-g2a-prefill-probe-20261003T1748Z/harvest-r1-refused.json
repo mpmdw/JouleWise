@@ -1,0 +1,183 @@
+{
+  "archive_root": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261003T1748Z",
+  "cause_codes": [
+    "summary_regeneration_failed"
+  ],
+  "fault": {
+    "detail": "summary_regeneration_failed",
+    "type": "HarvestRefusal"
+  },
+  "members": [
+    {
+      "clock_anchor_status": "bounded",
+      "problems": [],
+      "run_id": "g2a-small-p0512-r01",
+      "valid": true
+    },
+    {
+      "clock_anchor_status": "bounded",
+      "problems": [],
+      "run_id": "g2a-small-p0512-r02",
+      "valid": true
+    },
+    {
+      "clock_anchor_status": "bounded",
+      "problems": [],
+      "run_id": "g2a-small-p0512-r03",
+      "valid": true
+    },
+    {
+      "clock_anchor_status": "bounded",
+      "problems": [],
+      "run_id": "g2a-small-p0512-r04",
+      "valid": true
+    },
+    {
+      "clock_anchor_status": "bounded",
+      "problems": [],
+      "run_id": "g2a-small-p0512-r05",
+      "valid": true
+    },
+    {
+      "clock_anchor_status": "bounded",
+      "problems": [],
+      "run_id": "g2a-small-p1024-r01",
+      "valid": true
+    },
+    {
+      "clock_anchor_status": "bounded",
+      "problems": [],
+      "run_id": "g2a-small-p1024-r02",
+      "valid": true
+    },
+    {
+      "clock_anchor_status": "bounded",
+      "problems": [],
+      "run_id": "g2a-small-p1024-r03",
+      "valid": true
+    },
+    {
+      "clock_anchor_status": "bounded",
+      "problems": [],
+      "run_id": "g2a-small-p1024-r04",
+      "valid": true
+    },
+    {
+      "clock_anchor_status": "bounded",
+      "problems": [],
+      "run_id": "g2a-small-p1024-r05",
+      "valid": true
+    },
+    {
+      "clock_anchor_status": "bounded",
+      "problems": [],
+      "run_id": "g2a-small-p2048-r01",
+      "valid": true
+    },
+    {
+      "clock_anchor_status": "bounded",
+      "problems": [],
+      "run_id": "g2a-small-p2048-r02",
+      "valid": true
+    },
+    {
+      "clock_anchor_status": "not recorded",
+      "problems": [],
+      "run_id": "g2a-small-p2048-r03",
+      "valid": false
+    },
+    {
+      "clock_anchor_status": "not recorded",
+      "problems": [
+        "member_missing"
+      ],
+      "run_id": "g2a-small-p2048-r04",
+      "valid": false
+    },
+    {
+      "clock_anchor_status": "not recorded",
+      "problems": [
+        "member_missing"
+      ],
+      "run_id": "g2a-small-p2048-r05",
+      "valid": false
+    },
+    {
+      "clock_anchor_status": "not recorded",
+      "problems": [
+        "member_missing"
+      ],
+      "run_id": "g2a-small-p4096-r01",
+      "valid": false
+    },
+    {
+      "clock_anchor_status": "not recorded",
+      "problems": [
+        "member_missing"
+      ],
+      "run_id": "g2a-small-p4096-r02",
+      "valid": false
+    },
+    {
+      "clock_anchor_status": "not recorded",
+      "problems": [
+        "member_missing"
+      ],
+      "run_id": "g2a-small-p4096-r03",
+      "valid": false
+    },
+    {
+      "clock_anchor_status": "not recorded",
+      "problems": [
+        "member_missing"
+      ],
+      "run_id": "g2a-small-p4096-r04",
+      "valid": false
+    },
+    {
+      "clock_anchor_status": "not recorded",
+      "problems": [
+        "member_missing"
+      ],
+      "run_id": "g2a-small-p4096-r05",
+      "valid": false
+    },
+    {
+      "clock_anchor_status": "not recorded",
+      "problems": [
+        "member_missing"
+      ],
+      "run_id": "g2a-large-p0512-r01",
+      "valid": false
+    },
+    {
+      "clock_anchor_status": "not recorded",
+      "problems": [
+        "member_missing"
+      ],
+      "run_id": "g2a-large-p1024-r01",
+      "valid": false
+    },
+    {
+      "clock_anchor_status": "not recorded",
+      "problems": [
+        "member_missing"
+      ],
+      "run_id": "g2a-large-p2048-r01",
+      "valid": false
+    },
+    {
+      "clock_anchor_status": "not recorded",
+      "problems": [
+        "member_missing"
+      ],
+      "run_id": "g2a-large-p4096-r01",
+      "valid": false
+    }
+  ],
+  "pin_advance": null,
+  "plan_id": "d117-g2a-prefill-probe-20261003T1748Z",
+  "plan_sha256": "360ab1eaad674d9ed3670c71df1bd1a67dad97df6d0510aa3e9de676a028c282",
+  "schema": "joulewise.harvest_g2a_window.v1",
+  "verdict": "REFUSED"
+}
