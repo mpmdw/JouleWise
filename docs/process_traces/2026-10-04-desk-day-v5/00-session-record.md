@@ -80,3 +80,20 @@ Issuer review [19r](19-sol-issuer-review.md) FAIL: F1 (block-3 provenance from e
 permitted validity-filtered SELECT refused). **F1 disposition:** fix by anchoring to the records committed on main
 (`windows/<plan_id>/harvest.json`, `selection.json`), the archive's own `SHA256SUMS`, and the frozen plan's policy;
 coordinated multi-file forgery is outside the threat model (D-161). **F2:** fix. Round 3 brief [22](22-sol-issuer-r3-brief.md).
+
+## PR #471 (issuer) gates, 16:10-16:30
+
+- Round 3 (`c783f0ee`) [22r](22-sol-issuer-report-r3.md): committed-record anchor, archive `SHA256SUMS`, frozen-plan
+  policy; zero-large-member SELECT accepted via the summarizer's `_run_provenance`.
+- Delta check (Sol 6.1 high) [25](25-sol-issuer-delta.md): **PASS**; real dry issue exit 0, `g2a_record_sha256`
+  `c694c488…8222`, pin sha256 `d1209f6d…dccb`.
+- Cold Fable final pass at `c783f0ee` [26](26-fable-issuer.md): **PASS**, no BLOCKER/MAJOR; Fable reproduced the
+  pin from the archive and the committed records, and checked by hand that the summary equals the receipt
+  rows and every receipt row equals its archived bundle (all rungs). Dispositions:
+  - MINOR-2 (anchor is the checkout's HEAD, not main): **fixed by procedure**: the pin is issued only from a
+    detached checkout of `origin/main` after #471 merges (recorded in the issuance step and the handoff).
+  - MINOR-1 (unlisted archive file read with no checksum; committed `SHA256SUMS` unused), MINOR-3 (issuer does not
+    recompute the four-row summary from the receipt rows), MINOR-4/-5 (test pins for end-state ladder/panel and
+    window-identity layers), NIT-1..5: **deferred** to lane `G2A-ISSUER-HARDENING-01` (registered in the handoff).
+    None affects the pin issued from the block-3 SELECT record (Fable reproduced it and closed MINOR-3 by hand
+    for this record).
