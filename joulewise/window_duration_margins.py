@@ -26,12 +26,14 @@ from joulewise.authentication_io import (
 )
 from joulewise.bundle_read import BundleReadError, BundleReader
 from joulewise.cli import _strict_raw_to_trace_problems
+from joulewise.controller import _config_sha256 as runner_config_sha256
 from joulewise.reduce import (
     MIN_PHASE_SAMPLES,
     SHORT_WINDOW_CADENCE_RATIO_MIN,
     _in_window_sample_count,
     _window_gap_stats,
 )
+from joulewise.schemas import BenchmarkConfig, SchemaError
 from joulewise.whole_window import (
     MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
     AuthenticatedConsumptionSession,
@@ -497,6 +499,56 @@ def _pack_inventory(
     return tree_sha, registry_sha, sorted(cells, key=lambda cell: cell.cell_id)
 
 
+def _member_input_paths(
+    repository_root: Path,
+    pack_root: Path,
+    cells: Sequence[_RegisteredCell],
+) -> dict[str, Path]:
+    """Locate source configs through the authenticated plan-tree science rows.
+
+    Floor generators emit repository-relative paths; GAMMA emits pack-relative
+    paths. Registry pins must agree with those rows before either is consumed.
+    """
+    tree, _raw = _json_object(pack_root / "plan_tree.json", label="pack plan_tree.json")
+    science = tree.get("science")
+    if not isinstance(science, list):
+        _refuse("registered_membership_invalid", "plan tree has no science inventory")
+    expected: dict[str, str] = {}
+    for cell in cells:
+        for bundle_id, digest in cell.members:
+            if expected.setdefault(bundle_id, digest) != digest:
+                _refuse(
+                    "registered_membership_invalid",
+                    f"{bundle_id}: conflicting config pins",
+                )
+    source_root = (
+        repository_root
+        if isinstance(tree["downstream_contract"].get("extraction_spec"), Mapping)
+        else pack_root
+    )
+    paths: dict[str, Path] = {}
+    for row in science:
+        if not isinstance(row, Mapping):
+            _refuse("registered_membership_invalid", "science row is not an object")
+        bundle_id = row.get("run_id")
+        if not isinstance(bundle_id, str) or bundle_id not in expected:
+            continue
+        if bundle_id in paths or row.get("config_sha256") != expected[bundle_id]:
+            _refuse(
+                "registered_membership_invalid",
+                f"{bundle_id}: science config pin is ambiguous or mismatched",
+            )
+        paths[bundle_id] = _safe_relative_path(
+            source_root, row.get("config_path"), label=f"{bundle_id} source config path"
+        )
+    if set(paths) != set(expected):
+        _refuse(
+            "registered_membership_invalid",
+            "science inventory lacks registered members",
+        )
+    return paths
+
+
 def _resolve_member_paths(
     runs_root: Path,
     cells: Sequence[_RegisteredCell],
@@ -541,8 +593,12 @@ def _observe_member(
     expected_config_sha256: str,
     phase: str,
     path: Path,
+    input_config_path: Path,
 ) -> _MemberObservation:
     try:
+        input_raw = read_authentication_input(
+            input_config_path, grammar="json", label=f"{bundle_id} source config"
+        )
         config_raw = read_authentication_input(
             path / "config.json",
             grammar="json",
@@ -550,12 +606,35 @@ def _observe_member(
         )
     except OSError as exc:
         _refuse("member_config_mismatch", f"{bundle_id}: config is unreadable: {exc}")
-    if _sha256(config_raw) != expected_config_sha256:
+    if _sha256(input_raw) != expected_config_sha256:
         _refuse(
             "member_config_mismatch",
-            f"{bundle_id}: config bytes do not match the pack pin",
+            f"{bundle_id}: source config bytes do not match the pack pin",
+        )
+    try:
+        expected_run_sha = runner_config_sha256(
+            BenchmarkConfig.from_mapping(json.loads(input_raw))
+        )
+    except (SchemaError, ValueError, TypeError) as exc:
+        _refuse(
+            "member_config_mismatch", f"{bundle_id}: source config is invalid: {exc}"
+        )
+    observed_run_sha = _sha256(config_raw)
+    if observed_run_sha != expected_run_sha:
+        _refuse(
+            "member_config_mismatch",
+            f"{bundle_id}: config is not the runner-normalized pack input",
         )
     reader = BundleReader(path)
+    try:
+        metadata = reader.metadata()
+        if metadata.get("config_sha256") != observed_run_sha:
+            _refuse(
+                "member_config_mismatch",
+                f"{bundle_id}: metadata does not bind config bytes",
+            )
+    except BundleReadError as exc:
+        _refuse("member_config_mismatch", f"{bundle_id}: metadata is unreadable: {exc}")
     try:
         config = reader.config()
         backend = config.hardware_target.telemetry_backend.value
@@ -943,6 +1022,7 @@ def derive_window_duration_margins(
             tree_sha, registry_sha, cells = _pack_inventory(
                 authentication, repository_root, pack_root, pack_identity
             )
+            input_paths = _member_input_paths(repository_root, pack_root, cells)
             member_paths = _resolve_member_paths(runs_root, cells)
             observations: dict[tuple[str, str], _MemberObservation] = {}
             expected_by_id: dict[str, str] = {}
@@ -962,6 +1042,7 @@ def derive_window_duration_margins(
                             expected_config_sha,
                             phase,
                             member_paths[bundle_id],
+                            input_paths[bundle_id],
                         )
             referenced = set(member_paths)
             basis_sha = _discover_evaluation_basis(runs_root, referenced)
