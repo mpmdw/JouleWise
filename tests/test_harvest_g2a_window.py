@@ -13,6 +13,7 @@ from unittest import mock
 from scripts import harvest_g2a_window as harvest
 from scripts import generate_g2a_probe_inputs as producer
 from scripts import summarize_g2a_prefill_probe as summary
+from scripts.gen_g2_phase_d import G2A_CAMPAIGN_POLICY_PATH
 from tests.test_gen_g2a_window import G2aFixture, tree
 from tests import test_generate_g2a_probe_inputs as producer_tests
 from tests.test_generate_g2a_probe_inputs import IDENTITY, T1, ACCEPTANCE
@@ -124,6 +125,28 @@ class G2aHarvestTests(unittest.TestCase):
         advance = self.commands[-1]
         self.assertIn('--execute', advance)
         self.assertEqual(advance[advance.index('--operator-identity')+1], 'fixture-operator')
+
+    def test_bracket_uses_window_inventory_policy_for_both_blocks(self):
+        relative = Path('configs/campaign_policies/quiet_mac_p2_production.json')
+        for path in (relative, G2A_CAMPAIGN_POLICY_PATH):
+            with self.subTest(policy=path):
+                policy_path = self.f.measurement / path
+                self.value['campaign_policy'] = {'path': path.as_posix(), 'sha256': harvest.sha(policy_path)}
+                (self.f.g2a/'window-plan/g2a-input-inventory.json').write_text(json.dumps(self.value)+'\n')
+                self.args.archive_root = self.f.base / ('archive-' + path.stem)
+                with mock.patch.object(harvest.CampaignPolicy, 'from_mapping',
+                                       wraps=harvest.CampaignPolicy.from_mapping) as parse:
+                    self.assertEqual(self.run_harvest()['verdict'], 'SELECT')
+                parse.assert_called_once_with(harvest.read(policy_path))
+
+    def test_harvest_refuses_inventory_policy_outside_measurement_policy_directory(self):
+        self.value['campaign_policy'] = {'path': str(producer_tests.POLICY),
+                                         'sha256': harvest.sha(producer_tests.POLICY)}
+        (self.f.g2a/'window-plan/g2a-input-inventory.json').write_text(json.dumps(self.value)+'\n')
+        record = self.run_harvest()
+        self.assertEqual(record['verdict'], 'REFUSED')
+        self.assertEqual(record['fault']['detail'], 'campaign_policy_path_outside_policy_directory')
+        self.calibration_bracket_for_bundles.assert_not_called()
 
     def test_nondefault_run_config_mismatch_refuses_summary_even_if_metadata_rebound(self):
         path = self.f.g2a/'runs/g2a-small-p0512-r01'

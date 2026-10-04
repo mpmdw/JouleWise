@@ -135,6 +135,7 @@ def harvest(args, *, now=time.time, clear=group_clear, runner=subprocess.run):
         value = read(wp / 'g2a-input-inventory.json')
         ids = roster(value)
         inputs.check_harvest_inputs(measurement_root=root, root=g2a, ledger=ledger, head_pin=pin)
+        policy_path = inputs.harvest_campaign_policy_path(measurement_root=root, inventory=value)
         if value['window_id'] != plan.plan_id or value['session_id'] != plan.plan_id + '-calibration':
             raise HarvestRefusal('window_identity_mismatch')
         # Authenticate against the committed seed first. A mid-session receipt
@@ -185,7 +186,7 @@ def harvest(args, *, now=time.time, clear=group_clear, runner=subprocess.run):
                 binding = brackets.build_calibration_bracket_binding(snap, session_id=value['session_id'],
                     window_id=value['window_id'], plan_id=value['calibration_plan']['plan_id'], plan_sha256=sha(frozen),
                     evidence_root_id=value['evidence_root_id'], runs_root=runs)
-                policy = CampaignPolicy.from_mapping(read(root / 'configs/campaign_policies/quiet_mac_p2_production.json'))
+                policy = CampaignPolicy.from_mapping(read(policy_path))
                 bracket, reasons = brackets.calibration_bracket_for_bundles(runs, [runs / x for x in sorted(valid)],
                     policy.calibration_bracketing, mode='read_replay', ledger_snapshot=snap, bracket_binding=binding,
                     bracket_window_id=value['window_id'], bracket_plan_id=value['calibration_plan']['plan_id'],
