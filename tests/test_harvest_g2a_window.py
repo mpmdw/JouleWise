@@ -148,6 +148,30 @@ class G2aHarvestTests(unittest.TestCase):
         self.assertEqual(record['fault']['detail'], 'campaign_policy_path_outside_policy_directory')
         self.calibration_bracket_for_bundles.assert_not_called()
 
+    def test_harvest_refuses_an_inventory_policy_that_is_not_claim_grade(self):
+        # The schema already refuses a production policy without a bracket or with
+        # on_fail=flag; these two parse, and the harvest must refuse them.
+        def admission_off(source):
+            source['idle_admission']['enabled'] = False
+
+        def exploratory(source):
+            source['profile'] = 'exploratory'
+            source['idle_admission_extension']['claim_bearing'] = False
+
+        for name, change in (('admission_off', admission_off), ('exploratory', exploratory)):
+            with self.subTest(policy=name):
+                source = json.loads((self.f.measurement/'configs/campaign_policies/quiet_mac_p2_production.json').read_text())
+                change(source)
+                path = Path(f'configs/campaign_policies/not_claim_grade_{name}.json')
+                (self.f.measurement/path).write_text(json.dumps(source, sort_keys=True, indent=2)+'\n')
+                self.value['campaign_policy'] = {'path': path.as_posix(), 'sha256': harvest.sha(self.f.measurement/path)}
+                (self.f.g2a/'window-plan/g2a-input-inventory.json').write_text(json.dumps(self.value)+'\n')
+                self.args.archive_root = self.f.base / ('archive-refuse-' + name)
+                record = self.run_harvest()
+                self.assertEqual(record['verdict'], 'REFUSED')
+                self.assertEqual(record['fault']['detail'], 'campaign_policy_not_claim_grade')
+                self.calibration_bracket_for_bundles.assert_not_called()
+
     def test_nondefault_run_config_mismatch_refuses_summary_even_if_metadata_rebound(self):
         path = self.f.g2a/'runs/g2a-small-p0512-r01'
         config = harvest.read(path/'config.json')

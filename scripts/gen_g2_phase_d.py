@@ -44,12 +44,16 @@ G2A_CAMPAIGN_POLICY_PATH = Path("configs/campaign_policies/quiet_mac_p2_g2a_b3.j
 # overshoot and pin custody 420 s.
 # Delayed retries: 4*(300 + 75 + 30) = 1620 s (backoff + member idle + guards
 # and slice overhead). Block-3 ruling budgets four retries: the two rejected
-# first attempts among 13 block-2 members, scaled to 24 and rounded up. The
-# 300 s backoff is the longest wait that keeps a retried member's single
-# sampler stream (attempt 1, wait, attempt 2, measured window: about 485 s)
-# inside the active v3 clock anchor's 5 ms wall-minus-monotonic cap at the
-# 7.24-7.60 ppm network-time-OFF rate on record (uncertainty_evidence.py);
-# a 600 s wait (about 785 s of stream) would void every retried member.
+# first attempts among 13 block-2 members, scaled to 24 and rounded up. Why
+# 300 s: one sampler runs from attempt 1 through the measured window, and the
+# active v3 clock anchor caps its effective bound (anchor half-width + wall-
+# minus-monotonic span) at 5 ms. Block-2 members drifted about 3.2 ppm with
+# half-widths up to 2.31 ms, and an idle attempt took about 104 s. The
+# worst-case retried stream (Qwen3-8B at 4096 tokens, 5 tokens/s decode,
+# guards near their timeouts) is 2*104 + 300 + 45 + 20 + 103.2 + 6 = 683 s,
+# bound about 2.31 + 2.2 = 4.5 ms; a 600 s wait (983 s) would exceed 5 ms.
+# Drift tolerance at 300 s: about 3.9 ppm. A voided member is refused, never
+# admitted (tests/test_controller_retry_backoff.py).
 # ceil(7947.40625 + 20*240 + 4*300 + 8*180 + 1440 + 420 + 1620) = 18868 seconds.
 # Orchestrator ruling (block-2 design record 00, item 7): a first sizing from
 # code worst cases (10 and 5 tokens/s decode, the 300 s cooldown cap and an idle

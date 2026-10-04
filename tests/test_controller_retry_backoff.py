@@ -152,7 +152,7 @@ class RetryBackoffTests(unittest.TestCase):
         self.assertEqual(sum(row[:2] == ('sleep', 600) for row in clock.trace), 1)
 
     def test_backoff_bundle_passes_strict_admission_and_measured_window_checks(self):
-        for backoff in (0, 600):
+        for backoff in (0, 300):
             with self.subTest(backoff=backoff):
                 path, summary, metadata, clock, _ = self.run_member(backoff, strict_fixture=True)
                 self.assertEqual(summary.status, RunStatus.SUCCEEDED)
@@ -215,11 +215,30 @@ class RetryBackoffClockAnchorTests(unittest.TestCase):
     """The block-3 wait must keep a retried member's stream inside the v3 cap.
 
     The adapter keeps one sampler from attempt 1 through the measured window,
-    so the wait lengthens the stream the clock anchor fits. Network-time-OFF
-    captures on record drift 7.24 and 7.60 ppm (uncertainty_evidence.py); the
-    v3 method caps the wall-minus-monotonic span and the effective bound at
-    5 ms. Synthetic records only; no estimator code is mocked.
+    so the wait lengthens the stream the clock anchor fits. The v3 method caps
+    the effective bound (anchor half-width + wall-minus-monotonic span +
+    padding) at 5 ms. Real inputs, from block 2's twelve completed members
+    (window d117-g2a-prefill-probe-20261003T1748Z, read by the Fable final pass
+    on PR #465): drift about 3.2 ppm, anchor half-width up to 2.31 ms, one idle
+    attempt about 104 s of wall time. Synthetic records give a half-width of
+    about 0.5 ms, so the test adds the difference to model the widest one.
+    At 300 s the worst-case stream is 683 s and the bound about 4.5 ms; the
+    drift tolerance there is about (5 - 2.31) ms / 683 s = 3.9 ppm.
+    No estimator code is mocked.
     """
+
+    DRIFT_PPM = 3.2
+    WIDEST_HALF_WIDTH_S = 0.00231
+    # Worst-case retried stream for the longest member (Qwen3-8B at 4096
+    # prompt tokens): two idle attempts of 104 s wall time each (block 2), the
+    # wait, 45 s for three guards near their command timeouts, two 4096-token
+    # prefills at 10 s each, 516 decoded tokens at the code's worst-case 5
+    # tokens/s, 5 s settle and 1 s post dwell (Sol executing review on PR #465).
+    IDLE_ATTEMPT_S = 104
+    GUARDS_S = 45
+    PREFILLS_S = 2 * 10
+    DECODE_S = 516 / 5
+    SETTLE_AND_DWELL_S = 5 + 1
 
     @staticmethod
     def anchor(length_s, ppm):
@@ -235,26 +254,27 @@ class RetryBackoffClockAnchorTests(unittest.TestCase):
                    for i in range(length_s)]
         return derive_powermetrics_anchor_v3(stamps=stamps, records=records)
 
-    @staticmethod
-    def retried_stream_s(backoff_s=None):
-        # attempt 1 idle + wait + attempt 2 idle + 60 s for guards, warmup,
-        # the large model's measured window and the post-window dwell.
+    @classmethod
+    def retried_stream_s(cls, backoff_s=None):
         policy = CampaignPolicy.from_mapping(json.loads((ROOT / G2A_CAMPAIGN_POLICY_PATH).read_bytes()))
         wait = policy.idle_admission.retry_backoff_s if backoff_s is None else backoff_s
-        return int(75 + wait + 75 + 60)
+        return math.ceil(2 * cls.IDLE_ATTEMPT_S + wait + cls.GUARDS_S + cls.PREFILLS_S
+                         + cls.DECODE_S + cls.SETTLE_AND_DWELL_S)
 
-    def test_block3_policy_retried_stream_stays_bounded_at_on_record_drift(self):
-        length = self.retried_stream_s()
-        self.assertLessEqual(length, 520)
-        for ppm in (7.24, 7.60):
-            with self.subTest(ppm=ppm):
-                anchor = self.anchor(length, ppm)
-                self.assertEqual(anchor['status'], 'bounded', anchor)
-                self.assertEqual(anchor['method'], CLOCK_METHOD_V3)
+    @classmethod
+    def widest_bound_s(cls, anchor):
+        return (anchor['effective_clock_anchor_bound_s'] - anchor['anchor_only_bound_s']
+                + cls.WIDEST_HALF_WIDTH_S)
 
-    def test_a_600_second_wait_would_void_the_retried_member(self):
-        anchor = self.anchor(self.retried_stream_s(600), 7.60)
-        self.assertEqual(anchor['status'], 'unknown', anchor)
+    def test_block3_retried_stream_stays_inside_the_cap_at_block2_drift(self):
+        anchor = self.anchor(self.retried_stream_s(), self.DRIFT_PPM)
+        self.assertEqual(anchor['status'], 'bounded', anchor)
+        self.assertEqual(anchor['method'], CLOCK_METHOD_V3)
+        self.assertLess(self.widest_bound_s(anchor), 0.0046)
+
+    def test_a_600_second_wait_would_exceed_the_cap_for_the_widest_half_width(self):
+        anchor = self.anchor(self.retried_stream_s(600), self.DRIFT_PPM)
+        self.assertGreater(self.widest_bound_s(anchor), 0.005)
 
 
 if __name__ == '__main__':

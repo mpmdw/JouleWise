@@ -12,7 +12,7 @@ if str(ROOT) not in sys.path:
 from joulewise import calibration_bracketing as brackets, network_time_off, night_gate
 from joulewise.calibration_ledger import load_calibration_ledger_snapshot, terminal_head_pin_for_session
 from joulewise.cli import validate_bundle
-from joulewise.schemas import CampaignPolicy
+from joulewise.schemas import AdmissionFailureAction, CampaignPolicy, CampaignPolicyProfile
 from scripts import generate_g2a_probe_inputs as inputs, summarize_g2a_prefill_probe as summary
 from scripts import select_g2a_prefill_length as selector
 from scripts.generate_g2a_probe_inputs import harvest_roster as roster
@@ -136,6 +136,12 @@ def harvest(args, *, now=time.time, clear=group_clear, runner=subprocess.run):
         ids = roster(value)
         inputs.check_harvest_inputs(measurement_root=root, root=g2a, ledger=ledger, head_pin=pin)
         policy_path = inputs.harvest_campaign_policy_path(measurement_root=root, inventory=value)
+        # The inventory names the policy; only a claim-grade one may judge a bracket
+        # (production profile, bracket required, admission enabled and aborting).
+        policy = CampaignPolicy.from_mapping(read(policy_path))
+        if (policy.profile != CampaignPolicyProfile.PRODUCTION or not policy.calibration_bracketing.require_bracket
+                or not policy.idle_admission.enabled or policy.idle_admission.on_fail != AdmissionFailureAction.ABORT):
+            raise HarvestRefusal('campaign_policy_not_claim_grade')
         if value['window_id'] != plan.plan_id or value['session_id'] != plan.plan_id + '-calibration':
             raise HarvestRefusal('window_identity_mismatch')
         # Authenticate against the committed seed first. A mid-session receipt
@@ -186,7 +192,6 @@ def harvest(args, *, now=time.time, clear=group_clear, runner=subprocess.run):
                 binding = brackets.build_calibration_bracket_binding(snap, session_id=value['session_id'],
                     window_id=value['window_id'], plan_id=value['calibration_plan']['plan_id'], plan_sha256=sha(frozen),
                     evidence_root_id=value['evidence_root_id'], runs_root=runs)
-                policy = CampaignPolicy.from_mapping(read(policy_path))
                 bracket, reasons = brackets.calibration_bracket_for_bundles(runs, [runs / x for x in sorted(valid)],
                     policy.calibration_bracketing, mode='read_replay', ledger_snapshot=snap, bracket_binding=binding,
                     bracket_window_id=value['window_id'], bracket_plan_id=value['calibration_plan']['plan_id'],
