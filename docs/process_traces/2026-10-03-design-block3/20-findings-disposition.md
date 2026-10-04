@@ -1,6 +1,6 @@
 # Findings dispositions, PR #465 (lane G2A-B3-RETRY-BACKOFF-01)
 
-Reviewed head `ccca0b3c`; fixes in `68bf2301`.
+Reviewed head `ccca0b3c`; fixes in `68bf2301` and `f10ed46b`; Sol delta check (13) on `68bf2301`.
 
 | Source | Finding | Disposition |
 |---|---|---|
@@ -11,3 +11,4 @@ Reviewed head `ccca0b3c`; fixes in `68bf2301`.
 | Fable 3 NIT | Retry budget uses 75 s idle; a recorded attempt takes ≈102 s | **Rejected**: 4 × ≈27 s ≈ 108 s, inside the per-member allowances (240 s small, 300 s large against ≈112 s of non-idle work); the generator sizes from code, not bundle timing (its own rule). |
 | Fable 4 NIT | Strict-bundle subtest labelled 600 loads the 300 s file | **Fixed in `68bf2301`**. |
 | Fable 5 NIT | `environment_admission.retry_backoff` is recorded but never validated | **Rejected**: audit-only by design; the controller is its only writer, and the attempt timestamps (validated for order) already show the gap. |
+| Sol delta check (13) F1 should_fix | The 683 s budget is not a strict worst case: idle attempts may take up to ~123 s, start-up/drain/parse unbudgeted, prefill and decode rates assumed | **Fixed in `f10ed46b` as a label** (comment, docstring; registration §4 says "estimate, not an enforced bound"). Orchestrator ruling: same defect class (sizing argument) failed twice, so no third round; the class closes by stating what the test is. A strict bound cannot be proven (prefill and decode durations are not bounded by code), exceedance fails closed (retried member void, window RECOVER, no wrong number), and the delta's own figures put the tolerance at ≈3.9 ppm against block 2's ≈3.2 ppm. Harvest guard: PASS (16 policy combinations; guard deletion fails 2 tests). |

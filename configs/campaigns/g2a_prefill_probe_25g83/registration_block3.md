@@ -156,9 +156,10 @@ In order, inside one chain run under the unattended night driver:
    measured window, and the clock-step test of §5(b) fits every record of that stream. The active
    test refuses a capture when the clock anchor's effective bound (its half-width plus the
    wall-minus-monotonic span that clock drift builds up over the stream) exceeds 5 ms, so a wait
-   that makes the stream too long voids the member. The wait was sized against the worst-case
-   retried member (Qwen3-8B at 4096 tokens, decoding at the code's worst-case 5 tokens/s, guards
-   near their timeouts: about 683 s of stream at 300 s) using block 2's member clock records
+   that makes the stream too long voids the member. The wait was sized against an estimate of the
+   longest retried member (Qwen3-8B at 4096 tokens, decode assumed no slower than 5 tokens/s,
+   guards near their timeouts: about 683 s of stream at 300 s; an estimate, not an enforced bound)
+   using block 2's member clock records
    (instrument diagnostics, not results of the probe; their drift, widest half-width and idle
    attempt duration are the inputs of `tests/test_controller_retry_backoff.py` at H). At 300 s
    that member stays inside the 5 ms bound; at 600 s it would not. If the drift during this block
