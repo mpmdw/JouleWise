@@ -5,8 +5,9 @@ seat (Opus 5.5, headless orchestrator seat holding the orchestrator's design aut
 item 7), from the sealed block-2 registration
 `configs/campaigns/g2a_prefill_probe_25g83/registration_block2.md` and the orchestrator's ruling
 under its §7 (`docs/process_traces/2026-10-03-design-block3/00-design-record.md` §1). Every rule
-below is fixed before any data of this block exists. No value measured by block 2 or block 3
-appears in this file or may be added to it.
+below is fixed before any data of this block exists. No count, energy or other result measured
+by block 2 or block 3 appears in this file or may be added to it; block 2's clock diagnostics are
+used by reference only (§4 item 3).
 
 ## 1. What this block measures, and why it is needed
 
@@ -152,15 +153,19 @@ In order, inside one chain run under the unattended night driver:
    inside one member's own admission, before its prefill; it does not re-run a member, re-collect
    a rung or replace any capture (§7).
    *Why 300 s.* One power sampler runs from the start of attempt 1 to the end of the member's
-   measured window, and the clock-step test of §5(b) fits every record of that stream. With
-   network time off, the wall clock runs about 7.2-7.6 ppm off the monotonic clock (the captures
-   on record, `joulewise/uncertainty_evidence.py`), and the active test refuses a stream whose
-   wall-minus-monotonic span or bound exceeds 5 ms. A retried member's stream is about 75 s
-   (attempt 1) + the wait + 75 s (attempt 2) + 60 s (guards, warm-up, measured window) ≈ 510 s at
-   300 s, which stays inside the cap at 7.6 ppm; at 600 s (≈ 810 s) it would not, and every retried
-   member would be invalid. 300 s also outlasts the one burst on record: it started about 11 s
-   before the failed member's first attempt and lasted about six minutes; a retry 300 s after
-   that attempt ended would have begun about 30 s after the burst's logged end.
+   measured window, and the clock-step test of §5(b) fits every record of that stream. The active
+   test refuses a capture when the clock anchor's effective bound (its half-width plus the
+   wall-minus-monotonic span that clock drift builds up over the stream) exceeds 5 ms, so a wait
+   that makes the stream too long voids the member. The wait was sized against the worst-case
+   retried member (Qwen3-8B at 4096 tokens, decoding at the code's worst-case 5 tokens/s, guards
+   near their timeouts: about 683 s of stream at 300 s) using block 2's member clock records
+   (instrument diagnostics, not results of the probe; their drift, widest half-width and idle
+   attempt duration are the inputs of `tests/test_controller_retry_backoff.py` at H). At 300 s
+   that member stays inside the 5 ms bound; at 600 s it would not. If the drift during this block
+   is well above block 2's, a retried member can still be voided; it is then invalid (§6), never
+   admitted, and the window is RECOVER. 300 s also outlasts the one burst on record: it started
+   about 11 s before the failed member's first attempt and lasted about six minutes; a retry 300 s
+   after that attempt ended would have begun about 30 s after the burst's logged end.
 4. **Post bracket.** One governed pulse calibration in the same bracket session.
 5. **Terminal boundary.** The ledger session is finalized; the chain records the terminal head
    candidate (`physical_ahead`) and stops with the tracked pin unchanged. The counts receipt and
