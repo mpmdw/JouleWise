@@ -80,3 +80,14 @@ value, count or summary was read.
 
 Per recipe §7: email Ed once (paths and shas), then launch a design seat (RUN_STATE item 7) for the desk day. Brief: `40-desk-day-seat-brief.md`; state: `~/night-archive/desk-day-v5/`; launcher: `docs/process_traces/2026-10-02-interactive/launch-seat.sh` (opus). The selected rung is not typed here; the seat reads `selection.json`.
 - Pin- and seal-sensitive tests on the landing branch (24 modules that read the ledger head pin, seal record 52 or registration_block3): Ran 1044 tests, OK (skipped=4).
+- PR #468 (light tier) CI green 15/15 on `583c0284`; merged `4ea04a18`. Canonical root fast-forwarded to `4ea04a18` (no night label loaded, no night plist).
+- Desk-day seat launched: pid 70182, log `~/night-archive/desk-day-v5/seat-1791151006.log`. Email to Ed (block 3 complete, paths and shas, seat launched): Gmail `1a108ebde5ce2b0a`.
+
+## Gates and checks that ran (pruning rule)
+
+- **Harvest custody and verdict** (`harvest_g2a_window.py`): its first run caught nothing real. It mis-refused on its own bug, which only the real window exposed.
+- **Sol executing review: caught F1.** With zero valid members, the refusal cause code was lost. That is a cause-code fidelity defect, and it bears on how a RECOVER is named.
+- **Fable final pass:** PASS, minor notes only.
+- **Trial re-harvest before the real one: caught the uncommitted-pin refusal.** It cost a `/tmp` run instead of a real archive root.
+- **Pin-sensitive local tests (1044) and CI:** green; no catch.
+- **Watchdog hold_census:** held as designed during the window.
