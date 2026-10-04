@@ -54,6 +54,13 @@ AUTHOR_SPEC.loader.exec_module(author_arm_readiness_evidence)
 
 
 class LaunchWindowEntrypointTests(unittest.TestCase):
+    def setUp(self) -> None:
+        # These consumption/FD fixtures have no live identity projection.
+        # File-backed re-derivation is covered by the realization recheck tests.
+        patch = mock.patch.object(launch_window, "_recheck_identity_projection")
+        patch.start()
+        self.addCleanup(patch.stop)
+
     def _args(self, root: Path) -> argparse.Namespace:
         return argparse.Namespace(
             pack_root=root / "pack",
@@ -1103,6 +1110,12 @@ class ProductionArmRelocationLaunchTests(unittest.TestCase):
 class OperatorConfirmationDigestCliTests(unittest.TestCase):
     DIGEST = "Operator-Custody-Digest-Passed-Unchanged"
 
+    def setUp(self) -> None:
+        # Keep the synthetic confirmation fixture focused on its supply legs.
+        patch = mock.patch.object(launch_window, "_recheck_identity_projection")
+        patch.start()
+        self.addCleanup(patch.stop)
+
     @staticmethod
     def _captured_stdout(module: object) -> tuple[io.BytesIO, object]:
         # A real text stream, not a Mock: Python 3.14's argparse probes
@@ -2062,6 +2075,11 @@ class PackNightGoRefusalHandlerTests(unittest.TestCase):
 
 class PackNightLaunchBoundaryTests(unittest.TestCase):
     def setUp(self):
+        # The ARM/GO fixture predates file-backed projection inputs; the new
+        # realization recheck module exercises that independent launch gate.
+        patch = mock.patch.object(launch_window, "_recheck_identity_projection")
+        patch.start()
+        self.addCleanup(patch.stop)
         self.case = arm_readiness_tests.PackNightConsumerTests()
         self.case.setUp()
         self.addCleanup(self.case.doCleanups)
