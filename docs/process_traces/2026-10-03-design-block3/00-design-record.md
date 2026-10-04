@@ -105,7 +105,24 @@ unchecked condition in block 3 §3.
   but default-zero and byte-identical in production; #416 applies at the first claim-bearing
   `_v5` window, at a head containing this change.
 
-## 3. Work items
+## 3. Contamination disclosure (blindness, registration block 2 §10 and brief item 1)
+
+At ≈18:29:45 PDT, while reading PR #463's body for the gate-ledger format (`gh pr view 463`), this
+seat read its "Verification" paragraph, which reports the implementation seat's real-data replay of
+`w2`'s 12 valid members through the selector and names the selector's refusal code. That is a
+block-2 selection replay outcome, which the blindness rule says no seat reads before block 3 ends.
+It was not sought. It is public in PR #463's body (merged 2026-10-03), so any reader of that PR,
+the magistrate included, has had it since the merge.
+
+What it could have touched: nothing in block 3's design. The ruling (commit `34871f70`, 18:23:03),
+the registration draft including the §7 end state (`97ff5035`, 18:27:57) and the arm recipe
+(`ab2b3979`, 18:29:27) were all committed and pushed before the read. The rule block 3 uses is
+D-166's, unchanged, and the end state is D-166's own fallback length. Later edits to those files
+are limited to filling code-derived values (span, window, policy sha, H) and to changes a reviewer
+or the cold gate requires; each is visible in the branch history. Seat briefs and the seal charges
+forbid reading PR bodies of #461-#464 and name this disclosure.
+
+## 4. Work items
 
 | Item | What | Status |
 |---|---|---|
