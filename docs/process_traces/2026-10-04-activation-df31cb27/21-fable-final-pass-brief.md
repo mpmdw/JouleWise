@@ -1,4 +1,4 @@
-You are giving a cold final pass on one commit before merge. You have no prior context. Your working directory is a detached checkout of `96747ff0` (branch fix/2026-10-04-g2a-b3w1-bracket-baseline, PR #467); its parent on main is `a6c7f9cf`. Read `git diff a6c7f9cf..96747ff0` and the surrounding code. You may run read-only commands and the unit tests with `/Users/edr/code/JouleWise/.venv/bin/python -B -m unittest <modules>` from this directory (for example `tests.test_harvest_g2a_window tests.test_calibration_bracketing tests.test_custody_mode_inventory`).
+You are giving a cold final pass on one commit before merge. You have no prior context. Your working directory is a detached checkout of `92a3661d4ea1e48b89b2a48d419479aa7c63ace8` (branch fix/2026-10-04-g2a-b3w1-bracket-baseline, PR #467); its parent on main is `a6c7f9cf`. Read `git diff a6c7f9cf..92a3661d4ea1e48b89b2a48d419479aa7c63ace8` and the surrounding code. You may run read-only commands and the unit tests with `/Users/edr/code/JouleWise/.venv/bin/python -B -m unittest <modules>` from this directory (for example `tests.test_harvest_g2a_window tests.test_calibration_bracketing tests.test_custody_mode_inventory`).
 
 Rules:
 - Scratch: /tmp/df31-fable/ only.
@@ -21,3 +21,5 @@ Judge as the last reviewer before merge on code that decides the verdict over me
 5. Any other defect that would make a verdict wrong.
 
 Answer with a first line of exactly `FINAL PASS: PASS` or `FINAL PASS: FAIL`. Then give your findings, each with a severity (BLOCKER, MAJOR, MINOR or NIT), the file:line, and evidence (what you ran). Keep it under 800 words.
+
+Note: the head carries two commits. The second adds one line after the bracket decision: a finalized session's bracket-view snapshot refusal reasons are unioned, first, into the decision's reasons. An executing review had found that, with zero valid members, the decision returns only `instrument_calibration_bracket_missing` and drops the snapshot's codes. Judge that line as well.
