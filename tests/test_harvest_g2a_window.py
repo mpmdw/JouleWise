@@ -26,6 +26,25 @@ from tests.test_calibration_bracketing import _checkout_estimator_code_sha256, _
 from tests.test_reduce import self_consistent_calibration
 
 
+_D079_IMPORT_LEDGER = Path(__file__).parent/'fixtures/d117_v2_production/issued/calibration_observation_ledger.jsonl'
+
+
+def _d079_import_custody_available():
+    # The tracked receipts name 190 artifacts in Ed's external backup. Their
+    # bytes are not part of an ordinary CI checkout (see the fixture README).
+    # Match replay's first existing replacement root, including an explicitly
+    # disabled backup; the private bootstrap table alone cannot satisfy custody.
+    for line in _D079_IMPORT_LEDGER.read_bytes().splitlines():
+        receipt = json.loads(line)
+        if not receipt['artifact_sha256']:
+            continue
+        roots = real_ledger._custody_probe_paths(Path(receipt['custody_locator']), mode='read_replay')
+        root = next((path for path in roots if path.exists()), None)
+        if root is None or not all((root/name).is_file() for name in receipt['artifact_sha256']):
+            return False
+    return True
+
+
 class G2aHarvestTests(unittest.TestCase):
     def setUp(self):
         self.f = G2aFixture()
@@ -286,6 +305,10 @@ class G2aHarvestTests(unittest.TestCase):
         self.calibration_bracket_for_bundles.assert_not_called()
         self.assertEqual(self.commands, [])
 
+    @unittest.skipUnless(
+        _d079_import_custody_available(),
+        'lead-reviewed D-079 import custody inputs are unavailable',
+    )
     def test_real_passed_bracket_after_nonzero_acceptance_cutoff_selects(self):
         # Reuse the authenticated historical-import prefix; refresh only the
         # synthetic acceptance's estimator pins, as the bracketing tests do.
@@ -298,7 +321,7 @@ class G2aHarvestTests(unittest.TestCase):
         acceptance_path = self.f.base/'synthetic-issued-acceptance.json'
         acceptance_path.write_text(json.dumps(acceptance)+'\n')
         self.load_calibration_acceptance_bound.return_value = acceptance
-        self.ledger.write_bytes((issued/'calibration_observation_ledger.jsonl').read_bytes())
+        self.ledger.write_bytes(_D079_IMPORT_LEDGER.read_bytes())
         self.pin.write_bytes((issued/'calibration_ledger_head.json').read_bytes())
         cutoff = acceptance['ledger_cutoff']
         self.assertGreater(cutoff['sequence'], 0)
@@ -383,8 +406,12 @@ class G2aHarvestTests(unittest.TestCase):
                 mock.patch.object(harvest.brackets, 'build_calibration_bracket_binding', self.real_bracket_binding), \
                 mock.patch.object(harvest.brackets, 'calibration_bracket_for_bundles', self.real_bracket_for_bundles):
             record = self.run_harvest()
+        if self._causes(record) != ('SELECT', []):
+            print(f"harvest verdict={record['verdict']} fault={record.get('fault')} "
+                  f"cause_codes={record.get('cause_codes')}")
+        self.assertEqual(self._causes(record), ('SELECT', []),
+                         {'fault': record.get('fault'), 'cause_codes': record.get('cause_codes')})
         bracket = harvest.read(self.args.archive_root/'derived/bracket.json')
-        self.assertEqual(self._causes(record), ('SELECT', []), bracket)
         self.assertEqual(bracket['assessment']['status'], 'passed')
         self.assertEqual(bracket['reasons'], [])
         view = bracket['assessment']['acceptance']['ledger_snapshot']
