@@ -21,6 +21,7 @@ from tests.test_summarize_g2a_prefill_probe import retained_metadata, retained_s
 from joulewise import calibration_ledger as real_ledger
 from scripts import recover_calibration_ledger as recovery
 from tests.git_fixture import init_git_fixture
+from tests.test_calibration_bracketing import _unissued_acceptance_fixture, _unissued_acceptance_fixture_bytes
 
 
 class G2aHarvestTests(unittest.TestCase):
@@ -80,11 +81,14 @@ class G2aHarvestTests(unittest.TestCase):
         self.commands = []
         self.stack = ExitStack()
         self.addCleanup(self.stack.close)
+        self.real_bracket_for_bundles = harvest.brackets.calibration_bracket_for_bundles
+        self.real_bracket_binding = harvest.brackets.build_calibration_bracket_binding
         for obj, name, kwargs in (
             (producer, 'check_harvest_inputs', {'return_value': None}),
             (harvest, 'terminal_head_pin_for_session', {'return_value': {'sequence': 1, 'head_digest': 'b'*64}, 'create': True}),
             (harvest, 'load_calibration_ledger_snapshot', {'return_value': self.snapshot}),
             (harvest, 'validate_bundle', {'return_value': []}),
+            (harvest.brackets, 'load_calibration_acceptance_bound', {'return_value': copy.deepcopy(ACCEPTANCE)}),
             (harvest.brackets, 'build_calibration_bracket_binding', {'return_value': {'fixture': True}}),
             (harvest.brackets, 'calibration_bracket_for_bundles', {'return_value': ({'status': 'passed'}, ())}),
         ):
@@ -254,6 +258,94 @@ class G2aHarvestTests(unittest.TestCase):
         self.assertEqual(record['verdict'], 'RECOVER')
         self.assertEqual(record['cause_codes'], ['post_bracket_failure'])
         self.assertNotIn('selection', record)
+
+    def test_bracket_acceptance_file_sha_must_match_frozen_plan(self):
+        alternate = self.f.base/'different-acceptance.json'
+        alternate.write_bytes(harvest.brackets.DEFAULT_ACCEPTANCE_BOUND_PATH.read_bytes() + b'\n')
+        with mock.patch.object(harvest.brackets, 'DEFAULT_ACCEPTANCE_BOUND_PATH', alternate):
+            record = self.run_harvest()
+        self.assertEqual(self._causes(record), ('REFUSED', ['bracket_acceptance_plan_mismatch']))
+        self.calibration_bracket_for_bundles.assert_not_called()
+        self.assertEqual(self.commands, [])
+
+    def test_bracket_acceptance_id_must_match_frozen_plan(self):
+        self.load_calibration_acceptance_bound.return_value['acceptance_id'] = 'other-acceptance'
+        record = self.run_harvest()
+        self.assertEqual(self._causes(record), ('REFUSED', ['bracket_acceptance_plan_mismatch']))
+        self.calibration_bracket_for_bundles.assert_not_called()
+
+    def test_bracket_view_refusals_are_unfiltered_recovery_causes(self):
+        refused = copy.copy(self.snapshot)
+        refused.refusal_reasons = ('calibration_ledger_baseline_missing', 'calibration_ledger_custody_invalid')
+        self.load_calibration_ledger_snapshot.side_effect = [self.snapshot, self.snapshot, refused]
+        self.calibration_bracket_for_bundles.side_effect = lambda *_, **kwargs: (
+            {'status': 'failed'}, kwargs['ledger_snapshot'].refusal_reasons)
+        record = self.run_harvest()
+        self.assertEqual(self._causes(record), ('RECOVER', list(refused.refusal_reasons)))
+        self.build_calibration_bracket_binding.assert_not_called()
+        self.assertIs(self.calibration_bracket_for_bundles.call_args.kwargs['ledger_snapshot'], refused)
+
+    def test_bracket_view_refusals_survive_a_decision_that_drops_them(self):
+        refused = copy.copy(self.snapshot)
+        refused.refusal_reasons = ('calibration_ledger_baseline_missing',)
+        self.load_calibration_ledger_snapshot.side_effect = [self.snapshot, self.snapshot, refused]
+        # With no valid member the real decision returns only its generic code.
+        self.calibration_bracket_for_bundles.return_value = (
+            {'status': 'failed'}, ('instrument_calibration_bracket_missing',))
+        record = self.run_harvest()
+        self.assertEqual(record['verdict'], 'RECOVER')
+        self.assertIn('calibration_ledger_baseline_missing', record['cause_codes'])
+        self.assertIn('instrument_calibration_bracket_missing', record['cause_codes'])
+        reasons = harvest.read(self.args.archive_root/'derived/bracket.json')['reasons']
+        self.assertEqual(reasons, ['calibration_ledger_baseline_missing', 'instrument_calibration_bracket_missing'])
+
+    def test_finalized_session_after_acceptance_cutoff_uses_separate_bracket_view(self):
+        # The existing crash fixture can authenticate PRE custody but leaves
+        # POST unfilled. Complete that real session over a non-genesis seed.
+        self.crash_after_pre(seed_past_cutoff=True, retain_members=True)
+        post = self.fixture_capture('fixture-post')
+        real_ledger.claim_bracket_session_slot(self.ledger, session_id=self.value['session_id'],
+                                              slot='post', attempt_id='fixture-post')
+        real_ledger.finalize_bracket_session_slot(self.ledger, session_id=self.value['session_id'],
+            slot='post', disposition='valid', custody_locator=str(post),
+            artifact_sha256=real_ledger.artifact_hashes(post), identity_epoch=IDENTITY,
+            t1_bindings=T1, capture_wall_time_s='111.0', exact_bound_lexeme_s='0.026')
+        (self.f.night/'night/chain.exited').write_text('{"exit_code":0}\n')
+        for run_id in producer.harvest_roster(self.value):
+            path = self.f.g2a/'runs'/run_id
+            metadata = harvest.read(path/'metadata.json')
+            metadata['instrument_calibration'] = {'bindings': T1}
+            (path/'metadata.json').write_text(json.dumps(metadata)+'\n')
+            (path/'events.jsonl').write_text('\n'.join(json.dumps({
+                'phase': 'measured_run', 'event_type': event, 'timestamp_s': stamp,
+                'message': '', 'metadata': {},
+            }) for event, stamp in (('sampling_started', 100.), ('sampling_stopped', 110.)))+'\n')
+        acceptance_path = self.f.base/'fixture-acceptance.json'
+        acceptance_path.write_bytes(_unissued_acceptance_fixture_bytes())
+        acceptance = _unissued_acceptance_fixture()
+        self.load_calibration_acceptance_bound.return_value = acceptance
+        frozen = self.f.g2a/'window-plan/calibration_plan.json'
+        # Keep the session's plan binding intact: the fixture acceptance is
+        # installed before the session is reserved in crash_after_pre below.
+        self.assertEqual(harvest.read(frozen)['active_acceptance']['sha256'], harvest.sha(acceptance_path))
+        self.build_calibration_bracket_binding.side_effect = self.real_bracket_binding
+        self.calibration_bracket_for_bundles.side_effect = lambda *args, **kwargs: (
+            self.real_bracket_for_bundles(*args, **kwargs, _allow_unissued_fixture=True))
+        with mock.patch.object(harvest.brackets, 'DEFAULT_ACCEPTANCE_BOUND_PATH', acceptance_path):
+            record = self.run_harvest()
+        self.assertEqual(record['verdict'], 'RECOVER', record.get('fault'))
+        assessment = harvest.read(self.args.archive_root/'derived/bracket.json')
+        self.assertNotIn('calibration_ledger_baseline_missing', assessment['reasons'])
+        self.assertEqual(assessment['assessment']['acceptance']['ledger_snapshot']['baseline_sequence'],
+                         acceptance['ledger_cutoff']['sequence'])
+        snapshots = self.load_calibration_ledger_snapshot.call_args_list
+        self.assertEqual([call.kwargs['baseline_sequence'] for call in snapshots], [4, 4, 0])
+        self.assertEqual([call.kwargs['require_committed_pin'] for call in snapshots], [True, False, False])
+        self.assertEqual(snapshots[1].args, snapshots[2].args)
+        bracket_view = self.calibration_bracket_for_bundles.call_args.kwargs['ledger_snapshot']
+        self.assertEqual(bracket_view.bracket_session_by_id[self.value['session_id']].state, 'finalized')
+        self.assertGreater(bracket_view.head_sequence, 4)
+        self.assertIs(self.build_calibration_bracket_binding.call_args.args[0], bracket_view)
 
     def test_valid_low_counts_at_every_rung_selects_registered_collect_4096_fallback(self):
         for stage in self.value['stages'][:4]:
@@ -510,13 +602,36 @@ class G2aHarvestTests(unittest.TestCase):
         record = self.run_harvest()
         self.assertEqual(record['verdict'], 'RECOVER'); self.assertIn('bracket_incomplete', record['cause_codes'])
 
-    def crash_after_pre(self):
+    def fixture_capture(self, name):
+        capture = self.f.g2a/'runs/instrument_validation'/name
+        (capture/'raw').mkdir(parents=True)
+        (capture/'raw/powermetrics.plist').write_bytes(b'synthetic calibration capture ' + name.encode())
+        (capture/'events.jsonl').write_text('{"timestamp_s":99.0}\n')
+        (capture/'instrument_evidence.json').write_text('{"b_fiducial_s":0.025}\n')
+        (capture/'manifest.json').write_text(json.dumps({'fixture': True, 'name': name})+'\n')
+        return capture
+
+    def crash_after_pre(self, *, seed_past_cutoff=False, retain_members=False):
         """Leave the real mid-session slot-finalization tail that crashed w1."""
-        for run_id in producer.harvest_roster(self.value):
-            harvest.shutil.rmtree(self.f.g2a/'runs'/run_id)
+        if not retain_members:
+            for run_id in producer.harvest_roster(self.value):
+                harvest.shutil.rmtree(self.f.g2a/'runs'/run_id)
         self.ledger.write_bytes(b'')
         self.pin.write_text(json.dumps({'sequence': 0, 'head_digest': real_ledger.GENESIS_DIGEST,
                                        'ledger_schema': real_ledger.LEDGER_SCHEMA})+'\n')
+        seed_sequence, seed_digest = 0, real_ledger.GENESIS_DIGEST
+        if seed_past_cutoff:
+            seed = self.fixture_capture('fixture-seed')
+            real_ledger.append_pending_receipt(self.ledger, attempt_id='fixture-seed',
+                custody_locator=str(seed), identity_epoch=IDENTITY, t1_bindings=T1,
+                head_pin_path=self.pin, require_committed_pin=False, repo_root=self.f.measurement)
+            terminal = real_ledger.finalize_attempt_receipt(self.ledger, attempt_id='fixture-seed',
+                disposition='ordinary-invalid', custody_locator=str(seed),
+                artifact_sha256=real_ledger.artifact_hashes(seed), identity_epoch=IDENTITY, t1_bindings=T1,
+                capture_wall_time_s='1.0', exact_bound_lexeme_s='0.025')
+            pin = real_ledger.head_pin_for_receipt(terminal)
+            self.pin.write_text(json.dumps(pin)+'\n')
+            seed_sequence, seed_digest = pin['sequence'], pin['head_digest']
         init_git_fixture(self.f.measurement, '-q')
         subprocess.run(['git', 'add', str(self.pin.relative_to(self.f.measurement))],
                        cwd=self.f.measurement, check=True, capture_output=True)
@@ -524,16 +639,16 @@ class G2aHarvestTests(unittest.TestCase):
                         'commit', '-qm', 'fixture seed'], cwd=self.f.measurement, check=True, capture_output=True)
         frozen = self.f.g2a/'window-plan/calibration_plan.json'
         plan = harvest.read(frozen)
-        plan['calibration_ledger'].update(head_sequence=0, head_digest=real_ledger.GENESIS_DIGEST)
+        plan['calibration_ledger'].update(head_sequence=seed_sequence, head_digest=seed_digest)
+        if seed_past_cutoff:
+            fixture_acceptance = _unissued_acceptance_fixture()
+            plan['active_acceptance'].update(
+                sha256=hashlib.sha256(_unissued_acceptance_fixture_bytes()).hexdigest(),
+                acceptance_id=fixture_acceptance['acceptance_id'])
         frozen.write_text(json.dumps(plan)+'\n')
         self.value['calibration_plan']['sha256'] = harvest.sha(frozen)
         (self.f.g2a/'window-plan/g2a-input-inventory.json').write_text(json.dumps(self.value)+'\n')
-        capture = self.f.g2a/'runs/instrument_validation/fixture-pre'
-        (capture/'raw').mkdir(parents=True)
-        (capture/'raw/powermetrics.plist').write_bytes(b'synthetic calibration capture')
-        (capture/'events.jsonl').write_text('{"timestamp_s":99.0}\n')
-        (capture/'instrument_evidence.json').write_text('{"b_fiducial_s":0.025}\n')
-        (capture/'manifest.json').write_text('{"fixture":true}\n')
+        capture = self.fixture_capture('fixture-pre')
         real_ledger.append_bracket_session_receipt(self.ledger, head_pin_path=self.pin,
             repo_root=self.f.measurement, session_id=self.value['session_id'], window_id=self.value['window_id'],
             plan_id=self.value['calibration_plan']['plan_id'], plan_sha256=harvest.sha(frozen),
