@@ -222,18 +222,21 @@ class RetryBackoffClockAnchorTests(unittest.TestCase):
     on PR #465): drift about 3.2 ppm, anchor half-width up to 2.31 ms, one idle
     attempt about 104 s of wall time. Synthetic records give a half-width of
     about 0.5 ms, so the test adds the difference to model the widest one.
-    At 300 s the worst-case stream is 683 s and the bound about 4.5 ms; the
-    drift tolerance there is about (5 - 2.31) ms / 683 s = 3.9 ppm.
+    At 300 s the estimated longest stream is 683 s and the bound about 4.5 ms;
+    the drift tolerance there is about 3.9 ppm.
     No estimator code is mocked.
     """
 
     DRIFT_PPM = 3.2
     WIDEST_HALF_WIDTH_S = 0.00231
-    # Worst-case retried stream for the longest member (Qwen3-8B at 4096
-    # prompt tokens): two idle attempts of 104 s wall time each (block 2), the
-    # wait, 45 s for three guards near their command timeouts, two 4096-token
-    # prefills at 10 s each, 516 decoded tokens at the code's worst-case 5
-    # tokens/s, 5 s settle and 1 s post dwell (Sol executing review on PR #465).
+    # Estimated longest retried stream (Qwen3-8B at 4096 prompt tokens). An
+    # ESTIMATE, not an enforced worst case: two idle attempts of 104 s wall
+    # time each (observed in block 2; the slice deadline allows up to ~123 s),
+    # the wait, 45 s for three guards near their command timeouts, two
+    # 4096-token prefills assumed <= 10 s each, 516 decoded tokens assumed at
+    # >= 5 tokens/s, 5 s settle and 1 s post dwell; sampler start-up, drain and
+    # parse are not budgeted. A longer real stream can void a retried member,
+    # which fails closed (invalid member, RECOVER), never admits one.
     IDLE_ATTEMPT_S = 104
     GUARDS_S = 45
     PREFILLS_S = 2 * 10
