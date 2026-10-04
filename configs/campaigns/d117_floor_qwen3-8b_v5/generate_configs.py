@@ -76,6 +76,18 @@ from joulewise.suite import (  # noqa: E402
 
 N = 10
 PREFILL_LENGTH: int | None = None
+# Planning inputs only, never night-plan limits or measurement claims. The
+# non-prefill allowance retains the inherited 314-minute estimate at p512.
+# Rate = max(mean phase seconds / tokens) over block-3 p0512 and p2048
+# diagnostic members (n=1 per rung), archive 20261004T1305Z-r2.
+PLANNING_BASELINE_SECONDS = 18840.0
+PLANNING_PREFILL_SECONDS_PER_TOKEN = 0.0015653804875910282
+# Issuer PR #471, _end_state_record: copy its schema id and closed key set
+# only; harvest/registration replay remains issuer-owned.
+PREFILL_END_STATE_SCHEMA = "joulewise.g2a_prefill_end_state.v1"
+PREFILL_END_STATE_KEYS = frozenset({
+    "schema_version", "registration_sha256", "recover_harvests", "trigger",
+})
 PREFILL_LADDER_PROMPT_TOKENS = [512, 1024, 2048, 4096]
 PREFILL_MIN_SMALL_MODEL_MEMBERS_PER_RUNG = 5
 PREFILL_MIN_OVERLAPPING_POWER_INTERVAL_COUNT = 5
@@ -667,24 +679,44 @@ _PREFILL_STAGE_TEMPLATES = STAGES
 
 
 def projected_runtime_budget() -> dict[str, Any]:
-    """Conservative planning projection; never a measured duration or live gate.
-
-    The inherited 512-token whole-window estimate has no member-duration
-    decomposition. Scale the entire occupancy by the prompt-length ratio,
-    retaining its 20% time headroom. This over-allocates fixed/decode overhead
-    rather than asserting a new measured per-token rate.
-    """
+    """Scale only long-prefill work; fixed occupancy and decode stay fixed."""
     if PREFILL_LENGTH is None:
         raise ValueError("prefill_prompt_pin_unresolved")
-    minutes = 376.8 * PREFILL_LENGTH / 512
+    # Fifty long-prompt members each prefill once in warmup and once in the
+    # measured request (mlx_runtime.warmup uses the member's own prompt).
+    passes = 50 * 2
+    prefill_seconds = passes * PREFILL_LENGTH * PLANNING_PREFILL_SECONDS_PER_TOKEN
+    fixed_seconds = (
+        PLANNING_BASELINE_SECONDS
+        - passes * 512 * PLANNING_PREFILL_SECONDS_PER_TOKEN
+    )
+    subtotal = fixed_seconds + prefill_seconds
+    margin_seconds = subtotal * 0.2
+    seconds = subtotal + margin_seconds
+    minutes = seconds / 60
     return {
         "planning_estimate_minutes_with_margin": minutes,
         "planning_estimate_hours_with_margin": minutes / 60,
-        "planning_estimate_seconds_with_margin": round(minutes * 60),
-        "projection_basis": "inherited_whole_window_scaled_by_prompt_length_ratio",
+        "planning_estimate_seconds_with_margin": round(seconds),
+        "projection_basis": "diagnostic_prefill_rate_plus_inherited_fixed_allowance",
         "baseline_prompt_tokens": 512,
         "baseline_minutes_with_margin": 376.8,
         "prefill_prompt_tokens": PREFILL_LENGTH,
+        "prefill_seconds_per_token": PLANNING_PREFILL_SECONDS_PER_TOKEN,
+        "long_prefill_member_count": 50,
+        "prefill_passes_per_member": 2,
+        "components_seconds": {
+            "long_prefill": prefill_seconds,
+            "fixed_decode_cooldown_calibration_and_overhead": fixed_seconds,
+            "time_headroom": margin_seconds,
+        },
+        "fixed_allowance_includes": [
+            "forced_512_token_decode", "warmup_decode", "short_prompt_prefill",
+            "cooldowns", "idle_sampling", "post_warmup_settling",
+            "bound_and_reference_members", "calibration_observations",
+            "model_loading_and_fixed_overhead",
+        ],
+        "planning_only": True,
         "margin_percent": 20,
         "margin_authority": "time_headroom_only_never_member_replacement",
         "science_count": 100,
@@ -1152,35 +1184,67 @@ def configure_prefill_pin(path: Path) -> None:
         raise ValueError(
             f"prefill_prompt_pin_invalid: selection_record: {exc}"
         ) from exc
-    selection_keys = {
-        "collection_prefill_tokens",
-        "qualifying_prefill_tokens",
-        "refusal",
-        "rule",
-        "schema_version",
-        "selected_prefill_tokens",
-        "status",
-        "summary_sha256",
-    }
-    if not isinstance(selection, dict) or set(selection) != selection_keys:
-        raise ValueError("selection_record_closed_schema_mismatch")
-    if selection.get("schema_version") != "joulewise.g2a_prefill_selection.v1":
-        raise ValueError("selection_record_schema_version_invalid")
-    if selection.get("status") == "refused":
-        raise ValueError("selection_record_refused_not_supported")
-    if selection.get("status") != "selected":
-        raise ValueError("selection_record_status_invalid")
-    if (
-        type(selection.get("collection_prefill_tokens")) is not int
-        or selection["collection_prefill_tokens"] != prefill_length
-    ):
-        raise ValueError("selection_record_collection_prefill_tokens_mismatch")
-    if (
-        type(selection.get("selected_prefill_tokens")) is not int
-        or selection["selected_prefill_tokens"] != prefill_length
-        or selection.get("refusal") is not None
-    ):
-        raise ValueError("selection_record_selected_branch_malformed")
+    if isinstance(selection, dict) and selection.get("schema_version") == PREFILL_END_STATE_SCHEMA:
+        if set(selection) != PREFILL_END_STATE_KEYS:
+            raise ValueError("end_state_record_closed_schema_mismatch")
+        if prefill_length != 4096:
+            raise ValueError("end_state_record_requires_4096")
+
+        def is_sha256(item: Any) -> bool:
+            return (isinstance(item, str) and len(item) == 64
+                    and all(character in "0123456789abcdef" for character in item))
+
+        if not is_sha256(selection["registration_sha256"]):
+            raise ValueError("end_state_record_registration_sha256_invalid")
+        harvests = selection["recover_harvests"]
+        if not isinstance(harvests, list) or len(harvests) not in (1, 2):
+            raise ValueError("end_state_record_recover_harvests_invalid")
+        for harvest in harvests:
+            if (not isinstance(harvest, dict) or set(harvest) != {"path", "sha256"}
+                    or not isinstance(harvest["path"], str) or not harvest["path"].strip()
+                    or not Path(harvest["path"]).is_absolute()
+                    or ".." in Path(harvest["path"]).parts
+                    or not is_sha256(harvest["sha256"])):
+                raise ValueError("end_state_record_recover_harvests_invalid")
+        if (len({item["path"] for item in harvests}) != len(harvests)
+                or len({item["sha256"] for item in harvests}) != len(harvests)):
+            raise ValueError("end_state_record_recover_harvests_invalid")
+        expected_trigger = (
+            "first_recover_systematic_clock_anchor_failure" if len(harvests) == 1
+            else "recovery_window_also_recover"
+        )
+        if selection["trigger"] != expected_trigger:
+            raise ValueError("end_state_record_trigger_invalid")
+    else:
+        selection_keys = {
+            "collection_prefill_tokens",
+            "qualifying_prefill_tokens",
+            "refusal",
+            "rule",
+            "schema_version",
+            "selected_prefill_tokens",
+            "status",
+            "summary_sha256",
+        }
+        if not isinstance(selection, dict) or set(selection) != selection_keys:
+            raise ValueError("selection_record_closed_schema_mismatch")
+        if selection.get("schema_version") != "joulewise.g2a_prefill_selection.v1":
+            raise ValueError("selection_record_schema_version_invalid")
+        if selection.get("status") == "refused":
+            raise ValueError("selection_record_refused_not_supported")
+        if selection.get("status") != "selected":
+            raise ValueError("selection_record_status_invalid")
+        if (
+            type(selection.get("collection_prefill_tokens")) is not int
+            or selection["collection_prefill_tokens"] != prefill_length
+        ):
+            raise ValueError("selection_record_collection_prefill_tokens_mismatch")
+        if (
+            type(selection.get("selected_prefill_tokens")) is not int
+            or selection["selected_prefill_tokens"] != prefill_length
+            or selection.get("refusal") is not None
+        ):
+            raise ValueError("selection_record_selected_branch_malformed")
     ladder = json.loads(
         ladder_raw,
         object_pairs_hook=reject_duplicates,
@@ -2187,7 +2251,7 @@ def build_extraction_spec(
         "reported_energy_cells": reported_cells,
         "reported_energy_registration": {
             "authority": "D-123 / D-179",
-            "registration_sha256": registration_sha256("qwen3-8b"),
+            "registration_sha256": registration_sha256("qwen3-8b", PREFILL_LENGTH),
             "registration_ordering": "registration_digest_must_predate_first_frozen_spec",
             "procedure_only": True,
             "postcollection_numeric_values": "structurally_absent_until_governed_reduction",
