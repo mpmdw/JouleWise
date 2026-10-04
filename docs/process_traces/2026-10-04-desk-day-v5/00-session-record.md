@@ -97,3 +97,21 @@ coordinated multi-file forgery is outside the threat model (D-161). **F2:** fix.
     window-identity layers), NIT-1..5: **deferred** to lane `G2A-ISSUER-HARDENING-01` (registered in the handoff).
     None affects the pin issued from the block-3 SELECT record (Fable reproduced it and closed MINOR-3 by hand
     for this record).
+
+## 16:10-16:35: more lanes (consult-driven: land before `s1` so G2-b runs the claim head)
+
+- A6 `V5-LAUNCH-REALIZATION-RECHECK-01` (branch `feat/2026-10-04-launch-realization-recheck`): round 1
+  [23r1](23-sol-a6-report-r1.md) recheck after consumed-arm replay; F1 the driver writes `chain.started` before the
+  launcher, so a refusal would leave a started chain (harvests read that as RECOVER, not NULL). **Scope granted**
+  for `scripts/run_night.py`; round 2 [27](27-sol-a6-r2-brief.md).
+- G2-b one-block stop (branch `feat/2026-10-04-g2b-one-block-stop`): round 1 [24r1](24-sol-g2bstop-report-r1.md):
+  `run_campaign.py --max-blocks`, bound to authenticated `permitted_blocks`, rc 3, terminal `max_blocks_reached`
+  row; G2-b chain without SIGINT; `gen_g2_phase_d.py --check` PASS. Round 2 [33](33-sol-g2bstop-r2-brief.md) for
+  the provenance checker's termination test.
+- Floors round 2 [20r2](20-sol-floors-report-r2.md) (`a1133594`, PR #472): ladder registrations, end-state 4096
+  authority, component span plan. Planning: the floor windows stay ≈ 6.3-6.5 h at every rung (the prefill phase is
+  a small share). Lead applied the seat's `supply_map.json` fixture repin (`test_fixture_non_issuing` digests only).
+  Executing review brief [29](29-sol-floors-review-brief.md).
+- PR #469: hosted CI shard 3 errors in the new N3 test (`derived/bracket.json` missing on Linux: the harvest ended
+  before the bracket there). Fix seat [28](28-sol-n3-ci-brief.md) (test only).
+- PR #470: CI test jobs green; local whole suite running. PR #471: CI running; local whole suite running.
