@@ -44,3 +44,19 @@ d138_rev6_issuance, harvest_window, bracket_binding_cli): 143 OK.
 Brief `30-consult-brief.md`. Seats launched blind, in parallel: Sol 6.1 high (`codex-run-v3`, read-only,
 worktree `JouleWise-wt-5145800b-consult-sol`, report `31-sol-consult.md`) and Opus 5.5 (subagent,
 read-only, report `32-opus-consult.md`).
+
+## Consult answers and hand-off (≈18:15 PDT)
+
+- PR #464 (landing) merged `25ad3596` after CI green on `d08e2504`.
+- Sol 6.1 high (`31-sol-consult.md`, codex-run-v3 status OK/complete) and Opus 5.5 (`32-opus-consult.md`)
+  answered blind. Both recommend a newly sealed block 3 with a default-zero policy field that delays
+  the existing idle-admission retry, enabled only in block 3's own policy; both reject 4096 without a
+  completed probe (needs a cold D-166 amendment) and selection from `w2`'s partial rungs; both keep
+  `--max-failures 1`; both find no systematic non-removable cause. They differ on wait length
+  (300 s vs 600 s), span budgeting, and Opus's additions (large stages after the post bracket,
+  pre-committed end state, block-2 counts unread until block 3 ends, explicit seal ruling on §7's
+  "third blind window" sentence). No science split, so no cold Fable judge from this activation.
+- The orchestrator's §7 ruling and the block-3 design belong to a design seat (RUN_STATE item 7: the
+  magistrate stays the operator and never designs). Brief `40-design-block3-seat-brief.md`; state
+  `~/night-archive/design-block3/`; launched with `docs/process_traces/2026-10-02-interactive/launch-seat.sh`
+  (opus).
