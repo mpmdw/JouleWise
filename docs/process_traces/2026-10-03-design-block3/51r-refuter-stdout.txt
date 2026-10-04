@@ -1,0 +1,21 @@
+My verdict is **`REFUTER G2A-25G83-B3: AGREE`**, but only if three extra changes (D1–D3) are applied along with the judge's T1–T5 and R1–R2. It is in `docs/process_traces/2026-10-03-design-block3/51r-seal-refuter.md`. Nothing is committed; that file and the judge's ruling are the only untracked files in the worktree.
+
+**Phase 1 (written before I opened the ruling): provisional ADMIT.**
+- **Tests:** the lane's tests and the other G2-a tests pass (436 passed, 1 skipped). `gen_g2_phase_d.py --check` passes.
+- **Code matches the registration:** the span is 18,868 s and the window 21,600 s, as registered. The chain sets the block-3 policy once. The production policy is unchanged with no wait, and the block-3 policy differs only by its id and the 300 s wait. The controller waits only after a rejected first attempt, retries once and aborts on a second rejection. The selector and harvest follow D-166.
+- **Main hole I found:** the chain is generated from two files under `docs/`. A docs-only edit cutting the settle from 600 s to 60 s still passes `--check`, and the registration's arm-head rule would let it through without a new seal.
+- **Other findings:**
+  - The end-state 4096 binding has no code path in the `_v5` pin issuer.
+  - The end-state trigger ("systematic and not removable") is a judgment two operators could apply differently.
+  - "Background work can only raise a count" is wrong: a delayed power sampler lowers counts. That direction is the safe one.
+  - The charge's question 5 still says 600 s; the registration, policy and code all say 300 s.
+- **Blindness slip:** the end-state text has not changed since the draft committed at 18:27:57, before the disclosed 18:29:45 read.
+
+**Phase 2: the judge ruled `SEAL: ADMIT`.**
+- **Where we agree:** the judge found the same docs-chain hole independently, with the same 60 s probe. The judge's fixes cover my trigger, wording and contention findings, and every "old" text block appears exactly once in its file.
+- **Where the judge did better:** D-166's two-way refusal wording applies only at the 4096 fallback, so the draft's §9 sentence promised a protection that doesn't exist. I had missed that.
+- **D1 (major), required:** the judge's arm-time check (R1) reads the seal record from the `## H′ extensions` heading to the end of the file and uses a substring match. I tested it on a scratch seal record laid out the way block 2's was, with each later window's pin table appended at the end. Every pinned file then passes, including both chain source files. That reopens the hole for the recovery window `b3w2`. I gave exact replacement text: the lookup stops at the next heading and matches one exact path per line.
+- **D2 (major, desk day):** the existing `_v5` pin issuer never checks the harvest verdict, so it would accept a selection computed from a RECOVER window. Its desk-day change must accept only a selection named in a SELECT `harvest.json`.
+- **D3 (minor):** §4 says a clock-voided retried member makes the window RECOVER. That is false for a large member, which is §4's own example (Qwen3-8B at 4096). The judge's ruling repeats the error. I gave replacement text.
+
+None of these lets the block pick a wrong rung by its own rules, which is why I agree rather than disagree.
