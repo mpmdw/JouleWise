@@ -39,3 +39,27 @@ The step3 interactive-session heuristic already excludes `codex` lines (block-3 
   (`feat/2026-10-04-v5-floor-prefill-from-pin`), contrast [17](17-sol-contrast-brief.md)
   (`feat/2026-10-04-v5-contrast-replay-acceptance`). Orchestrator ruling: packs bind the acceptance in force
   (`n24_25g83_r2`), the floors take their prefill length from the issued pin only.
+
+## 15:50-16:10
+
+- PR #469 (guard tests): review [14r](14-sol-guardtests-review.md) FAIL, R1 MAJOR: the F6 cleanup in
+  `scripts/recover_calibration_ledger.py` could unlink a writer-lease lock inode another writer holds
+  (contract `docs/contracts/calibration_ledger_append.md`: the inode is never deleted). **Fixed** by dropping
+  the unlink (`7f7cbec6`); the lock stays in the archive (an empty file). 19/19 mutants killed. G2 (N3 mocks
+  acceptance authentication and strict member validation): **accepted** as a conditional bracket-decision
+  regression, which is what Fable N3 asked for. The controller change is a docstring (reviewer: AST
+  unchanged), so the PR has no executable measurement change left: Fable pass N/A.
+- PR #470 (run config): review [15r](15-sol-runcfg-review.md) FAIL, F1 MAJOR (second plan-tree read not bound
+  to `tree_sha`) **fixed** by the lead (`2a682b2e`), test added; 49 passed. Cold Fable final pass launched
+  (brief [21](21-fable-runcfg-brief.md)).
+- PR #471 (issuer): round 1 [10r1](10-sol-issuer-report-r1.md) asked two rulings. **F1 ruled:** the end-state pin
+  keeps D-166's static `exhausted_ladder_branch` declaration (a pre-registration constant in every pin, not an
+  assertion); authority is the closed end-state record. **F2 ruled:** scope added for the desk-chain
+  integration test. Round 2 [18r](18-sol-issuer-report-r2.md): implemented; dry issue from the real archive exit
+  0 with `g2a_record_sha256` = `c694c488…8222`; end state on the real RECOVER record refuses
+  `end_state_trigger_not_met`. Executing review (Sol xhigh) brief [19](19-sol-issuer-review-brief.md).
+- Floors round 1 [16r1](16-sol-floors-report-r1.md): pin-derived length and acceptance `n24_25g83_r2` done;
+  blocked on `joulewise/paper_reported_energy.py` (reported cells hardcode `prefill-p512`). **Ruled:**
+  prospectively register ladder-specific `prefill-p<L>` identities, historical p512 bytes unchanged; one length
+  per family. The round-1 span projection (whole window × L/512) is rejected as a plan; round 2 builds a
+  component estimate. Round 2 brief [20](20-sol-floors-r2-brief.md).
