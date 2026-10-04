@@ -503,13 +503,17 @@ def _member_input_paths(
     repository_root: Path,
     pack_root: Path,
     cells: Sequence[_RegisteredCell],
+    tree_sha: str,
 ) -> dict[str, Path]:
     """Locate source configs through the authenticated plan-tree science rows.
 
     Floor generators emit repository-relative paths; GAMMA emits pack-relative
     paths. Registry pins must agree with those rows before either is consumed.
+    The tree read here must be the bytes _pack_inventory authenticated.
     """
-    tree, _raw = _json_object(pack_root / "plan_tree.json", label="pack plan_tree.json")
+    tree, raw = _json_object(pack_root / "plan_tree.json", label="pack plan_tree.json")
+    if _sha256(raw) != tree_sha:
+        _refuse("pack_pin_invalid", "plan_tree.json changed after authentication")
     science = tree.get("science")
     if not isinstance(science, list):
         _refuse("registered_membership_invalid", "plan tree has no science inventory")
@@ -1022,7 +1026,9 @@ def derive_window_duration_margins(
             tree_sha, registry_sha, cells = _pack_inventory(
                 authentication, repository_root, pack_root, pack_identity
             )
-            input_paths = _member_input_paths(repository_root, pack_root, cells)
+            input_paths = _member_input_paths(
+                repository_root, pack_root, cells, tree_sha
+            )
             member_paths = _resolve_member_paths(runs_root, cells)
             observations: dict[tuple[str, str], _MemberObservation] = {}
             expected_by_id: dict[str, str] = {}

@@ -202,10 +202,15 @@ class FrozenPackRecorderAuthorizationTests(unittest.TestCase):
         for pack, pack_identity in cases:
             with self.subTest(pack=pack), V2AuthenticationReadSession() as authentication:
                 pack_root = self._pack_path(pack)
-                _tree_sha, _registry_sha, cells = margins._pack_inventory(
+                tree_sha, _registry_sha, cells = margins._pack_inventory(
                     authentication, REPO_ROOT, pack_root, pack_identity
                 )
-                paths = margins._member_input_paths(REPO_ROOT, pack_root, cells)
+                paths = margins._member_input_paths(
+                    REPO_ROOT, pack_root, cells, tree_sha
+                )
+                with self.assertRaises(margins.WindowDurationMarginsRefusal) as raised:
+                    margins._member_input_paths(REPO_ROOT, pack_root, cells, "0" * 64)
+                self.assertIn("plan_tree.json changed after authentication", str(raised.exception))
                 for cell in cells:
                     for bundle_id, pin in cell.members:
                         raw = read_authentication_input(
