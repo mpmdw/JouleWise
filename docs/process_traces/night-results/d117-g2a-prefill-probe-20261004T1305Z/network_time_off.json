@@ -1,0 +1,19 @@
+{
+  "argv": [
+    "/usr/bin/sudo",
+    "-n",
+    "/usr/sbin/systemsetup",
+    "-setusingnetworktime",
+    "off"
+  ],
+  "boot_id": "cd5b815a-df9b-4fc7-921a-8e97d8aba867",
+  "epoch_s": 1791119100.4304,
+  "error": null,
+  "exit_code": 0,
+  "monotonic_s": 1340663.315056708,
+  "plan_id": "d117-g2a-prefill-probe-20261004T1305Z",
+  "schema": "joulewise.network_time_off.v1",
+  "stderr": "",
+  "stdout": "Network Time is already off.\n",
+  "window_id": "d117-g2a-prefill-probe-20261004T1305Z"
+}
