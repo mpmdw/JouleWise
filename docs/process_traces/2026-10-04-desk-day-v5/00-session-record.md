@@ -15,3 +15,27 @@ Brief: `docs/process_traces/2026-10-04-activation-df31cb27/40-desk-day-seat-brie
 
 The step3 interactive-session heuristic already excludes `codex` lines (block-3 arm recipe
 `docs/process_traces/2026-10-03-design-block3/40-g2a-b3-arm-recipe.md:318`); nothing to do.
+
+## Results so far (15:00-15:50)
+
+- Guard-tests seat: N3 and N5 added (`93b84dae`); 211 passed, 1 skipped; mutation kill for N5 shown. PR #469.
+  Executing review (Sol 6.1 high): brief [14](14-sol-guardtests-review-brief.md).
+- Run-config seat: verdict "wrongly refused" (the pack pin is over the source config; the runner writes
+  `BenchmarkConfig.to_dict()` bytes, `joulewise/bundle.py:~950`). Fix `ee749c39`: authenticate the source
+  config against the pin, then the run config against the runner-normalized hash, then the metadata binding.
+  Report [12r](12-sol-runcfg-report.md). Executing review: brief [15](15-sol-runcfg-review-brief.md).
+- Scout: report [13r](13-sol-scout-report.md). Findings that change the plan:
+  1. The pin's home is `configs/campaigns/d117_contrast_v5/prefill_pin/` (runsheet Phase D); `--ruling-trace` is
+     the 08-30 ratification path.
+  2. Both `_v5` floor generators hardcode `PREFILL_LENGTH = 512` and refuse a pin of another length. Checked
+     privately against `selection.json`: the selected length is not 512, so both floors need a producer change
+     (D-117: the prefill floor cells ride the floor windows, so they measure the selected length).
+  3. The contrast generator cannot pass generic generator authentication (scout §2).
+  4. All three generators bind acceptance `n17_r6` (previous OS epoch), not `n24_25g83_r2` (in force).
+  5. Next measurement: the D-176 pack-bound rehearsal (`r1`) then G2-b (`s1`), not a claim window; the first
+     claim-bearing `_v5` window is ALPHA, after L10-A, the launch-realization recheck, the claim registration
+     and #416.
+- Producer seats launched (Sol 6.1 xhigh): floors [16](16-sol-floors-brief.md)
+  (`feat/2026-10-04-v5-floor-prefill-from-pin`), contrast [17](17-sol-contrast-brief.md)
+  (`feat/2026-10-04-v5-contrast-replay-acceptance`). Orchestrator ruling: packs bind the acceptance in force
+  (`n24_25g83_r2`), the floors take their prefill length from the issued pin only.
