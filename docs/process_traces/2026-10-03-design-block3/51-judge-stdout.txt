@@ -1,0 +1,27 @@
+The ruling is written: `docs/process_traces/2026-10-03-design-block3/51-seal-ruling.md`, first line `SEAL: ADMIT`.
+
+ADMIT is conditional on five registration text replacements (T1–T5) and two arm-recipe replacements (R1, R2), each given as exact old → new text and each checked to occur exactly once in its file. No code condition is placed on the arm head.
+
+**What I ran:** 555 tests across the lane's modules plus the admission, controller and campaign-runner modules (none failed, 1 skipped), and `gen_g2_phase_d.py --check` passes. Span is 18,868 s, window 21,600 s, and the emitted chain exports the block-3 policy exactly once. The whole suite, any live command, and a real retried bundle were not executed and are marked so in the ruling.
+
+**Rulings that change the text:**
+
+- **Arm-head rule (§12) had a real hole.** The chain is rendered from two files under `docs/` (the runsheet and the runbook), and §12 lets any docs-only commit through without a new seal. I changed `SETTLE_S=600` to `60` in the runsheet in memory: the generator's own check passed and the emitted chain carried the 60. T4 and R1 pin those two files.
+- **End state (§7) is admitted** as a prospective amendment of D-166, and the ruling carries the one sentence the decision log can cite. Two repairs:
+  - The early trigger ("systematic and not removable") was a judgment two magistrates could make differently. It is now a mechanical test on `harvest.json`: at least 5 members with a recorded clock-anchor status, more than half not `bounded`.
+  - The draft called the end state "D-166's exhausted-ladder branch". It is not, since no ladder was evaluated; the text now forbids saying no rung qualified.
+- **Contention during a measured window (§3, §9).** "Count can only rise" is half the physics: a delayed power sampler gives longer or merged records, which lowers a count. That direction is the safe one, so no check is needed. The draft also claimed a `_v5` shortfall at a selected rung "is reported as a refusal, never as an energy"; D-166 and the `_v5` generator give that wording only for the 4096 fallback. What protects an energy is the reducer's floor of 3.
+- **Blindness (§10)** now discloses the design seat's one slip. Commit times confirm the end state was committed at 18:27:57, before the 18:29:45 read.
+
+**Rulings with no text change:**
+
+- Block 3 is consistent with block 2's "never a third blind window" clause: it is the consult-then-ruling route that clause prescribes, and its own end state means there is no block 4.
+- The delayed retry does not weaken the quiet-machine bar, does not bias which members are measured, and is not re-collection. The controller code matches §4 line for line.
+- Network time (§5) is byte-identical to block 2 and stands.
+
+**Things the seat should know:**
+
+- Charge item 5 says "600 s"; the registration, policy, code and tests say 300 s. I ruled on 300 s; the seal record should note the stale number.
+- If the end state occurs, the prompt-pin issuer cannot bind it today (it requires a selection record). It fails closed and is a desk-day code obligation, not a condition on any window.
+- The 300 s wait clears the one burst on record by under a minute, and a retried member's clock bound is estimated at 4.5 ms of a 5 ms cap. Both are window risks that fail closed; I did not re-read the block-2 clock figures behind that estimate.
+- The contamination disclosure covers the injected `CLAUDE.md` and memory index (not opened, not relied on), and an inference about block 2's partial outcome that the charge's own reading list makes available. I did not open the refuter's `51r-seal-refuter.md`, which appeared during the session.

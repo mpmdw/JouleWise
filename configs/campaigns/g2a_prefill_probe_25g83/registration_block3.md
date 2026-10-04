@@ -1,10 +1,14 @@
 # Registration G2A-25G83-B3: the G2-a prefill resolvability probe on macOS build 25G83 (measurement block 3), with its analysis plan
 
-Status: DRAFT for the cold registration gate G2A-25G83-B3. Written 2026-10-03 by the block-3 design
-seat (Opus 5.5, headless orchestrator seat holding the orchestrator's design authority, RUN_STATE
-item 7), from the sealed block-2 registration
-`configs/campaigns/g2a_prefill_probe_25g83/registration_block2.md` and the orchestrator's ruling
-under its §7 (`docs/process_traces/2026-10-03-design-block3/00-design-record.md` §1). Every rule
+Status: SEALED 2026-10-03. Written by the block-3 design seat (Opus 5.5, headless orchestrator
+seat holding the orchestrator's design authority, RUN_STATE item 7), from the sealed block-2
+registration `configs/campaigns/g2a_prefill_probe_25g83/registration_block2.md` and the
+orchestrator's ruling under its §7 (`docs/process_traces/2026-10-03-design-block3/00-design-record.md`
+§1); sealed by the cold registration gate G2A-25G83-B3 (Fable 5.1, `SEAL: ADMIT`,
+`docs/process_traces/2026-10-03-design-block3/51-seal-ruling.md`) with its required changes T1-T5
+applied verbatim and its optional F11 wording, and the paired Opus refuter's AGREE with its
+required change D3 applied (`51r-seal-refuter.md`); pins in the seal record
+`docs/process_traces/2026-10-03-design-block3/52-seal-record.md`. Every rule
 below is fixed before any data of this block exists. No count, energy or other result measured
 by block 2 or block 3 appears in this file or may be added to it; block 2's clock diagnostics are
 used by reference only (§4 item 3).
@@ -118,9 +122,12 @@ the arm record and the seal record (§12).
   match the pin refuses the arm.
 - **Not checked: background work during a measured window.** Admission screens the 75 s idle
   baseline just before each member; work that starts during a member's measured window is not
-  screened. Registered as an unchecked condition because its only possible effect on this block's
-  output is to lengthen a prefill phase, which can raise a member's record count, never lower it;
-  §9 states what that means for the use of the result.
+  screened. Registered as an unchecked condition because neither of its two possible effects on
+  this block's output can put a false number in the paper. It can lengthen a prefill phase, which
+  raises a member's record count; §9 states what that means for the use of the result. It can
+  also delay the power sampler so that its records come out longer than usual, or merged, which
+  lowers a count; a lowered count can only move the selection to a longer rung or to the 4096
+  fallback, where the prefill is more resolvable.
 
 A change to any item in this section after the seal voids the seal for windows not yet armed; a
 new seal is required.
@@ -147,7 +154,8 @@ In order, inside one chain run under the unattended night driver:
    baseline is attempt 1. If attempt 1 is rejected, the controller waits 300 s
    (`retry_backoff_s`), during which nothing new is measured or admitted and the running power
    sampler's records are retained unchanged in the member's raw stream; then it observes the
-   environment guard again and runs attempt 2, the one retry, under the same criteria. If attempt
+   environment guard again and runs attempt 2 (a guard failure there aborts the member, as on
+   attempt 1), the one retry, under the same criteria. If attempt
    2 is also rejected, the member aborts, `--max-failures 1` stops the campaign and the chain, and
    the window is RECOVER (§7). The wait is the same for small and large members. It is a pause
    inside one member's own admission, before its prefill; it does not re-run a member, re-collect
@@ -163,8 +171,10 @@ In order, inside one chain run under the unattended night driver:
    (instrument diagnostics, not results of the probe; their drift, widest half-width and idle
    attempt duration are the inputs of `tests/test_controller_retry_backoff.py` at H). At 300 s
    that member stays inside the 5 ms bound; at 600 s it would not. If the drift during this block
-   is well above block 2's, a retried member can still be voided; it is then invalid (§6), never
-   admitted, and the window is RECOVER. 300 s also outlasts the one burst on record: it started
+   is well above block 2's, a retried member can still be voided; it is then invalid (§6) and never
+   admitted; a voided small-model member leaves its rung short and the window is RECOVER, while a
+   voided large-model member is recorded invalid and, like every large-model result, does not
+   gate (§7). 300 s also outlasts the one burst on record: it started
    about 11 s before the failed member's first attempt and lasted about six minutes; a retry 300 s
    after that attempt ended would have begun about 30 s after the burst's logged end.
 4. **Post bracket.** One governed pulse calibration in the same bracket session.
@@ -264,13 +274,20 @@ blocks, never topped up, and no member or rung is ever re-collected inside a win
 capture it made stay as they are, and attempt 2 is the retry the policy always allowed.
 
 **End state (pre-committed; the one change to D-166, ruled by this block's seal).** If the
-recovery window also ends RECOVER, or a cause named after the first RECOVER is systematic and not
-removable (for example most members' clock anchors not `bounded`), the block stops, and the
-prefill-length question is closed by D-166's exhausted-ladder branch without a further probe:
+recovery window also ends RECOVER, or the `harvest.json` of the first RECOVER that made a capture
+shows the one systematic cause registered here (at least 5 members whose `clock_anchor_status`
+is other than `not recorded`, and more than half of those other than `bounded`: the clock-step
+test of §5(b) is then failing for the instrument, which re-arming cannot remove), the block
+stops, and the prefill-length question is closed without a further probe. Any other cause of a
+first RECOVER leads to the recovery window. The end state borrows the outcome of D-166's
+exhausted-ladder branch and is not that branch: no ladder was evaluated, so no record or
+sentence may say that no rung qualified. Under the end state
 the `_v5` prefill arm is collected at 4096 prompt tokens, every `_v5` member's prefill count is
 printed with D-166's two-way refusal wording (count < 3: the reducer's refusal; count 3-4: "below
 the pre-registered count floor of 5", with the reducer's resolvable result disclosed alongside),
-and the paper states that the length was fixed by this end state, not selected by a probe. The
+and the paper states that the 4096-token length was fixed in advance as the default for a probe
+that could not be completed, that no probe selected it, and that nothing is claimed about which
+shorter lengths would have qualified. The
 `_v5` pre-registration object then binds, in place of a selection record, this registration's
 sha256 and the sha256s of the block's harvest records (`harvest.json` of each window). A null
 window, or a RECOVER window that made no capture, never triggers the end state. The stop and the
@@ -312,9 +329,13 @@ data prevents a third probe block, and the `_v5` per-member printing keeps any s
 - Because background work during a measured window is not screened (§3), a member's count could
   be higher than the same member would show on a quieter machine, so a selected rung could be one
   step shorter than a quieter probe would select. The selection is used only as a protocol
-  parameter; `_v5` members are collected under the same admission and print their own counts
-  with D-166's wording, so a shortfall at the selected rung is reported as a refusal, never as an
-  energy.
+  parameter, and a rung that is too short cannot put a false energy in the paper: every `_v5`
+  prefill phase is judged by the reducer's own floor of 3 overlapping records, so a `_v5` member
+  below 3 prints the reducer's refusal (`not_resolvable_sample_count`) and no energy, and a
+  member at 3 or more has a valid reducer energy, with its count recorded in its bundle. The
+  count floor of 5 is the safety margin against losing `_v5` members to that refusal; what a
+  too-short rung can cost is members, not a wrong number. D-166's two-way wording applies where
+  D-166 puts it (the 4096 fallback) and under the §7 end state.
 - Its member bundles, campaign log, configs, counts receipt and summary are diagnostic. They are
   never members of G2-b, the `_v5` transaction, any floor, mint or calibration corpus, and never
   enter any claim path. They are retained unchanged.
@@ -335,7 +356,12 @@ in the archived files. The verdict and the selection are computed by code from f
 person or agent reads a per-member overlap count, or a row of any window's summary, before the
 block ends (a SELECT, or the §7 end state). This covers block 2's two windows as well: their
 counts, summaries and any selection replay stay unread until this block ends, and afterwards they
-are diagnostic only. Naming the cause of a RECOVER, as §7 requires, may read that window's bracket
+are diagnostic only. One exception is on record (design record 00 §3): after this file's
+selection rule and end state were committed, the design seat read, in the body of PR #463, the
+outcome code of a selector replay on block 2's partial data. The only rules changed after that
+read are the wait length (600 s to 300 s, from the clock audit described in §4) and the changes
+the sealing gate required. The bodies of PRs #461-#464 stay unread by every seat until this
+block ends. Naming the cause of a RECOVER, as §7 requires, may read that window's bracket
 and admission evidence (fiducial bound, drift, clock outcome, logs); it never reads an overlap
 count. The selected rung is the one result this block exists to produce and is recorded as a
 parameter.
@@ -354,7 +380,10 @@ Pinned at the seal (the seal record lists each with its sha256 at H): this file;
 `scripts/select_g2a_prefill_length.py`, `scripts/harvest_g2a_window.py`, `scripts/run_night.py`,
 `scripts/run_campaign.py`, `joulewise/controller.py`, `joulewise/schemas.py`,
 `joulewise/environment_admission.py`, `configs/campaign_policies/quiet_mac_p2_g2a_b3.json`,
-`configs/model_panels/qwen3_4bit.json`, the D-166 registration file and the acceptance file.
+`configs/model_panels/qwen3_4bit.json`, the D-166 registration file, the acceptance file, and the
+two documents the generator renders the chain from, `docs/phase_2/window_runbook.md` and
+`docs/process_traces/2026-08-28-live-smoke/SHAKEDOWN-G2-RUNSHEET.md` (the chain's settle length,
+stage helpers and summary guard are bytes of these two files).
 
 H must contain the harvest rules block 2's seal required (a member whose clock anchor status is
 not `bounded` is invalid; a member found invalid at harvest gives the §7 verdict, never REFUSED
@@ -363,6 +392,7 @@ The harvest and the selector are run from a checkout whose pinned files match th
 Any window of this block is armed from a head H′ that differs from H only by (i) the merged pin
 advances of this block's earlier harvests, (ii) gated fixes that make code agree with this text
 (§11), and (iii) commits that change only files under `docs/`, `tests/`, or the files
-`RUN_STATE.md` and `TASK_QUEUE.md`; the arm checks (iii) with `git diff --name-only H H′`. The seal
-record is extended with the H′ pins before each arm; no new seal is needed. Any other difference
-needs a new seal.
+`RUN_STATE.md` and `TASK_QUEUE.md`, and that leave the two pinned chain-source documents named
+above unchanged; the arm checks (iii) with `git diff --name-only H H′`, which must not list
+either document unless the seal record lists it under (ii). The seal record is extended with the
+H′ pins before each arm; no new seal is needed. Any other difference needs a new seal.

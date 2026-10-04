@@ -37,7 +37,7 @@ same; every difference is a G2-a fact. Nothing here runs sudo (except the passwo
   registration §12 allows. step2 checks it: every file in
   `git diff --name-only SEAL_H H` is under `docs/` or `tests/`, is `RUN_STATE.md`, `TASK_QUEUE.md` or
   `configs/calibration/calibration_ledger_head.json`, or is named under the seal record's heading
-  `## H′ extensions` (which lists gated fixes that make code agree with the registration; `none` at the seal).
+  `## H′ extensions` (only lines of the exact form ``- `path` ``, or the single word `none`; it lists gated fixes that make code agree with the registration; `none` at the seal). H′ pin tables never go inside that section; each goes under its own `## H′ n pins` heading (refuter D1).
 - Probe inputs are built at the desk by `scripts/generate_g2a_probe_inputs.py build-probes` (5 small,
   1 large per rung) and bound by `bind-window` to this window's ids: window id = `PLAN_ID`, bracket
   session = `PLAN_ID-calibration`, evidence root = `evidence-PLAN_ID` (the harvest checks these).
@@ -232,8 +232,11 @@ git merge-base --is-ancestor 295fe1516c950ac0a49f4c389e84a027bba5c473 "$SEAL_H"
 git merge-base --is-ancestor "$SEAL_H" "$H"
 for f in ${(f)"$(git diff --name-only "$SEAL_H" "$H")"}; do
   case "$f" in
+    docs/phase_2/window_runbook.md|docs/process_traces/2026-08-28-live-smoke/SHAKEDOWN-G2-RUNSHEET.md)
+      awk '/^## H′ extensions[[:space:]]*$/{x=1;next} /^#/{x=0} x' "$SEAL_RECORD" | sed -n 's/^- `\(.*\)`$/\1/p' | grep -qxF -- "$f" \
+        || { echo "H changes a pinned chain-source document outside registration §12: $f"; exit 3; } ;;
     docs/*|tests/*|RUN_STATE.md|TASK_QUEUE.md|configs/calibration/calibration_ledger_head.json) ;;
-    *) awk '/^## H′ extensions/{x=1} x' "$SEAL_RECORD" | grep -qF -- "$f" \
+    *) awk '/^## H′ extensions[[:space:]]*$/{x=1;next} /^#/{x=0} x' "$SEAL_RECORD" | sed -n 's/^- `\(.*\)`$/\1/p' | grep -qxF -- "$f" \
          || { echo "H differs from SEAL_H outside registration §12: $f"; exit 3; } ;;
   esac
 done
@@ -464,7 +467,7 @@ read from `selection.json` by the next design seat, never typed into RUN_STATE b
 | Verdict | Next |
 |---|---|
 | SELECT | Block 3 is complete. Email Ed once (block complete, selection record path and sha). Launch a design seat (RUN_STATE item 7) for the desk day (rung pin from `derived/selection.json`, `_v5` pack generation, re-proof) and the next block. Block 2's archives may then be read as diagnostics only (registration §10). |
-| RECOVER, `capture_made` true, first time | Name the cause from `harvest.json` cause codes and member `clock_anchor_status` fields plus bracket/admission evidence only (registration §10: never an overlap count or a summary row). If the cause is systematic and not removable (for example most members' clock anchors not `bounded`): the block stops in its END STATE (below). Otherwise arm one recovery window (label `b3w2`) after any removable cause is removed through R3. |
+| RECOVER, `capture_made` true, first time | Name the cause from `harvest.json` cause codes and member `clock_anchor_status` fields plus bracket/admission evidence only (registration §10: never an overlap count or a summary row). If `harvest.json` lists at least 5 members whose `clock_anchor_status` is other than `not recorded` and more than half of those are other than `bounded`: the block stops in its END STATE (below). Otherwise arm one recovery window (label `b3w2`) after any removable cause is removed through R3. |
 | RECOVER, `capture_made` true, on `b3w2` | The block stops in its END STATE (below). |
 | END STATE (registration §7) | No further probe. `_v5` prefill length is 4096 by the end state; the `_v5` pre-registration binds the registration's sha256 and each block-3 window's `harvest.json` sha256 in place of a selection record. Record it (session record, RUN_STATE: paths, shas, "END STATE"), email Ed once, launch a design seat (RUN_STATE item 7) for the desk day at 4096. |
 | RECOVER, `capture_made` false | Counts like NULL for the allowance (registration §7). |

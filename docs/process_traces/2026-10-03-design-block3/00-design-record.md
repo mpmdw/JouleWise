@@ -126,9 +126,22 @@ forbid reading PR bodies of #461-#464 and name this disclosure.
 
 | Item | What | Status |
 |---|---|---|
-| Ruling | §1 above | done |
-| Code lane | `G2A-B3-RETRY-BACKOFF-01` | — |
-| Registration | `configs/campaigns/g2a_prefill_probe_25g83/registration_block3.md` | — |
-| Arm recipe | `40-g2a-b3-arm-recipe.md` | — |
-| Seal | cold Fable gate + Opus refuter | — |
-| Handoff | RUN_STATE top block | — |
+| Ruling | §1 above | done (wait changed 600 → 300 s on the clock audit) |
+| Code lane | `G2A-B3-RETRY-BACKOFF-01`: briefs [10](10-sol-lane-brief.md), report [11](11-sol-lane-report.md); PR #465 merged `295fe151` | Sol review FAIL→fixed ([12](12-sol-executing-review.md)); delta ([13](13-sol-delta-check.md)); Fable final pass PASS ([21](21-fable-final-pass.md)); dispositions [20](20-findings-disposition.md); CI green on `f10ed46b` |
+| Registration | `configs/campaigns/g2a_prefill_probe_25g83/registration_block3.md` sha256 `84dd0426…2476` | SEALED: judge ADMIT [51](51-seal-ruling.md), refuter AGREE [51r](51r-seal-refuter.md), seal record [52](52-seal-record.md) |
+| Arm recipe | [40](40-g2a-b3-arm-recipe.md) | written; R1 (as D1) and R2 applied |
+| D-166 amendment | decision log D-166 row | appended (ruling 3 sentence) |
+| Handoff | RUN_STATE top block | after the records PR merges |
+
+## 5. Gates that ran this session and what each caught (the pruning rule)
+
+| Gate or check | What it caught that touched a number or a window |
+|---|---|
+| Blind consult (Sol 6.1, Opus 5.5; before this seat) | The cause (maintenance burst + back-to-back retry) and the remedy class; Opus's end-state clause (prevents a probe loop) |
+| Sol implementation seat's own audit (11) | The clock-anchor constraint: a 600 s wait would have voided every retried member (window loss by design) |
+| Sol executing review (12) | Stream budget understated (large-model decode); no number, but the sizing argument was false |
+| Cold Fable final pass (21) | Same sizing defect with real inputs (drift ≈3.2 ppm, half-width 2.31 ms); harvest accepted any policy file in the directory (now refused unless claim-grade) |
+| Sol delta check (13) | Budget is an estimate, not a bound (label) |
+| CI | Nothing |
+| Cold registration gate (51) | A docs-only commit could change the chain's settle and summary guard without a new seal (F1, protects the window's shape); non-mechanical end-state trigger (F2); the end state mislabelled as the exhausted-ladder branch, which could have produced the false sentence "no rung qualified" (F3); a wrong "never lower" claim (F4) |
+| Opus seal refuter (51r) | The judge's own fix for F1 would be defeated once H′ pin tables are appended (D1); the issuer could pin a rung from a non-SELECT window's summary (D2, desk day); a text/code mismatch on voided large members (D3) |
