@@ -13,7 +13,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from joulewise import arm_readiness
+from joulewise import arm_readiness, calibration_bracketing
 from joulewise.dominance_closeout import ABSOLUTE_COMMON_MODE_REASON
 from joulewise.provenance import prompt_token_ids_sha256
 from scripts import issue_g2a_prefill_prompt_pin as issuer
@@ -56,7 +56,7 @@ def load_generator(pack_id: str, *, repository: Path = ROOT):
     return module
 
 
-def fixture_prefill_pin(root: Path) -> Path:
+def fixture_prefill_pin(root: Path, prefill_length: int = 512) -> Path:
     contrast = load_generator("d117_contrast_v5")
     bundle = root / "authority"
     bundle.mkdir()
@@ -67,8 +67,9 @@ def fixture_prefill_pin(root: Path) -> Path:
             "large_members": 1,
             "small_minimum_count": (
                 contrast.PREFILL_MIN_OVERLAPPING_POWER_INTERVAL_COUNT
+                if token_count >= prefill_length else 4
             ),
-            "all_small_count_ge_5": True,
+            "all_small_count_ge_5": token_count >= prefill_length,
         }
         for token_count in contrast.PREFILL_LADDER_PROMPT_TOKENS
     ]
@@ -105,7 +106,7 @@ def fixture_prefill_pin(root: Path) -> Path:
         }
 
     rungs = [rung(token_count) for token_count in contrast.PREFILL_LADDER_PROMPT_TOKENS]
-    target = next(row for row in rungs if row["prefill_tokens"] == 512)
+    target = next(row for row in rungs if row["prefill_tokens"] == prefill_length)
     ladder_path = bundle / "prompt-ladder.json"
     ladder_path.write_text(
         json.dumps(
@@ -155,14 +156,14 @@ def fixture_prefill_pin(root: Path) -> Path:
         },
         "panel_sha256": hashlib.sha256(PANEL.read_bytes()).hexdigest(),
         "exhausted_ladder_branch": contrast.PREFILL_EXHAUSTED_LADDER_BRANCH,
-        "prefill_length": 512,
+        "prefill_length": prefill_length,
         "tokenizer_json_sha256": TOKENIZER_SHA256,
         "special_token_policy": "add_special_tokens=true",
         "prompt_text": target["prompt_text"],
         "prompt_text_utf8_sha256": target["prompt_text_utf8_sha256"],
         "prompt_token_ids": target["prompt_token_ids"],
         "prompt_token_ids_sha256": target["prompt_token_ids_sha256"],
-        "prompt_tokens": 512,
+        "prompt_tokens": prefill_length,
         "repeat_count": target["repeat_count"],
         "closing_sentence": target["closing_sentence"],
         "generation_method": target["generation_method"],
@@ -284,6 +285,115 @@ class D117FloorQwen3V5PackTests(unittest.TestCase):
             relative = Path("configs/campaigns") / pack_id / "generate_configs.py"
             shutil.copy2(ROOT / relative, repository / relative)
         return repository
+
+    def test_each_ladder_rung_realizes_pin_and_derived_identities(self) -> None:
+        for length in selector.LADDER:
+            with tempfile.TemporaryDirectory(prefix=f"floor-rung-{length}-") as tmp:
+                pin = fixture_prefill_pin(Path(tmp), length)
+                for _, pack_id, model_id, _, _ in FLOORS:
+                    with self.subTest(length=length, pack_id=pack_id):
+                        module = load_generator(pack_id)
+                        self.assertIsNone(module.PREFILL_LENGTH)
+                        module.configure_prefill_pin(pin)
+                        module.load_model_inputs()
+                        self.assertEqual(module.PREFILL_LENGTH, length)
+                        self.assertIn(f"prefill-p{length}-", module.PLAN_ID)
+                        family = module.p512_family_definition()
+                        self.assertEqual(family["workload_profile"]["prompt_tokens"], length)
+                        self.assertEqual(family["condition_family_id"],
+                                         f"df-ph-prefill-p{length}-{model_id}")
+                        stages, _, _, absolute, blocks = module.build_assembly()
+                        prefill_runs = [run for stage in stages[3:] for run in stage["runs"]]
+                        self.assertEqual(len(prefill_runs), 50)
+                        self.assertEqual(len(absolute), 10)
+                        self.assertEqual(len(blocks), 10)
+                        for run in prefill_runs:
+                            config = module.config_for(run, "0" * 64, module.P512_PROMPT_TEXT)
+                            workload = config["workload_profile"]
+                            self.assertEqual(workload["prompt_token_expectation"]["token_count"], length)
+                            self.assertEqual(workload["name"], f"df_ph_prefill_p{length}_candidate")
+                            self.assertIn(f"prefill-p{length}-", config["run_id"])
+                            self.assertEqual(workload["output_tokens"], 512)
+                        budget = module.projected_runtime_budget()
+                        self.assertAlmostEqual(budget["planning_estimate_minutes_with_margin"],
+                                               376.8 * length / 512)
+                        self.assertEqual(budget["planning_estimate_seconds_with_margin"],
+                                         {512: 22608, 1024: 45216, 2048: 90432, 4096: 180864}[length])
+                        self.assertTrue(all(f"p{length}" in stage["stage_id"] for stage in stages[3:]))
+                        self.assertTrue(any(f"prefill_p{length}_" in str(path)
+                                            for path in module.expected_pack_paths()))
+
+    def test_complete_pack_generation_at_each_ladder_rung(self) -> None:
+        # This acceptance test exposes the out-of-scope D-179 p512-only registry.
+        # It must pass before this implementation can be accepted for real pins.
+        with tempfile.TemporaryDirectory(prefix="floor-all-rungs-") as tmp:
+            root = Path(tmp)
+            for length in selector.LADDER:
+                authority = root / str(length)
+                authority.mkdir()
+                pin = fixture_prefill_pin(authority, length)
+                for _, pack_id, _, _, _ in FLOORS:
+                    with self.subTest(length=length, pack_id=pack_id):
+                        module = load_generator(pack_id)
+                        module.configure_prefill_pin(pin)
+                        output = authority / pack_id
+                        module.generate(output)
+                        configs = list((output / module.PACK_REL).glob("0[456]_*/d117*.json"))
+                        self.assertEqual(len(configs), 50)
+                        for path in configs:
+                            config = json.loads(path.read_text(encoding="utf-8"))
+                            self.assertEqual(config["workload_profile"]["prompt_token_expectation"]
+                                             ["token_count"], length)
+
+    def test_non_ladder_prefill_length_refuses(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="floor-non-ladder-") as tmp:
+            pin = fixture_prefill_pin(Path(tmp))
+            value = json.loads(pin.read_text(encoding="utf-8"))
+            value["prefill_length"] = value["prompt_tokens"] = 768
+            pin.write_text(json.dumps(value), encoding="utf-8")
+            for _, pack_id, *_ in FLOORS:
+                with self.subTest(pack_id=pack_id):
+                    module = load_generator(pack_id)
+                    with self.assertRaisesRegex(ValueError, "ruled constants mismatch"):
+                        module.configure_prefill_pin(pin)
+                    self.assertIsNone(module.PREFILL_LENGTH)
+
+    def test_reconfiguration_publishes_only_authenticated_length(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="floor-reconfigure-") as tmp:
+            root = Path(tmp)
+            for _, pack_id, *_ in FLOORS:
+                module = load_generator(pack_id)
+                for length in (4096, 512, 2048):
+                    authority = root / f"{pack_id}-{length}"
+                    authority.mkdir()
+                    pin = fixture_prefill_pin(authority, length)
+                    module.configure_prefill_pin(pin)
+                    self.assertIn(f"prefill-p{length}-", module.PLAN_ID)
+                    self.assertEqual(module.PREFILL_LENGTH, length)
+                value = json.loads(pin.read_text(encoding="utf-8"))
+                value["prompt_token_ids_sha256"] = "0" * 64
+                pin.write_text(json.dumps(value), encoding="utf-8")
+                with self.assertRaisesRegex(ValueError, "prompt realization"):
+                    module.configure_prefill_pin(pin)
+                self.assertEqual(module.PREFILL_LENGTH, 2048)
+
+    def test_acceptance_binding_is_registry_live_default_and_cutoff(self) -> None:
+        acceptance = calibration_bracketing.load_calibration_acceptance_bound()
+        self.assertIsNotNone(acceptance)
+        registry = calibration_bracketing.ISSUED_ACCEPTANCE_REGISTRY[
+            calibration_bracketing.ACTIVE_ACCEPTANCE_ID
+        ]
+        for _, pack_id, *_ in FLOORS:
+            with self.subTest(pack_id=pack_id):
+                module = load_generator(pack_id)
+                binding = module.acceptance_pin()
+                self.assertEqual(binding["acceptance_id"], calibration_bracketing.ACTIVE_ACCEPTANCE_ID)
+                self.assertEqual(binding["rel"].as_posix(), registry["relative_path"])
+                self.assertEqual(binding["artifact_sha256"], registry["file_sha256"])
+                self.assertEqual(binding["derivation_sha256"], acceptance["derivation_sha256"])
+                self.assertEqual(module.LEDGER_HEAD_SHA256, acceptance["ledger_cutoff"]["head_digest"])
+                self.assertGreaterEqual(module.verify_ledger_head_pin()["sequence"],
+                                        acceptance["ledger_cutoff"]["sequence"])
 
     def test_routing_constants_are_the_only_producer_routing_sources(self) -> None:
         observed = {}
@@ -489,6 +599,13 @@ class D117FloorQwen3V5PackTests(unittest.TestCase):
                     {"collection_prefill_tokens": 1024}
                 ),
                 "selection_record_collection_prefill_tokens_mismatch",
+            ),
+            (
+                "wrong_selected_tokens",
+                lambda selection: selection.update(
+                    {"selected_prefill_tokens": 1024}
+                ),
+                "selection_record_selected_branch_malformed",
             ),
             (
                 "refused",
