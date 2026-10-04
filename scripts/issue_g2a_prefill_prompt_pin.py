@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Issue the post-selection G2-a prefill prompt pin consumed by D-117 v5."""
+"""Issue the harvest-bound G2-a prefill prompt pin consumed by D-117 v5."""
 
 from __future__ import annotations
 
@@ -8,12 +8,14 @@ import hashlib
 import json
 import os
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Sequence
 
 from configs.campaigns.d117_contrast_v5 import generate_configs as d117_v5
 from joulewise.adapters.mlx_runtime import _encode
 from joulewise.provenance import prompt_token_ids_sha256
+from joulewise.night_gate import chain_literal
 from scripts.generate_g2a_probe_inputs import LADDER_KEYS as PROMPT_LADDER_KEYS
 from scripts import select_g2a_prefill_length as selector
 from scripts import summarize_g2a_prefill_probe as summarizer
@@ -54,6 +56,21 @@ DEFAULT_MODEL_MIRROR = Path(
     "/Users/edr/jw_models/mlx-community/Qwen3-1.7B-4bit"
 )
 REPO_ROOT = Path(__file__).resolve().parents[1]
+BLOCK3_REGISTRATION_SHA256 = "84dd04268a2aed17118bd98b87c10ebe38e5f1bce2ea330a02048537b0342476"
+BLOCK3_POLICY_PATH = "configs/campaign_policies/quiet_mac_p2_g2a_b3.json"
+BLOCK3_POLICY_SHA256 = "04bdbec45cf3b609b33886c1487e9982f030564b3212e636f8cf4631b5d4edc7"
+LIVE_WINDOWS_ROOT = Path("/Users/edr/night-g2a")
+END_STATE_SCHEMA = "joulewise.g2a_prefill_end_state.v1"
+
+
+def _read_bytes(path: Path, *, label: str) -> bytes:
+    # Refuse even a direct CLI coordinate or a symlink into the live tree.
+    if path.resolve().is_relative_to(LIVE_WINDOWS_ROOT):
+        raise PromptPinError("live_root_path_outside_mapping")
+    try:
+        return path.read_bytes()
+    except OSError as exc:
+        raise PromptPinError(f"{label}_unreadable:{path}:{exc}") from exc
 
 
 class PromptPinError(ValueError):
@@ -70,10 +87,7 @@ def _strict_object_pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
 
 
 def _load_json(path: Path, *, label: str) -> tuple[Any, bytes]:
-    try:
-        raw = path.read_bytes()
-    except OSError as exc:
-        raise PromptPinError(f"{label}_unreadable:{path}:{exc}") from exc
+    raw = _read_bytes(path, label=label)
     try:
         value = json.loads(
             raw,
@@ -109,6 +123,206 @@ def _require_positive_int(value: Any, *, label: str) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
         raise PromptPinError(f"{label}_invalid")
     return value
+
+
+def _archive_file(root: Path, path: Path) -> Path:
+    resolved = path.resolve()
+    if not resolved.is_relative_to(root):
+        raise PromptPinError("archive_path_outside_root")
+    if not resolved.is_file():
+        raise PromptPinError("archive_file_missing")
+    return resolved
+
+
+def _copied_path(recorded: Any, *, source: Path, target: Path) -> Path:
+    """Invert harvest_g2a_window.archive's copytree(source, stage / name).
+
+    The harvester has no mapping helper. Its sources['g2a-root'] is the
+    pinned chain's G2A_ROOT: every relative suffix is preserved verbatim.
+    Never resolve or open the source coordinate (it may no longer exist).
+    """
+    if not isinstance(recorded, str) or ".." in Path(recorded).parts:
+        raise PromptPinError("live_root_path_outside_mapping")
+    try:
+        suffix = Path(recorded).relative_to(source)
+    except ValueError as exc:
+        raise PromptPinError("live_root_path_outside_mapping") from exc
+    return target / suffix
+
+
+@dataclass(frozen=True)
+class _Harvest:
+    path: Path
+    raw: bytes
+    record: dict[str, Any]
+    root: Path
+    live_root: Path
+    window_label: str
+    t0: float
+    inventory_path: Path
+    inventory: dict[str, Any]
+
+    def mapped(self, path: Any) -> Path:
+        candidate = _copied_path(path, source=self.live_root, target=self.root / "g2a-root")
+        if not candidate.resolve().is_relative_to(self.root / "g2a-root"):
+            raise PromptPinError("archive_path_outside_root")
+        return candidate
+
+    def file(self, relative: str) -> Path:
+        return _archive_file(self.root, self.root / relative)
+
+    def derived(self, name: str) -> tuple[Any, bytes]:
+        value, raw = _load_json(self.file(f"derived/{name}"), label="harvest_output")
+        outputs = self.record.get("outputs")
+        if not isinstance(outputs, dict) or outputs.get(name) != _sha256(raw):
+            raise PromptPinError("harvest_output_sha256_mismatch")
+        return value, raw
+
+
+def _load_harvest(path: Path, *, verdict: str) -> _Harvest:
+    path = path.resolve()
+    record, raw = _load_json(path, label="harvest")
+    if not isinstance(record, dict) or record.get("schema") != "joulewise.harvest_g2a_window.v1":
+        raise PromptPinError("harvest_schema_invalid")
+    archive_root = record.get("archive_root")
+    if (not isinstance(archive_root, str) or not Path(archive_root).is_absolute()
+            or Path(archive_root).resolve() != path.parent):
+        raise PromptPinError("harvest_archive_root_mismatch")
+    if record.get("verdict") != verdict:
+        raise PromptPinError("harvest_verdict_not_select" if verdict == "SELECT" else "harvest_recover_required")
+    if verdict == "SELECT" and record.get("cause_codes") != []:
+        raise PromptPinError("harvest_select_has_causes")
+    if verdict == "RECOVER" and record.get("capture_made") is not True:
+        raise PromptPinError("harvest_recover_capture_required")
+    root = path.parent
+    plan, plan_raw = _load_json(_archive_file(root, root / "night-custody/night_plan.json"), label="night_plan")
+    if record.get("plan_sha256") != _sha256(plan_raw):
+        raise PromptPinError("harvest_plan_sha256_mismatch")
+    plan_id = record.get("plan_id")
+    if (not isinstance(plan, dict) or not isinstance(plan_id, str)
+            or not plan_id or Path(plan_id).name != plan_id or plan_id in {".", ".."}
+            or plan.get("schema") != "joulewise.night_plan.v2"
+            or plan.get("plan_id") != plan_id or plan.get("receipt_class") != "DIAGNOSTIC_NO_PACK"
+            or not isinstance(plan.get("measurement_root"), str)
+            or not Path(plan["measurement_root"]).is_absolute()
+            or not isinstance(plan.get("custody_root"), str)
+            or not Path(plan["custody_root"]).is_absolute()
+            or type(plan.get("t0_epoch_s")) not in (float, int)):
+        raise PromptPinError("harvest_plan_binding_invalid")
+    inventory_path = _archive_file(root, root / "g2a-root/window-plan/g2a-input-inventory.json")
+    inventory, _ = _load_json(inventory_path, label="input_inventory")
+    if (not isinstance(inventory, dict)
+            or inventory.get("campaign_policy") != {"path": BLOCK3_POLICY_PATH, "sha256": BLOCK3_POLICY_SHA256}
+            or inventory.get("window_id") != plan_id
+            or inventory.get("session_id") != plan_id + "-calibration"):
+        raise PromptPinError("harvest_block3_binding_mismatch")
+    # Labels are the sealed arm recipe's WINDOW_LABEL (b3w1 then b3w2),
+    # retained in the authenticated plan's measurement clone coordinate.
+    label = Path(plan["measurement_root"]).name.rsplit("-g2a-", 1)[-1]
+    if label not in {"b3w1", "b3w2"}:
+        raise PromptPinError("harvest_block3_binding_mismatch")
+    custody = Path(plan["custody_root"])
+    chain_path = _archive_file(root, _copied_path(plan.get("chain_path"), source=custody, target=root / "night-custody"))
+    sidecar = _archive_file(root, _copied_path(plan.get("chain_sha256_path"), source=custody, target=root / "night-custody"))
+    chain_raw = _read_bytes(chain_path, label="chain")
+    try:
+        if _read_bytes(sidecar, label="chain_sha256").decode().split()[0] != _sha256(chain_raw):
+            raise PromptPinError("harvest_chain_sha256_mismatch")
+        text = chain_raw.decode("utf-8")
+        live_root = Path(chain_literal(text, "G2A_ROOT"))
+        if (chain_literal(text, "NIGHT_CHAIN_INTERFACE") != "g2a-reservation-v1"
+                or live_root != LIVE_WINDOWS_ROOT / plan_id):
+            raise ValueError("chain binding")
+        if chain_literal(text, "POLICY") != str(Path(plan["measurement_root"]) / BLOCK3_POLICY_PATH):
+            raise PromptPinError("harvest_block3_binding_mismatch")
+    except (ValueError, IndexError) as exc:
+        if isinstance(exc, PromptPinError):
+            raise
+        raise PromptPinError("harvest_chain_binding_invalid") from exc
+    harvest = _Harvest(path, raw, record, root, live_root, label, plan["t0_epoch_s"], inventory_path, inventory)
+
+    def check_paths(value: Any) -> None:
+        if isinstance(value, dict):
+            for key, item in value.items():
+                if key in {"path", "config_path", "config_root", "runs_root"} and isinstance(item, str):
+                    if Path(item).is_absolute() or key in {"config_root", "runs_root"}:
+                        harvest.mapped(item)
+                check_paths(item)
+        elif isinstance(value, list):
+            for item in value:
+                check_paths(item)
+
+    check_paths(inventory)
+    return harvest
+
+
+def _registration(path: Path) -> None:
+    if _sha256(_read_bytes(path, label="registration")) != BLOCK3_REGISTRATION_SHA256:
+        raise PromptPinError("registration_sha256_mismatch")
+
+
+def _harvest_ladder(harvest: _Harvest) -> tuple[Path, Any, bytes]:
+    path = harvest.file("g2a-root/window-plan/prefill-prompt-ladder.json")
+    ladder, raw = _load_json(path, label="prompt_ladder")
+    binding = harvest.inventory.get("prompt_ladder")
+    if (not isinstance(binding, dict) or harvest.mapped(binding.get("path")).resolve() != path
+            or binding.get("sha256") != _sha256(raw)):
+        raise PromptPinError("input_inventory_prompt_ladder_sha256_mismatch")
+    return path, ladder, raw
+
+
+def _harvest_summary(harvest: _Harvest) -> tuple[Any, bytes, Path]:
+    copies = harvest.record.get("chain_summary_copy")
+    names = {"d166-prefill-resolvability-summary.json": "summary.json",
+             "d166-prefill-counts-receipt.json": "counts.json"}
+    if not isinstance(copies, dict) or set(copies) != set(names):
+        raise PromptPinError("harvest_chain_summary_copy_invalid")
+    for chain_name, derived_name in names.items():
+        _, derived_raw = harvest.derived(derived_name)
+        chain_path = harvest.file(f"g2a-root/window-plan/{chain_name}")
+        chain_raw = _read_bytes(chain_path, label="chain_summary")
+        status = copies[chain_name]
+        if not isinstance(status, str) or status not in {"equal", "differs_invalid_members_excluded"}:
+            raise PromptPinError("harvest_chain_summary_copy_invalid")
+        if status == "equal" and chain_raw != derived_raw:
+            raise PromptPinError("harvest_chain_summary_byte_mismatch")
+    # Registration §8 lines 300-306: regenerated valid-member copies are
+    # authoritative; chain copies are checks even when large members differ.
+    summary, raw = harvest.derived("summary.json")
+    return summary, raw, harvest.file("derived/counts.json")
+
+
+def _end_state_record(harvests: list[_Harvest]) -> bytes:
+    if not 1 <= len(harvests) <= 2:
+        raise PromptPinError("end_state_recover_count_invalid")
+    first = harvests[0]
+    if (first.window_label != "b3w1" or (len(harvests) == 2 and (
+            harvests[1].window_label != "b3w2" or harvests[1].t0 <= first.t0
+            or harvests[1].record["plan_id"] == first.record["plan_id"]))):
+        raise PromptPinError("end_state_window_order_invalid")
+    members = first.record.get("members")
+    if (not isinstance(members, list) or any(
+            not isinstance(member, dict) or not isinstance(member.get("clock_anchor_status"), str)
+            or not isinstance(member.get("run_id"), str) for member in members)
+            or len({member["run_id"] for member in members}) != len(members)):
+        raise PromptPinError("end_state_members_invalid")
+    recorded = [member["clock_anchor_status"] for member in members
+                if member["clock_anchor_status"] != "not recorded"]
+    # Registration §7 lines 276-293: strictly more than half, minimum five
+    # recorded anchors; captureless RECOVERs never consume the allowance.
+    systematic = len(recorded) >= 5 and 2 * sum(status != "bounded" for status in recorded) > len(recorded)
+    if systematic and len(harvests) == 1:
+        trigger = "first_recover_systematic_clock_anchor_failure"
+    elif not systematic and len(harvests) == 2:
+        trigger = "recovery_window_also_recover"
+    else:
+        raise PromptPinError("end_state_trigger_not_met")
+    return _pin_bytes({
+        "schema_version": END_STATE_SCHEMA,
+        "registration_sha256": BLOCK3_REGISTRATION_SHA256,
+        "recover_harvests": [{"path": str(item.path), "sha256": _sha256(item.raw)} for item in harvests],
+        "trigger": trigger,
+    })
 
 
 def runtime_prompt_token_ids(
@@ -305,6 +519,7 @@ def _validate_pin(pin: Any) -> dict[str, Any]:
 
 def _validate_receipt(
     *,
+    harvest: _Harvest,
     input_inventory: Path,
     counts_receipt: Path,
     summary_raw: bytes,
@@ -324,6 +539,8 @@ def _validate_receipt(
         raise PromptPinError("counts_receipt_summary_output_sha256_mismatch")
     if not isinstance(receipt.get("runs_root"), str) or not receipt["runs_root"].strip():
         raise PromptPinError("counts_receipt_runs_root_invalid")
+    runs_root = harvest.mapped(receipt["runs_root"])
+    config_root = harvest.mapped(inventory.get("config_root"))
     prompt_ladder = inventory.get("prompt_ladder")
     panel = inventory.get("panel")
     if (
@@ -383,21 +600,26 @@ def _validate_receipt(
                 raise PromptPinError(f"receipt_run_id_unknown: {run['run_id']}")
             expected_stage, member = expected_members[run["run_id"]]
             try:
-                config_root = summarizer._resolve_inventory_config_root(inventory.get("config_root"))
                 config_path = summarizer._confined_path(
-                    config_root, member.get("config_path"), label="receipt_config_path"
+                    config_root,
+                    str(harvest.mapped(member["config_path"]))
+                    if isinstance(member.get("config_path"), str) and Path(member["config_path"]).is_absolute()
+                    else member.get("config_path"),
+                    label="receipt_config_path",
                 )
-                config, config_raw = summarizer._load_json(config_path, label="receipt_config")
-                metadata, _ = summarizer._load_json(
-                    Path(receipt["runs_root"]) / run["run_id"] / "metadata.json",
-                    label="receipt_metadata",
+                config, config_raw = _load_json(
+                    _archive_file(harvest.root, config_path), label="receipt_config"
                 )
+                metadata, _ = _load_json(
+                    _archive_file(harvest.root, runs_root / run["run_id"] / "metadata.json"), label="receipt_metadata",
+                )
+                _archive_file(harvest.root, runs_root / run["run_id"] / "config.json")
                 if not isinstance(metadata, dict) or metadata.get("run_id") != run["run_id"]:
                     raise summarizer.ProbeSummaryError("metadata_run_id_mismatch")
                 expected_config_sha = summarizer._authenticated_run_config_sha256(
                     config=config, config_raw=config_raw,
                     expected_input_sha256=member.get("config_sha256"), metadata=metadata,
-                    run_id=run["run_id"], runs_root=Path(receipt["runs_root"]),
+                    run_id=run["run_id"], runs_root=runs_root,
                 )
             except summarizer.ProbeSummaryError as exc:
                 raise PromptPinError("counts_receipt_run_provenance_mismatch") from exc
@@ -421,44 +643,72 @@ def _validate_receipt(
         raise PromptPinError("counts_receipt_selected_rung_run_set_mismatch")
 
 
-def _bundle_reference(path: Path, *, bundle_dir: Path, label: str) -> tuple[str, str]:
-    destination = bundle_dir / path.name
+def _bundle_reference(name: str, raw: bytes, *, bundle_dir: Path, label: str) -> tuple[str, str]:
+    destination = bundle_dir / name
     try:
         relative = destination.resolve().relative_to(bundle_dir.resolve()).as_posix()
     except ValueError as exc:
         raise PromptPinError(f"{label}_relative_path_invalid") from exc
-    return relative, _sha256(path.read_bytes())
+    return relative, _sha256(raw)
 
 
-def issue_pin(
+def _prepare_pin(
     *,
-    selection_record: Path,
-    summary_path: Path,
-    prompt_ladder_path: Path,
-    input_inventory: Path,
-    counts_receipt: Path,
+    harvest_path: Path | None = None,
+    end_state: bool = False,
+    recover_harvests: Sequence[Path] = (),
+    registration: Path,
     ruling_trace: Path,
     bundle_dir: Path,
-) -> dict[str, Any]:
-    selection, selection_raw = _load_json(selection_record, label="selection_record")
-    summary, summary_raw = _load_json(summary_path, label="summary")
-    ladder, ladder_raw = _load_json(prompt_ladder_path, label="prompt_ladder")
-    summary_hash = _sha256(summary_raw)
-    length = _selection_from_inputs(
-        selection,
-        summary=summary,
-        summary_sha256=summary_hash,
-    )
+) -> tuple[dict[str, Any], dict[str, bytes]]:
+    _registration(registration)
+    if end_state:
+        if harvest_path is not None:
+            raise PromptPinError("issuer_mode_inputs_invalid")
+        if not 1 <= len(recover_harvests) <= 2:
+            raise PromptPinError("end_state_recover_count_invalid")
+        records = [_load_harvest(path, verdict="RECOVER") for path in recover_harvests]
+        selection_raw = _end_state_record(records)
+        selection_name = "end-state-record.json"
+        harvest = records[0]
+        length = 4096
+    else:
+        if harvest_path is None or recover_harvests:
+            raise PromptPinError("issuer_mode_inputs_invalid")
+        harvest = _load_harvest(harvest_path, verdict="SELECT")
+        binding = harvest.record.get("selection")
+        if (not isinstance(binding, dict) or set(binding) != {"path", "sha256"}
+                or not isinstance(binding["path"], str) or not _is_sha256(binding["sha256"])):
+            raise PromptPinError("harvest_selection_binding_invalid")
+        selection_path = Path(binding["path"])
+        if not selection_path.is_absolute():
+            selection_path = harvest.root / selection_path
+        selection, selection_raw = _load_json(_archive_file(harvest.root, selection_path), label="selection_record")
+        if _sha256(selection_raw) != binding["sha256"]:
+            raise PromptPinError("harvest_selection_sha256_mismatch")
+        outputs = harvest.record.get("outputs")
+        if not isinstance(outputs, dict) or outputs.get("selection.json") != binding["sha256"]:
+            raise PromptPinError("harvest_output_sha256_mismatch")
+        selection_name = "selection.json"
+        summary, summary_raw, counts_receipt = _harvest_summary(harvest)
+        length = _selection_from_inputs(selection, summary=summary, summary_sha256=_sha256(summary_raw))
+    prompt_ladder_path, ladder, ladder_raw = _harvest_ladder(harvest)
     tokenizer_hash, rungs = _validate_ladder(ladder)
     rung = rungs[length]
-    _validate_receipt(
-        input_inventory=input_inventory,
-        counts_receipt=counts_receipt,
-        summary_raw=summary_raw,
-        ladder_raw=ladder_raw,
-        ladder=ladder,
-        selected_length=length,
-    )
+    if not end_state:
+        _validate_receipt(
+            harvest=harvest,
+            input_inventory=harvest.inventory_path,
+            counts_receipt=counts_receipt,
+            summary_raw=summary_raw,
+            ladder_raw=ladder_raw,
+            ladder=ladder,
+            selected_length=length,
+        )
+    else:
+        panel = harvest.inventory.get("panel")
+        if not isinstance(panel, dict) or ladder["panel_thinking_policy"]["panel_sha256"] != panel.get("sha256"):
+            raise PromptPinError("ladder_panel_binding_mismatch")
     observed_ids = runtime_prompt_token_ids(
         rung["prompt_text"], tokenizer_json_sha256=tokenizer_hash
     )
@@ -466,17 +716,18 @@ def issue_pin(
         raise PromptPinError(f"runtime_prompt_token_ids_mismatch:{length}")
     if len(observed_ids) != length:
         raise PromptPinError(f"runtime_prompt_token_count_mismatch:{length}")
+    if end_state:
+        # NEEDS_RULING: the unchanged v2 loader requires an exhausted-ladder
+        # condition that the implementation brief forbids for this mode.
+        # Validate the authority and tokenizer, but publish no conflicting pin.
+        raise PromptPinError("end_state_schema_ruling_required")
     ruling_paths = _ruling_trace_paths(ruling_trace)
     selection_hash = _sha256(selection_raw)
-    try:
-        selection_record.resolve().relative_to(prompt_ladder_path.resolve().parent)
-    except ValueError as exc:
-        raise PromptPinError("selection_record_outside_window_plan_root") from exc
     selection_relative, selection_copy_hash = _bundle_reference(
-        selection_record, bundle_dir=bundle_dir, label="selection_record"
+        selection_name, selection_raw, bundle_dir=bundle_dir, label="selection_record"
     )
     ladder_relative, ladder_copy_hash = _bundle_reference(
-        prompt_ladder_path, bundle_dir=bundle_dir, label="prompt_ladder"
+        prompt_ladder_path.name, ladder_raw, bundle_dir=bundle_dir, label="prompt_ladder"
     )
 
     pin = {
@@ -515,7 +766,12 @@ def issue_pin(
         "closing_sentence": rung["closing_sentence"],
         "generation_method": rung["generation_method"],
     }
-    return _validate_pin(pin)
+    return _validate_pin(pin), {selection_relative: selection_raw, ladder_relative: ladder_raw}
+
+
+def issue_pin(**kwargs: Any) -> dict[str, Any]:
+    """Validate harvest-bound authority and return the closed v2 pin."""
+    return _prepare_pin(**kwargs)[0]
 
 
 def _pin_bytes(pin: dict[str, Any]) -> bytes:
@@ -526,11 +782,11 @@ def _pin_bytes(pin: dict[str, Any]) -> bytes:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--selection-record", required=True, type=Path)
-    parser.add_argument("--summary", required=True, type=Path)
-    parser.add_argument("--prompt-ladder", required=True, type=Path)
-    parser.add_argument("--input-inventory", required=True, type=Path)
-    parser.add_argument("--counts-receipt", required=True, type=Path)
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--harvest", type=Path)
+    mode.add_argument("--end-state", action="store_true")
+    parser.add_argument("--recover-harvest", action="append", default=[], type=Path)
+    parser.add_argument("--registration", required=True, type=Path)
     parser.add_argument("--ruling-trace", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
     return parser
@@ -541,18 +797,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         if args.output.exists():
             raise PromptPinError("output_already_exists")
-        pin = issue_pin(
-            selection_record=args.selection_record,
-            summary_path=args.summary,
-            prompt_ladder_path=args.prompt_ladder,
-            input_inventory=args.input_inventory,
-            counts_receipt=args.counts_receipt,
+        pin, copies = _prepare_pin(
+            harvest_path=args.harvest,
+            end_state=args.end_state,
+            recover_harvests=args.recover_harvest,
+            registration=args.registration,
             ruling_trace=args.ruling_trace,
             bundle_dir=args.output.parent,
         )
-        for source in (args.selection_record, args.prompt_ladder):
-            destination = args.output.parent / source.name
-            raw = source.read_bytes()
+        for name, raw in copies.items():
+            destination = args.output.parent / name
             if destination.exists():
                 if destination.read_bytes() != raw:
                     raise PromptPinError(f"bundle_copy_mismatch:{destination}")
