@@ -49,3 +49,17 @@ value, count or summary was read.
   `~/night-archive/harvest-d117-g2a-prefill-probe-20261004T1305Z-r2` from a checkout at the merged
   head (block-2 precedent: the `-r2` re-harvests after #461/#463), records landed with the pin
   advance, and then recipe §7 by the re-harvest's verdict.
+
+## PR #467 gates
+
+- Fix seat (Sol 6.1 xhigh): [11](11-sol-fix-report.md). Implemented and tested (188 OK, 1 skip). Its sandbox could not write the linked worktree's git metadata, so the lead committed `96747ff0`. The seat's real-data bracket replay returned no tooling refusal code; its outcome is kept out of the PR body (block blinded).
+- Executing review (Sol 6.1 high, separate worktree): [12](12-sol-executing-review.md), **FAIL**, with one finding. F1 (MAJOR): with zero valid members, the bracket decision returns only `instrument_calibration_bracket_missing` and the bracket view's refusal codes were lost. Six mutation probes, all killed.
+- F1 **fixed** by the lead in `92a3661d`: the bracket view's refusal reasons are unioned, first, into the decision's reasons for a finalized session. A regression test was added; deleting the line fails it. Delta check (Sol 6.1 high): [13](13-sol-delta-check.md), **PASS**.
+- Cold Fable final pass at `92a3661d` (fresh worktree, no loop context; a first launch died on a missing `timeout` binary and was relaunched): [21](21-fable-final-pass.md), **PASS**, no BLOCKER or MAJOR. Dispositions:
+  - M1 (a non-baseline refusal in the third view is a RECOVER cause, not REFUSED): rejected as intended. It is requirement 4 of the brief; the verdict is never SELECT, and the pin advance re-authenticates.
+  - M2 (the decision reloads the default acceptance itself): rejected. Safe, because the loader authenticates against the code-pinned registry, and a divergent cutoff fails closed.
+  - N3 (no harvest-level test drives the real decision to `passed` with a non-zero cutoff): deferred to lane `G2A-ATTACH-GUARD-TESTS-01` (tests only).
+  - N4 (the union runs only for finalized sessions): rejected. The verdict is RECOVER either way.
+  - N5 (the `acceptance is None` clause survives mutation, ending REFUSED with another code): deferred to lane `G2A-ATTACH-GUARD-TESTS-01`.
+  - N6 (the acceptance binding also refuses non-finalized windows): rejected. It matches `check_harvest_inputs`.
+- Fable also checked that the 1305Z clone's ledger carries the cutoff digest at sequence 376.
