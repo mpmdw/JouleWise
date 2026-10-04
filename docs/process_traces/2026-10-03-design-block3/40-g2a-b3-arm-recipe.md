@@ -31,8 +31,10 @@ same; every difference is a G2-a fact. Nothing here runs sudo (except the passwo
   committed pin at H (sequence 392, PR #464) must equal its head (the clone step checks with the
   production loader). For the recovery window the seed is the previous block-3 window's archived
   terminal ledger, whose pin advance is merged first (§7).
-- Arm head: `SEAL_H` is the main commit named in the block-3 seal record. The arm head `H` is remote
-  main; it may differ from `SEAL_H` only as registration §12 allows. step2 checks it: every file in
+- Arm head: `SEAL_H` is the sealed H, the first main commit containing both PR #465 and the
+  block-3 seal record; the RUN_STATE block-3 HANDOFF names it (the seal record cannot contain its
+  own merge sha). The arm head `H` is remote main; it may differ from `SEAL_H` only as
+  registration §12 allows. step2 checks it: every file in
   `git diff --name-only SEAL_H H` is under `docs/` or `tests/`, is `RUN_STATE.md`, `TASK_QUEUE.md` or
   `configs/calibration/calibration_ledger_head.json`, or is named under the seal record's heading
   `## H′ extensions` (which lists gated fixes that make code agree with the registration; `none` at the seal).
@@ -94,7 +96,7 @@ set -euo pipefail
 export BENCH=/Users/edr/night-plan-staging/g2a-b3-bench
 # ---- values substituted by the fill command in section 3 ----
 export H='__H__'                         # 40 hex: remote main containing the block-3 seal record
-export SEAL_H='__SEAL_H__'               # 40 hex: the main commit named in the block-3 seal record
+export SEAL_H='__SEAL_H__'               # 40 hex: the sealed H named in the RUN_STATE block-3 HANDOFF
 export T0_EPOCH_S='__T0__'               # section 1
 export WINDOW_MAX_S='__WINDOW__'         # section 1
 export WINDOW_LABEL='__LABEL__'          # b3w1 for the first window, b3w2 for the recovery window
@@ -224,8 +226,9 @@ test "$(git rev-parse HEAD)" = "$H"; test -z "$(git status --porcelain=v1 --untr
 print -- "CHECK: sealed registration digest; D-166 registration armable; seal record names the same digest"
 test "$(shasum -a 256 "$REG_PATH" | cut -d' ' -f1)" = "$REG_SHA256"
 grep -q "$REG_SHA256" docs/process_traces/2026-10-03-design-block3/52-seal-record.md
-grep -q "$SEAL_H" "$SEAL_RECORD"
-print -- "CHECK: H differs from SEAL_H only as registration §12 allows"
+print -- "CHECK: SEAL_H carries the seal record and PR #465; H differs from SEAL_H only as registration §12 allows"
+git cat-file -e "$SEAL_H:$SEAL_RECORD"
+git merge-base --is-ancestor 295fe1516c950ac0a49f4c389e84a027bba5c473 "$SEAL_H"
 git merge-base --is-ancestor "$SEAL_H" "$H"
 for f in ${(f)"$(git diff --name-only "$SEAL_H" "$H")"}; do
   case "$f" in
@@ -379,7 +382,7 @@ re-arm with a new t0), never halt-and-email.
 ```zsh
 # 3.0 Fill
 export NEW_H='FILL: git ls-remote https://github.com/mpmdw/JouleWise refs/heads/main (must contain the block-3 seal record)'
-export NEW_SEAL_H='FILL: the arm head H named in docs/process_traces/2026-10-03-design-block3/52-seal-record.md'
+export NEW_SEAL_H='FILL: the sealed H named in the RUN_STATE block-3 HANDOFF'
 export NEW_T0='FILL: T0_EPOCH_S from section 1'
 export NEW_WINDOW='FILL: WINDOW_MAX_S from section 1'
 export NEW_LABEL=b3w1      # b3w2 for the recovery window
