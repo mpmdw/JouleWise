@@ -25,8 +25,10 @@ RUNSHEET_PATH = (
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+G2A_CAMPAIGN_POLICY_PATH = Path("configs/campaign_policies/quiet_mac_p2_g2a_b3.json")
+
 # Code-defined fixed work: 9 settles, 8 stage countdowns, 24 captures at
-# idle=75, warmup dwell=5, post dwell=1 (producer + production policy), two
+# idle=75, warmup dwell=5, post dwell=1 (producer + block-3 policy), two
 # 59-pulse captures (3*BASELINE_S + 3*(1+1.5) + pulse_schedule(59)[-1][1]
 # = 196.703125), and two calibration display/countdown pauses (20+5).
 # Variable work (model load, warmup, prefill, 512-token decode, cooldown,
@@ -40,7 +42,20 @@ if str(REPO_ROOT) not in sys.path:
 # passes 2*(WRITER_CUSTODY_PASSES+1)*120 + terminal custody, input
 # authentication and summary 3*120. Calibration readiness, allocation,
 # overshoot and pin custody 420 s.
-# ceil(7947.40625 + 20*240 + 4*300 + 8*180 + 1440 + 420) = 17248 seconds.
+# Delayed retries: 4*(300 + 75 + 30) = 1620 s (backoff + member idle + guards
+# and slice overhead). Block-3 ruling budgets four retries: the two rejected
+# first attempts among 13 block-2 members, scaled to 24 and rounded up. Why
+# 300 s: one sampler runs from attempt 1 through the measured window, and the
+# active v3 clock anchor caps its effective bound (anchor half-width + wall-
+# minus-monotonic span) at 5 ms. Block-2 members drifted about 3.2 ppm with
+# half-widths up to 2.31 ms, and an idle attempt took about 104 s. The
+# estimated longest retried stream (Qwen3-8B at 4096 tokens, decode assumed
+# >= 5 tokens/s, guards near their timeouts; an estimate, not an enforced
+# bound) is 2*104 + 300 + 45 + 20 + 103.2 + 6 = 683 s, bound about 4.5 ms; a
+# 600 s wait (983 s) would exceed 5 ms. Drift tolerance at 300 s: about 3.9
+# ppm. A voided member is refused, never admitted
+# (tests/test_controller_retry_backoff.py).
+# ceil(7947.40625 + 20*240 + 4*300 + 8*180 + 1440 + 420 + 1620) = 18868 seconds.
 # Orchestrator ruling (block-2 design record 00, item 7): a first sizing from
 # code worst cases (10 and 5 tokens/s decode, the 300 s cooldown cap and an idle
 # retry on EVERY member) gave 33556 s and would have held the machine about
@@ -48,6 +63,7 @@ if str(REPO_ROOT) not in sys.path:
 # driver's window expiry; the harvest then returns RECOVER.
 SMALL_MEMBER_ALLOWANCE_S = 240
 LARGE_MEMBER_ALLOWANCE_S = 300
+IDLE_RETRY_ALLOWANCE_COUNT = 4
 
 
 def programmed_span_s():
@@ -64,15 +80,19 @@ def programmed_span_s():
             "prompt_text_utf8_sha256": "0" * 64}
     configs = {role: producer._config_for(role=role, entry=panel.get(producer.EXPECTED_MODEL_IDS[role]),
         rung=rung, run_id="sizing", panel_sha="0" * 64) for role in producer.MODEL_ROLES}
-    policy = json.loads((REPO_ROOT / "configs/campaign_policies/quiet_mac_p2_production.json").read_bytes())
+    policy = json.loads((REPO_ROOT / G2A_CAMPAIGN_POLICY_PATH).read_bytes())
     rungs = len(producer.PREFILL_LENGTHS)
     capture = 3 * BASELINE_S + WARMUP_PULSE_COUNT * (PULSE_DURATION_S + 1.5) + pulse_schedule(PULSE_COUNT)[-1][1]
     member_dwells = sum(count * (configs[role]["sampling"]["idle_seconds"]
         + configs[role]["sampling"]["warmup_seconds"] + policy["post_window_sampling_dwell_s"])
         for role, count in (("small", 5), ("large", 1)))
     fixed = (1 + 2 * rungs) * 600 + 2 * rungs * 20 + rungs * member_dwells + 2 * capture + 2 * (20 + 5)
+    retry_allowance = IDLE_RETRY_ALLOWANCE_COUNT * (
+        policy["idle_admission"].get("retry_backoff_s", 0)
+        + max(config["sampling"]["idle_seconds"] for config in configs.values()) + 30
+    )
     return math.ceil(fixed + 5*rungs*SMALL_MEMBER_ALLOWANCE_S + rungs*LARGE_MEMBER_ALLOWANCE_S + 2*rungs*180
-                     + 120 + 2*(WRITER_CUSTODY_PASSES+1)*120 + 3*120 + 420)
+                     + 120 + 2*(WRITER_CUSTODY_PASSES+1)*120 + 3*120 + 420 + retry_allowance)
 
 
 NIGHT_PROGRAMMED_SPAN_S = programmed_span_s()
@@ -90,6 +110,7 @@ def integrated_g2a_chain(chain: str, *, measurement_root: Path, g2a_root: Path,
                      if old_id in row[2] else row[0]), chain, flags=re.MULTILINE)
     values = {"CALIBRATION_LEDGER": measurement_root / "runs/calibration_observation_ledger.jsonl",
               "LEDGER_HEAD_PIN": measurement_root / "configs/calibration/calibration_ledger_head.json",
+              "POLICY": measurement_root / G2A_CAMPAIGN_POLICY_PATH,
               "G2A_ROOT": g2a_root}
     for name, value in values.items():
         chain, count = re.subn(r"^export " + name + r"=.*$",

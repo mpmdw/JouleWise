@@ -17,6 +17,7 @@ from joulewise.schemas import (
     EnergyEvidence,
     FailureReason,
     IdleBaseline,
+    IdleAdmissionPolicy,
     ModelConfig,
     PromptTokenEvidencePolicy,
     RunStatus,
@@ -179,6 +180,44 @@ def exported_summary_semantics_accept(data: Any) -> bool:
 
 
 class BenchmarkConfigTests(unittest.TestCase):
+    def test_idle_admission_retry_backoff_defaults_and_bounds(self) -> None:
+        self.assertEqual(IdleAdmissionPolicy.from_mapping({}).retry_backoff_s, 0)
+        for value in (0, 0.0, -0.0, 0.5, 600, 1800, 1800.0):
+            with self.subTest(value=value):
+                self.assertEqual(
+                    IdleAdmissionPolicy.from_mapping({"retry_backoff_s": value}).retry_backoff_s,
+                    value,
+                )
+        for value in (True, False, -1, -0.5, float("nan"), float("inf"),
+                      -float("inf"), 1800.1, 1801, 10**1000, -(10**1000), "600", None):
+            with self.subTest(value=value), self.assertRaisesRegex(SchemaError, "retry_backoff_s"):
+                IdleAdmissionPolicy.from_mapping({"retry_backoff_s": value})
+
+    def test_retry_backoff_preserves_production_bytes_and_serialization(self) -> None:
+        from scripts.gen_g2_phase_d import G2A_CAMPAIGN_POLICY_PATH
+
+        raw = (ROOT / "configs/campaign_policies/quiet_mac_p2_production.json").read_bytes()
+        self.assertEqual(hashlib.sha256(raw).hexdigest(),
+                         "b0d7b228b88bea717aa9269c103aca760cc36cf05239e0f86c235b4b29665efd")
+        payload = json.loads(raw)
+        policy = CampaignPolicy.from_mapping(payload)
+        self.assertEqual(policy.idle_admission.retry_backoff_s, 0)
+        normalized = json.dumps(policy.to_dict(), sort_keys=True, indent=2) + "\n"
+        self.assertEqual(hashlib.sha256(normalized.encode()).hexdigest(),
+                         "dbe5f48bf2a17a19ea16a8d4a9884483009da2d146dc2a3f5d31f3ec74fa3ecd")
+        for zero in (0, 0.0):
+            payload["idle_admission"]["retry_backoff_s"] = zero
+            self.assertEqual(CampaignPolicy.from_mapping(payload).to_dict(), policy.to_dict())
+        block3_raw = (ROOT / G2A_CAMPAIGN_POLICY_PATH).read_bytes()
+        block3 = json.loads(block3_raw)
+        self.assertEqual(block3_raw, (json.dumps(block3, sort_keys=True, indent=2) + "\n").encode())
+        payload["idle_admission"]["retry_backoff_s"] = 300
+        payload["policy_id"] = "quiet-mac-p2-g2a-b3"
+        self.assertEqual(block3, payload)
+        parsed = CampaignPolicy.from_mapping(block3)
+        self.assertEqual(parsed.idle_admission.retry_backoff_s, 300)
+        self.assertEqual(parsed.to_dict()["idle_admission"]["retry_backoff_s"], 300)
+
     def test_campaign_policy_sidecars_are_typed_without_changing_config_identity(self) -> None:
         config_path = ROOT / "configs" / "examples" / "mock_local.json"
         config = BenchmarkConfig.from_mapping(json.loads(config_path.read_text()))
