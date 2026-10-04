@@ -18,12 +18,12 @@ same; every difference is a G2-a fact. Nothing here runs sudo (except the passwo
   must equal the seal record's (`docs/process_traces/2026-10-03-design-block3/52-seal-record.md`).
 - One command authors plan, chain and sidecar: `scripts/gen_g2_phase_d.py --new-g2a-window` (lane
   G2A-NIGHT-25G83-01, PR #458; block-3 lane G2A-B3-RETRY-BACKOFF-01). The chain carries
-  `NIGHT_PROGRAMMED_SPAN_S` (**SPAN_TBD s** at the block-3 lane) and exports `POLICY` as the block-3
+  `NIGHT_PROGRAMMED_SPAN_S` (**18,868 s** at the block-3 lane, PR #465) and exports `POLICY` as the block-3
   campaign policy `configs/campaign_policies/quiet_mac_p2_g2a_b3.json` (the production policy plus
-  `idle_admission.retry_backoff_s` = 600: a member whose first idle check fails waits 600 s before
+  `idle_admission.retry_backoff_s` = 300: a member whose first idle check fails waits 300 s before
   its one retry). The driver admits the chain with the physical start conditions (OFF receipt and
   600 s settle on both clocks, clean dwell, night gate) and no Revision 6 manifest.
-- `WINDOW_MAX_S` = span + 2700 rounded up to a minute = **WINDOW_TBD s** at that span (§1 computes it
+- `WINDOW_MAX_S` = span + 2700 rounded up to a minute = **21,600 s** at that span (§1 computes it
   from the code at H). Harvest opens at `t0 + WINDOW_MAX_S + 300`.
 - Ledger seed for `b3w1`: block 2 `w2`'s re-harvest terminal ledger
   `/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261003T1748Z-r2/derived/terminal-ledger.jsonl`,
@@ -50,7 +50,7 @@ same; every difference is a G2-a fact. Nothing here runs sudo (except the passwo
 
 ```zsh
 export LEAD_S=5400     # headless magistrate working lead; never below 2400
-export SPAN_S=SPAN_TBD     # NIGHT_PROGRAMMED_SPAN_S at the block-3 lane; step2 refuses if the code at H needs another value
+export SPAN_S=18868     # NIGHT_PROGRAMMED_SPAN_S at the block-3 lane; step2 refuses if the code at H needs another value
 python3 -B - <<'PY'
 import math, os, time
 from datetime import datetime, timezone
@@ -234,9 +234,9 @@ for f in ${(f)"$(git diff --name-only "$SEAL_H" "$H")"}; do
          || { echo "H differs from SEAL_H outside registration §12: $f"; exit 3; } ;;
   esac
 done
-print -- "CHECK: block-3 policy digest equals the seal record; retry backoff 600 parses"
+print -- "CHECK: block-3 policy digest equals the seal record; retry backoff 300 parses"
 grep -q "$(shasum -a 256 "$POLICY" | cut -d' ' -f1)" "$SEAL_RECORD"
-"$PY" -B -c 'import json,sys; from joulewise.schemas import CampaignPolicy as C; p=C.from_mapping(json.load(open(sys.argv[1]))); assert p.idle_admission.retry_backoff_s == 600, p.idle_admission' "$POLICY"
+"$PY" -B -c 'import json,sys; from joulewise.schemas import CampaignPolicy as C; p=C.from_mapping(json.load(open(sys.argv[1]))); assert p.idle_admission.retry_backoff_s == 300, p.idle_admission' "$POLICY"
 "$PY" -B -c 'import hashlib,sys; from joulewise import night_gate as g; d=hashlib.sha256(open(sys.argv[1],"rb").read()).hexdigest(); assert d == g.D166_REGISTRATION_SHA256 and g.armable_registration(d) is not None' "$D166_REG_PATH"
 print -- "CHECK: screen literals derive from the live acceptance; span literal; window covers span + 2700"
 "$PY" -B scripts/gen_g2_phase_d.py --check
@@ -324,7 +324,7 @@ print("What this is. The G2-a probe window of measurement block 3 (sealed regist
       f"{e['REG_PATH']}, sha256 {e['REG_SHA256']}). Between two pulse calibrations, the Mac runs Qwen3-1.7B five times and Qwen3-8B once "
       "at each of four prompt lengths (512, 1024, 2048, 4096 tokens), and counts how many 100 ms power records overlap each prefill phase. "
       "The shortest length at which all five small-model members show at least five overlapping records becomes Paper B's prefill length (rule D-166). "
-      "A member whose first idle check fails waits 600 s before its one retry (the block-3 change). No energy is computed and nothing here is a claim.")
+      "A member whose first idle check fails waits 300 s before its one retry (the block-3 change). No energy is computed and nothing here is a claim.")
 print("Network time stays OFF; the driver re-issues OFF at t0 and waits 600 s with the machine clean before the chain starts.")
 print(f"Ledger head at this arm: sequence {pin['sequence']}.")
 print("\nTimes:")

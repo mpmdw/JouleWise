@@ -47,7 +47,7 @@ stopped when one small-model member failed the idle-admission screen twice: both
 inside a macOS maintenance burst of about six minutes, and the one retry starts about half a second
 after the first attempt, so it cannot outwait such a burst. The orchestrator's ruling under block
 2 §7 (record 00 §1, after a blind consult of Sol 6.1 and Opus 5.5) closes block 2 and opens this
-block with one change to the window: the retry waits 600 s first (§4). Block 2's own text says a
+block with one change to the window: the retry waits 300 s first (§4). Block 2's own text says a
 second incomplete sweep "never goes to a third blind window"; this block is not a third block-2
 window but a new registration, written after the cause was named and the code changed, and blind
 to block 2's partial data (§10).
@@ -93,7 +93,7 @@ the arm record and the seal record (§12).
 - **Campaign policy.** `configs/campaign_policies/quiet_mac_p2_g2a_b3.json` (sha256 in the seal
   record), bound into the input inventory by `bind-window` and passed to every probe stage. It is
   the production policy `configs/campaign_policies/quiet_mac_p2_production.json` with two fields
-  changed: `policy_id` = `quiet-mac-p2-g2a-b3`, and `idle_admission.retry_backoff_s` = 600 (§4).
+  changed: `policy_id` = `quiet-mac-p2-g2a-b3`, and `idle_admission.retry_backoff_s` = 300 (§4).
   Every admission criterion is the production value: CPU busy ratio p95 ≤ 0.5 over at least 30
   records, processor combined power p95 ≤ 1.0 W, the GPU idle check, the environment guard
   (AC power, displays asleep, screensaver disengaged, thermal nominal), exactly one retry, abort
@@ -143,7 +143,7 @@ In order, inside one chain run under the unattended night driver:
    then `scripts/run_campaign.py` on that stage's config (5 members for small stages, 1 for large),
    `--arm-quiet-mode --max-failures 1`, with the campaign policy of §3.
    **Idle admission of each member (the one change from block 2).** The member's 75 s idle
-   baseline is attempt 1. If attempt 1 is rejected, the controller waits 600 s
+   baseline is attempt 1. If attempt 1 is rejected, the controller waits 300 s
    (`retry_backoff_s`), during which nothing new is measured or admitted and the running power
    sampler's records are retained unchanged in the member's raw stream; then it observes the
    environment guard again and runs attempt 2, the one retry, under the same criteria. If attempt
@@ -151,6 +151,16 @@ In order, inside one chain run under the unattended night driver:
    the window is RECOVER (§7). The wait is the same for small and large members. It is a pause
    inside one member's own admission, before its prefill; it does not re-run a member, re-collect
    a rung or replace any capture (§7).
+   *Why 300 s.* One power sampler runs from the start of attempt 1 to the end of the member's
+   measured window, and the clock-step test of §5(b) fits every record of that stream. With
+   network time off, the wall clock runs about 7.2-7.6 ppm off the monotonic clock (the captures
+   on record, `joulewise/uncertainty_evidence.py`), and the active test refuses a stream whose
+   wall-minus-monotonic span or bound exceeds 5 ms. A retried member's stream is about 75 s
+   (attempt 1) + the wait + 75 s (attempt 2) + 60 s (guards, warm-up, measured window) ≈ 510 s at
+   300 s, which stays inside the cap at 7.6 ppm; at 600 s (≈ 810 s) it would not, and every retried
+   member would be invalid. 300 s also outlasts the one burst on record: it started about 11 s
+   before the failed member's first attempt and lasted about six minutes; a retry 300 s after
+   that attempt ended would have begun about 30 s after the burst's logged end.
 4. **Post bracket.** One governed pulse calibration in the same bracket session.
 5. **Terminal boundary.** The ledger session is finalized; the chain records the terminal head
    candidate (`physical_ahead`) and stops with the tracked pin unchanged. The counts receipt and
@@ -158,9 +168,9 @@ In order, inside one chain run under the unattended night driver:
 
 `window_max_s` = `NIGHT_PROGRAMMED_SPAN_S` (the literal the generator writes into the chain from
 the code constants, including its declared allowance for model load and inference and for four
-delayed retries of 600 s each plus their attempt-2 capture; SPAN_TBD s at lane
+delayed retries of 300 s each plus their attempt-2 capture; 18,868 s at lane
 G2A-B3-RETRY-BACKOFF-01) + 2700 s (the clean dwell's own cap), rounded up to a whole minute
-(WINDOW_TBD s at that span). If the chain runs past `t0 + window_max_s`, the driver's window
+(21,600 s at that span). If the chain runs past `t0 + window_max_s`, the driver's window
 expiry stops it and the window is RECOVER (a stopped chain cannot leave a complete sweep with a
 passed post bracket). Nothing in the window may be shortened, skipped, reordered or repeated at
 arm or at run time.
