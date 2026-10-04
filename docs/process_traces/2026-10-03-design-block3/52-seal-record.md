@@ -85,3 +85,37 @@ none
 
 Later windows append their H′ pins below, each under its own `## H′ n pins` heading, never inside
 `## H′ extensions`.
+
+## H′ 1 pins (2026-10-04, activation df31cb27): the `b3w1` re-harvest runs from H′ 1
+
+H′ 1 = `18100c46ebbfab5e25038db0136d1a976de076cb` (merge of PR #467), listed under §12 (ii). `b3w1`
+(plan `d117-g2a-prefill-probe-20261004T1305Z`, armed at H `abe759d3`) ran GO with chain exit 0. Its
+first harvest (at H) returned RECOVER with the single cause `calibration_ledger_baseline_missing`.
+`scripts/harvest_g2a_window.py` gave the bracket decision a ledger view whose baseline was the window's
+seed head (392); `joulewise/calibration_bracketing.py` requires the acceptance's `ledger_cutoff`
+(376), as every other caller supplies. This was the first G2-a window whose bracket session finalized.
+PR #467 makes the harvest agree with §6 ("against the acceptance in force"), so the change is §11
+code-agrees-with-text, with no erratum. Its gates: Sol executing review FAIL → F1 fixed → delta PASS;
+cold Fable final pass PASS
+(`docs/process_traces/2026-10-04-activation-df31cb27/21-fable-final-pass.md`).
+
+Re-harvest (recipe §6 from a worktree at H′ 1, `--read-only-sources`, fresh root):
+`~/night-archive/harvest-d117-g2a-prefill-probe-20261004T1305Z-r2/harvest.json` sha256
+`8fca2228d66b8acbe06c128b50ecc8bd5579f8fde859dd04ad7bf9d6e5a9e814`, verdict SELECT, selection record
+`derived/selection.json` sha256 `c694c4884ff7f31b677b5ade1ab9710a4797c4529eaad61fba85fea080a88222`.
+Terminal ledger `derived/terminal-ledger.jsonl` sha256
+`6ee89e5a1b83c88d865a65cca71177d19a4b23b47d6af2979f92a6840857530e`. Pin advance 392 → 402, head
+digest `3ce1676c…0c08`, merged with this entry. The first harvest's record is kept as
+`windows/d117-g2a-prefill-probe-20261004T1305Z/harvest-r1-recover.json` (sha256 `e7636ebb…2242`).
+Before the re-harvest, the measurement clone's `configs/calibration/calibration_ledger_head.json` was
+restored to its committed bytes. The first harvest had written its pin advance there, byte-equal to
+that archive's `derived/terminal-pin.json` (`d399ed06…aa98`; a copy is preserved at
+`~/night-archive/df31-preserved/`), and the uncommitted pin made the input check refuse. The clone's
+HEAD never moved.
+
+Pins at H′ 1:
+
+| File | sha256 at H′ 1 |
+|---|---|
+| `scripts/harvest_g2a_window.py` | `0d8bc1274bd9e3222385b352fd7136281a73316bdeb90dda5269db9351d547ff` (changed by #467) |
+| the other fifteen files in the table above | unchanged (re-verified at `18100c46`) |

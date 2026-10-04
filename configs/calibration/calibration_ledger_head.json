@@ -1,5 +1,5 @@
 {
-  "sequence": 392,
-  "head_digest": "94d61596ba5a17095ca6c0d77b2ece80064877fd2bfa379fc051fd6b1003b82d",
+  "sequence": 402,
+  "head_digest": "3ce1676c530452df301e8f09d97905487b06b8ed8887d7c7a728a08fd5310c08",
   "ledger_schema": "joulewise.calibration_observation_ledger.v1"
 }
