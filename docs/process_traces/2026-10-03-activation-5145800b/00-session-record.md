@@ -60,3 +60,4 @@ read-only, report `32-opus-consult.md`).
   magistrate stays the operator and never designs). Brief `40-design-block3-seat-brief.md`; state
   `~/night-archive/design-block3/`; launched with `docs/process_traces/2026-10-02-interactive/launch-seat.sh`
   (opus).
+- Email to Ed (block 2 stopped, consult answers, design seat launched): Gmail `1a1047a59a76405a`. Seat pid 14864 alive at launch. Watchdog notice queue was empty, so no notice.ack was written.
