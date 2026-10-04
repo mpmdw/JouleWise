@@ -744,16 +744,56 @@ class IssueG2APrefillPromptPinTests(unittest.TestCase):
                 self.assertFalse(output.exists())
                 self.assertFalse((output.parent / "end-state-record.json").exists())
 
-    def test_end_state_reencodes_default_and_refuses_pending_schema_ruling(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            _, _, ladder_path, ladder = self.prepare(temporary, 512)
-            path = self.recover(statuses=["failed"] * 5)
-            rung = next(item for item in ladder["rungs"] if item["prefill_tokens"] == 4096)
-            with mock.patch.object(issuer, "runtime_prompt_token_ids", side_effect=self.fixture_tokenizer(ladder)) as tokenizer:
-                with self.assertRaisesRegex(issuer.PromptPinError, "^end_state_schema_ruling_required$"):
-                    issuer.issue_pin(end_state=True, recover_harvests=[path], registration=REGISTRATION,
-                                     ruling_trace=RULING, bundle_dir=Path(temporary))
+    def test_end_state_issues_default_and_reaches_v5_loader(self) -> None:
+        for trigger in ("first_recover_systematic_clock_anchor_failure", "recovery_window_also_recover"):
+            with self.subTest(trigger=trigger), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                _, _, _, ladder = self.prepare(str(root / "first"), 512)
+                statuses = ["failed"] * 5 if trigger == "first_recover_systematic_clock_anchor_failure" else ["bounded"] * 6
+                paths = [self.recover(statuses=statuses)]
+                if trigger == "recovery_window_also_recover":
+                    self.prepare(str(root / "second"), 512)
+                    paths.append(self.recover(label="b3w2", t0=2000))
+                output = root / "end-state-pin.json"
+                arguments = ["--end-state", "--registration", str(REGISTRATION),
+                             "--ruling-trace", str(RULING), "--output", str(output)]
+                for path in paths:
+                    arguments.extend(["--recover-harvest", str(path)])
+                    # End-state authority must not use a selector outcome.
+                    (path.parent / "derived/selection.json").unlink()
+                rung = next(item for item in ladder["rungs"] if item["prefill_tokens"] == 4096)
+                with mock.patch.object(issuer, "runtime_prompt_token_ids", side_effect=self.fixture_tokenizer(ladder)) as tokenizer:
+                    self.assertEqual(issuer.main(arguments), 0)
                 tokenizer.assert_called_once_with(rung["prompt_text"], tokenizer_json_sha256=ladder["tokenizer_json_sha256"])
+                pin = load_generator()._load_prefill_prompt_pin(
+                    output, prefill_length=4096,
+                    tokenizer_json_sha256=ladder["tokenizer_json_sha256"],
+                    panel_sha256=hashlib.sha256(PANEL.read_bytes()).hexdigest(),
+                )
+                self.assertEqual(set(pin), issuer.PROMPT_PIN_KEYS)
+                self.assertEqual(pin["prefill_length"], 4096)
+                self.assertEqual(pin["prompt_token_ids"], rung["prompt_token_ids"])
+                self.assertEqual(pin["exhausted_ladder_branch"], issuer.d117_v5.PREFILL_EXHAUSTED_LADDER_BRANCH)
+                self.assertEqual(pin["selection_record"]["path"], "end-state-record.json")
+                raw = (output.parent / pin["selection_record"]["path"]).read_bytes()
+                self.assertEqual(pin["g2a_record_sha256"], issuer._sha256(raw))
+                self.assertEqual(pin["selection_record"]["sha256"], issuer._sha256(raw))
+                self.assertEqual(pin["selection_authority"]["g2a_record"], {
+                    "record_id": "sha256:" + issuer._sha256(raw), "path": "end-state-record.json",
+                })
+                self.assertEqual(json.loads(raw), {
+                    "schema_version": issuer.END_STATE_SCHEMA,
+                    "registration_sha256": issuer.BLOCK3_REGISTRATION_SHA256,
+                    "recover_harvests": [{"path": str(path.resolve()), "sha256": issuer._sha256(path.read_bytes())} for path in paths],
+                    "trigger": trigger,
+                })
+                for forbidden in (b"no rung", b"no_rung", b"collect_at_4096", b"refusal"):
+                    self.assertNotIn(forbidden, raw)
+
+    def test_end_state_reencoding_mismatch_refuses(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            self.prepare(temporary, 512)
+            path = self.recover(statuses=["failed"] * 5)
             with mock.patch.object(issuer, "runtime_prompt_token_ids", return_value=[]):
                 with self.assertRaisesRegex(issuer.PromptPinError, "^runtime_prompt_token_ids_mismatch:"):
                     issuer.issue_pin(end_state=True, recover_harvests=[path], registration=REGISTRATION,

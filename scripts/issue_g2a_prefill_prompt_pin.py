@@ -716,11 +716,6 @@ def _prepare_pin(
         raise PromptPinError(f"runtime_prompt_token_ids_mismatch:{length}")
     if len(observed_ids) != length:
         raise PromptPinError(f"runtime_prompt_token_count_mismatch:{length}")
-    if end_state:
-        # NEEDS_RULING: the unchanged v2 loader requires an exhausted-ladder
-        # condition that the implementation brief forbids for this mode.
-        # Validate the authority and tokenizer, but publish no conflicting pin.
-        raise PromptPinError("end_state_schema_ruling_required")
     ruling_paths = _ruling_trace_paths(ruling_trace)
     selection_hash = _sha256(selection_raw)
     selection_relative, selection_copy_hash = _bundle_reference(
@@ -753,6 +748,9 @@ def _prepare_pin(
         "selection_record": {"path": selection_relative, "sha256": selection_copy_hash},
         "prompt_ladder": {"path": ladder_relative, "sha256": ladder_copy_hash},
         "panel_sha256": ladder["panel_thinking_policy"]["panel_sha256"],
+        # D-166's static pre-registration declaration is identical in every
+        # pin. The hash-bound selection_record supplies decision authority,
+        # including the registration §7 trigger in end-state mode.
         "exhausted_ladder_branch": d117_v5.PREFILL_EXHAUSTED_LADDER_BRANCH,
         "prefill_length": length,
         "tokenizer_json_sha256": tokenizer_hash,
