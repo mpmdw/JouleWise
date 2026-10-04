@@ -554,7 +554,7 @@ def summarize(
         minimum_count = (
             min(row["in_window_sample_count"] for row in small)
             if len(small) >= MIN_SMALL_MEMBERS
-            else 0 if small else None
+            else 0
         )
         summary_rows.append(
             {
@@ -563,8 +563,7 @@ def summarize(
                 "large_members": len(large),
                 "small_minimum_count": minimum_count,
                 "all_small_count_ge_5": (
-                    minimum_count is not None
-                    and minimum_count >= MIN_OVERLAPPING_POWER_INTERVAL_COUNT
+                    minimum_count >= MIN_OVERLAPPING_POWER_INTERVAL_COUNT
                 ),
             }
         )

@@ -330,22 +330,23 @@ class SummarizeG2APrefillProbeTests(unittest.TestCase):
         self.assertEqual(row["small_minimum_count"], 0)
         self.assertFalse(row["all_small_count_ge_5"])
 
-    def test_empty_rungs_emit_null_minimum_and_selector_reports_measurement_refusal(self) -> None:
+    def test_empty_rungs_stay_fail_closed_for_the_standalone_selector(self) -> None:
+        # An incomplete ladder must never authorize a selection outside the
+        # harvest's RECOVER gate (registration section 8; PR #463 review F1).
         with tempfile.TemporaryDirectory() as temporary:
             config_root, inventory, runs_root = self.copy_fixture(temporary)
             members, rows = summarizer.summarize(config_root=config_root, input_inventory=inventory,
                                                 runs_root=runs_root, valid_run_ids=set())
             self.assertEqual(members, [])
-            self.assertTrue(all(row["small_members"] == 0 and row["small_minimum_count"] is None
+            self.assertTrue(all(row["small_members"] == 0 and row["small_minimum_count"] == 0
                                 and row["all_small_count_ge_5"] is False for row in rows))
-            raw = summarizer._summary_bytes(rows)
             summary = Path(temporary) / "empty-summary.json"
-            summary.write_bytes(raw)
+            summary.write_bytes(summarizer._summary_bytes(rows))
             output = Path(temporary) / "empty-selection.json"
-            self.assertEqual(selector.main(["--summary", str(summary), "--output", str(output)]), 0)
+            self.assertEqual(selector.main(["--summary", str(summary), "--output", str(output)]), 2)
             record = json.loads(output.read_bytes())
-            self.assertEqual(record["status"], "refused")
-            self.assertEqual(record["refusal"]["code"], "no_g2a_prefill_rung_qualifies")
+            self.assertIsNone(record.get("selected_prefill_tokens"))
+            self.assertNotEqual(record.get("status"), "selected")
 
     def test_wrong_run_id_refuses_even_when_the_mutated_config_hash_is_rebound(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
