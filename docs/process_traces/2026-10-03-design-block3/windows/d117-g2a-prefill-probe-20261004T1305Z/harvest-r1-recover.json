@@ -1,0 +1,175 @@
+{
+  "archive_root": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261004T1305Z",
+  "capture_made": true,
+  "cause_codes": [
+    "calibration_ledger_baseline_missing"
+  ],
+  "chain_summary_copy": {
+    "d166-prefill-counts-receipt.json": "equal",
+    "d166-prefill-resolvability-summary.json": "equal"
+  },
+  "members": [
+    {
+      "clock_anchor_status": "bounded",
+      "problems": [],
+      "run_id": "g2a-small-p0512-r01",
+      "valid": true
+    },
+    {
+      "clock_anchor_status": "bounded",
+      "problems": [],
+      "run_id": "g2a-small-p0512-r02",
+      "valid": true
+    },
+    {
+      "clock_anchor_status": "bounded",
+      "problems": [],
+      "run_id": "g2a-small-p0512-r03",
+      "valid": true
+    },
+    {
+      "clock_anchor_status": "bounded",
+      "problems": [],
+      "run_id": "g2a-small-p0512-r04",
+      "valid": true
+    },
+    {
+      "clock_anchor_status": "bounded",
+      "problems": [],
+      "run_id": "g2a-small-p0512-r05",
+      "valid": true
+    },
+    {
+      "clock_anchor_status": "bounded",
+      "problems": [],
+      "run_id": "g2a-small-p1024-r01",
+      "valid": true
+    },
+    {
+      "clock_anchor_status": "bounded",
+      "problems": [],
+      "run_id": "g2a-small-p1024-r02",
+      "valid": true
+    },
+    {
+      "clock_anchor_status": "bounded",
+      "problems": [],
+      "run_id": "g2a-small-p1024-r03",
+      "valid": true
+    },
+    {
+      "clock_anchor_status": "bounded",
+      "problems": [],
+      "run_id": "g2a-small-p1024-r04",
+      "valid": true
+    },
+    {
+      "clock_anchor_status": "bounded",
+      "problems": [],
+      "run_id": "g2a-small-p1024-r05",
+      "valid": true
+    },
+    {
+      "clock_anchor_status": "bounded",
+      "problems": [],
+      "run_id": "g2a-small-p2048-r01",
+      "valid": true
+    },
+    {
+      "clock_anchor_status": "bounded",
+      "problems": [],
+      "run_id": "g2a-small-p2048-r02",
+      "valid": true
+    },
+    {
+      "clock_anchor_status": "bounded",
+      "problems": [],
+      "run_id": "g2a-small-p2048-r03",
+      "valid": true
+    },
+    {
+      "clock_anchor_status": "bounded",
+      "problems": [],
+      "run_id": "g2a-small-p2048-r04",
+      "valid": true
+    },
+    {
+      "clock_anchor_status": "bounded",
+      "problems": [],
+      "run_id": "g2a-small-p2048-r05",
+      "valid": true
+    },
+    {
+      "clock_anchor_status": "bounded",
+      "problems": [],
+      "run_id": "g2a-small-p4096-r01",
+      "valid": true
+    },
+    {
+      "clock_anchor_status": "bounded",
+      "problems": [],
+      "run_id": "g2a-small-p4096-r02",
+      "valid": true
+    },
+    {
+      "clock_anchor_status": "bounded",
+      "problems": [],
+      "run_id": "g2a-small-p4096-r03",
+      "valid": true
+    },
+    {
+      "clock_anchor_status": "bounded",
+      "problems": [],
+      "run_id": "g2a-small-p4096-r04",
+      "valid": true
+    },
+    {
+      "clock_anchor_status": "bounded",
+      "problems": [],
+      "run_id": "g2a-small-p4096-r05",
+      "valid": true
+    },
+    {
+      "clock_anchor_status": "bounded",
+      "problems": [],
+      "run_id": "g2a-large-p0512-r01",
+      "valid": true
+    },
+    {
+      "clock_anchor_status": "bounded",
+      "problems": [],
+      "run_id": "g2a-large-p1024-r01",
+      "valid": true
+    },
+    {
+      "clock_anchor_status": "bounded",
+      "problems": [],
+      "run_id": "g2a-large-p2048-r01",
+      "valid": true
+    },
+    {
+      "clock_anchor_status": "bounded",
+      "problems": [],
+      "run_id": "g2a-large-p4096-r01",
+      "valid": true
+    }
+  ],
+  "outputs": {
+    "bracket.json": "038f84146ff842fe75249431040fda22af4de5701a1f7c5c275c1140fe503c3c",
+    "counts.json": "79fd548f43b9bbd37d839520a9578f96ee16525d1739484501ca24c1e589f39d",
+    "network-time.json": "c800351f1214c2b0f54c394d7940f996fa24b4e4c94fe4e5f7bf0d0f28d7f2cb",
+    "physical-head-pin.json": "0511fe1aff7874d3f97fb61c070457f5c8f72f277b8e80c77561dc67c2d00a7c",
+    "summary.json": "ec97fff6fb69448ea1e8f5c3c837b1318f2e1921242d7bc2f9d81de53086a019",
+    "terminal-ledger.jsonl": "6ee89e5a1b83c88d865a65cca71177d19a4b23b47d6af2979f92a6840857530e",
+    "terminal-pin.json": "d399ed06c164d15b5dd2cc15e1d0ba618d02fa21efdffe474df2d5888671aa98"
+  },
+  "pin_advance": {
+    "needs_operator_commit": true,
+    "path": "/Users/edr/night-custody/measurement/JouleWise-measurement-20261004T1305Z-g2a-b3w1/configs/calibration/calibration_ledger_head.json",
+    "sha256": "d399ed06c164d15b5dd2cc15e1d0ba618d02fa21efdffe474df2d5888671aa98"
+  },
+  "plan_id": "d117-g2a-prefill-probe-20261004T1305Z",
+  "plan_sha256": "c77d58dfb38c3ad010a8c0f7136f5920d8ff6d78503c38e88865ebf55461f1bf",
+  "schema": "joulewise.harvest_g2a_window.v1",
+  "verdict": "RECOVER"
+}

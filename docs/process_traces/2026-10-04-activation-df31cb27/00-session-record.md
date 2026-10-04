@@ -63,3 +63,20 @@ value, count or summary was read.
   - N5 (the `acceptance is None` clause survives mutation, ending REFUSED with another code): deferred to lane `G2A-ATTACH-GUARD-TESTS-01`.
   - N6 (the acceptance binding also refuses non-finalized windows): rejected. It matches `check_harvest_inputs`.
 - Fable also checked that the 1305Z clone's ledger carries the cutoff digest at sequence 376.
+
+## Merge, re-harvest, verdict
+
+- CI green on `ad96bed4` (15/15, gate-ledger included); PR #467 merged `18100c46` (= H′ 1).
+- First trial re-harvest (from the fix worktree into `/tmp`) REFUSED with `harvest_frozen_input_authentication_failed`. The input check reported `calibration_ledger_head_uncommitted`: the first harvest had written its pin advance into the measurement clone's `configs/calibration/calibration_ledger_head.json`, as designed (`needs_operator_commit`). Block 2 never hit this because its first harvests refused before writing a pin. Those bytes equal the archive's `derived/terminal-pin.json` (`d399ed06…aa98`). A copy was preserved at `~/night-archive/df31-preserved/`, and the clone's file was restored to its committed bytes (`git checkout --` on that one file; the clone's HEAD stayed `abe759d3`). The second trial gave SELECT.
+- Re-harvest (recipe §6 from a detached worktree at `18100c46`, `--read-only-sources`, fresh root): `~/night-archive/harvest-d117-g2a-prefill-probe-20261004T1305Z-r2/harvest.json` sha256 `8fca2228d66b8acbe06c128b50ecc8bd5579f8fde859dd04ad7bf9d6e5a9e814`, **verdict SELECT**, no cause codes, `capture_made` true. Selection record `derived/selection.json` sha256 `c694c4884ff7f31b677b5ade1ab9710a4797c4529eaad61fba85fea080a88222`. Terminal ledger sha256 `6ee89e5a…530e`. Pin advance 392 → 402 (`d399ed06…aa98`). The clone stayed clean.
+- Pinned files at `18100c46` against the seal table: fifteen unchanged; `scripts/harvest_g2a_window.py` changed by #467 (`0d8bc127…47ff`). Recorded as seal record 52 `## H′ 1 pins`.
+- Landing (branch `harvest/d117-g2a-prefill-probe-20261004T1305Z-r2`):
+  - the pin advance;
+  - `windows/d117-g2a-prefill-probe-20261004T1305Z/` with `harvest.json` (r2), `harvest-r1-recover.json`, `SHA256SUMS` and `selection.json`;
+  - the seal record entry;
+  - the desk-day seat brief `40-desk-day-seat-brief.md`.
+
+## Step 4 by verdict: SELECT → block 3 complete
+
+Per recipe §7: email Ed once (paths and shas), then launch a design seat (RUN_STATE item 7) for the desk day. Brief: `40-desk-day-seat-brief.md`; state: `~/night-archive/desk-day-v5/`; launcher: `docs/process_traces/2026-10-02-interactive/launch-seat.sh` (opus). The selected rung is not typed here; the seat reads `selection.json`.
+- Pin- and seal-sensitive tests on the landing branch (24 modules that read the ledger head pin, seal record 52 or registration_block3): Ran 1044 tests, OK (skipped=4).
