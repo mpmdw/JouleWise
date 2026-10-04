@@ -15,7 +15,7 @@ from unittest import mock
 from joulewise.provenance import prompt_token_ids_sha256
 from scripts import issue_g2a_prefill_prompt_pin as issuer
 from scripts import select_g2a_prefill_length as selector
-from tests.test_summarize_g2a_prefill_probe import runner_config_bytes
+from tests.test_summarize_g2a_prefill_probe import retained_metadata, retained_summary, runner_config_bytes
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -53,6 +53,37 @@ def summary_for(first_qualifying: int | None) -> list[dict[str, object]]:
 
 class IssueG2APrefillPromptPinTests(unittest.TestCase):
     maxDiff = None
+
+    def setUp(self) -> None:
+        reviewed = tempfile.TemporaryDirectory()
+        self.addCleanup(reviewed.cleanup)
+        self.reviewed_root = Path(reviewed.name)
+        patcher = mock.patch.object(issuer, "BLOCK3_WINDOWS_PATH", self.reviewed_root)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        anchor = mock.patch.object(issuer, "_committed_record_bytes", side_effect=lambda path:
+                                   issuer._read_bytes(path, label="committed_window_record"))
+        self.real_committed_record_bytes = issuer._committed_record_bytes
+        anchor.start()
+        self.addCleanup(anchor.stop)
+
+    def snapshot_reviewed_records(self, archive: Path | None = None) -> None:
+        """Publish the synthetic window's records separately from its archive."""
+        archive = self.archive if archive is None else archive
+        harvest = archive / "harvest.json"
+        record = json.loads(harvest.read_bytes())
+        window = self.reviewed_root / record["plan_id"]
+        window.mkdir(exist_ok=True)
+        shutil.copyfile(harvest, window / "harvest.json")
+        if record.get("verdict") == "SELECT" and (archive / "derived/selection.json").is_file():
+            shutil.copyfile(archive / "derived/selection.json", window / "selection.json")
+        # Source-copy hashes exclude derived outputs, just as archive() does.
+        paths = sorted(path for path in archive.rglob("*") if path.is_file()
+                       and path.name not in {"SHA256SUMS", "harvest.json"}
+                       and "derived" not in path.relative_to(archive).parts)
+        (archive / "SHA256SUMS").write_text("".join(
+            f"{issuer._sha256(path.read_bytes())}  {path.relative_to(archive).as_posix()}\n"
+            for path in paths))
 
     def prepare(
         self,
@@ -106,6 +137,12 @@ class IssueG2APrefillPromptPinTests(unittest.TestCase):
             },
             "stages": fixture_inventory["stages"],
         }
+        frozen_path = root / "calibration_plan.json"
+        frozen_path.write_bytes(issuer._pin_bytes({
+            "plan_id": "fixture-calibration", "campaign_policy": inventory["campaign_policy"]}))
+        inventory["calibration_plan"] = {
+            "path": str(self.live_root / "window-plan/calibration_plan.json"),
+            "sha256": issuer._sha256(frozen_path.read_bytes()), "plan_id": "fixture-calibration"}
         shutil.copytree(ROOT / "tests/fixtures/g2a/pin/config-root", g2a / "prefill-probe-configs")
         inventory_path = root / "g2a-input-inventory.json"
         inventory_raw = (json.dumps(inventory, indent=2, sort_keys=True) + "\n").encode()
@@ -119,9 +156,9 @@ class IssueG2APrefillPromptPinTests(unittest.TestCase):
                 config_raw = runner_config_bytes((g2a / "prefill-probe-configs" / member["config_path"]).read_bytes())
                 config_sha = hashlib.sha256(config_raw).hexdigest()
                 (run_root / "config.json").write_bytes(config_raw)
-                (run_root / "metadata.json").write_text(json.dumps({
-                    "run_id": member["run_id"], "config_sha256": config_sha,
-                }) + "\n")
+                (run_root / "metadata.json").write_text(json.dumps(
+                    retained_metadata(member["run_id"], rung, config_raw)) + "\n")
+                (run_root / "summary_metrics.json").write_text(json.dumps(retained_summary(6)) + "\n")
                 receipt_runs.append(
                     {
                         "run_id": member["run_id"],
@@ -172,7 +209,8 @@ class IssueG2APrefillPromptPinTests(unittest.TestCase):
             "schema": "joulewise.harvest_g2a_window.v1", "archive_root": str(self.archive.resolve()),
             "plan_id": "fixture-b3w1", "plan_sha256": issuer._sha256((custody / "night_plan.json").read_bytes()),
             "verdict": "SELECT", "cause_codes": [], "capture_made": True,
-            "members": [{"run_id": f"member-{i}", "clock_anchor_status": "bounded"} for i in range(6)],
+            "members": [{"run_id": row["run_id"], "clock_anchor_status": "bounded", "valid": True}
+                        for row in receipt_runs],
             "selection": {"path": str(selection_path.resolve()), "sha256": "0" * 64},
             "outputs": {}, "chain_summary_copy": {
                 "d166-prefill-counts-receipt.json": "equal",
@@ -204,6 +242,7 @@ class IssueG2APrefillPromptPinTests(unittest.TestCase):
         record["selection"]["sha256"] = issuer._sha256((derived / "selection.json").read_bytes())
         record["outputs"] = {path.name: issuer._sha256(path.read_bytes()) for path in derived.iterdir()}
         self.harvest.write_bytes(issuer._pin_bytes(record))
+        self.snapshot_reviewed_records()
 
     def arguments(self, output: Path) -> list[str]:
         return ["--harvest", str(self.harvest), "--registration", str(REGISTRATION),
@@ -217,6 +256,7 @@ class IssueG2APrefillPromptPinTests(unittest.TestCase):
         return code, output
 
     def issue_direct(self):
+        self.snapshot_reviewed_records()
         return issuer.issue_pin(harvest_path=self.harvest, registration=REGISTRATION,
                                 ruling_trace=RULING, bundle_dir=self.archive.parent)
 
@@ -663,6 +703,7 @@ class IssueG2APrefillPromptPinTests(unittest.TestCase):
         inventory.update(window_id=plan_id, session_id=plan_id + "-calibration")
         inventory["config_root"] = str(self.live_root / "prefill-probe-configs")
         inventory["prompt_ladder"]["path"] = str(self.live_root / "window-plan/prefill-prompt-ladder.json")
+        inventory["calibration_plan"]["path"] = str(self.live_root / "window-plan/calibration_plan.json")
         self.input_inventory.write_bytes(issuer._pin_bytes(inventory))
         chain = self.archive / "night-custody/chain.zsh"
         chain.write_text(chain.read_text().replace(previous_live, str(self.live_root)).replace(
@@ -673,6 +714,7 @@ class IssueG2APrefillPromptPinTests(unittest.TestCase):
                       members=[{"run_id": f"member-{i}", "clock_anchor_status": status} for i, status in enumerate(statuses)])
         record.pop("selection", None)
         self.harvest.write_bytes(issuer._pin_bytes(record))
+        self.snapshot_reviewed_records()
         return self.harvest
 
     def test_end_state_clock_trigger_matches_registered_boundaries(self) -> None:
@@ -706,6 +748,7 @@ class IssueG2APrefillPromptPinTests(unittest.TestCase):
             first = self.recover()
             self.prepare(str(second_root), 512)
             second = self.recover(label="b3w2", t0=2000)
+            self.snapshot_reviewed_records(first.parent)
             records = [issuer._load_harvest(path, verdict="RECOVER") for path in (first, second)]
             binding = json.loads(issuer._end_state_record(records))
             self.assertEqual(binding["trigger"], "recovery_window_also_recover")
@@ -729,6 +772,7 @@ class IssueG2APrefillPromptPinTests(unittest.TestCase):
                 if mutation == "verdict": self.rewrite(path, verdict="NULL")
                 elif mutation == "capture": self.rewrite(path, capture_made=False)
                 elif mutation == "members": self.rewrite(path, members=[{}])
+                self.snapshot_reviewed_records()
                 paths = [] if mutation == "zero" else [path] * (3 if mutation == "three" else 1)
                 kwargs = {"harvest_path": path} if mutation == "mixed_mode" else {}
                 with self.assertRaisesRegex(issuer.PromptPinError, "^" + code + "$"):
@@ -754,6 +798,7 @@ class IssueG2APrefillPromptPinTests(unittest.TestCase):
                 if trigger == "recovery_window_also_recover":
                     self.prepare(str(root / "second"), 512)
                     paths.append(self.recover(label="b3w2", t0=2000))
+                    self.snapshot_reviewed_records(paths[0].parent)
                 output = root / "end-state-pin.json"
                 arguments = ["--end-state", "--registration", str(REGISTRATION),
                              "--ruling-trace", str(RULING), "--output", str(output)]
@@ -798,6 +843,175 @@ class IssueG2APrefillPromptPinTests(unittest.TestCase):
                 with self.assertRaisesRegex(issuer.PromptPinError, "^runtime_prompt_token_ids_mismatch:"):
                     issuer.issue_pin(end_state=True, recover_harvests=[path], registration=REGISTRATION,
                                      ruling_trace=RULING, bundle_dir=Path(temporary))
+
+    def test_review_counterexamples_refuse_at_reviewed_harvest_anchor(self) -> None:
+        for mutation in ("relabeled_block2", "new_selection_over_recover", "whitespace_selection",
+                         "null_relabeled_recover"):
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as temporary:
+                self.prepare(temporary, 512)
+                record = json.loads(self.harvest.read_bytes())
+                verdict = "SELECT"
+                if mutation == "relabeled_block2":
+                    self.recover(label="b2w1", statuses=["failed"] * 5)
+                    frozen = self.archive / "g2a-root/window-plan/calibration_plan.json"
+                    self.rewrite(frozen, campaign_policy={"path": "configs/campaign_policies/quiet_mac_p2_production.json",
+                                                         "sha256": "0" * 64})
+                    self.snapshot_reviewed_records()
+                    plan_path = self.archive / "night-custody/night_plan.json"
+                    self.rewrite(plan_path, measurement_root="/fixture-measurement-g2a-b3w1")
+                    chain = self.archive / "night-custody/chain.zsh"
+                    chain.write_bytes(chain.read_bytes().replace(b"g2a-b2w1/", b"g2a-b3w1/"))
+                    (chain.parent / "chain.zsh.sha256").write_text(issuer._sha256(chain.read_bytes()))
+                    self.rewrite(self.harvest, plan_sha256=issuer._sha256(plan_path.read_bytes()))
+                    # The reviewer kept the original source-copy sums.
+                    with self.assertRaisesRegex(issuer.PromptPinError, "^archive_sha256sum_mismatch$"):
+                        issuer._load_harvest(self.harvest, verdict="RECOVER")
+                    self.snapshot_reviewed_records()
+                    # A block-2 window has no record in the block-3 namespace.
+                    (self.reviewed_root / "fixture-b2w1/harvest.json").unlink()
+                    with self.assertRaisesRegex(issuer.PromptPinError, "^committed_window_record_unreadable:"):
+                        issuer._load_harvest(self.harvest, verdict="RECOVER")
+                    continue
+                if mutation == "new_selection_over_recover":
+                    self.recover()
+                    record = json.loads(self.harvest.read_bytes())
+                    record.update(verdict="SELECT", cause_codes=[], selection={
+                        "path": str(self.archive / "derived/selection.json"),
+                        "sha256": issuer._sha256((self.archive / "derived/selection.json").read_bytes())})
+                elif mutation == "whitespace_selection":
+                    selection = self.archive / "derived/selection.json"
+                    selection.write_bytes(selection.read_bytes() + b" ")
+                    record["selection"]["sha256"] = record["outputs"]["selection.json"] = issuer._sha256(selection.read_bytes())
+                else:
+                    self.rewrite(self.harvest, verdict="NULL", capture_made=False)
+                    self.snapshot_reviewed_records()
+                    record.update(verdict="RECOVER", capture_made=True,
+                                  members=[{"run_id": f"member-{i}", "clock_anchor_status": "failed"} for i in range(5)])
+                    verdict = "RECOVER"
+                self.harvest.write_bytes(issuer._pin_bytes(record))
+                with self.assertRaisesRegex(issuer.PromptPinError, "^harvest_committed_harvest_mismatch$"):
+                    issuer._load_harvest(self.harvest, verdict=verdict)
+
+    def test_selection_reviewed_bytes_refuse_even_when_both_declared_hashes_match(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            selection, _, _, _ = self.prepare(temporary, 512)
+            reviewed_selection = (self.reviewed_root / "fixture-b3w1/selection.json").read_bytes()
+            selection.write_bytes(selection.read_bytes() + b" ")
+            self.refresh_harvest()
+            (self.reviewed_root / "fixture-b3w1/selection.json").write_bytes(reviewed_selection)
+            with self.assertRaisesRegex(issuer.PromptPinError, "^harvest_committed_selection_mismatch$"):
+                issuer.issue_pin(harvest_path=self.harvest, registration=REGISTRATION,
+                                 ruling_trace=RULING, bundle_dir=Path(temporary))
+
+    def test_real_block3_r2_commit_excludes_superseded_r1_recover(self) -> None:
+        relative = Path("docs/process_traces/2026-10-03-design-block3/windows/d117-g2a-prefill-probe-20261004T1305Z")
+        r2 = self.real_committed_record_bytes(relative / "harvest.json")
+        r1 = self.real_committed_record_bytes(relative / "harvest-r1-recover.json")
+        self.assertEqual(json.loads(r2)["verdict"], "SELECT")
+        self.assertEqual(json.loads(r1)["verdict"], "RECOVER")
+        with mock.patch.object(issuer, "BLOCK3_WINDOWS_PATH", relative.parent), \
+                mock.patch.object(issuer, "_committed_record_bytes", self.real_committed_record_bytes):
+            issuer._reviewed_record(relative.name, "harvest.json", r2)
+            with self.assertRaisesRegex(issuer.PromptPinError, "^harvest_committed_harvest_mismatch$"):
+                issuer._reviewed_record(relative.name, "harvest.json", r1)
+
+    def test_superseded_r1_recover_cannot_replace_committed_r2_select(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            self.prepare(temporary, 512)
+            window = self.reviewed_root / "fixture-b3w1"
+            r2_select = (window / "harvest.json").read_bytes()
+            path = self.recover(statuses=["failed"] * 5)
+            (window / "harvest-r1-recover.json").write_bytes(path.read_bytes())
+            (window / "harvest.json").write_bytes(r2_select)
+            with self.assertRaisesRegex(issuer.PromptPinError, "^harvest_committed_harvest_mismatch$"):
+                issuer.issue_pin(end_state=True, recover_harvests=[path], registration=REGISTRATION,
+                                 ruling_trace=RULING, bundle_dir=Path(temporary))
+
+    def test_archive_checksums_bind_every_read_source_and_derived_output(self) -> None:
+        paths = ["night-custody/night_plan.json", "night-custody/chain.zsh", "night-custody/chain.zsh.sha256",
+                 "g2a-root/window-plan/g2a-input-inventory.json", "g2a-root/window-plan/calibration_plan.json",
+                 "g2a-root/window-plan/prefill-prompt-ladder.json",
+                 "g2a-root/window-plan/d166-prefill-counts-receipt.json",
+                 "g2a-root/window-plan/d166-prefill-resolvability-summary.json",
+                 "g2a-root/runs/g2a-small-p0512-r01/config.json",
+                 "g2a-root/runs/g2a-small-p0512-r01/metadata.json",
+                 "g2a-root/runs/g2a-small-p0512-r01/summary_metrics.json",
+                 "g2a-root/prefill-probe-configs/small-p512/g2a-small-p0512-r01.json",
+                 "derived/summary.json", "derived/counts.json"]
+        for relative in paths:
+            with self.subTest(relative=relative), tempfile.TemporaryDirectory() as temporary:
+                self.prepare(temporary, 512)
+                path = self.archive / relative
+                path.write_bytes(path.read_bytes() + b" ")
+                reason = "harvest_output_sha256_mismatch" if relative.startswith("derived/") else "archive_sha256sum_mismatch"
+                with self.assertRaisesRegex(issuer.PromptPinError, "^" + reason + "$"):
+                    issuer.issue_pin(harvest_path=self.harvest, registration=REGISTRATION,
+                                     ruling_trace=RULING, bundle_dir=Path(temporary))
+
+    def test_frozen_block2_policy_and_calibration_plan_digest_refuse(self) -> None:
+        for mutation in ("policy", "digest"):
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as temporary:
+                self.prepare(temporary, 512)
+                frozen = self.archive / "g2a-root/window-plan/calibration_plan.json"
+                if mutation == "policy":
+                    self.rewrite(frozen, campaign_policy={"path": "configs/campaign_policies/quiet_mac_p2_production.json",
+                                                         "sha256": "0" * 64})
+                else:
+                    frozen.write_bytes(frozen.read_bytes() + b" ")
+                self.snapshot_reviewed_records()
+                reason = "harvest_block3_binding_mismatch" if mutation == "policy" else "harvest_calibration_plan_binding_mismatch"
+                with self.assertRaisesRegex(issuer.PromptPinError, "^" + reason + "$"):
+                    issuer._load_harvest(self.harvest, verdict="SELECT")
+
+    def test_checksum_manifest_itself_is_checked_if_listed(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            self.prepare(temporary, 512)
+            sums = self.archive / "SHA256SUMS"
+            sums.write_bytes(sums.read_bytes() + b"0" * 64 + b"  SHA256SUMS\n")
+            with self.assertRaisesRegex(issuer.PromptPinError, "^archive_sha256sum_mismatch$"):
+                issuer._load_harvest(self.harvest, verdict="SELECT")
+
+    def test_selection_coordinate_alias_resolves_inside_verified_archive(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            selection, _, _, ladder = self.prepare(temporary, 512)
+            alias = Path(temporary) / "archive-alias"
+            alias.symlink_to(self.archive, target_is_directory=True)
+            self.rewrite(self.harvest, selection={"path": str(alias / "derived/selection.json"),
+                                                 "sha256": issuer._sha256(selection.read_bytes())})
+            with mock.patch.object(issuer, "runtime_prompt_token_ids", side_effect=self.fixture_tokenizer(ladder)):
+                pin = self.issue_direct()
+            self.assertEqual(pin["g2a_record_sha256"], issuer._sha256(selection.read_bytes()))
+
+    def test_valid_member_select_issues_with_invalid_nongating_large_member_excluded(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            selection, summary, _, ladder = self.prepare(temporary, 512)
+            receipt = json.loads(self.counts_receipt.read_bytes())
+            excluded = next(row["run_id"] for row in receipt["runs"] if row["stage_id"] == "large-p512")
+            receipt["runs"] = [row for row in receipt["runs"] if row["run_id"] != excluded]
+            rows = json.loads(summary.read_bytes())
+            rows[0]["large_members"] = 0
+            summary.write_bytes(issuer.summarizer._summary_bytes(rows))
+            receipt["summary_output_sha256"] = issuer._sha256(summary.read_bytes())
+            self.counts_receipt.write_bytes(issuer._pin_bytes(receipt))
+            selection.write_bytes(issuer._pin_bytes(selector.select(rows, summary_sha256=receipt["summary_output_sha256"])))
+            record = json.loads(self.harvest.read_bytes())
+            next(member for member in record["members"] if member["run_id"] == excluded).update(
+                valid=False, clock_anchor_status="failed")
+            self.harvest.write_bytes(issuer._pin_bytes(record))
+            self.refresh_harvest()
+            with mock.patch.object(issuer, "runtime_prompt_token_ids", side_effect=self.fixture_tokenizer(ladder)), \
+                    mock.patch.object(issuer.summarizer, "_run_provenance", wraps=issuer.summarizer._run_provenance) as derive:
+                pin = self.issue_direct()
+            self.assertEqual(pin["prefill_length"], 512)
+            self.assertEqual(pin["g2a_record_sha256"], issuer._sha256(selection.read_bytes()))
+            self.assertNotIn(excluded, {call.kwargs["run_id"] for call in derive.call_args_list})
+            # An invalid member cannot re-enter the authenticated receipt.
+            receipt["runs"].append({"run_id": excluded, "stage_id": "large-p512", **{
+                key: receipt["runs"][0][key] for key in receipt["runs"][0] if key not in {"run_id", "stage_id"}}})
+            self.counts_receipt.write_bytes(issuer._pin_bytes(receipt))
+            self.refresh_harvest()
+            with self.assertRaisesRegex(issuer.PromptPinError, "^counts_receipt_selected_rung_run_set_mismatch$"):
+                self.issue_direct()
 
 
 if __name__ == "__main__":

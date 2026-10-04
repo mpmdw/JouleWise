@@ -348,6 +348,25 @@ class SummarizeG2APrefillProbeTests(unittest.TestCase):
             self.assertIsNone(record.get("selected_prefill_tokens"))
             self.assertNotEqual(record.get("status"), "selected")
 
+    def test_valid_filter_excludes_nongating_large_member_without_rejecting_select(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            config_root, inventory_path, runs_root = self.copy_fixture(temporary)
+            inventory = json.loads(inventory_path.read_bytes())
+            valid = {member["run_id"] for stage in inventory["stages"] for member in stage["members"]}
+            excluded = next(stage["members"][0]["run_id"] for stage in inventory["stages"]
+                            if stage["stage_id"] == "large-p512")
+            valid.remove(excluded)
+            # Invalid provenance must not be inspected or counted.
+            (runs_root / excluded / "metadata.json").write_bytes(b"invalid excluded metadata")
+            members, rows = summarizer.summarize(config_root=config_root, input_inventory=inventory_path,
+                                                runs_root=runs_root, valid_run_ids=valid)
+            self.assertNotIn(excluded, {member["run_id"] for member in members})
+            self.assertEqual(rows[0]["large_members"], 0)
+            issuer._validate_summary(rows)
+            selection = selector.select(rows, summary_sha256=hashlib.sha256(summarizer._summary_bytes(rows)).hexdigest())
+            self.assertEqual(selection["collection_prefill_tokens"], 512)
+            self.assertEqual(selection["status"], "selected")
+
     def test_wrong_run_id_refuses_even_when_the_mutated_config_hash_is_rebound(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -693,13 +712,23 @@ class SummarizeG2APrefillProbeTests(unittest.TestCase):
                 "schema": "joulewise.harvest_g2a_window.v1", "archive_root": str(archive.resolve()),
                 "plan_id": plan_id, "plan_sha256": hashlib.sha256((custody / "night_plan.json").read_bytes()).hexdigest(),
                 "verdict": "SELECT", "cause_codes": [], "capture_made": True,
-                "members": [{"run_id": member["run_id"], "clock_anchor_status": "bounded"}
+                "members": [{"run_id": member["run_id"], "clock_anchor_status": "bounded", "valid": True}
                             for stage in inventory["stages"] for member in stage["members"]],
                 "selection": {"path": str((derived / "selection.json").resolve()), "sha256": selection_sha256},
                 "outputs": {path.name: hashlib.sha256(path.read_bytes()).hexdigest() for path in derived.iterdir()},
                 "chain_summary_copy": {"d166-prefill-counts-receipt.json": "equal",
                                        "d166-prefill-resolvability-summary.json": "equal"},
             }))
+            reviewed_root = Path(temporary) / "reviewed-windows"
+            reviewed_window = reviewed_root / plan_id
+            reviewed_window.mkdir(parents=True)
+            shutil.copyfile(harvest_path, reviewed_window / "harvest.json")
+            shutil.copyfile(derived / "selection.json", reviewed_window / "selection.json")
+            source_files = sorted(path for path in archive.rglob("*") if path.is_file()
+                                  and path.name != "harvest.json" and "derived" not in path.relative_to(archive).parts)
+            (archive / "SHA256SUMS").write_text("".join(
+                f"{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.relative_to(archive).as_posix()}\n"
+                for path in source_files))
             # The issuer must now succeed with only the archive present.
             shutil.rmtree(root)
             bundle = Path(temporary) / "pin-bundle"
@@ -713,7 +742,8 @@ class SummarizeG2APrefillProbeTests(unittest.TestCase):
                 issuer,
                 "runtime_prompt_token_ids",
                 side_effect=lambda prompt_text, **_kwargs: list(by_text[prompt_text]),
-            ):
+            ), mock.patch.object(issuer, "BLOCK3_WINDOWS_PATH", reviewed_root), \
+                    mock.patch.object(issuer, "_committed_record_bytes", side_effect=lambda path: path.read_bytes()):
                 issue_code = issuer.main(
                     [
                         "--harvest",
