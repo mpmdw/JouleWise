@@ -1,0 +1,13 @@
+{
+  "archive_root": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261004T0526Z",
+  "cause_codes": [
+    "chain_never_started"
+  ],
+  "members": [],
+  "outputs": {},
+  "pin_advance": null,
+  "plan_id": "d117-g2a-prefill-probe-20261004T0526Z",
+  "plan_sha256": "397b3f03a5897cf99912c928895cae39a0ca8957209956ed8ab6aca20bb51d61",
+  "schema": "joulewise.harvest_g2a_window.v1",
+  "verdict": "NULL"
+}
