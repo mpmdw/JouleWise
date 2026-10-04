@@ -285,6 +285,20 @@ class G2aHarvestTests(unittest.TestCase):
         self.build_calibration_bracket_binding.assert_not_called()
         self.assertIs(self.calibration_bracket_for_bundles.call_args.kwargs['ledger_snapshot'], refused)
 
+    def test_bracket_view_refusals_survive_a_decision_that_drops_them(self):
+        refused = copy.copy(self.snapshot)
+        refused.refusal_reasons = ('calibration_ledger_baseline_missing',)
+        self.load_calibration_ledger_snapshot.side_effect = [self.snapshot, self.snapshot, refused]
+        # With no valid member the real decision returns only its generic code.
+        self.calibration_bracket_for_bundles.return_value = (
+            {'status': 'failed'}, ('instrument_calibration_bracket_missing',))
+        record = self.run_harvest()
+        self.assertEqual(record['verdict'], 'RECOVER')
+        self.assertIn('calibration_ledger_baseline_missing', record['cause_codes'])
+        self.assertIn('instrument_calibration_bracket_missing', record['cause_codes'])
+        reasons = harvest.read(self.args.archive_root/'derived/bracket.json')['reasons']
+        self.assertEqual(reasons, ['calibration_ledger_baseline_missing', 'instrument_calibration_bracket_missing'])
+
     def test_finalized_session_after_acceptance_cutoff_uses_separate_bracket_view(self):
         # The existing crash fixture can authenticate PRE custody but leaves
         # POST unfilled. Complete that real session over a non-genesis seed.

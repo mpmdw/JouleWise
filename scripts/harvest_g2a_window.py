@@ -217,6 +217,9 @@ def harvest(args, *, now=time.time, clear=group_clear, runner=subprocess.run):
                     policy.calibration_bracketing, mode='read_replay', ledger_snapshot=snap, bracket_binding=binding,
                     bracket_window_id=value['window_id'], bracket_plan_id=value['calibration_plan']['plan_id'],
                     bracket_plan_sha256=sha(frozen), bracket_evidence_root_id=value['evidence_root_id'])
+                # The decision drops snapshot refusals on some paths (no valid
+                # member); the bracket view's own refusals are always causes.
+                reasons = tuple(dict.fromkeys((*snap.refusal_reasons, *reasons)))
         write(derived / 'bracket.json', {'binding': binding, 'assessment': bracket, 'reasons': reasons})
         counts, out = derived / 'counts.json', derived / 'summary.json'
         if summary.main(['--config-root', str(g2a / 'prefill-probe-configs'), '--input-inventory',
