@@ -1,7 +1,7 @@
 # Refuter for cold registration gate G2A-25G83-B3 (Opus 5.5)
 
 You are the independent refuter for the cold registration gate whose charge is
-`docs/process_traces/2026-10-03-design-block3/50-seal-charge.md` in this worktree. Read that
+`docs/process_traces/2026-10-03-design-block3/50-seal-charge.filled.md` in this worktree. Read that
 charge in full; its read limits, blindness rule, prohibitions and checks bind you exactly as they
 bind the judge (no RUN_STATE.md, TASK_QUEUE.md, CLAUDE*.md, AGENTS.md, memory or skill files; no
 pull-request bodies or comments; no sudo, systemsetup, launchctl, powermetrics; no model loading or
