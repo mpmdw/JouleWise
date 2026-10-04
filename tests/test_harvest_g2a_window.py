@@ -889,7 +889,7 @@ class G2aHarvestTests(unittest.TestCase):
             self.assertFalse((self.args.archive_root/'derived'/name).exists(), name)
         self.assertEqual((tree(self.f.measurement), tree(self.f.g2a), tree(self.f.night)), before)
 
-    def test_read_only_harvest_removes_terminal_lock_without_changing_ledger_bytes(self):
+    def test_read_only_harvest_repeats_terminal_ledger_bytes(self):
         self.crash_after_pre()
         before = tree(self.f.measurement), tree(self.f.g2a), tree(self.f.night)
         self.args.read_only_sources = True
@@ -899,8 +899,8 @@ class G2aHarvestTests(unittest.TestCase):
             record = self.run_harvest()
             self.assertEqual(record['verdict'], 'RECOVER', record.get('fault'))
             derived = self.args.archive_root/'derived'
-            self.assertFalse((derived/'terminal-ledger.jsonl.lock').exists())
-            self.assertNotIn('terminal-ledger.jsonl.lock', record['outputs'])
+            # The writer-lease sidecar stays: its inode is never deleted
+            # (docs/contracts/calibration_ledger_append.md).
             terminal_bytes.append((derived/'terminal-ledger.jsonl').read_bytes())
         self.assertEqual(terminal_bytes[0], terminal_bytes[1])
         self.assertTrue(terminal_bytes[0].startswith(self.ledger.read_bytes()))

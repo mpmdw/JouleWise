@@ -118,9 +118,6 @@ def recover_harvest_copy(
             operator_identity=operator_identity, attestation_reason="authenticated G2-a harvest terminal copy",
             execute=True, require_committed_pin=False, repo_root=repo_root,
         )
-    # The fresh derived copy has no further writers. All governed operations
-    # have released their leases; keep their transient lock out of the archive.
-    copied_ledger.with_name(copied_ledger.name + ".lock").unlink(missing_ok=True)
     if source_bytes != (ledger.read_bytes(), head_pin.read_bytes()):
         raise CalibrationLedgerError(RefusalCode.PIN_ADVANCEMENT_UNSAFE)
     return dict(terminal)
