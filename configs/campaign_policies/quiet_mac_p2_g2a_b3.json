@@ -1,0 +1,54 @@
+{
+  "calibration_bracketing": {
+    "calibration_bracket_max_drift_s": 0.01,
+    "require_bracket": true
+  },
+  "cooldown": {
+    "absolute_ceiling_w": null,
+    "cap_s": 300.0,
+    "policy_version": "cooldown-v2",
+    "require_thermal_nominal": true,
+    "subwindow_s": 5.0,
+    "sustained_window_s": 30.0,
+    "tolerance_fraction": 0.1
+  },
+  "environment_guard": {
+    "critical_unknown_fail_closed": true,
+    "require_ac_power": true,
+    "require_displays_asleep": true,
+    "require_external_connected": true,
+    "require_low_power_mode_off": true,
+    "require_screensaver_disengaged": true,
+    "require_thermal_nominal": true
+  },
+  "idle_admission": {
+    "enabled": true,
+    "on_fail": "abort",
+    "retry_attempts": 1,
+    "retry_backoff_s": 300
+  },
+  "idle_admission_extension": {
+    "adapter_wattage": {
+      "require_known_wattage": true
+    },
+    "claim_bearing": true,
+    "cpu_criteria": {
+      "cpu_busy_ratio_p95_max": 0.5,
+      "min_samples": 30,
+      "on_missing_telemetry": "fail",
+      "processor_combined_power_w_p95_max": 1.0
+    },
+    "neg8_bracket": {
+      "max_abs_delta_j": 0.05,
+      "max_rel_delta": 0.25,
+      "require_bracket": true
+    },
+    "policy_version": "idle-admission-core-v1",
+    "schema_version": "joulewise.idle_admission_extension.v1"
+  },
+  "policy_id": "quiet-mac-p2-g2a-b3",
+  "policy_version": "environment-guard-cooldown-v2",
+  "post_window_sampling_dwell_s": 1.0,
+  "profile": "production",
+  "schema_version": "joulewise.campaign_policy.v1"
+}

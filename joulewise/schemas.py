@@ -471,6 +471,7 @@ class IdleAdmissionPolicy:
     enabled: bool = True
     retry_attempts: int = 1
     on_fail: AdmissionFailureAction = AdmissionFailureAction.ABORT
+    retry_backoff_s: float = 0.0
 
     @classmethod
     def from_mapping(cls, data: dict[str, Any]) -> "IdleAdmissionPolicy":
@@ -478,7 +479,7 @@ class IdleAdmissionPolicy:
         _require_exact_keys(
             data,
             "idle_admission",
-            frozenset({"enabled", "retry_attempts", "on_fail"}),
+            frozenset({"enabled", "retry_attempts", "on_fail", "retry_backoff_s"}),
         )
         retry_attempts = data.get("retry_attempts", 1)
         if (
@@ -490,9 +491,19 @@ class IdleAdmissionPolicy:
                 "idle_admission.retry_attempts must be exactly 1 "
                 "(one fully-evidenced retry)"
             )
+        backoff_value = data.get("retry_backoff_s", 0)
+        # Check bounds before float conversion, including arbitrarily large ints.
+        if isinstance(backoff_value, int | float) and (backoff_value < 0 or backoff_value > 1800):
+            raise SchemaError("idle_admission.retry_backoff_s must be between 0 and 1800")
+        retry_backoff_s = _optional_float(
+            backoff_value, "idle_admission.retry_backoff_s", minimum=0.0
+        )
+        if retry_backoff_s is None or retry_backoff_s > 1800:
+            raise SchemaError("idle_admission.retry_backoff_s must be <= 1800 and non-null")
         return cls(
             enabled=_require_bool(data.get("enabled", True), "idle_admission.enabled"),
             retry_attempts=retry_attempts,
+            retry_backoff_s=retry_backoff_s,
             on_fail=_enum_value(
                 AdmissionFailureAction,
                 data.get("on_fail", AdmissionFailureAction.ABORT.value),
@@ -735,7 +746,11 @@ class CampaignPolicy:
         )
 
     def to_dict(self) -> dict[str, Any]:
-        return _enum_to_value(asdict(self))
+        result = _enum_to_value(asdict(self))
+        # Preserve historical policy metadata and normalized digests at zero.
+        if self.idle_admission.retry_backoff_s == 0:
+            result["idle_admission"].pop("retry_backoff_s")
+        return result
 
 
 @dataclass(frozen=True)

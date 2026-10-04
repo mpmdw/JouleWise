@@ -73,14 +73,14 @@
     "file": "scripts/harvest_g2a_window.py",
     "function": "harvest",
     "ordinal": 1,
-    "line": 143,
+    "line": 144,
     "reason": "G2-a harvest replays the full physical ledger against the committed seed pin only after a verified byte archive, authenticating the frozen baseline and capture custody; an open session is admitted only as a governed open extension. Abort and pin advancement use recover_calibration_ledger.py's governed procedures, not this replay snapshot."
   },
   {
     "file": "scripts/harvest_g2a_window.py",
     "function": "harvest",
     "ordinal": 2,
-    "line": 157,
+    "line": 158,
     "reason": "For a closed bracket session, G2-a harvest replays the ledger against a scratch pin taken from terminal_head_pin_for_session (never a mid-session receipt) to authenticate the terminal head for its archived diagnostic verdict; the scratch pin is never committed and no receipt is appended."
   },
   {
