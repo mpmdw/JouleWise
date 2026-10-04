@@ -73,14 +73,28 @@
     "file": "scripts/harvest_g2a_window.py",
     "function": "harvest",
     "ordinal": 1,
-    "line": 143,
-    "reason": "G2-a harvest replays the full physical ledger only after a verified byte archive, authenticating the frozen baseline and capture custody for a diagnostic report. Subsequent abort and pin advancement use recover_calibration_ledger.py's governed issuing procedures, not this replay snapshot."
+    "line": 151,
+    "reason": "G2-a harvest replays the full physical ledger against the committed seed pin only after a verified byte archive, authenticating the frozen baseline and capture custody; an open session is admitted only as a governed open extension. Abort and pin advancement use recover_calibration_ledger.py's governed procedures, not this replay snapshot."
   },
   {
     "file": "scripts/harvest_g2a_window.py",
     "function": "harvest",
     "ordinal": 2,
-    "line": 174,
+    "line": 166,
+    "reason": "For a closed bracket session, G2-a harvest replays the ledger against a scratch pin taken from terminal_head_pin_for_session (never a mid-session receipt) to authenticate the terminal head for its archived diagnostic verdict; the scratch pin is never committed and no receipt is appended."
+  },
+  {
+    "file": "scripts/harvest_g2a_window.py",
+    "function": "harvest",
+    "ordinal": 3,
+    "line": 187,
+    "reason": "After independent seed and terminal-head custody authentication, G2-a harvest replays the same physical ledger and selected pin against the plan-bound default acceptance cutoff for its diagnostic bracket decision. Snapshot refusal reasons remain RECOVER causes; this view never appends a receipt or publishes a binding."
+  },
+  {
+    "file": "scripts/harvest_g2a_window.py",
+    "function": "harvest",
+    "ordinal": 4,
+    "line": 216,
     "reason": "G2-a harvest re-evaluates retained member and pre/post bracket custody against live acceptance for its archived diagnostic verdict; no claim mint, binding publication or analysis-manifest finalization. Governed terminal-pin writes reauthenticate independently through the recovery CLI."
   },
   {
@@ -127,16 +141,23 @@
   },
   {
     "file": "scripts/recover_calibration_ledger.py",
+    "function": "recover_harvest_copy",
+    "ordinal": 1,
+    "line": 85,
+    "reason": "Read-only G2-a harvest recovery replays the source ledger against its committed pin to authenticate the governed extension before copying; the governed abort and pin advance then run on byte-exact derived copies, and the source bytes are re-checked unchanged."
+  },
+  {
+    "file": "scripts/recover_calibration_ledger.py",
     "function": "main",
     "ordinal": 1,
-    "line": 233,
+    "line": 335,
     "reason": "The audit and audit-observations commands reauthenticate existing ledger custody without issuing receipts."
   },
   {
     "file": "scripts/recover_calibration_ledger.py",
     "function": "main",
     "ordinal": 2,
-    "line": 265,
+    "line": 367,
     "reason": "The audit and audit-observations commands reauthenticate existing ledger custody without issuing receipts."
   },
   {

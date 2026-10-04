@@ -12,7 +12,7 @@ if str(ROOT) not in sys.path:
 from joulewise import calibration_bracketing as brackets, network_time_off, night_gate
 from joulewise.calibration_ledger import load_calibration_ledger_snapshot, terminal_head_pin_for_session
 from joulewise.cli import validate_bundle
-from joulewise.schemas import CampaignPolicy
+from joulewise.schemas import AdmissionFailureAction, CampaignPolicy, CampaignPolicyProfile
 from scripts import generate_g2a_probe_inputs as inputs, summarize_g2a_prefill_probe as summary
 from scripts import select_g2a_prefill_length as selector
 from scripts.generate_g2a_probe_inputs import harvest_roster as roster
@@ -135,14 +135,23 @@ def harvest(args, *, now=time.time, clear=group_clear, runner=subprocess.run):
         value = read(wp / 'g2a-input-inventory.json')
         ids = roster(value)
         inputs.check_harvest_inputs(measurement_root=root, root=g2a, ledger=ledger, head_pin=pin)
+        policy_path = inputs.harvest_campaign_policy_path(measurement_root=root, inventory=value)
+        # The inventory names the policy; only a claim-grade one may judge a bracket
+        # (production profile, bracket required, admission enabled and aborting).
+        policy = CampaignPolicy.from_mapping(read(policy_path))
+        if (policy.profile != CampaignPolicyProfile.PRODUCTION or not policy.calibration_bracketing.require_bracket
+                or not policy.idle_admission.enabled or policy.idle_admission.on_fail != AdmissionFailureAction.ABORT):
+            raise HarvestRefusal('campaign_policy_not_claim_grade')
         if value['window_id'] != plan.plan_id or value['session_id'] != plan.plan_id + '-calibration':
             raise HarvestRefusal('window_identity_mismatch')
+        frozen_plan = read(frozen)
         # Authenticate against the committed seed first. A mid-session receipt
         # is never a head-pin candidate. The governed open extension can be
         # assessed as incomplete before recovery closes it below.
         snap = load_calibration_ledger_snapshot(ledger, pin, require_committed_pin=True,
-            mode='read_replay', repo_root=root, baseline_sequence=read(frozen)['calibration_ledger']['head_sequence'],
-            baseline_digest=read(frozen)['calibration_ledger']['head_digest'])
+            mode='read_replay', repo_root=root, baseline_sequence=frozen_plan['calibration_ledger']['head_sequence'],
+            baseline_digest=frozen_plan['calibration_ledger']['head_digest'])
+        bracket_pin, bracket_require_committed_pin = pin, True
         session = snap.bracket_session_by_id.get(value['session_id'])
         if session and session.state == 'open':
             if not snap.is_governed_open_bracket_extension:
@@ -156,10 +165,28 @@ def harvest(args, *, now=time.time, clear=group_clear, runner=subprocess.run):
                 write(scratch_pin, candidate)
                 snap = load_calibration_ledger_snapshot(ledger, scratch_pin, require_committed_pin=False,
                     mode='read_replay', repo_root=root,
-                    baseline_sequence=read(frozen)['calibration_ledger']['head_sequence'],
-                    baseline_digest=read(frozen)['calibration_ledger']['head_digest'])
+                    baseline_sequence=frozen_plan['calibration_ledger']['head_sequence'],
+                    baseline_digest=frozen_plan['calibration_ledger']['head_digest'])
+                bracket_pin, bracket_require_committed_pin = scratch_pin, False
             if snap.refusal_reasons:
                 raise HarvestRefusal('ledger_authentication_failed')
+        # Input checking runs in the measurement clone; the bracket below uses
+        # this checkout's default acceptance. Bind that artifact to the plan
+        # with the producer's exact file-byte hash, not a reserialized JSON hash.
+        acceptance = brackets.load_calibration_acceptance_bound()
+        planned_acceptance = frozen_plan['active_acceptance']
+        if (acceptance is None
+                or inputs._sha256_path(brackets.DEFAULT_ACCEPTANCE_BOUND_PATH) != planned_acceptance['sha256']
+                or acceptance['acceptance_id'] != planned_acceptance['acceptance_id']):
+            raise HarvestRefusal('bracket_acceptance_plan_mismatch')
+        # Custody above authenticates the frozen seed and terminal head. The
+        # decision view instead authenticates the acceptance's issuance cutoff,
+        # with the same physical ledger, pin and replay mode. Its refusals belong
+        # to the bracket decision and therefore remain RECOVER causes.
+        cutoff = acceptance['ledger_cutoff']
+        snap = load_calibration_ledger_snapshot(ledger, bracket_pin,
+            require_committed_pin=bracket_require_committed_pin, mode='read_replay', repo_root=root,
+            baseline_sequence=cutoff['sequence'], baseline_digest=cutoff['head_digest'])
         valid, captures = set(), []
         for run_id in ids:
             path = runs / run_id
@@ -182,14 +209,17 @@ def harvest(args, *, now=time.time, clear=group_clear, runner=subprocess.run):
                 raise HarvestRefusal('bracket_session_binding_mismatch')
             captures.extend((row.attempt_id, Path(row.custody_locator)) for row in session.finalized_slots.values())
             if session.state == 'finalized':
-                binding = brackets.build_calibration_bracket_binding(snap, session_id=value['session_id'],
-                    window_id=value['window_id'], plan_id=value['calibration_plan']['plan_id'], plan_sha256=sha(frozen),
-                    evidence_root_id=value['evidence_root_id'], runs_root=runs)
-                policy = CampaignPolicy.from_mapping(read(root / 'configs/campaign_policies/quiet_mac_p2_production.json'))
+                if not snap.refusal_reasons:
+                    binding = brackets.build_calibration_bracket_binding(snap, session_id=value['session_id'],
+                        window_id=value['window_id'], plan_id=value['calibration_plan']['plan_id'], plan_sha256=sha(frozen),
+                        evidence_root_id=value['evidence_root_id'], runs_root=runs)
                 bracket, reasons = brackets.calibration_bracket_for_bundles(runs, [runs / x for x in sorted(valid)],
                     policy.calibration_bracketing, mode='read_replay', ledger_snapshot=snap, bracket_binding=binding,
                     bracket_window_id=value['window_id'], bracket_plan_id=value['calibration_plan']['plan_id'],
                     bracket_plan_sha256=sha(frozen), bracket_evidence_root_id=value['evidence_root_id'])
+                # The decision drops snapshot refusals on some paths (no valid
+                # member); the bracket view's own refusals are always causes.
+                reasons = tuple(dict.fromkeys((*snap.refusal_reasons, *reasons)))
         write(derived / 'bracket.json', {'binding': binding, 'assessment': bracket, 'reasons': reasons})
         counts, out = derived / 'counts.json', derived / 'summary.json'
         if summary.main(['--config-root', str(g2a / 'prefill-probe-configs'), '--input-inventory',

@@ -251,7 +251,13 @@ class GenerateG2AProbeInputsTests(unittest.TestCase):
             self.assertEqual(enforcing.call_count, 1)
 
     def test_harvest_check_routes_through_owning_clone_and_refuses_cli_failure(self) -> None:
-        clone = Path('/test/measurement-clone')
+        clone = Path(self.temporary.name) / 'measurement-clone'
+        relative = POLICY.relative_to(ROOT)
+        policy = clone / relative
+        policy.parent.mkdir(parents=True)
+        policy.write_bytes(POLICY.read_bytes())
+        _write_json(self.root / 'window-plan' / probe.INVENTORY_NAME,
+                    {'campaign_policy': {'path': relative.as_posix(), 'sha256': _sha256(policy)}})
         runner = mock.Mock(return_value=subprocess.CompletedProcess([], 0, 'PASS fixture', ''))
         kwargs = dict(measurement_root=clone, root=self.root, ledger=clone/'runs/ledger.jsonl',
                       head_pin=clone/'configs/calibration/calibration_ledger_head.json', runner=runner)
@@ -260,10 +266,47 @@ class GenerateG2AProbeInputsTests(unittest.TestCase):
         self.assertEqual(argv[:4], [str(clone/'.venv/bin/python'), '-B',
                                   str(clone/'scripts/generate_g2a_probe_inputs.py'), 'check'])
         self.assertEqual(argv[-1], '--at-reservation')
+        self.assertEqual(argv[argv.index('--campaign-policy') + 1], str(policy.resolve()))
         self.assertEqual(runner.call_args.kwargs['cwd'], clone)
         runner.return_value = subprocess.CompletedProcess([], 1, '', 'fixture refusal')
         with self.assertRaisesRegex(probe.G2AProbeError, 'harvest_frozen_input_authentication_failed'):
             probe.check_harvest_inputs(**kwargs)
+
+    def test_harvest_policy_is_bound_by_inventory_for_both_blocks(self) -> None:
+        from scripts.gen_g2_phase_d import G2A_CAMPAIGN_POLICY_PATH
+
+        clone = Path(self.temporary.name) / 'measurement-clone'
+        for relative in (POLICY.relative_to(ROOT), G2A_CAMPAIGN_POLICY_PATH):
+            with self.subTest(policy=relative):
+                policy = clone / relative
+                policy.parent.mkdir(parents=True, exist_ok=True)
+                policy.write_bytes((ROOT / relative).read_bytes())
+                _write_json(self.root / 'window-plan' / probe.INVENTORY_NAME,
+                            {'campaign_policy': {'path': relative.as_posix(), 'sha256': _sha256(policy)}})
+                runner = mock.Mock(return_value=subprocess.CompletedProcess([], 0, '', ''))
+                probe.check_harvest_inputs(measurement_root=clone, root=self.root,
+                    ledger=clone/'ledger', head_pin=clone/'pin', runner=runner)
+                argv = runner.call_args.args[0]
+                self.assertEqual(argv[argv.index('--campaign-policy') + 1], str(policy.resolve()))
+                policy.write_bytes(b'changed')
+                runner.reset_mock()
+                with self.assertRaisesRegex(probe.G2AProbeError, 'campaign_policy_sha256_mismatch'):
+                    probe.check_harvest_inputs(measurement_root=clone, root=self.root,
+                        ledger=clone/'ledger', head_pin=clone/'pin', runner=runner)
+                runner.assert_not_called()
+
+    def test_harvest_policy_refuses_paths_outside_policy_directory(self) -> None:
+        clone = Path(self.temporary.name) / 'measurement-clone'
+        directory = clone / 'configs/campaign_policies'
+        directory.mkdir(parents=True)
+        outside = clone / 'outside.json'
+        outside.write_bytes(POLICY.read_bytes())
+        (directory / 'escape.json').symlink_to(outside)
+        for path in ('outside.json', str(POLICY), 'configs/campaign_policies/../outside.json',
+                     'configs/campaign_policies/escape.json'):
+            with self.subTest(path=path), self.assertRaisesRegex(probe.G2AProbeError, 'outside_policy_directory'):
+                probe.harvest_campaign_policy_path(measurement_root=clone,
+                    inventory={'campaign_policy': {'path': path, 'sha256': _sha256(outside)}})
 
     def _inventory(self) -> dict:
         return json.loads(

@@ -11,6 +11,9 @@ import sys
 from pathlib import Path
 from typing import Any, Sequence
 
+from joulewise.controller import _config_sha256 as runner_config_sha256
+from joulewise.schemas import BenchmarkConfig, SchemaError
+
 
 INVENTORY_SCHEMA = "joulewise.g2a_input_inventory.v1"
 COUNTS_RECEIPT_SCHEMA = "joulewise.g2a_probe_counts_receipt.v1"
@@ -318,6 +321,37 @@ def _ladder_rungs(inventory: dict[str, Any]) -> dict[int, dict[str, Any]]:
     return by_length
 
 
+def _authenticated_run_config_sha256(
+    *,
+    config: Any,
+    config_raw: bytes,
+    expected_input_sha256: str,
+    metadata: Any,
+    run_id: str,
+    runs_root: Path,
+) -> str:
+    """Bind inventory bytes to the runner's exact normalized bundle bytes.
+
+    The controller helper derives and hashes the same bytes as
+    RunBundleWriter.create; keep parsing, defaults and serialization runner-owned.
+    """
+    if _sha256(config_raw) != expected_input_sha256:
+        raise ProbeSummaryError(f"config_sha256_mismatch:{run_id}")
+    try:
+        expected_run_sha256 = runner_config_sha256(BenchmarkConfig.from_mapping(config))
+    except SchemaError as exc:
+        raise ProbeSummaryError(f"config_invalid:{run_id}:{exc}") from exc
+    try:
+        observed_run_sha256 = _sha256((runs_root / run_id / "config.json").read_bytes())
+    except OSError as exc:
+        raise ProbeSummaryError(f"run_provenance_mismatch: {run_id}: config_sha256") from exc
+    if observed_run_sha256 != expected_run_sha256:
+        raise ProbeSummaryError(f"run_provenance_mismatch: {run_id}: config_sha256")
+    if not isinstance(metadata, dict) or metadata.get("config_sha256") != observed_run_sha256:
+        raise ProbeSummaryError(f"run_provenance_mismatch: {run_id}: metadata.config_sha256")
+    return observed_run_sha256
+
+
 def _run_provenance(
     *,
     summary: Any,
@@ -325,18 +359,17 @@ def _run_provenance(
     run_id: str,
     stage_id: str,
     expected_config_sha256: str,
+    config: Any,
+    config_raw: bytes,
     runs_root: Path,
     rung: dict[str, Any],
 ) -> dict[str, Any]:
     if not isinstance(metadata, dict) or metadata.get("run_id") != run_id:
         raise ProbeSummaryError(f"run_provenance_mismatch: {run_id}: run_id")
-    config_path = runs_root / run_id / "config.json"
-    try:
-        observed_config_sha256 = _sha256(config_path.read_bytes())
-    except OSError as exc:
-        raise ProbeSummaryError(f"run_provenance_mismatch: {run_id}: config_sha256") from exc
-    if observed_config_sha256 != expected_config_sha256:
-        raise ProbeSummaryError(f"run_provenance_mismatch: {run_id}: config_sha256")
+    observed_config_sha256 = _authenticated_run_config_sha256(
+        config=config, config_raw=config_raw, expected_input_sha256=expected_config_sha256,
+        metadata=metadata, run_id=run_id, runs_root=runs_root,
+    )
     try:
         prompt = metadata["workload_provenance"]["prompt"]
         realized_count = prompt["realized_token_count"]
@@ -357,7 +390,7 @@ def _run_provenance(
     return {
         "run_id": run_id,
         "stage_id": stage_id,
-        "config_sha256": expected_config_sha256,
+        "config_sha256": observed_config_sha256,
         "realized_prompt_token_count": realized_count,
         "realized_prompt_token_ids_sha256": realized_hash,
         "in_window_sample_count": _prefill_count(summary, run_id=run_id),
@@ -489,6 +522,8 @@ def summarize(
                     run_id=run_id,
                     stage_id=stage_id,
                     expected_config_sha256=member["config_sha256"],
+                    config=config,
+                    config_raw=config_raw,
                     runs_root=runs_root,
                     rung=rungs[expected_length],
                 )

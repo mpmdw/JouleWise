@@ -16,6 +16,7 @@ from joulewise.adapters.mlx_runtime import _encode
 from joulewise.provenance import prompt_token_ids_sha256
 from scripts.generate_g2a_probe_inputs import LADDER_KEYS as PROMPT_LADDER_KEYS
 from scripts import select_g2a_prefill_length as selector
+from scripts import summarize_g2a_prefill_probe as summarizer
 
 
 PROMPT_LADDER_SCHEMA = "joulewise.g2a_prefill_prompt_ladder.v1"
@@ -342,7 +343,7 @@ def _validate_receipt(
     if not isinstance(stages, list) or not isinstance(runs, list):
         raise PromptPinError("counts_receipt_runs_malformed")
     expected: set[str] = set()
-    expected_members: dict[str, tuple[str, str]] = {}
+    expected_members: dict[str, tuple[str, dict[str, Any]]] = {}
     for role in ("small", "large"):
         stage_id = f"{role}-p{selected_length}"
         stage = next(
@@ -360,7 +361,7 @@ def _validate_receipt(
             if isinstance(member, dict) and isinstance(member.get("run_id"), str):
                 expected_members[member["run_id"]] = (
                     stage_id,
-                    member.get("config_sha256"),
+                    member,
                 )
     observed: set[str] = set()
     run_keys = {
@@ -380,7 +381,26 @@ def _validate_receipt(
             observed.add(run["run_id"])
             if run["run_id"] not in expected_members:
                 raise PromptPinError(f"receipt_run_id_unknown: {run['run_id']}")
-            expected_stage, expected_config_sha = expected_members[run["run_id"]]
+            expected_stage, member = expected_members[run["run_id"]]
+            try:
+                config_root = summarizer._resolve_inventory_config_root(inventory.get("config_root"))
+                config_path = summarizer._confined_path(
+                    config_root, member.get("config_path"), label="receipt_config_path"
+                )
+                config, config_raw = summarizer._load_json(config_path, label="receipt_config")
+                metadata, _ = summarizer._load_json(
+                    Path(receipt["runs_root"]) / run["run_id"] / "metadata.json",
+                    label="receipt_metadata",
+                )
+                if not isinstance(metadata, dict) or metadata.get("run_id") != run["run_id"]:
+                    raise summarizer.ProbeSummaryError("metadata_run_id_mismatch")
+                expected_config_sha = summarizer._authenticated_run_config_sha256(
+                    config=config, config_raw=config_raw,
+                    expected_input_sha256=member.get("config_sha256"), metadata=metadata,
+                    run_id=run["run_id"], runs_root=Path(receipt["runs_root"]),
+                )
+            except summarizer.ProbeSummaryError as exc:
+                raise PromptPinError("counts_receipt_run_provenance_mismatch") from exc
             selected_rung = next(
                 item
                 for item in ladder["rungs"]

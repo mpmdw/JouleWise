@@ -1,0 +1,229 @@
+{
+  "archive_root": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261003T0820Z-r2",
+  "capture_made": true,
+  "cause_codes": [
+    "bracket_incomplete",
+    "chain_nonzero_or_missing_exit",
+    "rung_valid_small_members_shortfall"
+  ],
+  "chain_summary_copy": {
+    "d166-prefill-counts-receipt.json": "absent",
+    "d166-prefill-resolvability-summary.json": "absent"
+  },
+  "members": [
+    {
+      "clock_anchor_status": "not recorded",
+      "problems": [
+        "member_missing"
+      ],
+      "run_id": "g2a-small-p0512-r01",
+      "valid": false
+    },
+    {
+      "clock_anchor_status": "not recorded",
+      "problems": [
+        "member_missing"
+      ],
+      "run_id": "g2a-small-p0512-r02",
+      "valid": false
+    },
+    {
+      "clock_anchor_status": "not recorded",
+      "problems": [
+        "member_missing"
+      ],
+      "run_id": "g2a-small-p0512-r03",
+      "valid": false
+    },
+    {
+      "clock_anchor_status": "not recorded",
+      "problems": [
+        "member_missing"
+      ],
+      "run_id": "g2a-small-p0512-r04",
+      "valid": false
+    },
+    {
+      "clock_anchor_status": "not recorded",
+      "problems": [
+        "member_missing"
+      ],
+      "run_id": "g2a-small-p0512-r05",
+      "valid": false
+    },
+    {
+      "clock_anchor_status": "not recorded",
+      "problems": [
+        "member_missing"
+      ],
+      "run_id": "g2a-small-p1024-r01",
+      "valid": false
+    },
+    {
+      "clock_anchor_status": "not recorded",
+      "problems": [
+        "member_missing"
+      ],
+      "run_id": "g2a-small-p1024-r02",
+      "valid": false
+    },
+    {
+      "clock_anchor_status": "not recorded",
+      "problems": [
+        "member_missing"
+      ],
+      "run_id": "g2a-small-p1024-r03",
+      "valid": false
+    },
+    {
+      "clock_anchor_status": "not recorded",
+      "problems": [
+        "member_missing"
+      ],
+      "run_id": "g2a-small-p1024-r04",
+      "valid": false
+    },
+    {
+      "clock_anchor_status": "not recorded",
+      "problems": [
+        "member_missing"
+      ],
+      "run_id": "g2a-small-p1024-r05",
+      "valid": false
+    },
+    {
+      "clock_anchor_status": "not recorded",
+      "problems": [
+        "member_missing"
+      ],
+      "run_id": "g2a-small-p2048-r01",
+      "valid": false
+    },
+    {
+      "clock_anchor_status": "not recorded",
+      "problems": [
+        "member_missing"
+      ],
+      "run_id": "g2a-small-p2048-r02",
+      "valid": false
+    },
+    {
+      "clock_anchor_status": "not recorded",
+      "problems": [
+        "member_missing"
+      ],
+      "run_id": "g2a-small-p2048-r03",
+      "valid": false
+    },
+    {
+      "clock_anchor_status": "not recorded",
+      "problems": [
+        "member_missing"
+      ],
+      "run_id": "g2a-small-p2048-r04",
+      "valid": false
+    },
+    {
+      "clock_anchor_status": "not recorded",
+      "problems": [
+        "member_missing"
+      ],
+      "run_id": "g2a-small-p2048-r05",
+      "valid": false
+    },
+    {
+      "clock_anchor_status": "not recorded",
+      "problems": [
+        "member_missing"
+      ],
+      "run_id": "g2a-small-p4096-r01",
+      "valid": false
+    },
+    {
+      "clock_anchor_status": "not recorded",
+      "problems": [
+        "member_missing"
+      ],
+      "run_id": "g2a-small-p4096-r02",
+      "valid": false
+    },
+    {
+      "clock_anchor_status": "not recorded",
+      "problems": [
+        "member_missing"
+      ],
+      "run_id": "g2a-small-p4096-r03",
+      "valid": false
+    },
+    {
+      "clock_anchor_status": "not recorded",
+      "problems": [
+        "member_missing"
+      ],
+      "run_id": "g2a-small-p4096-r04",
+      "valid": false
+    },
+    {
+      "clock_anchor_status": "not recorded",
+      "problems": [
+        "member_missing"
+      ],
+      "run_id": "g2a-small-p4096-r05",
+      "valid": false
+    },
+    {
+      "clock_anchor_status": "not recorded",
+      "problems": [
+        "member_missing"
+      ],
+      "run_id": "g2a-large-p0512-r01",
+      "valid": false
+    },
+    {
+      "clock_anchor_status": "not recorded",
+      "problems": [
+        "member_missing"
+      ],
+      "run_id": "g2a-large-p1024-r01",
+      "valid": false
+    },
+    {
+      "clock_anchor_status": "not recorded",
+      "problems": [
+        "member_missing"
+      ],
+      "run_id": "g2a-large-p2048-r01",
+      "valid": false
+    },
+    {
+      "clock_anchor_status": "not recorded",
+      "problems": [
+        "member_missing"
+      ],
+      "run_id": "g2a-large-p4096-r01",
+      "valid": false
+    }
+  ],
+  "outputs": {
+    "bracket.json": "cdf6d142b8bb173e060a1b7ea8fccc53879fb7eb1101345d246301ad1e9013f6",
+    "counts.json": "570111bcb07789668fa4a6d6a799bf2a141244b2c2423e3367663fd13850da95",
+    "network-time.json": "9f65c1474693ac3a2b53a9ee64bc783fa0bc8b65b7f79892164a95cb1c4eeb73",
+    "summary.json": "f2133f9623d2cfd1f4834725199f38a043f407e2343689c4ebe5146911da03c0",
+    "terminal-ledger.jsonl": "a0e348855f1201bd3f8b19263c7e1cb0075a65a12163cadf873f2b04bad7a5e9",
+    "terminal-ledger.jsonl.lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "terminal-pin.json": "486c645c94803e92bd5a8f537a4a072dfc9af6328afdcaafbb31132dc838767d"
+  },
+  "pin_advance": {
+    "head_digest": "03c61af545393e27971b8000a264831316f9f249c2a13116bc072f1867c2c29e",
+    "needs_operator_commit": true,
+    "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261003T0820Z-r2/derived/terminal-pin.json",
+    "sequence": 384,
+    "sha256": "486c645c94803e92bd5a8f537a4a072dfc9af6328afdcaafbb31132dc838767d",
+    "source_path": "/Users/edr/night-custody/measurement/JouleWise-measurement-20261003T0820Z-g2a-w1/configs/calibration/calibration_ledger_head.json",
+    "source_pin_unchanged": true
+  },
+  "plan_id": "d117-g2a-prefill-probe-20261003T0820Z",
+  "plan_sha256": "2a8328afad4530ff49ef671f4fb60567dcc4e321db97b322f9bfe13aeb93e15e",
+  "schema": "joulewise.harvest_g2a_window.v1",
+  "verdict": "RECOVER"
+}
