@@ -13,6 +13,7 @@ from unittest import mock
 from joulewise.provenance import prompt_token_ids_sha256
 from scripts import issue_g2a_prefill_prompt_pin as issuer
 from scripts import select_g2a_prefill_length as selector
+from tests.test_summarize_g2a_prefill_probe import runner_config_bytes
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -86,6 +87,7 @@ class IssueG2APrefillPromptPinTests(unittest.TestCase):
             (ROOT / "tests/fixtures/g2a/pin/g2a-input-inventory.json").read_text()
         )
         inventory = {
+            "config_root": str(root / "config-root"),
             "panel": fixture_inventory["panel"],
             "prompt_ladder": {
                 "path": str(ladder_path),
@@ -93,6 +95,7 @@ class IssueG2APrefillPromptPinTests(unittest.TestCase):
             },
             "stages": fixture_inventory["stages"],
         }
+        shutil.copytree(ROOT / "tests/fixtures/g2a/pin/config-root", root / "config-root")
         inventory_path = root / "g2a-input-inventory.json"
         inventory_raw = (json.dumps(inventory, indent=2, sort_keys=True) + "\n").encode()
         inventory_path.write_bytes(inventory_raw)
@@ -100,11 +103,19 @@ class IssueG2APrefillPromptPinTests(unittest.TestCase):
         for stage in inventory["stages"]:
             rung = next(row for row in ladder["rungs"] if row["prefill_tokens"] == stage["prefill_tokens"])
             for member in stage["members"]:
+                run_root = root / "runs" / member["run_id"]
+                run_root.mkdir(parents=True)
+                config_raw = runner_config_bytes((root / "config-root" / member["config_path"]).read_bytes())
+                config_sha = hashlib.sha256(config_raw).hexdigest()
+                (run_root / "config.json").write_bytes(config_raw)
+                (run_root / "metadata.json").write_text(json.dumps({
+                    "run_id": member["run_id"], "config_sha256": config_sha,
+                }) + "\n")
                 receipt_runs.append(
                     {
                         "run_id": member["run_id"],
                         "stage_id": stage["stage_id"],
-                        "config_sha256": member["config_sha256"],
+                        "config_sha256": config_sha,
                         "realized_prompt_token_count": rung["prefill_tokens"],
                         "realized_prompt_token_ids_sha256": rung["prompt_token_ids_sha256"],
                         "in_window_sample_count": 6,
@@ -431,6 +442,37 @@ class IssueG2APrefillPromptPinTests(unittest.TestCase):
                         ruling_trace=RULING,
                         bundle_dir=root,
                     )
+
+    def test_run_config_binding_refuses_input_hash_content_and_metadata_mutations(self) -> None:
+        for mutation in ("input_hash_in_receipt", "nondefault_run_config", "input_bytes", "metadata_hash"):
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as temporary:
+                selection, summary, ladder_path, ladder = self.prepare(temporary, 512)
+                inventory = json.loads(self.input_inventory.read_bytes())
+                receipt = json.loads(self.counts_receipt.read_bytes())
+                member = inventory["stages"][0]["members"][0]
+                run = next(row for row in receipt["runs"] if row["run_id"] == member["run_id"])
+                run_root = Path(receipt["runs_root"]) / member["run_id"]
+                metadata = json.loads((run_root / "metadata.json").read_bytes())
+                if mutation == "input_hash_in_receipt":
+                    run["config_sha256"] = member["config_sha256"]
+                elif mutation == "nondefault_run_config":
+                    config = json.loads((run_root / "config.json").read_bytes())
+                    config["sampling"]["power_hz"] += 1
+                    raw = runner_config_bytes(json.dumps(config).encode())
+                    (run_root / "config.json").write_bytes(raw)
+                    run["config_sha256"] = metadata["config_sha256"] = hashlib.sha256(raw).hexdigest()
+                elif mutation == "input_bytes":
+                    path = Path(inventory["config_root"]) / member["config_path"]
+                    path.write_bytes(path.read_bytes() + b" ")
+                else:
+                    metadata["config_sha256"] = member["config_sha256"]
+                (run_root / "metadata.json").write_text(json.dumps(metadata) + "\n")
+                self.counts_receipt.write_text(json.dumps(receipt) + "\n")
+                with self.assertRaisesRegex(issuer.PromptPinError, "counts_receipt_run_provenance_mismatch"):
+                    issuer.issue_pin(selection_record=selection, summary_path=summary,
+                                     prompt_ladder_path=ladder_path, input_inventory=self.input_inventory,
+                                     counts_receipt=self.counts_receipt, ruling_trace=RULING,
+                                     bundle_dir=Path(temporary))
 
     def test_unknown_receipt_run_id_refuses_by_exact_reason(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
