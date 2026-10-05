@@ -2275,6 +2275,7 @@ runpy.run_path(script, run_name='__main__')
                     self.assertEqual(document["refusal"]["reason"], "night_chain_alive")
         self.assertEqual((night / "launch.pending").read_bytes(), original)
         self.assertFalse((night / "chain.started").exists())
+        self.assertFalse((night / "launch.resolved").exists())
 
     def test_dead_man_gone_pending_launcher_couriers_without_chain_markers(self):
         night = self.custody / "night"
@@ -2285,9 +2286,57 @@ runpy.run_path(script, run_name='__main__')
         self.driver.run_courier.assert_called_once()
         self.assertFalse((night / "chain.started").exists())
         self.assertFalse((night / "chain.exited").exists())
+        resolution = json.loads((night / "launch.resolved").read_bytes())
+        self.assertEqual(resolution["schema"], "joulewise.launch_resolved.v1")
+        self.assertEqual(resolution["basis"], "group_absent")
+        self.assertEqual(resolution["pgid"], 7272)
         artifacts = self.driver._artifact_list(self.custody, night)
         self.assertIn("night/launch.pending", [row["path"] for row in artifacts])
+        self.assertIn("night/launch.resolved", [row["path"] for row in artifacts])
         self.assertEqual(self.driver._existing_record(night).name, "launch.pending")
+
+    def test_dead_man_resolution_clears_later_census_number_collisions(self):
+        from joulewise import measurement_liveness as live
+        night = self.custody / "night"
+        night.mkdir()
+        pending = night / "launch.pending"
+        resolved = night / "launch.resolved"
+        start = "Tue Sep 8 01:02:03 2026"
+        for label, recorded_start, identity, reason in (
+            ("leaderless group", start, live.Identity("DEAD"), "owner process group"),
+            ("unavailable recorded start", None, live.Identity("LIVE", start), "indeterminate"),
+        ):
+            with self.subTest(collision=label):
+                resolved.unlink(missing_ok=True)
+                pending.write_text(json.dumps({"schema": "joulewise.launch_pending.v1",
+                    "pid": 7272, "pgid": 7272, "start_time": recorded_start}))
+                original = pending.read_bytes()
+                # Both residual-table rows refuse while the group exists.
+                with mock.patch.object(live.os, "killpg"):
+                    result = live.census(parents=[self.root], observer=lambda pid: identity)
+                    self.assertFalse(result.clear)
+                    self.assertIn(reason, result.refusals[0])
+                    with mock.patch.object(self.driver, "observe_identity", return_value=identity):
+                        self.assertEqual(self.driver.dead_man(self.plan_path), self.driver.EXIT_REFUSED)
+                self.assertFalse(resolved.exists())
+                self.driver.run_courier.assert_not_called()
+                # The dead-man later proves absence and durably closes custody.
+                with mock.patch.object(self.driver, "observe_identity", return_value=identity), \
+                     mock.patch.object(self.driver.os, "killpg", side_effect=ProcessLookupError) as group:
+                    self.assertEqual(self.driver.dead_man(self.plan_path), self.driver.EXIT_GO)
+                group.assert_called_once_with(7272, 0)
+                closure = resolved.read_bytes()
+                self.assertEqual(json.loads(closure)["basis"], "group_absent")
+                # A later collision cannot make readers probe that historical group.
+                observer = mock.Mock(side_effect=AssertionError("closed pending PID was probed"))
+                with mock.patch.object(live.os, "killpg", side_effect=PermissionError) as group:
+                    self.assertTrue(live.census(parents=[self.root], observer=observer).clear)
+                    self.assertIsNone(self.driver._pending_launch_refusal(night))
+                observer.assert_not_called()
+                group.assert_not_called()
+                self.assertEqual(resolved.read_bytes(), closure)
+                self.assertEqual(pending.read_bytes(), original)
+                self.driver.run_courier.reset_mock()
 
     def test_dead_man_unreadable_pending_identity_fails_closed(self):
         night = self.custody / "night"

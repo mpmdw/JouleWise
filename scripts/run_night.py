@@ -3993,6 +3993,7 @@ def _pending_launch_refusal(night_dir: Path) -> dict[str, Any] | None:
     try:
         os.killpg(pgid, 0)
     except ProcessLookupError:
+        _resolve_launch_pending(night_dir, pgid)
         return None
     except PermissionError:
         pass

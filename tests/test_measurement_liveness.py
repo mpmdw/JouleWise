@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import Mock, patch
@@ -382,8 +383,26 @@ class MeasurementLivenessTests(unittest.TestCase):
                 self.assertEqual(live.observe_identity(42), expected)
                 self.assertEqual(probe.call_args.args[0][1:], ['-p', '42', '-o', 'lstart=', '-o', 'stat='])
                 self.assertEqual(probe.call_args.kwargs['env']['LC_ALL'], 'C')
+                self.assertEqual(probe.call_args.kwargs['env']['TZ'], 'UTC')
         with patch.object(live.subprocess, 'run', side_effect=OSError('probe unavailable')):
             self.assertEqual(live.observe_identity(42).state, 'UNKNOWN')
+
+    def test_same_pid_start_time_compares_equal_across_caller_timezones(self):
+        # Exercise a TZ-sensitive executable even on hosts that cannot run ps.
+        probe = self.root / "identity-probe"
+        probe.write_text(f"#!{sys.executable}\n"
+                         "import time\n"
+                         "time.tzset()\n"
+                         "print(time.strftime('%a %b %e %H:%M:%S %Y', "
+                         "time.localtime(1788829323)), 'S')\n")
+        probe.chmod(0o700)
+        identities = []
+        for zone in ("UTC", "PST8PDT", "JST-9"):
+            with self.subTest(zone=zone), patch.dict(os.environ, {
+                    live.IDENTITY_PROBE_ENV: str(probe), "TZ": zone, "LC_ALL": "invalid-locale"}):
+                identities.append(live.observe_identity(os.getpid()))
+                self.assertEqual(identities[-1], live.Identity("LIVE", START))
+        self.assertEqual(len(set(identities)), 1)
 
 
 if __name__ == '__main__':

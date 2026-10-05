@@ -480,8 +480,14 @@ with mock.patch.object(driver, "_chain_environment", return_value=dict(os.enviro
                     case.setUp()
                     try:
                         from dataclasses import replace
+                        from joulewise.measurement_liveness import Identity
                         plan = replace(case.driver._load_plan(case.plan_path), custody_root=str(root))
-                        with mock.patch.object(case.driver, "_load_plan", return_value=plan):
+                        # The fixture's fixed identity would falsely report PID reuse
+                        # when the real writer's ps probe succeeds. Observe the same
+                        # start time, including None when the probe is unavailable.
+                        identity = Identity("LIVE", json.loads(original)["start_time"])
+                        with mock.patch.object(case.driver, "_load_plan", return_value=plan), \
+                             mock.patch.object(case.driver, "observe_identity", return_value=identity):
                             code = case.driver.dead_man(root / "plan.json")
                         self.assertEqual(code, case.driver.EXIT_REFUSED)
                         case.driver.run_courier.assert_not_called()

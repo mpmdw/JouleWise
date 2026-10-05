@@ -44,7 +44,7 @@ def observe_identity(pid: int) -> Identity:
     The optional probe executable receives the same arguments as ps; it is a
     single pathname, not shell text. Exit 1 with empty output denotes no PID.
     All other failures are UNKNOWN. Tokens match the watchdog's whitespace
-    normalization, under the C locale (lstart has one-second precision).
+    normalization, under the C locale and UTC (lstart has one-second precision).
     """
     if type(pid) is not int or pid <= 0:
         return Identity("UNKNOWN")
@@ -53,7 +53,7 @@ def observe_identity(pid: int) -> Identity:
             [os.environ.get(IDENTITY_PROBE_ENV, "/bin/ps"),
              "-p", str(pid), "-o", "lstart=", "-o", "stat="],
             capture_output=True, text=True, timeout=2,
-            env={**os.environ, "LC_ALL": "C", "LANG": "C"},
+            env={**os.environ, "LC_ALL": "C", "LANG": "C", "TZ": "UTC"},
         )
     except (OSError, subprocess.SubprocessError, UnicodeError):
         return Identity("UNKNOWN")
