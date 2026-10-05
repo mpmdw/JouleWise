@@ -380,19 +380,26 @@ def install_clock_sizing_inputs(repository, pack, custody, *, maximum=320.):
     root = custody / pack.name / t0._INPUT_DIRECTORY
     window = custody / 'window-plan'
     source = root / 'clock-sizing-source.json'
-    _write_json(source, {'seconds': maximum, 'basis': 'synthetic fixture only',
+    _write_json(source, {'seconds': maximum, 'pack_t0_s': 360, 't0_stage_cap_s': 3300,
+        'basis': 'synthetic fixture only',
         'diagnostic_anchor_half_width_s': .001, 'stamp_resolution_s': 1e-9,
         'rho_per_s': 1e-6})
     allowance = {'seconds': maximum, 'source': q.reference(source), 'source_pointer': '/seconds'}
     observed = root / 'clock-observed-bound.json'
     _write_json(observed, {'seconds': .004, 'basis': 'synthetic fixture only'})
     sizing = root / 'clock-sizing.json'
-    _write_json(sizing, {'fixed': {name: allowance for name in writer.FIXED_COMPONENTS['s1']},
+    sizing_value = {'fixed': {name: allowance for name in writer.FIXED_COMPONENTS['s1']},
         'members': {}, 'auxiliary': {}, 'streams': {name: allowance for name in ('pre', 'post')},
         'clock': {'diagnostic_anchor_half_width_s': .001, 'stamp_resolution_s': 1e-9,
             'rho_per_s': 1e-6, 'source': q.reference(source),
             'observed_max_effective_bound': {'seconds': .004, 'source': q.reference(observed),
-                                           'source_pointer': '/seconds'}}})
+                                           'source_pointer': '/seconds'}}}
+    for name in ('pack_t0', 't0_stage_cap'):
+        sizing_value['fixed'][name] = {
+            'seconds': 360 if name == 'pack_t0' else 3300,
+            'source': q.reference(source), 'source_pointer': '/' + name + '_s'}
+    window_max_s = writer.size_window('s1', sizing_value, brackets=('pre', 'post'))['window_max_s']
+    _write_json(sizing, sizing_value)
     chain = window / 'window-chain.zsh'
     text = re.sub(r'^export NIGHT_(?:CLOCK_(?:SIZING_SHA256|STREAM_MAX_S)|ARM_CONTEXT_SHA256)=.*\n', '', chain.read_text(), flags=re.M)
     chain.write_text(f'export NIGHT_CLOCK_SIZING_SHA256="{q.sha(sizing)}"\n'
@@ -416,7 +423,7 @@ def install_clock_sizing_inputs(repository, pack, custody, *, maximum=320.):
     plan = root / 'clock-sizing-plan.json'
     _write_json(plan, {'schema': night_gate.PACK_PLAN_SCHEMA, 'schema_version': 3,
         'plan_id': tree['plan']['plan_id'], 'receipt_class': 'TRANSACTION_PACK',
-        't0_epoch_s': 1., 'authored_epoch_s': 0., 'window_max_s': 4320,
+        't0_epoch_s': 1., 'authored_epoch_s': 0., 'window_max_s': window_max_s,
         'repo_head': head, 'measurement_root': str(repository), 'measurement_head': head,
         'chain_path': str(chain), 'chain_sha256_path': str(sidecar),
         'custody_root': str(custody), 'registration_path': None,
@@ -1044,6 +1051,11 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
         )
         publication_patcher.start()
         clock_patcher.start()
+        sizing_patcher = mock.patch.object(
+            _qualification, "authenticated_clock_budget", side_effect=fixture_clock_budget
+        )
+        sizing_patcher.start()
+        self.addCleanup(sizing_patcher.stop)
         self.addCleanup(clock_patcher.stop)
         self.addCleanup(publication_patcher.stop)
 
@@ -3192,7 +3204,14 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
         )
         fact = receipt["facts"][0]
         self.assertEqual(fact["source_kind"], "PROBE")
-        self.assertEqual(set(fact["value"]), readiness._CLOCK_PROBE_RESIDUAL_VALUE_KEYS)
+        self.assertEqual(
+            set(fact["value"]),
+            readiness._CLOCK_PROBE_RESIDUAL_VALUE_KEYS | {"clock_sizing_binding"},
+        )
+        self.assertEqual(
+            fact["value"]["clock_sizing_binding"],
+            _qualification.reference(_inputs / "kernel-frequency-binding.json"),
+        )
         self.assertEqual(fact["value"]["anchor_check_version"], kernel_clock.ANCHOR_CHECK_VERSION)
         self.assertEqual(fact["value"]["r0_kernel_frequency"], frequency_probe())
         self.assertEqual(fact["value"]["kernel_frequency"], frequency_probe())
