@@ -173,7 +173,7 @@ execution on the real producers).
    `evaluate_qualification`, and the real close-out output into G9, on a two-root fixture, covering G1, G3, G5, G8
    and G9.
 
-## Addendum D (2026-10-05 11:00, desk-day seat 3): attempt history, the sealed prewindow script, G10 placement, ledger isolation, NULL recovery
+## Addendum D (2026-10-05 10:15, desk-day seat 3): attempt history, the sealed prewindow script, G10 placement, ledger isolation, NULL recovery
 
 Inputs: lane X6's open flags on PR #483 (`118-sol-b4-x6-report.md`: F5, P1, S1, T1) and the remaining items of the Opus
 pre-mortem memo (`~/night-archive/ia-0a40/MEMO.md` 1.4, 1.6, 1.11 and 3.M).
