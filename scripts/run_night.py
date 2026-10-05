@@ -1776,6 +1776,8 @@ def run_courier(
             last_error = None
             argv = _courier_prelaunch(custody_root, plan, courier_bin, lock_descriptor, report)
             started_epoch_s = time.time()
+            exit_deadline = time.monotonic() + COURIER_DEADLINE_S
+            delivery_exit = {"exit_code": None, "timed_out": False}
             attempted += 1
             try:
                 process = t0_rehearsal.observed_popen(
@@ -1796,7 +1798,26 @@ def run_courier(
                     report=report,
                 )
                 heartbeat_seen = heartbeat_seen or saw_heartbeat
-                if not was_sent:
+                if was_sent:
+                    def reap_delivered_courier():
+                        # Delivery acknowledgement is independent of process
+                        # completion. Observe the exit before journal sealing,
+                        # using only the remainder of this attempt's budget.
+                        remaining = exit_deadline - time.monotonic()
+                        if deadman_epoch_s is not None:
+                            remaining = min(remaining, deadman_epoch_s - time.time())
+                        try:
+                            delivery_exit["exit_code"] = process.wait(timeout=max(0.0, remaining))
+                        except subprocess.TimeoutExpired:
+                            delivery_exit["timed_out"] = True
+                            process._timed_out = True
+                            # Same bounded cleanup as an undelivered courier;
+                            # this cannot revoke delivery or the chain verdict.
+                            _terminate_process_group(process, prove_group_absent=False)
+                            delivery_exit["exit_code"] = process.poll()
+
+                    optional("courier exit observation", reap_delivered_courier)
+                else:
                     # Keyword-gated OFF here, deliberately (cold-gate ruling
                     # 61 Q3 as amended). This loop is bounded by its own
                     # schedule -- it checks `deadman_epoch_s` before each
@@ -1816,6 +1837,8 @@ def run_courier(
                 "sent": was_sent,
                 "error": last_error,
             }
+            if was_sent:
+                attempt_record.update(delivery_exit)
             if courier_bin_substitution is not None:
                 attempt_record["courier_bin_substitution"] = dict(
                     courier_bin_substitution
@@ -1835,6 +1858,7 @@ def run_courier(
                     "sent": True,
                     "heartbeat_seen": heartbeat_seen,
                     "last_error": None,
+                    **delivery_exit,
                 }
             if attempt < len(COURIER_BACKOFF_S):
                 delay = COURIER_BACKOFF_S[attempt]
@@ -2082,6 +2106,9 @@ def _write_courier_outcome(night_dir: Path, outcome: Mapping[str, Any]) -> None:
         "heartbeat_seen": bool(outcome["heartbeat_seen"]),
         "last_error": outcome["last_error"],
     }
+    for field in ("exit_code", "timed_out"):
+        if field in outcome:
+            document[field] = outcome[field]
     _write_json(night_dir / "courier.json", document)
 
 

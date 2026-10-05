@@ -6064,7 +6064,7 @@ class CourierDeliveryBoundaryTests(unittest.TestCase):
     admitted_night = EvidenceProbeTests.admitted_night
 
     def run_terminated_night(self, after_chain=lambda night: None, *, wait=True,
-                             termination_proven=True):
+                             termination_proven=True, courier_process=None):
         """Seat-78 chain fixture; real result, inventory, argv and courier flow."""
         from tests.test_night_gate import EvidenceRegistrationTests, make_plan
         source = EvidenceRegistrationTests().source()
@@ -6082,7 +6082,7 @@ class CourierDeliveryBoundaryTests(unittest.TestCase):
 
         def accepted_delivery(*args, **kwargs):
             (night / 'courier.sent').write_text('accepted fixture email')
-            return mock.Mock()
+            return courier_process if courier_process is not None else mock.Mock(wait=mock.Mock(return_value=0))
 
         with ExitStack() as stack:
             for name, replacement in (
@@ -6114,6 +6114,21 @@ class CourierDeliveryBoundaryTests(unittest.TestCase):
             courier.assert_not_called()
             prompt = None
         return code, prompt
+
+    def test_delivered_courier_timeout_preserves_successful_chain_verdict(self):
+        process = mock.Mock(pid=4242)
+        process.wait.side_effect = [subprocess.TimeoutExpired('fixture-courier', 0), -signal.SIGTERM]
+        process.poll.return_value = -signal.SIGTERM
+        with mock.patch.object(self.driver, '_signal_group'):
+            code, _ = self.run_terminated_night(courier_process=process)
+        self.assertEqual(code, self.driver.EXIT_GO)
+        result = json.loads((self.f.custody / 'night/result.json').read_text())
+        self.assertEqual(result['verdict'], 'GO')
+        self.assertEqual(result['chain_exit_code'], 0)
+        outcome = json.loads((self.f.custody / 'night/courier.json').read_text())
+        self.assertTrue(outcome['sent'])
+        self.assertTrue(outcome['timed_out'])
+        self.assertEqual(outcome['exit_code'], -signal.SIGTERM)
 
     def assert_artifact_error(self, error):
         result = json.loads((self.f.custody / 'night/result.json').read_text())
@@ -6489,6 +6504,108 @@ class EvidenceProbeFailureTests(unittest.TestCase):
                 mock.patch.object(self.driver.subprocess,'run',return_value=subprocess.CompletedProcess([],0,marker,'')):
             self.assertEqual(self.driver._evidence_probe_worker(self.f.plan,self.f.plan_path,receipt,time.monotonic()+2,lambda *args:None),2)
         self.assertIn('changed during',json.loads(receipt.read_text())['refusal_code'])
+
+
+class CourierReapingTests(unittest.TestCase):
+    """Benign local children exercise the real delivery and observation path."""
+
+    def setUp(self):
+        from scripts import run_night
+        self.driver = run_night
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name).resolve()
+        self.night = self.root / "night"
+        self.night.mkdir()
+        self.journal = self.night / "process-observations.jsonl"
+        self.children = []
+        self.addCleanup(self.reap_children)
+
+    def reap_children(self):
+        for process in self.children:
+            if process.returncode is None:
+                process._journal = None
+                process.kill()
+                process.wait(timeout=5)
+
+    def delivered_child(self, *, hang=False, code=0, budget=2, deadman_epoch_s=None):
+        from joulewise import t0_rehearsal as t0
+        child = self.root / "courier.py"
+        child.write_text(
+            "from pathlib import Path\nimport time\n"
+            f"Path({str(self.night / 'courier.sent')!r}).write_text('fixture delivery')\n"
+            + ("time.sleep(60)\n" if hang else f"raise SystemExit({code})\n")
+        )
+        structural = self.night / "result.json"
+        structural.write_text('{"verdict":"PASS","chain_exit_code":0}\n')
+        before = structural.read_bytes()
+        spawn = t0.observed_popen
+        def retain(*args, **kwargs):
+            process = spawn(*args, **kwargs)
+            self.children.append(process)
+            return process
+        started = time.monotonic()
+        with t0.process_journal(self.journal, observe_only=True), \
+                mock.patch.object(t0, "observed_popen", side_effect=retain), \
+                mock.patch.object(self.driver, "_courier_prelaunch", return_value=[sys.executable, "-B", str(child)]), \
+                mock.patch.object(self.driver, "COURIER_DEADLINE_S", budget):
+            outcome = self.driver.run_courier(
+                self.root, types.SimpleNamespace(plan_id="s1-local"), child,
+                deadman_epoch_s=deadman_epoch_s)
+        self.assertLess(time.monotonic() - started, 5)
+        self.assertEqual(structural.read_bytes(), before)
+        self.assertTrue(outcome["sent"])
+        self.assertEqual(outcome["attempted"], 1)
+        self.assertIsNone(outcome["last_error"])
+        self.assertTrue((self.night / "courier.sent").is_file())
+        self.assertFalse((self.night / "courier.lock").exists())
+        events = [json.loads(line) for line in self.journal.read_bytes().splitlines()]
+        self.assertEqual([event["event"] for event in events], ["spawn", "exit", "seal"])
+        self.assertEqual(events[-1]["record_count"], 2)
+        self.assertIsNotNone(self.children[0].returncode)
+        self.assertEqual(events[1]["exit_code"], self.children[0].returncode)
+        self.assertEqual(events[1]["exit_code"], outcome["exit_code"])
+        self.assertEqual(events[1]["timed_out"], outcome["timed_out"])
+        attempt = json.loads((self.night / "courier.attempts.jsonl").read_text())
+        self.assertEqual(attempt["exit_code"], outcome["exit_code"])
+        self.assertEqual(attempt["timed_out"], outcome["timed_out"])
+        return outcome
+
+    def test_delivered_courier_is_reaped_before_journal_seal(self):
+        outcome = self.delivered_child()
+        self.assertEqual(outcome["exit_code"], 0)
+        self.assertFalse(outcome["timed_out"])
+
+    def test_still_running_delivered_courier_records_timeout_without_revoking_delivery(self):
+        outcome = self.delivered_child(hang=True, budget=0.2)
+        self.assertTrue(outcome["timed_out"])
+        self.assertEqual(outcome["exit_code"], -signal.SIGTERM)
+
+    def test_delivered_courier_nonzero_exit_does_not_revoke_delivery(self):
+        outcome = self.delivered_child(code=7)
+        self.assertEqual(outcome["exit_code"], 7)
+        self.assertFalse(outcome["timed_out"])
+
+    def test_delivered_courier_exit_wait_respects_deadman_epoch(self):
+        outcome = self.delivered_child(hang=True, deadman_epoch_s=time.time() + 0.2)
+        self.assertTrue(outcome["timed_out"])
+
+    def test_exit_wait_uses_remaining_attempt_budget_capped_by_deadman(self):
+        for deadman, expected in ((None, 50.0), (1020.0, 20.0)):
+            with self.subTest(deadman=deadman):
+                process = mock.Mock()
+                process.wait.return_value = 0
+                with mock.patch.object(self.driver, "_courier_prelaunch", return_value=["fixture"]), \
+                        mock.patch.object(self.driver.t0_rehearsal, "observed_popen", return_value=process), \
+                        mock.patch.object(self.driver, "_wait_for_courier", return_value=(True, True)), \
+                        mock.patch.object(self.driver, "COURIER_DEADLINE_S", 300), \
+                        mock.patch.object(self.driver.time, "monotonic", side_effect=[100.0, 350.0]), \
+                        mock.patch.object(self.driver.time, "time", return_value=1000.0):
+                    outcome = self.driver.run_courier(
+                        self.root, types.SimpleNamespace(plan_id="s1-local"), Path("fixture"),
+                        deadman_epoch_s=deadman)
+                process.wait.assert_called_once_with(timeout=expected)
+                self.assertTrue(outcome["sent"])
 
 
 class Ruling76DriverTests(unittest.TestCase):

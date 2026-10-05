@@ -102,6 +102,37 @@ class QualificationSubsetTests(unittest.TestCase):
         self.assertEqual(events[0]["stdin_fd0_target"], "/dev/null")
         self.assertNotIn("prompt_count", events[1])
 
+    def test_delivered_courier_journal_assembles_with_observed_exit_and_timeout(self):
+        from tests.test_run_night import CourierReapingTests
+        from tests.test_v5_pack_rehearsal import ObservedDeskMappingTests
+        for hang in (False, True):
+            with self.subTest(still_running=hang):
+                courier = CourierReapingTests()
+                courier.setUp()
+                mapping = ObservedDeskMappingTests()
+                try:
+                    outcome = courier.delivered_child(hang=hang, budget=0.2 if hang else 2)
+                    mapping.setUp()
+                    go = producer.read(mapping.night / "go_receipt.json")
+                    go["purpose"] = go["authorization"]["purpose"] = "G2B_SHAKEDOWN"
+                    (mapping.night / "go_receipt.json").write_bytes(readiness.render_json(go))
+                    for stage_id in t0._LIFECYCLE_STAGES:
+                        path = mapping.night / "rehearsal-lifecycle" / (stage_id + ".json")
+                        stage = producer.read(path)
+                        stage["schema_version"] = t0.QUALIFICATION_STAGE_SCHEMA
+                        path.write_bytes(readiness.render_json(stage))
+                    (mapping.night / "process-observations.jsonl").write_bytes(courier.journal.read_bytes())
+                    mapping.assemble(g7_locator=None)
+                    execution = producer.read(mapping.records / "execution.json")
+                    observed = execution["processes"][0]
+                    self.assertEqual(observed["state"], "EXITED")
+                    self.assertEqual(observed["exit_code"], outcome["exit_code"])
+                    self.assertEqual(observed["timed_out"], hang)
+                    self.assertEqual(execution["sequence_completed"], not hang)
+                finally:
+                    mapping.doCleanups()
+                    courier.doCleanups()
+
     def test_journal_write_exception_cannot_change_child_rc(self):
         journal = Path(self.temp.name).resolve() / "process-observations.jsonl"
         with mock.patch.object(t0, "append_observation", side_effect=OSError("fixture disk fault")):
