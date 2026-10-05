@@ -26,7 +26,7 @@
     "output_tokens": 256
   },
   "interconnect": {"name": "local"},
-  "sampling": {"power_hz": 10.0, "idle_seconds": 30.0, "warmup_seconds": 5.0},
+  "sampling": {"power_hz": 10.0, "idle_seconds": 75.0, "warmup_seconds": 5.0},
   "run_metadata": {
     "project": "capstone-joulewise",
     "operator": "lead",

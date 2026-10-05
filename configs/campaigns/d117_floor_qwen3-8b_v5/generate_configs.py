@@ -604,7 +604,7 @@ WORKLOAD = {
     "output_tokens": 512,
 }
 P512_WORKLOAD_NAME = "df_ph_prefill_p512_candidate"
-SAMPLING = {"power_hz": 10.0, "idle_seconds": 30.0, "warmup_seconds": 5.0}
+SAMPLING = {"power_hz": 10.0, "idle_seconds": 75.0, "warmup_seconds": 5.0}
 STAGES = (
     {
         "stage_id": "01_phase_decode_absolute",

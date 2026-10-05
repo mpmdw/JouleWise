@@ -1,0 +1,23 @@
+{
+  "schema_version": "joulewise.order_manifest.v1",
+  "manifest_id": "neg8-window-reference-midpoint-v1-gamma-reference-arm-boundary",
+  "plan_id": "plan-d117-contrast-qwen3-1p7b-vs-qwen3-8b-decode-prefill-p2048-v5",
+  "calibration_plan_sha256": "75fe8d58462ebdd1a258ec6dad2784d384588b5a42f5a8dc567d539cc9c4ec40",
+  "ordering_note": "One same-condition midpoint reference for trajectory-excursion budgeting; it is not an endpoint replicate.",
+  "planned_n_bundles": 1,
+  "executed_order": [
+    {
+      "index": 1,
+      "config": "neg8-window-arm-boundary.json",
+      "run_id": "neg8-window-arm-boundary",
+      "model_tag": "qwen25-1p5b-mlx",
+      "rep": 1,
+      "workload": "df-rq-mid",
+      "role": "neg8_daily_reference_midpoint",
+      "block_index": 1,
+      "position_in_block": 1,
+      "sentinel_position": "midpoint",
+      "config_sha256": "fe65758c8c0bcbfe3cd4921dc8fed6881e73a73d3416df4769d86b4b79677deb"
+    }
+  ]
+}
