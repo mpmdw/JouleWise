@@ -304,3 +304,27 @@ coordinated multi-file forgery is outside the threat model (D-161). **F2:** fix.
 - Packs: stale tests fixed [56r](56-sol-packs-tests-report.md) (432 tests across 15 modules pass); committed, main merged:
   **PR #477** `ca5f3f11` (pin bundle + three generated packs + two test updates). Cold Fable pass
   [61](61-fable-packs-brief.md), Sol delta [62](62-sol-packs-delta-brief.md) and the whole suite at `ca5f3f11` running.
+
+## 23:05-23:15
+
+- PR #477 (pin + packs) at `ca5f3f11`: Sol delta [62r](62-sol-packs-delta.md) **PASS** (fresh-clone regeneration diff empty; floor science
+  configs byte-identical to the first generation; 140/140 prefill members carry the pin's ids). Cold Fable [61r](61-fable-packs.md)
+  **PASS** (pin re-issued byte-identical; packs regenerate; 1,820 config hash references and six sidecars match; no live-root path).
+  Dispositions: N1 (the contrast pack still labels its prefill prompt `PROPOSED-PENDING-LEAD-RATIFICATION`; bytes-affecting):
+  **deferred** to lane `V5-FLOOR-HARDENING-01`, to land BEFORE the terminal freeze (it changes pack bytes); N2-N5 informational,
+  no action. Whole suite at `ca5f3f11` running.
+
+## Pruning rule (CLAUDE.local): gates that ran this session and what they caught that touched a number
+
+- Sol executing reviews: caught the runner-normalized config defect consequence chain (#470 F1: unauthenticated second
+  plan-tree read could select other source paths for admitted members); #471 F1/F2 (an unproduced selection could issue a pin;
+  a permitted SELECT refused) — both bear on which record fixes the prefill length; #469 R1 (lock inode deletion; custody);
+  #474 R1; #475 R1 (driver death lost launcher custody → a live chain could read as clear/NULL).
+- Cold Fable final passes: #474 F1 (a claim window could be ended by rc 3 after a clean stage, or an authorization left
+  unenforced) and #475 F1/F2 (stale pending records blocking harvests; a launcher collecting with no `chain.started`, i.e. a
+  window with bundles read as never started) — all on the path between a measurement and its admission. Fable PASSes on #470,
+  #471, #472, #473, #476, #477 caught no defect but closed #471's MINOR-3 by hand for the real record.
+- Throwaway-clone re-proof: caught both freeze blockers (floor identity declaration; DOCTRINE_PIN vs the network-time-OFF
+  doctrine) before any window.
+- Whole suites: caught nothing attributable this session (all extras were load flakes, confirmed serially).
+- Blind consult pair: shaped the next block; no number.
