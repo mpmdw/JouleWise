@@ -1,0 +1,30 @@
+{
+  "schema_version": "joulewise.d117_consumer_family_declaration.v1",
+  "draft_status": "as_generated_pre_d134_freeze",
+  "declaration_kind": "consumer_family_declaration",
+  "binding_mode": "declaration_only",
+  "byte_binding_pinset": false,
+  "authority": "plan-factory frozen cross-pack vocabulary, amended by D-122 and D-166",
+  "consumer_family_id": "d117-qwen3-1p7b-vs-qwen3-8b-gamma-consumer-v5",
+  "decode_floor_cells": {
+    "condition_a": "d117-qwen3-1p7b-decode-floor-v5",
+    "condition_b": "d117-qwen3-8b-decode-floor-v5",
+    "derivation": "deterministic plan-factory floor artifact vocabulary",
+    "floor_rule": "cross_stack_armwise_max.v1"
+  },
+  "prefill_p2048_floor_dependency": {
+    "cell_ids": [
+      "d117-qwen3-1p7b-prefill-p2048-floor-v5",
+      "d117-qwen3-8b-prefill-p2048-floor-v5"
+    ],
+    "transport_rule": {
+      "mode": "exact_stack_only",
+      "rule_id": "exact_stack_only.v1"
+    }
+  },
+  "forbidden_content": [
+    "aggregate artifact byte SHA",
+    "floor artifact pinset",
+    "postcollection receipt or verdict bytes"
+  ]
+}
