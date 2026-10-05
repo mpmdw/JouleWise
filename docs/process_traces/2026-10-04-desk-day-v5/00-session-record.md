@@ -351,3 +351,5 @@ Merged today: #469 `cfdb90d6`, #470 `a8e658e5`, #471 `b3ef116d`, #472 `a93604c8`
 #476 `1f49625f`. Open: #475 (A6; race-test fix in flight), #477 (pin + packs; rationale-census fix needed), doctrine-pin
 branch (round 3 in flight; no PR yet), design branch `design/2026-10-04-v5-qualification-block` (block-4 draft).
 Nothing armed; no window run by this seat. Next-seat checklist: `~/night-archive/desk-day-v5/STATE.md`.
+- 00:25: A6 race test fixed (test only; production unchanged) [63r](63-sol-a6-race-report.md); hosted CI green on the final head
+  `34aab522`; census clear under main's and the branch's code; **PR #475 merged `98909873`**.
