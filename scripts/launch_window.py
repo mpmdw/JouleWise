@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Atomically consume, revalidate, and exec one frozen D-117 window."""
+"""Atomically consume, revalidate, and exec one frozen D-117 window.
+
+Emit the ruled realization refusal code verbatim. The night's driver wraps
+this document under its own reason code, retaining ours in detail/evidence.
+"""
 
 from __future__ import annotations
 
@@ -39,6 +43,9 @@ HANDOFF_FD = 198
 HANDOFF_TOKEN_BYTES = 32
 # Private driver/launcher barrier; never inherited by the collection command.
 CHAIN_START_FD_ENV = "JOULEWISE_CHAIN_START_FD"
+# The driver reads these literal constants from the measurement checkout,
+# without importing or executing its launcher. Bump on incompatible changes.
+CHAIN_START_BARRIER_VERSION = 1
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -292,7 +299,16 @@ def _recheck_identity_projection(pack_root: Path) -> None:
 def launch(args: argparse.Namespace) -> int:
     start_fd = os.environ.pop(CHAIN_START_FD_ENV, None)
     if start_fd is not None:
-        with socket.socket(fileno=int(start_fd)) as channel:
+        try:
+            descriptor = int(start_fd)
+            if descriptor < 0:
+                raise ValueError("negative descriptor")
+            channel = socket.socket(fileno=descriptor)
+        except (ValueError, OverflowError) as exc:
+            raise LaunchLineageError(
+                "launch_consumption_invalid", "driver barrier descriptor is malformed"
+            ) from exc
+        with channel:
             # Do not consume or recheck until the driver has fsynced the
             # separate launcher identity. Driver death before custody closes
             # this channel and refuses; death during recheck retains custody.

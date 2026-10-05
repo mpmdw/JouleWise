@@ -61,6 +61,22 @@ class LaunchWindowEntrypointTests(unittest.TestCase):
         patch.start()
         self.addCleanup(patch.stop)
 
+    def test_malformed_driver_barrier_emits_refuse_document(self):
+        output = io.BytesIO()
+        stream = io.TextIOWrapper(output, encoding="utf-8", write_through=True)
+        cli = ["--pack-root", "/unused/pack", "--arm-receipt", "/unused/arm",
+               "--arm-readiness-custody-root", "/unused/custody",
+               "--launch-manifest", "/unused/manifest"]
+        with mock.patch.dict(os.environ, {launch_window.CHAIN_START_FD_ENV: "invalid-fd"}), \
+             mock.patch.object(launch_window.sys, "stdout", stream), \
+             mock.patch.object(launch_window, "_launch") as proceed:
+            self.assertEqual(launch_window.main(cli), 2)
+        refusal = json.loads(output.getvalue())
+        self.assertEqual(refusal["status"], "REFUSE")
+        self.assertEqual(refusal["reason_codes"], ["launch_consumption_invalid"])
+        self.assertIn("malformed", refusal["detail"])
+        proceed.assert_not_called()
+
     def _args(self, root: Path) -> argparse.Namespace:
         return argparse.Namespace(
             pack_root=root / "pack",

@@ -2080,10 +2080,11 @@ runpy.run_path(script, run_name='__main__')
                           and any(isinstance(t, ast.Name) and t.id == '_WRITE_ONCE_RECORDS' for t in node.targets))
         self.assertIn("network_time_off.json", self.driver._WRITE_ONCE_RECORDS)
         self.assertIn("launch.pending", self.driver._WRITE_ONCE_RECORDS)
+        self.assertIn("launch.resolved", self.driver._WRITE_ONCE_RECORDS)
         self.assertEqual(tuple(name for name in self.driver._WRITE_ONCE_RECORDS
                                if name not in {"network_time_off.json", "clean_dwell.output.txt",
                                                "clean_dwell.json", "start_conditions.json",
-                                               "launch.pending"}), ast.literal_eval(assignment.value))
+                                            "launch.pending", "launch.resolved"}), ast.literal_eval(assignment.value))
 
     def test_v2_existing_quiet_journal_reaches_legacy_evaluator(self):
         night = self.custody / 'night'
@@ -2252,7 +2253,7 @@ runpy.run_path(script, run_name='__main__')
         self.driver.run_courier.assert_not_called()
         self.driver._durable_record.assert_called_once()
 
-    def test_dead_man_guards_pending_launcher_even_with_chain_exit(self):
+    def test_dead_man_guards_unresolved_pending_launcher_and_invalid_exit(self):
         night = self.custody / "night"
         night.mkdir()
         original = b'{"pid":7272,"pgid":7272,"start_time":"prior","plan_id":"attempt"}\n'
@@ -2265,7 +2266,10 @@ runpy.run_path(script, run_name='__main__')
                     with mock.patch.object(self.driver.os, "killpg", side_effect=error) as kill:
                         code = self.driver.dead_man(self.plan_path)
                     self.assertEqual(code, self.driver.EXIT_REFUSED)
-                    kill.assert_called_once_with(7272, 0)
+                    if exited:
+                        kill.assert_not_called()  # Invalid closure fails before probing.
+                    else:
+                        kill.assert_called_once_with(7272, 0)
                     self.driver.run_courier.assert_not_called()
                     document = json.loads(sorted(night.glob("refusal*.json"))[-1].read_bytes())
                     self.assertEqual(document["refusal"]["reason"], "night_chain_alive")
@@ -2305,6 +2309,8 @@ runpy.run_path(script, run_name='__main__')
         # setUp replaces run_courier; exercise the actual delivery entrypoint.
         driver = _load_driver()
         with mock.patch.object(driver.os, "killpg"), \
+             mock.patch.object(driver, "observe_identity", return_value=types.SimpleNamespace(
+                 state="UNKNOWN", start_time=None)), \
              mock.patch.object(driver.subprocess, "Popen") as spawn:
             result = driver.run_courier(self.custody, plan, self.courier)
         self.assertEqual(result["attempted"], 0)
@@ -2318,7 +2324,7 @@ runpy.run_path(script, run_name='__main__')
         plan = self.driver._load_plan(self.plan_path)
         with mock.patch.object(self.driver, "_fsync_path", wraps=self.driver._fsync_path) as sync:
             self.driver._write_launch_pending(types.SimpleNamespace(pid=7272), night, plan)
-        sync.assert_called_once_with(night)
+        self.assertEqual(sync.call_args_list, [mock.call(night / "launch.pending"), mock.call(night)])
         original = (night / "launch.pending").read_bytes()
         record = json.loads(original)
         self.assertEqual(record["plan_id"], plan.plan_id)
@@ -2326,6 +2332,56 @@ runpy.run_path(script, run_name='__main__')
         with self.assertRaises(FileExistsError):
             self.driver._write_launch_pending(types.SimpleNamespace(pid=8282), night, plan)
         self.assertEqual((night / "launch.pending").read_bytes(), original)
+
+    def test_resolved_pending_couriers_despite_reused_group_or_stragglers(self):
+        night = self.custody / "night"
+        night.mkdir()
+        original = b'{"pid":7272,"pgid":7272,"start_time":"prior"}\n'
+        (night / "launch.pending").write_bytes(original)
+        for closure in ("chain.exited", "launch.resolved"):
+            if closure == "chain.exited":
+                self.driver._record_chain_exit(night, 0)
+            else:
+                self.driver._resolve_launch_pending(night, 7272)
+            with self.subTest(closure=closure), mock.patch.object(
+                    self.driver.os, "killpg", side_effect=PermissionError()) as group:
+                self.assertIsNone(self.driver._pending_launch_refusal(night))
+                self.assertEqual(self.driver.dead_man(self.plan_path), self.driver.EXIT_GO)
+                group.assert_not_called()
+            (night / closure).unlink()
+        self.assertEqual(self.driver.run_courier.call_count, 2)
+        self.assertEqual((night / "launch.pending").read_bytes(), original)
+
+    def test_unresolved_pending_reused_pid_does_not_block_courier(self):
+        from joulewise.measurement_liveness import Identity
+        night = self.custody / "night"
+        night.mkdir()
+        (night / "launch.pending").write_text(json.dumps({"pid": 7272, "pgid": 7272,
+            "start_time": "Tue Sep 8 01:02:03 2026"}))
+        with mock.patch.object(self.driver, "observe_identity", return_value=Identity(
+                "LIVE", "Tue Sep 8 01:02:04 2026")), mock.patch.object(
+                self.driver.os, "killpg", side_effect=PermissionError()) as group:
+            for started in (False, True):
+                if started:
+                    (night / "chain.started").write_bytes((night / "launch.pending").read_bytes())
+                with self.subTest(started=started):
+                    self.assertEqual(self.driver.dead_man(self.plan_path), self.driver.EXIT_GO)
+            group.assert_not_called()
+        self.assertEqual(self.driver.run_courier.call_count, 2)
+
+    def test_pending_resolution_is_write_once_and_durable(self):
+        night = self.custody / "night"
+        night.mkdir()
+        (night / "launch.pending").write_text('{"pgid":7272}')
+        with mock.patch.object(self.driver, "_fsync_path", wraps=self.driver._fsync_path) as sync:
+            self.driver._resolve_launch_pending(night, 7272)
+        sync.assert_called_once_with(night)
+        original = (night / "launch.resolved").read_bytes()
+        with self.assertRaises(FileExistsError):
+            self.driver._resolve_launch_pending(night, 8282)
+        self.assertEqual((night / "launch.resolved").read_bytes(), original)
+        self.assertIn("night/launch.resolved", [row["path"] for row in
+                      self.driver._artifact_list(self.custody, night)])
 
     def test_dead_man_refuses_a_fresh_live_courier_lock(self) -> None:
         night = self.custody / "night"
@@ -3294,7 +3350,7 @@ def probe_census_available():
 
 class NightProbeTests(unittest.TestCase):
     def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory(dir="/tmp")
+        self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name)
         # Every subprocess probe in this fixture resolves sudo to a fake.
@@ -4297,6 +4353,9 @@ class PackNightProducerTests(unittest.TestCase):
                     try:
                         measurement = case.root / "JouleWise-rehearsal-producer-table"
                         measurement.mkdir()
+                        (measurement / "scripts").mkdir()
+                        shutil.copyfile(REPO_ROOT / "scripts/launch_window.py",
+                                        measurement / "scripts/launch_window.py")
                         case._window_id = case.custody.name if prefixed else "production-window"
                         case.authorization.update(purpose="T0_REHEARSAL" if rehearsal else "CAMPAIGN_TRANSACTION",
                             authority="T0-UNATTENDED-01" if rehearsal else "V5-TRANSACTION-GO-01")
@@ -4481,7 +4540,7 @@ class WindowDeadlineTests(unittest.TestCase):
         if not probe_census_available():
             self.skipTest("/usr/bin/pgrep group census is unavailable")
         self.driver = _load_driver()
-        self.temporary = tempfile.TemporaryDirectory(dir="/tmp")
+        self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name)
         self.custody = self.root / "custody"

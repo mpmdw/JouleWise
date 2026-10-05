@@ -239,7 +239,8 @@ with mock.patch.object(launch_window, "_assemble_launch_inputs", return_value={{
 ''')
         driver = night_fixtures._load_driver()
         now = time.time()
-        plan = types.SimpleNamespace(plan_id="driver-recheck", t0_epoch_s=now, window_max_s=60)
+        plan = types.SimpleNamespace(plan_id="driver-recheck", t0_epoch_s=now, window_max_s=60,
+                                     measurement_root=str(launch_window.REPOSITORY_ROOT))
         probes = night_fixtures.ProbeSource(now, str(self.root)).probes()
         environment = dict(os.environ, PYTHONPATH=str(launch_window.REPOSITORY_ROOT))
         # The rejection fixture has only this blocked launcher child, which
@@ -282,6 +283,7 @@ with mock.patch.object(launch_window, "_assemble_launch_inputs", return_value={{
         claim.assert_not_called()
         self.assertFalse((self.night / "chain.started").exists())
         self.assertFalse((self.night / "chain.exited").exists())
+        self.assertTrue((self.night / "launch.resolved").exists())
         self.assertFalse(self.runs.exists())
         self.assertTrue(self.consumption.exists())
         pending = json.loads((self.night / "launch.pending").read_bytes())
@@ -332,6 +334,77 @@ with mock.patch.object(launch_window, "_assemble_launch_inputs", return_value={{
 
 
 class PendingLauncherCustodyTests(unittest.TestCase):
+    def test_skewed_measurement_launcher_refuses_before_popen_or_collection(self):
+        """Fable F2: an old launcher ignores the barrier and collects directly."""
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            night = root / "night"
+            night.mkdir()
+            launcher = root / "measurement/scripts/launch_window.py"
+            launcher.parent.mkdir(parents=True)
+            marker = root / "collection-ran"
+            launcher.write_text(f"from pathlib import Path\nPath({str(marker)!r}).touch()\n")
+            driver = night_fixtures._load_driver()
+            now = time.time()
+            plan = types.SimpleNamespace(plan_id="skew", t0_epoch_s=now, window_max_s=60,
+                                         measurement_root=str(launcher.parents[1]))
+            probes = night_fixtures.ProbeSource(now, str(root)).probes()
+            with mock.patch.object(driver.subprocess, "Popen") as spawn:
+                result = driver._run_chain_once(Path("/dev/null"), plan, probes, night, None,
+                    command=[sys.executable, "-B", str(launcher)])
+            spawn.assert_not_called()
+            self.assertEqual(result[1]["reason"], "night_chain_launch_failed")
+            self.assertIn("barrier refused before launch", result[1]["detail"])
+            self.assertTrue(result[4])
+            self.assertFalse(marker.exists())
+            self.assertEqual(list(night.iterdir()), [])
+
+    def test_measurement_barrier_capability_is_literal_and_versioned(self):
+        driver = night_fixtures._load_driver()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            launcher = root / "scripts/launch_window.py"
+            launcher.parent.mkdir()
+            plan = types.SimpleNamespace(measurement_root=str(root))
+            for version in ("0", "2", "True", "int('1')"):
+                launcher.write_text(f'CHAIN_START_BARRIER_VERSION = {version}\n'
+                                    'CHAIN_START_FD_ENV = "JOULEWISE_CHAIN_START_FD"\nHANDOFF_FD = 198\n')
+                with self.subTest(version=version), self.assertRaises(ValueError):
+                    driver._launcher_barrier(plan)
+            launcher.write_text('CHAIN_START_BARRIER_VERSION = 1\n'
+                                'CHAIN_START_FD_ENV = "JOULEWISE_CHAIN_START_FD"\nHANDOFF_FD = 198\n'
+                                'raise RuntimeError("must never import measurement launcher")\n')
+            self.assertEqual(driver._launcher_barrier(plan), ("JOULEWISE_CHAIN_START_FD", 198))
+
+    def test_non_speaking_launcher_timeout_claims_possible_collection_for_recover(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            night = root / "night"
+            night.mkdir()
+            marker = root / "collection-ran"
+            driver = night_fixtures._load_driver()
+            now = time.time()
+            plan = types.SimpleNamespace(plan_id="silent", t0_epoch_s=now, window_max_s=60,
+                                         measurement_root=str(launch_window.REPOSITORY_ROOT))
+            probes = night_fixtures.ProbeSource(now, str(root)).probes()
+            # An unexpected launcher implementation violates its advertised
+            # protocol. Use Fable's direct-collection stand-in after admission.
+            command = ["/bin/sh", "-c", 'printf bundle > "$1"; sleep 30', "--", str(marker)]
+            with mock.patch.object(driver, "_chain_environment", return_value=dict(os.environ)), \
+                 mock.patch.object(driver, "LAUNCHER_FIRST_BYTE_TIMEOUT_S", .5), \
+                 mock.patch.object(driver, "_group_census", return_value=(True, [])), \
+                 mock.patch.object(driver, "_claim_chain_start", wraps=driver._claim_chain_start) as claim:
+                result = driver._run_chain_once(Path("/dev/null"), plan, probes, night, None,
+                                               command=command)
+            self.assertTrue(marker.exists())
+            self.assertTrue(result[4])
+            self.assertEqual(result[1]["reason"], "night_chain_launch_failed")
+            self.assertIn("first-byte timeout", result[1]["detail"])
+            claim.assert_called_once_with(night)
+            self.assertTrue((night / "chain.started").exists())  # RECOVER, never NULL.
+            self.assertTrue((night / "chain.exited").exists())
+            self.assertTrue((night / "launch.resolved").exists())
+
     def test_driver_death_before_custody_ack_refuses_before_consumption_or_recheck(self):
         import socket
         parent, child = socket.socketpair()
@@ -379,7 +452,8 @@ from pathlib import Path
 from unittest import mock
 from tests.test_run_night import _load_driver, ProbeSource
 driver = _load_driver()
-plan = types.SimpleNamespace(plan_id="driver-death", t0_epoch_s=time.time(), window_max_s=60)
+plan = types.SimpleNamespace(plan_id="driver-death", t0_epoch_s=time.time(), window_max_s=60,
+    measurement_root={str(launch_window.REPOSITORY_ROOT)!r})
 with mock.patch.object(driver, "_chain_environment", return_value=dict(os.environ)):
     driver._run_chain_once(Path({str(launcher)!r}), plan, ProbeSource(time.time()).probes(),
         Path({str(night)!r}), None, command=[sys.executable, '-B', {str(launcher)!r}])

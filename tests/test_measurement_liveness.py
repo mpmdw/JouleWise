@@ -61,25 +61,33 @@ class MeasurementLivenessTests(unittest.TestCase):
         self.assertFalse((self.night / "chain.started").exists())
         self.assertEqual(path.read_bytes(), original)
 
-    def test_pending_group_gone_warns_and_permits_without_identity_or_custody_write(self):
+    def test_pending_group_gone_warns_and_permits_without_custody_write(self):
         path = self.pending_marker(start_time=None)
         original = path.read_bytes()
-        self.observer = lambda pid: self.fail("absent group probed leader")
+        self.observer = lambda pid: live.Identity("UNKNOWN")
         with patch.object(live.os, "killpg", side_effect=ProcessLookupError()):
             result = self.census()
         self.assertTrue(result.clear)
         self.assertIn("dead pending process group", result.warnings[0])
         self.assertEqual(path.read_bytes(), original)
 
-    def test_live_pending_group_with_dead_or_reused_leader_still_refuses(self):
+    def test_live_unresolved_pending_group_with_dead_leader_still_refuses(self):
         path = self.pending_marker()
-        for identity in (live.Identity("DEAD"), live.Identity("LIVE", OTHER)):
-            with self.subTest(identity=identity), patch.object(live.os, "killpg"):
-                self.observer = lambda pid: identity
-                result = self.census()
-            self.assertFalse(result.clear)
-            self.assertEqual(result.refusals, [f"live measurement owner process group: {path}"])
-            self.assertEqual(len(result.warnings), 1)
+        with patch.object(live.os, "killpg"):
+            self.observer = lambda pid: live.Identity("DEAD")
+            result = self.census()
+        self.assertFalse(result.clear)
+        self.assertEqual(result.refusals, [f"live measurement owner process group: {path}"])
+        self.assertEqual(len(result.warnings), 1)
+
+    def test_unresolved_pending_reused_pid_is_clear_even_when_group_probe_would_deny(self):
+        self.pending_marker()
+        self.observer = lambda pid: live.Identity("LIVE", OTHER)
+        with patch.object(live.os, "killpg", side_effect=PermissionError()) as group:
+            result = self.census()
+        self.assertTrue(result.clear)
+        self.assertIn("reused PID", result.warnings[0])
+        group.assert_not_called()
 
     def test_pending_group_unknown_or_identity_unavailable_refuses(self):
         path = self.pending_marker()
@@ -122,15 +130,29 @@ class MeasurementLivenessTests(unittest.TestCase):
                 group.assert_not_called()
             path.unlink()
 
-    def test_closed_chain_does_not_hide_live_pending_group(self):
+    def test_resolved_pending_record_with_reused_pgid_is_clear(self):
         self.pending_marker()
-        self.marker()
-        (self.night / "chain.exited").write_text(json.dumps(
-            {"exit_code": 0, "epoch_s": 1, "monotonic_ns": 2}))
-        with patch.object(live.os, "killpg"):
-            result = self.census()
-        self.assertFalse(result.clear)
-        self.assertIn("launch.pending", result.refusals[0])
+        self.observer = lambda pid: self.fail("resolved pending probed reused leader")
+        for name, record in (
+            ("chain.exited", {"exit_code": 0, "epoch_s": 1, "monotonic_ns": 2}),
+            ("launch.resolved", {"schema": "joulewise.launch_resolved.v1", "basis": "group_absent",
+                                 "pgid": 7272, "epoch_s": 1, "monotonic_ns": 2}),
+        ):
+            path = self.night / name
+            path.write_text(json.dumps(record))
+            with self.subTest(closure=name), patch.object(
+                    live.os, "killpg", side_effect=PermissionError()) as group:
+                self.assertTrue(self.census().clear)
+                group.assert_not_called()
+            path.unlink()
+
+    def test_invalid_pending_resolution_fails_closed(self):
+        self.pending_marker()
+        for raw in ('{}', '{', '{"schema":"joulewise.launch_resolved.v1"}'):
+            (self.night / "launch.resolved").write_text(raw)
+            with self.subTest(raw=raw), patch.object(live.os, "killpg") as group:
+                self.assertIn("indeterminate", self.census().refusals[0])
+                group.assert_not_called()
 
     def test_pending_disappearance_reconciles_once_and_instability_refuses(self):
         path = self.pending_marker()

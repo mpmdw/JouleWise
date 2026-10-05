@@ -187,9 +187,34 @@ def _pending_present(path: Path) -> bool:
     return _exists(path) or path.is_symlink()
 
 
+def pending_launch_closed(night: Path) -> bool:
+    """Read durable closure before probing a historical, reusable group number."""
+    for name in ("chain.exited", "launch.resolved"):
+        path = night / name
+        if not _pending_present(path):
+            continue
+        if path.is_symlink():
+            raise ValueError(f"launcher closure is a symlink: {path}")
+        record = _read_marker(path)
+        if name == "chain.exited":
+            valid = _valid_exit(record)
+        else:
+            valid = (record.get("schema") == "joulewise.launch_resolved.v1"
+                     and record.get("basis") == "group_absent"
+                     and type(record.get("pgid")) is int and record["pgid"] > 1
+                     and type(record.get("epoch_s")) in (int, float)
+                     and type(record.get("monotonic_ns")) is int)
+        if not valid:
+            raise ValueError(f"invalid launcher closure: {path}")
+        return True
+    return False
+
+
 def _inspect_pending(path: Path, result: Census,
                      observer: Callable[[int], Identity]) -> None:
     if not _pending_present(path):
+        return
+    if pending_launch_closed(path.parent):
         return
     if path.is_symlink():
         raise ValueError(f"pending launcher identity is a symlink: {path}")
@@ -197,14 +222,19 @@ def _inspect_pending(path: Path, result: Census,
     pid, pgid = record.get("pid"), record.get("pgid")
     if type(pid) is not int or pid <= 1 or type(pgid) is not int or pgid <= 1:
         raise ValueError(f"invalid pending launcher identity: {path}")
+    identity = observer(pid)
+    token, observed = _start_token(record.get("start_time")), _start_token(identity.start_time)
+    if identity.state == "LIVE" and token is not None and observed is not None and token != observed:
+        result.warnings.append(f"stale reused PID: {path}")
+        return
     try:
         os.killpg(pgid, 0)
     except ProcessLookupError:
         result.warnings.append(f"stale dead pending process group: {path}")
         return
-    # A dead or reused leader cannot disprove surviving group members.
+    # A dead leader cannot disprove surviving members of an unresolved group.
     refusal_count = len(result.refusals)
-    _inspect_identity(record, path, result, observer)
+    _inspect_identity(record, path, result, lambda pid: identity)
     if len(result.refusals) == refusal_count:
         result.refusals.append(f"live measurement owner process group: {path}")
 
