@@ -522,6 +522,15 @@ def attempt_destination(plan, destination, *, qualification=False, replay=None):
     elif (destination.parent != attempt or re.fullmatch(r"reharvest-[1-9][0-9]*", destination.name) is None
           or not Path(replay).is_relative_to(attempt)):
         raise HarvestRefusal("attempt_reharvest_layout_mismatch")
+    else:
+        number = int(destination.name.removeprefix("reharvest-"))
+        # Counting uses numeric order, so publication must preserve that order.
+        # Reserve every existing replay directory, including unpublished and
+        # qualification archives, rather than only those with harvest.json.
+        for path in attempt.glob("reharvest-*"):
+            suffix = path.name.removeprefix("reharvest-")
+            if path.is_dir() and re.fullmatch(r"[0-9]+", suffix) and int(suffix) >= number:
+                raise HarvestRefusal("attempt_reharvest_number_not_increasing")
     return attempt
 
 
