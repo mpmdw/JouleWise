@@ -353,3 +353,66 @@ branch (round 3 in flight; no PR yet), design branch `design/2026-10-04-v5-quali
 Nothing armed; no window run by this seat. Next-seat checklist: `~/night-archive/desk-day-v5/STATE.md`.
 - 00:25: A6 race test fixed (test only; production unchanged) [63r](63-sol-a6-race-report.md); hosted CI green on the final head
   `34aab522`; census clear under main's and the branch's code; **PR #475 merged `98909873`**.
+
+# Seat 2 (2026-10-05 00:27 PDT onward, headless Opus 5.5, same brief)
+
+Started from `~/night-archive/desk-day-v5/STATE.md`. No unread owner mail at start. Nothing armed throughout.
+Two messages arrived during the seat from the interactive session `joulewise-ba`: Ed's writing rule (only Opus
+writes what a human reads; Sol and Fable write code, tests, findings and verdicts), and a pre-mortem of block 4 (two
+Sol lenses and an Opus memo, `~/night-archive/ia-0a40/MEMO.md`, 47 refuter-checked claims). Both were used.
+
+## Merged
+- **#477** `c88565c4`: issued `_v5` prefill pin and the three generated packs. The whole-suite census failure was
+  the REGISTERED corrected absolute rationale copied into the packs (it denies the retired rationale), so the fix
+  was ten exact allowlist entries, not a generator change; Fable N1 (stale `PROPOSED-PENDING-LEAD-RATIFICATION`
+  label) fixed before freeze.
+- **#479** `b2ff2f36`: live v2 row `clock.network_time_policy` replaces `clock.restore_recipe` (network time stays
+  OFF). Round 4 made the guard structural, restored the two-backup check and refused clock commands in frozen
+  recipes. The suite caught a real regression (the runbook edit shifted `gen_g2_phase_d.py`'s line-pinned anchors);
+  fixed by keeping the edit line-neutral. A second review FAIL on further rewordings was rejected with reason under
+  gates 3 and 5: the physical guard is the live OFF receipt at ARM, the arm step's OFF in `finally` and the dwell.
+- **#480** `0a3b8806`: mlx-lm's detokenizer built once in `prepare()`, outside the measured prefill window (memo 3.1).
+  Fable caught that the first version renamed the recorded tokenizer identity class (would have broken identity
+  pins); fixed in round 2.
+
+## Open PRs at seat end (see RUN_STATE handoff for status)
+- **#481** `_v5` idle 75 s (memo 1.8). Round 1 edited the shared NEG-8 and window-reference configs in place (Fable:
+  breaks nine older plan trees and six window records) and made a run-id change that would fail the whole-window
+  verdict on three midpoints. Round 2 (`cfd51a96`): shared configs restored, `_v5` copies, run-id change reverted
+  and deferred to lane `GAMMA-INTERIOR-REFERENCES-01`. Needs review, delta Fable, suite, CI.
+- **#482** controller: G2-b pre-slot calibration attachment (memo 1.16) and per-bundle battery pairs (memo 1.2(b)).
+  Review caught an unregistered config getting the exception (round 2); Fable caught round 2 refusing the chain's
+  auxiliary stages (round 3, delta PASS); the whole suite then caught real regressions from the battery pairs
+  (privacy audit, injected clocks): round 4 in flight.
+- **#483** block-4 qualification code (integration branch). Cold Fable FAIL at 898c49a7 (B1 G9 two-root layout, B2
+  G1 absence-probe outcomes, M1-M3); lane X5 in flight.
+
+## Rulings (all in `76-r1-fold-ruling.md`)
+- **Ruling 76** (consult 75, Opus and Sol both B): the isolated rehearsal `r1` folds into `s1`; G6/G7 retire;
+  `a2` added for Q110; two verdicts on `s1`; `recover_no_science`. Prospective erratum to D-176 decision 4.
+- **Addendum A**: G9 via the post-STOP desk step; sizing roster and allowances; clock design check from observed
+  comparable streams.
+- **Addendum B** (consult 90 plus the memo): idle 75 s; frequency gate (inequality, not a fixed ppm); T-0 anchor
+  check in residual-plus-frequency-equality form (Sol's fixed `5 ms + 12.5 ppm · span` form not adopted, dissent
+  recorded); zero backoff with one admission re-arm (Sol's narrower scope not adopted, dissent recorded); census
+  by CPU; Revision-5 pre-slot route; detokenizer before seal; G10 stays Ed-owned.
+- **Addendum C**: cold-pass findings on #483.
+- Arm-only controls expire at the ARM deadline (not the 6-hour nonvolatile horizon), saving about 12 idle hours.
+
+## G10 owner: Ed's email not applied
+Ed emailed at 02:02 PDT asking to make G10 agent-run (a launchd one-shot using the arm step's existing
+`sudo -n systemsetup` setter). The headless magistrate and this seat both had the commit of its supersession record
+blocked by the auto-mode classifier ([Instruction Poisoning]). This seat did not route around it: G10 stays
+Ed-owned as registered. Ed can give the ruling from an interactive session or add a permission rule.
+
+## Pruning rule: what touched a number this seat
+- Cold Fable passes: #480 F2 (identity class rename would have broken identity pins and analysis matching); #481 F1/F2
+  (historical pins; whole-window verdict shape); #482 B1 (chain would stop at the first auxiliary stage); #483 B1/B2
+  (a good `s1` refused after the launch); #479 F2 (two-backup check silently dropped).
+- Executing reviews: #482 F1 (unregistered config accepted); #483 courier never reaped; #479 rewordings (rejected).
+- Whole suites: #479 runbook-anchor regression; #477 census; #482 battery-pair regressions.
+- Clone re-proof round 2: all 11 evidence kinds and `freeze-0004` PASS on all three packs after one regeneration;
+  found the #477 packs pinning the pre-#479 registry digest (fixed by #481's regeneration).
+- Opus pre-mortem (interactive session): about 20 blockers on the block-4 path, including the 30 s idle defect and
+  the detokenizer artifact in prefill energy.
+- Blind consults 75 and 90: shaped rulings 76 and addendum B.
