@@ -243,3 +243,19 @@ coordinated multi-file forgery is outside the threat model (D-161). **F2:** fix.
   - Notes: the T-0 author needs HEAD = local main = origin main (A196's real trace is cut after the packs merge);
     `freeze_projection` needs a clean tree, so project → commit per pack; the classifier refused a probe that would have
     shimmed doctrine text, and the seat did not work around it.
+
+## 20:40-21:25
+
+- A6 delta check (Sol) on `14324c52` [48r](48-sol-a6-delta.md): PASS (closed R1); it did not see Fable's F1/F2, which round 5 is fixing.
+- PR #476 (floors decode identity, `fd0b08db`): lead check in a fresh clone with the issued pin: both floor identity
+  projections PASS (refused before). Executing review [55r](55-sol-floor-identity-review.md) **PASS** (200 science configs
+  byte-identical; regression killed). Cold Fable [54r](54-fable-floor-identity.md) **PASS**. Whole suite running.
+- Doctrine-pin lane round 1 [52r1](52-sol-doctrine-pin-report-r1.md): registry v2 has no retirement state (35 exact rows, every
+  profile selects every row). **Ruled:** prospective replacement of the live v2 `clock.restore_recipe` row by a row asserting
+  the current stays-OFF doctrine; archival v1 and historical predicates byte-identical. Round 2 [53](53-sol-doctrine-pin-r2-brief.md).
+- Packs review [45r](45-sol-packs-review.md): content **PASS** (pin re-issued byte-identical; fresh-clone regeneration diff
+  empty for all three packs; 140/140 prefill members carry the pin's ids; decode forced 512 with D-166 prompts; acceptance
+  `n24_25g83_r2`, cutoff 376; reported-energy census and the real floor-to-contrast join at the issued length pass). FAIL on
+  two stale tests (F1 a pre-generation absence sentinel; F2 a generator census missing the emitted contrast generator):
+  **fix** seat [56](56-sol-packs-tests-brief.md). Floors regenerated on the packs branch with #476 (`196e532c`; only
+  `plan_tree*` and `producer_contract.json` change).
