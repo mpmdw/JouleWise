@@ -130,3 +130,20 @@ coordinated multi-file forgery is outside the threat model (D-161). **F2:** fix.
   **deferred** to lane `V5-FLOOR-HARDENING-01`. The real desk generation at the selected rung exercises the
   MINOR-2 join on real bytes before freeze.
 - PR #473 (contrast) opened at `a42a26fd`; executing review brief [35](35-sol-contrast-review-brief.md).
+
+## 17:05-17:45
+
+- PR #473 (contrast): executing review [35r](35-sol-contrast-review.md) **PASS** (real pin; generic authentication
+  passes by regeneration; one-byte drift in outputs and in each of the five carried inputs refuses; 110 existing
+  pack files byte-identical incl. all 80 science configs; acceptance `n24_25g83_r2`, cutoff 376). Cold Fable final
+  pass [37](37-fable-contrast.md) **PASS**. MINOR-1 (authentication proves self-consistency, not where carried inputs
+  came from): **fixed by procedure**: at pack landing the SOURCE generator runs `--check` with the canonical
+  `configs/model_panels/qwen3_4bit.json`, `configs/workloads/real_prompts_v1.json` and the committed pin against the
+  committed pack (that comparison binds the carried copies to the canonical sources). MINOR-2 (the
+  `decode_workload_candidate.json` profile path now names the pack copy): accepted, deterministic, an improvement.
+  NIT-1..4: deferred to `V5-FLOOR-HARDENING-01` (renamed scope: `_v5` generator hardening).
+- PR #474 (G2-b one-block stop) round 2 [33r2](33-sol-g2bstop-report-r2.md) (`278a719c`): the provenance checker
+  needed only its test updated. Executing review brief [36](36-sol-g2bstop-review-brief.md).
+- Merge plan: PRs touch disjoint files. Each merges after its own gates; the next PR then merges main in and its
+  hosted CI (the whole suite: six shards plus both exclusive modules, on the merged tree) is its row-2 evidence,
+  with the local suite at its pre-merge head recorded beside it.
