@@ -1,0 +1,274 @@
+"""Shared custody and structural-output boundaries for block-4 harvests.
+
+Collected bytes are never edited. Replay uses original absolute locators;
+copies, diagnostics and transcripts live behind a mode-0700 custody directory.
+This module owns no G-gate, calibration, battery or reduction acceptance rule.
+"""
+from __future__ import annotations
+
+import contextlib
+import io
+import os
+from pathlib import Path
+import re
+import tempfile
+import time
+
+from joulewise import arm_readiness as readiness, night_gate
+from joulewise.measurement_liveness import pending_launch_closed
+from scripts.harvest_g2a_window import archive, sha
+from scripts.harvest_window import inventory
+
+
+class HarvestRefusal(ValueError):
+    """Only fixed structural codes may cross the public boundary."""
+
+
+def read(path):
+    path = Path(path)
+    if any(p.is_symlink() for p in (path, *path.parents)) or not path.is_file():
+        raise HarvestRefusal("input_not_regular")
+    return readiness.parse_json_bytes(path.read_bytes())
+
+
+def write(path, value):
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("xb") as stream:
+        stream.write(readiness.render_json(value))
+
+
+def identifier(value):
+    if not isinstance(value, str) or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*", value) is None:
+        raise HarvestRefusal("identity_invalid")
+    return value
+
+
+def authenticated_reference(value):
+    if not isinstance(value, dict) or set(value) != {"path", "sha256"}:
+        raise HarvestRefusal("locator_invalid")
+    path = Path(value["path"])
+    if not path.is_absolute() or any(p.is_symlink() for p in (path, *path.parents)):
+        raise HarvestRefusal("locator_invalid")
+    if not path.is_file() or sha(path) != value["sha256"]:
+        raise HarvestRefusal("locator_digest_mismatch")
+    return path
+
+
+def reference(path):
+    return {"path": str(path), "sha256": sha(path)}
+
+
+def group_clear(night, *, killpg=os.killpg, plan_id=None):
+    """Read #475 custody even if the PASS-only chain marker was never made.
+
+    Do not write launch.resolved: absence is recorded in the derived harvest.
+    A dead leader alone is insufficient to disprove a surviving process group.
+    """
+    night = Path(night)
+    pending = night / "launch.pending"
+    if pending.exists() or pending.is_symlink():
+        value = read(pending)
+        if (set(value) != {"schema", "pgid", "pid", "start_time", "plan_id", "attempt_id", "epoch_s"}
+                or value["schema"] != "joulewise.launch_pending.v1"
+                or type(value["pid"]) is not int or value["pid"] <= 1
+                or value["pgid"] != value["pid"]
+                or not isinstance(value["start_time"], (str, type(None)))
+                or not isinstance(value["attempt_id"], str) or not value["attempt_id"]
+                or type(value["epoch_s"]) not in (int, float)
+                or (plan_id is not None and value["plan_id"] != plan_id)):
+            raise HarvestRefusal("pending_launcher_identity_invalid")
+        if pending_launch_closed(night):
+            resolved = night / "launch.resolved"
+            if resolved.exists() and read(resolved)["pgid"] != value["pgid"]:
+                raise HarvestRefusal("pending_launcher_closure_mismatch")
+            return True
+        pgid = value["pgid"]
+    else:
+        started = night / "chain.started"
+        if not started.exists() and not started.is_symlink():
+            return True
+        pgid = read(started).get("pgid")
+        if type(pgid) is not int or pgid <= 1:
+            raise HarvestRefusal("chain_group_identity_invalid")
+    try:
+        killpg(pgid, 0)
+    except ProcessLookupError:
+        return True
+    except PermissionError:
+        return False
+    return False
+
+
+def load_plan(path, purpose, *, now=time.time, clear=group_clear):
+    from scripts.run_night import WINDOW_SHUTDOWN_GRACE_S
+    plan = night_gate.NightPlan.from_mapping(read(path))
+    custody = Path(plan.custody_root)
+    if Path(path).absolute().parent != custody or plan.receipt_class != "TRANSACTION_PACK":
+        raise HarvestRefusal("qualification_plan_identity_invalid")
+    records = night_gate._authenticate_pack_records(plan)
+    authorization = records["authorization_record"]
+    if (authorization["purpose"] != purpose or authorization["claim_eligible"] is not False
+            or authorization["permitted_blocks"] != 1):
+        raise HarvestRefusal("qualification_plan_identity_invalid")
+    chain = Path(plan.chain_path)
+    if sha(chain) != Path(plan.chain_sha256_path).read_text().split()[0]:
+        raise HarvestRefusal("chain_digest_mismatch")
+    if now() < plan.t0_epoch_s + plan.window_max_s + WINDOW_SHUTDOWN_GRACE_S:
+        raise HarvestRefusal("harvest_before_completion_boundary")
+    night = custody / "night"
+    if not (night / "courier.sent").is_file() or not clear(night, plan_id=plan.plan_id):
+        raise HarvestRefusal("delivery_missing_or_launcher_group_alive")
+    return plan
+
+
+def census_sources(sources):
+    result = {}
+    for name, path in sources.items():
+        path = Path(path).absolute()
+        if any(p.is_symlink() for p in (path, *path.parents)):
+            raise HarvestRefusal("source_symlink")
+        rows = inventory(path)
+        if any("link" in row for row in rows.values()):
+            raise HarvestRefusal("source_symlink")
+        result[name] = rows
+    return result
+
+
+def tree_hash(root):
+    import hashlib
+    rows = census_sources({"tree": root})["tree"]
+    raw = "".join(f"{name}\0{row['sha256']}\n" for name, row in sorted(rows.items()) if "sha256" in row)
+    return hashlib.sha256(raw.encode()).hexdigest()
+
+
+def archive_sources(sources, destination, *, previous=None, added=()):
+    destination = Path(destination).absolute()
+    if destination.exists() or any(destination == Path(p) or Path(p) in destination.parents
+                                   or destination in Path(p).parents for p in sources.values()):
+        raise HarvestRefusal("archive_exists_or_overlaps_source")
+    original = census_sources(sources)
+    if previous is not None:
+        old = read(Path(previous) / "replay-locators.json")
+        expected = {row["name"]: row for row in old["sources"]}
+        current_names = set(sources) - set(added)
+        if current_names != set(expected):
+            raise HarvestRefusal("reharvest_source_census_changed")
+        for name in current_names:
+            if (str(sources[name]) != expected[name]["original_path"]
+                    or original[name] != expected[name]["inventory"]):
+                raise HarvestRefusal("reharvest_source_bytes_changed")
+    destination.mkdir(parents=True)
+    restricted = destination / "withheld"
+    restricted.mkdir(mode=0o700)
+    archived = archive(sources, restricted / "sources")
+    locators = {"schema": "joulewise.v5_qualification_replay_locators.v1", "sources": [
+        {"name": name, "original_path": str(path), "archived_path": str(restricted / "sources" / name),
+         "inventory": archived[name]} for name, path in sorted(sources.items())]}
+    write(destination / "replay-locators.json", locators)
+    # Hash/path census is public; source bytes stay in restricted custody.
+    sums = (restricted / "sources/SHA256SUMS").read_text()
+    (destination / "SHA256SUMS").write_text("".join(
+        f"{digest}  withheld/sources/{name}\n"
+        for digest, name in (line.split("  ", 1) for line in sums.splitlines())))
+    return original
+
+
+def unchanged(sources, original):
+    if census_sources(sources) != original:
+        raise HarvestRefusal("source_tree_mutated")
+
+
+def captured_call(function, transcript, *args, **kwargs):
+    """Never echo validator messages, nested diagnostics or unfiltered log tails."""
+    out, err = io.StringIO(), io.StringIO()
+    try:
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            return function(*args, **kwargs)
+    finally:
+        Path(transcript).parent.mkdir(parents=True, exist_ok=True)
+        with Path(transcript).open("x") as stream:
+            stream.write(out.getvalue())
+            stream.write(err.getvalue())
+
+
+def battery_boundaries(path, digest, plan_id):
+    """Authenticate recorded #421 boundary probes with the shared raw parser."""
+    from joulewise import battery_float
+    authenticated_reference({"path": str(path), "sha256": digest})
+    value = read(path)
+    if (value.get("schema") != "joulewise.v5_qualification_battery_boundaries.v1"
+            or value.get("plan_id") != plan_id
+            or set(value.get("observations", {})) != {"arm", "publication", "t0"}):
+        raise HarvestRefusal("battery_boundary_census_invalid")
+    passed = True
+    for role, item in value["observations"].items():
+        stored = read(authenticated_reference(item["record"]))
+        raw = authenticated_reference(item["raw"]).read_bytes()
+        if (stored.get("raw_stdout_sha256") != readiness.sha256_bytes(raw)
+                or stored.get("plan_id") != plan_id
+                or stored.get("schema") != battery_float.SCHEMA):
+            raise HarvestRefusal("battery_boundary_digest_or_identity_mismatch")
+        if stored.get("probe_error") or stored.get("exit_code") != 0 or stored.get("argv") != list(battery_float.IOREG_BATTERY_ARGV):
+            passed = False
+            continue
+        try:
+            parsed = battery_float.parse(raw, stored["wall_time_s"])
+        except ValueError:
+            passed = False
+            continue
+        if any(stored.get(key) != val for key, val in parsed.items()):
+            raise HarvestRefusal("battery_boundary_replay_mismatch")
+        passed = passed and parsed["passed"]
+    return passed
+
+
+def disposition(occurrence, verdict, cause_classes, majority=None):
+    # A RECOVER without an already reviewed named cure is END STATE. A later
+    # explicit lead authority binds the one allowed s2; no automatic retry.
+    end = verdict == "RECOVER"
+    # Eligibility is a prospective lead decision, never automatic permission.
+    return {"end_state": end, "s2_eligible": False,
+            "next_step": ("design_consult_cold_gate" if end else
+                          "r3_cure_and_head_coverage_required" if verdict == "RECOVER" else
+                          "identical_byte_reharvest" if verdict == "REFUSED" else
+                          "fresh_plan_after_cause_removed" if verdict == "NULL" else "lead_ratification")}
+
+
+def publish(destination, record):
+    """Record is constructed field-by-field; never merge an evaluator document."""
+    write(Path(destination) / "harvest.json", record)
+    return record
+
+
+def public_print(record):
+    print(f"verdict={record['verdict']}")
+
+
+def preflight_refusal(schema, scratch=Path("/tmp/dd5-b4c")):
+    """G2-a's safe fallback: never write into an unsafe archive coordinate."""
+    scratch = Path(scratch).resolve()
+    scratch.mkdir(parents=True, exist_ok=True)
+    destination = Path(tempfile.mkdtemp(prefix="v5-harvest-refusal-", dir=scratch))
+    record = {"schema": schema, "verdict": "REFUSED", "cause_classes": ["tooling"],
+              "cause_codes": ["completion_ownership_archive_or_authentication_fault"],
+              "s2_eligible": False, "end_state": False, "next_step": "r3_identical_byte_reharvest"}
+    publish(destination, record)
+    public_print(record)
+    print(f"harvest={destination / 'harvest.json'} sha256={sha(destination / 'harvest.json')}")
+    return record
+
+
+def release_metrics(*args, **kwargs):
+    # Qualification PASS is deliberately incapable of releasing measurements.
+    raise HarvestRefusal("claim_plan_seal_and_lead_release_required")
+
+
+def boundary_sources(path):
+    value = read(path)
+    sources = {"battery-boundary-map": path}
+    for role, item in value.get("observations", {}).items():
+        identifier(role)
+        for kind in ("record", "raw"):
+            sources[f"battery-{role}-{kind}"] = authenticated_reference(item[kind])
+    return sources
