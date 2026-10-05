@@ -165,3 +165,18 @@ coordinated multi-file forgery is outside the threat model (D-161). **F2:** fix.
   PID/PGID lived only in driver memory, so a driver death left a live launcher that dead-man and harvest would treat
   as clear. **Accepted**; round 3 [40](40-sol-a6-r3-brief.md) persists a pending-launcher record before the recheck.
 - PRs #469, #470, #471: gate records landed on each branch, ledgers filled; waiting for CI on the record heads.
+
+## 18:47 Step 1 DONE, step 2 DONE: issuer merged; `_v5` prefill prompt pin issued
+
+- PR #470 merged `a8e658e5`; PR #471 merged `b3ef116d` (seal record 52's desk-day issuer obligation met).
+- Pin issued from a detached checkout of `origin/main` at `b3ef116d` (Fable MINOR-2 procedure):
+  `scripts/issue_g2a_prefill_prompt_pin.py --harvest ~/night-archive/harvest-d117-g2a-prefill-probe-20261004T1305Z-r2/harvest.json
+  --registration configs/campaigns/g2a_prefill_probe_25g83/registration_block3.md --ruling-trace
+  docs/process_traces/2026-08-30-prefill-margin-coldgate/03-MAGISTRATE-RATIFICATION.md`, rc 0. Bundle (kept at
+  `~/night-archive/desk-day-v5/pin/` with `SHA256SUMS`):
+  - `prefill-prompt-pin.json` sha256 `d1209f6d5998e4a48ac0dae7ed04a8f6a2c5ec9950d768f0df9ef8839a32dccb` (equal to the
+    seats', the delta check's and the reviewers' dry issues);
+  - `selection.json` sha256 `c694c4884ff7f31b677b5ade1ab9710a4797c4529eaad61fba85fea080a88222` (= `g2a_record_sha256`,
+    the D-166 "G2-a record hash it selected from");
+  - `prefill-prompt-ladder.json` sha256 `43a77ea99cb2ac1f087f19d2f672444727b3e73a839e5dcfd8db1198d1352885`.
+  It lands in `configs/campaigns/d117_contrast_v5/prefill_pin/` with the generated packs (step 3), one PR.
