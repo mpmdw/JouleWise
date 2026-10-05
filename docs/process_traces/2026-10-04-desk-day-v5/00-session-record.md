@@ -221,3 +221,25 @@ coordinated multi-file forgery is outside the threat model (D-161). **F2:** fix.
   identity projection refuses (`readiness_identity_environment_dirty`: the floors' declared decode identity lacks
   `prompt_tokens: null`, `configs/campaigns/d117_floor_qwen3-*_v5/generate_configs.py:~2442`); evidence authoring refuses
   `evidence_author_doctrine_pin_underivable`; the contrast sacrificial freeze did not PASS. Triage follows its report.
+
+## 20:25-20:40: second Fable passes; clone re-proof report
+
+- PR #474: second cold Fable pass [47r](47-fable-g2bstop-2.md) **PASS** (F1 cured). N1 (three extra authenticated reads before the
+  purpose test; fail-closed): deferred to `V5-FLOOR-HARDENING-01` (`_v5` hardening) with a runbook sentence. N2 (an unrelated
+  provenance test narrowed to two members for its 60 s deadline): **recorded** here and in the PR gates; restoring the
+  strict-analysis variant goes to lane `TEST-LOCAL-ENV-ISOLATION-01`. N3 NIT deferred.
+- PR #475 (A6): first cold Fable pass [49r](49-fable-a6.md) **FAIL**: F1 BLOCKER (a closed window's `launch.pending` pgid can be
+  reused by an unrelated process group, so the census refuses later harvests; measured ≈0.7 % per record per instant on this
+  host), F2 MAJOR (a launcher without the barrier collects with no `chain.started`). Both fail toward refusal, not toward a
+  wrong number. **Accepted**; the one revision round: [50](50-sol-a6-r5-brief.md). A second Fable refusal goes to Ed.
+- Clone re-proof [44r](44-clone-proof-report.md): **FINDINGS**. Proven: anchors, all generator checks, the contrast identity
+  projection, 200 pre-author tests, the ruled predecessor and `freeze-0004` ordinal (sacrificial slot), governed non-null arm
+  REFUSE, canonical verify REFUSE, and the A196 dry gate's named refusal for all three packs. Blockers:
+  - F1: the floors' decode identity omits `prompt_tokens` → projection refuses. Fix seat [51](51-sol-floor-identity-brief.md).
+  - F2: the DOCTRINE_PIN deriver still requires the clock restore-recipe prose that the 2026-09-29 network-time-OFF runbook
+    change removed (the runbook already records that the restore-recipe registry row must be retired first). Orchestrator
+    ruling: retire the row and derive the current stays-OFF doctrine. Fix seat [52](52-sol-doctrine-pin-brief.md).
+  - Not yet exercised behind F2: nine evidence kinds, including PACK_AUTHENTICATION (#473's repair).
+  - Notes: the T-0 author needs HEAD = local main = origin main (A196's real trace is cut after the packs merge);
+    `freeze_projection` needs a clean tree, so project → commit per pack; the classifier refused a probe that would have
+    shimmed doctrine text, and the seat did not work around it.
