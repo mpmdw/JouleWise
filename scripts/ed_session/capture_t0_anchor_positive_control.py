@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import asdict
+from decimal import Decimal
 from contextlib import contextmanager
 import os
 from pathlib import Path
@@ -17,16 +18,19 @@ import signal
 import threading
 import sys
 import time
+from types import SimpleNamespace
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
 from joulewise import arm_readiness as readiness
 from joulewise import arm_readiness_evidence_t0 as author
 from joulewise import clock_reference, kernel_clock, network_time_off, t0_rehearsal
+from scripts import capture_t0_step
 
 ON_ARGV = (*network_time_off.OFF_ARGV[:-1], "on")
 REFUSAL = "evidence_author_t0_clock_attestation_underivable"
 ANCHOR_DETAIL = "R0-to-author RAW anchor delta exceeds 5000000 ns"
+NON_SPENDING = {"g10_preflight_offset_too_small", "g10_preflight_offset_too_large"}
 
 
 class NotDischarged(ValueError):
@@ -116,6 +120,45 @@ def snapshot_inputs(source, target):
             raise NotDischarged("author_capture_missing")
 
 
+def preflight_argv(repository):
+    # Use R0's fixed collector vector, without its arm/resync orchestration.
+    return capture_t0_step._command_for_step(
+        SimpleNamespace(repository=Path(repository), assignments={}), "clock-reference")
+
+
+def preflight_measurement(command, boot, *, repository=None):
+    if (command["argv"] != list(preflight_argv(REPO_ROOT if repository is None else repository))
+            or command["exit_code"] != 0):
+        raise NotDischarged("g10_preflight_command_invalid")
+    value = readiness.parse_json_bytes(command["stdout"].encode(), require_canonical=True)
+    legs = author._validate_reference_object(value, kind="CLOCK_ATTESTATION",
+        label="G10 preflight", boot_session_id=boot)
+    started, finished = command["started"], command["finished"]
+    if (any(s["boot_id"] != boot or not 0 <= s["read_skew_ns"] <= 1_000_000
+            for s in (started, finished))
+            or not started["monotonic_ns"] <= finished["monotonic_ns"]
+            or not started["monotonic_raw_ns"] <= value["anchor_monotonic_raw_ns"]
+                <= value["batch_finished_monotonic_raw_ns"] <= finished["monotonic_raw_ns"]):
+        raise NotDischarged("g10_preflight_boot_or_order")
+    if value["anchor_read_skew_ns"] > 1_000_000:
+        raise NotDischarged("g10_preflight_read_skew")
+    try:
+        agreement = author._reference_agreement(legs, kind="CLOCK_ATTESTATION", label="G10 preflight")
+        midpoint, bound = agreement.midpoint, agreement.bound
+    except author.T0EvidenceAuthoringError as exc:
+        if str(exc) != "G10 preflight bound exceeds 0.5 seconds":
+            raise
+        # The shared helper refuses above 0.5 s. Retain its same arithmetic
+        # for that rejected measurement too; never admit it or resync it.
+        lower = max(parsed.offset_s - parsed.uncertainty_s for _, parsed in legs)
+        upper = min(parsed.offset_s + parsed.uncertainty_s for _, parsed in legs)
+        midpoint = (lower + upper) / Decimal(2)
+        bound = abs(midpoint) + (upper - lower) / Decimal(2)
+    status = ("g10_preflight_offset_too_large" if bound > Decimal("0.400") else
+              "g10_preflight_offset_too_small" if abs(midpoint) < Decimal("0.020") else "PASS")
+    return {"midpoint_s": str(midpoint), "bound_s": str(bound), "status": status}
+
+
 @contextmanager
 def _uninterrupted_off():
     saved = {}
@@ -145,11 +188,24 @@ def run_control(*, pack_root, author_inputs, custody_root, resync_timeout_s=120,
     outcome = {"status": "NOT-DISCHARGED", "reason": "control_incomplete"}
     boot = None
     positive = None
+    preflight_admitted = False
     try:
+        preflight = execute_command(root, "preflight", preflight_argv(REPO_ROOT), 30, sample, runner)
+        boot = preflight["started"]["boot_id"]
+        if preflight["finished"]["boot_id"] != boot:
+            raise NotDischarged("g10_preflight_boot_changed")
+        measurement = preflight_measurement(preflight, boot)
+        write_json(root / "preflight.json", measurement)
+        if measurement["status"] != "PASS":
+            raise NotDischarged(measurement["status"])
+        preflight_admitted = True
+        # Preparation only copies bytes. It never calls _arm_reference or
+        # capture_step; neither the collector nor the snapshot sends ON.
         snapshot_inputs(source, inputs)
         before = sample()
         write_json(root / "before.json", before)
-        boot = before["boot_id"]
+        if before["boot_id"] != boot:
+            raise NotDischarged("g10_preflight_boot_changed")
         reference_capture = read_json(inputs / "clock-reference.json")
         r0 = readiness.parse_json_bytes(reference_capture["stdout"].encode())
         r0["kernel_frequency"] = kernel_clock.validate_probe(reference_capture.get("kernel_frequency"))
@@ -173,7 +229,8 @@ def run_control(*, pack_root, author_inputs, custody_root, resync_timeout_s=120,
             "pack_root": str(pack), "r0_anchor_ns": r0["anchor_realtime_ns"] - r0["anchor_monotonic_raw_ns"],
             "boot_id": boot,
             "author_code_sha256": {p: readiness.sha256_bytes((REPO_ROOT / p).read_bytes())
-                for p in ("scripts/author_arm_evidence_t0.py", "joulewise/arm_readiness_evidence_t0.py", "joulewise/kernel_clock.py")}})
+                for p in ("scripts/author_arm_evidence_t0.py", "joulewise/arm_readiness_evidence_t0.py", "joulewise/kernel_clock.py",
+                          "scripts/capture_t0_step.py", "scripts/collect_clock_reference.py", "joulewise/clock_reference.py")}})
         if before["read_skew_ns"] > 1_000_000:
             raise NotDischarged("anchor_read_skew")
         deadline = monotonic_ns() + resync_timeout_s * 1_000_000_000
@@ -244,28 +301,33 @@ def run_control(*, pack_root, author_inputs, custody_root, resync_timeout_s=120,
     except (Exception, KeyboardInterrupt) as exc:
         positive = None
         outcome["reason"] = str(exc) if isinstance(exc, NotDischarged) else "control_evidence_invalid"
+        if outcome["reason"] in NON_SPENDING:
+            outcome = {"status": outcome["reason"], "g10_attempt": False}
+        elif not preflight_admitted:
+            outcome["g10_attempt"] = False
     finally:
-        try:
-            path = root / network_time_off.RECEIPT_BASENAME
-            # OFF execution must not depend on the anchor sampler: a probe
-            # exception (including an interrupt) still reaches the real setter.
+        if preflight_admitted:
             try:
-                print("Finishing with network time OFF.", flush=True)
-            finally:
-                with _uninterrupted_off():
-                    off = network_time_off.set_network_time_off(
-                        path, root.name, root.name, runner=runner,
-                        clock=lambda: {"epoch_s": time.time(), "monotonic_s": monotonic_ns() / 1e9},
-                        boot_probe=lambda: network_time_off.boot_id(runner))
-            network_time_off.read_receipt(path, plan_id=root.name, window_id=root.name)
-            write_json(root / "kernel-frequency-after-off.json",
-                       kernel_clock.validate_probe(kernel_clock.read_kernel_frequency()))
-            write_json(root / "commands" / "off.json", off)
-            write_bytes(root / "commands" / "off" / "stdout.txt", off["stdout"].encode())
-            write_bytes(root / "commands" / "off" / "stderr.txt", off["stderr"].encode())
-        except (Exception, KeyboardInterrupt):
-            positive = None
-            outcome["reason"] = "off_receipt_missing_or_invalid"
+                path = root / network_time_off.RECEIPT_BASENAME
+                # OFF execution must not depend on the anchor sampler: a probe
+                # exception (including an interrupt) still reaches the real setter.
+                try:
+                    print("Finishing with network time OFF.", flush=True)
+                finally:
+                    with _uninterrupted_off():
+                        off = network_time_off.set_network_time_off(
+                            path, root.name, root.name, runner=runner,
+                            clock=lambda: {"epoch_s": time.time(), "monotonic_s": monotonic_ns() / 1e9},
+                            boot_probe=lambda: network_time_off.boot_id(runner))
+                network_time_off.read_receipt(path, plan_id=root.name, window_id=root.name)
+                write_json(root / "kernel-frequency-after-off.json",
+                           kernel_clock.validate_probe(kernel_clock.read_kernel_frequency()))
+                write_json(root / "commands" / "off.json", off)
+                write_bytes(root / "commands" / "off" / "stdout.txt", off["stdout"].encode())
+                write_bytes(root / "commands" / "off" / "stderr.txt", off["stderr"].encode())
+            except (Exception, KeyboardInterrupt):
+                positive = None
+                outcome["reason"] = "off_receipt_missing_or_invalid"
         if positive is not None:
             write_json(root / "positive-control.json", positive)
             outcome = {"status": "DISCHARGED", "positive_control_path": str(root / "positive-control.json")}
@@ -278,7 +340,7 @@ def run_control(*, pack_root, author_inputs, custody_root, resync_timeout_s=120,
 
 
 def verify_g10_custody(positive_path, manifest_path, *, code_root, head,
-                       before_monotonic_ns, boot_id):
+                       before_monotonic_ns, boot_id, after_monotonic_ns=None):
     """Replay the physical control's complete support census, never a locator alone."""
     positive_path, manifest_path = Path(positive_path), Path(manifest_path)
     root = manifest_path.parent
@@ -296,6 +358,10 @@ def verify_g10_custody(positive_path, manifest_path, *, code_root, head,
             observed[path.relative_to(root).as_posix()] = readiness.sha256_bytes(path.read_bytes())
     if manifest["files"] != observed:
         raise NotDischarged("g10_custody_hash_or_census")
+    preflight = read_json(root / "commands/preflight.json")
+    measurement = preflight_measurement(preflight, boot_id, repository=code_root)
+    if measurement["status"] != "PASS" or read_json(root / "preflight.json") != measurement:
+        raise NotDischarged("g10_preflight_measurement")
     before, after = read_json(root / "before.json"), read_json(root / "after.json")
     positive = read_json(positive_path)
     movement = read_json(root / "anchor-movement.json")
@@ -349,7 +415,7 @@ def verify_g10_custody(positive_path, manifest_path, *, code_root, head,
             or execution["argv"][2:] != ["--pack-root", lineage["pack_root"],
                 "--custody-root", str(root / "author-custody")]):
         raise NotDischarged("g10_on_or_author_refusal")
-    for label, command in (("on", on),):
+    for label, command in (("preflight", preflight), ("on", on)):
         directory = root / "commands" / label
         if (read_json(directory / "started.json") != command["started"]
                 or read_json(directory / "finished.json") != command["finished"]
@@ -358,14 +424,20 @@ def verify_g10_custody(positive_path, manifest_path, *, code_root, head,
             raise NotDischarged("g10_command_support")
     off = network_time_off.read_receipt(root / network_time_off.RECEIPT_BASENAME,
                                        plan_id=root.name, window_id=root.name)
-    stamps = [before, on["started"], on["finished"], after, execution["started"], execution["finished"]]
+    polls = [read_json(path) for path in sorted((root / "polls").glob("*.json"))]
+    if not polls or polls[-1] != after:
+        raise NotDischarged("g10_poll_support")
+    stamps = [preflight["started"], preflight["finished"], before, on["started"], on["finished"],
+              *polls, after, execution["started"], execution["finished"]]
     times = [value["monotonic_ns"] for value in stamps]
     if (any(value["boot_id"] != boot_id or value["read_skew_ns"] > 1_000_000 for value in stamps)
             or times != sorted(times) or off["boot_id"] != boot_id
             or not times[-1] <= round(off["monotonic_s"] * 1e9) < before_monotonic_ns
+            or (after_monotonic_ns is not None and not after_monotonic_ns < times[0])
             or lineage["boot_id"] != boot_id):
         raise NotDischarged("g10_boot_or_order")
-    expected_codes = {"scripts/author_arm_evidence_t0.py", "joulewise/arm_readiness_evidence_t0.py"}
+    expected_codes = {"scripts/author_arm_evidence_t0.py", "joulewise/arm_readiness_evidence_t0.py",
+                      "scripts/capture_t0_step.py", "scripts/collect_clock_reference.py", "joulewise/clock_reference.py"}
     if residual_version:
         expected_codes.add("joulewise/kernel_clock.py")
     if set(lineage["author_code_sha256"]) != expected_codes:
