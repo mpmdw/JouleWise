@@ -47,7 +47,7 @@ def night_plan_json_bytes(plan: NightPlan) -> bytes:
     ).encode("utf-8")
 
 
-def write_night_plan(path: str | os.PathLike[str], plan: NightPlan) -> Path:
+def write_night_plan(path: str | os.PathLike[str], plan: NightPlan, *, create_once: bool = False) -> Path:
     """Atomically publish one complete plan and return its resolved path."""
 
     target = Path(path).expanduser().resolve(strict=False)
@@ -68,7 +68,7 @@ def write_night_plan(path: str | os.PathLike[str], plan: NightPlan) -> Path:
             os.fsync(descriptor)
         finally:
             os.close(descriptor)
-        if plan.quiet_admission is not None:
+        if create_once or plan.quiet_admission is not None:
             # Publishing a new quiet plan never replaces existing sealed bytes.
             os.link(temporary, target)
         else:

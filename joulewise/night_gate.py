@@ -1170,11 +1170,44 @@ def _pack_rehearsal_roots(plan, arm, purpose):
         raise PackNightRefusal("rehearsal_clone_prefix_invalid: measurement_root")
 
 
+def qualification_start_deadline(plan, chain_text, purpose):
+    """Authenticate the block-4 sizing literals before ARM/GO admission.
+
+    Other pack chains have no qualification marker and retain their existing
+    policy. The writer pins this marker and these literals into authorization.
+    """
+    if not re.search(r"^export V5_QUALIFICATION_OCCURRENCE=", chain_text, re.MULTILINE):
+        return None
+    if purpose not in {"T0_REHEARSAL", "G2B_SHAKEDOWN"}:
+        raise PackNightRefusal("qualification non-claim purpose required")
+    marker = chain_literal(chain_text, "V5_QUALIFICATION_OCCURRENCE")
+    expected = "r1" if purpose == "T0_REHEARSAL" else "s1"
+    if marker != expected:
+        raise PackNightRefusal("qualification occurrence/purpose")
+    span = chain_literal(chain_text, "NIGHT_PROGRAMMED_SPAN_S")
+    latest = chain_literal(chain_text, "NIGHT_LATEST_CHAIN_START_EPOCH_S")
+    if not isinstance(span, str) or re.fullmatch(r"[1-9][0-9]*", span) is None:
+        raise PackNightRefusal("qualification programmed span")
+    span = int(span)
+    if plan.window_max_s != 60 * math.ceil((span + 2700) / 60):
+        raise PackNightRefusal("qualification window/dwell cap")
+    deadline = plan.t0_epoch_s + plan.window_max_s - span
+    if (not isinstance(latest, str) or re.fullmatch(r"[0-9]+", latest) is None
+            or not math.ceil(plan.t0_epoch_s) <= int(latest) <= math.floor(deadline)):
+        raise PackNightRefusal("qualification latest chain start")
+    return int(latest)
+
+
 def _evaluate_pack_conditions(plan, probes, rows, arm_path):
     """Derive C1/C2 from bound custody bytes, never caller condition labels."""
     from joulewise import arm_readiness as readiness
 
     prepared = _authenticate_pack_records(plan)
+    deadline = qualification_start_deadline(
+        plan, _pack_bytes(Path(plan.chain_path), "qualification_chain").decode("utf-8"),
+        prepared["authorization_record"]["purpose"])
+    if deadline is not None and _clock_value(probes, "epoch") > deadline:
+        raise PlanError("night_window_expired", "qualification latest chain start exceeded")
     rows["C1"] = _MutableCondition("PASS", None,
         [plan.pack_night[key]["path"] for key in ("authorization_record", "confirmation_record")],
         dict(prepared["authorization_record"]))
