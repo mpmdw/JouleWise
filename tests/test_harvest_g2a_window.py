@@ -22,6 +22,27 @@ from joulewise import calibration_ledger as real_ledger
 from scripts import recover_calibration_ledger as recovery
 from tests.git_fixture import init_git_fixture
 from tests.test_calibration_bracketing import _unissued_acceptance_fixture, _unissued_acceptance_fixture_bytes
+from tests.test_calibration_bracketing import _checkout_estimator_code_sha256, _reseal
+from tests.test_reduce import self_consistent_calibration
+
+
+_D079_IMPORT_LEDGER = Path(__file__).parent/'fixtures/d117_v2_production/issued/calibration_observation_ledger.jsonl'
+
+
+def _d079_import_custody_available():
+    # The tracked receipts name 190 artifacts in Ed's external backup. Their
+    # bytes are not part of an ordinary CI checkout (see the fixture README).
+    # Match replay's first existing replacement root, including an explicitly
+    # disabled backup; the private bootstrap table alone cannot satisfy custody.
+    for line in _D079_IMPORT_LEDGER.read_bytes().splitlines():
+        receipt = json.loads(line)
+        if not receipt['artifact_sha256']:
+            continue
+        roots = real_ledger._custody_probe_paths(Path(receipt['custody_locator']), mode='read_replay')
+        root = next((path for path in roots if path.exists()), None)
+        if root is None or not all((root/name).is_file() for name in receipt['artifact_sha256']):
+            return False
+    return True
 
 
 class G2aHarvestTests(unittest.TestCase):
@@ -273,6 +294,137 @@ class G2aHarvestTests(unittest.TestCase):
         record = self.run_harvest()
         self.assertEqual(self._causes(record), ('REFUSED', ['bracket_acceptance_plan_mismatch']))
         self.calibration_bracket_for_bundles.assert_not_called()
+
+    def test_missing_bracket_acceptance_refuses_with_exact_plan_mismatch_code(self):
+        # Removing the None guard still refuses, but misclassifies the fault
+        # as archive_or_authentication_fault after dereferencing acceptance.
+        self.load_calibration_acceptance_bound.return_value = None
+        record = self.run_harvest()
+        self.assertEqual(self._causes(record), ('REFUSED', ['bracket_acceptance_plan_mismatch']))
+        self.assertEqual(record['fault']['type'], 'HarvestRefusal')
+        self.calibration_bracket_for_bundles.assert_not_called()
+        self.assertEqual(self.commands, [])
+
+    @unittest.skipUnless(
+        _d079_import_custody_available(),
+        'lead-reviewed D-079 import custody inputs are unavailable',
+    )
+    def test_real_passed_bracket_after_nonzero_acceptance_cutoff_selects(self):
+        # Reuse the authenticated historical-import prefix; refresh only the
+        # synthetic acceptance's estimator pins, as the bracketing tests do.
+        # Capture physics, ledger replay, discovery, binding and decision are
+        # real. Input validation remains isolated by this orchestration fixture.
+        issued = Path(__file__).parent/'fixtures/d117_v2_production/issued'
+        acceptance = harvest.read(issued/'calibration_acceptance_d079_v2.json')
+        acceptance['prospective_rederivation']['estimator_code_sha256'] = _checkout_estimator_code_sha256()
+        acceptance = _reseal(acceptance)
+        acceptance_path = self.f.base/'synthetic-issued-acceptance.json'
+        acceptance_path.write_text(json.dumps(acceptance)+'\n')
+        self.load_calibration_acceptance_bound.return_value = acceptance
+        self.ledger.write_bytes(_D079_IMPORT_LEDGER.read_bytes())
+        self.pin.write_bytes((issued/'calibration_ledger_head.json').read_bytes())
+        cutoff = acceptance['ledger_cutoff']
+        self.assertGreater(cutoff['sequence'], 0)
+
+        # Put the frozen seed beyond the acceptance cutoff, so substituting
+        # the custody baseline for the decision baseline cannot pass.
+        seed = self.fixture_capture('fixture-seed')
+        real_ledger.append_pending_receipt(self.ledger, attempt_id='fixture-seed',
+            custody_locator=str(seed), identity_epoch=acceptance['identity_epoch'], t1_bindings=T1,
+            head_pin_path=self.pin, require_committed_pin=False, repo_root=self.f.measurement)
+        receipt = real_ledger.finalize_attempt_receipt(self.ledger, attempt_id='fixture-seed',
+            disposition='ordinary-invalid', custody_locator=str(seed),
+            artifact_sha256=real_ledger.artifact_hashes(seed), identity_epoch=acceptance['identity_epoch'],
+            t1_bindings=T1, capture_wall_time_s='1.0', exact_bound_lexeme_s='0.025')
+        seed_pin = real_ledger.head_pin_for_receipt(receipt)
+        self.pin.write_text(json.dumps(seed_pin)+'\n')
+        init_git_fixture(self.f.measurement, '-q')
+        subprocess.run(['git', 'add', str(self.pin.relative_to(self.f.measurement))],
+                       cwd=self.f.measurement, check=True, capture_output=True)
+        subprocess.run(['git', '-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid',
+                        'commit', '-qm', 'fixture seed'], cwd=self.f.measurement, check=True, capture_output=True)
+        frozen = self.f.g2a/'window-plan/calibration_plan.json'
+        plan = harvest.read(frozen)
+        plan['calibration_ledger'].update(head_sequence=seed_pin['sequence'], head_digest=seed_pin['head_digest'])
+        plan['active_acceptance'].update(sha256=harvest.sha(acceptance_path), acceptance_id=acceptance['acceptance_id'])
+        frozen.write_text(json.dumps(plan)+'\n')
+        self.value['calibration_plan']['sha256'] = harvest.sha(frozen)
+        (self.f.g2a/'window-plan/g2a-input-inventory.json').write_text(json.dumps(self.value)+'\n')
+
+        captures = {}
+        for slot, endpoint in (('pre', 1000.05), ('post', 1300.05)):
+            evidence, raw, events = self_consistent_calibration(
+                first_endpoint_s=endpoint, protocol_id=harvest.brackets.PROTOCOL_ID)
+            # The raw fit is about 21 ms, below the retained corpus minimum.
+            # A conservative 25 ms stored bound uses the verifier's real
+            # widen-only rule and stays inside that corpus's accepted range.
+            self.assertLess(evidence['b_fiducial_s'], 0.025)
+            evidence['b_fiducial_s'] = 0.025
+            path = self.f.g2a/'runs/instrument_validation'/('fixture-'+slot)
+            (path/'raw').mkdir(parents=True)
+            for name, data in (('raw/powermetrics.plist', raw), ('events.jsonl', events),
+                               ('instrument_evidence.json', (json.dumps(evidence)+'\n').encode())):
+                (path/name).write_bytes(data)
+            artifacts = {name: harvest.sha(path/name) for name in (
+                'raw/powermetrics.plist', 'events.jsonl', 'instrument_evidence.json')}
+            (path/'manifest.json').write_text(json.dumps({
+                'schema_version': 'joulewise.instrument_validation_manifest.v1',
+                'protocol_id': evidence['protocol_id'], 'pulse_count': evidence['pulse_count'],
+                'artifacts': artifacts})+'\n')
+            captures[slot] = path, evidence
+            self.assertEqual({field: evidence['bindings'][field] for field in acceptance['identity_epoch']},
+                             acceptance['identity_epoch'])
+
+        real_ledger.append_bracket_session_receipt(self.ledger, head_pin_path=self.pin,
+            repo_root=self.f.measurement, session_id=self.value['session_id'], window_id=self.value['window_id'],
+            plan_id=self.value['calibration_plan']['plan_id'], plan_sha256=harvest.sha(frozen),
+            evidence_root_id=self.value['evidence_root_id'], runs_root=self.f.g2a/'runs',
+            slots={slot: {'attempt_id': 'fixture-'+slot, 'custody_locator': str(path),
+                'identity_epoch': acceptance['identity_epoch'], 't1_bindings': evidence['bindings']}
+                for slot, (path, evidence) in captures.items()})
+        for slot, (path, evidence) in captures.items():
+            real_ledger.claim_bracket_session_slot(self.ledger, session_id=self.value['session_id'],
+                                                  slot=slot, attempt_id='fixture-'+slot)
+            real_ledger.finalize_bracket_session_slot(self.ledger, session_id=self.value['session_id'],
+                slot=slot, disposition='valid', custody_locator=str(path),
+                artifact_sha256=real_ledger.artifact_hashes(path), identity_epoch=acceptance['identity_epoch'],
+                t1_bindings=evidence['bindings'], capture_wall_time_s=str(evidence['capture_wall_time_s']),
+                exact_bound_lexeme_s=str(evidence['b_fiducial_s']))
+        for run_id in producer.harvest_roster(self.value):
+            path = self.f.g2a/'runs'/run_id
+            metadata = harvest.read(path/'metadata.json')
+            metadata['instrument_calibration'] = {'bindings': captures['pre'][1]['bindings']}
+            (path/'metadata.json').write_text(json.dumps(metadata)+'\n')
+            (path/'events.jsonl').write_text('\n'.join(json.dumps({
+                'phase': 'measured_run', 'event_type': event, 'timestamp_s': stamp,
+                'message': '', 'metadata': {},
+            }) for event, stamp in (('sampling_started', 1250.), ('sampling_stopped', 1260.)))+'\n')
+        self.load_calibration_ledger_snapshot.side_effect = real_ledger.load_calibration_ledger_snapshot
+        self.terminal_head_pin_for_session.side_effect = real_ledger.terminal_head_pin_for_session
+        # Replace the setup decision mocks with the actual functions.
+        with mock.patch.object(harvest.brackets, 'DEFAULT_ACCEPTANCE_BOUND_PATH', acceptance_path), \
+                mock.patch.object(harvest.brackets, 'build_calibration_bracket_binding', self.real_bracket_binding), \
+                mock.patch.object(harvest.brackets, 'calibration_bracket_for_bundles', self.real_bracket_for_bundles):
+            record = self.run_harvest()
+        if self._causes(record) != ('SELECT', []):
+            print(f"harvest verdict={record['verdict']} fault={record.get('fault')} "
+                  f"cause_codes={record.get('cause_codes')}")
+        self.assertEqual(self._causes(record), ('SELECT', []),
+                         {'fault': record.get('fault'), 'cause_codes': record.get('cause_codes')})
+        bracket = harvest.read(self.args.archive_root/'derived/bracket.json')
+        self.assertEqual(bracket['assessment']['status'], 'passed')
+        self.assertEqual(bracket['reasons'], [])
+        view = bracket['assessment']['acceptance']['ledger_snapshot']
+        self.assertEqual((view['baseline_sequence'], view['baseline_digest']),
+                         (cutoff['sequence'], cutoff['head_digest']))
+        self.assertGreater(view['sequence'], seed_pin['sequence'])
+        self.assertGreater(seed_pin['sequence'], cutoff['sequence'])
+        self.assertEqual(bracket['binding']['session_id'], self.value['session_id'])
+        self.assertEqual(bracket['assessment']['pre']['attempt_id'], 'fixture-pre')
+        self.assertEqual(bracket['assessment']['post']['attempt_id'], 'fixture-post')
+        self.assertEqual([call.kwargs['baseline_sequence'] for call in self.load_calibration_ledger_snapshot.call_args_list],
+                         [seed_pin['sequence'], seed_pin['sequence'], cutoff['sequence']])
+        self.assertEqual(harvest.read(record['selection']['path'])['selected_prefill_tokens'], 512)
 
     def test_bracket_view_refusals_are_unfiltered_recovery_causes(self):
         refused = copy.copy(self.snapshot)
@@ -684,6 +836,102 @@ class G2aHarvestTests(unittest.TestCase):
         self.assertEqual(snapshot.refusal_reasons, ())
         self.assertEqual(snapshot.bracket_session_by_id[self.value['session_id']].state, 'aborted')
         self.assertEqual(snapshot.head_sequence, 8)  # open, claim, pre final, abort: two records each
+
+    def test_crash_after_pre_with_uncommitted_seed_pin_refuses_first_ledger_load(self):
+        self.crash_after_pre()
+        # Same parsed seed, different uncommitted bytes: physical prefix and
+        # open-session shape alone must not authenticate the pin.
+        self.pin.write_bytes(self.pin.read_bytes() + b' ')
+        before = self.ledger.read_bytes(), self.pin.read_bytes()
+        record = self.run_harvest()
+        self.assertEqual((record['verdict'], record['cause_codes']),
+                         ('REFUSED', ['ledger_authentication_failed']))
+        self.assertEqual((self.ledger.read_bytes(), self.pin.read_bytes()), before)
+        self.assertEqual(self.commands, [])
+        self.validate_bundle.assert_not_called()
+
+    def add_foreign_open_session_tail(self):
+        """Build a hash-valid foreign tail that the governed writer would refuse."""
+        rows = [json.loads(line) for line in self.ledger.read_bytes().splitlines()]
+        original = rows[1]  # the original session's open business record
+        identity = dict(original, session_id='foreign-session', window_id='foreign-window')
+        slots = {slot: dict(value, attempt_id='foreign-'+slot,
+                           custody_locator=str(self.f.g2a/'runs/instrument_validation'/('foreign-'+slot)))
+                 for slot, value in original['slots'].items()}
+        foreign = real_ledger._new_bracket_session_record(
+            sequence=len(rows)+2, predecessor_digest=rows[-1]['receipt_digest'],
+            event=real_ledger.BRACKET_SESSION_OPEN_EVENT, session_identity=identity,
+            fields={'slots': slots})
+        core = real_ledger._target_core(foreign)
+        intent = real_ledger._new_append_intent(receipts=rows, byte_offset=len(self.ledger.read_bytes()),
+            target_core=core, operation_key=real_ledger._operation_key_for_core(core))
+        foreign = real_ledger._new_bracket_session_record(
+            sequence=len(rows)+2, predecessor_digest=intent['receipt_digest'],
+            event=real_ledger.BRACKET_SESSION_OPEN_EVENT, session_identity=identity,
+            fields={'slots': slots})
+        with self.ledger.open('ab') as handle:
+            for row in (intent, foreign):
+                handle.write(real_ledger.canonical_json_bytes(row) + b'\n')
+        snapshot = real_ledger.load_calibration_ledger_snapshot(
+            self.ledger, self.pin, repo_root=self.f.measurement, require_committed_pin=True)
+        self.assertEqual(set(snapshot.refusal_reasons), {
+            'calibration_ledger_head_mismatch', 'calibration_ledger_bracket_session_open'})
+        self.assertEqual({session.session_id for session in snapshot.bracket_sessions},
+                         {self.value['session_id'], 'foreign-session'})
+        self.assertFalse(snapshot.is_governed_open_bracket_extension)
+        return snapshot
+
+    def test_crash_after_pre_with_foreign_tail_refuses_first_ledger_load(self):
+        self.crash_after_pre()
+        self.add_foreign_open_session_tail()
+        before = self.ledger.read_bytes(), self.pin.read_bytes()
+        record = self.run_harvest()
+        self.assertEqual((record['verdict'], record['cause_codes']),
+                         ('REFUSED', ['ledger_authentication_failed']))
+        self.assertEqual((self.ledger.read_bytes(), self.pin.read_bytes()), before)
+        self.assertEqual(self.commands, [])
+        self.validate_bundle.assert_not_called()
+
+    def test_read_only_sources_recovery_rechecks_foreign_tail_before_creating_copies(self):
+        self.crash_after_pre()
+        snapshot = self.add_foreign_open_session_tail()
+        before = tree(self.f.measurement), tree(self.f.g2a), tree(self.f.night)
+        # Isolate recovery's independent guard: let only the earlier harvest
+        # check see an admitted snapshot. Recovery reloads the real foreign tail.
+        self.load_calibration_ledger_snapshot.side_effect = None
+        self.load_calibration_ledger_snapshot.return_value = SimpleNamespace(
+            bracket_session_by_id=snapshot.bracket_session_by_id,
+            refusal_reasons=snapshot.refusal_reasons, is_governed_open_bracket_extension=True)
+        with mock.patch.object(recovery, 'abort_calibration_session',
+                               wraps=real_ledger.abort_calibration_session) as abort, redirect_stdout(io.StringIO()):
+            code = harvest.main(['--plan', str(self.args.plan), '--archive-root', str(self.args.archive_root),
+                '--operator-identity', self.args.operator_identity, '--read-only-sources'],
+                now=self.now, clear=lambda _: True, runner=self.runner)
+        self.assertEqual(code, 3)
+        record = harvest.read(self.args.archive_root/'harvest.json')
+        self.assertEqual(record['verdict'], 'REFUSED')
+        self.assertEqual(record['fault']['type'], 'CalibrationLedgerError')
+        abort.assert_not_called()
+        for name in ('terminal-ledger.jsonl', 'terminal-pin.json', 'terminal-ledger.jsonl.lock'):
+            self.assertFalse((self.args.archive_root/'derived'/name).exists(), name)
+        self.assertEqual((tree(self.f.measurement), tree(self.f.g2a), tree(self.f.night)), before)
+
+    def test_read_only_harvest_repeats_terminal_ledger_bytes(self):
+        self.crash_after_pre()
+        before = tree(self.f.measurement), tree(self.f.g2a), tree(self.f.night)
+        self.args.read_only_sources = True
+        terminal_bytes = []
+        for name in ('archive', 'archive-repeat'):
+            self.args.archive_root = self.f.base/name
+            record = self.run_harvest()
+            self.assertEqual(record['verdict'], 'RECOVER', record.get('fault'))
+            derived = self.args.archive_root/'derived'
+            # The writer-lease sidecar stays: its inode is never deleted
+            # (docs/contracts/calibration_ledger_append.md).
+            terminal_bytes.append((derived/'terminal-ledger.jsonl').read_bytes())
+        self.assertEqual(terminal_bytes[0], terminal_bytes[1])
+        self.assertTrue(terminal_bytes[0].startswith(self.ledger.read_bytes()))
+        self.assertEqual((tree(self.f.measurement), tree(self.f.g2a), tree(self.f.night)), before)
 
     def test_crash_after_pre_capture_with_zero_members_uses_governed_source_abort_before_pin(self):
         self.crash_after_pre()
