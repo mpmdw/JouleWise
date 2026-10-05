@@ -841,6 +841,14 @@ class ArmReadinessLifecycleTests(unittest.TestCase):
     def test_atomic_launch_capability_race_exactly_one_consumer_and_replay_refuses(self) -> None:
         """Exactly one concurrent consumer spends the launch capability."""
 
+        self._assert_atomic_launch_capability_race(recheck_refuses=False)
+
+    def test_atomic_launch_capability_race_recheck_refuses_without_exec(self) -> None:
+        """A refusing winner spends the capability without starting collection."""
+
+        self._assert_atomic_launch_capability_race(recheck_refuses=True)
+
+    def _assert_atomic_launch_capability_race(self, *, recheck_refuses: bool) -> None:
         from tests.test_arm_readiness_dry_run import install_passing_freeze
         from tests.test_arm_readiness_integration import (
             clear_initial_arm,
@@ -875,6 +883,25 @@ class ArmReadinessLifecycleTests(unittest.TestCase):
         barrier = threading.Barrier(8)
         outcomes: dict[int, str] = {}
         lock = threading.Lock()
+        consumption_path = (
+            custody
+            / pack.name
+            / "arm_readiness.consumptions"
+            / f"{arm_path.stem}.consumed.json"
+        )
+        recheck_consumers: list[str] = []
+        exec_consumers: list[str] = []
+
+        def recheck(_pack_root: Path) -> None:
+            recheck_consumers.append(threading.current_thread().name)
+            if recheck_refuses:
+                raise ArmReadinessError(
+                    "readiness_identity_environment_dirty", "synthetic post-arm drift"
+                )
+
+        def execute(_program: str, _argv: list[str], _environment: dict) -> None:
+            self.assertTrue(consumption_path.is_file(), "exec requires a spent capability")
+            exec_consumers.append(threading.current_thread().name)
 
         def consume(consumer_id: int) -> None:
             outcome = "launch_returned_without_refusal"
@@ -901,7 +928,14 @@ class ArmReadinessLifecycleTests(unittest.TestCase):
             launch_window,
             "verify_consumed_launch",
             return_value={"exec_argv": exec_argv},
-        ), mock.patch.object(launch_window.os, "execve") as execve:
+        ) as verify, mock.patch.object(
+            # This fixture has synthetic projection receipts, not model files.
+            # Stub PASS/REFUSE here; file-backed re-derivation is covered by
+            # test_launch_window_realization_recheck.py. Consumption stays real.
+            launch_window, "_recheck_identity_projection", side_effect=recheck,
+        ) as identity_recheck, mock.patch.object(
+            launch_window.os, "execve", side_effect=execute,
+        ) as execve:
             # Assemble these immutable fixture inputs once through production.
             # Eight redundant caller-side ARM replays were the largest single
             # cost of the race (Opus review 90 measured CPU 96.1 s -> 59.1 s,
@@ -934,16 +968,25 @@ class ArmReadinessLifecycleTests(unittest.TestCase):
                     f"partial_outcomes={partial_outcomes}",
                 )
         outcomes = list(outcomes.values())
-        self.assertEqual(execve.call_count, 1)
-        self.assertEqual(outcomes.count("launch_consumption_invalid"), 1, outcomes)
+        identity_recheck.assert_called_once_with(pack.resolve())
+        verify.assert_called_once_with(
+            pack, str(consumption_path.resolve()), launch_manifest=args.launch_manifest,
+            expected_exec_argv=exec_argv,
+            step6_confirmation_table=args.step6_confirmation_table,
+            expected_confirmation_digest=args.expected_confirmation_digest,
+        )
+        if recheck_refuses:
+            execve.assert_not_called()
+            winner_outcome = "readiness_identity_environment_dirty"
+        else:
+            execve.assert_called_once_with(
+                exec_argv[0], exec_argv, dict(launch_window.os.environ)
+            )
+            self.assertEqual(exec_consumers, recheck_consumers)
+            winner_outcome = "launch_consumption_invalid"  # Mock execve returned.
+        self.assertEqual(outcomes.count(winner_outcome), 1, outcomes)
         self.assertEqual(outcomes.count("readiness_record_consumed"), 7, outcomes)
         self.assertNotIn("readiness_lock_unavailable", outcomes)
-        consumption_path = (
-            custody
-            / pack.name
-            / "arm_readiness.consumptions"
-            / f"{arm_path.stem}.consumed.json"
-        )
         consumption = readiness.validate_consumption_receipt(
             readiness.parse_json_bytes(
                 consumption_path.read_bytes(), require_canonical=True
@@ -958,13 +1001,14 @@ class ArmReadinessLifecycleTests(unittest.TestCase):
             readiness,
             "_attested_launch_artifact_references",
             return_value=self.launch_artifact_references(args.launch_manifest),
-        ):
+        ), mock.patch.object(launch_window.os, "execve") as replay_execve:
             with self.assertRaisesRegex(
                 ArmReadinessError, "already consumed"
             ) as replay:
                 launch_window.launch(args)
         self.assertEqual(replay.exception.reason_code, "readiness_record_consumed")
         self.assertNotEqual(replay.exception.reason_code, "readiness_lock_unavailable")
+        replay_execve.assert_not_called()
 
     def test_boot_session_change_voids_verification_and_consumption(self) -> None:
         """A stale boot voids both arm verification and consumption."""

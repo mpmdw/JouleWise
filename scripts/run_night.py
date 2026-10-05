@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import ast
 import hashlib
 import json
 import os
@@ -18,6 +19,8 @@ import uuid
 import math
 import queue
 import resource
+import socket
+from contextlib import ExitStack
 from dataclasses import asdict, replace
 from datetime import date, datetime, time as wall_time, timedelta, timezone
 from pathlib import Path
@@ -45,7 +48,9 @@ sys.path.insert(0, str(REPO_ROOT))
 from joulewise import arm_readiness as readiness
 from joulewise import arm_readiness_evidence_t0 as t0_author
 from joulewise import battery_float, night_gate, t0_rehearsal, quiet_admission, network_time_off
-from joulewise.measurement_liveness import observe_identity  # noqa: E402
+from joulewise.measurement_liveness import (  # noqa: E402
+    observe_identity, pending_launch_closed, _start_token,
+)
 
 from joulewise.night_gate import (  # noqa: E402
     NIGHT_DRIVER_REASON_CODES,
@@ -63,6 +68,7 @@ RESULT_SCHEMA = "joulewise.unattended_night_result.v1"
 REFUSAL_SCHEMA = "joulewise.night_refusal.v1"
 PROBE_TIMEOUT_S = 30
 CENSUS_INTERVAL_S = 30
+LAUNCHER_FIRST_BYTE_TIMEOUT_S = 30
 # The bench replay's recorder switch, named here as a LITERAL rather than
 # imported: the sampler that owns it imports this module, so importing it back
 # at module scope would close a cycle.  A regression pins the two spellings
@@ -133,6 +139,8 @@ _WRITE_ONCE_RECORDS = (
     "go-census.json",
     "result.json",
     "refusal.json",
+    "launch.pending",
+    "launch.resolved",
     "chain.started",
     "chain.exited",
     "courier.json",
@@ -462,6 +470,8 @@ def _record_chain_exit(
     if launch_failed:
         record["launch_failed"] = True
     _write_json(night_dir / "chain.exited", record)
+    if (night_dir / "launch.pending").exists():
+        _fsync_path(night_dir)
 
 
 def _signal_group(pgid: int, number: int) -> None:
@@ -503,6 +513,7 @@ def _terminate_process_group(
     pgid: int | None = None,
     prove_group_absent: bool = True,
     evidence: dict[str, Any] | None = None,
+    pending_dir: Path | None = None,
 ) -> bool:
     """Return True only when the whole process GROUP is proven gone.
 
@@ -557,6 +568,9 @@ def _terminate_process_group(
         return False
     if night_dir is not None:
         _record_chain_exit(night_dir, exit_code)
+    if prove_group_absent and (pending_dir is not None or night_dir is not None):
+        _resolve_launch_pending(pending_dir if pending_dir is not None else night_dir,
+                                process_group)
     return True
 
 
@@ -587,6 +601,59 @@ def _complete_chain_start(descriptor: int, process: subprocess.Popen[Any],
     _write_json(temporary, record)
     os.replace(temporary, night_dir / "chain.started")
     return pgid
+
+
+def _write_launch_pending(process, night_dir, plan):
+    """Retain launcher custody independently of the PASS-only chain claim.
+
+    Census unresolved records even without chain.started. Durable closure
+    prevents a finished attempt's reused pgid from holding later harvests.
+    """
+    identity = observe_identity(process.pid)
+    _write_json(night_dir / "launch.pending", {
+        "schema": "joulewise.launch_pending.v1", "plan_id": plan.plan_id,
+        "attempt_id": uuid.uuid4().hex, "pid": process.pid, "pgid": process.pid,
+        "epoch_s": time.time(),
+        "start_time": identity.start_time if identity.state == "LIVE" else None,
+    })
+    _fsync_path(night_dir / "launch.pending")
+    _fsync_path(night_dir)
+
+
+def _resolve_launch_pending(night_dir: Path, pgid: int) -> None:
+    """Write once, only after proving this launcher's group absent."""
+    if not (night_dir / "launch.pending").exists():
+        return
+    _write_json(night_dir / "launch.resolved", {
+        "schema": "joulewise.launch_resolved.v1", "basis": "group_absent",
+        "pgid": pgid, "epoch_s": time.time(), "monotonic_ns": time.monotonic_ns(),
+    })
+    _fsync_path(night_dir)
+
+
+def _launcher_barrier(plan) -> tuple[str, int]:
+    """Verify the pinned measurement launcher's explicit protocol capability.
+
+    Source literals survive reviewed backports and detached checkouts; commit
+    ancestry neither proves current file contents nor accepts such backports.
+    Never import code from the measurement checkout into the driver.
+    """
+    source = (Path(plan.measurement_root) / "scripts/launch_window.py").read_bytes()
+    constants = {}
+    for node in ast.parse(source).body:
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name) and target.id in (
+                    "CHAIN_START_BARRIER_VERSION", "CHAIN_START_FD_ENV", "HANDOFF_FD"
+                ):
+                    constants[target.id] = ast.literal_eval(node.value)
+    if (type(constants.get("CHAIN_START_BARRIER_VERSION")) is not int
+            or constants["CHAIN_START_BARRIER_VERSION"] != 1
+            or constants.get("CHAIN_START_FD_ENV") != "JOULEWISE_CHAIN_START_FD"
+            or type(constants.get("HANDOFF_FD")) is not int
+            or constants["HANDOFF_FD"] != 198):
+        raise ValueError("measurement launcher lacks the supported chain-start barrier")
+    return constants["CHAIN_START_FD_ENV"], constants["HANDOFF_FD"]
 
 
 def _complete_chain_launch_failure(descriptor: int, error: OSError) -> str:
@@ -800,7 +867,9 @@ class _WindowDeadline:
                 return self.outcome
             evidence: dict[str, Any] = {}
             proven = _terminate_process_group(
-                self.process, self.night_dir, pgid=self.pgid, evidence=evidence
+                self.process,
+                self.night_dir if (self.night_dir / "chain.started").exists() else None,
+                pgid=self.pgid, evidence=evidence, pending_dir=self.night_dir
             )
             fired_epoch_s = time.time()
             census = list(evidence.get("group_census", []))
@@ -867,7 +936,7 @@ def _run_chain_once(
     plan: NightPlan,
     probes: Probes,
     night_dir: Path,
-    claim_descriptor: int,
+    claim_descriptor: int | None,
     *,
     command: list[str] | None = None,
     abort_on_census: bool = True,
@@ -875,11 +944,44 @@ def _run_chain_once(
 ) -> tuple[int | None, dict[str, Any] | None, int, list[dict[str, Any]], bool]:
     """Run exactly one child session and continuously census it."""
 
+    with ExitStack() as resources:
+        channel = child_channel = None
+        start_fd_env = None
+        if claim_descriptor is None:
+            try:
+                start_fd_env, handoff_fd = _launcher_barrier(plan)
+            except (OSError, ValueError, SyntaxError, TypeError, AttributeError) as error:
+                return (None, _refusal_mapping(_CODES["chain_launch_failed"],
+                    f"measurement launcher barrier refused before launch: {error}"), 0, [], True)
+            channel, child_channel = socket.socketpair()
+            resources.enter_context(channel)
+            resources.enter_context(child_channel)
+            if child_channel.fileno() == handoff_fd:
+                # The launcher replaces FD 198 with its one-use capability.
+                # Keep the independent start barrier off that reserved slot.
+                replacement = resources.enter_context(child_channel.dup())
+                child_channel.close()
+                child_channel = replacement
+            channel.setblocking(False)
+        return _run_chain_once_impl(chain_path, plan, probes, night_dir,
+            claim_descriptor, command=command, abort_on_census=abort_on_census,
+            shutdown_monotonic=shutdown_monotonic, channel=channel,
+            child_channel=child_channel, start_fd_env=start_fd_env)
+
+
+def _run_chain_once_impl(chain_path, plan, probes, night_dir, claim_descriptor,
+                         *, command, abort_on_census, shutdown_monotonic,
+                         channel, child_channel, start_fd_env):
+
     census_path = night_dir / "censuses.jsonl"
     stdout_path = night_dir / "chain.stdout.log"
     stderr_path = night_dir / "chain.stderr.log"
     with stdout_path.open("xb") as stdout, stderr_path.open("xb") as stderr:
         environment = _chain_environment(plan, night_dir)
+        launch_options = {}
+        if child_channel is not None:
+            environment[start_fd_env] = str(child_channel.fileno())
+            launch_options["pass_fds"] = (child_channel.fileno(),)
         try:
             process = subprocess.Popen(
                 command if command is not None else ["/bin/zsh", str(chain_path)],
@@ -888,10 +990,14 @@ def _run_chain_once(
                 stderr=stderr,
                 env=environment,
                 start_new_session=True,
+                **launch_options,
             )
         except OSError as error:
-            launch_error = _complete_chain_launch_failure(claim_descriptor, error)
-            _record_chain_exit(night_dir, None, launch_failed=True)
+            if claim_descriptor is not None:
+                launch_error = _complete_chain_launch_failure(claim_descriptor, error)
+                _record_chain_exit(night_dir, None, launch_failed=True)
+            else:
+                launch_error = f"{type(error).__name__}: {error}"
             return (
                 None,
                 _refusal_mapping(
@@ -903,7 +1009,13 @@ def _run_chain_once(
                 [],
                 True,
             )
-        pgid = _complete_chain_start(claim_descriptor, process, night_dir)
+        finally:
+            if child_channel is not None:
+                child_channel.close()
+        awaiting_start = channel is not None
+        claimed = claim_descriptor is not None
+        pgid = (_complete_chain_start(claim_descriptor, process, night_dir)
+                if claimed else process.pid)
         census_count = 0
         census_hits: list[dict[str, Any]] = []
         # Read the driver's wall clock ONCE, here, and convert the deadline to
@@ -936,8 +1048,92 @@ def _run_chain_once(
                 bool(outcome["proven"]),
             )
 
+        def refuse_start(reason, detail):
+            fired = deadline.cancel()
+            if fired is not None:
+                return exceeded(fired)
+            evidence = {}
+            proven = _terminate_process_group(process, night_dir if claimed else None,
+                pgid=pgid, evidence=evidence, pending_dir=night_dir)
+            if not proven:
+                reason = _CODES["chain_alive"]
+            return (None, _refusal_mapping(reason, detail, evidence),
+                    census_count, census_hits, proven)
+
+        if awaiting_start:
+            try:
+                _write_launch_pending(process, night_dir, plan)
+            except OSError as error:
+                return refuse_start(_CODES["chain_launch_failed"],
+                    f"launcher custody could not be recorded: {type(error).__name__}: {error}")
+            # Before any potentially blocking census, bound the launcher's
+            # first byte. A non-speaking process may already have collected:
+            # claim conservatively so harvest chooses RECOVER, never NULL.
+            channel.settimeout(max(0.01, min(LAUNCHER_FIRST_BYTE_TIMEOUT_S,
+                                           deadline.remaining())))
+            try:
+                first_signal = channel.recv(1)
+            except socket.timeout:
+                fired = deadline.cancel()
+                descriptor = _claim_chain_start(night_dir)
+                if descriptor is not None:
+                    pgid = _complete_chain_start(descriptor, process, night_dir)
+                    claimed = True
+                if fired is not None:
+                    # The window watchdog may have reaped the unclaimed
+                    # launcher while recv timed out. Preserve its outcome,
+                    # then close the conservative start without re-killing.
+                    if claimed and fired["proven"] and not (night_dir / "chain.exited").exists():
+                        _record_chain_exit(night_dir, process.poll())
+                    return exceeded(fired)
+                return refuse_start(_CODES["chain_launch_failed"],
+                    "launcher first-byte timeout; collection start claimed conservatively")
+            except OSError as error:
+                return refuse_start(_CODES["chain_launch_failed"], str(error))
+            finally:
+                channel.setblocking(False)
+        else:
+            first_signal = None
+
         next_census = time.monotonic()
-        while process.poll() is None:
+        while process.poll() is None or awaiting_start:
+            if awaiting_start:
+                if deadline.expired():
+                    fired = deadline.fire()
+                    if fired is not None:
+                        return exceeded(fired)
+                try:
+                    signal_byte = first_signal if first_signal is not None else channel.recv(1)
+                    first_signal = None
+                except BlockingIOError:
+                    signal_byte = None
+                except OSError as error:
+                    return refuse_start(_CODES["chain_launch_failed"], str(error))
+                if signal_byte == b"C":
+                    try:
+                        channel.sendall(b"R")
+                    except OSError as error:
+                        return refuse_start(_CODES["chain_launch_failed"], str(error))
+                elif signal_byte == b"P":
+                    descriptor = _claim_chain_start(night_dir)
+                    if descriptor is None:
+                        return refuse_start(_CODES["chain_already_started"],
+                            "chain.started already exists; the night chain is once-only")
+                    pgid = _complete_chain_start(descriptor, process, night_dir)
+                    claimed = True
+                    awaiting_start = False
+                    try:
+                        channel.sendall(b"G")
+                    except OSError as error:
+                        return refuse_start(_CODES["chain_launch_failed"], str(error))
+                elif signal_byte == b"":
+                    # EOF is the ordinary refusal path. No claim was made.
+                    awaiting_start = False
+                elif signal_byte is not None:
+                    return refuse_start(_CODES["chain_launch_failed"],
+                        "launcher sent an invalid chain-start signal")
+                if process.poll() is not None:
+                    break
             now = time.monotonic()
             # Three checks, because the two calls between them can each block
             # without bound: the census probe and the census append. The
@@ -971,7 +1167,8 @@ def _run_chain_once(
                             return exceeded(fired)
                         evidence: dict[str, Any] = {}
                         proven = _terminate_process_group(
-                            process, night_dir, pgid=pgid, evidence=evidence
+                            process, night_dir if claimed else None,
+                            pgid=pgid, evidence=evidence, pending_dir=night_dir
                         )
                         if not proven:
                             _write_json(
@@ -1012,6 +1209,29 @@ def _run_chain_once(
         if fired is not None:
             return exceeded(fired)
         exit_code = process.wait()
+        if not claimed:
+            evidence = {"launcher_exit_code": exit_code}
+            proven = _terminate_process_group(process, pgid=pgid, evidence=evidence,
+                                             pending_dir=night_dir)
+            if not proven:
+                return (None, _refusal_mapping(_CODES["chain_alive"],
+                    "launcher process-group termination could not be proven", evidence),
+                    census_count, census_hits, False)
+            try:
+                refusal = readiness.parse_json_bytes(stdout_path.read_bytes())
+                reason = refusal["reason_codes"][0]
+                detail = refusal["detail"]
+                if (refusal["status"] != "REFUSE" or not isinstance(reason, str)
+                        or not isinstance(detail, str) or not detail):
+                    raise ValueError("launcher did not emit a refusal")
+                evidence["launcher_refusal"] = refusal
+                detail = f"{reason}: {detail}"
+            except (OSError, ValueError, KeyError, IndexError, TypeError):
+                detail = "launcher exited before passing its launch recheck"
+            # Launcher codes belong to its own refusal schema. Keep that
+            # exact document as evidence under the existing driver code.
+            return (None, _refusal_mapping(_CODES["chain_launch_failed"], detail, evidence),
+                    census_count, census_hits, proven)
         _record_chain_exit(night_dir, exit_code)
         return exit_code, None, census_count, census_hits, True
 
@@ -1049,6 +1269,8 @@ def _artifact_list(custody_root: Path, night_dir: Path) -> list[dict[str, Any]]:
         # result.json's refusal_documents or the courier's refusal discovery.
         *sorted(night_dir.glob("rerun.refusal*.json")),
         night_dir / "result.json",
+        night_dir / "launch.pending",
+        night_dir / "launch.resolved",
         night_dir / "chain.started",
         night_dir / "chain.exited",
         night_dir / "chain.unkilled",
@@ -1497,6 +1719,10 @@ def run_courier(
 
     night_dir = custody_root / "night"
     night_dir.mkdir(parents=True, exist_ok=True)
+    pending_refusal = _pending_launch_refusal(night_dir)
+    if pending_refusal is not None:
+        return {"attempted": 0, "sent": False, "heartbeat_seen": False,
+                "last_error": pending_refusal["detail"]}
     heartbeat = night_dir / "courier.heartbeat"
     sent = night_dir / "courier.sent"
     attempts_path = night_dir / "courier.attempts.jsonl"
@@ -1518,6 +1744,10 @@ def run_courier(
     last_error: str | None = None
     try:
         for attempt in range(1 + len(COURIER_BACKOFF_S)):
+            pending_refusal = _pending_launch_refusal(night_dir)
+            if pending_refusal is not None:
+                last_error = pending_refusal["detail"]
+                break
             if deadman_epoch_s is not None and time.time() >= deadman_epoch_s:
                 last_error = "dead-man epoch reached; run-path courier handed off"
                 break
@@ -3566,8 +3796,10 @@ def run_night(
                 deadman_epoch_s=deadman_epoch_s, courier_bin_substitution=courier_substitution)
         _write_bytes_exclusive(night_dir / "receipt.json", receipt.to_json_bytes())
 
-    claim_descriptor = _claim_chain_start(night_dir)
-    if claim_descriptor is None:
+    # Pack launchers burn/replay the capability and recheck in the pinned
+    # interpreter before asking _run_chain_once to make this same O_EXCL claim.
+    claim_descriptor = None if is_pack else _claim_chain_start(night_dir)
+    if claim_descriptor is None and not is_pack:
         _write_standard_refusal_result(
             custody_root,
             night_dir,
@@ -3638,7 +3870,9 @@ def run_night(
                     abort["evidence"],
                 )
             refused = (
-                abort_reason == _CODES["chain_launch_failed"] or not termination_proven
+                abort_reason in {_CODES["chain_launch_failed"], _CODES["chain_already_started"]}
+                or not termination_proven
+                or (is_pack and not (night_dir / "chain.started").exists())
             )
             verdict = "REFUSED" if refused else "ABORTED"
             base_exit_code = EXIT_REFUSED if refused else EXIT_ABORTED
@@ -3723,6 +3957,51 @@ def _read_started_pgid(path: Path) -> int | None:
     return pgid
 
 
+def _record_pid_reused(path: Path) -> bool:
+    try:
+        record = json.loads(path.read_bytes())
+        pid = record.get("pid")
+        if type(pid) is not int or pid <= 1 or record.get("pgid") != pid:
+            return False
+        identity = observe_identity(pid)
+        token, observed = _start_token(record.get("start_time")), _start_token(identity.start_time)
+        return (identity.state == "LIVE" and token is not None and observed is not None
+                and token != observed)
+    except (OSError, ValueError, TypeError, AttributeError, UnicodeError):
+        return False
+
+
+def _pending_launch_refusal(night_dir: Path) -> dict[str, Any] | None:
+    """Guard unresolved launches; closed chains permit courier stragglers."""
+    pending = night_dir / "launch.pending"
+    if not pending.exists() and not pending.is_symlink():
+        return None
+    try:
+        if pending_launch_closed(night_dir):
+            return None
+    except (OSError, ValueError, TypeError, UnicodeError) as error:
+        return _refusal_mapping(_CODES["chain_alive"],
+            f"pending launcher closure cannot be read: {error}",
+            {"record": "launch.pending"})
+    pgid = None if pending.is_symlink() else _read_started_pgid(pending)
+    if pgid is None or pgid <= 1:
+        return _refusal_mapping(_CODES["chain_alive"],
+            "pending launcher process-group identity cannot be read",
+            {"record": "launch.pending"})
+    if _record_pid_reused(pending):
+        return None
+    try:
+        os.killpg(pgid, 0)
+    except ProcessLookupError:
+        _resolve_launch_pending(night_dir, pgid)
+        return None
+    except PermissionError:
+        pass
+    return _refusal_mapping(_CODES["chain_alive"],
+        "pending launcher process group is still alive or cannot be disproven",
+        {"pgid": pgid, "record": "launch.pending"})
+
+
 def dead_man(plan_path: Path, *, courier_bin: Path | None = None) -> int:
     try:
         plan = _load_plan(plan_path)
@@ -3760,6 +4039,14 @@ def dead_man(plan_path: Path, *, courier_bin: Path | None = None) -> int:
         _durable_record(custody_root, night_dir, plan)
         return EXIT_REFUSED
 
+    pending_refusal = _pending_launch_refusal(night_dir)
+    if pending_refusal is not None:
+        _write_driver_refusal(night_dir / "refusal.json", plan,
+            pending_refusal["reason"], pending_refusal["detail"], pending_refusal["evidence"])
+        _append_log(custody_root, "dead-man refused while pending launcher was alive or unknown")
+        _durable_record(custody_root, night_dir, plan)
+        return EXIT_REFUSED
+
     started = night_dir / "chain.started"
     exited = night_dir / "chain.exited"
     if started.exists() and not exited.exists():
@@ -3776,13 +4063,18 @@ def dead_man(plan_path: Path, *, courier_bin: Path | None = None) -> int:
                 "dead-man found no live process-group identity in chain.started",
             )
         else:
-            group_alive = True
-            try:
-                os.killpg(pgid, 0)
-            except ProcessLookupError:
-                group_alive = False
-            except PermissionError:
-                group_alive = True
+            # The pending guard may have cleared a reused launcher PID.
+            # Do not reintroduce its historical group number via chain.started.
+            reused_owner = ((night_dir / "launch.pending").exists()
+                            and _record_pid_reused(started))
+            group_alive = not reused_owner
+            if group_alive:
+                try:
+                    os.killpg(pgid, 0)
+                except ProcessLookupError:
+                    group_alive = False
+                except PermissionError:
+                    group_alive = True
             if group_alive:
                 _write_driver_refusal(
                     night_dir / "refusal.json",
@@ -3795,7 +4087,8 @@ def dead_man(plan_path: Path, *, courier_bin: Path | None = None) -> int:
                 _durable_record(custody_root, night_dir, plan)
                 return EXIT_REFUSED
             _record_chain_exit(night_dir, None, reaped_by="dead-man")
-            _append_log(custody_root, "dead-man proved the chain process group was gone")
+            _append_log(custody_root, "dead-man proved the original chain owner ended" if reused_owner
+                        else "dead-man proved the chain process group was gone")
 
     probes = make_probes()
     probe, census_refusal = agent_census(probes)

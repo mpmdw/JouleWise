@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Atomically consume, revalidate, and exec one frozen D-117 window."""
+"""Atomically consume, revalidate, and exec one frozen D-117 window.
+
+Emit the ruled realization refusal code verbatim. The night's driver wraps
+this document under its own reason code, retaining ours in detail/evidence.
+"""
 
 from __future__ import annotations
 
@@ -7,6 +11,7 @@ import argparse
 import hashlib
 import os
 import secrets
+import socket
 import sys
 from pathlib import Path
 
@@ -29,12 +34,18 @@ from joulewise.arm_readiness import (  # noqa: E402
     validate_launch_manifest,
     verify_consumed_launch,
 )
+from joulewise import identity_pins as _identity  # noqa: E402
 
 
 # This descriptor number is part of the reviewed chain recipe. Only descriptor
 # contents are secret; neither the number nor a receipt path is a capability.
 HANDOFF_FD = 198
 HANDOFF_TOKEN_BYTES = 32
+# Private driver/launcher barrier; never inherited by the collection command.
+CHAIN_START_FD_ENV = "JOULEWISE_CHAIN_START_FD"
+# The driver reads these literal constants from the measurement checkout,
+# without importing or executing its launcher. Bump on incompatible changes.
+CHAIN_START_BARRIER_VERSION = 1
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -258,7 +269,59 @@ def _read_one_use_handoff() -> bytes:
     return token
 
 
+def _recheck_identity_projection(pack_root: Path) -> None:
+    """Re-derive live pack inputs using the same helpers as T-0 authoring."""
+
+    try:
+        tree, projection, _producer = _identity._load_pack_projection(pack_root)
+        frozen, _raw = _identity._load_frozen_receipt(pack_root, projection)
+        current_units, current_sha, _checks = _identity._derive_projection_units(
+            pack_root, projection
+        )
+    except _identity.IdentityPinProjectionError as exc:
+        raise ArmReadinessError(
+            "readiness_identity_environment_dirty",
+            f"launch identity re-derivation refused: {exc.reason_code}: {exc}",
+        ) from exc
+    if (
+        not _identity._frozen_pack_matches_receipt(projection, frozen)
+        or not _identity._frozen_pack_identity_matches_receipt(pack_root, tree, frozen)
+        or current_sha != frozen["pack"]["projection_input_sha256"]
+        or [unit["model_runtime_config"] for unit in current_units]
+        != [unit["model_runtime_config"] for unit in frozen["identity_units"]]
+    ):
+        raise ArmReadinessError(
+            "readiness_identity_environment_dirty",
+            "launch identity derivation differs from the frozen projection",
+        )
+
+
 def launch(args: argparse.Namespace) -> int:
+    start_fd = os.environ.pop(CHAIN_START_FD_ENV, None)
+    if start_fd is not None:
+        try:
+            descriptor = int(start_fd)
+            if descriptor < 0:
+                raise ValueError("negative descriptor")
+            channel = socket.socket(fileno=descriptor)
+        except (ValueError, OverflowError) as exc:
+            raise LaunchLineageError(
+                "launch_consumption_invalid", "driver barrier descriptor is malformed"
+            ) from exc
+        with channel:
+            # Do not consume or recheck until the driver has fsynced the
+            # separate launcher identity. Driver death before custody closes
+            # this channel and refuses; death during recheck retains custody.
+            channel.sendall(b"C")
+            if channel.recv(1) != b"R":
+                raise LaunchLineageError(
+                    "launch_consumption_invalid", "driver did not record launcher custody"
+                )
+            return _launch(args, channel)
+    return _launch(args, None)
+
+
+def _launch(args: argparse.Namespace, channel: socket.socket | None) -> int:
     launch_inputs = _assemble_launch_inputs(args)
     argv = list(launch_inputs["exec_argv"])
     token = secrets.token_bytes(HANDOFF_TOKEN_BYTES)
@@ -277,12 +340,22 @@ def launch(args: argparse.Namespace) -> int:
         step6_confirmation_table=args.step6_confirmation_table,
         expected_confirmation_digest=args.expected_confirmation_digest,
     )
+    _recheck_identity_projection(launch_inputs["pack_root"])
     if verified["exec_argv"] != argv:
         raise LaunchLineageError(
             "launch_binding_mismatch", "verified exec argv changed before execve"
         )
-    # Successful execve never returns. There is deliberately no child process,
-    # wait path, or automatic retry after the capability's linearization point.
+    if channel is not None:
+        # The exclusive chain start still follows consumed replay and recheck.
+        # EOF (including a dead driver) refuses rather than starting a chain.
+        channel.sendall(b"P")
+        if channel.recv(1) != b"G":
+            raise LaunchLineageError(
+                "launch_consumption_invalid", "driver did not claim the chain start"
+            )
+        channel.close()  # Never pass the private barrier to the collection.
+    # Successful execve never returns. There is deliberately no child process
+    # or automatic retry after the capability's linearization point.
     os.execve(argv[0], argv, dict(os.environ))
     raise LaunchLineageError(
         "launch_consumption_invalid", "execve returned after consuming the launch"

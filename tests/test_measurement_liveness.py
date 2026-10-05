@@ -4,9 +4,10 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from joulewise import measurement_liveness as live
 
@@ -36,6 +37,156 @@ class MeasurementLivenessTests(unittest.TestCase):
 
     def census(self):
         return live.census(observer=self.observer)
+
+    def pending_marker(self, **overrides):
+        record = {"schema": "joulewise.launch_pending.v1", "plan_id": "pending-plan",
+                  "attempt_id": "fixture-attempt", "pid": 7272, "pgid": 7272,
+                  "epoch_s": 1.0, "start_time": START}
+        record.update(overrides)
+        path = self.night / "launch.pending"
+        path.write_text(json.dumps(record) + "\n")
+        return path
+
+    def test_v8_live_pending_launcher_is_measurement_owner_without_chain_started(self):
+        path = self.pending_marker()
+        original = path.read_bytes()
+        self.observer = Mock(return_value=live.Identity("LIVE", START))
+        (self.night / "courier.sent").touch()
+        with patch.object(live.os, "killpg") as group:
+            result = self.census()
+        self.assertFalse(result.clear)
+        self.assertEqual(result.refusals, [f"live measurement owner: {path}"])
+        self.assertEqual(result.warnings, [])
+        group.assert_called_once_with(7272, 0)
+        self.observer.assert_called_once_with(7272)
+        self.assertFalse((self.night / "chain.started").exists())
+        self.assertEqual(path.read_bytes(), original)
+
+    def test_pending_group_gone_warns_and_permits_without_custody_write(self):
+        path = self.pending_marker(start_time=None)
+        original = path.read_bytes()
+        self.observer = lambda pid: live.Identity("UNKNOWN")
+        with patch.object(live.os, "killpg", side_effect=ProcessLookupError()):
+            result = self.census()
+        self.assertTrue(result.clear)
+        self.assertIn("dead pending process group", result.warnings[0])
+        self.assertEqual(path.read_bytes(), original)
+
+    def test_live_unresolved_pending_group_with_dead_leader_still_refuses(self):
+        path = self.pending_marker()
+        with patch.object(live.os, "killpg"):
+            self.observer = lambda pid: live.Identity("DEAD")
+            result = self.census()
+        self.assertFalse(result.clear)
+        self.assertEqual(result.refusals, [f"live measurement owner process group: {path}"])
+        self.assertEqual(len(result.warnings), 1)
+
+    def test_unresolved_pending_reused_pid_is_clear_even_when_group_probe_would_deny(self):
+        self.pending_marker()
+        self.observer = lambda pid: live.Identity("LIVE", OTHER)
+        with patch.object(live.os, "killpg", side_effect=PermissionError()) as group:
+            result = self.census()
+        self.assertTrue(result.clear)
+        self.assertIn("reused PID", result.warnings[0])
+        group.assert_not_called()
+
+    def test_pending_group_unknown_or_identity_unavailable_refuses(self):
+        path = self.pending_marker()
+        for error in (PermissionError("fixture denied"), OSError("fixture unavailable")):
+            with self.subTest(error=error), patch.object(live.os, "killpg", side_effect=error):
+                self.assertIn("indeterminate", self.census().refusals[0])
+        for identity in (live.Identity("UNKNOWN"), live.Identity("LIVE")):
+            with self.subTest(identity=identity), patch.object(live.os, "killpg"):
+                self.observer = lambda pid: identity
+                self.assertIn("indeterminate", self.census().refusals[0])
+        self.observer = lambda pid: live.Identity("LIVE", START)
+        for start in (None, "bad"):
+            self.pending_marker(start_time=start)
+            with self.subTest(start=start), patch.object(live.os, "killpg"):
+                self.assertIn("indeterminate", self.census().refusals[0])
+        self.assertTrue(path.exists())
+
+    def test_malformed_or_unreadable_pending_marker_refuses_before_group_probe(self):
+        path = self.pending_marker()
+        for raw in ("", "{", "[]", "{}", '{"pid":7272,"pgid":true}',
+                    '{"pid":true,"pgid":7272}', '{"pid":7272,"pgid":1}'):
+            path.write_text(raw)
+            with self.subTest(raw=raw), patch.object(live.os, "killpg") as group:
+                self.assertIn("indeterminate", self.census().refusals[0])
+                group.assert_not_called()
+            self.assertEqual(path.read_text(), raw)
+        self.pending_marker()
+        with patch.object(live, "_read_marker", side_effect=PermissionError("fixture unreadable")):
+            self.assertIn("indeterminate", self.census().refusals[0])
+
+    def test_pending_symlinks_refuse_including_dangling_links(self):
+        path = self.night / "launch.pending"
+        target = self.root / "pending-target"
+        for exists in (False, True):
+            if exists:
+                target.write_text(json.dumps({"pid": 7272, "pgid": 7272, "start_time": START}))
+            path.symlink_to(target)
+            with self.subTest(exists=exists), patch.object(live.os, "killpg") as group:
+                self.assertIn("indeterminate", self.census().refusals[0])
+                group.assert_not_called()
+            path.unlink()
+
+    def test_resolved_pending_record_with_reused_pgid_is_clear(self):
+        self.pending_marker()
+        self.observer = lambda pid: self.fail("resolved pending probed reused leader")
+        for name, record in (
+            ("chain.exited", {"exit_code": 0, "epoch_s": 1, "monotonic_ns": 2}),
+            ("launch.resolved", {"schema": "joulewise.launch_resolved.v1", "basis": "group_absent",
+                                 "pgid": 7272, "epoch_s": 1, "monotonic_ns": 2}),
+        ):
+            path = self.night / name
+            path.write_text(json.dumps(record))
+            with self.subTest(closure=name), patch.object(
+                    live.os, "killpg", side_effect=PermissionError()) as group:
+                self.assertTrue(self.census().clear)
+                group.assert_not_called()
+            path.unlink()
+
+    def test_invalid_pending_resolution_fails_closed(self):
+        self.pending_marker()
+        for raw in ('{}', '{', '{"schema":"joulewise.launch_resolved.v1"}'):
+            (self.night / "launch.resolved").write_text(raw)
+            with self.subTest(raw=raw), patch.object(live.os, "killpg") as group:
+                self.assertIn("indeterminate", self.census().refusals[0])
+                group.assert_not_called()
+
+    def test_pending_disappearance_reconciles_once_and_instability_refuses(self):
+        path = self.pending_marker()
+        record = live._read_marker(path)
+        with patch.object(live.os, "killpg"), patch.object(
+                live, "_read_marker", side_effect=[FileNotFoundError(), record]) as read:
+            self.assertFalse(self.census().clear)
+            self.assertEqual(read.call_count, 2)
+        with patch.object(live, "_read_marker", side_effect=FileNotFoundError()) as read:
+            self.assertIn("indeterminate", self.census().refusals[0])
+            self.assertEqual(read.call_count, 2)
+        def disappear(marker):
+            marker.unlink()
+            raise FileNotFoundError()
+        with patch.object(live, "_read_marker", side_effect=disappear):
+            self.assertTrue(self.census().clear)
+
+    def test_pending_diagnostics_are_not_duplicated_when_chain_read_retries(self):
+        self.pending_marker()
+        self.marker()
+        reader = live._read_marker
+        failed = False
+        def race(path):
+            nonlocal failed
+            if path.name == "chain.started" and not failed:
+                failed = True
+                raise FileNotFoundError("fixture chain race")
+            return reader(path)
+        with patch.object(live.os, "killpg"), patch.object(live, "_read_marker", side_effect=race):
+            result = self.census()
+        self.assertFalse(result.clear)
+        self.assertEqual(len(result.refusals), 2)
+        self.assertEqual(len(set(result.refusals)), 2)
 
     def test_open_chain_live_and_sent_never_closes_it(self):
         self.marker()
@@ -232,8 +383,26 @@ class MeasurementLivenessTests(unittest.TestCase):
                 self.assertEqual(live.observe_identity(42), expected)
                 self.assertEqual(probe.call_args.args[0][1:], ['-p', '42', '-o', 'lstart=', '-o', 'stat='])
                 self.assertEqual(probe.call_args.kwargs['env']['LC_ALL'], 'C')
+                self.assertEqual(probe.call_args.kwargs['env']['TZ'], 'UTC')
         with patch.object(live.subprocess, 'run', side_effect=OSError('probe unavailable')):
             self.assertEqual(live.observe_identity(42).state, 'UNKNOWN')
+
+    def test_same_pid_start_time_compares_equal_across_caller_timezones(self):
+        # Exercise a TZ-sensitive executable even on hosts that cannot run ps.
+        probe = self.root / "identity-probe"
+        probe.write_text(f"#!{sys.executable}\n"
+                         "import time\n"
+                         "time.tzset()\n"
+                         "print(time.strftime('%a %b %e %H:%M:%S %Y', "
+                         "time.localtime(1788829323)), 'S')\n")
+        probe.chmod(0o700)
+        identities = []
+        for zone in ("UTC", "PST8PDT", "JST-9"):
+            with self.subTest(zone=zone), patch.dict(os.environ, {
+                    live.IDENTITY_PROBE_ENV: str(probe), "TZ": zone, "LC_ALL": "invalid-locale"}):
+                identities.append(live.observe_identity(os.getpid()))
+                self.assertEqual(identities[-1], live.Identity("LIVE", START))
+        self.assertEqual(len(set(identities)), 1)
 
 
 if __name__ == '__main__':
