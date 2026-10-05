@@ -186,7 +186,7 @@ PINNED_ANCHORS = {
     1476: "# First executable action: consume the inherited one-use FD and mint start",
     1501: 'NEG8_DRIFT_BOUND="$BOUND_RUNS_ROOT/neg8-drift-bound.json"',
     1516: '  /bin/sleep "$SETTLE_S"',
-    1596: "  settle",
+    1596: "  settle || return $?",
     1613: "run_stage_list() {",
     1623: 'cd "$REPO"',
     1653: 'screen_pre_calibration "$PRE_CAL_CUSTODY"',
@@ -278,7 +278,7 @@ def render_g2a_night_chain(runsheet: str, night_date: str) -> str:
         raise ValueError("--night-date must be YYYYMMDD")
     runsheet = authenticated_screen_source(runsheet)
     blocks = inventory_g2a_shell_blocks(runsheet)
-    expected_ranges = [(1534, 1598), (328, 351), (374, 385), (389, 564), (575, 587)]
+    expected_ranges = [(1550, 1614), (328, 351), (374, 385), (389, 564), (575, 587)]
     observed_ranges = [(start, end) for start, end, _body in blocks]
     if observed_ranges != expected_ranges:
         raise ValueError(
@@ -515,6 +515,8 @@ def render_g2a_generated_region(runbook: str) -> str:
 def render_generated_region(runbook: str) -> str:
     """Render the sole G2-b chain variant from the complete runbook chain bytes."""
 
+    from scripts.run_campaign import MAX_BLOCKS_REACHED_RC
+
     chain = extract_runbook_chain(runbook)
     chain = _replace_once(
         chain,
@@ -529,14 +531,21 @@ def render_generated_region(runbook: str) -> str:
     chain = _replace_once(
         chain,
         'run_stage_list "$WINDOW_PLAN_ROOT/before_midpoint_stages.txt"\n',
-        "# G2-b delta: stop the authentic first stage after block 1, then preserve\n"
-        "# the governed chain's post-science bracket path.  The second-terminal\n"
-        "# signal card below supplies SIGINT immediately after b01 A2 succeeds.\n"
-        "set +e\n"
-        'run_stage_list "$WINDOW_PLAN_ROOT/before_midpoint_stages.txt"\n'
-        "SCIENCE_RC=$?\n"
-        "set -e\n"
-        'test "$SCIENCE_RC" = 130\n',
+        "# G2-b: one complete A/B/B/A block, stopped by the controller between\n"
+        "# members. G2B_SHAKEDOWN authorization requires --max-blocks and binds\n"
+        "# permitted_blocks=1; no operator signal.\n"
+        "# Dispatch only the first frozen science stage, preserving the bracket tail.\n"
+        "SCIENCE_RC=2\n"
+        "while IFS= read -r stage; do\n"
+        '  [ -z "$stage" ] && continue\n'
+        '  [[ "$stage" = \\#* ]] && continue\n'
+        "  set +e\n"
+        '  run_stage "$RUNS_ROOT" "$CLAIM_LOG" "$REPO/$stage" "$PRE_CAL_CUSTODY" "$stage" --max-blocks 1\n'
+        "  SCIENCE_RC=$?\n"
+        "  set -e\n"
+        "  break\n"
+        'done < "$WINDOW_PLAN_ROOT/before_midpoint_stages.txt"\n'
+        f'test "$SCIENCE_RC" = {MAX_BLOCKS_REACHED_RC}\n',
         label="before-midpoint stage call",
     )
     chain = _replace_once(

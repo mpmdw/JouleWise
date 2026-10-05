@@ -4341,9 +4341,11 @@ class RunCampaignTests(unittest.TestCase):
             config_dir = tmp_path / "configs"
             runs_dir = tmp_path / "runs"
             config_dir.mkdir()
-            manifest = write_strict_analysis_campaign(
-                config_dir, telemetry_backend="mock"
-            )
+            # Two physical members exercise both cooldown outcomes. A full
+            # generated matrix adds unrelated CLI work and can hit the same
+            # 60-second deadline without testing another provenance behavior.
+            write_config(config_dir, "first.json", "first")
+            write_config(config_dir, "second.json", "second")
             fake_cli = make_fake_cli(tmp_path)
 
             result = run_campaign(config_dir, runs_dir, cli_cmd=cli_cmd_for(fake_cli))
@@ -4352,8 +4354,8 @@ class RunCampaignTests(unittest.TestCase):
             manifests = list((runs_dir / "campaign_manifests").glob("*.json"))
             self.assertEqual(len(manifests), 1)
             provenance = json.loads(manifests[0].read_text(encoding="utf-8"))
-            first_run_id = manifest["entries"][0]["run_id"]
-            second_run_id = manifest["entries"][1]["run_id"]
+            first_run_id = "first"
+            second_run_id = "second"
             self.assertEqual(provenance["first_physical_run_id"], first_run_id)
             members = {
                 member["run_id"]: member for member in provenance["members"]
