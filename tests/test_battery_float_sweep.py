@@ -57,13 +57,15 @@ READERS = {
     "joulewise/detection_floor.py": ("bracket rows", "outside the derivation scope"),
     "scripts/mint_floor_artifact_generalized.py": ("bracket rows", "outside the derivation scope"),
     "joulewise/controller.py": (
-        "refuses Revision 5 except G2-a explicit opt-in", "legacy instrument calibration attachment raises "
+        "refuses Revision 5 except authenticated G2-a/G2-b pre slots", "legacy instrument calibration attachment raises "
         "'revision_five evidence cannot be attached as instrument calibration'; "
         "test_revision_five_b_readers.test_controller_attachment_refuses_before_physics_or_bound. "
-        "The sole exception authenticates a registered diagnostic member's ordinary finalized pre slot; "
+        "G2-a authenticates a registered diagnostic member's ordinary finalized pre slot; "
         "test_g2a_calibration_attachment.G2aCalibrationAttachmentTests covers acceptance and binding refusals, "
         "including test_derivation_session_cannot_use_explicit_diagnostic_path and "
-        "test_legacy_reader_still_refuses_real_pre_capture_shape_even_with_chain_environment"),
+        "test_legacy_reader_still_refuses_real_pre_capture_shape_even_with_chain_environment. "
+        "G2-b authenticates the launch lineage's session and plan, its finalized pre slot and battery pair; "
+        "test_controller_g2b_attachment.G2bAttachmentTests covers real-capture acceptance and binding refusals"),
     "scripts/run_campaign.py": ("run metadata", "reads the run's own controller attachment"),
     "scripts/calibration_ledger_backfill.py": (
         "refuses Revision 5", "raises '<dir>: revision_five evidence is not a backfill candidate'; "
@@ -83,6 +85,9 @@ READERS = {
 
 # file -> the runner each `battery_float.observe(` call there uses.
 OBSERVE_CALLERS = {
+    "joulewise/controller.py": [
+        "bundle_pre: observe's own bytes subprocess.run or an injected bytes runner",
+        "bundle_post: observe's own bytes subprocess.run or an injected bytes runner"],
     "scripts/sample_quiet_predicate_evidence.py": [
         "quiet_pre: battery_read uses observe's own bytes subprocess.run or an injected bytes runner",
         "quiet_post: battery_read uses observe's own bytes subprocess.run or an injected bytes runner"],
@@ -145,7 +150,8 @@ class SweepGuardTests(unittest.TestCase):
                     self.assertEqual(ast.unparse(phase), "f'slot_{phase}'")
                     self.assertTrue({"slot_pre", "slot_post"} <= set(battery_float.PHASES))
                     seen.update(("slot_pre", "slot_post"))
-        self.assertEqual(seen, set(battery_float.PHASES[:7]) | {"quiet_pre", "quiet_post"})
+        self.assertEqual(seen, set(battery_float.PHASES[:7]) | {
+            "quiet_pre", "quiet_post", "bundle_pre", "bundle_post"})
 
     def test_aliased_out_of_set_phase_is_visible(self):
         forms = (
