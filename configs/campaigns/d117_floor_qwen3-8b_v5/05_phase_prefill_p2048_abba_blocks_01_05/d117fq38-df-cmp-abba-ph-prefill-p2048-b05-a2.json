@@ -1,0 +1,65 @@
+{
+  "schema_version": "0.1",
+  "run_id": "d117fq38-df-cmp-abba-ph-prefill-p2048-b05-a2",
+  "model": {
+    "name": "Qwen3-8B-4bit",
+    "family": "qwen3",
+    "source": "/Users/edr/jw_models/mlx-community/Qwen3-8B-4bit",
+    "revision": "545dc4251c05440727734bcd94334791f6ab0192",
+    "weight_format": "mlx",
+    "context_window": 40960,
+    "tokenizer_json_sha256": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
+    "chat_template_sha256": "87a2728cb8dc9fe424d624542f6060ec05a1d285ebbec578bb078900e33396b5"
+  },
+  "quantization": {
+    "name": "int4",
+    "bits": 4,
+    "group_size": 64
+  },
+  "hardware_target": {
+    "id": "macbook_m3_max",
+    "transport": "local",
+    "runtime_backend": "mlx",
+    "telemetry_backend": "powermetrics",
+    "device_kind": "apple_silicon_unified_memory",
+    "notes": "D-117 beta Qwen3-8B production floor campaign on the current M3 Max; normal powermetrics sampler set only."
+  },
+  "workload_profile": {
+    "name": "df_ph_prefill_p2048_candidate",
+    "repetitions": 1,
+    "warmup_runs": 1,
+    "output_tokens": 512,
+    "prompt_text": "The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit and simple to review.",
+    "prompt_token_expectation": {
+      "schema_version": "joulewise.prompt_token_expectation.v1",
+      "token_hash_domain": "joulewise.prompt_token_ids.v1",
+      "token_count": 2048,
+      "token_ids_sha256": "202e4913340b2bae39bf9a9d3a314f62bb5ff783fae483ad6a98507d071e1479"
+    }
+  },
+  "interconnect": {
+    "name": "local"
+  },
+  "sampling": {
+    "power_hz": 10.0,
+    "idle_seconds": 30.0,
+    "warmup_seconds": 5.0
+  },
+  "run_metadata": {
+    "project": "capstone-joulewise",
+    "operator": "lead",
+    "tags": [
+      "phase2",
+      "d117-floor-qwen3-8b-v5",
+      "production-window",
+      "floor-calibration",
+      "df-condition=df-ph-prefill-p2048-qwen3-8b",
+      "calibration-plan-sha256=fed2a431162d8f0938d573a33d048862dac36947a7d2828280f4174c8724d949",
+      "rep5",
+      "calibration-abba-block-id=d117-df-cmp-abba-ph-prefill-p2048-qwen3-8b-b05",
+      "calibration-abba-label=A",
+      "calibration-abba-sequence-index=4",
+      "launch_lineage_required"
+    ]
+  }
+}

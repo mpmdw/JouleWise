@@ -1,0 +1,139 @@
+{
+  "analysis_contract": {
+    "allowed_aggregation_levels": [
+      "suite",
+      "block",
+      "level"
+    ],
+    "independent_unit": "bundle",
+    "primary_window_class": "suite"
+  },
+  "execution_policy": {
+    "cache_policy_verification": "declared_not_verified",
+    "cooldown_policy": "bundle_only",
+    "declared_cache_policy": "cold_between_bundles",
+    "default_output_policy": "fixed_budget_exact",
+    "order_policy": "manifest_order",
+    "warmup_policy": "adapter_default",
+    "within_bundle_repeats": 1
+  },
+  "generator": {
+    "name": "d117_v5_chat_template_renderer",
+    "parameters_hash": "87a2728cb8dc9fe424d624542f6060ec05a1d285ebbec578bb078900e33396b5",
+    "version": "1.0.0"
+  },
+  "items": [
+    {
+      "category": "real_question",
+      "difficulty": {
+        "axis": "unscored_real_prompt",
+        "label": "web_request",
+        "quarantine_note": "content variety only; no accuracy inference",
+        "scale": "nominal",
+        "source": "real_prompts_v1",
+        "value": 6.0
+      },
+      "grouping": {
+        "block_id": "single_prompt",
+        "condition_id": "sw-decode-a-qwen3-1p7b",
+        "level_id": "web_request",
+        "prefix_group_id": null
+      },
+      "item_id": "web_request-qwen3-1p7b-rendered",
+      "item_type": "ids_prompt",
+      "output_policy": "fixed_budget_exact",
+      "shape": {
+        "decode_level": "forced_512_tokens",
+        "planned_output_tokens": 512,
+        "planned_prompt_tokens": 42,
+        "prompt_level": "rendered_42_tokens"
+      },
+      "source": {
+        "contamination_note": "original prompt; rendered IDs are the run input",
+        "license": "CC0-1.0; original text authored for JouleWise",
+        "prompt_template_id": "chat_template_sha256:87a2728cb8dc9fe424d624542f6060ec05a1d285ebbec578bb078900e33396b5",
+        "prompt_text": null,
+        "prompt_token_ids": [
+          151644,
+          872,
+          198,
+          3838,
+          8573,
+          1283,
+          358,
+          3725,
+          264,
+          3482,
+          2621,
+          323,
+          3493,
+          3411,
+          30,
+          60785,
+          279,
+          1887,
+          7354,
+          504,
+          27598,
+          18615,
+          1526,
+          279,
+          2150,
+          25377,
+          1667,
+          14396,
+          4128,
+          323,
+          14976,
+          3565,
+          13,
+          151645,
+          198,
+          151644,
+          77091,
+          198,
+          151667,
+          271,
+          151668,
+          271
+        ],
+        "source_item_id": "web_request",
+        "source_sha256": "ab568a879417fbc4985119357a8a22bbc96f574134fb8b3f2ba9185c163d09b4"
+      },
+      "tags": [
+        "d166-real-prompt",
+        "enable-thinking=false"
+      ]
+    }
+  ],
+  "markers": {
+    "block_end_event": "block_end",
+    "block_start_event": "block_start",
+    "item_end_event": "item_end",
+    "item_start_event": "item_start",
+    "level_end_event": "level_end",
+    "level_start_event": "level_start",
+    "suite_end_event": "suite_end",
+    "suite_start_event": "suite_start"
+  },
+  "outputs": {
+    "per_item_response_hash": "response_sha256",
+    "per_item_status": "status",
+    "per_item_stop_reason": "stop_reason",
+    "per_item_token_count": "emitted_tokens"
+  },
+  "schema_version": "suite_manifest.v2",
+  "source_manifest": {
+    "contamination_note": "original prompts; no benchmark capability claim",
+    "license": "CC0-1.0; original text authored for JouleWise",
+    "revision": "20debdb41eb4983339a160176dcf4e475153b5d6f16b1ef3ada39447e99f3474",
+    "source_id": "real_prompts_v1",
+    "source_kind": "original_real_prompts",
+    "subset_id": "web_request",
+    "subset_sha256": "50882b3f20e60afb7aebeb5976bd791f7b8464f5ad64e3236e268e68cc019ac9"
+  },
+  "suite_id": "d117-qwen3-1p7b-vs-qwen3-8b-qwen3-1p7b-web_request-decode-v5",
+  "suite_profile": "real_prompts_v1",
+  "suite_revision": "20debdb41eb4983339a160176dcf4e475153b5d6f16b1ef3ada39447e99f3474",
+  "suite_seed": "d166-fixed-prompt-zero-v1"
+}

@@ -1,0 +1,1166 @@
+{
+  "schema_version": "joulewise.detection_floor_calibration_plan.v1",
+  "draft_status": "as_generated_pre_d134_freeze",
+  "plan_id": "plan-d117-contrast-qwen3-1p7b-vs-qwen3-8b-decode-prefill-p2048-v5",
+  "calibration_scope": "production_window",
+  "fixed_n": 10,
+  "authorities": [
+    "D-117",
+    "D-122",
+    "D-123",
+    "D-124",
+    "D-125",
+    "D-139",
+    "D-157",
+    "D-165",
+    "D-166"
+  ],
+  "stack_scope": {
+    "hardware_target": "macbook_m3_max",
+    "runtime_backend": "mlx",
+    "telemetry_backend": "powermetrics",
+    "quantization": "int4",
+    "sampling": {
+      "power_hz": 10.0,
+      "idle_seconds": 30.0,
+      "warmup_seconds": 5.0
+    },
+    "measurement_arms": {
+      "decode": {
+        "arms": {
+          "A": {
+            "condition_family_id": "sw-decode-a-qwen3-1p7b",
+            "condition_family_byte_sha256": "f50ca5d8952825faac466d8aa4a192bf6d7c00f47fc4d0ac44305b647b0b7113",
+            "condition_family_domain_sha256": "777ca260db8d9ff3f58fb24f17654536a8c7ddf10eaf327a6fdd099eca738c75",
+            "model_name": "Qwen3-1.7B-4bit",
+            "model_family": "qwen3",
+            "model_revision": "3b1b1768f8f8cf8351c712464f906e86c2b8269e",
+            "model_source": "/Users/edr/jw_models/mlx-community/Qwen3-1.7B-4bit",
+            "weight_format": "mlx",
+            "model_tag": "qwen3-1p7b-mlx"
+          },
+          "B": {
+            "condition_family_id": "sw-decode-b-qwen3-8b",
+            "condition_family_byte_sha256": "8b5aeb76b4c6fc71927a14db756c1c5cbb33c1f90f4596dec54381c453ae706e",
+            "condition_family_domain_sha256": "7a3db47c2511cee439cb74849c7e40e89d853db2ad0c05fc034f8c259753957b",
+            "model_name": "Qwen3-8B-4bit",
+            "model_family": "qwen3",
+            "model_revision": "545dc4251c05440727734bcd94334791f6ab0192",
+            "model_source": "/Users/edr/jw_models/mlx-community/Qwen3-8B-4bit",
+            "weight_format": "mlx",
+            "model_tag": "qwen3-8b-mlx"
+          }
+        },
+        "workload": {
+          "name": "real_prompts_v1_chat_rendered",
+          "repetitions": 1,
+          "warmup_runs": 1,
+          "output_tokens": 512
+        }
+      },
+      "prefill_p2048": {
+        "arms": {
+          "A": {
+            "condition_family_id": "sw-prefill-p2048-a-qwen3-1p7b",
+            "condition_family_byte_sha256": "5fa0ed8fd8e074e502207c683ef95b8002304798750d842bf3e749814bb2edfe",
+            "condition_family_domain_sha256": "4eb84b428618c5be2e38d9038ad94efce5cc3bbc5ce747b24823ded195b17acf",
+            "model_name": "Qwen3-1.7B-4bit",
+            "model_family": "qwen3",
+            "model_revision": "3b1b1768f8f8cf8351c712464f906e86c2b8269e",
+            "model_source": "/Users/edr/jw_models/mlx-community/Qwen3-1.7B-4bit",
+            "weight_format": "mlx",
+            "model_tag": "qwen3-1p7b-mlx"
+          },
+          "B": {
+            "condition_family_id": "sw-prefill-p2048-b-qwen3-8b",
+            "condition_family_byte_sha256": "6cd762bb11590fcff445e59ae926d915df1e166ca8a20f170333ee281e83864b",
+            "condition_family_domain_sha256": "b856bd13332d09bbe678c016a804945e8427ac8f2dea69b0bd003ab2ad0e5f77",
+            "model_name": "Qwen3-8B-4bit",
+            "model_family": "qwen3",
+            "model_revision": "545dc4251c05440727734bcd94334791f6ab0192",
+            "model_source": "/Users/edr/jw_models/mlx-community/Qwen3-8B-4bit",
+            "weight_format": "mlx",
+            "model_tag": "qwen3-8b-mlx"
+          }
+        },
+        "workload": {
+          "name": "df_ph_prefill_p2048_candidate",
+          "repetitions": 1,
+          "warmup_runs": 1,
+          "output_tokens": 512,
+          "prompt_text": "The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit and simple to review.",
+          "prompt_token_expectation": {
+            "schema_version": "joulewise.prompt_token_expectation.v1",
+            "token_hash_domain": "joulewise.prompt_token_ids.v1",
+            "token_count": 2048,
+            "token_ids_sha256": "202e4913340b2bae39bf9a9d3a314f62bb5ff783fae483ad6a98507d071e1479"
+          }
+        }
+      }
+    }
+  },
+  "replacement_rule": {
+    "policy": "abort_window_on_any_required_member_failure",
+    "predeclared_before_data": true,
+    "calibration_retries": 0,
+    "science_member_replacements": 0,
+    "outcome_dependent_top_up": "forbidden",
+    "missing_failed_or_strict_invalid_member": "abort_non_claim_bearing"
+  },
+  "floor_cells": [
+    {
+      "cell_id": "d117-sw-decode-contrast-qwen3-1p7b-vs-qwen3-8b",
+      "measurement_arm": "decode",
+      "kind": "comparative_contrast",
+      "minimum_claim_n_blocks": 10,
+      "metric": "phase_energy_j.decode",
+      "target_precheck_path": [
+        "phase",
+        "decode"
+      ],
+      "difference_orientation": "condition_b_minus_condition_a",
+      "point_estimator": "abba_block_arm_mean_difference_t_v1",
+      "floor_estimator_registration": {
+        "estimator_id": "d124_two_shared_edge_common_mode.v1",
+        "version": "v1",
+        "parameter_sha256": "dd61d38811ddadb2aecb8df4a533b715c8ca74bb031896d09688c9b76b69ed38",
+        "status": "registered_candidate",
+        "transfer_assumption": {
+          "assumption_id": "d124_block_bracket_edges_shared_within_abba.v1",
+          "statement": "Within one authenticated ABBA calibration bracket, onset and offset fiducial terms are shared edges while bundle-specific residual terms remain adversarial.",
+          "evidence_reference": "docs/process_traces/2026-08-08-attribution-debate/COMMONMODE-REPLAY.md"
+        },
+        "stationarity_transfer_assumption": {
+          "assumption_id": "d124_block_timescale_shared_edges_stationarity_transfer_v1",
+          "statement": "The shared onset and offset edge treatment calibrated on floor blocks transfers unchanged to the consuming contrast at the same block timescale.",
+          "evidence_reference": "docs/process_traces/2026-08-08-attribution-debate/COMMONMODE-REPLAY.md",
+          "evidentiary_limit": "The historical corpus records bounds, not realized member-level boundary errors."
+        },
+        "covariance_treatment": "two_shared_edges_plus_bundle_specific_adversarial_terms",
+        "calibration_treatment": "two_shared_edges_plus_bundle_specific_adversarial_terms",
+        "consuming_contrast_treatment": "two_shared_edges_plus_bundle_specific_adversarial_terms",
+        "identical_covariance_treatment_required": true,
+        "allowance": {
+          "rule": "max(observed_drift_s,bracket_screen_s)",
+          "embedding_count": 1,
+          "embedded_in": "shared_operative_bound_s"
+        },
+        "issued_acceptance_artifact_reopened": false,
+        "raw_calibration_corpus_voided": false,
+        "dominance_criterion": {
+          "kind": "comparative",
+          "ratio_id": "attribution_dominance_ratio.v1",
+          "numerator": "corner_widened_unguarded_floor_j",
+          "denominator": "point_unguarded_floor_j",
+          "threshold": 2.0,
+          "comparison": "greater_than_or_equal",
+          "exact_equality_policy": "R == 2.0 passes",
+          "per_component": true,
+          "all_must_pass": true,
+          "mixed_outcome_policy": "report_per_component_and_use_null_framing",
+          "zero_denominator_policy": {
+            "action": "refuse",
+            "reason": "dominance_ratio_zero_denominator",
+            "never_emit": [
+              "Infinity",
+              "NaN"
+            ]
+          },
+          "component_dispositions": {
+            "absolute_independent_corner": {
+              "status": "reportable",
+              "part_of_ratio_gate": true
+            },
+            "absolute_common_mode": {
+              "status": "not_applicable",
+              "reason": "a uniform additive energy offset cancels from absolute residuals; no absolute common-time replay is implemented; absolute R_cm is not_applicable because the registered replay is comparative-only, not because absolute timing uncertainty vanishes"
+            },
+            "comparative_common_mode": {
+              "status": "mandatory",
+              "withdrawal_comparison": "R_cm < 2.0",
+              "withdrawal_consequence": "withdraw_dominance_sentence"
+            },
+            "absolute_local_only_diagnostic": {
+              "status": "not_registered",
+              "reason": "deferred; requires a distinct versioned name"
+            }
+          },
+          "common_mode": {
+            "disclosure": "mandatory",
+            "applies_to": "comparative_abba",
+            "ratio_id": "attribution_dominance_ratio_common_mode.v1",
+            "threshold": 2.0,
+            "withdrawal_comparison": "R_cm < 2.0",
+            "withdrawal_consequence": "withdraw_dominance_sentence",
+            "replay_rule": {
+              "rule_id": "d165_shared_sign_local_corner_replay.v2",
+              "replay_fence": "authenticated_custodied_block_inputs_only",
+              "input_fields": [
+                "delta_j",
+                "onset_sweep_j",
+                "offset_sweep_j",
+                "zero_point_contrast_j",
+                "bundle_residual_half_widths_j",
+                "member_window_bounds_s",
+                "member_envelope_integral_sum_j",
+                "calibration_bracket",
+                "shared_edge_bound_s"
+              ],
+              "formula_reference": [
+                "joulewise.floor_extraction._common_mode_block_half_width.v1",
+                "joulewise.detection_floor.comparative_false_effect_floor.v1"
+              ],
+              "formula": "split each registered block width into its shared excursion and local residual terms; enumerate one common shared sign across all blocks and every independent local sign; take the maximum comparative unguarded floor"
+            }
+          }
+        }
+      },
+      "test": "two_sided",
+      "scientific_hypothesis_direction": "positive",
+      "family_alpha": 0.05,
+      "multiplicity": "Holm",
+      "family_m": 2,
+      "equivalence_margin": null,
+      "mde": null,
+      "ordered_blocks": [
+        {
+          "block_id": "d117-decode-contrast-b01",
+          "block_number": 1,
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "prompt_assignment": {
+            "rule_id": "d166_fixed_prompt_zero.v1",
+            "prompt_index": 0,
+            "prompt_id": "sky_color",
+            "same_for_all_members": true
+          },
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b01-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b01-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b01-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b01-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "d117-decode-contrast-b02",
+          "block_number": 2,
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "prompt_assignment": {
+            "rule_id": "d166_fixed_prompt_zero.v1",
+            "prompt_index": 0,
+            "prompt_id": "sky_color",
+            "same_for_all_members": true
+          },
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b02-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b02-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b02-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b02-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "d117-decode-contrast-b03",
+          "block_number": 3,
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "prompt_assignment": {
+            "rule_id": "d166_fixed_prompt_zero.v1",
+            "prompt_index": 0,
+            "prompt_id": "sky_color",
+            "same_for_all_members": true
+          },
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b03-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b03-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b03-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b03-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "d117-decode-contrast-b04",
+          "block_number": 4,
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "prompt_assignment": {
+            "rule_id": "d166_fixed_prompt_zero.v1",
+            "prompt_index": 0,
+            "prompt_id": "sky_color",
+            "same_for_all_members": true
+          },
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b04-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b04-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b04-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b04-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "d117-decode-contrast-b05",
+          "block_number": 5,
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "prompt_assignment": {
+            "rule_id": "d166_fixed_prompt_zero.v1",
+            "prompt_index": 0,
+            "prompt_id": "sky_color",
+            "same_for_all_members": true
+          },
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b05-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b05-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b05-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b05-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "d117-decode-contrast-b06",
+          "block_number": 6,
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "prompt_assignment": {
+            "rule_id": "d166_fixed_prompt_zero.v1",
+            "prompt_index": 0,
+            "prompt_id": "sky_color",
+            "same_for_all_members": true
+          },
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b06-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b06-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b06-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b06-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "d117-decode-contrast-b07",
+          "block_number": 7,
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "prompt_assignment": {
+            "rule_id": "d166_fixed_prompt_zero.v1",
+            "prompt_index": 0,
+            "prompt_id": "sky_color",
+            "same_for_all_members": true
+          },
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b07-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b07-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b07-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b07-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "d117-decode-contrast-b08",
+          "block_number": 8,
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "prompt_assignment": {
+            "rule_id": "d166_fixed_prompt_zero.v1",
+            "prompt_index": 0,
+            "prompt_id": "sky_color",
+            "same_for_all_members": true
+          },
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b08-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b08-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b08-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b08-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "d117-decode-contrast-b09",
+          "block_number": 9,
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "prompt_assignment": {
+            "rule_id": "d166_fixed_prompt_zero.v1",
+            "prompt_index": 0,
+            "prompt_id": "sky_color",
+            "same_for_all_members": true
+          },
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b09-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b09-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b09-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b09-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "d117-decode-contrast-b10",
+          "block_number": 10,
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "prompt_assignment": {
+            "rule_id": "d166_fixed_prompt_zero.v1",
+            "prompt_index": 0,
+            "prompt_id": "sky_color",
+            "same_for_all_members": true
+          },
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b10-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b10-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b10-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b10-a2"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "cell_id": "d117-sw-prefill-p2048-contrast-qwen3-1p7b-vs-qwen3-8b",
+      "measurement_arm": "prefill_p2048",
+      "kind": "comparative_contrast",
+      "minimum_claim_n_blocks": 10,
+      "metric": "phase_energy_j.prefill",
+      "target_precheck_path": [
+        "phase",
+        "prefill"
+      ],
+      "difference_orientation": "condition_b_minus_condition_a",
+      "point_estimator": "abba_block_arm_mean_difference_t_v1",
+      "floor_estimator_registration": {
+        "estimator_id": "d124_two_shared_edge_common_mode.v1",
+        "version": "v1",
+        "parameter_sha256": "dd61d38811ddadb2aecb8df4a533b715c8ca74bb031896d09688c9b76b69ed38",
+        "status": "registered_candidate",
+        "transfer_assumption": {
+          "assumption_id": "d124_block_bracket_edges_shared_within_abba.v1",
+          "statement": "Within one authenticated ABBA calibration bracket, onset and offset fiducial terms are shared edges while bundle-specific residual terms remain adversarial.",
+          "evidence_reference": "docs/process_traces/2026-08-08-attribution-debate/COMMONMODE-REPLAY.md"
+        },
+        "stationarity_transfer_assumption": {
+          "assumption_id": "d124_block_timescale_shared_edges_stationarity_transfer_v1",
+          "statement": "The shared onset and offset edge treatment calibrated on floor blocks transfers unchanged to the consuming contrast at the same block timescale.",
+          "evidence_reference": "docs/process_traces/2026-08-08-attribution-debate/COMMONMODE-REPLAY.md",
+          "evidentiary_limit": "The historical corpus records bounds, not realized member-level boundary errors."
+        },
+        "covariance_treatment": "two_shared_edges_plus_bundle_specific_adversarial_terms",
+        "calibration_treatment": "two_shared_edges_plus_bundle_specific_adversarial_terms",
+        "consuming_contrast_treatment": "two_shared_edges_plus_bundle_specific_adversarial_terms",
+        "identical_covariance_treatment_required": true,
+        "allowance": {
+          "rule": "max(observed_drift_s,bracket_screen_s)",
+          "embedding_count": 1,
+          "embedded_in": "shared_operative_bound_s"
+        },
+        "issued_acceptance_artifact_reopened": false,
+        "raw_calibration_corpus_voided": false,
+        "dominance_criterion": {
+          "kind": "comparative",
+          "ratio_id": "attribution_dominance_ratio.v1",
+          "numerator": "corner_widened_unguarded_floor_j",
+          "denominator": "point_unguarded_floor_j",
+          "threshold": 2.0,
+          "comparison": "greater_than_or_equal",
+          "exact_equality_policy": "R == 2.0 passes",
+          "per_component": true,
+          "all_must_pass": true,
+          "mixed_outcome_policy": "report_per_component_and_use_null_framing",
+          "zero_denominator_policy": {
+            "action": "refuse",
+            "reason": "dominance_ratio_zero_denominator",
+            "never_emit": [
+              "Infinity",
+              "NaN"
+            ]
+          },
+          "component_dispositions": {
+            "absolute_independent_corner": {
+              "status": "reportable",
+              "part_of_ratio_gate": true
+            },
+            "absolute_common_mode": {
+              "status": "not_applicable",
+              "reason": "a uniform additive energy offset cancels from absolute residuals; no absolute common-time replay is implemented; absolute R_cm is not_applicable because the registered replay is comparative-only, not because absolute timing uncertainty vanishes"
+            },
+            "comparative_common_mode": {
+              "status": "mandatory",
+              "withdrawal_comparison": "R_cm < 2.0",
+              "withdrawal_consequence": "withdraw_dominance_sentence"
+            },
+            "absolute_local_only_diagnostic": {
+              "status": "not_registered",
+              "reason": "deferred; requires a distinct versioned name"
+            }
+          },
+          "common_mode": {
+            "disclosure": "mandatory",
+            "applies_to": "comparative_abba",
+            "ratio_id": "attribution_dominance_ratio_common_mode.v1",
+            "threshold": 2.0,
+            "withdrawal_comparison": "R_cm < 2.0",
+            "withdrawal_consequence": "withdraw_dominance_sentence",
+            "replay_rule": {
+              "rule_id": "d165_shared_sign_local_corner_replay.v2",
+              "replay_fence": "authenticated_custodied_block_inputs_only",
+              "input_fields": [
+                "delta_j",
+                "onset_sweep_j",
+                "offset_sweep_j",
+                "zero_point_contrast_j",
+                "bundle_residual_half_widths_j",
+                "member_window_bounds_s",
+                "member_envelope_integral_sum_j",
+                "calibration_bracket",
+                "shared_edge_bound_s"
+              ],
+              "formula_reference": [
+                "joulewise.floor_extraction._common_mode_block_half_width.v1",
+                "joulewise.detection_floor.comparative_false_effect_floor.v1"
+              ],
+              "formula": "split each registered block width into its shared excursion and local residual terms; enumerate one common shared sign across all blocks and every independent local sign; take the maximum comparative unguarded floor"
+            }
+          }
+        }
+      },
+      "prompt_candidate": {
+        "path": "prefill_prompt_candidate.json",
+        "sha256": "b79abb259014bb28e9273b9d5c0ee02d26af2010a0b82a697e829592c5be0adf",
+        "status": "ISSUED-BY-G2A-PROMPT-PIN"
+      },
+      "test": "two_sided",
+      "scientific_hypothesis_direction": "positive",
+      "family_alpha": 0.05,
+      "multiplicity": "Holm",
+      "family_m": 2,
+      "equivalence_margin": null,
+      "mde": null,
+      "ordered_blocks": [
+        {
+          "block_id": "d117-prefill-p2048-contrast-b01",
+          "block_number": 1,
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "prompt_assignment": null,
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b01-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b01-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b01-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b01-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "d117-prefill-p2048-contrast-b02",
+          "block_number": 2,
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "prompt_assignment": null,
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b02-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b02-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b02-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b02-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "d117-prefill-p2048-contrast-b03",
+          "block_number": 3,
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "prompt_assignment": null,
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b03-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b03-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b03-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b03-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "d117-prefill-p2048-contrast-b04",
+          "block_number": 4,
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "prompt_assignment": null,
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b04-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b04-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b04-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b04-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "d117-prefill-p2048-contrast-b05",
+          "block_number": 5,
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "prompt_assignment": null,
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b05-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b05-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b05-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b05-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "d117-prefill-p2048-contrast-b06",
+          "block_number": 6,
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "prompt_assignment": null,
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b06-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b06-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b06-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b06-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "d117-prefill-p2048-contrast-b07",
+          "block_number": 7,
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "prompt_assignment": null,
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b07-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b07-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b07-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b07-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "d117-prefill-p2048-contrast-b08",
+          "block_number": 8,
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "prompt_assignment": null,
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b08-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b08-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b08-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b08-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "d117-prefill-p2048-contrast-b09",
+          "block_number": 9,
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "prompt_assignment": null,
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b09-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b09-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b09-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b09-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "d117-prefill-p2048-contrast-b10",
+          "block_number": 10,
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "prompt_assignment": null,
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b10-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b10-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b10-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b10-a2"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "reported_energy_cells": [],
+  "execution_mode": {
+    "ordered_science_stage_ids": [
+      "01_decode_contrast_blocks_01_05",
+      "02_decode_contrast_blocks_06_10",
+      "03_prefill_p2048_contrast_blocks_01_05",
+      "04_prefill_p2048_contrast_blocks_06_10"
+    ],
+    "planned_science_bundles": 80,
+    "planned_bound_bundles": 12,
+    "planned_reference_bundles": 9,
+    "planned_calibration_observations": 2
+  },
+  "roots": {
+    "claim_root_leaf": "runs_d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5",
+    "bound_root_leaf": "runs_d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5_bound"
+  },
+  "runs_dir": "runs_d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5",
+  "order_manifest": "order_manifest.json",
+  "campaign_log": "runs_d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5/campaign_log.jsonl",
+  "campaign_policy": {
+    "policy_id": "quiet-mac-p2-production",
+    "path": "configs/campaign_policies/quiet_mac_p2_production.json",
+    "sha256": "b0d7b228b88bea717aa9269c103aca760cc36cf05239e0f86c235b4b29665efd"
+  }
+}
