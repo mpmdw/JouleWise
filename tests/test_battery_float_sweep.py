@@ -57,9 +57,13 @@ READERS = {
     "joulewise/detection_floor.py": ("bracket rows", "outside the derivation scope"),
     "scripts/mint_floor_artifact_generalized.py": ("bracket rows", "outside the derivation scope"),
     "joulewise/controller.py": (
-        "refuses Revision 5", "instrument calibration attachment raises 'revision_five evidence cannot be "
-        "attached as instrument calibration'; test_revision_five_b_readers."
-        "test_controller_attachment_refuses_before_physics_or_bound"),
+        "refuses Revision 5 except G2-a explicit opt-in", "legacy instrument calibration attachment raises "
+        "'revision_five evidence cannot be attached as instrument calibration'; "
+        "test_revision_five_b_readers.test_controller_attachment_refuses_before_physics_or_bound. "
+        "The sole exception authenticates a registered diagnostic member's ordinary finalized pre slot; "
+        "test_g2a_calibration_attachment.G2aCalibrationAttachmentTests covers acceptance and binding refusals, "
+        "including test_derivation_session_cannot_use_explicit_diagnostic_path and "
+        "test_legacy_reader_still_refuses_real_pre_capture_shape_even_with_chain_environment"),
     "scripts/run_campaign.py": ("run metadata", "reads the run's own controller attachment"),
     "scripts/calibration_ledger_backfill.py": (
         "refuses Revision 5", "raises '<dir>: revision_five evidence is not a backfill candidate'; "
