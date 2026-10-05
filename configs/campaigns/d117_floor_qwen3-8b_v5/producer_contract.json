@@ -763,6 +763,7 @@
             "suite_manifest_ref": "configs/campaigns/d117_floor_qwen3-8b_v5/decode_prompt_manifest.json",
             "suite_manifest_sha256": "6dc7448c3e14ee18383f7904830f96dbc624e37875d3abac2561321669668705",
             "prompt_text": null,
+            "prompt_tokens": null,
             "dataset_ref": null
           }
         },

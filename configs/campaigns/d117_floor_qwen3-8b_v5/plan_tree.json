@@ -11,7 +11,7 @@
   },
   "generator": {
     "path": "configs/campaigns/d117_floor_qwen3-8b_v5/generate_configs.py",
-    "sha256": "bf4347b032485ef39ef8613c49d6c0caaad4b796615160966bafd0bec46f13f9"
+    "sha256": "0a0161e11d7cd9ee6fc117f6fac8d93995ab04d6112d4d31fd4636c9e5205a79"
   },
   "window_identity": {
     "window_id": "plan-d117-floor-qwen3-8b-decode-prefill-p2048-v5",
@@ -3124,6 +3124,7 @@
               "suite_manifest_ref": "configs/campaigns/d117_floor_qwen3-8b_v5/decode_prompt_manifest.json",
               "suite_manifest_sha256": "6dc7448c3e14ee18383f7904830f96dbc624e37875d3abac2561321669668705",
               "prompt_text": null,
+              "prompt_tokens": null,
               "dataset_ref": null
             }
           },
@@ -3717,7 +3718,7 @@
     },
     "producer_contract": {
       "path": "configs/campaigns/d117_floor_qwen3-8b_v5/producer_contract.json",
-      "sha256": "a70a2620e07fb97aa17a9ffbe428abeea75b6314c2ee3d2b31807aae97ba332c"
+      "sha256": "ab09362da466fc7c0821d48b665188286adcc523657ca8a767683d3efc27d4a2"
     },
     "prefill_phase_presence": "required_for_all_100_physical_bundles",
     "missing_registered_phase": "refuse"
