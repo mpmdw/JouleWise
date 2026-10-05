@@ -1,0 +1,63 @@
+{
+  "schema_version": "0.1",
+  "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b08-b1",
+  "model": {
+    "name": "Qwen3-8B-4bit",
+    "family": "qwen3",
+    "source": "/Users/edr/jw_models/mlx-community/Qwen3-8B-4bit",
+    "revision": "545dc4251c05440727734bcd94334791f6ab0192",
+    "weight_format": "mlx",
+    "context_window": 40960,
+    "tokenizer_json_sha256": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
+    "chat_template_sha256": "87a2728cb8dc9fe424d624542f6060ec05a1d285ebbec578bb078900e33396b5"
+  },
+  "quantization": {
+    "name": "int4",
+    "bits": 4,
+    "group_size": 64
+  },
+  "hardware_target": {
+    "id": "macbook_m3_max",
+    "transport": "local",
+    "runtime_backend": "mlx",
+    "telemetry_backend": "powermetrics",
+    "device_kind": "apple_silicon_unified_memory",
+    "notes": "D-117 gamma panel-selected contrast; normal powermetrics sampler set only; pack status as_generated_pre_d134_freeze."
+  },
+  "workload_profile": {
+    "name": "real_prompts_v1_chat_rendered",
+    "repetitions": 1,
+    "warmup_runs": 1,
+    "output_tokens": 512,
+    "suite_manifest_ref": "configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5/decode_prompt_manifests/qwen3-8b/01_sky_color.json",
+    "suite_manifest_sha256": "c35156575b7c14c9f2271b442f71c9fafa3944363c2f46ae2821731134229185"
+  },
+  "interconnect": {
+    "name": "local"
+  },
+  "sampling": {
+    "power_hz": 10.0,
+    "idle_seconds": 30.0,
+    "warmup_seconds": 5.0
+  },
+  "run_metadata": {
+    "project": "capstone-joulewise",
+    "operator": "lead",
+    "tags": [
+      "phase2",
+      "d117-contrast-qwen3-1p7b-vs-qwen3-8b-v5",
+      "production-window",
+      "comparative-contrast",
+      "measurement-arm=decode",
+      "df-condition=sw-decode-b-qwen3-8b",
+      "calibration-plan-sha256=b3f4679563f7d2bd84291a386b2e3fd8662cb2f7eaa7f492b2ee09544565d7ef",
+      "calibration-abba-block-id=d117-decode-contrast-b08",
+      "calibration-abba-label=B",
+      "calibration-abba-sequence-index=2",
+      "decode-workload=real_prompts_v1",
+      "decode-prompt=sky_color",
+      "chat-template-sha256=87a2728cb8dc9fe424d624542f6060ec05a1d285ebbec578bb078900e33396b5",
+      "launch_lineage_required"
+    ]
+  }
+}

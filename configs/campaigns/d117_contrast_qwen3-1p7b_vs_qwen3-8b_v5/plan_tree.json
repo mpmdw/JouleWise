@@ -1,0 +1,3561 @@
+{
+  "schema_version": "joulewise.d117_plan_tree.v1",
+  "draft_status": "as_generated_pre_d134_freeze",
+  "plan": {
+    "path": "calibration_plan.json",
+    "plan_id": "plan-d117-contrast-qwen3-1p7b-vs-qwen3-8b-decode-prefill-p2048-v5",
+    "actual_sha256": "b3f4679563f7d2bd84291a386b2e3fd8662cb2f7eaa7f492b2ee09544565d7ef",
+    "declared_sha256": "b3f4679563f7d2bd84291a386b2e3fd8662cb2f7eaa7f492b2ee09544565d7ef",
+    "sidecar_path": "calibration_plan.sha256",
+    "sidecar_sha256": "55b7753e68b3537c56a977cc5686a3adb9fa32c177063e0e06b68ca9a6bcb592"
+  },
+  "generator": {
+    "path": "configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5/generate_configs.py",
+    "sha256": "ffb406e582baabd40f3c679991057ac3f502873575511ee96de136c46a8c3821"
+  },
+  "window_identity": {
+    "window_id": "plan-d117-contrast-qwen3-1p7b-vs-qwen3-8b-decode-prefill-p2048-v5",
+    "evidence_root_id": "evidence-d117-contrast-qwen3-1p7b-vs-qwen3-8b-v5"
+  },
+  "roots": {
+    "claim_root_leaf": "runs_d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5",
+    "bound_root_leaf": "runs_d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5_bound"
+  },
+  "reference_cadence": {
+    "authority": "docs/process_traces/2026-08-07-plan-factory/DRAFT-U5U7.md §6 U7 gamma implementation session",
+    "binding_40_member_rule": "one midpoint reference between two 20-member halves of each ABBA arm",
+    "two_arm_interpretation": "arm_midpoints_plus_arm_boundary",
+    "freeze_ratification": "as_generated_pre_d134_freeze; the committed D-134 freeze receipt and its plan-tree attachment are the ratification authority for this reference-cadence declaration"
+  },
+  "campaign_policy": {
+    "path": "configs/campaign_policies/quiet_mac_p2_production.json",
+    "sha256": "b0d7b228b88bea717aa9269c103aca760cc36cf05239e0f86c235b4b29665efd"
+  },
+  "acceptance_policy": {
+    "selection": "issued_d116_artifact_only",
+    "issued_artifact_id": "d079_calibration_acceptance_v2_n24_25g83_r2",
+    "issued_artifact_sha256": "f949f511254e03b50b0be1cea37f74c1e8e6b4c49926c6c197024beea07b3660",
+    "issued_derivation_sha256": "10965d36527c73217154efdbd75ab923412685f3e79526bd31f33e6f9142e5c0",
+    "issued_artifact_reopened": false,
+    "arming_dependencies": [
+      "impl/d117-postcollection-trust landed and mint bar lifted",
+      "U2 successor registry available",
+      "reason-code unit resolved",
+      "U11 identity-pin projection receipt available",
+      "U8 readiness validation passed",
+      "U10 aggregate floor artifact available for decode declaration binding"
+    ]
+  },
+  "condition_families": [
+    {
+      "measurement_arm": "decode",
+      "arm": "A",
+      "path": "condition_families/condition_family_sw_decode_a_qwen3-1p7b.json",
+      "sha256": "f50ca5d8952825faac466d8aa4a192bf6d7c00f47fc4d0ac44305b647b0b7113",
+      "condition_family_id": "sw-decode-a-qwen3-1p7b",
+      "canonical_domain_sha256": "777ca260db8d9ff3f58fb24f17654536a8c7ddf10eaf327a6fdd099eca738c75"
+    },
+    {
+      "measurement_arm": "decode",
+      "arm": "B",
+      "path": "condition_families/condition_family_sw_decode_b_qwen3-8b.json",
+      "sha256": "8b5aeb76b4c6fc71927a14db756c1c5cbb33c1f90f4596dec54381c453ae706e",
+      "condition_family_id": "sw-decode-b-qwen3-8b",
+      "canonical_domain_sha256": "7a3db47c2511cee439cb74849c7e40e89d853db2ad0c05fc034f8c259753957b"
+    },
+    {
+      "measurement_arm": "prefill_p2048",
+      "arm": "A",
+      "path": "condition_families/condition_family_sw_prefill_p2048_a_qwen3-1p7b.json",
+      "sha256": "5fa0ed8fd8e074e502207c683ef95b8002304798750d842bf3e749814bb2edfe",
+      "condition_family_id": "sw-prefill-p2048-a-qwen3-1p7b",
+      "canonical_domain_sha256": "4eb84b428618c5be2e38d9038ad94efce5cc3bbc5ce747b24823ded195b17acf"
+    },
+    {
+      "measurement_arm": "prefill_p2048",
+      "arm": "B",
+      "path": "condition_families/condition_family_sw_prefill_p2048_b_qwen3-8b.json",
+      "sha256": "6cd762bb11590fcff445e59ae926d915df1e166ca8a20f170333ee281e83864b",
+      "condition_family_id": "sw-prefill-p2048-b-qwen3-8b",
+      "canonical_domain_sha256": "b856bd13332d09bbe678c016a804945e8427ac8f2dea69b0bd003ab2ad0e5f77"
+    }
+  ],
+  "science": [
+    {
+      "ordinal": 1,
+      "stage_id": "gamma-science-01-decode-contrast-blocks-01-05",
+      "config_path": "01_decode_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b01-a1.json",
+      "config_sha256": "056b9036063cb847acd4267014cb8eec4b0874e07979182fe75b59eb86fbf42f",
+      "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b01-a1",
+      "role": "comparative_contrast_member",
+      "measurement_arm": "decode",
+      "block_id": "d117-decode-contrast-b01",
+      "block_index": 1,
+      "position": "A1",
+      "arm": "A"
+    },
+    {
+      "ordinal": 2,
+      "stage_id": "gamma-science-01-decode-contrast-blocks-01-05",
+      "config_path": "01_decode_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b01-b1.json",
+      "config_sha256": "3ab0cdb8c52cad462115539059ee96de695cda2b2d9b0f888a37ff9c653b28bb",
+      "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b01-b1",
+      "role": "comparative_contrast_member",
+      "measurement_arm": "decode",
+      "block_id": "d117-decode-contrast-b01",
+      "block_index": 1,
+      "position": "B1",
+      "arm": "B"
+    },
+    {
+      "ordinal": 3,
+      "stage_id": "gamma-science-01-decode-contrast-blocks-01-05",
+      "config_path": "01_decode_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b01-b2.json",
+      "config_sha256": "1610707dc67d7a8c3a544028f7067ee7dd290a5d9493911790a65e253310c787",
+      "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b01-b2",
+      "role": "comparative_contrast_member",
+      "measurement_arm": "decode",
+      "block_id": "d117-decode-contrast-b01",
+      "block_index": 1,
+      "position": "B2",
+      "arm": "B"
+    },
+    {
+      "ordinal": 4,
+      "stage_id": "gamma-science-01-decode-contrast-blocks-01-05",
+      "config_path": "01_decode_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b01-a2.json",
+      "config_sha256": "45344bbd5d4084cb454091741624adcb0fadbc2bbc2d39fa0edaf4c957707660",
+      "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b01-a2",
+      "role": "comparative_contrast_member",
+      "measurement_arm": "decode",
+      "block_id": "d117-decode-contrast-b01",
+      "block_index": 1,
+      "position": "A2",
+      "arm": "A"
+    },
+    {
+      "ordinal": 5,
+      "stage_id": "gamma-science-01-decode-contrast-blocks-01-05",
+      "config_path": "01_decode_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b02-a1.json",
+      "config_sha256": "978ecc58257404c3d63983e9eda5285fd8ca2dc25bf3d7017bb495b2ad4e5460",
+      "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b02-a1",
+      "role": "comparative_contrast_member",
+      "measurement_arm": "decode",
+      "block_id": "d117-decode-contrast-b02",
+      "block_index": 2,
+      "position": "A1",
+      "arm": "A"
+    },
+    {
+      "ordinal": 6,
+      "stage_id": "gamma-science-01-decode-contrast-blocks-01-05",
+      "config_path": "01_decode_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b02-b1.json",
+      "config_sha256": "6770fa108cdc099bfe70d4193731cc8002f7d2aa69120c3489054e3d5ad5ee99",
+      "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b02-b1",
+      "role": "comparative_contrast_member",
+      "measurement_arm": "decode",
+      "block_id": "d117-decode-contrast-b02",
+      "block_index": 2,
+      "position": "B1",
+      "arm": "B"
+    },
+    {
+      "ordinal": 7,
+      "stage_id": "gamma-science-01-decode-contrast-blocks-01-05",
+      "config_path": "01_decode_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b02-b2.json",
+      "config_sha256": "ce0af2e999bf51863aa770bf648c99ff4ef17a83dc5d08833cd8d5f73669c8fa",
+      "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b02-b2",
+      "role": "comparative_contrast_member",
+      "measurement_arm": "decode",
+      "block_id": "d117-decode-contrast-b02",
+      "block_index": 2,
+      "position": "B2",
+      "arm": "B"
+    },
+    {
+      "ordinal": 8,
+      "stage_id": "gamma-science-01-decode-contrast-blocks-01-05",
+      "config_path": "01_decode_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b02-a2.json",
+      "config_sha256": "7dc8a76f9e1c3dbf283270588c11f205f6f9dcac9e81aab0adcfc177a00694dc",
+      "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b02-a2",
+      "role": "comparative_contrast_member",
+      "measurement_arm": "decode",
+      "block_id": "d117-decode-contrast-b02",
+      "block_index": 2,
+      "position": "A2",
+      "arm": "A"
+    },
+    {
+      "ordinal": 9,
+      "stage_id": "gamma-science-01-decode-contrast-blocks-01-05",
+      "config_path": "01_decode_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b03-a1.json",
+      "config_sha256": "6e56487652fbe6a22d358b11d3c0abbf5e62259ff519bb90b222c0dd2fbe589b",
+      "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b03-a1",
+      "role": "comparative_contrast_member",
+      "measurement_arm": "decode",
+      "block_id": "d117-decode-contrast-b03",
+      "block_index": 3,
+      "position": "A1",
+      "arm": "A"
+    },
+    {
+      "ordinal": 10,
+      "stage_id": "gamma-science-01-decode-contrast-blocks-01-05",
+      "config_path": "01_decode_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b03-b1.json",
+      "config_sha256": "c485652dc0b9d80b42f2c1982ae49e83d0d2591792cb01c688e574e5fcd8e55b",
+      "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b03-b1",
+      "role": "comparative_contrast_member",
+      "measurement_arm": "decode",
+      "block_id": "d117-decode-contrast-b03",
+      "block_index": 3,
+      "position": "B1",
+      "arm": "B"
+    },
+    {
+      "ordinal": 11,
+      "stage_id": "gamma-science-01-decode-contrast-blocks-01-05",
+      "config_path": "01_decode_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b03-b2.json",
+      "config_sha256": "642df9979fd38feddce6be879f62e375f27bd2d804fe353fd4494b6dac7f9169",
+      "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b03-b2",
+      "role": "comparative_contrast_member",
+      "measurement_arm": "decode",
+      "block_id": "d117-decode-contrast-b03",
+      "block_index": 3,
+      "position": "B2",
+      "arm": "B"
+    },
+    {
+      "ordinal": 12,
+      "stage_id": "gamma-science-01-decode-contrast-blocks-01-05",
+      "config_path": "01_decode_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b03-a2.json",
+      "config_sha256": "205391c71cec67a13698e6ee039a2c6afcf03ec356ed1495d11bff4558ba9490",
+      "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b03-a2",
+      "role": "comparative_contrast_member",
+      "measurement_arm": "decode",
+      "block_id": "d117-decode-contrast-b03",
+      "block_index": 3,
+      "position": "A2",
+      "arm": "A"
+    },
+    {
+      "ordinal": 13,
+      "stage_id": "gamma-science-01-decode-contrast-blocks-01-05",
+      "config_path": "01_decode_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b04-a1.json",
+      "config_sha256": "17103de87f21b091e0249f61c8a61c633d0bffbda9b3d0c48bbe22f547ec3af8",
+      "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b04-a1",
+      "role": "comparative_contrast_member",
+      "measurement_arm": "decode",
+      "block_id": "d117-decode-contrast-b04",
+      "block_index": 4,
+      "position": "A1",
+      "arm": "A"
+    },
+    {
+      "ordinal": 14,
+      "stage_id": "gamma-science-01-decode-contrast-blocks-01-05",
+      "config_path": "01_decode_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b04-b1.json",
+      "config_sha256": "c408a8c553f18d9acb80df5d26bd5d9e0a8415e69c9948bd13c72b90f44f46d8",
+      "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b04-b1",
+      "role": "comparative_contrast_member",
+      "measurement_arm": "decode",
+      "block_id": "d117-decode-contrast-b04",
+      "block_index": 4,
+      "position": "B1",
+      "arm": "B"
+    },
+    {
+      "ordinal": 15,
+      "stage_id": "gamma-science-01-decode-contrast-blocks-01-05",
+      "config_path": "01_decode_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b04-b2.json",
+      "config_sha256": "f88b9220aa8b0f1693ac66e594ff5669fe92406ff5959c9bfd36b51a5fbceef7",
+      "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b04-b2",
+      "role": "comparative_contrast_member",
+      "measurement_arm": "decode",
+      "block_id": "d117-decode-contrast-b04",
+      "block_index": 4,
+      "position": "B2",
+      "arm": "B"
+    },
+    {
+      "ordinal": 16,
+      "stage_id": "gamma-science-01-decode-contrast-blocks-01-05",
+      "config_path": "01_decode_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b04-a2.json",
+      "config_sha256": "7e053993df2f50e29618e3e7d2737514fdc368d1d6813c3527d243e6308461ca",
+      "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b04-a2",
+      "role": "comparative_contrast_member",
+      "measurement_arm": "decode",
+      "block_id": "d117-decode-contrast-b04",
+      "block_index": 4,
+      "position": "A2",
+      "arm": "A"
+    },
+    {
+      "ordinal": 17,
+      "stage_id": "gamma-science-01-decode-contrast-blocks-01-05",
+      "config_path": "01_decode_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b05-a1.json",
+      "config_sha256": "6f50992050df7e5a2e823a850de78252d32ddbc30c3ebea8f6607f8d83880284",
+      "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b05-a1",
+      "role": "comparative_contrast_member",
+      "measurement_arm": "decode",
+      "block_id": "d117-decode-contrast-b05",
+      "block_index": 5,
+      "position": "A1",
+      "arm": "A"
+    },
+    {
+      "ordinal": 18,
+      "stage_id": "gamma-science-01-decode-contrast-blocks-01-05",
+      "config_path": "01_decode_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b05-b1.json",
+      "config_sha256": "1afefb87e888a5617378204e090eeae6049dee1df602a73f937b5fad472da5db",
+      "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b05-b1",
+      "role": "comparative_contrast_member",
+      "measurement_arm": "decode",
+      "block_id": "d117-decode-contrast-b05",
+      "block_index": 5,
+      "position": "B1",
+      "arm": "B"
+    },
+    {
+      "ordinal": 19,
+      "stage_id": "gamma-science-01-decode-contrast-blocks-01-05",
+      "config_path": "01_decode_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b05-b2.json",
+      "config_sha256": "1335e7e3248bd3b857d4d93504a92d642672f5f1e11d6a7ecc55bb53119348bf",
+      "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b05-b2",
+      "role": "comparative_contrast_member",
+      "measurement_arm": "decode",
+      "block_id": "d117-decode-contrast-b05",
+      "block_index": 5,
+      "position": "B2",
+      "arm": "B"
+    },
+    {
+      "ordinal": 20,
+      "stage_id": "gamma-science-01-decode-contrast-blocks-01-05",
+      "config_path": "01_decode_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b05-a2.json",
+      "config_sha256": "4ebdb2be7abae4e781f9052ec96ee021f95bf99d2cd8b3fe6def4c18530d7972",
+      "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b05-a2",
+      "role": "comparative_contrast_member",
+      "measurement_arm": "decode",
+      "block_id": "d117-decode-contrast-b05",
+      "block_index": 5,
+      "position": "A2",
+      "arm": "A"
+    },
+    {
+      "ordinal": 21,
+      "stage_id": "gamma-science-02-decode-contrast-blocks-06-10",
+      "config_path": "02_decode_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b06-a1.json",
+      "config_sha256": "09cc89e2470ce560a64480202ac16196824532bf670a95d623f5a9e3e23e1212",
+      "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b06-a1",
+      "role": "comparative_contrast_member",
+      "measurement_arm": "decode",
+      "block_id": "d117-decode-contrast-b06",
+      "block_index": 6,
+      "position": "A1",
+      "arm": "A"
+    },
+    {
+      "ordinal": 22,
+      "stage_id": "gamma-science-02-decode-contrast-blocks-06-10",
+      "config_path": "02_decode_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b06-b1.json",
+      "config_sha256": "2ff20d888d84ae2757ff653c85f1f5766da6a876c59ef868f00215569d3a97a8",
+      "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b06-b1",
+      "role": "comparative_contrast_member",
+      "measurement_arm": "decode",
+      "block_id": "d117-decode-contrast-b06",
+      "block_index": 6,
+      "position": "B1",
+      "arm": "B"
+    },
+    {
+      "ordinal": 23,
+      "stage_id": "gamma-science-02-decode-contrast-blocks-06-10",
+      "config_path": "02_decode_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b06-b2.json",
+      "config_sha256": "7f4f796aace20b86ff3e444c40979c6cfea741eca0dd95bc862ce268aeeb04ed",
+      "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b06-b2",
+      "role": "comparative_contrast_member",
+      "measurement_arm": "decode",
+      "block_id": "d117-decode-contrast-b06",
+      "block_index": 6,
+      "position": "B2",
+      "arm": "B"
+    },
+    {
+      "ordinal": 24,
+      "stage_id": "gamma-science-02-decode-contrast-blocks-06-10",
+      "config_path": "02_decode_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b06-a2.json",
+      "config_sha256": "87c317d751b080475bd7c1982df9e9af2c285bbc7a0d52e7d3c78959e7f47d37",
+      "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b06-a2",
+      "role": "comparative_contrast_member",
+      "measurement_arm": "decode",
+      "block_id": "d117-decode-contrast-b06",
+      "block_index": 6,
+      "position": "A2",
+      "arm": "A"
+    },
+    {
+      "ordinal": 25,
+      "stage_id": "gamma-science-02-decode-contrast-blocks-06-10",
+      "config_path": "02_decode_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b07-a1.json",
+      "config_sha256": "b9ab3966ba539302bf4062899c038c794bd89bb6a735ac12f04f946ea0395e02",
+      "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b07-a1",
+      "role": "comparative_contrast_member",
+      "measurement_arm": "decode",
+      "block_id": "d117-decode-contrast-b07",
+      "block_index": 7,
+      "position": "A1",
+      "arm": "A"
+    },
+    {
+      "ordinal": 26,
+      "stage_id": "gamma-science-02-decode-contrast-blocks-06-10",
+      "config_path": "02_decode_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b07-b1.json",
+      "config_sha256": "aafe0f7b9e24fd397adc01666599dfccdca6e6ba24901f9ad150189881011bde",
+      "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b07-b1",
+      "role": "comparative_contrast_member",
+      "measurement_arm": "decode",
+      "block_id": "d117-decode-contrast-b07",
+      "block_index": 7,
+      "position": "B1",
+      "arm": "B"
+    },
+    {
+      "ordinal": 27,
+      "stage_id": "gamma-science-02-decode-contrast-blocks-06-10",
+      "config_path": "02_decode_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b07-b2.json",
+      "config_sha256": "ed90653ab90bded6124dc924ab344d390cd268798cbbae8fdc7f4e702b61084c",
+      "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b07-b2",
+      "role": "comparative_contrast_member",
+      "measurement_arm": "decode",
+      "block_id": "d117-decode-contrast-b07",
+      "block_index": 7,
+      "position": "B2",
+      "arm": "B"
+    },
+    {
+      "ordinal": 28,
+      "stage_id": "gamma-science-02-decode-contrast-blocks-06-10",
+      "config_path": "02_decode_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b07-a2.json",
+      "config_sha256": "b52c65cf3ecd3162278231f96694f0ca9b12d457e8ecc16b14201cfe255f6bde",
+      "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b07-a2",
+      "role": "comparative_contrast_member",
+      "measurement_arm": "decode",
+      "block_id": "d117-decode-contrast-b07",
+      "block_index": 7,
+      "position": "A2",
+      "arm": "A"
+    },
+    {
+      "ordinal": 29,
+      "stage_id": "gamma-science-02-decode-contrast-blocks-06-10",
+      "config_path": "02_decode_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b08-a1.json",
+      "config_sha256": "8c74399627142157d1fba38d951e371cc81ca0da42a9d060c7a03848fedd29d9",
+      "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b08-a1",
+      "role": "comparative_contrast_member",
+      "measurement_arm": "decode",
+      "block_id": "d117-decode-contrast-b08",
+      "block_index": 8,
+      "position": "A1",
+      "arm": "A"
+    },
+    {
+      "ordinal": 30,
+      "stage_id": "gamma-science-02-decode-contrast-blocks-06-10",
+      "config_path": "02_decode_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b08-b1.json",
+      "config_sha256": "fa5a98af0b231d331a39ea61585aef5b866d04bc5c1e27736ac743b93df450bc",
+      "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b08-b1",
+      "role": "comparative_contrast_member",
+      "measurement_arm": "decode",
+      "block_id": "d117-decode-contrast-b08",
+      "block_index": 8,
+      "position": "B1",
+      "arm": "B"
+    },
+    {
+      "ordinal": 31,
+      "stage_id": "gamma-science-02-decode-contrast-blocks-06-10",
+      "config_path": "02_decode_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b08-b2.json",
+      "config_sha256": "0198cc69984faeb6f73cad8f6b3e06d376b8b8391c37ff79a301f198f19ce3a4",
+      "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b08-b2",
+      "role": "comparative_contrast_member",
+      "measurement_arm": "decode",
+      "block_id": "d117-decode-contrast-b08",
+      "block_index": 8,
+      "position": "B2",
+      "arm": "B"
+    },
+    {
+      "ordinal": 32,
+      "stage_id": "gamma-science-02-decode-contrast-blocks-06-10",
+      "config_path": "02_decode_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b08-a2.json",
+      "config_sha256": "a1731c9fd7f0f80bdc66e9ce996c01a13ff1d721611b59477439a9b4f1ff2a31",
+      "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b08-a2",
+      "role": "comparative_contrast_member",
+      "measurement_arm": "decode",
+      "block_id": "d117-decode-contrast-b08",
+      "block_index": 8,
+      "position": "A2",
+      "arm": "A"
+    },
+    {
+      "ordinal": 33,
+      "stage_id": "gamma-science-02-decode-contrast-blocks-06-10",
+      "config_path": "02_decode_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b09-a1.json",
+      "config_sha256": "62a2ff46a67284ee2b9ed1204b2b928da14b0890bec534720e243d61fbbfa8d3",
+      "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b09-a1",
+      "role": "comparative_contrast_member",
+      "measurement_arm": "decode",
+      "block_id": "d117-decode-contrast-b09",
+      "block_index": 9,
+      "position": "A1",
+      "arm": "A"
+    },
+    {
+      "ordinal": 34,
+      "stage_id": "gamma-science-02-decode-contrast-blocks-06-10",
+      "config_path": "02_decode_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b09-b1.json",
+      "config_sha256": "9c89928c03d235a3a5e0171cf352bacc65ed203af1103c1dc83cf271cd503fa7",
+      "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b09-b1",
+      "role": "comparative_contrast_member",
+      "measurement_arm": "decode",
+      "block_id": "d117-decode-contrast-b09",
+      "block_index": 9,
+      "position": "B1",
+      "arm": "B"
+    },
+    {
+      "ordinal": 35,
+      "stage_id": "gamma-science-02-decode-contrast-blocks-06-10",
+      "config_path": "02_decode_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b09-b2.json",
+      "config_sha256": "bc8317f2d9839ee658c867f9fa350cd5a93c9d1ae52721b3fdd67a135fe86ae3",
+      "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b09-b2",
+      "role": "comparative_contrast_member",
+      "measurement_arm": "decode",
+      "block_id": "d117-decode-contrast-b09",
+      "block_index": 9,
+      "position": "B2",
+      "arm": "B"
+    },
+    {
+      "ordinal": 36,
+      "stage_id": "gamma-science-02-decode-contrast-blocks-06-10",
+      "config_path": "02_decode_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b09-a2.json",
+      "config_sha256": "479d8ea70a00d3302d83b24aa734f63fdfb883dbf11565d5090db1ce0c43849b",
+      "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b09-a2",
+      "role": "comparative_contrast_member",
+      "measurement_arm": "decode",
+      "block_id": "d117-decode-contrast-b09",
+      "block_index": 9,
+      "position": "A2",
+      "arm": "A"
+    },
+    {
+      "ordinal": 37,
+      "stage_id": "gamma-science-02-decode-contrast-blocks-06-10",
+      "config_path": "02_decode_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b10-a1.json",
+      "config_sha256": "6d07cb1daed0f2cd983aa42b53eaefce10dca4a8451e24e80714a9a2dda5dec5",
+      "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b10-a1",
+      "role": "comparative_contrast_member",
+      "measurement_arm": "decode",
+      "block_id": "d117-decode-contrast-b10",
+      "block_index": 10,
+      "position": "A1",
+      "arm": "A"
+    },
+    {
+      "ordinal": 38,
+      "stage_id": "gamma-science-02-decode-contrast-blocks-06-10",
+      "config_path": "02_decode_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b10-b1.json",
+      "config_sha256": "2fdb0180455ee34d7320b64315d18599f57ee99d624ae27dfa69376f40e26593",
+      "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b10-b1",
+      "role": "comparative_contrast_member",
+      "measurement_arm": "decode",
+      "block_id": "d117-decode-contrast-b10",
+      "block_index": 10,
+      "position": "B1",
+      "arm": "B"
+    },
+    {
+      "ordinal": 39,
+      "stage_id": "gamma-science-02-decode-contrast-blocks-06-10",
+      "config_path": "02_decode_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b10-b2.json",
+      "config_sha256": "0810ce5fb5bb032b093c13e9fe5c8a83bedf2080089c8d0163319a69ee07fa91",
+      "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b10-b2",
+      "role": "comparative_contrast_member",
+      "measurement_arm": "decode",
+      "block_id": "d117-decode-contrast-b10",
+      "block_index": 10,
+      "position": "B2",
+      "arm": "B"
+    },
+    {
+      "ordinal": 40,
+      "stage_id": "gamma-science-02-decode-contrast-blocks-06-10",
+      "config_path": "02_decode_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b10-a2.json",
+      "config_sha256": "20580b3b243975844f706c4c5e8772c91deb0b5648cc5e9ac66fdc7fde1b88e6",
+      "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b10-a2",
+      "role": "comparative_contrast_member",
+      "measurement_arm": "decode",
+      "block_id": "d117-decode-contrast-b10",
+      "block_index": 10,
+      "position": "A2",
+      "arm": "A"
+    },
+    {
+      "ordinal": 41,
+      "stage_id": "gamma-science-03-prefill-p2048-contrast-blocks-01-05",
+      "config_path": "03_prefill_p2048_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b01-a1.json",
+      "config_sha256": "f106ec92efdd1aff7e1a937ae81771ffbf9ecec9b3d72988e30345e0afd822dd",
+      "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b01-a1",
+      "role": "comparative_contrast_member",
+      "measurement_arm": "prefill_p2048",
+      "block_id": "d117-prefill-p2048-contrast-b01",
+      "block_index": 1,
+      "position": "A1",
+      "arm": "A"
+    },
+    {
+      "ordinal": 42,
+      "stage_id": "gamma-science-03-prefill-p2048-contrast-blocks-01-05",
+      "config_path": "03_prefill_p2048_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b01-b1.json",
+      "config_sha256": "3c36d532e16f7ce6a6a792097b57e8f7fbb85e45af9de79acb959a8550a5c7f1",
+      "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b01-b1",
+      "role": "comparative_contrast_member",
+      "measurement_arm": "prefill_p2048",
+      "block_id": "d117-prefill-p2048-contrast-b01",
+      "block_index": 1,
+      "position": "B1",
+      "arm": "B"
+    },
+    {
+      "ordinal": 43,
+      "stage_id": "gamma-science-03-prefill-p2048-contrast-blocks-01-05",
+      "config_path": "03_prefill_p2048_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b01-b2.json",
+      "config_sha256": "3d9a57fa70f4f2e980f2caaad51da3b793797686eaef7e932ab5a6176e898aec",
+      "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b01-b2",
+      "role": "comparative_contrast_member",
+      "measurement_arm": "prefill_p2048",
+      "block_id": "d117-prefill-p2048-contrast-b01",
+      "block_index": 1,
+      "position": "B2",
+      "arm": "B"
+    },
+    {
+      "ordinal": 44,
+      "stage_id": "gamma-science-03-prefill-p2048-contrast-blocks-01-05",
+      "config_path": "03_prefill_p2048_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b01-a2.json",
+      "config_sha256": "2f43244b6b5f39ef16195bad0028acc12e12dc77c1bde51390b93ab24071ccf2",
+      "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b01-a2",
+      "role": "comparative_contrast_member",
+      "measurement_arm": "prefill_p2048",
+      "block_id": "d117-prefill-p2048-contrast-b01",
+      "block_index": 1,
+      "position": "A2",
+      "arm": "A"
+    },
+    {
+      "ordinal": 45,
+      "stage_id": "gamma-science-03-prefill-p2048-contrast-blocks-01-05",
+      "config_path": "03_prefill_p2048_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b02-a1.json",
+      "config_sha256": "9456b7c4b216a15cd91e5ac6c6e9f5bc24586085df097aa6d54f3a88511a0977",
+      "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b02-a1",
+      "role": "comparative_contrast_member",
+      "measurement_arm": "prefill_p2048",
+      "block_id": "d117-prefill-p2048-contrast-b02",
+      "block_index": 2,
+      "position": "A1",
+      "arm": "A"
+    },
+    {
+      "ordinal": 46,
+      "stage_id": "gamma-science-03-prefill-p2048-contrast-blocks-01-05",
+      "config_path": "03_prefill_p2048_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b02-b1.json",
+      "config_sha256": "0a24644cb4cda0efeb2ca5242386e46112448be7208c623ce7e34f58baa78275",
+      "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b02-b1",
+      "role": "comparative_contrast_member",
+      "measurement_arm": "prefill_p2048",
+      "block_id": "d117-prefill-p2048-contrast-b02",
+      "block_index": 2,
+      "position": "B1",
+      "arm": "B"
+    },
+    {
+      "ordinal": 47,
+      "stage_id": "gamma-science-03-prefill-p2048-contrast-blocks-01-05",
+      "config_path": "03_prefill_p2048_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b02-b2.json",
+      "config_sha256": "bf18938f6bf1f156e67435c6ebb0969b4e76e0e9092be6169e4ceb0c3f179685",
+      "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b02-b2",
+      "role": "comparative_contrast_member",
+      "measurement_arm": "prefill_p2048",
+      "block_id": "d117-prefill-p2048-contrast-b02",
+      "block_index": 2,
+      "position": "B2",
+      "arm": "B"
+    },
+    {
+      "ordinal": 48,
+      "stage_id": "gamma-science-03-prefill-p2048-contrast-blocks-01-05",
+      "config_path": "03_prefill_p2048_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b02-a2.json",
+      "config_sha256": "48deefd175a86306f934baeac34bc7653e5d31f7bd6ed9554b17339d82d2f3f6",
+      "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b02-a2",
+      "role": "comparative_contrast_member",
+      "measurement_arm": "prefill_p2048",
+      "block_id": "d117-prefill-p2048-contrast-b02",
+      "block_index": 2,
+      "position": "A2",
+      "arm": "A"
+    },
+    {
+      "ordinal": 49,
+      "stage_id": "gamma-science-03-prefill-p2048-contrast-blocks-01-05",
+      "config_path": "03_prefill_p2048_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b03-a1.json",
+      "config_sha256": "a46a0e48c3360883d0cd8d276447fb62c05da2a12dbe0331cd5a8306761ef321",
+      "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b03-a1",
+      "role": "comparative_contrast_member",
+      "measurement_arm": "prefill_p2048",
+      "block_id": "d117-prefill-p2048-contrast-b03",
+      "block_index": 3,
+      "position": "A1",
+      "arm": "A"
+    },
+    {
+      "ordinal": 50,
+      "stage_id": "gamma-science-03-prefill-p2048-contrast-blocks-01-05",
+      "config_path": "03_prefill_p2048_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b03-b1.json",
+      "config_sha256": "b2355aa9915821d111878c24772d696604a1e6fb7351c0e866ecf91476ac349a",
+      "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b03-b1",
+      "role": "comparative_contrast_member",
+      "measurement_arm": "prefill_p2048",
+      "block_id": "d117-prefill-p2048-contrast-b03",
+      "block_index": 3,
+      "position": "B1",
+      "arm": "B"
+    },
+    {
+      "ordinal": 51,
+      "stage_id": "gamma-science-03-prefill-p2048-contrast-blocks-01-05",
+      "config_path": "03_prefill_p2048_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b03-b2.json",
+      "config_sha256": "ecee222e9cc569b46934ef05cb2936c5a1560d3abfdf590290bee382f272ca8e",
+      "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b03-b2",
+      "role": "comparative_contrast_member",
+      "measurement_arm": "prefill_p2048",
+      "block_id": "d117-prefill-p2048-contrast-b03",
+      "block_index": 3,
+      "position": "B2",
+      "arm": "B"
+    },
+    {
+      "ordinal": 52,
+      "stage_id": "gamma-science-03-prefill-p2048-contrast-blocks-01-05",
+      "config_path": "03_prefill_p2048_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b03-a2.json",
+      "config_sha256": "bbe7914c84ea10f62dd0284fd8759561e50f4d7a13dca7d90bcc08709fecc2c7",
+      "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b03-a2",
+      "role": "comparative_contrast_member",
+      "measurement_arm": "prefill_p2048",
+      "block_id": "d117-prefill-p2048-contrast-b03",
+      "block_index": 3,
+      "position": "A2",
+      "arm": "A"
+    },
+    {
+      "ordinal": 53,
+      "stage_id": "gamma-science-03-prefill-p2048-contrast-blocks-01-05",
+      "config_path": "03_prefill_p2048_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b04-a1.json",
+      "config_sha256": "359842482971a4655aade83ee9e8298697346aa303e1a92e1fc794718a171976",
+      "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b04-a1",
+      "role": "comparative_contrast_member",
+      "measurement_arm": "prefill_p2048",
+      "block_id": "d117-prefill-p2048-contrast-b04",
+      "block_index": 4,
+      "position": "A1",
+      "arm": "A"
+    },
+    {
+      "ordinal": 54,
+      "stage_id": "gamma-science-03-prefill-p2048-contrast-blocks-01-05",
+      "config_path": "03_prefill_p2048_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b04-b1.json",
+      "config_sha256": "d0b490f5a50925f5591c266f25c6e458a1f2410393e2a809b82379fcf1e1e7c3",
+      "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b04-b1",
+      "role": "comparative_contrast_member",
+      "measurement_arm": "prefill_p2048",
+      "block_id": "d117-prefill-p2048-contrast-b04",
+      "block_index": 4,
+      "position": "B1",
+      "arm": "B"
+    },
+    {
+      "ordinal": 55,
+      "stage_id": "gamma-science-03-prefill-p2048-contrast-blocks-01-05",
+      "config_path": "03_prefill_p2048_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b04-b2.json",
+      "config_sha256": "0586c137f6fe7b6a2bf86c015faf2167d73e0370324a21c82551c61230c80e19",
+      "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b04-b2",
+      "role": "comparative_contrast_member",
+      "measurement_arm": "prefill_p2048",
+      "block_id": "d117-prefill-p2048-contrast-b04",
+      "block_index": 4,
+      "position": "B2",
+      "arm": "B"
+    },
+    {
+      "ordinal": 56,
+      "stage_id": "gamma-science-03-prefill-p2048-contrast-blocks-01-05",
+      "config_path": "03_prefill_p2048_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b04-a2.json",
+      "config_sha256": "1b50dde707b0ec1764c5ba4f872d149a67b2844ebd203f7d25ecc450c27b4d20",
+      "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b04-a2",
+      "role": "comparative_contrast_member",
+      "measurement_arm": "prefill_p2048",
+      "block_id": "d117-prefill-p2048-contrast-b04",
+      "block_index": 4,
+      "position": "A2",
+      "arm": "A"
+    },
+    {
+      "ordinal": 57,
+      "stage_id": "gamma-science-03-prefill-p2048-contrast-blocks-01-05",
+      "config_path": "03_prefill_p2048_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b05-a1.json",
+      "config_sha256": "076e735017b1c87dd985328c1e20544dd5eec51fb35184b4e9af766fcd4ffa99",
+      "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b05-a1",
+      "role": "comparative_contrast_member",
+      "measurement_arm": "prefill_p2048",
+      "block_id": "d117-prefill-p2048-contrast-b05",
+      "block_index": 5,
+      "position": "A1",
+      "arm": "A"
+    },
+    {
+      "ordinal": 58,
+      "stage_id": "gamma-science-03-prefill-p2048-contrast-blocks-01-05",
+      "config_path": "03_prefill_p2048_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b05-b1.json",
+      "config_sha256": "830824d1ed1fe58057440eed8c795ad73b6281902ce30e35043e9bb2604efe62",
+      "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b05-b1",
+      "role": "comparative_contrast_member",
+      "measurement_arm": "prefill_p2048",
+      "block_id": "d117-prefill-p2048-contrast-b05",
+      "block_index": 5,
+      "position": "B1",
+      "arm": "B"
+    },
+    {
+      "ordinal": 59,
+      "stage_id": "gamma-science-03-prefill-p2048-contrast-blocks-01-05",
+      "config_path": "03_prefill_p2048_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b05-b2.json",
+      "config_sha256": "6a97706c5d5767ba827bc15c11b9cb575a7446018eadfe1b1fbe76e8a6b5871e",
+      "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b05-b2",
+      "role": "comparative_contrast_member",
+      "measurement_arm": "prefill_p2048",
+      "block_id": "d117-prefill-p2048-contrast-b05",
+      "block_index": 5,
+      "position": "B2",
+      "arm": "B"
+    },
+    {
+      "ordinal": 60,
+      "stage_id": "gamma-science-03-prefill-p2048-contrast-blocks-01-05",
+      "config_path": "03_prefill_p2048_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b05-a2.json",
+      "config_sha256": "2b2b1f8d20706154df42f61cba6a6db37de7030002fa2861c2690515903f1790",
+      "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b05-a2",
+      "role": "comparative_contrast_member",
+      "measurement_arm": "prefill_p2048",
+      "block_id": "d117-prefill-p2048-contrast-b05",
+      "block_index": 5,
+      "position": "A2",
+      "arm": "A"
+    },
+    {
+      "ordinal": 61,
+      "stage_id": "gamma-science-04-prefill-p2048-contrast-blocks-06-10",
+      "config_path": "04_prefill_p2048_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b06-a1.json",
+      "config_sha256": "74827ba57619fc0d9e8bfff478e817c58036f7bb40d768dc1609f0b09cd0be84",
+      "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b06-a1",
+      "role": "comparative_contrast_member",
+      "measurement_arm": "prefill_p2048",
+      "block_id": "d117-prefill-p2048-contrast-b06",
+      "block_index": 6,
+      "position": "A1",
+      "arm": "A"
+    },
+    {
+      "ordinal": 62,
+      "stage_id": "gamma-science-04-prefill-p2048-contrast-blocks-06-10",
+      "config_path": "04_prefill_p2048_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b06-b1.json",
+      "config_sha256": "2cdb74e932ea61ce1a1e48296373953d6275536c3dce36a820c061d2392fa201",
+      "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b06-b1",
+      "role": "comparative_contrast_member",
+      "measurement_arm": "prefill_p2048",
+      "block_id": "d117-prefill-p2048-contrast-b06",
+      "block_index": 6,
+      "position": "B1",
+      "arm": "B"
+    },
+    {
+      "ordinal": 63,
+      "stage_id": "gamma-science-04-prefill-p2048-contrast-blocks-06-10",
+      "config_path": "04_prefill_p2048_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b06-b2.json",
+      "config_sha256": "4eee59aad765e449523f14e793dda5648e02ef069b88d683a9a474c7ab968a69",
+      "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b06-b2",
+      "role": "comparative_contrast_member",
+      "measurement_arm": "prefill_p2048",
+      "block_id": "d117-prefill-p2048-contrast-b06",
+      "block_index": 6,
+      "position": "B2",
+      "arm": "B"
+    },
+    {
+      "ordinal": 64,
+      "stage_id": "gamma-science-04-prefill-p2048-contrast-blocks-06-10",
+      "config_path": "04_prefill_p2048_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b06-a2.json",
+      "config_sha256": "4347a53420fd3edd34b1e87542f793329b2f7600ba15bd0eb8084fde5bcb6648",
+      "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b06-a2",
+      "role": "comparative_contrast_member",
+      "measurement_arm": "prefill_p2048",
+      "block_id": "d117-prefill-p2048-contrast-b06",
+      "block_index": 6,
+      "position": "A2",
+      "arm": "A"
+    },
+    {
+      "ordinal": 65,
+      "stage_id": "gamma-science-04-prefill-p2048-contrast-blocks-06-10",
+      "config_path": "04_prefill_p2048_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b07-a1.json",
+      "config_sha256": "9044a93da88c9f5f05cd52b419cf3e303d54442969105ac9c82bf00bebe1cc49",
+      "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b07-a1",
+      "role": "comparative_contrast_member",
+      "measurement_arm": "prefill_p2048",
+      "block_id": "d117-prefill-p2048-contrast-b07",
+      "block_index": 7,
+      "position": "A1",
+      "arm": "A"
+    },
+    {
+      "ordinal": 66,
+      "stage_id": "gamma-science-04-prefill-p2048-contrast-blocks-06-10",
+      "config_path": "04_prefill_p2048_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b07-b1.json",
+      "config_sha256": "228e5ecbfe5782033f0473817ad45712d2617416683e1ca90f1d6912e13ceb5b",
+      "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b07-b1",
+      "role": "comparative_contrast_member",
+      "measurement_arm": "prefill_p2048",
+      "block_id": "d117-prefill-p2048-contrast-b07",
+      "block_index": 7,
+      "position": "B1",
+      "arm": "B"
+    },
+    {
+      "ordinal": 67,
+      "stage_id": "gamma-science-04-prefill-p2048-contrast-blocks-06-10",
+      "config_path": "04_prefill_p2048_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b07-b2.json",
+      "config_sha256": "170a505bd9275098cc95924f3a70aef829e85a262374c4a5c1f55d9ca22c6231",
+      "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b07-b2",
+      "role": "comparative_contrast_member",
+      "measurement_arm": "prefill_p2048",
+      "block_id": "d117-prefill-p2048-contrast-b07",
+      "block_index": 7,
+      "position": "B2",
+      "arm": "B"
+    },
+    {
+      "ordinal": 68,
+      "stage_id": "gamma-science-04-prefill-p2048-contrast-blocks-06-10",
+      "config_path": "04_prefill_p2048_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b07-a2.json",
+      "config_sha256": "162dc549e4ddca94ee845650d8bff277318b245093b4a2ed058bf7c00d9ec41e",
+      "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b07-a2",
+      "role": "comparative_contrast_member",
+      "measurement_arm": "prefill_p2048",
+      "block_id": "d117-prefill-p2048-contrast-b07",
+      "block_index": 7,
+      "position": "A2",
+      "arm": "A"
+    },
+    {
+      "ordinal": 69,
+      "stage_id": "gamma-science-04-prefill-p2048-contrast-blocks-06-10",
+      "config_path": "04_prefill_p2048_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b08-a1.json",
+      "config_sha256": "9957246d096743cd39efe101adad614b1cf6f15eb2df96711e6fbd69843196a2",
+      "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b08-a1",
+      "role": "comparative_contrast_member",
+      "measurement_arm": "prefill_p2048",
+      "block_id": "d117-prefill-p2048-contrast-b08",
+      "block_index": 8,
+      "position": "A1",
+      "arm": "A"
+    },
+    {
+      "ordinal": 70,
+      "stage_id": "gamma-science-04-prefill-p2048-contrast-blocks-06-10",
+      "config_path": "04_prefill_p2048_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b08-b1.json",
+      "config_sha256": "da8942a99e308cc15ff66457f46cf1bd122e7c43a3f38d705bb30a87f8a0558e",
+      "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b08-b1",
+      "role": "comparative_contrast_member",
+      "measurement_arm": "prefill_p2048",
+      "block_id": "d117-prefill-p2048-contrast-b08",
+      "block_index": 8,
+      "position": "B1",
+      "arm": "B"
+    },
+    {
+      "ordinal": 71,
+      "stage_id": "gamma-science-04-prefill-p2048-contrast-blocks-06-10",
+      "config_path": "04_prefill_p2048_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b08-b2.json",
+      "config_sha256": "a8a8dc9b1795f4c5b35f68b3f185a3c8ecf9c8c4ed556c16b77a276c93527373",
+      "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b08-b2",
+      "role": "comparative_contrast_member",
+      "measurement_arm": "prefill_p2048",
+      "block_id": "d117-prefill-p2048-contrast-b08",
+      "block_index": 8,
+      "position": "B2",
+      "arm": "B"
+    },
+    {
+      "ordinal": 72,
+      "stage_id": "gamma-science-04-prefill-p2048-contrast-blocks-06-10",
+      "config_path": "04_prefill_p2048_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b08-a2.json",
+      "config_sha256": "fa66e6c16a8350ae3636941294da1c542948adcb2e5482da4758edd5100af2c2",
+      "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b08-a2",
+      "role": "comparative_contrast_member",
+      "measurement_arm": "prefill_p2048",
+      "block_id": "d117-prefill-p2048-contrast-b08",
+      "block_index": 8,
+      "position": "A2",
+      "arm": "A"
+    },
+    {
+      "ordinal": 73,
+      "stage_id": "gamma-science-04-prefill-p2048-contrast-blocks-06-10",
+      "config_path": "04_prefill_p2048_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b09-a1.json",
+      "config_sha256": "5c92f3e052bb475b825d6ab049c260d5a8602228f003206a0bc3933d9873bced",
+      "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b09-a1",
+      "role": "comparative_contrast_member",
+      "measurement_arm": "prefill_p2048",
+      "block_id": "d117-prefill-p2048-contrast-b09",
+      "block_index": 9,
+      "position": "A1",
+      "arm": "A"
+    },
+    {
+      "ordinal": 74,
+      "stage_id": "gamma-science-04-prefill-p2048-contrast-blocks-06-10",
+      "config_path": "04_prefill_p2048_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b09-b1.json",
+      "config_sha256": "de7d29e938f64316840693844c705669e29d3b1be29e21fd0052708cb3475b9f",
+      "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b09-b1",
+      "role": "comparative_contrast_member",
+      "measurement_arm": "prefill_p2048",
+      "block_id": "d117-prefill-p2048-contrast-b09",
+      "block_index": 9,
+      "position": "B1",
+      "arm": "B"
+    },
+    {
+      "ordinal": 75,
+      "stage_id": "gamma-science-04-prefill-p2048-contrast-blocks-06-10",
+      "config_path": "04_prefill_p2048_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b09-b2.json",
+      "config_sha256": "5a4e26e1d15869c1892290311ca868e9a2690d1715379300d5cab1676187ba4a",
+      "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b09-b2",
+      "role": "comparative_contrast_member",
+      "measurement_arm": "prefill_p2048",
+      "block_id": "d117-prefill-p2048-contrast-b09",
+      "block_index": 9,
+      "position": "B2",
+      "arm": "B"
+    },
+    {
+      "ordinal": 76,
+      "stage_id": "gamma-science-04-prefill-p2048-contrast-blocks-06-10",
+      "config_path": "04_prefill_p2048_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b09-a2.json",
+      "config_sha256": "77d2b52909d753eb194e65bafbb034afd8f2f658192702fc28066080b992b860",
+      "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b09-a2",
+      "role": "comparative_contrast_member",
+      "measurement_arm": "prefill_p2048",
+      "block_id": "d117-prefill-p2048-contrast-b09",
+      "block_index": 9,
+      "position": "A2",
+      "arm": "A"
+    },
+    {
+      "ordinal": 77,
+      "stage_id": "gamma-science-04-prefill-p2048-contrast-blocks-06-10",
+      "config_path": "04_prefill_p2048_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b10-a1.json",
+      "config_sha256": "6fca238384b237fe00df12add58a50044f16f3bd7b66334e88d7721f7eec579c",
+      "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b10-a1",
+      "role": "comparative_contrast_member",
+      "measurement_arm": "prefill_p2048",
+      "block_id": "d117-prefill-p2048-contrast-b10",
+      "block_index": 10,
+      "position": "A1",
+      "arm": "A"
+    },
+    {
+      "ordinal": 78,
+      "stage_id": "gamma-science-04-prefill-p2048-contrast-blocks-06-10",
+      "config_path": "04_prefill_p2048_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b10-b1.json",
+      "config_sha256": "621a5909caa8696f28161449e53da15a69b97f350aeb60ac47c4ebe1b616168f",
+      "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b10-b1",
+      "role": "comparative_contrast_member",
+      "measurement_arm": "prefill_p2048",
+      "block_id": "d117-prefill-p2048-contrast-b10",
+      "block_index": 10,
+      "position": "B1",
+      "arm": "B"
+    },
+    {
+      "ordinal": 79,
+      "stage_id": "gamma-science-04-prefill-p2048-contrast-blocks-06-10",
+      "config_path": "04_prefill_p2048_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b10-b2.json",
+      "config_sha256": "ac292e295601bb7cffcab104731cd60eeb7b7c76ba7c5820426770e54d0eeebb",
+      "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b10-b2",
+      "role": "comparative_contrast_member",
+      "measurement_arm": "prefill_p2048",
+      "block_id": "d117-prefill-p2048-contrast-b10",
+      "block_index": 10,
+      "position": "B2",
+      "arm": "B"
+    },
+    {
+      "ordinal": 80,
+      "stage_id": "gamma-science-04-prefill-p2048-contrast-blocks-06-10",
+      "config_path": "04_prefill_p2048_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b10-a2.json",
+      "config_sha256": "17d47f68bf954f4462204e65ae80b840e59ac3a701b6b3ece01be73f7eaa7e4b",
+      "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b10-a2",
+      "role": "comparative_contrast_member",
+      "measurement_arm": "prefill_p2048",
+      "block_id": "d117-prefill-p2048-contrast-b10",
+      "block_index": 10,
+      "position": "A2",
+      "arm": "A"
+    }
+  ],
+  "stage_graph": [
+    {
+      "stage_id": "gamma-bracket-reservation",
+      "ordinal": 1,
+      "kind": "bracket_reservation",
+      "expected_count": 0,
+      "predecessor": null,
+      "successor": "gamma-calibration-pre",
+      "input_ref": {
+        "kind": "plan_tree"
+      },
+      "launch": {
+        "schema_version": "joulewise.stage_launch.v1",
+        "commands": [
+          {
+            "command_id": "gamma-bracket-reservation.reserve",
+            "command_kind": "bracket_reservation",
+            "argv_template": {
+              "tool_id": "bracket_reserver",
+              "interface_id": "joulewise.calibration_window_bracket_reservation.cli.v1",
+              "arguments": [
+                {
+                  "kind": "literal",
+                  "value": "--ledger"
+                },
+                {
+                  "kind": "binding",
+                  "value": "ledger_path"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--head-pin"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/calibration/calibration_ledger_head.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--plan"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5/calibration_plan.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--session-id"
+                },
+                {
+                  "kind": "binding",
+                  "value": "bracket_session_id"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--window-id"
+                },
+                {
+                  "kind": "tree_pointer",
+                  "value": "/window_identity/window_id"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--plan-id"
+                },
+                {
+                  "kind": "tree_pointer",
+                  "value": "/plan/plan_id"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--plan-sha256"
+                },
+                {
+                  "kind": "tree_pointer",
+                  "value": "/plan/actual_sha256"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--evidence-root-id"
+                },
+                {
+                  "kind": "tree_pointer",
+                  "value": "/window_identity/evidence_root_id"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--runs-root"
+                },
+                {
+                  "kind": "binding",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--pre-attempt-id"
+                },
+                {
+                  "kind": "binding",
+                  "value": "pre_attempt_id"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--post-attempt-id"
+                },
+                {
+                  "kind": "binding",
+                  "value": "post_attempt_id"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--pre-custody-locator"
+                },
+                {
+                  "kind": "binding",
+                  "value": "pre_calibration_dir"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--post-custody-locator"
+                },
+                {
+                  "kind": "binding",
+                  "value": "post_calibration_dir"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--identity-epoch-json"
+                },
+                {
+                  "kind": "binding",
+                  "value": "identity_epoch_json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--t1-bindings-json"
+                },
+                {
+                  "kind": "binding",
+                  "value": "t1_bindings_json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--execute"
+                }
+              ]
+            },
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "stage_id": "gamma-calibration-pre",
+      "ordinal": 2,
+      "kind": "calibration_capture",
+      "expected_count": 1,
+      "predecessor": "gamma-bracket-reservation",
+      "successor": "gamma-bound-collection",
+      "input_ref": {
+        "kind": "arm_attachment",
+        "slot": "pre_attempt_id"
+      },
+      "launch": {
+        "schema_version": "joulewise.stage_launch.v1",
+        "commands": [
+          {
+            "command_id": "gamma-calibration-pre.capture",
+            "command_kind": "calibration_capture",
+            "argv_template": {
+              "tool_id": "fiducial_capture",
+              "interface_id": "joulewise.powermetrics_fiducial.cli.v1",
+              "arguments": [
+                {
+                  "kind": "literal",
+                  "value": "--allow-live"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--output-root"
+                },
+                {
+                  "kind": "binding_path",
+                  "value": "claim_runs_root",
+                  "relative": "instrument_validation"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--session-id"
+                },
+                {
+                  "kind": "binding",
+                  "value": "bracket_session_id"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--slot"
+                },
+                {
+                  "kind": "literal",
+                  "value": "pre"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--attempt-id"
+                },
+                {
+                  "kind": "binding",
+                  "value": "pre_attempt_id"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--power-policy"
+                },
+                {
+                  "kind": "literal",
+                  "value": "ac_high_power"
+                }
+              ]
+            },
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "stage_id": "gamma-bound-collection",
+      "ordinal": 3,
+      "kind": "campaign_collection",
+      "expected_count": 12,
+      "predecessor": "gamma-calibration-pre",
+      "successor": "gamma-bound-derivation",
+      "input_ref": {
+        "kind": "external_input",
+        "input_id": "neg8_bound_corpus"
+      },
+      "launch": {
+        "schema_version": "joulewise.stage_launch.v1",
+        "commands": [
+          {
+            "command_id": "gamma-bound-collection.collect",
+            "command_kind": "campaign_collection",
+            "argv_template": {
+              "tool_id": "campaign_runner",
+              "interface_id": "joulewise.run_campaign.cli.v1",
+              "arguments": [
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaigns/neg8_reference_corpus"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--runs-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "bound_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--log"
+                },
+                {
+                  "kind": "binding_path",
+                  "value": "bound_runs_root",
+                  "relative": "campaign_log.jsonl"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--campaign-policy"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaign_policies/quiet_mac_p2_production.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-calibration-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "pre_calibration_dir"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-power-policy"
+                },
+                {
+                  "kind": "literal",
+                  "value": "ac_high_power"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-quiet-mode"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-countdown-s"
+                },
+                {
+                  "kind": "literal",
+                  "value": "20"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--max-failures"
+                },
+                {
+                  "kind": "literal",
+                  "value": "1"
+                }
+              ]
+            },
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "stage_id": "gamma-bound-derivation",
+      "ordinal": 4,
+      "kind": "bound_derivation",
+      "expected_count": 0,
+      "predecessor": "gamma-bound-collection",
+      "successor": "gamma-reference-start",
+      "input_ref": {
+        "kind": "external_input",
+        "input_id": "neg8_settled_corpus"
+      },
+      "launch": {
+        "schema_version": "joulewise.stage_launch.v1",
+        "commands": [
+          {
+            "command_id": "gamma-bound-derivation.derive",
+            "command_kind": "bound_derivation",
+            "argv_template": {
+              "tool_id": "campaign_runner",
+              "interface_id": "joulewise.run_campaign.cli.v1",
+              "arguments": [
+                {
+                  "kind": "literal",
+                  "value": "--derive-neg8-drift-bound"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaigns/neg8_reference_corpus/derivation/settled_corpus.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--neg8-drift-bound-output"
+                },
+                {
+                  "kind": "binding_path",
+                  "value": "bound_runs_root",
+                  "relative": "neg8-drift-bound.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--runs-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "bound_runs_root"
+                }
+              ]
+            },
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "stage_id": "gamma-reference-start",
+      "ordinal": 5,
+      "kind": "campaign_collection",
+      "expected_count": 3,
+      "predecessor": "gamma-bound-derivation",
+      "successor": "gamma-science-01-decode-contrast-blocks-01-05",
+      "input_ref": {
+        "kind": "external_input",
+        "input_id": "start_references"
+      },
+      "launch": {
+        "schema_version": "joulewise.stage_launch.v1",
+        "commands": [
+          {
+            "command_id": "gamma-reference-start.collect",
+            "command_kind": "campaign_collection",
+            "argv_template": {
+              "tool_id": "campaign_runner",
+              "interface_id": "joulewise.run_campaign.cli.v1",
+              "arguments": [
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaigns/window_references/start_triplet"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--runs-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--log"
+                },
+                {
+                  "kind": "binding_path",
+                  "value": "claim_runs_root",
+                  "relative": "campaign_log.jsonl"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--campaign-policy"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaign_policies/quiet_mac_p2_production.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-calibration-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "pre_calibration_dir"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-power-policy"
+                },
+                {
+                  "kind": "literal",
+                  "value": "ac_high_power"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-quiet-mode"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-countdown-s"
+                },
+                {
+                  "kind": "literal",
+                  "value": "20"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--max-failures"
+                },
+                {
+                  "kind": "literal",
+                  "value": "1"
+                }
+              ]
+            },
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "stage_id": "gamma-science-01-decode-contrast-blocks-01-05",
+      "ordinal": 6,
+      "kind": "campaign_collection",
+      "expected_count": 20,
+      "predecessor": "gamma-reference-start",
+      "successor": "gamma-reference-decode-midpoint",
+      "input_ref": {
+        "kind": "pack_manifest",
+        "path": "01_decode_contrast_blocks_01_05/order_manifest.json",
+        "manifest_id": "d117-gamma-01-decode-contrast-blocks-01-05-order-v1",
+        "sha256": "6b38e15057b278b85440638a6788ba1756b007a24a6aef33be48060620298e43"
+      },
+      "launch": {
+        "schema_version": "joulewise.stage_launch.v1",
+        "commands": [
+          {
+            "command_id": "gamma-science-01-decode-contrast-blocks-01-05.collect",
+            "command_kind": "campaign_collection",
+            "argv_template": {
+              "tool_id": "campaign_runner",
+              "interface_id": "joulewise.run_campaign.cli.v1",
+              "arguments": [
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5/01_decode_contrast_blocks_01_05"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--runs-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--log"
+                },
+                {
+                  "kind": "binding_path",
+                  "value": "claim_runs_root",
+                  "relative": "campaign_log.jsonl"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--campaign-policy"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaign_policies/quiet_mac_p2_production.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-calibration-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "pre_calibration_dir"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-power-policy"
+                },
+                {
+                  "kind": "literal",
+                  "value": "ac_high_power"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-quiet-mode"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-countdown-s"
+                },
+                {
+                  "kind": "literal",
+                  "value": "20"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--max-failures"
+                },
+                {
+                  "kind": "literal",
+                  "value": "1"
+                }
+              ]
+            },
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "stage_id": "gamma-reference-decode-midpoint",
+      "ordinal": 7,
+      "kind": "campaign_collection",
+      "expected_count": 1,
+      "predecessor": "gamma-science-01-decode-contrast-blocks-01-05",
+      "successor": "gamma-science-02-decode-contrast-blocks-06-10",
+      "input_ref": {
+        "kind": "external_input",
+        "input_id": "midpoint_reference"
+      },
+      "launch": {
+        "schema_version": "joulewise.stage_launch.v1",
+        "commands": [
+          {
+            "command_id": "gamma-reference-decode-midpoint.collect",
+            "command_kind": "campaign_collection",
+            "argv_template": {
+              "tool_id": "campaign_runner",
+              "interface_id": "joulewise.run_campaign.cli.v1",
+              "arguments": [
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaigns/window_references/midpoint"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--runs-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--log"
+                },
+                {
+                  "kind": "binding_path",
+                  "value": "claim_runs_root",
+                  "relative": "campaign_log.jsonl"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--campaign-policy"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaign_policies/quiet_mac_p2_production.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-calibration-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "pre_calibration_dir"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-power-policy"
+                },
+                {
+                  "kind": "literal",
+                  "value": "ac_high_power"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-quiet-mode"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-countdown-s"
+                },
+                {
+                  "kind": "literal",
+                  "value": "20"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--max-failures"
+                },
+                {
+                  "kind": "literal",
+                  "value": "1"
+                }
+              ]
+            },
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "stage_id": "gamma-science-02-decode-contrast-blocks-06-10",
+      "ordinal": 8,
+      "kind": "campaign_collection",
+      "expected_count": 20,
+      "predecessor": "gamma-reference-decode-midpoint",
+      "successor": "gamma-reference-arm-boundary",
+      "input_ref": {
+        "kind": "pack_manifest",
+        "path": "02_decode_contrast_blocks_06_10/order_manifest.json",
+        "manifest_id": "d117-gamma-02-decode-contrast-blocks-06-10-order-v1",
+        "sha256": "1649085e09f469b5d11390e3b6ea0af843f090c695cd3b0e810b0b64fd3d17b0"
+      },
+      "launch": {
+        "schema_version": "joulewise.stage_launch.v1",
+        "commands": [
+          {
+            "command_id": "gamma-science-02-decode-contrast-blocks-06-10.collect",
+            "command_kind": "campaign_collection",
+            "argv_template": {
+              "tool_id": "campaign_runner",
+              "interface_id": "joulewise.run_campaign.cli.v1",
+              "arguments": [
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5/02_decode_contrast_blocks_06_10"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--runs-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--log"
+                },
+                {
+                  "kind": "binding_path",
+                  "value": "claim_runs_root",
+                  "relative": "campaign_log.jsonl"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--campaign-policy"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaign_policies/quiet_mac_p2_production.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-calibration-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "pre_calibration_dir"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-power-policy"
+                },
+                {
+                  "kind": "literal",
+                  "value": "ac_high_power"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-quiet-mode"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-countdown-s"
+                },
+                {
+                  "kind": "literal",
+                  "value": "20"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--max-failures"
+                },
+                {
+                  "kind": "literal",
+                  "value": "1"
+                }
+              ]
+            },
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "stage_id": "gamma-reference-arm-boundary",
+      "ordinal": 9,
+      "kind": "campaign_collection",
+      "expected_count": 1,
+      "predecessor": "gamma-science-02-decode-contrast-blocks-06-10",
+      "successor": "gamma-science-03-prefill-p2048-contrast-blocks-01-05",
+      "input_ref": {
+        "kind": "external_input",
+        "input_id": "midpoint_reference"
+      },
+      "launch": {
+        "schema_version": "joulewise.stage_launch.v1",
+        "commands": [
+          {
+            "command_id": "gamma-reference-arm-boundary.collect",
+            "command_kind": "campaign_collection",
+            "argv_template": {
+              "tool_id": "campaign_runner",
+              "interface_id": "joulewise.run_campaign.cli.v1",
+              "arguments": [
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaigns/window_references/midpoint"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--runs-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--log"
+                },
+                {
+                  "kind": "binding_path",
+                  "value": "claim_runs_root",
+                  "relative": "campaign_log.jsonl"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--campaign-policy"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaign_policies/quiet_mac_p2_production.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-calibration-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "pre_calibration_dir"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-power-policy"
+                },
+                {
+                  "kind": "literal",
+                  "value": "ac_high_power"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-quiet-mode"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-countdown-s"
+                },
+                {
+                  "kind": "literal",
+                  "value": "20"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--max-failures"
+                },
+                {
+                  "kind": "literal",
+                  "value": "1"
+                }
+              ]
+            },
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "stage_id": "gamma-science-03-prefill-p2048-contrast-blocks-01-05",
+      "ordinal": 10,
+      "kind": "campaign_collection",
+      "expected_count": 20,
+      "predecessor": "gamma-reference-arm-boundary",
+      "successor": "gamma-reference-prefill-midpoint",
+      "input_ref": {
+        "kind": "pack_manifest",
+        "path": "03_prefill_p2048_contrast_blocks_01_05/order_manifest.json",
+        "manifest_id": "d117-gamma-03-prefill-p2048-contrast-blocks-01-05-order-v1",
+        "sha256": "4294487754d256524593bff33a22d3c1d542cafc3a4fda98bcfa770eaa3f520b"
+      },
+      "launch": {
+        "schema_version": "joulewise.stage_launch.v1",
+        "commands": [
+          {
+            "command_id": "gamma-science-03-prefill-p2048-contrast-blocks-01-05.collect",
+            "command_kind": "campaign_collection",
+            "argv_template": {
+              "tool_id": "campaign_runner",
+              "interface_id": "joulewise.run_campaign.cli.v1",
+              "arguments": [
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5/03_prefill_p2048_contrast_blocks_01_05"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--runs-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--log"
+                },
+                {
+                  "kind": "binding_path",
+                  "value": "claim_runs_root",
+                  "relative": "campaign_log.jsonl"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--campaign-policy"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaign_policies/quiet_mac_p2_production.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-calibration-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "pre_calibration_dir"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-power-policy"
+                },
+                {
+                  "kind": "literal",
+                  "value": "ac_high_power"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-quiet-mode"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-countdown-s"
+                },
+                {
+                  "kind": "literal",
+                  "value": "20"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--max-failures"
+                },
+                {
+                  "kind": "literal",
+                  "value": "1"
+                }
+              ]
+            },
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "stage_id": "gamma-reference-prefill-midpoint",
+      "ordinal": 11,
+      "kind": "campaign_collection",
+      "expected_count": 1,
+      "predecessor": "gamma-science-03-prefill-p2048-contrast-blocks-01-05",
+      "successor": "gamma-science-04-prefill-p2048-contrast-blocks-06-10",
+      "input_ref": {
+        "kind": "external_input",
+        "input_id": "midpoint_reference"
+      },
+      "launch": {
+        "schema_version": "joulewise.stage_launch.v1",
+        "commands": [
+          {
+            "command_id": "gamma-reference-prefill-midpoint.collect",
+            "command_kind": "campaign_collection",
+            "argv_template": {
+              "tool_id": "campaign_runner",
+              "interface_id": "joulewise.run_campaign.cli.v1",
+              "arguments": [
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaigns/window_references/midpoint"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--runs-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--log"
+                },
+                {
+                  "kind": "binding_path",
+                  "value": "claim_runs_root",
+                  "relative": "campaign_log.jsonl"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--campaign-policy"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaign_policies/quiet_mac_p2_production.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-calibration-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "pre_calibration_dir"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-power-policy"
+                },
+                {
+                  "kind": "literal",
+                  "value": "ac_high_power"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-quiet-mode"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-countdown-s"
+                },
+                {
+                  "kind": "literal",
+                  "value": "20"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--max-failures"
+                },
+                {
+                  "kind": "literal",
+                  "value": "1"
+                }
+              ]
+            },
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "stage_id": "gamma-science-04-prefill-p2048-contrast-blocks-06-10",
+      "ordinal": 12,
+      "kind": "campaign_collection",
+      "expected_count": 20,
+      "predecessor": "gamma-reference-prefill-midpoint",
+      "successor": "gamma-reference-end",
+      "input_ref": {
+        "kind": "pack_manifest",
+        "path": "04_prefill_p2048_contrast_blocks_06_10/order_manifest.json",
+        "manifest_id": "d117-gamma-04-prefill-p2048-contrast-blocks-06-10-order-v1",
+        "sha256": "ebc198b1745210940623cb1699cef9c07204e1a8b1f29c21c09c62be284e4d2b"
+      },
+      "launch": {
+        "schema_version": "joulewise.stage_launch.v1",
+        "commands": [
+          {
+            "command_id": "gamma-science-04-prefill-p2048-contrast-blocks-06-10.collect",
+            "command_kind": "campaign_collection",
+            "argv_template": {
+              "tool_id": "campaign_runner",
+              "interface_id": "joulewise.run_campaign.cli.v1",
+              "arguments": [
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5/04_prefill_p2048_contrast_blocks_06_10"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--runs-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--log"
+                },
+                {
+                  "kind": "binding_path",
+                  "value": "claim_runs_root",
+                  "relative": "campaign_log.jsonl"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--campaign-policy"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaign_policies/quiet_mac_p2_production.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-calibration-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "pre_calibration_dir"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-power-policy"
+                },
+                {
+                  "kind": "literal",
+                  "value": "ac_high_power"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-quiet-mode"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-countdown-s"
+                },
+                {
+                  "kind": "literal",
+                  "value": "20"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--max-failures"
+                },
+                {
+                  "kind": "literal",
+                  "value": "1"
+                }
+              ]
+            },
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "stage_id": "gamma-reference-end",
+      "ordinal": 13,
+      "kind": "campaign_collection",
+      "expected_count": 3,
+      "predecessor": "gamma-science-04-prefill-p2048-contrast-blocks-06-10",
+      "successor": "gamma-calibration-post",
+      "input_ref": {
+        "kind": "external_input",
+        "input_id": "end_references"
+      },
+      "launch": {
+        "schema_version": "joulewise.stage_launch.v1",
+        "commands": [
+          {
+            "command_id": "gamma-reference-end.collect",
+            "command_kind": "campaign_collection",
+            "argv_template": {
+              "tool_id": "campaign_runner",
+              "interface_id": "joulewise.run_campaign.cli.v1",
+              "arguments": [
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaigns/window_references/end_triplet"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--runs-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--log"
+                },
+                {
+                  "kind": "binding_path",
+                  "value": "claim_runs_root",
+                  "relative": "campaign_log.jsonl"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--campaign-policy"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaign_policies/quiet_mac_p2_production.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-calibration-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "pre_calibration_dir"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-power-policy"
+                },
+                {
+                  "kind": "literal",
+                  "value": "ac_high_power"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-quiet-mode"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-countdown-s"
+                },
+                {
+                  "kind": "literal",
+                  "value": "20"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--max-failures"
+                },
+                {
+                  "kind": "literal",
+                  "value": "1"
+                }
+              ]
+            },
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "stage_id": "gamma-calibration-post",
+      "ordinal": 14,
+      "kind": "calibration_capture",
+      "expected_count": 1,
+      "predecessor": "gamma-reference-end",
+      "successor": "gamma-whole-window-verdict",
+      "input_ref": {
+        "kind": "arm_attachment",
+        "slot": "post_attempt_id"
+      },
+      "launch": {
+        "schema_version": "joulewise.stage_launch.v1",
+        "commands": [
+          {
+            "command_id": "gamma-calibration-post.capture",
+            "command_kind": "calibration_capture",
+            "argv_template": {
+              "tool_id": "fiducial_capture",
+              "interface_id": "joulewise.powermetrics_fiducial.cli.v1",
+              "arguments": [
+                {
+                  "kind": "literal",
+                  "value": "--allow-live"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--output-root"
+                },
+                {
+                  "kind": "binding_path",
+                  "value": "claim_runs_root",
+                  "relative": "instrument_validation"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--session-id"
+                },
+                {
+                  "kind": "binding",
+                  "value": "bracket_session_id"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--slot"
+                },
+                {
+                  "kind": "literal",
+                  "value": "post"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--attempt-id"
+                },
+                {
+                  "kind": "binding",
+                  "value": "post_attempt_id"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--power-policy"
+                },
+                {
+                  "kind": "literal",
+                  "value": "ac_high_power"
+                }
+              ]
+            },
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "stage_id": "gamma-whole-window-verdict",
+      "ordinal": 15,
+      "kind": "whole_window_verdict",
+      "expected_count": 0,
+      "predecessor": "gamma-calibration-post",
+      "successor": "gamma-backup",
+      "input_ref": {
+        "kind": "derived",
+        "from": "claim_runs_root"
+      },
+      "launch": {
+        "schema_version": "joulewise.stage_launch.v1",
+        "commands": [
+          {
+            "command_id": "gamma-whole-window-verdict.issue",
+            "command_kind": "whole_window_verdict",
+            "argv_template": {
+              "tool_id": "campaign_runner",
+              "interface_id": "joulewise.run_campaign.cli.v1",
+              "arguments": [
+                {
+                  "kind": "literal",
+                  "value": "--whole-window-verdict"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--runs-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--log"
+                },
+                {
+                  "kind": "binding_path",
+                  "value": "claim_runs_root",
+                  "relative": "campaign_log.jsonl"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--campaign-policy"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaign_policies/quiet_mac_p2_production.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--neg8-drift-bound"
+                },
+                {
+                  "kind": "binding_path",
+                  "value": "bound_runs_root",
+                  "relative": "neg8-drift-bound.json"
+                }
+              ]
+            },
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "stage_id": "gamma-backup",
+      "ordinal": 16,
+      "kind": "backup",
+      "expected_count": 0,
+      "predecessor": "gamma-whole-window-verdict",
+      "successor": null,
+      "input_ref": {
+        "kind": "arm_attachment",
+        "slot": "backup_destinations"
+      },
+      "launch": {
+        "schema_version": "joulewise.stage_launch.v1",
+        "commands": [
+          {
+            "command_id": "gamma-backup.claim",
+            "command_kind": "backup",
+            "argv_template": {
+              "tool_id": "backup_runs",
+              "interface_id": "joulewise.backup_runs.cli.v1",
+              "arguments": [
+                {
+                  "kind": "binding",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "binding",
+                  "value": "claim_backup_destination"
+                }
+              ]
+            },
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          },
+          {
+            "command_id": "gamma-backup.bound",
+            "command_kind": "backup",
+            "argv_template": {
+              "tool_id": "backup_runs",
+              "interface_id": "joulewise.backup_runs.cli.v1",
+              "arguments": [
+                {
+                  "kind": "binding",
+                  "value": "bound_runs_root"
+                },
+                {
+                  "kind": "binding",
+                  "value": "bound_backup_destination"
+                }
+              ]
+            },
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "external_inputs": [
+    {
+      "input_id": "neg8_bound_corpus",
+      "manifest_path": "configs/campaigns/neg8_reference_corpus/order_manifest.json",
+      "manifest_sha256": "0ec9d68aa4265cc9378bb682091a973fc92879b76506fa25af828050a608509f",
+      "manifest_id": "neg8-reference-corpus-order-v1",
+      "expected_count": 12,
+      "members": [
+        {
+          "run_id": "neg8-refcorpus-r01",
+          "path": "configs/campaigns/neg8_reference_corpus/neg8-refcorpus-r01.json",
+          "sha256": "08ad3cf5b1f39339cc1c226856b92e17d8d03b72397c9b366f4f56418161ef0e"
+        },
+        {
+          "run_id": "neg8-refcorpus-r02",
+          "path": "configs/campaigns/neg8_reference_corpus/neg8-refcorpus-r02.json",
+          "sha256": "418641328b0d66a013ec083198665d0090893b624ea120cb1f981cb779f34a23"
+        },
+        {
+          "run_id": "neg8-refcorpus-r03",
+          "path": "configs/campaigns/neg8_reference_corpus/neg8-refcorpus-r03.json",
+          "sha256": "3eda26dc2009f040d93d6dabb158a0135555f4d2cc8a679e9ca04988dd085482"
+        },
+        {
+          "run_id": "neg8-refcorpus-r04",
+          "path": "configs/campaigns/neg8_reference_corpus/neg8-refcorpus-r04.json",
+          "sha256": "c450c0f5555d607df1ca42569f05521771b7e9dd1504c04630cde0496ec01f7b"
+        },
+        {
+          "run_id": "neg8-refcorpus-r05",
+          "path": "configs/campaigns/neg8_reference_corpus/neg8-refcorpus-r05.json",
+          "sha256": "c494f0715302d1d18ac74bf064c38350c36e55463be0eb6af31f781a70fe84ae"
+        },
+        {
+          "run_id": "neg8-refcorpus-r06",
+          "path": "configs/campaigns/neg8_reference_corpus/neg8-refcorpus-r06.json",
+          "sha256": "e4dc2a282e853430f1355453460c9ca7a2ae99c05d1afb45fc83f78d534a21b3"
+        },
+        {
+          "run_id": "neg8-refcorpus-r07",
+          "path": "configs/campaigns/neg8_reference_corpus/neg8-refcorpus-r07.json",
+          "sha256": "4d4ef567e41e61bda368502fb87b3a3dda0ea18ac72db71b72709e5b2922eb86"
+        },
+        {
+          "run_id": "neg8-refcorpus-r08",
+          "path": "configs/campaigns/neg8_reference_corpus/neg8-refcorpus-r08.json",
+          "sha256": "d11124bf2ab266236ad4eaa6bc18e10e20a08f6a1f8176ea7486a4d96397f903"
+        },
+        {
+          "run_id": "neg8-refcorpus-r09",
+          "path": "configs/campaigns/neg8_reference_corpus/neg8-refcorpus-r09.json",
+          "sha256": "0c45014316cb95b439c846eba0ac2b0734a2e38bb80b48a422e8aab74808c902"
+        },
+        {
+          "run_id": "neg8-refcorpus-r10",
+          "path": "configs/campaigns/neg8_reference_corpus/neg8-refcorpus-r10.json",
+          "sha256": "74c207c32bda7be6869045f72f33c358e927ce21009670daf50ed3c01ba57312"
+        },
+        {
+          "run_id": "neg8-refcorpus-r11",
+          "path": "configs/campaigns/neg8_reference_corpus/neg8-refcorpus-r11.json",
+          "sha256": "16e2d75e12174336a896632af278c3aef7f8685bca85c8d9b71053acec9d0553"
+        },
+        {
+          "run_id": "neg8-refcorpus-r12",
+          "path": "configs/campaigns/neg8_reference_corpus/neg8-refcorpus-r12.json",
+          "sha256": "fd00f4ab3d16fcbe18ead64acffdded0c1b3ea7b196f41f7d39d3399f0d39b31"
+        }
+      ]
+    },
+    {
+      "input_id": "neg8_settled_corpus",
+      "path": "configs/campaigns/neg8_reference_corpus/derivation/settled_corpus.json",
+      "sha256": "74ccdaec74497c3aa7c074ef1129ec2bf2cc01d8ac14d3d07be77ab468599688"
+    },
+    {
+      "input_id": "start_references",
+      "manifest_path": "configs/campaigns/window_references/start_triplet/order_manifest.json",
+      "manifest_sha256": "9cac197255bdc9a0a1a0b8ee8ceb587ba3c8cabc20b976b2543dc3a400d37cb0",
+      "manifest_id": "neg8-window-reference-start-triplet-v1",
+      "expected_count": 3,
+      "members": [
+        {
+          "run_id": "neg8-window-start-r1",
+          "path": "configs/campaigns/window_references/start_triplet/neg8-window-start-r1.json",
+          "sha256": "e0c63accf536d026ed9dec4ef4a1cdbf9c795e4708025f85f48f56ac5cbbb704"
+        },
+        {
+          "run_id": "neg8-window-start-r2",
+          "path": "configs/campaigns/window_references/start_triplet/neg8-window-start-r2.json",
+          "sha256": "85065db3e71d3cf6693e80723d54feacaf24abdd4f4af1e8b726f912e568db4f"
+        },
+        {
+          "run_id": "neg8-window-start-r3",
+          "path": "configs/campaigns/window_references/start_triplet/neg8-window-start-r3.json",
+          "sha256": "96c3fafdf6327afc3d23c9d40c54983df6613423a68e72dfb69565d9b432abfd"
+        }
+      ]
+    },
+    {
+      "input_id": "midpoint_reference",
+      "manifest_path": "configs/campaigns/window_references/midpoint/order_manifest.json",
+      "manifest_sha256": "9ccedd91307985ba5641e791f4ac89f4e250fca414a4ba713cc7977ced6abb21",
+      "manifest_id": "neg8-window-reference-midpoint-v1",
+      "expected_count": 1,
+      "members": [
+        {
+          "run_id": "neg8-window-midpoint",
+          "path": "configs/campaigns/window_references/midpoint/neg8-window-midpoint.json",
+          "sha256": "321b96d8580eac8e338575a95c4db26ee2e4b24d2f27effc6fee107da32fe9ff"
+        }
+      ]
+    },
+    {
+      "input_id": "end_references",
+      "manifest_path": "configs/campaigns/window_references/end_triplet/order_manifest.json",
+      "manifest_sha256": "8e65a4347aafa0722a60a2bd58c7e8061b860db66fa06f6acec24d1a1ade5c67",
+      "manifest_id": "neg8-window-reference-end-triplet-v1",
+      "expected_count": 3,
+      "members": [
+        {
+          "run_id": "neg8-window-end-r1",
+          "path": "configs/campaigns/window_references/end_triplet/neg8-window-end-r1.json",
+          "sha256": "fd7b43938b6aa13bea4c949d3ab61266b3282530db7869d56c622bf2392507b0"
+        },
+        {
+          "run_id": "neg8-window-end-r2",
+          "path": "configs/campaigns/window_references/end_triplet/neg8-window-end-r2.json",
+          "sha256": "72593d4ba2382591ae3f0b01e70673ae0cc605546471e00254cea01eac4a3204"
+        },
+        {
+          "run_id": "neg8-window-end-r3",
+          "path": "configs/campaigns/window_references/end_triplet/neg8-window-end-r3.json",
+          "sha256": "c7720a668409eb62cecd22dbbcd4d972cc7d87d83bf9ccf4ede0bcf1b9b451be"
+        }
+      ]
+    }
+  ],
+  "attempt_policy": {
+    "calibration_retries": 0,
+    "science_member_replacements": 0,
+    "outcome_dependent_top_up": "forbidden",
+    "failure_semantics": "abort_window_and_demote_to_non_claim_bearing",
+    "retry_commands_present": false
+  },
+  "arm_attachments": {
+    "arm_readiness": {
+      "contract_id": "D-134",
+      "required_before_arm": true,
+      "row_registry": {
+        "registry_id": "d117-row-registry-v2",
+        "path": "configs/arm_readiness/d117_row_registry_v2.json",
+        "sha256": "9aaff5d66a8b9cfd67b79be49866810b0922013f6c6a15b49572861fa789e4ab",
+        "plan_profile": "GAMMA"
+      },
+      "freeze_receipt": null,
+      "arm_receipt_namespace": "arm_readiness.receipts/arm-<4+ digits>.json",
+      "pack_digest_algorithm": "joulewise.committed_pack_tree_sha256.v1"
+    },
+    "launch": {
+      "schema_version": "joulewise.stage_launch_bindings.v1",
+      "closed_bindings": {
+        "repo_root": "existing_absolute_directory",
+        "ledger_path": "existing_absolute_file",
+        "claim_runs_root": "fresh_absolute_directory_with_declared_leaf",
+        "bound_runs_root": "fresh_absolute_directory_with_declared_leaf",
+        "operator_log_root": "absolute_directory",
+        "pre_calibration_dir": "absolute_directory",
+        "post_calibration_dir": "absolute_directory",
+        "claim_backup_destination": "absolute_path",
+        "bound_backup_destination": "absolute_path",
+        "bracket_session_id": "non_path_string",
+        "pre_attempt_id": "non_path_string",
+        "post_attempt_id": "non_path_string",
+        "identity_epoch_json": "authenticated_absolute_file",
+        "t1_bindings_json": "authenticated_absolute_file"
+      },
+      "calibration_directory_relation": {
+        "pre": "claim_runs_root/instrument_validation/pre_attempt_id",
+        "post": "claim_runs_root/instrument_validation/post_attempt_id"
+      }
+    },
+    "absolute_roots": {
+      "status": "EMPTY",
+      "value": "",
+      "todo": "TODO(U8): materialize fresh absolute roots at arm"
+    },
+    "selected_acceptance": {
+      "status": "EMPTY",
+      "value": "",
+      "todo": "TODO(U2/U8): select authenticated acceptance at arm"
+    },
+    "identity_pin_projection": {
+      "work_order": "D117-U11-IDPIN-PROJECTION",
+      "mode": "derive_never_operator_enter",
+      "state": "unprojected",
+      "required_before_arm": true,
+      "derivation_contract": "joulewise.identity_pin_derivation.v1",
+      "identity_units": [
+        {
+          "identity_unit_id": "A/decode",
+          "producer_plan_reference": {
+            "plan_id": "plan-d117-floor-qwen3-1p7b-decode-prefill-p2048-v5",
+            "path": "../d117_floor_qwen3-1p7b_v5/calibration_plan.json"
+          },
+          "consumer_bindings": [
+            {
+              "arm": "A",
+              "family": "sw-decode-a-qwen3-1p7b",
+              "measurement_arm": "decode"
+            }
+          ],
+          "declared_identity": {
+            "hardware_target": "macbook_m3_max",
+            "runtime_backend": "mlx",
+            "telemetry_backend": "powermetrics",
+            "model_name": "Qwen3-1.7B-4bit",
+            "model_source": "/Users/edr/jw_models/mlx-community/Qwen3-1.7B-4bit",
+            "model_revision": "3b1b1768f8f8cf8351c712464f906e86c2b8269e",
+            "quantization": {
+              "name": "int4",
+              "bits": 4,
+              "group_size": 64
+            },
+            "workload_profile": {
+              "name": "real_prompts_v1_chat_rendered",
+              "repetitions": 1,
+              "warmup_runs": 1,
+              "prompt_tokens": null,
+              "output_tokens": 512,
+              "prompt_text": null,
+              "dataset_ref": null,
+              "suite_manifest_set": [
+                {
+                  "suite_manifest_ref": "configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5/decode_prompt_manifests/qwen3-1p7b/01_sky_color.json",
+                  "suite_manifest_sha256": "d60a7f4d2e3498947fef630fd3092da59ffb13b52e604894ada065e4e9647b23",
+                  "declared_member_count": 20
+                }
+              ]
+            }
+          },
+          "config_inventory": [
+            {
+              "path": "01_decode_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b01-a1.json",
+              "sha256": "056b9036063cb847acd4267014cb8eec4b0874e07979182fe75b59eb86fbf42f"
+            },
+            {
+              "path": "01_decode_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b01-a2.json",
+              "sha256": "45344bbd5d4084cb454091741624adcb0fadbc2bbc2d39fa0edaf4c957707660"
+            },
+            {
+              "path": "01_decode_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b02-a1.json",
+              "sha256": "978ecc58257404c3d63983e9eda5285fd8ca2dc25bf3d7017bb495b2ad4e5460"
+            },
+            {
+              "path": "01_decode_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b02-a2.json",
+              "sha256": "7dc8a76f9e1c3dbf283270588c11f205f6f9dcac9e81aab0adcfc177a00694dc"
+            },
+            {
+              "path": "01_decode_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b03-a1.json",
+              "sha256": "6e56487652fbe6a22d358b11d3c0abbf5e62259ff519bb90b222c0dd2fbe589b"
+            },
+            {
+              "path": "01_decode_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b03-a2.json",
+              "sha256": "205391c71cec67a13698e6ee039a2c6afcf03ec356ed1495d11bff4558ba9490"
+            },
+            {
+              "path": "01_decode_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b04-a1.json",
+              "sha256": "17103de87f21b091e0249f61c8a61c633d0bffbda9b3d0c48bbe22f547ec3af8"
+            },
+            {
+              "path": "01_decode_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b04-a2.json",
+              "sha256": "7e053993df2f50e29618e3e7d2737514fdc368d1d6813c3527d243e6308461ca"
+            },
+            {
+              "path": "01_decode_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b05-a1.json",
+              "sha256": "6f50992050df7e5a2e823a850de78252d32ddbc30c3ebea8f6607f8d83880284"
+            },
+            {
+              "path": "01_decode_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b05-a2.json",
+              "sha256": "4ebdb2be7abae4e781f9052ec96ee021f95bf99d2cd8b3fe6def4c18530d7972"
+            },
+            {
+              "path": "02_decode_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b06-a1.json",
+              "sha256": "09cc89e2470ce560a64480202ac16196824532bf670a95d623f5a9e3e23e1212"
+            },
+            {
+              "path": "02_decode_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b06-a2.json",
+              "sha256": "87c317d751b080475bd7c1982df9e9af2c285bbc7a0d52e7d3c78959e7f47d37"
+            },
+            {
+              "path": "02_decode_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b07-a1.json",
+              "sha256": "b9ab3966ba539302bf4062899c038c794bd89bb6a735ac12f04f946ea0395e02"
+            },
+            {
+              "path": "02_decode_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b07-a2.json",
+              "sha256": "b52c65cf3ecd3162278231f96694f0ca9b12d457e8ecc16b14201cfe255f6bde"
+            },
+            {
+              "path": "02_decode_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b08-a1.json",
+              "sha256": "8c74399627142157d1fba38d951e371cc81ca0da42a9d060c7a03848fedd29d9"
+            },
+            {
+              "path": "02_decode_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b08-a2.json",
+              "sha256": "a1731c9fd7f0f80bdc66e9ce996c01a13ff1d721611b59477439a9b4f1ff2a31"
+            },
+            {
+              "path": "02_decode_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b09-a1.json",
+              "sha256": "62a2ff46a67284ee2b9ed1204b2b928da14b0890bec534720e243d61fbbfa8d3"
+            },
+            {
+              "path": "02_decode_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b09-a2.json",
+              "sha256": "479d8ea70a00d3302d83b24aa734f63fdfb883dbf11565d5090db1ce0c43849b"
+            },
+            {
+              "path": "02_decode_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b10-a1.json",
+              "sha256": "6d07cb1daed0f2cd983aa42b53eaefce10dca4a8451e24e80714a9a2dda5dec5"
+            },
+            {
+              "path": "02_decode_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b10-a2.json",
+              "sha256": "20580b3b243975844f706c4c5e8772c91deb0b5648cc5e9ac66fdc7fde1b88e6"
+            }
+          ],
+          "model_runtime_config": {
+            "model_artifact_sha256": null,
+            "runtime_identity_sha256": null,
+            "config_set_sha256": null
+          }
+        },
+        {
+          "identity_unit_id": "A/prefill_p2048",
+          "producer_plan_reference": {
+            "plan_id": "plan-d117-floor-qwen3-1p7b-decode-prefill-p2048-v5",
+            "path": "../d117_floor_qwen3-1p7b_v5/calibration_plan.json"
+          },
+          "consumer_bindings": [
+            {
+              "arm": "A",
+              "family": "sw-prefill-p2048-a-qwen3-1p7b",
+              "measurement_arm": "prefill_p2048"
+            }
+          ],
+          "declared_identity": {
+            "hardware_target": "macbook_m3_max",
+            "runtime_backend": "mlx",
+            "telemetry_backend": "powermetrics",
+            "model_name": "Qwen3-1.7B-4bit",
+            "model_source": "/Users/edr/jw_models/mlx-community/Qwen3-1.7B-4bit",
+            "model_revision": "3b1b1768f8f8cf8351c712464f906e86c2b8269e",
+            "quantization": {
+              "name": "int4",
+              "bits": 4,
+              "group_size": 64
+            },
+            "workload_profile": {
+              "name": "df_ph_prefill_p2048_candidate",
+              "repetitions": 1,
+              "warmup_runs": 1,
+              "output_tokens": 512,
+              "prompt_text": "The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit and simple to review.",
+              "prompt_token_expectation": {
+                "schema_version": "joulewise.prompt_token_expectation.v1",
+                "token_hash_domain": "joulewise.prompt_token_ids.v1",
+                "token_count": 2048,
+                "token_ids_sha256": "202e4913340b2bae39bf9a9d3a314f62bb5ff783fae483ad6a98507d071e1479"
+              },
+              "prompt_tokens": null,
+              "dataset_ref": null
+            }
+          },
+          "config_inventory": [
+            {
+              "path": "03_prefill_p2048_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b01-a1.json",
+              "sha256": "f106ec92efdd1aff7e1a937ae81771ffbf9ecec9b3d72988e30345e0afd822dd"
+            },
+            {
+              "path": "03_prefill_p2048_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b01-a2.json",
+              "sha256": "2f43244b6b5f39ef16195bad0028acc12e12dc77c1bde51390b93ab24071ccf2"
+            },
+            {
+              "path": "03_prefill_p2048_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b02-a1.json",
+              "sha256": "9456b7c4b216a15cd91e5ac6c6e9f5bc24586085df097aa6d54f3a88511a0977"
+            },
+            {
+              "path": "03_prefill_p2048_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b02-a2.json",
+              "sha256": "48deefd175a86306f934baeac34bc7653e5d31f7bd6ed9554b17339d82d2f3f6"
+            },
+            {
+              "path": "03_prefill_p2048_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b03-a1.json",
+              "sha256": "a46a0e48c3360883d0cd8d276447fb62c05da2a12dbe0331cd5a8306761ef321"
+            },
+            {
+              "path": "03_prefill_p2048_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b03-a2.json",
+              "sha256": "bbe7914c84ea10f62dd0284fd8759561e50f4d7a13dca7d90bcc08709fecc2c7"
+            },
+            {
+              "path": "03_prefill_p2048_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b04-a1.json",
+              "sha256": "359842482971a4655aade83ee9e8298697346aa303e1a92e1fc794718a171976"
+            },
+            {
+              "path": "03_prefill_p2048_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b04-a2.json",
+              "sha256": "1b50dde707b0ec1764c5ba4f872d149a67b2844ebd203f7d25ecc450c27b4d20"
+            },
+            {
+              "path": "03_prefill_p2048_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b05-a1.json",
+              "sha256": "076e735017b1c87dd985328c1e20544dd5eec51fb35184b4e9af766fcd4ffa99"
+            },
+            {
+              "path": "03_prefill_p2048_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b05-a2.json",
+              "sha256": "2b2b1f8d20706154df42f61cba6a6db37de7030002fa2861c2690515903f1790"
+            },
+            {
+              "path": "04_prefill_p2048_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b06-a1.json",
+              "sha256": "74827ba57619fc0d9e8bfff478e817c58036f7bb40d768dc1609f0b09cd0be84"
+            },
+            {
+              "path": "04_prefill_p2048_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b06-a2.json",
+              "sha256": "4347a53420fd3edd34b1e87542f793329b2f7600ba15bd0eb8084fde5bcb6648"
+            },
+            {
+              "path": "04_prefill_p2048_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b07-a1.json",
+              "sha256": "9044a93da88c9f5f05cd52b419cf3e303d54442969105ac9c82bf00bebe1cc49"
+            },
+            {
+              "path": "04_prefill_p2048_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b07-a2.json",
+              "sha256": "162dc549e4ddca94ee845650d8bff277318b245093b4a2ed058bf7c00d9ec41e"
+            },
+            {
+              "path": "04_prefill_p2048_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b08-a1.json",
+              "sha256": "9957246d096743cd39efe101adad614b1cf6f15eb2df96711e6fbd69843196a2"
+            },
+            {
+              "path": "04_prefill_p2048_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b08-a2.json",
+              "sha256": "fa66e6c16a8350ae3636941294da1c542948adcb2e5482da4758edd5100af2c2"
+            },
+            {
+              "path": "04_prefill_p2048_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b09-a1.json",
+              "sha256": "5c92f3e052bb475b825d6ab049c260d5a8602228f003206a0bc3933d9873bced"
+            },
+            {
+              "path": "04_prefill_p2048_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b09-a2.json",
+              "sha256": "77d2b52909d753eb194e65bafbb034afd8f2f658192702fc28066080b992b860"
+            },
+            {
+              "path": "04_prefill_p2048_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b10-a1.json",
+              "sha256": "6fca238384b237fe00df12add58a50044f16f3bd7b66334e88d7721f7eec579c"
+            },
+            {
+              "path": "04_prefill_p2048_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b10-a2.json",
+              "sha256": "17d47f68bf954f4462204e65ae80b840e59ac3a701b6b3ece01be73f7eaa7e4b"
+            }
+          ],
+          "model_runtime_config": {
+            "model_artifact_sha256": null,
+            "runtime_identity_sha256": null,
+            "config_set_sha256": null
+          }
+        },
+        {
+          "identity_unit_id": "B/decode",
+          "producer_plan_reference": {
+            "plan_id": "plan-d117-floor-qwen3-8b-decode-prefill-p2048-v5",
+            "path": "../d117_floor_qwen3-8b_v5/calibration_plan.json"
+          },
+          "consumer_bindings": [
+            {
+              "arm": "B",
+              "family": "sw-decode-b-qwen3-8b",
+              "measurement_arm": "decode"
+            }
+          ],
+          "declared_identity": {
+            "hardware_target": "macbook_m3_max",
+            "runtime_backend": "mlx",
+            "telemetry_backend": "powermetrics",
+            "model_name": "Qwen3-8B-4bit",
+            "model_source": "/Users/edr/jw_models/mlx-community/Qwen3-8B-4bit",
+            "model_revision": "545dc4251c05440727734bcd94334791f6ab0192",
+            "quantization": {
+              "name": "int4",
+              "bits": 4,
+              "group_size": 64
+            },
+            "workload_profile": {
+              "name": "real_prompts_v1_chat_rendered",
+              "repetitions": 1,
+              "warmup_runs": 1,
+              "prompt_tokens": null,
+              "output_tokens": 512,
+              "prompt_text": null,
+              "dataset_ref": null,
+              "suite_manifest_set": [
+                {
+                  "suite_manifest_ref": "configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5/decode_prompt_manifests/qwen3-8b/01_sky_color.json",
+                  "suite_manifest_sha256": "c35156575b7c14c9f2271b442f71c9fafa3944363c2f46ae2821731134229185",
+                  "declared_member_count": 20
+                }
+              ]
+            }
+          },
+          "config_inventory": [
+            {
+              "path": "01_decode_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b01-b1.json",
+              "sha256": "3ab0cdb8c52cad462115539059ee96de695cda2b2d9b0f888a37ff9c653b28bb"
+            },
+            {
+              "path": "01_decode_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b01-b2.json",
+              "sha256": "1610707dc67d7a8c3a544028f7067ee7dd290a5d9493911790a65e253310c787"
+            },
+            {
+              "path": "01_decode_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b02-b1.json",
+              "sha256": "6770fa108cdc099bfe70d4193731cc8002f7d2aa69120c3489054e3d5ad5ee99"
+            },
+            {
+              "path": "01_decode_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b02-b2.json",
+              "sha256": "ce0af2e999bf51863aa770bf648c99ff4ef17a83dc5d08833cd8d5f73669c8fa"
+            },
+            {
+              "path": "01_decode_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b03-b1.json",
+              "sha256": "c485652dc0b9d80b42f2c1982ae49e83d0d2591792cb01c688e574e5fcd8e55b"
+            },
+            {
+              "path": "01_decode_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b03-b2.json",
+              "sha256": "642df9979fd38feddce6be879f62e375f27bd2d804fe353fd4494b6dac7f9169"
+            },
+            {
+              "path": "01_decode_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b04-b1.json",
+              "sha256": "c408a8c553f18d9acb80df5d26bd5d9e0a8415e69c9948bd13c72b90f44f46d8"
+            },
+            {
+              "path": "01_decode_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b04-b2.json",
+              "sha256": "f88b9220aa8b0f1693ac66e594ff5669fe92406ff5959c9bfd36b51a5fbceef7"
+            },
+            {
+              "path": "01_decode_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b05-b1.json",
+              "sha256": "1afefb87e888a5617378204e090eeae6049dee1df602a73f937b5fad472da5db"
+            },
+            {
+              "path": "01_decode_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b05-b2.json",
+              "sha256": "1335e7e3248bd3b857d4d93504a92d642672f5f1e11d6a7ecc55bb53119348bf"
+            },
+            {
+              "path": "02_decode_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b06-b1.json",
+              "sha256": "2ff20d888d84ae2757ff653c85f1f5766da6a876c59ef868f00215569d3a97a8"
+            },
+            {
+              "path": "02_decode_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b06-b2.json",
+              "sha256": "7f4f796aace20b86ff3e444c40979c6cfea741eca0dd95bc862ce268aeeb04ed"
+            },
+            {
+              "path": "02_decode_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b07-b1.json",
+              "sha256": "aafe0f7b9e24fd397adc01666599dfccdca6e6ba24901f9ad150189881011bde"
+            },
+            {
+              "path": "02_decode_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b07-b2.json",
+              "sha256": "ed90653ab90bded6124dc924ab344d390cd268798cbbae8fdc7f4e702b61084c"
+            },
+            {
+              "path": "02_decode_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b08-b1.json",
+              "sha256": "fa5a98af0b231d331a39ea61585aef5b866d04bc5c1e27736ac743b93df450bc"
+            },
+            {
+              "path": "02_decode_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b08-b2.json",
+              "sha256": "0198cc69984faeb6f73cad8f6b3e06d376b8b8391c37ff79a301f198f19ce3a4"
+            },
+            {
+              "path": "02_decode_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b09-b1.json",
+              "sha256": "9c89928c03d235a3a5e0171cf352bacc65ed203af1103c1dc83cf271cd503fa7"
+            },
+            {
+              "path": "02_decode_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b09-b2.json",
+              "sha256": "bc8317f2d9839ee658c867f9fa350cd5a93c9d1ae52721b3fdd67a135fe86ae3"
+            },
+            {
+              "path": "02_decode_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b10-b1.json",
+              "sha256": "2fdb0180455ee34d7320b64315d18599f57ee99d624ae27dfa69376f40e26593"
+            },
+            {
+              "path": "02_decode_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b10-b2.json",
+              "sha256": "0810ce5fb5bb032b093c13e9fe5c8a83bedf2080089c8d0163319a69ee07fa91"
+            }
+          ],
+          "model_runtime_config": {
+            "model_artifact_sha256": null,
+            "runtime_identity_sha256": null,
+            "config_set_sha256": null
+          }
+        },
+        {
+          "identity_unit_id": "B/prefill_p2048",
+          "producer_plan_reference": {
+            "plan_id": "plan-d117-floor-qwen3-8b-decode-prefill-p2048-v5",
+            "path": "../d117_floor_qwen3-8b_v5/calibration_plan.json"
+          },
+          "consumer_bindings": [
+            {
+              "arm": "B",
+              "family": "sw-prefill-p2048-b-qwen3-8b",
+              "measurement_arm": "prefill_p2048"
+            }
+          ],
+          "declared_identity": {
+            "hardware_target": "macbook_m3_max",
+            "runtime_backend": "mlx",
+            "telemetry_backend": "powermetrics",
+            "model_name": "Qwen3-8B-4bit",
+            "model_source": "/Users/edr/jw_models/mlx-community/Qwen3-8B-4bit",
+            "model_revision": "545dc4251c05440727734bcd94334791f6ab0192",
+            "quantization": {
+              "name": "int4",
+              "bits": 4,
+              "group_size": 64
+            },
+            "workload_profile": {
+              "name": "df_ph_prefill_p2048_candidate",
+              "repetitions": 1,
+              "warmup_runs": 1,
+              "output_tokens": 512,
+              "prompt_text": "The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit and simple to review.",
+              "prompt_token_expectation": {
+                "schema_version": "joulewise.prompt_token_expectation.v1",
+                "token_hash_domain": "joulewise.prompt_token_ids.v1",
+                "token_count": 2048,
+                "token_ids_sha256": "202e4913340b2bae39bf9a9d3a314f62bb5ff783fae483ad6a98507d071e1479"
+              },
+              "prompt_tokens": null,
+              "dataset_ref": null
+            }
+          },
+          "config_inventory": [
+            {
+              "path": "03_prefill_p2048_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b01-b1.json",
+              "sha256": "3c36d532e16f7ce6a6a792097b57e8f7fbb85e45af9de79acb959a8550a5c7f1"
+            },
+            {
+              "path": "03_prefill_p2048_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b01-b2.json",
+              "sha256": "3d9a57fa70f4f2e980f2caaad51da3b793797686eaef7e932ab5a6176e898aec"
+            },
+            {
+              "path": "03_prefill_p2048_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b02-b1.json",
+              "sha256": "0a24644cb4cda0efeb2ca5242386e46112448be7208c623ce7e34f58baa78275"
+            },
+            {
+              "path": "03_prefill_p2048_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b02-b2.json",
+              "sha256": "bf18938f6bf1f156e67435c6ebb0969b4e76e0e9092be6169e4ceb0c3f179685"
+            },
+            {
+              "path": "03_prefill_p2048_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b03-b1.json",
+              "sha256": "b2355aa9915821d111878c24772d696604a1e6fb7351c0e866ecf91476ac349a"
+            },
+            {
+              "path": "03_prefill_p2048_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b03-b2.json",
+              "sha256": "ecee222e9cc569b46934ef05cb2936c5a1560d3abfdf590290bee382f272ca8e"
+            },
+            {
+              "path": "03_prefill_p2048_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b04-b1.json",
+              "sha256": "d0b490f5a50925f5591c266f25c6e458a1f2410393e2a809b82379fcf1e1e7c3"
+            },
+            {
+              "path": "03_prefill_p2048_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b04-b2.json",
+              "sha256": "0586c137f6fe7b6a2bf86c015faf2167d73e0370324a21c82551c61230c80e19"
+            },
+            {
+              "path": "03_prefill_p2048_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b05-b1.json",
+              "sha256": "830824d1ed1fe58057440eed8c795ad73b6281902ce30e35043e9bb2604efe62"
+            },
+            {
+              "path": "03_prefill_p2048_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b05-b2.json",
+              "sha256": "6a97706c5d5767ba827bc15c11b9cb575a7446018eadfe1b1fbe76e8a6b5871e"
+            },
+            {
+              "path": "04_prefill_p2048_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b06-b1.json",
+              "sha256": "2cdb74e932ea61ce1a1e48296373953d6275536c3dce36a820c061d2392fa201"
+            },
+            {
+              "path": "04_prefill_p2048_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b06-b2.json",
+              "sha256": "4eee59aad765e449523f14e793dda5648e02ef069b88d683a9a474c7ab968a69"
+            },
+            {
+              "path": "04_prefill_p2048_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b07-b1.json",
+              "sha256": "228e5ecbfe5782033f0473817ad45712d2617416683e1ca90f1d6912e13ceb5b"
+            },
+            {
+              "path": "04_prefill_p2048_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b07-b2.json",
+              "sha256": "170a505bd9275098cc95924f3a70aef829e85a262374c4a5c1f55d9ca22c6231"
+            },
+            {
+              "path": "04_prefill_p2048_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b08-b1.json",
+              "sha256": "da8942a99e308cc15ff66457f46cf1bd122e7c43a3f38d705bb30a87f8a0558e"
+            },
+            {
+              "path": "04_prefill_p2048_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b08-b2.json",
+              "sha256": "a8a8dc9b1795f4c5b35f68b3f185a3c8ecf9c8c4ed556c16b77a276c93527373"
+            },
+            {
+              "path": "04_prefill_p2048_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b09-b1.json",
+              "sha256": "de7d29e938f64316840693844c705669e29d3b1be29e21fd0052708cb3475b9f"
+            },
+            {
+              "path": "04_prefill_p2048_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b09-b2.json",
+              "sha256": "5a4e26e1d15869c1892290311ca868e9a2690d1715379300d5cab1676187ba4a"
+            },
+            {
+              "path": "04_prefill_p2048_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b10-b1.json",
+              "sha256": "621a5909caa8696f28161449e53da15a69b97f350aeb60ac47c4ebe1b616168f"
+            },
+            {
+              "path": "04_prefill_p2048_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b10-b2.json",
+              "sha256": "ac292e295601bb7cffcab104731cd60eeb7b7c76ba7c5820426770e54d0eeebb"
+            }
+          ],
+          "model_runtime_config": {
+            "model_artifact_sha256": null,
+            "runtime_identity_sha256": null,
+            "config_set_sha256": null
+          }
+        }
+      ],
+      "projection_receipt": null,
+      "supersedes": []
+    },
+    "aggregate_floor_artifact_sha256": {
+      "status": "EMPTY",
+      "value": "",
+      "todo": "TODO(U10/U8): validate and attach exact aggregate artifact bytes at arm"
+    },
+    "receipt_oracle": {
+      "schema_version": "joulewise.bracket_session_receipt_oracle.v1",
+      "status": "derived_from_production_model",
+      "source": {
+        "module": "joulewise.calibration_ledger",
+        "operation_functions": [
+          "append_bracket_session_receipt",
+          "claim_bracket_session_slot",
+          "finalize_bracket_session_slot"
+        ],
+        "append_policy_revision": "d117-ledger-resident-v1",
+        "claim_policy_revision": "d117-stable-claim-v1"
+      },
+      "session_terminal_state": "finalized",
+      "logical_operation_count": 5,
+      "receipt_count": 10,
+      "physical_receipt_shape": [
+        {
+          "relative_sequence": 1,
+          "schema_version": "joulewise.calibration_ledger_control.v1",
+          "event": "append-intent",
+          "target_schema_version": "joulewise.calibration_window_bracket_session.v1",
+          "target_event": "bracket-session-open",
+          "slot": null
+        },
+        {
+          "relative_sequence": 2,
+          "schema_version": "joulewise.calibration_window_bracket_session.v1",
+          "event": "bracket-session-open",
+          "target_schema_version": null,
+          "target_event": null,
+          "slot": null
+        },
+        {
+          "relative_sequence": 3,
+          "schema_version": "joulewise.calibration_ledger_control.v1",
+          "event": "append-intent",
+          "target_schema_version": "joulewise.calibration_window_bracket_session.v1",
+          "target_event": "bracket-session-slot-claim",
+          "slot": "pre"
+        },
+        {
+          "relative_sequence": 4,
+          "schema_version": "joulewise.calibration_window_bracket_session.v1",
+          "event": "bracket-session-slot-claim",
+          "target_schema_version": null,
+          "target_event": null,
+          "slot": "pre"
+        },
+        {
+          "relative_sequence": 5,
+          "schema_version": "joulewise.calibration_ledger_control.v1",
+          "event": "append-intent",
+          "target_schema_version": "joulewise.calibration_window_bracket_session.v1",
+          "target_event": "bracket-session-slot-finalization",
+          "slot": "pre"
+        },
+        {
+          "relative_sequence": 6,
+          "schema_version": "joulewise.calibration_window_bracket_session.v1",
+          "event": "bracket-session-slot-finalization",
+          "target_schema_version": null,
+          "target_event": null,
+          "slot": "pre"
+        },
+        {
+          "relative_sequence": 7,
+          "schema_version": "joulewise.calibration_ledger_control.v1",
+          "event": "append-intent",
+          "target_schema_version": "joulewise.calibration_window_bracket_session.v1",
+          "target_event": "bracket-session-slot-claim",
+          "slot": "post"
+        },
+        {
+          "relative_sequence": 8,
+          "schema_version": "joulewise.calibration_window_bracket_session.v1",
+          "event": "bracket-session-slot-claim",
+          "target_schema_version": null,
+          "target_event": null,
+          "slot": "post"
+        },
+        {
+          "relative_sequence": 9,
+          "schema_version": "joulewise.calibration_ledger_control.v1",
+          "event": "append-intent",
+          "target_schema_version": "joulewise.calibration_window_bracket_session.v1",
+          "target_event": "bracket-session-slot-finalization",
+          "slot": "post"
+        },
+        {
+          "relative_sequence": 10,
+          "schema_version": "joulewise.calibration_window_bracket_session.v1",
+          "event": "bracket-session-slot-finalization",
+          "target_schema_version": null,
+          "target_event": null,
+          "slot": "post"
+        }
+      ],
+      "terminal_sequence": null,
+      "terminal_sequence_rule": {
+        "base": "authenticated_arm_head_sequence",
+        "delta": 10,
+        "applicability": "clean_path_no_recovery_control_rows",
+        "recovery_note": "Authenticated recovery control rows (for example an abandon-tail repair between an intent and its reconstructed target) may lawfully extend the terminal sequence beyond base+delta. Arm-time verification must validate the business-receipt cadence separately from authenticated control rows rather than requiring base+delta exactly."
+      },
+      "arm_time_receipts": []
+    },
+    "prefill_phase_recording_proof": {
+      "status": "EMPTY",
+      "value": "",
+      "todo": "TODO(lead): re-run the plan-factory amendment-5 desk proof from custodied Qwen3-1.7B-4bit and Qwen3-8B-4bit bundles before ratification"
+    },
+    "readiness_record": {
+      "status": "EMPTY",
+      "value": "",
+      "todo": "TODO(U8): validate the exact draft after all gates land"
+    }
+  },
+  "closeout_attachments": {
+    "bracket_binding_sha256": {
+      "status": "EMPTY",
+      "value": "",
+      "todo": "TODO(postcollection): populate from the completed bracket session"
+    },
+    "terminal_committed_head": {
+      "status": "EMPTY",
+      "value": "",
+      "todo": "TODO(postcollection): populate from the committed terminal head"
+    },
+    "whole_window_verdict_sha256": {
+      "status": "EMPTY",
+      "value": "",
+      "todo": "TODO(postcollection): issue only after collection"
+    },
+    "evaluation_basis_sha256": {
+      "status": "EMPTY",
+      "value": "",
+      "todo": "TODO(postcollection): derive exact 80-member basis"
+    },
+    "claim_backup_receipt": {
+      "status": "EMPTY",
+      "value": "",
+      "todo": "TODO(postcollection): verified backup receipt"
+    },
+    "bound_backup_receipt": {
+      "status": "EMPTY",
+      "value": "",
+      "todo": "TODO(postcollection): verified backup receipt"
+    }
+  },
+  "downstream_contract": {
+    "analysis_manifest_path": "analysis_manifest_v3.json",
+    "analysis_manifest_sha256": "7385e95c2e2a163db9b0b74758672ac1f9da18406f705be182fdcf2138f1d5ee",
+    "consumer_family_declaration_path": "consumer_family_declaration.json",
+    "consumer_family_declaration_sha256": "2875c95356812799553614b95dfc5c3237fa396dc70c03c71a91c2a764f3e464",
+    "binding_mode": "declaration_only"
+  },
+  "decode_workload": {
+    "path": "decode_workload_candidate.json",
+    "sha256": "5480df03672abde78d6f2ba03da483a5783396c050f315b2088c828aed3b2fd4",
+    "assignment_rule_id": "d166_fixed_prompt_zero.v1"
+  },
+  "runtime_budget": {
+    "draft_status": "as_generated_pre_d134_freeze",
+    "decode": {
+      "members": 40,
+      "minutes_with_margin": 168.0,
+      "authority": "docs/process_traces/2026-08-07-plan-factory/DRAFT-U5U7.md §6 U7 gamma implementation session",
+      "prompt_assignment": {
+        "rule_id": "d166_fixed_prompt_zero.v1",
+        "rule": "prompt_index = 0 for every decode block in both model arms",
+        "same_prompt_for_all_a_and_b_members_in_block": true,
+        "prompt_count": 8
+      }
+    },
+    "prefill_p2048": {
+      "members": 40,
+      "core_minutes_before_margin": null,
+      "minutes_with_20_percent_margin": null,
+      "budget_status": "EMPTY-PENDING-D162-G2-SHAKEDOWN",
+      "authority": "D-166 as amended selects length and budget from the G2-a record"
+    },
+    "interior_reference_augmentation": {
+      "additional_references": 2,
+      "core_minutes_before_margin": 10.0,
+      "minutes_with_20_percent_margin": 12.0,
+      "placement": [
+        "after_decode_member_40_arm_boundary",
+        "after_prefill_member_20_arm_midpoint"
+      ],
+      "authority": "docs/process_traces/2026-08-07-plan-factory/DRAFT-U5U7.md §6 U7 gamma implementation session",
+      "freeze_ratification": "as_generated_pre_d134_freeze; the committed D-134 freeze receipt and its plan-tree attachment are the ratification authority for this reference-cadence declaration"
+    },
+    "combined_minutes_with_margin": null,
+    "combined_derivation": "EMPTY until the D-166 G2-a sweep supplies the selected prefill budget",
+    "member_replacement_authority": false
+  }
+}
