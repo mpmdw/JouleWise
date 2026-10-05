@@ -328,3 +328,26 @@ coordinated multi-file forgery is outside the threat model (D-161). **F2:** fix.
   doctrine) before any window.
 - Whole suites: caught nothing attributable this session (all extras were load flakes, confirmed serially).
 - Blind consult pair: shaped the next block; no number.
+
+## 23:15-00:00: suites, two new findings, handoff
+
+- PR #475 (A6) whole suite at `baa9bb7b` and hosted CI on `8d9735f7`: one REAL regression,
+  `tests/test_arm_readiness_lifecycle.py::…test_atomic_launch_capability_race_exactly_one_consumer_and_replay_refuses`
+  (`execve` called 0 times; passes at main `1f49625f`, fails serially at the A6 head). Fix seat
+  [63](63-sol-a6-race-brief.md) in flight (report `~/night-archive/desk-day-v5/sol-a6race.md`). After it: suite, CI, and a
+  delta-limited Fable pass if the fix touches `scripts/launch_window.py`.
+- PR #477 (pin + packs) whole suite at `ca5f3f11`: one REAL finding, `tests/test_d165_rationale_census.py::…
+  test_no_active_retired_rationale_in_tracked_consumers`: the generated packs carry the retired "common-time" rationale
+  (contrast `analysis_manifest_v3.json`, both packs' `calibration_plan.json`; 10 lines). The generators emit retired
+  rationale text; fix in the generators (or rule that generated packs are not "tracked consumers"), then regenerate —
+  together with Fable N1 (`PROPOSED-PENDING-LEAD-RATIFICATION` label) since both change pack bytes before freeze.
+- Doctrine-pin lane round 3 [60](60-sol-doctrine-pin-r3-brief.md) still running (report `sol-docpin3.md`).
+- Records PR #478 is blocked by branch protection (docs-only changes skip the required test matrix); records and the
+  RUN_STATE handoff go straight to main as a doc commit (doctrine: small doc and bookkeeping commits may).
+
+## Seat end state (10-hour budget reached; `done.json` IN_PROGRESS; the magistrate relaunches this brief)
+
+Merged today: #469 `cfdb90d6`, #470 `a8e658e5`, #471 `b3ef116d`, #472 `a93604c8`, #473 `784d12f1`, #474 `b53c58d8`,
+#476 `1f49625f`. Open: #475 (A6; race-test fix in flight), #477 (pin + packs; rationale-census fix needed), doctrine-pin
+branch (round 3 in flight; no PR yet), design branch `design/2026-10-04-v5-qualification-block` (block-4 draft).
+Nothing armed; no window run by this seat. Next-seat checklist: `~/night-archive/desk-day-v5/STATE.md`.
