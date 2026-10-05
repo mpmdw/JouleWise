@@ -11,7 +11,7 @@
   },
   "generator": {
     "path": "configs/campaigns/d117_floor_qwen3-8b_v5/generate_configs.py",
-    "sha256": "409eb4e2bc94d602c7bbc8fb679806ba17fd54ee1e6e8f42b15bb630f05bdd3a"
+    "sha256": "29ea007dd65bde378a6fee0cb628d02d8eacf851331ea6f99dd46ae9038b0382"
   },
   "window_identity": {
     "window_id": "plan-d117-floor-qwen3-8b-decode-prefill-p2048-v5",
@@ -1524,7 +1524,7 @@
       "kind": "campaign_collection",
       "expected_count": 12,
       "input": {
-        "path": "configs/campaigns/neg8_reference_corpus/order_manifest.json",
+        "path": "configs/campaigns/neg8_reference_corpus_v5/order_manifest.json",
         "manifest_id": "neg8-reference-corpus-order-v1",
         "sha256": "0ec9d68aa4265cc9378bb682091a973fc92879b76506fa25af828050a608509f"
       },
@@ -1540,7 +1540,7 @@
               "arguments": [
                 {
                   "kind": "repo_path",
-                  "value": "configs/campaigns/neg8_reference_corpus"
+                  "value": "configs/campaigns/neg8_reference_corpus_v5"
                 },
                 {
                   "kind": "literal",
@@ -1625,7 +1625,7 @@
       "expected_count": 1,
       "input": {
         "kind": "external_artifact",
-        "path": "configs/campaigns/neg8_reference_corpus/derivation/settled_corpus.json",
+        "path": "configs/campaigns/neg8_reference_corpus_v5/derivation/settled_corpus.json",
         "sha256": "74ccdaec74497c3aa7c074ef1129ec2bf2cc01d8ac14d3d07be77ab468599688"
       },
       "launch": {
@@ -1644,7 +1644,7 @@
                 },
                 {
                   "kind": "repo_path",
-                  "value": "configs/campaigns/neg8_reference_corpus/derivation/settled_corpus.json"
+                  "value": "configs/campaigns/neg8_reference_corpus_v5/derivation/settled_corpus.json"
                 },
                 {
                   "kind": "literal",
@@ -1684,7 +1684,7 @@
       "kind": "campaign_collection",
       "expected_count": 3,
       "input": {
-        "path": "configs/campaigns/window_references/start_triplet/order_manifest.json",
+        "path": "configs/campaigns/window_references_v5/start_triplet/order_manifest.json",
         "manifest_id": "neg8-window-reference-start-triplet-v1",
         "sha256": "9cac197255bdc9a0a1a0b8ee8ceb587ba3c8cabc20b976b2543dc3a400d37cb0"
       },
@@ -1700,7 +1700,7 @@
               "arguments": [
                 {
                   "kind": "repo_path",
-                  "value": "configs/campaigns/window_references/start_triplet"
+                  "value": "configs/campaigns/window_references_v5/start_triplet"
                 },
                 {
                   "kind": "literal",
@@ -2087,7 +2087,7 @@
       "kind": "campaign_collection",
       "expected_count": 1,
       "input": {
-        "path": "configs/campaigns/window_references/midpoint/order_manifest.json",
+        "path": "configs/campaigns/window_references_v5/midpoint/order_manifest.json",
         "manifest_id": "neg8-window-reference-midpoint-v1",
         "sha256": "9ccedd91307985ba5641e791f4ac89f4e250fca414a4ba713cc7977ced6abb21"
       },
@@ -2103,7 +2103,7 @@
               "arguments": [
                 {
                   "kind": "repo_path",
-                  "value": "configs/campaigns/window_references/midpoint"
+                  "value": "configs/campaigns/window_references_v5/midpoint"
                 },
                 {
                   "kind": "literal",
@@ -2490,7 +2490,7 @@
       "kind": "campaign_collection",
       "expected_count": 3,
       "input": {
-        "path": "configs/campaigns/window_references/end_triplet/order_manifest.json",
+        "path": "configs/campaigns/window_references_v5/end_triplet/order_manifest.json",
         "manifest_id": "neg8-window-reference-end-triplet-v1",
         "sha256": "8e65a4347aafa0722a60a2bd58c7e8061b860db66fa06f6acec24d1a1ade5c67"
       },
@@ -2506,7 +2506,7 @@
               "arguments": [
                 {
                   "kind": "repo_path",
-                  "value": "configs/campaigns/window_references/end_triplet"
+                  "value": "configs/campaigns/window_references_v5/end_triplet"
                 },
                 {
                   "kind": "literal",
@@ -2807,7 +2807,7 @@
       {
         "external_input_id": "neg8_bound",
         "manifest": {
-          "path": "configs/campaigns/neg8_reference_corpus/order_manifest.json",
+          "path": "configs/campaigns/neg8_reference_corpus_v5/order_manifest.json",
           "manifest_id": "neg8-reference-corpus-order-v1",
           "sha256": "0ec9d68aa4265cc9378bb682091a973fc92879b76506fa25af828050a608509f"
         },
@@ -2816,73 +2816,73 @@
           {
             "ordinal": 1,
             "run_id": "neg8-refcorpus-r01",
-            "path": "configs/campaigns/neg8_reference_corpus/neg8-refcorpus-r01.json",
+            "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r01.json",
             "sha256": "6bccecc46fe1bd093357d4aa270c19325af28084c6b5bacd0cc3cc6630dd893e"
           },
           {
             "ordinal": 2,
             "run_id": "neg8-refcorpus-r02",
-            "path": "configs/campaigns/neg8_reference_corpus/neg8-refcorpus-r02.json",
+            "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r02.json",
             "sha256": "c9b42b48ad7bd9d815b6cd200072477b1d1874546703f64a9144ea89a37422eb"
           },
           {
             "ordinal": 3,
             "run_id": "neg8-refcorpus-r03",
-            "path": "configs/campaigns/neg8_reference_corpus/neg8-refcorpus-r03.json",
+            "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r03.json",
             "sha256": "b46790c56480340275ccd31dccd6e1754d2145cca1782c88b4f51be310bb86c5"
           },
           {
             "ordinal": 4,
             "run_id": "neg8-refcorpus-r04",
-            "path": "configs/campaigns/neg8_reference_corpus/neg8-refcorpus-r04.json",
+            "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r04.json",
             "sha256": "5e0f25d616072fb4fa48cb2b6ccd25f69299c417ea80f35bc99f3733b2980878"
           },
           {
             "ordinal": 5,
             "run_id": "neg8-refcorpus-r05",
-            "path": "configs/campaigns/neg8_reference_corpus/neg8-refcorpus-r05.json",
+            "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r05.json",
             "sha256": "6606cb9963839bd6bd2715fa84afccd56db0f3273c3e162a15e6117768159564"
           },
           {
             "ordinal": 6,
             "run_id": "neg8-refcorpus-r06",
-            "path": "configs/campaigns/neg8_reference_corpus/neg8-refcorpus-r06.json",
+            "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r06.json",
             "sha256": "6fae93773ce9b69c1c192a24f43622939a094bd4e2296267b421fb59aa3951e9"
           },
           {
             "ordinal": 7,
             "run_id": "neg8-refcorpus-r07",
-            "path": "configs/campaigns/neg8_reference_corpus/neg8-refcorpus-r07.json",
+            "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r07.json",
             "sha256": "dab4a8a5f727df0da02c542a584a9582f079450e7e716b1c99b67844b71b0fe4"
           },
           {
             "ordinal": 8,
             "run_id": "neg8-refcorpus-r08",
-            "path": "configs/campaigns/neg8_reference_corpus/neg8-refcorpus-r08.json",
+            "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r08.json",
             "sha256": "7d842daf967a1d7a4c47c35eb3cac139122c3bdb2707eaad2578d20e5c75594d"
           },
           {
             "ordinal": 9,
             "run_id": "neg8-refcorpus-r09",
-            "path": "configs/campaigns/neg8_reference_corpus/neg8-refcorpus-r09.json",
+            "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r09.json",
             "sha256": "547a3b0d7bd5f3b55f72a8d64cefc8698e25df927dd6fdd3a64103b6073ecadd"
           },
           {
             "ordinal": 10,
             "run_id": "neg8-refcorpus-r10",
-            "path": "configs/campaigns/neg8_reference_corpus/neg8-refcorpus-r10.json",
+            "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r10.json",
             "sha256": "c688d052cac174b56fb7a8229fabe1f648959fe017797395acde33b8f91e1a8d"
           },
           {
             "ordinal": 11,
             "run_id": "neg8-refcorpus-r11",
-            "path": "configs/campaigns/neg8_reference_corpus/neg8-refcorpus-r11.json",
+            "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r11.json",
             "sha256": "2b85317e04427ff315ec07503d2cd718b300ae46011be1f11dcc4fd13a4a01d9"
           },
           {
             "ordinal": 12,
             "run_id": "neg8-refcorpus-r12",
-            "path": "configs/campaigns/neg8_reference_corpus/neg8-refcorpus-r12.json",
+            "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r12.json",
             "sha256": "2a7c24642198d4774072c0e946cf165f7510ef6ae50c96f589c1ac6f816ae46d"
           }
         ]
@@ -2890,7 +2890,7 @@
       {
         "external_input_id": "start_reference",
         "manifest": {
-          "path": "configs/campaigns/window_references/start_triplet/order_manifest.json",
+          "path": "configs/campaigns/window_references_v5/start_triplet/order_manifest.json",
           "manifest_id": "neg8-window-reference-start-triplet-v1",
           "sha256": "9cac197255bdc9a0a1a0b8ee8ceb587ba3c8cabc20b976b2543dc3a400d37cb0"
         },
@@ -2899,19 +2899,19 @@
           {
             "ordinal": 1,
             "run_id": "neg8-window-start-r1",
-            "path": "configs/campaigns/window_references/start_triplet/neg8-window-start-r1.json",
+            "path": "configs/campaigns/window_references_v5/start_triplet/neg8-window-start-r1.json",
             "sha256": "353b6633bb28c09ca2add77b4ce3db2e73952e7a3eb53c4e1dfa08259e9fb478"
           },
           {
             "ordinal": 2,
             "run_id": "neg8-window-start-r2",
-            "path": "configs/campaigns/window_references/start_triplet/neg8-window-start-r2.json",
+            "path": "configs/campaigns/window_references_v5/start_triplet/neg8-window-start-r2.json",
             "sha256": "f1bcb1b5323562e738893f94ce7acf867d39543d5bee58a7a165600b98420013"
           },
           {
             "ordinal": 3,
             "run_id": "neg8-window-start-r3",
-            "path": "configs/campaigns/window_references/start_triplet/neg8-window-start-r3.json",
+            "path": "configs/campaigns/window_references_v5/start_triplet/neg8-window-start-r3.json",
             "sha256": "6a5ac82869c38922c543c8d9c7d64e1fc8dc8d166afeffc8c78b1fb75c4b0847"
           }
         ]
@@ -2919,7 +2919,7 @@
       {
         "external_input_id": "midpoint_reference",
         "manifest": {
-          "path": "configs/campaigns/window_references/midpoint/order_manifest.json",
+          "path": "configs/campaigns/window_references_v5/midpoint/order_manifest.json",
           "manifest_id": "neg8-window-reference-midpoint-v1",
           "sha256": "9ccedd91307985ba5641e791f4ac89f4e250fca414a4ba713cc7977ced6abb21"
         },
@@ -2928,7 +2928,7 @@
           {
             "ordinal": 1,
             "run_id": "neg8-window-midpoint",
-            "path": "configs/campaigns/window_references/midpoint/neg8-window-midpoint.json",
+            "path": "configs/campaigns/window_references_v5/midpoint/neg8-window-midpoint.json",
             "sha256": "1332cf4a4e48ac9d8f6be3593270084089b5e7e74953aa4aee43084b231041af"
           }
         ]
@@ -2936,7 +2936,7 @@
       {
         "external_input_id": "end_reference",
         "manifest": {
-          "path": "configs/campaigns/window_references/end_triplet/order_manifest.json",
+          "path": "configs/campaigns/window_references_v5/end_triplet/order_manifest.json",
           "manifest_id": "neg8-window-reference-end-triplet-v1",
           "sha256": "8e65a4347aafa0722a60a2bd58c7e8061b860db66fa06f6acec24d1a1ade5c67"
         },
@@ -2945,19 +2945,19 @@
           {
             "ordinal": 1,
             "run_id": "neg8-window-end-r1",
-            "path": "configs/campaigns/window_references/end_triplet/neg8-window-end-r1.json",
+            "path": "configs/campaigns/window_references_v5/end_triplet/neg8-window-end-r1.json",
             "sha256": "62e16d11cd4d3c5d44744ff390374ea009a6fae8988845e1f82a860e28571bd0"
           },
           {
             "ordinal": 2,
             "run_id": "neg8-window-end-r2",
-            "path": "configs/campaigns/window_references/end_triplet/neg8-window-end-r2.json",
+            "path": "configs/campaigns/window_references_v5/end_triplet/neg8-window-end-r2.json",
             "sha256": "3c85f630e6eb0002dfdfdb5ce09816497298b9fbec546e66390723a7d8dea2e8"
           },
           {
             "ordinal": 3,
             "run_id": "neg8-window-end-r3",
-            "path": "configs/campaigns/window_references/end_triplet/neg8-window-end-r3.json",
+            "path": "configs/campaigns/window_references_v5/end_triplet/neg8-window-end-r3.json",
             "sha256": "aa0933348c3afd0d925a841a23701559324e4204f6dad21a5ace939134b7d535"
           }
         ]
@@ -2965,7 +2965,7 @@
     ],
     "artifacts": [
       {
-        "path": "configs/campaigns/neg8_reference_corpus/derivation/settled_corpus.json",
+        "path": "configs/campaigns/neg8_reference_corpus_v5/derivation/settled_corpus.json",
         "sha256": "74ccdaec74497c3aa7c074ef1129ec2bf2cc01d8ac14d3d07be77ab468599688"
       },
       {

@@ -1225,66 +1225,19 @@ STAGE_SPECS: tuple[dict[str, Any], ...] = ()
 REFERENCE_AFTER_STAGE: dict[str, str] = {}
 
 POLICY_PATH = Path("configs/campaign_policies/quiet_mac_p2_production.json")
-NEG8_MANIFEST_PATH = Path("configs/campaigns/neg8_reference_corpus/order_manifest.json")
+NEG8_MANIFEST_PATH = Path("configs/campaigns/neg8_reference_corpus_v5/order_manifest.json")
 NEG8_CORPUS_PATH = Path(
-    "configs/campaigns/neg8_reference_corpus/derivation/settled_corpus.json"
+    "configs/campaigns/neg8_reference_corpus_v5/derivation/settled_corpus.json"
 )
 START_REF_MANIFEST_PATH = Path(
-    "configs/campaigns/window_references/start_triplet/order_manifest.json"
+    "configs/campaigns/window_references_v5/start_triplet/order_manifest.json"
 )
 MID_REF_MANIFEST_PATH = Path(
-    "configs/campaigns/window_references/midpoint/order_manifest.json"
+    "configs/campaigns/window_references_v5/midpoint/order_manifest.json"
 )
 END_REF_MANIFEST_PATH = Path(
-    "configs/campaigns/window_references/end_triplet/order_manifest.json"
+    "configs/campaigns/window_references_v5/end_triplet/order_manifest.json"
 )
-
-
-INTERIOR_REFERENCE_STAGES = (
-    "gamma-reference-decode-midpoint",
-    "gamma-reference-arm-boundary",
-    "gamma-reference-prefill-midpoint",
-)
-
-
-def interior_reference_dir(stage_id: str) -> Path:
-    return Path("references") / stage_id
-
-
-def generate_interior_references(out: Path, plan_sha: str) -> dict[str, dict[str, Any]]:
-    """Keep the G2-b midpoint route and give the other launches new identities."""
-    source_manifest = json.loads((REPO_ROOT / MID_REF_MANIFEST_PATH).read_bytes())
-    source_row, = source_manifest["executed_order"]
-    source_config = json.loads(
-        (REPO_ROOT / MID_REF_MANIFEST_PATH.parent / source_row["config"]).read_bytes()
-    )
-    references = {}
-    for stage_id in INTERIOR_REFERENCE_STAGES[1:]:
-        member_id = "neg8-window-" + stage_id.removeprefix("gamma-reference-")
-        config = dict(source_config, run_id=member_id)
-        config["run_metadata"] = dict(source_config["run_metadata"], tags=[
-            f"calibration-plan-sha256={plan_sha}"
-            if tag.startswith("calibration-plan-sha256=") else tag
-            for tag in source_config["run_metadata"]["tags"]
-        ])
-        relative = interior_reference_dir(stage_id)
-        config_raw = render_json(config)
-        write_bytes(out / relative / f"{member_id}.json", config_raw)
-        row = dict(source_row, config=f"{member_id}.json", run_id=member_id,
-                   config_sha256=sha256_bytes(config_raw))
-        manifest = dict(source_manifest,
-                        manifest_id=source_manifest["manifest_id"] + "-" + stage_id,
-                        plan_id=PLAN_ID, calibration_plan_sha256=plan_sha,
-                        executed_order=[row])
-        manifest_raw = render_json(manifest)
-        manifest_path = relative / "order_manifest.json"
-        write_bytes(out / manifest_path, manifest_raw)
-        references[stage_id] = {
-            "path": manifest_path.as_posix(),
-            "manifest_id": manifest["manifest_id"],
-            "sha256": sha256_bytes(manifest_raw),
-        }
-    return references
 
 
 def render_suite_manifest_bytes(value: dict[str, Any]) -> bytes:
@@ -1371,10 +1324,6 @@ def expected_pack_paths(*, include_generator: bool = True) -> tuple[Path, ...]:
         family_relpath(PREFILL_ARM, "A"),
         family_relpath(PREFILL_ARM, "B"),
     ]
-    for stage_id in INTERIOR_REFERENCE_STAGES[1:]:
-        relative = interior_reference_dir(stage_id)
-        member_id = "neg8-window-" + stage_id.removeprefix("gamma-reference-")
-        paths.extend((relative / "order_manifest.json", relative / f"{member_id}.json"))
     paths.extend(sorted(REPLAY_INPUT_BYTES))
     if include_generator:
         paths.append(Path("generate_configs.py"))
@@ -2338,8 +2287,8 @@ def build_stage_graph(stage_manifests: dict[str, dict[str, Any]]) -> list[dict[s
                     "gamma-reference-arm-boundary",
                     "campaign_collection",
                     1,
-                    {"kind": "pack_manifest", **stage_manifests["gamma-reference-arm-boundary"]},
-                    [campaign_command("gamma-reference-arm-boundary", (PACK_REL / interior_reference_dir("gamma-reference-arm-boundary")).as_posix(), "claim_runs_root")],
+                    {"kind": "external_input", "input_id": "midpoint_reference"},
+                    [campaign_command("gamma-reference-arm-boundary", MID_REF_MANIFEST_PATH.parent.as_posix(), "claim_runs_root")],
                 )
             )
     for stage in STAGE_SPECS[2:]:
@@ -2359,8 +2308,8 @@ def build_stage_graph(stage_manifests: dict[str, dict[str, Any]]) -> list[dict[s
                     "gamma-reference-prefill-midpoint",
                     "campaign_collection",
                     1,
-                    {"kind": "pack_manifest", **stage_manifests["gamma-reference-prefill-midpoint"]},
-                    [campaign_command("gamma-reference-prefill-midpoint", (PACK_REL / interior_reference_dir("gamma-reference-prefill-midpoint")).as_posix(), "claim_runs_root")],
+                    {"kind": "external_input", "input_id": "midpoint_reference"},
+                    [campaign_command("gamma-reference-prefill-midpoint", MID_REF_MANIFEST_PATH.parent.as_posix(), "claim_runs_root")],
                 )
             )
     stages.append(
@@ -3306,7 +3255,6 @@ def _generate(output_repo_root: Path) -> dict[str, str]:
         build_external_manifest("midpoint_reference", MID_REF_MANIFEST_PATH),
         build_external_manifest("end_references", END_REF_MANIFEST_PATH),
     ]
-    stage_manifest_refs.update(generate_interior_references(out, plan_sha))
     stage_graph = build_stage_graph(stage_manifest_refs)
     science_rows = [
         {

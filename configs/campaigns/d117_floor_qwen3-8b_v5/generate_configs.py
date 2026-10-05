@@ -223,18 +223,18 @@ SUCCESSOR_ACCEPTANCE_ID = "d079_calibration_acceptance_v2_n24_25g83_r2"
 LEDGER_HEAD_SHA256 = (
     "a5b825b7dd77856be8d612be759be84f925a32f6e671481c2662bb03cbf57014"
 )
-NEG8_MANIFEST_REL = Path("configs/campaigns/neg8_reference_corpus/order_manifest.json")
+NEG8_MANIFEST_REL = Path("configs/campaigns/neg8_reference_corpus_v5/order_manifest.json")
 NEG8_SETTLED_REL = Path(
-    "configs/campaigns/neg8_reference_corpus/derivation/settled_corpus.json"
+    "configs/campaigns/neg8_reference_corpus_v5/derivation/settled_corpus.json"
 )
 START_MANIFEST_REL = Path(
-    "configs/campaigns/window_references/start_triplet/order_manifest.json"
+    "configs/campaigns/window_references_v5/start_triplet/order_manifest.json"
 )
 MIDPOINT_MANIFEST_REL = Path(
-    "configs/campaigns/window_references/midpoint/order_manifest.json"
+    "configs/campaigns/window_references_v5/midpoint/order_manifest.json"
 )
 END_MANIFEST_REL = Path(
-    "configs/campaigns/window_references/end_triplet/order_manifest.json"
+    "configs/campaigns/window_references_v5/end_triplet/order_manifest.json"
 )
 EXTERNAL_MANIFEST_SHAS = {
     NEG8_MANIFEST_REL: "0ec9d68aa4265cc9378bb682091a973fc92879b76506fa25af828050a608509f",

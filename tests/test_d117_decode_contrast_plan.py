@@ -2257,15 +2257,7 @@ class D117GammaPlanTest(unittest.TestCase):
                     external["manifest_sha256"],
                 )
                 for member in external["members"]:
-                    # The v1 tree retains the historical 30-second source pins.
-                    # Addendum B regenerates prospective references at 75 seconds;
-                    # reconstruct only that field to verify every other source byte.
-                    raw = (ROOT / member["path"]).read_bytes()
-                    self.assertEqual(raw.count(b'"idle_seconds": 75.0'), 1)
-                    historical = raw.replace(b'"idle_seconds": 75.0',
-                                             b'"idle_seconds": 30.0')
-                    self.assertEqual(hashlib.sha256(historical).hexdigest(),
-                                     member["sha256"])
+                    self.assertEqual(sha256(ROOT / member["path"]), member["sha256"])
             else:
                 self.assertEqual(sha256(ROOT / external["path"]), external["sha256"])
 

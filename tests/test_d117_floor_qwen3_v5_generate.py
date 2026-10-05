@@ -291,6 +291,11 @@ class D117FloorQwen3V5PackTests(unittest.TestCase):
         for _profile, pack_id, _model_id, _model_name, _plan_id in FLOORS:
             relative = Path("configs/campaigns") / pack_id / "generate_configs.py"
             shutil.copy2(ROOT / relative, repository / relative)
+        # Prospective reference inputs may be uncommitted alongside the
+        # generators, so the clone must grade those working-tree bytes too.
+        for directory in ("neg8_reference_corpus_v5", "window_references_v5"):
+            relative = Path("configs/campaigns") / directory
+            shutil.copytree(ROOT / relative, repository / relative, dirs_exist_ok=True)
         return repository
 
     def test_each_ladder_rung_realizes_pin_and_derived_identities(self) -> None:

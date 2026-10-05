@@ -223,6 +223,17 @@ class G2bOneBlockChainTests(unittest.TestCase):
         self.generator = _load_generator()
         self.chain = self.generator.render_generated_region(self.generator.RUNBOOK_PATH.read_text())
 
+    def test_v5_reference_routing_preserves_the_pinned_historical_chain(self):
+        runsheet = RUNSHEET_PATH.read_text()
+        start = runsheet.index(self.generator.BEGIN_MARKER)
+        end = runsheet.index(self.generator.END_MARKER, start) + len(self.generator.END_MARKER) + 1
+        self.assertEqual(self.chain, runsheet[start:end])
+        prospective = self.generator.render_generated_region(
+            self.generator.RUNBOOK_PATH.read_text(), v5_references=True)
+        self.assertEqual(prospective.replace("/window_references_v5\"", "/window_references\"")
+                                   .replace("/neg8_reference_corpus_v5\"", "/neg8_reference_corpus\""),
+                         self.chain)
+
     def test_chain_asserts_registered_stop_rc_and_preserves_bracket_path(self):
         from scripts.run_campaign import MAX_BLOCKS_REACHED_RC, CAMPAIGN_STOP_RETURN_CODES
 
@@ -244,8 +255,14 @@ class G2bOneBlockChainTests(unittest.TestCase):
         tree = json.loads((pack / "plan_tree.json").read_bytes())
         science = [row for row in tree["stage_graph"]
                    if row["stage_id"].startswith("gamma-science-")]
-        body = self.chain[self.chain.index("# The reference corpus"):
-                          self.chain.index('POST_CAL_CUSTODY="$(calibrate_slot post')]
+        chain = self.generator.render_generated_region(
+            self.generator.RUNBOOK_PATH.read_text(), v5_references=True)
+        # Execute the renderer's actual root assignments; environment overrides
+        # would conceal a historical 30-second dispatch route.
+        bindings = chain[chain.index('POLICY="$REPO/'):
+                         chain.index('\nmkdir -p')]
+        body = chain[chain.index("# The reference corpus"):
+                     chain.index('POST_CAL_CUSTODY="$(calibrate_slot post')]
         with tempfile.TemporaryDirectory(prefix="g2b-roster-") as temporary:
             root = Path(temporary)
             (root / "before_midpoint_stages.txt").write_text("\n".join(
@@ -267,17 +284,14 @@ class G2bOneBlockChainTests(unittest.TestCase):
             )
             shell = ('set -euo pipefail\ntimestamp() { echo roster; }\n'
                      'run_stage() { ' + shlex.quote(sys.executable) + ' -B '
-                     + shlex.quote(str(collector)) + ' "$3" "$@"; }\n' + body)
+                     + shlex.quote(str(collector)) + ' "$3" "$@"; }\n' + bindings + '\n' + body)
             environment = {**os.environ, "REPO": str(REPO_ROOT), "PY": "/usr/bin/true",
                 "BOUND_RUNS_ROOT": str(root / "bound"), "BOUND_LOG": str(root / "bound.log"),
-                "BOUND_CONFIG_ROOT": str(REPO_ROOT / "configs/campaigns/neg8_reference_corpus"),
-                "BOUND_MANIFEST": str(REPO_ROOT / "configs/campaigns/neg8_reference_corpus"
-                                      / "derivation/settled_corpus.json"),
                 "NEG8_DRIFT_BOUND": str(root / "bound.json"),
                 "RUNS_ROOT": str(root / "claim"), "CLAIM_LOG": str(root / "claim.log"),
-                "REF_ROOT": str(REPO_ROOT / "configs/campaigns/window_references"),
                 "PRE_CAL_CUSTODY": "roster-only", "WINDOW_PLAN_ROOT": str(root),
-                "OPERATOR_LOG_ROOT": str(root)}
+                "WINDOW_CUSTODY_ROOT": str(root)}
+            (root / "operator_logs").mkdir()
             result = subprocess.run(["/bin/zsh", "-c", shell], env=environment,
                                     capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
