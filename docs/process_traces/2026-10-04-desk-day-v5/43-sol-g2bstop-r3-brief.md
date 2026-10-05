@@ -1,0 +1,16 @@
+# Implementation seat, round 3: PR #474 cold Fable FAIL (F1 MAJOR implicit bound on the claim path) and minors
+
+Worktree: /Users/edr/code/JouleWise-wt-dd5-g2bstop (branch feat/2026-10-04-g2b-one-block-stop, head 0636046c). Fable's ruling: /Users/edr/night-archive/desk-day-v5/fable-g2bstop.md (read all of it). Commit if your sandbox allows; otherwise leave changes uncommitted. Do not push.
+
+## Dispositions (orchestrator)
+- **F1 MAJOR: fix with Fable's cure (a).** The block limit applies ONLY when the run is a G2-b shakedown: take the authenticated binding only when the authorization's `purpose` is `G2B_SHAKEDOWN`, and require `--max-blocks` to be passed for such a run (refuse a G2B authorization without the flag, and refuse `--max-blocks` on any authorization whose purpose is not `G2B_SHAKEDOWN`; an unauthenticated `--max-blocks` stays allowed only if a test or desk path needs it, say which, else refuse it too). Every other authenticated path (CAMPAIGN_TRANSACTION, T0_REHEARSAL, …) must be byte-identical to main: add a golden differential test with a NON-None authentication (consumption → GO → authorization with `permitted_blocks` 1, equal to the stage's blocks, and larger) whose log, rc and artifacts equal main's. Remove `preflight.block_limit` from any unbounded run's verdict row. Correct the module docstring, `docs/phase_2/window_runbook.md` (~1717-1729) and the runsheet text accordingly (regenerate pinned regions via `scripts/gen_g2_phase_d.py`; `--check` must pass).
+- **F2: fix** the per-hop hash test: tamper each hop by changing one value while keeping the structure valid, so only the digest comparison can refuse; show the `read_bound` hash mutant is now killed by it.
+- **F3: fix** the one non-equivalent survivor: add a test that reaches the limit with a `blocked`/`invalid` stage verdict (and one with a claim barrier if reachable) and asserts no stop row and no rc 3; add a waived-member case.
+- **F4: deferred** to the qualification block's desk proof (a mock-runner rehearsal of the real `_v5` GAMMA first stage with `quiet_mac_p2_production.json`); do not build it here, but if a cheap unit-level test with the production policy file and a real v5 analysis manifest fragment is possible, add it.
+- **F5: rejected** (unreachable: new consumptions are v3 and live authentication requires the current boot).
+- **F6: fix** both: the duplicated range check (keep one), and add `|| return $?` to the two `echo` lines in `run_stage` (regenerate rendered regions).
+
+Run to completion: `tests/test_run_campaign_max_blocks.py tests/test_gen_g2_phase_d.py tests/test_check_window_provenance.py tests/test_run_campaign.py` and `python3 scripts/gen_g2_phase_d.py --check`, with `/Users/edr/code/JouleWise/.venv/bin/python`. Re-run Fable's 12-mutant sweep idea on your changes (scratch copies only) and report kills.
+
+WRITE_SCOPE: ["scripts/run_campaign.py", "scripts/gen_g2_phase_d.py", "docs/process_traces/2026-08-28-live-smoke/SHAKEDOWN-G2-RUNSHEET.md", "docs/phase_2/window_runbook.md", "tests/test_run_campaign.py", "tests/test_run_campaign_max_blocks.py", "tests/test_gen_g2_phase_d.py", "tests/test_check_window_provenance.py", "tests/fixtures/**"]
+Scratch: /tmp/dd5-g2bstop3/ only. No background processes. Finish in this turn.

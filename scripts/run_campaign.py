@@ -17,6 +17,12 @@ existing run IDs.
 
 Dry-run mode prints the exact plan and invokes nothing. It also writes no
 campaign log entries; JSONL logging is reserved for actual campaign attempts.
+
+``--max-blocks`` stops between members after complete, strict-valid A/B/B/A
+blocks. A G2B_SHAKEDOWN authorization requires the option and derives its
+limit from the authorization's ``permitted_blocks``. Other authenticated
+purposes refuse the option and retain their ordinary, unbounded behavior.
+Unauthenticated limits support desk tests with the mock CLI/controller.
 """
 
 from __future__ import annotations
@@ -239,6 +245,11 @@ NEG8_REFERENCE_START_ROLE = "neg8_daily_reference_start"
 NEG8_REFERENCE_MIDPOINT_ROLE = "neg8_daily_reference_midpoint"
 NEG8_REFERENCE_END_ROLE = "neg8_daily_reference_end"
 FLOOR_MEMBER_ROLES = frozenset({"absolute_repeat", "comparative_abba_member"})
+CAMPAIGN_STOP_SCHEMA = "joulewise.campaign_stop.v1"
+# Campaign return-code registry: 0 success, 1 failure, 2 usage/preflight,
+# 3 governed block limit, 130 interruption (main's KeyboardInterrupt handler).
+CAMPAIGN_STOP_RETURN_CODES = MappingProxyType({"max_blocks_reached": 3})
+MAX_BLOCKS_REACHED_RC = CAMPAIGN_STOP_RETURN_CODES["max_blocks_reached"]
 
 
 @dataclass(frozen=True)
@@ -686,6 +697,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Require the P2-038 single-bundle strict/reduce/evidence/backup gate",
     )
     parser.add_argument("--max-failures", type=int, default=1, help="Stop after this many failures")
+    parser.add_argument(
+        "--max-blocks", type=int, metavar="N",
+        help=("Stop after N complete A/B/B/A blocks (exit 3); authenticated "
+              "permitted_blocks cannot be overridden"),
+    )
     parser.add_argument(
         "--cli-cmd",
         help="Command prefix replacing '<python> -m joulewise'; 'run <config> --runs-dir <dir>' is appended",
@@ -3119,6 +3135,122 @@ def apply_order_manifest(
             parts.append("config(s) absent from manifest: " + ", ".join(extras))
         raise ValueError("; ".join(parts))
     return ordered
+
+
+def _authenticated_campaign_block_limit(
+    launch_authentication: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Follow only hashes already replayed by the outer launch authentication.
+
+    Re-read each hop to close a post-preflight file swap. No CLI path or
+    environment variable can supply or replace the authorization binding.
+    """
+
+    def read_bound(reference: Mapping[str, Any]) -> dict[str, Any]:
+        path = Path(reference["path"])
+        raw = path.read_bytes()
+        if hashlib.sha256(raw).hexdigest() != reference["sha256"]:
+            raise ValueError(f"block-limit authorization hash mismatch: {path}")
+        value = json.loads(raw)
+        if not isinstance(value, dict):
+            raise ValueError(f"block-limit authorization is not an object: {path}")
+        return value
+
+    try:
+        authenticated = launch_authentication["authentication"]
+        consumption = read_bound({"path": authenticated["consumption_path"],
+                                  "sha256": authenticated["consumption_sha256"]})
+        go = read_bound(consumption["go_receipt"])
+        reference = go["authorization"]
+        authorization = read_bound(reference)
+        maximum = authorization["permitted_blocks"]
+        if type(maximum) is not int or maximum < 1:
+            raise ValueError("authorization.permitted_blocks must be an integer >= 1")
+        return {"max_blocks": maximum, "source": "authorization",
+                "authorization": {key: reference[key] for key in ("path", "sha256")},
+                "purpose": authorization["purpose"]}
+    except (OSError, ValueError, TypeError, KeyError) as exc:
+        raise LaunchLineageError("launch_binding_mismatch", str(exc)) from exc
+
+
+@dataclass
+class CampaignBlockLimit:
+    binding: dict[str, Any]
+    block_ends: dict[str, tuple[OrderEntry, ...]]
+    completed_members: set[str] = field(default_factory=set)
+    completed_blocks: int = 0
+    last_block: tuple[OrderEntry, ...] | None = None
+
+    def observe(
+        self, info: ConfigInfo, status: str, evaluations: Sequence[MemberEvaluation],
+    ) -> bool:
+        # Waivers, missing/invalid summaries and interrupted children are never
+        # completion. Existing strict-valid successes count without redispatch.
+        if (status not in {"ok", "skipped"} or len(evaluations) != 1
+                or not evaluations[0].usable or evaluations[0].waived):
+            return False
+        self.completed_members.add(info.path.name)
+        block = self.block_ends.get(info.path.name)
+        if block is None or not all(row.config in self.completed_members for row in block):
+            return False
+        self.completed_blocks += 1
+        self.last_block = block
+        return self.completed_blocks == self.binding["max_blocks"]
+
+
+def campaign_block_limit(
+    requested: int | None,
+    launch_authentication: Mapping[str, Any] | None,
+    order_entries: Sequence[OrderEntry],
+    items: Sequence[ConfigInfo | ConfigError],
+) -> CampaignBlockLimit | None:
+    """Validate bounded science before member 1; leave the legacy path untouched."""
+
+    if requested is not None and (type(requested) is not int or requested < 1):
+        raise ValueError("--max-blocks must be >= 1")
+    # Other purposes retain every ordinary stage, including reference corpora,
+    # without a block limit. G2-b's bracket reference configs are unauthenticated.
+    if launch_authentication is not None:
+        binding = _authenticated_campaign_block_limit(launch_authentication)
+        if binding["purpose"] != "G2B_SHAKEDOWN":
+            if requested is not None:
+                raise ValueError("--max-blocks requires G2B_SHAKEDOWN authorization")
+            return None
+        if requested is None:
+            raise ValueError("G2B_SHAKEDOWN authorization requires --max-blocks")
+        if requested != binding["max_blocks"]:
+            raise ValueError("--max-blocks conflicts with authenticated permitted_blocks")
+    elif requested is not None:
+        # The real mock CLI/controller desk test uses this unauthenticated path.
+        binding = {"max_blocks": requested, "source": "cli"}
+    else:
+        return None
+    if (not order_entries or len(order_entries) % 4
+            or [row.index for row in order_entries] != list(range(1, len(order_entries) + 1))
+            or len(items) != len(order_entries)):
+        raise ValueError("--max-blocks requires an ordered manifest of complete A/B/B/A blocks")
+    for item, row in zip(items, order_entries, strict=True):
+        if (not isinstance(item, ConfigInfo) or item.repetitions != 1
+                or item.path.name != row.config
+                or (row.run_id is not None and row.run_id != item.raw_run_id)):
+            raise ValueError("--max-blocks requires one matching single-repetition config per member")
+    block_ends = {}
+    seen_blocks = set()
+    for offset in range(0, len(order_entries), 4):
+        block = tuple(replace(row, run_id=items[offset + position].run_id)
+                      for position, row in enumerate(order_entries[offset:offset + 4]))
+        index = block[0].block_index
+        models = [row.model_tag for row in block]
+        if (type(index) is not int or index < 1 or index in seen_blocks
+                or any(row.block_index != index for row in block)
+                or [row.position_in_block for row in block] != [1, 2, 3, 4]
+                or any(not model for model in models)
+                or models[0] != models[3] or models[1] != models[2]
+                or models[0] == models[1]):
+            raise ValueError("--max-blocks requires unique contiguous four-member A/B/B/A blocks")
+        seen_blocks.add(index)
+        block_ends[block[-1].config] = block
+    return CampaignBlockLimit(binding, block_ends)
 
 
 def order_entry_by_config(order_entries: list[OrderEntry]) -> dict[str, OrderEntry]:
@@ -8054,6 +8186,7 @@ def run_campaign(args: argparse.Namespace) -> int:
 
     if args.max_failures < 1:
         raise ValueError("--max-failures must be >= 1")
+    requested_max_blocks = getattr(args, "max_blocks", None)
 
     analysis_manifest = load_analysis_manifest(config_dir)
     try:
@@ -8152,6 +8285,8 @@ def run_campaign(args: argparse.Namespace) -> int:
                 release_campaign_lock(verdict_lock, in_flight=in_flight)
         return 1
     if analysis_manifest is not None and analysis_manifest.is_axi_v2:
+        if requested_max_blocks is not None:
+            raise ValueError("--max-blocks requires ordinary A/B/B/A configs, not an AXI spec")
         return run_axi_spec_campaign(
             args,
             analysis_manifest,
@@ -8172,6 +8307,17 @@ def run_campaign(args: argparse.Namespace) -> int:
     if duplicate_error is not None:
         print(f"error: {duplicate_error}", file=sys.stderr)
         return 2
+    block_limit = campaign_block_limit(
+        requested_max_blocks, launch_authentication, order_entries, items
+    )
+    block_limit_reached = False
+    if block_limit is not None:
+        # A bounded occurrence stops at its first failed member (D-078: never
+        # topped up into a complete block), so a wider failure budget would be
+        # silently ignored; refuse it instead.
+        if args.max_failures != 1:
+            raise ValueError("--max-blocks stops at the first failure; --max-failures must be 1")
+        preflight["block_limit"] = block_limit.binding
     if args.shakedown_gate is not None:
         if args.backup is None:
             print("error: --shakedown-gate requires --backup", file=sys.stderr)
@@ -8412,7 +8558,7 @@ def run_campaign(args: argparse.Namespace) -> int:
                     lock_token=lock_path,
                 )
                 counts["config_error"] += 1
-                if failures >= args.max_failures:
+                if failures >= args.max_failures or (block_limit is not None and failures):
                     break
                 continue
 
@@ -8569,7 +8715,13 @@ def run_campaign(args: argparse.Namespace) -> int:
                     lock_token=lock_path,
                 )
                 counts[status] += 1
-                if failures >= args.max_failures:
+                if block_limit is not None:
+                    if status != "skipped":
+                        failures = max(failures, 1)
+                    elif block_limit.observe(info, status, evaluations):
+                        block_limit_reached = True
+                        break
+                if failures >= args.max_failures or (block_limit is not None and failures):
                     break
                 continue
 
@@ -8640,7 +8792,7 @@ def run_campaign(args: argparse.Namespace) -> int:
                     lock_token=lock_path,
                 )
                 counts[status] += 1
-                if failures >= args.max_failures:
+                if failures >= args.max_failures or (block_limit is not None and failures):
                     break
                 continue
 
@@ -8730,7 +8882,7 @@ def run_campaign(args: argparse.Namespace) -> int:
                     ),
                     lock_token=lock_path,
                 )
-                if failures >= args.max_failures:
+                if failures >= args.max_failures or (block_limit is not None and failures):
                     break
                 continue
 
@@ -8883,7 +9035,13 @@ def run_campaign(args: argparse.Namespace) -> int:
             ):
                 backup_runs(runs_dir, backup_script_path(args.backup))
 
-            if failures >= args.max_failures:
+            if block_limit is not None:
+                if status != "ok":
+                    failures = max(failures, 1)
+                elif block_limit.observe(info, status, evaluations):
+                    block_limit_reached = True
+                    break
+            if failures >= args.max_failures or (block_limit is not None and failures):
                 break
         print("Summary:")
         for summary_status in STATUSES:
@@ -8946,11 +9104,28 @@ def run_campaign(args: argparse.Namespace) -> int:
             claim_bearing
             and _idle_admission_claim_barrier_reasons(idle_admission_core)
         )
-        return 1 if (
+        campaign_failed = bool(
             failures
             or collection_verdict in {"blocked", "invalid"}
             or core_blocks_claim
-        ) else 0
+        )
+        if block_limit_reached and not campaign_failed:
+            assert block_limit is not None and block_limit.last_block is not None
+            append_log(log_path, {
+                "schema_version": CAMPAIGN_STOP_SCHEMA,
+                "record_type": "campaign_stop",
+                "timestamp": utc_timestamp(),
+                "status": "stopped",
+                "stop_reason": "max_blocks_reached",
+                "exit_code": MAX_BLOCKS_REACHED_RC,
+                "block_limit": block_limit.binding,
+                "completed_blocks": block_limit.completed_blocks,
+                "last_block_index": block_limit.last_block[0].block_index,
+                "last_block_members": [row.run_id for row in block_limit.last_block],
+                "campaign_provenance_manifest": str(campaign_provenance_path),
+            }, lock_token=lock_path)
+            return MAX_BLOCKS_REACHED_RC
+        return 1 if campaign_failed else 0
     except BaseException as exc:
         in_flight = exc
         raise
