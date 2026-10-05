@@ -3857,6 +3857,10 @@ class PackNightProducerTests(unittest.TestCase):
             self.events.append("LAUNCH")
             self.assertIs(kwargs["stdin"], subprocess.DEVNULL)
             calls.append(command)
+            import socket
+            channel = socket.socket(fileno=os.dup(kwargs["pass_fds"][0]))
+            self.addCleanup(channel.close)
+            channel.sendall(b"P")
             return FakeProcess(command, return_code=0)
         read_bytes = Path.read_bytes
         def observed_read(path):
@@ -3930,6 +3934,29 @@ class PackNightProducerTests(unittest.TestCase):
         with self.assertRaises(FileExistsError):
             self.driver._write_bytes_exclusive(go_path, b"replacement")
         self.assertEqual(go, json.loads(go_path.read_bytes()))
+
+    def test_launcher_recheck_refusal_leaves_driver_chain_unstarted(self):
+        refusal = {"status": "REFUSE", "reason_codes": ["readiness_identity_environment_dirty"],
+                   "detail": "launch identity derivation differs from the frozen projection"}
+        def spawn(command, **kwargs):
+            self.assertFalse((self.custody / "night/chain.started").exists())
+            kwargs["stdout"].write(self.readiness.render_json(refusal))
+            kwargs["stdout"].flush()
+            return FakeProcess(command, return_code=2)
+        with mock.patch.object(self.driver.subprocess, "Popen", side_effect=spawn), \
+             mock.patch.object(self.driver, "_claim_chain_start", wraps=self.driver._claim_chain_start) as claim:
+            self.assertEqual(self.driver.run_night(self.plan_path), self.driver.EXIT_REFUSED)
+        claim.assert_not_called()
+        night = self.custody / "night"
+        self.assertFalse((night / "chain.started").exists())
+        self.assertFalse((night / "chain.exited").exists())
+        result = json.loads((night / "result.json").read_bytes())
+        self.assertEqual(result["verdict"], "REFUSED")
+        self.assertEqual(result["aborted_reason"], "night_chain_launch_failed")
+        self.assertIsNone(result["chain_exit_code"])
+        document = json.loads((night / "refusal.json").read_bytes())
+        self.assertEqual(self.driver.validate_refusal(document), [])
+        self.assertEqual(document["refusal"]["evidence"]["launcher_refusal"], refusal)
 
     def test_gate_reauthenticates_c1_and_c2_despite_forged_driver_pass_rows(self):
         prepared = self.driver._prepare_pack_night(self.plan, self.plan_path, self.raw)

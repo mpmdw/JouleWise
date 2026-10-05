@@ -5,8 +5,12 @@ import copy
 import io
 import json
 import os
+import sys
 import tempfile
+import time
+import types
 import unittest
+from contextlib import nullcontext
 from pathlib import Path
 from unittest import mock
 
@@ -180,6 +184,143 @@ class LaunchRealizationRecheckTests(unittest.TestCase):
         derive.assert_not_called()
         execute.assert_not_called()
         create.assert_not_called()
+
+    def _driver_launch(self, mutation, *, fixture_group_census=False, start_fd198=False):
+        """Real launcher child/barrier, projection hashing, exec and bundle writer."""
+        collect = self.root / "collect.py"
+        collect.write_text(f'''
+import json, os
+from pathlib import Path
+from joulewise.bundle import RunBundleWriter
+from joulewise.clock import FakeClock
+from joulewise.schemas import BenchmarkConfig
+night = Path({str(self.night)!r})
+record = json.loads((night / "chain.started").read_bytes())
+assert record["pid"] == record["pgid"] == os.getpid()
+assert set(record) == {{"pid", "pgid", "epoch_s", "start_time"}}
+assert "{launch_window.CHAIN_START_FD_ENV}" not in os.environ
+config = BenchmarkConfig.from_mapping(json.loads(Path({str(self.pack / 'configs/member-1.json')!r}).read_bytes()))
+RunBundleWriter.create(Path({str(self.runs)!r}), config, FakeClock())
+''')
+        launcher = self.root / "launcher.py"
+        launcher.write_text(f'''
+import json
+from pathlib import Path
+from unittest import mock
+from scripts import launch_window
+from joulewise import identity_pins
+from tests.test_identity_pins import probe_metadata
+pack = Path({str(self.pack)!r})
+tokenizer = Path({str(self.tokenizer)!r})
+argv = [{sys.executable!r}, "-B", {str(collect)!r}]
+def metadata(config, realization_configs=()):
+    result = probe_metadata(config, realization_configs)
+    if json.loads(tokenizer.read_bytes())["vocab"]["hello"] != 1:
+        for row in result.get("prompt_realizations", []):
+            row["token_ids_sha256"] = "e" * 64
+    return result
+def consume(**kwargs):
+    Path({str(self.consumption)!r}).write_bytes(b'{{"status":"CONSUMED"}}\\n')
+    return {{"consumption_path": Path({str(self.consumption)!r})}}
+def verify(*args, **kwargs):
+    if {mutation!r} == "tokenizer":
+        tokenizer.write_bytes(b'{{"vocab":{{"hello":2}}}}\\n')
+    elif {mutation!r} == "model":
+        Path({str(self.weight)!r}).write_bytes(b"changed-model-weights")
+    return {{"exec_argv": argv}}
+with mock.patch.object(launch_window, "_assemble_launch_inputs", return_value={{"pack_root": pack, "exec_argv": argv}}), \\
+     mock.patch.object(launch_window, "_consume_launch_capability", side_effect=consume), \\
+     mock.patch.object(launch_window, "verify_consumed_launch", side_effect=verify), \\
+     mock.patch.object(identity_pins, "_runtime_probe_metadata", side_effect=metadata):
+    raise SystemExit(launch_window.main(["--pack-root", str(pack), "--arm-receipt", {str(self.arm)!r},
+        "--arm-readiness-custody-root", {str(self.root)!r}, "--launch-manifest", {str(self.args.launch_manifest)!r}]))
+''')
+        driver = night_fixtures._load_driver()
+        now = time.time()
+        plan = types.SimpleNamespace(plan_id="driver-recheck", t0_epoch_s=now, window_max_s=60)
+        probes = night_fixtures.ProbeSource(now, str(self.root)).probes()
+        environment = dict(os.environ, PYTHONPATH=str(launch_window.REPOSITORY_ROOT))
+        # The rejection fixture has only this blocked launcher child, which
+        # the real termination helper reaps. Its group census is fixture data
+        # so sandbox process-inspection permissions do not change the test.
+        census = (mock.patch.object(driver, "_group_census", return_value=(True, []))
+                  if fixture_group_census else nullcontext())
+        socketpair = driver.socket.socketpair
+        def reserved_slot_pair():
+            parent, child = socketpair()
+            if child.fileno() == launch_window.HANDOFF_FD:
+                return parent, child
+            try:
+                saved = os.dup(launch_window.HANDOFF_FD)
+            except OSError:
+                saved = None
+            if saved is not None:
+                def restore():
+                    os.dup2(saved, launch_window.HANDOFF_FD)
+                    os.close(saved)
+                self.addCleanup(restore)
+            os.dup2(child.fileno(), launch_window.HANDOFF_FD)
+            child.close()
+            return parent, driver.socket.socket(fileno=launch_window.HANDOFF_FD)
+        barrier = (mock.patch.object(driver.socket, "socketpair", side_effect=reserved_slot_pair)
+                   if start_fd198 else nullcontext())
+        with census, barrier, mock.patch.object(driver, "_chain_environment", return_value=environment), \
+             mock.patch.object(driver, "_claim_chain_start", wraps=driver._claim_chain_start) as claim:
+            result = driver._run_chain_once(collect, plan, probes, self.night, None,
+                command=[sys.executable, "-B", str(launcher)])
+        return driver, result, claim
+
+    def test_driver_tokenizer_mutation_after_consumed_replay_never_claims_start(self):
+        driver, result, claim = self._driver_launch("tokenizer")
+        self.assertIsNone(result[0])
+        self.assertEqual(result[1]["reason"], "night_chain_launch_failed")
+        self.assertEqual(result[1]["evidence"]["launcher_refusal"]["reason_codes"],
+                         ["readiness_identity_environment_dirty"])
+        self.assertTrue(result[4])
+        claim.assert_not_called()
+        self.assertFalse((self.night / "chain.started").exists())
+        self.assertFalse((self.night / "chain.exited").exists())
+        self.assertFalse(self.runs.exists())
+        self.assertTrue(self.consumption.exists())
+
+    def test_driver_model_mutation_after_consumed_replay_never_claims_start(self):
+        _driver, result, claim = self._driver_launch("model")
+        self.assertEqual(result[1]["evidence"]["launcher_refusal"]["reason_codes"],
+                         ["readiness_identity_environment_dirty"])
+        claim.assert_not_called()
+        self.assertFalse((self.night / "chain.started").exists())
+        self.assertFalse(self.runs.exists())
+
+    def test_driver_clean_recheck_claims_once_before_real_exec_and_bundle(self):
+        driver, result, claim = self._driver_launch(None)
+        self.assertEqual(result[0:2], (0, None))
+        self.assertTrue(result[4])
+        claim.assert_called_once_with(self.night)
+        self.assertTrue(self.runs.exists())
+        record = json.loads((self.night / "chain.started").read_bytes())
+        before = (self.night / "chain.started").read_bytes()
+        self.assertIsNone(driver._claim_chain_start(self.night))
+        self.assertEqual((self.night / "chain.started").read_bytes(), before)
+        self.assertEqual(record["pid"], record["pgid"])
+        self.assertIsInstance(record["epoch_s"], float)
+        self.assertEqual((self.night / "chain.started").stat().st_mode & 0o777, 0o600)
+        self.assertEqual(json.loads((self.night / "chain.exited").read_bytes())["exit_code"], 0)
+
+    def test_driver_existing_exclusive_claim_prevents_real_collection_exec(self):
+        original = b'{"pid":123,"pgid":123,"epoch_s":1.0,"start_time":"prior"}\n'
+        (self.night / "chain.started").write_bytes(original)
+        _driver, result, claim = self._driver_launch(None, fixture_group_census=True)
+        claim.assert_called_once_with(self.night)
+        self.assertEqual(result[1]["reason"], "night_chain_already_started")
+        self.assertTrue(result[4])
+        self.assertEqual((self.night / "chain.started").read_bytes(), original)
+        self.assertFalse(self.runs.exists())
+
+    def test_driver_barrier_does_not_collide_with_reserved_capability_fd198(self):
+        _driver, result, claim = self._driver_launch(None, start_fd198=True)
+        self.assertEqual(result[0:2], (0, None))
+        claim.assert_called_once_with(self.night)
+        self.assertTrue(self.runs.exists())
 
 
 class NonPackLaunchRouteTests(unittest.TestCase):

@@ -7,6 +7,7 @@ import argparse
 import hashlib
 import os
 import secrets
+import socket
 import sys
 from pathlib import Path
 
@@ -36,6 +37,8 @@ from joulewise import identity_pins as _identity  # noqa: E402
 # contents are secret; neither the number nor a receipt path is a capability.
 HANDOFF_FD = 198
 HANDOFF_TOKEN_BYTES = 32
+# Private driver/launcher barrier; never inherited by the collection command.
+CHAIN_START_FD_ENV = "JOULEWISE_CHAIN_START_FD"
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -287,6 +290,7 @@ def _recheck_identity_projection(pack_root: Path) -> None:
 
 
 def launch(args: argparse.Namespace) -> int:
+    start_fd = os.environ.pop(CHAIN_START_FD_ENV, None)
     launch_inputs = _assemble_launch_inputs(args)
     argv = list(launch_inputs["exec_argv"])
     token = secrets.token_bytes(HANDOFF_TOKEN_BYTES)
@@ -310,8 +314,18 @@ def launch(args: argparse.Namespace) -> int:
         raise LaunchLineageError(
             "launch_binding_mismatch", "verified exec argv changed before execve"
         )
-    # Successful execve never returns. There is deliberately no child process,
-    # wait path, or automatic retry after the capability's linearization point.
+    if start_fd is not None:
+        # The driver publishes its exclusive start claim and full process
+        # identity only after this launch's consumed replay and recheck pass.
+        # EOF (including a dead driver) refuses rather than starting a chain.
+        with socket.socket(fileno=int(start_fd)) as channel:
+            channel.sendall(b"P")
+            if channel.recv(1) != b"G":
+                raise LaunchLineageError(
+                    "launch_consumption_invalid", "driver did not claim the chain start"
+                )
+    # Successful execve never returns. There is deliberately no child process
+    # or automatic retry after the capability's linearization point.
     os.execve(argv[0], argv, dict(os.environ))
     raise LaunchLineageError(
         "launch_consumption_invalid", "execve returned after consuming the launch"

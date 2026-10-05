@@ -18,6 +18,8 @@ import uuid
 import math
 import queue
 import resource
+import socket
+from contextlib import ExitStack
 from dataclasses import asdict, replace
 from datetime import date, datetime, time as wall_time, timedelta, timezone
 from pathlib import Path
@@ -867,7 +869,7 @@ def _run_chain_once(
     plan: NightPlan,
     probes: Probes,
     night_dir: Path,
-    claim_descriptor: int,
+    claim_descriptor: int | None,
     *,
     command: list[str] | None = None,
     abort_on_census: bool = True,
@@ -875,11 +877,41 @@ def _run_chain_once(
 ) -> tuple[int | None, dict[str, Any] | None, int, list[dict[str, Any]], bool]:
     """Run exactly one child session and continuously census it."""
 
+    with ExitStack() as resources:
+        channel = child_channel = None
+        start_fd_env = None
+        if claim_descriptor is None:
+            from scripts import launch_window
+            start_fd_env = launch_window.CHAIN_START_FD_ENV
+            channel, child_channel = socket.socketpair()
+            resources.enter_context(channel)
+            resources.enter_context(child_channel)
+            if child_channel.fileno() == launch_window.HANDOFF_FD:
+                # The launcher replaces FD 198 with its one-use capability.
+                # Keep the independent start barrier off that reserved slot.
+                replacement = resources.enter_context(child_channel.dup())
+                child_channel.close()
+                child_channel = replacement
+            channel.setblocking(False)
+        return _run_chain_once_impl(chain_path, plan, probes, night_dir,
+            claim_descriptor, command=command, abort_on_census=abort_on_census,
+            shutdown_monotonic=shutdown_monotonic, channel=channel,
+            child_channel=child_channel, start_fd_env=start_fd_env)
+
+
+def _run_chain_once_impl(chain_path, plan, probes, night_dir, claim_descriptor,
+                         *, command, abort_on_census, shutdown_monotonic,
+                         channel, child_channel, start_fd_env):
+
     census_path = night_dir / "censuses.jsonl"
     stdout_path = night_dir / "chain.stdout.log"
     stderr_path = night_dir / "chain.stderr.log"
     with stdout_path.open("xb") as stdout, stderr_path.open("xb") as stderr:
         environment = _chain_environment(plan, night_dir)
+        launch_options = {}
+        if child_channel is not None:
+            environment[start_fd_env] = str(child_channel.fileno())
+            launch_options["pass_fds"] = (child_channel.fileno(),)
         try:
             process = subprocess.Popen(
                 command if command is not None else ["/bin/zsh", str(chain_path)],
@@ -888,10 +920,14 @@ def _run_chain_once(
                 stderr=stderr,
                 env=environment,
                 start_new_session=True,
+                **launch_options,
             )
         except OSError as error:
-            launch_error = _complete_chain_launch_failure(claim_descriptor, error)
-            _record_chain_exit(night_dir, None, launch_failed=True)
+            if claim_descriptor is not None:
+                launch_error = _complete_chain_launch_failure(claim_descriptor, error)
+                _record_chain_exit(night_dir, None, launch_failed=True)
+            else:
+                launch_error = f"{type(error).__name__}: {error}"
             return (
                 None,
                 _refusal_mapping(
@@ -903,7 +939,13 @@ def _run_chain_once(
                 [],
                 True,
             )
-        pgid = _complete_chain_start(claim_descriptor, process, night_dir)
+        finally:
+            if child_channel is not None:
+                child_channel.close()
+        awaiting_start = channel is not None
+        claimed = claim_descriptor is not None
+        pgid = (_complete_chain_start(claim_descriptor, process, night_dir)
+                if claimed else process.pid)
         census_count = 0
         census_hits: list[dict[str, Any]] = []
         # Read the driver's wall clock ONCE, here, and convert the deadline to
@@ -936,8 +978,51 @@ def _run_chain_once(
                 bool(outcome["proven"]),
             )
 
+        def refuse_start(reason, detail):
+            fired = deadline.cancel()
+            if fired is not None:
+                return exceeded(fired)
+            evidence = {}
+            proven = _terminate_process_group(process, night_dir if claimed else None,
+                pgid=pgid, evidence=evidence)
+            if not proven:
+                reason = _CODES["chain_alive"]
+            return (None, _refusal_mapping(reason, detail, evidence),
+                    census_count, census_hits, proven)
+
         next_census = time.monotonic()
-        while process.poll() is None:
+        while process.poll() is None or awaiting_start:
+            if awaiting_start:
+                if deadline.expired():
+                    fired = deadline.fire()
+                    if fired is not None:
+                        return exceeded(fired)
+                try:
+                    signal_byte = channel.recv(1)
+                except BlockingIOError:
+                    signal_byte = None
+                except OSError as error:
+                    return refuse_start(_CODES["chain_launch_failed"], str(error))
+                if signal_byte == b"P":
+                    descriptor = _claim_chain_start(night_dir)
+                    if descriptor is None:
+                        return refuse_start(_CODES["chain_already_started"],
+                            "chain.started already exists; the night chain is once-only")
+                    pgid = _complete_chain_start(descriptor, process, night_dir)
+                    claimed = True
+                    awaiting_start = False
+                    try:
+                        channel.sendall(b"G")
+                    except OSError as error:
+                        return refuse_start(_CODES["chain_launch_failed"], str(error))
+                elif signal_byte == b"":
+                    # EOF is the ordinary refusal path. No claim was made.
+                    awaiting_start = False
+                elif signal_byte is not None:
+                    return refuse_start(_CODES["chain_launch_failed"],
+                        "launcher sent an invalid chain-start signal")
+                if process.poll() is not None:
+                    break
             now = time.monotonic()
             # Three checks, because the two calls between them can each block
             # without bound: the census probe and the census append. The
@@ -1012,6 +1097,23 @@ def _run_chain_once(
         if fired is not None:
             return exceeded(fired)
         exit_code = process.wait()
+        if not claimed:
+            evidence = {"launcher_exit_code": exit_code}
+            try:
+                refusal = readiness.parse_json_bytes(stdout_path.read_bytes())
+                reason = refusal["reason_codes"][0]
+                detail = refusal["detail"]
+                if (refusal["status"] != "REFUSE" or not isinstance(reason, str)
+                        or not isinstance(detail, str) or not detail):
+                    raise ValueError("launcher did not emit a refusal")
+                evidence["launcher_refusal"] = refusal
+                detail = f"{reason}: {detail}"
+            except (OSError, ValueError, KeyError, IndexError, TypeError):
+                detail = "launcher exited before passing its launch recheck"
+            # Launcher codes belong to its own refusal schema. Keep that
+            # exact document as evidence under the existing driver code.
+            return (None, _refusal_mapping(_CODES["chain_launch_failed"], detail, evidence),
+                    census_count, census_hits, True)
         _record_chain_exit(night_dir, exit_code)
         return exit_code, None, census_count, census_hits, True
 
@@ -3566,8 +3668,10 @@ def run_night(
                 deadman_epoch_s=deadman_epoch_s, courier_bin_substitution=courier_substitution)
         _write_bytes_exclusive(night_dir / "receipt.json", receipt.to_json_bytes())
 
-    claim_descriptor = _claim_chain_start(night_dir)
-    if claim_descriptor is None:
+    # Pack launchers burn/replay the capability and recheck in the pinned
+    # interpreter before asking _run_chain_once to make this same O_EXCL claim.
+    claim_descriptor = None if is_pack else _claim_chain_start(night_dir)
+    if claim_descriptor is None and not is_pack:
         _write_standard_refusal_result(
             custody_root,
             night_dir,
@@ -3638,7 +3742,9 @@ def run_night(
                     abort["evidence"],
                 )
             refused = (
-                abort_reason == _CODES["chain_launch_failed"] or not termination_proven
+                abort_reason in {_CODES["chain_launch_failed"], _CODES["chain_already_started"]}
+                or not termination_proven
+                or (is_pack and not (night_dir / "chain.started").exists())
             )
             verdict = "REFUSED" if refused else "ABORTED"
             base_exit_code = EXIT_REFUSED if refused else EXIT_ABORTED

@@ -2216,6 +2216,12 @@ class PackNightLaunchBoundaryTests(unittest.TestCase):
             replay = arm_readiness.verify_consumed_launch(fixture.pack, self.case.consumption)
             self.assertEqual(replay["status"], "PASS")
             events.append("REPLAY")
+            # This in-process launcher stand-in has passed the real replay;
+            # emulate its child endpoint so the driver can publish its claim.
+            import socket
+            channel = socket.socket(fileno=os.dup(kwargs["pass_fds"][0]))
+            self.addCleanup(channel.close)
+            channel.sendall(b"P")
             return FakeProcess(command)
 
         with mock.patch.object(driver, "make_probes", return_value=probes), \
