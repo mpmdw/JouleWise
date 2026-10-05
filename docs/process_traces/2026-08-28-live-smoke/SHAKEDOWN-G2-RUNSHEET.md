@@ -151,7 +151,7 @@ Old line 593:
    so it constrains an invocation to one bundle but cannot select that bundle
    from a larger frozen stage. G2 therefore starts the authentic frozen stage
    and terminates that campaign process immediately after block 1's last
-   member; Phase D gives the exact signal and post-signal on-disk assertions.
+   member; Phase D gives the controller stop and its exact on-disk assertions.
 
 2. **B-SUPPLY — G2-b only: the named measurement checkout must contain the real `_v5`
    supply.** The 2026-08-28 desk census found no successor
@@ -481,9 +481,9 @@ run_stage() {
   local calibration_dir="$4"
   local label="$5"
 
-  settle
-  quarantine_stale_lock "$root"
-  echo "$(timestamp) stage_start=$label" >> "$G2A_OPERATOR_LOG_ROOT/window-chain.log"
+  settle || return $?
+  quarantine_stale_lock "$root" || return $?
+  echo "$(timestamp) stage_start=$label" >> "$G2A_OPERATOR_LOG_ROOT/window-chain.log" || return $?
 
   "$PY" "$REPO/scripts/run_campaign.py" "$config_dir" \
     --runs-dir "$root" \
@@ -493,9 +493,9 @@ run_stage() {
     --instrument-power-policy "$POWER_POLICY" \
     --arm-quiet-mode \
     --arm-countdown-s 20 \
-    --max-failures 1
+    --max-failures 1 "${@:6}" || return $?
 
-  echo "$(timestamp) stage_end=$label" >> "$G2A_OPERATOR_LOG_ROOT/window-chain.log"
+  echo "$(timestamp) stage_end=$label" >> "$G2A_OPERATOR_LOG_ROOT/window-chain.log" || return $?
 }
 
 # Authenticate every probe input before ledger readiness or reservation.
@@ -1072,9 +1072,9 @@ run_stage() {
   local calibration_dir="$4"
   local label="$5"
 
-  settle
-  quarantine_stale_lock "$root"
-  echo "$(timestamp) stage_start=$label" >> "$OPERATOR_LOG_ROOT/window-chain.log"
+  settle || return $?
+  quarantine_stale_lock "$root" || return $?
+  echo "$(timestamp) stage_start=$label" >> "$OPERATOR_LOG_ROOT/window-chain.log" || return $?
 
   "$PY" "$REPO/scripts/run_campaign.py" "$config_dir" \
     --runs-dir "$root" \
@@ -1084,9 +1084,9 @@ run_stage() {
     --instrument-power-policy "$POWER_POLICY" \
     --arm-quiet-mode \
     --arm-countdown-s 20 \
-    --max-failures 1
+    --max-failures 1 "${@:6}" || return $?
 
-  echo "$(timestamp) stage_end=$label" >> "$OPERATOR_LOG_ROOT/window-chain.log"
+  echo "$(timestamp) stage_end=$label" >> "$OPERATOR_LOG_ROOT/window-chain.log" || return $?
 }
 
 run_stage_list() {
@@ -1145,14 +1145,21 @@ echo "$(timestamp) neg8_bound=$NEG8_DRIFT_BOUND" >> "$OPERATOR_LOG_ROOT/window-c
 run_stage "$RUNS_ROOT" "$CLAIM_LOG" "$REF_ROOT/start_triplet" "$PRE_CAL_CUSTODY" \
   start-reference-triplet
 
-# G2-b delta: stop the authentic first stage after block 1, then preserve
-# the governed chain's post-science bracket path.  The second-terminal
-# signal card below supplies SIGINT immediately after b01 A2 succeeds.
-set +e
-run_stage_list "$WINDOW_PLAN_ROOT/before_midpoint_stages.txt"
-SCIENCE_RC=$?
-set -e
-test "$SCIENCE_RC" = 130
+# G2-b: one complete A/B/B/A block, stopped by the controller between
+# members. G2B_SHAKEDOWN authorization requires --max-blocks and binds
+# permitted_blocks=1; no operator signal.
+# Dispatch only the first frozen science stage, preserving the bracket tail.
+SCIENCE_RC=2
+while IFS= read -r stage; do
+  [ -z "$stage" ] && continue
+  [[ "$stage" = \#* ]] && continue
+  set +e
+  run_stage "$RUNS_ROOT" "$CLAIM_LOG" "$REPO/$stage" "$PRE_CAL_CUSTODY" "$stage" --max-blocks 1
+  SCIENCE_RC=$?
+  set -e
+  break
+done < "$WINDOW_PLAN_ROOT/before_midpoint_stages.txt"
+test "$SCIENCE_RC" = 3
 
 run_stage "$RUNS_ROOT" "$CLAIM_LOG" "$REF_ROOT/midpoint" "$PRE_CAL_CUSTODY" \
   midpoint-reference
@@ -1181,21 +1188,30 @@ echo "$(timestamp) g2_boundary_stopped=physical_ahead" >> "$OPERATOR_LOG_ROOT/wi
 ```
 <!-- END GENERATED: g2-phase-d-governed-chain -->
 
-**TERMINATE HERE — second local terminal, after block 1 A2 succeeds:**
+**Controller-owned one-block stop (zero operator actions):**
 
-```sh
-SCIENCE_PID="$(/usr/bin/sed -n 's/^pid=\([0-9][0-9]*\).*/\1/p' "$RUNS_ROOT/campaign.lock")"
-test -n "$SCIENCE_PID"
-/bin/kill -INT "$SCIENCE_PID"
-```
+The first frozen science stage uses `--max-blocks 1`. Its authenticated
+`G2B_SHAKEDOWN` authorization binds `permitted_blocks=1`; omitting the flag
+or passing a conflicting limit refuses before dispatch. Other authenticated
+purposes refuse the flag and remain unbounded; unauthenticated limits support
+the mock CLI/controller desk tests. Reference stages remain unbounded.
+The controller requires four
+single-repetition, strict-valid, succeeded A/B/B/A members, then stops before
+the next member. Failures, waivers and interrupted blocks never qualify.
+The registered return code is **3** (`max_blocks_reached`), distinct from
+success, failure and interruption. The terminal JSONL row has
+`schema_version=joulewise.campaign_stop.v1`, `record_type=campaign_stop`,
+`stop_reason=max_blocks_reached`, `exit_code=3`, `completed_blocks=1`, the
+last block index and its four members, plus the authenticated limit binding.
 
-The expected state when the signal completes is exact: the four block-1 bundle
+The expected state when the controller returns is exact: the four block-1 bundle
 directories named by the SHA-bound index-1 stage order manifest each contain
 `summary_metrics.json`; no other frozen science-member directory exists;
 `campaign.lock` is absent because Python unwound through its `finally`; the
-partial campaign manifest retains the four completed members; and no midpoint,
-post-calibration, completion, binding, verdict, finalized manifest, or claim
-artifact exists yet. The primary chain checks `SCIENCE_RC=130`, then continues
+partial campaign manifest retains the four completed members; the stage verdict
+and terminal stop row are preserved; and no midpoint, post-calibration,
+completion, bracket binding, whole-window verdict, finalized manifest, or claim
+artifact exists yet. The primary chain checks `SCIENCE_RC=3`, then continues
 with midpoint, end reference, and the post bracket. It then records the
 physical-ahead terminal candidate and STOPS: no launch completion, pin advance,
 binding, verdict, finalize attempt, or claim occurs in the night chain. Any

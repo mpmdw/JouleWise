@@ -1,4 +1,4 @@
-"""Regression tests for the executable G2-a night-chain emitter."""
+"""Regression tests for the G2-a emitter and unattended G2-b block stop."""
 
 from __future__ import annotations
 
@@ -58,7 +58,7 @@ class G2aNightChainTests(unittest.TestCase):
         independent = _independent_fence_inventory(self.runsheet)
         self.assertEqual(
             [(start, end) for start, end, _body in independent],
-            [(1534, 1598), (328, 351), (374, 385), (389, 564), (575, 587)],
+            [(1550, 1614), (328, 351), (374, 385), (389, 564), (575, 587)],
         )
         self.assertEqual(self.generator.inventory_g2a_shell_blocks(self.runsheet), independent)
 
@@ -213,6 +213,83 @@ class G2aNightChainTests(unittest.TestCase):
         assignments = re.findall(r"(?m)^(?:export )?PRE_CAL_FIDUCIAL_MAX_S=(.+)$", chain)
         self.assertEqual(assignments, [str(_derive_preflight_systematic_screen_s())] * 2)
         self.assertNotIn("# acceptance artifact d079_calibration_acceptance_v2_n17_r3", chain)
+
+
+class G2bOneBlockChainTests(unittest.TestCase):
+    def setUp(self):
+        self.generator = _load_generator()
+        self.chain = self.generator.render_generated_region(self.generator.RUNBOOK_PATH.read_text())
+
+    def test_chain_asserts_registered_stop_rc_and_preserves_bracket_path(self):
+        from scripts.run_campaign import MAX_BLOCKS_REACHED_RC, CAMPAIGN_STOP_RETURN_CODES
+
+        self.assertEqual(CAMPAIGN_STOP_RETURN_CODES["max_blocks_reached"], MAX_BLOCKS_REACHED_RC)
+        self.assertNotIn(MAX_BLOCKS_REACHED_RC, (0, 1, 2, 130))
+        self.assertIn(f'test "$SCIENCE_RC" = {MAX_BLOCKS_REACHED_RC}\n', self.chain)
+        self.assertEqual(self.chain.count("--max-blocks 1"), 1)
+        self.assertNotIn("SIGINT", self.chain)
+        self.assertNotIn("kill -INT", RUNSHEET_PATH.read_text())
+        self.assertNotIn('run_stage_list "$WINDOW_PLAN_ROOT/after_midpoint_stages.txt"', self.chain)
+        self.assertLess(self.chain.index('test "$SCIENCE_RC" = '), self.chain.index('  midpoint-reference'))
+        self.assertIn('POST_CAL_CUSTODY="$(calibrate_slot post', self.chain)
+        self.assertIn('post-bracket-terminal-boundary.json', self.chain)
+
+    @unittest.skipUnless(shutil.which("zsh"), "zsh required for generated chain")
+    def test_first_stage_only_and_failure_propagation_with_errexit_disabled(self):
+        helper = self.chain[self.chain.index("run_stage() {"):self.chain.index("run_stage_list() {")]
+        science = self.chain[self.chain.index("# G2-b: one complete"):self.chain.index(
+            'run_stage "$RUNS_ROOT" "$CLAIM_LOG" "$REF_ROOT/midpoint"')]
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "before_midpoint_stages.txt").write_text("# frozen stages\n\nfirst-stage\nsecond-stage\n")
+            client = root / "fake-campaign"
+            client.write_text('#!/bin/sh\nprintf "%s\\n" "$@" >> "$ARGV_LOG"\nexit "$CAMPAIGN_RC"\n')
+            client.chmod(0o755)
+            environment = {**os.environ, "PY": str(client), "REPO": str(root),
+                "RUNS_ROOT": str(root / "runs"), "CLAIM_LOG": str(root / "campaign.jsonl"),
+                "PRE_CAL_CUSTODY": "fixture-calibration", "POLICY": "fixture-policy",
+                "POWER_POLICY": "fixture-power", "WINDOW_PLAN_ROOT": str(root),
+                "OPERATOR_LOG_ROOT": str(root), "ARGV_LOG": str(root / "argv")}
+            script = ('set -euo pipefail\nsettle() { :; }\nquarantine_stale_lock() { :; }\n'
+                      'timestamp() { echo fixture; }\n' + helper + science +
+                      'echo post-bracket-path >> "$OPERATOR_LOG_ROOT/post"\n')
+            for rc in (3, 1, 2, 130, 0):
+                with self.subTest(rc=rc):
+                    result = subprocess.run(["/bin/zsh", "-c", script],
+                        env={**environment, "CAMPAIGN_RC": str(rc)}, text=True, capture_output=True)
+                    self.assertEqual(result.returncode, 0 if rc == 3 else 1, result.stderr)
+                    argv = (root / "argv").read_text().splitlines()
+                    self.assertIn(str(root / "first-stage"), argv)
+                    self.assertNotIn(str(root / "second-stage"), argv)
+                    self.assertEqual(argv[-2:], ["--max-blocks", "1"])
+                    self.assertEqual((root / "post").exists(), rc == 3)
+                    (root / "argv").unlink()
+                    (root / "post").unlink(missing_ok=True)
+
+    @unittest.skipUnless(shutil.which("zsh"), "zsh required for generated chain")
+    def test_run_stage_propagates_both_log_write_failures_with_errexit_disabled(self):
+        g2a = self.generator.render_g2a_night_chain(RUNSHEET_PATH.read_text(), "20260830")
+        for variant, chain in (("g2a", g2a), ("g2b", self.chain)):
+            start = chain.index("run_stage() {")
+            helper = chain[start:chain.index("\n}\n", start) + 3]
+            for failure in ("stage_start", "stage_end"):
+                with self.subTest(variant=variant, failure=failure), tempfile.TemporaryDirectory() as temporary:
+                    root = Path(temporary)
+                    client = root / "fake-campaign"
+                    client.write_text('#!/bin/sh\ntouch "$DISPATCHED"\nexit 0\n')
+                    client.chmod(0o755)
+                    script = ('set -uo pipefail\nset +e\n'
+                        'settle() { :; }\nquarantine_stale_lock() { :; }\n'
+                        'timestamp() { builtin echo fixture; }\n'
+                        'echo() { [[ "$1" = *"$FAILURE"* ]] && return 7; builtin echo "$@"; }\n'
+                        + helper + 'run_stage root log configs calibration label\nexit $?\n')
+                    result = subprocess.run(["/bin/zsh", "-c", script], text=True, capture_output=True,
+                        env={**os.environ, "PY": str(client), "REPO": str(root), "POLICY": "desk",
+                            "POWER_POLICY": "desk", "OPERATOR_LOG_ROOT": str(root),
+                            "G2A_OPERATOR_LOG_ROOT": str(root), "FAILURE": failure,
+                            "DISPATCHED": str(root / "dispatched")})
+                    self.assertEqual(result.returncode, 7, result.stderr)
+                    self.assertEqual((root / "dispatched").exists(), failure == "stage_end")
 
 
 if __name__ == "__main__":
