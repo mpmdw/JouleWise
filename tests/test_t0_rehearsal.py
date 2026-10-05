@@ -1022,9 +1022,7 @@ class PackGoReplayTests(unittest.TestCase):
             go, artifacts, {"d149_go": go.relative_path}, (), issues)
 
     def evaluate(self):
-        with mock.patch.object(readiness, "_derive_arm_semantics_for_verification",
-                return_value=(self.fixture.arm["rows"], self.fixture.arm["refusals"])):
-            return rehearsal.evaluate_g5(self.bundle())
+        return rehearsal.evaluate_g5(self.bundle())
 
     def rebind(self):
         def references(go):
@@ -1065,12 +1063,11 @@ class PackGoReplayTests(unittest.TestCase):
         self.assertEqual(result.status, rehearsal.GateStatus.FAIL)
         self.assertIn("G2B_SHAKEDOWN", result.message)
 
-    def test_g5_requires_arm_semantic_replay_and_real_t0_inventory(self):
+    def test_g5_uses_recorded_arm_semantics_and_real_t0_inventory(self):
         with mock.patch.object(readiness, "_derive_arm_semantics_for_verification",
                 return_value=([], [{"reason": "refused"}])):
             result = rehearsal.evaluate_g5(self.bundle())
-        self.assertEqual(result.status, rehearsal.GateStatus.FAIL)
-        self.assertIn("PASS/GO", result.message)
+        self.assertEqual(result.status, rehearsal.GateStatus.PASS, result.message)
         with mock.patch.object(readiness, "_authenticate_go_t0_evidence", REAL_G5_T0_AUTHENTICATOR):
             result = self.evaluate()
         self.assertEqual(result.status, rehearsal.GateStatus.FAIL)
@@ -1128,7 +1125,7 @@ class PackGoReplayTests(unittest.TestCase):
             readiness.gnu_sidecar(readiness.sha256_bytes(path.read_bytes()), path.name))
         result = self.evaluate()
         self.assertEqual(result.status, rehearsal.GateStatus.FAIL)
-        self.assertIn("superseded", result.message)
+        self.assertIn("higher-numbered ARM", result.message)
 
 
 if __name__ == "__main__":

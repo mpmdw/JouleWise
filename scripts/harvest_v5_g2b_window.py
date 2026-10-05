@@ -265,7 +265,7 @@ def authenticate_launch(plan, go_path, consumed_path):
         raise q.HarvestRefusal("launch_consumption_go_mismatch")
     table, digest = readiness._consumed_confirmation_pair(record, None, None)
     arm, arm_path, pack, _ = readiness._replay_consumed_arm(None, record, path, require_current_boot=False,
-        require_unexpired=False, replay_arm_semantics=True, step6_confirmation_table=table,
+        require_unexpired=False, replay_arm_semantics=False, step6_confirmation_table=table,
         expected_confirmation_digest=digest)
     readiness.verify_consumed_launch(pack, path, require_current_boot=False)
     candidates = list((Path(plan.custody_root) / go["pack_id"]).rglob("*.consumed.json"))
@@ -313,13 +313,15 @@ def bracket_assessment(custody, plan, policy, acceptance_path):
     return snapshot, binding, session, causes
 
 
-def desk_check(custody, pack, terminal, transcripts, *, runner=subprocess.run, python=sys.executable):
+def desk_check(custody, pack, terminal, transcripts, *, acceptance=None, runner=subprocess.run, python=sys.executable):
     runs = custody / "runs"
     argv = [python, "-B", ROOT / "scripts/check_window_provenance.py", "--runs-root", runs,
         "--pack-root", pack, "--custody-root", custody, "--bracket-binding", runs / "bracket-binding.json",
         "--whole-window-verdict", runs / "whole-window-verdict.json", "--calibration-ledger",
         custody / "calibration/calibration_observation_ledger.jsonl", "--head-pin",
         custody / "calibration/calibration_ledger_head.json", "--terminal-boundary-record", terminal]
+    if acceptance is not None:
+        argv += ["--acceptance", acceptance]
     result = command(argv, transcripts / "desk-check.txt", runner=runner)
     lines = result.stdout.splitlines()
     nr14 = sum(line.startswith("PASS NR14-LAYOUT ") for line in lines) == 1
@@ -507,14 +509,11 @@ def harvest(args, *, runner=subprocess.run, now=None, clear=q.group_clear):
                 sources[field] = q.authenticated_reference(inputs[field])
         if "battery_boundaries" in sources:
             sources.update(q.boundary_sources(sources["battery_boundaries"]))
+        if "desk_producer_events" in inputs:
+            sources["desk-producer-events"] = q.authenticated_reference(inputs["desk_producer_events"])
         if not args.prepare_desk:
-            prior_sources = q.read(args.previous_harvest / "replay-locators.json")["sources"] if args.previous_harvest else None
-            external_events = prior_sources is None or any(row["name"] == "desk-producer-events" for row in prior_sources)
-            if external_events:
-                if "desk_producer_events" in inputs:
-                    sources["desk-producer-events"] = q.authenticated_reference(inputs["desk_producer_events"])
-                else:
-                    missing_after_start.append("desk_producer_events_missing")
+            if "desk-producer-events" not in sources and not args.previous_harvest:
+                missing_after_start.append("desk_producer_events_missing")
             for name in ("bracket-binding.json", "whole-window-verdict.json"):
                 if not (custody / "runs" / name).is_file():
                     missing_after_start.append(name.replace("-", "_").replace(".json", "_missing"))
@@ -539,23 +538,33 @@ def harvest(args, *, runner=subprocess.run, now=None, clear=q.group_clear):
     with tempfile.TemporaryDirectory(prefix="desk-", dir=args.scratch_root) as temporary:
         transcripts = Path(temporary)
         events = None
+        desk_error = None
         if started and not no_science and not missing_after_start:
-            if args.prepare_desk:
-                if args.previous_harvest:
-                    raise q.HarvestRefusal("reharvest_cannot_prepare_desk")
-                events = prepare_desk(custody, custody / "prospective/calibration_plan.json", policy_path,
-                                      Path(plan.measurement_root), transcripts, runner=runner, pack=pack)
-            elif args.previous_harvest:
-                derived = args.previous_harvest / "derived/desk-producer-events.json"
-                events = q.read(sources["desk-producer-events"] if "desk-producer-events" in sources else derived)
-            else:
-                events = q.read(q.authenticated_reference(inputs["desk_producer_events"]))
+            try:
+                if args.prepare_desk:
+                    if args.previous_harvest:
+                        raise q.HarvestRefusal("reharvest_cannot_prepare_desk")
+                    events = prepare_desk(custody, custody / "prospective/calibration_plan.json", policy_path,
+                                          Path(plan.measurement_root), transcripts, runner=runner, pack=pack)
+                elif args.previous_harvest:
+                    derived = args.previous_harvest / "derived/desk-producer-events.json"
+                    events = q.read(sources["desk-producer-events"] if "desk-producer-events" in sources else derived)
+                else:
+                    events = q.read(sources["desk-producer-events"])
+            except Exception as error:
+                # Preserve the collected source census and publish a refusal
+                # even when a desk tool fails before producing its order proof.
+                desk_error = error
         original = q.archive_sources(sources, destination, previous=args.previous_harvest)
+        if events is not None:
+            q.write(destination / "derived/desk-producer-events.json", events)
         shutil.copytree(transcripts, destination / "withheld/desk-production")
     record = {"schema": SCHEMA, "occurrence": occurrence, "plan_id": q.identifier(plan.plan_id),
               "plan_sha256": q.sha(plan_path), "inputs_sha256": q.sha(input_path), "head": plan.measurement_head,
               "verdict": "REFUSED", "cause_codes": [], "cause_classes": [], "members": []}
     try:
+        if desk_error is not None:
+            raise desk_error
         if not (night / "chain.started").exists():
             record.update(verdict="NULL", cause_codes=["chain_never_started"])
         elif no_science:
@@ -580,7 +589,6 @@ def harvest(args, *, runner=subprocess.run, now=None, clear=q.group_clear):
             expected, order_sha, causes = science_roster(pack, runs, inputs["auxiliary_bundle_ids"])
             causes += stop_codes(runs, night, expected, {k: go["authorization"][k] for k in ("path", "sha256")})
             authenticate_order(events, runs)
-            q.write(destination / "derived/desk-producer-events.json", events)
             row = authoritative_row(runs)
             if row["status"] != "passed":
                 causes.append("whole_window_not_passed")
@@ -603,8 +611,9 @@ def harvest(args, *, runner=subprocess.run, now=None, clear=q.group_clear):
             battery_pass = battery_pass and attempt_pass
             if not battery_pass:
                 causes.append("battery_observation_not_passed")
-            off = network_time_off.read_receipt(night / network_time_off.RECEIPT_BASENAME,
-                                              plan_id=plan.plan_id, window_id=plan.plan_id)
+            frozen, _tree, identity = frozen_identity(custody, pack=pack)
+            off = network_time_off.read_receipt(q.off_receipt_path(plan),
+                                              plan_id=plan.plan_id, window_id=identity["window_id"])
             network = network_time_capture_report(off, capture_paths)
             q.write(destination / "withheld/network-time.json", network)
             settled = True
@@ -621,7 +630,8 @@ def harvest(args, *, runner=subprocess.run, now=None, clear=q.group_clear):
             if not settled:
                 causes.append("network_time_off_not_settled")
             check_transcripts = destination / "withheld/checks"
-            desk_passed = desk_check(custody, pack, terminal, check_transcripts, runner=runner)
+            desk_passed = desk_check(custody, pack, terminal, check_transcripts,
+                                     acceptance=acceptance_path, runner=runner)
             record["desk_check_status"] = "PASS" if desk_passed else "FAIL"
             if not desk_passed:
                 causes.append("desk_provenance_not_passed")

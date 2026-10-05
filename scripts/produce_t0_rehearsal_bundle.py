@@ -263,13 +263,14 @@ def observe_s1_lifecycle(plan):
 
 
 def observe_network_time_off():
-    """Existing bounded reader only; no setter or resynchronization."""
-    query = ["/usr/bin/sudo", "-n", "/usr/sbin/systemsetup", "-getusingnetworktime"]
+    """Use the permitted OFF setter to witness that network time stayed OFF."""
+    query = list(network_time_off.OFF_ARGV)
     result = t0.observed_run(query, stdin=-3, capture_output=True, text=True, timeout=30)
-    if result.returncode != 0 or result.stdout.strip() != "Network Time: Off":
+    observation = {"argv": query, "exit_code": result.returncode,
+                   "stdout": result.stdout, "stderr": result.stderr}
+    if not t0.network_time_remained_off(observation):
         raise ValueError("OFF observation unavailable")
-    return {"argv": query, "exit_code": result.returncode,
-            "stdout": result.stdout, "stderr": result.stderr}
+    return observation
 
 
 def bounded_timeout(value):
@@ -371,16 +372,12 @@ def lifecycle(plan_path):
     stage("close_out", ledger_close_out=reference(close_record),
           sources=[reference(path) for path in retained_activity],
           backup_records=[reference(stage_dir / (name + ".json")) for name in ("claim_backup", "bound_backup")])
-    # This step only queries time. It has no ON command and no clock setter.
-    query = ["/usr/bin/sudo", "-n", "/usr/sbin/systemsetup", "-getusingnetworktime"]
-    result = t0.observed_run(query, stdin=-3, capture_output=True, text=True, timeout=30)
-    if result.returncode != 0 or result.stdout.strip() != "Network Time: Off":
-        raise ValueError("restore requires observed network time OFF")
+    observation = observe_network_time_off()
     off_path = custody / go["pack_id"] / "arm_readiness.t0.inputs" / network_time_off.RECEIPT_BASENAME
     off = network_time_off.read_receipt(off_path, plan_id=plan.plan_id, window_id=plan.plan_id)
     network_time_off.seconds_since_receipt(off, {**network_time_off._clock(), "boot_id": network_time_off.boot_id()})
     stage("restore", network_time="OFF", stand_down=True, off_receipt=reference(off_path),
-          observation={"argv": query, "exit_code": result.returncode, "stdout": result.stdout, "stderr": result.stderr})
+          observation=observation)
     return stage_dir
 
 

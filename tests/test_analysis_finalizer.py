@@ -7,6 +7,7 @@ import json
 import tempfile
 import time
 import unittest
+from functools import partial
 from contextlib import redirect_stdout
 from pathlib import Path
 from unittest import mock
@@ -121,7 +122,7 @@ def _metadata_for_config(config: dict, model_token: str) -> dict:
 
 
 def _install_calibration_session(
-    root: Path, *, prospective: dict, runs_root: Path
+    root: Path, *, prospective: dict, runs_root: Path, acceptance_prefix: bool = False
 ) -> tuple[Path, Path]:
     ledger = root / "calibration_ledger.jsonl"
     head_pin = root / "calibration_ledger_head.json"
@@ -133,6 +134,21 @@ def _install_calibration_session(
             "ledger_schema": LEDGER_SCHEMA,
         },
     )
+    if acceptance_prefix:
+        import base64
+        import zlib
+        from joulewise.calibration_bracketing import load_calibration_acceptance_bound
+        fixture_dir = Path(__file__).parent / "fixtures/v5_qualification_harvest"
+        encoded = (fixture_dir / "acceptance-prefix-376.jsonl.zlib.b85").read_bytes()
+        raw = zlib.decompress(base64.b85decode(encoded))
+        source = json.loads((fixture_dir / "acceptance-prefix-SOURCE.json").read_bytes())
+        if hashlib.sha256(encoded).hexdigest() != source["fixture_sha256"]:
+            raise AssertionError("acceptance prefix fixture changed")
+        ledger.write_bytes(raw)
+        cutoff = load_calibration_acceptance_bound()["ledger_cutoff"]
+        _write_json(head_pin, {"sequence": cutoff["sequence"],
+                               "head_digest": cutoff["head_digest"],
+                               "ledger_schema": LEDGER_SCHEMA})
     epoch = {
         field: value
         for field, value in zip(
@@ -219,6 +235,7 @@ def install_synthetic_finalization_fixture(
     shared_governed_stack: bool = False,
     floor_cells_by_slot: dict[tuple[str, str], dict] | None = None,
     dominance_criterion: dict | None = None,
+    acceptance_prefix: bool = False,
 ) -> dict:
     root = Path(root)
     prospective_path, plan_tree_path, prospective = (
@@ -474,7 +491,7 @@ def install_synthetic_finalization_fixture(
     verdict_path = root / "whole_window_verdict.json"
     _write_json(verdict_path, verdict)
     ledger_path, bracket_path = _install_calibration_session(
-        root, prospective=prospective, runs_root=runs_root
+        root, prospective=prospective, runs_root=runs_root, acceptance_prefix=acceptance_prefix
     )
     cells = []
     groups = []
@@ -555,6 +572,12 @@ def install_synthetic_finalization_fixture(
         raise AssertionError(floor_errors)
     floor_path = root / "floors" / "aggregate_floor.json"
     _write_json(floor_path, floor)
+    from tests.test_calibration_bracketing import _unissued_acceptance_fixture_bytes
+    acceptance_path = root / "genesis-acceptance.json"
+    acceptance_path.write_bytes(_unissued_acceptance_fixture_bytes())
+    if acceptance_prefix:
+        from joulewise.calibration_bracketing import DEFAULT_ACCEPTANCE_BOUND_PATH
+        acceptance_path = DEFAULT_ACCEPTANCE_BOUND_PATH
     return {
         "root": root,
         "prospective_path": prospective_path,
@@ -565,6 +588,7 @@ def install_synthetic_finalization_fixture(
         "ledger_path": ledger_path,
         "bracket_path": bracket_path,
         "floor_path": floor_path,
+        "acceptance_path": acceptance_path,
     }
 
 
@@ -604,6 +628,93 @@ def _make_sliced_one_block_verdict(fixture: dict) -> None:
 
 
 class AnalysisFinalizerTests(unittest.TestCase):
+    def test_endpoint_descriptors_replay_authentic_acceptance_cutoff(self) -> None:
+        from joulewise import whole_window as window, calibration_bracketing as brackets
+        from joulewise import calibration_ledger as ledger
+        with tempfile.TemporaryDirectory() as temporary:
+            fixture = install_synthetic_finalization_fixture(Path(temporary), acceptance_prefix=True)
+            snapshot = ledger.load_calibration_ledger_snapshot(
+                fixture["ledger_path"], fixture["root"] / "calibration_ledger_head.json",
+                require_committed_pin=False, verify_custody=False)
+            session = snapshot.bracket_session_by_id["synthetic-session"]
+            def descriptor(slot):
+                o = session.finalized_slots[slot]
+                return {"attempt_id": o.attempt_id, "content_id": o.content_id,
+                    "ledger_receipt_digest": o.receipt_digest, "bracket_slot": slot,
+                    "bracket_session_id": o.bracket_session_id, "bracket_window_id": o.bracket_window_id,
+                    "bracket_plan_id": o.bracket_plan_id, "bracket_plan_sha256": o.bracket_plan_sha256,
+                    "bracket_evidence_root_id": o.bracket_evidence_root_id, "bracket_runs_root": o.bracket_runs_root,
+                    "b_fiducial_s": 0.025}
+            for metadata in fixture["runs_root"].glob("*/metadata.json"):
+                value = json.loads(metadata.read_text())
+                value["instrument_calibration"]["bindings"] = dict(session.finalized_slots["pre"].t1_bindings)
+                _write_json(metadata, value)
+                (metadata.parent / "events.jsonl").write_text("".join(json.dumps({
+                    "phase": "measured_run", "event_type": event, "timestamp_s": stamp,
+                    "message": "", "metadata": {}}) + "\n"
+                    for event, stamp in (("sampling_started", 100.), ("sampling_stopped", 110.))))
+            row = json.loads(fixture["verdict_path"].read_text())
+            bracket = row["idle_admission_core"]["instrument_calibration_bracket"]
+            bracket.update(pre=descriptor("pre"), post=descriptor("post"))
+            basis = row["evaluation_basis"]
+            for occurrence in basis["member_occurrences"]:
+                occurrence["metadata_sha256"] = hashlib.sha256((fixture["runs_root"] /
+                    occurrence["bundle_path"] / "metadata.json").read_bytes()).hexdigest()
+            basis["calibration_bracket_set"] = window._calibration_bracket_basis(bracket)
+            basis["sha256"] = window.canonical_sha256({key: value for key, value in basis.items() if key != "sha256"})
+            raw = (json.dumps(row, sort_keys=True) + "\n").encode()
+            fixture["verdict_path"].write_bytes(raw)
+            (fixture["runs_root"] / "campaign_log.jsonl").write_bytes(raw)
+            seen = []; reads = []
+            real = window.calibration_bracket_for_bundles
+            real_load = ledger.load_calibration_ledger_snapshot
+            real_custody = ledger._custody_reasons
+            def fixture_custody(observations, repository, **kwargs):
+                # The byte-pinned historical prefix establishes only the
+                # acceptance cutoff. Its 110 archived custody trees are not
+                # part of this portable fixture. Authenticate all new session
+                # custody bytes with the production verifier.
+                return real_custody([o for o in observations if o.attempt_id.startswith("synthetic-session-")], repository, **kwargs)
+            def observe(*args, **kwargs):
+                result, reasons = real(*args, **kwargs)
+                seen.append((kwargs["ledger_snapshot"], reasons))
+                return result, reasons
+            def observe_load(*args, **kwargs):
+                reads.append(kwargs)
+                return real_load(*args, **kwargs)
+            with mock.patch.object(window, "calibration_bracket_for_bundles", side_effect=observe), \
+                 mock.patch.object(ledger, "load_calibration_ledger_snapshot", side_effect=observe_load), \
+                 mock.patch.object(ledger, "_custody_reasons", side_effect=fixture_custody):
+                # Synthetic calibration physics can refuse; the real endpoint
+                # replay must still authenticate and carry the acceptance baseline.
+                with self.assertRaises(AnalysisManifestFinalizationError):
+                    finalize_prospective_analysis_manifest_v3(
+                        fixture["prospective_path"], plan_tree_path=fixture["plan_tree_path"],
+                        custody_root=fixture["root"], runs_root=fixture["runs_root"],
+                        whole_window_verdict_path=fixture["verdict_path"], bracket_binding_path=fixture["bracket_path"],
+                        calibration_ledger_path=fixture["ledger_path"], aggregate_floor_artifact_path=fixture["floor_path"],
+                        output_dir=fixture["root"], acceptance_bound_path=fixture["acceptance_path"])
+            cutoff = brackets.load_calibration_acceptance_bound(fixture["acceptance_path"])["ledger_cutoff"]
+            self.assertTrue(seen, "finalization must reach real endpoint replay")
+            for view, reasons in seen:
+                self.assertEqual((view.baseline_sequence, view.baseline_digest), (cutoff["sequence"], cutoff["head_digest"]))
+                self.assertNotIn("calibration_ledger_baseline_missing", reasons)
+            self.assertTrue(any(read.get("mode") == "read_replay" and read.get("verify_custody") is True for read in reads))
+            self.assertFalse(list(fixture["root"].glob("*.finalized.json")))
+
+    def test_invalid_acceptance_refuses_before_finalized_output(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            fixture = install_synthetic_finalization_fixture(Path(temporary))
+            fixture["acceptance_path"].write_text("{}\n")
+            with self.assertRaisesRegex(AnalysisManifestFinalizationError, "calibration acceptance artifact is absent or invalid"):
+                finalize_prospective_analysis_manifest_v3(
+                    fixture["prospective_path"], plan_tree_path=fixture["plan_tree_path"],
+                    custody_root=fixture["root"], runs_root=fixture["runs_root"],
+                    whole_window_verdict_path=fixture["verdict_path"], bracket_binding_path=fixture["bracket_path"],
+                    calibration_ledger_path=fixture["ledger_path"], aggregate_floor_artifact_path=fixture["floor_path"],
+                    output_dir=fixture["root"], acceptance_bound_path=fixture["acceptance_path"])
+            self.assertFalse(list(fixture["root"].glob("*.finalized.json")))
+
     def test_fixture_drift_bound_binds_registered_corpus_bytes(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             fixture = install_synthetic_finalization_fixture(Path(tmp))
@@ -651,6 +762,7 @@ class AnalysisFinalizerTests(unittest.TestCase):
                 finalize_prospective_analysis_manifest_v3(
                     fixture["prospective_path"],
                     plan_tree_path=fixture["plan_tree_path"],
+                    acceptance_bound_path=fixture["acceptance_path"],
                     custody_root=fixture["root"],
                     runs_root=fixture["runs_root"],
                     whole_window_verdict_path=fixture["verdict_path"],
@@ -680,6 +792,7 @@ class AnalysisFinalizerTests(unittest.TestCase):
             manifest = finalize_prospective_analysis_manifest_v3(
                 fixture["prospective_path"],
                 plan_tree_path=fixture["plan_tree_path"],
+                acceptance_bound_path=fixture["acceptance_path"],
                 custody_root=fixture["root"],
                 runs_root=fixture["runs_root"],
                 whole_window_verdict_path=fixture["verdict_path"],
@@ -745,6 +858,7 @@ class AnalysisFinalizerTests(unittest.TestCase):
                 finalize_prospective_analysis_manifest_v3(
                     fixture["prospective_path"],
                     plan_tree_path=fixture["plan_tree_path"],
+                    acceptance_bound_path=fixture["acceptance_path"],
                     custody_root=fixture["root"],
                     runs_root=fixture["runs_root"],
                     whole_window_verdict_path=fixture["verdict_path"],
@@ -775,6 +889,7 @@ class AnalysisFinalizerTests(unittest.TestCase):
             manifest = finalize_prospective_analysis_manifest_v3(
                 fixture["prospective_path"],
                 plan_tree_path=fixture["plan_tree_path"],
+                acceptance_bound_path=fixture["acceptance_path"],
                 custody_root=fixture["root"],
                 runs_root=fixture["runs_root"],
                 whole_window_verdict_path=fixture["verdict_path"],
@@ -796,6 +911,7 @@ class AnalysisFinalizerTests(unittest.TestCase):
                 for refusal in validate_finalized_analysis_manifest_v3(
                     attacked,
                     manifest_path=manifest_path,
+                    acceptance_bound_path=fixture["acceptance_path"],
                     custody_root=fixture["root"],
                 )
             }
@@ -847,7 +963,11 @@ class AnalysisFinalizerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             fixture = install_synthetic_finalization_fixture(Path(tmp))
             stdout = io.StringIO()
-            with redirect_stdout(stdout):
+            with redirect_stdout(stdout), mock.patch(
+                "scripts.finalize_analysis_manifest.finalize_prospective_analysis_manifest_v3",
+                wraps=partial(finalize_prospective_analysis_manifest_v3,
+                              acceptance_bound_path=fixture["acceptance_path"]),
+            ):
                 code = finalize_main(
                     [
                         "--prospective-manifest",
@@ -881,6 +1001,7 @@ class AnalysisFinalizerTests(unittest.TestCase):
             kwargs = {
                 "plan_tree_path": fixture["plan_tree_path"],
                 "custody_root": fixture["root"],
+                "acceptance_bound_path": fixture["acceptance_path"],
                 "runs_root": fixture["runs_root"],
                 "whole_window_verdict_path": fixture["verdict_path"],
                 "bracket_binding_path": fixture["bracket_path"],
@@ -924,7 +1045,8 @@ class AnalysisFinalizerTests(unittest.TestCase):
             )
             self.assertEqual(
                 validate_finalized_analysis_manifest_v3(
-                    first, manifest_path=path, custody_root=fixture["root"]
+                    first, manifest_path=path, custody_root=fixture["root"],
+                    acceptance_bound_path=fixture["acceptance_path"]
                 ),
                 (),
             )
@@ -937,6 +1059,7 @@ class AnalysisFinalizerTests(unittest.TestCase):
             manifest = finalize_prospective_analysis_manifest_v3(
                 fixture["prospective_path"],
                 plan_tree_path=fixture["plan_tree_path"],
+                acceptance_bound_path=fixture["acceptance_path"],
                 custody_root=fixture["root"],
                 runs_root=fixture["runs_root"],
                 whole_window_verdict_path=fixture["verdict_path"],
@@ -967,6 +1090,7 @@ class AnalysisFinalizerTests(unittest.TestCase):
                 for item in validate_finalized_analysis_manifest_v3(
                     attacked,
                     manifest_path=path,
+                    acceptance_bound_path=fixture["acceptance_path"],
                     custody_root=fixture["root"],
                 )
             }
@@ -987,6 +1111,7 @@ class AnalysisFinalizerTests(unittest.TestCase):
                 finalize_prospective_analysis_manifest_v3(
                     fixture["prospective_path"],
                     plan_tree_path=fixture["plan_tree_path"],
+                    acceptance_bound_path=fixture["acceptance_path"],
                     custody_root=fixture["root"],
                     runs_root=fixture["runs_root"],
                     whole_window_verdict_path=fixture["verdict_path"],
@@ -1018,6 +1143,7 @@ class AnalysisFinalizerTests(unittest.TestCase):
                 finalize_prospective_analysis_manifest_v3(
                     fixture["prospective_path"],
                     plan_tree_path=fixture["plan_tree_path"],
+                    acceptance_bound_path=fixture["acceptance_path"],
                     custody_root=fixture["root"],
                     runs_root=fixture["runs_root"],
                     whole_window_verdict_path=fixture["verdict_path"],
@@ -1048,6 +1174,7 @@ class AnalysisFinalizerTests(unittest.TestCase):
                 finalize_prospective_analysis_manifest_v3(
                     fixture["prospective_path"],
                     plan_tree_path=fixture["plan_tree_path"],
+                    acceptance_bound_path=fixture["acceptance_path"],
                     custody_root=fixture["root"],
                     runs_root=fixture["runs_root"],
                     whole_window_verdict_path=fixture["verdict_path"],
@@ -1072,6 +1199,7 @@ class AnalysisFinalizerTests(unittest.TestCase):
                 finalize_prospective_analysis_manifest_v3(
                     fixture["prospective_path"],
                     plan_tree_path=fixture["plan_tree_path"],
+                    acceptance_bound_path=fixture["acceptance_path"],
                     custody_root=fixture["root"],
                     runs_root=fixture["runs_root"],
                     whole_window_verdict_path=fixture["verdict_path"],
@@ -1088,6 +1216,7 @@ class AnalysisFinalizerTests(unittest.TestCase):
             manifest = finalize_prospective_analysis_manifest_v3(
                 fixture["prospective_path"],
                 plan_tree_path=fixture["plan_tree_path"],
+                acceptance_bound_path=fixture["acceptance_path"],
                 custody_root=fixture["root"],
                 runs_root=fixture["runs_root"],
                 whole_window_verdict_path=fixture["verdict_path"],
@@ -1111,6 +1240,7 @@ class AnalysisFinalizerTests(unittest.TestCase):
                 for item in validate_finalized_analysis_manifest_v3(
                     attacked,
                     manifest_path=path,
+                    acceptance_bound_path=fixture["acceptance_path"],
                     custody_root=fixture["root"],
                 )
             }
@@ -1136,6 +1266,7 @@ class AnalysisFinalizerTests(unittest.TestCase):
                 finalize_prospective_analysis_manifest_v3(
                     fixture["prospective_path"],
                     plan_tree_path=fixture["plan_tree_path"],
+                    acceptance_bound_path=fixture["acceptance_path"],
                     custody_root=fixture["root"],
                     runs_root=fixture["runs_root"],
                     whole_window_verdict_path=fixture["verdict_path"],
@@ -1168,6 +1299,7 @@ class AnalysisFinalizerTests(unittest.TestCase):
                 finalize_prospective_analysis_manifest_v3(
                     fixture["prospective_path"],
                     plan_tree_path=fixture["plan_tree_path"],
+                    acceptance_bound_path=fixture["acceptance_path"],
                     custody_root=fixture["root"],
                     runs_root=fixture["runs_root"],
                     whole_window_verdict_path=fixture["verdict_path"],
@@ -1185,6 +1317,7 @@ class AnalysisFinalizerTests(unittest.TestCase):
             common = {
                 "plan_tree_path": fixture["plan_tree_path"],
                 "custody_root": fixture["root"],
+                "acceptance_bound_path": fixture["acceptance_path"],
                 "runs_root": fixture["runs_root"],
                 "bracket_binding_path": fixture["bracket_path"],
                 "calibration_ledger_path": fixture["ledger_path"],
@@ -1258,6 +1391,7 @@ class AnalysisFinalizerTests(unittest.TestCase):
                 finalize_prospective_analysis_manifest_v3(
                     fixture["prospective_path"],
                     plan_tree_path=fixture["plan_tree_path"],
+                    acceptance_bound_path=fixture["acceptance_path"],
                     custody_root=fixture["root"],
                     runs_root=fixture["runs_root"],
                     whole_window_verdict_path=fixture["verdict_path"],

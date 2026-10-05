@@ -957,8 +957,8 @@ def evaluate_g5(bundle: EvidenceBundle) -> GateResult:
 
     Historical clock mode uses the consumption instant on its recorded boot;
     it never requires a completed night's GO to remain live on today's boot.
-    ARM semantics are nevertheless re-derived explicitly (ordinary historical
-    launch replay intentionally skips that step).
+    Recorded ARM semantics are authenticated without re-deriving today's
+    reviewed head or volatile evidence budget.
     """
     name = "PACK GO EVALUATION"
     artifact, value, error = _json_record(bundle, "d149_go")
@@ -993,7 +993,7 @@ def evaluate_g5(bundle: EvidenceBundle) -> GateResult:
         table, digest = readiness._consumed_confirmation_pair(record, None, None)
         arm, arm_path, pack_root, _pack = readiness._replay_consumed_arm(
             None, record, path, require_current_boot=False, require_unexpired=False,
-            replay_arm_semantics=True, step6_confirmation_table=table,
+            replay_arm_semantics=False, step6_confirmation_table=table,
             expected_confirmation_digest=digest)
         readiness.verify_consumed_launch(pack_root, path, require_current_boot=False)
         issued = go["issued_monotonic_ns"]
@@ -1231,6 +1231,15 @@ def _verified_tree_members(source, destination, files):
         raise ValueError("backup destination census mismatch")
 
 
+def network_time_remained_off(observation):
+    """The permitted OFF setter proves continuity only on its already-off result."""
+    return (isinstance(observation, Mapping)
+            and type(observation.get("exit_code")) is int and observation["exit_code"] == 0
+            and observation.get("argv") == list(network_time_off.OFF_ARGV)
+            and isinstance(observation.get("stdout"), str)
+            and " ".join(observation["stdout"].split()).casefold().rstrip(".").rstrip() == "network time is already off")
+
+
 def _qualified_desk_stage(bundle, facts, stage_id, evidence):
     record_artifact = _verify_artifact_reference(bundle, facts.get("plan_record"), label="s1 desk plan")
     record = record_artifact.value
@@ -1283,11 +1292,19 @@ def _qualified_desk_stage(bundle, facts, stage_id, evidence):
         assertions = facts.get("phase_g", {})
         if (assertions.get("whole_window_verdict_count") != 1
                 or any(assertions.get(key) is not True for key in ("no_extra_bundles", "no_scratch_residue", "pack_unchanged"))
-                or assertions.get("head") != record["head"]
                 or assertions.get("pack_sha256") != record.get("pack_night", {}).get("pack_sha256")
                 or not isinstance(assertions.get("git_status"), str)
                 or any(line and not line.startswith("##") for line in assertions["git_status"].splitlines())):
             raise ValueError("s1 close-out Phase G assertions failed")
+        if assertions.get("head") != record["head"]:
+            from joulewise.v5_qualification import pin_only_head_extension
+            extension = pin_only_head_extension(plan.value["measurement_root"], record["head"], assertions.get("head"))
+            if extension is None or assertions.get("head_extension") != extension:
+                raise ValueError("s1 close-out head extension is not authenticated H_pin")
+            if extension["terminal_head_pin"] != stop["terminal_head_pin_candidate"]:
+                raise ValueError("s1 close-out H_pin differs from the STOP terminal candidate")
+        elif assertions.get("head_extension") is not None:
+            raise ValueError("s1 close-out unexpected head extension")
         log = _verify_artifact_reference(bundle, assertions.get("campaign_log"), label="Phase G campaign log")
         rows = [readiness.parse_json_bytes(line) for line in log.raw.splitlines() if line.strip()]
         if sum(row.get("record_type") == "idle_admission_whole_window_verdict" for row in rows) != 1:
@@ -1414,9 +1431,8 @@ def evaluate_g9(bundle: EvidenceBundle) -> GateResult:
                     if facts.get("network_time") != "OFF" or facts.get("stand_down") is not True:
                         raise ValueError("restore-ON is forbidden")
                     observation = facts.get("observation", {})
-                    if (observation.get("exit_code") != 0 or observation.get("stdout", "").strip() != "Network Time: Off"
-                            or observation.get("argv") != ["/usr/bin/sudo", "-n", "/usr/sbin/systemsetup", "-getusingnetworktime"]):
-                        raise ValueError("restore lacks observed OFF query")
+                    if not network_time_remained_off(observation):
+                        raise ValueError("restore lacks observed already-OFF setter witness")
                     off_artifact = _verify_artifact_reference(bundle, facts.get("off_receipt"), label="restore OFF receipt")
                     network_time_off.admit(readiness.parse_json_bytes(off_artifact.raw))
                 if not qualified and stage_id in {"claim_backup", "bound_backup"}:

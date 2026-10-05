@@ -40,6 +40,7 @@ from joulewise.analysis_manifest_v3 import (  # noqa: E402
     finalize_prospective_analysis_manifest_v3,
 )
 from joulewise.calibration_ledger import load_calibration_ledger_snapshot  # noqa: E402
+from joulewise.calibration_bracketing import load_calibration_acceptance_bound  # noqa: E402
 from joulewise.schemas import CampaignPolicy  # noqa: E402
 from joulewise.whole_window import (  # noqa: E402
     AuthenticatedConsumptionSession,
@@ -310,6 +311,19 @@ def _assert_exact_member_set(
         )
 
 
+def _acceptance_replay_snapshot(args: argparse.Namespace) -> Any:
+    path = getattr(args, "acceptance", None)
+    acceptance = load_calibration_acceptance_bound(path) if path is not None else load_calibration_acceptance_bound()
+    if acceptance is None:
+        raise AssertionFailure("calibration acceptance artifact is absent or invalid")
+    cutoff = acceptance["ledger_cutoff"]
+    return load_calibration_ledger_snapshot(
+        args.calibration_ledger, args.head_pin, require_committed_pin=False,
+        verify_custody=False, mode="read_replay",
+        baseline_sequence=cutoff["sequence"], baseline_digest=cutoff["head_digest"],
+    )
+
+
 def _ratified_g2_boundary_snapshot(
     args: argparse.Namespace,
     binding: Mapping[str, Any],
@@ -319,12 +333,7 @@ def _ratified_g2_boundary_snapshot(
     record = _read_object(
         args.terminal_boundary_record, "post-bracket terminal boundary record"
     )
-    snapshot = load_calibration_ledger_snapshot(
-        args.calibration_ledger,
-        args.head_pin,
-        require_committed_pin=False,
-        verify_custody=False,
-    )
+    snapshot = _acceptance_replay_snapshot(args)
     if snapshot.refusal_reasons:
         raise AssertionFailure(
             "reviewed-refresh ledger snapshot is not exact "
@@ -397,6 +406,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--whole-window-verdict", required=True, type=Path)
     parser.add_argument("--calibration-ledger", required=True, type=Path)
     parser.add_argument("--head-pin", type=Path)
+    parser.add_argument("--acceptance", type=Path, help="file-pinned acceptance whose ledger cutoff is replayed")
     parser.add_argument(
         "--terminal-boundary-record",
         type=Path,
@@ -527,6 +537,7 @@ def _run_expect_refusal(args: argparse.Namespace) -> int:
                     calibration_ledger_path=paths["calibration_ledger"],
                     aggregate_floor_artifact_path=paths["aggregate_floor_artifact"],
                     output_dir=paths["output_dir"],
+                    acceptance_bound_path=getattr(args, "acceptance", None),
                 )
             except AnalysisManifestFinalizationError as exc:
                 observed = frozenset({exc.reason_code})
@@ -851,12 +862,7 @@ def _run_assertions(args: argparse.Namespace) -> int:
             binding = _read_object(args.bracket_binding, "bracket binding")
             snapshot, candidate = _ratified_g2_boundary_snapshot(args, binding)
         else:
-            snapshot = load_calibration_ledger_snapshot(
-                args.calibration_ledger,
-                args.head_pin,
-                require_committed_pin=False,
-                verify_custody=False,
-            )
+            snapshot = _acceptance_replay_snapshot(args)
         session = AuthenticatedConsumptionSession(
             runs_root,
             selected_ids,

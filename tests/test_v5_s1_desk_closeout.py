@@ -67,8 +67,8 @@ class DeskCloseoutTests(unittest.TestCase):
             "plan": producer.reference(self.plan_path), "window_id": self.custody.name, "desk_sources": self.sources,
             "backup_destinations": self.destinations, "pack_night": {"pack_sha256": "a" * 64}}
         self.record_path = self.custody / "qualification-plan-record.json"; producer.write(self.record_path, self.record)
-        self.plan = SimpleNamespace(custody_root=str(self.custody), measurement_root=str(self.measurement), measurement_head=self.head,
-            plan_id=self.custody.name, pack_night={"pack_root": str(self.pack), "pack_sha256": "a" * 64})
+        self.plan = SimpleNamespace(receipt_class="TRANSACTION_PACK", custody_root=str(self.custody), measurement_root=str(self.measurement), measurement_head=self.head,
+            plan_id=self.custody.name, pack_night={"pack_id": self.go["pack_id"], "pack_root": str(self.pack), "pack_sha256": "a" * 64})
         for name in ("launch", "capability_consumption", "capture"):
             producer.write(self.stage_dir / (name + ".json"), {"schema_version": t0.QUALIFICATION_STAGE_SCHEMA,
                 "stage_id": name, "monotonic_ns": 1})
@@ -79,8 +79,8 @@ class DeskCloseoutTests(unittest.TestCase):
         producer.write(self.off_path, self.off)
         producer.write(self.night / "standdown-observed.json", {"schema_version": producer.STANDDOWN_SCHEMA,
             "boot_session_id": self.go["boot_session_id"], "exits": [{"pid": 123, "observed_exit_monotonic_ns": 1}], "after": {"processes": []}})
-        self.observation = {"argv": ["/usr/bin/sudo", "-n", "/usr/sbin/systemsetup", "-getusingnetworktime"],
-            "exit_code": 0, "stdout": "Network Time: Off\n", "stderr": ""}
+        self.observation = {"argv": ["/usr/bin/sudo", "-n", "/usr/sbin/systemsetup", "-setusingnetworktime", "off"],
+            "exit_code": 0, "stdout": "Network Time is already off.\n", "stderr": ""}
         stage = {"stage_id": "bound", "kind": "campaign_collection", "input_ref": {"input_id": "neg8_bound_corpus"},
             "launch": {"commands": [{"argv_template": {"arguments": [{"kind": "repo_path", "value": "configs/campaigns/fixture-bound"}]}}]}}
         for patch in (mock.patch.object(desk.q, "load_plan", return_value=self.plan),
@@ -145,12 +145,22 @@ class DeskCloseoutTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "modified measurement checkout"):
             self.close()
 
-    def test_restore_network_time_on_refuses_without_setter(self):
-        with mock.patch.object(producer.t0, "observed_run", return_value=subprocess.CompletedProcess([], 0, "Network Time: On\n", "")) as run:
+    def test_restore_setter_that_changed_on_to_off_refuses_before_backup(self):
+        with mock.patch.object(producer.t0, "observed_run", return_value=subprocess.CompletedProcess([], 0, "setUsingNetworkTime: Off\n", "")) as run:
             with self.assertRaisesRegex(ValueError, "OFF observation"):
                 self.close()
         self.assertFalse((self.stage_dir / "restore.json").exists())
+        self.assertFalse(Path(self.destinations["claim"]).exists())
+        self.assertFalse(Path(self.destinations["bound"]).exists())
         self.assertEqual(run.call_args.args[0], self.observation["argv"])
+
+    def test_unavailable_off_witness_leaves_backup_destinations_retryable(self):
+        with mock.patch.object(producer.t0, "observed_run", return_value=subprocess.CompletedProcess([], 1, "", "fixture failure")):
+            with self.assertRaisesRegex(ValueError, "OFF observation"):
+                self.close()
+        self.assertFalse(any((self.stage_dir / (name + ".json")).exists() for name in desk.DESK_STAGES))
+        self.assertTrue(all(not Path(path).exists() for path in self.destinations.values()))
+        self.assertEqual(self.close()["status"], "COMPLETE")
 
     def test_before_quiet_boundary_or_without_stop_or_inside_night_refuses(self):
         with mock.patch.object(desk.q, "load_plan", side_effect=ValueError("harvest_before_completion_boundary")):
