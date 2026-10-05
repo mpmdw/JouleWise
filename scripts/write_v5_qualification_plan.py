@@ -142,11 +142,19 @@ def size_window(occurrence, sizing, *, roster=(), auxiliary=(), brackets=(), non
     stage. This does not assert a hard latency bound for unbounded inference.
     """
     require(occurrence in {"a1", "a2", "s1"}, "occurrence_retired_or_invalid")
+    source_stream_max = (allowance(sizing["totals"]["T_stream_max"])
+                         if sizing.get("schema_version") == "joulewise.v5_qualification_sizing_allowances.v1"
+                         else Fraction())
     sizing = sizing_adapter(sizing)
     occurrence = "s1"
     exact(sizing, {"fixed", "members", "auxiliary", "streams", "clock"}, "sizing")
-    exact(sizing["fixed"], FIXED_COMPONENTS[occurrence], "fixed")
-    total = sum((allowance(v) for v in sizing["fixed"].values()), Fraction())
+    exact(sizing["fixed"], FIXED_COMPONENTS[occurrence] | {"t0_stage_cap"}, "fixed")
+    stage_cap = allowance(sizing["fixed"]["t0_stage_cap"])
+    require(3180 <= stage_cap <= 3480, "t0_stage_cap_band")
+    # The six captures (including the one dwell) precede the programmed chain;
+    # pack_t0 covers only post-stage authoring, verification and consuming start.
+    total = sum((allowance(v) for key, v in sizing["fixed"].items()
+                 if key != "t0_stage_cap"), Fraction())
     members = sizing["members"]
     require(isinstance(members, dict), "members")
     require(set(members) == {r["run_id"] for r in roster}, "member_inventory")
@@ -158,10 +166,14 @@ def size_window(occurrence, sizing, *, roster=(), auxiliary=(), brackets=(), non
     total += sum((allowance(v) for v in sizing["auxiliary"].values()), Fraction())
     span = math.ceil(total)
     require(span > 0, "programmed_span")
-    window = 60 * math.ceil(Fraction(span + DWELL_CAP_S, 60))
+    window = 60 * math.ceil((span + stage_cap) / 60)
     clock = exact(sizing["clock"], {"diagnostic_anchor_half_width_s", "stamp_resolution_s", "rho_per_s", "source", "observed_max_effective_bound"}, "clock")
     _, clock_raw = read_locator(clock["source"])
     clock_source = readiness.parse_json_bytes(clock_raw)
+    # Raw sizing inputs retain the same production maximum through their
+    # authenticated clock source, even without the outer allowance adapter.
+    source_stream_max = max(source_stream_max, number(
+        clock_source.get("totals", {}).get("T_stream_max", 0), "clock.source_stream_max"))
     require(all(clock_source[key] == clock[key] for key in (
         "diagnostic_anchor_half_width_s", "stamp_resolution_s", "rho_per_s")), "clock.source_values")
     from joulewise.uncertainty_evidence import NUMERIC_PADDING_S, _round_outward_up
@@ -174,23 +186,30 @@ def size_window(occurrence, sizing, *, roster=(), auxiliary=(), brackets=(), non
     rho = number(clock["rho_per_s"], "clock.rho")
     streams = sizing["streams"]
     require(isinstance(streams, dict), "streams")
+    # nonsampling names whole auxiliary stages without a clock anchor (bound
+    # derivation). Cooldown subwindows and the post-run sentinel are helpers
+    # inside a member, not extra anchor-bearing roster entries.
     require(set(nonsampling) <= set(auxiliary), "nonsampling_inventory")
     sampled_auxiliary = set(auxiliary) - set(nonsampling)
     require(set(streams) == (set(members) | sampled_auxiliary | set(brackets)), "stream_inventory")
-    longest = max((allowance(v) for v in streams.values()), default=Fraction())
+    stream_seconds = {name: allowance(v) for name, v in streams.items()}
+    require(all(seconds >= 60 for seconds in stream_seconds.values()), "anchor_stream_minimum")
+    longest = max(stream_seconds.values(), default=Fraction())
+    require(longest >= source_stream_max, "source_stream_maximum_omitted")
     for member_id, components in members.items():
-        # Load occurs before sampler startup; every later guarded/retry term is
-        # inside the longest stream estimate and must be explicitly covered.
-        sampled = sum((allowance(v) for key, v in components.items() if key != "load"), Fraction())
-        require(allowance(streams[member_id]) >= sampled, "stream_omits_guard_or_retry")
+        # Load precedes startup. The main sampler stops at
+        # joulewise/controller.py:1607; cooldown runs on its own sampler.
+        # Admission guards/retry remain covered by the anchor-bearing stream.
+        sampled = sum((allowance(v) for key, v in components.items()
+                       if key not in {"load", "cooldown"}), Fraction())
+        require(stream_seconds[member_id] >= sampled, "stream_omits_guard_or_retry")
     # Bracket protocol spans are already included in pre_post_calibration;
     # their continuous sampler streams still need the independent clock check.
-    for stage in (*sampled_auxiliary, *brackets):
-        require(allowance(streams[stage]) > 0, "auxiliary_stream")
     effective = _round_outward_up(placement + rho * longest)
     observed = allowance(clock["observed_max_effective_bound"])
     require(observed <= Fraction(0.005), "clock_bound_exceeded")
     return {"programmed_span_s": span, "window_max_s": window,
+            "t0_stage_cap_s": float(stage_cap),
             "clean_dwell_cap_s": DWELL_CAP_S,
             "longest_sampler_stream_s": float(longest),
             "worst_case_effective_clock_bound_s": effective,
@@ -559,7 +578,7 @@ def write_qualification(occurrence, inputs, output):
                             "attempt_ordinal": inputs["pack"]["attempt_ordinal"], **records})
     plan = night_gate.NightPlan.from_mapping(base)
     bound_deadlines = deadlines(plan, sizing["programmed_span_s"], inputs["deadlines"])
-    chain_deadline = night_gate.qualification_start_deadline(plan, text, purpose)
+    chain_deadline = night_gate.qualification_start_deadline(plan, text, purpose, sizing=inputs["sizing"])
     require(chain_deadline is not None and chain_deadline == bound_deadlines["latest_chain_start_epoch_s"], "qualification_chain_deadline")
     # Authenticate exact records and sidecar with canonical preparation before
     # publishing a plan. A refused attempt retains its create-once authority
@@ -583,7 +602,7 @@ def write_qualification(occurrence, inputs, output):
         require(destination != custody and destination not in custody.parents
                 and custody not in destination.parents, "backup_plan_custody_overlap")
     prerequisites(occurrence, inputs["prerequisites"], inputs["head"],
-                  plan.t0_epoch_s - float(allowance(sizing_adapter(inputs["sizing"])["fixed"]["pack_t0"])), custody,
+                  plan.t0_epoch_s - sizing["t0_stage_cap_s"], custody,
                   code_root=measurement)
     if occurrence == "s1":
         for name, relative in (("driver", "scripts/run_night.py"), ("bundle", "scripts/produce_t0_rehearsal_bundle.py"),

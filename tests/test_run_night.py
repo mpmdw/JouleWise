@@ -6759,3 +6759,91 @@ class Ruling76DriverTests(unittest.TestCase):
                         driver.readiness, '_current_boot_session_id', return_value=BOOT_UUID):
                     with self.assertRaises(night_gate.PackNightRefusal):
                         driver._admit_qualification_control_order(plan, {'occurrence': 's1', 'prerequisites': refs})
+
+
+class QualificationT0StageCapTests(unittest.TestCase):
+    """The capture transport uses the authenticated record's source-bound cap."""
+    def setUp(self):
+        self.f = PackNightProducerTests()
+        self.f.setUp()
+        self.addCleanup(self.f.doCleanups)
+        self.driver = self.f.driver
+        self.night = self.f.custody / 'night'
+        self.night.mkdir(exist_ok=True)
+        self.record_path = self.f.custody / 'qualification-plan-record.json'
+
+    def bind_cap(self, cap, *, arm_only=False):
+        from scripts import write_v5_qualification_plan as writer
+        from joulewise.night_plan_writer import night_plan_mapping
+        source = self.f.root / 'stage-cap-source.json'
+        self.f.write(source, {'seconds': cap})
+        sizing = self.f.inputs / 'kernel-frequency-sizing.json'
+        sizing_ref = self.f.write(sizing, {'fixed': {'t0_stage_cap': {
+            'seconds': cap, 'source': writer.locator(source), 'source_pointer': '/seconds'}}})
+        self.record = {'head': self.f.plan.repo_head, 'pack_night': self.f.plan.pack_night,
+                       'sizing': {'t0_stage_cap_s': cap}, 'plan': writer.locator(self.f.plan_path)}
+        plan_path = self.f.plan_path
+        if arm_only:
+            plan_path = self.f.custody / 'arm-only-context.json'
+            self.record.update(schema_version=writer.ARM_ONLY_SCHEMA,
+                               plan_binding=night_plan_mapping(self.f.plan))
+            self.f.write(plan_path, self.record)
+        else:
+            self.f.write(self.record_path, self.record)
+        # Authentication itself is covered by ClockSizingTests; only the native
+        # transport is mocked here. The returned plan/sizing bytes and their
+        # locators are real, so record/source substitution still fails closed.
+        sources = ({}, writer.locator(plan_path), sizing_ref, {}, {})
+        return sources
+
+    def capture(self, sources, operation):
+        from joulewise import v5_qualification as qualification
+        with mock.patch.object(qualification, 'authenticated_clock_budget', return_value=(100., sources)) as authenticate, \
+             mock.patch.object(self.driver.t0_rehearsal, 'observed_run', side_effect=operation) as run, \
+             mock.patch.object(self.driver, '_chain_environment', return_value={}):
+            self.driver._capture_qualification_t0(self.f.plan)
+        authenticate.assert_called_once_with(self.f.inputs, self.f.plan.pack_night['pack_root'])
+        return run
+
+    def complete(self, argv, **kwargs):
+        from scripts import capture_t0_step as capture
+        for name in capture.STEP_FILENAMES.values():
+            self.f.write(self.f.inputs / name, {'fixture': True})
+        return subprocess.CompletedProcess(argv, 0, b'fixture stdout', b'fixture stderr')
+
+    def test_s1_capture_uses_plan_cap_instead_of_3600_or_fixed_3300(self):
+        sources = self.bind_cap(3340)
+        run = self.capture(sources, self.complete)
+        self.assertEqual(run.call_args.kwargs['timeout'], 3340)
+        self.assertIs(run.call_args.kwargs['stdin'], subprocess.DEVNULL)
+        self.assertEqual((self.night / 't0-capture.stdout.json').read_bytes(), b'fixture stdout')
+
+    def test_arm_only_capture_uses_its_own_plan_record_cap(self):
+        sources = self.bind_cap(3180, arm_only=True)
+        run = self.capture(sources, self.complete)
+        self.assertEqual(run.call_args.kwargs['timeout'], 3180)
+
+    def test_record_cannot_substitute_an_unbound_stage_cap(self):
+        sources = self.bind_cap(3300)
+        self.record['sizing']['t0_stage_cap_s'] = 3600
+        self.f.write(self.record_path, self.record)
+        with self.assertRaisesRegex(night_gate.PackNightRefusal, 'stage cap binding'):
+            self.capture(sources, self.complete)
+        self.assertFalse((self.night / 't0-capture.stdout.json').exists())
+
+    def test_mutated_sizing_bytes_are_refused_before_capture(self):
+        sources = self.bind_cap(3300)
+        Path(sources[2]['path']).write_bytes(b'{}\n')
+        with self.assertRaises(night_gate.PackNightRefusal):
+            self.capture(sources, self.complete)
+        self.assertFalse((self.night / 't0-capture.stdout.json').exists())
+
+    def test_timeout_preserves_partial_output_and_refuses(self):
+        sources = self.bind_cap(3300)
+        def timeout(argv, **kwargs):
+            self.assertEqual(kwargs['timeout'], 3300)
+            raise subprocess.TimeoutExpired(argv, kwargs['timeout'], output=b'partial', stderr=b'timed out')
+        with self.assertRaisesRegex(night_gate.PackNightRefusal, 'stage timed out'):
+            self.capture(sources, timeout)
+        self.assertEqual((self.night / 't0-capture.stdout.json').read_bytes(), b'partial')
+        self.assertEqual((self.night / 't0-capture.stderr.txt').read_bytes(), b'timed out')

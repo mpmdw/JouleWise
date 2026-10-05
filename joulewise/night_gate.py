@@ -1170,7 +1170,7 @@ def _pack_rehearsal_roots(plan, arm, purpose):
         raise PackNightRefusal("rehearsal_clone_prefix_invalid: measurement_root")
 
 
-def qualification_start_deadline(plan, chain_text, purpose):
+def qualification_start_deadline(plan, chain_text, purpose, *, sizing=None):
     """Authenticate the block-4 sizing literals before ARM/GO admission.
 
     Other pack chains have no qualification marker and retain their existing
@@ -1189,7 +1189,38 @@ def qualification_start_deadline(plan, chain_text, purpose):
     if not isinstance(span, str) or re.fullmatch(r"[1-9][0-9]*", span) is None:
         raise PackNightRefusal("qualification programmed span")
     span = int(span)
-    if plan.window_max_s != 60 * math.ceil((span + 2700) / 60):
+    window_cap = 2700
+    if (plan.receipt_class == "TRANSACTION_PACK" and purpose == "G2B_SHAKEDOWN"
+            and marker == "s1" and isinstance(plan.pack_night, Mapping)):
+        from joulewise import arm_readiness as readiness
+        # During initial staging the writer has verified sizing but has not
+        # published its custody file yet. Runtime uses the same chain-pinned
+        # bytes. Older packs without a stage allowance keep the original cap.
+        supplied = sizing is not None
+        sizing_path = (Path(plan.custody_root) / plan.pack_night["pack_id"]
+                       / "arm_readiness.t0.inputs/kernel-frequency-sizing.json")
+        if not supplied:
+            try:
+                sizing = readiness.parse_json_bytes(sizing_path.read_bytes())
+            except (OSError, ValueError):
+                sizing = None
+        inner = sizing.get("sizing", sizing) if isinstance(sizing, Mapping) else {}
+        fixed = inner.get("fixed", {}) if isinstance(inner, Mapping) else {}
+        if isinstance(fixed, Mapping) and "t0_stage_cap" in fixed:
+            from scripts import write_v5_qualification_plan as writer
+            expected_sizing = chain_literal(chain_text, "NIGHT_CLOCK_SIZING_SHA256")
+            if re.fullmatch(r"[0-9a-f]{64}", expected_sizing) is None:
+                raise PackNightRefusal("qualification stage sizing pin")
+            if supplied:
+                if readiness.sha256_bytes(readiness.render_json(sizing)) != expected_sizing:
+                    raise PackNightRefusal("qualification stage sizing sha256 mismatch")
+            else:
+                sizing = readiness.parse_json_bytes(_pack_bytes(
+                    sizing_path, "qualification_stage_sizing", expected_sizing))
+            window_cap = writer.allowance(writer.sizing_adapter(sizing)["fixed"]["t0_stage_cap"])
+            if not 3180 <= window_cap <= 3480:
+                raise PackNightRefusal("qualification t0_stage_cap_band")
+    if plan.window_max_s != 60 * math.ceil((span + window_cap) / 60):
         raise PackNightRefusal("qualification window/dwell cap")
     deadline = plan.t0_epoch_s + plan.window_max_s - span
     if (not isinstance(latest, str) or re.fullmatch(r"[0-9]+", latest) is None
