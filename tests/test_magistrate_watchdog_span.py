@@ -4,6 +4,8 @@ import datetime as dt
 import json
 import plistlib
 import signal
+import subprocess
+import threading
 from pathlib import Path
 from unittest import mock
 
@@ -148,6 +150,89 @@ class TickSpanTests(WatchdogTestCase):
                 plist.unlink()
         self.assertEqual(0, self.harness.census_calls)  # Baseline installed-only path.
         self.assertEqual([], wd.load_state(self.harness.storage)["notice_pending"])
+
+    def test_installed_only_resident_skips_refresh_at_normal_cadence(self) -> None:
+        # Reviewer CONTRACT probe: discovery can miss the independently
+        # installed plan while an existing resident continues polling.
+        plan = self.make_plan(t0=self.base.timestamp())
+        self.installed_plan(plan)
+        supervisor = self.supervisor(plan)
+        cached = wd.StopObservation("CLEAR", "pre-span clear")
+        supervisor._remote_stop = cached
+        supervisor._remote_probe_started_monotonic = self.harness.clock.mono
+        supervisor._remote_stop_observed_monotonic = self.harness.clock.mono
+        calls = []
+
+        def transport(argv, **kwargs):
+            self.assertIn("ls-remote", argv)
+            calls.append(list(argv))
+            return subprocess.CompletedProcess(
+                argv, 0 if argv[-1] == wd.POSITIVE_CONTROL_REF else 2, "control", "")
+
+        self.harness.deps.git_probe = wd.remote_stop_probe
+        with mock.patch.object(self.harness.storage, "glob_plans", return_value=[]), \
+             mock.patch.object(wd.subprocess, "run", side_effect=transport):
+            state = wd.initial_state()
+            self.assertEqual("FENCED", wd.decide(
+                self.harness.storage, self.harness.deps, state).state)
+            self.assertEqual("NOT_PROBED", state["remote_stop"]["state"])
+            self.assertEqual([], calls)
+            self.set_wall(self.base.timestamp() + wd.REMOTE_STOP_PROBE_CADENCE_S)
+            self.assertIsNotNone(wd.installed_agent_fence(
+                self.harness.clock.wall, self.harness.storage, state=state))
+            try:
+                self.assertTrue(supervisor.step())
+            finally:
+                thread = supervisor._remote_probe_thread
+                if thread is not None:
+                    thread.join(5)
+                    self.assertFalse(thread.is_alive())
+            self.assertEqual([], calls)
+            self.assertIsNone(thread, "suppression must prevent starting a refresh")
+            self.assertIs(cached, supervisor._remote_stop)
+            self.assertEqual("NOT_PROBED", supervisor.state["remote_stop"]["state"])
+
+    def test_inflight_refresh_abandons_second_call_at_span_start(self) -> None:
+        # Reviewer CONTRACT probe: hold the positive-control transport while
+        # the resident crosses the inclusive boundary and requests stand-down.
+        plan = self.make_plan()
+        supervisor = self.supervisor(plan)
+        self.set_wall(plan.t0_epoch_s - wd.PLAN_LEAD_S - 0.001)
+        cached = supervisor._remote_stop
+        cached_monotonic = supervisor._remote_stop_observed_monotonic
+        entered = threading.Event()
+        release = threading.Event()
+        calls = []
+
+        def transport(argv, **kwargs):
+            calls.append((argv[-1], self.harness.clock.wall.timestamp()))
+            if argv[-1] == wd.POSITIVE_CONTROL_REF:
+                entered.set()
+                self.assertTrue(release.wait(5))
+                return subprocess.CompletedProcess(argv, 0, "control", "")
+            return subprocess.CompletedProcess(argv, 2, "", "")
+
+        self.harness.deps.git_probe = wd.remote_stop_probe
+        with mock.patch.object(wd.subprocess, "run", side_effect=transport):
+            try:
+                self.assertTrue(supervisor.step())
+                self.assertTrue(entered.wait(5))
+                self.set_wall(plan.t0_epoch_s - wd.PLAN_LEAD_S)
+                self.assertTrue(wd.plan_span_active(
+                    plan, self.harness.clock.wall.timestamp(), self.harness.storage))
+                self.assertTrue(supervisor.step())
+                self.assertEqual("STANDDOWN_REQUESTED", supervisor.state["state"])
+            finally:
+                release.set()
+                thread = supervisor._remote_probe_thread
+                if thread is not None:
+                    thread.join(5)
+                    self.assertFalse(thread.is_alive())
+            self.assertEqual([wd.POSITIVE_CONTROL_REF], [ref for ref, _ in calls])
+            self.assertLess(calls[0][1], plan.t0_epoch_s - wd.PLAN_LEAD_S)
+            self.assertIs(cached, supervisor._remote_stop)
+            self.assertEqual(cached_monotonic, supervisor._remote_stop_observed_monotonic)
+            self.assertEqual("NOT_PROBED", supervisor.state["remote_stop"]["state"])
 
     def test_active_span_still_records_nonempty_census_and_notice(self) -> None:
         self.make_plan(t0=self.base.timestamp())
