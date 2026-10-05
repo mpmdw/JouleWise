@@ -1,13 +1,13 @@
 """Ruling 76 B.2/B.3 regressions through the real author and ARM predicates."""
 from decimal import Decimal
 from fractions import Fraction
-from types import SimpleNamespace
 import unittest
 from unittest import mock
 
 from joulewise import arm_readiness as arm, arm_readiness_evidence_t0 as author
 from joulewise import clock_reference, kernel_clock
 from tests.test_kernel_clock import frequency_probe
+from tests import test_v5_qualification_plan as sizing_fixture
 
 
 class Block4ClockTests(unittest.TestCase):
@@ -23,14 +23,32 @@ class Block4ClockTests(unittest.TestCase):
               "anchor_read_skew_ns": 1000, "batch_finished_monotonic_raw_ns": r0_raw + 10,
               "kernel_frequency": frequency, "t_stream_max_s": stream_max}
         agreement = author._ReferenceAgreement(3, Decimal(".01"), Decimal(".03"))
-        context = SimpleNamespace(
+        fixture = sizing_fixture.PlanWriterTests()
+        fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
+        # Keep the clock cases' stream budget while replaying real sizing custody.
+        fixture.input["sizing"]["streams"] = {
+            name: fixture.allow(stream_max) for name in fixture.input["sizing"]["streams"]}
+        fixture.write()
+        context = author._Context(
+            pack_root=fixture.pack, repository=fixture.repo,
+            custody_root=fixture.custody, custody_pack_root=fixture.custody / fixture.pack.name,
+            tree={}, pack_sha256=fixture.input["pack"]["sha256"],
+            plan_sha256=arm.sha256_bytes(fixture.output.read_bytes()),
+            head_commit=fixture.head, head_tree_oid="d" * 40, boot_session_id="boot",
+            boot_probe=author._ProbeResult(("/usr/sbin/sysctl", "-n", "kern.bootsessionuuid"),
+                str(fixture.repo), 0, "boot\n", ""),
             captures={"clock-reference": ({"finished_monotonic_ns": 10}, {})},
-            values={}, clock=SimpleNamespace(monotonic_ns=lambda: end_raw))
+            clock=author._DerivationClock(lambda: end_raw, lambda: "1970-01-01T00:00:00Z",
+                lambda: endpoint))
         disable = {"exit_code": 0, "argv": ["/usr/bin/sudo", "-n", "/usr/sbin/systemsetup",
                    "-setusingnetworktime", "off"], "started_monotonic_ns": 20,
                    "finished_monotonic_ns": 30}
         endpoint = clock_reference.ClockAnchor(offset + end_raw + drift + step_ns, end_raw, 1000)
         with (mock.patch.object(author, "_captured_clock_reference", return_value=(r0, {}, agreement)),
+              # The miniature writer pack has no registry; every real authoring
+              # profile requires this gate, as the registry test below verifies.
+              mock.patch.object(arm, "requires_t0_frequency_gate", return_value=True),
               mock.patch.object(author, "_capture", return_value=(disable, {})),
               mock.patch.object(author, "_fresh_clock_reference_batch", return_value=(
                   agreement, (), end_raw - 1000, endpoint, end_raw)),
@@ -137,7 +155,7 @@ class Block4ClockTests(unittest.TestCase):
     def test_historical_fact_keeps_fixed_semantics_and_unknown_version_refuses(self):
         value, receipt = self.derive(1600)
         legacy = {key: val for key, val in value.items()
-                  if key not in arm._CLOCK_PROBE_RESIDUAL_VALUE_KEYS - arm._CLOCK_PROBE_VALUE_KEYS}
+                  if key in arm._CLOCK_PROBE_VALUE_KEYS}
         self.assertFalse(arm._clock_probe_predicate_passes(receipt, legacy, arm._PREDICATE_LIVE_ANCHOR_NOT_APPLICABLE))
         legacy["anchor_realtime_ns"] -= legacy["anchor_realtime_ns"] - legacy["anchor_monotonic_raw_ns"] - (
             legacy["r0_anchor_realtime_ns"] - legacy["r0_anchor_monotonic_raw_ns"])
