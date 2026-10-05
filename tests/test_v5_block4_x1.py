@@ -1,5 +1,6 @@
 """Desk regression lenses for pre-mortem X1; none discharge a hardware gate."""
 import copy
+from dataclasses import replace
 import json
 import os
 from pathlib import Path
@@ -16,6 +17,7 @@ from unittest import mock
 from joulewise import arm_readiness as readiness, arm_readiness_evidence_t0 as author, night_gate
 from joulewise.dwell import final_clean_dwell
 from joulewise import prewindow
+from joulewise import t0_rehearsal as t0, v5_qualification as q
 from scripts import capture_t0_step as capture, run_night, write_v5_qualification_plan as writer
 from scripts.ed_session import capture_t0_anchor_positive_control as g10
 from tests.test_arm_readiness_schemas import arm_context
@@ -322,3 +324,82 @@ class RunnerTests(unittest.TestCase):
         self.assertNotIn("Traceback", result.stderr)
         self.assertEqual(json.loads(result.stdout),
                          {"status": "NOT-DISCHARGED", "reason": "outside_confirmation_missing"})
+
+
+class G10CustodyTests(unittest.TestCase):
+    def test_real_custody_replay_requires_a2_expiry_then_g10_then_s1_and_intact_support(self):
+        from tests.test_t0_anchor_positive_control import PositiveControlTests
+        from tests.test_t0_rehearsal import FixtureBuilder, fixture_bundle
+        control = PositiveControlTests()
+        control.setUp()
+        self.addCleanup(control.doCleanups)
+        self.assertEqual(control.run_control()["status"], "DISCHARGED")
+        head = subprocess.check_output(["git", "-C", str(control.repository),
+                                        "rev-parse", "HEAD"], text=True).strip()
+        builder = FixtureBuilder(Path(control.temporary.name).resolve() / "qualification")
+        root = builder.build()
+        plan = root / "qualification-plan.json"
+        q.write(plan, {"measurement_root": str(control.repository),
+                       "pack_night": {"pack_id": builder.namespace.name}})
+        boot = control.stamp()["boot_id"]
+        base = control.base_ns
+        refs = {}
+        controls = {}
+        for label, checked in (("a1", base - 4 * 10**9), ("a2", base - 2 * 10**9)):
+            observation = root / (label + "-observation.json")
+            q.write(observation, {"first_t0_boundary_monotonic_ns": checked - 10**9})
+            path = root / (label + "-control.json")
+            value = {"observation": q.reference(observation),
+                     "checked_monotonic_ns": checked, "boot_session_id": boot}
+            q.write(path, value)
+            controls[label] = (path, value)
+            refs[label + "_control"] = q.reference(path)
+        refs.update(g10_control=q.reference(control.control / "positive-control.json"),
+                    g10_artifacts=[q.reference(control.control / "custody-manifest.json")])
+        record = root / "qualification-plan-record.json"
+        def save_record():
+            record.write_bytes(readiness.render_json({"head": head,
+                "plan": q.reference(plan), "prerequisites": refs}))
+        save_record()
+        boundary = base + 2 * 10**9
+        for index, name in enumerate(author._CAPTURE_FILES.values()):
+            (builder.inputs / name).write_bytes(readiness.render_json({
+                "started_monotonic_ns": boundary + index * 1000, "boot_session_id": boot}))
+        shutil.copytree(control.control, root / "records/g10-custody" / control.control.name)
+        shutil.copyfile(control.control / "positive-control.json", root / "records/positive-control.json")
+        self.assertEqual(q.g10_sources(root), {"g10-custody": control.control})
+        bundle = fixture_bundle(root)
+        bundle = replace(bundle, manifest=replace(bundle.manifest,
+            value={"schema_version": "joulewise.v5_s1_qualification_bundle.v1"}))
+        self.assertEqual(t0.evaluate_g10(bundle).status, t0.GateStatus.PASS)
+        positive = g10.read_json(control.control / "positive-control.json")
+
+        # The old upper bound was a1's T-0. The replacement is a strict
+        # a2-expiry lower bound and the earliest s1 capture upper bound.
+        path, original = controls["a2"]
+        for checked in (base, base + 1):
+            with self.subTest(a2_expiry=checked):
+                path.write_bytes(readiness.render_json({**original, "checked_monotonic_ns": checked}))
+                refs["a2_control"] = q.reference(path)
+                save_record()
+                result = t0.evaluate_g10(bundle)
+                self.assertEqual(result.status, t0.GateStatus.FAIL)
+                self.assertIn("g10_boot_or_order", result.message)
+        path.write_bytes(readiness.render_json(original))
+        refs["a2_control"] = q.reference(path)
+        save_record()
+        first_capture = builder.inputs / "clock-reference.json"
+        raw = first_capture.read_bytes()
+        for at in (base, base - 1):
+            with self.subTest(s1_boundary=at):
+                first_capture.write_bytes(readiness.render_json({
+                    "started_monotonic_ns": at, "boot_session_id": boot}))
+                with self.assertRaisesRegex(ValueError, "g10_boot_or_order"):
+                    q.replay_g10_custody(root, positive)
+        first_capture.write_bytes(raw)
+        self.assertEqual(t0.evaluate_g10(bundle).status, t0.GateStatus.PASS)
+        support = control.control / "before.json"
+        support.write_bytes(support.read_bytes() + b" ")
+        result = t0.evaluate_g10(bundle)
+        self.assertEqual(result.status, t0.GateStatus.FAIL)
+        self.assertIn("g10_custody_hash_or_census", result.message)

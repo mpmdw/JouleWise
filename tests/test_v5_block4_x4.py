@@ -127,16 +127,25 @@ class G10CustodyTests(unittest.TestCase):
     def test_real_g10_verifier_replays_retained_tree_and_refuses_support_mutation(self):
         from tests.test_t0_anchor_positive_control import PositiveControlTests
         from tests.test_t0_rehearsal import FixtureBuilder, fixture_bundle
-        from joulewise import t0_rehearsal as t0
+        from joulewise import t0_rehearsal as t0, arm_readiness_evidence_t0 as author
         control = PositiveControlTests(); control.setUp(); self.addCleanup(control.doCleanups)
         self.assertEqual(control.run_control()['status'], 'DISCHARGED')
         head = subprocess.check_output(['git', '-C', str(control.repository), 'rev-parse', 'HEAD'], text=True).strip()
         root = FixtureBuilder(Path(control.temporary.name).resolve() / 'qualification').build()
-        plan = root / 'qualification-plan.json'; q.write(plan, {'measurement_root':str(control.repository)})
-        observation = root / 'a1-observation.json'; q.write(observation, {'first_t0_boundary_monotonic_ns':10**30})
-        first = root / 'a1-control.json'; q.write(first, {'observation':q.reference(observation), 'boot_session_id':control.stamp()['boot_id']})
+        boot = control.stamp()['boot_id']
+        plan = root / 'qualification-plan.json'; q.write(plan, {
+            'measurement_root':str(control.repository), 'pack_night':{'pack_id':control.pack.name}})
+        first = root / 'a1-control.json'; q.write(first, {
+            'checked_monotonic_ns':control.base_ns - 3 * 10**9, 'boot_session_id':boot})
+        second = root / 'a2-control.json'; q.write(second, {
+            'checked_monotonic_ns':control.base_ns - 10**9, 'boot_session_id':boot})
+        input_root = root / control.pack.name / author._INPUT_DIRECTORY
+        for index, filename in enumerate(author._CAPTURE_FILES.values()):
+            q.write(input_root / filename, {'started_monotonic_ns':control.base_ns + 2 * 10**9 + index,
+                                           'boot_session_id':boot})
         q.write(root / 'qualification-plan-record.json', {'head':head, 'plan':q.reference(plan), 'prerequisites':{
-            'a1_control':q.reference(first), 'g10_control':q.reference(control.control / 'positive-control.json'),
+            'a1_control':q.reference(first), 'a2_control':q.reference(second),
+            'g10_control':q.reference(control.control / 'positive-control.json'),
             'g10_artifacts':[q.reference(control.control / 'custody-manifest.json')]}})
         shutil.copytree(control.control, root / 'records/g10-custody' / control.control.name)
         shutil.copyfile(control.control / 'positive-control.json', root / 'records/positive-control.json')

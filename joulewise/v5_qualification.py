@@ -197,7 +197,7 @@ def g10_sources(custody):
     return {"g10-custody": manifest.parent}
 
 
-def replay_g10_custody(custody, positive):
+def replay_g10_custody(custody, positive, *, bundle=None):
     """Re-run G10's native verifier with the registered head/boot/order bounds."""
     from scripts.ed_session.capture_t0_anchor_positive_control import verify_g10_custody
     record = read(Path(custody) / "qualification-plan-record.json")
@@ -207,11 +207,30 @@ def replay_g10_custody(custody, positive):
     if read(positive_path) != positive:
         raise HarvestRefusal("g10_positive_copy_mismatch")
     first = read(authenticated_reference(prereqs["a1_control"]))
-    observation = read(authenticated_reference(first["observation"]))
+    second = read(authenticated_reference(prereqs["a2_control"]))
     plan = read(authenticated_reference(record["plan"]))
+    from joulewise import arm_readiness_evidence_t0 as author
+    input_root = Path(custody) / plan["pack_night"]["pack_id"] / author._INPUT_DIRECTORY
+    captures = []
+    for filename in author._CAPTURE_FILES.values():
+        path = input_root / filename
+        capture = read(path)
+        if bundle is not None:
+            from joulewise.t0_rehearsal import _artifact_for_path
+            artifact = _artifact_for_path(bundle, str(path))
+            if artifact is None or artifact.sha256 != sha(path) or artifact.value != capture:
+                raise HarvestRefusal("g10_s1_boundary_custody")
+        if (type(capture.get("started_monotonic_ns")) is not int
+                or capture["started_monotonic_ns"] < 0
+                or capture.get("boot_session_id", "").lower() != second["boot_session_id"].lower()):
+            raise HarvestRefusal("g10_boot_or_order")
+        captures.append(capture)
+    if first["boot_session_id"].lower() != second["boot_session_id"].lower():
+        raise HarvestRefusal("g10_boot_or_order")
     verify_g10_custody(positive_path, manifest_path, code_root=Path(plan["measurement_root"]),
-        head=record["head"], before_monotonic_ns=observation["first_t0_boundary_monotonic_ns"],
-        boot_id=first["boot_session_id"].lower())
+        head=record["head"], after_monotonic_ns=second["checked_monotonic_ns"],
+        before_monotonic_ns=min(c["started_monotonic_ns"] for c in captures),
+        boot_id=second["boot_session_id"].lower())
     # The bundle carries an exact duplicate for custody, while replay retains
     # original absolute locators embedded by the live producer.
     retained = Path(custody) / "records/g10-custody" / manifest_path.parent.name

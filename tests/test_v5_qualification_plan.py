@@ -533,6 +533,10 @@ class PlanWriterTests(SizingTests):
 class PrerequisiteTests(unittest.TestCase):
     def setUp(self):
         import tempfile
+        # The s1 writer binds G10 to this boot and its own monotonic time.
+        boot = mock.patch.object(readiness, "_current_boot_session_id", return_value="same-boot")
+        boot.start()
+        self.addCleanup(boot.stop)
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name).resolve()
@@ -644,12 +648,12 @@ class PackRosterTests(unittest.TestCase):
                 {"argv_template": {"arguments": [{"kind": "repo_path", "value": path}]}}]}}
         self.tree["stage_graph"] = [
             {"stage_id": "calibration-pre", "kind": "calibration_capture", "input_ref": {"slot": "pre_attempt_id"}},
-            collection("neg8", "configs/campaigns/neg8_reference_corpus"),
+            collection("neg8", "configs/campaigns/neg8_reference_corpus_v5"),
             {"stage_id": "bound-derivation", "kind": "bound_derivation"},
-            collection("start", "configs/campaigns/window_references/start_triplet"),
+            collection("start", "configs/campaigns/window_references_v5/start_triplet"),
             {"stage_id": "science-0", "kind": "campaign_collection"},
-            collection("midpoint", "configs/campaigns/window_references/midpoint"),
-            collection("end", "configs/campaigns/window_references/end_triplet"),
+            collection("midpoint", "configs/campaigns/window_references_v5/midpoint"),
+            collection("end", "configs/campaigns/window_references_v5/end_triplet"),
             {"stage_id": "calibration-post", "kind": "calibration_capture", "input_ref": {"slot": "post_attempt_id"}}]
         patch = mock.patch.object(readiness, "_repo_for_pack", return_value=writer.REPO_ROOT)
         patch.start(); self.addCleanup(patch.stop)

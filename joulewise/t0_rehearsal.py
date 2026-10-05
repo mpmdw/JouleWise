@@ -1796,7 +1796,7 @@ def evaluate_g10(bundle: EvidenceBundle) -> GateResult:
             raise ValueError("privileged anchor positive control did not record the real author refusal code")
         if bundle.manifest.value.get("schema_version") == "joulewise.v5_s1_qualification_bundle.v1":
             from joulewise.v5_qualification import replay_g10_custody
-            evidence.append({"g10_custody": replay_g10_custody(bundle.custody_root, positive)})
+            evidence.append({"g10_custody": replay_g10_custody(bundle.custody_root, positive, bundle=bundle)})
     except (ValueError, OSError, KeyError, TypeError) as exc:
         return _result("G10", name, GateStatus.FAIL, str(exc), *evidence)
     return _result("G10", name, GateStatus.PASS, "real author and arm paths enforce 5 ms +/- 1 ns, and Ed's adjacent privileged control visibly moved the RAW anchor", *evidence)

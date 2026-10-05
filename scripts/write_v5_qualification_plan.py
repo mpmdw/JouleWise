@@ -16,6 +16,7 @@ import re
 import shlex
 import subprocess
 import sys
+import time
 from fractions import Fraction
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -466,17 +467,17 @@ def prerequisites(occurrence, references, head, t0_sequence_start, custody, *, c
         controls[label] = control
     if occurrence == "s1":
         from scripts.ed_session.capture_t0_anchor_positive_control import verify_g10_custody
-        _, raw = read_locator(controls["a1"]["observation"])
-        first_control = readiness.parse_json_bytes(raw)
         positive_path, _ = read_locator(references["g10_control"])
         manifest_path, _ = read_locator(references["g10_artifacts"][0])
+        writer_boot = readiness._current_boot_session_id().lower()
         verify_g10_custody(positive_path, manifest_path, code_root=code_root or REPO_ROOT, head=head,
-            before_monotonic_ns=first_control["first_t0_boundary_monotonic_ns"],
-            boot_id=controls["a1"]["boot_session_id"])
+            after_monotonic_ns=controls["a2"]["checked_monotonic_ns"],
+            before_monotonic_ns=time.monotonic_ns(), boot_id=writer_boot)
         _, raw = read_locator(controls["a2"]["observation"])
         observation = readiness.parse_json_bytes(raw)
         require(controls["a1"]["checked_monotonic_ns"] < observation["first_t0_boundary_monotonic_ns"]
                 and controls["a1"]["boot_session_id"] == controls["a2"]["boot_session_id"], "a1_before_a2_t0")
+        require(controls["a2"]["boot_session_id"].lower() == writer_boot, "g10_boot_or_order")
 
 
 def authenticate_frozen_pack(root, confirmation):
