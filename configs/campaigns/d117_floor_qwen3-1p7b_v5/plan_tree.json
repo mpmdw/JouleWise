@@ -4,14 +4,14 @@
   "plan": {
     "path": "calibration_plan.json",
     "plan_id": "plan-d117-floor-qwen3-1p7b-decode-prefill-p2048-v5",
-    "actual_sha256": "f4992afbfa3e948c70714c6a463dceef73a638a98178379f8f992cb1e6505c54",
-    "declared_sha256": "f4992afbfa3e948c70714c6a463dceef73a638a98178379f8f992cb1e6505c54",
+    "actual_sha256": "9128800eb9fe14bbc1335f07df406b2d7781b2a9b6704543a249387645d2ab07",
+    "declared_sha256": "9128800eb9fe14bbc1335f07df406b2d7781b2a9b6704543a249387645d2ab07",
     "sidecar_path": "calibration_plan.sha256",
-    "sidecar_sha256": "433a8cbbbcca8fcbe97096538a6286033b05c4db9008b02c1839c5fdf041acb9"
+    "sidecar_sha256": "25f1ca3e217aba92e3c102c7216d8ab7e52b5ee83a417fef836e847bbc78d16b"
   },
   "generator": {
     "path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/generate_configs.py",
-    "sha256": "c6e5a655375996dec4f3df23c47ce1ad38bdf2cc63fc299f07a15aec3b1e3b1a"
+    "sha256": "9a248536c51425401cfa18d54e3d4f7cfa955ee13e057726d586e2ef5cec944c"
   },
   "window_identity": {
     "window_id": "plan-d117-floor-qwen3-1p7b-decode-prefill-p2048-v5",
@@ -85,7 +85,7 @@
       "ordinal": 1,
       "stage_id": "01_phase_decode_absolute",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/01_phase_decode_absolute/d117fq31p7-df-ph-decode-abs-r01.json",
-      "config_sha256": "47ba91352d897b2bdd97ac8093bdd50c60ff27ffda41ec2990833b8dcaff1a13",
+      "config_sha256": "5f2d07f5a759bfe68233f0601888440406c0f1f3244fa8ecd72f501be0f87713",
       "run_id": "d117fq31p7-df-ph-decode-abs-r01",
       "role": "absolute_repeat",
       "block_id": null,
@@ -97,7 +97,7 @@
       "ordinal": 2,
       "stage_id": "01_phase_decode_absolute",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/01_phase_decode_absolute/d117fq31p7-df-ph-decode-abs-r02.json",
-      "config_sha256": "f2b270acc16004de0b0cfd23175f87181282de8c2ac5fce82e18cd547a30ddb9",
+      "config_sha256": "855048bb1da43e54f7e5804b26619bf6a5de44f755f41a02512a6c81c7759610",
       "run_id": "d117fq31p7-df-ph-decode-abs-r02",
       "role": "absolute_repeat",
       "block_id": null,
@@ -109,7 +109,7 @@
       "ordinal": 3,
       "stage_id": "01_phase_decode_absolute",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/01_phase_decode_absolute/d117fq31p7-df-ph-decode-abs-r03.json",
-      "config_sha256": "fad56f35e156810c40370f447684b05f9e1412f2f6b643e6a636f4c642177774",
+      "config_sha256": "2a6f69ec3010bb0f4c24a5a909b6b770e5120cb7929ed48f962a3ceea92abdbe",
       "run_id": "d117fq31p7-df-ph-decode-abs-r03",
       "role": "absolute_repeat",
       "block_id": null,
@@ -121,7 +121,7 @@
       "ordinal": 4,
       "stage_id": "01_phase_decode_absolute",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/01_phase_decode_absolute/d117fq31p7-df-ph-decode-abs-r04.json",
-      "config_sha256": "2a30ef06a393921752779dbfb0a100ee82acce078ddc55fe5162407ccef35404",
+      "config_sha256": "817cd449fc42ab6c79953f89a0a7644bf693defdfb3b5fb7e59a97b33f46c6fb",
       "run_id": "d117fq31p7-df-ph-decode-abs-r04",
       "role": "absolute_repeat",
       "block_id": null,
@@ -133,7 +133,7 @@
       "ordinal": 5,
       "stage_id": "01_phase_decode_absolute",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/01_phase_decode_absolute/d117fq31p7-df-ph-decode-abs-r05.json",
-      "config_sha256": "377eb3a6fc724add96eccf288f3539f3cc747537090579000c8abf0c359cb7ed",
+      "config_sha256": "09a94cfcaf9967ec6f24c6cc81e2297b1771962922d7b5b148bd3e8b58a70b9a",
       "run_id": "d117fq31p7-df-ph-decode-abs-r05",
       "role": "absolute_repeat",
       "block_id": null,
@@ -145,7 +145,7 @@
       "ordinal": 6,
       "stage_id": "01_phase_decode_absolute",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/01_phase_decode_absolute/d117fq31p7-df-ph-decode-abs-r06.json",
-      "config_sha256": "a35a20c44566ec326df5067fdf740470397912293aefd3cde5a3a53967a99766",
+      "config_sha256": "27217c9aac9b58dcbe51722a6ac8ac6da33fad2e693ffb44cd653001396fcb93",
       "run_id": "d117fq31p7-df-ph-decode-abs-r06",
       "role": "absolute_repeat",
       "block_id": null,
@@ -157,7 +157,7 @@
       "ordinal": 7,
       "stage_id": "01_phase_decode_absolute",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/01_phase_decode_absolute/d117fq31p7-df-ph-decode-abs-r07.json",
-      "config_sha256": "cfe09bd30cb6ea7fd9e91ea79ff182f57102dce587149a2926f543392ab710ab",
+      "config_sha256": "76a850e5602a5d4514b8004eb608cc34caa9d29c4e6a9283daf72cd836f31621",
       "run_id": "d117fq31p7-df-ph-decode-abs-r07",
       "role": "absolute_repeat",
       "block_id": null,
@@ -169,7 +169,7 @@
       "ordinal": 8,
       "stage_id": "01_phase_decode_absolute",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/01_phase_decode_absolute/d117fq31p7-df-ph-decode-abs-r08.json",
-      "config_sha256": "dd4853d2a8a248cbdaf66dc46453489f169d93a4e85fb87daadceca5cbc5644f",
+      "config_sha256": "aeff59e2cf4d6bb4a2dc681a5c18788159ff2c27fa69ccaff53fa3ef5579138d",
       "run_id": "d117fq31p7-df-ph-decode-abs-r08",
       "role": "absolute_repeat",
       "block_id": null,
@@ -181,7 +181,7 @@
       "ordinal": 9,
       "stage_id": "01_phase_decode_absolute",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/01_phase_decode_absolute/d117fq31p7-df-ph-decode-abs-r09.json",
-      "config_sha256": "c924f79c8b24524f7035990c7c407a5821e57cfd7e5b57f276f76d959a676dd2",
+      "config_sha256": "6d9570e5469806ed27dd94de7b302522a9dfd905ca57401235941b7fbb3bff1e",
       "run_id": "d117fq31p7-df-ph-decode-abs-r09",
       "role": "absolute_repeat",
       "block_id": null,
@@ -193,7 +193,7 @@
       "ordinal": 10,
       "stage_id": "01_phase_decode_absolute",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/01_phase_decode_absolute/d117fq31p7-df-ph-decode-abs-r10.json",
-      "config_sha256": "8353f2f68d11c80a34bef4160f582e38bd7dd94e7cdfba14aff1fca18176acc9",
+      "config_sha256": "dec82fed722aed8de315442998f3ff1d717710f0215b71641519dd73fc6d9752",
       "run_id": "d117fq31p7-df-ph-decode-abs-r10",
       "role": "absolute_repeat",
       "block_id": null,
@@ -205,7 +205,7 @@
       "ordinal": 11,
       "stage_id": "02_phase_decode_abba_blocks_01_05",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/02_phase_decode_abba_blocks_01_05/d117fq31p7-df-cmp-abba-ph-decode-b01-a1.json",
-      "config_sha256": "8a4c134d28687b9584d77692c3e71879304cb632ace3638d483d41e9a4300e45",
+      "config_sha256": "fab74e30bf80e2a424780eabcea0cd043da702221076ee932f4f92b9536040a2",
       "run_id": "d117fq31p7-df-cmp-abba-ph-decode-b01-a1",
       "role": "comparative_abba_member",
       "block_id": "d117-df-cmp-abba-ph-decode-qwen3-1p7b-b01",
@@ -217,7 +217,7 @@
       "ordinal": 12,
       "stage_id": "02_phase_decode_abba_blocks_01_05",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/02_phase_decode_abba_blocks_01_05/d117fq31p7-df-cmp-abba-ph-decode-b01-b1.json",
-      "config_sha256": "97f57603bc6c261b1238b90ceb0362207ca37df7d0d80ffaf780d2a5512a43dc",
+      "config_sha256": "d3c4803a3612f1509dccec1928d54fd5e099baf0302ae6e3ce3fb8129bbaddaa",
       "run_id": "d117fq31p7-df-cmp-abba-ph-decode-b01-b1",
       "role": "comparative_abba_member",
       "block_id": "d117-df-cmp-abba-ph-decode-qwen3-1p7b-b01",
@@ -229,7 +229,7 @@
       "ordinal": 13,
       "stage_id": "02_phase_decode_abba_blocks_01_05",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/02_phase_decode_abba_blocks_01_05/d117fq31p7-df-cmp-abba-ph-decode-b01-b2.json",
-      "config_sha256": "d6e11f6290ec8c6952f03f0815c1b917ec3681dfc19c48fe1cb723c84216b31b",
+      "config_sha256": "460fd3c6c697ac4ac5874f3e743866fab2ec67b7744607bd0f62cca343db36f0",
       "run_id": "d117fq31p7-df-cmp-abba-ph-decode-b01-b2",
       "role": "comparative_abba_member",
       "block_id": "d117-df-cmp-abba-ph-decode-qwen3-1p7b-b01",
@@ -241,7 +241,7 @@
       "ordinal": 14,
       "stage_id": "02_phase_decode_abba_blocks_01_05",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/02_phase_decode_abba_blocks_01_05/d117fq31p7-df-cmp-abba-ph-decode-b01-a2.json",
-      "config_sha256": "83fe41300073ee51e9f0b1743767f74441506ed6e87b625f60d6758cd1875180",
+      "config_sha256": "46f90dadf5823f891c70eb520e9a39e43759f5165433634c5294d685fe435ef5",
       "run_id": "d117fq31p7-df-cmp-abba-ph-decode-b01-a2",
       "role": "comparative_abba_member",
       "block_id": "d117-df-cmp-abba-ph-decode-qwen3-1p7b-b01",
@@ -253,7 +253,7 @@
       "ordinal": 15,
       "stage_id": "02_phase_decode_abba_blocks_01_05",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/02_phase_decode_abba_blocks_01_05/d117fq31p7-df-cmp-abba-ph-decode-b02-a1.json",
-      "config_sha256": "bee87596a7bb4ead1afbc46fc44556970cfad292213ba8d35746948df6840b18",
+      "config_sha256": "8799f4a0ff4994e0a84381b65558d81800b0882d35fd28b47c1bf815236801ee",
       "run_id": "d117fq31p7-df-cmp-abba-ph-decode-b02-a1",
       "role": "comparative_abba_member",
       "block_id": "d117-df-cmp-abba-ph-decode-qwen3-1p7b-b02",
@@ -265,7 +265,7 @@
       "ordinal": 16,
       "stage_id": "02_phase_decode_abba_blocks_01_05",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/02_phase_decode_abba_blocks_01_05/d117fq31p7-df-cmp-abba-ph-decode-b02-b1.json",
-      "config_sha256": "cd252eab58e90a7e9374dcc4f58453f3946cc01a0536ca33af45ec134a4f7082",
+      "config_sha256": "31dbf0e7d5a32bf4eb7bec7fb54b26241390a4938488b831b8964ea248ada80d",
       "run_id": "d117fq31p7-df-cmp-abba-ph-decode-b02-b1",
       "role": "comparative_abba_member",
       "block_id": "d117-df-cmp-abba-ph-decode-qwen3-1p7b-b02",
@@ -277,7 +277,7 @@
       "ordinal": 17,
       "stage_id": "02_phase_decode_abba_blocks_01_05",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/02_phase_decode_abba_blocks_01_05/d117fq31p7-df-cmp-abba-ph-decode-b02-b2.json",
-      "config_sha256": "908c5e69043ed4c99de698951925d5f4c9861b1f2d7b23e0b470cc6c1eabdecb",
+      "config_sha256": "c1e1d7fae0bfe273fd6c40bb1833b13d2eaa90632883e207da1f94b7d033bf17",
       "run_id": "d117fq31p7-df-cmp-abba-ph-decode-b02-b2",
       "role": "comparative_abba_member",
       "block_id": "d117-df-cmp-abba-ph-decode-qwen3-1p7b-b02",
@@ -289,7 +289,7 @@
       "ordinal": 18,
       "stage_id": "02_phase_decode_abba_blocks_01_05",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/02_phase_decode_abba_blocks_01_05/d117fq31p7-df-cmp-abba-ph-decode-b02-a2.json",
-      "config_sha256": "e2bf153b3ce3e52ecd2e6b96dbf1cd180da1fb572e52bb1a0eeda9b539907d27",
+      "config_sha256": "53e6017008857b715d794982723f686155618493d5cfdab1bd3785e8d14d259f",
       "run_id": "d117fq31p7-df-cmp-abba-ph-decode-b02-a2",
       "role": "comparative_abba_member",
       "block_id": "d117-df-cmp-abba-ph-decode-qwen3-1p7b-b02",
@@ -301,7 +301,7 @@
       "ordinal": 19,
       "stage_id": "02_phase_decode_abba_blocks_01_05",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/02_phase_decode_abba_blocks_01_05/d117fq31p7-df-cmp-abba-ph-decode-b03-a1.json",
-      "config_sha256": "259bbaedd8f50b4c3b2f24b73736ae71e0bdbab78ab22787c7a1f82a38ff33b1",
+      "config_sha256": "ff8b78fec255fa0d6d8fdb91925ca69a6120f25a6c7a70e3245dcba3abf65e70",
       "run_id": "d117fq31p7-df-cmp-abba-ph-decode-b03-a1",
       "role": "comparative_abba_member",
       "block_id": "d117-df-cmp-abba-ph-decode-qwen3-1p7b-b03",
@@ -313,7 +313,7 @@
       "ordinal": 20,
       "stage_id": "02_phase_decode_abba_blocks_01_05",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/02_phase_decode_abba_blocks_01_05/d117fq31p7-df-cmp-abba-ph-decode-b03-b1.json",
-      "config_sha256": "6163b416a04e6a67f9c7476b4dfbb227a90cdb37df21f37946ad0fdef9133088",
+      "config_sha256": "eacb92b012177b6878890cc94f4fc7f1edca79605b61362d440a0821fc0d734e",
       "run_id": "d117fq31p7-df-cmp-abba-ph-decode-b03-b1",
       "role": "comparative_abba_member",
       "block_id": "d117-df-cmp-abba-ph-decode-qwen3-1p7b-b03",
@@ -325,7 +325,7 @@
       "ordinal": 21,
       "stage_id": "02_phase_decode_abba_blocks_01_05",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/02_phase_decode_abba_blocks_01_05/d117fq31p7-df-cmp-abba-ph-decode-b03-b2.json",
-      "config_sha256": "779e8825394ee022554232b234f19aac7d70b0ab4e77774fd53c77f6bcde9857",
+      "config_sha256": "da94b57ce609b8d4cace431ca0ec519448a1bde877b43ccf2d46cacdb2bcf3c8",
       "run_id": "d117fq31p7-df-cmp-abba-ph-decode-b03-b2",
       "role": "comparative_abba_member",
       "block_id": "d117-df-cmp-abba-ph-decode-qwen3-1p7b-b03",
@@ -337,7 +337,7 @@
       "ordinal": 22,
       "stage_id": "02_phase_decode_abba_blocks_01_05",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/02_phase_decode_abba_blocks_01_05/d117fq31p7-df-cmp-abba-ph-decode-b03-a2.json",
-      "config_sha256": "ff016b69e13c6780cdbc0a8607b2209637aed8d42bb74df45242aafb44280260",
+      "config_sha256": "cadef2bab5a798abebc07f6d30e63d9519ca2c5808ee3539fbf51725d1189b0e",
       "run_id": "d117fq31p7-df-cmp-abba-ph-decode-b03-a2",
       "role": "comparative_abba_member",
       "block_id": "d117-df-cmp-abba-ph-decode-qwen3-1p7b-b03",
@@ -349,7 +349,7 @@
       "ordinal": 23,
       "stage_id": "02_phase_decode_abba_blocks_01_05",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/02_phase_decode_abba_blocks_01_05/d117fq31p7-df-cmp-abba-ph-decode-b04-a1.json",
-      "config_sha256": "91cc286fe4cbc90e33ffb2b5eec900274e7a16aa7e2a7ad4df2224ec67d7fcfd",
+      "config_sha256": "feaa96c18e7a6a4e2396c5f42b9883bc2a137d6b21e0a7e57674d2e63881df02",
       "run_id": "d117fq31p7-df-cmp-abba-ph-decode-b04-a1",
       "role": "comparative_abba_member",
       "block_id": "d117-df-cmp-abba-ph-decode-qwen3-1p7b-b04",
@@ -361,7 +361,7 @@
       "ordinal": 24,
       "stage_id": "02_phase_decode_abba_blocks_01_05",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/02_phase_decode_abba_blocks_01_05/d117fq31p7-df-cmp-abba-ph-decode-b04-b1.json",
-      "config_sha256": "e64594837b5ad566468a59ac8b53f239c3f20cba73f63a7a8633c4036a2d0414",
+      "config_sha256": "c66e55919f76c8479d2fb781f448abc0e2e86b1bc4c7a23d7b30e3f7d539aac8",
       "run_id": "d117fq31p7-df-cmp-abba-ph-decode-b04-b1",
       "role": "comparative_abba_member",
       "block_id": "d117-df-cmp-abba-ph-decode-qwen3-1p7b-b04",
@@ -373,7 +373,7 @@
       "ordinal": 25,
       "stage_id": "02_phase_decode_abba_blocks_01_05",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/02_phase_decode_abba_blocks_01_05/d117fq31p7-df-cmp-abba-ph-decode-b04-b2.json",
-      "config_sha256": "f0e7f4db361cae347da9f6b158daa30cc2612f45a8d96293514aa995aadbc735",
+      "config_sha256": "14171fddb636628a9b5d943c4f9ed07d67a3ff47ea5894b56c7e4d2b17b19baf",
       "run_id": "d117fq31p7-df-cmp-abba-ph-decode-b04-b2",
       "role": "comparative_abba_member",
       "block_id": "d117-df-cmp-abba-ph-decode-qwen3-1p7b-b04",
@@ -385,7 +385,7 @@
       "ordinal": 26,
       "stage_id": "02_phase_decode_abba_blocks_01_05",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/02_phase_decode_abba_blocks_01_05/d117fq31p7-df-cmp-abba-ph-decode-b04-a2.json",
-      "config_sha256": "4014b00b94bc546033693c672ee09c440f6dfcb122f64e228e0402c8ff94b584",
+      "config_sha256": "2ee97199ce8ea32b602c0082e9b58e202726ae61086adf6336c83efb1fd4e1d0",
       "run_id": "d117fq31p7-df-cmp-abba-ph-decode-b04-a2",
       "role": "comparative_abba_member",
       "block_id": "d117-df-cmp-abba-ph-decode-qwen3-1p7b-b04",
@@ -397,7 +397,7 @@
       "ordinal": 27,
       "stage_id": "02_phase_decode_abba_blocks_01_05",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/02_phase_decode_abba_blocks_01_05/d117fq31p7-df-cmp-abba-ph-decode-b05-a1.json",
-      "config_sha256": "e67d1b621d55fd60af7b035d6eaa22a7915b9e0df6f3d5c9d9d2a03d39818660",
+      "config_sha256": "366f7038c1e5f684edae2b54321f78de3c028c428cbc8357a4b6ab70bd959e3a",
       "run_id": "d117fq31p7-df-cmp-abba-ph-decode-b05-a1",
       "role": "comparative_abba_member",
       "block_id": "d117-df-cmp-abba-ph-decode-qwen3-1p7b-b05",
@@ -409,7 +409,7 @@
       "ordinal": 28,
       "stage_id": "02_phase_decode_abba_blocks_01_05",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/02_phase_decode_abba_blocks_01_05/d117fq31p7-df-cmp-abba-ph-decode-b05-b1.json",
-      "config_sha256": "cb98759b9967a2abacea0270015be7b20f0f26429a06898fafeb8b34aea40c79",
+      "config_sha256": "7476cad6aa1b75b56aad933d09d5d357ad9b6744ca858c7449d919c016911ed5",
       "run_id": "d117fq31p7-df-cmp-abba-ph-decode-b05-b1",
       "role": "comparative_abba_member",
       "block_id": "d117-df-cmp-abba-ph-decode-qwen3-1p7b-b05",
@@ -421,7 +421,7 @@
       "ordinal": 29,
       "stage_id": "02_phase_decode_abba_blocks_01_05",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/02_phase_decode_abba_blocks_01_05/d117fq31p7-df-cmp-abba-ph-decode-b05-b2.json",
-      "config_sha256": "b2ce0dd8d3fa924991999cd7b635ffb76dc1bafd10bee267c1afdef1760b5373",
+      "config_sha256": "b934a1b1071d7c7645acd4a870ca2876fa38827f161899905fc58aef41f39937",
       "run_id": "d117fq31p7-df-cmp-abba-ph-decode-b05-b2",
       "role": "comparative_abba_member",
       "block_id": "d117-df-cmp-abba-ph-decode-qwen3-1p7b-b05",
@@ -433,7 +433,7 @@
       "ordinal": 30,
       "stage_id": "02_phase_decode_abba_blocks_01_05",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/02_phase_decode_abba_blocks_01_05/d117fq31p7-df-cmp-abba-ph-decode-b05-a2.json",
-      "config_sha256": "00997240c878fa0a14ac5bf737f35f99dd26d9b7c7184aa106db58ebbc88662c",
+      "config_sha256": "ea8e9134b238dba4209d4bfe7339aa2e5119d194ca70c625d344ca08b51fdc46",
       "run_id": "d117fq31p7-df-cmp-abba-ph-decode-b05-a2",
       "role": "comparative_abba_member",
       "block_id": "d117-df-cmp-abba-ph-decode-qwen3-1p7b-b05",
@@ -445,7 +445,7 @@
       "ordinal": 31,
       "stage_id": "03_phase_decode_abba_blocks_06_10",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/03_phase_decode_abba_blocks_06_10/d117fq31p7-df-cmp-abba-ph-decode-b06-a1.json",
-      "config_sha256": "ce1b9c759276612b21518d5944d805786fc1cf13a449af27279403ed7ae4d76d",
+      "config_sha256": "b9619783289bce9e99094c4294ebd115c3dcc0f53838cfd806d0eadf3983bca8",
       "run_id": "d117fq31p7-df-cmp-abba-ph-decode-b06-a1",
       "role": "comparative_abba_member",
       "block_id": "d117-df-cmp-abba-ph-decode-qwen3-1p7b-b06",
@@ -457,7 +457,7 @@
       "ordinal": 32,
       "stage_id": "03_phase_decode_abba_blocks_06_10",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/03_phase_decode_abba_blocks_06_10/d117fq31p7-df-cmp-abba-ph-decode-b06-b1.json",
-      "config_sha256": "6ee67970bc604e7295faf8b6130a8141e8fd423be52927b58e5b464539c3838a",
+      "config_sha256": "7d8f293137ca64b74b6b3e07cbcedec46f46fcf65c9b7f074b84f06145556fe9",
       "run_id": "d117fq31p7-df-cmp-abba-ph-decode-b06-b1",
       "role": "comparative_abba_member",
       "block_id": "d117-df-cmp-abba-ph-decode-qwen3-1p7b-b06",
@@ -469,7 +469,7 @@
       "ordinal": 33,
       "stage_id": "03_phase_decode_abba_blocks_06_10",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/03_phase_decode_abba_blocks_06_10/d117fq31p7-df-cmp-abba-ph-decode-b06-b2.json",
-      "config_sha256": "846b67ae4807a6c4e7a637b1c1ed56686a2438b9ffad7d87e1b4db3902e98678",
+      "config_sha256": "dcee5718ffdcde41cfb0bb290718b75df9a3978e59a96af4eaf54c2bc7b211a1",
       "run_id": "d117fq31p7-df-cmp-abba-ph-decode-b06-b2",
       "role": "comparative_abba_member",
       "block_id": "d117-df-cmp-abba-ph-decode-qwen3-1p7b-b06",
@@ -481,7 +481,7 @@
       "ordinal": 34,
       "stage_id": "03_phase_decode_abba_blocks_06_10",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/03_phase_decode_abba_blocks_06_10/d117fq31p7-df-cmp-abba-ph-decode-b06-a2.json",
-      "config_sha256": "a804b1778418b99f2b20f1110019a0ea916d07d97b9056ec21a245053ec7eca2",
+      "config_sha256": "029869dbe0612af65415f7ed0c2b6bc16ae67a6982d276eed7ccd14850f40167",
       "run_id": "d117fq31p7-df-cmp-abba-ph-decode-b06-a2",
       "role": "comparative_abba_member",
       "block_id": "d117-df-cmp-abba-ph-decode-qwen3-1p7b-b06",
@@ -493,7 +493,7 @@
       "ordinal": 35,
       "stage_id": "03_phase_decode_abba_blocks_06_10",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/03_phase_decode_abba_blocks_06_10/d117fq31p7-df-cmp-abba-ph-decode-b07-a1.json",
-      "config_sha256": "8ed44a355ba2a7b48a5330ac2a87bfa69ff7b963d5bac89797a6af7f077cdc12",
+      "config_sha256": "fd4983b202bd1043fa5deebd1828e72480999e5110b51bc3de6174bb64e8534f",
       "run_id": "d117fq31p7-df-cmp-abba-ph-decode-b07-a1",
       "role": "comparative_abba_member",
       "block_id": "d117-df-cmp-abba-ph-decode-qwen3-1p7b-b07",
@@ -505,7 +505,7 @@
       "ordinal": 36,
       "stage_id": "03_phase_decode_abba_blocks_06_10",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/03_phase_decode_abba_blocks_06_10/d117fq31p7-df-cmp-abba-ph-decode-b07-b1.json",
-      "config_sha256": "4e66dcebe5dd64e2fc4862e827fb1a4a58a0188a18fa331590e856d75080978e",
+      "config_sha256": "7794c80f8d04b3a527b8a0cf23a265c07e5b62ebee8743b55b9be23c39a369d0",
       "run_id": "d117fq31p7-df-cmp-abba-ph-decode-b07-b1",
       "role": "comparative_abba_member",
       "block_id": "d117-df-cmp-abba-ph-decode-qwen3-1p7b-b07",
@@ -517,7 +517,7 @@
       "ordinal": 37,
       "stage_id": "03_phase_decode_abba_blocks_06_10",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/03_phase_decode_abba_blocks_06_10/d117fq31p7-df-cmp-abba-ph-decode-b07-b2.json",
-      "config_sha256": "6b52516e2ce187494f2cb9323c8f9bf9b514578956aa5fd603d4919c2b6bce83",
+      "config_sha256": "f95780524bbff01cc8bc1b21e0ddaffefded930f47775a08330283596ae74902",
       "run_id": "d117fq31p7-df-cmp-abba-ph-decode-b07-b2",
       "role": "comparative_abba_member",
       "block_id": "d117-df-cmp-abba-ph-decode-qwen3-1p7b-b07",
@@ -529,7 +529,7 @@
       "ordinal": 38,
       "stage_id": "03_phase_decode_abba_blocks_06_10",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/03_phase_decode_abba_blocks_06_10/d117fq31p7-df-cmp-abba-ph-decode-b07-a2.json",
-      "config_sha256": "49c9cc5925149dedf095cd76845df9c717a5a152c849e1d8d376c758eea324ec",
+      "config_sha256": "871fedcfc15a3a95bcd0e5fab707f0040cf29e4399cada0ed8b045754df02bf0",
       "run_id": "d117fq31p7-df-cmp-abba-ph-decode-b07-a2",
       "role": "comparative_abba_member",
       "block_id": "d117-df-cmp-abba-ph-decode-qwen3-1p7b-b07",
@@ -541,7 +541,7 @@
       "ordinal": 39,
       "stage_id": "03_phase_decode_abba_blocks_06_10",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/03_phase_decode_abba_blocks_06_10/d117fq31p7-df-cmp-abba-ph-decode-b08-a1.json",
-      "config_sha256": "e9f96868d29b3c7081434491dfd298f196591aa481a6c4143d16f98b4e8f283f",
+      "config_sha256": "0517f874ebfc96c3afe98e1a1d42a601f17a36d000b9ad2c57fe8253f59faeb9",
       "run_id": "d117fq31p7-df-cmp-abba-ph-decode-b08-a1",
       "role": "comparative_abba_member",
       "block_id": "d117-df-cmp-abba-ph-decode-qwen3-1p7b-b08",
@@ -553,7 +553,7 @@
       "ordinal": 40,
       "stage_id": "03_phase_decode_abba_blocks_06_10",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/03_phase_decode_abba_blocks_06_10/d117fq31p7-df-cmp-abba-ph-decode-b08-b1.json",
-      "config_sha256": "4d0ec4a3bafb796cf5347a53a5ca2ae716f45051a03e67f0bf11874787aba551",
+      "config_sha256": "68220ed1fde49222ffb11dbf2d1007f665ab06d87f86adca969b328b36a5d892",
       "run_id": "d117fq31p7-df-cmp-abba-ph-decode-b08-b1",
       "role": "comparative_abba_member",
       "block_id": "d117-df-cmp-abba-ph-decode-qwen3-1p7b-b08",
@@ -565,7 +565,7 @@
       "ordinal": 41,
       "stage_id": "03_phase_decode_abba_blocks_06_10",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/03_phase_decode_abba_blocks_06_10/d117fq31p7-df-cmp-abba-ph-decode-b08-b2.json",
-      "config_sha256": "c74a103ecc1745e4db89415d8a75dd303176ff1681c17f638370ead22337bd48",
+      "config_sha256": "c634f4487b9daab3e9577a5d43cf7f1e06703e72b1d66b4d5e54f0d75a10a27f",
       "run_id": "d117fq31p7-df-cmp-abba-ph-decode-b08-b2",
       "role": "comparative_abba_member",
       "block_id": "d117-df-cmp-abba-ph-decode-qwen3-1p7b-b08",
@@ -577,7 +577,7 @@
       "ordinal": 42,
       "stage_id": "03_phase_decode_abba_blocks_06_10",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/03_phase_decode_abba_blocks_06_10/d117fq31p7-df-cmp-abba-ph-decode-b08-a2.json",
-      "config_sha256": "7c1aa7aadb6a4f5982d521b749650eb9147412d5d23014ff251911af94d5b04d",
+      "config_sha256": "ddf61578f0d3b449682c879b5a7bc25a53b1d247264c8896016f23569245d4f6",
       "run_id": "d117fq31p7-df-cmp-abba-ph-decode-b08-a2",
       "role": "comparative_abba_member",
       "block_id": "d117-df-cmp-abba-ph-decode-qwen3-1p7b-b08",
@@ -589,7 +589,7 @@
       "ordinal": 43,
       "stage_id": "03_phase_decode_abba_blocks_06_10",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/03_phase_decode_abba_blocks_06_10/d117fq31p7-df-cmp-abba-ph-decode-b09-a1.json",
-      "config_sha256": "5dd5b00cc6e49fc2ab44fd72228285d7e54b120e81214c4f2fe82805cc916c72",
+      "config_sha256": "3cc752eee44ff399ff36d50385f2c953c5432cc7fa98ef3708aa3e164d0c4046",
       "run_id": "d117fq31p7-df-cmp-abba-ph-decode-b09-a1",
       "role": "comparative_abba_member",
       "block_id": "d117-df-cmp-abba-ph-decode-qwen3-1p7b-b09",
@@ -601,7 +601,7 @@
       "ordinal": 44,
       "stage_id": "03_phase_decode_abba_blocks_06_10",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/03_phase_decode_abba_blocks_06_10/d117fq31p7-df-cmp-abba-ph-decode-b09-b1.json",
-      "config_sha256": "913391f35da7a300fcbe843f27b3f33a16f8d77cfe74ce0537339e7fbeda737e",
+      "config_sha256": "1e51ec33618056205b0a1c362cabc07705f7ca059dcc8c91845d8dd4eff3f37d",
       "run_id": "d117fq31p7-df-cmp-abba-ph-decode-b09-b1",
       "role": "comparative_abba_member",
       "block_id": "d117-df-cmp-abba-ph-decode-qwen3-1p7b-b09",
@@ -613,7 +613,7 @@
       "ordinal": 45,
       "stage_id": "03_phase_decode_abba_blocks_06_10",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/03_phase_decode_abba_blocks_06_10/d117fq31p7-df-cmp-abba-ph-decode-b09-b2.json",
-      "config_sha256": "8cb455352db88ad385b56b794fda0c30c3483f9572283c0573f6a93c9bea0d48",
+      "config_sha256": "778af18d073e3528001b71b3aab6c96f7e91825cb2307843e7db57b5b74bf4f3",
       "run_id": "d117fq31p7-df-cmp-abba-ph-decode-b09-b2",
       "role": "comparative_abba_member",
       "block_id": "d117-df-cmp-abba-ph-decode-qwen3-1p7b-b09",
@@ -625,7 +625,7 @@
       "ordinal": 46,
       "stage_id": "03_phase_decode_abba_blocks_06_10",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/03_phase_decode_abba_blocks_06_10/d117fq31p7-df-cmp-abba-ph-decode-b09-a2.json",
-      "config_sha256": "10713ca2bb16c68c59dac5594f7804603a0f759e3a73539ca82cdc228d670997",
+      "config_sha256": "d0aef67540b89a8a9a4025efcb01ea25c26bcb705977c8bc509db80bd896dbb0",
       "run_id": "d117fq31p7-df-cmp-abba-ph-decode-b09-a2",
       "role": "comparative_abba_member",
       "block_id": "d117-df-cmp-abba-ph-decode-qwen3-1p7b-b09",
@@ -637,7 +637,7 @@
       "ordinal": 47,
       "stage_id": "03_phase_decode_abba_blocks_06_10",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/03_phase_decode_abba_blocks_06_10/d117fq31p7-df-cmp-abba-ph-decode-b10-a1.json",
-      "config_sha256": "efac18a706c6d5c3e6ba36834e215efc9d2bca8bbf9d1705908a810aa8aa2762",
+      "config_sha256": "3445e6ecae2581787db64d3dc44097221626fc6f8f463099055d6c780a3baf53",
       "run_id": "d117fq31p7-df-cmp-abba-ph-decode-b10-a1",
       "role": "comparative_abba_member",
       "block_id": "d117-df-cmp-abba-ph-decode-qwen3-1p7b-b10",
@@ -649,7 +649,7 @@
       "ordinal": 48,
       "stage_id": "03_phase_decode_abba_blocks_06_10",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/03_phase_decode_abba_blocks_06_10/d117fq31p7-df-cmp-abba-ph-decode-b10-b1.json",
-      "config_sha256": "c48f4d2e7147e642b23590981555b8d13e71673a398a4ad0cf9bc6c301b5f387",
+      "config_sha256": "1988562b1b98b49c3084fead5c35f7cfe7b24ba0978cc40a139cfafcaa46154f",
       "run_id": "d117fq31p7-df-cmp-abba-ph-decode-b10-b1",
       "role": "comparative_abba_member",
       "block_id": "d117-df-cmp-abba-ph-decode-qwen3-1p7b-b10",
@@ -661,7 +661,7 @@
       "ordinal": 49,
       "stage_id": "03_phase_decode_abba_blocks_06_10",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/03_phase_decode_abba_blocks_06_10/d117fq31p7-df-cmp-abba-ph-decode-b10-b2.json",
-      "config_sha256": "adb146da00d36569c90cefa61572111e3e579f38fa17942e114e336648b34d2f",
+      "config_sha256": "17a92e755f6f293ce25107a0a27a9bd1c40a4b85e56e88ea533f8adcdc6fc149",
       "run_id": "d117fq31p7-df-cmp-abba-ph-decode-b10-b2",
       "role": "comparative_abba_member",
       "block_id": "d117-df-cmp-abba-ph-decode-qwen3-1p7b-b10",
@@ -673,7 +673,7 @@
       "ordinal": 50,
       "stage_id": "03_phase_decode_abba_blocks_06_10",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/03_phase_decode_abba_blocks_06_10/d117fq31p7-df-cmp-abba-ph-decode-b10-a2.json",
-      "config_sha256": "bc2baeb8fa29a7aca34e33b600ddecacc971934718216f4471f3ebf7104decbe",
+      "config_sha256": "f22d67c48ad3cfd42a993aed3ec376997751c67d932f1c9ea628a7a7d89119a7",
       "run_id": "d117fq31p7-df-cmp-abba-ph-decode-b10-a2",
       "role": "comparative_abba_member",
       "block_id": "d117-df-cmp-abba-ph-decode-qwen3-1p7b-b10",
@@ -685,7 +685,7 @@
       "ordinal": 51,
       "stage_id": "04_phase_prefill_p2048_absolute",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/04_phase_prefill_p2048_absolute/d117fq31p7-df-ph-prefill-p2048-abs-r01.json",
-      "config_sha256": "ceb7ff3a954af19f9c05b2aa83b80fd6edea5eb20265747b0e0901e31b28cb7b",
+      "config_sha256": "a8164f02afa7d0b010f38ec767c4a1f5c4fe2cc9b4b15ffe5e8e2ee16eff3243",
       "run_id": "d117fq31p7-df-ph-prefill-p2048-abs-r01",
       "role": "absolute_repeat",
       "block_id": null,
@@ -697,7 +697,7 @@
       "ordinal": 52,
       "stage_id": "04_phase_prefill_p2048_absolute",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/04_phase_prefill_p2048_absolute/d117fq31p7-df-ph-prefill-p2048-abs-r02.json",
-      "config_sha256": "7244e034001ce28d27728827be7d268e27c20bace348294556e9091197d9b0fa",
+      "config_sha256": "1daaeb332fb34206f18ae5defc2a9de92e378f919ab1a50f267cb3ac3bc00ff2",
       "run_id": "d117fq31p7-df-ph-prefill-p2048-abs-r02",
       "role": "absolute_repeat",
       "block_id": null,
@@ -709,7 +709,7 @@
       "ordinal": 53,
       "stage_id": "04_phase_prefill_p2048_absolute",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/04_phase_prefill_p2048_absolute/d117fq31p7-df-ph-prefill-p2048-abs-r03.json",
-      "config_sha256": "d5bd611cc98cbdb870c90d7180b3aea5ae73c38ff3e97021c54b3d70680202d7",
+      "config_sha256": "c8daac31ae1e332b58576a45b5950bf39b5aaf155124fbe72d027af35c217db4",
       "run_id": "d117fq31p7-df-ph-prefill-p2048-abs-r03",
       "role": "absolute_repeat",
       "block_id": null,
@@ -721,7 +721,7 @@
       "ordinal": 54,
       "stage_id": "04_phase_prefill_p2048_absolute",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/04_phase_prefill_p2048_absolute/d117fq31p7-df-ph-prefill-p2048-abs-r04.json",
-      "config_sha256": "21c5ee91d799e58c4ba74cb28095803ba9956b3db859c3272531d7d2dec9d8c0",
+      "config_sha256": "d6d59727bbdaa6dcc096d79a84341ed2edbf3be2000649a0c90eb8fecda6b483",
       "run_id": "d117fq31p7-df-ph-prefill-p2048-abs-r04",
       "role": "absolute_repeat",
       "block_id": null,
@@ -733,7 +733,7 @@
       "ordinal": 55,
       "stage_id": "04_phase_prefill_p2048_absolute",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/04_phase_prefill_p2048_absolute/d117fq31p7-df-ph-prefill-p2048-abs-r05.json",
-      "config_sha256": "9fa9ce4418e590186b5b8cad70531ff35ee6430392988299376ca2932eb65c7e",
+      "config_sha256": "b2eddc3310156b4d66ef5c34288bc0702dc36397278320cc040ed1e162af5e93",
       "run_id": "d117fq31p7-df-ph-prefill-p2048-abs-r05",
       "role": "absolute_repeat",
       "block_id": null,
@@ -745,7 +745,7 @@
       "ordinal": 56,
       "stage_id": "04_phase_prefill_p2048_absolute",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/04_phase_prefill_p2048_absolute/d117fq31p7-df-ph-prefill-p2048-abs-r06.json",
-      "config_sha256": "a3b6339d2240317878b73a0a8ba351482bdfca167b1e0c64a5fb13f77b5eecb0",
+      "config_sha256": "7b79a43eed7b42097d90aa18adf29f9556f69681641de93a0deb3b5eaff3c0cb",
       "run_id": "d117fq31p7-df-ph-prefill-p2048-abs-r06",
       "role": "absolute_repeat",
       "block_id": null,
@@ -757,7 +757,7 @@
       "ordinal": 57,
       "stage_id": "04_phase_prefill_p2048_absolute",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/04_phase_prefill_p2048_absolute/d117fq31p7-df-ph-prefill-p2048-abs-r07.json",
-      "config_sha256": "599457527e33ed9bf5f33db8d5a2c2d605ce0a51d843ea6a2ac96f39b3d0f30c",
+      "config_sha256": "e8a3e23cad3d118468e3b702135454e526c86089ba74e2a94cc5ec1f58881c8f",
       "run_id": "d117fq31p7-df-ph-prefill-p2048-abs-r07",
       "role": "absolute_repeat",
       "block_id": null,
@@ -769,7 +769,7 @@
       "ordinal": 58,
       "stage_id": "04_phase_prefill_p2048_absolute",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/04_phase_prefill_p2048_absolute/d117fq31p7-df-ph-prefill-p2048-abs-r08.json",
-      "config_sha256": "7ebd3fd2f01bb7eb3ad5d7e20f7c2e03f9415f9d4d2c22d71c6b1238257d99a5",
+      "config_sha256": "9d222d1b69c2293704f4f0bef7443daff8c21ca388dfa90cd7d674204301be45",
       "run_id": "d117fq31p7-df-ph-prefill-p2048-abs-r08",
       "role": "absolute_repeat",
       "block_id": null,
@@ -781,7 +781,7 @@
       "ordinal": 59,
       "stage_id": "04_phase_prefill_p2048_absolute",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/04_phase_prefill_p2048_absolute/d117fq31p7-df-ph-prefill-p2048-abs-r09.json",
-      "config_sha256": "09fb88920f73460c75be753f25fb87d5fe2754a173f5cc8905d13921deb12b81",
+      "config_sha256": "bbd1272f9fc538a8e2b8d55a064cc3cdeb1e26f88e30e40d1ed1671c14171a3a",
       "run_id": "d117fq31p7-df-ph-prefill-p2048-abs-r09",
       "role": "absolute_repeat",
       "block_id": null,
@@ -793,7 +793,7 @@
       "ordinal": 60,
       "stage_id": "04_phase_prefill_p2048_absolute",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/04_phase_prefill_p2048_absolute/d117fq31p7-df-ph-prefill-p2048-abs-r10.json",
-      "config_sha256": "14bec6809f5f76c175a94a74a7e91efed03c61df2bf07eb7cd0d5f86b1dbeb49",
+      "config_sha256": "7cbcc2eb1c7786676dbc1b0c647ee40e653bc65869401df3cc26e9e80ee01cea",
       "run_id": "d117fq31p7-df-ph-prefill-p2048-abs-r10",
       "role": "absolute_repeat",
       "block_id": null,
@@ -805,7 +805,7 @@
       "ordinal": 61,
       "stage_id": "05_phase_prefill_p2048_abba_blocks_01_05",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/05_phase_prefill_p2048_abba_blocks_01_05/d117fq31p7-df-cmp-abba-ph-prefill-p2048-b01-a1.json",
-      "config_sha256": "82f1bd130c9921555ad9f13c30760bd60cb1ba14cceefa4a0d491c992e075cba",
+      "config_sha256": "877a3b7a6f0046f3b616db30e897f1e5c4343daa1b7628ac9edf50a06bda67d3",
       "run_id": "d117fq31p7-df-cmp-abba-ph-prefill-p2048-b01-a1",
       "role": "comparative_abba_member",
       "block_id": "d117-df-cmp-abba-ph-prefill-p2048-qwen3-1p7b-b01",
@@ -817,7 +817,7 @@
       "ordinal": 62,
       "stage_id": "05_phase_prefill_p2048_abba_blocks_01_05",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/05_phase_prefill_p2048_abba_blocks_01_05/d117fq31p7-df-cmp-abba-ph-prefill-p2048-b01-b1.json",
-      "config_sha256": "6efe39e4afba0b8abe1dc0dc5192606e83017599e9917bfd7c474472ae3092ef",
+      "config_sha256": "63a4123309566b1ecb8282c98acb25e6cac53c322738fa25809d1169679451b7",
       "run_id": "d117fq31p7-df-cmp-abba-ph-prefill-p2048-b01-b1",
       "role": "comparative_abba_member",
       "block_id": "d117-df-cmp-abba-ph-prefill-p2048-qwen3-1p7b-b01",
@@ -829,7 +829,7 @@
       "ordinal": 63,
       "stage_id": "05_phase_prefill_p2048_abba_blocks_01_05",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/05_phase_prefill_p2048_abba_blocks_01_05/d117fq31p7-df-cmp-abba-ph-prefill-p2048-b01-b2.json",
-      "config_sha256": "2819b959a26d9656ef1b9e00a163522aee292b186c920b74587a5c77c962e096",
+      "config_sha256": "47387523b5132dde71f4af868ba9267a2cc169568a5252938b6c8cf26d869231",
       "run_id": "d117fq31p7-df-cmp-abba-ph-prefill-p2048-b01-b2",
       "role": "comparative_abba_member",
       "block_id": "d117-df-cmp-abba-ph-prefill-p2048-qwen3-1p7b-b01",
@@ -841,7 +841,7 @@
       "ordinal": 64,
       "stage_id": "05_phase_prefill_p2048_abba_blocks_01_05",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/05_phase_prefill_p2048_abba_blocks_01_05/d117fq31p7-df-cmp-abba-ph-prefill-p2048-b01-a2.json",
-      "config_sha256": "d4e54c788265e55cccd49561e78cf7cdf871b6ac6a8a3546824dbaa5fab12a6f",
+      "config_sha256": "8459d32f3423c25c2fa98c06c1e645a37fd153ad8a446ac1a7eb28e88c472371",
       "run_id": "d117fq31p7-df-cmp-abba-ph-prefill-p2048-b01-a2",
       "role": "comparative_abba_member",
       "block_id": "d117-df-cmp-abba-ph-prefill-p2048-qwen3-1p7b-b01",
@@ -853,7 +853,7 @@
       "ordinal": 65,
       "stage_id": "05_phase_prefill_p2048_abba_blocks_01_05",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/05_phase_prefill_p2048_abba_blocks_01_05/d117fq31p7-df-cmp-abba-ph-prefill-p2048-b02-a1.json",
-      "config_sha256": "e2352e2f9d512efa64f540611c12b86ae809ab6ea4568e80a4940495c7ed4e87",
+      "config_sha256": "0070e6f615bbb6780284e2c260fe3d550146d3d4e3b795ca400562ed217ea765",
       "run_id": "d117fq31p7-df-cmp-abba-ph-prefill-p2048-b02-a1",
       "role": "comparative_abba_member",
       "block_id": "d117-df-cmp-abba-ph-prefill-p2048-qwen3-1p7b-b02",
@@ -865,7 +865,7 @@
       "ordinal": 66,
       "stage_id": "05_phase_prefill_p2048_abba_blocks_01_05",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/05_phase_prefill_p2048_abba_blocks_01_05/d117fq31p7-df-cmp-abba-ph-prefill-p2048-b02-b1.json",
-      "config_sha256": "bcfa8769b01fb497cef718bbfd7e3940feaa16306f4d3896c3bcf874782f4d55",
+      "config_sha256": "58b31642bca9490e743722e82b895d189086b27acd315d1870d2f996c990045b",
       "run_id": "d117fq31p7-df-cmp-abba-ph-prefill-p2048-b02-b1",
       "role": "comparative_abba_member",
       "block_id": "d117-df-cmp-abba-ph-prefill-p2048-qwen3-1p7b-b02",
@@ -877,7 +877,7 @@
       "ordinal": 67,
       "stage_id": "05_phase_prefill_p2048_abba_blocks_01_05",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/05_phase_prefill_p2048_abba_blocks_01_05/d117fq31p7-df-cmp-abba-ph-prefill-p2048-b02-b2.json",
-      "config_sha256": "b6aa51403b43b7fb8b8ebaa65191cb76bb1ad7ef027f371bbc78b334325637d7",
+      "config_sha256": "cbe0a0f709f1b159d92ff0e2249ee665512e39a9ad7753c3bac6fdeaddd8cf12",
       "run_id": "d117fq31p7-df-cmp-abba-ph-prefill-p2048-b02-b2",
       "role": "comparative_abba_member",
       "block_id": "d117-df-cmp-abba-ph-prefill-p2048-qwen3-1p7b-b02",
@@ -889,7 +889,7 @@
       "ordinal": 68,
       "stage_id": "05_phase_prefill_p2048_abba_blocks_01_05",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/05_phase_prefill_p2048_abba_blocks_01_05/d117fq31p7-df-cmp-abba-ph-prefill-p2048-b02-a2.json",
-      "config_sha256": "c07f72635ef6d6e16d1cc54becedb5153790c81a4a5858566baa751ed813eb91",
+      "config_sha256": "5061c4de8d61cb2615fc11e92ed0b679d53da1e0ef6ecb11425981834fecd8a1",
       "run_id": "d117fq31p7-df-cmp-abba-ph-prefill-p2048-b02-a2",
       "role": "comparative_abba_member",
       "block_id": "d117-df-cmp-abba-ph-prefill-p2048-qwen3-1p7b-b02",
@@ -901,7 +901,7 @@
       "ordinal": 69,
       "stage_id": "05_phase_prefill_p2048_abba_blocks_01_05",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/05_phase_prefill_p2048_abba_blocks_01_05/d117fq31p7-df-cmp-abba-ph-prefill-p2048-b03-a1.json",
-      "config_sha256": "5e7efdef2cc8ec3865fba2750970dbba6865eca0e96403436e47b7fb2aedd41d",
+      "config_sha256": "e4c8b01dd4d87ca8b4c575b4bf5712921bdb7bb8e57a80178ec81b92ad5af86b",
       "run_id": "d117fq31p7-df-cmp-abba-ph-prefill-p2048-b03-a1",
       "role": "comparative_abba_member",
       "block_id": "d117-df-cmp-abba-ph-prefill-p2048-qwen3-1p7b-b03",
@@ -913,7 +913,7 @@
       "ordinal": 70,
       "stage_id": "05_phase_prefill_p2048_abba_blocks_01_05",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/05_phase_prefill_p2048_abba_blocks_01_05/d117fq31p7-df-cmp-abba-ph-prefill-p2048-b03-b1.json",
-      "config_sha256": "400ee28bb302128f8fde06701ed62d032d2ba6453ed097830a3f2a4b44974191",
+      "config_sha256": "c443fd7244c0ac8c3a5d4fdcdbd99ed69948ba4eb9bfcc49a31ac0e25a7b44fd",
       "run_id": "d117fq31p7-df-cmp-abba-ph-prefill-p2048-b03-b1",
       "role": "comparative_abba_member",
       "block_id": "d117-df-cmp-abba-ph-prefill-p2048-qwen3-1p7b-b03",
@@ -925,7 +925,7 @@
       "ordinal": 71,
       "stage_id": "05_phase_prefill_p2048_abba_blocks_01_05",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/05_phase_prefill_p2048_abba_blocks_01_05/d117fq31p7-df-cmp-abba-ph-prefill-p2048-b03-b2.json",
-      "config_sha256": "c10ef23c181df012320e245db8cebf58723a2ba13ec82b51da0429c6ec9d7c45",
+      "config_sha256": "01e2ee8ecc13bbdd7e417c931a09a229021f93bd23559fce4cf10da7d1137270",
       "run_id": "d117fq31p7-df-cmp-abba-ph-prefill-p2048-b03-b2",
       "role": "comparative_abba_member",
       "block_id": "d117-df-cmp-abba-ph-prefill-p2048-qwen3-1p7b-b03",
@@ -937,7 +937,7 @@
       "ordinal": 72,
       "stage_id": "05_phase_prefill_p2048_abba_blocks_01_05",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/05_phase_prefill_p2048_abba_blocks_01_05/d117fq31p7-df-cmp-abba-ph-prefill-p2048-b03-a2.json",
-      "config_sha256": "12f89d64e1dc88f030271e69f601c23937dc603d8655eb22eea8701d02d05e31",
+      "config_sha256": "f3f12e98866591e9bfccdd03d184c824c8da8a96f899fe1ab05ae8df8062c65e",
       "run_id": "d117fq31p7-df-cmp-abba-ph-prefill-p2048-b03-a2",
       "role": "comparative_abba_member",
       "block_id": "d117-df-cmp-abba-ph-prefill-p2048-qwen3-1p7b-b03",
@@ -949,7 +949,7 @@
       "ordinal": 73,
       "stage_id": "05_phase_prefill_p2048_abba_blocks_01_05",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/05_phase_prefill_p2048_abba_blocks_01_05/d117fq31p7-df-cmp-abba-ph-prefill-p2048-b04-a1.json",
-      "config_sha256": "2e70b6dd3c5dd5942c843e492045fdf2f38e2563ebd97e2fa9b1d4f9be0da238",
+      "config_sha256": "e44a7c0e94fa40ecb2807dc4e435ff22730d8bb8190540245622cf9c9f1ef358",
       "run_id": "d117fq31p7-df-cmp-abba-ph-prefill-p2048-b04-a1",
       "role": "comparative_abba_member",
       "block_id": "d117-df-cmp-abba-ph-prefill-p2048-qwen3-1p7b-b04",
@@ -961,7 +961,7 @@
       "ordinal": 74,
       "stage_id": "05_phase_prefill_p2048_abba_blocks_01_05",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/05_phase_prefill_p2048_abba_blocks_01_05/d117fq31p7-df-cmp-abba-ph-prefill-p2048-b04-b1.json",
-      "config_sha256": "22b3efc4e10746ed0bbd1ef8fa40ef632b76ec464b8ad06f9aaa3b1ec62b04f0",
+      "config_sha256": "313af6bbac631421e0d7a30d90c00f0e9e899a68808697610ff4bf56b2a69c02",
       "run_id": "d117fq31p7-df-cmp-abba-ph-prefill-p2048-b04-b1",
       "role": "comparative_abba_member",
       "block_id": "d117-df-cmp-abba-ph-prefill-p2048-qwen3-1p7b-b04",
@@ -973,7 +973,7 @@
       "ordinal": 75,
       "stage_id": "05_phase_prefill_p2048_abba_blocks_01_05",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/05_phase_prefill_p2048_abba_blocks_01_05/d117fq31p7-df-cmp-abba-ph-prefill-p2048-b04-b2.json",
-      "config_sha256": "5f093e3f021b4a662e77e232db19009fa8d73202b7b566af56abf07f1fcb387f",
+      "config_sha256": "9e06c67d1eca3401eac8243c8fafa2f69034a868525cc3d3b5dc9557cdde03e2",
       "run_id": "d117fq31p7-df-cmp-abba-ph-prefill-p2048-b04-b2",
       "role": "comparative_abba_member",
       "block_id": "d117-df-cmp-abba-ph-prefill-p2048-qwen3-1p7b-b04",
@@ -985,7 +985,7 @@
       "ordinal": 76,
       "stage_id": "05_phase_prefill_p2048_abba_blocks_01_05",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/05_phase_prefill_p2048_abba_blocks_01_05/d117fq31p7-df-cmp-abba-ph-prefill-p2048-b04-a2.json",
-      "config_sha256": "f8467dce5212d0b40493914212943c8b298f209c00f7bb40071a80fecd16f616",
+      "config_sha256": "f59cbe3af5a734fe7f5d4367f2bf068d2217d333ce6b81a1d4296977063958bc",
       "run_id": "d117fq31p7-df-cmp-abba-ph-prefill-p2048-b04-a2",
       "role": "comparative_abba_member",
       "block_id": "d117-df-cmp-abba-ph-prefill-p2048-qwen3-1p7b-b04",
@@ -997,7 +997,7 @@
       "ordinal": 77,
       "stage_id": "05_phase_prefill_p2048_abba_blocks_01_05",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/05_phase_prefill_p2048_abba_blocks_01_05/d117fq31p7-df-cmp-abba-ph-prefill-p2048-b05-a1.json",
-      "config_sha256": "83b7473822bfafec278d88569a4a00a5ad02a0f418e254e82ce1708fe7df8415",
+      "config_sha256": "e8b2dcbf261ba715f7a7bb40692c07ba51affc86865f36bf3a5b621233322e69",
       "run_id": "d117fq31p7-df-cmp-abba-ph-prefill-p2048-b05-a1",
       "role": "comparative_abba_member",
       "block_id": "d117-df-cmp-abba-ph-prefill-p2048-qwen3-1p7b-b05",
@@ -1009,7 +1009,7 @@
       "ordinal": 78,
       "stage_id": "05_phase_prefill_p2048_abba_blocks_01_05",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/05_phase_prefill_p2048_abba_blocks_01_05/d117fq31p7-df-cmp-abba-ph-prefill-p2048-b05-b1.json",
-      "config_sha256": "0706e6fafbb14ffb594c4a1346061814fc796899c40cfda7d6ac0e4642b21ef3",
+      "config_sha256": "8b1ebf85681a452984a36b61eea3a793e9083e074375eea39dd10d82985f169a",
       "run_id": "d117fq31p7-df-cmp-abba-ph-prefill-p2048-b05-b1",
       "role": "comparative_abba_member",
       "block_id": "d117-df-cmp-abba-ph-prefill-p2048-qwen3-1p7b-b05",
@@ -1021,7 +1021,7 @@
       "ordinal": 79,
       "stage_id": "05_phase_prefill_p2048_abba_blocks_01_05",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/05_phase_prefill_p2048_abba_blocks_01_05/d117fq31p7-df-cmp-abba-ph-prefill-p2048-b05-b2.json",
-      "config_sha256": "478ac126e13054ed48508de74f68fcbdfd213d54dd07fe9a3743ebe05629dd43",
+      "config_sha256": "8987e9a8a4275e529316e14e7ee953c85e046f6586a804e20ef7ebe3fc4b8a00",
       "run_id": "d117fq31p7-df-cmp-abba-ph-prefill-p2048-b05-b2",
       "role": "comparative_abba_member",
       "block_id": "d117-df-cmp-abba-ph-prefill-p2048-qwen3-1p7b-b05",
@@ -1033,7 +1033,7 @@
       "ordinal": 80,
       "stage_id": "05_phase_prefill_p2048_abba_blocks_01_05",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/05_phase_prefill_p2048_abba_blocks_01_05/d117fq31p7-df-cmp-abba-ph-prefill-p2048-b05-a2.json",
-      "config_sha256": "f8120b41e38cbdacc6abc86071fe2a1e71753e3d31b9162f4b6326fc5a8267db",
+      "config_sha256": "0115c45b98231e9760619badadb4b3a6c72b194d70c1877cba7f2642b34a7dd1",
       "run_id": "d117fq31p7-df-cmp-abba-ph-prefill-p2048-b05-a2",
       "role": "comparative_abba_member",
       "block_id": "d117-df-cmp-abba-ph-prefill-p2048-qwen3-1p7b-b05",
@@ -1045,7 +1045,7 @@
       "ordinal": 81,
       "stage_id": "06_phase_prefill_p2048_abba_blocks_06_10",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/06_phase_prefill_p2048_abba_blocks_06_10/d117fq31p7-df-cmp-abba-ph-prefill-p2048-b06-a1.json",
-      "config_sha256": "b700d001a27a7d6e722ffcdcb4848d7a58f6ce872d25bc571fd3be424a8eeb84",
+      "config_sha256": "02028dca1e700331d8da9398758a07bf5bfd3007ad41af1e5da3c58489e899dc",
       "run_id": "d117fq31p7-df-cmp-abba-ph-prefill-p2048-b06-a1",
       "role": "comparative_abba_member",
       "block_id": "d117-df-cmp-abba-ph-prefill-p2048-qwen3-1p7b-b06",
@@ -1057,7 +1057,7 @@
       "ordinal": 82,
       "stage_id": "06_phase_prefill_p2048_abba_blocks_06_10",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/06_phase_prefill_p2048_abba_blocks_06_10/d117fq31p7-df-cmp-abba-ph-prefill-p2048-b06-b1.json",
-      "config_sha256": "a66fa5ffa40886403a00d9de19198165dc94ec629ca0065b0640399856141fea",
+      "config_sha256": "6dea3cf2f56cfefe8323e95b065ae40b3fd41307aad65d22872a146734b76b45",
       "run_id": "d117fq31p7-df-cmp-abba-ph-prefill-p2048-b06-b1",
       "role": "comparative_abba_member",
       "block_id": "d117-df-cmp-abba-ph-prefill-p2048-qwen3-1p7b-b06",
@@ -1069,7 +1069,7 @@
       "ordinal": 83,
       "stage_id": "06_phase_prefill_p2048_abba_blocks_06_10",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/06_phase_prefill_p2048_abba_blocks_06_10/d117fq31p7-df-cmp-abba-ph-prefill-p2048-b06-b2.json",
-      "config_sha256": "d0752e8b21b284a778fb5d4431ddac6c7c2f4d9f4d8a4f8239b24c8f0486f6ff",
+      "config_sha256": "95e08cc6ab1e08a146a7cb933b53206bd59e57ac45efb1259ddda7ba23865590",
       "run_id": "d117fq31p7-df-cmp-abba-ph-prefill-p2048-b06-b2",
       "role": "comparative_abba_member",
       "block_id": "d117-df-cmp-abba-ph-prefill-p2048-qwen3-1p7b-b06",
@@ -1081,7 +1081,7 @@
       "ordinal": 84,
       "stage_id": "06_phase_prefill_p2048_abba_blocks_06_10",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/06_phase_prefill_p2048_abba_blocks_06_10/d117fq31p7-df-cmp-abba-ph-prefill-p2048-b06-a2.json",
-      "config_sha256": "c34f52f55cf9be2a2b73cb72d0019224d04384678d8e126ec193fdcceac4958b",
+      "config_sha256": "5756bd4c123c2d4412cc0b7aab7cc1cfc42211fb41058949bf722bdfca8c5e5c",
       "run_id": "d117fq31p7-df-cmp-abba-ph-prefill-p2048-b06-a2",
       "role": "comparative_abba_member",
       "block_id": "d117-df-cmp-abba-ph-prefill-p2048-qwen3-1p7b-b06",
@@ -1093,7 +1093,7 @@
       "ordinal": 85,
       "stage_id": "06_phase_prefill_p2048_abba_blocks_06_10",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/06_phase_prefill_p2048_abba_blocks_06_10/d117fq31p7-df-cmp-abba-ph-prefill-p2048-b07-a1.json",
-      "config_sha256": "322a9de45b62ef990c25f6d29ba3ba8bc15178f59c3c2115f84fd0c79ecad75f",
+      "config_sha256": "7242f60fce042d307386ed7a46761a74e33aae6acef34beb3dff3a99a64e3df5",
       "run_id": "d117fq31p7-df-cmp-abba-ph-prefill-p2048-b07-a1",
       "role": "comparative_abba_member",
       "block_id": "d117-df-cmp-abba-ph-prefill-p2048-qwen3-1p7b-b07",
@@ -1105,7 +1105,7 @@
       "ordinal": 86,
       "stage_id": "06_phase_prefill_p2048_abba_blocks_06_10",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/06_phase_prefill_p2048_abba_blocks_06_10/d117fq31p7-df-cmp-abba-ph-prefill-p2048-b07-b1.json",
-      "config_sha256": "b363945c810a05ea6d2aede033799573053365c881b447ef0fbbf8e51a32e7f7",
+      "config_sha256": "6ed0b7d5417981ef32c47d67f39b7ec71816ad38dcc78cea31965b481c582a5e",
       "run_id": "d117fq31p7-df-cmp-abba-ph-prefill-p2048-b07-b1",
       "role": "comparative_abba_member",
       "block_id": "d117-df-cmp-abba-ph-prefill-p2048-qwen3-1p7b-b07",
@@ -1117,7 +1117,7 @@
       "ordinal": 87,
       "stage_id": "06_phase_prefill_p2048_abba_blocks_06_10",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/06_phase_prefill_p2048_abba_blocks_06_10/d117fq31p7-df-cmp-abba-ph-prefill-p2048-b07-b2.json",
-      "config_sha256": "243a1c3ee6542ea5faa72544329a5657f25e7cafc292ed17a93046d455635f7f",
+      "config_sha256": "a650c5565ec4f344b4fa2a1f2bb046268b7ec3e15cbb2c45d5cc0e9a442412a5",
       "run_id": "d117fq31p7-df-cmp-abba-ph-prefill-p2048-b07-b2",
       "role": "comparative_abba_member",
       "block_id": "d117-df-cmp-abba-ph-prefill-p2048-qwen3-1p7b-b07",
@@ -1129,7 +1129,7 @@
       "ordinal": 88,
       "stage_id": "06_phase_prefill_p2048_abba_blocks_06_10",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/06_phase_prefill_p2048_abba_blocks_06_10/d117fq31p7-df-cmp-abba-ph-prefill-p2048-b07-a2.json",
-      "config_sha256": "bfad18e25a96d5e2c658425e2a189fde9e3d5e3733aaf86b01fc19b66823238b",
+      "config_sha256": "3ab83e7994ba8fd2e3a884bc17fcc829f6766bc45aa13a696ea5e3d3a3473f38",
       "run_id": "d117fq31p7-df-cmp-abba-ph-prefill-p2048-b07-a2",
       "role": "comparative_abba_member",
       "block_id": "d117-df-cmp-abba-ph-prefill-p2048-qwen3-1p7b-b07",
@@ -1141,7 +1141,7 @@
       "ordinal": 89,
       "stage_id": "06_phase_prefill_p2048_abba_blocks_06_10",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/06_phase_prefill_p2048_abba_blocks_06_10/d117fq31p7-df-cmp-abba-ph-prefill-p2048-b08-a1.json",
-      "config_sha256": "8b82b52e6421457310dacd6639cfebdb62292493a26d7fcb8a0203c3ae5c64c9",
+      "config_sha256": "332bfea85099a3609ffe44de28696bd46bb7ac3c28797997c9f8cdf7d43b7aa7",
       "run_id": "d117fq31p7-df-cmp-abba-ph-prefill-p2048-b08-a1",
       "role": "comparative_abba_member",
       "block_id": "d117-df-cmp-abba-ph-prefill-p2048-qwen3-1p7b-b08",
@@ -1153,7 +1153,7 @@
       "ordinal": 90,
       "stage_id": "06_phase_prefill_p2048_abba_blocks_06_10",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/06_phase_prefill_p2048_abba_blocks_06_10/d117fq31p7-df-cmp-abba-ph-prefill-p2048-b08-b1.json",
-      "config_sha256": "3633c459d81b6b2fa7b1e577cfaf2b0950cd4433ef6c6d97fdb5967242908446",
+      "config_sha256": "546a15e69415b1294a7fba78bf5edad4b2713d7c201a987433da25e9282a2f62",
       "run_id": "d117fq31p7-df-cmp-abba-ph-prefill-p2048-b08-b1",
       "role": "comparative_abba_member",
       "block_id": "d117-df-cmp-abba-ph-prefill-p2048-qwen3-1p7b-b08",
@@ -1165,7 +1165,7 @@
       "ordinal": 91,
       "stage_id": "06_phase_prefill_p2048_abba_blocks_06_10",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/06_phase_prefill_p2048_abba_blocks_06_10/d117fq31p7-df-cmp-abba-ph-prefill-p2048-b08-b2.json",
-      "config_sha256": "9c6e877c55294464bea9a677a0c7cc5192b4f852a82506a73058f66d900a5e7b",
+      "config_sha256": "33580e6b955affdee31a2a871e5dc35311b62319a1547aa59540b078f9701f28",
       "run_id": "d117fq31p7-df-cmp-abba-ph-prefill-p2048-b08-b2",
       "role": "comparative_abba_member",
       "block_id": "d117-df-cmp-abba-ph-prefill-p2048-qwen3-1p7b-b08",
@@ -1177,7 +1177,7 @@
       "ordinal": 92,
       "stage_id": "06_phase_prefill_p2048_abba_blocks_06_10",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/06_phase_prefill_p2048_abba_blocks_06_10/d117fq31p7-df-cmp-abba-ph-prefill-p2048-b08-a2.json",
-      "config_sha256": "e7fc4275fa1dae8526495392ccec4fa7eaf5db77ea61694cdb693d5900f8349d",
+      "config_sha256": "8218b2619ce54efb55c76a64710ae0e874e91f6271f9f647a704c0a6b8952287",
       "run_id": "d117fq31p7-df-cmp-abba-ph-prefill-p2048-b08-a2",
       "role": "comparative_abba_member",
       "block_id": "d117-df-cmp-abba-ph-prefill-p2048-qwen3-1p7b-b08",
@@ -1189,7 +1189,7 @@
       "ordinal": 93,
       "stage_id": "06_phase_prefill_p2048_abba_blocks_06_10",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/06_phase_prefill_p2048_abba_blocks_06_10/d117fq31p7-df-cmp-abba-ph-prefill-p2048-b09-a1.json",
-      "config_sha256": "bfc24e81ff007907d2ee8be568ac0edbc0ce10303e4b67edfe8acffd40ceeda9",
+      "config_sha256": "48cc64e92e893b462bffccff7c2edaa4d7ae56be39331f6eb576b3f8da28077e",
       "run_id": "d117fq31p7-df-cmp-abba-ph-prefill-p2048-b09-a1",
       "role": "comparative_abba_member",
       "block_id": "d117-df-cmp-abba-ph-prefill-p2048-qwen3-1p7b-b09",
@@ -1201,7 +1201,7 @@
       "ordinal": 94,
       "stage_id": "06_phase_prefill_p2048_abba_blocks_06_10",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/06_phase_prefill_p2048_abba_blocks_06_10/d117fq31p7-df-cmp-abba-ph-prefill-p2048-b09-b1.json",
-      "config_sha256": "8e7aa3818ad89501f2e5113d81c5679130f0138d9b2fecde8aafc8190a4433a3",
+      "config_sha256": "ddda9af4fe935eb0426b8c2100e99c7537d0240c4f54f9b697f558c218e60363",
       "run_id": "d117fq31p7-df-cmp-abba-ph-prefill-p2048-b09-b1",
       "role": "comparative_abba_member",
       "block_id": "d117-df-cmp-abba-ph-prefill-p2048-qwen3-1p7b-b09",
@@ -1213,7 +1213,7 @@
       "ordinal": 95,
       "stage_id": "06_phase_prefill_p2048_abba_blocks_06_10",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/06_phase_prefill_p2048_abba_blocks_06_10/d117fq31p7-df-cmp-abba-ph-prefill-p2048-b09-b2.json",
-      "config_sha256": "b8b38703d518187fa0c7e2acdabd8927403c996b930c06c923b88032e3a3c17c",
+      "config_sha256": "3978fa81e8186fe8f38e1335312c2821a2f33268cc4ea2253122d06af61fbc33",
       "run_id": "d117fq31p7-df-cmp-abba-ph-prefill-p2048-b09-b2",
       "role": "comparative_abba_member",
       "block_id": "d117-df-cmp-abba-ph-prefill-p2048-qwen3-1p7b-b09",
@@ -1225,7 +1225,7 @@
       "ordinal": 96,
       "stage_id": "06_phase_prefill_p2048_abba_blocks_06_10",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/06_phase_prefill_p2048_abba_blocks_06_10/d117fq31p7-df-cmp-abba-ph-prefill-p2048-b09-a2.json",
-      "config_sha256": "9f2d91d302bb5807e812d336a4f3b3097767b00263a02be2c3101da8d7be6ef4",
+      "config_sha256": "5c7c86e64ed406b85566c8113e9fe0fbd4fed5d1ffbee8fa631279557c9a6fdc",
       "run_id": "d117fq31p7-df-cmp-abba-ph-prefill-p2048-b09-a2",
       "role": "comparative_abba_member",
       "block_id": "d117-df-cmp-abba-ph-prefill-p2048-qwen3-1p7b-b09",
@@ -1237,7 +1237,7 @@
       "ordinal": 97,
       "stage_id": "06_phase_prefill_p2048_abba_blocks_06_10",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/06_phase_prefill_p2048_abba_blocks_06_10/d117fq31p7-df-cmp-abba-ph-prefill-p2048-b10-a1.json",
-      "config_sha256": "108b49e6d147604025afbb9c0d8c8e93a424fd35289094459d64223359784606",
+      "config_sha256": "a7e8ab63b994a5cab3cbf5009ada569e38f025ba0dc17619840bc7f02e4b0382",
       "run_id": "d117fq31p7-df-cmp-abba-ph-prefill-p2048-b10-a1",
       "role": "comparative_abba_member",
       "block_id": "d117-df-cmp-abba-ph-prefill-p2048-qwen3-1p7b-b10",
@@ -1249,7 +1249,7 @@
       "ordinal": 98,
       "stage_id": "06_phase_prefill_p2048_abba_blocks_06_10",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/06_phase_prefill_p2048_abba_blocks_06_10/d117fq31p7-df-cmp-abba-ph-prefill-p2048-b10-b1.json",
-      "config_sha256": "3babdd11fcefcfbc83efb6bc26b89c7d69457a5c6f1e4dc999daac496dd6eb4d",
+      "config_sha256": "b31f7eaa1b416e45f135d1d33def00f526e45c4ab931b3f1e1f6f082641f40d0",
       "run_id": "d117fq31p7-df-cmp-abba-ph-prefill-p2048-b10-b1",
       "role": "comparative_abba_member",
       "block_id": "d117-df-cmp-abba-ph-prefill-p2048-qwen3-1p7b-b10",
@@ -1261,7 +1261,7 @@
       "ordinal": 99,
       "stage_id": "06_phase_prefill_p2048_abba_blocks_06_10",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/06_phase_prefill_p2048_abba_blocks_06_10/d117fq31p7-df-cmp-abba-ph-prefill-p2048-b10-b2.json",
-      "config_sha256": "912d36c929a47740e28d05f1d2048adec988ce2e1df53953fd4f4b53916f4793",
+      "config_sha256": "612e37dcfbf7f18a7df51bbe35935896bcedce3df4e63082f738fca826b19331",
       "run_id": "d117fq31p7-df-cmp-abba-ph-prefill-p2048-b10-b2",
       "role": "comparative_abba_member",
       "block_id": "d117-df-cmp-abba-ph-prefill-p2048-qwen3-1p7b-b10",
@@ -1273,7 +1273,7 @@
       "ordinal": 100,
       "stage_id": "06_phase_prefill_p2048_abba_blocks_06_10",
       "config_path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/06_phase_prefill_p2048_abba_blocks_06_10/d117fq31p7-df-cmp-abba-ph-prefill-p2048-b10-a2.json",
-      "config_sha256": "55668e206ee3430c016df6abd2ffa2409413410061667d2e2b8951beb5ea5421",
+      "config_sha256": "fae13db1e356b30b4c49660a00f5d61f24d3986a2b46edbb67170bbc55f53b2b",
       "run_id": "d117fq31p7-df-cmp-abba-ph-prefill-p2048-b10-a2",
       "role": "comparative_abba_member",
       "block_id": "d117-df-cmp-abba-ph-prefill-p2048-qwen3-1p7b-b10",
@@ -1524,7 +1524,7 @@
       "kind": "campaign_collection",
       "expected_count": 12,
       "input": {
-        "path": "configs/campaigns/neg8_reference_corpus/order_manifest.json",
+        "path": "configs/campaigns/neg8_reference_corpus_v5/order_manifest.json",
         "manifest_id": "neg8-reference-corpus-order-v1",
         "sha256": "0ec9d68aa4265cc9378bb682091a973fc92879b76506fa25af828050a608509f"
       },
@@ -1540,7 +1540,7 @@
               "arguments": [
                 {
                   "kind": "repo_path",
-                  "value": "configs/campaigns/neg8_reference_corpus"
+                  "value": "configs/campaigns/neg8_reference_corpus_v5"
                 },
                 {
                   "kind": "literal",
@@ -1625,7 +1625,7 @@
       "expected_count": 1,
       "input": {
         "kind": "external_artifact",
-        "path": "configs/campaigns/neg8_reference_corpus/derivation/settled_corpus.json",
+        "path": "configs/campaigns/neg8_reference_corpus_v5/derivation/settled_corpus.json",
         "sha256": "74ccdaec74497c3aa7c074ef1129ec2bf2cc01d8ac14d3d07be77ab468599688"
       },
       "launch": {
@@ -1644,7 +1644,7 @@
                 },
                 {
                   "kind": "repo_path",
-                  "value": "configs/campaigns/neg8_reference_corpus/derivation/settled_corpus.json"
+                  "value": "configs/campaigns/neg8_reference_corpus_v5/derivation/settled_corpus.json"
                 },
                 {
                   "kind": "literal",
@@ -1684,7 +1684,7 @@
       "kind": "campaign_collection",
       "expected_count": 3,
       "input": {
-        "path": "configs/campaigns/window_references/start_triplet/order_manifest.json",
+        "path": "configs/campaigns/window_references_v5/start_triplet/order_manifest.json",
         "manifest_id": "neg8-window-reference-start-triplet-v1",
         "sha256": "9cac197255bdc9a0a1a0b8ee8ceb587ba3c8cabc20b976b2543dc3a400d37cb0"
       },
@@ -1700,7 +1700,7 @@
               "arguments": [
                 {
                   "kind": "repo_path",
-                  "value": "configs/campaigns/window_references/start_triplet"
+                  "value": "configs/campaigns/window_references_v5/start_triplet"
                 },
                 {
                   "kind": "literal",
@@ -1787,7 +1787,7 @@
         "kind": "manifest",
         "path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/01_phase_decode_absolute/order_manifest.json",
         "manifest_id": "d117-floor-qwen3-1p7b-v5-01-phase-decode-absolute-order-v1",
-        "sha256": "8493bf211b426754e7ef37382a4bbc264e798f6c259d35c13984c3cf87f5277b"
+        "sha256": "68a02e2bae3ddff6816e775ae41b0a62e494f35cd2becccce272f551d64bd60c"
       },
       "launch": {
         "schema_version": "joulewise.stage_launch.v1",
@@ -1888,7 +1888,7 @@
         "kind": "manifest",
         "path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/02_phase_decode_abba_blocks_01_05/order_manifest.json",
         "manifest_id": "d117-floor-qwen3-1p7b-v5-02-phase-decode-abba-blocks-01-05-order-v1",
-        "sha256": "0a1fb6bf30a6c44c1a342167a824906b2cf0c12fb0084bf998c504ec7d1c9b0e"
+        "sha256": "0929d5c431ac0d8e795f34021f36de36bbca3c618b6a96c9832070b4c053db15"
       },
       "launch": {
         "schema_version": "joulewise.stage_launch.v1",
@@ -1989,7 +1989,7 @@
         "kind": "manifest",
         "path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/03_phase_decode_abba_blocks_06_10/order_manifest.json",
         "manifest_id": "d117-floor-qwen3-1p7b-v5-03-phase-decode-abba-blocks-06-10-order-v1",
-        "sha256": "fb6f4e546b537dd89bb0deaf52099eed0fb873502914daabe24397fe575bc905"
+        "sha256": "af199b0535f77b83dea51e8692d6d1f2cc4660d74db27493ffc946b35e1faafd"
       },
       "launch": {
         "schema_version": "joulewise.stage_launch.v1",
@@ -2087,7 +2087,7 @@
       "kind": "campaign_collection",
       "expected_count": 1,
       "input": {
-        "path": "configs/campaigns/window_references/midpoint/order_manifest.json",
+        "path": "configs/campaigns/window_references_v5/midpoint/order_manifest.json",
         "manifest_id": "neg8-window-reference-midpoint-v1",
         "sha256": "9ccedd91307985ba5641e791f4ac89f4e250fca414a4ba713cc7977ced6abb21"
       },
@@ -2103,7 +2103,7 @@
               "arguments": [
                 {
                   "kind": "repo_path",
-                  "value": "configs/campaigns/window_references/midpoint"
+                  "value": "configs/campaigns/window_references_v5/midpoint"
                 },
                 {
                   "kind": "literal",
@@ -2190,7 +2190,7 @@
         "kind": "manifest",
         "path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/04_phase_prefill_p2048_absolute/order_manifest.json",
         "manifest_id": "d117-floor-qwen3-1p7b-v5-04-phase-prefill-p2048-absolute-order-v1",
-        "sha256": "fbbbd69aab6450754614c373dd955461e051c465eb737da1480d920fc1e437e3"
+        "sha256": "329147797aac632dbee8e50378f0d7d08067efb68f47e55e7187df0d19f34bb0"
       },
       "launch": {
         "schema_version": "joulewise.stage_launch.v1",
@@ -2291,7 +2291,7 @@
         "kind": "manifest",
         "path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/05_phase_prefill_p2048_abba_blocks_01_05/order_manifest.json",
         "manifest_id": "d117-floor-qwen3-1p7b-v5-05-phase-prefill-p2048-abba-blocks-01-05-order-v1",
-        "sha256": "f011515dce1633fd4c9ed0a8b8ff9d5c8810110345089896ca8d1ddea2c35c91"
+        "sha256": "95c579390209655734059b3a8feb0415eb0cd0eda6fef1a98dff97912b0d3f3f"
       },
       "launch": {
         "schema_version": "joulewise.stage_launch.v1",
@@ -2392,7 +2392,7 @@
         "kind": "manifest",
         "path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/06_phase_prefill_p2048_abba_blocks_06_10/order_manifest.json",
         "manifest_id": "d117-floor-qwen3-1p7b-v5-06-phase-prefill-p2048-abba-blocks-06-10-order-v1",
-        "sha256": "22f28eb02cd5ae83787e54e3bf64dc9b8e00dea2b88d7d8263031778ff2179b9"
+        "sha256": "afac8313f467a2248546e11342a14c19d3834bfc3dc72d34d9ca53f1522b0eba"
       },
       "launch": {
         "schema_version": "joulewise.stage_launch.v1",
@@ -2490,7 +2490,7 @@
       "kind": "campaign_collection",
       "expected_count": 3,
       "input": {
-        "path": "configs/campaigns/window_references/end_triplet/order_manifest.json",
+        "path": "configs/campaigns/window_references_v5/end_triplet/order_manifest.json",
         "manifest_id": "neg8-window-reference-end-triplet-v1",
         "sha256": "8e65a4347aafa0722a60a2bd58c7e8061b860db66fa06f6acec24d1a1ade5c67"
       },
@@ -2506,7 +2506,7 @@
               "arguments": [
                 {
                   "kind": "repo_path",
-                  "value": "configs/campaigns/window_references/end_triplet"
+                  "value": "configs/campaigns/window_references_v5/end_triplet"
                 },
                 {
                   "kind": "literal",
@@ -2807,7 +2807,7 @@
       {
         "external_input_id": "neg8_bound",
         "manifest": {
-          "path": "configs/campaigns/neg8_reference_corpus/order_manifest.json",
+          "path": "configs/campaigns/neg8_reference_corpus_v5/order_manifest.json",
           "manifest_id": "neg8-reference-corpus-order-v1",
           "sha256": "0ec9d68aa4265cc9378bb682091a973fc92879b76506fa25af828050a608509f"
         },
@@ -2816,81 +2816,81 @@
           {
             "ordinal": 1,
             "run_id": "neg8-refcorpus-r01",
-            "path": "configs/campaigns/neg8_reference_corpus/neg8-refcorpus-r01.json",
-            "sha256": "08ad3cf5b1f39339cc1c226856b92e17d8d03b72397c9b366f4f56418161ef0e"
+            "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r01.json",
+            "sha256": "6bccecc46fe1bd093357d4aa270c19325af28084c6b5bacd0cc3cc6630dd893e"
           },
           {
             "ordinal": 2,
             "run_id": "neg8-refcorpus-r02",
-            "path": "configs/campaigns/neg8_reference_corpus/neg8-refcorpus-r02.json",
-            "sha256": "418641328b0d66a013ec083198665d0090893b624ea120cb1f981cb779f34a23"
+            "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r02.json",
+            "sha256": "c9b42b48ad7bd9d815b6cd200072477b1d1874546703f64a9144ea89a37422eb"
           },
           {
             "ordinal": 3,
             "run_id": "neg8-refcorpus-r03",
-            "path": "configs/campaigns/neg8_reference_corpus/neg8-refcorpus-r03.json",
-            "sha256": "3eda26dc2009f040d93d6dabb158a0135555f4d2cc8a679e9ca04988dd085482"
+            "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r03.json",
+            "sha256": "b46790c56480340275ccd31dccd6e1754d2145cca1782c88b4f51be310bb86c5"
           },
           {
             "ordinal": 4,
             "run_id": "neg8-refcorpus-r04",
-            "path": "configs/campaigns/neg8_reference_corpus/neg8-refcorpus-r04.json",
-            "sha256": "c450c0f5555d607df1ca42569f05521771b7e9dd1504c04630cde0496ec01f7b"
+            "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r04.json",
+            "sha256": "5e0f25d616072fb4fa48cb2b6ccd25f69299c417ea80f35bc99f3733b2980878"
           },
           {
             "ordinal": 5,
             "run_id": "neg8-refcorpus-r05",
-            "path": "configs/campaigns/neg8_reference_corpus/neg8-refcorpus-r05.json",
-            "sha256": "c494f0715302d1d18ac74bf064c38350c36e55463be0eb6af31f781a70fe84ae"
+            "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r05.json",
+            "sha256": "6606cb9963839bd6bd2715fa84afccd56db0f3273c3e162a15e6117768159564"
           },
           {
             "ordinal": 6,
             "run_id": "neg8-refcorpus-r06",
-            "path": "configs/campaigns/neg8_reference_corpus/neg8-refcorpus-r06.json",
-            "sha256": "e4dc2a282e853430f1355453460c9ca7a2ae99c05d1afb45fc83f78d534a21b3"
+            "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r06.json",
+            "sha256": "6fae93773ce9b69c1c192a24f43622939a094bd4e2296267b421fb59aa3951e9"
           },
           {
             "ordinal": 7,
             "run_id": "neg8-refcorpus-r07",
-            "path": "configs/campaigns/neg8_reference_corpus/neg8-refcorpus-r07.json",
-            "sha256": "4d4ef567e41e61bda368502fb87b3a3dda0ea18ac72db71b72709e5b2922eb86"
+            "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r07.json",
+            "sha256": "dab4a8a5f727df0da02c542a584a9582f079450e7e716b1c99b67844b71b0fe4"
           },
           {
             "ordinal": 8,
             "run_id": "neg8-refcorpus-r08",
-            "path": "configs/campaigns/neg8_reference_corpus/neg8-refcorpus-r08.json",
-            "sha256": "d11124bf2ab266236ad4eaa6bc18e10e20a08f6a1f8176ea7486a4d96397f903"
+            "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r08.json",
+            "sha256": "7d842daf967a1d7a4c47c35eb3cac139122c3bdb2707eaad2578d20e5c75594d"
           },
           {
             "ordinal": 9,
             "run_id": "neg8-refcorpus-r09",
-            "path": "configs/campaigns/neg8_reference_corpus/neg8-refcorpus-r09.json",
-            "sha256": "0c45014316cb95b439c846eba0ac2b0734a2e38bb80b48a422e8aab74808c902"
+            "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r09.json",
+            "sha256": "547a3b0d7bd5f3b55f72a8d64cefc8698e25df927dd6fdd3a64103b6073ecadd"
           },
           {
             "ordinal": 10,
             "run_id": "neg8-refcorpus-r10",
-            "path": "configs/campaigns/neg8_reference_corpus/neg8-refcorpus-r10.json",
-            "sha256": "74c207c32bda7be6869045f72f33c358e927ce21009670daf50ed3c01ba57312"
+            "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r10.json",
+            "sha256": "c688d052cac174b56fb7a8229fabe1f648959fe017797395acde33b8f91e1a8d"
           },
           {
             "ordinal": 11,
             "run_id": "neg8-refcorpus-r11",
-            "path": "configs/campaigns/neg8_reference_corpus/neg8-refcorpus-r11.json",
-            "sha256": "16e2d75e12174336a896632af278c3aef7f8685bca85c8d9b71053acec9d0553"
+            "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r11.json",
+            "sha256": "2b85317e04427ff315ec07503d2cd718b300ae46011be1f11dcc4fd13a4a01d9"
           },
           {
             "ordinal": 12,
             "run_id": "neg8-refcorpus-r12",
-            "path": "configs/campaigns/neg8_reference_corpus/neg8-refcorpus-r12.json",
-            "sha256": "fd00f4ab3d16fcbe18ead64acffdded0c1b3ea7b196f41f7d39d3399f0d39b31"
+            "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r12.json",
+            "sha256": "2a7c24642198d4774072c0e946cf165f7510ef6ae50c96f589c1ac6f816ae46d"
           }
         ]
       },
       {
         "external_input_id": "start_reference",
         "manifest": {
-          "path": "configs/campaigns/window_references/start_triplet/order_manifest.json",
+          "path": "configs/campaigns/window_references_v5/start_triplet/order_manifest.json",
           "manifest_id": "neg8-window-reference-start-triplet-v1",
           "sha256": "9cac197255bdc9a0a1a0b8ee8ceb587ba3c8cabc20b976b2543dc3a400d37cb0"
         },
@@ -2899,27 +2899,27 @@
           {
             "ordinal": 1,
             "run_id": "neg8-window-start-r1",
-            "path": "configs/campaigns/window_references/start_triplet/neg8-window-start-r1.json",
-            "sha256": "e0c63accf536d026ed9dec4ef4a1cdbf9c795e4708025f85f48f56ac5cbbb704"
+            "path": "configs/campaigns/window_references_v5/start_triplet/neg8-window-start-r1.json",
+            "sha256": "353b6633bb28c09ca2add77b4ce3db2e73952e7a3eb53c4e1dfa08259e9fb478"
           },
           {
             "ordinal": 2,
             "run_id": "neg8-window-start-r2",
-            "path": "configs/campaigns/window_references/start_triplet/neg8-window-start-r2.json",
-            "sha256": "85065db3e71d3cf6693e80723d54feacaf24abdd4f4af1e8b726f912e568db4f"
+            "path": "configs/campaigns/window_references_v5/start_triplet/neg8-window-start-r2.json",
+            "sha256": "f1bcb1b5323562e738893f94ce7acf867d39543d5bee58a7a165600b98420013"
           },
           {
             "ordinal": 3,
             "run_id": "neg8-window-start-r3",
-            "path": "configs/campaigns/window_references/start_triplet/neg8-window-start-r3.json",
-            "sha256": "96c3fafdf6327afc3d23c9d40c54983df6613423a68e72dfb69565d9b432abfd"
+            "path": "configs/campaigns/window_references_v5/start_triplet/neg8-window-start-r3.json",
+            "sha256": "6a5ac82869c38922c543c8d9c7d64e1fc8dc8d166afeffc8c78b1fb75c4b0847"
           }
         ]
       },
       {
         "external_input_id": "midpoint_reference",
         "manifest": {
-          "path": "configs/campaigns/window_references/midpoint/order_manifest.json",
+          "path": "configs/campaigns/window_references_v5/midpoint/order_manifest.json",
           "manifest_id": "neg8-window-reference-midpoint-v1",
           "sha256": "9ccedd91307985ba5641e791f4ac89f4e250fca414a4ba713cc7977ced6abb21"
         },
@@ -2928,15 +2928,15 @@
           {
             "ordinal": 1,
             "run_id": "neg8-window-midpoint",
-            "path": "configs/campaigns/window_references/midpoint/neg8-window-midpoint.json",
-            "sha256": "321b96d8580eac8e338575a95c4db26ee2e4b24d2f27effc6fee107da32fe9ff"
+            "path": "configs/campaigns/window_references_v5/midpoint/neg8-window-midpoint.json",
+            "sha256": "1332cf4a4e48ac9d8f6be3593270084089b5e7e74953aa4aee43084b231041af"
           }
         ]
       },
       {
         "external_input_id": "end_reference",
         "manifest": {
-          "path": "configs/campaigns/window_references/end_triplet/order_manifest.json",
+          "path": "configs/campaigns/window_references_v5/end_triplet/order_manifest.json",
           "manifest_id": "neg8-window-reference-end-triplet-v1",
           "sha256": "8e65a4347aafa0722a60a2bd58c7e8061b860db66fa06f6acec24d1a1ade5c67"
         },
@@ -2945,27 +2945,27 @@
           {
             "ordinal": 1,
             "run_id": "neg8-window-end-r1",
-            "path": "configs/campaigns/window_references/end_triplet/neg8-window-end-r1.json",
-            "sha256": "fd7b43938b6aa13bea4c949d3ab61266b3282530db7869d56c622bf2392507b0"
+            "path": "configs/campaigns/window_references_v5/end_triplet/neg8-window-end-r1.json",
+            "sha256": "62e16d11cd4d3c5d44744ff390374ea009a6fae8988845e1f82a860e28571bd0"
           },
           {
             "ordinal": 2,
             "run_id": "neg8-window-end-r2",
-            "path": "configs/campaigns/window_references/end_triplet/neg8-window-end-r2.json",
-            "sha256": "72593d4ba2382591ae3f0b01e70673ae0cc605546471e00254cea01eac4a3204"
+            "path": "configs/campaigns/window_references_v5/end_triplet/neg8-window-end-r2.json",
+            "sha256": "3c85f630e6eb0002dfdfdb5ce09816497298b9fbec546e66390723a7d8dea2e8"
           },
           {
             "ordinal": 3,
             "run_id": "neg8-window-end-r3",
-            "path": "configs/campaigns/window_references/end_triplet/neg8-window-end-r3.json",
-            "sha256": "c7720a668409eb62cecd22dbbcd4d972cc7d87d83bf9ccf4ede0bcf1b9b451be"
+            "path": "configs/campaigns/window_references_v5/end_triplet/neg8-window-end-r3.json",
+            "sha256": "aa0933348c3afd0d925a841a23701559324e4204f6dad21a5ace939134b7d535"
           }
         ]
       }
     ],
     "artifacts": [
       {
-        "path": "configs/campaigns/neg8_reference_corpus/derivation/settled_corpus.json",
+        "path": "configs/campaigns/neg8_reference_corpus_v5/derivation/settled_corpus.json",
         "sha256": "74ccdaec74497c3aa7c074ef1129ec2bf2cc01d8ac14d3d07be77ab468599688"
       },
       {
@@ -3005,7 +3005,7 @@
       "row_registry": {
         "registry_id": "d117-row-registry-v2",
         "path": "configs/arm_readiness/d117_row_registry_v2.json",
-        "sha256": "9aaff5d66a8b9cfd67b79be49866810b0922013f6c6a15b49572861fa789e4ab",
+        "sha256": "55973f12098312c484ba3664a4ddef22131b26a92ac08920de54191e4edaecda",
         "plan_profile": "ALPHA"
       },
       "freeze_receipt": null,
@@ -3131,203 +3131,203 @@
           "config_inventory": [
             {
               "path": "01_phase_decode_absolute/d117fq31p7-df-ph-decode-abs-r01.json",
-              "sha256": "47ba91352d897b2bdd97ac8093bdd50c60ff27ffda41ec2990833b8dcaff1a13"
+              "sha256": "5f2d07f5a759bfe68233f0601888440406c0f1f3244fa8ecd72f501be0f87713"
             },
             {
               "path": "01_phase_decode_absolute/d117fq31p7-df-ph-decode-abs-r02.json",
-              "sha256": "f2b270acc16004de0b0cfd23175f87181282de8c2ac5fce82e18cd547a30ddb9"
+              "sha256": "855048bb1da43e54f7e5804b26619bf6a5de44f755f41a02512a6c81c7759610"
             },
             {
               "path": "01_phase_decode_absolute/d117fq31p7-df-ph-decode-abs-r03.json",
-              "sha256": "fad56f35e156810c40370f447684b05f9e1412f2f6b643e6a636f4c642177774"
+              "sha256": "2a6f69ec3010bb0f4c24a5a909b6b770e5120cb7929ed48f962a3ceea92abdbe"
             },
             {
               "path": "01_phase_decode_absolute/d117fq31p7-df-ph-decode-abs-r04.json",
-              "sha256": "2a30ef06a393921752779dbfb0a100ee82acce078ddc55fe5162407ccef35404"
+              "sha256": "817cd449fc42ab6c79953f89a0a7644bf693defdfb3b5fb7e59a97b33f46c6fb"
             },
             {
               "path": "01_phase_decode_absolute/d117fq31p7-df-ph-decode-abs-r05.json",
-              "sha256": "377eb3a6fc724add96eccf288f3539f3cc747537090579000c8abf0c359cb7ed"
+              "sha256": "09a94cfcaf9967ec6f24c6cc81e2297b1771962922d7b5b148bd3e8b58a70b9a"
             },
             {
               "path": "01_phase_decode_absolute/d117fq31p7-df-ph-decode-abs-r06.json",
-              "sha256": "a35a20c44566ec326df5067fdf740470397912293aefd3cde5a3a53967a99766"
+              "sha256": "27217c9aac9b58dcbe51722a6ac8ac6da33fad2e693ffb44cd653001396fcb93"
             },
             {
               "path": "01_phase_decode_absolute/d117fq31p7-df-ph-decode-abs-r07.json",
-              "sha256": "cfe09bd30cb6ea7fd9e91ea79ff182f57102dce587149a2926f543392ab710ab"
+              "sha256": "76a850e5602a5d4514b8004eb608cc34caa9d29c4e6a9283daf72cd836f31621"
             },
             {
               "path": "01_phase_decode_absolute/d117fq31p7-df-ph-decode-abs-r08.json",
-              "sha256": "dd4853d2a8a248cbdaf66dc46453489f169d93a4e85fb87daadceca5cbc5644f"
+              "sha256": "aeff59e2cf4d6bb4a2dc681a5c18788159ff2c27fa69ccaff53fa3ef5579138d"
             },
             {
               "path": "01_phase_decode_absolute/d117fq31p7-df-ph-decode-abs-r09.json",
-              "sha256": "c924f79c8b24524f7035990c7c407a5821e57cfd7e5b57f276f76d959a676dd2"
+              "sha256": "6d9570e5469806ed27dd94de7b302522a9dfd905ca57401235941b7fbb3bff1e"
             },
             {
               "path": "01_phase_decode_absolute/d117fq31p7-df-ph-decode-abs-r10.json",
-              "sha256": "8353f2f68d11c80a34bef4160f582e38bd7dd94e7cdfba14aff1fca18176acc9"
+              "sha256": "dec82fed722aed8de315442998f3ff1d717710f0215b71641519dd73fc6d9752"
             },
             {
               "path": "02_phase_decode_abba_blocks_01_05/d117fq31p7-df-cmp-abba-ph-decode-b01-a1.json",
-              "sha256": "8a4c134d28687b9584d77692c3e71879304cb632ace3638d483d41e9a4300e45"
+              "sha256": "fab74e30bf80e2a424780eabcea0cd043da702221076ee932f4f92b9536040a2"
             },
             {
               "path": "02_phase_decode_abba_blocks_01_05/d117fq31p7-df-cmp-abba-ph-decode-b01-a2.json",
-              "sha256": "83fe41300073ee51e9f0b1743767f74441506ed6e87b625f60d6758cd1875180"
+              "sha256": "46f90dadf5823f891c70eb520e9a39e43759f5165433634c5294d685fe435ef5"
             },
             {
               "path": "02_phase_decode_abba_blocks_01_05/d117fq31p7-df-cmp-abba-ph-decode-b01-b1.json",
-              "sha256": "97f57603bc6c261b1238b90ceb0362207ca37df7d0d80ffaf780d2a5512a43dc"
+              "sha256": "d3c4803a3612f1509dccec1928d54fd5e099baf0302ae6e3ce3fb8129bbaddaa"
             },
             {
               "path": "02_phase_decode_abba_blocks_01_05/d117fq31p7-df-cmp-abba-ph-decode-b01-b2.json",
-              "sha256": "d6e11f6290ec8c6952f03f0815c1b917ec3681dfc19c48fe1cb723c84216b31b"
+              "sha256": "460fd3c6c697ac4ac5874f3e743866fab2ec67b7744607bd0f62cca343db36f0"
             },
             {
               "path": "02_phase_decode_abba_blocks_01_05/d117fq31p7-df-cmp-abba-ph-decode-b02-a1.json",
-              "sha256": "bee87596a7bb4ead1afbc46fc44556970cfad292213ba8d35746948df6840b18"
+              "sha256": "8799f4a0ff4994e0a84381b65558d81800b0882d35fd28b47c1bf815236801ee"
             },
             {
               "path": "02_phase_decode_abba_blocks_01_05/d117fq31p7-df-cmp-abba-ph-decode-b02-a2.json",
-              "sha256": "e2bf153b3ce3e52ecd2e6b96dbf1cd180da1fb572e52bb1a0eeda9b539907d27"
+              "sha256": "53e6017008857b715d794982723f686155618493d5cfdab1bd3785e8d14d259f"
             },
             {
               "path": "02_phase_decode_abba_blocks_01_05/d117fq31p7-df-cmp-abba-ph-decode-b02-b1.json",
-              "sha256": "cd252eab58e90a7e9374dcc4f58453f3946cc01a0536ca33af45ec134a4f7082"
+              "sha256": "31dbf0e7d5a32bf4eb7bec7fb54b26241390a4938488b831b8964ea248ada80d"
             },
             {
               "path": "02_phase_decode_abba_blocks_01_05/d117fq31p7-df-cmp-abba-ph-decode-b02-b2.json",
-              "sha256": "908c5e69043ed4c99de698951925d5f4c9861b1f2d7b23e0b470cc6c1eabdecb"
+              "sha256": "c1e1d7fae0bfe273fd6c40bb1833b13d2eaa90632883e207da1f94b7d033bf17"
             },
             {
               "path": "02_phase_decode_abba_blocks_01_05/d117fq31p7-df-cmp-abba-ph-decode-b03-a1.json",
-              "sha256": "259bbaedd8f50b4c3b2f24b73736ae71e0bdbab78ab22787c7a1f82a38ff33b1"
+              "sha256": "ff8b78fec255fa0d6d8fdb91925ca69a6120f25a6c7a70e3245dcba3abf65e70"
             },
             {
               "path": "02_phase_decode_abba_blocks_01_05/d117fq31p7-df-cmp-abba-ph-decode-b03-a2.json",
-              "sha256": "ff016b69e13c6780cdbc0a8607b2209637aed8d42bb74df45242aafb44280260"
+              "sha256": "cadef2bab5a798abebc07f6d30e63d9519ca2c5808ee3539fbf51725d1189b0e"
             },
             {
               "path": "02_phase_decode_abba_blocks_01_05/d117fq31p7-df-cmp-abba-ph-decode-b03-b1.json",
-              "sha256": "6163b416a04e6a67f9c7476b4dfbb227a90cdb37df21f37946ad0fdef9133088"
+              "sha256": "eacb92b012177b6878890cc94f4fc7f1edca79605b61362d440a0821fc0d734e"
             },
             {
               "path": "02_phase_decode_abba_blocks_01_05/d117fq31p7-df-cmp-abba-ph-decode-b03-b2.json",
-              "sha256": "779e8825394ee022554232b234f19aac7d70b0ab4e77774fd53c77f6bcde9857"
+              "sha256": "da94b57ce609b8d4cace431ca0ec519448a1bde877b43ccf2d46cacdb2bcf3c8"
             },
             {
               "path": "02_phase_decode_abba_blocks_01_05/d117fq31p7-df-cmp-abba-ph-decode-b04-a1.json",
-              "sha256": "91cc286fe4cbc90e33ffb2b5eec900274e7a16aa7e2a7ad4df2224ec67d7fcfd"
+              "sha256": "feaa96c18e7a6a4e2396c5f42b9883bc2a137d6b21e0a7e57674d2e63881df02"
             },
             {
               "path": "02_phase_decode_abba_blocks_01_05/d117fq31p7-df-cmp-abba-ph-decode-b04-a2.json",
-              "sha256": "4014b00b94bc546033693c672ee09c440f6dfcb122f64e228e0402c8ff94b584"
+              "sha256": "2ee97199ce8ea32b602c0082e9b58e202726ae61086adf6336c83efb1fd4e1d0"
             },
             {
               "path": "02_phase_decode_abba_blocks_01_05/d117fq31p7-df-cmp-abba-ph-decode-b04-b1.json",
-              "sha256": "e64594837b5ad566468a59ac8b53f239c3f20cba73f63a7a8633c4036a2d0414"
+              "sha256": "c66e55919f76c8479d2fb781f448abc0e2e86b1bc4c7a23d7b30e3f7d539aac8"
             },
             {
               "path": "02_phase_decode_abba_blocks_01_05/d117fq31p7-df-cmp-abba-ph-decode-b04-b2.json",
-              "sha256": "f0e7f4db361cae347da9f6b158daa30cc2612f45a8d96293514aa995aadbc735"
+              "sha256": "14171fddb636628a9b5d943c4f9ed07d67a3ff47ea5894b56c7e4d2b17b19baf"
             },
             {
               "path": "02_phase_decode_abba_blocks_01_05/d117fq31p7-df-cmp-abba-ph-decode-b05-a1.json",
-              "sha256": "e67d1b621d55fd60af7b035d6eaa22a7915b9e0df6f3d5c9d9d2a03d39818660"
+              "sha256": "366f7038c1e5f684edae2b54321f78de3c028c428cbc8357a4b6ab70bd959e3a"
             },
             {
               "path": "02_phase_decode_abba_blocks_01_05/d117fq31p7-df-cmp-abba-ph-decode-b05-a2.json",
-              "sha256": "00997240c878fa0a14ac5bf737f35f99dd26d9b7c7184aa106db58ebbc88662c"
+              "sha256": "ea8e9134b238dba4209d4bfe7339aa2e5119d194ca70c625d344ca08b51fdc46"
             },
             {
               "path": "02_phase_decode_abba_blocks_01_05/d117fq31p7-df-cmp-abba-ph-decode-b05-b1.json",
-              "sha256": "cb98759b9967a2abacea0270015be7b20f0f26429a06898fafeb8b34aea40c79"
+              "sha256": "7476cad6aa1b75b56aad933d09d5d357ad9b6744ca858c7449d919c016911ed5"
             },
             {
               "path": "02_phase_decode_abba_blocks_01_05/d117fq31p7-df-cmp-abba-ph-decode-b05-b2.json",
-              "sha256": "b2ce0dd8d3fa924991999cd7b635ffb76dc1bafd10bee267c1afdef1760b5373"
+              "sha256": "b934a1b1071d7c7645acd4a870ca2876fa38827f161899905fc58aef41f39937"
             },
             {
               "path": "03_phase_decode_abba_blocks_06_10/d117fq31p7-df-cmp-abba-ph-decode-b06-a1.json",
-              "sha256": "ce1b9c759276612b21518d5944d805786fc1cf13a449af27279403ed7ae4d76d"
+              "sha256": "b9619783289bce9e99094c4294ebd115c3dcc0f53838cfd806d0eadf3983bca8"
             },
             {
               "path": "03_phase_decode_abba_blocks_06_10/d117fq31p7-df-cmp-abba-ph-decode-b06-a2.json",
-              "sha256": "a804b1778418b99f2b20f1110019a0ea916d07d97b9056ec21a245053ec7eca2"
+              "sha256": "029869dbe0612af65415f7ed0c2b6bc16ae67a6982d276eed7ccd14850f40167"
             },
             {
               "path": "03_phase_decode_abba_blocks_06_10/d117fq31p7-df-cmp-abba-ph-decode-b06-b1.json",
-              "sha256": "6ee67970bc604e7295faf8b6130a8141e8fd423be52927b58e5b464539c3838a"
+              "sha256": "7d8f293137ca64b74b6b3e07cbcedec46f46fcf65c9b7f074b84f06145556fe9"
             },
             {
               "path": "03_phase_decode_abba_blocks_06_10/d117fq31p7-df-cmp-abba-ph-decode-b06-b2.json",
-              "sha256": "846b67ae4807a6c4e7a637b1c1ed56686a2438b9ffad7d87e1b4db3902e98678"
+              "sha256": "dcee5718ffdcde41cfb0bb290718b75df9a3978e59a96af4eaf54c2bc7b211a1"
             },
             {
               "path": "03_phase_decode_abba_blocks_06_10/d117fq31p7-df-cmp-abba-ph-decode-b07-a1.json",
-              "sha256": "8ed44a355ba2a7b48a5330ac2a87bfa69ff7b963d5bac89797a6af7f077cdc12"
+              "sha256": "fd4983b202bd1043fa5deebd1828e72480999e5110b51bc3de6174bb64e8534f"
             },
             {
               "path": "03_phase_decode_abba_blocks_06_10/d117fq31p7-df-cmp-abba-ph-decode-b07-a2.json",
-              "sha256": "49c9cc5925149dedf095cd76845df9c717a5a152c849e1d8d376c758eea324ec"
+              "sha256": "871fedcfc15a3a95bcd0e5fab707f0040cf29e4399cada0ed8b045754df02bf0"
             },
             {
               "path": "03_phase_decode_abba_blocks_06_10/d117fq31p7-df-cmp-abba-ph-decode-b07-b1.json",
-              "sha256": "4e66dcebe5dd64e2fc4862e827fb1a4a58a0188a18fa331590e856d75080978e"
+              "sha256": "7794c80f8d04b3a527b8a0cf23a265c07e5b62ebee8743b55b9be23c39a369d0"
             },
             {
               "path": "03_phase_decode_abba_blocks_06_10/d117fq31p7-df-cmp-abba-ph-decode-b07-b2.json",
-              "sha256": "6b52516e2ce187494f2cb9323c8f9bf9b514578956aa5fd603d4919c2b6bce83"
+              "sha256": "f95780524bbff01cc8bc1b21e0ddaffefded930f47775a08330283596ae74902"
             },
             {
               "path": "03_phase_decode_abba_blocks_06_10/d117fq31p7-df-cmp-abba-ph-decode-b08-a1.json",
-              "sha256": "e9f96868d29b3c7081434491dfd298f196591aa481a6c4143d16f98b4e8f283f"
+              "sha256": "0517f874ebfc96c3afe98e1a1d42a601f17a36d000b9ad2c57fe8253f59faeb9"
             },
             {
               "path": "03_phase_decode_abba_blocks_06_10/d117fq31p7-df-cmp-abba-ph-decode-b08-a2.json",
-              "sha256": "7c1aa7aadb6a4f5982d521b749650eb9147412d5d23014ff251911af94d5b04d"
+              "sha256": "ddf61578f0d3b449682c879b5a7bc25a53b1d247264c8896016f23569245d4f6"
             },
             {
               "path": "03_phase_decode_abba_blocks_06_10/d117fq31p7-df-cmp-abba-ph-decode-b08-b1.json",
-              "sha256": "4d0ec4a3bafb796cf5347a53a5ca2ae716f45051a03e67f0bf11874787aba551"
+              "sha256": "68220ed1fde49222ffb11dbf2d1007f665ab06d87f86adca969b328b36a5d892"
             },
             {
               "path": "03_phase_decode_abba_blocks_06_10/d117fq31p7-df-cmp-abba-ph-decode-b08-b2.json",
-              "sha256": "c74a103ecc1745e4db89415d8a75dd303176ff1681c17f638370ead22337bd48"
+              "sha256": "c634f4487b9daab3e9577a5d43cf7f1e06703e72b1d66b4d5e54f0d75a10a27f"
             },
             {
               "path": "03_phase_decode_abba_blocks_06_10/d117fq31p7-df-cmp-abba-ph-decode-b09-a1.json",
-              "sha256": "5dd5b00cc6e49fc2ab44fd72228285d7e54b120e81214c4f2fe82805cc916c72"
+              "sha256": "3cc752eee44ff399ff36d50385f2c953c5432cc7fa98ef3708aa3e164d0c4046"
             },
             {
               "path": "03_phase_decode_abba_blocks_06_10/d117fq31p7-df-cmp-abba-ph-decode-b09-a2.json",
-              "sha256": "10713ca2bb16c68c59dac5594f7804603a0f759e3a73539ca82cdc228d670997"
+              "sha256": "d0aef67540b89a8a9a4025efcb01ea25c26bcb705977c8bc509db80bd896dbb0"
             },
             {
               "path": "03_phase_decode_abba_blocks_06_10/d117fq31p7-df-cmp-abba-ph-decode-b09-b1.json",
-              "sha256": "913391f35da7a300fcbe843f27b3f33a16f8d77cfe74ce0537339e7fbeda737e"
+              "sha256": "1e51ec33618056205b0a1c362cabc07705f7ca059dcc8c91845d8dd4eff3f37d"
             },
             {
               "path": "03_phase_decode_abba_blocks_06_10/d117fq31p7-df-cmp-abba-ph-decode-b09-b2.json",
-              "sha256": "8cb455352db88ad385b56b794fda0c30c3483f9572283c0573f6a93c9bea0d48"
+              "sha256": "778af18d073e3528001b71b3aab6c96f7e91825cb2307843e7db57b5b74bf4f3"
             },
             {
               "path": "03_phase_decode_abba_blocks_06_10/d117fq31p7-df-cmp-abba-ph-decode-b10-a1.json",
-              "sha256": "efac18a706c6d5c3e6ba36834e215efc9d2bca8bbf9d1705908a810aa8aa2762"
+              "sha256": "3445e6ecae2581787db64d3dc44097221626fc6f8f463099055d6c780a3baf53"
             },
             {
               "path": "03_phase_decode_abba_blocks_06_10/d117fq31p7-df-cmp-abba-ph-decode-b10-a2.json",
-              "sha256": "bc2baeb8fa29a7aca34e33b600ddecacc971934718216f4471f3ebf7104decbe"
+              "sha256": "f22d67c48ad3cfd42a993aed3ec376997751c67d932f1c9ea628a7a7d89119a7"
             },
             {
               "path": "03_phase_decode_abba_blocks_06_10/d117fq31p7-df-cmp-abba-ph-decode-b10-b1.json",
-              "sha256": "c48f4d2e7147e642b23590981555b8d13e71673a398a4ad0cf9bc6c301b5f387"
+              "sha256": "1988562b1b98b49c3084fead5c35f7cfe7b24ba0978cc40a139cfafcaa46154f"
             },
             {
               "path": "03_phase_decode_abba_blocks_06_10/d117fq31p7-df-cmp-abba-ph-decode-b10-b2.json",
-              "sha256": "adb146da00d36569c90cefa61572111e3e579f38fa17942e114e336648b34d2f"
+              "sha256": "17a92e755f6f293ce25107a0a27a9bd1c40a4b85e56e88ea533f8adcdc6fc149"
             }
           ],
           "model_runtime_config": {
@@ -3380,203 +3380,203 @@
           "config_inventory": [
             {
               "path": "04_phase_prefill_p2048_absolute/d117fq31p7-df-ph-prefill-p2048-abs-r01.json",
-              "sha256": "ceb7ff3a954af19f9c05b2aa83b80fd6edea5eb20265747b0e0901e31b28cb7b"
+              "sha256": "a8164f02afa7d0b010f38ec767c4a1f5c4fe2cc9b4b15ffe5e8e2ee16eff3243"
             },
             {
               "path": "04_phase_prefill_p2048_absolute/d117fq31p7-df-ph-prefill-p2048-abs-r02.json",
-              "sha256": "7244e034001ce28d27728827be7d268e27c20bace348294556e9091197d9b0fa"
+              "sha256": "1daaeb332fb34206f18ae5defc2a9de92e378f919ab1a50f267cb3ac3bc00ff2"
             },
             {
               "path": "04_phase_prefill_p2048_absolute/d117fq31p7-df-ph-prefill-p2048-abs-r03.json",
-              "sha256": "d5bd611cc98cbdb870c90d7180b3aea5ae73c38ff3e97021c54b3d70680202d7"
+              "sha256": "c8daac31ae1e332b58576a45b5950bf39b5aaf155124fbe72d027af35c217db4"
             },
             {
               "path": "04_phase_prefill_p2048_absolute/d117fq31p7-df-ph-prefill-p2048-abs-r04.json",
-              "sha256": "21c5ee91d799e58c4ba74cb28095803ba9956b3db859c3272531d7d2dec9d8c0"
+              "sha256": "d6d59727bbdaa6dcc096d79a84341ed2edbf3be2000649a0c90eb8fecda6b483"
             },
             {
               "path": "04_phase_prefill_p2048_absolute/d117fq31p7-df-ph-prefill-p2048-abs-r05.json",
-              "sha256": "9fa9ce4418e590186b5b8cad70531ff35ee6430392988299376ca2932eb65c7e"
+              "sha256": "b2eddc3310156b4d66ef5c34288bc0702dc36397278320cc040ed1e162af5e93"
             },
             {
               "path": "04_phase_prefill_p2048_absolute/d117fq31p7-df-ph-prefill-p2048-abs-r06.json",
-              "sha256": "a3b6339d2240317878b73a0a8ba351482bdfca167b1e0c64a5fb13f77b5eecb0"
+              "sha256": "7b79a43eed7b42097d90aa18adf29f9556f69681641de93a0deb3b5eaff3c0cb"
             },
             {
               "path": "04_phase_prefill_p2048_absolute/d117fq31p7-df-ph-prefill-p2048-abs-r07.json",
-              "sha256": "599457527e33ed9bf5f33db8d5a2c2d605ce0a51d843ea6a2ac96f39b3d0f30c"
+              "sha256": "e8a3e23cad3d118468e3b702135454e526c86089ba74e2a94cc5ec1f58881c8f"
             },
             {
               "path": "04_phase_prefill_p2048_absolute/d117fq31p7-df-ph-prefill-p2048-abs-r08.json",
-              "sha256": "7ebd3fd2f01bb7eb3ad5d7e20f7c2e03f9415f9d4d2c22d71c6b1238257d99a5"
+              "sha256": "9d222d1b69c2293704f4f0bef7443daff8c21ca388dfa90cd7d674204301be45"
             },
             {
               "path": "04_phase_prefill_p2048_absolute/d117fq31p7-df-ph-prefill-p2048-abs-r09.json",
-              "sha256": "09fb88920f73460c75be753f25fb87d5fe2754a173f5cc8905d13921deb12b81"
+              "sha256": "bbd1272f9fc538a8e2b8d55a064cc3cdeb1e26f88e30e40d1ed1671c14171a3a"
             },
             {
               "path": "04_phase_prefill_p2048_absolute/d117fq31p7-df-ph-prefill-p2048-abs-r10.json",
-              "sha256": "14bec6809f5f76c175a94a74a7e91efed03c61df2bf07eb7cd0d5f86b1dbeb49"
+              "sha256": "7cbcc2eb1c7786676dbc1b0c647ee40e653bc65869401df3cc26e9e80ee01cea"
             },
             {
               "path": "05_phase_prefill_p2048_abba_blocks_01_05/d117fq31p7-df-cmp-abba-ph-prefill-p2048-b01-a1.json",
-              "sha256": "82f1bd130c9921555ad9f13c30760bd60cb1ba14cceefa4a0d491c992e075cba"
+              "sha256": "877a3b7a6f0046f3b616db30e897f1e5c4343daa1b7628ac9edf50a06bda67d3"
             },
             {
               "path": "05_phase_prefill_p2048_abba_blocks_01_05/d117fq31p7-df-cmp-abba-ph-prefill-p2048-b01-a2.json",
-              "sha256": "d4e54c788265e55cccd49561e78cf7cdf871b6ac6a8a3546824dbaa5fab12a6f"
+              "sha256": "8459d32f3423c25c2fa98c06c1e645a37fd153ad8a446ac1a7eb28e88c472371"
             },
             {
               "path": "05_phase_prefill_p2048_abba_blocks_01_05/d117fq31p7-df-cmp-abba-ph-prefill-p2048-b01-b1.json",
-              "sha256": "6efe39e4afba0b8abe1dc0dc5192606e83017599e9917bfd7c474472ae3092ef"
+              "sha256": "63a4123309566b1ecb8282c98acb25e6cac53c322738fa25809d1169679451b7"
             },
             {
               "path": "05_phase_prefill_p2048_abba_blocks_01_05/d117fq31p7-df-cmp-abba-ph-prefill-p2048-b01-b2.json",
-              "sha256": "2819b959a26d9656ef1b9e00a163522aee292b186c920b74587a5c77c962e096"
+              "sha256": "47387523b5132dde71f4af868ba9267a2cc169568a5252938b6c8cf26d869231"
             },
             {
               "path": "05_phase_prefill_p2048_abba_blocks_01_05/d117fq31p7-df-cmp-abba-ph-prefill-p2048-b02-a1.json",
-              "sha256": "e2352e2f9d512efa64f540611c12b86ae809ab6ea4568e80a4940495c7ed4e87"
+              "sha256": "0070e6f615bbb6780284e2c260fe3d550146d3d4e3b795ca400562ed217ea765"
             },
             {
               "path": "05_phase_prefill_p2048_abba_blocks_01_05/d117fq31p7-df-cmp-abba-ph-prefill-p2048-b02-a2.json",
-              "sha256": "c07f72635ef6d6e16d1cc54becedb5153790c81a4a5858566baa751ed813eb91"
+              "sha256": "5061c4de8d61cb2615fc11e92ed0b679d53da1e0ef6ecb11425981834fecd8a1"
             },
             {
               "path": "05_phase_prefill_p2048_abba_blocks_01_05/d117fq31p7-df-cmp-abba-ph-prefill-p2048-b02-b1.json",
-              "sha256": "bcfa8769b01fb497cef718bbfd7e3940feaa16306f4d3896c3bcf874782f4d55"
+              "sha256": "58b31642bca9490e743722e82b895d189086b27acd315d1870d2f996c990045b"
             },
             {
               "path": "05_phase_prefill_p2048_abba_blocks_01_05/d117fq31p7-df-cmp-abba-ph-prefill-p2048-b02-b2.json",
-              "sha256": "b6aa51403b43b7fb8b8ebaa65191cb76bb1ad7ef027f371bbc78b334325637d7"
+              "sha256": "cbe0a0f709f1b159d92ff0e2249ee665512e39a9ad7753c3bac6fdeaddd8cf12"
             },
             {
               "path": "05_phase_prefill_p2048_abba_blocks_01_05/d117fq31p7-df-cmp-abba-ph-prefill-p2048-b03-a1.json",
-              "sha256": "5e7efdef2cc8ec3865fba2750970dbba6865eca0e96403436e47b7fb2aedd41d"
+              "sha256": "e4c8b01dd4d87ca8b4c575b4bf5712921bdb7bb8e57a80178ec81b92ad5af86b"
             },
             {
               "path": "05_phase_prefill_p2048_abba_blocks_01_05/d117fq31p7-df-cmp-abba-ph-prefill-p2048-b03-a2.json",
-              "sha256": "12f89d64e1dc88f030271e69f601c23937dc603d8655eb22eea8701d02d05e31"
+              "sha256": "f3f12e98866591e9bfccdd03d184c824c8da8a96f899fe1ab05ae8df8062c65e"
             },
             {
               "path": "05_phase_prefill_p2048_abba_blocks_01_05/d117fq31p7-df-cmp-abba-ph-prefill-p2048-b03-b1.json",
-              "sha256": "400ee28bb302128f8fde06701ed62d032d2ba6453ed097830a3f2a4b44974191"
+              "sha256": "c443fd7244c0ac8c3a5d4fdcdbd99ed69948ba4eb9bfcc49a31ac0e25a7b44fd"
             },
             {
               "path": "05_phase_prefill_p2048_abba_blocks_01_05/d117fq31p7-df-cmp-abba-ph-prefill-p2048-b03-b2.json",
-              "sha256": "c10ef23c181df012320e245db8cebf58723a2ba13ec82b51da0429c6ec9d7c45"
+              "sha256": "01e2ee8ecc13bbdd7e417c931a09a229021f93bd23559fce4cf10da7d1137270"
             },
             {
               "path": "05_phase_prefill_p2048_abba_blocks_01_05/d117fq31p7-df-cmp-abba-ph-prefill-p2048-b04-a1.json",
-              "sha256": "2e70b6dd3c5dd5942c843e492045fdf2f38e2563ebd97e2fa9b1d4f9be0da238"
+              "sha256": "e44a7c0e94fa40ecb2807dc4e435ff22730d8bb8190540245622cf9c9f1ef358"
             },
             {
               "path": "05_phase_prefill_p2048_abba_blocks_01_05/d117fq31p7-df-cmp-abba-ph-prefill-p2048-b04-a2.json",
-              "sha256": "f8467dce5212d0b40493914212943c8b298f209c00f7bb40071a80fecd16f616"
+              "sha256": "f59cbe3af5a734fe7f5d4367f2bf068d2217d333ce6b81a1d4296977063958bc"
             },
             {
               "path": "05_phase_prefill_p2048_abba_blocks_01_05/d117fq31p7-df-cmp-abba-ph-prefill-p2048-b04-b1.json",
-              "sha256": "22b3efc4e10746ed0bbd1ef8fa40ef632b76ec464b8ad06f9aaa3b1ec62b04f0"
+              "sha256": "313af6bbac631421e0d7a30d90c00f0e9e899a68808697610ff4bf56b2a69c02"
             },
             {
               "path": "05_phase_prefill_p2048_abba_blocks_01_05/d117fq31p7-df-cmp-abba-ph-prefill-p2048-b04-b2.json",
-              "sha256": "5f093e3f021b4a662e77e232db19009fa8d73202b7b566af56abf07f1fcb387f"
+              "sha256": "9e06c67d1eca3401eac8243c8fafa2f69034a868525cc3d3b5dc9557cdde03e2"
             },
             {
               "path": "05_phase_prefill_p2048_abba_blocks_01_05/d117fq31p7-df-cmp-abba-ph-prefill-p2048-b05-a1.json",
-              "sha256": "83b7473822bfafec278d88569a4a00a5ad02a0f418e254e82ce1708fe7df8415"
+              "sha256": "e8b2dcbf261ba715f7a7bb40692c07ba51affc86865f36bf3a5b621233322e69"
             },
             {
               "path": "05_phase_prefill_p2048_abba_blocks_01_05/d117fq31p7-df-cmp-abba-ph-prefill-p2048-b05-a2.json",
-              "sha256": "f8120b41e38cbdacc6abc86071fe2a1e71753e3d31b9162f4b6326fc5a8267db"
+              "sha256": "0115c45b98231e9760619badadb4b3a6c72b194d70c1877cba7f2642b34a7dd1"
             },
             {
               "path": "05_phase_prefill_p2048_abba_blocks_01_05/d117fq31p7-df-cmp-abba-ph-prefill-p2048-b05-b1.json",
-              "sha256": "0706e6fafbb14ffb594c4a1346061814fc796899c40cfda7d6ac0e4642b21ef3"
+              "sha256": "8b1ebf85681a452984a36b61eea3a793e9083e074375eea39dd10d82985f169a"
             },
             {
               "path": "05_phase_prefill_p2048_abba_blocks_01_05/d117fq31p7-df-cmp-abba-ph-prefill-p2048-b05-b2.json",
-              "sha256": "478ac126e13054ed48508de74f68fcbdfd213d54dd07fe9a3743ebe05629dd43"
+              "sha256": "8987e9a8a4275e529316e14e7ee953c85e046f6586a804e20ef7ebe3fc4b8a00"
             },
             {
               "path": "06_phase_prefill_p2048_abba_blocks_06_10/d117fq31p7-df-cmp-abba-ph-prefill-p2048-b06-a1.json",
-              "sha256": "b700d001a27a7d6e722ffcdcb4848d7a58f6ce872d25bc571fd3be424a8eeb84"
+              "sha256": "02028dca1e700331d8da9398758a07bf5bfd3007ad41af1e5da3c58489e899dc"
             },
             {
               "path": "06_phase_prefill_p2048_abba_blocks_06_10/d117fq31p7-df-cmp-abba-ph-prefill-p2048-b06-a2.json",
-              "sha256": "c34f52f55cf9be2a2b73cb72d0019224d04384678d8e126ec193fdcceac4958b"
+              "sha256": "5756bd4c123c2d4412cc0b7aab7cc1cfc42211fb41058949bf722bdfca8c5e5c"
             },
             {
               "path": "06_phase_prefill_p2048_abba_blocks_06_10/d117fq31p7-df-cmp-abba-ph-prefill-p2048-b06-b1.json",
-              "sha256": "a66fa5ffa40886403a00d9de19198165dc94ec629ca0065b0640399856141fea"
+              "sha256": "6dea3cf2f56cfefe8323e95b065ae40b3fd41307aad65d22872a146734b76b45"
             },
             {
               "path": "06_phase_prefill_p2048_abba_blocks_06_10/d117fq31p7-df-cmp-abba-ph-prefill-p2048-b06-b2.json",
-              "sha256": "d0752e8b21b284a778fb5d4431ddac6c7c2f4d9f4d8a4f8239b24c8f0486f6ff"
+              "sha256": "95e08cc6ab1e08a146a7cb933b53206bd59e57ac45efb1259ddda7ba23865590"
             },
             {
               "path": "06_phase_prefill_p2048_abba_blocks_06_10/d117fq31p7-df-cmp-abba-ph-prefill-p2048-b07-a1.json",
-              "sha256": "322a9de45b62ef990c25f6d29ba3ba8bc15178f59c3c2115f84fd0c79ecad75f"
+              "sha256": "7242f60fce042d307386ed7a46761a74e33aae6acef34beb3dff3a99a64e3df5"
             },
             {
               "path": "06_phase_prefill_p2048_abba_blocks_06_10/d117fq31p7-df-cmp-abba-ph-prefill-p2048-b07-a2.json",
-              "sha256": "bfad18e25a96d5e2c658425e2a189fde9e3d5e3733aaf86b01fc19b66823238b"
+              "sha256": "3ab83e7994ba8fd2e3a884bc17fcc829f6766bc45aa13a696ea5e3d3a3473f38"
             },
             {
               "path": "06_phase_prefill_p2048_abba_blocks_06_10/d117fq31p7-df-cmp-abba-ph-prefill-p2048-b07-b1.json",
-              "sha256": "b363945c810a05ea6d2aede033799573053365c881b447ef0fbbf8e51a32e7f7"
+              "sha256": "6ed0b7d5417981ef32c47d67f39b7ec71816ad38dcc78cea31965b481c582a5e"
             },
             {
               "path": "06_phase_prefill_p2048_abba_blocks_06_10/d117fq31p7-df-cmp-abba-ph-prefill-p2048-b07-b2.json",
-              "sha256": "243a1c3ee6542ea5faa72544329a5657f25e7cafc292ed17a93046d455635f7f"
+              "sha256": "a650c5565ec4f344b4fa2a1f2bb046268b7ec3e15cbb2c45d5cc0e9a442412a5"
             },
             {
               "path": "06_phase_prefill_p2048_abba_blocks_06_10/d117fq31p7-df-cmp-abba-ph-prefill-p2048-b08-a1.json",
-              "sha256": "8b82b52e6421457310dacd6639cfebdb62292493a26d7fcb8a0203c3ae5c64c9"
+              "sha256": "332bfea85099a3609ffe44de28696bd46bb7ac3c28797997c9f8cdf7d43b7aa7"
             },
             {
               "path": "06_phase_prefill_p2048_abba_blocks_06_10/d117fq31p7-df-cmp-abba-ph-prefill-p2048-b08-a2.json",
-              "sha256": "e7fc4275fa1dae8526495392ccec4fa7eaf5db77ea61694cdb693d5900f8349d"
+              "sha256": "8218b2619ce54efb55c76a64710ae0e874e91f6271f9f647a704c0a6b8952287"
             },
             {
               "path": "06_phase_prefill_p2048_abba_blocks_06_10/d117fq31p7-df-cmp-abba-ph-prefill-p2048-b08-b1.json",
-              "sha256": "3633c459d81b6b2fa7b1e577cfaf2b0950cd4433ef6c6d97fdb5967242908446"
+              "sha256": "546a15e69415b1294a7fba78bf5edad4b2713d7c201a987433da25e9282a2f62"
             },
             {
               "path": "06_phase_prefill_p2048_abba_blocks_06_10/d117fq31p7-df-cmp-abba-ph-prefill-p2048-b08-b2.json",
-              "sha256": "9c6e877c55294464bea9a677a0c7cc5192b4f852a82506a73058f66d900a5e7b"
+              "sha256": "33580e6b955affdee31a2a871e5dc35311b62319a1547aa59540b078f9701f28"
             },
             {
               "path": "06_phase_prefill_p2048_abba_blocks_06_10/d117fq31p7-df-cmp-abba-ph-prefill-p2048-b09-a1.json",
-              "sha256": "bfc24e81ff007907d2ee8be568ac0edbc0ce10303e4b67edfe8acffd40ceeda9"
+              "sha256": "48cc64e92e893b462bffccff7c2edaa4d7ae56be39331f6eb576b3f8da28077e"
             },
             {
               "path": "06_phase_prefill_p2048_abba_blocks_06_10/d117fq31p7-df-cmp-abba-ph-prefill-p2048-b09-a2.json",
-              "sha256": "9f2d91d302bb5807e812d336a4f3b3097767b00263a02be2c3101da8d7be6ef4"
+              "sha256": "5c7c86e64ed406b85566c8113e9fe0fbd4fed5d1ffbee8fa631279557c9a6fdc"
             },
             {
               "path": "06_phase_prefill_p2048_abba_blocks_06_10/d117fq31p7-df-cmp-abba-ph-prefill-p2048-b09-b1.json",
-              "sha256": "8e7aa3818ad89501f2e5113d81c5679130f0138d9b2fecde8aafc8190a4433a3"
+              "sha256": "ddda9af4fe935eb0426b8c2100e99c7537d0240c4f54f9b697f558c218e60363"
             },
             {
               "path": "06_phase_prefill_p2048_abba_blocks_06_10/d117fq31p7-df-cmp-abba-ph-prefill-p2048-b09-b2.json",
-              "sha256": "b8b38703d518187fa0c7e2acdabd8927403c996b930c06c923b88032e3a3c17c"
+              "sha256": "3978fa81e8186fe8f38e1335312c2821a2f33268cc4ea2253122d06af61fbc33"
             },
             {
               "path": "06_phase_prefill_p2048_abba_blocks_06_10/d117fq31p7-df-cmp-abba-ph-prefill-p2048-b10-a1.json",
-              "sha256": "108b49e6d147604025afbb9c0d8c8e93a424fd35289094459d64223359784606"
+              "sha256": "a7e8ab63b994a5cab3cbf5009ada569e38f025ba0dc17619840bc7f02e4b0382"
             },
             {
               "path": "06_phase_prefill_p2048_abba_blocks_06_10/d117fq31p7-df-cmp-abba-ph-prefill-p2048-b10-a2.json",
-              "sha256": "55668e206ee3430c016df6abd2ffa2409413410061667d2e2b8951beb5ea5421"
+              "sha256": "fae13db1e356b30b4c49660a00f5d61f24d3986a2b46edbb67170bbc55f53b2b"
             },
             {
               "path": "06_phase_prefill_p2048_abba_blocks_06_10/d117fq31p7-df-cmp-abba-ph-prefill-p2048-b10-b1.json",
-              "sha256": "3babdd11fcefcfbc83efb6bc26b89c7d69457a5c6f1e4dc999daac496dd6eb4d"
+              "sha256": "b31f7eaa1b416e45f135d1d33def00f526e45c4ab931b3f1e1f6f082641f40d0"
             },
             {
               "path": "06_phase_prefill_p2048_abba_blocks_06_10/d117fq31p7-df-cmp-abba-ph-prefill-p2048-b10-b2.json",
-              "sha256": "912d36c929a47740e28d05f1d2048adec988ce2e1df53953fd4f4b53916f4793"
+              "sha256": "612e37dcfbf7f18a7df51bbe35935896bcedce3df4e63082f738fca826b19331"
             }
           ],
           "model_runtime_config": {
@@ -3714,11 +3714,11 @@
   "downstream_contract": {
     "extraction_spec": {
       "path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/extraction_spec.json",
-      "sha256": "03fe7be896c50a21b97d38c914b813988d1fa6ac645df773b69e238c220b28af"
+      "sha256": "8b7969851c576032a89ebd00c5d3a4396e1eba264d4d1e6a4603420fecd15c5c"
     },
     "producer_contract": {
       "path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/producer_contract.json",
-      "sha256": "4dec2d800b6027492888bcb6e62b5325d31f293c1d706687a301cb72f1534d7d"
+      "sha256": "55120f8efb895c15fe987c0e6561820cc7c50a7cbcc049a8131a7d7f134f1ad6"
     },
     "prefill_phase_presence": "required_for_all_100_physical_bundles",
     "missing_registered_phase": "refuse"

@@ -539,7 +539,7 @@ def generation_hardware() -> dict[str, Any]:
         **HARDWARE,
         "notes": f"{HARDWARE['notes']}; pack status {emitted_draft_status()}.",
     }
-SAMPLING = {"power_hz": 10.0, "idle_seconds": 30.0, "warmup_seconds": 5.0}
+SAMPLING = {"power_hz": 10.0, "idle_seconds": 75.0, "warmup_seconds": 5.0}
 
 
 def dominance_criterion_registration() -> dict[str, Any]:
@@ -1225,18 +1225,18 @@ STAGE_SPECS: tuple[dict[str, Any], ...] = ()
 REFERENCE_AFTER_STAGE: dict[str, str] = {}
 
 POLICY_PATH = Path("configs/campaign_policies/quiet_mac_p2_production.json")
-NEG8_MANIFEST_PATH = Path("configs/campaigns/neg8_reference_corpus/order_manifest.json")
+NEG8_MANIFEST_PATH = Path("configs/campaigns/neg8_reference_corpus_v5/order_manifest.json")
 NEG8_CORPUS_PATH = Path(
-    "configs/campaigns/neg8_reference_corpus/derivation/settled_corpus.json"
+    "configs/campaigns/neg8_reference_corpus_v5/derivation/settled_corpus.json"
 )
 START_REF_MANIFEST_PATH = Path(
-    "configs/campaigns/window_references/start_triplet/order_manifest.json"
+    "configs/campaigns/window_references_v5/start_triplet/order_manifest.json"
 )
 MID_REF_MANIFEST_PATH = Path(
-    "configs/campaigns/window_references/midpoint/order_manifest.json"
+    "configs/campaigns/window_references_v5/midpoint/order_manifest.json"
 )
 END_REF_MANIFEST_PATH = Path(
-    "configs/campaigns/window_references/end_triplet/order_manifest.json"
+    "configs/campaigns/window_references_v5/end_triplet/order_manifest.json"
 )
 
 

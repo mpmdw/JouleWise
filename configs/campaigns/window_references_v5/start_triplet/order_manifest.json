@@ -1,0 +1,46 @@
+{
+  "schema_version": "joulewise.order_manifest.v1",
+  "manifest_id": "neg8-window-reference-start-triplet-v1",
+  "plan_id": "neg8-window-reference-trajectory-m3max-qwen25-1p5b-v1",
+  "calibration_plan_sha256": "e529a0624b7618edaade511dd610ae0837f31de299dde642a055974c382681ab",
+  "ordering_note": "Three consecutive same-condition start references; endpoint mean and standard error are the prospective screen inputs.",
+  "planned_n_bundles": 3,
+  "executed_order": [
+    {
+      "index": 1,
+      "config": "neg8-window-start-r1.json",
+      "run_id": "neg8-window-start-r1",
+      "model_tag": "qwen25-1p5b-mlx",
+      "rep": 1,
+      "workload": "df-rq-mid",
+      "role": "neg8_daily_reference_start",
+      "block_index": 1,
+      "position_in_block": 1,
+      "sentinel_position": "start"
+    },
+    {
+      "index": 2,
+      "config": "neg8-window-start-r2.json",
+      "run_id": "neg8-window-start-r2",
+      "model_tag": "qwen25-1p5b-mlx",
+      "rep": 2,
+      "workload": "df-rq-mid",
+      "role": "neg8_daily_reference_start",
+      "block_index": 1,
+      "position_in_block": 2,
+      "sentinel_position": "start"
+    },
+    {
+      "index": 3,
+      "config": "neg8-window-start-r3.json",
+      "run_id": "neg8-window-start-r3",
+      "model_tag": "qwen25-1p5b-mlx",
+      "rep": 3,
+      "workload": "df-rq-mid",
+      "role": "neg8_daily_reference_start",
+      "block_index": 1,
+      "position_in_block": 3,
+      "sentinel_position": "start"
+    }
+  ]
+}

@@ -291,6 +291,11 @@ class D117FloorQwen3V5PackTests(unittest.TestCase):
         for _profile, pack_id, _model_id, _model_name, _plan_id in FLOORS:
             relative = Path("configs/campaigns") / pack_id / "generate_configs.py"
             shutil.copy2(ROOT / relative, repository / relative)
+        # Prospective reference inputs may be uncommitted alongside the
+        # generators, so the clone must grade those working-tree bytes too.
+        for directory in ("neg8_reference_corpus_v5", "window_references_v5"):
+            relative = Path("configs/campaigns") / directory
+            shutil.copytree(ROOT / relative, repository / relative, dirs_exist_ok=True)
         return repository
 
     def test_each_ladder_rung_realizes_pin_and_derived_identities(self) -> None:
@@ -935,6 +940,8 @@ class D117FloorQwen3V5PackTests(unittest.TestCase):
                         path for path in first_pack.glob("[0-9][0-9]_*/d117*.json")
                     )
                     self.assertEqual(len(configs), 100)
+                    for path in configs:
+                        self.assertEqual(json.loads(path.read_bytes())["sampling"]["idle_seconds"], 75.0)
                     decode_configs = configs[:50]
                     prefill_configs = configs[50:]
                     decode_manifest = json.loads(
