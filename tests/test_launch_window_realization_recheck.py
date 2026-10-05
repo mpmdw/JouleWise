@@ -517,6 +517,8 @@ with mock.patch.object(driver, "_chain_environment", return_value=dict(os.enviro
                                 os.killpg(child_pid, 0)
                             except ProcessLookupError:
                                 break
+                            except PermissionError:
+                                pass  # macOS: only an unreaped zombie is left; keep waiting
                             time.sleep(.02)
                         else:
                             self.fail("pending launcher group survived test cleanup")
