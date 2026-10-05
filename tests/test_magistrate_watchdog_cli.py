@@ -256,7 +256,8 @@ class MagistrateWatchdogCliTests(unittest.TestCase):
 
     def test_real_cli_consumes_production_plan_set_and_fails_closed(self) -> None:
         custody_parent = self.root / "four-plan-custody"
-        valid_path = self._write_valid(custody_parent, "valid-v2")
+        # Keep this diagnostics/recovery test outside the no-work span fence.
+        valid_path = self._write_valid(custody_parent, "valid-v2", t0_offset_s=3600)
         retired_path = custody_parent / "retired-v1" / "night_plan.json"
         retired_path.parent.mkdir(parents=True)
         shutil.copyfile(RETIRED_V1, retired_path)
@@ -327,6 +328,32 @@ class MagistrateWatchdogCliTests(unittest.TestCase):
         self.assertRegex(decision_line, r"^decision=(?:FENCED|HOLD_CENSUS)\b")
         self.assertNotIn("decision=LAUNCHING", positive.stdout)
         self.assertNotIn("decision=HOLD_UNSAFE", positive.stdout)
+
+    def test_real_cli_active_span_uses_no_subprocess(self) -> None:
+        custody_parent = self.root / "quiet-tick-custody"
+        self._write_valid(custody_parent, "active-plan")
+        source = (
+            "import sys\n"
+            "from unittest import mock\n"
+            "from scripts import magistrate_watchdog as wd\n"
+            "with mock.patch.object(wd, 'remote_stop_probe', side_effect=AssertionError('network')) as probe, "
+            "mock.patch.object(wd.subprocess, 'run', side_effect=AssertionError('subprocess')) as run, "
+            "mock.patch.object(wd.subprocess, 'Popen', side_effect=AssertionError('spawn')) as spawn, "
+            "mock.patch.object(wd.os, 'fork', side_effect=AssertionError('fork')) as fork:\n"
+            " result=wd.main(sys.argv[1:])\n"
+            " for guard in (probe, run, spawn, fork): guard.assert_not_called()\n"
+            " raise SystemExit(result)\n"
+        )
+        completed = subprocess.run(
+            [sys.executable, "-c", source, "tick", "--custody-root",
+             str(custody_parent / "magistrate")],
+            cwd=REPO_ROOT, env=self.environment, capture_output=True, text=True,
+            check=False,
+        )
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        watchdog_root = custody_parent / "magistrate"
+        for name in ("state.json", "events.jsonl", "attempts", "standdown.request"):
+            self.assertFalse((watchdog_root / name).exists(), name)
 
     def test_real_cli_resident_records_drain_after_plan_is_truncated(self) -> None:
         custody_parent = self.root / "resident-drain-custody"

@@ -1422,7 +1422,7 @@ class SupervisorTests(WatchdogTestCase):
         self.assertFalse(supervisor.step())
         self.assertIn((100, signal.SIGKILL), self.harness.processes.signals)
 
-    def test_unsafe_replacement_tick_in_kill_phase_signals_term_then_kill(self) -> None:
+    def test_unsafe_replacement_tick_in_active_span_defers_recovery(self) -> None:
         t0 = self.base.timestamp() + 30 * 60
         plan = self.make_plan(t0=t0, name="valid-plan")
         plan_path = self.temp / "torn-sibling" / "night_plan.json"
@@ -1452,10 +1452,9 @@ class SupervisorTests(WatchdogTestCase):
         decision = wd.tick(self.harness.storage, self.harness.deps)
 
         self.assertEqual("HOLD_UNSAFE", decision.state)
-        self.assertEqual(
-            [(100, signal.SIGTERM), (100, signal.SIGKILL)],
-            self.harness.processes.signals,
-        )
+        self.assertEqual([], self.harness.processes.signals)
+        self.assertFalse(decision.adopt)
+        self.assertFalse((self.harness.storage.root / "standdown.request").exists())
 
     def test_replacement_ticks_adopt_recorded_session_and_continue_unsafe_drain(self) -> None:
         plan = self.make_plan()

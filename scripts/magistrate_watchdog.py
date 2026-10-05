@@ -1590,17 +1590,6 @@ def decide(
     except (OSError, ValueError, OverflowError) as exc:
         return Decision("HOLD_UNSAFE", f"installed_agent_fence: {exc}")
     active_plans = [plan for plan in plans if plan_span_active(plan, wall.timestamp(), storage, state)]
-    try:
-        stop = deps.git_probe()
-    except Exception as exc:
-        stop = StopObservation("NETWORK_UNCERTAIN", f"git probe exception: {exc}")
-    state["remote_stop"] = {
-        "state": stop.state,
-        "detail": stop.detail,
-        "observed_monotonic": monotonic,
-    }
-    if storage.exists(storage.root / "STOP"):
-        stop = StopObservation("STOPPED", "local STOP file present")
     if active_plans:
         census = release_census or deps.census()
         if release_census is None:
@@ -1619,12 +1608,23 @@ def decide(
         if not census.empty:
             return Decision("HOLD_CENSUS", "production census non-empty inside plan span")
         return Decision("FENCED", "plan span active and census empty")
+    if installed is not None:
+        return Decision("FENCED", installed)
+    try:
+        stop = deps.git_probe()
+    except Exception as exc:
+        stop = StopObservation("NETWORK_UNCERTAIN", f"git probe exception: {exc}")
+    state["remote_stop"] = {
+        "state": stop.state,
+        "detail": stop.detail,
+        "observed_monotonic": monotonic,
+    }
+    if storage.exists(storage.root / "STOP"):
+        stop = StopObservation("STOPPED", "local STOP file present")
     if stop.state == "STOPPED":
         return Decision("STOPPED", stop.detail, adopt=owner is not None)
     if stop.state != "CLEAR":
         return Decision("NETWORK_UNCERTAIN", stop.detail, adopt=owner is not None)
-    if installed is not None:
-        return Decision("FENCED", installed)
     if owner is not None:
         return Decision("ACTIVE", f"owned pid {owner.pid} is live", adopt=True)
     if wall.timestamp() < float(state.get("next_eligible_epoch_s", 0.0)):
@@ -2437,6 +2437,27 @@ def tick(storage: Storage, deps: Dependencies, *, dry_run: bool = False) -> Deci
     state = load_state(storage)
     observed_wall = deps.wall_now().astimezone()
     snapshot = load_plans(storage, now_epoch_s=observed_wall.timestamp())
+    # A launchd tick can fall inside a measured window. Resolve the filesystem
+    # span fence before reboot probes, censuses, lock recovery, or networking.
+    # The resident supervisor owns stand-down enforcement; this tick does no
+    # maintenance or custody writes until the span has ended.
+    try:
+        active_span = any(
+            plan_span_active(plan, observed_wall.timestamp(), storage, state)
+            for plan in snapshot.plans
+        )
+        installed = None if active_span else installed_agent_fence(
+            observed_wall, storage, state=state
+        )
+    except (OSError, ValueError, OverflowError):
+        # An unresolved fence still belongs to the existing fail-closed
+        # diagnostics/drain path below. Only a confirmed span defers it.
+        active_span = False
+        installed = None
+    if active_span or installed is not None:
+        if snapshot.errors:
+            return Decision("HOLD_UNSAFE", "; ".join(snapshot.errors))
+        return Decision("FENCED", installed or "plan span active; tick deferred")
     record_plan_diagnostics(
         storage,
         snapshot.diagnostics,
