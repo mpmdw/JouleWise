@@ -14,10 +14,35 @@ ordered three-object registration manifest, using UTF-8 JSON with sorted keys,
 compact separators, no newline and finite numbers. Registration schema:
 `joulewise.paper_reported_energy_registration.v1`.
 
+Prospective extension (2026-10-04 floor-seat ruling F1): the ordered roles are
+`decode`, `prefill-p42`, and exactly one `prefill-p<L>`, where L is a D-166
+ladder rung (512, 1024, 2048, 4096). `registration_manifest(model, L)` and
+`registration_sha256(model, L)` select that manifest; the omitted L remains
+512 for historical callers. The p512 objects, bytes and digests are unchanged.
+The generator supplies L only after authenticating its prompt pin. The census
+derives L from the pack's long-prefill condition-family workload declarations
+(absolute and both comparative bindings must agree); a minimal spec may declare
+`reported_energy_registration.prefill_prompt_tokens` instead. If both forms
+are present they must agree. Undeclared historical specs retain L=512. Reported
+cell names cannot supply length authority. Both floor identities and the reported
+identity must use the declared L; a mixed family or a longer prompt labelled
+`p512` refuses.
+
 | Model | Registration SHA-256 (procedure metadata, not a production evidence pin) |
 |---|---|
 | qwen3-1p7b | d89011dbda01172c41ebaa200d2410b37419fc2ee626700945a811d51b136952 |
 | qwen3-8b | 88e0f5c179a7ecccb1f048f209e25ed0f239772cc078cf650c50957beceab138 |
+
+Prospective ladder-specific manifests (procedure metadata only):
+
+| Model | L | Registration SHA-256 |
+|---|---:|---|
+| qwen3-1p7b | 1024 | f0066cda9197d50fc3a039ea3e728b37789cdccfb835881705d66defbcf2b883 |
+| qwen3-8b | 1024 | 23e7d130b2fa9978452ebdb6ddaae195a22e6b480991d2233b92308e09fe4fda |
+| qwen3-1p7b | 2048 | 5560857668f053c99d0369161d4735015f4678a160b7a8423c7a7f357a50f5ea |
+| qwen3-8b | 2048 | 04657a74de839a48ebf6bf55fe66f299fdd2e6401353c76d87d4d6ae843dae79 |
+| qwen3-1p7b | 4096 | 00563c28347edbad9ca97d10e8af584a91f81f2351a2353ee2a9833d10e550ec |
+| qwen3-8b | 4096 | b1ed97fb33f88c79fb22825a1e49dbf35f1f8491ebc00b214c0ecda031f49147 |
 
 The mechanical fence is `verify_registration_ordering(repository, model)` in
 `joulewise/paper_reported_energy.py`. It uses `git log --diff-filter=A
@@ -27,7 +52,14 @@ owner (including its constants and `registration_sha256`) and the commit adding
 commit must be a strict ancestor of the spec commit, checked with
 `git merge-base --is-ancestor`; simultaneous addition refuses. Both the first
 committed spec blob and the HEAD spec blob must contain
-`reported_energy_registration.registration_sha256 == registration_sha256(model)`.
+`reported_energy_registration.registration_sha256 == registration_sha256(model, L)`
+with the same declared L. For L=512 the original owner-addition fence is
+unchanged. For a longer rung the registration commit is the first committed
+addition of `PREFILL_LADDER_PROMPT_TOKENS = (512, 1024, 2048, 4096)` in that
+owner (`git log --reverse -S <declaration>`); this prospective commit must
+strictly predate the spec. The original p512 owner commit cannot authorize a
+later ladder registration. Both models' ordering checks recognize their own
+ladder-specific manifest digest.
 Missing, shallow or ambiguous addition history refuses; a later digest repair
 cannot erase a spec that first existed with the wrong digest. This is a check
 of committed Git ancestry, not author timestamps or a claim about untracked
@@ -53,7 +85,7 @@ Each reported cell has exactly fifty ordered `{ordinal,bundle_id,config_sha256}`
 rows (ordinals 1–50). The first ten are absolute repeats. The remaining forty
 are ten complete blocks ordered A1, B1, B2, A2. The independent floor-spec census
 must match both the member order and configuration pins. Decode and prefill-p42
-share a physical universe; prefill-p512 has its separately registered universe.
+share a physical universe; prefill-p<L> has its separately registered universe.
 Any missing, duplicated, reordered, invalid or provenance-mismatched member
 refuses the energy cell. No post-collection admission filter and no 49-member
 mean are permitted. `n_bundles = expected_n = 50` is never a floor-component count.
