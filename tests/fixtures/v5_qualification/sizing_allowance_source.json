@@ -1,0 +1,423 @@
+{
+  "auxiliary": {
+    "gamma-bound-collection": 7140,
+    "gamma-bound-derivation": 60,
+    "gamma-reference-decode-midpoint": 595,
+    "gamma-reference-end": 1785,
+    "gamma-reference-start": 1785
+  },
+  "diagnostic_anchor_half_width_s": 0.003597711938684421,
+  "fixed": {
+    "fixed_settles": 3700,
+    "pack_t0": 360,
+    "pre_post_calibration": 770,
+    "stage_custody": 2835,
+    "terminal_shutdown": 300
+  },
+  "members": {
+    "large": {
+      "cooldown": 300,
+      "forced_decode": 13,
+      "idle_admission": 275,
+      "load": 6,
+      "prefill": 9,
+      "warmup": 16
+    },
+    "small": {
+      "cooldown": 300,
+      "forced_decode": 5,
+      "idle_admission": 275,
+      "load": 3,
+      "prefill": 2,
+      "warmup": 10
+    }
+  },
+  "provenance": {
+    "calibration_rate_maximum": {
+      "seconds": 7.778972106962934e-06,
+      "source": {
+        "path": "/Users/edr/night-archive/harvest-d079-epoch-25g83-derivation-w1-20260927-3ba66eeb/custody-root/runs/instrument_validation/d079-epoch-25g83-derivation-w1-20260927-d12/instrument_evidence.json",
+        "sha256": "5f1fba020a660762a46b9c78a1f700a48df2d75d30142690822b984cca86f68a"
+      },
+      "source_pointer": "derived: /clock_anchor/wall_minus_monotonic_span_s / /clock_anchor/rate_fit_baseline_s"
+    },
+    "calibration_sampler_maximum": {
+      "seconds": 196.8432228565216,
+      "source": {
+        "path": "/Users/edr/night-archive/harvest-d079-epoch-25g83-derivation-w1-20260927-3ba66eeb/custody-root/runs/instrument_validation/d079-epoch-25g83-derivation-w1-20260927-d08/events.jsonl",
+        "sha256": "0ed2ea8035d247ed744e233f13df2214024ace7408e357a5effb34f64475caaa"
+      },
+      "source_pointer": "JSONL[125].timestamp_s - JSONL[0].timestamp_s"
+    },
+    "classification": "Protocol sizing adapter; source maxima plus explicit margins or config-derived prospective allocations. No hard inference-latency guarantee.",
+    "controls": {
+      "arm_capability_horizon_s": 300,
+      "check_offset_s": 120,
+      "courier_offset_s": 720,
+      "deadman_offset_s": 4020,
+      "nonvolatile_horizon_s": 21600,
+      "shutdown_offset_s": 420,
+      "volatile_horizon_s": 1200
+    },
+    "observed_maxima": {
+      "calclock.anchor_only_bound_s": {
+        "seconds": 0.0018319634425905114,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d079-epoch-25g83-derivation-w2-20260927-77b1bee2/custody-root/runs/instrument_validation/d079-epoch-25g83-derivation-w2-20260927-d06/instrument_evidence.json",
+          "sha256": "3b5097b8bad7c5a3f3d41b7b7480c6a196f7487ca7e08ec07440804a3309a363"
+        },
+        "source_pointer": "/clock_anchor/anchor_only_bound_s"
+      },
+      "calclock.numeric_padding_s": {
+        "seconds": 1e-06,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d079-epoch-25g83-derivation-w1-20260927-3ba66eeb/custody-root/runs/instrument_validation/d079-epoch-25g83-derivation-w1-20260927-d02/instrument_evidence.json",
+          "sha256": "e9c2ebbc5d63f5002289b578be370417493e4a94924c5c29495e44242ab779bf"
+        },
+        "source_pointer": "/clock_anchor/numeric_padding_s"
+      },
+      "calclock.rate_fit_baseline_s": {
+        "seconds": 197.920038488,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d079-epoch-25g83-derivation-w2-20260927-77b1bee2/custody-root/runs/instrument_validation/d079-epoch-25g83-derivation-w2-20260927-d04/instrument_evidence.json",
+          "sha256": "6306915494c8192df280b07781903b5ad19434f2701311651ac20bfa183615b3"
+        },
+        "source_pointer": "/clock_anchor/rate_fit_baseline_s"
+      },
+      "calclock.rho": {
+        "seconds": 7.778972106962934e-06,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d079-epoch-25g83-derivation-w1-20260927-3ba66eeb/custody-root/runs/instrument_validation/d079-epoch-25g83-derivation-w1-20260927-d12/instrument_evidence.json",
+          "sha256": "5f1fba020a660762a46b9c78a1f700a48df2d75d30142690822b984cca86f68a"
+        },
+        "source_pointer": "derived: /clock_anchor/wall_minus_monotonic_span_s / /clock_anchor/rate_fit_baseline_s"
+      },
+      "calclock.stamp_resolution_s": {
+        "seconds": 1.0000000000000002e-06,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d079-epoch-25g83-derivation-w1-20260927-3ba66eeb/custody-root/runs/instrument_validation/d079-epoch-25g83-derivation-w1-20260927-d02/instrument_evidence.json",
+          "sha256": "e9c2ebbc5d63f5002289b578be370417493e4a94924c5c29495e44242ab779bf"
+        },
+        "source_pointer": "/clock_anchor/stamp_resolution_s"
+      },
+      "calclock.wall_minus_monotonic_span_s": {
+        "seconds": 0.051981210708618164,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d079-epoch-25g83-derivation-w1-20260927-3ba66eeb/custody-root/runs/instrument_validation/d079-epoch-25g83-derivation-w1-20260927-d08/instrument_evidence.json",
+          "sha256": "912b2d14c06dea981e67ffa14adb0f7d11344ab0be66710a7983e596b161bc19"
+        },
+        "source_pointer": "/clock_anchor/wall_minus_monotonic_span_s"
+      },
+      "clock.anchor_only_bound_s": {
+        "seconds": 0.003597711938684421,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261004T1305Z/g2a-root/runs/g2a-large-p4096-r01/metadata.json",
+          "sha256": "63bd62a1ca1652a0b9194885f75a4d59a8afde1b06d274dbfee21b6352d66c80"
+        },
+        "source_pointer": "/uncertainty_evidence/clock_anchor/anchor_only_bound_s"
+      },
+      "clock.numeric_padding_s": {
+        "seconds": 1e-06,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261003T1748Z/g2a-root/runs/g2a-small-p0512-r01/metadata.json",
+          "sha256": "055cd018af46c36f3e0ac77208146cfe32ea20c4b88793fc75db8d695613b535"
+        },
+        "source_pointer": "/uncertainty_evidence/clock_anchor/numeric_padding_s"
+      },
+      "clock.rate_fit_baseline_s": {
+        "seconds": 217.489778134,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261003T1748Z/g2a-root/runs/g2a-small-p0512-r02/metadata.json",
+          "sha256": "4b45e84b7416c77560656697c2d570df0566f727f604ad0bcda7422fd52aa16a"
+        },
+        "source_pointer": "/uncertainty_evidence/clock_anchor/rate_fit_baseline_s"
+      },
+      "clock.rho": {
+        "seconds": 3.27862190264707e-06,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261004T1305Z/g2a-root/runs/g2a-small-p4096-r02/metadata.json",
+          "sha256": "79577c376f90412bb11658068616a0cf7c77c5452c924c22c430e1eefcffb734"
+        },
+        "source_pointer": "derived: /uncertainty_evidence/clock_anchor/wall_minus_monotonic_span_s / /uncertainty_evidence/clock_anchor/rate_fit_baseline_s"
+      },
+      "clock.stamp_resolution_s": {
+        "seconds": 1.0000000000000002e-06,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261003T1748Z/g2a-root/runs/g2a-small-p0512-r01/metadata.json",
+          "sha256": "055cd018af46c36f3e0ac77208146cfe32ea20c4b88793fc75db8d695613b535"
+        },
+        "source_pointer": "/uncertainty_evidence/clock_anchor/stamp_resolution_s"
+      },
+      "clock.wall_minus_monotonic_span_s": {
+        "seconds": 0.0007040500640869141,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261003T1748Z/g2a-root/runs/g2a-small-p0512-r02/metadata.json",
+          "sha256": "4b45e84b7416c77560656697c2d570df0566f727f604ad0bcda7422fd52aa16a"
+        },
+        "source_pointer": "/uncertainty_evidence/clock_anchor/wall_minus_monotonic_span_s"
+      },
+      "large.admission_attempt": {
+        "seconds": 101.54775500297546,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261004T1305Z/g2a-root/runs/g2a-large-p1024-r01/metadata.json",
+          "sha256": "638a0b187ba1c0f9dbf2b36ce59080f4c4822d4ba40c9d1528777c379ff11085"
+        },
+        "source_pointer": "difference: /environment_admission/attempts/0/end_s - /environment_admission/attempts/0/start_s"
+      },
+      "large.cleanup": {
+        "seconds": 0.0190582275390625,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261004T1305Z/g2a-root/runs/g2a-large-p1024-r01/events.jsonl",
+          "sha256": "9a0eb25ebbfb3366a25449575014a7ac28bac05ca81b746bcbd2fbb1d0f4296a"
+        },
+        "source_pointer": "JSONL[536].timestamp_s - JSONL[535].timestamp_s"
+      },
+      "large.decode": {
+        "seconds": 7.531263113021851,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261004T1305Z/g2a-root/runs/g2a-large-p4096-r01/events.jsonl",
+          "sha256": "60525bc3859b49714ed482fd56e7b45bb5a5c5750005a1fe74edbf643cfbc26b"
+        },
+        "source_pointer": "JSONL[530].timestamp_s - JSONL[17].timestamp_s"
+      },
+      "large.full_member": {
+        "seconds": 175.17604875564575,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261004T1305Z/g2a-root/runs/g2a-large-p4096-r01/events.jsonl",
+          "sha256": "60525bc3859b49714ed482fd56e7b45bb5a5c5750005a1fe74edbf643cfbc26b"
+        },
+        "source_pointer": "JSONL[539].timestamp_s - JSONL[0].timestamp_s"
+      },
+      "large.generation_setup": {
+        "seconds": 0.00015878677368164062,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261004T1305Z/g2a-root/runs/g2a-large-p1024-r01/events.jsonl",
+          "sha256": "9a0eb25ebbfb3366a25449575014a7ac28bac05ca81b746bcbd2fbb1d0f4296a"
+        },
+        "source_pointer": "JSONL[14].timestamp_s - JSONL[13].timestamp_s"
+      },
+      "large.idle_baseline": {
+        "seconds": 106.87252402305603,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261004T1305Z/g2a-root/runs/g2a-large-p1024-r01/events.jsonl",
+          "sha256": "9a0eb25ebbfb3366a25449575014a7ac28bac05ca81b746bcbd2fbb1d0f4296a"
+        },
+        "source_pointer": "JSONL[6].timestamp_s - JSONL[5].timestamp_s"
+      },
+      "large.idle_drift_sentinel": {
+        "seconds": 7.729466915130615,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261004T1305Z/g2a-root/runs/g2a-large-p4096-r01/events.jsonl",
+          "sha256": "60525bc3859b49714ed482fd56e7b45bb5a5c5750005a1fe74edbf643cfbc26b"
+        },
+        "source_pointer": "JSONL[534].timestamp_s - JSONL[533].timestamp_s"
+      },
+      "large.load": {
+        "seconds": 1.0060889720916748,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261004T1305Z/g2a-root/runs/g2a-large-p0512-r01/metadata.json",
+          "sha256": "39f4dd77c00d3e9b8667314de1f3419b3ba4eb87f48ea4b45f7666395aaf1829"
+        },
+        "source_pointer": "/adapters/runtime/prepare_metadata/load_wall_time_s"
+      },
+      "large.measured_run": {
+        "seconds": 23.58442497253418,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261004T1305Z/g2a-root/runs/g2a-large-p4096-r01/events.jsonl",
+          "sha256": "60525bc3859b49714ed482fd56e7b45bb5a5c5750005a1fe74edbf643cfbc26b"
+        },
+        "source_pointer": "JSONL[532].timestamp_s - JSONL[9].timestamp_s"
+      },
+      "large.prefill": {
+        "seconds": 5.499452114105225,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261004T1305Z/g2a-root/runs/g2a-large-p4096-r01/events.jsonl",
+          "sha256": "60525bc3859b49714ed482fd56e7b45bb5a5c5750005a1fe74edbf643cfbc26b"
+        },
+        "source_pointer": "JSONL[16].timestamp_s - JSONL[15].timestamp_s"
+      },
+      "large.prepare": {
+        "seconds": 3.543833017349243,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261004T1305Z/g2a-root/runs/g2a-large-p0512-r01/events.jsonl",
+          "sha256": "2e831dcc4da72e34caa1cfe49a9a56adf00dd98bb920396c480c29b5ffdbf461"
+        },
+        "source_pointer": "JSONL[4].timestamp_s - JSONL[3].timestamp_s"
+      },
+      "large.reduce": {
+        "seconds": 23.927138090133667,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261004T1305Z/g2a-root/runs/g2a-large-p4096-r01/events.jsonl",
+          "sha256": "60525bc3859b49714ed482fd56e7b45bb5a5c5750005a1fe74edbf643cfbc26b"
+        },
+        "source_pointer": "JSONL[538].timestamp_s - JSONL[537].timestamp_s"
+      },
+      "large.tokenize": {
+        "seconds": 0.013760089874267578,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261004T1305Z/g2a-root/runs/g2a-large-p4096-r01/events.jsonl",
+          "sha256": "60525bc3859b49714ed482fd56e7b45bb5a5c5750005a1fe74edbf643cfbc26b"
+        },
+        "source_pointer": "JSONL[12].timestamp_s - JSONL[11].timestamp_s"
+      },
+      "large.validate": {
+        "seconds": 0.004819154739379883,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261004T1305Z/g2a-root/runs/g2a-large-p2048-r01/events.jsonl",
+          "sha256": "4727aee881bf68b8a8f223c816f494a75bc211d442e21671dd534d33ad77ecba"
+        },
+        "source_pointer": "JSONL[2].timestamp_s - JSONL[1].timestamp_s"
+      },
+      "large.warmup": {
+        "seconds": 10.53489375114441,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261004T1305Z/g2a-root/runs/g2a-large-p4096-r01/events.jsonl",
+          "sha256": "60525bc3859b49714ed482fd56e7b45bb5a5c5750005a1fe74edbf643cfbc26b"
+        },
+        "source_pointer": "JSONL[8].timestamp_s - JSONL[7].timestamp_s"
+      },
+      "small.admission_attempt": {
+        "seconds": 103.55372524261475,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261003T1748Z/g2a-root/runs/g2a-small-p2048-r03/metadata.json",
+          "sha256": "68c575cbb3ccd7e97f93a9dbbddcc2642c3d39eb22044d66342b8bb258e28a47"
+        },
+        "source_pointer": "difference: /environment_admission/attempts/1/end_s - /environment_admission/attempts/1/start_s"
+      },
+      "small.cleanup": {
+        "seconds": 0.016691923141479492,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261003T1748Z/g2a-root/runs/g2a-small-p0512-r05/events.jsonl",
+          "sha256": "acc07d06a859ce285fb4ee53802e33b79004309fee8674f3e639e187bc672af9"
+        },
+        "source_pointer": "JSONL[536].timestamp_s - JSONL[535].timestamp_s"
+      },
+      "small.decode": {
+        "seconds": 2.6607329845428467,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261004T1305Z/g2a-root/runs/g2a-small-p4096-r01/events.jsonl",
+          "sha256": "96e0044724266963e06910b9c439d4d4fade8df4e9c430894cadaf52b3023210"
+        },
+        "source_pointer": "JSONL[530].timestamp_s - JSONL[17].timestamp_s"
+      },
+      "small.full_member": {
+        "seconds": 270.5376479625702,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261003T1748Z/g2a-root/runs/g2a-small-p0512-r02/events.jsonl",
+          "sha256": "c48967480324396dbecceae205db55abc2b3bbe1729a171b210ae74f9894d97b"
+        },
+        "source_pointer": "JSONL[539].timestamp_s - JSONL[0].timestamp_s"
+      },
+      "small.generation_setup": {
+        "seconds": 0.000179290771484375,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261003T1748Z/g2a-root/runs/g2a-small-p1024-r02/events.jsonl",
+          "sha256": "08d8259aadbd6f8be08f0ebd5c0ec2bea0cdeeebdc3cdf0d6eabb751456e728d"
+        },
+        "source_pointer": "JSONL[14].timestamp_s - JSONL[13].timestamp_s"
+      },
+      "small.idle_baseline": {
+        "seconds": 209.79530096054077,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261003T1748Z/g2a-root/runs/g2a-small-p0512-r02/events.jsonl",
+          "sha256": "c48967480324396dbecceae205db55abc2b3bbe1729a171b210ae74f9894d97b"
+        },
+        "source_pointer": "JSONL[6].timestamp_s - JSONL[5].timestamp_s"
+      },
+      "small.idle_drift_sentinel": {
+        "seconds": 7.673356056213379,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261004T1305Z/g2a-root/runs/g2a-small-p0512-r02/events.jsonl",
+          "sha256": "92d08502fd89ebf2276107a6e6043c193f20f78db2866c0208665f7054bbf35e"
+        },
+        "source_pointer": "JSONL[534].timestamp_s - JSONL[533].timestamp_s"
+      },
+      "small.load": {
+        "seconds": 0.4582388401031494,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261004T1305Z/g2a-root/runs/g2a-small-p0512-r01/metadata.json",
+          "sha256": "420cc22700b8966c578b17f5eadd1fce0be672226f5bc054161b2c5244aa6247"
+        },
+        "source_pointer": "/adapters/runtime/prepare_metadata/load_wall_time_s"
+      },
+      "small.measured_run": {
+        "seconds": 17.926040172576904,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261003T1748Z/g2a-root/runs/g2a-small-p0512-r02/events.jsonl",
+          "sha256": "c48967480324396dbecceae205db55abc2b3bbe1729a171b210ae74f9894d97b"
+        },
+        "source_pointer": "JSONL[532].timestamp_s - JSONL[9].timestamp_s"
+      },
+      "small.prefill": {
+        "seconds": 1.3214471340179443,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261004T1305Z/g2a-root/runs/g2a-small-p4096-r02/events.jsonl",
+          "sha256": "64734b5789b8c9a9dd50a1a62712f6560d3576ad1c7cc2f3127a332cd140e51f"
+        },
+        "source_pointer": "JSONL[16].timestamp_s - JSONL[15].timestamp_s"
+      },
+      "small.prepare": {
+        "seconds": 1.671717882156372,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261003T1748Z/g2a-root/runs/g2a-small-p0512-r01/events.jsonl",
+          "sha256": "406b716a725f6132ae9a5a761de3908d3caaa5b30ec545d6cde64ddf6bb15460"
+        },
+        "source_pointer": "JSONL[4].timestamp_s - JSONL[3].timestamp_s"
+      },
+      "small.reduce": {
+        "seconds": 28.1126492023468,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261003T1748Z/g2a-root/runs/g2a-small-p0512-r02/events.jsonl",
+          "sha256": "c48967480324396dbecceae205db55abc2b3bbe1729a171b210ae74f9894d97b"
+        },
+        "source_pointer": "JSONL[538].timestamp_s - JSONL[537].timestamp_s"
+      },
+      "small.tokenize": {
+        "seconds": 0.022682905197143555,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261004T1305Z/g2a-root/runs/g2a-small-p4096-r01/events.jsonl",
+          "sha256": "96e0044724266963e06910b9c439d4d4fade8df4e9c430894cadaf52b3023210"
+        },
+        "source_pointer": "JSONL[12].timestamp_s - JSONL[11].timestamp_s"
+      },
+      "small.validate": {
+        "seconds": 0.004945993423461914,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261003T1748Z/g2a-root/runs/g2a-small-p1024-r05/events.jsonl",
+          "sha256": "e283c7f4cda77b1a413dec03367fe5ad561be01ccbe6a51cf081fddc7f9ed0af"
+        },
+        "source_pointer": "JSONL[2].timestamp_s - JSONL[1].timestamp_s"
+      },
+      "small.warmup": {
+        "seconds": 6.3994879722595215,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261004T1305Z/g2a-root/runs/g2a-small-p4096-r01/events.jsonl",
+          "sha256": "96e0044724266963e06910b9c439d4d4fade8df4e9c430894cadaf52b3023210"
+        },
+        "source_pointer": "JSONL[8].timestamp_s - JSONL[7].timestamp_s"
+      }
+    },
+    "timing_scan_counts": {
+      "calibration": 52,
+      "large": 4,
+      "small": 33
+    }
+  },
+  "rho_per_s": 8e-06,
+  "stamp_resolution_s": 1e-06,
+  "streams": {
+    "bracket": 240,
+    "large": 613,
+    "small": 592
+  },
+  "totals": {
+    "E_ABBA_L": 2428,
+    "E_large_L": 619,
+    "E_small_L": 595,
+    "NIGHT_PROGRAMMED_SPAN_S_s1": 21758,
+    "T_bound_and_references": 11365,
+    "WINDOW_MAX_S_s1": 24480,
+    "latest_start_offset_s": 2722,
+    "post_quiet_backup_close_off_s": 420
+  }
+}

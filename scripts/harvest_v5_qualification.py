@@ -70,6 +70,7 @@ def harvest(args, *, now=None, clear=q.group_clear, load=load_qualification):
             if (custody / "night/producer-faults.jsonl").exists():
                 raise q.HarvestRefusal("qualification_observation_producer_fault")
             bundle = load(custody)
+            record["desk_stages"] = q.s1_desk_records(bundle)
             verdict = evaluate(bundle, transcript=destination / "withheld/t0-evaluation.txt")
             q.write(derived / "s1-qualification-verdict.json", verdict)
             causes = [f"{row['gate_id'].lower()}_not_passed" for row in verdict["gates"]

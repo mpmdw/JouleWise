@@ -35,6 +35,13 @@ class QualificationHarvestTests(unittest.TestCase):
             chain_path=str(self.chain), chain_sha256_path=str(self.sidecar))
         self.args = SimpleNamespace(plan=self.plan_path, archive_root=self.base / "harvest", previous_harvest=None,
             replay_source=[], battery_evidence=self.battery, battery_evidence_sha256=q.sha(self.battery))
+        lifecycle = q.read(self.root / "records/lifecycle.json")
+        for row in lifecycle["stages"]:
+            if row["stage_id"] in {"claim_backup", "bound_backup", "close_out", "restore"}:
+                stage = self.root / "records" / (row["stage_id"] + ".json")
+                q.write(stage, {"schema_version": h.t0_rehearsal.QUALIFICATION_STAGE_SCHEMA, "stage_id": row["stage_id"]})
+                row.update(status="COMPLETE", evidence=q.reference(stage))
+        (self.root / "records/lifecycle.json").write_bytes(readiness.render_json(lifecycle))
         for patch in (mock.patch.object(q, "load_plan", return_value=self.plan),
                       mock.patch.object(q, "battery_boundaries", return_value=True)):
             patch.start(); self.addCleanup(patch.stop)
@@ -48,11 +55,24 @@ class QualificationHarvestTests(unittest.TestCase):
             record = self.harvest()
         self.assertEqual(record["verdict"], "PASS")
         self.assertEqual(record["verdict_kind"], "qualification")
+        self.assertEqual(set(record["desk_stages"]), {"claim_backup", "bound_backup", "close_out", "restore"})
+        for locator in record["desk_stages"].values():
+            self.assertEqual(q.reference(locator["path"]), locator)
         self.assertEqual(record["gate_counts"], {"PASS": 8, "FAIL": 0, "UNRULED": 0, "NOT_APPLICABLE": 2})
         self.assertEqual(q.tree_hash(self.root), before)
         self.assertEqual(record["next_step"], "lead_ratification")  # Decision 8: no kernel writes/closure before seal.
         self.assertTrue((self.args.archive_root / "derived/s1-qualification-verdict.json").exists())
         self.assertFalse((self.args.archive_root / "l10-a").exists())
+
+    def test_missing_or_unhashed_desk_stage_refuses_harvest(self):
+        lifecycle = q.read(self.root / "records/lifecycle.json")
+        next(row for row in lifecycle["stages"] if row["stage_id"] == "claim_backup")["evidence"]["sha256"] = "0" * 64
+        (self.root / "records/lifecycle.json").write_bytes(readiness.render_json(lifecycle))
+        with mock.patch.object(h.t0_rehearsal, "evaluate_qualification") as evaluate:
+            record = self.harvest()
+        self.assertEqual(record["verdict"], "REFUSED")
+        self.assertEqual(record["cause_codes"], ["s1_desk_stage_digest_mismatch"])
+        evaluate.assert_not_called()
 
     def test_producer_fault_refuses_only_qualification_no_recover(self):
         (self.root / "night/producer-faults.jsonl").write_text('{"producer":"hid"}\n')

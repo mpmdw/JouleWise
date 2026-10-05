@@ -221,12 +221,7 @@ def qualification_process_role(argv):
 
 
 def observe_s1_lifecycle(plan):
-    """Observe s1's actual sources; never copy a corpus, close a session or restore ON.
-
-    The G2-b chain ends at the physical-ahead boundary. Its runsheet supplies
-    neither two backups nor launch completion. Preserve those as missing G9
-    stages until the lead rules their exact counterpart/choreography.
-    """
+    """Observe night-owned stages; Addendum A desk stages are never in-chain."""
     custody = Path(plan.custody_root)
     night = custody / "night"
     go = readiness.validate_pack_night_go_receipt(read(night / "go_receipt.json"))
@@ -257,31 +252,22 @@ def observe_s1_lifecycle(plan):
                 samplers.append(reference(retained))
     if metadata and samplers:
         stage("capture", artifacts=metadata, sampler_artifacts=samplers)
-    gaps = {"claim_backup": "no_two_backup_sequence_in_g2b_chain_or_runsheet",
-            "bound_backup": "no_two_backup_sequence_in_g2b_chain_or_runsheet",
-            "close_out": "physical_ahead_stop_forbids_launch_completion"}
+    gaps = {name: "post_STOP_desk_closeout_required"
+            for name in ("claim_backup", "bound_backup", "close_out", "restore")}
     if not metadata or not samplers:
         gaps["capture"] = "science_or_auxiliary_capture_evidence_absent"
-    # Restore means continued OFF and the observed agent stand-down. It is a
-    # query only; use the canonical receipt, never an ON/setter operation.
-    try:
-        standdown_path = night / "standdown-observed.json"
-        standdown = read(standdown_path)
-        if standdown["boot_session_id"] != go["boot_session_id"] or not standdown["exits"]:
-            raise ValueError("stand-down lineage unavailable")
-        query = ["/usr/bin/sudo", "-n", "/usr/sbin/systemsetup", "-getusingnetworktime"]
-        result = t0.observed_run(query, stdin=-3, capture_output=True, text=True, timeout=30)
-        if result.returncode != 0 or result.stdout.strip() != "Network Time: Off":
-            raise ValueError("OFF observation unavailable")
-        off = namespace / "arm_readiness.t0.inputs" / network_time_off.RECEIPT_BASENAME
-        network_time_off.read_receipt(off, plan_id=plan.plan_id, window_id=plan.plan_id)
-        stage("restore", network_time="OFF", stand_down=True, standdown=reference(standdown_path),
-            off_receipt=reference(off), observation={"argv": query, "exit_code": result.returncode,
-                "stdout": result.stdout, "stderr": result.stderr})
-    except Exception:
-        gaps["restore"] = "observed_OFF_and_standdown_required"
     return write(night / "lifecycle-gaps.json", {"schema_version": "joulewise.v5_s1_lifecycle_gaps.v1",
-        "missing_stages": gaps, "needs_ruling": ["map two verified postcollection backups and close-out onto s1, or prospectively retire/change those G9 obligations"]})
+        "missing_stages": gaps, "desk_step": "scripts/v5_s1_desk_closeout.py"})
+
+
+def observe_network_time_off():
+    """Existing bounded reader only; no setter or resynchronization."""
+    query = ["/usr/bin/sudo", "-n", "/usr/sbin/systemsetup", "-getusingnetworktime"]
+    result = t0.observed_run(query, stdin=-3, capture_output=True, text=True, timeout=30)
+    if result.returncode != 0 or result.stdout.strip() != "Network Time: Off":
+        raise ValueError("OFF observation unavailable")
+    return {"argv": query, "exit_code": result.returncode,
+            "stdout": result.stdout, "stderr": result.stderr}
 
 
 def bounded_timeout(value):
@@ -554,9 +540,6 @@ def assemble(custody, *, positive_control, positive_sha256, positive_artifacts,
     stages = []
     for stage_id in t0._LIFECYCLE_STAGES:
         path = night / "rehearsal-lifecycle" / (stage_id + ".json")
-        if qualification and not path.exists():
-            stages.append({"stage_id": stage_id, "status": "MISSING", "evidence": None})
-            continue
         stage = read(path)
         if stage.get("schema_version") != (t0.QUALIFICATION_STAGE_SCHEMA if qualification else STAGE_SCHEMA) or stage.get("stage_id") != stage_id:
             raise ValueError("lifecycle evidence was missing or swapped")
@@ -629,7 +612,9 @@ def assemble(custody, *, positive_control, positive_sha256, positive_artifacts,
           [reference(night / "process-observations.jsonl"), reference(night / "standdown-observed.json"),
            reference(night / "hid-idle-observation.json"), reference(software_observations),
            *([] if fixture_mapping else [reference(origin_path)]),
-           *([reference(plan_record_path)] if qualification and not fixture_mapping else []), *support]})
+           *([reference(plan_record_path)] if qualification and not fixture_mapping else []),
+           *([reference(night / "rehearsal-lifecycle" / (name + ".json"))
+              for name in ("claim_backup", "bound_backup", "close_out", "restore")] if qualification else []), *support]})
     name = reader.QUALIFICATION_MANIFEST_NAME if qualification else "t0-rehearsal-initial.json" if initial else reader.MANIFEST_NAME
     write(custody / name, manifest)
     write(night / ("assembly-initial.json" if initial else "assembly-final.json"), {

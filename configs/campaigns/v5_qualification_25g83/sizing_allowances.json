@@ -1,0 +1,514 @@
+{
+  "schema_version": "joulewise.v5_qualification_sizing_allowances.v1",
+  "sizing": {
+    "fixed": {
+      "pack_t0": {
+        "seconds": 360,
+        "source": {
+          "path": "tests/fixtures/v5_qualification/sizing_allowance_source.json",
+          "sha256": "b02aed6a1580592db2a9e845d843f7f68c57ac54e6fbac6b830eee29b5b6d33a"
+        },
+        "source_pointer": "/fixed/pack_t0"
+      },
+      "fixed_settles": {
+        "seconds": 3700,
+        "source": {
+          "path": "tests/fixtures/v5_qualification/sizing_allowance_source.json",
+          "sha256": "b02aed6a1580592db2a9e845d843f7f68c57ac54e6fbac6b830eee29b5b6d33a"
+        },
+        "source_pointer": "/fixed/fixed_settles"
+      },
+      "pre_post_calibration": {
+        "seconds": 770,
+        "source": {
+          "path": "tests/fixtures/v5_qualification/sizing_allowance_source.json",
+          "sha256": "b02aed6a1580592db2a9e845d843f7f68c57ac54e6fbac6b830eee29b5b6d33a"
+        },
+        "source_pointer": "/fixed/pre_post_calibration"
+      },
+      "stage_custody": {
+        "seconds": 2835,
+        "source": {
+          "path": "tests/fixtures/v5_qualification/sizing_allowance_source.json",
+          "sha256": "b02aed6a1580592db2a9e845d843f7f68c57ac54e6fbac6b830eee29b5b6d33a"
+        },
+        "source_pointer": "/fixed/stage_custody"
+      },
+      "terminal_shutdown": {
+        "seconds": 300,
+        "source": {
+          "path": "tests/fixtures/v5_qualification/sizing_allowance_source.json",
+          "sha256": "b02aed6a1580592db2a9e845d843f7f68c57ac54e6fbac6b830eee29b5b6d33a"
+        },
+        "source_pointer": "/fixed/terminal_shutdown"
+      }
+    },
+    "members": {
+      "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b01-a1": {
+        "load": {
+          "seconds": 3,
+          "source": {
+            "path": "tests/fixtures/v5_qualification/sizing_allowance_source.json",
+            "sha256": "b02aed6a1580592db2a9e845d843f7f68c57ac54e6fbac6b830eee29b5b6d33a"
+          },
+          "source_pointer": "/members/small/load"
+        },
+        "warmup": {
+          "seconds": 10,
+          "source": {
+            "path": "tests/fixtures/v5_qualification/sizing_allowance_source.json",
+            "sha256": "b02aed6a1580592db2a9e845d843f7f68c57ac54e6fbac6b830eee29b5b6d33a"
+          },
+          "source_pointer": "/members/small/warmup"
+        },
+        "prefill": {
+          "seconds": 2,
+          "source": {
+            "path": "tests/fixtures/v5_qualification/sizing_allowance_source.json",
+            "sha256": "b02aed6a1580592db2a9e845d843f7f68c57ac54e6fbac6b830eee29b5b6d33a"
+          },
+          "source_pointer": "/members/small/prefill"
+        },
+        "forced_decode": {
+          "seconds": 5,
+          "source": {
+            "path": "tests/fixtures/v5_qualification/sizing_allowance_source.json",
+            "sha256": "b02aed6a1580592db2a9e845d843f7f68c57ac54e6fbac6b830eee29b5b6d33a"
+          },
+          "source_pointer": "/members/small/forced_decode"
+        },
+        "cooldown": {
+          "seconds": 300,
+          "source": {
+            "path": "tests/fixtures/v5_qualification/sizing_allowance_source.json",
+            "sha256": "b02aed6a1580592db2a9e845d843f7f68c57ac54e6fbac6b830eee29b5b6d33a"
+          },
+          "source_pointer": "/members/small/cooldown"
+        },
+        "idle_admission": {
+          "seconds": 275,
+          "source": {
+            "path": "tests/fixtures/v5_qualification/sizing_allowance_source.json",
+            "sha256": "b02aed6a1580592db2a9e845d843f7f68c57ac54e6fbac6b830eee29b5b6d33a"
+          },
+          "source_pointer": "/members/small/idle_admission"
+        }
+      },
+      "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b01-b1": {
+        "load": {
+          "seconds": 6,
+          "source": {
+            "path": "tests/fixtures/v5_qualification/sizing_allowance_source.json",
+            "sha256": "b02aed6a1580592db2a9e845d843f7f68c57ac54e6fbac6b830eee29b5b6d33a"
+          },
+          "source_pointer": "/members/large/load"
+        },
+        "warmup": {
+          "seconds": 16,
+          "source": {
+            "path": "tests/fixtures/v5_qualification/sizing_allowance_source.json",
+            "sha256": "b02aed6a1580592db2a9e845d843f7f68c57ac54e6fbac6b830eee29b5b6d33a"
+          },
+          "source_pointer": "/members/large/warmup"
+        },
+        "prefill": {
+          "seconds": 9,
+          "source": {
+            "path": "tests/fixtures/v5_qualification/sizing_allowance_source.json",
+            "sha256": "b02aed6a1580592db2a9e845d843f7f68c57ac54e6fbac6b830eee29b5b6d33a"
+          },
+          "source_pointer": "/members/large/prefill"
+        },
+        "forced_decode": {
+          "seconds": 13,
+          "source": {
+            "path": "tests/fixtures/v5_qualification/sizing_allowance_source.json",
+            "sha256": "b02aed6a1580592db2a9e845d843f7f68c57ac54e6fbac6b830eee29b5b6d33a"
+          },
+          "source_pointer": "/members/large/forced_decode"
+        },
+        "cooldown": {
+          "seconds": 300,
+          "source": {
+            "path": "tests/fixtures/v5_qualification/sizing_allowance_source.json",
+            "sha256": "b02aed6a1580592db2a9e845d843f7f68c57ac54e6fbac6b830eee29b5b6d33a"
+          },
+          "source_pointer": "/members/large/cooldown"
+        },
+        "idle_admission": {
+          "seconds": 275,
+          "source": {
+            "path": "tests/fixtures/v5_qualification/sizing_allowance_source.json",
+            "sha256": "b02aed6a1580592db2a9e845d843f7f68c57ac54e6fbac6b830eee29b5b6d33a"
+          },
+          "source_pointer": "/members/large/idle_admission"
+        }
+      },
+      "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b01-b2": {
+        "load": {
+          "seconds": 6,
+          "source": {
+            "path": "tests/fixtures/v5_qualification/sizing_allowance_source.json",
+            "sha256": "b02aed6a1580592db2a9e845d843f7f68c57ac54e6fbac6b830eee29b5b6d33a"
+          },
+          "source_pointer": "/members/large/load"
+        },
+        "warmup": {
+          "seconds": 16,
+          "source": {
+            "path": "tests/fixtures/v5_qualification/sizing_allowance_source.json",
+            "sha256": "b02aed6a1580592db2a9e845d843f7f68c57ac54e6fbac6b830eee29b5b6d33a"
+          },
+          "source_pointer": "/members/large/warmup"
+        },
+        "prefill": {
+          "seconds": 9,
+          "source": {
+            "path": "tests/fixtures/v5_qualification/sizing_allowance_source.json",
+            "sha256": "b02aed6a1580592db2a9e845d843f7f68c57ac54e6fbac6b830eee29b5b6d33a"
+          },
+          "source_pointer": "/members/large/prefill"
+        },
+        "forced_decode": {
+          "seconds": 13,
+          "source": {
+            "path": "tests/fixtures/v5_qualification/sizing_allowance_source.json",
+            "sha256": "b02aed6a1580592db2a9e845d843f7f68c57ac54e6fbac6b830eee29b5b6d33a"
+          },
+          "source_pointer": "/members/large/forced_decode"
+        },
+        "cooldown": {
+          "seconds": 300,
+          "source": {
+            "path": "tests/fixtures/v5_qualification/sizing_allowance_source.json",
+            "sha256": "b02aed6a1580592db2a9e845d843f7f68c57ac54e6fbac6b830eee29b5b6d33a"
+          },
+          "source_pointer": "/members/large/cooldown"
+        },
+        "idle_admission": {
+          "seconds": 275,
+          "source": {
+            "path": "tests/fixtures/v5_qualification/sizing_allowance_source.json",
+            "sha256": "b02aed6a1580592db2a9e845d843f7f68c57ac54e6fbac6b830eee29b5b6d33a"
+          },
+          "source_pointer": "/members/large/idle_admission"
+        }
+      },
+      "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b01-a2": {
+        "load": {
+          "seconds": 3,
+          "source": {
+            "path": "tests/fixtures/v5_qualification/sizing_allowance_source.json",
+            "sha256": "b02aed6a1580592db2a9e845d843f7f68c57ac54e6fbac6b830eee29b5b6d33a"
+          },
+          "source_pointer": "/members/small/load"
+        },
+        "warmup": {
+          "seconds": 10,
+          "source": {
+            "path": "tests/fixtures/v5_qualification/sizing_allowance_source.json",
+            "sha256": "b02aed6a1580592db2a9e845d843f7f68c57ac54e6fbac6b830eee29b5b6d33a"
+          },
+          "source_pointer": "/members/small/warmup"
+        },
+        "prefill": {
+          "seconds": 2,
+          "source": {
+            "path": "tests/fixtures/v5_qualification/sizing_allowance_source.json",
+            "sha256": "b02aed6a1580592db2a9e845d843f7f68c57ac54e6fbac6b830eee29b5b6d33a"
+          },
+          "source_pointer": "/members/small/prefill"
+        },
+        "forced_decode": {
+          "seconds": 5,
+          "source": {
+            "path": "tests/fixtures/v5_qualification/sizing_allowance_source.json",
+            "sha256": "b02aed6a1580592db2a9e845d843f7f68c57ac54e6fbac6b830eee29b5b6d33a"
+          },
+          "source_pointer": "/members/small/forced_decode"
+        },
+        "cooldown": {
+          "seconds": 300,
+          "source": {
+            "path": "tests/fixtures/v5_qualification/sizing_allowance_source.json",
+            "sha256": "b02aed6a1580592db2a9e845d843f7f68c57ac54e6fbac6b830eee29b5b6d33a"
+          },
+          "source_pointer": "/members/small/cooldown"
+        },
+        "idle_admission": {
+          "seconds": 275,
+          "source": {
+            "path": "tests/fixtures/v5_qualification/sizing_allowance_source.json",
+            "sha256": "b02aed6a1580592db2a9e845d843f7f68c57ac54e6fbac6b830eee29b5b6d33a"
+          },
+          "source_pointer": "/members/small/idle_admission"
+        }
+      }
+    },
+    "auxiliary": {
+      "gamma-bound-collection": {
+        "seconds": 7140,
+        "source": {
+          "path": "tests/fixtures/v5_qualification/sizing_allowance_source.json",
+          "sha256": "b02aed6a1580592db2a9e845d843f7f68c57ac54e6fbac6b830eee29b5b6d33a"
+        },
+        "source_pointer": "/auxiliary/gamma-bound-collection"
+      },
+      "gamma-reference-start": {
+        "seconds": 1785,
+        "source": {
+          "path": "tests/fixtures/v5_qualification/sizing_allowance_source.json",
+          "sha256": "b02aed6a1580592db2a9e845d843f7f68c57ac54e6fbac6b830eee29b5b6d33a"
+        },
+        "source_pointer": "/auxiliary/gamma-reference-start"
+      },
+      "gamma-reference-decode-midpoint": {
+        "seconds": 595,
+        "source": {
+          "path": "tests/fixtures/v5_qualification/sizing_allowance_source.json",
+          "sha256": "b02aed6a1580592db2a9e845d843f7f68c57ac54e6fbac6b830eee29b5b6d33a"
+        },
+        "source_pointer": "/auxiliary/gamma-reference-decode-midpoint"
+      },
+      "gamma-reference-end": {
+        "seconds": 1785,
+        "source": {
+          "path": "tests/fixtures/v5_qualification/sizing_allowance_source.json",
+          "sha256": "b02aed6a1580592db2a9e845d843f7f68c57ac54e6fbac6b830eee29b5b6d33a"
+        },
+        "source_pointer": "/auxiliary/gamma-reference-end"
+      },
+      "gamma-bound-derivation": {
+        "seconds": 60,
+        "source": {
+          "path": "tests/fixtures/v5_qualification/sizing_allowance_source.json",
+          "sha256": "b02aed6a1580592db2a9e845d843f7f68c57ac54e6fbac6b830eee29b5b6d33a"
+        },
+        "source_pointer": "/auxiliary/gamma-bound-derivation"
+      }
+    },
+    "streams": {
+      "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b01-a1": {
+        "seconds": 592,
+        "source": {
+          "path": "tests/fixtures/v5_qualification/sizing_allowance_source.json",
+          "sha256": "b02aed6a1580592db2a9e845d843f7f68c57ac54e6fbac6b830eee29b5b6d33a"
+        },
+        "source_pointer": "/streams/small"
+      },
+      "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b01-b1": {
+        "seconds": 613,
+        "source": {
+          "path": "tests/fixtures/v5_qualification/sizing_allowance_source.json",
+          "sha256": "b02aed6a1580592db2a9e845d843f7f68c57ac54e6fbac6b830eee29b5b6d33a"
+        },
+        "source_pointer": "/streams/large"
+      },
+      "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b01-b2": {
+        "seconds": 613,
+        "source": {
+          "path": "tests/fixtures/v5_qualification/sizing_allowance_source.json",
+          "sha256": "b02aed6a1580592db2a9e845d843f7f68c57ac54e6fbac6b830eee29b5b6d33a"
+        },
+        "source_pointer": "/streams/large"
+      },
+      "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b01-a2": {
+        "seconds": 592,
+        "source": {
+          "path": "tests/fixtures/v5_qualification/sizing_allowance_source.json",
+          "sha256": "b02aed6a1580592db2a9e845d843f7f68c57ac54e6fbac6b830eee29b5b6d33a"
+        },
+        "source_pointer": "/streams/small"
+      },
+      "gamma-bound-collection": {
+        "seconds": 592,
+        "source": {
+          "path": "tests/fixtures/v5_qualification/sizing_allowance_source.json",
+          "sha256": "b02aed6a1580592db2a9e845d843f7f68c57ac54e6fbac6b830eee29b5b6d33a"
+        },
+        "source_pointer": "/streams/small"
+      },
+      "gamma-reference-start": {
+        "seconds": 592,
+        "source": {
+          "path": "tests/fixtures/v5_qualification/sizing_allowance_source.json",
+          "sha256": "b02aed6a1580592db2a9e845d843f7f68c57ac54e6fbac6b830eee29b5b6d33a"
+        },
+        "source_pointer": "/streams/small"
+      },
+      "gamma-reference-decode-midpoint": {
+        "seconds": 592,
+        "source": {
+          "path": "tests/fixtures/v5_qualification/sizing_allowance_source.json",
+          "sha256": "b02aed6a1580592db2a9e845d843f7f68c57ac54e6fbac6b830eee29b5b6d33a"
+        },
+        "source_pointer": "/streams/small"
+      },
+      "gamma-reference-end": {
+        "seconds": 592,
+        "source": {
+          "path": "tests/fixtures/v5_qualification/sizing_allowance_source.json",
+          "sha256": "b02aed6a1580592db2a9e845d843f7f68c57ac54e6fbac6b830eee29b5b6d33a"
+        },
+        "source_pointer": "/streams/small"
+      },
+      "gamma-calibration-pre": {
+        "seconds": 240,
+        "source": {
+          "path": "tests/fixtures/v5_qualification/sizing_allowance_source.json",
+          "sha256": "b02aed6a1580592db2a9e845d843f7f68c57ac54e6fbac6b830eee29b5b6d33a"
+        },
+        "source_pointer": "/streams/bracket"
+      },
+      "gamma-calibration-post": {
+        "seconds": 240,
+        "source": {
+          "path": "tests/fixtures/v5_qualification/sizing_allowance_source.json",
+          "sha256": "b02aed6a1580592db2a9e845d843f7f68c57ac54e6fbac6b830eee29b5b6d33a"
+        },
+        "source_pointer": "/streams/bracket"
+      }
+    },
+    "clock": {
+      "diagnostic_anchor_half_width_s": 0.003597711938684421,
+      "stamp_resolution_s": 1e-06,
+      "rho_per_s": 8e-06,
+      "source": {
+        "path": "tests/fixtures/v5_qualification/sizing_allowance_source.json",
+        "sha256": "b02aed6a1580592db2a9e845d843f7f68c57ac54e6fbac6b830eee29b5b6d33a"
+      },
+      "observed_max_effective_bound": {
+        "seconds": 0.004017182870691257,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261004T1305Z-r2/g2a-root/runs/g2a-large-p4096-r01/metadata.json",
+          "sha256": "63bd62a1ca1652a0b9194885f75a4d59a8afde1b06d274dbfee21b6352d66c80"
+        },
+        "source_pointer": "/uncertainty_evidence/clock_anchor/effective_clock_anchor_bound_s"
+      }
+    }
+  },
+  "totals": {
+    "E_small_L": {
+      "seconds": 595,
+      "source": {
+        "path": "tests/fixtures/v5_qualification/sizing_allowance_source.json",
+        "sha256": "b02aed6a1580592db2a9e845d843f7f68c57ac54e6fbac6b830eee29b5b6d33a"
+      },
+      "source_pointer": "/totals/E_small_L"
+    },
+    "E_large_L": {
+      "seconds": 619,
+      "source": {
+        "path": "tests/fixtures/v5_qualification/sizing_allowance_source.json",
+        "sha256": "b02aed6a1580592db2a9e845d843f7f68c57ac54e6fbac6b830eee29b5b6d33a"
+      },
+      "source_pointer": "/totals/E_large_L"
+    },
+    "E_ABBA_L": {
+      "seconds": 2428,
+      "source": {
+        "path": "tests/fixtures/v5_qualification/sizing_allowance_source.json",
+        "sha256": "b02aed6a1580592db2a9e845d843f7f68c57ac54e6fbac6b830eee29b5b6d33a"
+      },
+      "source_pointer": "/totals/E_ABBA_L"
+    },
+    "T_bound_and_references": {
+      "seconds": 11365,
+      "source": {
+        "path": "tests/fixtures/v5_qualification/sizing_allowance_source.json",
+        "sha256": "b02aed6a1580592db2a9e845d843f7f68c57ac54e6fbac6b830eee29b5b6d33a"
+      },
+      "source_pointer": "/totals/T_bound_and_references"
+    },
+    "NIGHT_PROGRAMMED_SPAN_S_s1": {
+      "seconds": 21758,
+      "source": {
+        "path": "tests/fixtures/v5_qualification/sizing_allowance_source.json",
+        "sha256": "b02aed6a1580592db2a9e845d843f7f68c57ac54e6fbac6b830eee29b5b6d33a"
+      },
+      "source_pointer": "/totals/NIGHT_PROGRAMMED_SPAN_S_s1"
+    },
+    "WINDOW_MAX_S_s1": {
+      "seconds": 24480,
+      "source": {
+        "path": "tests/fixtures/v5_qualification/sizing_allowance_source.json",
+        "sha256": "b02aed6a1580592db2a9e845d843f7f68c57ac54e6fbac6b830eee29b5b6d33a"
+      },
+      "source_pointer": "/totals/WINDOW_MAX_S_s1"
+    },
+    "latest_start_offset_s": {
+      "seconds": 2722,
+      "source": {
+        "path": "tests/fixtures/v5_qualification/sizing_allowance_source.json",
+        "sha256": "b02aed6a1580592db2a9e845d843f7f68c57ac54e6fbac6b830eee29b5b6d33a"
+      },
+      "source_pointer": "/totals/latest_start_offset_s"
+    },
+    "post_quiet_backup_close_off_s": {
+      "seconds": 420,
+      "source": {
+        "path": "tests/fixtures/v5_qualification/sizing_allowance_source.json",
+        "sha256": "b02aed6a1580592db2a9e845d843f7f68c57ac54e6fbac6b830eee29b5b6d33a"
+      },
+      "source_pointer": "/totals/post_quiet_backup_close_off_s"
+    }
+  },
+  "controls": {
+    "volatile_horizon_s": {
+      "seconds": 1200,
+      "source": {
+        "path": "tests/fixtures/v5_qualification/sizing_allowance_source.json",
+        "sha256": "b02aed6a1580592db2a9e845d843f7f68c57ac54e6fbac6b830eee29b5b6d33a"
+      },
+      "source_pointer": "/provenance/controls/volatile_horizon_s"
+    },
+    "nonvolatile_horizon_s": {
+      "seconds": 21600,
+      "source": {
+        "path": "tests/fixtures/v5_qualification/sizing_allowance_source.json",
+        "sha256": "b02aed6a1580592db2a9e845d843f7f68c57ac54e6fbac6b830eee29b5b6d33a"
+      },
+      "source_pointer": "/provenance/controls/nonvolatile_horizon_s"
+    },
+    "arm_capability_horizon_s": {
+      "seconds": 300,
+      "source": {
+        "path": "tests/fixtures/v5_qualification/sizing_allowance_source.json",
+        "sha256": "b02aed6a1580592db2a9e845d843f7f68c57ac54e6fbac6b830eee29b5b6d33a"
+      },
+      "source_pointer": "/provenance/controls/arm_capability_horizon_s"
+    },
+    "check_offset_s": {
+      "seconds": 120,
+      "source": {
+        "path": "tests/fixtures/v5_qualification/sizing_allowance_source.json",
+        "sha256": "b02aed6a1580592db2a9e845d843f7f68c57ac54e6fbac6b830eee29b5b6d33a"
+      },
+      "source_pointer": "/provenance/controls/check_offset_s"
+    },
+    "shutdown_offset_s": {
+      "seconds": 420,
+      "source": {
+        "path": "tests/fixtures/v5_qualification/sizing_allowance_source.json",
+        "sha256": "b02aed6a1580592db2a9e845d843f7f68c57ac54e6fbac6b830eee29b5b6d33a"
+      },
+      "source_pointer": "/provenance/controls/shutdown_offset_s"
+    },
+    "courier_offset_s": {
+      "seconds": 720,
+      "source": {
+        "path": "tests/fixtures/v5_qualification/sizing_allowance_source.json",
+        "sha256": "b02aed6a1580592db2a9e845d843f7f68c57ac54e6fbac6b830eee29b5b6d33a"
+      },
+      "source_pointer": "/provenance/controls/courier_offset_s"
+    },
+    "deadman_offset_s": {
+      "seconds": 4020,
+      "source": {
+        "path": "tests/fixtures/v5_qualification/sizing_allowance_source.json",
+        "sha256": "b02aed6a1580592db2a9e845d843f7f68c57ac54e6fbac6b830eee29b5b6d33a"
+      },
+      "source_pointer": "/provenance/controls/deadman_offset_s"
+    }
+  }
+}

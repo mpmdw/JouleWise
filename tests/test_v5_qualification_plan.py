@@ -33,7 +33,8 @@ class SizingTests(unittest.TestCase):
             "auxiliary": {name: self.allow(30) for name in self.aux},
             "streams": {name: self.allow(100) for name in [*(r["run_id"] for r in self.roster), *self.aux, *self.brackets]},
             "clock": {"diagnostic_anchor_half_width_s": 0.001, "stamp_resolution_s": 1e-9,
-                      "rho_per_s": 1e-6, "source": self.source},
+                      "rho_per_s": 1e-6, "source": self.source,
+                      "observed_max_effective_bound": self.allow(0.004)},
         }
 
     def allow(self, seconds):
@@ -76,6 +77,8 @@ class SizingTests(unittest.TestCase):
     def test_longest_auxiliary_stream_and_clock_violation(self):
         changed = copy.deepcopy(self.sizing)
         changed["streams"]["neg8"] = self.allow(5000)
+        self.assertGreater(self.size(changed)["worst_case_effective_clock_bound_s"], 0.005)
+        changed["clock"]["observed_max_effective_bound"] = self.allow(0.005000001)
         with self.assertRaisesRegex(ValueError, "clock_bound_exceeded"):
             self.size(changed)
 
@@ -86,8 +89,7 @@ class SizingTests(unittest.TestCase):
         self.assertEqual(before, self.size(changed)["programmed_span_s"])
         self.assertEqual(200, self.size(changed)["longest_sampler_stream_s"])
         changed["streams"]["calibration-post"] = self.allow(5000)
-        with self.assertRaisesRegex(ValueError, "clock_bound_exceeded"):
-            self.size(changed)
+        self.assertGreater(self.size(changed)["worst_case_effective_clock_bound_s"], 0.005)
         del changed["streams"]["calibration-post"]
         with self.assertRaisesRegex(ValueError, "stream_inventory"):
             self.size(changed)
@@ -110,9 +112,49 @@ class SizingTests(unittest.TestCase):
         sized = self.size()
         from joulewise.uncertainty_evidence import NUMERIC_PADDING_S
         self.assertAlmostEqual(0.001 + 1e-9 + NUMERIC_PADDING_S + 1e-6 * 100,
-                               sized["prospective_effective_clock_bound_s"], places=15)
+                               sized["worst_case_effective_clock_bound_s"], places=15)
         self.assertEqual(self.sizing["clock"], sized["clock"])
         self.assertEqual(NUMERIC_PADDING_S, sized["numeric_padding_s"])
+
+    def test_observed_clock_source_and_exact_five_ms_gate(self):
+        for value, passes in ((0.005, True), (0.005000001, False)):
+            changed = copy.deepcopy(self.sizing)
+            changed["clock"]["observed_max_effective_bound"] = self.allow(value)
+            if passes:
+                self.assertEqual(value, self.size(changed)["observed_max_effective_clock_bound_s"])
+            else:
+                with self.assertRaisesRegex(ValueError, "clock_bound_exceeded"):
+                    self.size(changed)
+        changed["clock"]["observed_max_effective_bound"]["source"]["sha256"] = "0" * 64
+        with self.assertRaises(ValueError):
+            self.size(changed)
+
+    def test_durable_adapter_keeps_all_allowances_without_tmp_sources(self):
+        import hashlib
+        adapter = json.loads((writer.REPO_ROOT / "configs/campaigns/v5_qualification_25g83/sizing_allowances.json").read_bytes())
+        self.assertEqual(adapter["schema_version"], "joulewise.v5_qualification_sizing_allowances.v1")
+        items = []
+        def visit(value):
+            if isinstance(value, dict):
+                if "seconds" in value:
+                    self.assertEqual(set(value), {"seconds", "source", "source_pointer"})
+                    self.assertFalse(value["source"]["path"].startswith(("/tmp/", "/private/tmp/")))
+                    items.append(value)
+                else:
+                    for child in value.values():
+                        visit(child)
+        visit(adapter)
+        self.assertEqual(len(items), 60)  # 44 sizing terms, observed clock max, 8 totals, 7 controls.
+        for item in items:
+            path = Path(item["source"]["path"])
+            if not path.is_absolute():
+                raw = (writer.REPO_ROOT / path).read_bytes()
+                self.assertEqual(hashlib.sha256(raw).hexdigest(), item["source"]["sha256"])
+                self.assertEqual(writer.allowance(item), item["seconds"])
+        self.assertEqual(adapter["totals"]["post_quiet_backup_close_off_s"]["seconds"], 420)
+        self.assertEqual(set(adapter["sizing"]["auxiliary"]), {
+            "gamma-bound-collection", "gamma-bound-derivation", "gamma-reference-start",
+            "gamma-reference-decode-midpoint", "gamma-reference-end"})
 
     def test_source_mutation_negative_nan_and_unresolved_fill(self):
         changed = copy.deepcopy(self.sizing)
@@ -247,6 +289,21 @@ class PlanWriterTests(SizingTests):
         self.assertEqual(before, self.output.read_bytes())
         with self.assertRaises(FileExistsError):
             write_night_plan(self.output, plan, create_once=True)
+
+    def test_s1_plan_names_independent_backups_and_desk_recipe(self):
+        self.write()
+        record = writer.read_object(self.custody / "qualification-plan-record.json")
+        self.assertEqual(record["backup_destinations"], writer.backup_destinations(self.input["arm_context"]))
+        self.assertTrue(record["observation_recipe"]["desk_closeout_after_quiet_window"])
+        self.assertIn("v5_s1_desk_closeout.py", " ".join(record["observation_recipe"]["desk_closeout_argv"]))
+
+    def test_equal_or_nested_backup_destinations_refuse_before_write(self):
+        context = self.input["arm_context"]
+        for bound in (context["claim_backup_destination"], context["claim_backup_destination"] + "/nested"):
+            context["bound_backup_destination"] = bound
+            with self.assertRaisesRegex(ValueError, "backup_destinations_overlap"):
+                self.write()
+            self.assertFalse(self.output.exists())
 
     def test_wrong_head_purpose_claim_eligibility_and_partial_pack_refuse(self):
         for group, key, value in (("plan", "repo_head", "0" * 40),
@@ -449,6 +506,20 @@ class PackRosterTests(unittest.TestCase):
                 + [{"stage_id": "bound-derivation", "kind": "bound_derivation"}]
                 + [{"stage_id": name, "kind": "calibration_capture"} for name in ("calibration-pre", "calibration-post")],
             "arm_attachments": {"identity_pin_projection": {"identity_units": [{"config_inventory": self.inventory}]}}}
+        def collection(name, path):
+            return {"stage_id": name, "kind": "campaign_collection", "launch": {"commands": [
+                {"argv_template": {"arguments": [{"kind": "repo_path", "value": path}]}}]}}
+        self.tree["stage_graph"] = [
+            {"stage_id": "calibration-pre", "kind": "calibration_capture", "input_ref": {"slot": "pre_attempt_id"}},
+            collection("neg8", "configs/campaigns/neg8_reference_corpus"),
+            {"stage_id": "bound-derivation", "kind": "bound_derivation"},
+            collection("start", "configs/campaigns/window_references/start_triplet"),
+            {"stage_id": "science-0", "kind": "campaign_collection"},
+            collection("midpoint", "configs/campaigns/window_references/midpoint"),
+            collection("end", "configs/campaigns/window_references/end_triplet"),
+            {"stage_id": "calibration-post", "kind": "calibration_capture", "input_ref": {"slot": "post_attempt_id"}}]
+        patch = mock.patch.object(readiness, "_repo_for_pack", return_value=writer.REPO_ROOT)
+        patch.start(); self.addCleanup(patch.stop)
         self.save()
 
     def save(self):
@@ -459,10 +530,28 @@ class PackRosterTests(unittest.TestCase):
     def test_authentic_first_stage_and_full_auxiliary_roster(self):
         rows, aux, brackets, nonsampling = writer.pack_roster(self.root, "s1")
         self.assertEqual(["A1", "B1", "B2", "A2"], [r["position"] for r in rows])
-        self.assertEqual(["neg8", "start", "midpoint", "end", "bound-derivation"], aux)
+        self.assertEqual(["neg8", "bound-derivation", "start", "midpoint", "end"], aux)
         self.assertEqual(["calibration-pre", "calibration-post"], brackets)
         self.assertEqual(["bound-derivation"], nonsampling)
         self.assertEqual(80, len(self.tree["science"]))
+
+    def test_undispatched_stages_change_nothing_dispatched_omission_refuses(self):
+        before = writer.pack_roster(self.root, "s1")
+        dormant = copy.deepcopy(self.tree["stage_graph"][5])
+        dormant["stage_id"] = "gamma-reference-arm-boundary"
+        self.tree["stage_graph"].insert(6, dormant)
+        dormant = copy.deepcopy(dormant)
+        dormant["stage_id"] = "gamma-reference-prefill-midpoint"
+        self.tree["stage_graph"].insert(7, dormant)
+        self.tree["stage_graph"].append({"stage_id": "extra-unused", "kind": "campaign_collection"})
+        self.save()
+        self.assertEqual(before, writer.pack_roster(self.root, "s1"))
+        graph = copy.deepcopy(self.tree["stage_graph"])
+        for missing in ("start", "midpoint"):
+            self.tree["stage_graph"] = [row for row in graph if row["stage_id"] != missing]
+            self.save()
+            with self.subTest(missing=missing), self.assertRaisesRegex(ValueError, "dispatched_stage_missing"):
+                writer.pack_roster(self.root, "s1")
 
     def test_partial_pack_swapped_order_and_missing_config_refuse(self):
         self.tree["science"].pop()
@@ -482,7 +571,7 @@ class PackRosterTests(unittest.TestCase):
     def test_missing_bracket_stream_roster_refuses(self):
         self.tree["stage_graph"].pop()
         self.save()
-        with self.assertRaisesRegex(ValueError, "bracket_stream_roster"):
+        with self.assertRaisesRegex(ValueError, "dispatched_stage_missing"):
             writer.pack_roster(self.root, "s1")
 
     def test_missing_or_mutated_config_and_unresolved_fill_refuse(self):

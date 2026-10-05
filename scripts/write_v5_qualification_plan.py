@@ -13,6 +13,7 @@ import math
 import os
 from pathlib import Path
 import re
+import shlex
 import subprocess
 import sys
 from fractions import Fraction
@@ -78,7 +79,11 @@ def locator(path):
 
 def read_locator(value):
     exact(value, {"path", "sha256"}, "locator")
-    path = safe_path(value["path"])
+    path = Path(value["path"])
+    if not path.is_absolute():
+        require(".." not in path.parts, "locator.relative_escape")
+        path = REPO_ROOT / path
+    path = safe_path(path)
     raw = night_gate._pack_bytes(path, "qualification_input", value["sha256"])
     return path, raw
 
@@ -117,6 +122,18 @@ def allowance(value):
     return number(value["seconds"], "allowance.seconds")
 
 
+def sizing_adapter(value):
+    """Read the durable sizing-seat adapter without charging desk controls to the night."""
+    if value.get("schema_version") != "joulewise.v5_qualification_sizing_allowances.v1":
+        return value
+    exact(value, {"schema_version", "sizing", "totals", "controls"}, "sizing_adapter")
+    for group in ("totals", "controls"):
+        require(isinstance(value[group], dict) and bool(value[group]), "sizing_adapter." + group)
+        for item in value[group].values():
+            allowance(item)
+    return value["sizing"]
+
+
 def size_window(occurrence, sizing, *, roster=(), auxiliary=(), brackets=(), nonsampling=()):
     """Component arithmetic follows block-3's prospective allowance method.
 
@@ -124,6 +141,7 @@ def size_window(occurrence, sizing, *, roster=(), auxiliary=(), brackets=(), non
     stage. This does not assert a hard latency bound for unbounded inference.
     """
     require(occurrence in {"a1", "a2", "s1"}, "occurrence_retired_or_invalid")
+    sizing = sizing_adapter(sizing)
     occurrence = "s1"
     exact(sizing, {"fixed", "members", "auxiliary", "streams", "clock"}, "sizing")
     exact(sizing["fixed"], FIXED_COMPONENTS[occurrence], "fixed")
@@ -140,7 +158,7 @@ def size_window(occurrence, sizing, *, roster=(), auxiliary=(), brackets=(), non
     span = math.ceil(total)
     require(span > 0, "programmed_span")
     window = 60 * math.ceil(Fraction(span + DWELL_CAP_S, 60))
-    clock = exact(sizing["clock"], {"diagnostic_anchor_half_width_s", "stamp_resolution_s", "rho_per_s", "source"}, "clock")
+    clock = exact(sizing["clock"], {"diagnostic_anchor_half_width_s", "stamp_resolution_s", "rho_per_s", "source", "observed_max_effective_bound"}, "clock")
     _, clock_raw = read_locator(clock["source"])
     clock_source = readiness.parse_json_bytes(clock_raw)
     require(all(clock_source[key] == clock[key] for key in (
@@ -169,13 +187,17 @@ def size_window(occurrence, sizing, *, roster=(), auxiliary=(), brackets=(), non
     for stage in (*sampled_auxiliary, *brackets):
         require(allowance(streams[stage]) > 0, "auxiliary_stream")
     effective = _round_outward_up(placement + rho * longest)
-    require(effective <= 0.005, "clock_bound_exceeded")
+    observed = allowance(clock["observed_max_effective_bound"])
+    require(observed <= Fraction(0.005), "clock_bound_exceeded")
     return {"programmed_span_s": span, "window_max_s": window,
             "clean_dwell_cap_s": DWELL_CAP_S,
             "longest_sampler_stream_s": float(longest),
-            "prospective_effective_clock_bound_s": effective,
+            "worst_case_effective_clock_bound_s": effective,
+            "observed_max_effective_clock_bound_s": float(observed),
+            "clock_admission_limit_s": 0.005,
+            "clock_design_margin_s": float(Fraction(0.005) - observed),
             "clock": {key: clock[key] for key in (
-                "diagnostic_anchor_half_width_s", "stamp_resolution_s", "rho_per_s", "source")},
+                "diagnostic_anchor_half_width_s", "stamp_resolution_s", "rho_per_s", "source", "observed_max_effective_bound")},
             "numeric_padding_s": NUMERIC_PADDING_S,
             "estimate_only": True}
 
@@ -203,14 +225,89 @@ def pack_roster(root, occurrence):
         require(inventory.get(row["config_path"]) == row["config_sha256"], "science_config_inventory")
     graph = tree.get("stage_graph")
     require(isinstance(graph, list) and graph, "stage_graph")
-    science_stages = {r["stage_id"] for r in science}
-    auxiliary = [r["stage_id"] for r in graph if r["stage_id"] not in science_stages
+    dispatched = dispatched_stages(root, graph, first[0]["stage_id"])
+    auxiliary = [r["stage_id"] for r in dispatched if r["stage_id"] != first[0]["stage_id"]
                  and r.get("kind") in {"campaign_collection", "bound_derivation"}]
     require(auxiliary and len(auxiliary) == len(set(auxiliary)), "auxiliary_roster")
-    brackets = [r["stage_id"] for r in graph if r.get("kind") == "calibration_capture"]
+    brackets = [r["stage_id"] for r in dispatched if r.get("kind") == "calibration_capture"]
     require(len(brackets) == 2 and len(set(brackets)) == 2, "bracket_stream_roster")
-    nonsampling = [r["stage_id"] for r in graph if r.get("kind") == "bound_derivation"]
+    nonsampling = [r["stage_id"] for r in dispatched if r.get("kind") == "bound_derivation"]
     return [{k: r[k] for k in ("run_id", "config_path", "config_sha256", "stage_id", "block_id", "position", "arm")} for r in first], auxiliary, brackets, nonsampling
+
+
+def dispatched_stages(root, graph, science_stage):
+    """Resolve dispatches in the rendered one-block chain against the frozen graph.
+
+    Repeated reference paths resolve in graph order: only the first midpoint is
+    dispatched. An unused graph row does not contribute a sizing allowance.
+    """
+    body = g2b_body(readiness._repo_for_pack(root))
+    logical = body.replace("\\\n", " ")
+    bindings = {"REPO": ""}
+    for name, value in re.findall(r'^(?:export )?([A-Z_]+)="([^"\n]+)"$', logical, re.M):
+        for key, bound in bindings.items():
+            value = value.replace("$" + key, bound)
+        bindings[name] = value
+    dispatches = []
+    require(logical.count('\ncd "$REPO"\n') == 1, "g2b_dispatch_start")
+    for line in logical.split('\ncd "$REPO"\n', 1)[1].splitlines():
+        line = line.strip()
+        if line.startswith('run_stage '):
+            argv = shlex.split(line)
+            config = argv[3]
+            if config == "$REPO/$stage":
+                require("--max-blocks 1" in line and 'before_midpoint_stages.txt' in body
+                        and '  break\n' in body, "one_block_dispatch")
+                dispatches.append(("science", science_stage))
+            else:
+                for key, value in bindings.items():
+                    config = config.replace("$" + key, value)
+                require("$" not in config, "unresolved_dispatch_path")
+                dispatches.append(("config", config.lstrip("/")))
+        elif line.startswith('"$PY" "$REPO/scripts/run_campaign.py"') and '--derive-neg8-drift-bound' in line:
+            dispatches.append(("kind", "bound_derivation"))
+        elif re.match(r'^(PRE|POST)_CAL_CUSTODY=', line):
+            slot = re.search(r'calibrate_slot (pre|post) ', line)
+            require(slot is not None, "calibration_dispatch")
+            dispatches.append(("slot", slot[1] + "_attempt_id"))
+    require(len(dispatches) == 8, "g2b_dispatch_inventory")
+    selected, cursor = [], 0
+    for kind, value in dispatches:
+        matches = []
+        for index, row in enumerate(graph[cursor:], cursor):
+            paths = [arg.get("value") for command in row.get("launch", {}).get("commands", [])
+                     for arg in command.get("argv_template", {}).get("arguments", [])
+                     if arg.get("kind") == "repo_path"]
+            match = (row.get("stage_id") == value if kind == "science" else
+                     value in paths if kind == "config" else
+                     row.get("kind") == value if kind == "kind" else
+                     row.get("kind") == "calibration_capture" and row.get("input_ref", {}).get("slot") == value)
+            if match:
+                matches.append((index, row))
+        require(bool(matches), "dispatched_stage_missing")
+        index, row = matches[0]
+        require(row["stage_id"] not in {"gamma-reference-arm-boundary", "gamma-reference-prefill-midpoint"},
+                "dispatched_stage_missing")
+        if kind == "config" and value.endswith("/midpoint"):
+            require(not any(item.get("input_ref", {}).get("kind") == "pack_manifest"
+                            for item in graph[cursor:index]), "dispatched_stage_missing")
+        selected.append(row)
+        cursor = index + 1
+    return selected
+
+
+def backup_destinations(context):
+    result = {name: str(safe_path(context[name + "_backup_destination"], exists=False))
+              for name in ("claim", "bound")}
+    paths = [Path(value) for value in result.values()]
+    require(paths[0] != paths[1] and paths[0] not in paths[1].parents
+            and paths[1] not in paths[0].parents, "backup_destinations_overlap")
+    for destination in paths:
+        for source in (context["custody_root"], context["claim_runs_root"], context["bound_runs_root"]):
+            source = Path(source)
+            require(destination != source and destination not in source.parents
+                    and source not in destination.parents, "backup_source_destination_overlap")
+    return result
 
 
 def g2b_body(measurement):
@@ -420,8 +517,9 @@ def write_qualification(occurrence, inputs, output):
     for key, value in context.items():
         if key.endswith("root") or key.endswith("path"):
             safe_path(value, exists=False)
+    destinations = backup_destinations(context)
     prerequisites(occurrence, inputs["prerequisites"], inputs["head"],
-                  plan.t0_epoch_s - float(allowance(inputs["sizing"]["fixed"]["pack_t0"])), custody)
+                  plan.t0_epoch_s - float(allowance(sizing_adapter(inputs["sizing"])["fixed"]["pack_t0"])), custody)
     if occurrence == "s1":
         for name, relative in (("driver", "scripts/run_night.py"), ("bundle", "scripts/produce_t0_rehearsal_bundle.py"),
                                ("evaluator", "joulewise/t0_rehearsal.py")):
@@ -438,7 +536,10 @@ def write_qualification(occurrence, inputs, output):
               "nonsampling_auxiliary_roster": nonsampling,
               "sizing": sizing, "deadlines": bound_deadlines,
               "input_sha256": readiness.sha256_bytes(readiness.render_json(inputs)),
-              "prerequisites": inputs["prerequisites"]}
+              "prerequisites": inputs["prerequisites"],
+              "backup_destinations": destinations,
+              "desk_sources": {name: context[key] for name, key in (("custody", "custody_root"),
+                  ("claim_runs", "claim_runs_root"), ("bound_runs", "bound_runs_root"))}}
     if occurrence in {"a1", "a2"}:
         record.update(schema_version=ARM_ONLY_SCHEMA, mode="ARM_ONLY_NO_LAUNCH",
                       arm_context=context, plan_binding=night_plan_mapping(plan),
@@ -453,6 +554,8 @@ def write_qualification(occurrence, inputs, output):
         record["observation_recipe"] = {
             "standdown_argv": [str(measurement / ".venv/bin/python"), str(measurement / "scripts/produce_t0_rehearsal_bundle.py"), "observe-standdown", "--plan", str(output)],
             "supervised_driver_argv": [str(measurement / ".venv/bin/python"), str(measurement / "scripts/produce_t0_rehearsal_bundle.py"), "run-driver", "--plan", str(output)],
+            "desk_closeout_argv": [str(measurement / ".venv/bin/python"), str(measurement / "scripts/v5_s1_desk_closeout.py"), "--plan", str(output)],
+            "desk_closeout_after_quiet_window": True,
             "bundle_manifest": str(custody / "s1-qualification-bundle.json"),
             "positive_control": inputs["prerequisites"]["g10_control"],
             "positive_control_artifacts": inputs["prerequisites"]["g10_artifacts"],

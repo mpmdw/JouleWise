@@ -147,16 +147,43 @@ class QualificationSubsetTests(unittest.TestCase):
 
     def qualified_lifecycle(self):
         from tests.test_network_time_off import receipt
-        from scripts.produce_t0_rehearsal_bundle import verified_backup
         stage_dir = self.root / "records/qualification-stages"; stage_dir.mkdir()
         self.put("night/chain.started", {"pid": 777, "monotonic_ns": 10})
-        metadata = self.root / "records/capture/metadata.json"
-        metadata.parent.mkdir()
+        metadata = stage_dir / "capture/metadata.json"; metadata.parent.mkdir()
         metadata.write_bytes(readiness.render_json({"run_id": "fixture-only"}))
         raw = metadata.with_name("powermetrics.raw.txt"); raw.write_text("fixture-only sampler bytes")
-        completion = self.root / "records/observed-completion.json"
-        completion.write_bytes(readiness.render_json({"lifecycle_event": "completion", "proof_scope": producer.FIXTURE}))
-        off = self.root / "records/off.json"; off.write_bytes(readiness.render_json(receipt()))
+        off_value = receipt(); go = producer.read(self.root / "night/go_receipt.json")
+        off_value.update(plan_id=self.root.name, window_id=self.root.name, boot_id=go["boot_session_id"].lower())
+        off = stage_dir / "off.json"; off.write_bytes(readiness.render_json(off_value))
+        plan = self.root / "night_plan.json"; plan.write_bytes(readiness.render_json({"plan_id": self.root.name}))
+        go["plan_sha256"] = producer.reference(plan)["sha256"]
+        self.put("night/go_receipt.json", go)
+        sources = {"custody": str(self.root)}
+        (self.root / "records/lifecycle.json").unlink()
+        for role in ("claim_runs", "bound_runs"):
+            root = Path(self.temp.name).resolve() / ("backup-" + role); root.mkdir()
+            (root / "member.txt").write_text("fixture-only backup bytes")
+            sources[role] = str(root)
+        destinations = {role: str(Path(self.temp.name).resolve() / (role + "-destination")) for role in ("claim", "bound")}
+        arm_path = next(self.root.glob("*/arm_readiness.receipts/arm-0001.json"))
+        arm = producer.read(arm_path)
+        arm["arm_context"].update(custody_root=sources["custody"], claim_runs_root=sources["claim_runs"], bound_runs_root=sources["bound_runs"],
+            claim_backup_destination=destinations["claim"], bound_backup_destination=destinations["bound"])
+        arm_path.write_bytes(readiness.render_json(arm))
+        go["arm_receipt"]["sha256"] = producer.reference(arm_path)["sha256"]
+        self.put("night/go_receipt.json", go)
+        record = stage_dir / "plan-record.json"
+        record.write_bytes(readiness.render_json({"schema_version": "joulewise.v5_qualification_plan_record.v1",
+            "occurrence": "s1", "head": go["repo_head"], "plan": producer.reference(plan),
+            "window_id": self.root.name, "desk_sources": sources, "backup_destinations": destinations,
+            "pack_night": {"pack_sha256": "a" * 64}}))
+        stop = stage_dir / "stop.json"; stop.write_bytes(readiness.render_json({"session_state": "finalized",
+            "pin_relation": "physical_ahead", "refusal_code": "calibration_ledger_head_mismatch", "terminal_head_pin_candidate": {"fixture": True}}))
+        runsheet = producer.copy_record(producer.REPO_ROOT / "docs/process_traces/2026-08-28-live-smoke/SHAKEDOWN-G2-RUNSHEET.md", stage_dir / "runsheet.md")
+        log = stage_dir / "campaign_log.jsonl"; log.write_bytes(producer.calibration_ledger.canonical_json_bytes({"record_type": "idle_admission_whole_window_verdict"}) + b"\n")
+        standdown = stage_dir / "standdown.json"; standdown.write_bytes(readiness.render_json({
+            "schema_version": producer.STANDDOWN_SCHEMA, "boot_session_id": go["boot_session_id"],
+            "exits": [{"pid": 123, "observed_exit_monotonic_ns": 1}], "after": {"processes": []}}))
         consumption = next(self.root.rglob("*.consumed.json"))
         stages = []
         for index, name in enumerate(t0._LIFECYCLE_STAGES):
@@ -164,33 +191,70 @@ class QualificationSubsetTests(unittest.TestCase):
             if name == "launch": value["source"] = producer.reference(self.root / "night/chain.started")
             elif name == "capability_consumption": value["source"] = producer.reference(consumption)
             elif name == "capture": value.update(artifacts=[producer.reference(metadata)], sampler_artifacts=[producer.reference(raw)])
-            elif name.endswith("backup"):
-                source = Path(self.temp.name).resolve() / (name + "-source"); source.mkdir()
-                (source / "member.txt").write_text("fixture-only backup bytes")
-                value.update(verified_backup(source, source.with_name(name + "-destination")))
-            elif name == "close_out": value["source"] = producer.reference(completion)
+            else: value["plan_record"] = producer.reference(record)
+            if name.endswith("backup"):
+                role = "claim" if name == "claim_backup" else "bound"
+                copies = {}
+                for source_role, source in sources.items():
+                    dest = Path(destinations[role]) / source_role / "runs"; dest.parent.mkdir(parents=True)
+                    copies[source_role] = producer.verified_backup(Path(source), dest)
+                value.update(destination=destinations[role], copies=copies)
+            elif name == "close_out": value.update(stop=producer.reference(stop), runsheet=producer.reference(runsheet),
+                off_receipt=producer.reference(off), off_identity={key: off_value[key] for key in ("plan_id", "window_id", "boot_id")},
+                phase_g={"whole_window_verdict_count": 1, "campaign_log": producer.reference(log),
+                    "expected_bundles": {"claim_runs": [], "bound_runs": []}, "runs_tree": {"claim_runs": ["member.txt"], "bound_runs": ["member.txt"]},
+                    "custody_files": producer.tree_files(Path(sources["custody"])), "git_status": "## fixture\n",
+                    "head": go["repo_head"], "pack_sha256": "a" * 64, "no_extra_bundles": True,
+                    "no_scratch_residue": True, "pack_unchanged": True})
             elif name == "restore": value.update(network_time="OFF", stand_down=True, off_receipt=producer.reference(off),
-                observation={"argv": ["/usr/bin/sudo", "-n", "/usr/sbin/systemsetup", "-getusingnetworktime"],
+                standdown=producer.reference(standdown), observation={"argv": ["/usr/bin/sudo", "-n", "/usr/sbin/systemsetup", "-getusingnetworktime"],
                              "exit_code": 0, "stdout": "Network Time: Off"})
             path = stage_dir / (name + ".json"); path.write_bytes(readiness.render_json(value))
             stages.append({"stage_id": name, "status": "COMPLETE", "evidence": producer.reference(path)})
         return {"schema_version": t0.QUALIFICATION_LIFECYCLE_SCHEMA, "stages": stages,
                 "operator_actions_at_t0": 0, "human_interventions": []}
 
-    def test_missing_s1_backup_or_closeout_cannot_pass_g9(self):
-        life = self.qualified_lifecycle()
+    def mutate_stage(self, life, name, mutate):
+        row = next(row for row in life["stages"] if row["stage_id"] == name)
+        path = Path(row["evidence"]["path"])
+        value = producer.read(path); mutate(value)
+        path.write_bytes(readiness.render_json(value))
+        row["evidence"] = producer.reference(path)
         self.put("records/lifecycle.json", life)
-        # A supplied launch-completion fixture cannot invent s1's counterpart.
-        baseline = t0.evaluate_g9(self.bundle())
-        self.assertEqual(baseline.status.value, "FAIL")
-        self.assertIn("close-out counterpart has not been ruled", baseline.message)
-        for stage in ("claim_backup", "bound_backup", "close_out"):
+
+    def test_missing_s1_backup_or_closeout_cannot_pass_g9(self):
+        life = self.qualified_lifecycle(); self.put("records/lifecycle.json", life)
+        result = t0.evaluate_g9(self.bundle())
+        self.assertEqual(result.status.value, "PASS", result.message)
+        for name in ("claim_backup", "bound_backup", "close_out", "restore"):
             altered = copy.deepcopy(life)
-            next(row for row in altered["stages"] if row["stage_id"] == stage)["status"] = "MISSING"
+            next(row for row in altered["stages"] if row["stage_id"] == name)["status"] = "MISSING"
             self.put("records/lifecycle.json", altered)
-            result = t0.evaluate_g9(self.bundle())
-            self.assertEqual(result.status.value, "FAIL")
-            self.assertIn("stage " + stage + " is not complete", result.message)
+            self.assertEqual(t0.evaluate_g9(self.bundle()).status.value, "FAIL")
+
+    def test_unverified_backup_digest_mismatch_fails(self):
+        life = self.qualified_lifecycle(); self.put("records/lifecycle.json", life)
+        stage = producer.read(next(row["evidence"]["path"] for row in life["stages"] if row["stage_id"] == "claim_backup"))
+        Path(stage["copies"]["bound_runs"]["destination"], "member.txt").write_text("tampered")
+        result = t0.evaluate_g9(self.bundle())
+        self.assertEqual(result.status.value, "FAIL"); self.assertIn("digest mismatch", result.message)
+
+    def test_same_backup_destination_twice_fails(self):
+        life = self.qualified_lifecycle()
+        claim = producer.read(next(row["evidence"]["path"] for row in life["stages"] if row["stage_id"] == "claim_backup"))
+        self.mutate_stage(life, "bound_backup", lambda value: value.update(destination=claim["destination"]))
+        self.assertEqual(t0.evaluate_g9(self.bundle()).status.value, "FAIL")
+
+    def test_closeout_missing_off_identity_fails(self):
+        life = self.qualified_lifecycle()
+        self.mutate_stage(life, "close_out", lambda value: value.pop("off_identity"))
+        result = t0.evaluate_g9(self.bundle())
+        self.assertEqual(result.status.value, "FAIL"); self.assertIn("OFF identity", result.message)
+
+    def test_restore_network_time_on_fails(self):
+        life = self.qualified_lifecycle()
+        self.mutate_stage(life, "restore", lambda value: value.update(network_time="ON"))
+        self.assertEqual(t0.evaluate_g9(self.bundle()).status.value, "FAIL")
 
     def test_s1_producer_observes_sources_and_flags_missing_runsheet_counterparts(self):
         go = producer.read(self.root / "night/go_receipt.json")
@@ -210,15 +274,15 @@ class QualificationSubsetTests(unittest.TestCase):
         with mock.patch.object(producer.t0, "observed_run", side_effect=AssertionError("no machine query in desk test")):
             result_path = producer.observe_s1_lifecycle(plan)
         gaps = producer.read(result_path)["missing_stages"]
-        self.assertEqual(gaps["close_out"], "physical_ahead_stop_forbids_launch_completion")
-        self.assertEqual(gaps["claim_backup"], "no_two_backup_sequence_in_g2b_chain_or_runsheet")
-        self.assertEqual(gaps["bound_backup"], "no_two_backup_sequence_in_g2b_chain_or_runsheet")
+        self.assertEqual(gaps["close_out"], "post_STOP_desk_closeout_required")
+        self.assertEqual(gaps["claim_backup"], "post_STOP_desk_closeout_required")
+        self.assertEqual(gaps["bound_backup"], "post_STOP_desk_closeout_required")
         for stage in ("launch", "capability_consumption", "capture"):
             self.assertTrue((self.root / "night/rehearsal-lifecycle" / (stage + ".json")).exists())
         self.assertFalse((self.root / "night/rehearsal-lifecycle/close_out.json").exists())
         self.assertFalse((self.root / "night/rehearsal-lifecycle/claim_backup.json").exists())
 
-    def test_s1_assembly_emits_seven_record_subset_from_observed_fixture_mapping(self):
+    def test_s1_assembly_requires_all_four_desk_stage_records(self):
         from tests.test_v5_pack_rehearsal import ObservedDeskMappingTests
         fixture = ObservedDeskMappingTests('test_desk_observation_backup_assembly_and_real_evaluators')
         fixture.setUp()
@@ -246,19 +310,8 @@ class QualificationSubsetTests(unittest.TestCase):
                 path.write_bytes(readiness.render_json(value))
             for name in ("capture", "claim_backup", "bound_backup", "close_out"):
                 (stage_dir / (name + ".json")).unlink()
-            result = fixture.assemble(g7_locator=None)
-            rows = {row["gate_id"]: row for row in result["gates"]}
-            self.assertEqual(rows["G1"]["status"], "PASS")
-            self.assertEqual(rows["G9"]["status"], "FAIL")
-            self.assertEqual(rows["G6"]["basis"], "retired_by_ruling_76")
-            self.assertEqual(rows["G7"]["status"], "NOT_APPLICABLE")
-            manifest = producer.read(fixture.root / loader.QUALIFICATION_MANIFEST_NAME)
-            self.assertEqual(set(manifest["records"]), loader.RECORD_NAMES - {"g7_control", "rehearsal_receipt"})
-            execution = producer.read(fixture.records / "execution.json")
-            self.assertEqual(execution["schema_version"], t0.QUALIFICATION_EXECUTION_SCHEMA)
-            self.assertEqual(execution["processes"][1]["expected_outcome"], {"exit_code": 1, "stdout": ""})
-            with self.assertRaisesRegex(loader.BundleLoadError, "fixture|observed"):
-                loader.load_evidence_bundle(fixture.root, manifest_name=loader.QUALIFICATION_MANIFEST_NAME, require_observed=True)
+            with self.assertRaises((OSError, ValueError)):
+                fixture.assemble(g7_locator=None)
         finally:
             fixture.doCleanups()
 

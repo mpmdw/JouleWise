@@ -1212,6 +1212,126 @@ def evaluate_g8(bundle: EvidenceBundle) -> GateResult:
     return _result("G8", name, GateStatus.PASS, "pre-launch census binds the agent lineage, the agent exited before capture, and every capture census is agent-free", artifact.citation())
 
 
+def _verified_tree_members(source, destination, files):
+    if not source.is_absolute() or not destination.is_absolute() or not isinstance(files, Mapping) or not files:
+        raise ValueError("backup lacks independently verified file census")
+    if _contains(source, destination) or _contains(destination, source):
+        raise ValueError("backup source/destination overlap")
+    for relative, digest in files.items():
+        path = Path(relative)
+        if path.is_absolute() or ".." in path.parts or not isinstance(digest, str) or not _SHA256_RE.fullmatch(digest):
+            raise ValueError("backup member escapes tree or has invalid digest")
+        for root in (source, destination):
+            member = root / path
+            if any(p.is_symlink() for p in (member, *member.parents)) or not member.is_file() or readiness.sha256_bytes(member.read_bytes()) != digest:
+                raise ValueError("backup member digest mismatch")
+    actual = {p.relative_to(destination).as_posix(): readiness.sha256_bytes(p.read_bytes())
+              for p in destination.rglob("*") if p.is_file()}
+    if any(p.is_symlink() for p in destination.rglob("*")) or actual != files:
+        raise ValueError("backup destination census mismatch")
+
+
+def _qualified_desk_stage(bundle, facts, stage_id, evidence):
+    record_artifact = _verify_artifact_reference(bundle, facts.get("plan_record"), label="s1 desk plan")
+    record = record_artifact.value
+    go = bundle.record("d149_go").value
+    if (not isinstance(record, Mapping) or record.get("schema_version") != "joulewise.v5_qualification_plan_record.v1"
+            or record.get("occurrence") != "s1" or record.get("head") != go.get("repo_head")
+            or record.get("plan", {}).get("sha256") != go.get("plan_sha256")):
+        raise ValueError("desk stage is not bound to the s1 plan")
+    plan = _verify_artifact_reference(bundle, record.get("plan"), label="s1 plan")
+    if not isinstance(plan.value, Mapping) or not isinstance(plan.value.get("plan_id"), str):
+        raise ValueError("desk stage lacks its s1 plan identity")
+    evidence.append(record_artifact.citation())
+    destinations = record.get("backup_destinations", {})
+    sources = record.get("desk_sources", {})
+    if set(destinations) != {"claim", "bound"} or set(sources) != {"custody", "claim_runs", "bound_runs"}:
+        raise ValueError("s1 plan lacks backup destinations or sources")
+    arm = _artifact_for_path(bundle, str(bundle.custody_root / go["pack_id"] / "arm_readiness.receipts"
+        / (go["arm_receipt"]["receipt_id"] + ".json")))
+    if arm is None or not isinstance(arm.value, Mapping) or arm.sha256 != go["arm_receipt"]["sha256"]:
+        raise ValueError("desk stage lacks its s1 ARM roots")
+    context = arm.value.get("arm_context", {})
+    expected_sources = {name: context.get(key) for name, key in (("custody", "custody_root"),
+        ("claim_runs", "claim_runs_root"), ("bound_runs", "bound_runs_root"))}
+    expected_destinations = {role: context.get(role + "_backup_destination") for role in ("claim", "bound")}
+    if (sources != expected_sources or destinations != expected_destinations
+            or sources["custody"] != str(bundle.custody_root)):
+        raise ValueError("desk backup roots differ from the s1 ARM/plan")
+    paths = [Path(destinations[role]) for role in ("claim", "bound")]
+    if any(not p.is_absolute() for p in paths) or _contains(paths[0], paths[1]) or _contains(paths[1], paths[0]):
+        raise ValueError("backup destinations are not independent")
+    if stage_id.endswith("backup"):
+        role = "claim" if stage_id == "claim_backup" else "bound"
+        if facts.get("destination") != destinations[role] or set(facts.get("copies", {})) != set(sources):
+            raise ValueError("backup does not cover both s1 runs roots and custody")
+        for name, copy in facts["copies"].items():
+            destination = Path(facts["destination"]) / name / "runs"
+            if copy.get("source") != sources[name] or copy.get("destination") != str(destination):
+                raise ValueError("backup copy source/destination differs from plan")
+            _verified_tree_members(Path(sources[name]), destination, copy.get("files"))
+    elif stage_id == "close_out":
+        stop_artifact = _verify_artifact_reference(bundle, facts.get("stop"), label="s1 STOP")
+        stop = stop_artifact.value
+        if (not isinstance(stop, Mapping) or stop.get("session_state") != "finalized"
+                or stop.get("pin_relation") != "physical_ahead" or stop.get("refusal_code") != "calibration_ledger_head_mismatch"
+                or stop.get("terminal_head_pin_candidate") is None):
+            raise ValueError("s1 close-out lacks physical_ahead STOP")
+        runsheet = _verify_artifact_reference(bundle, facts.get("runsheet"), label="Phase G runsheet")
+        if b"### G1 \xe2\x80\x94 post-run assertions" not in runsheet.raw:
+            raise ValueError("s1 close-out lacks Phase G authority")
+        assertions = facts.get("phase_g", {})
+        if (assertions.get("whole_window_verdict_count") != 1
+                or any(assertions.get(key) is not True for key in ("no_extra_bundles", "no_scratch_residue", "pack_unchanged"))
+                or assertions.get("head") != record["head"]
+                or assertions.get("pack_sha256") != record.get("pack_night", {}).get("pack_sha256")
+                or not isinstance(assertions.get("git_status"), str)
+                or any(line and not line.startswith("##") for line in assertions["git_status"].splitlines())):
+            raise ValueError("s1 close-out Phase G assertions failed")
+        log = _verify_artifact_reference(bundle, assertions.get("campaign_log"), label="Phase G campaign log")
+        rows = [readiness.parse_json_bytes(line) for line in log.raw.splitlines() if line.strip()]
+        if sum(row.get("record_type") == "idle_admission_whole_window_verdict" for row in rows) != 1:
+            raise ValueError("Phase G requires exactly one whole-window verdict")
+        if set(assertions.get("expected_bundles", {})) != {"claim_runs", "bound_runs"} or set(assertions.get("runs_tree", {})) != {"claim_runs", "bound_runs"}:
+            raise ValueError("Phase G runs census missing")
+        for role, expected in assertions["expected_bundles"].items():
+            root = Path(sources[role])
+            actual = {p.name for p in root.iterdir() if p.is_dir()
+                      and p.name not in {"instrument_validation", "campaign_manifests"}}
+            if actual != set(expected):
+                raise ValueError("Phase G bundle census mismatch")
+        files = assertions.get("custody_files")
+        if not isinstance(files, Mapping) or not files:
+            raise ValueError("Phase G custody SHA-256 census absent")
+        for relative, digest in files.items():
+            path = Path(relative)
+            if path.is_absolute() or ".." in path.parts:
+                raise ValueError("Phase G custody path escapes tree")
+            member = Path(sources["custody"]) / path
+            if any(p.is_symlink() for p in (member, *member.parents)) or readiness.sha256_bytes(member.read_bytes()) != digest:
+                raise ValueError("Phase G custody digest mismatch")
+        evidence.extend((stop_artifact.citation(), runsheet.citation(), log.citation()))
+    if stage_id in {"close_out", "restore"}:
+        off_artifact = _verify_artifact_reference(bundle, facts.get("off_receipt"), label="s1 window OFF receipt")
+        off = network_time_off.admit(readiness.parse_json_bytes(off_artifact.raw))
+        identity = {key: off[key] for key in ("plan_id", "window_id", "boot_id")}
+        if (off["window_id"] != record.get("window_id") or off["plan_id"] != plan.value["plan_id"]
+                or off["boot_id"].lower() != go.get("boot_session_id", "").lower()):
+            raise ValueError("s1 OFF receipt window identity mismatch")
+        if stage_id == "close_out" and facts.get("off_identity") != identity:
+            raise ValueError("s1 close-out missing window OFF identity")
+        evidence.append(off_artifact.citation())
+    if stage_id == "restore":
+        standdown = _verify_artifact_reference(bundle, facts.get("standdown"), label="s1 stand-down")
+        observation = standdown.value
+        if (not isinstance(observation, Mapping)
+                or observation.get("schema_version") != "joulewise.t0_rehearsal_standdown_observation.v1"
+                or observation.get("boot_session_id") != go.get("boot_session_id")
+                or not observation.get("exits") or observation.get("after", {}).get("processes") != []):
+            raise ValueError("restore lacks observed stand-down")
+        evidence.append(standdown.citation())
+
+
 def evaluate_g9(bundle: EvidenceBundle) -> GateResult:
     """Evaluate the complete launch-through-restore lifecycle."""
 
@@ -1267,11 +1387,8 @@ def evaluate_g9(bundle: EvidenceBundle) -> GateResult:
                         if used_raw.path.name != "powermetrics.raw.txt" or not used_raw.raw:
                             raise ValueError("s1 sampler witness is absent")
                         evidence.append(used_raw.citation())
-                if qualified and stage_id == "close_out":
-                    # The governed G2-b stop has no close-out counterpart.
-                    # Do not silently choose launch completion or reinterpret
-                    # physical_ahead. The lead must rule the mapping first.
-                    raise ValueError("s1 close-out counterpart has not been ruled")
+                if qualified and stage_id in {"claim_backup", "bound_backup", "close_out", "restore"}:
+                    _qualified_desk_stage(bundle, facts, stage_id, evidence)
                 if not qualified and stage_id in {"capture", "close_out"}:
                     references = facts.get("artifacts" if stage_id == "capture" else "sources")
                     if not isinstance(references, list) or len(references) != 2:
@@ -1302,7 +1419,7 @@ def evaluate_g9(bundle: EvidenceBundle) -> GateResult:
                         raise ValueError("restore lacks observed OFF query")
                     off_artifact = _verify_artifact_reference(bundle, facts.get("off_receipt"), label="restore OFF receipt")
                     network_time_off.admit(readiness.parse_json_bytes(off_artifact.raw))
-                if stage_id in {"claim_backup", "bound_backup"}:
+                if not qualified and stage_id in {"claim_backup", "bound_backup"}:
                     files = facts.get("files")
                     source, destination = Path(facts.get("source", "")), Path(facts.get("destination", ""))
                     if not source.is_absolute() or not destination.is_absolute() or not isinstance(files, Mapping) or not files:
@@ -1335,7 +1452,7 @@ def evaluate_g9(bundle: EvidenceBundle) -> GateResult:
         interventions = value.get("human_interventions")
         if not isinstance(interventions, list) or interventions:
             raise ValueError("human intervention occurred during the rehearsal")
-    except (ValueError, OSError, TypeError, readiness.ArmReadinessError) as exc:
+    except (ValueError, OSError, TypeError, KeyError, readiness.ArmReadinessError) as exc:
         return _result("G9", name, GateStatus.FAIL, str(exc), *evidence)
     return _result("G9", name, GateStatus.PASS, "launch, capability consumption, capture, both backups, close-out, and restore are complete with zero human intervention", *evidence)
 

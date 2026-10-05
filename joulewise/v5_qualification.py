@@ -59,6 +59,29 @@ def reference(path):
     return {"path": str(path), "sha256": sha(path)}
 
 
+def s1_desk_records(bundle):
+    """Require the four post-STOP observations, each bound by its lifecycle hash."""
+    from joulewise import t0_rehearsal as t0
+    lifecycle = bundle.record("lifecycle")
+    if lifecycle is None or not isinstance(lifecycle.value, dict):
+        raise HarvestRefusal("s1_desk_lifecycle_missing")
+    stages = lifecycle.value.get("stages", [])
+    result = {}
+    for name in ("claim_backup", "bound_backup", "close_out", "restore"):
+        rows = [row for row in stages if row.get("stage_id") == name]
+        if len(rows) != 1 or rows[0].get("status") != "COMPLETE":
+            raise HarvestRefusal("s1_desk_stage_missing")
+        try:
+            artifact = t0._verify_artifact_reference(bundle, rows[0].get("evidence"), label=name)
+        except ValueError as exc:
+            raise HarvestRefusal("s1_desk_stage_digest_mismatch") from exc
+        if (not isinstance(artifact.value, dict) or artifact.value.get("schema_version") != t0.QUALIFICATION_STAGE_SCHEMA
+                or artifact.value.get("stage_id") != name):
+            raise HarvestRefusal("s1_desk_stage_schema_invalid")
+        result[name] = {"path": str(artifact.path), "sha256": artifact.sha256}
+    return result
+
+
 def group_clear(night, *, killpg=os.killpg, plan_id=None):
     """Read #475 custody even if the PASS-only chain marker was never made.
 
