@@ -146,3 +146,29 @@ T-0 span longer than about 1579 s even when nothing happened.
    claim registration states it again.
 8. **G10 owner** (memo 1.5, C1): stays Ed-owned, as the registration says. Ed's 2026-10-05 email asking to make it
    agent-run could not be recorded by the headless seats (the safety classifier blocked it), so it is not applied.
+
+## Addendum C (2026-10-05 07:00, same seat): cold-pass findings on the integration code (PR #483)
+
+Input: cold Fable final pass at 898c49a7, `~/night-archive/desk-day-v5/fable-int.md` (FAIL, B1 and B2 proved by
+execution on the real producers).
+
+1. **G1's registered outcomes are per argv, not one exception** (B2; corrects decision 4). The driver journals
+   every governed process, including the T-0 author's own absence probes. Every `/usr/bin/pgrep` the driver or the
+   author runs is an absence probe: the agent census, `pgrep -x caffeinate`, the browser and monitor censuses and
+   the process-group census. Each passes G1 on exit exactly 1 with empty stdout, and its stdout must be captured
+   by the journal (a `wait()` without captured output is a recording defect, not an empty answer). Every other
+   governed process passes on exit 0. The registered table lives in code beside G1 and is tested against the
+   real driver's journal.
+2. **G9 checks the layout the night gate requires** (B1). The plan custody root and the ARM custody root are
+   distinct and not nested. G9 compares the desk close-out's sources with both roots taken from the authenticated
+   plan, and the backup copy set must equal exactly the set the close-out registers (both runs roots, the plan
+   custody root, the ARM custody root and the night custody, whatever the code fixes), not a hand-written list.
+3. **Public locators carry no timing** (M1). `replay-locators.json` keeps only paths and SHA-256 on the public side;
+   the full rows with sizes and modification times go under the mode-0700 `withheld/` directory.
+4. **The structural G2-b verdict does not depend on qualification artifacts** (M2). G10 custody replay belongs to the
+   qualification verdict only; the G2-b harvest does not read it.
+5. **The frequency gate applies to every pack that authors T-0** (M3), selected by the plan and registry profile,
+   never by a pack directory name; ALPHA and BETA get it too.
+6. **One composed desk test with no mock at the seams** before seal: the real journal into the real assembler into
+   `evaluate_qualification`, and the real close-out output into G9, on a two-root fixture, covering G1, G3, G5, G8
+   and G9.
