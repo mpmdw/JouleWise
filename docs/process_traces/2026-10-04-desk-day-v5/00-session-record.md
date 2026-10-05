@@ -115,3 +115,18 @@ coordinated multi-file forgery is outside the threat model (D-161). **F2:** fix.
 - PR #469: hosted CI shard 3 errors in the new N3 test (`derived/bracket.json` missing on Linux: the harvest ended
   before the bracket there). Fix seat [28](28-sol-n3-ci-brief.md) (test only).
 - PR #470: CI test jobs green; local whole suite running. PR #471: CI running; local whole suite running.
+
+## 16:35-17:05
+
+- PR #469: N3 CI cause found [28r](28-sol-n3-ci-report.md): the test reads 190 external D-079 import custody
+  artifacts (iCloud backup path) absent on hosted CI; now `skipUnless` with the file's existing reason, and it
+  asserts the verdict before reading `bracket.json` (`fa0c8fe6`). Whole suite at `93b84dae`: failure set identical
+  to base `8fa002f7` (67 local-env failures, list `~/night-archive/desk-day-v5/base-failures-8fa002f7.txt`).
+- PR #472 (floors): executing review [29r](29-sol-floors-review.md) **PASS** (real pin: 50/50 long-prefill members
+  per floor carry the pin's ids; historical p512 bytes identical; aliases/mixed lengths refuse). Cold Fable final pass
+  [34](34-fable-floors.md) **PASS**, no BLOCKER/MAJOR. Dispositions: MINOR-1 (an undeclared spec defaults to 512 in
+  the reported-energy census; the generator cannot emit it and `--check` flags it), MINOR-2 (floor-to-contrast join
+  tested only at 512), MINOR-3 (end-state branch ahead of the contrast generator; both fail closed), NIT-1..4:
+  **deferred** to lane `V5-FLOOR-HARDENING-01`. The real desk generation at the selected rung exercises the
+  MINOR-2 join on real bytes before freeze.
+- PR #473 (contrast) opened at `a42a26fd`; executing review brief [35](35-sol-contrast-review-brief.md).
