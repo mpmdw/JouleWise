@@ -101,6 +101,26 @@ class Block4ClockTests(unittest.TestCase):
                 self.assertFalse(gate["passes"])
                 self.assertLess(gate["margin_ms"], 0)
 
+    def test_idle_75_sizing_clears_current_frequency_and_checks_inclusive_limit(self):
+        import json
+        import math
+        from pathlib import Path
+        source = Path(__file__).resolve().parents[1] / "configs/campaigns/v5_qualification_25g83/sizing_allowances.json"
+        adapter = json.loads(source.read_bytes())
+        maximum = max(item["seconds"] for item in adapter["sizing"]["streams"].values())
+        self.assertEqual(maximum, adapter["totals"]["T_stream_max"]["seconds"])
+        self.assertEqual(maximum, 335)
+        gate = kernel_clock.frequency_gate(frequency_probe(-207749), maximum)
+        self.assertTrue(gate["passes"])
+        self.assertAlmostEqual(gate["bound_ms"], 4.84570, places=5)
+        self.assertFalse(kernel_clock.frequency_gate(frequency_probe(-207749), 613)["passes"])
+        # The raw frequency word is quantized at 1/65536 ppm: last passing
+        # word and its immediate successor exercise the actual gate boundary.
+        last_word = math.floor((1300 / maximum - 0.25) * 65536)
+        for sign in (-1, 1):
+            self.assertTrue(kernel_clock.frequency_gate(frequency_probe(sign * last_word), maximum)["passes"])
+            self.assertFalse(kernel_clock.frequency_gate(frequency_probe(sign * (last_word + 1)), maximum)["passes"])
+
     def test_frequency_requirement_follows_every_authoring_registry_profile(self):
         import json
         from pathlib import Path

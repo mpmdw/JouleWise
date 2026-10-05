@@ -149,17 +149,63 @@ class SizingTests(unittest.TestCase):
                     for child in value.values():
                         visit(child)
         visit(adapter)
-        self.assertEqual(len(items), 60)  # 44 sizing terms, observed clock max, 8 totals, 7 controls.
+        self.assertEqual(len(items), 69)  # Stream max and eight full custody-inclusive totals.
+        production_source = "configs/campaigns/v5_qualification_25g83/sizing_sources/sizing_source_v2.json"
         for item in items:
+            self.assertEqual(item["source"]["path"], production_source)
             path = Path(item["source"]["path"])
             if not path.is_absolute():
                 raw = (writer.REPO_ROOT / path).read_bytes()
                 self.assertEqual(hashlib.sha256(raw).hexdigest(), item["source"]["sha256"])
                 self.assertEqual(writer.allowance(item), item["seconds"])
+        self.assertEqual(adapter["sizing"]["clock"]["source"]["path"], production_source)
         self.assertEqual(adapter["totals"]["post_quiet_backup_close_off_s"]["seconds"], 420)
         self.assertEqual(set(adapter["sizing"]["auxiliary"]), {
             "gamma-bound-collection", "gamma-bound-derivation", "gamma-reference-start",
             "gamma-reference-decode-midpoint", "gamma-reference-end"})
+
+    def test_production_derivation_binds_idle_cadence_and_separate_streams(self):
+        import hashlib
+        source = json.loads((writer.REPO_ROOT /
+            "configs/campaigns/v5_qualification_25g83/sizing_sources/sizing_source_v2.json").read_bytes())
+        provenance = source["provenance"]
+        self.assertEqual(len(provenance["config_inventory"]), 23)
+        for row in provenance["config_inventory"]:
+            raw = (writer.REPO_ROOT / row["source"]["path"]).read_bytes()
+            self.assertEqual(hashlib.sha256(raw).hexdigest(), row["source"]["sha256"])
+            sampling = json.loads(raw)["sampling"]
+            self.assertEqual(sampling["idle_seconds"], row["sampling_idle_seconds"])
+            self.assertEqual(row["sampling_idle_seconds"], 75)
+            self.assertEqual(row["idle_records"], 750)
+        self.assertEqual(len(provenance["cadence_captures"]), 40)
+        for row in provenance["cadence_captures"]:
+            self.assertEqual(row["records"], 750)
+            self.assertGreater(row["endpoint_span_s"], 60)
+            self.assertEqual(len(row["source"]["sha256"]), 64)
+        for model in ("small", "large"):
+            components = source["members"][model]
+            self.assertEqual(components["idle_admission"], 2 * 110 + 3 * 15 + 10)
+            # Cooldown is wall time on its own adapter, not member sampler time.
+            self.assertEqual(source["streams"][model], 15 + 17 - 10 + sum(
+                seconds for key, seconds in components.items()
+                if key not in {"load", "cooldown"}))
+            self.assertEqual(source["totals"][f"E_{model}_full"],
+                             sum(components.values()) + 32)
+        self.assertEqual(source["totals"]["T_stream_max"], max(source["streams"].values()))
+        self.assertEqual(source["totals"]["T_bound_and_references"],
+                         19 * source["totals"]["E_small_L"] + 60)
+        self.assertEqual(source["totals"]["T_bound_and_references_full"],
+                         19 * source["totals"]["E_small_full"] + 60)
+        self.assertEqual(source["fixed"]["stage_custody"], 2835 + 23 * 32)
+        # Two equivalent accounts prove sampler custody is charged once: in
+        # the v1 writer's fixed field, or in record 44's full member envelopes.
+        full = source["totals"]
+        self.assertEqual(full["NIGHT_PROGRAMMED_SPAN_S_s1"],
+            sum(value for key, value in source["fixed"].items() if key != "stage_custody")
+            + 2835 + full["E_ABBA_full"] + full["T_bound_and_references_full"])
+        self.assertEqual(source["derivations"]["window"]["outside_dwell_cap_s"], 2700)
+        self.assertIn("PROVISIONAL", source["status"])
+        self.assertTrue(source["blockers"])
 
     def test_source_mutation_negative_nan_and_unresolved_fill(self):
         changed = copy.deepcopy(self.sizing)
@@ -644,12 +690,12 @@ class PackRosterTests(unittest.TestCase):
                 {"argv_template": {"arguments": [{"kind": "repo_path", "value": path}]}}]}}
         self.tree["stage_graph"] = [
             {"stage_id": "calibration-pre", "kind": "calibration_capture", "input_ref": {"slot": "pre_attempt_id"}},
-            collection("neg8", "configs/campaigns/neg8_reference_corpus"),
+            collection("neg8", "configs/campaigns/neg8_reference_corpus_v5"),
             {"stage_id": "bound-derivation", "kind": "bound_derivation"},
-            collection("start", "configs/campaigns/window_references/start_triplet"),
+            collection("start", "configs/campaigns/window_references_v5/start_triplet"),
             {"stage_id": "science-0", "kind": "campaign_collection"},
-            collection("midpoint", "configs/campaigns/window_references/midpoint"),
-            collection("end", "configs/campaigns/window_references/end_triplet"),
+            collection("midpoint", "configs/campaigns/window_references_v5/midpoint"),
+            collection("end", "configs/campaigns/window_references_v5/end_triplet"),
             {"stage_id": "calibration-post", "kind": "calibration_capture", "input_ref": {"slot": "post_attempt_id"}}]
         patch = mock.patch.object(readiness, "_repo_for_pack", return_value=writer.REPO_ROOT)
         patch.start(); self.addCleanup(patch.stop)
