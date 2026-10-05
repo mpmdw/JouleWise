@@ -1,7 +1,7 @@
 # Registration V5-QUAL-25G83-B4: measurement block 4, the qualification block for the `_v5` claim family
 
 **Status: DRAFT, 2026-10-05. Unsealed.** This file authorizes no arm and discharges no live gate. It is written
-by the desk-day orchestrator seat (Opus 5.5) under lead ruling 76 and its addendum A
+by the desk-day orchestrator seat (Opus 5.5) under lead ruling 76 and its addenda A to D
 (`docs/process_traces/2026-10-04-desk-day-v5/76-r1-fold-ruling.md`), after the blind consult in brief 75 and both
 answers beside it. A cold Fable judge and an independent Opus refuter seal it (§12). Ruling 76 changes D-176
 decision 4 prospectively; until this seal, D-176 stands as written, and Ed may veto (§14).
@@ -32,20 +32,23 @@ G2-a (block 3) fixed a protocol parameter, the prefill length. It discharged non
 
 The block runs in this order, each step only after the previous one has passed:
 
-**G10 physical control → `a1` → `a2` → `s1`.** Recovery is limited to §7: a fresh `s1` after a no-science tooling
-failure, or at most one `s2`.
+**`a1` → `a2` → G10 physical control → `s1`.** Recovery is limited to §7: a fresh `s1` after a NULL, a no-science
+tooling failure or the one admission abort, or at most one `s2`. Every `s1` attempt and the `s2` names its
+predecessor in a create-once `previous_attempt` field (`none` for the first), and the harvests prove the block's
+attempt history complete (§7).
 
 | Occurrence | What it is | What it must hand back |
 |---|---|---|
-| G10 control | The privileged-anchor positive control (§5), outside every armed or capture span. | The exact eight-key control record with its raw supports. |
 | `a1` | An arm-only control on a throwaway real-GAMMA ARM context: fresh T-0, purpose `G2B_SHAKEDOWN`, `claim_eligible=false`, `permitted_blocks=1`. It arms once and never launches: no consumption, no bundle, no `night/chain.started`. | A genuine PASS/GO ARM, then the canonical verifier refusing `readiness_record_expired` after the ARM's own validity horizon, with proof that nothing launched. |
 | `a2` | The same arm-only recipe with its own identity, authorization, custody and fresh T-0, started after `a1`'s expiry check. It exists to give Q110 its third real receipt bundle (§8). | The same expiry and no-launch proof. |
+| G10 control | The privileged-anchor positive control (§5), after `a2`'s expiry check and before `s1`'s T-0, outside every armed or capture span. | The exact eight-key control record with its raw supports and its offset preflight. |
 | `s1` | One consuming launch of the frozen GAMMA pack `d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5` as a `TRANSACTION_PACK` night, purpose `G2B_SHAKEDOWN`, `claim_eligible=false`, `permitted_blocks=1`: the first frozen science stage, exactly one A/B/B/A science block, then the governed post-science path. | Two separate verdicts (§7): the structural G2-b verdict and the decision-4 qualification verdict. |
 
 No receipt, capability, namespace or T-0 evidence is shared between occurrences. The controls are not consuming
 recovery allowances. Their waits come from their own receipts and boot, never from a guessed delay. `s1` uses
 `scripts/run_night.py run --plan ...`, never the `rehearse` subcommand. There is no separate rehearsal pack,
-profile, ledger or clone, and no live G6 or G7 control (ruling 76).
+profile, ledger or clone, and no live G6 or G7 control (ruling 76). The controls' seed copies of the ledger (§3.6)
+are not rehearsal ledgers: they exist only so that a control's T-0 reservation cannot touch production.
 
 All occurrences run at one reviewed code head **H**, which is meant to be the ALPHA/BETA/GAMMA claim head. H
 contains the producer fixes #472, #473 and #476, the one-block stop #474, the A6 recheck #475, the issued pin and
@@ -90,7 +93,13 @@ packs #477, the network-time policy #479 and the block-4 qualification code
    `6ee89e5a1b83c88d865a65cca71177d19a4b23b47d6af2979f92a6840857530e`). The actual source at H is
    `FILL[PRODUCTION-LEDGER-SEED]`. The live head is not the acceptance cutoff (sequence 376); brackets read the
    cutoff view (the #467 lesson). `s1`'s ARM, GO, consumption and runs sit in shakedown custody, isolated from claim
-   roots.
+   roots. **Only `s1` (and a fresh attempt or `s2`) reserves in the production ledger** (addendum D, item 4).
+   - G10's preparation, `a1` and `a2` each bind `CALIBRATION_LEDGER` to their own byte-exact copy of the seed.
+   - Each copy lies outside all four ARM-context roots and stays unchanged until `s1`'s writer has run.
+   - Before every T-0, the recipe asserts that the production ledger's SHA-256 and the committed pin still equal
+     the seed's.
+
+   The copy paths are in `FILL[ROOTS-AND-CUSTODY-MAP]`.
 7. **Battery float, directive #421, every occurrence.** Fresh authenticated raw ioreg plus the shared
    `joulewise/battery_float.py` observation at arm, immediately before publication or install, and at T-0. PASS
    needs ExternalConnected=Yes, IsCharging=No, signed InstantAmperage within ±200 mA and UpdateTime no older than
@@ -114,10 +123,17 @@ cost about six idle hours per control without protecting anything. The next occu
 only after the previous control's perishable evidence has expired, that is after the latest of its ARM deadline, its
 GO deadline and every volatile T-0 evidence deadline (a horizon of 1200 s from the evidence origin), so the next
 occurrence's check set is fresh in the sense of the D-149 fence. `FILL[ARM-CONTROL-DEADLINE-RECIPE]` carries these
-computed deadlines and the expiry, check and courier caps. `a1` completes before `a2` starts, and `a2` before
+computed deadlines and the expiry, check and courier caps. `a1` completes before `a2` starts, `a2` before G10, and G10 before
 `s1`'s T-0 and clean dwell.
 
-**`s1`.** One launch. A settled OFF receipt and a 600-second clean dwell; the pre settle and the pre bracket with the
+**`s1`.** One launch. A settled OFF receipt and a 600-second clean dwell. There are two dwells, and both must pass
+(addendum D, item 2):
+- T-0's dwell judges every process by CPU (above 5.0% is a contaminant) and records the load average without
+  vetoing on it;
+- the night's pre-chain dwell runs the sealed Revision-6 `scripts/prewindow_check.sh` unchanged (named daemons
+  above 5.0% CPU, and a load-average veto).
+
+Then the pre settle and the pre bracket with the
 acceptance-derived screen; NEG-8 bound work and start references; the first before-midpoint science stage with
 `scripts/run_campaign.py --max-blocks 1` (#474); the midpoint and end references; the post bracket in the same
 session; finalization and the ratified physical-ahead STOP. There is no after-midpoint science, no fifth science
@@ -151,7 +167,8 @@ correction `f`, read unprivileged with `ntp_adjtime(modes=0)`. After G10's OFF a
 only if `H_max + 0.10 ms + (|f| + 0.25 ppm) · T_stream_max ≤ 5 ms`, where `H_max` = 3.60 ms is the largest observed
 anchor half-width and `T_stream_max` is the longest continuous sampler stream of the regenerated packs, including one
 admission retry and the guards (record 44). If the first draw after G10 fails, one reviewed network-time ON/OFF
-redraw is allowed before `a1`; a second failure goes to the lead and nothing arms.
+redraw is allowed per block, before whichever occurrence's R0 gate failed; a second failure goes to the lead and
+nothing arms. A redraw made before G10 restarts G10's wait for its offset band (§5).
 
 **Clock design check (addendum A).** Every member's effective clock-anchor bound must be at most 5 ms at harvest;
 that admission is unchanged. The design-time question is whether the planned streams can plausibly meet it. The
@@ -179,9 +196,25 @@ any accrued offset, including right after G10.
 **Why G10 exists.** G4 passes when the drift-corrected anchor stays within 5 ms. G10 shows that the T-0 author really
 refuses when the clock has been reset; without it, a G4 PASS has never been shown able to fail.
 
-**The physical control precedes `a1`'s T-0** and sits outside every armed or capture span. It is Ed-owned, as
-D-176 decision 4 requires, and runs `scripts/ed_session/capture_t0_anchor_positive_control.py`
-(`FILL[G10-CONTROL-CLI]`, recipe 46):
+**The physical control runs after `a2`'s expiry check and before `s1`'s first T-0 boundary**, on the same boot,
+outside every armed or capture span (addendum D, item 3).
+
+Why this order: every T-0 arm reference resyncs the clock when the sntp quorum's bound exceeds 0.5 s. `a1`'s
+preparation therefore does the block's one resync. G10 then runs once enough drift has accrued for its ON to move
+the anchor by much more than 5 ms. Run first, its own preparation would have done that resync, and its ON would
+see almost nothing to correct.
+
+The control is Ed-owned, as D-176 decision 4 requires, and runs
+`scripts/ed_session/capture_t0_anchor_positive_control.py` (`FILL[G10-CONTROL-CLI]`, recipe 46):
+
+0. **Offset preflight.** The helper runs the fixed R0 clock-reference collector and computes the quorum agreement
+   as T-0 does. It proceeds only if the midpoint is at least 20 ms and the bound at most 0.400 s. Otherwise it
+   stops without spending anything:
+   - too small: wait (at −3.17 ppm the offset grows about 11 ms an hour);
+   - too large: goes to the lead.
+
+   If its input preparation would resync anyway, it stops before its own ON. That outcome is not an attempt. The
+   preflight record is part of G10's custody.
 
 1. The helper writes machine-authored CLOCK_REALTIME and CLOCK_MONOTONIC_RAW before-stamps and the real author
    inputs into their own control custody.
@@ -285,9 +318,24 @@ STATE and without spending `s2`. The aborted attempt's bytes are kept and never 
 (D-078). The harvest must authenticate the guard observation and the abort reason. A second admission abort follows
 the same-refusal-twice consult rule.
 
+**Attempt history.** The harvests walk the `previous_attempt` chain back to `none`, authenticating each link by
+SHA-256. They then list every attempt harvest of the block under its harvest archive root, and refuse unless the two
+sets are equal (no fork, no orphan, no second `none`). The allowances in this section are counted on that chain. An
+omitted predecessor therefore refuses, rather than resetting a count.
+
+**NULL recovery.** A NULL attempt leaves one open bracket session from its T-0 reservation. The governed restore
+(`FILL[NULL-RESTORE-CLI]`) takes three steps:
+- it copies the attempt's ledger to custody;
+- it proves that the dropped tail is exactly that one session-open row;
+- it restores the seed bytes, with the pin unchanged, and writes an authenticated restore record.
+
+The next attempt's writer and harvester verify that record. The pin and H do not move, so `a1` and `a2` stay valid
+for the fresh attempt on the same boot. After a reboot or a head change, fresh controls are needed; they are not
+occurrences and spend nothing.
+
 **At most one `s2`**, only when `s1` is RECOVER because of a named tooling defect removed through reviewed R3 that
 makes the code agree with this text, within §12. It has its own authorization, roots, T-0 and complete one-block
-roster. `s1` is kept unchanged. Nothing is pooled, replaced, topped up or rerun (D-078).
+roster, and the plan writer writes it as `s1` plus its `previous_attempt` pointer. `s1` is kept unchanged. Nothing is pooled, replaced, topped up or rerun (D-078).
 
 **Instrument or physics RECOVER has no `s2`** (apart from the one admission re-arm above): a clock failure, acceptance or bracket physics, an authentic battery
 non-pass, a machine or environment failure during the started chain. The systematic-clock trigger stands: **at
@@ -415,7 +463,8 @@ coverage before any recovery or claim arm. Any other head difference or operatin
 | Ids, T-0, ordinal, ARM/GO/consumption, rosters | `FILL[PER-OCCURRENCE-ID-AND-RECEIPT-MAP]`, §3 rosters | Interfaces at seal; bytes at runtime |
 | Roots and production census | `FILL[ROOTS-AND-CUSTODY-MAP]` | Recipe at seal; each arm |
 | Backups | `FILL[BACKUP-DESTINATIONS-AND-VERIFICATION]` | Recipe at seal; desk step |
-| Qualification and G10 | §6 producer map; §5 control record; `FILL[L10-A-RATIFICATION-RECORD-PATH]` | Producers at seal; G10 before `a1`; ratification before claim |
+| Qualification and G10 | §6 producer map; §5 control record and preflight; `FILL[L10-A-RATIFICATION-RECORD-PATH]` | Producers at seal; G10 after `a2`, before `s1`'s T-0; ratification before claim |
+| Attempt history, NULL restore | §7 `previous_attempt` chain and archive census; `FILL[NULL-RESTORE-CLI]` | Interfaces at seal; each attempt |
 | Interfaces, return codes, policy, sizing | §8 FILLs; §4 deadlines and stop codes; §3.5 policy hash | Seal; rendered each arm |
 | Ledger, battery, OFF | §3.6–3.7; `FILL[PER-OCCURRENCE-OFF-RECEIPTS]` | Recipe at seal; fresh each window |
 | Restricted metrics, release, Q110 | §10, §8 | Mechanism at seal; release after claim seal; Q110 before ALPHA |
