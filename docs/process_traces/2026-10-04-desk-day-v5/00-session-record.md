@@ -284,3 +284,17 @@ coordinated multi-file forgery is outside the threat model (D-161). **F2:** fix.
   to UTC, G3 closure written by readers that prove a pending group gone. Lead ran the two A6 test modules OUTSIDE the
   sandbox with real `ps`: 50 passed. Third Fable pass (delta-limited) [59](59-fable-a6-3-brief.md) and whole suite at
   `baa9bb7b` running.
+
+## 22:35-22:55
+
+- PR #475 third cold Fable pass (delta-limited) [59r](59-fable-a6-3.md) **PASS**: G1-G3 cured with killing tests. H1 (the
+  driver-death test's cleanup loop errors about 1 run in 9 on a macOS zombie-only group): **fixed** by the lead with Fable's
+  two test lines (`8d9735f7`; 3/3 runs green with real `ps`). H2 (start-time text now UTC: old-version and new-version code
+  disagree about one live process across the upgrade): **landing condition adopted**: merge and update checkouts only while
+  the census is clear (Fable ran both census versions at 22:27: clear, no open chain, no pending record), and every
+  measurement checkout is cut from main at or after this merge before the next launch (true for every recipe: clones are
+  cut at arm time). H3-H6 NITs: deferred to lane `A6-HARDENING-01`.
+- Doctrine-pin lane round 2 [53r2](53-sol-doctrine-pin-report-r2.md): live v2 row `clock.restore_recipe` replaced by
+  `clock.network_time_policy` (35 rows; archival v1 and historical predicates unchanged; `clock.network_time_off` unchanged).
+  Committed and main merged (`cda64e28`). Six more paths requested (prospective fixtures; the three live readiness views):
+  **granted**; round 3 [60](60-sol-doctrine-pin-r3-brief.md) running.
