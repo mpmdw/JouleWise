@@ -64,6 +64,7 @@ from pathlib import Path
 from typing import Any, Protocol
 
 import joulewise.adapters
+from joulewise import battery_float
 from joulewise.aggregate import aggregate_experiment
 from joulewise import reduce as reduce_module
 from joulewise.bundle import (
@@ -249,6 +250,7 @@ def run_benchmark(
     instrument_calibration_dir: Path | None = None,
     instrument_power_policy: str | None = None,
     post_window_sampling_dwell_s: float | None = None,
+    battery_runner: Callable | None = None,
 ) -> tuple[Path, SummaryMetrics | SummaryMetricsV060]:
     """Run one benchmark and return ``(bundle path, summary)``.
 
@@ -296,6 +298,7 @@ def run_benchmark(
         power_policy=instrument_power_policy,
         runtime_powermetrics_sha256=runtime_powermetrics_sha256,
         runtime_power_policy=runtime_power_policy,
+        runs_root=runs_root,
         g2a_context=(config, runs_root, Path(os.environ["JOULEWISE_G2A_PRE_BRACKET_PLAN"]))
         if "JOULEWISE_G2A_PRE_BRACKET_PLAN" in os.environ else None,
     )
@@ -349,6 +352,7 @@ def run_benchmark(
         attachment.metadata if attachment is not None else None,
         pre_resolved_telemetry,
         float(post_window_sampling_dwell_s),
+        battery_runner,
     ).execute()
 
 
@@ -373,6 +377,7 @@ def _load_instrument_calibration_attachment(
     runtime_powermetrics_sha256: str | None = None,
     runtime_power_policy: str | None = None,
     g2a_context: tuple[BenchmarkConfig, Path, Path] | None = None,
+    runs_root: Path | None = None,
 ) -> _InstrumentCalibrationAttachment | None:
     """Authenticate a validation directory before a bundle is created."""
 
@@ -439,8 +444,16 @@ def _load_instrument_calibration_attachment(
         raise ValueError("instrument calibration evidence is invalid JSON") from exc
     from joulewise.calibration_bracketing import REVISION_FIVE_EPOCH  # noqa: PLC0415
 
+    from joulewise.arm_readiness import LAUNCH_LINEAGE_LOCATOR_BASENAME  # noqa: PLC0415
+
     bracket_provenance = None
-    if g2a_context is not None:
+    g2b_provenance = None
+    locator = Path(runs_root) / LAUNCH_LINEAGE_LOCATOR_BASENAME if runs_root is not None else None
+    if locator is not None and (locator.exists() or locator.is_symlink()):
+        g2b_provenance = _authenticate_g2b_pre_slot_attachment(
+            resolved_root, files, evidence, Path(runs_root)
+        )
+    elif g2a_context is not None:
         bracket_provenance = _authenticate_g2a_pre_bracket_attachment(
             resolved_root, files, evidence, *g2a_context
         )
@@ -451,7 +464,7 @@ def _load_instrument_calibration_attachment(
             and all(epoch.get(field) == value for field, value in REVISION_FIVE_EPOCH.items())
             for epoch in (evidence.get("identity_epoch"), evidence.get("bindings"))
         )
-    ) and bracket_provenance is None:
+    ) and bracket_provenance is None and g2b_provenance is None:
         raise ValueError("revision_five evidence cannot be attached as instrument calibration")
     bindings = evidence.get("bindings") if isinstance(evidence, dict) else None
     bound = evidence.get("b_fiducial_s") if isinstance(evidence, dict) else None
@@ -513,8 +526,91 @@ def _load_instrument_calibration_attachment(
                 "power_policy": runtime_power_policy,
             },
             **({"g2a_pre_bracket": bracket_provenance} if bracket_provenance else {}),
+            **({"g2b_pre_slot": g2b_provenance} if g2b_provenance else {}),
         },
     )
+
+
+def _authenticate_g2b_pre_slot_attachment(
+    directory: Path, files: dict[str, bytes], evidence: Any, runs_root: Path,
+) -> dict[str, Any]:
+    """Authenticate the launch lineage and its ordinary finalized pre slot.
+
+    The root-local locator selects this route; it is never an authorization
+    by itself. Both claim and bound members use the session named by the
+    authenticated consumption/start/settle chain, with completion absent.
+    """
+    from joulewise.arm_readiness import (  # noqa: PLC0415
+        authenticate_campaign_launch_lineage, _plan_tree, _repo_for_pack,
+    )
+    from joulewise.calibration_ledger import (  # noqa: PLC0415
+        SESSION_KIND_BRACKET, calibration_session_status,
+        load_calibration_ledger_snapshot,
+    )
+
+    context = authenticate_campaign_launch_lineage(runs_root)
+    lineage = context["launch_lineage"]
+    pack_root = Path(context["pack_root"])
+    repo = _repo_for_pack(pack_root)
+    tree, _ = _plan_tree(pack_root)
+    plan = tree["plan"]
+    plan_path = pack_root / plan["path"]
+    ledger_path = repo / "runs/calibration_observation_ledger.jsonl"
+    pin_path = repo / "configs/calibration/calibration_ledger_head.json"
+    status = calibration_session_status(
+        ledger_path, pin_path, session_id=lineage["bracket_session_id"],
+        plan_path=plan_path, repo_root=repo, custody_mode="issuing",
+    )
+    pre_status = status["slots"].get("pre")
+    if (status["session_id"] != lineage["bracket_session_id"]
+            or status["plan_id"] != lineage["plan_id"]
+            or plan["plan_id"] != lineage["plan_id"]
+            or status["plan_sha256"] != plan["actual_sha256"]
+            or status["session_kind"] != SESSION_KIND_BRACKET
+            or status["session_state"] != "open"
+            or not isinstance(pre_status, dict)
+            or pre_status.get("finalized") is not True
+            or pre_status.get("custody_state") != "complete"
+            or Path(pre_status["custody_locator"]).resolve() != directory):
+        raise ValueError("G2-b attachment requires its session's finalized pre slot")
+    # Session status authenticates the durable reservation. Compare the byte
+    # snapshot being installed with the finalization receipt as well: a valid
+    # manifest alone cannot bind these bytes to this session.
+    snapshot = load_calibration_ledger_snapshot(
+        ledger_path, pin_path, repo_root=repo, verify_custody=False, mode="issuing",
+    )
+    session = snapshot.bracket_session_by_id[lineage["bracket_session_id"]]
+    pre = session.finalized_slots.get("pre")
+    if (not snapshot.is_governed_open_bracket_extension
+            or session.session_kind != SESSION_KIND_BRACKET or session.state != "open"
+            or session.window_id != lineage["window_id"]
+            or session.plan_id != status["plan_id"]
+            or session.plan_sha256 != status["plan_sha256"]
+            or pre is None or pre.disposition != "valid" or pre.is_historical_import
+            or Path(pre.custody_locator).resolve() != directory
+            or not isinstance(evidence, dict) or evidence.get("validation_id") != pre.attempt_id
+            or any(hashlib.sha256(files.get(name, b"")).hexdigest() != digest
+                   for name, digest in pre.artifact_sha256.items())
+            or any(evidence.get("bindings", {}).get(key) != value
+                   for key, value in pre.t1_bindings.items())):
+        raise ValueError("G2-b attachment does not match the authenticated finalized pre slot")
+    verdict = battery_float.authenticate_capture(directory, expected={
+        "session_id": session.session_id, "slot": "pre", "attempt_id": pre.attempt_id,
+    })
+    if verdict.status != "pass":
+        raise ValueError(f"G2-b pre slot battery {verdict.status}: {'; '.join(verdict.reasons)}")
+    # Live capture manifests predate battery artifact entries. Carry the raw
+    # pair too, so the installed Revision-5 capture remains independently readable.
+    for phase in ("pre", "post"):
+        relative = f"raw/battery_float.{phase}.ioreg"
+        raw = (directory / relative).read_bytes()
+        if hashlib.sha256(raw).hexdigest() != evidence["battery_float"][phase]["raw_stdout_sha256"]:
+            raise ValueError("G2-b pre slot battery custody changed during attachment")
+        files[relative] = raw
+    return {"session_id": session.session_id, "slot": "pre",
+            "plan_id": session.plan_id, "plan_sha256": session.plan_sha256,
+            "receipt_digest": pre.receipt_digest,
+            "launch_lineage_locator_sha256": context["locator_sha256"]}
 
 
 def _authenticate_g2a_pre_bracket_attachment(
@@ -812,6 +908,7 @@ class _Execution:
         instrument_calibration: dict[str, Any] | None = None,
         pre_resolved_telemetry: TelemetryAdapter | None = None,
         post_window_sampling_dwell_s: float = 0.0,
+        battery_runner: Callable | None = None,
     ) -> None:
         self._config = config
         self._writer = writer
@@ -836,6 +933,8 @@ class _Execution:
         )
         self._pre_resolved_telemetry = pre_resolved_telemetry
         self._post_window_sampling_dwell_s = post_window_sampling_dwell_s
+        self._battery_runner = battery_runner
+        self._battery_float: dict[str, Any] = {"pre": None, "post": None}
         self._trace_window_margins: dict[str, float] | None = None
         self._environment_admission: dict[str, Any] | None = None
         # D-024: one immutable context, constructed after bundle creation,
@@ -939,16 +1038,51 @@ class _Execution:
         self._log(self._controller_log, f"run {self._writer.run_id} started")
         self._stage_validate()
         self._stage_prepare()
+        self._observe_battery_float("pre")
         self._stage_idle_baseline()
         self._stage_warmup()
         self._stage_measured_run()
         self._stage_idle_drift_sentinel()
+        self._observe_battery_float("post")
         self._stage_cleanup()
         # Current claim reduction consumes the post-run environment/admission
         # record.  Capture it at the lifecycle boundary immediately before
         # metadata is persisted and the pure reducer reads that metadata.
         self._capture_post_run_environment_observation()
         return self._stage_reduce()
+
+    def _observe_battery_float(self, phase: str) -> None:
+        if self._config.hardware_target.telemetry_backend == TelemetryBackend.MOCK:
+            return
+        name = f"battery_float.{phase}.ioreg"
+        kwargs = dict(
+            runner=self._battery_runner,
+            wall_time_s=self._clock.now(),
+            monotonic_ns=lambda: battery_float.monotonic_ns_from_s(
+                _clock_stamp(self._clock).monotonic_after_s
+            ),
+            raw_path=f"raw/{name}", session_id=self._writer.run_id,
+        )
+        if phase == "pre":
+            record, raw = battery_float.observe(phase="bundle_pre", **kwargs)
+        else:
+            record, raw = battery_float.observe(phase="bundle_post", **kwargs)
+        self._battery_float[phase] = record
+        try:
+            self._writer.write_raw(name, raw)
+        except Exception as exc:  # observation custody failure cannot abort a member
+            record["probe_error"] = True
+            record["passed"] = False
+            record["reasons"].append(f"battery raw write failed: {type(exc).__name__}: {exc}")
+            self._log(self._controller_log, record["reasons"][-1])
+
+    def _salvage_battery_float_post(self) -> None:
+        if self._battery_float["pre"] is not None and self._battery_float["post"] is None:
+            # Do not launch a probe if teardown failed and the sampler is live.
+            if self._sampling_active or self._sampling_start_in_progress:
+                self._log(self._controller_log, "battery post not observed: sampler teardown incomplete")
+                return
+            self._observe_battery_float("post")
 
     # ------------------------------------------------------------------
     # Stages
@@ -1435,6 +1569,9 @@ class _Execution:
         """Collect the short post-run idle sentinel outside the measured window."""
 
         if not isinstance(self._telemetry, IdleDriftEvidenceProvider):
+            if self._config.hardware_target.telemetry_backend != TelemetryBackend.MOCK:
+                self._begin_stage("idle_drift_sentinel")
+                self._complete_stage("idle_drift_sentinel", {"status": "unavailable"})
             return
         self._begin_stage("idle_drift_sentinel")
         assert self._baseline is not None
@@ -1557,6 +1694,7 @@ class _Execution:
         # Every salvage action is independent: one broken writer or adapter
         # cannot prevent later evidence and cleanup attempts.
         self._attempt_salvage_step("stop_sampling", self._stop_sampling_best_effort)
+        self._attempt_salvage_step("battery_float_post", self._salvage_battery_float_post)
         self._attempt_salvage_step("adapter_custody", self._salvage_adapter_custody)
         self._attempt_salvage_step("runtime_cleanup", self._cleanup_best_effort)
         self._attempt_salvage_step(
@@ -1604,6 +1742,7 @@ class _Execution:
         )
         actions: list[tuple[str, Callable[[], Any]]] = [
             ("stop_sampling", self._stop_sampling_best_effort),
+            ("battery_float_post", self._salvage_battery_float_post),
             ("adapter_custody", self._salvage_adapter_custody),
             ("runtime_cleanup", self._cleanup_best_effort),
             ("failure_environment", self._capture_failure_fallback_environment),
@@ -2158,6 +2297,12 @@ class _Execution:
         if self._metadata_written:
             return
         extra: dict[str, Any] = {}
+        if self._config.hardware_target.telemetry_backend == TelemetryBackend.MOCK:
+            extra["battery_float"] = {"pre": None, "post": None, "not_applicable": "mock"}
+        elif self._battery_float["pre"] is None:
+            extra["battery_float"] = {"pre": None, "post": None, "not_reached": self._current_stage}
+        else:
+            extra["battery_float"] = dict(self._battery_float)
         if self._is_axi_run():
             policy = self._config.batch_policy
             speculation = self._config.speculation
@@ -2451,9 +2596,19 @@ class _Execution:
 
     def _begin_stage(self, name: str) -> None:
         self._current_stage = name
-        self._buffer_event("stage_started", name, f"stage {name} started")
+        metadata = None
+        if name == "idle_baseline" and self._config.hardware_target.telemetry_backend != TelemetryBackend.MOCK:
+            metadata = {"monotonic_ns": battery_float.monotonic_ns_from_s(
+                _clock_stamp(self._clock).monotonic_after_s
+            )}
+        self._buffer_event("stage_started", name, f"stage {name} started", metadata)
 
     def _complete_stage(self, name: str, metadata: dict[str, Any] | None = None) -> None:
+        if name == "idle_drift_sentinel" and self._config.hardware_target.telemetry_backend != TelemetryBackend.MOCK:
+            metadata = dict(metadata or {})
+            metadata["monotonic_ns"] = battery_float.monotonic_ns_from_s(
+                _clock_stamp(self._clock).monotonic_after_s
+            )
         self._buffer_event("stage_completed", name, f"stage {name} completed", metadata)
 
     def _log(self, buffer: list[str], message: str) -> None:
