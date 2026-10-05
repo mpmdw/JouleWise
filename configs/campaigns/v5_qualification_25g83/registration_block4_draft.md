@@ -67,15 +67,21 @@ packs #477, the network-time policy #479 and the block-4 qualification code
    and file hashes in `configs/model_panels/qwen3_4bit.json` at H. The frozen order manifest gives
    small/large/large/small; `FILL[S1-ROSTER]` lists the exact first-stage member ids. Prompt bytes, the issued
    prefill length, thinking-off greedy decode, forced 512 output tokens, prompt-0 assignment and family m=2 keep
-   their D-166 meaning. No subset pack and no shortened workload.
+   their D-166 meaning. No subset pack and no shortened workload. Every config `s1` dispatches (science, NEG-8 bound,
+   references) uses `sampling.idle_seconds` 75, regenerated at source and re-pinned (addendum B, item 1; at 30 s
+   every stream is shorter than the 60-second clock-fit minimum). `FILL[V5-PACK-REGEN-RECORD]` binds that
+   regeneration. The mlx-lm detokenizer is built in `prepare()`, outside every measured window (addendum B, item 7):
+   **prospective note**, this removes 55–65 ms of CPU-only work that earlier `_v5`-family prefill windows counted, so
+   prefill windows from H on are not directly comparable with block-3 prefill windows without that correction.
 4. **Issued pin bundle.** `configs/campaigns/d117_contrast_v5/prefill_pin/` (landing in #477):
    `prefill-prompt-pin.json` SHA-256 `d1209f6d5998e4a48ac0dae7ed04a8f6a2c5ec9950d768f0df9ef8839a32dccb`;
    `selection.json` SHA-256 `c694c4884ff7f31b677b5ade1ab9710a4797c4529eaad61fba85fea080a88222`;
    `prefill-prompt-ladder.json` SHA-256 `43a77ea99cb2ac1f087f19d2f672444727b3e73a839e5dcfd8db1198d1352885`.
    These bytes are authenticated at H. Selection is never rerun.
 5. **Campaign policy.** `configs/campaign_policies/quiet_mac_p2_production.json`, `FILL[PRODUCTION-POLICY-SHA256]`.
-   Its admission thresholds, retry count, dwell and abort rules stand; block 3's 300-second backoff is not
-   imported. The NEG-8 bound corpus, the start, midpoint and end references and the settles are frozen in
+   Its admission thresholds, retry count, dwell and abort rules stand, and the retry backoff stays 0 s: a backoff
+   inside one sampler stream would push the stream past the clock budget, and a retry that starts a new stream is
+   deferred to block 5 (addendum B, item 4). §7 gives one admission abort a fresh `s1` instead. The NEG-8 bound corpus, the start, midpoint and end references and the settles are frozen in
    `FILL[S1-COMPLETE-AUXILIARY-ROSTER]`. They are separate from the four science members.
 6. **Calibration ledger.** The physical ledger authenticates with `verify_custody=True` against the committed pin
    at H. At drafting the pin is sequence 402, head digest
@@ -140,6 +146,13 @@ the rendered one-block G2-b chain runs, and nothing it does not dispatch.
   `t0 + WINDOW_MAX_S − NIGHT_PROGRAMMED_SPAN_S`. A chain still running at expiry is RECOVER, never a partial PASS.
   Completion, courier and dead-man bounds: `FILL[PER-OCCURRENCE-SHUTDOWN-CAPS]`.
 
+**Frequency gate (addendum B, item 2).** With network time OFF the anchor drifts at the kernel's stored frequency
+correction `f`, read unprivileged with `ntp_adjtime(modes=0)`. After G10's OFF and at every R0, the occurrence arms
+only if `H_max + 0.10 ms + (|f| + 0.25 ppm) · T_stream_max ≤ 5 ms`, where `H_max` = 3.60 ms is the largest observed
+anchor half-width and `T_stream_max` is the longest continuous sampler stream of the regenerated packs, including one
+admission retry and the guards (record 44). If the first draw after G10 fails, one reviewed network-time ON/OFF
+redraw is allowed before `a1`; a second failure goes to the lead and nothing arms.
+
 **Clock design check (addendum A).** Every member's effective clock-anchor bound must be at most 5 ms at harvest;
 that admission is unchanged. The design-time question is whether the planned streams can plausibly meet it. The
 check uses observed effective bounds of comparable streams on this machine, models and OS build: block 3's SELECT
@@ -157,8 +170,14 @@ own boot, admitted by the shared reader (setter exit 0 and normalized `setUsingN
 clocks. Receipts are never reused. T-0's clock-disable capture and the clock row authenticate the same state
 through G4; neither authorizes ON. Freeze and ARM derive this doctrine through `clock.network_time_policy` (#479).
 
-**Why G10 exists.** G4 passes when the RAW clock anchor stays within 5 ms. G10 shows that the T-0 author really
-refuses when the anchor has moved more than 5 ms; without it, a G4 PASS has never been shown able to fail.
+**The T-0 anchor check (addendum B, item 3).** The author, ARM, G4 replay and the G10 helper all require
+`|Δanchor − f_R0 · span| ≤ 5 ms` between R0 and authoring, where `f_R0` is the kernel frequency word read with R0;
+the word read at authoring must equal `f_R0`; and `f_R0` must pass the frequency gate (§4). Steady drift is
+predicted and removed; any intervention by `timed` rewrites the frequency word, so a slew or a step is caught at
+any accrued offset, including right after G10.
+
+**Why G10 exists.** G4 passes when the drift-corrected anchor stays within 5 ms. G10 shows that the T-0 author really
+refuses when the clock has been reset; without it, a G4 PASS has never been shown able to fail.
 
 **The physical control precedes `a1`'s T-0** and sits outside every armed or capture span. It is Ed-owned, as
 D-176 decision 4 requires, and runs `scripts/ed_session/capture_t0_anchor_positive_control.py`
@@ -171,7 +190,7 @@ D-176 decision 4 requires, and runs `scripts/ed_session/capture_t0_anchor_positi
    the existing D-127 grant), keeps argv, stdout, stderr, return code and stamps, and polls the RAW anchor for a
    movement above 5 ms within a bounded deadline (120 s default, 300 s maximum). OFF runs in a `finally`. No new
    sudoers grant and no other way of setting the clock.
-3. If the anchor moved more than 5,000,000 ns, it runs the real T-0 author on the changed sequence and requires
+3. If the drift-corrected anchor moved more than 5,000,000 ns, it runs the real T-0 author on the changed sequence and requires
    exactly `evidence_author_t0_clock_attestation_underivable` with no PASS namespace. A movement of 5 ms or less
    discharges nothing: the attempt is preserved and goes to the lead, and it is not retried in a loop.
 4. It writes the exact eight-key record (`schema_version`, `performed_by`, `outside_t0_sequence=true`,
@@ -195,7 +214,7 @@ each record's path, schema, digest and producer.
 | G1 execution | A hang or prompt costs a window | Each governed process has a registered expected outcome: the agent census passes on `pgrep` exit exactly 1 with empty stdout, every other process on exit 0. fd 0 at `/dev/null`, no timeout, `sequence_completed`, with pid/argv/exit custody. Exhaustive exec-descendant prompt tracing is not required: with fd 0 at `/dev/null` a prompting child gets EOF and shows up as an abnormal exit or an incomplete chain. |
 | G2 T-0 namespace | An attestation standing in for a probe | The exact fifteen ARM_ONLY receipts and captures, the canonical source and receipt census, zero operator-attestation facts, a machine PROBE clock fact, hashes and membership matching the GO. |
 | G3 HID idle | Operator activity at T-0 | A raw `HIDIdleTime` witness covering the actual RAW-clock T-0 span. |
-| G4 clock | Clock steps inside energy windows | Real fixed-roster reference bytes, clock-disable and settled OFF evidence, and the existing recomputation: 600–3600 s T-0 span, 30 s repeat-reference cap, 5 ms RAW bound. |
+| G4 clock | Clock steps inside energy windows | Real fixed-roster reference bytes, clock-disable and settled OFF evidence, and the recomputation: 600–3600 s T-0 span, 30 s repeat-reference cap, the §5 residual 5 ms bound with frequency-word equality, and the §4 frequency gate. |
 | G5 GO and consumption | Wrong pack, stale ARM, double launch | The current 26-key pack GO, ARM and one v3 consumption, with authenticated plan, authorization, confirmation and census; replay at the recorded boot and instant, C1–C5. |
 | G6, G7 | (retired) | `NOT_APPLICABLE`, basis `retired_by_ruling_76`, never PASS. The merged unit regression that refuses a fully valid rehearsal receipt by class stays. |
 | G8 process lineage | Agent load in captured power | The agent's pid, argv and observed exit before the chain and capture, the real chain and capture boundaries, and zero-agent censuses throughout. An agent cannot certify its own future exit. |
@@ -260,11 +279,17 @@ D-078 has nothing to pool or top up. It is kept, cured through R3 and re-armed a
 authorization and T-0) without spending the `s2` allowance. The harvest must authenticate the cause ordering and
 the absence of any science sampler start. It stays RECOVER; it does not become NULL.
 
+**One admission abort re-arms (addendum B, item 4).** Exactly one guard-attested idle-admission abort per block,
+with no other RECOVER cause present, re-arms a fresh complete `s1` (new plan id, authorization and T-0) without END
+STATE and without spending `s2`. The aborted attempt's bytes are kept and never pooled with the fresh attempt
+(D-078). The harvest must authenticate the guard observation and the abort reason. A second admission abort follows
+the same-refusal-twice consult rule.
+
 **At most one `s2`**, only when `s1` is RECOVER because of a named tooling defect removed through reviewed R3 that
 makes the code agree with this text, within §12. It has its own authorization, roots, T-0 and complete one-block
 roster. `s1` is kept unchanged. Nothing is pooled, replaced, topped up or rerun (D-078).
 
-**Instrument or physics RECOVER has no `s2`:** a clock failure, acceptance or bracket physics, an authentic battery
+**Instrument or physics RECOVER has no `s2`** (apart from the one admission re-arm above): a clock failure, acceptance or bracket physics, an authentic battery
 non-pass, a machine or environment failure during the started chain. The systematic-clock trigger stands: **at
 least five members with a recorded anchor status (excluding `not recorded`), and more than half of them not
 `bounded`**, counted over the occurrence's actual science, reference and bound records, with the denominator
