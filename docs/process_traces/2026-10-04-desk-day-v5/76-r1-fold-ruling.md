@@ -72,3 +72,103 @@ tooling-recovery allowance, so a pack-path failure on it costs a window, not a n
 - Sizing (lane A F1): approved as a source-bound allowance adapter. GAMMA member estimates at the issued length come
   from block-3 archives (diagnostic reading, permitted after block 3 by its registration §10) and the committed
   pack configs; each allowance cites `{path, sha256, pointer}`. No `s1` byte is used for sizing.
+
+## Addendum A (2026-10-05 02:35, same seat): G9 on `s1`, sizing roster and the clock design check
+
+- **G9 stages on `s1`** (fold seat F1). `s1`'s night chain stops at physical-ahead and must not emit launch
+  completion, so the backups and close-out happen in the governed post-STOP desk step, after the quiet window and
+  before any later arm. `claim_backup` and `bound_backup` are two verified copies of the `s1` custody and runs
+  roots, to two distinct destinations named in the `s1` plan, made through the existing backup path
+  (`scripts/run_campaign.py::backup_runs`) with a SHA-256 census verified at each destination. `close_out` is the
+  runsheet's Phase G post-run assertion record plus the identity of the window's OFF receipt. `restore` is the
+  observed network-time-OFF state and stand-down. `launch`, `capability_consumption` and `capture` come from the
+  night itself. No G9 stage may be satisfied by an in-chain step that the G2-b chain forbids.
+- **Sizing roster** (sizing seat F2). The plan writer sizes exactly the stages the rendered one-block G2-b chain
+  runs. It must not size full-GAMMA stages that `s1` never dispatches (`gamma-reference-arm-boundary`,
+  `gamma-reference-prefill-midpoint`).
+- **Sizing allowances** (sizing seat F3). The labelled custody, control and backup allocations and the
+  auxiliary-model proxy are approved as design allowances. Their bytes are committed under
+  `configs/campaigns/v5_qualification_25g83/` so that every allowance cites a repository path and digest.
+- **Clock design check** (sizing seat F1). The worst-case product h + rho*T_stream (ladder-maximum anchor half-width,
+  maximum drift rate, a 613-second envelope that also counts the separate cooldown sampler) is 8.5 ms. It stacks
+  three worst cases, so it is reported as a diagnostic, not a gate. The design check uses observed effective
+  clock-anchor bounds from comparable streams on this machine, models and OS build: the block-3 SELECT re-harvest
+  holds 50 anchor records, all `bounded`, largest 4.02 ms. The margin to 5 ms is thin and is disclosed to the cold
+  gate. The binding admission is unchanged: every obligated `s1` member must be `bounded` at harvest, and the
+  majority trigger (at least five recorded anchors, more than half not bounded) ends the block.
+
+## Addendum B (2026-10-05 04:55, same seat): clock, idle admission and the pre-mortem rulings
+
+Inputs: the Opus pre-mortem memo (`~/night-archive/ia-0a40/MEMO.md`, lane ia-0a40, run from the interactive session
+at Ed's request) and the blind consult in brief 90, with both answers beside it (`90-opus-clock-idle.md`,
+`90-sol-clock-idle.md`).
+
+**What each clock guard protects.** The per-member effective bound (at most 5 ms, pinned estimator) decides where an
+energy trace sits against the wall-stamped phase edges; it is the guard that protects the joules. At 40 W, 5 ms is
+0.2 J per edge, below the roughly 1 J attribution limit. The T-0 anchor check protects provenance: it shows that
+nothing reset the clock between R0 and authoring. With network time OFF the anchor drifts steadily at the kernel's
+stored frequency correction (−3.17 ppm today, read-only `ntp_adjtime(modes=0)`), so a fixed 5 ms check refuses any
+T-0 span longer than about 1579 s even when nothing happened.
+
+1. **Idle 75 s** (memo 1.8). All `_v5` science, NEG-8 bound and reference configs move from `idle_seconds` 30 to 75,
+   the value block 3 ran with (all 50 anchors bounded, largest 4.02 ms). At 30 s every stream is shorter than the
+   60-second clock-fit minimum and returns `unknown`. The packs are regenerated and re-pinned through a gated PR.
+2. **Frequency gate** (memo 1.1). After G10's OFF and at every R0, read the kernel frequency word `f`. Arm only if
+   `H_max + 0.10 ms + (|f| + 0.25 ppm) · T_stream_max ≤ 5 ms`, where `H_max` = 3.60 ms (largest observed half-width)
+   and `T_stream_max` is the longest continuous sampler stream of the regenerated packs, including one admission
+   retry and the guards (record 44 is recomputed after regeneration). The gate is this inequality, not a fixed ppm
+   number; the Opus seat's 5 ppm (for a 250 s stream) and the Sol seat's 3.5 ppm (for 320 s) are two evaluations of
+   it. If the draw after G10 fails, one reviewed network-time ON/OFF redraw is allowed before `a1`; a second failure
+   goes to the lead and nothing arms.
+3. **T-0 anchor check in residual form** (memo 1.1, 1.21). The author, ARM, G4 replay and the G10 helper all use
+   `|Δanchor − f_R0 · span| ≤ 5 ms`, plus: the kernel frequency word read at authoring equals `f_R0`, and
+   `|f_R0|` passes the gate above. Any intervention by `timed` rewrites the frequency word, so the equality test
+   catches slews as well as steps at any accrued offset, including right after G10. The fixed form
+   `5 ms + RATE_CAP · span` (Sol seat) is not adopted: just after G10 the accrued offset is small, and at 12.5 ppm
+   and 3600 s the fixed form would pass a stray resync of up to about 45 ms. Dissent recorded. G10's discharge is
+   unaffected: before G10 the accrued offset since the last sync is hundreds of milliseconds.
+4. **Backoff stays 0 s; one admission abort re-arms** (memo 1.14). Admission thresholds are unchanged. Exactly one
+   guard-attested idle-admission abort per block, with no other RECOVER cause present, re-arms a fresh complete
+   `s1` (new plan id, authorization and T-0) without END STATE and without spending `s2`. The aborted attempt's bytes
+   are kept and never pooled with the fresh attempt (D-078). A second abort follows the same-refusal-twice consult
+   rule. Dissent (Sol seat): allow this only when no science energy window has started yet. Not adopted: `s1` is
+   non-claim and the fresh attempt collects a complete new block, so nothing is pooled or topped up. Retry as a new
+   sampler stream, which would make a real backoff affordable, is deferred to block 5 (with the v3.1 identity).
+5. **Census** (memo 1.15), recorded as the WO-CENSUS-SEMANTICS cure: the ARM maintenance census keeps its `pgrep`
+   probe for custody and judges by CPU: it fails only on a probe error or a matching process above 5.0% CPU, the
+   constant shared with `scripts/prewindow_check.sh`. A resident daemon idling at 0–0.3% is not a contaminant.
+6. **Revision-5 attachment** (memo 1.16): an authenticated G2-b pre-slot route, selected when the runs root holds the
+   launch lineage file, taking session and plan from that lineage and confirming through session status that the
+   attached directory is that session's finalized pre slot. Measurement code; cold final pass.
+7. **Detokenizer** (memo 3.1): mlx-lm's detokenizer is built once in `prepare()`, outside every measured window, and
+   handed out as reset copies. This shortens prefill windows by 55–65 ms of CPU-only work. It must land before the
+   seal, so that `s1` qualifies the code that collects claims; the registration carries a prospective note, and the
+   claim registration states it again.
+8. **G10 owner** (memo 1.5, C1): stays Ed-owned, as the registration says. Ed's 2026-10-05 email asking to make it
+   agent-run could not be recorded by the headless seats (the safety classifier blocked it), so it is not applied.
+
+## Addendum C (2026-10-05 07:00, same seat): cold-pass findings on the integration code (PR #483)
+
+Input: cold Fable final pass at 898c49a7, `~/night-archive/desk-day-v5/fable-int.md` (FAIL, B1 and B2 proved by
+execution on the real producers).
+
+1. **G1's registered outcomes are per argv, not one exception** (B2; corrects decision 4). The driver journals
+   every governed process, including the T-0 author's own absence probes. Every `/usr/bin/pgrep` the driver or the
+   author runs is an absence probe: the agent census, `pgrep -x caffeinate`, the browser and monitor censuses and
+   the process-group census. Each passes G1 on exit exactly 1 with empty stdout, and its stdout must be captured
+   by the journal (a `wait()` without captured output is a recording defect, not an empty answer). Every other
+   governed process passes on exit 0. The registered table lives in code beside G1 and is tested against the
+   real driver's journal.
+2. **G9 checks the layout the night gate requires** (B1). The plan custody root and the ARM custody root are
+   distinct and not nested. G9 compares the desk close-out's sources with both roots taken from the authenticated
+   plan, and the backup copy set must equal exactly the set the close-out registers (both runs roots, the plan
+   custody root, the ARM custody root and the night custody, whatever the code fixes), not a hand-written list.
+3. **Public locators carry no timing** (M1). `replay-locators.json` keeps only paths and SHA-256 on the public side;
+   the full rows with sizes and modification times go under the mode-0700 `withheld/` directory.
+4. **The structural G2-b verdict does not depend on qualification artifacts** (M2). G10 custody replay belongs to the
+   qualification verdict only; the G2-b harvest does not read it.
+5. **The frequency gate applies to every pack that authors T-0** (M3), selected by the plan and registry profile,
+   never by a pack directory name; ALPHA and BETA get it too.
+6. **One composed desk test with no mock at the seams** before seal: the real journal into the real assembler into
+   `evaluate_qualification`, and the real close-out output into G9, on a two-root fixture, covering G1, G3, G5, G8
+   and G9.
