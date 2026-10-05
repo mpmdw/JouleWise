@@ -1,49 +1,43 @@
 from __future__ import annotations
 
-import contextlib
 import datetime as dt
+import json
 import plistlib
+import signal
 from pathlib import Path
 from unittest import mock
 
 from scripts import magistrate_watchdog as wd
+from tests import test_magistrate_watchdog as watchdog_tests
 from tests.test_magistrate_watchdog import WatchdogTestCase
 
 
 class TickSpanTests(WatchdogTestCase):
     def set_wall(self, epoch: float) -> None:
+        self.harness.clock.mono += epoch - self.harness.clock.wall.timestamp()
         self.harness.clock.wall = dt.datetime.fromtimestamp(epoch, tz=self.local_tz)
 
-    def quiet_tick(self, *, dry_run: bool = False) -> wd.Decision:
-        """Fail on every subprocess seam and every avoidable custody write."""
-        targets = (
-            (self.harness.deps, "git_probe"),
-            (self.harness.deps, "census"),
-            (self.harness.deps, "driver_probe"),
-            (self.harness.deps, "spawn"),
-            (self.harness.deps, "version_probe"),
-            (self.harness.processes, "snapshot"),
-            (self.harness.processes, "send_signal"),
-            (self.harness.storage, "atomic_bytes"),
-            (self.harness.storage, "append_jsonl"),
-            (self.harness.storage, "unlink"),
-            (wd.subprocess, "run"),
-            (wd.subprocess, "Popen"),
-            (wd.os, "fork"),
-            (wd, "decide"),
-        )
-        with contextlib.ExitStack() as stack:
-            guards = [stack.enter_context(mock.patch.object(
-                owner, name, side_effect=AssertionError(f"active tick called {name}")
-            )) for owner, name in targets]
+    def network_free_tick(self, *, dry_run: bool = False) -> wd.Decision:
+        # Assert call counts too: decide deliberately catches probe exceptions.
+        with mock.patch.object(self.harness.deps, "git_probe",
+                               side_effect=AssertionError("in-span network probe")) as probe, \
+             mock.patch.object(wd, "remote_stop_probe",
+                               side_effect=AssertionError("in-span HTTPS probe")) as remote:
             decision = wd.tick(self.harness.storage, self.harness.deps, dry_run=dry_run)
-            for guard in guards:
-                guard.assert_not_called()
-        self.assertFalse(decision.launch)
-        self.assertFalse(decision.adopt)
+            probe.assert_not_called()
+            remote.assert_not_called()
         return decision
 
-    def test_active_span_is_quiet_at_start_window_and_inclusive_end(self) -> None:
+    def installed_plan(self, plan: wd.NightPlan, label: str = "com.joulewise.night") -> Path:
+        directory = wd.Path.home() / "Library" / "LaunchAgents"
+        directory.mkdir(parents=True, exist_ok=True)
+        plist = directory / f"{label}.plist"
+        plist.write_bytes(plistlib.dumps({"ProgramArguments": [
+            "python", "run_night.py", "--plan",
+            str(Path(plan.custody_root) / "night_plan.json")]}))
+        return plist
+
+    def test_active_span_skips_probe_at_start_window_and_inclusive_end(self) -> None:
         plan = self.make_plan()
         night = Path(plan.custody_root) / "night"
         night.mkdir()
@@ -53,59 +47,139 @@ class TickSpanTests(WatchdogTestCase):
             for dry_run in (False, True):
                 with self.subTest(epoch=epoch, dry_run=dry_run):
                     self.set_wall(epoch)
-                    self.assertEqual("FENCED", self.quiet_tick(dry_run=dry_run).state)
+                    self.assertEqual("FENCED", self.network_free_tick(dry_run=dry_run).state)
+                    state = wd.load_state(self.harness.storage)
+                    self.assertEqual("NOT_PROBED", state["remote_stop"]["state"])
+                    self.assertEqual([], state["notice_pending"])
+        self.assertEqual(6, self.harness.census_calls)
+        self.assertTrue((self.harness.storage.root / "events.jsonl").exists())
 
-    def test_active_span_does_not_reset_backoff_or_refresh_stop_cache(self) -> None:
-        plan = self.make_plan(t0=self.base.timestamp())
-        state = wd.initial_state()
-        state.update({"next_eligible_epoch_s": plan.t0_epoch_s + 3600,
-                      "next_eligible_monotonic": 3600,
-                      "remote_stop": {"state": "STOPPED", "detail": "cached stop",
-                                      "observed_monotonic": 10}})
-        path = self.harness.storage.root / "state.json"
-        self.harness.storage.atomic_json(path, state)
-        before = path.read_bytes()
-        self.assertEqual("FENCED", self.quiet_tick().state)
-        self.assertEqual(before, path.read_bytes())
-
-    def test_active_span_with_owned_session_defers_adoption(self) -> None:
+    def test_skipped_probe_replaces_stale_stop_or_network_uncertainty(self) -> None:
         self.make_plan(t0=self.base.timestamp())
+        for cached in ("STOPPED", "NETWORK_UNCERTAIN"):
+            with self.subTest(cached=cached):
+                state = wd.initial_state()
+                state["remote_stop"] = {"state": cached, "detail": "old result",
+                                        "observed_monotonic": 10}
+                self.harness.storage.atomic_json(self.harness.storage.root / "state.json", state)
+                self.assertEqual("FENCED", self.network_free_tick().state)
+                state = wd.load_state(self.harness.storage)
+                self.assertEqual("NOT_PROBED", state["remote_stop"]["state"])
+                self.assertEqual([], state["notice_pending"])
+                self.assertFalse((self.harness.storage.root / "standdown.request").exists())
+
+    def test_active_span_recovers_owned_session_and_enforces_standdown(self) -> None:
+        plan = self.make_plan(t0=self.base.timestamp() + wd.TERM_LEAD_S)
         lock = self.write_live_lock()
-        self.assertEqual("FENCED", self.quiet_tick().state)
+        self.harness.processes.rows = [wd.ProcessInfo(100, 1, "token-a", "session")]
+        with mock.patch.object(wd.os, "fork", return_value=4321) as fork:
+            decision = self.network_free_tick()
+        self.assertEqual("STANDDOWN_TERM", decision.state)
+        self.assertTrue(decision.adopt)
+        self.assertFalse(decision.launch)
+        fork.assert_called_once_with()
         self.assertEqual(lock, wd.read_lock(self.harness.storage))
+        self.assertEqual(1, self.harness.census_calls)
+        state = wd.load_state(self.harness.storage)
+        supervisor = wd.adopt_session(self.harness.storage, self.harness.deps, state)
+        self.assertIsNotNone(supervisor)
+        with mock.patch.object(self.harness.deps, "git_probe",
+                               side_effect=AssertionError("resident network probe")) as probe:
+            self.assertTrue(supervisor.step())
+            probe.assert_not_called()
+        self.assertIn((100, signal.SIGTERM), self.harness.processes.signals)
+        self.assertTrue((self.harness.storage.root / "standdown.request").exists())
 
-    def test_active_span_with_malformed_sibling_holds_without_recovery(self) -> None:
+    def test_in_span_tick_releases_zero_capture_refusal_for_immediate_retry(self) -> None:
+        plan = self.make_plan(t0=self.base.timestamp() - 60,
+                              authored_epoch_s=self.base.timestamp() - 3600)
+        watchdog_tests.FenceTests.write_terminal_refusal(self, plan)
+        self.installed_plan(plan)
+        self.assertTrue(wd.plan_span_active(plan, self.base.timestamp(), self.harness.storage))
+        with mock.patch.object(wd.os, "fork", return_value=4321) as fork:
+            decision = self.network_free_tick()
+        self.assertEqual("LAUNCHING", decision.state)
+        self.assertTrue(decision.launch)
+        fork.assert_called_once_with()
+        self.assertEqual(1, self.harness.census_calls)
+        self.assertEqual(1, self.harness.driver_calls)
+        state = wd.load_state(self.harness.storage)
+        self.assertEqual(1, len(state["released_zero_capture_refusals"]))
+        self.assertEqual("NOT_PROBED", state["remote_stop"]["state"])
+        self.assertEqual([], state["notice_pending"])
+        self.assertFalse(wd.plan_span_active(plan, self.base.timestamp(), self.harness.storage, state))
+        self.assertIsNone(wd.installed_agent_fence(self.base, self.harness.storage, state=state))
+        self.assertLess(self.base.timestamp(), wd.plan_completion_epoch(plan))
+
+    def test_skipped_result_in_resident_cache_does_not_hold_or_notice(self) -> None:
+        plan = self.make_plan()  # Outside its span; exercise the cache consumer.
+        supervisor = self.supervisor(plan)
+        supervisor._remote_stop = wd.StopObservation("NOT_PROBED", "span tick skipped")
+        supervisor._remote_probe_started_monotonic = self.harness.clock.mono
+        with mock.patch.object(self.harness.deps, "git_probe",
+                               side_effect=AssertionError("unexpected refresh")) as probe:
+            self.assertTrue(supervisor.step())
+            probe.assert_not_called()
+        self.assertEqual("ACTIVE", supervisor.state["state"])
+        self.assertEqual([], supervisor.state["notice_pending"])
+        self.assertFalse((self.harness.storage.root / "standdown.request").exists())
+
+    def test_local_stop_during_discovered_span_preserves_plan_precedence(self) -> None:
         self.make_plan(t0=self.base.timestamp())
-        path = self.temp / "torn" / "night_plan.json"
-        path.parent.mkdir()
-        path.write_text("{torn", encoding="utf-8")
-        decision = self.quiet_tick()
-        self.assertEqual("HOLD_UNSAFE", decision.state)
-        self.assertIn("night_plan_unreadable", decision.reason)
+        self.harness.storage.root.mkdir(parents=True)
+        (self.harness.storage.root / "STOP").write_text("stop\n", encoding="utf-8")
+        self.assertEqual("FENCED", self.network_free_tick().state)
+        self.assertEqual(1, self.harness.census_calls)
 
-    def test_installed_only_span_is_quiet(self) -> None:
+    def test_installed_only_span_skips_probe_but_local_stop_still_wins(self) -> None:
         plan = self.make_plan(t0=self.base.timestamp())
-        directory = wd.Path.home() / "Library" / "LaunchAgents"
-        directory.mkdir(parents=True)
         for label in ("com.joulewise.night", "com.joulewise.night.deadman"):
             with self.subTest(label=label):
-                plist = directory / f"{label}.plist"
-                plist.write_bytes(plistlib.dumps({"ProgramArguments": [
-                    "python", "run_night.py", "--plan",
-                    str(Path(plan.custody_root) / "night_plan.json")]}))
+                plist = self.installed_plan(plan, label)
                 with mock.patch.object(self.harness.storage, "glob_plans", return_value=[]):
-                    decision = self.quiet_tick()
-                self.assertEqual("FENCED", decision.state)
-                self.assertEqual(f"installed_plan:{plan.plan_id}", decision.reason)
+                    decision = self.network_free_tick()
+                    self.assertEqual("FENCED", decision.state)
+                    self.assertEqual(f"installed_plan:{plan.plan_id}", decision.reason)
+                    (self.harness.storage.root / "STOP").write_text("stop\n", encoding="utf-8")
+                    decision = self.network_free_tick()
+                    self.assertEqual("STOPPED", decision.state)
+                    self.assertEqual("local STOP file present", decision.reason)
+                (self.harness.storage.root / "STOP").unlink()
                 plist.unlink()
+        self.assertEqual(0, self.harness.census_calls)  # Baseline installed-only path.
+        self.assertEqual([], wd.load_state(self.harness.storage)["notice_pending"])
 
-    def test_open_chain_keeps_tick_quiet_past_deadman(self) -> None:
+    def test_active_span_still_records_nonempty_census_and_notice(self) -> None:
+        self.make_plan(t0=self.base.timestamp())
+        self.harness.census = wd.CensusObservation(False, 0, "100 claude -p", "")
+        self.assertEqual("HOLD_CENSUS", self.network_free_tick().state)
+        state = wd.load_state(self.harness.storage)
+        self.assertEqual(["hold_census"], [row["kind"] for row in state["notice_pending"]])
+        self.assertEqual("NOT_PROBED", state["remote_stop"]["state"])
+
+    def test_active_span_still_checks_clock_and_records_diagnostics(self) -> None:
+        self.make_plan(t0=self.base.timestamp())
+        state = wd.initial_state()
+        state["last_clock"] = {"epoch_s": self.base.timestamp() - 10,
+                               "monotonic": self.harness.clock.mono - 100}
+        self.harness.storage.atomic_json(self.harness.storage.root / "state.json", state)
+        path = self.temp / "retired" / "night_plan.json"
+        path.parent.mkdir()
+        path.write_bytes(watchdog_tests.RETIRED_V1.read_bytes())
+        self.assertEqual("CLOCK_UNCERTAIN", self.network_free_tick().state)
+        events = [json.loads(line) for line in
+                  (self.harness.storage.root / "events.jsonl").read_text().splitlines()]
+        self.assertTrue(any(row["kind"] == "plan_retired_v1" for row in events))
+        state = wd.load_state(self.harness.storage)
+        self.assertEqual(["clock_uncertain"], [row["kind"] for row in state["notice_pending"]])
+
+    def test_open_chain_skips_probe_past_deadman_until_exit(self) -> None:
         plan = self.make_plan()
         night = Path(plan.custody_root) / "night"
         night.mkdir()
         (night / "chain.started").write_text("{}", encoding="utf-8")
         self.set_wall(wd.deadman_epoch(plan) + wd.COURIER_LOCK_FRESH_S + 1)
-        self.assertEqual("FENCED", self.quiet_tick().state)
+        self.assertEqual("FENCED", self.network_free_tick().state)
         (night / "chain.exited").write_text("{}", encoding="utf-8")
         probe = mock.Mock(return_value=wd.StopObservation("CLEAR", "clear"))
         self.harness.deps.git_probe = probe
@@ -114,15 +188,12 @@ class TickSpanTests(WatchdogTestCase):
         probe.assert_called_once_with()
 
     def test_unreadable_installed_fence_keeps_normal_unsafe_hold_path(self) -> None:
-        probe = mock.Mock(side_effect=AssertionError("unsafe tick probed network"))
-        self.harness.deps.git_probe = probe
         with mock.patch.object(wd, "installed_agent_fence", side_effect=ValueError("torn plist")):
-            decision = wd.tick(self.harness.storage, self.harness.deps)
+            decision = self.network_free_tick()
         self.assertEqual("HOLD_UNSAFE", decision.state)
         self.assertIn("torn plist", decision.reason)
         self.assertEqual("HOLD_UNSAFE", wd.load_state(self.harness.storage)["state"])
         self.assertTrue((self.harness.storage.root / "events.jsonl").exists())
-        probe.assert_not_called()
 
     def test_tick_before_span_still_probes(self) -> None:
         plan = self.make_plan()
@@ -139,7 +210,7 @@ class TickSpanTests(WatchdogTestCase):
         night.mkdir()
         (night / "courier.sent").write_text("sent\n", encoding="utf-8")
         self.set_wall(wd.plan_completion_epoch(plan))
-        self.assertEqual("FENCED", self.quiet_tick().state)
+        self.assertEqual("FENCED", self.network_free_tick().state)
         self.set_wall(wd.plan_completion_epoch(plan) + 0.001)
         probe = mock.Mock(return_value=wd.StopObservation("STOPPED", "remote stop"))
         self.harness.deps.git_probe = probe
@@ -152,13 +223,28 @@ class TickSpanTests(WatchdogTestCase):
         plan = self.make_plan()
         end = wd.deadman_epoch(plan) + wd.COURIER_LOCK_FRESH_S
         self.set_wall(end)
-        self.assertEqual("FENCED", self.quiet_tick().state)
+        self.assertEqual("FENCED", self.network_free_tick().state)
         self.set_wall(end + 0.001)
         probe = mock.Mock(return_value=wd.StopObservation("CLEAR", "clear"))
         self.harness.deps.git_probe = probe
         self.assertEqual("LAUNCHING", wd.tick(
             self.harness.storage, self.harness.deps, dry_run=True).state)
         probe.assert_called_once_with()
+
+    def test_first_post_installed_only_span_tick_probes(self) -> None:
+        plan = self.make_plan()
+        self.installed_plan(plan)
+        night = Path(plan.custody_root) / "night"
+        night.mkdir()
+        (night / "courier.sent").write_text("sent\n", encoding="utf-8")
+        with mock.patch.object(self.harness.storage, "glob_plans", return_value=[]):
+            self.set_wall(wd.plan_completion_epoch(plan))
+            self.assertEqual("FENCED", self.network_free_tick().state)
+            self.set_wall(wd.plan_completion_epoch(plan) + 0.001)
+            probe = mock.Mock(return_value=wd.StopObservation("STOPPED", "remote stop"))
+            self.harness.deps.git_probe = probe
+            self.assertEqual("STOPPED", wd.tick(self.harness.storage, self.harness.deps).state)
+            probe.assert_called_once_with()
 
     def test_no_plan_tick_still_probes_and_fails_closed(self) -> None:
         probe = mock.Mock(side_effect=RuntimeError("offline"))

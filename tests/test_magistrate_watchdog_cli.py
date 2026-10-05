@@ -256,8 +256,7 @@ class MagistrateWatchdogCliTests(unittest.TestCase):
 
     def test_real_cli_consumes_production_plan_set_and_fails_closed(self) -> None:
         custody_parent = self.root / "four-plan-custody"
-        # Keep this diagnostics/recovery test outside the no-work span fence.
-        valid_path = self._write_valid(custody_parent, "valid-v2", t0_offset_s=3600)
+        valid_path = self._write_valid(custody_parent, "valid-v2")
         retired_path = custody_parent / "retired-v1" / "night_plan.json"
         retired_path.parent.mkdir(parents=True)
         shutil.copyfile(RETIRED_V1, retired_path)
@@ -329,19 +328,18 @@ class MagistrateWatchdogCliTests(unittest.TestCase):
         self.assertNotIn("decision=LAUNCHING", positive.stdout)
         self.assertNotIn("decision=HOLD_UNSAFE", positive.stdout)
 
-    def test_real_cli_active_span_uses_no_subprocess(self) -> None:
-        custody_parent = self.root / "quiet-tick-custody"
+    def test_real_cli_active_span_skips_only_network_probe(self) -> None:
+        custody_parent = self.root / "span-tick-custody"
         self._write_valid(custody_parent, "active-plan")
         source = (
             "import sys\n"
             "from unittest import mock\n"
             "from scripts import magistrate_watchdog as wd\n"
             "with mock.patch.object(wd, 'remote_stop_probe', side_effect=AssertionError('network')) as probe, "
-            "mock.patch.object(wd.subprocess, 'run', side_effect=AssertionError('subprocess')) as run, "
-            "mock.patch.object(wd.subprocess, 'Popen', side_effect=AssertionError('spawn')) as spawn, "
-            "mock.patch.object(wd.os, 'fork', side_effect=AssertionError('fork')) as fork:\n"
+            "mock.patch.object(wd, 'production_census', return_value=wd.CensusObservation(True, 1, '', '')) as census:\n"
             " result=wd.main(sys.argv[1:])\n"
-            " for guard in (probe, run, spawn, fork): guard.assert_not_called()\n"
+            " probe.assert_not_called()\n"
+            " census.assert_called_once_with()\n"
             " raise SystemExit(result)\n"
         )
         completed = subprocess.run(
@@ -352,8 +350,13 @@ class MagistrateWatchdogCliTests(unittest.TestCase):
         )
         self.assertEqual(0, completed.returncode, completed.stderr)
         watchdog_root = custody_parent / "magistrate"
-        for name in ("state.json", "events.jsonl", "attempts", "standdown.request"):
-            self.assertFalse((watchdog_root / name).exists(), name)
+        state = json.loads((watchdog_root / "state.json").read_text())
+        self.assertEqual("FENCED", state["state"])
+        self.assertEqual("NOT_PROBED", state["remote_stop"]["state"])
+        self.assertEqual([], state["notice_pending"])
+        events = [json.loads(line) for line in
+                  (watchdog_root / "events.jsonl").read_text().splitlines()]
+        self.assertTrue(any(row["kind"] == "census" for row in events))
 
     def test_real_cli_resident_records_drain_after_plan_is_truncated(self) -> None:
         custody_parent = self.root / "resident-drain-custody"

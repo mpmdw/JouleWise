@@ -1422,7 +1422,7 @@ class SupervisorTests(WatchdogTestCase):
         self.assertFalse(supervisor.step())
         self.assertIn((100, signal.SIGKILL), self.harness.processes.signals)
 
-    def test_unsafe_replacement_tick_in_active_span_defers_recovery(self) -> None:
+    def test_unsafe_replacement_tick_in_kill_phase_signals_term_then_kill(self) -> None:
         t0 = self.base.timestamp() + 30 * 60
         plan = self.make_plan(t0=t0, name="valid-plan")
         plan_path = self.temp / "torn-sibling" / "night_plan.json"
@@ -1449,12 +1449,16 @@ class SupervisorTests(WatchdogTestCase):
             plan.t0_epoch_s - wd.KILL_LEAD_S + 1, tz=self.local_tz
         )
 
-        decision = wd.tick(self.harness.storage, self.harness.deps)
+        with mock.patch.object(self.harness.deps, "git_probe",
+                               side_effect=AssertionError("in-span network probe")) as probe:
+            decision = wd.tick(self.harness.storage, self.harness.deps)
+            probe.assert_not_called()
 
         self.assertEqual("HOLD_UNSAFE", decision.state)
-        self.assertEqual([], self.harness.processes.signals)
-        self.assertFalse(decision.adopt)
-        self.assertFalse((self.harness.storage.root / "standdown.request").exists())
+        self.assertEqual(
+            [(100, signal.SIGTERM), (100, signal.SIGKILL)],
+            self.harness.processes.signals,
+        )
 
     def test_replacement_ticks_adopt_recorded_session_and_continue_unsafe_drain(self) -> None:
         plan = self.make_plan()
