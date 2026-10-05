@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import tempfile
 from types import SimpleNamespace
@@ -143,6 +144,58 @@ class G2aCalibrationAttachmentTests(unittest.TestCase):
         self.config_path.write_text('{}\n')
         with self.assertRaisesRegex(ValueError, 'config mismatch'):
             self.run_member()
+
+    def rewrite_plan_and_session(self):
+        """Rebind a changed frozen plan without introducing a stale session sha."""
+        self.plan_path.write_text(json.dumps(self.plan) + '\n')
+        self.ledger.unlink()
+        self.open_session()
+
+    def test_member_config_content_must_equal_running_config_even_with_matching_sha(self):
+        different = self.config.to_dict()
+        different['sampling']['idle_seconds'] += 1
+        self.config_path.write_text(json.dumps(different) + '\n')
+        self.plan['stages'][0]['members'][0]['config_sha256'] = hashlib.sha256(
+            self.config_path.read_bytes()).hexdigest()
+        self.rewrite_plan_and_session()
+        # The real sha check passes; only semantic equality with the config
+        # passed to run_benchmark distinguishes these two registered bytes.
+        with self.assertRaisesRegex(ValueError, 'config mismatch'):
+            self.run_member()
+
+    def test_byte_identical_pre_capture_at_another_path_is_not_the_finalized_slot(self):
+        original = self.capture
+        self.capture = self.runs / 'instrument_validation/copied-pre'
+        shutil.copytree(original, self.capture)
+        self.assertEqual(ledger.artifact_hashes(self.capture), self.hashes)
+        with self.assertRaisesRegex(ValueError, 'does not match the finalized pre slot'):
+            self.run_member()
+
+    def test_attachment_bytes_must_match_each_finalized_slot_artifact_hash(self):
+        files = {name: (self.capture / name).read_bytes() for name in self.hashes}
+        authenticate = controller._authenticate_g2a_pre_bracket_attachment
+        self.assertEqual(authenticate(self.capture.resolve(), files, self.evidence, self.config,
+            self.runs, self.plan_path)['session_id'], 'fixture-session')
+        # Exercise the attachment's in-memory byte snapshot independently of
+        # manifest validation and source-custody replay, which authenticate
+        # their own bytes. Leave the actual ledger and capture intact.
+        for name in files:
+            with self.subTest(artifact=name):
+                changed = dict(files, **{name: files[name] + b' '})
+                with self.assertRaisesRegex(ValueError, 'does not match the finalized pre slot'):
+                    authenticate(self.capture.resolve(), changed, self.evidence, self.config,
+                        self.runs, self.plan_path)
+
+    def test_claim_eligible_plan_cannot_use_explicit_diagnostic_path(self):
+        self.plan['status']['claim_eligible'] = True
+        self.rewrite_plan_and_session()
+        with self.assertRaisesRegex(ValueError, 'frozen diagnostic window'):
+            self.run_member()
+
+    def test_other_night_window_cannot_use_explicit_diagnostic_path(self):
+        with patch.dict(os.environ, {'JOULEWISE_NIGHT_PLAN_ID': 'other-window'}):
+            with self.assertRaisesRegex(ValueError, 'frozen diagnostic window'):
+                self.run_member()
 
     def test_uncommitted_pin_cannot_use_explicit_diagnostic_path(self):
         self.pin.write_bytes(self.pin.read_bytes() + b' ')

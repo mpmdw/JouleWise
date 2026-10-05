@@ -21,8 +21,12 @@ from joulewise.authentication_io import (
     V2AuthenticationReadSession,
     read_authentication_input,
 )
+from joulewise.bundle import RunBundleWriter
 from joulewise.bundle_read import BundleReader
+from joulewise.clock import FakeClock
+from joulewise.controller import _config_sha256 as runner_config_sha256
 from joulewise.reduce import _in_window_sample_count, _window_gap_stats
+from joulewise.schemas import BenchmarkConfig
 from joulewise.whole_window import MAX_BRACKET_CONSUMPTION_SEMANTICS_ID
 
 
@@ -188,6 +192,42 @@ class FrozenPackRecorderAuthorizationTests(unittest.TestCase):
                         expected_members,
                     )
                     self.assertEqual(len(set(expected_members)), 40)
+
+    def test_frozen_pack_pins_authenticate_source_not_runner_bytes(self) -> None:
+        cases = [
+            (str(case["pack"]), str(case["pack_identity"]))
+            for case in FROZEN_FLOOR_PACKS
+        ]
+        cases.append((GAMMA_PACK, GAMMA_PACK_ID))
+        for pack, pack_identity in cases:
+            with self.subTest(pack=pack), V2AuthenticationReadSession() as authentication:
+                pack_root = self._pack_path(pack)
+                tree_sha, _registry_sha, cells = margins._pack_inventory(
+                    authentication, REPO_ROOT, pack_root, pack_identity
+                )
+                paths = margins._member_input_paths(
+                    REPO_ROOT, pack_root, cells, tree_sha
+                )
+                with self.assertRaises(margins.WindowDurationMarginsRefusal) as raised:
+                    margins._member_input_paths(REPO_ROOT, pack_root, cells, "0" * 64)
+                self.assertIn("plan_tree.json changed after authentication", str(raised.exception))
+                for cell in cells:
+                    for bundle_id, pin in cell.members:
+                        raw = read_authentication_input(
+                            paths[bundle_id], grammar="json", label="source config"
+                        )
+                        self.assertEqual(hashlib.sha256(raw).hexdigest(), pin)
+                bundle_id, pin = cells[0].members[0]
+                config = BenchmarkConfig.from_mapping(
+                    json.loads(paths[bundle_id].read_bytes())
+                )
+                with mock.patch("joulewise.bundle._capture_source_state", return_value={}):
+                    writer = RunBundleWriter.create(self.root / pack, config, FakeClock())
+                written_sha = hashlib.sha256(
+                    (writer.path / "config.json").read_bytes()
+                ).hexdigest()
+                self.assertEqual(written_sha, runner_config_sha256(config))
+                self.assertNotEqual(written_sha, pin)
 
     def test_selected_floor_grant_does_not_authorize_other_pack_spec(self) -> None:
         alpha = FROZEN_FLOOR_PACKS[0]
@@ -508,13 +548,17 @@ class WindowDurationMarginsTests(unittest.TestCase):
     ) -> None:
         bundle = self.runs_root / bundle_id
         raw_dir = bundle / "raw"
-        raw_dir.mkdir(parents=True)
         config = json.loads(CONFIG_FIXTURE.read_text(encoding="utf-8"))
         config["run_id"] = bundle_id
         config_raw = _json_bytes(config)
-        (bundle / "config.json").write_bytes(config_raw)
+        _write_json(self.repository_root / "source_configs" / f"{bundle_id}.json", config)
+        with mock.patch("joulewise.bundle._capture_source_state", return_value={}):
+            writer = RunBundleWriter.create(
+                self.runs_root, BenchmarkConfig.from_mapping(config), FakeClock()
+            )
         self.config_sha_by_id[bundle_id] = hashlib.sha256(config_raw).hexdigest()
         metadata = {
+            "config_sha256": writer.config_sha256,
             "device": {
                 "rail_manifest": ["cpu_power", "gpu_power", "ane_power"]
             },
@@ -653,6 +697,14 @@ class WindowDurationMarginsTests(unittest.TestCase):
             "schema_version": "joulewise.d117_plan_tree.v1",
             "plan": {"plan_id": self.PACK_ID, "actual_sha256": "a" * 64},
             "window_identity": {"window_id": self.PACK_ID},
+            "science": [
+                {
+                    "run_id": bundle_id,
+                    "config_path": f"source_configs/{bundle_id}.json",
+                    "config_sha256": pin,
+                }
+                for bundle_id, pin in self.config_sha_by_id.items()
+            ],
             "downstream_contract": {
                 "extraction_spec": {
                     "path": "extraction_spec.json",
@@ -888,6 +940,120 @@ class WindowDurationMarginsTests(unittest.TestCase):
             }.issubset(sources)
         )
         margins.validate_window_duration_margins_receipt(receipt)
+
+    def test_real_runner_serialization_authenticates_input_run_and_metadata(self) -> None:
+        receipt = self._derive()
+        sources = {
+            row["source"]: row["sha256"] for row in receipt["authoritative_inputs"]
+        }
+        for cell in receipt["cells"]:
+            for member in cell["members"]:
+                bundle_id = member["bundle_id"]
+                pin = self.config_sha_by_id[bundle_id]
+                written_sha = hashlib.sha256(
+                    (self.runs_root / bundle_id / "config.json").read_bytes()
+                ).hexdigest()
+                self.assertNotEqual(written_sha, pin)
+                self.assertEqual(member["expected_config_sha256"], pin)
+                self.assertEqual(
+                    sources[f"repository:source_configs/{bundle_id}.json"], pin
+                )
+                self.assertEqual(sources[f"runs:{bundle_id}/config.json"], written_sha)
+
+    def test_gamma_pack_relative_sources_authenticate_runner_serialization(self) -> None:
+        tree_path = self.pack_root / "plan_tree.json"
+        tree = json.loads(tree_path.read_bytes())
+        registry = self._registry()
+        manifest = {
+            "schema_version": "joulewise.analysis_manifest.v3.prospective",
+            "plan": {"plan_id": self.PACK_ID, "sha256": tree["plan"]["actual_sha256"]},
+            "contrasts": [
+                {
+                    "contrast_id": cell["cell_id"],
+                    "metric": cell["metric"],
+                    "members": [
+                        {
+                            "run_id": row["bundle_id"],
+                            "config_sha256": row["config_sha256"],
+                        }
+                        for row in cell["member_config_sha256"]
+                    ],
+                }
+                for cell in registry["cells"]
+                if cell["kind"] == "comparative"
+            ],
+        }
+        raw = _json_bytes(manifest)
+        (self.pack_root / "analysis_manifest_v3.json").write_bytes(raw)
+        tree["downstream_contract"] = {
+            "analysis_manifest_path": "analysis_manifest_v3.json",
+            "analysis_manifest_sha256": hashlib.sha256(raw).hexdigest(),
+        }
+        for row in tree["science"]:
+            source = self.repository_root / row["config_path"]
+            target = self.pack_root / row["config_path"]
+            target.parent.mkdir(exist_ok=True)
+            shutil.move(source, target)
+        self._rewrite_tree(tree)
+        self.assertEqual(self._derive()["status"], "PASS")
+
+    def _rewrite_tree(self, tree: dict[str, object]) -> None:
+        raw = _json_bytes(tree)
+        (self.pack_root / "plan_tree.json").write_bytes(raw)
+        (self.pack_root / "plan_tree.sha256").write_text(
+            f"{hashlib.sha256(raw).hexdigest()}  plan_tree.json\n", encoding="utf-8"
+        )
+
+    def test_nondefault_run_config_refuses_even_with_metadata_hash_rebound(self) -> None:
+        bundle = self.runs_root / self.bundle_ids["decode"][0]
+        config = json.loads((bundle / "config.json").read_bytes())
+        config["sampling"]["power_hz"] += 1
+        _write_json(bundle / "config.json", config)
+        metadata = json.loads((bundle / "metadata.json").read_bytes())
+        metadata["config_sha256"] = hashlib.sha256(
+            (bundle / "config.json").read_bytes()
+        ).hexdigest()
+        _write_json(bundle / "metadata.json", metadata)
+        self._assert_record_refuses("member_config_mismatch")
+
+    def test_source_config_bytes_must_match_pack_pin(self) -> None:
+        source = (
+            self.repository_root / "source_configs"
+            / f"{self.bundle_ids['decode'][0]}.json"
+        )
+        source.write_bytes(source.read_bytes() + b" ")
+        self._assert_record_refuses("member_config_mismatch")
+
+    def test_metadata_config_hash_must_bind_runner_bytes(self) -> None:
+        bundle_id = self.bundle_ids["decode"][0]
+        path = self.runs_root / bundle_id / "metadata.json"
+        original = json.loads(path.read_bytes())
+        for digest in (None, "f" * 64, self.config_sha_by_id[bundle_id]):
+            with self.subTest(digest=digest):
+                metadata = dict(original)
+                metadata["config_sha256"] = digest
+                _write_json(path, metadata)
+                self._assert_record_refuses("member_config_mismatch")
+
+    def test_science_inventory_must_bind_unique_registered_source_paths(self) -> None:
+        original = json.loads((self.pack_root / "plan_tree.json").read_bytes())
+        for mutation in ("missing", "duplicate", "pin", "escape"):
+            with self.subTest(mutation=mutation):
+                tree = copy.deepcopy(original)
+                if mutation == "missing":
+                    tree["science"].pop(0)
+                elif mutation == "duplicate":
+                    tree["science"].append(dict(tree["science"][0]))
+                elif mutation == "pin":
+                    tree["science"][0]["config_sha256"] = "f" * 64
+                else:
+                    tree["science"][0]["config_path"] = "../escape.json"
+                self._rewrite_tree(tree)
+                self._assert_record_refuses(
+                    "pack_pin_invalid"
+                    if mutation == "escape"
+                    else "registered_membership_invalid"
+                )
 
     def test_tampered_events_refuses_without_output(self) -> None:
         bundle = self.runs_root / self.bundle_ids["decode"][0]
