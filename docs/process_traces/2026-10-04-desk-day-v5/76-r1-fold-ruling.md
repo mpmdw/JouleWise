@@ -343,3 +343,8 @@ tests), briefs 139 and 140.
     - C2: a single-row stage-list substitution regression.
 
     D3 is item 5 above.
+11. **The first real re-harvest verdict is final** (third cold pass N2, `~/night-archive/desk-day-v5/fable-int3.md`).
+    Item 5 lets an identical-bytes re-harvest supersede a REFUSED original. It must not let a later re-harvest
+    overturn an earlier one that produced a real verdict (NULL, PASS or RECOVER). The history counts the
+    lowest-numbered `reharvest-N` whose verdict is not REFUSED. Any later re-harvest of the same bytes is derived
+    only and never counted. This applies to a re-harvest the same rule as to an original: a real verdict is final.
