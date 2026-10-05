@@ -7,6 +7,7 @@ import hashlib
 import io
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -44,9 +45,11 @@ class CampaignMaxBlocksTests(unittest.TestCase):
             json.dumps({"executed_order": self.entries}) + "\n")
 
     def invoke(self, extra=(), *, fail_at=None, invalid_at=None, interrupt_at=None,
-               authentication=None):
+               waived_at=None, authentication=None, verdict=None,
+               policy=TEST_CAMPAIGN_POLICY, analysis=None, persist_provenance=False,
+               prospective=None):
         args = campaign.parse_args([str(self.configs), "--runs-dir", str(self.runs),
-            "--campaign-policy", str(TEST_CAMPAIGN_POLICY), *extra])
+            "--campaign-policy", str(policy), *extra])
         provenance_path = self.runs / "campaign_manifests" / "fixed.json"
         provenance = {"session_id": "fixed", "first_physical_run_id": None,
                       "members": [], "cooldown_gates": [], "environment_preflight": None}
@@ -69,19 +72,31 @@ class CampaignMaxBlocksTests(unittest.TestCase):
             status = json.loads(summary.read_bytes())["status"] if summary.exists() else None
             return [campaign.MemberEvaluation(bundle_id=info.run_id, bundle_path=bundle,
                 config_name=info.path.name, status=status,
-                strict_valid=info.run_id != invalid_at)]
+                strict_valid=info.run_id not in (invalid_at, waived_at),
+                waiver=(campaign.Waiver("run_id", info.run_id, "desk waiver", "test",
+                    "2026-10-04T00:00:00Z", "strict_invalid")
+                    if info.run_id == waived_at else None))]
 
         with ExitStack() as stack:
             for name, value in (
                 ("authenticate_campaign_writer_preflight", authentication),
                 ("publish_campaign", None), ("remove_campaign", None),
                 ("new_campaign_provenance", (provenance_path, provenance)),
-                ("write_campaign_provenance", None),
                 ("campaign_environment_preflight", {"admitted": True}),
                 ("campaign_cooldown_before_member", {"result": "recovered"}),
                 ("utc_timestamp", "2026-10-04T00:00:00Z"),
             ):
                 stack.enter_context(patch.object(campaign, name, return_value=value))
+            if not persist_provenance:
+                stack.enter_context(patch.object(campaign, "write_campaign_provenance"))
+            if verdict is not None:
+                stack.enter_context(patch.object(campaign, "collection_verdict_for",
+                    return_value=(verdict, ["desk stage-verdict refusal"])))
+            if analysis is not None:
+                stack.enter_context(patch.object(campaign, "load_analysis_manifest", return_value=analysis))
+            if prospective is not None:
+                stack.enter_context(patch.object(campaign, "resolve_prospective_analysis_manifest_v3",
+                    return_value=prospective))
             stack.enter_context(patch.object(campaign.time, "monotonic", return_value=1.0))
             stack.enter_context(patch.object(campaign, "run_authenticated_campaign_child", side_effect=child))
             stack.enter_context(patch.object(campaign, "evaluate_members", side_effect=evaluate))
@@ -118,6 +133,30 @@ class CampaignMaxBlocksTests(unittest.TestCase):
         golden = ROOT / "tests/fixtures/campaign_max_blocks_legacy.jsonl"
         self.assertEqual(wire, golden.read_text())
 
+    def snapshot(self, rc):
+        def normalized(path):
+            return path.read_text().replace(str(self.root), "<ROOT>").replace(str(ROOT), "<REPO>")
+        return {"rc": rc, "log": normalized(self.runs / "campaign_log.jsonl"),
+            "artifacts": {str(path.relative_to(self.runs)): normalized(path)
+                for path in sorted(self.runs.rglob("*")) if path.is_file()
+                and path.name != "campaign_log.jsonl"}}
+
+    def test_unflagged_authenticated_purposes_match_main_golden_log_rc_and_artifacts(self):
+        # Generated with main's 8fa002f7 script through this same desk harness.
+        golden = json.loads((ROOT / "tests/fixtures/campaign_max_blocks_authenticated_main.json").read_text())
+        for purpose in ("CAMPAIGN_TRANSACTION", "T0_REHEARSAL"):
+            for permitted in (1, 3, 5):
+                with self.subTest(purpose=purpose, permitted=permitted):
+                    self.runs = self.root / "runs"
+                    self.invoked = []
+                    auth = self.authentication(permitted, purpose=purpose)
+                    self.assertIsNotNone(auth)
+                    rc = self.invoke(authentication=auth, persist_provenance=True)
+                    self.assertEqual(self.snapshot(rc), golden["snapshot"])
+                    self.assertEqual(self.invoked, [row["run_id"] for row in self.entries])
+                    self.assertNotIn("block_limit", self.rows()[-1]["preflight"])
+                    shutil.rmtree(self.runs)
+
     def test_failure_at_each_position_is_never_the_limit_stop(self):
         for position in (1, 2, 3, 4):
             with self.subTest(position=position):
@@ -136,6 +175,65 @@ class CampaignMaxBlocksTests(unittest.TestCase):
     def test_exit_zero_with_invalid_member_is_not_a_complete_block(self):
         self.assertEqual(self.invoke(["--max-blocks", "1"], invalid_at="block1-member4"), 1)
         self.assertFalse(any(row.get("record_type") == "campaign_stop" for row in self.rows()))
+
+    def test_waived_member_never_qualifies_as_a_complete_block(self):
+        self.assertEqual(self.invoke(["--max-blocks", "1"], waived_at="block1-member4"), 1)
+        self.assertEqual(len(self.invoked), 4)
+        self.assertEqual(self.rows()[-2]["status"], "waived")
+        self.assertEqual(self.rows()[-2]["members"][0]["collection_classification"], "waived")
+        self.assertFalse(any(row.get("record_type") == "campaign_stop" for row in self.rows()))
+
+    def test_limit_reached_with_failed_stage_verdict_has_no_stop_row_or_rc3(self):
+        for verdict in ("blocked", "invalid"):
+            with self.subTest(verdict=verdict):
+                self.runs = self.root / verdict
+                self.invoked = []
+                self.assertEqual(self.invoke(["--max-blocks", "1"], verdict=verdict), 1)
+                self.assertEqual(len(self.invoked), 4)
+                self.assertEqual(self.rows()[-1]["collection"]["verdict"], verdict)
+                self.assertFalse(any(row.get("record_type") == "campaign_stop" for row in self.rows()))
+
+    def test_limit_reached_with_claim_barrier_has_no_stop_row_or_rc3(self):
+        analysis = campaign.AnalysisManifestState(self.configs / "analysis_manifest.json",
+            {}, "desk-claim", "0" * 64)
+        policy = ROOT / "configs/campaign_policies/quiet_mac_p2_production.json"
+        self.assertEqual(self.invoke(["--max-blocks", "1"], policy=policy, analysis=analysis), 1)
+        self.assertEqual(len(self.invoked), 4)
+        verdict = self.rows()[-1]
+        self.assertEqual(verdict["collection"]["verdict"], "usable")
+        self.assertEqual(verdict["claim_readiness"]["verdict"], "not_ready_for_analysis")
+        self.assertIn("cpu_admission_core_failed", verdict["claim_readiness"]["reasons"])
+        self.assertFalse(any(row.get("record_type") == "campaign_stop" for row in self.rows()))
+
+    def test_production_policy_with_v5_prospective_manifest_fragment_can_stop(self):
+        # Unit coverage only: reuse the real v5 producer's analysis semantics,
+        # with desk pin/domain inputs. No pack validation or runner rehearsal.
+        from tests.test_d117_contrast_v5_pack import D117ContrastV5PackTests
+
+        fixture = D117ContrastV5PackTests()
+        fixture.setUp()
+        fixture.configure(fixture.write_prefill_pin(self.root))
+        producer = fixture.generator
+        families = [{"condition_family_id": producer.family_id(arm, model),
+            "canonical_domain_sha256": "0" * 64}
+            for arm in ("decode", producer.PREFILL_ARM) for model in ("A", "B")]
+        manifest = producer.build_analysis_manifest("0" * 64, {"manifest_id": "desk-root"},
+            "0" * 64, [], [], families, "0" * 64, "0" * 64)
+        fragment = {key: manifest[key] for key in ("schema_version", "manifest_id", "design", "contrasts")}
+        path = self.root / "v5-analysis-fragment.json"
+        path.write_text(json.dumps(fragment) + "\n")
+        prospective = campaign.ProspectiveManifestIdentity(path, fragment["manifest_id"],
+            hashlib.sha256(path.read_bytes()).hexdigest())
+        self.assertEqual(fragment["schema_version"], "joulewise.analysis_manifest.v3.prospective")
+        self.assertEqual(fragment["design"]["sampling_plan"]["planned_n_blocks"], 10)
+        policy = ROOT / "configs/campaign_policies/quiet_mac_p2_production.json"
+        self.assertEqual(self.invoke(["--max-blocks", "1"], authentication=self.authentication(),
+            policy=policy, prospective=prospective), campaign.MAX_BLOCKS_REACHED_RC)
+        self.assertEqual(len(self.invoked), 4)
+        verdict = self.rows()[-2]
+        self.assertEqual(verdict["analysis_manifest"], prospective.to_log())
+        self.assertEqual(verdict["preflight"]["campaign_policy"]["policy_id"], "quiet-mac-p2-production")
+        self.assertEqual(verdict["claim_readiness"]["verdict"], "not_assessed")
 
     def test_interrupt_cannot_report_a_complete_block(self):
         with self.assertRaises(KeyboardInterrupt):
@@ -193,36 +291,69 @@ class CampaignMaxBlocksTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "--max-blocks"):
                 self.invoke(["--max-blocks", value])
 
-    def authentication(self, permitted=1):
+    def authentication(self, permitted=1, *, purpose="G2B_SHAKEDOWN"):
         def artifact(name, value):
             path = self.root / name
+            value = {**value, "desk_note": "authenticated"}
             raw = (json.dumps(value) + "\n").encode()
             path.write_bytes(raw)
             return {"path": str(path), "sha256": hashlib.sha256(raw).hexdigest()}
         authorization = artifact("authorization.json", {"permitted_blocks": permitted,
-            "purpose": "G2B_SHAKEDOWN"})
+            "purpose": purpose})
         go = artifact("go.json", {"authorization": authorization})
         consumption = artifact("consumption.json", {"go_receipt": go})
         return {"authentication": {"consumption_path": consumption["path"],
                                    "consumption_sha256": consumption["sha256"]}}
 
-    def test_authenticated_limit_applies_without_cli_and_cannot_be_overridden(self):
+    def test_g2b_requires_explicit_matching_limit_before_dispatch(self):
         auth = self.authentication()
+        with self.assertRaisesRegex(ValueError, "G2B_SHAKEDOWN authorization requires --max-blocks"):
+            self.invoke(authentication=auth)
         for value in ("2", "9"):
             with self.assertRaisesRegex(ValueError, "permitted_blocks"):
                 self.invoke(["--max-blocks", value], authentication=auth)
+        with self.assertRaisesRegex(ValueError, "permitted_blocks"):
+            self.invoke(["--max-blocks", "1"], authentication=self.authentication(3))
+        auth = self.authentication()
         self.assertEqual(self.invoked, [])
-        self.assertEqual(self.invoke(authentication=auth), campaign.MAX_BLOCKS_REACHED_RC)
+        self.assertEqual(self.invoke(["--max-blocks", "1"], authentication=auth), campaign.MAX_BLOCKS_REACHED_RC)
         self.assertEqual(len(self.invoked), 4)
         self.assertEqual(self.rows()[-1]["block_limit"]["source"], "authorization")
+
+    def test_other_authenticated_purposes_refuse_explicit_limit_before_dispatch(self):
+        for purpose in ("CAMPAIGN_TRANSACTION", "T0_REHEARSAL"):
+            with self.subTest(purpose=purpose):
+                with self.assertRaisesRegex(ValueError, "requires G2B_SHAKEDOWN authorization"):
+                    self.invoke(["--max-blocks", "1"], authentication=self.authentication(purpose=purpose))
+                self.assertEqual(self.invoked, [])
+                self.assertFalse((self.runs / "campaign.lock").exists())
+
+    def test_g2b_missing_flag_refuses_even_without_contrast_role(self):
+        for role in ("comparative_abba_member", "neg8_reference_corpus_member"):
+            with self.subTest(role=role):
+                for row in self.entries:
+                    row["role"] = role
+                self.write_order()
+                with self.assertRaisesRegex(ValueError, "G2B_SHAKEDOWN authorization requires --max-blocks"):
+                    self.invoke(authentication=self.authentication())
+                self.assertEqual(self.invoked, [])
 
     def test_hash_mismatch_at_each_authenticated_hop_refuses(self):
         for name in ("consumption.json", "go.json", "authorization.json"):
             with self.subTest(name=name):
                 auth = self.authentication()
-                (self.root / name).write_text('{"permitted_blocks": 99}\n')
-                with self.assertRaises(campaign.LaunchLineageError):
-                    self.invoke(authentication=auth)
+                path = self.root / name
+                value = json.loads(path.read_bytes())
+                # Preserve every required field and nested hash reference.
+                # A digest-bypass mutant must reach dispatch, not a KeyError.
+                if name == "authorization.json":
+                    value["permitted_blocks"] = 2
+                else:
+                    value["desk_note"] = "changed after authentication"
+                path.write_text(json.dumps(value) + "\n")
+                limit = "2" if name == "authorization.json" else "1"
+                with self.assertRaisesRegex(campaign.LaunchLineageError, "hash mismatch"):
+                    self.invoke(["--max-blocks", limit], authentication=auth)
                 self.assertEqual(self.invoked, [])
 
     def test_limit_comes_from_replayed_pack_night_authorization(self):
@@ -251,7 +382,7 @@ class CampaignMaxBlocksTests(unittest.TestCase):
         for row in self.entries:
             row.update(role="neg8_reference_corpus_member", position_in_block=1)
         self.write_order()
-        self.assertEqual(self.invoke(authentication=self.authentication()), 0)
+        self.assertEqual(self.invoke(authentication=self.authentication(purpose="CAMPAIGN_TRANSACTION")), 0)
         self.assertEqual(len(self.invoked), 12)
 
     def test_real_mock_cli_finishes_four_strict_valid_bundles_and_no_fifth(self):

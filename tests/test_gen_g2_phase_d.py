@@ -58,7 +58,7 @@ class G2aNightChainTests(unittest.TestCase):
         independent = _independent_fence_inventory(self.runsheet)
         self.assertEqual(
             [(start, end) for start, end, _body in independent],
-            [(1546, 1610), (328, 351), (374, 385), (389, 564), (575, 587)],
+            [(1550, 1614), (328, 351), (374, 385), (389, 564), (575, 587)],
         )
         self.assertEqual(self.generator.inventory_g2a_shell_blocks(self.runsheet), independent)
 
@@ -265,6 +265,31 @@ class G2bOneBlockChainTests(unittest.TestCase):
                     self.assertEqual((root / "post").exists(), rc == 3)
                     (root / "argv").unlink()
                     (root / "post").unlink(missing_ok=True)
+
+    @unittest.skipUnless(shutil.which("zsh"), "zsh required for generated chain")
+    def test_run_stage_propagates_both_log_write_failures_with_errexit_disabled(self):
+        g2a = self.generator.render_g2a_night_chain(RUNSHEET_PATH.read_text(), "20260830")
+        for variant, chain in (("g2a", g2a), ("g2b", self.chain)):
+            start = chain.index("run_stage() {")
+            helper = chain[start:chain.index("\n}\n", start) + 3]
+            for failure in ("stage_start", "stage_end"):
+                with self.subTest(variant=variant, failure=failure), tempfile.TemporaryDirectory() as temporary:
+                    root = Path(temporary)
+                    client = root / "fake-campaign"
+                    client.write_text('#!/bin/sh\ntouch "$DISPATCHED"\nexit 0\n')
+                    client.chmod(0o755)
+                    script = ('set -uo pipefail\nset +e\n'
+                        'settle() { :; }\nquarantine_stale_lock() { :; }\n'
+                        'timestamp() { builtin echo fixture; }\n'
+                        'echo() { [[ "$1" = *"$FAILURE"* ]] && return 7; builtin echo "$@"; }\n'
+                        + helper + 'run_stage root log configs calibration label\nexit $?\n')
+                    result = subprocess.run(["/bin/zsh", "-c", script], text=True, capture_output=True,
+                        env={**os.environ, "PY": str(client), "REPO": str(root), "POLICY": "desk",
+                            "POWER_POLICY": "desk", "OPERATOR_LOG_ROOT": str(root),
+                            "G2A_OPERATOR_LOG_ROOT": str(root), "FAILURE": failure,
+                            "DISPATCHED": str(root / "dispatched")})
+                    self.assertEqual(result.returncode, 7, result.stderr)
+                    self.assertEqual((root / "dispatched").exists(), failure == "stage_end")
 
 
 if __name__ == "__main__":

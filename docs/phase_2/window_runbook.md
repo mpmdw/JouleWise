@@ -1595,7 +1595,7 @@ run_stage() {
 
   settle || return $?
   quarantine_stale_lock "$root" || return $?
-  echo "$(timestamp) stage_start=$label" >> "$OPERATOR_LOG_ROOT/window-chain.log"
+  echo "$(timestamp) stage_start=$label" >> "$OPERATOR_LOG_ROOT/window-chain.log" || return $?
 
   "$PY" "$REPO/scripts/run_campaign.py" "$config_dir" \
     --runs-dir "$root" \
@@ -1607,7 +1607,7 @@ run_stage() {
     --arm-countdown-s 20 \
     --max-failures 1 "${@:6}" || return $?
 
-  echo "$(timestamp) stage_end=$label" >> "$OPERATOR_LOG_ROOT/window-chain.log"
+  echo "$(timestamp) stage_end=$label" >> "$OPERATOR_LOG_ROOT/window-chain.log" || return $?
 }
 
 run_stage_list() {
@@ -1718,10 +1718,13 @@ For bounded A/B/B/A contrast collection, `run_stage` forwards optional campaign
 arguments after its five routing arguments and preserves a nonzero campaign
 result. `--max-blocks N` stops between members after N strict-valid, succeeded
 four-member blocks. A failed, waived or interrupted member cannot complete a
-block. Authenticated contrast stages derive the limit from the consumption →
-GO → authorization hash chain's `permitted_blocks`; a conflicting CLI limit
-refuses before dispatch, and omitting the option retains the authenticated
-limit. Reference stages remain outside that science allowance. The campaign
+block. A `G2B_SHAKEDOWN` authorization requires the option and derives
+its limit from the consumption → GO → authorization hash chain's
+`permitted_blocks`; an absent or conflicting CLI limit refuses before dispatch.
+Other authenticated purposes refuse `--max-blocks` and remain unbounded, with
+no `preflight.block_limit` verdict field. Unauthenticated limits support the
+mock CLI/controller desk tests. Reference stages remain outside the science
+allowance. The campaign
 return-code registry reserves **3** for `max_blocks_reached`, with a terminal
 `joulewise.campaign_stop.v1` row after the stage verdict. G2-b's generated
 variant runs only the first frozen science stage with `--max-blocks 1`, checks

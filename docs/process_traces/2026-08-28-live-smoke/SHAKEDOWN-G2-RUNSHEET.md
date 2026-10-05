@@ -483,7 +483,7 @@ run_stage() {
 
   settle || return $?
   quarantine_stale_lock "$root" || return $?
-  echo "$(timestamp) stage_start=$label" >> "$G2A_OPERATOR_LOG_ROOT/window-chain.log"
+  echo "$(timestamp) stage_start=$label" >> "$G2A_OPERATOR_LOG_ROOT/window-chain.log" || return $?
 
   "$PY" "$REPO/scripts/run_campaign.py" "$config_dir" \
     --runs-dir "$root" \
@@ -495,7 +495,7 @@ run_stage() {
     --arm-countdown-s 20 \
     --max-failures 1 "${@:6}" || return $?
 
-  echo "$(timestamp) stage_end=$label" >> "$G2A_OPERATOR_LOG_ROOT/window-chain.log"
+  echo "$(timestamp) stage_end=$label" >> "$G2A_OPERATOR_LOG_ROOT/window-chain.log" || return $?
 }
 
 # Authenticate every probe input before ledger readiness or reservation.
@@ -1074,7 +1074,7 @@ run_stage() {
 
   settle || return $?
   quarantine_stale_lock "$root" || return $?
-  echo "$(timestamp) stage_start=$label" >> "$OPERATOR_LOG_ROOT/window-chain.log"
+  echo "$(timestamp) stage_start=$label" >> "$OPERATOR_LOG_ROOT/window-chain.log" || return $?
 
   "$PY" "$REPO/scripts/run_campaign.py" "$config_dir" \
     --runs-dir "$root" \
@@ -1086,7 +1086,7 @@ run_stage() {
     --arm-countdown-s 20 \
     --max-failures 1 "${@:6}" || return $?
 
-  echo "$(timestamp) stage_end=$label" >> "$OPERATOR_LOG_ROOT/window-chain.log"
+  echo "$(timestamp) stage_end=$label" >> "$OPERATOR_LOG_ROOT/window-chain.log" || return $?
 }
 
 run_stage_list() {
@@ -1146,7 +1146,8 @@ run_stage "$RUNS_ROOT" "$CLAIM_LOG" "$REF_ROOT/start_triplet" "$PRE_CAL_CUSTODY"
   start-reference-triplet
 
 # G2-b: one complete A/B/B/A block, stopped by the controller between
-# members. Authorization binds permitted_blocks=1; no operator signal.
+# members. G2B_SHAKEDOWN authorization requires --max-blocks and binds
+# permitted_blocks=1; no operator signal.
 # Dispatch only the first frozen science stage, preserving the bracket tail.
 SCIENCE_RC=2
 while IFS= read -r stage; do
@@ -1190,8 +1191,11 @@ echo "$(timestamp) g2_boundary_stopped=physical_ahead" >> "$OPERATOR_LOG_ROOT/wi
 **Controller-owned one-block stop (zero operator actions):**
 
 The first frozen science stage uses `--max-blocks 1`. Its authenticated
-authorization's `permitted_blocks=1` applies even if the option is omitted;
-a conflicting CLI limit refuses before dispatch. The controller requires four
+`G2B_SHAKEDOWN` authorization binds `permitted_blocks=1`; omitting the flag
+or passing a conflicting limit refuses before dispatch. Other authenticated
+purposes refuse the flag and remain unbounded; unauthenticated limits support
+the mock CLI/controller desk tests. Reference stages remain unbounded.
+The controller requires four
 single-repetition, strict-valid, succeeded A/B/B/A members, then stops before
 the next member. Failures, waivers and interrupted blocks never qualify.
 The registered return code is **3** (`max_blocks_reached`), distinct from

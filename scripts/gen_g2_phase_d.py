@@ -278,7 +278,7 @@ def render_g2a_night_chain(runsheet: str, night_date: str) -> str:
         raise ValueError("--night-date must be YYYYMMDD")
     runsheet = authenticated_screen_source(runsheet)
     blocks = inventory_g2a_shell_blocks(runsheet)
-    expected_ranges = [(1546, 1610), (328, 351), (374, 385), (389, 564), (575, 587)]
+    expected_ranges = [(1550, 1614), (328, 351), (374, 385), (389, 564), (575, 587)]
     observed_ranges = [(start, end) for start, end, _body in blocks]
     if observed_ranges != expected_ranges:
         raise ValueError(
@@ -532,7 +532,8 @@ def render_generated_region(runbook: str) -> str:
         chain,
         'run_stage_list "$WINDOW_PLAN_ROOT/before_midpoint_stages.txt"\n',
         "# G2-b: one complete A/B/B/A block, stopped by the controller between\n"
-        "# members. Authorization binds permitted_blocks=1; no operator signal.\n"
+        "# members. G2B_SHAKEDOWN authorization requires --max-blocks and binds\n"
+        "# permitted_blocks=1; no operator signal.\n"
         "# Dispatch only the first frozen science stage, preserving the bracket tail.\n"
         "SCIENCE_RC=2\n"
         "while IFS= read -r stage; do\n"

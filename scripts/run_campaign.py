@@ -19,8 +19,10 @@ Dry-run mode prints the exact plan and invokes nothing. It also writes no
 campaign log entries; JSONL logging is reserved for actual campaign attempts.
 
 ``--max-blocks`` stops between members after complete, strict-valid A/B/B/A
-blocks. For authenticated contrast stages, the authorization's
-``permitted_blocks`` is authoritative even when the option is omitted.
+blocks. A G2B_SHAKEDOWN authorization requires the option and derives its
+limit from the authorization's ``permitted_blocks``. Other authenticated
+purposes refuse the option and retain their ordinary, unbounded behavior.
+Unauthenticated limits support desk tests with the mock CLI/controller.
 """
 
 from __future__ import annotations
@@ -3206,14 +3208,20 @@ def campaign_block_limit(
 
     if requested is not None and (type(requested) is not int or requested < 1):
         raise ValueError("--max-blocks must be >= 1")
-    # Reference corpora also have block_index (one member per block); they are
-    # bracket inputs, outside the authorization's A/B/B/A science allowance.
-    contrast = any(row.role == "comparative_contrast_member" for row in order_entries)
-    if launch_authentication is not None and (contrast or requested is not None):
+    # Other purposes retain every ordinary stage, including reference corpora,
+    # without a block limit. G2-b's bracket reference configs are unauthenticated.
+    if launch_authentication is not None:
         binding = _authenticated_campaign_block_limit(launch_authentication)
-        if requested is not None and requested != binding["max_blocks"]:
+        if binding["purpose"] != "G2B_SHAKEDOWN":
+            if requested is not None:
+                raise ValueError("--max-blocks requires G2B_SHAKEDOWN authorization")
+            return None
+        if requested is None:
+            raise ValueError("G2B_SHAKEDOWN authorization requires --max-blocks")
+        if requested != binding["max_blocks"]:
             raise ValueError("--max-blocks conflicts with authenticated permitted_blocks")
     elif requested is not None:
+        # The real mock CLI/controller desk test uses this unauthenticated path.
         binding = {"max_blocks": requested, "source": "cli"}
     else:
         return None
@@ -8179,8 +8187,6 @@ def run_campaign(args: argparse.Namespace) -> int:
     if args.max_failures < 1:
         raise ValueError("--max-failures must be >= 1")
     requested_max_blocks = getattr(args, "max_blocks", None)
-    if requested_max_blocks is not None and requested_max_blocks < 1:
-        raise ValueError("--max-blocks must be >= 1")
 
     analysis_manifest = load_analysis_manifest(config_dir)
     try:
