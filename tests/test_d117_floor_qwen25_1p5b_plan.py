@@ -1651,10 +1651,14 @@ class D179V5ReportedEnergyRegistrationTests(unittest.TestCase):
         from joulewise.paper_reported_energy import (
             _validate_registered_spec, registration_sha256, reported_energy_registration,
         )
-        from tests.test_d117_floor_qwen3_v5_generate import load_generator
+        from tests.test_d117_floor_qwen3_v5_generate import fixture_prefill_pin, load_generator
+        temporary = tempfile.TemporaryDirectory(prefix="d179-v5-pin-")
+        self.addCleanup(temporary.cleanup)
+        pin = fixture_prefill_pin(Path(temporary.name))
         for model in ("qwen3-1p7b", "qwen3-8b"):
             with self.subTest(model=model):
                 generator = load_generator(f"d117_floor_{model}_v5")
+                generator.configure_prefill_pin(pin)
                 generator.load_and_verify_families()
                 absolute = [f"repeat-{i}" for i in range(10)]
                 blocks = [{"block_id": f"block-{i}", "members": {

@@ -7,6 +7,7 @@ import hashlib
 import importlib.util
 import json
 import math
+import shutil
 import statistics
 import subprocess
 import tempfile
@@ -16,6 +17,9 @@ from pathlib import Path, PurePosixPath
 from unittest import mock
 
 from joulewise import (
+    arm_readiness,
+    arm_readiness_evidence,
+    calibration_bracketing,
     detection_floor,
     dominance_closeout,
     floor_mint_estimator,
@@ -981,6 +985,125 @@ class D117ContrastV5PackTests(unittest.TestCase):
             }
             self.assertEqual(second, first)
             self.assertEqual(list(root.glob(".d117-v5-stage-*")), [])
+
+    def replay_fixture(
+        self, root: Path
+    ) -> tuple[Path, arm_readiness_evidence._DerivationContext]:
+        # Independent repository: no source generator, original pin bundle,
+        # panel or workload is available at its issuance location.
+        pin = self.write_prefill_pin(root)
+        self.configure(pin)
+        pack = self.generate_pack(root)
+        for path in (pin, root / "selection-record.json", root / "prompt-ladder.json"):
+            path.unlink()
+        for name in ("joulewise", "scripts"):
+            for source in (ROOT / name).rglob("*.py"):
+                target = root / source.relative_to(ROOT)
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(source, target)
+        for relative in (
+            "configs/campaign_policies",
+            "configs/campaigns/neg8_reference_corpus",
+            "configs/campaigns/window_references",
+            "configs/arm_readiness",
+            "configs/analysis_registry",
+        ):
+            shutil.copytree(ROOT / relative, root / relative)
+        supersession = root / SUPERSESSION.relative_to(ROOT)
+        supersession.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(SUPERSESSION, supersession)
+        self.init_fixture_git(root)
+        head = self.commit_fixture(root, "generated replayable v5 contrast pack")
+        context = arm_readiness_evidence._DerivationContext(
+            pack_root=pack.resolve(),
+            repository=root.resolve(),
+            tree=json.loads((pack / "plan_tree.json").read_bytes()),
+            pack_sha256=arm_readiness.committed_pack_tree_sha256(pack),
+            head_commit=head,
+        )
+        return pack, context
+
+    def test_emitted_generator_passes_generic_pack_authentication(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="d117-v5-replay-") as temporary:
+            root = Path(temporary)
+            pack, context = self.replay_fixture(root)
+            before = {
+                path.relative_to(pack): path.read_bytes()
+                for path in pack.rglob("*") if path.is_file()
+            }
+            derived = arm_readiness_evidence._derive_pack_authentication(context)
+            self.assertEqual(
+                derived.facts["desk.current_pack.v1"]["pack_generator_check_status"],
+                "PASS",
+            )
+            recorded = next(
+                check["evidence"] for check in derived.checks
+                if check["check_id"] == "pack_generator_check"
+            )
+            self.assertEqual(recorded["derivation_mode"], "regenerated")
+            self.assertTrue(recorded["preserve_flag_supported"])
+            self.assertEqual(
+                recorded["command"][-2:],
+                ["--check", "--no-preserve-current-frozen-bytes"],
+            )
+            after = {
+                path.relative_to(pack): path.read_bytes()
+                for path in pack.rglob("*") if path.is_file()
+            }
+            self.assertEqual(after, before)
+
+    def test_generic_replay_refuses_one_byte_output_and_input_drift(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="d117-v5-replay-drift-") as temporary:
+            root = Path(temporary)
+            pack, context = self.replay_fixture(root)
+            # Exercise the same subprocess check used by PACK_AUTHENTICATION;
+            # this refusal must be regeneration, not merely Git dirty state.
+            cases = (
+                ("calibration_plan.json", "production bytes differ from regeneration"),
+                ("generator_inputs/decode_workload.json", "pinned replay input drifted"),
+                ("prefill_pin/selection-record.json", "pinned replay input drifted"),
+            )
+            for relative, reason in cases:
+                with self.subTest(relative=relative):
+                    path = pack / relative
+                    original = path.read_bytes()
+                    path.write_bytes(original + b" ")
+                    try:
+                        with self.assertRaisesRegex(
+                            arm_readiness_evidence.EvidenceAuthoringError, reason
+                        ):
+                            arm_readiness_evidence._recorded_generator_check(
+                                context, context.tree["generator"]["path"],
+                                (pack / "generate_configs.py").read_bytes(),
+                                kind="PACK_AUTHENTICATION",
+                                preserve_current_frozen_bytes=False,
+                            )
+                    finally:
+                        path.write_bytes(original)
+
+    def test_successor_acceptance_is_registry_live_default_with_issued_cutoff(self) -> None:
+        acceptance = calibration_bracketing.load_calibration_acceptance_bound()
+        self.assertIsNotNone(acceptance)
+        registry = calibration_bracketing.ISSUED_ACCEPTANCE_REGISTRY[
+            calibration_bracketing.ACTIVE_ACCEPTANCE_ID
+        ]
+        self.assertEqual(self.generator.acceptance_pin(), {
+            "acceptance_id": calibration_bracketing.ACTIVE_ACCEPTANCE_ID,
+            "rel": registry["relative_path"],
+            "artifact_sha256": registry["file_sha256"],
+            "derivation_sha256": acceptance["derivation_sha256"],
+        })
+        self.assertEqual(registry["path"],
+                         calibration_bracketing.DEFAULT_ACCEPTANCE_BOUND_PATH)
+        self.assertEqual(acceptance["ledger_cutoff"]["sequence"], 376)
+        with tempfile.TemporaryDirectory(prefix="d117-v5-live-acceptance-") as temporary:
+            root = Path(temporary)
+            self.configure(self.write_prefill_pin(root))
+            pack = self.generate_pack(root)
+            policy = json.loads((pack / "plan_tree.json").read_bytes())["acceptance_policy"]
+            self.assertEqual(policy["issued_artifact_id"], acceptance["acceptance_id"])
+            self.assertEqual(policy["issued_artifact_sha256"], registry["file_sha256"])
+            self.assertEqual(policy["issued_derivation_sha256"], acceptance["derivation_sha256"])
 
     def test_generated_v5_pack_freezes_and_verifies(self) -> None:
         with tempfile.TemporaryDirectory(prefix="d117-v5-identity-pass-") as temporary:
