@@ -227,6 +227,68 @@ class MlxRuntimeDetokenizerTests(unittest.TestCase):
         self.assertEqual(prepared.metadata["detokenizer"], provenance)
         self.assertEqual(BPEStreamingDetokenizer.constructions, ["prepare", "prepare", "generation"])
 
+    def test_tokenizer_identity_matches_parent_on_optimized_and_fallback_paths(self):
+        config = make_config(model={"revision": "fixture-revision"})
+        expected = {
+            "backend": "mlx",
+            "identifier": "fixture-local-tokenizer",
+            "revision": "fixture-revision",
+            "class": "TokenizerWrapper",
+            "vocab_size": 3,
+        }
+        # Parent behavior: load the original wrapper without preparing a template.
+        with patch.object(MlxRuntimeAdapter, "_prepare_detokenizer", return_value=None):
+            parent, _, _ = self.prepare_adapter()
+        optimized, _, _ = self.prepare_adapter()
+        fallback, _, _ = self.prepare_adapter(UnknownDetokenizer)
+        manifest = make_suite_manifest([
+            suite_item("identity", prompt_tokens=2, output_tokens=3),
+        ])
+        parent_identity = parent.identity_projection_metadata(config)["tokenizer"]
+        self.assertEqual(parent_identity, expected)
+        parent_bytes = json.dumps(parent_identity, sort_keys=True).encode("utf-8")
+        for path, adapter in [("parent", parent), ("optimized", optimized), ("fallback", fallback)]:
+            with self.subTest(path=path):
+                records = [
+                    adapter.identity_projection_metadata(config)["tokenizer"],
+                    adapter.run_workload(config).workload_provenance["tokenizer"],
+                    adapter.run_suite(config, manifest, order_seed="fixture").workload_provenance["tokenizer"],
+                ]
+                for record in records:
+                    self.assertEqual(record, expected)
+                    self.assertEqual(json.dumps(record, sort_keys=True).encode("utf-8"), parent_bytes)
+
+    def test_construction_failure_records_fallback_and_preserves_generation(self):
+        original_init = BPEStreamingDetokenizer.__init__
+        attempts = 0
+
+        def fail_once(detokenizer, tokenizer):
+            nonlocal attempts
+            attempts += 1
+            if attempts == 1:
+                raise RuntimeError("fixture detokenizer construction failed")
+            original_init(detokenizer, tokenizer)
+
+        with patch.object(BPEStreamingDetokenizer, "__init__", fail_once):
+            adapter, backend, prepared = self.prepare_adapter()
+            self.assertIs(adapter._tokenizer, backend.tokenizer)
+            expected = {
+                "path": "fallback",
+                "reason": "detokenizer_construction_failed",
+                "error": "RuntimeError: fixture detokenizer construction failed",
+            }
+            self.assertEqual(prepared.metadata["detokenizer"], expected)
+            BPEStreamingDetokenizer.stage = "generation"
+            workload = adapter.run_workload(make_config())
+            self.assertEqual(workload.output_artifacts["response.txt"], "A B")
+            self.assertEqual(workload.workload_provenance["generator"]["detokenizer"], expected)
+            suite = adapter.run_suite(make_config(), make_suite_manifest([
+                suite_item("fallback", prompt_tokens=2, output_tokens=3),
+            ]), order_seed="fixture")
+            self.assertEqual(suite.workload_provenance["generator"]["detokenizer"], expected)
+            self.assertEqual(BPEStreamingDetokenizer.constructions, ["generation", "generation"])
+            self.assertEqual(attempts, 3)
+
     def test_suite_reuses_map_and_records_provenance(self):
         for detokenizer_class, path in [(BPEStreamingDetokenizer, "prepared_bpe_shallow_copy"), (UnknownDetokenizer, "fallback")]:
             with self.subTest(path=path):

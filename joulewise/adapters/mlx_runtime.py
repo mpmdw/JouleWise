@@ -341,7 +341,14 @@ class MlxRuntimeAdapter:
             self._detokenizer_provenance["reason"] = "unsupported_tokenizer_wrapper"
             return
 
-        template = self._tokenizer.detokenizer
+        try:
+            template = self._tokenizer.detokenizer
+        except Exception as exc:  # noqa: BLE001 - preserve the original generation path
+            self._detokenizer_provenance.update(
+                reason="detokenizer_construction_failed",
+                error=f"{type(exc).__name__}: {exc}",
+            )
+            return
         self._detokenizer_provenance["class"] = (
             f"{type(template).__module__}.{type(template).__qualname__}"
         )
@@ -350,6 +357,9 @@ class MlxRuntimeAdapter:
             return
 
         class PreparedTokenizerWrapper(wrapper_class):
+            # The optimization changes stream allocation, not tokenizer identity.
+            _joulewise_tokenizer_identity_class = wrapper_class
+
             @property
             def detokenizer(self):
                 detokenizer = copy.copy(self._joulewise_detokenizer_template)
@@ -1281,11 +1291,14 @@ def _tokenizer_eos_ids(tokenizer: Any) -> set[int] | None:
 
 
 def _tokenizer_identity(tokenizer: Any, config: BenchmarkConfig) -> dict[str, Any]:
+    identity_class = vars(type(tokenizer)).get(
+        "_joulewise_tokenizer_identity_class", type(tokenizer)
+    )
     return {
         "backend": "mlx",
         "identifier": _tokenizer_identifier(tokenizer, config),
         "revision": config.model.revision,
-        "class": type(tokenizer).__name__,
+        "class": identity_class.__name__,
         "vocab_size": _tokenizer_vocab_size(tokenizer),
     }
 
