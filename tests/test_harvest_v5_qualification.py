@@ -11,6 +11,7 @@ from unittest import mock
 from joulewise import arm_readiness as readiness, v5_qualification as q
 from scripts import harvest_v5_qualification as h
 from tests.test_t0_rehearsal import FixtureBuilder, fixture_bundle, fixture_replay
+from tests.test_v5_block4_x7 import bind_history_fixture, put
 
 
 def verdict(status="PASS"):
@@ -33,7 +34,10 @@ class QualificationHarvestTests(unittest.TestCase):
         self.battery = self.base / "battery.json"; q.write(self.battery, {"fixture": "boundary"})
         self.plan = SimpleNamespace(custody_root=str(self.root), plan_id=self.root.name,
             chain_path=str(self.chain), chain_sha256_path=str(self.sidecar))
-        self.args = SimpleNamespace(plan=self.plan_path, archive_root=self.base / "harvest", previous_harvest=None,
+        self.plan = bind_history_fixture(self.plan_path, self.plan, self.base / "block-archive")
+        attempt_root = Path(self.plan.block_archive_root) / "attempts" / self.plan.plan_id
+        put(attempt_root / "harvest.json", q.attempt_record(self.plan, self.plan_path, "s1", verdict="PASS", cause_codes=[], cause_classes=[]))
+        self.args = SimpleNamespace(plan=self.plan_path, archive_root=attempt_root / "qualification", previous_harvest=None,
             replay_source=[], battery_evidence=self.battery, battery_evidence_sha256=q.sha(self.battery))
         lifecycle = q.read(self.root / "records/lifecycle.json")
         for row in lifecycle["stages"]:
@@ -86,6 +90,30 @@ class QualificationHarvestTests(unittest.TestCase):
         self.assertFalse(record["s2_eligible"])
         self.assertFalse((self.root / "night/g2b-verdict.json").exists())
 
+    def admission_structural(self):
+        from tests.test_v5_block4_x7 import AttemptHistoryTests
+        native = AttemptHistoryTests.admission(self, "native-abort", {"none": True})
+        structural = q.attempt_record(self.plan, self.plan_path, "s1")
+        structural.update({key: native[key] for key in ("verdict", "cause_codes", "cause_classes", "recovery_classification", "admission_abort")})
+        put(self.args.archive_root.parent / "harvest.json", structural)
+        return structural
+
+    def test_admission_abort_rearms_and_qualification_another_cause_blocks_writer_replay(self):
+        structural = self.admission_structural()
+        with mock.patch.object(h.t0_rehearsal, "evaluate_qualification") as evaluate:
+            record = self.harvest()
+        evaluate.assert_not_called()
+        self.assertEqual(record["verdict"], "RECOVER")
+        self.assertFalse(record["end_state"])
+        self.assertFalse(record["consumes_s2"])
+        self.assertIn("fresh_s1", record["next_step"])
+        q.authenticate_attempt_record(structural, Path(self.plan.block_archive_root))
+        record["cause_codes"].append("battery_boundary_not_passed")
+        record["end_state"] = True
+        put(self.args.archive_root / "harvest.json", record)
+        with self.assertRaisesRegex(q.HarvestRefusal, "other_recover_cause"):
+            q.authenticate_attempt_record(structural, Path(self.plan.block_archive_root))
+
     def test_live_gate_failure_is_fail_not_g2b_recovery(self):
         value = verdict(); value["gates"][2]["status"] = "FAIL"
         value["overall_verdict"] = "FAIL"
@@ -127,7 +155,7 @@ class QualificationHarvestTests(unittest.TestCase):
         with mock.patch.object(h.t0_rehearsal, "evaluate_qualification", return_value=verdict()):
             self.harvest()
             first = self.args.archive_root
-            self.args.previous_harvest = first; self.args.archive_root = self.base / "blind-reharvest"
+            self.args.previous_harvest = first; self.args.archive_root = first.parent / "reharvest-1"
             self.harvest()
         for archive in (first, self.args.archive_root):
             self.assertEqual((archive / "withheld").stat().st_mode & 0o777, 0o700)
@@ -148,11 +176,11 @@ class QualificationHarvestTests(unittest.TestCase):
         with mock.patch.object(h.t0_rehearsal, "evaluate_qualification", side_effect=RuntimeError("fixture fault")):
             self.assertEqual(self.harvest()["verdict"], "REFUSED")
         old = self.args.archive_root
-        self.args.previous_harvest = old; self.args.archive_root = self.base / "reharvest"
+        self.args.previous_harvest = old; self.args.archive_root = old.parent / "reharvest-1"
         with mock.patch.object(h.t0_rehearsal, "evaluate_qualification", return_value=verdict()):
             self.assertEqual(self.harvest()["verdict"], "PASS")
         self.assertEqual(q.read(old / "harvest.json")["verdict"], "REFUSED")
-        self.args.archive_root = self.base / "changed"
+        self.args.archive_root = old.parent / "reharvest-2"
         (self.root / "changed-bytes").write_text("fault")
         with self.assertRaisesRegex(q.HarvestRefusal, "reharvest_source_bytes_changed"):
             self.harvest()

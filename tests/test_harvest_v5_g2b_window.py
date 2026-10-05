@@ -16,6 +16,7 @@ from joulewise import arm_readiness as readiness, battery_float, v5_qualificatio
 from scripts import harvest_v5_g2b_window as h
 from tests.test_analysis_finalizer import install_synthetic_finalization_fixture, _make_sliced_one_block_verdict
 from tests.test_battery_float import raw as battery_raw, UPDATE
+from tests.test_v5_block4_x7 import bind_history_fixture
 
 SCRATCH = Path(tempfile.gettempdir())
 
@@ -301,11 +302,12 @@ class G2bStructureTests(unittest.TestCase):
         plan = SimpleNamespace(plan_id="s1-fixture", custody_root=str(night_root), measurement_head="a" * 40,
             chain_path=str(chain), chain_sha256_path=str(sidecar),
             pack_night={"pack_id": "d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5", "pack_root": str(self.pack)})
+        plan = bind_history_fixture(plan_path, plan, self.base / "block-archive")
         input_path = self.base / "inputs.json"
         put(input_path, {"schema": h.INPUT_SCHEMA, "occurrence": "s1", "plan": q.reference(plan_path),
             "custody_root": str(self.custody), "policy": q.reference(policy), "acceptance": q.reference(acceptance),
             "bound_runs_root": str(bound)})
-        args = SimpleNamespace(inputs=input_path, inputs_sha256=q.sha(input_path), archive_root=self.base / "null",
+        args = SimpleNamespace(inputs=input_path, inputs_sha256=q.sha(input_path), archive_root=Path(plan.block_archive_root) / "attempts" / plan.plan_id,
             scratch_root=self.base, prepare_desk=False, previous_harvest=None)
         with mock.patch.object(q, "load_plan", return_value=plan):
             record = h.harvest(args)
@@ -315,7 +317,8 @@ class G2bStructureTests(unittest.TestCase):
         # even when qualification-only G10 registration is unreadable.
         put(night_root / "night/chain.started", {"pid": 54321, "pgid": 54321})
         (night_root / "qualification-plan-record.json").write_text("malformed qualification-only bytes")
-        args.archive_root = self.base / "started-without-qualification"
+        shutil.rmtree(args.archive_root)
+        args.archive_root = Path(plan.block_archive_root) / "attempts" / plan.plan_id
         with mock.patch.object(q, "load_plan", return_value=plan), mock.patch.object(
                 q, "g10_sources", side_effect=AssertionError("structural harvest read G10")), mock.patch.object(
                 q, "replay_g10_custody", side_effect=AssertionError("structural harvest replayed G10")):
@@ -325,13 +328,57 @@ class G2bStructureTests(unittest.TestCase):
         self.assertFalse(any("g10" in cause for cause in structural["cause_codes"]))
         put(night_root / "night/launch.pending", {"schema": "joulewise.launch_pending.v1", "pid": 54321,
             "pgid": 54321, "start_time": "fixture", "plan_id": "s1-fixture", "attempt_id": "one", "epoch_s": 1.0})
-        args.archive_root = self.base / "live-pending"
+        shutil.rmtree(args.archive_root)
+        args.archive_root = Path(plan.block_archive_root) / "attempts" / plan.plan_id
         with mock.patch.object(q, "load_plan", return_value=plan), mock.patch.object(q.os, "killpg", return_value=None):
             # Bind the injected syscall explicitly; group_clear's default was
             # captured on import and must never contact a real process group.
             record = h.harvest(args, clear=lambda night, **kw: q.group_clear(night, killpg=q.os.killpg, **kw))
         self.assertEqual(record["verdict"], "REFUSED")
         self.assertEqual(record["cause_codes"], ["launcher_group_alive"])
+
+    def test_native_admission_abort_has_one_rearm_and_other_cause_blocks_it(self):
+        from tests.test_v5_block4_x7 import AttemptHistoryTests
+        self.root = self.runs
+        AttemptHistoryTests.admission(self, self.ids[0], {"none": True})
+        night_custody = self.base / "admission-night"
+        (night_custody / "night").mkdir(parents=True)
+        put(night_custody / "night/chain.started", {"pgid": 99999999, "pid": 99999999})
+        chain = self.base / "admission-chain.zsh"; chain.write_text("exit 1\n")
+        sidecar = self.base / "admission-chain.sha256"
+        plan_path = night_custody / "night_plan.json"
+        plan = bind_history_fixture(plan_path, SimpleNamespace(plan_id="admission-attempt", custody_root=str(night_custody),
+            chain_path=str(chain), chain_sha256_path=str(sidecar),
+            pack_night={"pack_id": "d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5", "pack_root": str(self.pack)}), self.base / "block-archive")
+        bound = self.base / "admission-bound"; bound.mkdir()
+        paths = {}
+        for name in ("policy", "acceptance", "go", "consumption", "battery_boundaries"):
+            path = self.base / ("admission-" + name + ".json")
+            put(path, {"observations": {}} if name == "battery_boundaries" else {})
+            paths[name] = q.reference(path)
+        input_path = self.base / "admission-inputs.json"
+        put(input_path, {"schema": h.INPUT_SCHEMA, "occurrence": "s1", "plan": q.reference(plan_path),
+            "custody_root": str(self.custody), "bound_runs_root": str(bound), **paths})
+        destination = Path(plan.block_archive_root) / "attempts" / plan.plan_id
+        args = SimpleNamespace(inputs=input_path, inputs_sha256=q.sha(input_path), archive_root=destination,
+            scratch_root=self.base, prepare_desk=False, previous_harvest=None)
+        with mock.patch.object(q, "load_plan", return_value=plan), mock.patch.object(h, "authenticate_launch"), \
+             mock.patch.object(q, "battery_boundaries", return_value=True), mock.patch.object(h, "battery_attempts", return_value=(True, [])):
+            result = h.harvest(args, clear=lambda *a, **k: True)
+        self.assertEqual(result["verdict"], "RECOVER")
+        self.assertFalse(result["end_state"])
+        self.assertFalse(result["consumes_s2"])
+        self.assertIn("fresh_s1", result["next_step"])
+        # Independent retained variant: an additional physics failure blocks rearm.
+        shutil.rmtree(destination)
+        put(self.runs / self.ids[1] / "summary_metrics.json", {"status": "failed", "failure_message": "another physics failure"})
+        with mock.patch.object(q, "load_plan", return_value=plan), mock.patch.object(h, "authenticate_launch"), \
+             mock.patch.object(q, "battery_boundaries", return_value=True), mock.patch.object(h, "battery_attempts", return_value=(True, [])):
+            mixed = h.harvest(args, clear=lambda *a, **k: True)
+        self.assertTrue(mixed["end_state"])
+        self.assertEqual(mixed["recovery_classification"], "admission_abort_with_other_recover_cause")
+        with self.assertRaisesRegex(q.HarvestRefusal, "named_tooling_recover"):
+            q.tooling_s2_predecessor(mixed)
 
 
 class BatteryBoundaryTests(unittest.TestCase):
@@ -549,18 +596,19 @@ class RecoverNoScienceTests(unittest.TestCase):
         plan = SimpleNamespace(plan_id='s1-attempt', custody_root=str(night_custody),
             chain_path=str(chain), chain_sha256_path=str(sidecar), measurement_head='a' * 40,
             pack_night={'pack_root': str(self.pack), 'pack_id': 'd117_contrast_qwen3-1p7b_vs_qwen3-8b_v5'})
+        plan = bind_history_fixture(plan_path, plan, self.root / "block-archive")
         inputs = dict(self.inputs, schema=h.INPUT_SCHEMA, occurrence='s1', plan=q.reference(plan_path),
             custody_root=str(g2b), policy=q.reference(policy), acceptance=q.reference(acceptance), bound_runs_root=str(bound))
         input_path = self.root / 'inputs.json'; put(input_path, inputs)
         args = SimpleNamespace(inputs=input_path, inputs_sha256=q.sha(input_path),
-            archive_root=self.root / 'archive', prepare_desk=False, previous_harvest=None, scratch_root=self.root)
+            archive_root=Path(plan.block_archive_root) / 'attempts' / plan.plan_id, prepare_desk=False, previous_harvest=None, scratch_root=self.root)
         before = q.tree_hash(night_custody)
         with mock.patch.object(q, 'load_plan', return_value=plan), \
              mock.patch.object(q, 'g10_sources', side_effect=AssertionError('qualification-only G10 read')), \
              mock.patch.object(q, 'replay_g10_custody', side_effect=AssertionError('qualification-only G10 replay')):
             result = h.harvest(args, clear=lambda *a, **k: True)
             first = args.archive_root
-            args.previous_harvest = first; args.archive_root = self.root / 'reharvest'
+            args.previous_harvest = first; args.archive_root = first / 'reharvest-1'
             second = h.harvest(args, clear=lambda *a, **k: True)
         self.assertEqual(second['verdict'], result['verdict'])
         for archive in (first, args.archive_root):

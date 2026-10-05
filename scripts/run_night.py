@@ -2367,7 +2367,7 @@ def _qualification_observe(night, producer, operation):
 def _s1_observation_enabled(plan):
     try:
         return (plan.receipt_class == "TRANSACTION_PACK" and night_gate.chain_literal(
-            Path(plan.chain_path).read_text(), "V5_QUALIFICATION_OCCURRENCE") == "s1")
+            Path(plan.chain_path).read_text(), "V5_QUALIFICATION_OCCURRENCE") in {"s1", "s2"})
     except Exception:
         return False
 
@@ -2424,7 +2424,9 @@ def _produce_pack_go(plan, plan_path, plan_raw, prepared, arm_state, receipt, pr
     if arm["boot_session_id"] != readiness._current_boot_session_id() or not probe.monotonic_ns <= issued < arm["valid_until_monotonic_ns"]:
         raise PackNightRefusal("boot_session_id/valid_until_monotonic_ns")
     authorization = prepared["authorization_record"]
-    if arm["pack"]["plan_id"] != plan.plan_id:
+    calibration_plan_id = (readiness._pack_record(prepared["root"])["plan_id"]
+                           if plan.previous_attempt is not None else plan.plan_id)
+    if arm["pack"]["plan_id"] != calibration_plan_id:
         raise PackNightRefusal("arm_receipt.pack.plan_id")
     if arm["reviewed_main"]["head_commit"] != plan.repo_head or probes.checkout_head() != plan.repo_head:
         raise PackNightRefusal("repo_head")
@@ -3691,9 +3693,15 @@ def _admit_qualification_control_order(plan, record):
     """Check prior controls against the actual fresh T-0/dwell captures."""
     from scripts.check_v5_arm_abort import ABSENCE_KEYS, CONTROL_SCHEMA
     occurrence = record["occurrence"]
+    if getattr(plan, "previous_attempt", None) is not None:
+        authorization = plan.pack_night["authorization_record"]
+        authority = _pack_object(Path(authorization["path"]), "qualification_authorization", authorization["sha256"])
+        chain = _pack_bytes(Path(plan.chain_path), "qualification_chain", authority["permitted_chain_sha256"])
+        if night_gate.chain_literal(chain.decode(), "V5_QUALIFICATION_OCCURRENCE") != occurrence:
+            raise PackNightRefusal("qualification occurrence binding")
     if occurrence == "a1":
         return
-    if occurrence not in {"a2", "s1"}:
+    if occurrence not in {"a2", "s1", "s2"}:
         raise PackNightRefusal("qualification occurrence")
     boot = readiness._current_boot_session_id()
     inputs = Path(plan.custody_root) / plan.pack_night["pack_id"] / "arm_readiness.t0.inputs"

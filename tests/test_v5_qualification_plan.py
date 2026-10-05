@@ -313,6 +313,9 @@ class PlanWriterTests(SizingTests):
             producers[name] = writer.locator(path)
         self.input["prerequisites"] = {"observation_producers": producers,
             "g10_control": writer.locator(self.confirm), "g10_artifacts": [writer.locator(self.transcript)]}
+        self.input["previous_attempt"] = {"none": True}
+        self.input["block_archive_root"] = str(self.root / "block-archive")
+        Path(self.input["block_archive_root"]).mkdir()
         self.output = self.custody / "night_plan.json"
         self.input["sizing"]["fixed"]["t0_stage_cap"] = self.allow(3300)
         for target, name, replacement in (
@@ -550,6 +553,9 @@ class PlanWriterTests(SizingTests):
         for occurrence in ("a1", "a2", "s1"):
             with self.subTest(occurrence=occurrence):
                 inputs = copy.deepcopy(self.input)
+                if occurrence in {"a1", "a2"}:
+                    inputs.pop("previous_attempt")
+                    inputs.pop("block_archive_root")
                 custody = self.root / (occurrence + "-context-fixture")
                 custody.mkdir()
                 inputs["plan"].update(plan_id=custody.name, custody_root=str(custody))

@@ -128,9 +128,12 @@ def closeout(plan_path, *, now=time.time, clear=q.group_clear):
         raise ValueError("desk lifecycle is create-once")
     record_path = custody / "qualification-plan-record.json"
     record = producer.read(record_path)
-    if (record.get("occurrence") != "s1" or record["plan"] != producer.reference(plan_path)
+    if (record.get("occurrence") not in {"s1", "s2"} or record["plan"] != producer.reference(plan_path)
             or record["head"] != plan.measurement_head):
         raise ValueError("desk plan binding mismatch")
+    if getattr(plan, "previous_attempt", None) is not None and record["occurrence"] != q.night_gate.chain_literal(
+            producer.regular(plan.chain_path).decode(), "V5_QUALIFICATION_OCCURRENCE"):
+        raise ValueError("desk qualification occurrence binding mismatch")
     go = readiness.validate_pack_night_go_receipt(producer.read(night / "go_receipt.json"))
     if go["purpose"] != "G2B_SHAKEDOWN" or go["plan_sha256"] != record["plan"]["sha256"]:
         raise ValueError("desk GO binding mismatch")

@@ -22,7 +22,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from joulewise import arm_readiness as readiness, battery_float, calibration_bracketing as brackets
-from joulewise import network_time_off, v5_qualification as q
+from joulewise import network_time_off, night_gate, v5_qualification as q
 from joulewise.calibration_ledger import load_calibration_ledger_snapshot
 from joulewise.cli import validate_bundle
 from joulewise.reduce import reduce_bundle
@@ -489,6 +489,8 @@ def harvest(args, *, runner=subprocess.run, now=None, clear=q.group_clear):
     if now is not None:
         kwargs["now"] = now
     plan = q.load_plan(plan_path, "G2B_SHAKEDOWN", **kwargs)
+    if night_gate.chain_literal(Path(plan.chain_path).read_text(), "V5_QUALIFICATION_OCCURRENCE") != occurrence:
+        raise q.HarvestRefusal("harvest_occurrence_plan_mismatch")
     custody, night = Path(inputs["custody_root"]), Path(plan.custody_root) / "night"
     pack = Path(plan.pack_night["pack_root"])
     if plan.pack_night["pack_id"] != "d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5":
@@ -500,12 +502,16 @@ def harvest(args, *, runner=subprocess.run, now=None, clear=q.group_clear):
                "chain": Path(plan.chain_path), "chain-sidecar": Path(plan.chain_sha256_path),
                "bound-runs": Path(inputs["bound_runs_root"])}
     started = (night / "chain.started").exists()
+    admission_abort, admission_other_causes = q.native_admission_abort(custody / "runs") if started else (None, [])
+    if admission_abort and (night / "producer-faults.jsonl").exists():
+        admission_other_causes.append("qualification_observation_producer_fault")
     no_science = recover_no_science(inputs, plan, night, pack, custody / "runs") if started and occurrence == "s1" else None
     missing_after_start = []
     if no_science:
         sources["pre-science-tooling-failure"] = q.authenticated_reference(inputs["pre_science_tooling_failure"])
     if started and not no_science:
-        for field in ("terminal_boundary", "go", "consumption", "battery_boundaries"):
+        for field in (("go", "consumption", "battery_boundaries") if admission_abort else
+                      ("terminal_boundary", "go", "consumption", "battery_boundaries")):
             if field not in inputs:
                 missing_after_start.append(field + "_missing")
             else:
@@ -514,15 +520,20 @@ def harvest(args, *, runner=subprocess.run, now=None, clear=q.group_clear):
             sources.update(q.boundary_sources(sources["battery_boundaries"]))
         if "desk_producer_events" in inputs:
             sources["desk-producer-events"] = q.authenticated_reference(inputs["desk_producer_events"])
-        if not args.prepare_desk:
+        if not args.prepare_desk and not admission_abort:
             if "desk-producer-events" not in sources and not args.previous_harvest:
                 missing_after_start.append("desk_producer_events_missing")
             for name in ("bracket-binding.json", "whole-window-verdict.json"):
                 if not (custody / "runs" / name).is_file():
                     missing_after_start.append(name.replace("-", "_").replace(".json", "_missing"))
     destination = args.archive_root.absolute()
+    q.attempt_destination(plan, destination, replay=args.previous_harvest)
     # No recovery authority is inferred from a harvester's classification.
     if occurrence == "s2":
+        q.authenticate_s2_authority(inputs["s2_authority"], plan.plan_id, plan.previous_attempt)
+        plan_record = q.read(Path(plan.custody_root) / "qualification-plan-record.json")
+        if plan_record.get("s2_authority") != inputs["s2_authority"]:
+            raise q.HarvestRefusal("s2_authority_plan_mismatch")
         authority_path = q.authenticated_reference(inputs["s2_authority"])
         authority = q.read(authority_path)
         prior = q.read(q.authenticated_reference(authority["s1_harvest"]))
@@ -542,7 +553,7 @@ def harvest(args, *, runner=subprocess.run, now=None, clear=q.group_clear):
         transcripts = Path(temporary)
         events = None
         desk_error = None
-        if started and not no_science and not missing_after_start:
+        if started and not no_science and not admission_abort and not missing_after_start:
             try:
                 if args.prepare_desk:
                     if args.previous_harvest:
@@ -562,9 +573,8 @@ def harvest(args, *, runner=subprocess.run, now=None, clear=q.group_clear):
         if events is not None:
             q.write(destination / "derived/desk-producer-events.json", events)
         shutil.copytree(transcripts, destination / "withheld/desk-production")
-    record = {"schema": SCHEMA, "occurrence": occurrence, "plan_id": q.identifier(plan.plan_id),
-              "plan_sha256": q.sha(plan_path), "inputs_sha256": q.sha(input_path), "head": plan.measurement_head,
-              "verdict": "REFUSED", "cause_codes": [], "cause_classes": [], "members": []}
+    record = q.attempt_record(plan, plan_path, occurrence, inputs_sha256=q.sha(input_path), head=plan.measurement_head,
+                              verdict="REFUSED", cause_codes=[], cause_classes=[], members=[])
     try:
         if desk_error is not None:
             raise desk_error
@@ -572,6 +582,18 @@ def harvest(args, *, runner=subprocess.run, now=None, clear=q.group_clear):
             record.update(verdict="NULL", cause_codes=["chain_never_started"])
         elif no_science:
             record.update(no_science)
+        elif admission_abort:
+            causes = [q.ADMISSION_ABORT_CODE, *missing_after_start, *admission_other_causes]
+            if not missing_after_start:
+                authenticate_launch(plan, sources["go"], sources["consumption"])
+                if not q.battery_boundaries(sources["battery_boundaries"], inputs["battery_boundaries"]["sha256"],
+                                            plan.plan_id, plan_path=plan_path):
+                    causes.append("battery_observation_not_passed")
+                if not battery_attempts(custody, Path(inputs["bound_runs_root"]))[0]:
+                    causes.append("battery_observation_not_passed")
+            record.update(verdict="RECOVER", cause_codes=sorted(set(causes)), cause_classes=["instrument_physics"],
+                          recovery_classification="admission_abort" if len(set(causes)) == 1 else "admission_abort_with_other_recover_cause",
+                          admission_abort=admission_abort)
         elif missing_after_start:
             # Later artifacts legitimately do not exist after a started-chain
             # crash. Preserve/authenticate the retained occurrence first; this
@@ -695,6 +717,15 @@ def harvest(args, *, runner=subprocess.run, now=None, clear=q.group_clear):
     if record["verdict"] == "RECOVER" and record.get("recovery_classification") == "recover_no_science":
         record.update(end_state=False, s2_eligible=False, consumes_s2=False,
                       next_step="r3_cure_then_fresh_s1_plan_authorization_t0_same_code_twice_consult")
+    try:
+        history = q.checked_history(record, plan, replay=args.previous_harvest is not None)
+        record["attempt_history"] = history
+        if q.is_admission_abort(record):
+            record.update(q.admission_abort_disposition(record, history))
+    except (OSError, ValueError, KeyError, TypeError) as error:
+        record.update(verdict="REFUSED", cause_codes=[str(error) if isinstance(error, q.HarvestRefusal) else "attempt_history_authentication_fault"],
+                      cause_classes=["tooling"], end_state=False, s2_eligible=False,
+                      next_step="attempt_history_refusal")
     return q.publish(destination, record)
 
 

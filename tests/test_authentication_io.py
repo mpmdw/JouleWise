@@ -48,6 +48,7 @@ AUTHENTICATION_SURFACE = (
     "joulewise/environment_admission.py",
     "joulewise/detection_floor.py",
     "joulewise/salvage_dangler.py",
+    "scripts/restore_v5_null_reservation.py",
 )
 NON_AUTHENTICATION_WRITERS = {
     "_fsync_parent_directory",
