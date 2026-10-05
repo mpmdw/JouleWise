@@ -712,10 +712,15 @@ def _chain_environment(plan: NightPlan, night_dir: Path) -> dict[str, str]:
     environment.pop("NIGHT_VERIFY_ONLY", None)
     environment.pop("NIGHT_RESERVATION_ARGV_ONLY", None)
     environment.pop("EVIDENCE_PROCESS_JOURNAL", None)
-    off_path = night_dir / network_time_off.RECEIPT_BASENAME
-    if plan.receipt_class == "TRANSACTION_PACK":
-        off_path = (night_dir.parent / plan.pack_night["pack_id"] /
-                    "arm_readiness.t0.inputs" / network_time_off.RECEIPT_BASENAME)
+    from joulewise import v5_qualification
+    off_path = v5_qualification.off_receipt_path(plan, night_dir)
+    chain = Path(plan.chain_path) if getattr(plan, "chain_path", None) is not None else None
+    if plan.receipt_class == "TRANSACTION_PACK" and chain is not None:
+        window = chain.parent / "window.env"
+        if window.is_file() and chain.is_file() and "export V5_QUALIFICATION_OCCURRENCE=" in chain.read_text():
+            assignments = t0_author.parse_window_environment(window.read_bytes())
+            for key in ("CALIBRATION_LEDGER", "LEDGER_HEAD_PIN"):
+                environment[key] = assignments[key]
     environment["JOULEWISE_NETWORK_TIME_OFF_RECEIPT"] = str(off_path)
     return environment
 
@@ -3341,12 +3346,11 @@ def smoke_observation_round(interval_s):
 
 
 def _admit_network_time_off(plan, night_dir, *, during_settle=None, budget=None):
+    from joulewise import v5_qualification
+    off_path = v5_qualification.off_receipt_path(plan, night_dir)
     if plan.receipt_class == "TRANSACTION_PACK":
-        off_path = (night_dir.parent / plan.pack_night["pack_id"] /
-                    "arm_readiness.t0.inputs" / network_time_off.RECEIPT_BASENAME)
         off = network_time_off.read_receipt(off_path)
     else:
-        off_path = night_dir / network_time_off.RECEIPT_BASENAME
         off = network_time_off.set_network_time_off(off_path, plan.plan_id, plan.plan_id)
     # The receipt starts both clocks. Running the dwell here overlaps the OFF
     # settle without a background worker or an extra 600-second sleep.

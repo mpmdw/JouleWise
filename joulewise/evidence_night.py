@@ -1370,11 +1370,14 @@ def check(*, candidate, canonical=CANONICAL, supervisor_state=SUPERVISOR_STATE,
                     phase="arm_check", runner=lambda argv: runner(argv, timeout=battery_float.PROBE_TIMEOUT_S),
                     plan_id=state.get("plan_id"),
                 )
+                from joulewise.v5_qualification import persist_battery_observation
+                retained = persist_battery_observation(
+                    lifecycle_dir(candidate), f"battery-float-arm-check-{observed['monotonic_before_ns']}", observed, _raw)
                 try:
                     battery_float.require_pass(observed)
                 except (battery_float.ProbeError, ValueError) as exc:
-                    raise Refused(f"battery float: {exc}", evidence={"observation": observed}) from exc
-                return {"observation": observed}
+                    raise Refused(f"battery float: {exc}", evidence={"observation": observed, **retained}) from exc
+                return {"observation": observed, **retained}
             inspect("battery_float", check_battery_float)
             # Each arm predicate follows its own row flag, as at t0. An
             # unflagged kind records `skipped`; an unreadable kind fails closed.
@@ -1805,7 +1808,8 @@ def publish_install(*, candidate, notice_accepted=None, launchctl_bin="launchctl
                 phase="publish_install", runner=lambda argv: runner(argv, timeout=battery_float.PROBE_TIMEOUT_S),
                 plan_id=state.get("plan_id"),
             )
-            saved_json(attempt / "battery-float-at-publication.json", battery_observation)
+            from joulewise.v5_qualification import persist_battery_observation
+            persist_battery_observation(attempt, "battery-float-at-publication", battery_observation, _battery_raw)
             try:
                 battery_float.require_pass(battery_observation)
             except (battery_float.ProbeError, ValueError) as exc:

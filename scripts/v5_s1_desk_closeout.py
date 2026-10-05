@@ -30,6 +30,10 @@ RUNSHEET = "docs/process_traces/2026-08-28-live-smoke/SHAKEDOWN-G2-RUNSHEET.md"
 def backup_sources(sources, destination, script, *, runner=subprocess.run):
     """Reuse backup_runs.sh's rsync implementation, then independently hash both trees."""
     destination = writer.safe_path(destination, exists=False)
+    sources = {role: writer.safe_path(source) for role, source in sources.items()}
+    if any(destination == source or destination in source.parents or source in destination.parents
+           for source in sources.values()):
+        raise ValueError("backup destination overlaps a source")
     if destination.exists() and (not destination.is_dir() or any(destination.iterdir())):
         raise ValueError("backup destination already exists")
     destination.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -83,14 +87,16 @@ def phase_g(plan, record):
                    and p.name not in {"instrument_validation", "campaign_manifests"}}
         if bundles != expected[role]:
             raise ValueError("Phase G extra or missing bundle")
-    custody = Path(roots["custody"])
+    plan_custody = Path(getattr(plan, "custody_root", roots["custody"]))
+    custody_roots = {Path(roots["custody"]), plan_custody}
     # Scratch has no place in retained custody. The measurement checkout copy
     # is separately pinned by git status and is not a lifecycle scratch root.
-    for path in custody.rglob("*"):
-        if "results-clone" in path.relative_to(custody).parts:
-            continue
-        if path.name in {"scratch", "tmp", "__pycache__"} or path.name.endswith((".tmp", ".pyc")):
-            raise ValueError("Phase G scratch residue")
+    for custody in custody_roots:
+        for path in custody.rglob("*"):
+            if "results-clone" in path.relative_to(custody).parts:
+                continue
+            if path.name in {"scratch", "tmp", "__pycache__"} or path.name.endswith((".tmp", ".pyc")):
+                raise ValueError("Phase G scratch residue")
     head = subprocess.check_output(["git", "-C", plan.measurement_root, "rev-parse", "HEAD"], text=True).strip()
     status = subprocess.check_output(["git", "-C", plan.measurement_root, "status", "--short", "--branch"], text=True)
     if any(line and not line.startswith("##") for line in status.splitlines()):
@@ -102,7 +108,8 @@ def phase_g(plan, record):
             "expected_bundles": {role: sorted(ids) for role, ids in expected.items()},
             "runs_tree": {role: sorted(str(p.relative_to(Path(roots[role])))
                 for p in Path(roots[role]).rglob("*")) for role in ("claim_runs", "bound_runs")},
-            "custody_files": producer.tree_files(custody),
+            "custody_files": producer.tree_files(Path(roots["custody"])),
+            "night_custody_files": producer.tree_files(plan_custody),
             "git_status": status, "head": head, "pack_sha256": plan.pack_night["pack_sha256"],
             "no_extra_bundles": True, "no_scratch_residue": True, "pack_unchanged": True}
     if extension is not None:
@@ -139,6 +146,13 @@ def closeout(plan_path, *, now=time.time, clear=q.group_clear):
     stops = list(custody.rglob("post-bracket-terminal-boundary.json"))
     if len(stops) != 1:
         raise ValueError("desk requires one retained STOP boundary")
+    q.require_terminal_boundary(plan, stops[0])
+    arm_root = writer.safe_path(context["custody_root"])
+    if arm_root == custody or arm_root in custody.parents or custody in arm_root.parents:
+        raise ValueError("desk requires separate plan and ARM custody roots")
+    # The writer pins the original three desk sources. Add the authenticated
+    # plan root to both backups without changing that registered source map.
+    sources["night_custody"] = str(custody)
     stop = producer.read(stops[0])
     if (stop.get("session_state") != "finalized" or stop.get("pin_relation") != "physical_ahead"
             or stop.get("refusal_code") != "calibration_ledger_head_mismatch"

@@ -331,7 +331,7 @@ class BatteryBoundaryTests(unittest.TestCase):
             for role in ("arm", "publication", "t0"):
                 raw_path = root / f"{role}.ioreg"
                 raw_path.write_bytes(battery_raw())
-                stored, _ = battery_float.observe(phase=role, wall_time_s=UPDATE + 1, monotonic_ns=lambda: 1,
+                stored, _ = battery_float.observe(phase=q.BATTERY_BOUNDARY_PHASES[role], wall_time_s=UPDATE + 1, monotonic_ns=lambda: 1,
                     plan_id="plan", runner=lambda argv: subprocess.CompletedProcess(argv, 0, raw_path.read_bytes(), b""))
                 path = root / f"{role}.json"
                 put(path, stored)

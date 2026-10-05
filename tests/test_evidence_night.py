@@ -67,7 +67,7 @@ class NoticeProtocolTextTests(unittest.TestCase):
         }
 
     def setUp(self):
-        temp = tempfile.TemporaryDirectory(dir="/tmp")
+        temp = tempfile.TemporaryDirectory(dir=tempfile.gettempdir())
         self.addCleanup(temp.cleanup)
         self.addCleanup_path = Path(temp.name)
         self.protocols = ROOT / "configs/campaigns/quiet_predicate_evidence_01"
@@ -289,7 +289,7 @@ class ArgumentsTests(unittest.TestCase):
                           roots_under=ROOT, staging_under=ROOT / "staging")
 
     def test_real_lock_verifier_and_builder_recipe(self):
-        with _census_clean_tempdir(prefix="recipe-", dir="/tmp") as tmp:
+        with _census_clean_tempdir(prefix="recipe-", dir=tempfile.gettempdir()) as tmp:
             root = Path(tmp).resolve()
             (root / "env").mkdir()
             (root / "env/mac-measurement-lock.txt").write_text("# lock\na==1\nb==2\n")
@@ -314,7 +314,7 @@ class ArgumentsTests(unittest.TestCase):
 class PrepareTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.temp = _census_clean_tempdir(prefix="night-entry-", dir="/tmp")
+        cls.temp = _census_clean_tempdir(prefix="night-entry-", dir=tempfile.gettempdir())
         cls.base = Path(cls.temp.name).resolve()
         cls.remote = cls.base / "remote.git"
         subprocess.run(["git", "clone", "--bare", "-q", "--no-hardlinks", str(ROOT), str(cls.remote)], check=True)
@@ -885,7 +885,7 @@ class LifecycleTests(unittest.TestCase):
     def setUp(self):
         from tests.git_fixture import init_git_fixture
         from tests.test_arm_census import observation, row
-        temporary = _census_clean_tempdir(prefix="lifecycle-", dir="/tmp")
+        temporary = _census_clean_tempdir(prefix="lifecycle-", dir=tempfile.gettempdir())
         self.addCleanup(temporary.cleanup)
         self.base = Path(temporary.name).resolve()
         self.canonical = self.base / "canonical"
@@ -1024,15 +1024,17 @@ class LifecycleTests(unittest.TestCase):
             return json.loads((self.stage / "lifecycle/check.json").read_text())
         return entry.check(**self.kw)
 
-    def test_check_passes_and_writes_only_check_json(self):
+    def test_check_passes_and_retains_check_and_raw_battery_observation(self):
         def snapshot():
             return {str(p): (p.read_bytes(), p.stat().st_mtime_ns) for p in self.base.rglob("*") if p.is_file()}
         before = snapshot()
         record = self.checked()
         after = snapshot()
         self.assertTrue(record["rehearsal_ready"])
+        battery = record["checks"]["battery_float"]
         self.assertEqual(set(after) - set(before), {str(self.stage / "lifecycle/check.json"),
-            str(self.stage.parent / ".locks" / (self.stage.name + ".lock"))})
+            str(self.stage.parent / ".locks" / (self.stage.name + ".lock")),
+            battery["record"]["path"], battery["raw"]["path"]})
         self.assertEqual(before, {p: after[p] for p in before})
         self.assertEqual(record["checks"]["census"]["argv"][-1], "[c]odex|[c]laude|[t]3")
         self.assertIn(20, record["checks"]["census"]["owned_helpers"])
@@ -1083,6 +1085,9 @@ class LifecycleTests(unittest.TestCase):
                 self.assertEqual(battery["observation"]["probe_error"], verdict == "fail")
                 self.assertEqual(battery["observation"]["raw_stdout_sha256"],
                                  hashlib.sha256(stdout).hexdigest())
+                self.assertEqual(Path(battery["raw"]["path"]).read_bytes(), stdout)
+                self.assertEqual(json.loads(Path(battery["record"]["path"]).read_bytes()), battery["observation"])
+                self.assertEqual(battery["observation"]["plan_id"], json.loads((self.stage / "prepare.json").read_bytes())["plan_id"])
 
     def test_corecaptured_arm_toggles_once_and_counts_only_post_toggle_spawns(self):
         raw = (ROOT / "tests/fixtures/corecaptured/loop-20260922-1022.log").read_text()
@@ -2308,6 +2313,8 @@ class LifecycleTests(unittest.TestCase):
         self.assertTrue(observation["probe_error"])
         self.assertIn("framing: byte", observation["reasons"][0])
         self.assertEqual(observation["raw_stdout_sha256"], hashlib.sha256(smuggle).hexdigest())
+        self.assertEqual((attempt / "battery-float-at-publication.ioreg").read_bytes(), smuggle)
+        self.assertIsNotNone(observation["plan_id"])
 
     def test_b6_clone_old_census_literal_is_reported(self):
         with patch.object(entry, "CENSUS_FIX", self.tip):

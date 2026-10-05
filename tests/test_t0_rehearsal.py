@@ -440,6 +440,14 @@ class FixtureBuilder:
         try:
             # Reuse this bundle's context without weakening the case's setUp.
             fixture._set_up_fixture(self.base.resolve(), existing_context=True)
+            # Native context is retained under plan custody; its ARM root is
+            # a separate, non-nested tree just as in qualification custody.
+            self.arm_custody_root = Path(fixture.arm["arm_context"]["custody_root"])
+            assert self.arm_custody_root != self.root
+            assert self.root not in self.arm_custody_root.parents
+            assert self.arm_custody_root not in self.root.parents
+            native = self.root / fixture.pack.name / "arm_readiness.t0.inputs/arm-context.json"
+            assert readiness.parse_json_bytes(native.read_bytes()) == fixture.arm["arm_context"]
             evidence = install_t0_inventory(fixture)
             inputs = fixture._consumer_inputs()
             go = inputs["authenticated_go_receipt"]

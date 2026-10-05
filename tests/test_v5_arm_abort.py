@@ -105,7 +105,7 @@ class ArmAbortTests(unittest.TestCase):
             raw = corpus.document(corpus.required(int(self.epoch)))
             raw_path = self.custody / f"battery-{phase}.ioreg"
             raw_path.write_bytes(raw)
-            record, _ = battery_float.observe(phase=phase, wall_time_s=self.epoch,
+            record, _ = battery_float.observe(phase=checker.q.BATTERY_BOUNDARY_PHASES[phase], wall_time_s=self.epoch,
                 monotonic_ns=lambda: self.clock, raw_path=str(raw_path), plan_id=self.plan.plan_id,
                 runner=lambda argv, raw=raw: SimpleNamespace(args=argv, stdout=raw, stderr=b"", returncode=0))
             self.evidence["battery"][phase] = {
@@ -143,7 +143,7 @@ class ArmAbortTests(unittest.TestCase):
 
     def test_native_battery_phases_bind_sites_and_preserve_raw_authentication(self):
         for site, phase in (("arm", "arm_check"), ("publication", "publish_install"),
-                            ("publication", "validate_install"), ("t0", "t0_power_row")):
+                            ("t0", "t0")):
             path = Path(self.evidence["battery"][site]["record"]["path"])
             value = writer.read_object(path); value["phase"] = phase
             path.write_bytes(readiness.render_json(value))

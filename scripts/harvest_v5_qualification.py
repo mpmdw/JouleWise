@@ -51,6 +51,8 @@ def harvest(args, *, now=None, clear=q.group_clear, load=load_qualification):
     destination = args.archive_root.absolute()
     sources = {"night-custody": custody, "chain": Path(plan.chain_path),
                "chain-sidecar": Path(plan.chain_sha256_path)}
+    if (custody / "night/chain.started").exists():
+        sources.update(q.g10_sources(custody))
     boundary = q.authenticated_reference({"path": str(args.battery_evidence.absolute()),
                                           "sha256": args.battery_evidence_sha256})
     sources["battery-boundaries"] = boundary

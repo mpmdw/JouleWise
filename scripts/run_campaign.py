@@ -684,6 +684,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("config_dir", nargs="?", help="Directory containing generated JSON configs")
     parser.add_argument("--runs-dir", default="runs", help="Bundle output directory")
     parser.add_argument("--log", help="JSONL campaign log path")
+    parser.add_argument("--calibration-ledger", default=os.environ.get("CALIBRATION_LEDGER"),
+                        help="Selected calibration observation ledger")
+    parser.add_argument("--head-pin", default=os.environ.get("LEDGER_HEAD_PIN"),
+                        help="Selected committed calibration ledger head pin")
     parser.add_argument("--dry-run", action="store_true", help="Print plan without invoking benchmarks")
     parser.add_argument(
         "--backup",
@@ -4938,8 +4942,15 @@ def _neg8_reference_scientific_config_sha256(
     return observed
 
 
+def _selected_calibration_paths(args):
+    return {parameter: value for option, parameter in
+            (("calibration_ledger", "ledger_path"), ("head_pin", "head_pin_path"))
+            if (value := getattr(args, option, None)) is not None}
+
+
 def _load_calibration_snapshot_for_evaluation(
     calibration_custody_store: str | Path | None = None,
+    *, ledger_path: str | Path | None = None, head_pin_path: str | Path | None = None,
 ) -> CalibrationLedgerSnapshot:
     """Load the one D-109 snapshot shared by a complete runner evaluation.
 
@@ -4967,6 +4978,12 @@ def _load_calibration_snapshot_for_evaluation(
         loader_arguments["calibration_custody_store"] = Path(
             calibration_custody_store
         )
+    ledger_path = ledger_path if ledger_path is not None else os.environ.get("CALIBRATION_LEDGER")
+    head_pin_path = head_pin_path if head_pin_path is not None else os.environ.get("LEDGER_HEAD_PIN")
+    if ledger_path is not None:
+        loader_arguments["ledger_path"] = Path(ledger_path)
+    if head_pin_path is not None:
+        loader_arguments["head_pin_path"] = Path(head_pin_path)
     snapshot = load_calibration_ledger_snapshot(**loader_arguments)
     if calibration_custody_store is None or not snapshot.valid:
         return snapshot
@@ -6365,7 +6382,8 @@ def _run_whole_window_verdict_locked(
         MINTED_CONSUMPTION_SEMANTICS_ID,
     )
     calibration_snapshot = _load_calibration_snapshot_for_evaluation(
-        getattr(args, "calibration_custody_store", None)
+        getattr(args, "calibration_custody_store", None),
+        **_selected_calibration_paths(args),
     )
     bracket_binding, bracket_identity = _validated_bracket_binding_input(
         getattr(args, "bracket_binding", None),
@@ -8054,7 +8072,8 @@ def run_axi_spec_campaign(
                 )
             evaluation_started_at = utc_timestamp()
             calibration_ledger_snapshot = (
-                _load_calibration_snapshot_for_evaluation()
+                _load_calibration_snapshot_for_evaluation(
+                    **_selected_calibration_paths(args))
             )
             core_evaluation = _idle_admission_core_evaluation(
                 selected_evaluations,

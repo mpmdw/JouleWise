@@ -127,6 +127,8 @@ def install_pack_night_launch_inputs(pack, arm_path, manifest_path, custody,
     from dataclasses import replace
     from joulewise import night_gate
     from tests.test_run_night import _load_driver, ProbeSource
+    context_path = custody / arm["pack"]["pack_id"] / "arm_readiness.t0.inputs/arm-context.json"
+    context_path.write_bytes(readiness.render_json(arm["arm_context"]))
     driver = _load_driver()
     parsed_plan = night_gate.NightPlan.from_mapping(plan)
     sidecar = Path(plan["chain_sha256_path"])
@@ -186,8 +188,6 @@ class LaunchConsumptionV2Tests(unittest.TestCase):
         self.arm = sample_arm(root / "context")
         self.arm["boot_session_id"] = TEST_BOOT_SESSION_ID
         self.arm["pack"]["pack_root"] = str(self.pack)
-        if hasattr(self, "_custody_window"):
-            self.arm["arm_context"]["custody_root"] = str(self.custody)
         (self.pack / "committed.txt").write_text("integration fixture\n")
         (self.pack / "member.json").write_text('{"run_id":"member"}\n')
         init_git_fixture(root, "-q")
@@ -246,6 +246,8 @@ class LaunchConsumptionV2Tests(unittest.TestCase):
             / "launch-manifest.json"
         )
         self.manifest_path.parent.mkdir(parents=True)
+        (self.manifest_path.parent / "arm-context.json").write_bytes(
+            readiness.render_json(self.arm["arm_context"]))
         self.manifest_path.write_bytes(
             readiness.render_json(
                 {

@@ -441,6 +441,20 @@ def assemble(custody, *, positive_control, positive_sha256, positive_artifacts,
         raise ValueError("positive control schema mismatch")
     if not positive_artifacts:
         raise ValueError("G10 physical control raw supporting artifacts required")
+    if qualification and not fixture_mapping:
+        # Keep the complete support tree, not just its manifest. Absolute
+        # locators remain immutable and are replayed against the original.
+        from joulewise import v5_qualification as q
+        tree = q.g10_sources(custody)["g10-custody"]
+        retained = records / "g10-custody" / tree.name
+        before = tree_files(tree)
+        if retained.exists():
+            if tree_files(retained) != before:
+                raise ValueError("retained G10 custody changed")
+        else:
+            shutil.copytree(tree, retained)
+        if tree_files(tree) != before or tree_files(retained) != before:
+            raise ValueError("G10 custody changed during copy")
     support = []
     for i, path in enumerate(positive_artifacts):
         target = copy_record(path, records / "positive-control-support" / f"{i:04d}-{Path(path).name}")

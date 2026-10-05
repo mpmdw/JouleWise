@@ -141,12 +141,9 @@ def prepare_desk(custody, frozen, policy, measurement_root, transcripts, *, runn
     py = measurement_root / ".venv/bin/python"
     ledger = custody / "calibration/calibration_observation_ledger.jsonl"
     pin = custody / "calibration/calibration_ledger_head.json"
-    # run_campaign has no ledger flags. The desk restaging must already have
-    # made its code-owned defaults byte-identical to this authenticated copy.
-    for staged, live in ((ledger, measurement_root / "runs/calibration_observation_ledger.jsonl"),
-                         (pin, measurement_root / "configs/calibration/calibration_ledger_head.json")):
-        if staged.read_bytes() != live.read_bytes():
-            raise q.HarvestRefusal("desk_default_ledger_not_restaged")
+    committed_pin = measurement_root / "configs/calibration/calibration_ledger_head.json"
+    if pin.read_bytes() != committed_pin.read_bytes():
+        raise q.HarvestRefusal("desk_head_pin_copy_mismatch")
     snapshot = physical_snapshot(custody, measurement_root)
     sessions = [session for session in snapshot.bracket_session_by_id.values()
         if (session.window_id, session.plan_id, session.plan_sha256, session.evidence_root_id, session.runs_root)
@@ -173,7 +170,8 @@ def prepare_desk(custody, frozen, policy, measurement_root, transcripts, *, runn
     argv = [py, "-B", measurement_root / "scripts/run_campaign.py", "--whole-window-verdict",
         "--runs-dir", runs, "--log", runs / "campaign_log.jsonl", "--campaign-policy", policy,
         "--neg8-drift-bound", runs / "neg8-drift-bound.json", "--bracket-binding", runs / "bracket-binding.json",
-        "--whole-window-verdict-output", runs / "whole-window-verdict.json"]
+        "--whole-window-verdict-output", runs / "whole-window-verdict.json",
+        "--calibration-ledger", ledger, "--head-pin", committed_pin]
     result = command(argv, transcripts / "whole-window.txt", runner=runner)
     if result.returncode not in {0, 1}:
         raise q.HarvestRefusal("whole_window_producer_fault")
@@ -426,6 +424,11 @@ def battery_attempts(custody, bound_runs):
         passed = passed and pair.status == "pass"
         captures.append((path.name, path))
     for evidence in sorted(custody.glob("**/instrument_evidence.json")):
+        # Attached calibration copies authenticate with their original capture;
+        # they do not contain the capture's raw ioreg pair.
+        if any(bundle in evidence.parents and "instrument_calibration" in evidence.relative_to(bundle).parts
+               for bundle in attempts):
+            continue
         path = evidence.parent
         pair = battery_float.authenticate_capture(path)
         passed = passed and pair.status == "pass"
@@ -502,6 +505,7 @@ def harvest(args, *, runner=subprocess.run, now=None, clear=q.group_clear):
     if no_science:
         sources["pre-science-tooling-failure"] = q.authenticated_reference(inputs["pre_science_tooling_failure"])
     if started and not no_science:
+        sources.update(q.g10_sources(Path(plan.custody_root)))
         for field in ("terminal_boundary", "go", "consumption", "battery_boundaries"):
             if field not in inputs:
                 missing_after_start.append(field + "_missing")
@@ -579,10 +583,13 @@ def harvest(args, *, runner=subprocess.run, now=None, clear=q.group_clear):
             record.update(verdict="RECOVER", cause_codes=sorted(causes), cause_classes=["tooling"])
         else:
             terminal = q.authenticated_reference(inputs["terminal_boundary"])
+            q.require_terminal_boundary(plan, terminal)
             go_path = q.authenticated_reference(inputs["go"])
             consumed = q.authenticated_reference(inputs["consumption"])
             boundary = q.authenticated_reference(inputs["battery_boundaries"])
             go = authenticate_launch(plan, go_path, consumed)
+            if "g10-custody" in sources:
+                q.replay_g10_custody(Path(plan.custody_root), q.read(sources["g10-custody"] / "positive-control.json"))
             runs = custody / "runs"
             if any(custody.glob("**/.campaign.lock")) or (runs / "campaign.lock").exists():
                 raise q.HarvestRefusal("campaign_lock_leftover")

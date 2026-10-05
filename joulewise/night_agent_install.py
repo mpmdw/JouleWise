@@ -1252,7 +1252,20 @@ def validate_install(args, repo):
     # (Prepared.launch_context) and before admission's mkdir; it follows plan
     # validation so the reading is as fresh as the read-only phase allows.
     battery_observation, _battery_raw = battery_float.observe(
-        phase="validate_install", runner=BATTERY_PROBE_RUNNER)
+        phase="validate_install", runner=BATTERY_PROBE_RUNNER, plan_id=plan.plan_id)
+    # This module also runs from minimal installer clones. Keep this custody
+    # write independent of the desk harvester and its analysis imports.
+    directory = args.plan.parent
+    if any(path.is_symlink() for path in (directory, *directory.parents)):
+        raise Refused(3, "battery observation custody traverses a symlink")
+    name = "battery-float-install-check-{}".format(battery_observation["monotonic_before_ns"])
+    for suffix, raw in ((".ioreg", _battery_raw),
+                        (".json", (json.dumps(battery_observation, sort_keys=True) + "\n").encode())):
+        with (directory / (name + suffix)).open("xb") as stream:
+            os.chmod(stream.name, 0o600)
+            stream.write(raw)
+            stream.flush()
+            os.fsync(stream.fileno())
     try:
         battery_float.require_pass(battery_observation)
     except (battery_float.ProbeError, ValueError) as exc:

@@ -21,6 +21,9 @@ from scripts.harvest_g2a_window import archive, sha
 from scripts.harvest_window import inventory
 
 
+BATTERY_BOUNDARY_PHASES = {"arm": "arm_check", "publication": "publish_install", "t0": "t0"}
+
+
 class HarvestRefusal(ValueError):
     """Only fixed structural codes may cross the public boundary."""
 
@@ -126,6 +129,55 @@ def group_clear(night, *, killpg=os.killpg, plan_id=None, observer=None):
     except PermissionError:
         return False
     return False
+
+
+def g10_sources(custody):
+    """Preserve the complete original physical-control tree for harvest replay."""
+    record_path = Path(custody) / "qualification-plan-record.json"
+    if not record_path.exists():
+        return {}
+    prereqs = read(record_path)["prerequisites"]
+    positive = authenticated_reference(prereqs["g10_control"])
+    manifests = prereqs["g10_artifacts"]
+    if len(manifests) != 1:
+        raise HarvestRefusal("g10_custody_manifest_required")
+    manifest = authenticated_reference(manifests[0])
+    if manifest.name != "custody-manifest.json" or positive != manifest.parent / "positive-control.json":
+        raise HarvestRefusal("g10_custody_locator_invalid")
+    return {"g10-custody": manifest.parent}
+
+
+def replay_g10_custody(custody, positive):
+    """Re-run G10's native verifier with the registered head/boot/order bounds."""
+    from scripts.ed_session.capture_t0_anchor_positive_control import verify_g10_custody
+    record = read(Path(custody) / "qualification-plan-record.json")
+    prereqs = record["prerequisites"]
+    positive_path = authenticated_reference(prereqs["g10_control"])
+    manifest_path = authenticated_reference(prereqs["g10_artifacts"][0])
+    if read(positive_path) != positive:
+        raise HarvestRefusal("g10_positive_copy_mismatch")
+    first = read(authenticated_reference(prereqs["a1_control"]))
+    observation = read(authenticated_reference(first["observation"]))
+    plan = read(authenticated_reference(record["plan"]))
+    verify_g10_custody(positive_path, manifest_path, code_root=Path(plan["measurement_root"]),
+        head=record["head"], before_monotonic_ns=observation["first_t0_boundary_monotonic_ns"],
+        boot_id=first["boot_session_id"].lower())
+    # The bundle carries an exact duplicate for custody, while replay retains
+    # original absolute locators embedded by the live producer.
+    retained = Path(custody) / "records/g10-custody" / manifest_path.parent.name
+    if census_sources({"tree": retained}) != census_sources({"tree": manifest_path.parent}):
+        raise HarvestRefusal("g10_retained_tree_mismatch")
+    return {"path": str(manifest_path), "sha256": sha(manifest_path)}
+
+
+def require_terminal_boundary(plan, terminal):
+    """The chain writes STOP at one plan-bound path, never a supplied substitute."""
+    expected = Path(plan.custody_root) / "night/transcript/post-bracket-terminal-boundary.json"
+    record = read(Path(plan.custody_root) / "qualification-plan-record.json")
+    if record.get("terminal_boundary_path") != str(expected) or Path(terminal) != expected:
+        raise HarvestRefusal("terminal_boundary_path_mismatch")
+    if list(Path(plan.custody_root).rglob("post-bracket-terminal-boundary.json")) != [expected]:
+        raise HarvestRefusal("terminal_boundary_census_invalid")
 
 
 def off_receipt_path(plan, night_dir=None):
@@ -260,6 +312,45 @@ def captured_call(function, transcript, *args, **kwargs):
             stream.write(err.getvalue())
 
 
+def captured_battery_observation(path):
+    """Read a native battery observation from a capture or the T-0 C3 receipt."""
+    from joulewise import battery_float
+    value = read(path)
+    if value.get("schema") == battery_float.SCHEMA:
+        observation = value
+    else:
+        candidates = [row.get("measured", {}).get("battery_float") for row in value.get("conditions", [])
+                      if row.get("condition_id") == "C3" and "battery_float" in row.get("measured", {})]
+        if len(candidates) != 1:
+            raise HarvestRefusal("t0_battery_capture_missing")
+        observation = candidates[0]
+    stdout = observation.get("raw_stdout")
+    if not isinstance(stdout, str):
+        raise HarvestRefusal("t0_battery_raw_missing")
+    raw = stdout.encode("utf-8")
+    if readiness.sha256_bytes(raw) != observation.get("raw_stdout_sha256"):
+        raise HarvestRefusal("t0_battery_raw_mismatch")
+    return observation, raw
+
+
+def persist_battery_observation(directory, name, observation, raw):
+    """Retain the exact observed stdout even when the predicate refuses."""
+    if not isinstance(raw, bytes) or readiness.sha256_bytes(raw) != observation.get("raw_stdout_sha256"):
+        raise HarvestRefusal("battery_boundary_raw_mismatch")
+    directory = Path(directory)
+    if any(path.is_symlink() for path in (directory, *directory.parents)):
+        raise HarvestRefusal("battery_boundary_directory_symlink")
+    directory.mkdir(parents=True, exist_ok=True)
+    raw_path, record_path = directory / (name + ".ioreg"), directory / (name + ".json")
+    for path, body in ((raw_path, raw), (record_path, readiness.render_json(observation))):
+        with path.open("xb") as stream:
+            os.chmod(path, 0o600)
+            stream.write(body)
+            stream.flush()
+            os.fsync(stream.fileno())
+    return {"record": reference(record_path.absolute()), "raw": reference(raw_path.absolute())}
+
+
 def battery_boundaries(path, digest, plan_id):
     """Authenticate recorded #421 boundary probes with the shared raw parser."""
     from joulewise import battery_float
@@ -275,9 +366,15 @@ def battery_boundaries(path, digest, plan_id):
         raw = authenticated_reference(item["raw"]).read_bytes()
         if (stored.get("raw_stdout_sha256") != readiness.sha256_bytes(raw)
                 or stored.get("plan_id") != plan_id
-                or stored.get("schema") != battery_float.SCHEMA):
+                or stored.get("schema") != battery_float.SCHEMA
+                or stored.get("phase") != BATTERY_BOUNDARY_PHASES[role]):
             raise HarvestRefusal("battery_boundary_digest_or_identity_mismatch")
-        if stored.get("probe_error") or stored.get("exit_code") != 0 or stored.get("argv") != list(battery_float.IOREG_BATTERY_ARGV):
+        if "source_capture" in stored:
+            capture = authenticated_reference(stored["source_capture"])
+            observed, original = captured_battery_observation(capture)
+            if {k: v for k, v in stored.items() if k != "source_capture"} != observed or original != raw:
+                raise HarvestRefusal("battery_boundary_capture_mismatch")
+        if stored.get("probe_error") or stored.get("timed_out") or stored.get("exit_code") != 0 or stored.get("argv") != list(battery_float.IOREG_BATTERY_ARGV):
             passed = False
             continue
         try:
@@ -339,4 +436,7 @@ def boundary_sources(path):
         identifier(role)
         for kind in ("record", "raw"):
             sources[f"battery-{role}-{kind}"] = authenticated_reference(item[kind])
+        stored = read(sources[f"battery-{role}-record"])
+        if "source_capture" in stored:
+            sources[f"battery-{role}-capture"] = authenticated_reference(stored["source_capture"])
     return sources

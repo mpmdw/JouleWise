@@ -33,7 +33,10 @@ class DeskCloseoutTests(unittest.TestCase):
         subprocess.run(["git", "-C", str(self.measurement), "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
                         "commit", "-qm", "fixture-only desk sources"], check=True)
         self.head = subprocess.check_output(["git", "-C", str(self.measurement), "rev-parse", "HEAD"], text=True).strip()
-        self.sources = {"custody": str(self.custody)}
+        self.arm_root = self.base / "arm-root"
+        self.arm_root.mkdir()
+        (self.arm_root / "identity.json").write_text('{"fixture":"ARM root"}\n')
+        self.sources = {"custody": str(self.arm_root)}
         for role in ("claim_runs", "bound_runs"):
             root = self.base / role; root.mkdir()
             self.sources[role] = str(root)
@@ -58,12 +61,13 @@ class DeskCloseoutTests(unittest.TestCase):
         self.destinations = {role: str(self.base / (role + "-backup")) for role in ("claim", "bound")}
         arm = next(self.custody.glob("*/arm_readiness.receipts/arm-0001.json"))
         self.context = producer.read(arm)["arm_context"]
-        self.context.update(custody_root=str(self.custody), claim_runs_root=self.sources["claim_runs"], bound_runs_root=self.sources["bound_runs"],
+        self.context.update(custody_root=str(self.arm_root), claim_runs_root=self.sources["claim_runs"], bound_runs_root=self.sources["bound_runs"],
             claim_backup_destination=self.destinations["claim"], bound_backup_destination=self.destinations["bound"])
         value = producer.read(arm); value["arm_context"] = self.context; arm.write_bytes(readiness.render_json(value))
         self.go["arm_receipt"]["sha256"] = producer.reference(arm)["sha256"]
         (self.night / "go_receipt.json").write_bytes(readiness.render_json(self.go))
         self.record = {"schema_version": "joulewise.v5_qualification_plan_record.v1", "occurrence": "s1", "head": self.head,
+            "terminal_boundary_path": str(self.night / "transcript/post-bracket-terminal-boundary.json"),
             "plan": producer.reference(self.plan_path), "window_id": self.custody.name, "desk_sources": self.sources,
             "backup_destinations": self.destinations, "pack_night": {"pack_sha256": "a" * 64}}
         self.record_path = self.custody / "qualification-plan-record.json"; producer.write(self.record_path, self.record)
@@ -72,7 +76,7 @@ class DeskCloseoutTests(unittest.TestCase):
         for name in ("launch", "capability_consumption", "capture"):
             producer.write(self.stage_dir / (name + ".json"), {"schema_version": t0.QUALIFICATION_STAGE_SCHEMA,
                 "stage_id": name, "monotonic_ns": 1})
-        producer.write(self.night / "post-bracket-terminal-boundary.json", {"session_state": "finalized", "pin_relation": "physical_ahead",
+        producer.write(self.night / "transcript/post-bracket-terminal-boundary.json", {"session_state": "finalized", "pin_relation": "physical_ahead",
             "refusal_code": "calibration_ledger_head_mismatch", "terminal_head_pin_candidate": {"fixture": True}})
         self.off_path = self.custody / self.go["pack_id"] / "arm_readiness.t0.inputs/network_time_off.json"
         self.off = receipt(); self.off.update(plan_id=self.custody.name, window_id=self.custody.name, boot_id=self.go["boot_session_id"].lower())
@@ -101,7 +105,7 @@ class DeskCloseoutTests(unittest.TestCase):
         self.assertEqual(set(result["stages"]), set(desk.DESK_STAGES))
         for name in ("claim_backup", "bound_backup"):
             value = producer.read(self.stage_dir / (name + ".json"))
-            self.assertEqual(set(value["copies"]), {"custody", "claim_runs", "bound_runs"})
+            self.assertEqual(set(value["copies"]), {"custody", "night_custody", "claim_runs", "bound_runs"})
             for copy in value["copies"].values():
                 self.assertEqual(producer.tree_files(Path(copy["destination"])), copy["files"])
         close = producer.read(self.stage_dir / "close_out.json")
@@ -166,7 +170,7 @@ class DeskCloseoutTests(unittest.TestCase):
         with mock.patch.object(desk.q, "load_plan", side_effect=ValueError("harvest_before_completion_boundary")):
             with self.assertRaisesRegex(ValueError, "completion_boundary"):
                 self.close()
-        stop = self.night / "post-bracket-terminal-boundary.json"; stop.unlink()
+        stop = self.night / "transcript/post-bracket-terminal-boundary.json"; stop.unlink()
         with self.assertRaisesRegex(ValueError, "STOP boundary"):
             self.close()
         with mock.patch.dict(desk.os.environ, {"V5_QUALIFICATION_OCCURRENCE": "s1"}):

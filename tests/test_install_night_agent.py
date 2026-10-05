@@ -112,7 +112,7 @@ def _init_repo(root: Path) -> str:
 
 class InstallNightAgentTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.temporary = tempfile.TemporaryDirectory(dir="/tmp")
+        self.temporary = tempfile.TemporaryDirectory(dir=tempfile.gettempdir())
         self.root = Path(self.temporary.name).resolve()
         self.measurement_root = self.root / "measurement checkout"
         self.measurement_head = _init_repo(self.measurement_root)
@@ -844,6 +844,23 @@ class InstallNightAgentTests(unittest.TestCase):
         self.assertNotIn("plan_t0_in_the_past", completed.stderr)
         self._assert_no_installed_outputs()
 
+    def test_install_check_retains_raw_battery_bytes_and_native_plan_identity(self) -> None:
+        import hashlib
+        plan_path = self._write_plan()
+        completed = self._run(plan_path)
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        records = list(plan_path.parent.glob("battery-float-install-check-*.json"))
+        self.assertEqual(len(records), 1)
+        observation = json.loads(records[0].read_bytes())
+        raw = records[0].with_suffix(".ioreg").read_bytes()
+        self.assertEqual(observation["phase"], "validate_install")
+        self.assertEqual(observation["plan_id"], json.loads(plan_path.read_bytes())["plan_id"])
+        self.assertEqual(observation["raw_stdout_sha256"], hashlib.sha256(raw).hexdigest())
+        from joulewise import battery_float
+        parsed = battery_float.parse(raw, observation["wall_time_s"])
+        self.assertTrue(parsed["passed"])
+        self.assertTrue(all(observation[key] == value for key, value in parsed.items()))
+
     def test_install_with_both_pins_matching_renders_both_plists(self) -> None:
         completed = self._run(self._write_plan())
         self.assertEqual(0, completed.returncode, completed.stderr)
@@ -1271,7 +1288,7 @@ class InterpreterIdentityTests(unittest.TestCase):
     """
 
     def setUp(self) -> None:
-        self.temporary = tempfile.TemporaryDirectory(dir="/tmp")
+        self.temporary = tempfile.TemporaryDirectory(dir=tempfile.gettempdir())
         self.addCleanup(self.temporary.cleanup)
         self.directory = Path(self.temporary.name)
 

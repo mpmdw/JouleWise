@@ -46,8 +46,12 @@ class G2bHarness:
             measurement_root=str(h.ROOT), measurement_head="a" * 40,
             chain_path=str(self.chain), chain_sha256_path=str(self.sidecar),
             pack_night={"pack_id": "d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5", "pack_root": str(c.pack)})
+        self.terminal = self.night / "transcript/post-bracket-terminal-boundary.json"
+        put(self.terminal, {})
+        put(self.night_root / "qualification-plan-record.json", {
+            "terminal_boundary_path": str(self.terminal)})
         self.go = {"authorization": c.authorization, "boot_session_id": "fixture-boot"}
-        for name in ("acceptance", "terminal", "go", "consumption", "battery-boundaries"):
+        for name in ("acceptance", "go", "consumption", "battery-boundaries"):
             put(self.root / f"{name}.json", {})
         put(self.root / "events.json", c.events)
         put(c.custody / "prospective/calibration_plan.json", {"plan_id": "frozen", "evidence_root_id": "evidence"})
@@ -65,7 +69,7 @@ class G2bHarness:
             "plan": q.reference(self.night_root / "night_plan.json"), "custody_root": str(c.custody),
             "policy": q.reference(h.ROOT / "configs/campaign_policies/quiet_mac_p2_production.json"),
             "acceptance": q.reference(self.root / "acceptance.json"), "bound_runs_root": str(self.bound),
-            "terminal_boundary": q.reference(self.root / "terminal.json"),
+            "terminal_boundary": q.reference(self.terminal),
             "go": q.reference(self.root / "go.json"), "consumption": q.reference(self.root / "consumption.json"),
             "battery_boundaries": q.reference(self.root / "battery-boundaries.json"),
             "desk_producer_events": q.reference(self.root / "events.json"),
@@ -76,6 +80,9 @@ class G2bHarness:
         self.desk = self.stack.enter_context(mock.patch.object(h, "desk_check", return_value=True))
         for obj, name, value in (
             (q, "load_plan", self.plan), (h, "authenticate_launch", self.go),
+            # This harness covers STOP/OFF and harvest transport. The complete
+            # native G10 custody tree is replayed separately by the X4 tests.
+            (q, "g10_sources", {}),
             (h, "validate_whole_window_verdict_row", SimpleNamespace(authentic=True)),
             (h, "frozen_identity", ({"plan_id": "frozen"}, {}, {"window_id": "frozen-window", "evidence_root_id": "evidence"})),
             (h, "bracket_assessment", (SimpleNamespace(refusal_reasons=()), {}, {}, [])),
