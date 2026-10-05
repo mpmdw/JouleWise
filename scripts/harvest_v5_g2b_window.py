@@ -342,12 +342,11 @@ def l10_a(custody, destination, bundle_ids, head, *, runner=subprocess.run, pyth
         raise q.HarvestRefusal("l10_staging_incomplete")
     scratch = root / "scratch"
     scratch.mkdir()
-    (staging / "analysis-output").mkdir()
     argv = [python, "-B", ROOT / "scripts/check_window_provenance.py", "--expect-finalize-refusal",
         "--scratch-dir", scratch, "--prospective-manifest", staging / required[0], "--plan-tree", staging / required[1],
         "--custody-root", staging, "--runs-root", staging / "g2b", "--whole-window-verdict", staging / required[2],
         "--bracket-binding", staging / required[3], "--calibration-ledger", staging / required[4],
-        "--aggregate-floor-artifact", staging / "floors/d117-v5-aggregate-floor.json", "--output-dir", staging / "analysis-output"]
+        "--aggregate-floor-artifact", staging / "floors/d117-v5-aggregate-floor.json", "--output-dir", staging]
     result = command(argv, transcripts / "finalization.txt", runner=runner)
     good = (result.returncode == 0 and result.stdout.splitlines() == [
         f"PASS FINALIZE-REFUSAL observed={{{FINALIZER_REASON}}} expected={{{FINALIZER_REASON}}}",
@@ -369,8 +368,6 @@ def l10_a(custody, destination, bundle_ids, head, *, runner=subprocess.run, pyth
               "g2b_tree_after": after, "staged_tree_sha256": q.tree_hash(staging / "g2b"),
               "floors_empty_before_after": True, "source_unchanged": True,
               "observed_reason_codes": [FINALIZER_REASON] if good else observed or ["unexpected_finalizer_result"],
-              "needs_ruling": "analysis_finalization_attachment_missing" in observed
-                              or "analysis_finalization_noncanonical" in observed,
               "input_hashes": {name: q.sha(staging / name) for name in required},
               "transcript_sha256": q.sha(transcripts / "finalization.txt")}
     q.write(destination / "l10-a/record.json", record)

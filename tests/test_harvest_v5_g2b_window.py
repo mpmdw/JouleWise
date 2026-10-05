@@ -17,7 +17,7 @@ from scripts import harvest_v5_g2b_window as h
 from tests.test_analysis_finalizer import install_synthetic_finalization_fixture, _make_sliced_one_block_verdict
 from tests.test_battery_float import raw as battery_raw, UPDATE
 
-SCRATCH = Path("/tmp/dd5-b4c")
+SCRATCH = Path(tempfile.gettempdir())
 
 
 def put(path, value):
@@ -343,36 +343,58 @@ class FoldedL10Tests(unittest.TestCase):
         return subprocess.CompletedProcess(args[0], 0,
             f"PASS FINALIZE-REFUSAL observed={{{h.FINALIZER_REASON}}} expected={{{h.FINALIZER_REASON}}}\nSUMMARY pass=1 skip=0 fail=0\n", "")
 
-    def test_registered_command_exposes_output_dir_contract_conflict(self):
+    def test_old_output_dir_is_noncanonical_and_recorded_as_fail(self):
+        def old_command(argv, **kwargs):
+            old = list(argv)
+            staging = Path(old[old.index("--custody-root") + 1])
+            output = staging / "analysis-output"
+            output.mkdir()
+            old[old.index("--output-dir") + 1] = str(output)
+            return subprocess.run(old, **kwargs)
         before = q.tree_hash(self.custody)
-        members, causes = self.invoke()
+        _members, causes = self.invoke(runner=old_command)
         self.assertIn("l10_finalizer_not_exact_singleton", causes)
         record = q.read(self.dest / "l10-a/record.json")
         self.assertEqual(record["observed_reason_codes"], ["analysis_finalization_noncanonical"])
-        self.assertTrue(record["needs_ruling"])
+        self.assertEqual(record["status"], "FAIL")
+        self.assertNotIn("needs_ruling", record)
         self.assertEqual(record["proof_scope"], "L10_A_G2B_CONTRACT_PREFIX")
         self.assertEqual(q.tree_hash(self.custody), before)
         self.assertEqual(record["g2b_tree_before"], record["g2b_tree_after"])
 
-    def test_actual_finalizer_member_cover_after_proposed_command_correction(self):
-        # Read-only experiment for the lead's ruling, not a production override.
-        # The production harvester continues to invoke the registered command.
-        def experiment(argv, **kwargs):
-            corrected = list(argv)
-            corrected[corrected.index("--output-dir") + 1] = corrected[corrected.index("--custody-root") + 1]
-            return subprocess.run(corrected, **kwargs)
-        _members, causes = self.invoke(runner=experiment)
-        self.assertNotIn("l10_finalizer_not_exact_singleton", causes)
-        self.assertEqual(q.read(self.dest / "l10-a/record.json")["observed_reason_codes"], [h.FINALIZER_REASON])
+    def test_actual_finalizer_staging_root_reaches_exact_member_cover_without_source_writes(self):
+        before = q.tree_hash(self.custody)
+        def real_command(argv, **kwargs):
+            staging = Path(argv[argv.index("--custody-root") + 1])
+            self.assertEqual(Path(argv[argv.index("--output-dir") + 1]), staging)
+            self.assertFalse((staging / "analysis-output").exists())
+            return subprocess.run(argv, **kwargs)
+        # The finalizer fixture has no clock anchors. Isolate that independent
+        # member gate while executing the real checker and finalizer unchanged.
+        with mock.patch.object(h, "anchor_status", return_value="bounded"):
+            _members, causes = self.invoke(runner=real_command)
+        self.assertEqual(causes, [])
+        record = q.read(self.dest / "l10-a/record.json")
+        self.assertEqual(record["status"], "PASS")
+        self.assertEqual(record["observed_reason_codes"], [h.FINALIZER_REASON])
+        self.assertNotIn("needs_ruling", record)
+        self.assertTrue(record["floors_empty_before_after"])
+        self.assertEqual(record["g2b_tree_before"], record["g2b_tree_after"])
+        self.assertEqual(record["staged_tree_sha256"], record["g2b_tree_before"])
+        self.assertEqual(q.tree_hash(self.custody), before)
 
     def test_wrong_finalizer_singleton_and_success_do_not_pass(self):
         for stdout in ("", "PASS FINALIZE-REFUSAL observed={analysis_finalization_attachment_missing}\n",
-                       f"PASS FINALIZE-REFUSAL observed={{{h.FINALIZER_REASON},extra}}\n"):
+                       f"PASS FINALIZE-REFUSAL observed={{{h.FINALIZER_REASON},extra}}\n",
+                       self.expected_runner([]).stdout + "gross_energy_j=314159\n"):
             self.dest = self.base / f"harvest-{len(list(self.base.glob('harvest-*')))}"
             (self.dest / "withheld").mkdir(parents=True)
             result = subprocess.CompletedProcess([], 0, stdout, "")
             _members, causes = self.invoke(runner=lambda *a, **k: result)
             self.assertIn("l10_finalizer_not_exact_singleton", causes)
+            record = q.read(self.dest / "l10-a/record.json")
+            self.assertEqual(record["status"], "FAIL")
+            self.assertNotIn(b"314159", (self.dest / "l10-a/record.json").read_bytes())
 
     def test_floor_staged_before_or_during_finalizer_is_refused(self):
         (self.custody / "floors/forbidden.json").write_text("{}")

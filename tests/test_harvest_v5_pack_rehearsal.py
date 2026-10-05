@@ -12,7 +12,7 @@ from joulewise import arm_readiness as readiness, v5_qualification as q
 from scripts import harvest_v5_pack_rehearsal as h
 from tests.test_t0_rehearsal import FixtureBuilder, fixture_bundle, fixture_replay
 
-SCRATCH = Path("/tmp/dd5-b4c")
+SCRATCH = Path(tempfile.gettempdir())
 
 
 class RehearsalHarvestTests(unittest.TestCase):
