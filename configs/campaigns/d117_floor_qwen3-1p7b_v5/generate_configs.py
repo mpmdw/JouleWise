@@ -2440,6 +2440,7 @@ def build_producer_contract(
                         "workload_profile": {
                             **decode_identity_workload,
                             "prompt_text": None,
+                            "prompt_tokens": None,
                             "dataset_ref": None,
                         },
                     },
