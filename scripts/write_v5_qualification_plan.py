@@ -31,7 +31,6 @@ ARM_ONLY_SCHEMA = "joulewise.v5_qualification_arm_only.v1"
 GAMMA = "d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5"
 DWELL_CAP_S = 2700
 FIXED_COMPONENTS = {
-    "r1": {"pack_t0", "noninference_chain", "backup_close_restore", "shutdown"},
     "s1": {"pack_t0", "fixed_settles", "pre_post_calibration", "stage_custody", "terminal_shutdown"},
 }
 MEMBER_COMPONENTS = {"load", "warmup", "prefill", "forced_decode", "cooldown", "idle_admission"}
@@ -124,7 +123,8 @@ def size_window(occurrence, sizing, *, roster=(), auxiliary=(), brackets=(), non
     Require every component, including model load/admission and every auxiliary
     stage. This does not assert a hard latency bound for unbounded inference.
     """
-    occurrence = "s1" if occurrence == "a1" else occurrence
+    require(occurrence in {"a1", "a2", "s1"}, "occurrence_retired_or_invalid")
+    occurrence = "s1"
     exact(sizing, {"fixed", "members", "auxiliary", "streams", "clock"}, "sizing")
     exact(sizing["fixed"], FIXED_COMPONENTS[occurrence], "fixed")
     total = sum((allowance(v) for v in sizing["fixed"].values()), Fraction())
@@ -186,9 +186,6 @@ def pack_roster(root, occurrence):
     inventory = readiness._authenticated_pack_config_inventory(root)
     for relative, digest in inventory.items():
         night_gate._pack_bytes(safe_path(root / relative), "config_inventory", digest)
-    if occurrence == "r1":
-        require(tree.get("science") == [], "r1_noninference")
-        return [], [], [], []
     require(root.name == GAMMA, "real_gamma_required")
     science = tree.get("science")
     require(isinstance(science, list) and len(science) == 80, "partial_gamma_pack")
@@ -240,6 +237,7 @@ def render_qualification_chain(occurrence, template, sizing, root, t0_epoch_s, o
     pack or guessed role/stage duration is generated here.
     """
     root = safe_path(root)
+    require(occurrence == "s1", "occurrence_retired_or_invalid")
     template = safe_path(template)
     text = template.read_text()
     no_fill(text)
@@ -289,28 +287,37 @@ def deadlines(plan, span, declared):
 
 
 def prerequisites(occurrence, references, head, t0_sequence_start, custody):
-    expected = set() if occurrence == "r1" else {"r1_bundle"}
-    if occurrence == "s1":
-        expected.add("a1_control")
+    expected = (set() if occurrence == "a1" else {"a1_control"} if occurrence == "a2" else
+                {"a1_control", "a2_control", "observation_producers", "g10_control", "g10_artifacts"})
     exact(references, expected, "prerequisites")
-    if not expected:
-        return
-    from scripts.rehearse_t0_unattended import load_evidence_bundle
-    from joulewise.t0_rehearsal import evaluate_rehearsal
-    path, _ = read_locator(references["r1_bundle"])
-    require(path.name == "t0-rehearsal-bundle.json", "r1_bundle_locator")
-    require(path.parent != custody and custody not in path.parent.parents and path.parent not in custody.parents, "prerequisite_custody_overlap")
-    bundle = load_evidence_bundle(path.parent)
-    verdict = evaluate_rehearsal(bundle)
-    require(verdict["overall_verdict"] == "PASS" and len(verdict["gates"]) == 10
-            and all(g["status"] == "PASS" for g in verdict["gates"]), "r1_not_pass")
-    require(bundle.record("d149_go").value["repo_head"] == head, "r1_wrong_head")
     if occurrence == "s1":
+        from joulewise import t0_rehearsal as t0
+        exact(references["observation_producers"], {"driver", "bundle", "evaluator"}, "observation_producers")
+        for name, suffix in (("driver", "scripts/run_night.py"), ("bundle", "scripts/produce_t0_rehearsal_bundle.py"),
+                             ("evaluator", "joulewise/t0_rehearsal.py")):
+            path, _ = read_locator(references["observation_producers"][name])
+            require(path.as_posix().endswith("/" + suffix), "observation_producer_path")
+        _, raw = read_locator(references["g10_control"])
+        positive = readiness.parse_json_bytes(raw)
+        exact(positive, t0._POSITIVE_CONTROL_KEYS, "g10_control")
+        require(positive["schema_version"] == t0.POSITIVE_CONTROL_SCHEMA
+                and positive["performed_by"] == "Ed"
+                and all(positive[key] is True for key in ("outside_t0_sequence", "network_time_reenabled", "forced_resync"))
+                and type(positive["anchor_before_ns"]) is int and type(positive["anchor_after_ns"]) is int
+                and abs(positive["anchor_after_ns"] - positive["anchor_before_ns"]) > 5_000_000
+                and positive["author_refusal_reason_code"] == "evidence_author_t0_clock_attestation_underivable", "g10_control_not_pass")
+        require(isinstance(references["g10_artifacts"], list) and references["g10_artifacts"], "g10_support_required")
+        for ref in references["g10_artifacts"]:
+            read_locator(ref)
+    controls = {}
+    for label in ("a1", "a2"):
+        if label + "_control" not in expected:
+            continue
         from scripts.check_v5_arm_abort import ABSENCE_KEYS, CONTROL_SCHEMA
-        _, raw = read_locator(references["a1_control"])
+        _, raw = read_locator(references[label + "_control"])
         control = readiness.parse_json_bytes(raw)
         exact(control["absence"], ABSENCE_KEYS, "a1_absence")
-        require(control["schema_version"] == CONTROL_SCHEMA and control["occurrence"] == "a1" and control["verdict"] == "PASS"
+        require(control["schema_version"] == CONTROL_SCHEMA and control["occurrence"] == label and control["verdict"] == "PASS"
                 and control["refusal_reason_code"] == "readiness_record_expired"
                 and control["checked_epoch_s"] < t0_sequence_start
                 and control["ordering"]["expired_before_s1_t0"] is True
@@ -322,6 +329,12 @@ def prerequisites(occurrence, references, head, t0_sequence_start, custody):
                 and context_path.parent not in custody.parents, "prerequisite_custody_overlap")
         for ref in [control["arm_receipt"], control["observation"], *control["sources"]]:
             read_locator(ref)
+        controls[label] = control
+    if occurrence == "s1":
+        _, raw = read_locator(controls["a2"]["observation"])
+        observation = readiness.parse_json_bytes(raw)
+        require(controls["a1"]["checked_monotonic_ns"] < observation["first_t0_boundary_monotonic_ns"]
+                and controls["a1"]["boot_session_id"] == controls["a2"]["boot_session_id"], "a1_before_a2_t0")
 
 
 def authenticate_frozen_pack(root, confirmation):
@@ -337,6 +350,7 @@ def authenticate_frozen_pack(root, confirmation):
 
 
 def write_qualification(occurrence, inputs, output):
+    require(occurrence in {"a1", "a2", "s1"}, "occurrence_retired_or_invalid")
     exact(inputs, {"schema_version", "head", "plan", "pack", "authorization", "confirmation", "sizing", "deadlines", "other_custody_roots", "arm_context", "prerequisites"}, "inputs")
     require(inputs["schema_version"] == INPUT_SCHEMA, "inputs.schema")
     no_fill(inputs)
@@ -367,12 +381,11 @@ def write_qualification(occurrence, inputs, output):
     no_fill(text)
     require(night_gate.chain_literal(text, "NIGHT_PROGRAMMED_SPAN_S") == str(sizing["programmed_span_s"]), "chain_span_literal")
     require(not re.search(r"(?:export\s+)?(?:EXPECTED_CONFIRMATION_DIGEST|STEP6_CONFIRMATION_TABLE)\s*=", text), "confirmation_environment_route")
-    if occurrence != "r1":
-        require(g2b_body(measurement) in text, "reviewed_g2b_chain_required")
-    purpose = "T0_REHEARSAL" if occurrence == "r1" else "G2B_SHAKEDOWN"
+    require(g2b_body(measurement) in text, "reviewed_g2b_chain_required")
+    purpose = "G2B_SHAKEDOWN"
     auth = inputs["authorization"]
     require(auth.get("purpose") == purpose and auth.get("claim_eligible") is False and auth.get("permitted_blocks") == 1, "purpose_claim_blocks")
-    require(frozen_identity["window_id"].startswith("rehearsal-t0-unattended-") == (occurrence == "r1"), "window_prefix")
+    require(not frozen_identity["window_id"].startswith("rehearsal-t0-unattended-"), "window_prefix")
     auth_path = custody / "authorization_record.json"
     confirm_path = custody / "step6_confirmation_record.json"
     require(not auth_path.exists() and not confirm_path.exists(), "create_once_records")
@@ -409,11 +422,13 @@ def write_qualification(occurrence, inputs, output):
             safe_path(value, exists=False)
     prerequisites(occurrence, inputs["prerequisites"], inputs["head"],
                   plan.t0_epoch_s - float(allowance(inputs["sizing"]["fixed"]["pack_t0"])), custody)
+    if occurrence == "s1":
+        for name, relative in (("driver", "scripts/run_night.py"), ("bundle", "scripts/produce_t0_rehearsal_bundle.py"),
+                               ("evaluator", "joulewise/t0_rehearsal.py")):
+            require(inputs["prerequisites"]["observation_producers"][name] == locator(measurement / relative), "observation_producer_checkout")
     create_record(auth_path, auth)
     create_record(confirm_path, confirmation)
     night_gate._authenticate_pack_records(plan)
-    if purpose == "T0_REHEARSAL":
-        night_gate._pack_rehearsal_roots(plan, {"arm_context": context, "pack": frozen_identity}, purpose)
     record = {"schema_version": OUTPUT_SCHEMA, "occurrence": occurrence,
               "head": inputs["head"], "pack_night": plan.pack_night,
               "window_id": frozen_identity["window_id"],
@@ -424,10 +439,10 @@ def write_qualification(occurrence, inputs, output):
               "sizing": sizing, "deadlines": bound_deadlines,
               "input_sha256": readiness.sha256_bytes(readiness.render_json(inputs)),
               "prerequisites": inputs["prerequisites"]}
-    if occurrence == "a1":
+    if occurrence in {"a1", "a2"}:
         record.update(schema_version=ARM_ONLY_SCHEMA, mode="ARM_ONLY_NO_LAUNCH",
                       arm_context=context, plan_binding=night_plan_mapping(plan),
-                      recipe={"author_argv": [str(measurement / ".venv/bin/python"), str(measurement / "scripts/author_arm_evidence_t0.py"), "--pack-root", str(root), "--custody-root", str(custody)],
+                      recipe={"arm_argv": [str(measurement / ".venv/bin/python"), str(measurement / "scripts/check_v5_arm_abort.py"), "arm", "--context", str(output)],
                               "arm_api": "joulewise.arm_readiness.generate_arm_receipt",
                               "confirmation_record": records["confirmation_record"],
                               "expiry_checker": "scripts/check_v5_arm_abort.py"})
@@ -435,6 +450,13 @@ def write_qualification(occurrence, inputs, output):
     else:
         write_night_plan(output, plan, create_once=True)
         record.update(plan=locator(output), driver_argv=[str(measurement / ".venv/bin/python"), str(measurement / "scripts/run_night.py"), "run", "--plan", str(output)])
+        record["observation_recipe"] = {
+            "standdown_argv": [str(measurement / ".venv/bin/python"), str(measurement / "scripts/produce_t0_rehearsal_bundle.py"), "observe-standdown", "--plan", str(output)],
+            "supervised_driver_argv": [str(measurement / ".venv/bin/python"), str(measurement / "scripts/produce_t0_rehearsal_bundle.py"), "run-driver", "--plan", str(output)],
+            "bundle_manifest": str(custody / "s1-qualification-bundle.json"),
+            "positive_control": inputs["prerequisites"]["g10_control"],
+            "positive_control_artifacts": inputs["prerequisites"]["g10_artifacts"],
+            "timeout_s_required": True}
         create_record(custody / "qualification-plan-record.json", record)
     return {"status": "STAGED", "occurrence": occurrence, "output": locator(output)}
 
@@ -442,12 +464,12 @@ def write_qualification(occurrence, inputs, output):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="occurrence", required=True)
-    for name in ("r1", "a1", "s1"):
+    for name in ("a1", "a2", "s1"):
         command = commands.add_parser(name)
         command.add_argument("--inputs", type=Path, required=True)
         command.add_argument("--output", type=Path, required=True)
     render = commands.add_parser("render-chain")
-    render.add_argument("--occurrence", dest="render_occurrence", choices=("r1", "s1"), required=True)
+    render.add_argument("--occurrence", dest="render_occurrence", choices=("s1",), required=True)
     render.add_argument("--template", type=Path, required=True)
     render.add_argument("--sizing", type=Path, required=True)
     render.add_argument("--pack-root", type=Path, required=True)

@@ -6489,3 +6489,139 @@ class EvidenceProbeFailureTests(unittest.TestCase):
                 mock.patch.object(self.driver.subprocess,'run',return_value=subprocess.CompletedProcess([],0,marker,'')):
             self.assertEqual(self.driver._evidence_probe_worker(self.f.plan,self.f.plan_path,receipt,time.monotonic()+2,lambda *args:None),2)
         self.assertIn('changed during',json.loads(receipt.read_text())['refusal_code'])
+
+
+class Ruling76DriverTests(unittest.TestCase):
+    def test_durable_record_excludes_raw_logs_for_every_nonclaim_purpose(self):
+        driver = _load_driver()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            for purpose in ('G2B_SHAKEDOWN', 'T0_REHEARSAL', 'CAMPAIGN_TRANSACTION', 'DIAGNOSTIC_NO_PACK'):
+                custody = root / purpose; night = custody / 'night'; night.mkdir(parents=True)
+                for name in ('chain.stdout.log', 'chain.stderr.log'):
+                    (night / name).write_text('private per-member duration energy power\n')
+                plan = types.SimpleNamespace(plan_id='fixture', receipt_class=('DIAGNOSTIC_NO_PACK' if purpose == 'DIAGNOSTIC_NO_PACK' else 'TRANSACTION_PACK'))
+                def git(argv, **kwargs):
+                    if argv[:4] == ['git', 'clone', '--depth', '1']: Path(argv[-1]).mkdir()
+                    return types.SimpleNamespace(stdout='fixture-origin\n', returncode=0)
+                with mock.patch.object(driver.t0_rehearsal, 'observed_run', side_effect=git), \
+                     mock.patch.object(driver.night_gate, '_authenticate_pack_records', return_value={'authorization_record': {'purpose': purpose}}):
+                    self.assertIsNone(driver._durable_record(custody, night, plan))
+                    destination = custody / 'results-clone/docs/process_traces/night-results/fixture'
+                    for name in ('chain.stdout.log', 'chain.stderr.log'):
+                        self.assertEqual((destination / name).exists(), purpose == 'CAMPAIGN_TRANSACTION')
+                        self.assertTrue((night / name).exists())
+                    # A stale local copy must not survive the next nonclaim publish.
+                    if purpose != 'CAMPAIGN_TRANSACTION':
+                        (destination / 'chain.stdout.log').write_text('stale leak')
+                        driver._durable_record(custody, night, plan)
+                        self.assertFalse((destination / 'chain.stdout.log').exists())
+
+    def test_observer_faults_do_not_change_success_or_failure_chain_rc(self):
+        for code, error in ((0, RuntimeError('fixture producer')), (5, RuntimeError('fixture producer')),
+                            (0, SystemExit(19)), (5, SystemExit(19))):
+            fixture = PackNightProducerTests('test_driver_self_authors_arm_before_go_and_pins_all_eight_flags')
+            fixture.setUp()
+            try:
+                driver = fixture.driver
+                with mock.patch.object(driver, '_run_chain_once', return_value=(code, None, 1, [], True)), \
+                     mock.patch('scripts.produce_t0_rehearsal_bundle.observe_s1_lifecycle', side_effect=error):
+                    result = driver.run_night(fixture.plan_path)
+                self.assertEqual(result, driver.EXIT_GO if code == 0 else driver.EXIT_CHAIN_FAILED)
+                self.assertEqual(json.loads((fixture.custody / 'night/result.json').read_bytes())['chain_exit_code'], code)
+                self.assertTrue((fixture.custody / 'night/producer-faults.jsonl').exists())
+            finally:
+                fixture.doCleanups()
+
+    def test_a1_and_a2_author_verify_then_return_without_go_or_launcher(self):
+        from scripts import check_v5_arm_abort as checker
+        for occurrence in ('a1', 'a2'):
+            fixture = PackNightProducerTests('test_driver_self_authors_arm_before_go_and_pins_all_eight_flags')
+            fixture.setUp()
+            try:
+                driver = fixture.driver
+                context_path = fixture.custody / 'arm-only-context.json'
+                context = {'occurrence': occurrence, 'arm_context': {'custody_root': str(fixture.custody)}}
+                fixture.write(context_path, context)
+                prepared = driver._prepare_pack_night(fixture.plan, fixture.plan_path, fixture.raw)
+                with mock.patch.object(checker, 'context_at', return_value=(context, fixture.plan, prepared)), \
+                     mock.patch.object(checker, 'absence', return_value={key: True for key in checker.ABSENCE_KEYS}), \
+                     mock.patch.object(driver, '_admit_qualification_control_order'), \
+                     mock.patch.object(driver, '_admit_network_time_off'), \
+                     mock.patch.object(driver, '_admit_derivation_clean_dwell'), \
+                     mock.patch.object(driver, '_derivation_start_budget', return_value={}), \
+                     mock.patch.object(driver, '_produce_pack_go') as go, \
+                     mock.patch.object(driver, '_pack_launcher_argv') as launcher, \
+                     mock.patch.object(driver, '_run_chain_once') as chain:
+                    result = driver.arm_only(context_path)
+                self.assertEqual(result['status'], 'PASS')
+                self.assertEqual(result['occurrence'], occurrence)
+                self.assertIsNone(result['go_receipt'])
+                go.assert_not_called(); launcher.assert_not_called(); chain.assert_not_called()
+                self.assertEqual(fixture.events.count('T0'), 1)
+                self.assertEqual(fixture.events.count('ARM'), 1)
+                self.assertEqual(fixture.events.count('VERIFY'), 1)
+                self.assertTrue((fixture.custody / 'night/arm-only.json').exists())
+                self.assertFalse((fixture.custody / 'night/go_receipt.json').exists())
+            finally:
+                fixture.doCleanups()
+
+    def test_qualification_reuses_native_dwell_once_and_enforces_cap(self):
+        driver = _load_driver()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            night = root / 'night'; night.mkdir()
+            inputs = root / 'pack/arm_readiness.t0.inputs'; inputs.mkdir(parents=True)
+            command = ['/bin/bash', '/fixture/prewindow_check.sh', '--wait', '--timeout-min', '45', '--window', 'gamma']
+            plan = types.SimpleNamespace(custody_root=str(root), pack_night={'pack_id': 'pack'}, plan_id='fixture')
+            manifest = {'prewindow_command': command}
+            (inputs / 'launch-manifest.json').write_bytes(driver.readiness.render_json(manifest))
+            capture = {'step_id': 'prewindow-check', 'exit_code': 0, 'boot_session_id': BOOT_UUID,
+                'argv': command, 'started_monotonic_ns': 0, 'finished_monotonic_ns': 600_000_000_000}
+            for elapsed, passed in ((600_000_000_000, True), (599_999_999_999, False), (2_700_000_000_001, False)):
+                (inputs / 'prewindow-check.json').write_bytes(driver.readiness.render_json(dict(capture, finished_monotonic_ns=elapsed)))
+                with mock.patch.object(driver.readiness, '_current_boot_session_id', return_value=BOOT_UUID), \
+                     mock.patch.object(driver, '_derivation_budget_remaining', return_value=100), \
+                     mock.patch.object(driver.t0_rehearsal, 'observed_run') as run:
+                    if passed:
+                        driver._admit_qualification_clean_dwell(plan, night, {})
+                        record = json.loads((night / 'clean_dwell.json').read_bytes())
+                        self.assertTrue(record['reused_native_t0_capture'])
+                        self.assertEqual(record['timeout_s'], 2700)
+                    else:
+                        with self.assertRaises(night_gate.PackNightRefusal):
+                            driver._admit_qualification_clean_dwell(plan, night, {})
+                    run.assert_not_called()
+                (night / 'clean_dwell.json').unlink(missing_ok=True)
+
+    def test_prior_controls_precede_actual_t0_and_dwell_not_only_declared_time(self):
+        from scripts import check_v5_arm_abort as checker
+        driver = _load_driver()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            inputs = root / 'pack/arm_readiness.t0.inputs'; inputs.mkdir(parents=True)
+            plan = types.SimpleNamespace(custody_root=str(root), pack_night={'pack_id': 'pack'})
+            for name in driver.t0_author._CAPTURE_FILES.values():
+                (inputs / name).write_bytes(driver.readiness.render_json({
+                    'boot_session_id': BOOT_UUID, 'started_monotonic_ns': 1000}))
+            control = {'schema_version': checker.CONTROL_SCHEMA, 'occurrence': 'a1', 'verdict': 'PASS',
+                'refusal_reason_code': 'readiness_record_expired', 'boot_session_id': BOOT_UUID,
+                'checked_monotonic_ns': 999, 'absence': {key: True for key in checker.ABSENCE_KEYS}}
+            refs = {}
+            for label in ('a1', 'a2'):
+                path = root / (label + '.json')
+                path.write_bytes(driver.readiness.render_json(dict(control, occurrence=label)))
+                refs[label + '_control'] = {'path': str(path), 'sha256': driver._sha256_path(path)}
+            for occurrence in ('a2', 's1'):
+                with self.subTest(occurrence=occurrence), mock.patch.object(
+                        driver.readiness, '_current_boot_session_id', return_value=BOOT_UUID):
+                    driver._admit_qualification_control_order(plan, {'occurrence': occurrence, 'prerequisites': refs})
+            for field, value in (('checked_monotonic_ns', 1000), ('checked_monotonic_ns', 1001),
+                                 ('boot_session_id', 'other-boot'), ('refusal_reason_code', 'other-refusal')):
+                path = root / 'a2.json'
+                path.write_bytes(driver.readiness.render_json(dict(control, occurrence='a2', **{field: value})))
+                refs['a2_control']['sha256'] = driver._sha256_path(path)
+                with self.subTest(field=field, value=value), mock.patch.object(
+                        driver.readiness, '_current_boot_session_id', return_value=BOOT_UUID):
+                    with self.assertRaises(night_gate.PackNightRefusal):
+                        driver._admit_qualification_control_order(plan, {'occurrence': 's1', 'prerequisites': refs})

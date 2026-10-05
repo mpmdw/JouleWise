@@ -36,7 +36,7 @@ def context_at(path):
     context = read_object(path)
     no_fill(context)
     require(context.get("schema_version") == ARM_ONLY_SCHEMA
-            and context.get("occurrence") == "a1"
+            and context.get("occurrence") in {"a1", "a2"}
             and context.get("mode") == "ARM_ONLY_NO_LAUNCH", "a1_context")
     plan = NightPlan.from_mapping(context["plan_binding"])
     require(path.parent == Path(plan.custody_root), "context_custody")
@@ -245,7 +245,7 @@ def finish(context_path, *, wait=False, now_ns=None, now_epoch=None, boot=None, 
     at, epoch = now_ns(), now_epoch()
     require(target <= at and epoch < start["expiry_check_deadline_epoch_s"]
             and epoch < start["s1_t0_not_before_epoch_s"], "expiry_or_s1_order")
-    record = {"schema_version": CONTROL_SCHEMA, "occurrence": "a1", "verdict": "PASS",
+    record = {"schema_version": CONTROL_SCHEMA, "occurrence": context["occurrence"], "verdict": "PASS",
               "context": locator(context_path), "observation": locator(start_path),
               "arm_receipt": start["arm_receipt"], "boot_session_id": start["boot_session_id"],
               "valid_until_monotonic_ns": arm["valid_until_monotonic_ns"],
@@ -261,6 +261,8 @@ def finish(context_path, *, wait=False, now_ns=None, now_epoch=None, boot=None, 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
+    arm = commands.add_parser("arm")
+    arm.add_argument("--context", type=Path, required=True)
     first = commands.add_parser("observe")
     first.add_argument("--context", type=Path, required=True)
     first.add_argument("--arm-receipt", type=Path, required=True)
@@ -270,12 +272,17 @@ def main(argv=None):
     last.add_argument("--wait", action="store_true")
     args = parser.parse_args(argv)
     try:
-        result = (observe(args.context, args.arm_receipt, args.evidence) if args.command == "observe"
-                  else finish(args.context, wait=args.wait))
+        if args.command == "arm":
+            from scripts.run_night import arm_only
+            result = arm_only(args.context)
+        else:
+            result = (observe(args.context, args.arm_receipt, args.evidence) if args.command == "observe"
+                      else finish(args.context, wait=args.wait))
     except (OSError, ValueError, KeyError, TypeError):
         output, code = {"status": "REFUSED", "reason_code": "arm_abort_control_invalid"}, 2
     else:
-        output, code = {"status": "PASS", "schema_version": result["schema_version"], "occurrence": "a1"}, 0
+        output, code = {"status": "PASS", "schema_version": result["schema_version"],
+                        "occurrence": context_at(args.context)[0]["occurrence"]}, 0
     sys.stdout.buffer.write(readiness.render_json(output))
     return code
 

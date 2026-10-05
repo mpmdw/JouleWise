@@ -392,6 +392,48 @@ def battery_attempts(custody, bound_runs):
     return passed, captures
 
 
+def recover_no_science(inputs, plan, night, pack, runs):
+    """Authenticate a named tooling cause and prove no science was dispatched.
+
+    A partial science directory is conservative science custody even without
+    metadata: it cannot be called no-science. Missing failure evidence never
+    grants a fresh s1. This path does not require a post bracket/desk verdict
+    that the pre-science fault prevented from existing.
+    """
+    locator = inputs.get("pre_science_tooling_failure")
+    if locator is None:
+        return None
+    failure = q.read(q.authenticated_reference(locator))
+    if (set(failure) != {"schema", "plan_id", "cause_code", "cause_class", "monotonic_ns", "seam"}
+            or failure["schema"] != "joulewise.v5_pre_science_tooling_failure.v1"
+            or failure["plan_id"] != plan.plan_id or failure["cause_class"] != "tooling"
+            or failure["seam"] not in {"pack_path", "launch"}
+            or type(failure["monotonic_ns"]) is not int):
+        raise q.HarvestRefusal("pre_science_tooling_failure_invalid")
+    q.identifier(failure["cause_code"])
+    if failure["cause_code"].startswith(("qualification_", "rehearsal_producer_", "producer_")):
+        raise q.HarvestRefusal("observation_fault_is_not_g2b_recovery")
+    started = q.read(night / "chain.started")
+    if type(started.get("monotonic_ns")) is not int or failure["monotonic_ns"] <= started["monotonic_ns"]:
+        raise q.HarvestRefusal("tooling_failure_not_after_chain_start")
+    tree = q.read(pack / "plan_tree.json")
+    science = tree.get("science")
+    if not isinstance(science, list) or len(science) != 80:
+        raise q.HarvestRefusal("pre_science_frozen_roster_invalid")
+    ids = {q.identifier(row["run_id"]) for row in science}
+    if any((runs / run_id).exists() or (runs / run_id).is_symlink() for run_id in ids):
+        return None
+    # Unknown/partial science custody cannot be hidden by a roster mismatch.
+    auxiliary = set(map(q.identifier, inputs["auxiliary_bundle_ids"]))
+    for path in runs.iterdir() if runs.exists() else ():
+        if path.is_dir() and path.name not in auxiliary | {"campaign_manifests", "instrument_validation"}:
+            return None
+    return {"verdict": "RECOVER", "recovery_classification": "recover_no_science",
+            "cause_codes": [failure["cause_code"]], "cause_classes": ["tooling"],
+            "science_sampler_started": False, "science_bytes_present": False,
+            "consumes_s2": False, "tooling_failure": locator}
+
+
 def harvest(args, *, runner=subprocess.run, now=None, clear=q.group_clear):
     input_path = q.authenticated_reference({"path": str(args.inputs.absolute()), "sha256": args.inputs_sha256})
     inputs = q.read(input_path)
@@ -414,7 +456,10 @@ def harvest(args, *, runner=subprocess.run, now=None, clear=q.group_clear):
                "chain": Path(plan.chain_path), "chain-sidecar": Path(plan.chain_sha256_path),
                "bound-runs": Path(inputs["bound_runs_root"])}
     started = (night / "chain.started").exists()
-    if started:
+    no_science = recover_no_science(inputs, plan, night, pack, custody / "runs") if started and occurrence == "s1" else None
+    if no_science:
+        sources["pre-science-tooling-failure"] = q.authenticated_reference(inputs["pre_science_tooling_failure"])
+    if started and not no_science:
         for field in ("terminal_boundary", "go", "consumption", "battery_boundaries"):
             sources[field] = q.authenticated_reference(inputs[field])
         sources.update(q.boundary_sources(sources["battery_boundaries"]))
@@ -434,13 +479,14 @@ def harvest(args, *, runner=subprocess.run, now=None, clear=q.group_clear):
                 or prior.get("plan_id") == plan.plan_id
                 or prior.get("cause_classes") != ["tooling"]
                 or authority.get("tooling_cause") not in prior["cause_codes"]
-                or prior.get("clock_majority", {}).get("triggered") is True):
+                or prior.get("clock_majority", {}).get("triggered") is True
+                or prior.get("recovery_classification") == "recover_no_science"):
             raise q.HarvestRefusal("s2_not_authorized_tooling_cure")
         sources["s2-authority"] = authority_path
     with tempfile.TemporaryDirectory(prefix="desk-", dir=args.scratch_root) as temporary:
         transcripts = Path(temporary)
         events = None
-        if (night / "chain.started").exists():
+        if started and not no_science:
             if args.prepare_desk:
                 if args.previous_harvest:
                     raise q.HarvestRefusal("reharvest_cannot_prepare_desk")
@@ -458,6 +504,8 @@ def harvest(args, *, runner=subprocess.run, now=None, clear=q.group_clear):
     try:
         if not (night / "chain.started").exists():
             record.update(verdict="NULL", cause_codes=["chain_never_started"])
+        elif no_science:
+            record.update(no_science)
         else:
             terminal = q.authenticated_reference(inputs["terminal_boundary"])
             go_path = q.authenticated_reference(inputs["go"])
@@ -568,6 +616,9 @@ def harvest(args, *, runner=subprocess.run, now=None, clear=q.group_clear):
         record.update(verdict="REFUSED", cause_codes=[str(error) if isinstance(error, q.HarvestRefusal)
                       else "archive_authentication_or_tool_fault"], cause_classes=["tooling"])
     record.update(q.disposition(occurrence, record["verdict"], record["cause_classes"], record.get("clock_majority")))
+    if record["verdict"] == "RECOVER" and record.get("recovery_classification") == "recover_no_science":
+        record.update(end_state=False, s2_eligible=False, consumes_s2=False,
+                      next_step="r3_cure_then_fresh_s1_plan_authorization_t0_same_code_twice_consult")
     return q.publish(destination, record)
 
 
@@ -576,7 +627,7 @@ def main(argv=None):
     parser.add_argument("--inputs", required=True, type=Path)
     parser.add_argument("--inputs-sha256", required=True)
     parser.add_argument("--archive-root", required=True, type=Path)
-    parser.add_argument("--scratch-root", type=Path, default=Path("/tmp/dd5-b4c"))
+    parser.add_argument("--scratch-root", type=Path, default=Path("/tmp/dd5-fold"))
     parser.add_argument("--prepare-desk", action="store_true")
     parser.add_argument("--previous-harvest", type=Path)
     args = parser.parse_args(argv)

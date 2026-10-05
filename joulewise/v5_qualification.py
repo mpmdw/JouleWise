@@ -245,7 +245,7 @@ def public_print(record):
     print(f"verdict={record['verdict']}")
 
 
-def preflight_refusal(schema, scratch=Path("/tmp/dd5-b4c")):
+def preflight_refusal(schema, scratch=Path("/tmp/dd5-fold")):
     """G2-a's safe fallback: never write into an unsafe archive coordinate."""
     scratch = Path(scratch).resolve()
     scratch.mkdir(parents=True, exist_ok=True)

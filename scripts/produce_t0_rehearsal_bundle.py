@@ -28,6 +28,7 @@ STAGE_SCHEMA = "joulewise.t0_rehearsal_lifecycle_stage.v1"
 PROVENANCE_SCHEMA = "joulewise.t0_rehearsal_producer_provenance.v1"
 STANDDOWN_SCHEMA = "joulewise.t0_rehearsal_standdown_observation.v1"
 OBSERVED = "OBSERVED_REHEARSAL"
+QUALIFICATION_OBSERVED = "OBSERVED_G2B_SHAKEDOWN"
 FIXTURE = "DESK_FIXTURE_MAPPING_ONLY"
 HID_SCHEMA = "joulewise.t0_rehearsal_hid_observation.v1"
 HID_ARGV = ("/usr/sbin/ioreg", "-r", "-c", "IOHIDSystem")
@@ -72,13 +73,14 @@ def reference(path):
 
 def plan_at(path):
     plan = night_gate.NightPlan.from_mapping(read(path))
-    if plan.receipt_class != "TRANSACTION_PACK" or not plan.plan_id.startswith(t0.REHEARSAL_WINDOW_PREFIX):
-        raise ValueError("requires prefixed TRANSACTION_PACK rehearsal plan")
+    if plan.receipt_class != "TRANSACTION_PACK":
+        raise ValueError("requires TRANSACTION_PACK plan")
     auth = read(plan.pack_night["authorization_record"]["path"])
     if reference(plan.pack_night["authorization_record"]["path"])["sha256"] != plan.pack_night["authorization_record"]["sha256"]:
         raise ValueError("authorization digest mismatch")
-    if auth["purpose"] != "T0_REHEARSAL" or auth["claim_eligible"] is not False:
-        raise ValueError("requires non-claim T0_REHEARSAL authorization")
+    if (auth["purpose"] not in {"T0_REHEARSAL", "G2B_SHAKEDOWN"} or auth["claim_eligible"] is not False
+            or auth["purpose"] == "T0_REHEARSAL" and not plan.plan_id.startswith(t0.REHEARSAL_WINDOW_PREFIX)):
+        raise ValueError("requires non-claim observation authorization")
     return plan
 
 
@@ -152,31 +154,134 @@ def run_driver(plan_path, timeout_s):
     night = Path(plan.custody_root) / "night"
     night.mkdir(parents=True, exist_ok=True)
     journal = night / "process-observations.jsonl"
-    if journal.exists():
+    qualified = read(plan.pack_night["authorization_record"]["path"])["purpose"] == "G2B_SHAKEDOWN"
+    if journal.exists() and not qualified:
         raise ValueError("process observation journal already exists")
-    standdown_path = night / "standdown-observed.json"
-    standdown = read(standdown_path)
-    before = read(standdown["before"]["path"])
-    boot = readiness._current_boot_session_id()
-    if (standdown.get("schema_version") != STANDDOWN_SCHEMA
-            or reference(standdown["before"]["path"]) != standdown["before"]
-            or standdown.get("boot_session_id") != boot
-            or before.get("boot_session_id") != boot
-            or before.get("plan_sha256") != reference(plan_path)["sha256"]):
-        raise ValueError("observed stand-down producer record missing")
-    write(night / "observation-origin.json", {
-        "schema_version": "joulewise.t0_rehearsal_observation_origin.v1",
-        "proof_scope": OBSERVED, "plan": reference(plan_path),
-        "standdown": reference(standdown_path),
-        "producer": reference(Path(__file__).resolve()),
-        "boot_session_id": boot})
+    def origin():
+        standdown_path = night / "standdown-observed.json"
+        standdown = read(standdown_path)
+        before = read(standdown["before"]["path"])
+        boot = readiness._current_boot_session_id()
+        if (standdown.get("schema_version") != STANDDOWN_SCHEMA
+                or reference(standdown["before"]["path"]) != standdown["before"]
+                or standdown.get("boot_session_id") != boot
+                or before.get("boot_session_id") != boot
+                or before.get("plan_sha256") != reference(plan_path)["sha256"]):
+            raise ValueError("observed stand-down producer record missing")
+        return write(night / "observation-origin.json", {
+            "schema_version": "joulewise.t0_rehearsal_observation_origin.v1",
+            "proof_scope": QUALIFICATION_OBSERVED if qualified else OBSERVED,
+            "plan": reference(plan_path), "standdown": reference(standdown_path),
+            "producer": reference(Path(__file__).resolve()), "boot_session_id": boot})
+    from scripts.run_night import _qualification_observe
+    if qualified:
+        if journal.exists():
+            def reused_journal():
+                raise ValueError("process observation journal already exists")
+            _qualification_observe(night, "journal_custody_reused", reused_journal)
+        _qualification_observe(night, "standdown_origin", origin)
+    else:
+        origin()
     environment = os.environ.copy()
     environment["JOULEWISE_REHEARSAL_PROCESS_JOURNAL"] = str(journal)
     command = [str(Path(plan.measurement_root) / ".venv/bin/python"), "-B",
                str(Path(plan.measurement_root) / "scripts/run_night.py"), "run", "--plan", str(plan_path)]
-    with t0.process_journal(journal):
-        result = t0.observed_run(command, stdin=-3, env=environment, timeout=timeout_s)
-    return result.returncode
+    # The driver owns the window deadline. An observer timeout must not kill
+    # it or turn a science result into a tooling RECOVER.
+    context = t0.process_journal(journal, observe_only=qualified)
+    if not qualified:
+        with context:
+            return t0.observed_run(command, stdin=-3, env=environment, timeout=timeout_s).returncode
+    entered = _qualification_observe(night, "supervisor_journal_open", context.__enter__) is not None
+    try:
+        return t0.observed_run(command, stdin=-3, env=environment).returncode
+    finally:
+        if entered:
+            _qualification_observe(night, "supervisor_journal_close", lambda: context.__exit__(None, None, None))
+
+
+def observe_hid(night):
+    started = time.monotonic_ns()
+    result = t0.observed_run(HID_ARGV, stdin=-3, capture_output=True, text=True, timeout=HID_TIMEOUT_S)
+    finished = time.monotonic_ns()
+    if result.returncode != 0:
+        raise ValueError("HID raw observation failed")
+    t0.parse_hid_idle_time(result.stdout)
+    return write(night / "hid-idle-observation.json", {"schema_version": HID_SCHEMA,
+        "argv": list(HID_ARGV), "exit_code": result.returncode, "stdout": result.stdout,
+        "stderr": result.stderr, "started_monotonic_ns": started, "finished_monotonic_ns": finished})
+
+
+def qualification_process_role(argv):
+    # Bind/probe workers use this same script. Only its governed run command
+    # is the top-level driver whose completion the supervisor observes.
+    return "top_level" if any(
+        Path(str(arg)).name == "run_night.py" and argv[index + 1:index + 3] == ["run", "--plan"]
+        for index, arg in enumerate(argv)) else "governed_subprocess"
+
+
+def observe_s1_lifecycle(plan):
+    """Observe s1's actual sources; never copy a corpus, close a session or restore ON.
+
+    The G2-b chain ends at the physical-ahead boundary. Its runsheet supplies
+    neither two backups nor launch completion. Preserve those as missing G9
+    stages until the lead rules their exact counterpart/choreography.
+    """
+    custody = Path(plan.custody_root)
+    night = custody / "night"
+    go = readiness.validate_pack_night_go_receipt(read(night / "go_receipt.json"))
+    if go["purpose"] != "G2B_SHAKEDOWN" or go["authorization"]["claim_eligible"] is not False:
+        raise ValueError("s1 purpose binding")
+    stage_dir = night / "rehearsal-lifecycle"
+    stage_dir.mkdir(mode=0o700, exist_ok=True)
+    def stage(name, **facts):
+        return write(stage_dir / (name + ".json"), {"schema_version": t0.QUALIFICATION_STAGE_SCHEMA,
+            "stage_id": name, "monotonic_ns": time.monotonic_ns(), **facts})
+    stage("launch", source=reference(night / "chain.started"))
+    namespace = custody / go["pack_id"]
+    consumed = list(namespace.glob("arm_readiness.consumptions/*.consumed.json"))
+    if len(consumed) != 1:
+        raise ValueError("s1 requires one consumption")
+    stage("capability_consumption", source=reference(consumed[0]))
+    arm_path = namespace / "arm_readiness.receipts" / (go["arm_receipt"]["receipt_id"] + ".json")
+    context = read(arm_path)["arm_context"]
+    metadata, samplers = [], []
+    for role in ("claim_runs_root", "bound_runs_root"):
+        root = Path(context[role])
+        for source in sorted(root.rglob("metadata.json")):
+            retained = copy_record(source, stage_dir / "capture" / role / source.relative_to(root))
+            metadata.append(reference(retained))
+            raw = source.parent / "powermetrics.raw.txt"
+            if raw.is_file():
+                retained = copy_record(raw, stage_dir / "capture" / role / raw.relative_to(root))
+                samplers.append(reference(retained))
+    if metadata and samplers:
+        stage("capture", artifacts=metadata, sampler_artifacts=samplers)
+    gaps = {"claim_backup": "no_two_backup_sequence_in_g2b_chain_or_runsheet",
+            "bound_backup": "no_two_backup_sequence_in_g2b_chain_or_runsheet",
+            "close_out": "physical_ahead_stop_forbids_launch_completion"}
+    if not metadata or not samplers:
+        gaps["capture"] = "science_or_auxiliary_capture_evidence_absent"
+    # Restore means continued OFF and the observed agent stand-down. It is a
+    # query only; use the canonical receipt, never an ON/setter operation.
+    try:
+        standdown_path = night / "standdown-observed.json"
+        standdown = read(standdown_path)
+        if standdown["boot_session_id"] != go["boot_session_id"] or not standdown["exits"]:
+            raise ValueError("stand-down lineage unavailable")
+        query = ["/usr/bin/sudo", "-n", "/usr/sbin/systemsetup", "-getusingnetworktime"]
+        result = t0.observed_run(query, stdin=-3, capture_output=True, text=True, timeout=30)
+        if result.returncode != 0 or result.stdout.strip() != "Network Time: Off":
+            raise ValueError("OFF observation unavailable")
+        off = namespace / "arm_readiness.t0.inputs" / network_time_off.RECEIPT_BASENAME
+        network_time_off.read_receipt(off, plan_id=plan.plan_id, window_id=plan.plan_id)
+        stage("restore", network_time="OFF", stand_down=True, standdown=reference(standdown_path),
+            off_receipt=reference(off), observation={"argv": query, "exit_code": result.returncode,
+                "stdout": result.stdout, "stderr": result.stderr})
+    except Exception:
+        gaps["restore"] = "observed_OFF_and_standdown_required"
+    return write(night / "lifecycle-gaps.json", {"schema_version": "joulewise.v5_s1_lifecycle_gaps.v1",
+        "missing_stages": gaps, "needs_ruling": ["map two verified postcollection backups and close-out onto s1, or prospectively retire/change those G9 obligations"]})
 
 
 def bounded_timeout(value):
@@ -213,6 +318,8 @@ def verified_backup(source, destination):
 def lifecycle(plan_path):
     """Perform actual file activity, two verified copies, close-out and OFF check."""
     plan = plan_at(plan_path)
+    if read(plan.pack_night["authorization_record"]["path"])["purpose"] == "G2B_SHAKEDOWN":
+        return observe_s1_lifecycle(plan)
     custody = Path(plan.custody_root)
     night = custody / "night"
     go = readiness.validate_pack_night_go_receipt(read(night / "go_receipt.json"))
@@ -299,6 +406,7 @@ def copy_record(source, target):
     else:
         target.parent.mkdir(parents=True, exist_ok=True)
         with target.open("xb") as stream:
+            os.chmod(target, 0o600)
             stream.write(raw)
     return target
 
@@ -312,21 +420,35 @@ def assemble(custody, *, positive_control, positive_sha256, positive_artifacts,
     night, records = custody / "night", custody / "records"
     go_path = night / "go_receipt.json"
     go = readiness.validate_pack_night_go_receipt(read(go_path))
-    if go["purpose"] != "T0_REHEARSAL" or go["authorization"]["claim_eligible"] is not False or not custody.name.startswith(t0.REHEARSAL_WINDOW_PREFIX):
+    qualification = go["purpose"] == "G2B_SHAKEDOWN"
+    if (go["purpose"] not in {"T0_REHEARSAL", "G2B_SHAKEDOWN"} or go["authorization"]["claim_eligible"] is not False
+            or not qualification and not custody.name.startswith(t0.REHEARSAL_WINDOW_PREFIX)):
         raise ValueError("requires a completed non-claim pack rehearsal")
-    if not initial and g7_locator is None:
+    if not qualification and not initial and g7_locator is None:
         raise ValueError("final assembly requires authenticated G7 locator")
     origin_path = night / "observation-origin.json"
     if not fixture_mapping:
         origin = read(origin_path)
         if (origin.get("schema_version") != "joulewise.t0_rehearsal_observation_origin.v1"
-                or origin.get("proof_scope") != OBSERVED
+                or origin.get("proof_scope") != (QUALIFICATION_OBSERVED if qualification else OBSERVED)
                 or origin.get("boot_session_id") != go["boot_session_id"]
                 or origin["plan"]["sha256"] != go["plan_sha256"]):
             raise ValueError("fixture or unobserved producer inputs cannot be assembled as real")
         for locator in (origin["plan"], origin["standdown"], origin["producer"]):
             if reference(locator["path"]) != locator:
                 raise ValueError("observation origin source digest mismatch")
+    plan_record_path = custody / "qualification-plan-record.json"
+    if qualification and not fixture_mapping:
+        plan_record = read(plan_record_path)
+        prerequisites = plan_record["prerequisites"]
+        if (plan_record.get("occurrence") != "s1" or plan_record.get("head") != go["repo_head"]
+                or plan_record["plan"]["sha256"] != go["plan_sha256"]
+                or prerequisites["g10_control"] != {"path": str(positive_control), "sha256": positive_sha256}
+                or prerequisites["g10_artifacts"] != [reference(path) for path in positive_artifacts]):
+            raise ValueError("s1 registered observation/G10 inputs changed")
+        for locator in prerequisites["observation_producers"].values():
+            if reference(locator["path"]) != locator:
+                raise ValueError("s1 observation producer source changed")
     if reference(positive_control)["sha256"] != positive_sha256:
         raise ValueError("positive control digest mismatch")
     positive = read(positive_control)
@@ -348,12 +470,13 @@ def assemble(custody, *, positive_control, positive_sha256, positive_artifacts,
             or not journal_ids.issubset({e.get("journal_id") for e in seals})
             or any(e.get("record_count") != sum(o.get("journal_id") == e.get("journal_id") for o in observations) for e in seals)):
         raise ValueError("process observation missing spawn or observed exit/seal")
-    spawns, exits = {}, {}
+    spawns, exits, outputs = {}, {}, {}
     for event in observations:
         if event.get("schema_version") != t0.PROCESS_EVENT_SCHEMA:
             raise ValueError("process observation schema mismatch")
         key = (event["pid"], event["spawned_monotonic_ns"])
-        target = spawns if event["event"] == "spawn" else exits if event["event"] == "exit" else None
+        target = (spawns if event["event"] == "spawn" else exits if event["event"] == "exit"
+                  else outputs if event["event"] == "output" else None)
         if target is None or key in target:
             raise ValueError("duplicate or unknown process observation")
         target[key] = event
@@ -364,16 +487,24 @@ def assemble(custody, *, positive_control, positive_sha256, positive_artifacts,
         exit_event = exits[key]
         if any(exit_event[field] != spawn[field] for field in ("pid", "argv", "stdin_fd0_target", "spawned_monotonic_ns")) or exit_event["monotonic_ns"] < spawn["monotonic_ns"]:
             raise ValueError("process observation was swapped")
-        processes_record.append({"role": "top_level" if i == 0 else "governed_subprocess",
+        process = {"role": qualification_process_role(spawn["argv"]) if qualification else "top_level" if i == 0 else "governed_subprocess",
             "pid": spawn["pid"], "argv": spawn["argv"], "stdin_fd0_target": spawn["stdin_fd0_target"],
             "state": "EXITED", "exit_code": exit_event["exit_code"],
             # Missing dialogue observations stay unknown. Exit success and
             # DEVNULL alone cannot prove the absence of a surviving prompt.
             "prompt_count": exit_event.get("prompt_count"),
             "eof_refusal": exit_event.get("eof_refusal"),
-            "timed_out": exit_event.get("timed_out")})
-    execution = write(records / "execution.json", {"schema_version": t0.EXECUTION_SCHEMA,
-          "sequence_completed": all(p["exit_code"] == 0 for p in processes_record), "processes": processes_record})
+            "timed_out": exit_event.get("timed_out")}
+        if qualification:
+            agent_census = spawn["argv"] == list(night_gate.AGENT_CENSUS_ARGV)
+            process.pop("prompt_count")
+            process.pop("eof_refusal")
+            process["expected_outcome"] = {"exit_code": 1, "stdout": ""} if agent_census else {"exit_code": 0}
+            process["stdout"] = outputs.get(key, {}).get("stdout") if agent_census else None
+        processes_record.append(process)
+    execution = write(records / "execution.json", {"schema_version": t0.QUALIFICATION_EXECUTION_SCHEMA if qualification else t0.EXECUTION_SCHEMA,
+          "sequence_completed": all(p["state"] == "EXITED" and p["exit_code"] == (p["expected_outcome"]["exit_code"] if qualification else 0)
+                                    and p["timed_out"] is False for p in processes_record), "processes": processes_record})
     namespace = custody / go["pack_id"]
     # Observe HID during the non-inference lifecycle, after all T-0 author
     # work. Do not add a probe to the frozen eleven-site post-R1 census.
@@ -390,8 +521,9 @@ def assemble(custody, *, positive_control, positive_sha256, positive_artifacts,
             raise ValueError("immutable HID witness changed")
     else:
         with hid.open("xb") as stream:
+            os.chmod(hid, 0o600)
             stream.write(hid_raw)
-    receipt = write(records / "rehearsal-receipt.json", {"schema_version": t0.REHEARSAL_RECEIPT_SCHEMA,
+    receipt = None if qualification else write(records / "rehearsal-receipt.json", {"schema_version": t0.REHEARSAL_RECEIPT_SCHEMA,
         "receipt_class": t0.REHEARSAL_RECEIPT_CLASS, "claim_eligible": False,
         "window_id": custody.name, "custody_root": str(custody), "acceptance_target": "T0-UNATTENDED-01"})
     standdown = read(night / "standdown-observed.json")
@@ -422,13 +554,16 @@ def assemble(custody, *, positive_control, positive_sha256, positive_artifacts,
     stages = []
     for stage_id in t0._LIFECYCLE_STAGES:
         path = night / "rehearsal-lifecycle" / (stage_id + ".json")
+        if qualification and not path.exists():
+            stages.append({"stage_id": stage_id, "status": "MISSING", "evidence": None})
+            continue
         stage = read(path)
-        if stage.get("schema_version") != STAGE_SCHEMA or stage.get("stage_id") != stage_id:
+        if stage.get("schema_version") != (t0.QUALIFICATION_STAGE_SCHEMA if qualification else STAGE_SCHEMA) or stage.get("stage_id") != stage_id:
             raise ValueError("lifecycle evidence was missing or swapped")
         if stage_id == "restore" and (stage.get("network_time") != "OFF" or stage.get("stand_down") is not True):
             raise ValueError("restore-ON is forbidden")
         stages.append({"stage_id": stage_id, "status": "COMPLETE", "evidence": reference(path)})
-    lifecycle_record = write(records / "lifecycle.json", {"schema_version": t0.LIFECYCLE_SCHEMA,
+    lifecycle_record = write(records / "lifecycle.json", {"schema_version": t0.QUALIFICATION_LIFECYCLE_SCHEMA if qualification else t0.LIFECYCLE_SCHEMA,
         "stages": stages, "operator_actions_at_t0": 0, "human_interventions": []})
     # Software controls are the existing real author/arm boundary replays.
     clock_source = read(namespace / "arm_readiness.t0.sources/clock-correct-and-prior-state.json")
@@ -480,28 +615,31 @@ def assemble(custody, *, positive_control, positive_sha256, positive_artifacts,
         inventory = reader._production_inventory(go)
     roots = readiness.production_custody_roots(home=Path.home() if home is None else home, inventory=inventory)
     record_paths = {name: path.relative_to(custody).as_posix() for name, path in {
-        "execution": execution, "hid_idle": hid, "d149_go": go_path, "rehearsal_receipt": receipt,
+        "execution": execution, "hid_idle": hid, "d149_go": go_path,
         "process_lineage": lineage, "lifecycle": lifecycle_record, "falsifier_controls": falsifiers,
         "positive_control": positive_path}.items()}
+    if receipt is not None:
+        record_paths["rehearsal_receipt"] = receipt.relative_to(custody).as_posix()
     if g7_locator is not None:
         record_paths["g7_control"] = read(g7_locator)
-    manifest = {"schema_version": reader.MANIFEST_SCHEMA, "t0_namespace": go["pack_id"],
+    manifest = {"schema_version": reader.QUALIFICATION_MANIFEST_SCHEMA if qualification else reader.MANIFEST_SCHEMA, "t0_namespace": go["pack_id"],
                 "records": record_paths, "production_roots": [{"role": r.role, "path": str(r.path)} for r in roots]}
     write(custody / "rehearsal-provenance.json", {"schema_version": PROVENANCE_SCHEMA,
-          "proof_scope": FIXTURE if fixture_mapping else OBSERVED, "source_records":
+          "proof_scope": FIXTURE if fixture_mapping else QUALIFICATION_OBSERVED if qualification else OBSERVED, "source_records":
           [reference(night / "process-observations.jsonl"), reference(night / "standdown-observed.json"),
            reference(night / "hid-idle-observation.json"), reference(software_observations),
-           *([] if fixture_mapping else [reference(origin_path)]), *support]})
-    name = "t0-rehearsal-initial.json" if initial else reader.MANIFEST_NAME
+           *([] if fixture_mapping else [reference(origin_path)]),
+           *([reference(plan_record_path)] if qualification and not fixture_mapping else []), *support]})
+    name = reader.QUALIFICATION_MANIFEST_NAME if qualification else "t0-rehearsal-initial.json" if initial else reader.MANIFEST_NAME
     write(custody / name, manifest)
     write(night / ("assembly-initial.json" if initial else "assembly-final.json"), {
         "schema_version": "joulewise.t0_rehearsal_assembly.v1", "manifest": reference(custody / name),
         "records": [reference(custody / p) for key, p in record_paths.items() if key != "g7_control"],
         "g7_control": record_paths.get("g7_control"),
-        "proof_scope": FIXTURE if fixture_mapping else OBSERVED})
+        "proof_scope": FIXTURE if fixture_mapping else QUALIFICATION_OBSERVED if qualification else OBSERVED})
     bundle = reader.load_evidence_bundle(custody, home=home, inventory=inventory, manifest_name=name)
-    verdict = t0.evaluate_rehearsal(bundle)
-    verdict["proof_scope"] = FIXTURE if fixture_mapping else OBSERVED
+    verdict = t0.evaluate_qualification(bundle) if qualification else t0.evaluate_rehearsal(bundle)
+    verdict["proof_scope"] = FIXTURE if fixture_mapping else QUALIFICATION_OBSERVED if qualification else OBSERVED
     return verdict
 
 
@@ -531,7 +669,13 @@ def main(argv=None):
             verdict = assemble(args.custody_root, positive_control=args.positive_control,
                 positive_sha256=args.positive_control_sha256, positive_artifacts=args.positive_control_artifact,
                 g7_locator=args.g7_locator, initial=args.initial, fixture_mapping=args.fixture_mapping)
-            sys.stdout.buffer.write(readiness.render_json(verdict))
+            output = ({"schema_version": verdict["schema_version"], "overall_verdict": verdict["overall_verdict"],
+                       "proof_scope": verdict["proof_scope"], "gates": [
+                           {"gate_id": row["gate_id"], "status": row["status"],
+                            **({"basis": row["basis"]} if "basis" in row else {})}
+                           for row in verdict["gates"]]}
+                      if verdict["schema_version"] == "joulewise.v5_s1_qualification_verdict.v1" else verdict)
+            sys.stdout.buffer.write(readiness.render_json(output))
             return 0 if verdict["overall_verdict"] == "PASS" else 2
         if args.command == "observe-standdown":
             observe_standdown(args.plan, args.timeout_s)
@@ -543,7 +687,7 @@ def main(argv=None):
                 lifecycle(args.plan)
         return 0
     except (ValueError, OSError, KeyError, subprocess.SubprocessError) as exc:
-        sys.stdout.buffer.write(readiness.render_json({"status": "REFUSED", "reason_code": "rehearsal_producer_incomplete", "detail": str(exc)}))
+        sys.stdout.buffer.write(readiness.render_json({"status": "REFUSED", "reason_code": "rehearsal_producer_incomplete"}))
         return 2
 
 

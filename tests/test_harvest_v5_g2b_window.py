@@ -434,3 +434,89 @@ class FoldedL10Tests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RecoverNoScienceTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name).resolve()
+        self.night = self.root / 'night'; self.night.mkdir()
+        self.pack = self.root / 'pack'; self.pack.mkdir()
+        self.runs = self.root / 'runs'; self.runs.mkdir()
+        put(self.night / 'chain.started', {'monotonic_ns': 100})
+        put(self.pack / 'plan_tree.json', {'science': [{'run_id': f'science-{i:02}'} for i in range(80)]})
+        self.failure = self.root / 'tooling-failure.json'
+        self.value = {'schema': 'joulewise.v5_pre_science_tooling_failure.v1', 'plan_id': 's1-attempt',
+            'cause_code': 'night_chain_launch_failed', 'cause_class': 'tooling', 'monotonic_ns': 101, 'seam': 'launch'}
+        put(self.failure, self.value)
+        self.inputs = {'auxiliary_bundle_ids': ['start-reference'], 'pre_science_tooling_failure': q.reference(self.failure)}
+        self.plan = SimpleNamespace(plan_id='s1-attempt')
+
+    def classify(self):
+        return h.recover_no_science(self.inputs, self.plan, self.night, self.pack, self.runs)
+
+    def test_registered_post_start_tooling_failure_is_no_science_without_s2_spend(self):
+        result = self.classify()
+        self.assertEqual(result['verdict'], 'RECOVER')
+        self.assertEqual(result['recovery_classification'], 'recover_no_science')
+        self.assertFalse(result['consumes_s2'])
+        self.assertFalse(result['science_bytes_present'])
+        # Auxiliary samplers are allowed; ruling 76 binds the first SCIENCE sampler.
+        put(self.runs / 'start-reference/metadata.json', {'fixture': 'auxiliary'})
+        self.assertEqual(self.classify()['recovery_classification'], 'recover_no_science')
+
+    def test_even_partial_science_directory_precludes_no_science(self):
+        (self.runs / 'science-00').mkdir()
+        self.assertIsNone(self.classify())
+
+    def test_failure_before_or_at_chain_start_is_not_the_ruled_recover(self):
+        for stamp in (99, 100):
+            put(self.failure, dict(self.value, monotonic_ns=stamp))
+            self.inputs['pre_science_tooling_failure'] = q.reference(self.failure)
+            with self.subTest(stamp=stamp), self.assertRaisesRegex(q.HarvestRefusal, 'not_after_chain_start'):
+                self.classify()
+
+    def test_missing_named_cause_and_physical_fault_do_not_grant_rearm(self):
+        inputs = dict(self.inputs); inputs.pop('pre_science_tooling_failure')
+        self.assertIsNone(h.recover_no_science(inputs, self.plan, self.night, self.pack, self.runs))
+        put(self.failure, dict(self.value, cause_class='instrument_physics'))
+        self.inputs['pre_science_tooling_failure'] = q.reference(self.failure)
+        with self.assertRaisesRegex(q.HarvestRefusal, 'failure_invalid'):
+            self.classify()
+
+    def test_harvest_no_science_needs_no_post_bracket_and_preserves_custody(self):
+        night_custody = self.root / 'night-custody'; night_custody.mkdir()
+        self.night.rename(night_custody / 'night')
+        self.night = night_custody / 'night'
+        g2b = self.root / 'g2b'; g2b.mkdir()
+        self.runs.rename(g2b / 'runs'); self.runs = g2b / 'runs'
+        bound = self.root / 'bound'; bound.mkdir()
+        plan_path = night_custody / 'night_plan.json'; put(plan_path, {'fixture': 'plan'})
+        policy = self.root / 'policy.json'; put(policy, {'fixture': 'policy'})
+        acceptance = self.root / 'acceptance.json'; put(acceptance, {'fixture': 'acceptance'})
+        chain = self.root / 'chain.zsh'; chain.write_text('exit 1\n')
+        sidecar = self.root / 'chain.sha256'; sidecar.write_text(q.sha(chain))
+        plan = SimpleNamespace(plan_id='s1-attempt', custody_root=str(night_custody),
+            chain_path=str(chain), chain_sha256_path=str(sidecar), measurement_head='a' * 40,
+            pack_night={'pack_root': str(self.pack), 'pack_id': 'd117_contrast_qwen3-1p7b_vs_qwen3-8b_v5'})
+        inputs = dict(self.inputs, schema=h.INPUT_SCHEMA, occurrence='s1', plan=q.reference(plan_path),
+            custody_root=str(g2b), policy=q.reference(policy), acceptance=q.reference(acceptance), bound_runs_root=str(bound))
+        input_path = self.root / 'inputs.json'; put(input_path, inputs)
+        args = SimpleNamespace(inputs=input_path, inputs_sha256=q.sha(input_path),
+            archive_root=self.root / 'archive', prepare_desk=False, previous_harvest=None, scratch_root=self.root)
+        before = q.tree_hash(night_custody)
+        with mock.patch.object(q, 'load_plan', return_value=plan):
+            result = h.harvest(args, clear=lambda *a, **k: True)
+        self.assertEqual(result['verdict'], 'RECOVER')
+        self.assertEqual(result['recovery_classification'], 'recover_no_science')
+        self.assertFalse(result['end_state'])
+        self.assertFalse(result['consumes_s2'])
+        self.assertEqual(before, q.tree_hash(night_custody))
+        self.assertFalse((args.archive_root / 'l10-a').exists())
+
+    def test_observation_producer_fault_is_never_g2b_recover_no_science(self):
+        put(self.failure, dict(self.value, cause_code='qualification_observation_producer_fault'))
+        self.inputs['pre_science_tooling_failure'] = q.reference(self.failure)
+        with self.assertRaisesRegex(q.HarvestRefusal, 'not_g2b_recovery'):
+            self.classify()

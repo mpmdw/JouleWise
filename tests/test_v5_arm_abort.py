@@ -301,3 +301,21 @@ class ArmAbortTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class A2ExpiryTests(unittest.TestCase):
+    def test_a2_uses_same_authentic_expiry_recipe_with_distinct_occurrence(self):
+        fixture = ArmAbortTests('test_real_verifier_pass_then_canonical_expiry_and_create_once_control')
+        fixture.setUp()
+        try:
+            value = writer.read_object(fixture.context_path)
+            value['occurrence'] = 'a2'
+            fixture.context_path.write_bytes(readiness.render_json(value))
+            fixture.observe()
+            fixture.expire()
+            result = fixture.finish()
+            self.assertEqual(result['occurrence'], 'a2')
+            self.assertEqual(result['refusal_reason_code'], 'readiness_record_expired')
+            self.assertTrue(all(result['absence'].values()))
+        finally:
+            fixture.doCleanups()

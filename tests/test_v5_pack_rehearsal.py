@@ -241,28 +241,10 @@ class IsolationRecipeTests(unittest.TestCase):
                     with self.assertRaisesRegex(ValueError, "finite and positive"):
                         operation(Path("/nonexistent-plan.json"), value)
 
-    def test_production_overlap_and_unsupported_pack_profile(self):
-        path = Path(__file__).resolve().parents[1] / "configs/campaigns/v5_pack_rehearsal/generate_configs.py"
-        spec = importlib.util.spec_from_file_location("rehearsal_recipe", path)
-        module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
-        with tempfile.TemporaryDirectory() as temp:
-            base = Path(temp).resolve()
-            window = t0.REHEARSAL_WINDOW_PREFIX + "desk"
-            checkout = base / "JouleWise-rehearsal-desk"
-            custody = base / "home/night-custody" / window
-            backups = [base / "backup-a", base / "backup-b"]
-            for directory in (checkout, custody, *backups):
-                directory.mkdir(parents=True)
-            inventory = [{"deployment_id": "production", "measurement_root": str(base / "production"),
-                          "custody_root": None, "ledger_path": None, "notes": "desk fixture"}]
-            result = module.generate(window, checkout, custody, *backups, home=base / "home", inventory=inventory)
-            self.assertEqual(producer.read(result)["status"], "NEEDS_RULING")
-            self.assertEqual(producer.read(result)["genesis_pin"]["sequence"], 0)
-            with self.assertRaises(readiness.ArmReadinessError):
-                readiness._plan_profile(result.parent)
-            inventory[0]["measurement_root"] = str(checkout)
-            with self.assertRaisesRegex(ValueError, "production-root overlap"):
-                module.generate(window, checkout, custody, *backups, home=base / "home", inventory=inventory)
+    def test_retired_pack_and_chain_are_absent(self):
+        root = Path(__file__).resolve().parents[1]
+        self.assertFalse((root / "configs/campaigns/v5_pack_rehearsal/generate_configs.py").exists())
+        self.assertFalse((root / "scripts/night_chains/v5_pack_rehearsal.zsh").exists())
 
     def test_observed_descriptor_and_expected_negative_exit_are_retained(self):
         with tempfile.TemporaryDirectory() as temp:

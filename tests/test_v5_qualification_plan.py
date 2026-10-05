@@ -18,7 +18,7 @@ from tests.test_arm_readiness_schemas import arm_context
 
 class SizingTests(unittest.TestCase):
     def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory(dir="/tmp/dd5-b4a" if Path("/tmp/dd5-b4a").exists() else None)
+        self.tmp = tempfile.TemporaryDirectory(dir=tempfile.gettempdir())
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name).resolve()
         source = self.root / "reviewed-estimate.json"
@@ -126,14 +126,12 @@ class SizingTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "unresolved_fill"):
             writer.no_fill({"nested": ["FILL[PACK]"]})
 
-    def test_r1_zero_model_multiplicity(self):
-        value = copy.deepcopy(self.sizing)
-        value.update(fixed={name: self.allow(10) for name in writer.FIXED_COMPONENTS["r1"]},
-                     members={}, auxiliary={}, streams={})
-        self.assertEqual(40, writer.size_window("r1", value)["programmed_span_s"])
-        value["members"] = {"unauthorized-inference": {}}
-        with self.assertRaisesRegex(ValueError, "member_inventory"):
-            writer.size_window("r1", value)
+    def test_retired_r1_has_no_sizing_or_cli_route(self):
+        with self.assertRaisesRegex(ValueError, "occurrence_retired"):
+            writer.size_window("r1", self.sizing)
+        for occurrence in ("a1", "a2"):
+            self.assertEqual(self.size(), writer.size_window(occurrence, self.sizing,
+                roster=self.roster, auxiliary=self.aux, brackets=self.brackets))
 
     def test_deadline_latest_chain_start_shutdown_courier_and_deadman(self):
         from scripts.run_night import deadman_epoch
@@ -154,7 +152,7 @@ class PlanWriterTests(SizingTests):
     """Real record/plan serializer and gate; fixtures stub frozen ARM inputs only."""
     def setUp(self):
         super().setUp()
-        self.repo = self.root / "JouleWise-rehearsal-fixture"
+        self.repo = self.root / "JouleWise-fixture"
         self.repo.mkdir()
         self.pack = self.repo / "rehearsal-pack"
         self.pack.mkdir()
@@ -162,10 +160,10 @@ class PlanWriterTests(SizingTests):
         for argv in (["init", "-q"], ["add", "."], ["-c", "user.name=Fixture", "-c", "user.email=fixture@example.test", "commit", "-qm", "fixture"]):
             subprocess.run(["git", "-C", str(self.repo), *argv], check=True, capture_output=True)
         self.head = subprocess.check_output(["git", "-C", str(self.repo), "rev-parse", "HEAD"], text=True).strip()
-        self.custody = self.root / "rehearsal-t0-unattended-fixture"
+        self.custody = self.root / "s1-fixture"
         self.custody.mkdir()
         self.chain = self.root / "chain.zsh"
-        self.chain.write_text("#!/bin/zsh\nexport NIGHT_PROGRAMMED_SPAN_S=40\nexport NIGHT_LATEST_CHAIN_START_EPOCH_S=3720\nexport V5_QUALIFICATION_OCCURRENCE=r1\necho fixture\n")
+        self.chain.write_text("#!/bin/zsh\nexport NIGHT_PROGRAMMED_SPAN_S=40\nexport NIGHT_LATEST_CHAIN_START_EPOCH_S=3720\nexport V5_QUALIFICATION_OCCURRENCE=s1\necho fixture\n")
         self.sidecar = self.root / "chain.sha256"
         self.sidecar.write_bytes(readiness.gnu_sidecar(writer.locator(self.chain)["sha256"], self.chain.name))
         self.table = self.root / "d117_step6_confirmation_table_v5.json"
@@ -194,18 +192,28 @@ class PlanWriterTests(SizingTests):
                 "chain_path": str(self.chain), "chain_sha256_path": str(self.sidecar),
                 "custody_root": str(self.custody), "registration_path": None},
             "pack": {"root": str(self.pack), "sha256": digest, "attempt_ordinal": 2},
-            "authorization": {"purpose": "T0_REHEARSAL", "attempt_id": self.custody.name + "/2",
+            "authorization": {"purpose": "G2B_SHAKEDOWN", "attempt_id": self.custody.name + "/2",
                 "claim_eligible": False, "permitted_blocks": 1, "pack_sha256": digest,
-                "permitted_chain_sha256": writer.locator(self.chain)["sha256"], "authority": "D-176 decision 4"},
+                "permitted_chain_sha256": writer.locator(self.chain)["sha256"], "authority": "D-171 §3 / ruling 76"},
             "confirmation": {"record": writer.locator(self.confirm), "transcript": writer.locator(self.transcript),
                 "expected_confirmation_digest": self.hc},
-            "sizing": {"fixed": {name: self.allow(10) for name in writer.FIXED_COMPONENTS["r1"]},
+            "sizing": {"fixed": {name: self.allow(8) for name in writer.FIXED_COMPONENTS["s1"]},
                        "members": {}, "auxiliary": {}, "streams": {}, "clock": self.sizing["clock"]},
             "deadlines": {"latest_chain_start_epoch_s": 3720., "shutdown_epoch_s": 4060.,
                           "courier_epoch_s": 4360., "deadman_epoch_s": 7680.},
             "other_custody_roots": [], "arm_context": context, "prerequisites": {}}
+        producers = {}
+        for name, relative in (("driver", "scripts/run_night.py"), ("bundle", "scripts/produce_t0_rehearsal_bundle.py"), ("evaluator", "joulewise/t0_rehearsal.py")):
+            path = self.repo / relative
+            path.parent.mkdir(exist_ok=True)
+            path.write_text("fixture source only\n")
+            producers[name] = writer.locator(path)
+        self.input["prerequisites"] = {"observation_producers": producers,
+            "g10_control": writer.locator(self.confirm), "g10_artifacts": [writer.locator(self.transcript)]}
         self.output = self.custody / "night_plan.json"
         for target, name, replacement in (
+            (writer, "g2b_body", mock.Mock(return_value="echo fixture\n")),
+            (writer, "prerequisites", mock.Mock()),
             (writer, "pack_roster", mock.Mock(return_value=([], [], [], []))),
             (readiness, "_pack_record", mock.Mock(return_value={"plan_id": self.custody.name, "window_id": self.custody.name})),
             (writer, "authenticate_frozen_pack", mock.Mock(return_value={"path": "/fixture/freeze.json", "sha256": "0" * 64})),
@@ -219,7 +227,7 @@ class PlanWriterTests(SizingTests):
             self.addCleanup(patcher.stop)
 
     def write(self):
-        return writer.write_qualification("r1", self.input, self.output)
+        return writer.write_qualification("s1", self.input, self.output)
 
     def test_canonical_create_once_records_and_run_command(self):
         self.write()
@@ -289,44 +297,44 @@ class PlanWriterTests(SizingTests):
     def test_qualification_marker_cannot_authorize_a_claim_purpose(self):
         self.write()
         plan = night_gate.NightPlan.from_mapping(writer.read_object(self.output))
-        text = self.chain.read_text().replace("V5_QUALIFICATION_OCCURRENCE=r1", "V5_QUALIFICATION_OCCURRENCE=s1")
+        text = self.chain.read_text().replace("V5_QUALIFICATION_OCCURRENCE=s1", "V5_QUALIFICATION_OCCURRENCE=s1")
         with self.assertRaisesRegex(ValueError, "non-claim purpose"):
             night_gate.qualification_start_deadline(plan, text, "CAMPAIGN_TRANSACTION")
 
     def test_render_chain_emits_span_and_deadline_without_modifying_template(self):
         template = self.root / "template.zsh"
-        template.write_text("#!/bin/zsh\necho noninference-fixture\n")
+        template.write_text("#!/bin/zsh\necho fixture\n")
         output = self.root / "rendered-chain.zsh"
-        result = writer.render_qualification_chain("r1", template, self.input["sizing"], self.pack, 1000., output)
+        result = writer.render_qualification_chain("s1", template, self.input["sizing"], self.pack, 1000., output)
         self.assertEqual(40, result["programmed_span_s"])
         self.assertEqual("40", night_gate.chain_literal(output.read_text(), "NIGHT_PROGRAMMED_SPAN_S"))
         self.assertEqual("3720", night_gate.chain_literal(output.read_text(), "NIGHT_LATEST_CHAIN_START_EPOCH_S"))
-        self.assertEqual("#!/bin/zsh\necho noninference-fixture\n", template.read_text())
+        self.assertEqual("#!/bin/zsh\necho fixture\n", template.read_text())
         self.assertEqual(writer.locator(output)["sha256"], Path(str(output) + ".sha256").read_text().split()[0])
 
     def test_a1_is_context_only_and_s1_is_a_canonical_run_plan(self):
-        for occurrence in ("a1", "s1"):
+        for occurrence in ("a1", "a2", "s1"):
             with self.subTest(occurrence=occurrence):
                 inputs = copy.deepcopy(self.input)
-                custody = self.root / (occurrence + "-fixture")
+                custody = self.root / (occurrence + "-context-fixture")
                 custody.mkdir()
                 inputs["plan"].update(plan_id=custody.name, custody_root=str(custody))
                 inputs["arm_context"]["custody_root"] = str(custody)
                 inputs["sizing"]["fixed"] = {key: self.allow(8) for key in writer.FIXED_COMPONENTS["s1"]}
                 inputs["authorization"].update(purpose="G2B_SHAKEDOWN", authority="D-171 §3", attempt_id=custody.name + "/2")
                 chain = self.root / (occurrence + "-chain.zsh")
-                chain.write_text(self.chain.read_text().replace("V5_QUALIFICATION_OCCURRENCE=r1", "V5_QUALIFICATION_OCCURRENCE=s1"))
+                chain.write_text(self.chain.read_text().replace("V5_QUALIFICATION_OCCURRENCE=s1", "V5_QUALIFICATION_OCCURRENCE=s1"))
                 sidecar = self.root / (occurrence + "-chain.sha256")
                 sidecar.write_bytes(readiness.gnu_sidecar(writer.locator(chain)["sha256"], chain.name))
                 inputs["plan"].update(chain_path=str(chain), chain_sha256_path=str(sidecar))
                 inputs["authorization"]["permitted_chain_sha256"] = writer.locator(chain)["sha256"]
-                output = custody / ("arm-only-context.json" if occurrence == "a1" else "night_plan.json")
+                output = custody / ("arm-only-context.json" if occurrence in {"a1", "a2"} else "night_plan.json")
                 with mock.patch.object(writer, "g2b_body", return_value="echo fixture\n"), \
                      mock.patch.object(readiness, "_pack_record", return_value={"plan_id": custody.name, "window_id": custody.name}), \
                      mock.patch.object(writer, "prerequisites"):
                     writer.write_qualification(occurrence, inputs, output)
                 value = writer.read_object(output)
-                if occurrence == "a1":
+                if occurrence in {"a1", "a2"}:
                     self.assertEqual(writer.ARM_ONLY_SCHEMA, value["schema_version"])
                     self.assertNotIn("driver_argv", value)
                     self.assertFalse((custody / "night_plan.json").exists())
@@ -338,70 +346,82 @@ class PlanWriterTests(SizingTests):
 
 class PrerequisiteTests(unittest.TestCase):
     def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory(dir="/tmp/dd5-b4a" if Path("/tmp/dd5-b4a").exists() else None)
+        import tempfile
+        self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name).resolve()
-        archive = self.root / "r1"
-        archive.mkdir()
-        bundle_path = archive / "t0-rehearsal-bundle.json"
-        bundle_path.write_bytes(b"{}\n")
-        self.refs = {"r1_bundle": writer.locator(bundle_path)}
+        self.custody = self.root / "s1"; self.custody.mkdir()
         self.head = "a" * 40
-        self.go = {"repo_head": self.head}
-        self.verdict = {"overall_verdict": "PASS", "gates": [{"status": "PASS"} for _ in range(10)]}
-        bundle = SimpleNamespace(record=lambda name: SimpleNamespace(value=self.go))
-        for patch in (mock.patch("scripts.rehearse_t0_unattended.load_evidence_bundle", return_value=bundle),
-                      mock.patch("joulewise.t0_rehearsal.evaluate_rehearsal", side_effect=lambda value: self.verdict)):
-            patch.start()
-            self.addCleanup(patch.stop)
-        self.custody = self.root / "s1"
-        self.custody.mkdir()
-
-    def test_r1_requires_all_ten_native_gates_and_same_head(self):
-        writer.prerequisites("a1", self.refs, self.head, 3000, self.custody)
-        self.verdict["gates"][-1]["status"] = "UNRULED"
-        with self.assertRaisesRegex(ValueError, "r1_not_pass"):
-            writer.prerequisites("a1", self.refs, self.head, 3000, self.custody)
-        self.verdict["gates"][-1]["status"] = "PASS"
-        self.go["repo_head"] = "b" * 40
-        with self.assertRaisesRegex(ValueError, "r1_wrong_head"):
-            writer.prerequisites("a1", self.refs, self.head, 3000, self.custody)
-
-    def test_s1_requires_complete_absence_and_expiry_before_t0(self):
+        self.refs = {}
+        self.controls = {}
+        from joulewise import t0_rehearsal as t0
         from scripts.check_v5_arm_abort import ABSENCE_KEYS, CONTROL_SCHEMA
-        archive = self.root / "a1"
-        archive.mkdir()
-        context = archive / "context.json"
-        context.write_bytes(readiness.render_json({"head": self.head}))
-        source = archive / "source.json"
-        source.write_bytes(b"{}\n")
-        control = {"schema_version": CONTROL_SCHEMA, "occurrence": "a1", "verdict": "PASS",
-            "refusal_reason_code": "readiness_record_expired", "checked_epoch_s": 2000,
-            "absence": {key: True for key in ABSENCE_KEYS}, "context": writer.locator(context),
-            "ordering": {"expired_before_s1_t0": True}, "arm_receipt": writer.locator(source),
-            "observation": writer.locator(source), "sources": []}
-        path = archive / "arm-abort-control.json"
-        for defect in (None, "late", "missing_absence", "false_absence"):
-            candidate = copy.deepcopy(control)
-            if defect == "late":
-                candidate["checked_epoch_s"] = 3000
-            elif defect == "missing_absence":
-                candidate["absence"] = {}
-            elif defect == "false_absence":
-                candidate["absence"]["consumption_absent"] = False
-            path.write_bytes(readiness.render_json(candidate))
-            refs = dict(self.refs, a1_control=writer.locator(path))
-            with self.subTest(defect=defect):
-                if defect is None:
+        for label, at in (("a1", 1000), ("a2", 2000)):
+            root = self.root / label; root.mkdir()
+            context = root / "context.json"
+            source = root / "source.json"
+            context.write_bytes(readiness.render_json({"head": self.head}))
+            source.write_bytes(readiness.render_json({"first_t0_boundary_monotonic_ns": at - 100}))
+            control = {"schema_version": CONTROL_SCHEMA, "occurrence": label, "verdict": "PASS",
+                "refusal_reason_code": "readiness_record_expired", "checked_epoch_s": at,
+                "checked_monotonic_ns": at, "boot_session_id": "same-boot",
+                "absence": {key: True for key in ABSENCE_KEYS}, "context": writer.locator(context),
+                "ordering": {"expired_before_s1_t0": True}, "arm_receipt": writer.locator(source),
+                "observation": writer.locator(source), "sources": []}
+            path = root / "arm-abort-control.json"
+            path.write_bytes(readiness.render_json(control))
+            self.refs[label + "_control"] = writer.locator(path)
+            self.controls[label] = (path, control)
+        producers = {}
+        for name, suffix in (("driver", "scripts/run_night.py"), ("bundle", "scripts/produce_t0_rehearsal_bundle.py"), ("evaluator", "joulewise/t0_rehearsal.py")):
+            path = self.root / suffix; path.parent.mkdir(exist_ok=True)
+            path.write_text("fixture-only source")
+            producers[name] = writer.locator(path)
+        positive = self.root / "g10.json"
+        positive.write_bytes(readiness.render_json({"schema_version": t0.POSITIVE_CONTROL_SCHEMA,
+            "performed_by": "Ed", "outside_t0_sequence": True, "network_time_reenabled": True,
+            "forced_resync": True, "anchor_before_ns": 0, "anchor_after_ns": 5_000_001,
+            "author_refusal_reason_code": "evidence_author_t0_clock_attestation_underivable"}))
+        self.refs.update(observation_producers=producers, g10_control=writer.locator(positive),
+                         g10_artifacts=[writer.locator(positive)])
+
+    def test_fold_has_no_r1_and_requires_a1_a2_g10_and_source_pins(self):
+        writer.prerequisites("a1", {}, self.head, 500, self.custody)
+        writer.prerequisites("a2", {"a1_control": self.refs["a1_control"]}, self.head, 1500, self.custody)
+        writer.prerequisites("s1", self.refs, self.head, 3000, self.custody)
+        for key in self.refs:
+            changed = dict(self.refs); changed.pop(key)
+            with self.subTest(key=key), self.assertRaises(ValueError):
+                writer.prerequisites("s1", changed, self.head, 3000, self.custody)
+        with self.assertRaises(ValueError):
+            writer.prerequisites("s1", dict(self.refs, r1_bundle=self.refs["g10_control"]), self.head, 3000, self.custody)
+
+    def test_each_control_must_expire_without_launch_before_s1_t0(self):
+        for label in ("a1", "a2"):
+            path, control = self.controls[label]
+            for defect in ("late", "wrong_refusal", "launch"):
+                candidate = copy.deepcopy(control)
+                if defect == "late": candidate["checked_epoch_s"] = 3000
+                elif defect == "wrong_refusal": candidate["refusal_reason_code"] = "different"
+                else: candidate["absence"]["chain_started_absent"] = False
+                path.write_bytes(readiness.render_json(candidate))
+                refs = dict(self.refs, **{label + "_control": writer.locator(path)})
+                with self.subTest(label=label, defect=defect), self.assertRaises(ValueError):
                     writer.prerequisites("s1", refs, self.head, 3000, self.custody)
-                else:
-                    with self.assertRaises(ValueError):
-                        writer.prerequisites("s1", refs, self.head, 3000, self.custody)
+                path.write_bytes(readiness.render_json(control))
+
+    def test_a2_t0_must_follow_a1_expiry(self):
+        path, control = self.controls["a1"]
+        control["checked_monotonic_ns"] = 1900
+        path.write_bytes(readiness.render_json(control))
+        refs = dict(self.refs, a1_control=writer.locator(path))
+        with self.assertRaisesRegex(ValueError, "a1_before_a2"):
+            writer.prerequisites("s1", refs, self.head, 3000, self.custody)
 
 
 class PackRosterTests(unittest.TestCase):
     def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory(dir="/tmp/dd5-b4a" if Path("/tmp/dd5-b4a").exists() else None)
+        self.tmp = tempfile.TemporaryDirectory(dir=tempfile.gettempdir())
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name).resolve() / writer.GAMMA
         self.root.mkdir()

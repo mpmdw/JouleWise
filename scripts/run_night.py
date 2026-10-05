@@ -979,6 +979,8 @@ def _run_chain_once_impl(chain_path, plan, probes, night_dir, claim_descriptor,
     stdout_path = night_dir / "chain.stdout.log"
     stderr_path = night_dir / "chain.stderr.log"
     with stdout_path.open("xb") as stdout, stderr_path.open("xb") as stderr:
+        os.chmod(stdout_path, 0o600)
+        os.chmod(stderr_path, 0o600)
         environment = _chain_environment(plan, night_dir)
         launch_options = {}
         if child_channel is not None:
@@ -1098,6 +1100,8 @@ def _run_chain_once_impl(chain_path, plan, probes, night_dir, claim_descriptor,
             first_signal = None
 
         next_census = time.monotonic()
+        hid_observed = False
+        s1_observations = _s1_observation_enabled(plan)
         while process.poll() is None or awaiting_start:
             if awaiting_start:
                 if deadline.expired():
@@ -1137,6 +1141,12 @@ def _run_chain_once_impl(chain_path, plan, probes, night_dir, claim_descriptor,
                 if process.poll() is not None:
                     break
             now = time.monotonic()
+            if claimed and not hid_observed and s1_observations:
+                def hid_operation():
+                    from scripts.produce_t0_rehearsal_bundle import observe_hid
+                    return observe_hid(night_dir)
+                _qualification_observe(night_dir, "hid", hid_operation)
+                hid_observed = True
             # Three checks, because the two calls between them can each block
             # without bound: the census probe and the census append. The
             # watchdog thread covers a block that never returns at all; these
@@ -1354,7 +1364,17 @@ def _durable_record(custody_root: Path, night_dir: Path, plan: NightPlan) -> str
         )
         destination = clone / "docs" / "process_traces" / "night-results" / plan.plan_id
         destination.mkdir(parents=True, exist_ok=True)
+        allow_raw_logs = False
+        if plan.receipt_class == "TRANSACTION_PACK":
+            allow_raw_logs = (night_gate._authenticate_pack_records(plan)["authorization_record"]["purpose"]
+                              == "CAMPAIGN_TRANSACTION")
+        # A reused results clone must not retain logs from an earlier publish.
+        if not allow_raw_logs:
+            for name in ("chain.stdout.log", "chain.stderr.log"):
+                (destination / name).unlink(missing_ok=True)
         for artifact in _artifact_list(custody_root, night_dir):
+            if not allow_raw_logs and Path(artifact["path"]).name in {"chain.stdout.log", "chain.stderr.log"}:
+                continue
             if "error" in artifact:
                 omitted.append(f"{artifact['path']} ({artifact['error']})")
                 continue
@@ -2253,6 +2273,63 @@ def _author_pack_arm(plan: NightPlan, prepared):
         raise PackNightRefusal("arm_receipt.sha256")
     _pack_no_retry(plan, boot, path)
     return {"path": path, "arm": arm, "sha256": result["receipt_sha256"], "authored": authored}
+
+
+def arm_only(context_path: Path) -> dict[str, Any]:
+    """Author and verify one ARM, then persist a GO-less no-launch record."""
+    from scripts.check_v5_arm_abort import context_at, absence
+    context, plan, prepared = context_at(context_path)
+    custody = Path(plan.custody_root)
+    night = custody / "night"
+    night.mkdir(parents=True, exist_ok=True)
+    output = night / "arm-only.json"
+    if output.exists() or _existing_record(night, plan) is not None:
+        raise PackNightRefusal("arm-only custody already used")
+    absence(plan, context["arm_context"])
+    input_path = custody / plan.pack_night["pack_id"] / "arm_readiness.t0.inputs/arm-context.json"
+    input_path.parent.mkdir(parents=True, exist_ok=True)
+    if input_path.exists():
+        if _pack_object(input_path, "arm_context") != context["arm_context"]:
+            raise PackNightRefusal("arm-only native context mismatch")
+    else:
+        _write_bytes_exclusive(input_path, readiness.render_json(context["arm_context"]))
+    _admit_qualification_control_order(plan, context)
+    budget = _derivation_start_budget(plan)
+    _admit_network_time_off(plan, night,
+        during_settle=lambda: _admit_qualification_clean_dwell(plan, night, budget), budget=budget)
+    state = _author_pack_arm(plan, prepared)
+    if state["arm"]["arm_context"] != context["arm_context"]:
+        raise PackNightRefusal("arm-only authored context mismatch")
+    record = {"schema_version": "joulewise.v5_arm_only_record.v1",
+              "occurrence": context["occurrence"], "plan_id": plan.plan_id,
+              "context": {"path": str(context_path), "sha256": _sha256_path(context_path)},
+              "arm_receipt": {"path": str(state["path"]), "sha256": state["sha256"]},
+              "status": "PASS", "mode": "ARM_ONLY_NO_LAUNCH", "go_receipt": None,
+              "absence": absence(plan, context["arm_context"])}
+    _write_bytes_exclusive(output, readiness.render_json(record))
+    return record
+
+
+def _qualification_observe(night, producer, operation):
+    """Observation failures never become driver refusals or change chain rc."""
+    try:
+        return operation()
+    except BaseException:
+        try:
+            t0_rehearsal.append_observation(night / "producer-faults.jsonl", {
+                "schema_version": "joulewise.v5_qualification_producer_fault.v1",
+                "producer": producer, "status": "REFUSED"})
+        except BaseException:
+            pass
+        return None
+
+
+def _s1_observation_enabled(plan):
+    try:
+        return (plan.receipt_class == "TRANSACTION_PACK" and night_gate.chain_literal(
+            Path(plan.chain_path).read_text(), "V5_QUALIFICATION_OCCURRENCE") == "s1")
+    except Exception:
+        return False
 
 
 def _pack_launch_references(plan: NightPlan, arm):
@@ -3543,6 +3620,58 @@ def _admit_derivation_clean_dwell(plan, night_dir, budget):
         raise ValueError("derivation start deadline exceeded after clean dwell")
 
 
+def _admit_qualification_clean_dwell(plan, night_dir, budget):
+    """Bind the native T-0 wait; never repeat its ten-minute dwell.
+
+    The author subsequently replays the same capture with _prewindow_capture,
+    including the continuous-idle/READY predicate and frozen command. This
+    adapter adds block-4's total cap and latest-start budget only.
+    """
+    inputs = Path(plan.custody_root) / plan.pack_night["pack_id"] / "arm_readiness.t0.inputs"
+    path = inputs / "prewindow-check.json"
+    capture = _pack_object(path, "qualification_clean_dwell")
+    manifest = _pack_object(inputs / "launch-manifest.json", "qualification_launch_manifest")
+    elapsed = capture["finished_monotonic_ns"] - capture["started_monotonic_ns"]
+    if (capture.get("step_id") != "prewindow-check" or capture.get("exit_code") != 0
+            or capture.get("boot_session_id") != readiness._current_boot_session_id()
+            or capture.get("argv") != manifest.get("prewindow_command")
+            or not 600_000_000_000 <= elapsed <= 2_700_000_000_000
+            or _derivation_budget_remaining(budget) <= 0):
+        raise PackNightRefusal("qualification clean dwell cap or start budget")
+    _write_bytes_exclusive(night_dir / "clean_dwell.json", readiness.render_json({
+        "schema": "joulewise.v5_qualification_clean_dwell.v1", "plan_id": plan.plan_id,
+        "source": {"path": str(path), "sha256": _sha256_path(path)},
+        "required_clean_dwell_s": 600, "timeout_s": 2700,
+        "reused_native_t0_capture": True, "budget": budget}))
+
+
+def _admit_qualification_control_order(plan, record):
+    """Check prior controls against the actual fresh T-0/dwell captures."""
+    from scripts.check_v5_arm_abort import ABSENCE_KEYS, CONTROL_SCHEMA
+    occurrence = record["occurrence"]
+    if occurrence == "a1":
+        return
+    if occurrence not in {"a2", "s1"}:
+        raise PackNightRefusal("qualification occurrence")
+    boot = readiness._current_boot_session_id()
+    inputs = Path(plan.custody_root) / plan.pack_night["pack_id"] / "arm_readiness.t0.inputs"
+    captures = [_pack_object(inputs / name, "qualification_t0_capture") for name in t0_author._CAPTURE_FILES.values()]
+    if any(type(capture.get("started_monotonic_ns")) is not int
+           or capture.get("boot_session_id") != boot for capture in captures):
+        raise PackNightRefusal("qualification T-0 capture boundary")
+    first = min(capture["started_monotonic_ns"] for capture in captures)
+    for label in (("a1",) if occurrence == "a2" else ("a1", "a2")):
+        reference = record["prerequisites"][label + "_control"]
+        control = _pack_object(Path(reference["path"]), "qualification_prior_control", reference["sha256"])
+        if (control.get("schema_version") != CONTROL_SCHEMA or control.get("occurrence") != label
+                or control.get("verdict") != "PASS" or control.get("refusal_reason_code") != "readiness_record_expired"
+                or control.get("boot_session_id") != boot or type(control.get("checked_monotonic_ns")) is not int
+                or not control["checked_monotonic_ns"] < first
+                or set(control.get("absence", {})) != ABSENCE_KEYS
+                or any(value is not True for value in control["absence"].values())):
+            raise PackNightRefusal("qualification prior expiry must precede actual T-0/dwell")
+
+
 def run_night(
     plan_path: Path,
     *,
@@ -3654,6 +3783,14 @@ def run_night(
             if rehearsal:
                 raise PackNightRefusal("receipt_class: rehearsal flag requires REHEARSAL_STUB")
             prepared = _prepare_pack_night(plan, plan_path, plan_raw)
+            if prepared["authorization_record"]["purpose"] == "G2B_SHAKEDOWN" and _s1_observation_enabled(plan):
+                qualification = _pack_object(custody_root / "qualification-plan-record.json", "qualification_plan_record")
+                if qualification.get("head") != plan.repo_head or qualification["plan"]["sha256"] != _sha256_path(plan_path):
+                    raise PackNightRefusal("qualification plan record binding")
+                _admit_qualification_control_order(plan, qualification)
+                budget = _derivation_start_budget(plan)
+                _admit_network_time_off(plan, night_dir,
+                    during_settle=lambda: _admit_qualification_clean_dwell(plan, night_dir, budget), budget=budget)
             arm_state = _author_pack_arm(plan, prepared)
             receipt = evaluate_night(plan, probes, pack_arm_receipt=arm_state["path"])
         except (OSError, ValueError, RuntimeError, KeyError, TypeError) as error:
@@ -3840,6 +3977,12 @@ def run_night(
                if plan.quiet_admission is not None else {}),
         )
     )
+
+    if is_pack and prepared["authorization_record"]["purpose"] == "G2B_SHAKEDOWN":
+        def lifecycle_operation():
+            from scripts.produce_t0_rehearsal_bundle import observe_s1_lifecycle
+            return observe_s1_lifecycle(plan)
+        _qualification_observe(night_dir, "lifecycle", lifecycle_operation)
 
     report = {
         "facts": {"plan_id": plan.plan_id, "receipt_class": plan.receipt_class,
@@ -4645,11 +4788,22 @@ def build_parser() -> argparse.ArgumentParser:
     control.add_argument("--plan", required=True, type=Path)
     control.add_argument("--rehearsal-receipt", required=True, type=Path)
     control.add_argument("--rehearsal-go", required=True, type=Path)
+    arm_control = subcommands.add_parser("arm-only")
+    arm_control.add_argument("--context", required=True, type=Path)
     return parser
 
 
 def _main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if args.command == "arm-only":
+        try:
+            record = arm_only(args.context)
+        except (OSError, ValueError, RuntimeError, KeyError, TypeError):
+            sys.stdout.buffer.write(readiness.render_json({"status": "REFUSED", "reason_code": "arm_only_invalid"}))
+            return EXIT_REFUSED
+        sys.stdout.buffer.write(readiness.render_json({"status": "PASS", "occurrence": record["occurrence"],
+            "arm_receipt": record["arm_receipt"]}))
+        return 0
     if args.command == "_bind-worker":
         return _bind_worker(args.kind, args.job_id, args.result_fd, args.request)
     if args.command == "_probe-worker":
@@ -4699,15 +4853,34 @@ def main(argv: list[str] | None = None) -> int:
     # This selects observation custody only; it cannot select replay inputs.
     journal = os.environ.get("JOULEWISE_REHEARSAL_PROCESS_JOURNAL")
     if journal is None:
-        return _main(argv)
+        arguments = sys.argv[1:] if argv is None else argv
+        # Observation routing only; authority is authenticated by the driver.
+        # Its first machine/command probe remains the agent census.
+        if arguments and arguments[0] == "run" and "--plan" in arguments:
+            try:
+                plan = _load_plan(Path(arguments[arguments.index("--plan") + 1]))
+                if _s1_observation_enabled(plan):
+                    night = Path(plan.custody_root) / "night"
+                    night.mkdir(parents=True, exist_ok=True)
+                    journal = str(night / "process-observations.jsonl")
+            except Exception:
+                pass
+        if journal is None:
+            return _main(argv)
     path = Path(journal)
     if (not path.is_absolute() or path.name != "process-observations.jsonl"
             or path.parent.name != "night"
-            or not path.parent.parent.name.startswith(t0_rehearsal.REHEARSAL_WINDOW_PREFIX)
             or any(p.is_symlink() for p in (path, *path.parents))):
-        raise ValueError("invalid rehearsal observation custody")
-    with t0_rehearsal.process_journal(path):
         return _main(argv)
+    context = t0_rehearsal.process_journal(path, observe_only=True)
+    entered = False
+    try:
+        _qualification_observe(path.parent, "process_journal_open", lambda: context.__enter__())
+        entered = t0_rehearsal._PROCESS_JOURNAL.get() is not None
+        return _main(argv)
+    finally:
+        if entered:
+            _qualification_observe(path.parent, "process_journal_close", lambda: context.__exit__(None, None, None))
 
 
 if __name__ == "__main__":

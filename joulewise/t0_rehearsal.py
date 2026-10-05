@@ -1,4 +1,4 @@
-"""Mechanical judgment for the ruled zero-operator T-0 rehearsal.
+"""Mechanical judgment for historical T-0 rehearsal and s1 qualification.
 
 A *rehearsal evidence bundle* is an immutable set of custodied artifacts plus
 their already-parsed values.  This module performs no collection and launches
@@ -8,6 +8,9 @@ ten-gate table and returns ``PASS``, ``FAIL``, or ``UNRULED`` with the evidence
 it used.  ``compose_overall_verdict`` is the sole composition rule: one FAIL
 makes the rehearsal FAIL; otherwise any UNRULED makes it INCOMPLETE; only ten
 PASS results can make it PASS.
+
+``evaluate_qualification`` uses the ruling-76 eight-gate subset and records
+G6/G7 as NOT_APPLICABLE. It does not change the historical verdict wire format.
 
 The terms used below are mechanical.  A *custody document* is a canonical JSON
 artifact found under the declared T-0 namespace.  A *RAW anchor* is
@@ -50,10 +53,13 @@ REHEARSAL_WINDOW_PREFIX = "rehearsal-t0-unattended-"
 G7_CONTROL_SCHEMA = "joulewise.pack_night_g7_control.v1"
 
 EXECUTION_SCHEMA = "joulewise.t0_unattended_execution_record.v1"
+QUALIFICATION_EXECUTION_SCHEMA = "joulewise.v5_qualification_execution_record.v1"
+QUALIFICATION_STAGE_SCHEMA = "joulewise.v5_qualification_lifecycle_stage.v1"
 D149_SCHEMA = "joulewise.t0_unattended_d149_go_receipt.v1"
 REHEARSAL_RECEIPT_SCHEMA = "joulewise.t0_unattended_rehearsal_receipt.v1"
 PROCESS_LINEAGE_SCHEMA = "joulewise.t0_unattended_process_lineage.v1"
 LIFECYCLE_SCHEMA = "joulewise.t0_unattended_lifecycle.v1"
+QUALIFICATION_LIFECYCLE_SCHEMA = "joulewise.v5_qualification_lifecycle.v1"
 FALSIFIER_SCHEMA = "joulewise.t0_unattended_falsifier_controls.v1"
 POSITIVE_CONTROL_SCHEMA = "joulewise.t0_unattended_anchor_positive_control.v1"
 
@@ -176,8 +182,9 @@ def append_observation(path: Path, value: Mapping[str, Any]) -> None:
 
 class _ProcessJournal:
     """A capped queue keeps custody I/O off the process supervision seams."""
-    def __init__(self, path):
+    def __init__(self, path, *, observe_only=False):
         self.path = Path(path)
+        self.observe_only = observe_only
         self.journal_id = str(uuid.uuid4())
         self.pending = queue.Queue(maxsize=1024)
         self.count = 0
@@ -216,15 +223,23 @@ class _ProcessJournal:
             self.error = "process observation queue overflow"
         self.writer.join(timeout=2)
         if self.writer.is_alive() or self.error is not None:
-            raise ValueError("process observation journal incomplete: " + (self.error or "drain timed out"))
+            if not self.observe_only:
+                raise ValueError("process observation journal incomplete: " + (self.error or "drain timed out"))
+            # Missing seal is itself fail-closed evidence even if this write fails.
+            try:
+                append_observation(self.path.with_name("producer-faults.jsonl"), {
+                    "schema_version": "joulewise.v5_qualification_producer_fault.v1",
+                    "producer": "process_journal", "status": "REFUSED"})
+            except Exception:
+                pass
 
 
 @contextmanager
-def process_journal(path: Path):
-    journal = _ProcessJournal(path)
+def process_journal(path: Path, *, observe_only=False):
+    journal = _ProcessJournal(path, observe_only=observe_only)
     token = _PROCESS_JOURNAL.set(journal)
     try:
-        yield
+        yield journal
     finally:
         _PROCESS_JOURNAL.reset(token)
         journal.close()
@@ -239,36 +254,67 @@ class ObservedProcess(subprocess.Popen):
     def __init__(self, args, **kwargs):
         self._journal = _PROCESS_JOURNAL.get()
         self._exit_recorded = False
-        self._timed_out = None
+        self._timed_out = False
         self._command = list(args) if not isinstance(args, str) else [args]
         self._spawned_ns = time.monotonic_ns()
         self._fd0 = "unobserved"
         descriptor = None
         if self._journal is not None and kwargs.get("stdin") == subprocess.DEVNULL:
-            descriptor = os.open(os.devnull, os.O_RDONLY)
-            actual, expected = os.fstat(descriptor), os.stat(os.devnull)
-            if (stat.S_ISCHR(actual.st_mode) and
-                    (actual.st_dev, actual.st_ino, actual.st_rdev) ==
-                    (expected.st_dev, expected.st_ino, expected.st_rdev)):
-                self._fd0 = "/dev/null"
-            kwargs["stdin"] = descriptor
+            try:
+                descriptor = os.open(os.devnull, os.O_RDONLY)
+                actual, expected = os.fstat(descriptor), os.stat(os.devnull)
+                if (stat.S_ISCHR(actual.st_mode) and
+                        (actual.st_dev, actual.st_ino, actual.st_rdev) ==
+                        (expected.st_dev, expected.st_ino, expected.st_rdev)):
+                    self._fd0 = "/dev/null"
+                kwargs["stdin"] = descriptor
+            except BaseException:
+                if not self._journal.observe_only:
+                    raise
+                self._journal.error = "fd0 observation fault"
         try:
             super().__init__(args, **kwargs)
         finally:
             if descriptor is not None:
-                os.close(descriptor)
+                try:
+                    os.close(descriptor)
+                except BaseException:
+                    if not self._journal.observe_only:
+                        raise
+                    self._journal.error = "fd0 observation close fault"
         self._event("spawn", None)
 
     def _event(self, event, exit_code):
         if self._journal is not None:
-            self._journal.emit({
-                "schema_version": PROCESS_EVENT_SCHEMA, "event": event,
-                "pid": self.pid, "argv": self._command,
-                "stdin_fd0_target": self._fd0, "exit_code": exit_code,
-                "timed_out": self._timed_out,
-                "monotonic_ns": time.monotonic_ns(),
-                "spawned_monotonic_ns": self._spawned_ns,
-            })
+            try:
+                value = {
+                    "schema_version": PROCESS_EVENT_SCHEMA, "event": event,
+                    "pid": self.pid, "argv": self._command,
+                    "stdin_fd0_target": self._fd0, "exit_code": exit_code,
+                    "timed_out": self._timed_out,
+                    "monotonic_ns": time.monotonic_ns(),
+                    "spawned_monotonic_ns": self._spawned_ns,
+                }
+                self._journal.emit(value)
+            except BaseException:
+                if not self._journal.observe_only:
+                    raise
+                self._journal.error = "process event producer fault"
+
+    def communicate(self, *args, **kwargs):
+        stdout, stderr = super().communicate(*args, **kwargs)
+        from joulewise.night_gate import AGENT_CENSUS_ARGV
+        if self._journal is not None and tuple(self._command) == AGENT_CENSUS_ARGV:
+            try:
+                self._journal.emit({"schema_version": PROCESS_EVENT_SCHEMA,
+                    "event": "output", "pid": self.pid, "argv": self._command,
+                    "spawned_monotonic_ns": self._spawned_ns,
+                    "stdout": stdout.decode() if isinstance(stdout, bytes) else stdout})
+            except BaseException:
+                if not self._journal.observe_only:
+                    raise
+                self._journal.error = "process output producer fault"
+        return stdout, stderr
 
     def _observe_exit(self, code):
         if code is not None and not self._exit_recorded:
@@ -625,30 +671,42 @@ def evaluate_g1(bundle: EvidenceBundle) -> GateResult:
         )
     if error is not None or value is None:
         return _result("G1", name, GateStatus.FAIL, error or "invalid execution record", artifact.citation())
-    if set(value) != _EXECUTION_KEYS or value.get("schema_version") != EXECUTION_SCHEMA:
+    qualified = value.get("schema_version") == QUALIFICATION_EXECUTION_SCHEMA
+    if set(value) != _EXECUTION_KEYS or value.get("schema_version") not in {EXECUTION_SCHEMA, QUALIFICATION_EXECUTION_SCHEMA}:
         return _result("G1", name, GateStatus.FAIL, "execution record schema is invalid", artifact.citation())
     processes = value.get("processes")
     if not isinstance(processes, list) or not processes:
         return _result("G1", name, GateStatus.FAIL, "execution record has no governed process census", artifact.citation())
     top_levels = 0
     for index, process in enumerate(processes):
-        if not isinstance(process, Mapping) or set(process) != _EXECUTION_PROCESS_KEYS:
+        keys = ((_EXECUTION_PROCESS_KEYS - {"prompt_count", "eof_refusal"}) |
+                {"expected_outcome", "stdout"}) if qualified else _EXECUTION_PROCESS_KEYS
+        if not isinstance(process, Mapping) or set(process) != keys:
             return _result("G1", name, GateStatus.FAIL, f"governed process {index} record is malformed", artifact.citation())
         if process.get("role") == "top_level":
             top_levels += 1
         if process.get("stdin_fd0_target") != "/dev/null":
             return _result("G1", name, GateStatus.FAIL, f"governed process {index} stdin was not bound to /dev/null", artifact.citation())
-        if process.get("state") != "EXITED" or process.get("exit_code") != 0:
+        from joulewise.night_gate import AGENT_CENSUS_ARGV
+        census = qualified and process.get("argv") == list(AGENT_CENSUS_ARGV)
+        expected = {"exit_code": 1, "stdout": ""} if census else {"exit_code": 0}
+        if qualified and process.get("expected_outcome") != expected:
+            return _result("G1", name, GateStatus.FAIL, f"governed process {index} expected outcome is not registered", artifact.citation())
+        if (process.get("state") != "EXITED" or qualified and type(process.get("exit_code")) is not int
+                or process.get("exit_code") != expected["exit_code"]
+                or census and process.get("stdout") != ""):
             return _result("G1", name, GateStatus.FAIL, f"governed process {index} did not complete successfully", artifact.citation())
-        if process.get("prompt_count") != 0:
+        if not qualified and process.get("prompt_count") != 0:
             return _result("G1", name, GateStatus.FAIL, f"governed process {index} recorded a surviving prompt", artifact.citation())
-        if process.get("eof_refusal") is not False:
+        if not qualified and process.get("eof_refusal") is not False:
             return _result("G1", name, GateStatus.FAIL, f"governed process {index} recorded an EOF refusal", artifact.citation())
         if process.get("timed_out") is not False:
             return _result("G1", name, GateStatus.FAIL, f"governed process {index} hung or timed out", artifact.citation())
     if top_levels != 1 or value.get("sequence_completed") is not True:
         return _result("G1", name, GateStatus.FAIL, "top-level T-0 sequence did not record one complete execution", artifact.citation())
-    return _result("G1", name, GateStatus.PASS, "top-level and all governed processes completed with fd 0 at /dev/null and no prompt, EOF refusal, or hang", artifact.citation())
+    message = ("all governed processes met registered outcomes with fd 0 at /dev/null, no timeout and a complete sequence"
+               if qualified else "top-level and all governed processes completed with fd 0 at /dev/null and no prompt, EOF refusal, or hang")
+    return _result("G1", name, GateStatus.PASS, message, artifact.citation())
 
 
 def evaluate_g2(bundle: EvidenceBundle) -> GateResult:
@@ -1163,7 +1221,8 @@ def evaluate_g9(bundle: EvidenceBundle) -> GateResult:
         return _result("G9", name, GateStatus.FAIL, error or "lifecycle record is absent")
     evidence = [artifact.citation()]
     try:
-        if set(value) != _LIFECYCLE_KEYS or value.get("schema_version") != LIFECYCLE_SCHEMA:
+        qualified = value.get("schema_version") == QUALIFICATION_LIFECYCLE_SCHEMA
+        if set(value) != _LIFECYCLE_KEYS or value.get("schema_version") not in {LIFECYCLE_SCHEMA, QUALIFICATION_LIFECYCLE_SCHEMA}:
             raise ValueError("lifecycle record schema is invalid")
         stages = value.get("stages")
         if not isinstance(stages, list) or [stage.get("stage_id") if isinstance(stage, Mapping) else None for stage in stages] != list(_LIFECYCLE_STAGES):
@@ -1177,7 +1236,9 @@ def evaluate_g9(bundle: EvidenceBundle) -> GateResult:
             used = _verify_artifact_reference(bundle, stage.get("evidence"), label=f"lifecycle {stage_id}")
             evidence.append(used.citation())
             facts = used.value
-            if isinstance(facts, Mapping) and facts.get("schema_version") == "joulewise.t0_rehearsal_lifecycle_stage.v1":
+            if qualified and (not isinstance(facts, Mapping) or facts.get("schema_version") != QUALIFICATION_STAGE_SCHEMA):
+                raise ValueError("qualification stage lacks observed s1 evidence")
+            if isinstance(facts, Mapping) and facts.get("schema_version") in {"joulewise.t0_rehearsal_lifecycle_stage.v1", QUALIFICATION_STAGE_SCHEMA}:
                 if facts.get("stage_id") != stage_id:
                     raise ValueError("lifecycle producer stage was swapped")
                 if stage_id in {"launch", "capability_consumption"}:
@@ -1191,7 +1252,27 @@ def evaluate_g9(bundle: EvidenceBundle) -> GateResult:
                         raise ValueError("launch source lacks observed pid/time")
                     if stage_id == "capability_consumption" and not source.path.name.endswith(".consumed.json"):
                         raise ValueError("capability source is not a retained consumption")
-                if stage_id in {"capture", "close_out"}:
+                if qualified and stage_id == "capture":
+                    refs = facts.get("artifacts")
+                    raw_refs = facts.get("sampler_artifacts")
+                    if not isinstance(refs, list) or not refs or not isinstance(raw_refs, list) or not raw_refs:
+                        raise ValueError("s1 capture lacks metadata and sampler artifacts")
+                    for ref in refs:
+                        used_capture = _verify_artifact_reference(bundle, ref, label="s1 capture")
+                        if used_capture.path.name != "metadata.json" or not isinstance(used_capture.value, Mapping):
+                            raise ValueError("s1 capture is not retained metadata")
+                        evidence.append(used_capture.citation())
+                    for ref in raw_refs:
+                        used_raw = _verify_artifact_reference(bundle, ref, label="s1 sampler")
+                        if used_raw.path.name != "powermetrics.raw.txt" or not used_raw.raw:
+                            raise ValueError("s1 sampler witness is absent")
+                        evidence.append(used_raw.citation())
+                if qualified and stage_id == "close_out":
+                    # The governed G2-b stop has no close-out counterpart.
+                    # Do not silently choose launch completion or reinterpret
+                    # physical_ahead. The lead must rule the mapping first.
+                    raise ValueError("s1 close-out counterpart has not been ruled")
+                if not qualified and stage_id in {"capture", "close_out"}:
                     references = facts.get("artifacts" if stage_id == "capture" else "sources")
                     if not isinstance(references, list) or len(references) != 2:
                         raise ValueError(f"{stage_id} lacks both activity artifacts")
@@ -1239,7 +1320,7 @@ def evaluate_g9(bundle: EvidenceBundle) -> GateResult:
         producer_stages = [bundle.artifact(stage["evidence"]["path"]) if not Path(stage["evidence"]["path"]).is_absolute()
                            else _artifact_for_path(bundle, stage["evidence"]["path"]) for stage in stages]
         observed = [item.value for item in producer_stages if item is not None and isinstance(item.value, Mapping)
-                    and item.value.get("schema_version") == "joulewise.t0_rehearsal_lifecycle_stage.v1"]
+                    and item.value.get("schema_version") in {"joulewise.t0_rehearsal_lifecycle_stage.v1", QUALIFICATION_STAGE_SCHEMA}]
         if observed:
             if len(observed) != len(_LIFECYCLE_STAGES):
                 raise ValueError("mixed lifecycle producer and fixture evidence")
@@ -1496,6 +1577,40 @@ def evaluate_rehearsal(bundle: EvidenceBundle) -> dict[str, object]:
     }
 
 
+def evaluate_qualification(bundle: EvidenceBundle, *, purpose="G2B_SHAKEDOWN") -> dict[str, object]:
+    """Ruling 76 subset, with retired gates recorded explicitly, never PASS.
+
+    The historical ten-gate entry point and its wire format are unchanged.
+    """
+    if purpose != "G2B_SHAKEDOWN":
+        raise ValueError("qualification requires G2B_SHAKEDOWN")
+    go = bundle.record("d149_go")
+    if (go is None or not isinstance(go.value, Mapping)
+            or go.value.get("purpose") != purpose
+            or go.value.get("authorization", {}).get("claim_eligible") is not False):
+        raise ValueError("qualification GO purpose/claim binding")
+    rows, live = [], []
+    for index, evaluator in enumerate(GATE_EVALUATORS, 1):
+        if index in (6, 7):
+            rows.append({"gate_id": f"G{index}", "name": "RETIRED LIVE GATE",
+                         "status": "NOT_APPLICABLE", "basis": "retired_by_ruling_76"})
+        else:
+            result = evaluator(bundle)
+            required_schema = {1: ("execution", QUALIFICATION_EXECUTION_SCHEMA),
+                               9: ("lifecycle", QUALIFICATION_LIFECYCLE_SCHEMA)}.get(index)
+            if required_schema:
+                record = bundle.record(required_schema[0])
+                if record is None or not isinstance(record.value, Mapping) or record.value.get("schema_version") != required_schema[1]:
+                    result = _result(f"G{index}", result.name, GateStatus.FAIL, "s1 qualification observation schema required")
+            live.append(result.status)
+            rows.append(result.to_dict())
+    return {"schema_version": "joulewise.v5_s1_qualification_verdict.v1",
+            "purpose": purpose, "overall_verdict": compose_overall_verdict(live).value,
+            "gate_counts": {status: sum(row["status"] == status for row in rows)
+                            for status in ("PASS", "FAIL", "UNRULED", "NOT_APPLICABLE")},
+            "gates": rows, "load_issues": list(bundle.load_issues)}
+
+
 __all__ = [
     "D149_SCHEMA",
     "EXECUTION_SCHEMA",
@@ -1507,6 +1622,9 @@ __all__ = [
     "GateResult",
     "GateStatus",
     "LIFECYCLE_SCHEMA",
+    "QUALIFICATION_EXECUTION_SCHEMA",
+    "QUALIFICATION_LIFECYCLE_SCHEMA",
+    "QUALIFICATION_STAGE_SCHEMA",
     "OverallVerdict",
     "POSITIVE_CONTROL_SCHEMA",
     "PROCESS_LINEAGE_SCHEMA",
@@ -1526,5 +1644,6 @@ __all__ = [
     "evaluate_g9",
     "evaluate_g10",
     "evaluate_rehearsal",
+    "evaluate_qualification",
     "parse_hid_idle_time",
 ]
