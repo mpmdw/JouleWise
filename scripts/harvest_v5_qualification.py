@@ -56,8 +56,9 @@ def harvest(args, *, now=None, clear=q.group_clear, load=load_qualification):
     q.authenticate_attempt_record(structural, Path(plan.block_archive_root))
     if structural.get("plan") != q.reference(args.plan):
         raise q.HarvestRefusal("qualification_structural_attempt_mismatch")
-    history = q.attempt_history(structural, plan.block_archive_root, current_harvest=structural_path)
-    admission_abort = q.is_admission_abort(structural)
+    history = q.checked_history(structural, plan, replay=True)
+    counted_structural = q.counted_attempt(structural, structural_path)
+    admission_abort = q.is_admission_abort(counted_structural)
     sources = {"night-custody": custody, "chain": Path(plan.chain_path),
                "chain-sidecar": Path(plan.chain_sha256_path)}
     sources["structural-harvest"] = structural_path
@@ -87,7 +88,7 @@ def harvest(args, *, now=None, clear=q.group_clear, load=load_qualification):
             if not q.battery_boundaries(boundary, args.battery_evidence_sha256, plan.plan_id, plan_path=args.plan.absolute()):
                 causes.append("battery_boundary_not_passed")
             record.update(verdict="RECOVER", cause_codes=causes, cause_classes=["instrument_physics"],
-                          admission_abort=structural["admission_abort"],
+                          admission_abort=counted_structural["admission_abort"],
                           recovery_classification="admission_abort" if len(causes) == 1 else "admission_abort_with_other_recover_cause")
         else:
             if (custody / "night/producer-faults.jsonl").exists():

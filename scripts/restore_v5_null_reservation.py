@@ -116,7 +116,7 @@ def restore(plan_reference, harvest_reference, seed_reference, *, output):
     plan = q.load_plan(plan_path, "G2B_SHAKEDOWN")
     harvest_path = q.authenticated_reference(harvest_reference)
     harvest = q.read(harvest_path)
-    require_null(harvest, plan, plan_reference["sha256"])
+    require_null(q.counted_attempt(harvest, harvest_path), plan, plan_reference["sha256"])
     if harvest_path != Path(plan.block_archive_root) / "attempts" / plan.plan_id / "harvest.json":
         raise q.HarvestRefusal("null_restore_harvest_not_counted_attempt")
     q.authenticate_attempt_record(harvest, Path(plan.block_archive_root))
@@ -135,16 +135,18 @@ def restore(plan_reference, harvest_reference, seed_reference, *, output):
     with ledger.CalibrationWriterLease(live):
         attempted, pin_raw = regular_bytes(live, "jsonl"), regular_bytes(pin_path, "json")
         validate_tail(seed, attempted, readiness.parse_json_bytes(pin_raw), row)
-        require_null(harvest, plan, plan_reference["sha256"])
+        require_null(q.counted_attempt(harvest, harvest_path), plan, plan_reference["sha256"])
         # Preserve attempted bytes before any mutation. Each output is create-once.
         saved = custody / "null-reservation-ledger.jsonl"
-        if Path(output).exists() or Path(output).is_symlink() or saved.exists() or saved.is_symlink():
+        saved_pin = custody / "null-reservation-head-pin.json"
+        if any(path.exists() or path.is_symlink() for path in (Path(output), saved, saved_pin)):
             raise q.HarvestRefusal("null_restore_custody_exists")
-        with saved.open("xb") as stream:
-            os.chmod(saved, 0o600)
-            stream.write(attempted)
-            stream.flush()
-            os.fsync(stream.fileno())
+        for path, raw in ((saved, attempted), (saved_pin, pin_raw)):
+            with path.open("xb") as stream:
+                os.chmod(path, 0o600)
+                stream.write(raw)
+                stream.flush()
+                os.fsync(stream.fileno())
         ledger._fsync_parent_directory(custody)
         pin_ref = q.reference(pin_path)
         # Recheck byte identity under the lease immediately before truncation.
@@ -162,6 +164,7 @@ def restore(plan_reference, harvest_reference, seed_reference, *, output):
                   "harvest": harvest_reference, "seed": seed_reference,
                   "reservation": q.reference(capture_path), "attempt_ledger": q.reference(saved),
                   "restored_ledger": q.reference(live), "head_pin": pin_ref,
+                  "head_pin_copy": q.reference(saved_pin),
                   "dropped_receipt_sha256": row["receipt_digest"]}
         with Path(output).open("xb") as stream:
             os.chmod(output, 0o600)
@@ -176,12 +179,13 @@ def verify_restore(reference, previous_harvest, *, restored_ledger=None):
     """Replay saved attempted bytes and bind the next attempt to its NULL prior."""
     record = q.read(q.authenticated_reference(reference))
     expected = {"schema", "plan_id", "plan", "harvest", "seed", "reservation", "attempt_ledger",
-                "restored_ledger", "head_pin", "dropped_receipt_sha256"}
+                "restored_ledger", "head_pin", "head_pin_copy", "dropped_receipt_sha256"}
     if set(record) != expected or record["schema"] != SCHEMA or record["harvest"] != previous_harvest:
         raise q.HarvestRefusal("null_restore_record_identity_mismatch")
     plan_path = q.authenticated_reference(record["plan"])
     plan = night_gate.NightPlan.from_mapping(q.read(plan_path))
-    harvest = q.read(q.authenticated_reference(record["harvest"]))
+    harvest_path = q.authenticated_reference(record["harvest"])
+    harvest = q.counted_attempt(q.read(harvest_path), harvest_path)
     require_null(harvest, plan, record["plan"]["sha256"])
     if record["plan_id"] != plan.plan_id or Path(reference["path"]) != Path(plan.custody_root) / "null-reservation-restore.json":
         raise q.HarvestRefusal("null_restore_record_identity_mismatch")
@@ -194,8 +198,12 @@ def verify_restore(reference, previous_harvest, *, restored_ledger=None):
     capture = q.read(q.authenticated_reference(record["reservation"]))
     row = readiness.parse_json_bytes(capture["stdout"].encode())["receipt"]
     live, pin = reservation_binding(plan, capture, row)
-    pin_path = q.authenticated_reference(record["head_pin"])
-    if pin != pin_path or record["restored_ledger"] != {"path": str(live), "sha256": record["seed"]["sha256"]}:
+    # The live pin may advance after this restore. Authenticate its retained
+    # bytes against the path/digest recorded while the native lease was held.
+    pin_path = q.authenticated_reference(record["head_pin_copy"])
+    if (pin_path != Path(plan.custody_root) / "null-reservation-head-pin.json"
+            or record["head_pin"] != {"path": str(pin), "sha256": record["head_pin_copy"]["sha256"]}
+            or record["restored_ledger"] != {"path": str(live), "sha256": record["seed"]["sha256"]}):
         raise q.HarvestRefusal("null_restore_ledger_binding_mismatch")
     validate_tail(seed, attempted, q.read(pin_path), row)
     if row["receipt_digest"] != record["dropped_receipt_sha256"]:

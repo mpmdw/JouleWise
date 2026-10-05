@@ -211,10 +211,11 @@ def tooling_s2_predecessor(record):
 
 def authenticate_s2_authority(reference, plan_id, previous):
     authority = read(authenticated_reference(reference))
-    prior = tooling_s2_predecessor(read(authenticated_reference(previous)))
+    prior_reference, prior = nearest_counted_predecessor(previous)
+    tooling_s2_predecessor(prior)
     if (authority.get("schema") != "joulewise.v5_qualification_s2_authority.v1"
             or authority.get("new_plan_id") != plan_id or authority.get("lead_approved") is not True
-            or authority.get("s1_harvest") != previous
+            or authority.get("s1_harvest") != prior_reference
             or prior.get("plan_id") == plan_id
             or authority.get("tooling_cause") not in prior["cause_codes"]):
         raise HarvestRefusal("s2_not_authorized_tooling_cure")
@@ -223,7 +224,81 @@ def authenticate_s2_authority(reference, plan_id, previous):
     return authority
 
 
-def attempt_history(current, archive_root, *, current_harvest=None):
+def authenticate_reharvest(record, destination, original, original_path):
+    """Replay the existing source census against both retained source copies."""
+    from scripts.harvest_window import copy_matches
+    destination, original_path = Path(destination), Path(original_path)
+    if (destination.parent != original_path.parent
+            or re.fullmatch(r"reharvest-[1-9][0-9]*", destination.name) is None):
+        raise HarvestRefusal("attempt_reharvest_layout_mismatch")
+    for key in ("schema", "plan", "plan_sha256", "previous_attempt", "block_archive_root", "occurrence", "plan_id"):
+        if original.get(key) != record.get(key):
+            raise HarvestRefusal("attempt_reharvest_identity_mismatch")
+    censuses = []
+    for archive_root in (original_path.parent, destination):
+        manifest = read(archive_root / "withheld/replay-locators.json")
+        if manifest.get("schema") != "joulewise.v5_qualification_replay_locators.v1":
+            raise HarvestRefusal("reharvest_source_census_changed")
+        rows = manifest["sources"]
+        sources, census = {}, {}
+        for row in rows:
+            name = identifier(row["name"])
+            path = archive_root / "withheld/sources" / name
+            if name in sources or row["archived_path"] != str(path):
+                raise HarvestRefusal("reharvest_source_census_changed")
+            sources[name] = path
+            census[name] = {key: row[key] for key in ("original_path", "inventory")}
+        retained = census_sources(sources)
+        for name in sources:
+            if not copy_matches(census[name]["inventory"], retained[name]):
+                raise HarvestRefusal("reharvest_source_bytes_changed")
+        censuses.append(census)
+    if censuses[0].keys() != censuses[1].keys():
+        raise HarvestRefusal("reharvest_source_census_changed")
+    if censuses[0] != censuses[1]:
+        raise HarvestRefusal("reharvest_source_bytes_changed")
+    return record
+
+
+def counted_attempt(record, original_path, *, pending=None):
+    """Keep the chain's original pointer, superseding only REFUSED verdicts."""
+    if record.get("verdict") != "REFUSED":
+        return record
+    original_path = Path(original_path)
+    candidates = {}
+    for path in original_path.parent.glob("reharvest-*/harvest.json"):
+        if re.fullmatch(r"reharvest-[1-9][0-9]*", path.parent.name):
+            candidates[int(path.parent.name.removeprefix("reharvest-"))] = (path.parent, None)
+    if pending is not None:
+        destination, replacement = pending
+        authenticate_reharvest(replacement, destination, record, original_path)
+        candidates[int(Path(destination).name.removeprefix("reharvest-"))] = (destination, replacement)
+    if not candidates:
+        return record
+    destination, replacement = candidates[max(candidates)]
+    if replacement is None:
+        replacement = read(Path(destination) / "harvest.json")
+    return authenticate_reharvest(replacement, destination, record, original_path)
+
+
+def nearest_counted_predecessor(previous):
+    """Resolve NULL links and REFUSED re-harvests without changing pointers."""
+    seen = set()
+    while (path := previous_attempt(previous)) is not None:
+        if path in seen:
+            raise HarvestRefusal("attempt_history_cycle")
+        seen.add(path)
+        original = read(path)
+        if path.parent.name != original.get("plan_id") or path.parent.parent.name != "attempts":
+            raise HarvestRefusal("attempt_archive_layout_mismatch")
+        record = counted_attempt(original, path)
+        if record.get("verdict") != "NULL":
+            return previous, record
+        previous = original["previous_attempt"]
+    raise HarvestRefusal("s2_not_after_named_tooling_recover")
+
+
+def attempt_history(current, archive_root, *, current_harvest=None, reharvest=None):
     """Walk authenticated links and census the complete supplied block root.
 
     The caller must obtain the block root and current pointer from create-once
@@ -231,7 +306,9 @@ def attempt_history(current, archive_root, *, current_harvest=None):
     bindings; the census unit is exactly attempts/*/harvest.json.
 
     Before publication, current_harvest is absent. For replay it is the exact
-    harvest.json being checked. No duplicate/derived harvest is silently ignored.
+    original harvest.json being checked. Re-harvests supply counted verdicts,
+    never another attempt or chain pointer. The optional reharvest tuple holds
+    a pending destination/record after source archiving, before publication.
     """
     root = Path(archive_root)
     if (not root.is_absolute() or not root.is_dir()
@@ -288,32 +365,32 @@ def attempt_history(current, archive_root, *, current_harvest=None):
         raise HarvestRefusal("attempt_history_second_none")
     if found != chain:
         raise HarvestRefusal("attempt_history_orphan_harvest")
-    chronological = list(reversed(records))
+    counted = [counted_attempt(record, root / "attempts" / record["plan_id"] / "harvest.json",
+                               pending=reharvest if index == 0 else None)
+               for index, record in enumerate(records)]
+    chronological = list(reversed(counted))
     s2_count, admission_count = 0, 0
+    prior = None
     for index, record in enumerate(chronological):
         if record["occurrence"] == "s2":
             s2_count += record.get("verdict") != "NULL"
             if s2_count > 1:
                 raise HarvestRefusal("attempt_history_second_s2")
-            if index == 0:
+            if prior is None:
                 raise HarvestRefusal("s2_not_after_named_tooling_recover")
-            tooling_s2_predecessor(chronological[index - 1])
+            tooling_s2_predecessor(prior)
         if is_admission_abort(record):
             admission_count += 1
             if admission_count > 1 and index < len(chronological) - 1:
                 raise HarvestRefusal("same_refusal_twice_consult_required")
-        if index == 0 or record["occurrence"] == "s2":
-            continue
-        prior = chronological[index - 1]
-        if prior.get("verdict") == "NULL":
-            continue
-        if is_admission_abort(prior):
-            continue
-        if (prior.get("verdict") == "RECOVER"
-                and prior.get("recovery_classification") == "recover_no_science"
-                and prior.get("cause_classes") == ["tooling"]):
-            continue
-        raise HarvestRefusal("fresh_s1_predecessor_not_rearmable")
+        if prior is not None and record["occurrence"] == "s1":
+            if not (is_admission_abort(prior)
+                    or prior.get("verdict") == "RECOVER"
+                    and prior.get("recovery_classification") == "recover_no_science"
+                    and prior.get("cause_classes") == ["tooling"]):
+                raise HarvestRefusal("fresh_s1_predecessor_not_rearmable")
+        if record.get("verdict") != "NULL":
+            prior = record
     return {"harvests": [reference(path) for path in sorted(chain)],
             "s2_count": s2_count, "admission_abort_count": admission_count,
             "same_refusal_twice": admission_count > 1}
@@ -351,7 +428,8 @@ def authenticate_attempt_record(record, root):
         plan_record = read(Path(plan.custody_root) / "qualification-plan-record.json")
         authenticate_s2_authority(plan_record.get("s2_authority"), plan.plan_id, plan.previous_attempt)
     qualification = Path(root) / "attempts" / plan.plan_id / "qualification/harvest.json"
-    if record.get("recovery_classification") == "admission_abort" and qualification.is_file():
+    counted = counted_attempt(record, Path(root) / "attempts" / plan.plan_id / "harvest.json")
+    if counted.get("recovery_classification") == "admission_abort" and qualification.is_file():
         other = read(qualification)
         if (other.get("structural_harvest") != reference(Path(root) / "attempts" / plan.plan_id / "harvest.json")
                 or other.get("end_state") is True
@@ -367,7 +445,7 @@ def verify_attempt_restore(plan, *, writer=False):
         if restore_ref is not None:
             raise HarvestRefusal("null_restore_without_null_predecessor")
         return
-    prior = read(previous)
+    prior = counted_attempt(read(previous), previous)
     if prior.get("verdict") != "NULL":
         if restore_ref is not None:
             raise HarvestRefusal("null_restore_without_null_predecessor")
@@ -424,15 +502,17 @@ def attempt_destination(plan, destination, *, qualification=False, replay=None):
     return attempt
 
 
-def checked_history(record, plan, *, replay=False):
+def checked_history(record, plan, *, replay=False, reharvest=None):
     path = Path(plan.block_archive_root) / "attempts" / plan.plan_id / "harvest.json"
     if replay:
-        # Reharvesting changes derived verdicts, never the counted attempt bytes.
+        # Chain identity stays with the original; its REFUSED verdict may be
+        # superseded by an authenticated identical-source re-harvest.
         original = read(path)
         for key in ("plan", "previous_attempt", "block_archive_root", "occurrence", "plan_id"):
             if original.get(key) != record.get(key):
                 raise HarvestRefusal("attempt_reharvest_identity_mismatch")
-        return attempt_history(original, plan.block_archive_root, current_harvest=path)
+        return attempt_history(original, plan.block_archive_root, current_harvest=path,
+                               reharvest=(Path(reharvest), record) if reharvest is not None else None)
     return attempt_history(record, plan.block_archive_root)
 
 

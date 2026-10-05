@@ -169,7 +169,8 @@ def closeout(plan_path, *, now=time.time, clear=q.group_clear):
         assertions["campaign_log"]["path"], stage_dir / "phase-g-campaign-log.jsonl"))
     runsheet = producer.copy_record(Path(plan.measurement_root) / RUNSHEET, stage_dir / "runsheet.md")
     off_path = q.off_receipt_path(plan)
-    off = network_time_off.read_receipt(off_path, plan_id=plan.plan_id, window_id=record["window_id"])
+    frozen = producer.read(Path(plan.pack_night["pack_root"]) / "calibration_plan.json")
+    off = network_time_off.read_receipt(off_path, plan_id=frozen["plan_id"], window_id=record["window_id"])
     if off["boot_id"].lower() != go["boot_session_id"].lower():
         raise ValueError("OFF receipt boot mismatch")
     standdown_path = night / "standdown-observed.json"

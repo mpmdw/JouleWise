@@ -535,19 +535,6 @@ def harvest(args, *, runner=subprocess.run, now=None, clear=q.group_clear):
         if plan_record.get("s2_authority") != inputs["s2_authority"]:
             raise q.HarvestRefusal("s2_authority_plan_mismatch")
         authority_path = q.authenticated_reference(inputs["s2_authority"])
-        authority = q.read(authority_path)
-        prior = q.read(q.authenticated_reference(authority["s1_harvest"]))
-        q.authenticated_reference(authority["r3_cure"])
-        q.authenticated_reference(authority["head_coverage"])
-        if (authority.get("schema") != "joulewise.v5_qualification_s2_authority.v1"
-                or authority.get("new_plan_id") != plan.plan_id or authority.get("lead_approved") is not True
-                or prior.get("occurrence") != "s1" or prior.get("verdict") != "RECOVER"
-                or prior.get("plan_id") == plan.plan_id
-                or prior.get("cause_classes") != ["tooling"]
-                or authority.get("tooling_cause") not in prior["cause_codes"]
-                or prior.get("clock_majority", {}).get("triggered") is True
-                or prior.get("recovery_classification") == "recover_no_science"):
-            raise q.HarvestRefusal("s2_not_authorized_tooling_cure")
         sources["s2-authority"] = authority_path
     with tempfile.TemporaryDirectory(prefix="desk-", dir=args.scratch_root) as temporary:
         transcripts = Path(temporary)
@@ -639,7 +626,7 @@ def harvest(args, *, runner=subprocess.run, now=None, clear=q.group_clear):
                 causes.append("battery_observation_not_passed")
             frozen, _tree, identity = frozen_identity(custody, pack=pack)
             off = network_time_off.read_receipt(q.off_receipt_path(plan),
-                                              plan_id=plan.plan_id, window_id=identity["window_id"])
+                                              plan_id=frozen["plan_id"], window_id=identity["window_id"])
             network = network_time_capture_report(off, capture_paths)
             q.write(destination / "withheld/network-time.json", network)
             settled = True
@@ -718,7 +705,8 @@ def harvest(args, *, runner=subprocess.run, now=None, clear=q.group_clear):
         record.update(end_state=False, s2_eligible=False, consumes_s2=False,
                       next_step="r3_cure_then_fresh_s1_plan_authorization_t0_same_code_twice_consult")
     try:
-        history = q.checked_history(record, plan, replay=args.previous_harvest is not None)
+        history = q.checked_history(record, plan, replay=args.previous_harvest is not None,
+                                    reharvest=destination if args.previous_harvest is not None else None)
         record["attempt_history"] = history
         if q.is_admission_abort(record):
             record.update(q.admission_abort_disposition(record, history))

@@ -65,7 +65,7 @@ class G2bHarness:
         self.off_path = (self.night_root / self.plan.pack_night["pack_id"] /
                          "arm_readiness.t0.inputs" / off.RECEIPT_BASENAME)
         self.off_value = {"schema": off.SCHEMA, "argv": list(off.OFF_ARGV), "exit_code": 0,
-            "stdout": "Network Time is already off\n", "stderr": "", "plan_id": self.plan.plan_id,
+            "stdout": "Network Time is already off\n", "stderr": "", "plan_id": "frozen",
             "window_id": "frozen-window", "boot_id": "fixture-boot", "epoch_s": 1000., "monotonic_s": 1000.}
         put(self.off_path, self.off_value)
         meta = q.read(c.runs / c.ids[0] / "metadata.json")
