@@ -3727,6 +3727,26 @@ def _capture_qualification_t0(plan):
         return
     if any(present):
         raise PackNightRefusal("incomplete prior T-0 capture sequence")
+    from joulewise import v5_qualification as qualification
+    from scripts import write_v5_qualification_plan as writer
+    # Replay the plan/authority/chain/source binding before trusting the record's
+    # stage cap. This covers both s1 and the arm-only a1/a2 plan records.
+    _, sources = qualification.authenticated_clock_budget(inputs, plan.pack_night["pack_root"])
+    bound_record = _pack_object(Path(sources[1]["path"]), "qualification_bound_plan", sources[1]["sha256"])
+    arm_only = bound_record.get("schema_version") == writer.ARM_ONLY_SCHEMA
+    bound_plan = bound_record["plan_binding"] if arm_only else bound_record
+    if NightPlan.from_mapping(bound_plan) != plan:
+        raise PackNightRefusal("qualification T-0 plan binding")
+    record = (bound_record if arm_only else _pack_object(
+        Path(plan.custody_root) / "qualification-plan-record.json", "qualification_plan_record"))
+    if (record.get("head") != plan.repo_head or record.get("pack_night") != plan.pack_night
+            or not arm_only and record.get("plan") != sources[1]):
+        raise PackNightRefusal("qualification T-0 record binding")
+    bound_sizing = _pack_object(Path(sources[2]["path"]), "qualification_bound_sizing", sources[2]["sha256"])
+    source_cap = writer.allowance(writer.sizing_adapter(bound_sizing)["fixed"]["t0_stage_cap"])
+    stage_cap = record["sizing"]["t0_stage_cap_s"]
+    if type(stage_cap) not in (int, float) or stage_cap != source_cap:
+        raise PackNightRefusal("qualification T-0 stage cap binding")
     night_gate.authenticate_arm_context(plan)
     argv = [str(Path(plan.measurement_root) / ".venv/bin/python"),
             str(Path(plan.measurement_root) / "scripts/capture_t0_step.py"), "sequence",
@@ -3735,7 +3755,7 @@ def _capture_qualification_t0(plan):
     night = Path(plan.custody_root) / "night"
     try:
         completed = t0_rehearsal.observed_run(argv, cwd=plan.measurement_root,
-            stdin=subprocess.DEVNULL, capture_output=True, timeout=3600,
+            stdin=subprocess.DEVNULL, capture_output=True, timeout=stage_cap,
             env=_chain_environment(plan, night))
     except subprocess.TimeoutExpired as exc:
         for name, stream in (("stdout.json", exc.stdout), ("stderr.txt", exc.stderr)):

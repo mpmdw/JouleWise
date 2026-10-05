@@ -7,28 +7,7 @@
     "gamma-reference-start": 1785
   },
   "blindness": "Only archive timestamp_s, elapsed_ns and named duration/clock fields are decoded. Raw bytes are hashed for custody; no archive energy/power scalar is decoded, printed or retained. No s1 input exists or is used.",
-  "blockers": [
-    {
-      "change": "Exclude separately sampled cooldown from member stream coverage; add >=60 s member/bracket/auxiliary lower bound (179-188) tied to full idle capture, not just upper allowance.",
-      "file_line": "scripts/write_v5_qualification_plan.py:183"
-    },
-    {
-      "change": "Bind/enforce selected pack_t0 band with actual runner caps and pre-t0 schedule; band3180..3480 is provisional until capture/author/verification allocations are operationally bounded.",
-      "file_line": "scripts/write_v5_qualification_plan.py:147"
-    },
-    {
-      "change": "Dispatch captures by t0-X, finish author/verification before t0; line585 of writer only supplies a prerequisite boundary, not a runnable timer.",
-      "file_line": "scripts/run_night.py:3870"
-    },
-    {
-      "change": "Implement ruling76 D.2 distinct sealed pre-chain dwell (X8); keep2700 outside window until the lead changes that ruling.",
-      "file_line": "scripts/run_night.py:3665"
-    },
-    {
-      "change": "Aggregate bounds for quiet prep and ledger captures and author/verify are needed before candidate X3300 can be called code-proven.",
-      "file_line": "scripts/capture_t0_step.py:634"
-    }
-  ],
+  "blockers": [],
   "classification": "Prospective production source allowances, not hard latency guarantees. Auxiliary model timing is an approved small-model proxy (ruling 76 A.3).",
   "controls": {
     "arm_capability_horizon_s": 300,
@@ -42,12 +21,12 @@
   "derivations": {
     "bound_references": "12*595 +3*595 +1*595 +3*595 +60 derivation =11365; 19 auxiliary captures; no undispatched GAMMA references",
     "deadlines": {
-      "courier_deadline_offset_s": 28740,
-      "deadman_formula": "60*ceil((t0+28140+300+3600)/60); if t0 is minute-aligned: t0+32040",
-      "deadman_unrounded_offset_s": 32040,
+      "courier_deadline_offset_s": 26400,
+      "deadman_formula": "60*ceil((t0+25800+300+3600)/60); if t0 is minute-aligned: t0+29700",
+      "deadman_unrounded_offset_s": 29700,
       "driver_completion_check": "run_night._completion_epoch_s line2078 uses window+300 for its dead-man sanity check, not an absolute courier deadline; bounded courier runtime is300 s after launch. Latest emergency+delivery allowance is window+600, per writer.deadlines.",
-      "emergency_shutdown_offset_s": 28440,
-      "latest_chain_start_offset_s": 2706
+      "emergency_shutdown_offset_s": 26100,
+      "latest_chain_start_offset_s": 3306
     },
     "fixed_settles": "6*600 + 5*20 =3700, exactly rendered one-block chain",
     "frequency_gate": {
@@ -63,8 +42,7 @@
       "passes": true,
       "placement_margin_ms": 0.1,
       "t_stream_max_s": 335,
-      "today_f_ppm": -3.17,
-      "writer_blocker": "size_window lines183-184 incorrectly requires the separately sampled cooldown inside main stream: asks for613 s instead of335; production replay refuses stream_omits_guard_or_retry until X7/X9 repair."
+      "today_f_ppm": -3.17
     },
     "idle_slice": {
       "attempt_allowance_s": 110,
@@ -88,26 +66,10 @@
     },
     "pack_t0": {
       "author_allowance_s": 120,
-      "band_s": [
-        3180,
-        3480
-      ],
-      "band_status": "CONDITIONAL DESIGN ALLOWANCE ONLY; no code-proven admissible band",
-      "capture_overhead_allowance_s": 240,
-      "capture_overhead_derivation": "120 s R0 convergence allocation + 120 s design allocation for clock-disable receipt reuse, quiet prep and two ledger captures",
-      "chosen_margin_s": 120,
-      "clean_dwell_cap_s": 2700,
-      "clean_dwell_min_s": 600,
-      "g4_margin_s": 180,
-      "maximum_formula": "memo 1.9 conservative X + author <=3600: X <=3480 with 120 s author allowance",
-      "minimum_formula": "2700 + 240 + 120 + 120 = 3180",
-      "minimum_successful_t0_span_s": 600,
-      "missing_bounds": "scripts/capture_t0_step.py:634 has timeout=None for quiet prep/ledger steps; author/verification have no aggregate 120 s deadline. The 3600 s sequence timeout at run_night.py:3738 alone already consumes G4 ceiling; adding 120 s author needs 3720>3600. Current code executes sequence at t0, not t0-X.",
-      "off_min_s": 600,
-      "off_overlap": "R0 ends with OFF; clean dwell follows OFF. Ledger captures and author require age >=600 s on both clocks. OFF settle overlaps the dwell; do not add a second 600 s inside X when the author-boundary disjunct is used.",
-      "seconds": 3300,
-      "serial_variant": "If OFF settle must precede and cannot overlap T-0 dwell, min X=600+2700+240+120+120=3780 > upper3480 by300 s. No X; requires lead ruling.",
-      "strict_first_capture_variant": "Own OFF is produced after R0 in _arm_reference (736-779), so first capture >=OFF+600 cannot hold without changing order. Current code supports the author boundary only.",
+      "authority": "Ruling 76 addendum E item 2",
+      "consuming_start_allowance_s": 120,
+      "formula": "120 author + 120 verification + 120 consuming start = 360 s, after the six-step T-0 stage",
+      "seconds": 360,
       "verification_allowance_s": 120
     },
     "post_quiet": "420 s two backups/close-out/OFF design allocation, outside quiet span",
@@ -115,7 +77,7 @@
     "stage_custody": {
       "basis": "Approved labelled allocations in record44 and ruling76 A.3; remaining stage/custody proxies are not hardware measurements.",
       "formula": "5*180 stage overhead +23*45 reductions +2*240 bracket writer custody +300 reservation +120 terminal custody +23*(15+17) native sampler custody =3571",
-      "full_member_accounting": "For record44 full envelopes use E_small627, E_large651, E_ABBA2556, bound/references11973, and legacy custody2835. The v1 writer instead uses six-term subtotals595/619/2428/11365 plus custody3571; both total25434. Do not add the736 s twice.",
+      "full_member_accounting": "Full envelopes use E_small627, E_large651, E_ABBA2556, bound/references11973, and legacy custody2835. The v1 writer uses six-term subtotals595/619/2428/11365 plus custody3571; both total22494 with pack_t0360. Do not add the736 s twice.",
       "legacy_custody_s": 2835,
       "native_sampler_custody_s": 736,
       "reduction_allowance_s": 45,
@@ -137,7 +99,7 @@
         "joulewise/adapters/powermetrics.py:291"
       ],
       "formula": "max(15+(275-10)+10+2+5+17, 15+(275-10)+16+9+13+17, 240) = 335 s; exclude load, separate sentinel and separate cooldown",
-      "helper_streams": "A literal all-native-streams >=60 s is false: cooldown uses 5 s subwindows and the separate post-run sentinel uses up to 5 s. The 60 s clock-fit check applies to member/calibration anchor-bearing streams; lead must confirm that scope.",
+      "helper_streams": "Ruling 76 addendum E item 3 requires >=60 s for every anchor-bearing science, NEG-8, reference and bracket stream. Cooldown subwindows and the separate post-run sentinel have no clock anchor and are exempt; whole unanchored auxiliary stages use the nonsampling roster.",
       "main_stream_lower_bound": {
         "basis": "750 records: 749 endpoint intervals before warmup/measured phases; not a hard bound on future record cadence; reject partial/aborted captures as failed evidence",
         "comparable_margin_to_60_s": 37.54572803000001,
@@ -157,27 +119,44 @@
         "winddown_s": 17
       }
     },
+    "t0_stage_cap": {
+      "author_allowance_s": 120,
+      "authority": "Ruling 76 addendum E items 1-2",
+      "band_s": [
+        3180,
+        3480
+      ],
+      "clean_dwell_cap_s": 2700,
+      "clean_dwell_min_s": 600,
+      "enforcement": "Source-bound writer band; run_night._capture_qualification_t0 uses the authenticated plan cap as the six-step subprocess timeout.",
+      "formula": "2700 dwell cap + 600 for the other five captures and OFF margin = 3300 s",
+      "g4_ceiling_s": 3600,
+      "g4_margin_s": 180,
+      "limitation": "Post-stage authoring and ARM verification remain prospective allowances; this derivation is not live/hardware validation.",
+      "off_overlap": "The one clean dwell follows OFF; OFF settling overlaps it. No second dwell or separate 600 s OFF term is added.",
+      "other_captures_and_off_margin_s": 600,
+      "r0_to_author_allowance_s": 3420,
+      "seconds": 3300,
+      "window_enforcement": "qualification_start_deadline applies the chain-pinned source allowance only to block-4 G2B_SHAKEDOWN transaction packs with fixed.t0_stage_cap. The writer supplies sizing at initial deadline validation; runtime reads the published sizing file. Earlier packs, rehearsal and derivation plans retain span+2700."
+    },
     "terminal_shutdown": "300 s physical-ahead STOP/shell exit design allocation; separate from driver emergency grace300",
     "window": {
-      "formula": "60*ceil((25434+2700)/60)=28140",
-      "one_dwell_code_variant": {
-        "formula": "If lead removes second dwell: 60*ceil(25434/60)=25440; current size_window still adds2700 incorrectly under that interpretation.",
-        "latest_start_offset_s": 6,
-        "window_max_s": 25440
-      },
-      "outside_dwell_cap_s": 2700,
-      "outside_dwell_reason": "Ruling76 D.2 and design registration \u00a74 require a distinct sealed pre-chain dwell in addition to T-0 dwell inside X. Current driver wrongly reuses T-0 capture (3665-3687); X8 must restore second dwell.",
-      "pre_t0_accounting": "Registered formula conservatively retains X in programmed span although scheduled before t0. Actual chain-only allowance is22134; do not silently change registered semantics.",
-      "programmed_formula": "3300 +3700 +770 +11365 +(2*595+2*619) +3571 +300 =25434",
-      "record44_full_member_formula": "3300+3700+770+11973+(2*627+2*651)+2835+300=25434"
+      "formula": "60*ceil((22494+3300)/60)=25800",
+      "latest_chain_start_formula": "t0 + 25800 - 22494 = t0 + 3306",
+      "outside_stage_reason": "The six-step T-0 stage includes the single clean dwell and runs inside the window before the programmed chain. Ruling 76 addendum E replaces addendum D item 2.",
+      "outside_t0_stage_cap_s": 3300,
+      "prerequisite_boundary": "t0 - T0_STAGE_CAP_S is the conservative declared pre-stage control boundary; the driver separately checks ordering against actual fresh captures.",
+      "programmed_formula": "360 + 3700 + 770 + 11365 + (2*595+2*619) + 3571 + 300 = 22494",
+      "record44_full_member_formula": "360 + 3700 + 770 + 11973 + (2*627+2*651) + 2835 + 300 = 22494"
     }
   },
   "diagnostic_anchor_half_width_s": 0.003597711938684421,
   "fixed": {
     "fixed_settles": 3700,
-    "pack_t0": 3300,
+    "pack_t0": 360,
     "pre_post_calibration": 770,
     "stage_custody": 3571,
+    "t0_stage_cap": 3300,
     "terminal_shutdown": 300
   },
   "head": "bda1c180cf156ecedcbe01a6010390dcd724c8cc",
@@ -215,10 +194,10 @@
         "sha256": "336ac80747662923d0a83a48a64cc268a1a36d3040896673e617b756364e061f"
       },
       {
-        "git_commit": "6c7ee40055acd0b514023ec0d4327fe5aaaceb37",
-        "git_object": "5c4fe9d07d08e37e0fcdb0ffbf3a22c7b103ca57",
+        "git_commit": "c08abb1a182b53ea8a55e6987c02163688b6b173",
+        "git_object": "17b28a87613fde76a4d2c7b5be58274243dd5aa1",
         "path": "docs/process_traces/2026-10-04-desk-day-v5/76-r1-fold-ruling.md",
-        "sha256": "666ba37ed9b24f10b50722d3fec19b07f3096402c35c627f97fd89388b266181"
+        "sha256": "87c2a2de9ad69da8dbbbd75ae3b66e4c7a7cc7b0544363a1f7124c7c21492ac9"
       },
       {
         "path": "/Users/edr/night-archive/ia-0a40/MEMO.md",
@@ -984,9 +963,9 @@
       {
         "source": {
           "path": "scripts/write_v5_qualification_plan.py",
-          "sha256": "724817e967ae2aa418e9fca9b24925af0c7c9cc7f01432b3f667ef2576ce29b8"
+          "sha256": "24442f8825c27bd6be639ab8212d206ac1185987c1e599471c7f258bd368dc42"
         },
-        "source_pointer": "112-202 allowances and arithmetic; 407-420 deadlines; 585 lead time"
+        "source_pointer": "size_window: source-bound T0 stage cap, stream bounds and WINDOW_MAX_S; deadlines; write_qualification prerequisite boundary"
       },
       {
         "source": {
@@ -998,9 +977,9 @@
       {
         "source": {
           "path": "scripts/run_night.py",
-          "sha256": "4564c582a2e4377f944f7980d0fb5444fb7efd66238d26d30b16edb1d38adf99"
+          "sha256": "60eeaae1bd530189f08b04b1b8075b3ec93d51c5839226ff9b6b76516836ec5c"
         },
-        "source_pointer": "81-98 deadlines; 1970-1978 dead-man; 3348-3368 OFF overlap; 3665-3687 dwell reuse; 3737-3739 stage cap; 3870-3875 capture/author at t0"
+        "source_pointer": "deadline constants; deadman_epoch; _admit_qualification_clean_dwell (single 600-2700 s dwell); _capture_qualification_t0 (authenticated plan stage cap); run_night (capture/author at t0)"
       },
       {
         "source": {
@@ -1092,6 +1071,13 @@
           "sha256": "1e022927b3eefe84e9ac7028ba0a0d62554760437f1e6229e1a0aa564fe7c7b0"
         },
         "source_pointer": "approved custody allocation basis"
+      },
+      {
+        "source": {
+          "path": "joulewise/night_gate.py",
+          "sha256": "72971505590fc95a608c4ba93b099d31b2572cb9c8862dafa950b80258bc2b68"
+        },
+        "source_pointer": "qualification_start_deadline: authenticated stage-cap window; legacy span+2700 preserved"
       }
     ],
     "timing_evidence": {
@@ -1452,7 +1438,7 @@
   "rho_per_s": 8e-06,
   "schema_version": "joulewise.v5_qualification_sizing_source.v2",
   "stamp_resolution_s": 1.0000000000000002e-06,
-  "status": "PROVISIONAL: writer integration and T-0 operating caps need lead disposition; not arm-ready",
+  "status": "PROVISIONAL: prospective source-bound allowances under ruling 76 addendum E; cold seal and live qualification remain lead-owned; not arm-ready",
   "streams": {
     "bracket": 240,
     "large": 335,
@@ -1465,16 +1451,16 @@
     "E_large_full": 651,
     "E_small_L": 595,
     "E_small_full": 627,
-    "NIGHT_PROGRAMMED_SPAN_S_s1": 25434,
+    "NIGHT_PROGRAMMED_SPAN_S_s1": 22494,
     "T_bound_and_references": 11365,
     "T_bound_and_references_full": 11973,
     "T_stream_max": 335,
-    "WINDOW_MAX_S_s1": 28140,
+    "WINDOW_MAX_S_s1": 25800,
     "gamma_bound_collection_full": 7524,
     "gamma_reference_decode_midpoint_full": 627,
     "gamma_reference_end_full": 1881,
     "gamma_reference_start_full": 1881,
-    "latest_start_offset_s": 2706,
+    "latest_start_offset_s": 3306,
     "post_quiet_backup_close_off_s": 420
   }
 }

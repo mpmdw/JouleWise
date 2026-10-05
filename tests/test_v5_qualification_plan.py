@@ -41,6 +41,7 @@ class SizingTests(unittest.TestCase):
                       "rho_per_s": 1e-6, "source": self.source,
                       "observed_max_effective_bound": self.allow(0.004)},
         }
+        self.sizing["fixed"]["t0_stage_cap"] = self.allow(3300)
 
     def allow(self, seconds):
         path = self.root / f"allowance-{seconds}.json"
@@ -50,10 +51,11 @@ class SizingTests(unittest.TestCase):
     def size(self, sizing=None):
         return writer.size_window("s1", sizing or self.sizing, roster=self.roster, auxiliary=self.aux, brackets=self.brackets)
 
-    def test_components_count_once_and_window_has_single_dwell_cap(self):
+    def test_components_count_once_and_window_has_single_t0_stage_cap(self):
         sized = self.size()
         self.assertEqual(5 * 100 + 4 * 6 * 10 + 4 * 30, sized["programmed_span_s"])
-        self.assertEqual(3600, sized["window_max_s"])
+        self.assertEqual(4200, sized["window_max_s"])
+        self.assertEqual(3300, sized["t0_stage_cap_s"])
         self.assertEqual(2700, sized["clean_dwell_cap_s"])
 
     def test_load_and_admission_sensitivity_kills_omission(self):
@@ -149,7 +151,7 @@ class SizingTests(unittest.TestCase):
                     for child in value.values():
                         visit(child)
         visit(adapter)
-        self.assertEqual(len(items), 69)  # Stream max and eight full custody-inclusive totals.
+        self.assertEqual(len(items), 70)  # Separate stage cap plus the round-2 allowances.
         production_source = "configs/campaigns/v5_qualification_25g83/sizing_sources/sizing_source_v2.json"
         for item in items:
             self.assertEqual(item["source"]["path"], production_source)
@@ -201,11 +203,13 @@ class SizingTests(unittest.TestCase):
         # the v1 writer's fixed field, or in record 44's full member envelopes.
         full = source["totals"]
         self.assertEqual(full["NIGHT_PROGRAMMED_SPAN_S_s1"],
-            sum(value for key, value in source["fixed"].items() if key != "stage_custody")
+            sum(value for key, value in source["fixed"].items() if key not in {"stage_custody", "t0_stage_cap"})
             + 2835 + full["E_ABBA_full"] + full["T_bound_and_references_full"])
-        self.assertEqual(source["derivations"]["window"]["outside_dwell_cap_s"], 2700)
+        self.assertEqual(source["derivations"]["window"]["outside_t0_stage_cap_s"], 3300)
+        self.assertEqual(source["fixed"]["pack_t0"], 360)
+        self.assertEqual(source["fixed"]["t0_stage_cap"], 2700 + 600)
         self.assertIn("PROVISIONAL", source["status"])
-        self.assertTrue(source["blockers"])
+        self.assertEqual(source["blockers"], [])
 
     def test_source_mutation_negative_nan_and_unresolved_fill(self):
         changed = copy.deepcopy(self.sizing)
@@ -257,7 +261,7 @@ class PlanWriterTests(SizingTests):
         self.custody = self.root / "s1-fixture"
         self.custody.mkdir()
         self.chain = self.root / "chain.zsh"
-        self.chain.write_text("#!/bin/zsh\nexport NIGHT_PROGRAMMED_SPAN_S=40\nexport NIGHT_LATEST_CHAIN_START_EPOCH_S=3720\nexport V5_QUALIFICATION_OCCURRENCE=s1\necho fixture\n")
+        self.chain.write_text("#!/bin/zsh\nexport NIGHT_PROGRAMMED_SPAN_S=40\nexport NIGHT_LATEST_CHAIN_START_EPOCH_S=4320\nexport V5_QUALIFICATION_OCCURRENCE=s1\necho fixture\n")
         self.sidecar = self.root / "chain.sha256"
         self.sidecar.write_bytes(readiness.gnu_sidecar(writer.locator(self.chain)["sha256"], self.chain.name))
         self.table = self.root / "d117_step6_confirmation_table_v5.json"
@@ -285,7 +289,7 @@ class PlanWriterTests(SizingTests):
                       "kernel_frequency": frequency_probe(),
             "plan": {"schema": night_gate.PACK_PLAN_SCHEMA, "schema_version": 3,
                 "plan_id": self.custody.name, "receipt_class": "TRANSACTION_PACK", "t0_epoch_s": 1000.,
-                "window_max_s": 2760, "authored_epoch_s": 0., "repo_head": self.head,
+                "window_max_s": 3360, "authored_epoch_s": 0., "repo_head": self.head,
                 "measurement_root": str(self.repo), "measurement_head": self.head,
                 "chain_path": str(self.chain), "chain_sha256_path": str(self.sidecar),
                 "custody_root": str(self.custody), "registration_path": None},
@@ -298,8 +302,8 @@ class PlanWriterTests(SizingTests):
             "sizing": {"fixed": {name: self.allow(8) for name in writer.FIXED_COMPONENTS["s1"]},
                        "members": {}, "auxiliary": {}, "streams": {name: self.allow(100)
                            for name in ("calibration-pre", "calibration-post")}, "clock": self.sizing["clock"]},
-            "deadlines": {"latest_chain_start_epoch_s": 3720., "shutdown_epoch_s": 4060.,
-                          "courier_epoch_s": 4360., "deadman_epoch_s": 7680.},
+            "deadlines": {"latest_chain_start_epoch_s": 4320., "shutdown_epoch_s": 4660.,
+                          "courier_epoch_s": 4960., "deadman_epoch_s": 8280.},
             "other_custody_roots": [], "arm_context": context, "prerequisites": {}}
         producers = {}
         for name, relative in (("driver", "scripts/run_night.py"), ("bundle", "scripts/produce_t0_rehearsal_bundle.py"), ("evaluator", "joulewise/t0_rehearsal.py")):
@@ -310,6 +314,7 @@ class PlanWriterTests(SizingTests):
         self.input["prerequisites"] = {"observation_producers": producers,
             "g10_control": writer.locator(self.confirm), "g10_artifacts": [writer.locator(self.transcript)]}
         self.output = self.custody / "night_plan.json"
+        self.input["sizing"]["fixed"]["t0_stage_cap"] = self.allow(3300)
         for target, name, replacement in (
             (writer, "g2b_body", mock.Mock(return_value="echo fixture\n")),
             (writer, "prerequisites", mock.Mock()),
@@ -512,7 +517,7 @@ class PlanWriterTests(SizingTests):
         self.write()
         plan = night_gate.NightPlan.from_mapping(writer.read_object(self.output))
         prepared = night_gate._authenticate_pack_records(plan)
-        probes = mock.Mock(now_epoch_s=lambda: 3721.)
+        probes = mock.Mock(now_epoch_s=lambda: 4321.)
         with mock.patch.object(night_gate, "_authenticate_pack_records", return_value=prepared), \
              mock.patch.object(readiness, "_verify_arm_receipt") as verify:
             with self.assertRaises(night_gate.PlanError) as error:
@@ -533,11 +538,11 @@ class PlanWriterTests(SizingTests):
         output = self.root / "rendered-chain.zsh"
         with mock.patch.object(writer, "pack_roster", return_value=(
                 [{"config_path": "science/member.json"}], [], [], [])), mock.patch.object(writer, "size_window",
-                return_value={"programmed_span_s": 40, "window_max_s": 2760, "longest_sampler_stream_s": 100.}):
+                return_value={"programmed_span_s": 40, "window_max_s": 3360, "longest_sampler_stream_s": 100.}):
             result = writer.render_qualification_chain("s1", template, self.input["sizing"], self.pack, 1000., output)
         self.assertEqual(40, result["programmed_span_s"])
         self.assertEqual("40", night_gate.chain_literal(output.read_text(), "NIGHT_PROGRAMMED_SPAN_S"))
-        self.assertEqual("3720", night_gate.chain_literal(output.read_text(), "NIGHT_LATEST_CHAIN_START_EPOCH_S"))
+        self.assertEqual("4320", night_gate.chain_literal(output.read_text(), "NIGHT_LATEST_CHAIN_START_EPOCH_S"))
         self.assertEqual("#!/bin/zsh\necho fixture\n", template.read_text())
         self.assertEqual(writer.locator(output)["sha256"], Path(str(output) + ".sha256").read_text().split()[0])
 
@@ -549,6 +554,7 @@ class PlanWriterTests(SizingTests):
                 custody.mkdir()
                 inputs["plan"].update(plan_id=custody.name, custody_root=str(custody))
                 inputs["sizing"]["fixed"] = {key: self.allow(8) for key in writer.FIXED_COMPONENTS["s1"]}
+                inputs["sizing"]["fixed"]["t0_stage_cap"] = self.allow(3300)
                 inputs["authorization"].update(purpose="G2B_SHAKEDOWN", authority="D-171 §3", attempt_id=custody.name + "/2")
                 chain = self.root / (occurrence + "-chain.zsh")
                 chain.write_text(self.chain.read_text().replace("V5_QUALIFICATION_OCCURRENCE=s1", "V5_QUALIFICATION_OCCURRENCE=s1"))
