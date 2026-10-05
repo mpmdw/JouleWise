@@ -426,11 +426,16 @@ def assemble(custody, *, positive_control, positive_sha256, positive_artifacts,
     if qualification and not fixture_mapping:
         plan_record = read(plan_record_path)
         prerequisites = plan_record["prerequisites"]
-        if (plan_record.get("occurrence") != "s1" or plan_record.get("head") != go["repo_head"]
+        if (plan_record.get("occurrence") not in {"s1", "s2"} or plan_record.get("head") != go["repo_head"]
                 or plan_record["plan"]["sha256"] != go["plan_sha256"]
                 or prerequisites["g10_control"] != {"path": str(positive_control), "sha256": positive_sha256}
                 or prerequisites["g10_artifacts"] != [reference(path) for path in positive_artifacts]):
             raise ValueError("s1 registered observation/G10 inputs changed")
+        plan = plan_at(plan_record["plan"]["path"])
+        if (reference(plan_record["plan"]["path"]) != plan_record["plan"]
+                or reference(plan.chain_path)["sha256"] != go["window_chain_sha256"]
+                or night_gate.chain_literal(regular(plan.chain_path).decode(), "V5_QUALIFICATION_OCCURRENCE") != plan_record["occurrence"]):
+            raise ValueError("qualification occurrence differs from the GO-authenticated plan")
         for locator in prerequisites["observation_producers"].values():
             if reference(locator["path"]) != locator:
                 raise ValueError("s1 observation producer source changed")

@@ -48,6 +48,7 @@ AUTHENTICATION_SURFACE = (
     "joulewise/environment_admission.py",
     "joulewise/detection_floor.py",
     "joulewise/salvage_dangler.py",
+    "scripts/restore_v5_null_reservation.py",
 )
 NON_AUTHENTICATION_WRITERS = {
     "_fsync_parent_directory",
@@ -58,13 +59,13 @@ NON_AUTHENTICATION_WRITERS = {
 CLASSIFIED_NON_AUTHENTICATION_READS = {
     # Append-only publisher idempotence check over its own prospective output;
     # this is writer state, not evidence admitted to analysis or paper custody.
-    "joulewise/analysis_manifest_v3.py:_write_append_only:4011:read_bytes",
+    "joulewise/analysis_manifest_v3.py:_write_append_only:4024:read_bytes",
     # Locked recheck of the same publisher-owned output before atomic creation;
     # routing it into an evidence session would misclassify mutable writer state.
-    "joulewise/analysis_manifest_v3.py:_write_append_only:4029:read_bytes",
+    "joulewise/analysis_manifest_v3.py:_write_append_only:4042:read_bytes",
     # Parent directory descriptor used only for fsync durability after publish;
     # no file content is read through this descriptor.
-    "joulewise/analysis_manifest_v3.py:_write_append_only:4035:os.open",
+    "joulewise/analysis_manifest_v3.py:_write_append_only:4048:os.open",
     # Linux mountinfo describes OS filesystem topology, not project evidence.
     "joulewise/calibration_ledger.py:_filesystem_type:3439:read_text",
     # The lock sidecar descriptor is used for inode/lock state, never content.

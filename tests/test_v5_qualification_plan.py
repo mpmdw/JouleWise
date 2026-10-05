@@ -263,6 +263,9 @@ class PlanWriterTests(SizingTests):
             producers[name] = writer.locator(path)
         self.input["prerequisites"] = {"observation_producers": producers,
             "g10_control": writer.locator(self.confirm), "g10_artifacts": [writer.locator(self.transcript)]}
+        self.input["previous_attempt"] = {"none": True}
+        self.input["block_archive_root"] = str(self.root / "block-archive")
+        Path(self.input["block_archive_root"]).mkdir()
         self.output = self.custody / "night_plan.json"
         for target, name, replacement in (
             (writer, "g2b_body", mock.Mock(return_value="echo fixture\n")),
@@ -499,6 +502,9 @@ class PlanWriterTests(SizingTests):
         for occurrence in ("a1", "a2", "s1"):
             with self.subTest(occurrence=occurrence):
                 inputs = copy.deepcopy(self.input)
+                if occurrence in {"a1", "a2"}:
+                    inputs.pop("previous_attempt")
+                    inputs.pop("block_archive_root")
                 custody = self.root / (occurrence + "-context-fixture")
                 custody.mkdir()
                 inputs["plan"].update(plan_id=custody.name, custody_root=str(custody))
@@ -644,12 +650,12 @@ class PackRosterTests(unittest.TestCase):
                 {"argv_template": {"arguments": [{"kind": "repo_path", "value": path}]}}]}}
         self.tree["stage_graph"] = [
             {"stage_id": "calibration-pre", "kind": "calibration_capture", "input_ref": {"slot": "pre_attempt_id"}},
-            collection("neg8", "configs/campaigns/neg8_reference_corpus"),
+            collection("neg8", "configs/campaigns/neg8_reference_corpus_v5"),
             {"stage_id": "bound-derivation", "kind": "bound_derivation"},
-            collection("start", "configs/campaigns/window_references/start_triplet"),
+            collection("start", "configs/campaigns/window_references_v5/start_triplet"),
             {"stage_id": "science-0", "kind": "campaign_collection"},
-            collection("midpoint", "configs/campaigns/window_references/midpoint"),
-            collection("end", "configs/campaigns/window_references/end_triplet"),
+            collection("midpoint", "configs/campaigns/window_references_v5/midpoint"),
+            collection("end", "configs/campaigns/window_references_v5/end_triplet"),
             {"stage_id": "calibration-post", "kind": "calibration_capture", "input_ref": {"slot": "post_attempt_id"}}]
         patch = mock.patch.object(readiness, "_repo_for_pack", return_value=writer.REPO_ROOT)
         patch.start(); self.addCleanup(patch.stop)

@@ -22,6 +22,8 @@ from scripts.harvest_window import inventory
 
 
 BATTERY_BOUNDARY_PHASES = {"arm": "arm_check", "publication": "publish_install", "t0": "t0"}
+ATTEMPT_HARVEST_SCHEMA = "joulewise.harvest_v5_g2b_window.v1"
+ADMISSION_ABORT_CODE = "guard_attested_idle_admission_abort"
 
 
 class HarvestRefusal(ValueError):
@@ -63,6 +65,386 @@ def reference(path):
     return {"path": str(path), "sha256": sha(path)}
 
 
+def previous_attempt(value):
+    """Validate the mandatory pointer; absence is never a first-attempt default."""
+    if isinstance(value, dict) and set(value) == {"none"} and value["none"] is True:
+        return None
+    if (not isinstance(value, dict) or set(value) != {"path", "sha256"}
+            or not isinstance(value["path"], str)
+            or not isinstance(value["sha256"], str)
+            or re.fullmatch(r"[0-9a-f]{64}", value["sha256"]) is None):
+        raise HarvestRefusal("previous_attempt_required_or_invalid")
+    path = authenticated_reference(value)
+    if path.name != "harvest.json":
+        raise HarvestRefusal("previous_attempt_not_harvest")
+    return path
+
+
+def admission_abort_evidence(value):
+    """Replay every controller idle-admission abort predicate from native bytes."""
+    from joulewise.environment_admission import ADMISSION_SCHEMA, environment_observation_failure, _registered_campaign_policy
+    from joulewise.environment import evaluate_environment_policy
+    from joulewise.authentication_io import read_authentication_input
+    from joulewise.adapters.powermetrics import idle_window_gpu_quality
+    from joulewise.idle_admission import evaluate_cpu_idle_admission
+    if not isinstance(value, dict) or set(value) not in ({"metadata", "summary", "events"}, {"metadata", "summary", "events", "telemetry"}):
+        raise HarvestRefusal("admission_abort_evidence_invalid")
+    metadata_path, summary_path, events_path = (authenticated_reference(value[key]) for key in ("metadata", "summary", "events"))
+    if (metadata_path.name != "metadata.json" or summary_path.name != "summary_metrics.json"
+            or events_path.name != "events.jsonl" or metadata_path.parent != summary_path.parent
+            or metadata_path.parent != events_path.parent):
+        raise HarvestRefusal("admission_abort_bundle_mismatch")
+    metadata, summary = read(metadata_path), read(summary_path)
+    admission = metadata.get("environment_admission", {})
+    guards, attempts = admission.get("guard_observations", []), admission.get("attempts", [])
+    events = [readiness.parse_json_bytes(line) for line in read_authentication_input(
+        events_path, grammar="jsonl", label="block-4 admission abort events").splitlines() if line.strip()]
+    failures = [event for event in events if event.get("event_type") == "failure"]
+    policy = _registered_campaign_policy(metadata)
+    if (metadata.get("run_id") != metadata_path.parent.name or summary.get("status") != "failed"
+            or len(failures) != 1 or failures[0].get("phase") != "idle_baseline"
+            or admission.get("schema_version") != ADMISSION_SCHEMA or admission.get("decision") != "abort"
+            or policy is None or policy.profile.value != "production"
+            or not policy.idle_admission.enabled or policy.idle_admission.on_fail.value != "abort"
+            or admission.get("on_fail") != "abort" or admission.get("policy_version") != policy.policy_version
+            or not isinstance(guards, list) or not guards or not isinstance(attempts, list)):
+        raise HarvestRefusal("admission_abort_not_guard_attested")
+    phases = ["before_attempt_1", "after_attempt_1", "before_attempt_2", "after_attempt_2"]
+    if ([guard.get("phase") for guard in guards] != phases[:len(guards)] or len(guards) > 4
+            or any(guard.get("capture_skipped") is not False or not isinstance(guard.get("errors"), dict) for guard in guards)
+            or any(environment_observation_failure(guard) is not None for guard in guards[:-1])):
+        raise HarvestRefusal("admission_abort_not_guard_attested")
+    reason = environment_observation_failure(guards[-1])
+    stored = admission.get("per_run_environment_evaluation", {})
+    if reason is None and len(guards) == 1:
+        snapshot = stored.get("snapshot")
+        if not isinstance(snapshot, dict):
+            raise HarvestRefusal("admission_abort_environment_snapshot_missing")
+        fresh = evaluate_environment_policy(snapshot, policy.environment_guard)
+        if (fresh.get("eligible") is not False
+                or any(stored.get(key) != fresh.get(key) for key in ("eligible", "snapshot_sha256", "findings", "findings_sha256"))
+                or metadata.get("campaign_environment_preflight", {}).get("override") is not None):
+            raise HarvestRefusal("admission_abort_environment_replay_mismatch")
+        reason = "critical per-run environment policy did not pass"
+    elif reason is None:
+        if len(guards) != 4 or len(attempts) != 2 or len(value.get("telemetry", [])) != 2:
+            raise HarvestRefusal("admission_abort_retry_evidence_missing")
+        for index, (attempt, ref) in enumerate(zip(attempts, value["telemetry"]), 1):
+            path = authenticated_reference(ref)
+            name = "rich_telemetry_idle.jsonl" if index == 1 else "rich_telemetry_idle_attempt_2.jsonl"
+            if path != metadata_path.parent / name or attempt.get("attempt") != index:
+                raise HarvestRefusal("admission_abort_retry_evidence_mismatch")
+            rows = [readiness.parse_json_bytes(line) for line in read_authentication_input(
+                path, grammar="jsonl", label="block-4 native idle-admission telemetry").splitlines() if line.strip()]
+            gpu = idle_window_gpu_quality(rows)
+            if any(attempt.get("baseline", {}).get(key) != result for key, result in gpu.items()):
+                raise HarvestRefusal("admission_abort_gpu_replay_mismatch")
+            admitted = gpu["idle_window_suspect"] is False
+            extension = policy.idle_admission_extension
+            if extension is not None:
+                cpu = evaluate_cpu_idle_admission(rows, extension.cpu_criteria, gpu_admitted=admitted)
+                if (admission.get("idle_admission_extension", {}).get("sha256") != extension.sha256()
+                        or attempt.get("cpu_admission_enforced") is not True or attempt.get("gpu_admitted") is not admitted
+                        or attempt.get("cpu_admission") != cpu):
+                    raise HarvestRefusal("admission_abort_cpu_replay_mismatch")
+                admitted = cpu["admitted"]
+            if admitted is not False or attempt.get("admitted") is not False:
+                raise HarvestRefusal("admission_abort_retry_not_failed")
+        reason = "idle environment admission failed after one retry"
+    if (admission.get("failure") != reason or summary.get("failure_message") != reason
+            or failures[0].get("message") != reason):
+        raise HarvestRefusal("admission_abort_reason_mismatch")
+    return value
+
+
+def native_admission_abort(runs):
+    """Find one native admission failure; a second failure is another cause."""
+    candidates, other_causes = [], []
+    for metadata_path in sorted(Path(runs).rglob("metadata.json")):
+        bundle = metadata_path.parent
+        summary_path = bundle / "summary_metrics.json"
+        if not summary_path.is_file():
+            other_causes.append("attempt_bundle_incomplete")
+            continue
+        metadata, summary = read(metadata_path), read(summary_path)
+        if summary.get("status") == "succeeded":
+            continue
+        if metadata.get("environment_admission", {}).get("decision") != "abort":
+            other_causes.append("member_failed_outside_idle_admission")
+            continue
+        value = {"metadata": reference(metadata_path), "summary": reference(summary_path),
+                 "events": reference(bundle / "events.jsonl")}
+        telemetry = [bundle / name for name in ("rich_telemetry_idle.jsonl", "rich_telemetry_idle_attempt_2.jsonl")]
+        if all(path.is_file() for path in telemetry):
+            value["telemetry"] = [reference(path) for path in telemetry]
+        admission_abort_evidence(value)
+        candidates.append(value)
+    if len(candidates) > 1:
+        other_causes.append("multiple_idle_admission_aborts_in_attempt")
+    return (candidates[0] if candidates else None), sorted(set(other_causes))
+
+
+def is_admission_abort(record):
+    if record.get("recovery_classification") != "admission_abort":
+        return False
+    if (record.get("verdict") != "RECOVER"
+            or record.get("cause_codes") != [ADMISSION_ABORT_CODE]
+            or record.get("cause_classes") != ["instrument_physics"]):
+        raise HarvestRefusal("admission_abort_has_other_recover_cause")
+    admission_abort_evidence(record.get("admission_abort"))
+    return True
+
+
+def tooling_s2_predecessor(record):
+    """Eligibility is necessary, not the lead's R3/head-coverage permission."""
+    codes = record.get("cause_codes")
+    if (record.get("occurrence") != "s1" or record.get("verdict") != "RECOVER"
+            or record.get("cause_classes") != ["tooling"]
+            or not isinstance(codes, list) or not codes
+            or any(not isinstance(code, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*", code)
+                   for code in codes)
+            or record.get("clock_majority", {}).get("triggered") is True
+            or record.get("recovery_classification") in {"admission_abort", "recover_no_science"}):
+        raise HarvestRefusal("s2_not_after_named_tooling_recover")
+    return record
+
+
+def authenticate_s2_authority(reference, plan_id, previous):
+    authority = read(authenticated_reference(reference))
+    prior = tooling_s2_predecessor(read(authenticated_reference(previous)))
+    if (authority.get("schema") != "joulewise.v5_qualification_s2_authority.v1"
+            or authority.get("new_plan_id") != plan_id or authority.get("lead_approved") is not True
+            or authority.get("s1_harvest") != previous
+            or prior.get("plan_id") == plan_id
+            or authority.get("tooling_cause") not in prior["cause_codes"]):
+        raise HarvestRefusal("s2_not_authorized_tooling_cure")
+    authenticated_reference(authority.get("r3_cure"))
+    authenticated_reference(authority.get("head_coverage"))
+    return authority
+
+
+def attempt_history(current, archive_root, *, current_harvest=None):
+    """Walk authenticated links and census the complete supplied block root.
+
+    The caller must obtain the block root and current pointer from create-once
+    plan/authorization bytes. Linked production records reauthenticate those
+    bindings; the census unit is exactly attempts/*/harvest.json.
+
+    Before publication, current_harvest is absent. For replay it is the exact
+    harvest.json being checked. No duplicate/derived harvest is silently ignored.
+    """
+    root = Path(archive_root)
+    if (not root.is_absolute() or not root.is_dir()
+            or any(p.is_symlink() for p in (root, *root.parents))):
+        raise HarvestRefusal("attempt_archive_root_invalid")
+    census_sources({"attempt-archive": root})  # Also refuses nested symlinks.
+    found = set(root.glob("attempts/*/harvest.json"))
+    records, chain, seen_ids = [current], set(), set()
+    if current_harvest is not None:
+        path = Path(current_harvest)
+        if path not in found or read(path) != current:
+            raise HarvestRefusal("current_attempt_harvest_mismatch")
+        chain.add(path)
+    cursor = current
+    while True:
+        if (not isinstance(cursor, dict) or cursor.get("schema") != ATTEMPT_HARVEST_SCHEMA
+                or cursor.get("occurrence") not in {"s1", "s2"}
+                or "previous_attempt" not in cursor):
+            raise HarvestRefusal("attempt_history_record_invalid")
+        identity = identifier(cursor.get("plan_id"))
+        if "plan" in current:
+            authenticate_attempt_record(cursor, root)
+        if identity in seen_ids:
+            raise HarvestRefusal("attempt_history_identity_reused")
+        seen_ids.add(identity)
+        path = previous_attempt(cursor["previous_attempt"])
+        if path is None:
+            break
+        if path not in found:
+            raise HarvestRefusal("previous_attempt_outside_block_archive")
+        if path in chain:
+            raise HarvestRefusal("attempt_history_cycle")
+        chain.add(path)
+        cursor = read(path)
+        if path != root / "attempts" / cursor.get("plan_id", "") / "harvest.json":
+            raise HarvestRefusal("attempt_archive_layout_mismatch")
+        records.append(cursor)
+    # Inspect all records before the set comparison so second roots and forks
+    # have useful fixed refusal codes, including unreferenced attempts.
+    roots, predecessors = 0, set()
+    for record in [current, *(read(path) for path in sorted(found - ({Path(current_harvest)} if current_harvest else set())))]:
+        if not isinstance(record, dict) or record.get("schema") != ATTEMPT_HARVEST_SCHEMA:
+            raise HarvestRefusal("attempt_archive_contains_unregistered_harvest")
+        if "previous_attempt" not in record:
+            raise HarvestRefusal("previous_attempt_required_or_invalid")
+        path = previous_attempt(record["previous_attempt"])
+        if path is None:
+            roots += 1
+        elif path in predecessors:
+            raise HarvestRefusal("attempt_history_fork")
+        else:
+            predecessors.add(path)
+    if roots != 1:
+        raise HarvestRefusal("attempt_history_second_none")
+    if found != chain:
+        raise HarvestRefusal("attempt_history_orphan_harvest")
+    chronological = list(reversed(records))
+    s2_count, admission_count = 0, 0
+    for index, record in enumerate(chronological):
+        if record["occurrence"] == "s2":
+            s2_count += record.get("verdict") != "NULL"
+            if s2_count > 1:
+                raise HarvestRefusal("attempt_history_second_s2")
+            if index == 0:
+                raise HarvestRefusal("s2_not_after_named_tooling_recover")
+            tooling_s2_predecessor(chronological[index - 1])
+        if is_admission_abort(record):
+            admission_count += 1
+            if admission_count > 1 and index < len(chronological) - 1:
+                raise HarvestRefusal("same_refusal_twice_consult_required")
+        if index == 0 or record["occurrence"] == "s2":
+            continue
+        prior = chronological[index - 1]
+        if prior.get("verdict") == "NULL":
+            continue
+        if is_admission_abort(prior):
+            continue
+        if (prior.get("verdict") == "RECOVER"
+                and prior.get("recovery_classification") == "recover_no_science"
+                and prior.get("cause_classes") == ["tooling"]):
+            continue
+        raise HarvestRefusal("fresh_s1_predecessor_not_rearmable")
+    return {"harvests": [reference(path) for path in sorted(chain)],
+            "s2_count": s2_count, "admission_abort_count": admission_count,
+            "same_refusal_twice": admission_count > 1}
+
+
+def authenticate_attempt_record(record, root):
+    """A harvest's self-reported predecessor is checked against its authority."""
+    path = authenticated_reference(record.get("plan"))
+    plan = night_gate.NightPlan.from_mapping(read(path))
+    if (record.get("plan_id") != plan.plan_id or record.get("plan_sha256") != sha(path)
+            or record.get("previous_attempt") != plan.previous_attempt
+            or record.get("block_archive_root") != plan.block_archive_root
+            or str(root) != plan.block_archive_root):
+        raise HarvestRefusal("attempt_history_plan_binding_mismatch")
+    authorization = read(authenticated_reference(plan.pack_night["authorization_record"]))
+    keys = {"purpose", "attempt_id", "claim_eligible", "pack_sha256", "permitted_chain_sha256",
+            "permitted_blocks", "authority", "previous_attempt", "block_archive_root"}
+    if plan.null_reservation_restore is not None:
+        keys.add("null_reservation_restore")
+    if (set(authorization) != keys or authorization.get("claim_eligible") is not False
+            or authorization.get("permitted_blocks") != 1 or "D-171" not in authorization.get("authority", "")
+            or authorization.get("pack_sha256") != plan.pack_night["pack_sha256"]):
+        raise HarvestRefusal("attempt_history_authorization_binding_mismatch")
+    for key in ("previous_attempt", "block_archive_root", "null_reservation_restore"):
+        value = getattr(plan, key)
+        if authorization.get(key) != value:
+            raise HarvestRefusal("attempt_history_authorization_binding_mismatch")
+    if (authorization.get("purpose") != "G2B_SHAKEDOWN"
+            or authorization.get("attempt_id") != f"{plan.plan_id}/{plan.pack_night['attempt_ordinal']}"
+            or authorization.get("permitted_chain_sha256") != sha(plan.chain_path)
+            or night_gate.chain_literal(Path(plan.chain_path).read_text(), "V5_QUALIFICATION_OCCURRENCE") != record.get("occurrence")):
+        raise HarvestRefusal("attempt_history_authorization_binding_mismatch")
+    verify_attempt_restore(plan)
+    if record.get("occurrence") == "s2":
+        plan_record = read(Path(plan.custody_root) / "qualification-plan-record.json")
+        authenticate_s2_authority(plan_record.get("s2_authority"), plan.plan_id, plan.previous_attempt)
+    qualification = Path(root) / "attempts" / plan.plan_id / "qualification/harvest.json"
+    if record.get("recovery_classification") == "admission_abort" and qualification.is_file():
+        other = read(qualification)
+        if (other.get("structural_harvest") != reference(Path(root) / "attempts" / plan.plan_id / "harvest.json")
+                or other.get("end_state") is True
+                or other.get("verdict") == "RECOVER" and other.get("cause_codes") != [ADMISSION_ABORT_CODE]):
+            raise HarvestRefusal("admission_abort_has_other_recover_cause")
+    return plan
+
+
+def verify_attempt_restore(plan, *, writer=False):
+    previous = previous_attempt(plan.previous_attempt)
+    restore_ref = plan.null_reservation_restore
+    if previous is None:
+        if restore_ref is not None:
+            raise HarvestRefusal("null_restore_without_null_predecessor")
+        return
+    prior = read(previous)
+    if prior.get("verdict") != "NULL":
+        if restore_ref is not None:
+            raise HarvestRefusal("null_restore_without_null_predecessor")
+        return
+    prior_plan = night_gate.NightPlan.from_mapping(read(authenticated_reference(prior.get("plan"))))
+    capture = Path(prior_plan.custody_root) / prior_plan.pack_night["pack_id"] / "arm_readiness.t0.inputs/ledger-reservation.json"
+    if capture.exists() and restore_ref is None:
+        raise HarvestRefusal("null_reservation_restore_required")
+    if restore_ref is not None:
+        from scripts.restore_v5_null_reservation import verify_restore
+        record = read(authenticated_reference(restore_ref))
+        environment = Path(plan.chain_path).parent / "window.env"
+        if environment.is_file():
+            from joulewise import arm_readiness_evidence_t0 as author
+            from joulewise.authentication_io import read_authentication_input
+            values = author.parse_window_environment(read_authentication_input(
+                environment, grammar="raw", label="NULL rearm planned ledger bindings"))
+        else:
+            text = Path(plan.chain_path).read_text()
+            values = {key: night_gate.chain_literal(text, key) for key in ("CALIBRATION_LEDGER", "LEDGER_HEAD_PIN")}
+        if (values["CALIBRATION_LEDGER"] != record["restored_ledger"]["path"]
+                or values["LEDGER_HEAD_PIN"] != record["head_pin"]["path"]):
+            raise HarvestRefusal("null_restore_next_ledger_binding_mismatch")
+        capture = Path(plan.custody_root) / plan.pack_night["pack_id"] / "arm_readiness.t0.inputs/ledger-reservation.json" if hasattr(plan, "pack_night") else None
+        if not writer and capture is not None and capture.exists():
+            from scripts.restore_v5_null_reservation import flag
+            argv = read(capture)["argv"]
+            if any(flag(argv, "--" + name) != values[key] for name, key in (("ledger", "CALIBRATION_LEDGER"), ("head-pin", "LEDGER_HEAD_PIN"))):
+                raise HarvestRefusal("null_restore_next_reservation_binding_mismatch")
+        verify_restore(restore_ref, plan.previous_attempt,
+                       restored_ledger=record["restored_ledger"] if writer else None)
+
+
+def attempt_record(plan, plan_path, occurrence, **extra):
+    previous_attempt(plan.previous_attempt)
+    return {"schema": ATTEMPT_HARVEST_SCHEMA, "plan_id": identifier(plan.plan_id),
+            "plan": reference(plan_path), "plan_sha256": sha(plan_path),
+            "previous_attempt": plan.previous_attempt, "block_archive_root": plan.block_archive_root,
+            "occurrence": occurrence, **extra}
+
+
+def attempt_destination(plan, destination, *, qualification=False, replay=None):
+    """Only the registered unit is an attempt; replay and qualification are children."""
+    root = Path(plan.block_archive_root)
+    attempt = root / "attempts" / identifier(plan.plan_id)
+    destination = Path(destination)
+    expected = attempt / "qualification" if qualification else attempt
+    if replay is None:
+        if destination != expected:
+            raise HarvestRefusal("attempt_archive_layout_mismatch")
+    elif (destination.parent != attempt or re.fullmatch(r"reharvest-[1-9][0-9]*", destination.name) is None
+          or not Path(replay).is_relative_to(attempt)):
+        raise HarvestRefusal("attempt_reharvest_layout_mismatch")
+    return attempt
+
+
+def checked_history(record, plan, *, replay=False):
+    path = Path(plan.block_archive_root) / "attempts" / plan.plan_id / "harvest.json"
+    if replay:
+        # Reharvesting changes derived verdicts, never the counted attempt bytes.
+        original = read(path)
+        for key in ("plan", "previous_attempt", "block_archive_root", "occurrence", "plan_id"):
+            if original.get(key) != record.get(key):
+                raise HarvestRefusal("attempt_reharvest_identity_mismatch")
+        return attempt_history(original, plan.block_archive_root, current_harvest=path)
+    return attempt_history(record, plan.block_archive_root)
+
+
+def admission_abort_disposition(record, history):
+    if not is_admission_abort(record):
+        raise HarvestRefusal("admission_abort_not_guard_attested")
+    repeated = history["admission_abort_count"] > 1
+    return {"end_state": False, "s2_eligible": False, "consumes_s2": False,
+            "next_step": "same_refusal_twice_consult_required" if repeated else
+                         "fresh_s1_plan_authorization_t0_after_admission_cause_removed"}
+
+
 def authenticated_clock_budget(input_root, pack_root):
     """Replay sizing against the chain pinned by the occurrence's authority.
 
@@ -77,7 +459,7 @@ def authenticated_clock_budget(input_root, pack_root):
     binding = read(binding_path)
     if (set(binding) != {"schema", "occurrence", "plan", "sizing", "plan_id", "pack_root", "pack_sha256"}
             or binding["schema"] != "joulewise.v5_qualification_clock_binding.v1"
-            or binding["occurrence"] not in {"a1", "a2", "s1"}
+            or binding["occurrence"] not in {"a1", "a2", "s1", "s2"}
             or binding["pack_root"] != str(pack_root)):
         raise HarvestRefusal("clock_sizing_binding_invalid")
     plan_path = authenticated_reference(binding["plan"])
@@ -273,6 +655,10 @@ def pin_only_head_extension(repository, armed_head, head):
 def load_plan(path, purpose, *, now=time.time, clear=group_clear):
     from scripts.run_night import WINDOW_SHUTDOWN_GRACE_S
     plan = night_gate.NightPlan.from_mapping(read(path))
+    previous_attempt(plan.previous_attempt)
+    if plan.block_archive_root is None:
+        raise HarvestRefusal("block_archive_root_required_or_invalid")
+    verify_attempt_restore(plan)
     custody = Path(plan.custody_root)
     if Path(path).absolute().parent != custody or plan.receipt_class != "TRANSACTION_PACK":
         raise HarvestRefusal("qualification_plan_identity_invalid")

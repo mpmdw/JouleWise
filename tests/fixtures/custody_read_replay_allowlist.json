@@ -187,5 +187,33 @@
     "ordinal": 1,
     "line": 121,
     "reason": "Synthetic fixture replays a committed ledger with verify_custody=False in a disposable Git root to build Revision 6 test records; it never reads or modifies live evidence."
+  },
+  {
+    "file": "joulewise/analysis_manifest_v3.py",
+    "function": "_authenticate_finalization_inputs",
+    "ordinal": 1,
+    "line": 3649,
+    "reason": "Analysis-manifest finalization replays existing authenticated bracket and physical ledger custody at the acceptance issuance cutoff, with verify_custody=True and terminal-head equality checked separately. It publishes an analysis manifest but neither appends ledger rows nor issues acceptance."
+  },
+  {
+    "file": "scripts/check_window_provenance.py",
+    "function": "_acceptance_replay_snapshot",
+    "ordinal": 1,
+    "line": 320,
+    "reason": "Read-only provenance assertions replay the retained physical ledger at the authenticated acceptance issuance cutoff, with verify_custody=False; this helper neither publishes a bracket binding nor appends ledger rows."
+  },
+  {
+    "file": "scripts/harvest_v5_g2b_window.py",
+    "function": "bracket_assessment",
+    "ordinal": 1,
+    "line": 293,
+    "reason": "Structural G2-b harvest replays retained ledger custody at the authenticated acceptance issuance cutoff after a separate seed-pin physical authentication; verify_custody=True, with no ledger append or acceptance issuance."
+  },
+  {
+    "file": "scripts/harvest_v5_g2b_window.py",
+    "function": "physical_snapshot",
+    "ordinal": 1,
+    "line": 117,
+    "reason": "G2-b harvest and explicit desk preparation authenticate retained physical ledger custody at its seed pin; verify_custody=True and read_replay select retained custody without ledger writes. Desk binding publication runs separately through build_bracket_binding."
   }
 ]

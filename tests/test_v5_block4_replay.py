@@ -7,6 +7,7 @@ The independent started-occurrence controls below do not bypass that stop to
 claim a completed writer/ARM/driver/closeout/two-harvest occurrence.
 """
 import inspect
+import shutil
 from pathlib import Path
 from types import SimpleNamespace
 import subprocess
@@ -25,7 +26,7 @@ from tests.test_kernel_clock import frequency_probe
 
 SCRATCH = (Path(tempfile.gettempdir()) / "v5-block4-replay").resolve()
 PACK_RELATIVE = "configs/campaigns/" + writer.GAMMA
-PACK_SOURCE_COMMIT = "c88565c48fe7a8f0a1e6973cba3e03dfaeaacdab"
+PACK_SOURCE_COMMIT = "bda1c180cf156ecedcbe01a6010390dcd724c8cc"
 
 
 def put(path, value):
@@ -110,7 +111,9 @@ class CommittedGammaJoinedReplayTests(unittest.TestCase):
                 "pack_sha256": self.digest, "attempt_ordinal": 1,
                 "authorization_record": {"path": str(custody / "authorization_record.json"), "sha256": "0" * 64},
                 "confirmation_record": {"path": str(custody / "step6_confirmation_record.json"), "sha256": "0" * 64}}})
-        return {"schema_version": writer.INPUT_SCHEMA, "head": self.head, "plan": binding,
+        archive_root = self.root / (occurrence + "-block-archive"); archive_root.mkdir()
+        history = {"previous_attempt": {"none": True}, "block_archive_root": str(archive_root)} if occurrence == "s1" else {}
+        return {**history, "schema_version": writer.INPUT_SCHEMA, "head": self.head, "plan": binding,
             "kernel_frequency": frequency_probe(),
             "pack": {"root": str(self.pack), "sha256": self.digest, "attempt_ordinal": 1},
             "authorization": {"purpose": "G2B_SHAKEDOWN", "attempt_id": plan_id + "/1",
@@ -132,10 +135,17 @@ class CommittedGammaJoinedReplayTests(unittest.TestCase):
                 output = Path(inputs["plan"]["custody_root"]) / "plan.json"
                 with self.assertRaises(ar.ArmReadinessError) as caught:
                     writer.write_qualification(occurrence, inputs, output)
-                self.assertEqual(caught.exception.reason_code, "readiness_row_registry_mismatch")
+                self.assertEqual(caught.exception.reason_code, "readiness_freeze_receipt_unreadable")
                 self.assertFalse(output.exists())
                 self.assertEqual(list(output.parent.iterdir()), [])
         self.assertEqual(ar.committed_pack_tree_sha256(self.pack), before)
+
+    def test_earlier_registry_refusal_remains_a_negative_control(self):
+        registry = q.read(writer.REPO_ROOT / ar.ROW_REGISTRY_RELATIVE_PATH)
+        registry["freeze_evidence_lifecycle"]["schema_version"] = "unregistered.fixture.schema"
+        with self.assertRaises(ar.ArmReadinessError) as caught:
+            ar.validate_registry(registry)
+        self.assertEqual(caught.exception.reason_code, "readiness_row_registry_mismatch")
 
     def test_real_arm_issuer_also_stops_before_authorizing(self):
         from tests.test_arm_readiness_schemas import arm_context
@@ -145,7 +155,7 @@ class CommittedGammaJoinedReplayTests(unittest.TestCase):
             ar.generate_arm_receipt(self.pack, arm_context(self.root),
                 inputs["plan"]["custody_root"], step6_confirmation_table=confirmation["table_path"],
                 expected_confirmation_digest=inputs["confirmation"]["expected_confirmation_digest"])
-        self.assertEqual(caught.exception.reason_code, "readiness_row_registry_mismatch")
+        self.assertEqual(caught.exception.reason_code, "readiness_freeze_receipt_unreadable")
         self.assertFalse(list(self.root.rglob("arm_readiness.receipts/arm-*.json")))
 
     def joined_stop(self):
@@ -185,10 +195,12 @@ class StartedOccurrenceReplayTests(unittest.TestCase):
         self.night.mkdir(parents=True)
         self.custody = self.root / "g2b-custody"; self.runs = self.custody / "runs"; self.runs.mkdir(parents=True)
         self.bound = self.root / "bound"; self.bound.mkdir()
-        chain = self.root / "chain.zsh"; chain.write_text("#!/bin/zsh\nexit 0\n")
+        chain = self.root / "chain.zsh"; chain.write_text("#!/bin/zsh\nexport V5_QUALIFICATION_OCCURRENCE=s1\nexit 0\n")
         sidecar = self.root / "chain.sha256"; sidecar.write_bytes(ar.gnu_sidecar(q.sha(chain), chain.name))
         table = self.root / "table.json"; put(table, {})
+        self.archive = self.root / "block-archive"; self.archive.mkdir()
         auth = put(self.night_custody / "authorization_record.json", {"purpose": "G2B_SHAKEDOWN",
+            "previous_attempt": {"none": True}, "block_archive_root": str(self.archive),
             "attempt_id": "s1-synthetic/1", "claim_eligible": False, "permitted_blocks": 1,
             "pack_sha256": digest, "permitted_chain_sha256": q.sha(chain), "authority": "D-171 §3"})
         confirmation = put(self.night_custody / "confirmation.json", {"table_path": str(table),
@@ -199,6 +211,7 @@ class StartedOccurrenceReplayTests(unittest.TestCase):
             "window_max_s": 3600, "authored_epoch_s": 0., "repo_head": head, "measurement_root": str(g2b.ROOT),
             "measurement_head": head, "chain_path": str(chain), "chain_sha256_path": str(sidecar),
             "custody_root": str(self.night_custody), "registration_path": None,
+            "previous_attempt": {"none": True}, "block_archive_root": str(self.archive),
             "pack_night": {"pack_id": self.pack.name, "pack_root": str(self.pack), "pack_sha256": digest,
                 "attempt_ordinal": 1, "authorization_record": auth, "confirmation_record": confirmation}})
         plan_path = write_night_plan(self.night_custody / "night_plan.json", self.plan, create_once=True)
@@ -228,7 +241,7 @@ class StartedOccurrenceReplayTests(unittest.TestCase):
             "acceptance": put(self.root / "acceptance.json", {}), "bound_runs_root": str(self.bound),
             "auxiliary_bundle_ids": [], "bound_bundle_ids": []}
         self.input_path = self.root / "inputs.json"
-        self.args = SimpleNamespace(inputs=self.input_path, inputs_sha256=None, archive_root=self.root / "harvest",
+        self.args = SimpleNamespace(inputs=self.input_path, inputs_sha256=None, archive_root=self.archive / "attempts" / self.plan.plan_id,
             scratch_root=self.root, prepare_desk=False, previous_harvest=None)
 
     def harvest(self):
@@ -257,7 +270,8 @@ class StartedOccurrenceReplayTests(unittest.TestCase):
         self.assertFalse(record["consumes_s2"])
         self.assertFalse(record["s2_eligible"])
         self.assertFalse(record["end_state"])
-        self.args.archive_root = self.root / "partial-harvest"
+        # Independent retained-input variant, not an R3 identical-byte replay.
+        shutil.rmtree(self.args.archive_root)
         (self.runs / q.read(self.pack / "plan_tree.json")["science"][0]["run_id"]).mkdir()
         record = self.harvest()
         self.assertEqual(record["verdict"], "RECOVER")
@@ -275,14 +289,14 @@ class StartedOccurrenceReplayTests(unittest.TestCase):
         first = self.harvest()
         self.assertEqual(first["verdict"], "REFUSED")
         self.args.previous_harvest = self.args.archive_root
-        self.args.archive_root = self.root / "reharvest"
+        self.args.archive_root = self.args.previous_harvest / "reharvest-1"
         second = self.harvest()
         self.assertEqual(second["verdict"], "REFUSED")
         a, b = [q.read(root / "replay-locators.json") for root in (self.args.previous_harvest, self.args.archive_root)]
         self.assertEqual([(r["name"], r["original_path"], r["inventory"]) for r in a["sources"]],
                          [(r["name"], r["original_path"], r["inventory"]) for r in b["sources"]])
         self.assertIn("desk-producer-events", {r["name"] for r in b["sources"]})
-        self.args.archive_root = self.root / "changed"
+        self.args.archive_root = self.args.previous_harvest / "reharvest-2"
         (self.root / "desk-events.json").write_text("changed")
         with self.assertRaisesRegex(q.HarvestRefusal, "digest_mismatch"):
             self.harvest()
@@ -292,7 +306,7 @@ class StartedOccurrenceReplayTests(unittest.TestCase):
         from tests.test_battery_float import raw, UPDATE
         retained_rc = q.read(self.night / "chain.exited")["exit_code"]
         structural_before = self.harvest()
-        self.args.archive_root = self.root / "structural-after-observation-fault"
+        structural_root = self.args.archive_root
         observations = {}
         for site in ("arm", "publication", "t0"):
             raw_path = self.root / (site + ".ioreg"); raw_path.write_bytes(raw())
@@ -304,13 +318,15 @@ class StartedOccurrenceReplayTests(unittest.TestCase):
         put(boundary, {"schema": "joulewise.v5_qualification_battery_boundaries.v1", "plan_id": self.plan.plan_id,
                        "observations": observations})
         driver._qualification_observe(self.night, "hid", lambda: (_ for _ in ()).throw(OSError("synthetic producer fault")))
-        args = SimpleNamespace(plan=self.night_custody / "night_plan.json", archive_root=self.root / "qualification",
+        args = SimpleNamespace(plan=self.night_custody / "night_plan.json", archive_root=structural_root / "qualification",
             battery_evidence=boundary, battery_evidence_sha256=q.sha(boundary), replay_source=[], previous_harvest=None)
         # Mock seam: wall clock after the completion/harvest boundary.
         verdict = qualification.harvest(args, now=lambda: 999999.)
         self.assertEqual(verdict["verdict"], "FAIL")
         self.assertEqual(verdict["cause_codes"], ["qualification_observation_producer_fault"])
         self.assertFalse(verdict["end_state"])
+        # Another independent snapshot includes the later observation fault.
+        shutil.rmtree(structural_root)
         structural = self.harvest()
         self.assertEqual(q.read(self.night / "chain.exited")["exit_code"], retained_rc)
         for field in ("verdict", "cause_codes", "cause_classes"):

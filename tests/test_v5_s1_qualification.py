@@ -11,6 +11,7 @@ from unittest import mock
 from joulewise import arm_readiness as readiness, t0_rehearsal as t0
 from scripts import produce_t0_rehearsal_bundle as producer, rehearse_t0_unattended as loader
 from tests import test_t0_rehearsal as historical
+from tests.git_fixture import init_git_fixture
 
 
 class QualificationSubsetTests(unittest.TestCase):
@@ -192,7 +193,7 @@ class QualificationSubsetTests(unittest.TestCase):
         with historical.fixture_replay(self.root):
             self.assertEqual(t0.evaluate_g10(self.bundle()).status.value, "FAIL")
 
-    def qualified_lifecycle(self, *, head_extension=None, measurement_root=None):
+    def qualified_lifecycle(self, *, head_extension=None, measurement_root=None, occurrence="s1"):
         from tests.test_network_time_off import receipt
         stage_dir = self.root / "records/qualification-stages"; stage_dir.mkdir()
         self.put("night/chain.started", {"pid": 777, "monotonic_ns": 10})
@@ -225,7 +226,7 @@ class QualificationSubsetTests(unittest.TestCase):
         context_path = arm_path.parent.parent / "arm_readiness.t0.inputs/arm-context.json"
         context_path.write_bytes(readiness.render_json(arm["arm_context"]))
         chain = self.root / "night/window-chain.zsh"
-        chain.write_text("export V5_QUALIFICATION_OCCURRENCE=s1\nexport NIGHT_ARM_CONTEXT_SHA256="
+        chain.write_text(f"export V5_QUALIFICATION_OCCURRENCE={occurrence}\nexport NIGHT_ARM_CONTEXT_SHA256="
                          + producer.reference(context_path)["sha256"] + "\n")
         plan_value = producer.read(plan)
         plan_value.update(custody_root=str(self.root), chain_path=str(chain), pack_night={"pack_id": go["pack_id"]})
@@ -236,7 +237,7 @@ class QualificationSubsetTests(unittest.TestCase):
         self.put("night/go_receipt.json", go)
         record = stage_dir / "plan-record.json"
         record.write_bytes(readiness.render_json({"schema_version": "joulewise.v5_qualification_plan_record.v1",
-            "occurrence": "s1", "head": go["repo_head"], "plan": producer.reference(plan),
+            "occurrence": occurrence, "head": go["repo_head"], "plan": producer.reference(plan),
             "window_id": self.root.name, "desk_sources": sources, "backup_destinations": destinations,
             "pack_night": {"pack_sha256": "a" * 64}}))
         stop = stage_dir / "stop.json"; stop.write_bytes(readiness.render_json({"session_state": "finalized",
@@ -315,6 +316,29 @@ class QualificationSubsetTests(unittest.TestCase):
         native.write_bytes(readiness.render_json(context))
         self.assertEqual(t0.evaluate_g9(self.bundle()).status.value, "FAIL")
 
+    def test_s2_desk_preservation_replays_and_mislabeled_occurrence_refuses(self):
+        life = self.qualified_lifecycle(occurrence="s2")
+        self.put("records/lifecycle.json", life)
+        result = t0.evaluate_g9(self.bundle())
+        self.assertEqual(result.status.value, "PASS", result.message)
+        stage = producer.read(next(row["evidence"]["path"] for row in life["stages"]
+                                   if row["stage_id"] == "claim_backup"))
+        record_path = Path(stage["plan_record"]["path"])
+        record = producer.read(record_path)
+        record["occurrence"] = "s1"
+        record_path.write_bytes(readiness.render_json(record))
+        for row in life["stages"]:
+            if row["stage_id"] in {"claim_backup", "bound_backup", "close_out", "restore"}:
+                stage_path = Path(row["evidence"]["path"])
+                value = producer.read(stage_path)
+                value["plan_record"] = producer.reference(record_path)
+                stage_path.write_bytes(readiness.render_json(value))
+                row["evidence"] = producer.reference(stage_path)
+        self.put("records/lifecycle.json", life)
+        result = t0.evaluate_g9(self.bundle())
+        self.assertEqual(result.status.value, "FAIL")
+        self.assertIn("occurrence differs", result.message)
+
     def test_missing_s1_backup_or_closeout_cannot_pass_g9(self):
         life = self.qualified_lifecycle(); self.put("records/lifecycle.json", life)
         result = t0.evaluate_g9(self.bundle())
@@ -357,7 +381,7 @@ class QualificationSubsetTests(unittest.TestCase):
             return subprocess.check_output(["git", "-C", str(repository), *args], text=True, stderr=subprocess.PIPE).strip()
         def commit(message):
             git("add", "."); git("-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit", "-qm", message)
-        git("init", "-q"); commit("fixture H")
+        init_git_fixture(repository, "-q"); commit("fixture H")
         armed = git("rev-parse", "HEAD")
         pin.write_bytes(readiness.render_json({"ledger_schema": ledger.LEDGER_SCHEMA, "sequence": 3, "head_digest": "a" * 64}))
         commit("fixture H_pin"); head_pin = git("rev-parse", "HEAD")

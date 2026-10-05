@@ -1311,7 +1311,7 @@ def _qualified_desk_stage(bundle, facts, stage_id, evidence):
     record = record_artifact.value
     go = bundle.record("d149_go").value
     if (not isinstance(record, Mapping) or record.get("schema_version") != "joulewise.v5_qualification_plan_record.v1"
-            or record.get("occurrence") != "s1" or record.get("head") != go.get("repo_head")
+            or record.get("occurrence") not in {"s1", "s2"} or record.get("head") != go.get("repo_head")
             or record.get("plan", {}).get("sha256") != go.get("plan_sha256")):
         raise ValueError("desk stage is not bound to the s1 plan")
     plan = _verify_artifact_reference(bundle, record.get("plan"), label="s1 plan")
@@ -1336,6 +1336,8 @@ def _qualified_desk_stage(bundle, facts, stage_id, evidence):
             or not chain.is_file() or readiness.sha256_bytes(chain.read_bytes()) != go.get("window_chain_sha256")
             or plan.value.get("pack_night", {}).get("pack_id") != go.get("pack_id")):
         raise ValueError("desk plan chain is not authenticated by GO")
+    if night_gate.chain_literal(chain.read_text(), "V5_QUALIFICATION_OCCURRENCE") != record["occurrence"]:
+        raise ValueError("desk occurrence differs from the GO-authenticated chain")
     try:
         context = night_gate.authenticate_arm_context(SimpleNamespace(**plan.value), arm.value.get("arm_context"))
     except (ValueError, OSError) as exc:

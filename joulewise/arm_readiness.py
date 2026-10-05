@@ -10212,7 +10212,7 @@ def _authenticate_pack_launch_go(
         if not custody_pack_root.resolve().is_relative_to(night_root):
             raise _go_invalid("night_plan.custody_root")
         expected = {
-            "plan_id": arm["pack"]["plan_id"], "pack_id": arm["pack"]["pack_id"],
+            "plan_id": plan["plan_id"] if "previous_attempt" in plan else arm["pack"]["plan_id"], "pack_id": arm["pack"]["pack_id"],
             "pack_sha256": arm["pack"]["pack_sha256"],
             "repo_head": arm["reviewed_main"]["head_commit"],
             "boot_session_id": arm["boot_session_id"],
@@ -10256,8 +10256,19 @@ def _authenticate_pack_launch_go(
             if any(go[go_key][key] != reference[key] for key in ("path", "sha256")):
                 raise _go_invalid(go_key)
         authorization = _go_record(go["authorization"], "authorization", night_root)
-        _require_exact_keys(authorization, {"purpose", "attempt_id", "claim_eligible", "pack_sha256",
-            "permitted_chain_sha256", "permitted_blocks", "authority"}, "authorization")
+        authorization_keys = {"purpose", "attempt_id", "claim_eligible", "pack_sha256",
+            "permitted_chain_sha256", "permitted_blocks", "authority"}
+        if "previous_attempt" in plan:
+            from joulewise.night_gate import validate_attempt_bindings
+            validate_attempt_bindings(plan["previous_attempt"], plan.get("block_archive_root"),
+                                      plan.get("null_reservation_restore"))
+            history_keys = {"previous_attempt", "block_archive_root"}
+            if "null_reservation_restore" in plan:
+                history_keys.add("null_reservation_restore")
+            authorization_keys |= history_keys
+            if any(authorization.get(key) != plan[key] for key in history_keys):
+                raise _go_invalid("authorization.attempt_history")
+        _require_exact_keys(authorization, authorization_keys, "authorization")
         for key in ("purpose", "attempt_id", "claim_eligible"):
             if type(authorization[key]) is not type(go["authorization"][key]) or authorization[key] != go["authorization"][key]:
                 raise _go_invalid(f"authorization.{key}")

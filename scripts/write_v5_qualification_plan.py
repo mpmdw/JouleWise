@@ -16,6 +16,7 @@ import re
 import shlex
 import subprocess
 import sys
+from types import SimpleNamespace
 from fractions import Fraction
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -140,7 +141,7 @@ def size_window(occurrence, sizing, *, roster=(), auxiliary=(), brackets=(), non
     Require every component, including model load/admission and every auxiliary
     stage. This does not assert a hard latency bound for unbounded inference.
     """
-    require(occurrence in {"a1", "a2", "s1"}, "occurrence_retired_or_invalid")
+    require(occurrence in {"a1", "a2", "s1", "s2"}, "occurrence_retired_or_invalid")
     sizing = sizing_adapter(sizing)
     occurrence = "s1"
     exact(sizing, {"fixed", "members", "auxiliary", "streams", "clock"}, "sizing")
@@ -349,14 +350,14 @@ def render_qualification_chain(occurrence, template, sizing, root, t0_epoch_s, o
     pack or guessed role/stage duration is generated here.
     """
     root = safe_path(root)
-    require(occurrence == "s1", "occurrence_retired_or_invalid")
+    require(occurrence in {"s1", "s2"}, "occurrence_retired_or_invalid")
     template = safe_path(template)
     text = template.read_text()
     no_fill(text)
     require(not re.search(r"(?m)^\s*(?:export\s+)?TRANSCRIPT_ROOT\s*=", text), "transcript_root_override")
     roster, auxiliary, brackets, nonsampling = pack_roster(root, occurrence)
     sized = size_window(occurrence, sizing, roster=roster, auxiliary=auxiliary, brackets=brackets, nonsampling=nonsampling)
-    if occurrence == "s1":
+    if occurrence in {"s1", "s2"}:
         require(g2b_body(readiness._repo_for_pack(root)) in text, "reviewed_g2b_chain_required")
     require(not re.search(r"(?:export\s+)?(?:EXPECTED_CONFIRMATION_DIGEST|STEP6_CONFIRMATION_TABLE)\s*=", text), "confirmation_environment_route")
     for name in ("NIGHT_PROGRAMMED_SPAN_S", "NIGHT_LATEST_CHAIN_START_EPOCH_S"):
@@ -424,7 +425,7 @@ def prerequisites(occurrence, references, head, t0_sequence_start, custody, *, c
     expected = (set() if occurrence == "a1" else {"a1_control"} if occurrence == "a2" else
                 {"a1_control", "a2_control", "observation_producers", "g10_control", "g10_artifacts"})
     exact(references, expected, "prerequisites")
-    if occurrence == "s1":
+    if occurrence in {"s1", "s2"}:
         from joulewise import t0_rehearsal as t0
         exact(references["observation_producers"], {"driver", "bundle", "evaluator"}, "observation_producers")
         for name, suffix in (("driver", "scripts/run_night.py"), ("bundle", "scripts/produce_t0_rehearsal_bundle.py"),
@@ -464,7 +465,7 @@ def prerequisites(occurrence, references, head, t0_sequence_start, custody, *, c
         for ref in [control["arm_receipt"], control["observation"], *control["sources"]]:
             read_locator(ref)
         controls[label] = control
-    if occurrence == "s1":
+    if occurrence in {"s1", "s2"}:
         from scripts.ed_session.capture_t0_anchor_positive_control import verify_g10_custody
         _, raw = read_locator(controls["a1"]["observation"])
         first_control = readiness.parse_json_bytes(raw)
@@ -492,8 +493,15 @@ def authenticate_frozen_pack(root, confirmation):
 
 
 def write_qualification(occurrence, inputs, output):
-    require(occurrence in {"a1", "a2", "s1"}, "occurrence_retired_or_invalid")
-    exact(inputs, {"schema_version", "head", "plan", "pack", "authorization", "confirmation", "sizing", "deadlines", "other_custody_roots", "arm_context", "prerequisites", "kernel_frequency"}, "inputs")
+    require(occurrence in {"a1", "a2", "s1", "s2"}, "occurrence_retired_or_invalid")
+    keys = {"schema_version", "head", "plan", "pack", "authorization", "confirmation", "sizing", "deadlines", "other_custody_roots", "arm_context", "prerequisites", "kernel_frequency"}
+    if occurrence in {"s1", "s2"}:
+        keys |= {"previous_attempt", "block_archive_root"}
+        if "null_reservation_restore" in inputs:
+            keys.add("null_reservation_restore")
+    if occurrence == "s2":
+        keys.add("s2_authority")
+    exact(inputs, keys, "inputs")
     require(inputs["schema_version"] == INPUT_SCHEMA, "inputs.schema")
     no_fill(inputs)
     base = dict(inputs["plan"])
@@ -514,7 +522,8 @@ def write_qualification(occurrence, inputs, output):
     digest = readiness.committed_pack_tree_sha256(root)
     require(digest == inputs["pack"]["sha256"], "pack_digest")
     frozen_identity = readiness._pack_record(root)
-    require(base["plan_id"] == frozen_identity["plan_id"], "frozen_plan_id")
+    if occurrence in {"a1", "a2"}:
+        require(base["plan_id"] == frozen_identity["plan_id"], "frozen_plan_id")
     roster, auxiliary, brackets, nonsampling = pack_roster(root, occurrence)
     sizing = size_window(occurrence, inputs["sizing"], roster=roster, auxiliary=auxiliary, brackets=brackets, nonsampling=nonsampling)
     gate = kernel_clock.frequency_gate(inputs["kernel_frequency"], sizing["longest_sampler_stream_s"])
@@ -534,7 +543,34 @@ def write_qualification(occurrence, inputs, output):
     require(not re.search(r"(?:export\s+)?(?:EXPECTED_CONFIRMATION_DIGEST|STEP6_CONFIRMATION_TABLE)\s*=", text), "confirmation_environment_route")
     require(g2b_body(measurement) in text, "reviewed_g2b_chain_required")
     purpose = "G2B_SHAKEDOWN"
-    auth = inputs["authorization"]
+    auth = dict(inputs["authorization"])
+    auth_keys = {"purpose", "attempt_id", "claim_eligible", "pack_sha256", "permitted_chain_sha256", "permitted_blocks", "authority"}
+    if occurrence in {"s1", "s2"}:
+        from joulewise import v5_qualification as q
+        night_gate.validate_attempt_bindings(inputs["previous_attempt"], inputs["block_archive_root"],
+                                           inputs.get("null_reservation_restore"))
+        require(night_gate.chain_literal(text, "V5_QUALIFICATION_OCCURRENCE") == occurrence, "chain_occurrence")
+        for name in ("previous_attempt", "block_archive_root", "null_reservation_restore"):
+            if name in inputs:
+                require(name not in auth or auth[name] == inputs[name], "authorization_history_binding")
+                require(name not in base or base[name] == inputs[name], "plan_history_binding")
+                auth[name] = base[name] = inputs[name]
+                auth_keys.add(name)
+        q.previous_attempt(inputs["previous_attempt"])
+        safe_path(inputs["block_archive_root"])
+        # The create-once pointer and census are checked before publishing authority.
+        provisional = {"schema": q.ATTEMPT_HARVEST_SCHEMA, "plan_id": base["plan_id"],
+                       "previous_attempt": inputs["previous_attempt"], "occurrence": occurrence,
+                       "block_archive_root": inputs["block_archive_root"], "verdict": "REFUSED"}
+        # A proposed s2 must fit the allowance before authority is published.
+        # An actual NULL harvest still spends neither allowance in replay.
+        # The new plan is not yet published; authenticate all existing links.
+        history = q.attempt_history(provisional, inputs["block_archive_root"])
+        for ref in history["harvests"]:
+            q.authenticate_attempt_record(q.read(q.authenticated_reference(ref)), Path(inputs["block_archive_root"]))
+        if occurrence == "s2":
+            q.authenticate_s2_authority(inputs["s2_authority"], base["plan_id"], inputs["previous_attempt"])
+        q.verify_attempt_restore(SimpleNamespace(**{**base, "null_reservation_restore": inputs.get("null_reservation_restore")}), writer=True)
     require(auth.get("purpose") == purpose and auth.get("claim_eligible") is False and auth.get("permitted_blocks") == 1, "purpose_claim_blocks")
     require(not frozen_identity["window_id"].startswith("rehearsal-t0-unattended-"), "window_prefix")
     auth_path = custody / "authorization_record.json"
@@ -565,7 +601,7 @@ def write_qualification(occurrence, inputs, output):
     # bytes; it cannot be quietly rewritten and retried in the same custody.
     require(auth.get("attempt_id") == f"{plan.plan_id}/{plan.pack_night['attempt_ordinal']}", "attempt_id")
     require(auth.get("pack_sha256") == digest and auth.get("permitted_chain_sha256") == readiness.sha256_bytes(chain.read_bytes()), "authorization_bindings")
-    exact(auth, {"purpose", "attempt_id", "claim_eligible", "pack_sha256", "permitted_chain_sha256", "permitted_blocks", "authority"}, "authorization")
+    exact(auth, auth_keys, "authorization")
     context = readiness.validate_arm_context(inputs["arm_context"])
     arm_root = safe_path(context["custody_root"])
     require(arm_root != custody and arm_root not in custody.parents and custody not in arm_root.parents,
@@ -584,7 +620,7 @@ def write_qualification(occurrence, inputs, output):
     prerequisites(occurrence, inputs["prerequisites"], inputs["head"],
                   plan.t0_epoch_s - float(allowance(sizing_adapter(inputs["sizing"])["fixed"]["pack_t0"])), custody,
                   code_root=measurement)
-    if occurrence == "s1":
+    if occurrence in {"s1", "s2"}:
         for name, relative in (("driver", "scripts/run_night.py"), ("bundle", "scripts/produce_t0_rehearsal_bundle.py"),
                                ("evaluator", "joulewise/t0_rehearsal.py")):
             require(inputs["prerequisites"]["observation_producers"][name] == locator(measurement / relative), "observation_producer_checkout")
@@ -614,7 +650,10 @@ def write_qualification(occurrence, inputs, output):
                   "quiet-mac-prep", "prewindow-check", "ledger-readiness", "ledger-reservation"]},
               "backup_destinations": destinations,
               "desk_sources": t0_rehearsal.qualification_backup_sources(custody, context)}
-    if occurrence == "s1":
+    if occurrence in {"s1", "s2"}:
+        record.update(previous_attempt=plan.previous_attempt, block_archive_root=plan.block_archive_root)
+        if occurrence == "s2":
+            record["s2_authority"] = inputs["s2_authority"]
         record["terminal_boundary_path"] = str(custody / "night/transcript/post-bracket-terminal-boundary.json")
     if occurrence in {"a1", "a2"}:
         record.update(schema_version=ARM_ONLY_SCHEMA, mode="ARM_ONLY_NO_LAUNCH",
@@ -649,12 +688,12 @@ def write_qualification(occurrence, inputs, output):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="occurrence", required=True)
-    for name in ("a1", "a2", "s1"):
+    for name in ("a1", "a2", "s1", "s2"):
         command = commands.add_parser(name)
         command.add_argument("--inputs", type=Path, required=True)
         command.add_argument("--output", type=Path, required=True)
     render = commands.add_parser("render-chain")
-    render.add_argument("--occurrence", dest="render_occurrence", choices=("s1",), required=True)
+    render.add_argument("--occurrence", dest="render_occurrence", choices=("s1", "s2"), required=True)
     render.add_argument("--template", type=Path, required=True)
     render.add_argument("--sizing", type=Path, required=True)
     render.add_argument("--pack-root", type=Path, required=True)

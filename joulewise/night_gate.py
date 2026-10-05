@@ -389,6 +389,9 @@ class NightPlan:
     registration_path: str | None
     pack_night: dict[str, object] | None = None
     quiet_admission: dict[str, object] | None = None
+    previous_attempt: dict[str, object] | None = None
+    block_archive_root: str | None = None
+    null_reservation_restore: dict[str, object] | None = None
 
     @staticmethod
     def from_mapping(value: Mapping[str, object]) -> "NightPlan":
@@ -398,6 +401,13 @@ class NightPlan:
         is_pack = value.get("receipt_class") == "TRANSACTION_PACK"
         is_quiet = value.get("schema") == QUIET_PLAN_SCHEMA and not is_pack
         expected_keys = _PLAN_KEYS | {"pack_night"} if is_pack else _PLAN_KEYS
+        history_keys = {"previous_attempt", "block_archive_root"}
+        if keys & history_keys:
+            expected_keys |= history_keys
+            if not is_pack:
+                raise PlanError("night_plan_malformed", "attempt history requires a pack plan")
+        if "null_reservation_restore" in keys:
+            expected_keys |= history_keys | {"null_reservation_restore"}
         if is_quiet:
             expected_keys = expected_keys | {"quiet_admission"}
         expected_schema = PACK_PLAN_SCHEMA if is_pack else PLAN_SCHEMA
@@ -531,6 +541,14 @@ class NightPlan:
                 "night_plan_malformed",
                 f"registration_path is required for {receipt_class}",
             )
+        previous = value.get("previous_attempt")
+        archive_root = value.get("block_archive_root")
+        restore = value.get("null_reservation_restore")
+        if keys & history_keys:
+            try:
+                validate_attempt_bindings(previous, archive_root, restore)
+            except ValueError as exc:
+                raise PlanError("night_plan_malformed", str(exc)) from exc
         quiet_admission = None
         if is_quiet:
             from joulewise.quiet_admission import validate_policy
@@ -553,7 +571,26 @@ class NightPlan:
             registration_path=registration,
             pack_night=pack_night,
             quiet_admission=quiet_admission,
+            previous_attempt=previous,
+            block_archive_root=archive_root,
+            null_reservation_restore=restore,
         )
+
+
+def validate_attempt_bindings(previous, archive_root, restore=None):
+    """Validate the create-once history shapes without reading mutable evidence."""
+    def locator(value):
+        return (isinstance(value, Mapping) and set(value) == {"path", "sha256"}
+                and isinstance(value["path"], str) and os.path.isabs(value["path"])
+                and isinstance(value["sha256"], str) and _SHA256_RE.fullmatch(value["sha256"]))
+    if not (isinstance(previous, Mapping) and set(previous) == {"none"} and previous["none"] is True):
+        if not locator(previous) or Path(previous["path"]).name != "harvest.json":
+            raise ValueError("previous_attempt_required_or_invalid")
+    if (not isinstance(archive_root, str) or not os.path.isabs(archive_root)
+            or any(p.is_symlink() for p in (Path(archive_root), *Path(archive_root).parents))):
+        raise ValueError("block_archive_root_required_or_invalid")
+    if restore is not None and not locator(restore):
+        raise ValueError("null_reservation_restore_invalid")
 
 
 @dataclass(frozen=True)
@@ -987,6 +1024,13 @@ def _authenticate_pack_records(plan: NightPlan):
         records[field] = _pack_object(path, field, locator["sha256"])
     authorization = records["authorization_record"]
     keys = {"purpose", "attempt_id", "claim_eligible", "pack_sha256", "permitted_chain_sha256", "permitted_blocks", "authority"}
+    if plan.previous_attempt is not None:
+        keys |= {"previous_attempt", "block_archive_root"}
+        if plan.null_reservation_restore is not None:
+            keys.add("null_reservation_restore")
+        for field in keys - {"purpose", "attempt_id", "claim_eligible", "pack_sha256", "permitted_chain_sha256", "permitted_blocks", "authority"}:
+            if authorization.get(field) != getattr(plan, field):
+                raise PackNightRefusal("authorization_record." + field)
     if set(authorization) != keys:
         raise PackNightRefusal("authorization_record.keys")
     for field in ("pack_sha256", "permitted_chain_sha256"):
@@ -1181,8 +1225,8 @@ def qualification_start_deadline(plan, chain_text, purpose):
     if purpose not in {"T0_REHEARSAL", "G2B_SHAKEDOWN"}:
         raise PackNightRefusal("qualification non-claim purpose required")
     marker = chain_literal(chain_text, "V5_QUALIFICATION_OCCURRENCE")
-    expected = "r1" if purpose == "T0_REHEARSAL" else "s1"
-    if marker != expected:
+    expected = {"r1"} if purpose == "T0_REHEARSAL" else {"s1", "s2"}
+    if marker not in expected:
         raise PackNightRefusal("qualification occurrence/purpose")
     span = chain_literal(chain_text, "NIGHT_PROGRAMMED_SPAN_S")
     latest = chain_literal(chain_text, "NIGHT_LATEST_CHAIN_START_EPOCH_S")
@@ -1263,7 +1307,8 @@ def _evaluate_pack_conditions(plan, probes, rows, arm_path):
     arm = _pack_object(path, "arm_receipt", verified["receipt_sha256"])
     _pack_digest(plan, arm)
     if (arm["status"] != "PASS" or arm["arm_disposition"] != "GO"
-            or arm["pack"]["plan_id"] != plan.plan_id
+            or arm["pack"]["plan_id"] != (readiness._pack_record(prepared["root"])["plan_id"]
+                                           if plan.previous_attempt is not None else plan.plan_id)
             or arm["reviewed_main"]["head_commit"] != plan.repo_head):
         raise PackNightRefusal("arm_receipt.plan/HEAD/custody/disposition")
     authenticate_arm_context(plan, arm["arm_context"],
