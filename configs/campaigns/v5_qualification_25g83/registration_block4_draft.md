@@ -100,10 +100,16 @@ Changing any of these after the seal is a new rule (§11), not an arm-time choic
 ## 4. Window shape, deadlines and sizing
 
 **Controls.** Author a fresh T-0 set, ARM once, keep the PASS/GO result and its exact expiry, and never install or
-invoke a consuming launcher. After every validity horizon has ended, the canonical verifier must refuse
-`readiness_record_expired`. Then prove there was no consumption, chain start, sampler or bundle.
-`FILL[ARM-CONTROL-DEADLINE-RECIPE]` bounds the expiry, check and courier steps. `a1` completes before `a2` starts,
-and `a2` before `s1`'s T-0 and clean dwell.
+invoke a consuming launcher. At or after the ARM's capability deadline plus 1 ns (the ARM deadline is the
+earlier of 300 s after evaluation and every evidence deadline), the canonical verifier must refuse
+`readiness_record_expired`. Then prove there was no consumption, chain start, sampler or bundle. The control
+does not wait for its six-hour nonvolatile evidence horizon: nothing from it is ever reused, and that wait would
+cost about six idle hours per control without protecting anything. The next occurrence's first T-0 capture starts
+only after the previous control's perishable evidence has expired, that is after the latest of its ARM deadline, its
+GO deadline and every volatile T-0 evidence deadline (a horizon of 1200 s from the evidence origin), so the next
+occurrence's check set is fresh in the sense of the D-149 fence. `FILL[ARM-CONTROL-DEADLINE-RECIPE]` carries these
+computed deadlines and the expiry, check and courier caps. `a1` completes before `a2` starts, and `a2` before
+`s1`'s T-0 and clean dwell.
 
 **`s1`.** One launch. A settled OFF receipt and a 600-second clean dwell; the pre settle and the pre bracket with the
 acceptance-derived screen; NEG-8 bound work and start references; the first before-midpoint science stage with
