@@ -172,3 +172,69 @@ execution on the real producers).
 6. **One composed desk test with no mock at the seams** before seal: the real journal into the real assembler into
    `evaluate_qualification`, and the real close-out output into G9, on a two-root fixture, covering G1, G3, G5, G8
    and G9.
+
+## Addendum D (2026-10-05 11:00, desk-day seat 3): attempt history, the sealed prewindow script, G10 placement, ledger isolation, NULL recovery
+
+Inputs: lane X6's open flags on PR #483 (`118-sol-b4-x6-report.md`: F5, P1, S1, T1) and the remaining items of the Opus
+pre-mortem memo (`~/night-archive/ia-0a40/MEMO.md` 1.4, 1.6, 1.11 and 3.M).
+
+1. **The attempt history of a block is a chain plus a census** (X6 F5). Sol's objection was that a per-attempt
+   pointer cannot exclude an attempt that someone simply left out. Under D-161 the threat is an honest mistake or a
+   hallucinated record, not a forger. So completeness is proven by two checks together:
+   - Every `s1` attempt and the `s2` carries a required, create-once `previous_attempt` field in its authorization
+     and plan. The field is either `none` (the block's first attempt only) or the path and SHA-256 of the
+     immediately preceding attempt's `harvest.json`.
+   - The harvester walks that chain back to `none`, authenticating each link. It then lists every attempt harvest
+     of the block under the block's harvest archive root. The two sets must be equal: no fork, no orphan, no
+     second `none`.
+
+   The allowances are counted on the walked chain:
+   - NULL re-arms are free;
+   - at most one guard-attested admission abort re-arms (addendum B, item 4), and a second goes to the
+     same-refusal-twice consult;
+   - at most one `s2`, only after a named tooling RECOVER.
+
+   Lane X7 (brief 120).
+2. **`scripts/prewindow_check.sh` stays byte-identical to main** (X6 P1). The sealed Revision-6 registration pins
+   it, and `scripts/issue_calibration_acceptance_generation.py` refuses a dwell whose script digest differs from
+   that pin. The CPU-based census (addendum B, item 5) and the report-only load average at T-0 (memo A-F6) move into
+   a T-0 dwell of the T-0 caller's own. That dwell has the same clean-dwell length and caps, and the T-0 evidence pins
+   it. The night path keeps calling the sealed shell script. Consequence, stated for the seal: the night's
+   pre-chain dwell judges contaminants by the sealed named-daemon list and vetoes on load average, while T-0
+   judges every process by CPU. Both must pass, so the night path is the stricter one. Lane X8 (brief 121).
+3. **G10 runs after `a2` and before `s1`'s T-0, scheduled by measured offset** (memo 1.4). Every T-0 arm reference
+   resyncs when the sntp quorum's bound exceeds 0.5 s. Today the clock is about 1.15 s off, so `a1`'s preparation
+   will resync. If G10 came first, its own preparation would do that resync, and G10's ON would then see almost
+   nothing to correct.
+   - G10 therefore runs after `a2`'s expiry check, on the same boot as the controls and `s1`, and before `s1`'s
+     first T-0 boundary. This uses the original ruling 76 wording, "before `s1`'s T-0".
+   - Its helper first measures the offset with the fixed R0 reference collector. It proceeds only when the
+     quorum midpoint is at least 20 ms and the bound at most 0.400 s. At −3.17 ppm the offset grows by about
+     11 ms an hour, so 20 ms accrues roughly two hours after `a1`'s resync.
+   - If its preparation would resync anyway, it stops before its own ON. That outcome does not count as an
+     attempt.
+   - The one reviewed ON/OFF frequency redraw (addendum B, item 2) is now one per block, before whichever
+     occurrence's R0 gate failed. A redraw made before G10 restarts the wait for the offset band.
+
+   Lane X9 (brief 123). Recipe 46 is rewritten by the lead.
+4. **Ledger isolation for the controls** (memo 1.6). G10's preparation, `a1` and `a2` each bind `CALIBRATION_LEDGER`
+   to their own byte-exact copy of the production seed. Each copy sits outside all four ARM-context roots and
+   stays unchanged until `s1`'s writer has run. Only `s1` reserves in the production ledger. Before every T-0, the
+   operator recipe asserts that the production ledger's SHA-256 and the committed pin are unchanged. The memo
+   checked this at API level: the controls' records re-authenticate against their copies, and production stays at
+   the seed digest. No code change; registration §2 and §3.6 and the roots map carry it.
+5. **NULL recovery restores the seed** (memo 1.11). A NULL `s1` attempt (no `chain.started`) leaves one open
+   bracket session from its T-0 reservation. Recovery has three steps:
+   - copy that attempt's ledger to custody;
+   - prove that the dropped tail is exactly that one session-open row;
+   - restore the seed bytes, with the pin unchanged.
+
+   This is governed, not a copy-from-source retry: a tool does it and writes an authenticated restore record, which
+   the next attempt's writer and harvester verify (lane X7). Because the pin and H do not change, `a1` and `a2` stay
+   valid for the fresh attempt on the same boot. A reboot or a head change needs fresh controls, which are not
+   occurrences and spend nothing. `s2` is written by the plan writer as `s1` plus the history pointer.
+6. **Three watchdog tests are not a regression** (X6 T1). They failed serially only inside the Sol sandbox. The lead
+   ran them outside the sandbox: 9 of 9 passed at bda1c180 and 3 of 3 at main.
+7. **The magistrate watchdog makes no network call during a plan span** (memo 3.M). Its five-minute tick ran two
+   HTTPS `git ls-remote` probes before checking for an active plan. Separate PR off main (lane WD, brief 122),
+   because it protects every window, not only block 4.
