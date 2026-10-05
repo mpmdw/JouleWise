@@ -727,7 +727,8 @@ def make_t0_fixture(
         "plan_id": tree["plan"]["plan_id"], "window_id": tree["window_identity"]["window_id"],
         "epoch_s": now_epoch - (now_monotonic_ns - off_finished) / 1e9,
         "monotonic_s": off_finished / 1e9})
-    captures["clock-reference.json"].update(kernel_frequency=frequency_probe(), t_stream_max_s=None)
+    captures["clock-reference.json"].update(kernel_frequency=frequency_probe(), t_stream_max_s=320.)
+    _write_json(input_root / "kernel-frequency-gate.json", kernel_clock.frequency_gate(frequency_probe(), 320.))
     for name, value in captures.items():
         _write_json(input_root / name, value)
 
@@ -950,6 +951,18 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
         clock_patcher.start()
         self.addCleanup(clock_patcher.stop)
         self.addCleanup(publication_patcher.stop)
+
+    def test_new_floor_t0_authoring_requires_frequency_gate_by_profile(self):
+        temporary, repository, pack, custody, _context, inputs = make_t0_fixture()
+        self.addCleanup(temporary.cleanup)
+        self.assertNotEqual(pack.name, "d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5")
+        path = inputs / "clock-reference.json"
+        capture = json.loads(path.read_bytes()); capture["t_stream_max_s"] = None
+        _write_json(path, capture)
+        with author_environment(repository), self.assertRaises(T0EvidenceAuthoringError) as caught:
+            author_arm_readiness_evidence_t0(pack, custody)
+        self.assertEqual(caught.exception.reason_code, "evidence_author_t0_clock_attestation_underivable")
+        self.assertIn("frequency gate is missing", str(caught.exception))
 
     def test_versioned_receipts_author_steady_negative_drift_at_long_spans(self):
         from fractions import Fraction

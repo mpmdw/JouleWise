@@ -819,7 +819,7 @@ def _capture_step_with_dependencies(
                 stream_max = gate["t_stream_max_s"]
                 if not kernel_clock.frequency_gate(r0_frequency, stream_max)["passes"]:
                     raise ValueError("R0 kernel frequency exceeds the stream clock budget")
-            elif context.pack_root.name == "d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5":
+            elif readiness.requires_t0_frequency_gate(context.pack_root):
                 raise ValueError("qualification kernel frequency gate is missing")
         elif step_id == "clock-disable":
             off = network_time_off.read_receipt(

@@ -682,6 +682,28 @@ class FixtureBuilder:
 
 
 class T0RehearsalTests(unittest.TestCase):
+    def test_g10_reads_residual_stamps_from_retained_control_tree(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = FixtureBuilder(Path(temporary)).build()
+            positive = json.loads((root / "records/positive-control.json").read_bytes())
+            support = root / "records/g10-custody/native-control"
+            _write_json(support / "positive-control.json", positive)
+            frequency = frequency_probe()
+            _write_json(support / "before.json", {"realtime_ns": positive["anchor_before_ns"],
+                "monotonic_raw_ns": 0, "kernel_frequency": frequency})
+            _write_json(support / "after.json", {"realtime_ns": positive["anchor_after_ns"] + 1000,
+                "monotonic_raw_ns": 1000, "kernel_frequency": frequency})
+            movement = {"anchor_check_version": kernel_clock.ANCHOR_CHECK_VERSION,
+                "absolute_movement_ns": 5_000_001, "residual_movement_ns": 5_000_001.}
+            _write_json(support / "anchor-movement.json", movement)
+            result = rehearsal.evaluate_g10(fixture_bundle(root))
+            self.assertEqual(result.status, rehearsal.GateStatus.PASS, result.message)
+            movement["residual_movement_ns"] = 0.
+            _write_json(support / "anchor-movement.json", movement)
+            result = rehearsal.evaluate_g10(fixture_bundle(root))
+            self.assertEqual(result.status, rehearsal.GateStatus.FAIL)
+            self.assertIn("residual differs", result.message)
+
     def test_g4_replays_versioned_drift_step_and_slew_from_raw_custody(self):
         from fractions import Fraction
         with tempfile.TemporaryDirectory() as temporary:

@@ -505,7 +505,6 @@ def harvest(args, *, runner=subprocess.run, now=None, clear=q.group_clear):
     if no_science:
         sources["pre-science-tooling-failure"] = q.authenticated_reference(inputs["pre_science_tooling_failure"])
     if started and not no_science:
-        sources.update(q.g10_sources(Path(plan.custody_root)))
         for field in ("terminal_boundary", "go", "consumption", "battery_boundaries"):
             if field not in inputs:
                 missing_after_start.append(field + "_missing")
@@ -588,8 +587,6 @@ def harvest(args, *, runner=subprocess.run, now=None, clear=q.group_clear):
             consumed = q.authenticated_reference(inputs["consumption"])
             boundary = q.authenticated_reference(inputs["battery_boundaries"])
             go = authenticate_launch(plan, go_path, consumed)
-            if "g10-custody" in sources:
-                q.replay_g10_custody(Path(plan.custody_root), q.read(sources["g10-custody"] / "positive-control.json"))
             runs = custody / "runs"
             if any(custody.glob("**/.campaign.lock")) or (runs / "campaign.lock").exists():
                 raise q.HarvestRefusal("campaign_lock_leftover")

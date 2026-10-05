@@ -101,6 +101,19 @@ class Block4ClockTests(unittest.TestCase):
                 self.assertFalse(gate["passes"])
                 self.assertLess(gate["margin_ms"], 0)
 
+    def test_frequency_requirement_follows_every_authoring_registry_profile(self):
+        import json
+        from pathlib import Path
+        registry = json.loads((Path(__file__).resolve().parents[1] /
+            "configs/arm_readiness/d117_row_registry_v2.json").read_bytes())
+        for profile in registry["plan_profiles"]:
+            rows = arm._profile_rows(registry, profile["profile_id"], phase="arm")
+            expected = any("CLOCK_ATTESTATION" in row["required_evidence_kinds"] for row in rows)
+            with self.subTest(profile=profile["profile_id"]), mock.patch.object(
+                    arm, "_registry_reference", return_value=(registry, b"", {"plan_profile": profile["profile_id"]})):
+                self.assertEqual(arm.requires_t0_frequency_gate(Path("renamed-pack")), expected)
+                self.assertTrue(expected)
+
     def test_historical_fact_keeps_fixed_semantics_and_unknown_version_refuses(self):
         value, receipt = self.derive(1600)
         legacy = {key: val for key, val in value.items()

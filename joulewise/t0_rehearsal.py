@@ -304,18 +304,20 @@ class ObservedProcess(subprocess.Popen):
 
     def communicate(self, *args, **kwargs):
         stdout, stderr = super().communicate(*args, **kwargs)
-        from joulewise.night_gate import AGENT_CENSUS_ARGV
-        if self._journal is not None and tuple(self._command) == AGENT_CENSUS_ARGV:
+        self.observe_output(stdout)
+        return stdout, stderr
+
+    def observe_output(self, stdout):
+        if self._journal is not None and self._command[:1] == ["/usr/bin/pgrep"]:
             try:
                 self._journal.emit({"schema_version": PROCESS_EVENT_SCHEMA,
                     "event": "output", "pid": self.pid, "argv": self._command,
                     "spawned_monotonic_ns": self._spawned_ns,
-                    "stdout": stdout.decode() if isinstance(stdout, bytes) else stdout})
+                    "stdout": stdout.decode("utf-8", errors="replace") if isinstance(stdout, bytes) else stdout})
             except BaseException:
                 if not self._journal.observe_only:
                     raise
                 self._journal.error = "process output producer fault"
-        return stdout, stderr
 
     def _observe_exit(self, code):
         if code is not None and not self._exit_recorded:
@@ -651,6 +653,33 @@ def _verify_artifact_reference(
     return artifact
 
 
+# Ruling 76 addendum C: all governed pgrep argv are absence probes.
+# The executable selector is exhaustive; remaining argv use the success row.
+QUALIFICATION_PROCESS_OUTCOMES = {
+    "/usr/bin/pgrep": {"exit_code": 1, "stdout": ""},
+    "default": {"exit_code": 0},
+}
+
+
+def qualification_process_outcome(argv):
+    return dict(QUALIFICATION_PROCESS_OUTCOMES.get(
+        argv[0] if isinstance(argv, (list, tuple)) and argv else None,
+        QUALIFICATION_PROCESS_OUTCOMES["default"]))
+
+
+# Shared by the plan writer, desk producer and G9. night_custody is the
+# plan's custody root; custody is the separate ARM context custody root.
+QUALIFICATION_BACKUP_SOURCE_FIELDS = {
+    "custody": "custody_root", "claim_runs": "claim_runs_root",
+    "bound_runs": "bound_runs_root", "night_custody": None,
+}
+
+
+def qualification_backup_sources(plan_custody, arm_context):
+    return {name: str(plan_custody) if key is None else arm_context.get(key)
+            for name, key in QUALIFICATION_BACKUP_SOURCE_FIELDS.items()}
+
+
 def evaluate_g1(bundle: EvidenceBundle) -> GateResult:
     """Evaluate noninteractive execution from the per-process fd-0 record.
 
@@ -688,9 +717,8 @@ def evaluate_g1(bundle: EvidenceBundle) -> GateResult:
             top_levels += 1
         if process.get("stdin_fd0_target") != "/dev/null":
             return _result("G1", name, GateStatus.FAIL, f"governed process {index} stdin was not bound to /dev/null", artifact.citation())
-        from joulewise.night_gate import AGENT_CENSUS_ARGV
-        census = qualified and process.get("argv") == list(AGENT_CENSUS_ARGV)
-        expected = {"exit_code": 1, "stdout": ""} if census else {"exit_code": 0}
+        expected = qualification_process_outcome(process.get("argv")) if qualified else {"exit_code": 0}
+        census = "stdout" in expected
         if qualified and process.get("expected_outcome") != expected:
             return _result("G1", name, GateStatus.FAIL, f"governed process {index} expected outcome is not registered", artifact.citation())
         if (process.get("state") != "EXITED" or qualified and type(process.get("exit_code")) is not int
@@ -1279,18 +1307,29 @@ def _qualified_desk_stage(bundle, facts, stage_id, evidence):
     evidence.append(record_artifact.citation())
     destinations = record.get("backup_destinations", {})
     sources = record.get("desk_sources", {})
-    if set(destinations) != {"claim", "bound"} or set(sources) != {"custody", "claim_runs", "bound_runs"}:
+    if set(destinations) != {"claim", "bound"} or set(sources) != set(QUALIFICATION_BACKUP_SOURCE_FIELDS):
         raise ValueError("s1 plan lacks backup destinations or sources")
     arm = _artifact_for_path(bundle, str(bundle.custody_root / go["pack_id"] / "arm_readiness.receipts"
         / (go["arm_receipt"]["receipt_id"] + ".json")))
     if arm is None or not isinstance(arm.value, Mapping) or arm.sha256 != go["arm_receipt"]["sha256"]:
         raise ValueError("desk stage lacks its s1 ARM roots")
-    context = arm.value.get("arm_context", {})
-    expected_sources = {name: context.get(key) for name, key in (("custody", "custody_root"),
-        ("claim_runs", "claim_runs_root"), ("bound_runs", "bound_runs_root"))}
+    from types import SimpleNamespace
+    from joulewise import night_gate
+    plan_custody = plan.value.get("custody_root")
+    if plan_custody != str(bundle.custody_root):
+        raise ValueError("desk plan custody differs from the bundle")
+    chain = Path(plan.value.get("chain_path", ""))
+    if (not chain.is_absolute() or any(p.is_symlink() for p in (chain, *chain.parents))
+            or not chain.is_file() or readiness.sha256_bytes(chain.read_bytes()) != go.get("window_chain_sha256")
+            or plan.value.get("pack_night", {}).get("pack_id") != go.get("pack_id")):
+        raise ValueError("desk plan chain is not authenticated by GO")
+    try:
+        context = night_gate.authenticate_arm_context(SimpleNamespace(**plan.value), arm.value.get("arm_context"))
+    except (ValueError, OSError) as exc:
+        raise ValueError("desk ARM context differs from the authenticated plan: " + str(exc)) from exc
+    expected_sources = qualification_backup_sources(plan_custody, context)
     expected_destinations = {role: context.get(role + "_backup_destination") for role in ("claim", "bound")}
-    if (sources != expected_sources or destinations != expected_destinations
-            or sources["custody"] != str(bundle.custody_root)):
+    if sources != expected_sources or destinations != expected_destinations:
         raise ValueError("desk backup roots differ from the s1 ARM/plan")
     paths = [Path(destinations[role]) for role in ("claim", "bound")]
     if any(not p.is_absolute() for p in paths) or _contains(paths[0], paths[1]) or _contains(paths[1], paths[0]):
@@ -1706,13 +1745,22 @@ def evaluate_g10(bundle: EvidenceBundle) -> GateResult:
         after = positive.get("anchor_after_ns")
         if not _real_int(before) or not _real_int(after):
             raise ValueError("privileged anchor positive control endpoints are invalid")
-        movement_artifact = _artifact_for_path(bundle, str(positive_artifact.path.with_name("anchor-movement.json")))
+        support_root = positive_artifact.path.parent
+        movement_artifact = _artifact_for_path(bundle, str(support_root / "anchor-movement.json"))
+        if movement_artifact is None:
+            retained = [item for item in bundle.artifacts
+                        if item.path.name == "positive-control.json"
+                        and item.path.is_relative_to(bundle.custody_root / "records/g10-custody")
+                        and item.raw == positive_artifact.raw]
+            if len(retained) == 1:
+                support_root = retained[0].path.parent
+                movement_artifact = _artifact_for_path(bundle, str(support_root / "anchor-movement.json"))
         movement = movement_artifact.value if movement_artifact is not None else None
         if isinstance(movement, Mapping) and "anchor_check_version" in movement:
             if movement["anchor_check_version"] != kernel_clock.ANCHOR_CHECK_VERSION:
                 raise ValueError("unsupported positive-control anchor semantics")
-            before_artifact = _artifact_for_path(bundle, str(positive_artifact.path.with_name("before.json")))
-            after_artifact = _artifact_for_path(bundle, str(positive_artifact.path.with_name("after.json")))
+            before_artifact = _artifact_for_path(bundle, str(support_root / "before.json"))
+            after_artifact = _artifact_for_path(bundle, str(support_root / "after.json"))
             if before_artifact is None or after_artifact is None:
                 raise ValueError("positive-control residual stamps are absent")
             stamps = (before_artifact.value, after_artifact.value)

@@ -311,6 +311,18 @@ class G2bStructureTests(unittest.TestCase):
             record = h.harvest(args)
         self.assertEqual(record["verdict"], "NULL")
         self.assertTrue((args.archive_root / "SHA256SUMS").is_file())
+        # A started structural harvest must reach its own missing-input verdict
+        # even when qualification-only G10 registration is unreadable.
+        put(night_root / "night/chain.started", {"pid": 54321, "pgid": 54321})
+        (night_root / "qualification-plan-record.json").write_text("malformed qualification-only bytes")
+        args.archive_root = self.base / "started-without-qualification"
+        with mock.patch.object(q, "load_plan", return_value=plan), mock.patch.object(
+                q, "g10_sources", side_effect=AssertionError("structural harvest read G10")), mock.patch.object(
+                q, "replay_g10_custody", side_effect=AssertionError("structural harvest replayed G10")):
+            structural = h.harvest(args, clear=lambda *a, **k: True)
+        self.assertEqual(structural["verdict"], "RECOVER")
+        self.assertIn("go_missing", structural["cause_codes"])
+        self.assertFalse(any("g10" in cause for cause in structural["cause_codes"]))
         put(night_root / "night/launch.pending", {"schema": "joulewise.launch_pending.v1", "pid": 54321,
             "pgid": 54321, "start_time": "fixture", "plan_id": "s1-fixture", "attempt_id": "one", "epoch_s": 1.0})
         args.archive_root = self.base / "live-pending"
@@ -530,6 +542,11 @@ class RecoverNoScienceTests(unittest.TestCase):
         self.night = night_custody / 'night'
         g2b = self.root / 'g2b'; g2b.mkdir()
         self.runs.rename(g2b / 'runs'); self.runs = g2b / 'runs'
+        auxiliary = self.runs / 'start-reference'
+        auxiliary.mkdir()
+        (auxiliary / 'powermetrics.raw.txt').write_bytes(b'private auxiliary sampler' * 37)
+        put(auxiliary / 'summary_metrics.json',
+            {'gross_energy_j': 314159, 'power_w': 271828, 'duration_s': 161803})
         bound = self.root / 'bound'; bound.mkdir()
         plan_path = night_custody / 'night_plan.json'; put(plan_path, {'fixture': 'plan'})
         policy = self.root / 'policy.json'; put(policy, {'fixture': 'policy'})
@@ -545,8 +562,24 @@ class RecoverNoScienceTests(unittest.TestCase):
         args = SimpleNamespace(inputs=input_path, inputs_sha256=q.sha(input_path),
             archive_root=self.root / 'archive', prepare_desk=False, previous_harvest=None, scratch_root=self.root)
         before = q.tree_hash(night_custody)
-        with mock.patch.object(q, 'load_plan', return_value=plan):
+        with mock.patch.object(q, 'load_plan', return_value=plan), \
+             mock.patch.object(q, 'g10_sources', side_effect=AssertionError('qualification-only G10 read')), \
+             mock.patch.object(q, 'replay_g10_custody', side_effect=AssertionError('qualification-only G10 replay')):
             result = h.harvest(args, clear=lambda *a, **k: True)
+            first = args.archive_root
+            args.previous_harvest = first; args.archive_root = self.root / 'reharvest'
+            second = h.harvest(args, clear=lambda *a, **k: True)
+        self.assertEqual(second['verdict'], result['verdict'])
+        for archive in (first, args.archive_root):
+            self.assertEqual((archive / 'withheld').stat().st_mode & 0o777, 0o700)
+            for source in q.read(archive / 'replay-locators.json')['sources']:
+                self.assertTrue(all(set(row) == {'sha256'} for row in source['inventory'].values()))
+            for path in archive.rglob('*'):
+                if not path.is_file() or 'withheld' in path.relative_to(archive).parts:
+                    continue
+                for forbidden in (b'mtime_ns', b'"size"', b'gross_energy_j', b'power_w', b'duration_s',
+                                  b'314159', b'271828', b'161803'):
+                    self.assertNotIn(forbidden, path.read_bytes(), str(path))
         self.assertEqual(result['verdict'], 'RECOVER')
         self.assertEqual(result['recovery_classification'], 'recover_no_science')
         self.assertFalse(result['end_state'])

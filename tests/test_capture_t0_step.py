@@ -74,6 +74,28 @@ class CaptureT0StepTests(unittest.TestCase):
             self.assertIn("stream clock budget", str(caught.exception))
             self.assertFalse((root / "clock-reference.json").exists())
 
+    def test_r0_frequency_gate_is_required_for_registry_profile_on_renamed_pack(self):
+        from tests.test_kernel_clock import frequency_probe
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            context = SimpleNamespace(input_root=root, repository=root,
+                pack_root=root / "renamed-alpha", boot_session_id=TEST_BOOT_SESSION_ID)
+            completed = subprocess.CompletedProcess(["/fixture/reference"], 0, b"{}\n", b"")
+            completed.kernel_frequency = frequency_probe()
+            with (mock.patch.object(capture, "_load_context", return_value=context),
+                  mock.patch.object(capture, "_prepare_derived_inputs", return_value=[]),
+                  mock.patch.object(capture, "_require_sequence"),
+                  mock.patch.object(capture, "_command_for_step", return_value=("/fixture/reference",)),
+                  mock.patch.object(capture, "_current_boot_session_id", return_value=TEST_BOOT_SESSION_ID),
+                  mock.patch.object(capture, "_arm_reference", return_value=(completed, 20)),
+                  mock.patch.object(readiness, "requires_t0_frequency_gate", return_value=True) as obligation,
+                  self.assertRaises(capture.CaptureT0Error) as caught):
+                capture._capture_step_with_dependencies("clock-reference", root, root, root,
+                                                       monotonic_ns=lambda: 10)
+            obligation.assert_called_once_with(context.pack_root)
+            self.assertIn("frequency gate is missing", str(caught.exception))
+            self.assertFalse((root / "clock-reference.json").exists())
+
     @staticmethod
     def _terminal_review_message(tree_oid: str, packs: tuple[str, ...]) -> str:
         return "\n".join(
@@ -188,7 +210,10 @@ class CaptureT0StepTests(unittest.TestCase):
                 encoding="utf-8"
             )
         )
+        gate_raw = (input_root / "kernel-frequency-gate.json").read_bytes()
         shutil.rmtree(input_root)
+        input_root.mkdir()
+        (input_root / "kernel-frequency-gate.json").write_bytes(gate_raw)
         return (
             temporary,
             repository,
@@ -289,7 +314,7 @@ class CaptureT0StepTests(unittest.TestCase):
             from tests.test_kernel_clock import frequency_probe
             r0_capture = json.loads((input_root / "clock-reference.json").read_bytes())
             self.assertEqual(r0_capture["kernel_frequency"], frequency_probe())
-            self.assertIsNone(r0_capture["t_stream_max_s"])
+            self.assertEqual(r0_capture["t_stream_max_s"], 320.)
             self.assertEqual(json.loads(r0_capture["stdout"])["anchor_monotonic_raw_ns"],
                              SYNTHETIC_MONOTONIC_NS - 900 * 1_000_000_000)
 
@@ -297,6 +322,7 @@ class CaptureT0StepTests(unittest.TestCase):
             {path.name for path in input_root.iterdir()},
             {
                 "network_time_off.json",
+                "kernel-frequency-gate.json",
                 "arm-context.json",
                 "clock-disable.json",
                 "clock-reference.json",
@@ -406,7 +432,7 @@ class CaptureT0StepTests(unittest.TestCase):
             ),
         ):
             context = capture._load_context(pack, custody, custody / "window-plan")
-        input_root.mkdir(parents=True)
+        input_root.mkdir(parents=True, exist_ok=True)
         outputs = {
             "clock-reference": (
                 readiness.render_json(

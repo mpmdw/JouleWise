@@ -23,7 +23,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from joulewise import arm_readiness as readiness
-from joulewise import night_gate, kernel_clock
+from joulewise import night_gate, kernel_clock, t0_rehearsal
 from joulewise.night_plan_writer import night_plan_mapping, write_night_plan
 
 INPUT_SCHEMA = "joulewise.v5_qualification_inputs.v1"
@@ -605,8 +605,7 @@ def write_qualification(occurrence, inputs, output):
                   "stage": "before_ARM", "steps": ["clock-reference", "clock-disable",
                   "quiet-mac-prep", "prewindow-check", "ledger-readiness", "ledger-reservation"]},
               "backup_destinations": destinations,
-              "desk_sources": {name: context[key] for name, key in (("custody", "custody_root"),
-                  ("claim_runs", "claim_runs_root"), ("bound_runs", "bound_runs_root"))}}
+              "desk_sources": t0_rehearsal.qualification_backup_sources(custody, context)}
     if occurrence == "s1":
         record["terminal_boundary_path"] = str(custody / "night/transcript/post-bracket-terminal-boundary.json")
     if occurrence in {"a1", "a2"}:

@@ -119,6 +119,31 @@ class QualificationHarvestTests(unittest.TestCase):
         with self.assertRaisesRegex(q.HarvestRefusal, "claim_plan_seal"):
             q.release_metrics()
 
+    def test_every_public_file_of_both_harvests_is_blind(self):
+        raw = self.root / "runs/member/powermetrics.raw.txt"
+        raw.parent.mkdir(parents=True); raw.write_bytes(b"secret sampler" * 37)
+        private = self.root / "runs/member/summary_metrics.json"
+        q.write(private, {"gross_energy_j": 314159, "power_w": 271828, "duration_s": 161803})
+        with mock.patch.object(h.t0_rehearsal, "evaluate_qualification", return_value=verdict()):
+            self.harvest()
+            first = self.args.archive_root
+            self.args.previous_harvest = first; self.args.archive_root = self.base / "blind-reharvest"
+            self.harvest()
+        for archive in (first, self.args.archive_root):
+            self.assertEqual((archive / "withheld").stat().st_mode & 0o777, 0o700)
+            full = q.read(archive / "withheld/replay-locators.json")
+            self.assertIn("mtime_ns", readiness.render_json(full).decode())
+            public = q.read(archive / "replay-locators.json")
+            for source in public["sources"]:
+                self.assertTrue(all(set(row) == {"sha256"} for row in source["inventory"].values()))
+            for path in archive.rglob("*"):
+                if not path.is_file() or "withheld" in path.relative_to(archive).parts:
+                    continue
+                body = path.read_bytes()
+                for forbidden in (b"mtime_ns", b'"size"', b"gross_energy_j", b"power_w", b"duration_s",
+                                  b"314159", b"271828", b"161803"):
+                    self.assertNotIn(forbidden, body, str(path))
+
     def test_reharvest_requires_same_bytes_and_new_archive(self):
         with mock.patch.object(h.t0_rehearsal, "evaluate_qualification", side_effect=RuntimeError("fixture fault")):
             self.assertEqual(self.harvest()["verdict"], "REFUSED")

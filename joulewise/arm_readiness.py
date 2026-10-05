@@ -5884,6 +5884,17 @@ def resolve_frozen_plan(
     return resolved, relative, plan_id, raw
 
 
+def requires_t0_frequency_gate(pack_root: Path) -> bool:
+    """Current authoring obligations follow the authenticated plan profile.
+
+    This is used only for new captures/authoring. Historical receipt replay
+    continues to interpret each recorded anchor_check_version.
+    """
+    registry, _raw, reference = _registry_reference(pack_root)
+    return any("CLOCK_ATTESTATION" in row.get("required_evidence_kinds", [])
+               for row in _profile_rows(registry, reference["plan_profile"], phase="arm"))
+
+
 def _profile_rows(
     registry: Mapping[str, Any], profile: str, *, phase: str
 ) -> list[Mapping[str, Any]]:

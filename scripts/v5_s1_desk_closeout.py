@@ -139,8 +139,7 @@ def closeout(plan_path, *, now=time.time, clear=q.group_clear):
         raise ValueError("desk ARM digest mismatch")
     context = producer.read(arm)["arm_context"]
     destinations = writer.backup_destinations(context)
-    sources = {name: context[key] for name, key in (("custody", "custody_root"),
-        ("claim_runs", "claim_runs_root"), ("bound_runs", "bound_runs_root"))}
+    sources = t0.qualification_backup_sources(custody, context)
     if record["backup_destinations"] != destinations or record["desk_sources"] != sources:
         raise ValueError("desk sources/destinations differ from s1 plan")
     stops = list(custody.rglob("post-bracket-terminal-boundary.json"))
@@ -150,9 +149,6 @@ def closeout(plan_path, *, now=time.time, clear=q.group_clear):
     arm_root = writer.safe_path(context["custody_root"])
     if arm_root == custody or arm_root in custody.parents or custody in arm_root.parents:
         raise ValueError("desk requires separate plan and ARM custody roots")
-    # The writer pins the original three desk sources. Add the authenticated
-    # plan root to both backups without changing that registered source map.
-    sources["night_custody"] = str(custody)
     stop = producer.read(stops[0])
     if (stop.get("session_state") != "finalized" or stop.get("pin_relation") != "physical_ahead"
             or stop.get("refusal_code") != "calibration_ledger_head_mismatch"

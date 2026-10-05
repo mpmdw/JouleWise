@@ -269,7 +269,7 @@ def archive_sources(sources, destination, *, previous=None, added=()):
         raise HarvestRefusal("archive_exists_or_overlaps_source")
     original = census_sources(sources)
     if previous is not None:
-        old = read(Path(previous) / "replay-locators.json")
+        old = read(Path(previous) / "withheld/replay-locators.json")
         expected = {row["name"]: row for row in old["sources"]}
         current_names = set(sources) - set(added)
         if current_names != set(expected):
@@ -285,7 +285,12 @@ def archive_sources(sources, destination, *, previous=None, added=()):
     locators = {"schema": "joulewise.v5_qualification_replay_locators.v1", "sources": [
         {"name": name, "original_path": str(path), "archived_path": str(restricted / "sources" / name),
          "inventory": archived[name]} for name, path in sorted(sources.items())]}
-    write(destination / "replay-locators.json", locators)
+    write(restricted / "replay-locators.json", locators)
+    public = {**locators, "sources": [
+        {**row, "inventory": {path: {"sha256": item["sha256"]} for path, item in row["inventory"].items()
+                              if "sha256" in item}}
+        for row in locators["sources"]]}
+    write(destination / "replay-locators.json", public)
     # Hash/path census is public; source bytes stay in restricted custody.
     sums = (restricted / "sources/SHA256SUMS").read_text()
     (destination / "SHA256SUMS").write_text("".join(

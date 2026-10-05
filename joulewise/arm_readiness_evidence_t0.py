@@ -486,6 +486,8 @@ def _execute_probe(argv: _Sequence[str], *, cwd: _Path) -> _ProbeResult:
             stderr.seek(0)
             stdout_raw = stdout.read()
             stderr_raw = stderr.read()
+            if hasattr(process, "observe_output"):
+                process.observe_output(stdout_raw)
     except (OSError, _subprocess.SubprocessError) as exc:
         raise ValueError(f"probe could not execute: {exc}") from exc
     if timed_out:
@@ -772,7 +774,7 @@ def _captured_clock_reference(
         frequency = _kernel_clock.validate_probe(capture.get("kernel_frequency"))
     except ValueError as exc:
         raise _underivable(kind, str(exc)) from exc
-    if (context.pack_root.name == "d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5"
+    if (_readiness.requires_t0_frequency_gate(context.pack_root)
             and capture.get("t_stream_max_s") is None):
         raise _underivable(kind, "qualification kernel frequency gate is missing")
     value = {**value, "kernel_frequency": frequency,

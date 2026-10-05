@@ -42,6 +42,22 @@ class QualificationSubsetTests(unittest.TestCase):
             with self.subTest(code=code, stdout=stdout):
                 self.assertEqual(t0.evaluate_g1(self.bundle()).status.value, expected)
 
+    def test_g1_registered_table_covers_all_native_absence_probes(self):
+        from joulewise import arm_readiness_evidence_t0 as author
+        argv_roster = [list(producer.night_gate.AGENT_CENSUS_ARGV),
+                      ["/usr/bin/pgrep", "-x", "caffeinate"],
+                      ["/usr/bin/pgrep", "-lf", author._BROWSER_CENSUS_PATTERN],
+                      ["/usr/bin/pgrep", "-lf", author._MONITOR_CENSUS_PATTERN],
+                      ["/usr/bin/pgrep", "-lf", "-g", "12345", "."]]
+        for argv in argv_roster:
+            for code, stdout, expected in ((1, "", "PASS"), (0, "", "FAIL"),
+                                           (1, None, "FAIL"), (1, "42 process", "FAIL"), (2, "", "FAIL")):
+                record = self.g1_record(code, stdout)
+                record["processes"][1]["argv"] = argv
+                self.put("records/execution.json", record)
+                with self.subTest(argv=argv, code=code, stdout=stdout):
+                    self.assertEqual(t0.evaluate_g1(self.bundle()).status.value, expected)
+
     def test_g1_outcomes_are_registered_not_caller_overrides(self):
         for key, value in (("expected_outcome", {"exit_code": 0}), ("stdin_fd0_target", "tty"), ("timed_out", True)):
             record = self.g1_record(0 if key == "expected_outcome" else 1)
@@ -192,7 +208,9 @@ class QualificationSubsetTests(unittest.TestCase):
             go["repo_head"] = head_extension["armed_head"]
         go["plan_sha256"] = producer.reference(plan)["sha256"]
         self.put("night/go_receipt.json", go)
-        sources = {"custody": str(self.root)}
+        arm_root = Path(self.temp.name).resolve() / "desk-arm-custody"
+        arm_root.mkdir(); (arm_root / "member.txt").write_text("fixture-only ARM custody bytes")
+        sources = {"custody": str(arm_root), "night_custody": str(self.root)}
         (self.root / "records/lifecycle.json").unlink()
         for role in ("claim_runs", "bound_runs"):
             root = Path(self.temp.name).resolve() / ("backup-" + role); root.mkdir()
@@ -204,6 +222,16 @@ class QualificationSubsetTests(unittest.TestCase):
         arm["arm_context"].update(custody_root=sources["custody"], claim_runs_root=sources["claim_runs"], bound_runs_root=sources["bound_runs"],
             claim_backup_destination=destinations["claim"], bound_backup_destination=destinations["bound"])
         arm_path.write_bytes(readiness.render_json(arm))
+        context_path = arm_path.parent.parent / "arm_readiness.t0.inputs/arm-context.json"
+        context_path.write_bytes(readiness.render_json(arm["arm_context"]))
+        chain = self.root / "night/window-chain.zsh"
+        chain.write_text("export V5_QUALIFICATION_OCCURRENCE=s1\nexport NIGHT_ARM_CONTEXT_SHA256="
+                         + producer.reference(context_path)["sha256"] + "\n")
+        plan_value = producer.read(plan)
+        plan_value.update(custody_root=str(self.root), chain_path=str(chain), pack_night={"pack_id": go["pack_id"]})
+        plan.write_bytes(readiness.render_json(plan_value))
+        go["plan_sha256"] = producer.reference(plan)["sha256"]
+        go["window_chain_sha256"] = producer.reference(chain)["sha256"]
         go["arm_receipt"]["sha256"] = producer.reference(arm_path)["sha256"]
         self.put("night/go_receipt.json", go)
         record = stage_dir / "plan-record.json"
@@ -257,6 +285,35 @@ class QualificationSubsetTests(unittest.TestCase):
         path.write_bytes(readiness.render_json(value))
         row["evidence"] = producer.reference(path)
         self.put("records/lifecycle.json", life)
+
+    def test_g9_requires_exact_registered_copies_and_authenticated_two_roots(self):
+        life = self.qualified_lifecycle(); self.put("records/lifecycle.json", life)
+        result = t0.evaluate_g9(self.bundle())
+        self.assertEqual(result.status.value, "PASS", result.message)
+        row = next(row for row in life["stages"] if row["stage_id"] == "claim_backup")
+        stage_path = Path(row["evidence"]["path"])
+        original = producer.read(stage_path)
+        for change in ("missing", "extra", "wrong_plan_root"):
+            value = copy.deepcopy(original)
+            if change == "missing":
+                value["copies"].pop("night_custody")
+            elif change == "extra":
+                value["copies"]["unregistered"] = value["copies"]["custody"]
+            else:
+                value["copies"]["night_custody"]["source"] = value["copies"]["custody"]["source"]
+            stage_path.write_bytes(readiness.render_json(value))
+            row["evidence"] = producer.reference(stage_path); self.put("records/lifecycle.json", life)
+            with self.subTest(change=change):
+                self.assertEqual(t0.evaluate_g9(self.bundle()).status.value, "FAIL")
+        stage_path.write_bytes(readiness.render_json(original))
+        row["evidence"] = producer.reference(stage_path); self.put("records/lifecycle.json", life)
+        plan_record = producer.read(original["plan_record"]["path"])
+        plan = producer.read(plan_record["plan"]["path"])
+        native = self.root / plan["pack_night"]["pack_id"] / "arm_readiness.t0.inputs/arm-context.json"
+        # Editing only the input (without its chain pin) cannot redefine ARM roots.
+        context = producer.read(native); context["custody_root"] = str(self.root)
+        native.write_bytes(readiness.render_json(context))
+        self.assertEqual(t0.evaluate_g9(self.bundle()).status.value, "FAIL")
 
     def test_missing_s1_backup_or_closeout_cannot_pass_g9(self):
         life = self.qualified_lifecycle(); self.put("records/lifecycle.json", life)

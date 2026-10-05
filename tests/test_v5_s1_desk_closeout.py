@@ -68,7 +68,7 @@ class DeskCloseoutTests(unittest.TestCase):
         (self.night / "go_receipt.json").write_bytes(readiness.render_json(self.go))
         self.record = {"schema_version": "joulewise.v5_qualification_plan_record.v1", "occurrence": "s1", "head": self.head,
             "terminal_boundary_path": str(self.night / "transcript/post-bracket-terminal-boundary.json"),
-            "plan": producer.reference(self.plan_path), "window_id": self.custody.name, "desk_sources": self.sources,
+            "plan": producer.reference(self.plan_path), "window_id": self.custody.name, "desk_sources": {**self.sources, "night_custody": str(self.custody)},
             "backup_destinations": self.destinations, "pack_night": {"pack_sha256": "a" * 64}}
         self.record_path = self.custody / "qualification-plan-record.json"; producer.write(self.record_path, self.record)
         self.plan = SimpleNamespace(receipt_class="TRANSACTION_PACK", custody_root=str(self.custody), measurement_root=str(self.measurement), measurement_head=self.head,
