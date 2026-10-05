@@ -139,6 +139,18 @@ class G10PlacementTests(unittest.TestCase):
 
 
 class PreparationIsolationTests(unittest.TestCase):
+    def test_run_rechecks_offset_after_standalone_preflight_passes(self):
+        fixture = ControlFixture(self, offset="0.020")
+        with mock.patch.object(g10, "REPO_ROOT", fixture.case.repository):
+            result, _ = g10.check_preflight(sample=fixture.case.sample, runner=fixture.runner)
+        self.assertEqual(result["status"], "PASS")
+        self.assertFalse(fixture.case.control.exists())
+        fixture.offset = "0.019"
+        self.assertEqual(fixture.run(), {"status": "g10_preflight_offset_too_small", "g10_attempt": False})
+        self.assertEqual(fixture.argv, [g10.preflight_argv(fixture.case.repository)] * 2)
+        self.assertNotIn(g10.ON_ARGV, fixture.argv)
+        self.assertEqual(fixture.case.author_calls, [])
+
     def test_preparation_cannot_reach_arm_reference_resync_on(self):
         for offset, expected_ons in (("0.020", 1), ("1.150", 0)):
             with self.subTest(offset=offset):

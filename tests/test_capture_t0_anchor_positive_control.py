@@ -107,5 +107,117 @@ class OffsetPreflightTests(unittest.TestCase):
         self.assertFalse((fixture.case.control / "author-custody").exists())
 
 
+class PreflightSubcommandTests(unittest.TestCase):
+    def invoke(self, fixture, *arguments, runner=None, sample=None):
+        stream = io.StringIO()
+        with mock.patch.object(g10, "REPO_ROOT", fixture.case.repository), \
+             mock.patch("builtins.input", side_effect=AssertionError("preflight requested OUTSIDE")), \
+             mock.patch.object(g10, "run_control", side_effect=AssertionError("preflight entered run")), \
+             redirect_stdout(stream):
+            rc = g10.main(["preflight", *arguments], sample=sample or fixture.case.sample,
+                          runner=runner or fixture.runner)
+        raw = stream.getvalue().encode()
+        result = readiness.parse_json_bytes(raw, require_canonical=True)
+        self.assertEqual(raw, readiness.render_json(result))
+        self.assertEqual(fixture.argv, [g10.preflight_argv(fixture.case.repository)])
+        self.assertNotIn(g10.ON_ARGV, fixture.argv)
+        self.assertNotIn(network_time_off.OFF_ARGV, fixture.argv)
+        self.assertFalse(fixture.case.control.exists())
+        self.assertEqual(fixture.case.author_calls, [])
+        return rc, result
+
+    def test_bands_and_boundary_exit_codes_without_output_or_setters(self):
+        for offset, uncertainty, status, rc in (
+                ("0.019", "0.001", "g10_preflight_offset_too_small", 3),
+                ("-0.019", "0.001", "g10_preflight_offset_too_small", 3),
+                ("0.020", "0.001", "PASS", 0),
+                ("-0.020", "0.380", "PASS", 0),
+                ("0.020", "0.390", "g10_preflight_offset_too_large", 4),
+                ("1.150", "0.001", "g10_preflight_offset_too_large", 4)):
+            with self.subTest(offset=offset, uncertainty=uncertainty):
+                fixture = ControlFixture(self, offset=offset, uncertainty=uncertainty)
+                before = set(fixture.case.repository.parent.rglob("*"))
+                code, result = self.invoke(fixture)
+                self.assertEqual(code, rc)
+                self.assertEqual(result, {"status": status, "midpoint_s": offset,
+                    "bound_s": str(abs(g10.Decimal(offset)) + g10.Decimal(uncertainty)),
+                    "exit_code": 0, "boot_id": legacy.TEST_BOOT_SESSION_ID})
+                self.assertEqual(set(fixture.case.repository.parent.rglob("*")), before)
+
+    def test_nonzero_collector_retains_raw_error_record(self):
+        fixture = ControlFixture(self)
+        fixture.preflight_exit = 7
+        output = fixture.case.repository.parent / "offset.json"
+        rc, result = self.invoke(fixture, "--output", str(output))
+        self.assertEqual(rc, 2)
+        self.assertEqual(result["status"], "ERROR")
+        self.assertEqual(result["exit_code"], 7)
+        self.assertEqual(result["reason"], "g10_preflight_command_invalid")
+        record = g10.read_json(output)
+        self.assertEqual(record["measurement"], result)
+        self.assertEqual(record["command"]["stderr"], fixture.preflight_stderr.decode())
+        self.assertEqual(record["command"]["exit_code"], 7)
+
+    def test_malformed_collector_and_timeout_exit_two_without_setters(self):
+        for defect in ("json", "timeout"):
+            with self.subTest(defect=defect):
+                fixture = ControlFixture(self)
+                def runner(argv, *, timeout):
+                    if defect == "timeout":
+                        fixture.argv.append(tuple(argv))
+                        raise subprocess.TimeoutExpired(argv, timeout)
+                    completed = fixture.runner(argv, timeout=timeout)
+                    completed.stdout = b"not JSON\n"
+                    return completed
+                rc, result = self.invoke(fixture, runner=runner)
+                self.assertEqual(rc, 2)
+                self.assertEqual(result["status"], "ERROR")
+
+    def test_boot_change_is_error_without_setters(self):
+        fixture = ControlFixture(self)
+        def sample():
+            value = fixture.case.sample()
+            if fixture.argv:
+                value["boot_id"] = "00000000-0000-0000-0000-000000000001"
+            return value
+        rc, result = self.invoke(fixture, sample=sample)
+        self.assertEqual(rc, 2)
+        self.assertEqual(result["reason"], "g10_preflight_boot_or_order")
+
+    def test_unserializable_raw_record_exits_two_without_creating_output(self):
+        fixture = ControlFixture(self)
+        fixture.preflight_stderr = b"\xff"
+        output = fixture.case.repository.parent / "offset.json"
+        rc, result = self.invoke(fixture, "--output", str(output))
+        self.assertEqual(rc, 2)
+        self.assertEqual(result["status"], "ERROR")
+        self.assertEqual(result["reason"], "g10_preflight_output_refused")
+        self.assertFalse(output.exists())
+
+    def test_output_is_full_raw_record_and_create_once(self):
+        for offset, expected in (("0.020", 0), ("0.019", 3), ("1.150", 4)):
+            with self.subTest(offset=offset):
+                fixture = ControlFixture(self, offset=offset)
+                output = fixture.case.repository.parent / "offset.json"
+                rc, result = self.invoke(fixture, "--output", str(output))
+                self.assertEqual(rc, expected)
+                record = g10.read_json(output)
+                self.assertEqual(set(record), {"command", "measurement"})
+                self.assertEqual(record["measurement"], result)
+                command = record["command"]
+                self.assertEqual(command["argv"], list(fixture.argv[0]))
+                self.assertEqual(command["stderr"], fixture.preflight_stderr.decode())
+                self.assertEqual(command["started"]["boot_id"], result["boot_id"])
+                self.assertEqual(g10.preflight_measurement(command, result["boot_id"],
+                    repository=fixture.case.repository), {key: result[key] for key in
+                    ("midpoint_s", "bound_s", "status")})
+                original = output.read_bytes()
+                fixture.argv.clear()
+                rc, result = self.invoke(fixture, "--output", str(output))
+                self.assertEqual(rc, 2)
+                self.assertEqual(result["reason"], "g10_preflight_output_refused")
+                self.assertEqual(output.read_bytes(), original)
+
+
 if __name__ == "__main__":
     unittest.main()

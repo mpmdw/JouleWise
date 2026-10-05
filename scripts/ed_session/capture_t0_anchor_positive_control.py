@@ -88,20 +88,25 @@ def run_command(argv, *, timeout):
                           cwd=REPO_ROOT, stdin=subprocess.DEVNULL)
 
 
-def execute_command(root, label, argv, timeout, sample, runner):
-    """Retain exact argv, actual exit and separated streams for the ON command."""
+def collect_command(argv, timeout, sample, runner):
+    """Capture a command and its bounding stamps without writing custody."""
     started = sample()
     completed = runner(argv, timeout=timeout)
     finished = sample()
+    return {"argv": list(argv), "exit_code": completed.returncode,
+            "stdout": network_time_off._text(completed.stdout),
+            "stderr": network_time_off._text(completed.stderr),
+            "started": started, "finished": finished}, completed
+
+
+def execute_command(root, label, argv, timeout, sample, runner):
+    """Retain exact argv, actual exit and separated command streams."""
+    result, completed = collect_command(argv, timeout, sample, runner)
     directory = root / "commands" / label
     for name, value in (("stdout.txt", completed.stdout), ("stderr.txt", completed.stderr)):
         write_bytes(directory / name, value if isinstance(value, bytes) else value.encode())
-    write_json(directory / "started.json", started)
-    write_json(directory / "finished.json", finished)
-    result = {"argv": list(argv), "exit_code": completed.returncode,
-              "stdout": network_time_off._text(completed.stdout),
-              "stderr": network_time_off._text(completed.stderr),
-              "started": started, "finished": finished}
+    write_json(directory / "started.json", result["started"])
+    write_json(directory / "finished.json", result["finished"])
     write_json(root / "commands" / f"{label}.json", result)
     return result
 
@@ -157,6 +162,20 @@ def preflight_measurement(command, boot, *, repository=None):
     status = ("g10_preflight_offset_too_large" if bound > Decimal("0.400") else
               "g10_preflight_offset_too_small" if abs(midpoint) < Decimal("0.020") else "PASS")
     return {"midpoint_s": str(midpoint), "bound_s": str(bound), "status": status}
+
+
+def check_preflight(*, sample=stamp, runner=run_command):
+    """Report the same R0 admission check as run, without ON/OFF or custody."""
+    command = None
+    result = {"status": "ERROR", "midpoint_s": None, "bound_s": None,
+              "exit_code": None, "boot_id": None}
+    try:
+        command, _ = collect_command(preflight_argv(REPO_ROOT), 30, sample, runner)
+        result.update(exit_code=command["exit_code"], boot_id=command["started"]["boot_id"])
+        result.update(preflight_measurement(command, result["boot_id"]))
+    except (Exception, KeyboardInterrupt) as exc:
+        result["reason"] = str(exc) if isinstance(exc, NotDischarged) else "g10_preflight_evidence_invalid"
+    return result, {"command": command, "measurement": result}
 
 
 @contextmanager
@@ -477,11 +496,13 @@ def run_control(**kwargs):
             signal.signal(number, handler)
 
 
-def main(argv=None):
+def main(argv=None, *, sample=None, runner=None):
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="operation", required=True)
     stamps = sub.add_parser("stamp")
     stamps.add_argument("--output", type=Path, required=True)
+    preflight = sub.add_parser("preflight", help="check the offset band before preparing T-0 inputs")
+    preflight.add_argument("--output", type=Path, help="retain the full raw check in a new file")
     run = sub.add_parser("run")
     run.add_argument("--pack-root", type=Path, required=True)
     run.add_argument("--author-inputs", type=Path, required=True)
@@ -492,6 +513,17 @@ def main(argv=None):
     if args.operation == "stamp":
         write_json(args.output, stamp())
         return 0
+    if args.operation == "preflight":
+        result, record = check_preflight(sample=stamp if sample is None else sample,
+                                        runner=run_command if runner is None else runner)
+        try:
+            if args.output is not None:
+                write_json(args.output, record)
+        except (OSError, ValueError):
+            result = {**result, "status": "ERROR", "reason": "g10_preflight_output_refused"}
+        print(readiness.render_json(result).decode(), end="")
+        return {"PASS": 0, "g10_preflight_offset_too_small": 3,
+                "g10_preflight_offset_too_large": 4}.get(result["status"], 2)
     try:
         print("Ed: confirm no agent seat, armed window or capture is running; type OUTSIDE: ",
               end="", file=sys.stderr, flush=True)
