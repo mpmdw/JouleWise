@@ -73,6 +73,7 @@ LIVE_V5_GENERATORS = tuple(
     ROOT / "configs/campaigns" / pack_id / "generate_configs.py"
     for pack_id in (
         "d117_contrast_v5",
+        "d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5",
         "d117_floor_qwen3-1p7b_v5",
         "d117_floor_qwen3-8b_v5",
     )
