@@ -5,16 +5,18 @@ from contextlib import redirect_stdout, redirect_stderr
 from dataclasses import replace
 import importlib.util
 import io
+import itertools
 import os
 from pathlib import Path
 import subprocess
+import time
 import unittest
 from unittest import mock
 
-from joulewise import arm_readiness as readiness, kernel_clock, network_time_off, t0_rehearsal
+from joulewise import arm_readiness as readiness, kernel_clock, network_time_off, t0_rehearsal, v5_qualification
 from tests.test_kernel_clock import frequency_probe
 from joulewise.clock_reference import ClockAnchor
-from scripts import author_arm_evidence_t0 as author_cli
+from scripts import author_arm_evidence_t0 as author_cli, collect_clock_reference
 from tests.test_arm_readiness_evidence_t0 import (
     make_t0_fixture, author_environment, SYNTHETIC_MONOTONIC_NS,
     SYNTHETIC_REALTIME_OFFSET_NS,
@@ -61,6 +63,10 @@ class PositiveControlTests(unittest.TestCase):
         self.on_duration_s = 0
         self.poll_duration_s = 0
         self.command_argv = []
+        # Anchor refusal is independent of plan/dispatch sizing replay. Keep
+        # the binding in custody and inject only that separately tested seam.
+        (self.inputs / "kernel-frequency-binding.json").write_bytes(
+            readiness.render_json({"fixture": "sizing supplied by injected replay"}))
 
     def stamp(self):
         self.sequence += 1
@@ -82,14 +88,27 @@ class PositiveControlTests(unittest.TestCase):
         self.elapsed_ns += round(seconds * 1e9)
 
     def sample(self):
-        # ON has two command stamps; the next sample is the first poll.
-        if self.command_calls == ["on"] and self.sequence >= 3:
+        # Preflight and ON each have two stamps, with before.json between.
+        if self.command_calls == ["on"] and self.sequence >= 5:
             if self.poll_exception:
                 raise self.poll_exception
             self.elapsed_ns += round(self.poll_duration_s * 1e9)
         return self.stamp()
 
     def runner(self, argv, *, timeout):
+        if tuple(argv) == helper.preflight_argv(self.repository):
+            self.assertEqual(timeout, 30)
+            raw = itertools.count(self.base_ns + self.elapsed_ns + self.sequence * 1000 + 1)
+            def clock(clock_id):
+                return next(raw) + (SYNTHETIC_REALTIME_OFFSET_NS
+                                    if clock_id == time.CLOCK_REALTIME else 0)
+            def sntp(command):
+                return subprocess.CompletedProcess(command, 0,
+                    f"+0.020 +/- 0.001 {command[-1]} 192.0.2.1\n".encode(), b"")
+            stream = io.BytesIO()
+            collect_clock_reference.main([], runner=sntp, clock_gettime_ns=clock,
+                boot_session_id_reader=lambda: TEST_BOOT_SESSION_ID, stdout=stream)
+            return subprocess.CompletedProcess(argv, 0, stream.getvalue(), b"")
         if tuple(argv) == network_time_off.BOOT_ARGV:
             return subprocess.CompletedProcess(argv, 0, TEST_BOOT_SESSION_ID.encode(), b"")
         if tuple(argv) in (ON_ARGV, network_time_off.OFF_ARGV):
@@ -120,6 +139,7 @@ class PositiveControlTests(unittest.TestCase):
         with (author_environment(self.repository, sample_anchor=lambda: endpoint,
                                   now_monotonic_ns=self.base_ns, kernel_frequency=self.after_frequency),
               mock.patch.object(author_cli, "REPO_ROOT", self.repository),
+              mock.patch.object(v5_qualification, "authenticated_clock_budget", return_value=(320., ())),
               redirect_stdout(sink), redirect_stderr(stderr)):
             rc = author_cli.main(argv[2:])
         raw = stdout.getvalue()
@@ -153,6 +173,7 @@ class PositiveControlTests(unittest.TestCase):
         return helper.verify_g10_custody(self.control / "positive-control.json",
             self.control / "custody-manifest.json", code_root=self.repository, head=head,
             before_monotonic_ns=self.base_ns + self.elapsed_ns + 1_000_000_000,
+            after_monotonic_ns=self.base_ns - 1,
             boot_id=TEST_BOOT_SESSION_ID)
 
     def test_custody_verifier_binds_supports_boot_code_and_order(self):
@@ -393,10 +414,11 @@ class PositiveControlTests(unittest.TestCase):
 
     def test_on_uses_remaining_short_timeout_and_cannot_overrun(self):
         self.on_duration_s = 4
-        result = helper.run_control(pack_root=self.pack, author_inputs=self.inputs,
-                                   custody_root=self.control, resync_timeout_s=3,
-                                   sample=self.sample, runner=self.runner,
-                                   monotonic_ns=self.monotonic_ns, sleep=self.sleep)
+        with mock.patch.object(helper, "REPO_ROOT", self.repository):
+            result = helper.run_control(pack_root=self.pack, author_inputs=self.inputs,
+                                       custody_root=self.control, resync_timeout_s=3,
+                                       sample=self.sample, runner=self.runner,
+                                       monotonic_ns=self.monotonic_ns, sleep=self.sleep)
         self.assert_not_discharged(result, "anchor_movement_at_or_below_5ms")
         self.assertEqual(self.command_argv[0], (ON_ARGV, 3))
         self.assertEqual(self.author_calls, [])
@@ -422,11 +444,26 @@ class PositiveControlTests(unittest.TestCase):
         self.assertEqual(self.author_calls, [])
 
     def test_off_after_initial_probe_exception(self):
-        with mock.patch.object(self, "sample", side_effect=RuntimeError("initial probe failed")):
+        # The first control probe follows the two preflight stamps. A failure
+        # here must still unwind OFF after admission of the measured offset.
+        original = self.sample
+        def failed_control_probe():
+            if self.sequence == 2:
+                raise RuntimeError("initial control probe failed")
+            return original()
+        with mock.patch.object(self, "sample", side_effect=failed_control_probe):
             self.assert_not_discharged(self.run_control(), "control_evidence_invalid")
         self.assertEqual(self.command_calls, ["off"])
         receipt = network_time_off.read_receipt(self.control / "network_time_off.json")
         self.assertEqual(receipt["boot_id"], TEST_BOOT_SESSION_ID)
+
+    def test_preflight_initial_probe_exception_is_non_spending(self):
+        with mock.patch.object(self, "sample", side_effect=RuntimeError("preflight probe failed")):
+            self.assertEqual(self.run_control(), {"status": "NOT-DISCHARGED",
+                "reason": "control_evidence_invalid", "g10_attempt": False})
+        self.assertEqual(self.command_calls, [])
+        self.assertFalse((self.control / "positive-control.json").exists())
+        self.assertFalse((self.control / "author-custody").exists())
 
     def test_off_runner_exception_clears_positive_record(self):
         original = self.runner
@@ -442,7 +479,7 @@ class PositiveControlTests(unittest.TestCase):
     def test_off_after_author_exception(self):
         original = self.runner
         def failing_author(argv, *, timeout):
-            if tuple(argv) not in (ON_ARGV, network_time_off.OFF_ARGV, network_time_off.BOOT_ARGV):
+            if len(argv) > 1 and Path(argv[1]).name == "author_arm_evidence_t0.py":
                 raise RuntimeError("author failed")
             return original(argv, timeout=timeout)
         with mock.patch.object(self, "runner", side_effect=failing_author):
