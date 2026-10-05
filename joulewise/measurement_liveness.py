@@ -44,7 +44,7 @@ def observe_identity(pid: int) -> Identity:
     The optional probe executable receives the same arguments as ps; it is a
     single pathname, not shell text. Exit 1 with empty output denotes no PID.
     All other failures are UNKNOWN. Tokens match the watchdog's whitespace
-    normalization, under the C locale (lstart has one-second precision).
+    normalization, under the C locale and UTC (lstart has one-second precision).
     """
     if type(pid) is not int or pid <= 0:
         return Identity("UNKNOWN")
@@ -53,7 +53,7 @@ def observe_identity(pid: int) -> Identity:
             [os.environ.get(IDENTITY_PROBE_ENV, "/bin/ps"),
              "-p", str(pid), "-o", "lstart=", "-o", "stat="],
             capture_output=True, text=True, timeout=2,
-            env={**os.environ, "LC_ALL": "C", "LANG": "C"},
+            env={**os.environ, "LC_ALL": "C", "LANG": "C", "TZ": "UTC"},
         )
     except (OSError, subprocess.SubprocessError, UnicodeError):
         return Identity("UNKNOWN")
@@ -182,7 +182,65 @@ def _inspect_identity(record: dict, path: Path, result: Census,
     result.refusals.append(f"live measurement owner: {path}")
 
 
-def _inspect_chain(night: Path, result: Census, observer: Callable[[int], Identity]) -> None:
+def _pending_present(path: Path) -> bool:
+    # A dangling link is unreadable custody, not an absent launcher record.
+    return _exists(path) or path.is_symlink()
+
+
+def pending_launch_closed(night: Path) -> bool:
+    """Read durable closure before probing a historical, reusable group number."""
+    for name in ("chain.exited", "launch.resolved"):
+        path = night / name
+        if not _pending_present(path):
+            continue
+        if path.is_symlink():
+            raise ValueError(f"launcher closure is a symlink: {path}")
+        record = _read_marker(path)
+        if name == "chain.exited":
+            valid = _valid_exit(record)
+        else:
+            valid = (record.get("schema") == "joulewise.launch_resolved.v1"
+                     and record.get("basis") == "group_absent"
+                     and type(record.get("pgid")) is int and record["pgid"] > 1
+                     and type(record.get("epoch_s")) in (int, float)
+                     and type(record.get("monotonic_ns")) is int)
+        if not valid:
+            raise ValueError(f"invalid launcher closure: {path}")
+        return True
+    return False
+
+
+def _inspect_pending(path: Path, result: Census,
+                     observer: Callable[[int], Identity]) -> None:
+    if not _pending_present(path):
+        return
+    if pending_launch_closed(path.parent):
+        return
+    if path.is_symlink():
+        raise ValueError(f"pending launcher identity is a symlink: {path}")
+    record = _read_marker(path)
+    pid, pgid = record.get("pid"), record.get("pgid")
+    if type(pid) is not int or pid <= 1 or type(pgid) is not int or pgid <= 1:
+        raise ValueError(f"invalid pending launcher identity: {path}")
+    identity = observer(pid)
+    token, observed = _start_token(record.get("start_time")), _start_token(identity.start_time)
+    if identity.state == "LIVE" and token is not None and observed is not None and token != observed:
+        result.warnings.append(f"stale reused PID: {path}")
+        return
+    try:
+        os.killpg(pgid, 0)
+    except ProcessLookupError:
+        result.warnings.append(f"stale dead pending process group: {path}")
+        return
+    # A dead leader cannot disprove surviving members of an unresolved group.
+    refusal_count = len(result.refusals)
+    _inspect_identity(record, path, result, lambda pid: identity)
+    if len(result.refusals) == refusal_count:
+        result.refusals.append(f"live measurement owner process group: {path}")
+
+
+def _inspect_started_chain(night: Path, result: Census,
+                           observer: Callable[[int], Identity]) -> None:
     started, exited = night / "chain.started", night / "chain.exited"
     if not _exists(started):
         return
@@ -199,6 +257,15 @@ def _inspect_chain(night: Path, result: Census, observer: Callable[[int], Identi
     if _start_token(record.get("start_time")) is None:
         raise ValueError(f"chain start identity unavailable: {started}")
     _inspect_identity(record, started, result, observer)
+
+
+def _inspect_chain(night: Path, result: Census, observer: Callable[[int], Identity]) -> None:
+    pending = Census()
+    _inspect_pending(night / "launch.pending", pending, observer)
+    _inspect_started_chain(night, pending, observer)
+    # Commit diagnostics only after both reads, so reconciliation cannot duplicate them.
+    result.refusals.extend(pending.refusals)
+    result.warnings.extend(pending.warnings)
 
 
 def _inspect_campaign(path: Path, result: Census, observer: Callable[[int], Identity]) -> None:
@@ -257,7 +324,8 @@ def census(*, parents: list[Path] | None = None,
                         continue
                     if is_dir:
                         _reconciled(lambda: _inspect_chain(child / "night", result, observer),
-                                    lambda: _exists(child / "night" / "chain.started"))
+                                    lambda: (_exists(child / "night" / "chain.started")
+                                             or _pending_present(child / "night" / "launch.pending")))
     except (OSError, ValueError, TypeError, UnicodeError, RuntimeError) as exc:
         result.refusals.append(f"census indeterminate: {exc}")
     return result
