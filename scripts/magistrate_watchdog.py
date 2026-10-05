@@ -752,10 +752,9 @@ def load_plans(storage: Storage, *, now_epoch_s: float | None = None) -> PlanSna
     return PlanSnapshot(tuple(plans), tuple(errors), tuple(diagnostics))
 
 
-def installed_agent_fence(
+def _installed_agent_plans(
     now: dt.datetime, storage: Storage, *, launch_agents_dir: Path | None = None,
-    state: Mapping[str, Any] | None = None,
-) -> str | None:
+) -> list[NightPlan]:
     """Read installed agents independently of custody discovery; fail closed."""
     directory = launch_agents_dir or Path.home() / "Library" / "LaunchAgents"
     try:
@@ -765,8 +764,8 @@ def installed_agent_fence(
         # directory symlink is unreadable and must still fail closed.
         if storage.exists(directory):
             raise ValueError(f"unreadable LaunchAgents directory: {directory}")
-        return None
-    reasons = []
+        return []
+    plans = []
     for label in ("com.joulewise.night", "com.joulewise.night.deadman"):
         plist = directory / f"{label}.plist"
         if plist not in entries:
@@ -785,12 +784,20 @@ def installed_agent_fence(
             if plan.authored_epoch_s > now.timestamp():
                 raise ValueError("installed plan authored_epoch_s is in the future")
             deadman_epoch(plan)
-            if plan_span_active(plan, now.timestamp(), storage, state):
-                reasons.append(f"installed_plan:{plan.plan_id}")
+            plans.append(plan)
         except (OSError, ValueError, OverflowError, TypeError, KeyError, IndexError, PlanError,
                 plistlib.InvalidFileException, ExpatError) as exc:
             raise ValueError(f"unreadable installed agent {plist}: {exc}") from exc
-    return "; ".join(reasons) or None
+    return plans
+
+
+def installed_agent_fence(
+    now: dt.datetime, storage: Storage, *, launch_agents_dir: Path | None = None,
+    state: Mapping[str, Any] | None = None,
+) -> str | None:
+    plans = _installed_agent_plans(now, storage, launch_agents_dir=launch_agents_dir)
+    return "; ".join(f"installed_plan:{plan.plan_id}" for plan in plans
+                     if plan_span_active(plan, now.timestamp(), storage, state)) or None
 
 
 def plan_completion_epoch(plan: NightPlan) -> float:
@@ -1518,18 +1525,39 @@ def _remote_probe_allowed(storage: Storage, deps: Dependencies, state: Mapping[s
     snapshot = load_plans(storage, now_epoch_s=now.timestamp())
     if snapshot.errors:
         raise ValueError("; ".join(snapshot.errors))
-    # Re-read the clock after the filesystem reads, so a span that starts
-    # during them is still seen before any transport (review F3).
+    installed = _installed_agent_plans(now, storage)
+    # Evaluate both sources with the same fresh clock after all file reads.
     now = deps.wall_now().astimezone()
     return not any(
-        plan_span_active(plan, now.timestamp(), storage, state) for plan in snapshot.plans
-    ) and installed_agent_fence(now, storage, state=state) is None
+        plan_span_active(plan, now.timestamp(), storage, state)
+        for plan in (*snapshot.plans, *installed)
+    )
 
 
 def _probe_remote_stop(storage: Storage, deps: Dependencies, state: Mapping[str, Any]) -> StopObservation:
     if deps.git_probe is remote_stop_probe:
         return remote_stop_probe(probe_allowed=lambda: _remote_probe_allowed(storage, deps, state))
     return deps.git_probe()
+
+
+def _launch_fence(storage: Storage, deps: Dependencies, state: Mapping[str, Any]) -> Decision | None:
+    """Refresh both fence sources and time at each launch boundary."""
+    try:
+        now = deps.wall_now().astimezone()
+        snapshot = load_plans(storage, now_epoch_s=now.timestamp())
+        if snapshot.errors:
+            return Decision("HOLD_UNSAFE", "; ".join(snapshot.errors))
+        installed = _installed_agent_plans(now, storage)
+        now = deps.wall_now().astimezone()
+        if any(plan_span_active(plan, now.timestamp(), storage, state) for plan in snapshot.plans):
+            return Decision("FENCED", "plan span active at launch boundary")
+        reasons = [f"installed_plan:{plan.plan_id}" for plan in installed
+                   if plan_span_active(plan, now.timestamp(), storage, state)]
+        if reasons:
+            return Decision("FENCED", "; ".join(reasons))
+    except (OSError, ValueError, OverflowError) as exc:
+        return Decision("HOLD_UNSAFE", f"launch_fence: {exc}")
+    return None
 
 
 def decide(
@@ -1671,7 +1699,7 @@ def decide(
         return Decision(waiting_state, "backoff has not expired")
     if lock is not None:
         return Decision("HOLD_UNSAFE", "magistrate.lock could not be cleared")
-    return Decision("LAUNCHING", "all launch predicates clear", launch=True)
+    return _launch_fence(storage, deps, state) or Decision("LAUNCHING", "all launch predicates clear", launch=True)
 
 
 def resolve_session_binary(path: Path) -> Path:
@@ -2549,6 +2577,13 @@ def tick(storage: Storage, deps: Dependencies, *, dry_run: bool = False) -> Deci
     if not decision.launch and not decision.adopt:
         return decision
 
+    if decision.launch:
+        fence = _launch_fence(storage, deps, state)
+        if fence is not None:
+            now = deps.wall_now().astimezone()
+            transition(storage, state, fence.state, fence.reason, now)
+            storage.atomic_json(storage.root / "state.json", state)
+            return fence
     pid = os.fork()
     if pid:
         return decision

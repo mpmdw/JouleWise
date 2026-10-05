@@ -386,8 +386,11 @@ def attempt_history(current, archive_root, *, current_harvest=None, reharvest=No
         # `prior` deliberately skips NULL for the separate allowance rules.
         if (index > 0 and record.get("verdict") == "NULL"
                 and chronological[index - 1].get("verdict") == "NULL"):
-            codes = record.get("cause_codes", [])
-            previous_codes = chronological[index - 1].get("cause_codes", [])
+            # New NULL harvests retain authenticated native refusal reasons.
+            # Older retained records have only their original cause census.
+            codes = record.get("native_refusal_codes", record.get("cause_codes", []))
+            previous_record = chronological[index - 1]
+            previous_codes = previous_record.get("native_refusal_codes", previous_record.get("cause_codes", []))
             if (not isinstance(codes, list) or not isinstance(previous_codes, list)):
                 raise HarvestRefusal("attempt_history_refusal_codes_invalid")
             current_codes = sorted({identifier(code) for code in codes})

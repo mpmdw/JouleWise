@@ -339,7 +339,7 @@ class TickSpanTests(WatchdogTestCase):
         probe.assert_called_once_with()
 
     def test_span_starting_during_guard_reads_suppresses_transport(self):
-        # Review F3: the guard re-reads the clock after its filesystem reads.
+        # D8: transport suppression must also suppress the launch and fork.
         plan = self.make_plan()
         span_start = plan.t0_epoch_s - wd.PLAN_LEAD_S
         self.set_wall(span_start - 0.001)
@@ -362,9 +362,81 @@ class TickSpanTests(WatchdogTestCase):
             return subprocess.CompletedProcess(argv, 0 if argv[-1] == wd.POSITIVE_CONTROL_REF else 2, "control", "")
 
         with mock.patch.object(self.harness.storage, "read_text", side_effect=read_and_advance), \
-                mock.patch.object(wd.subprocess, "run", side_effect=transport):
-            wd.tick(self.harness.storage, self.harness.deps, dry_run=True)
+                mock.patch.object(wd.subprocess, "run", side_effect=transport), \
+                mock.patch.object(wd.os, "fork", return_value=12345) as fork:
+            decision = wd.tick(self.harness.storage, self.harness.deps)
         self.assertEqual([], calls)
+        self.assertEqual("FENCED", decision.state)
+        self.assertFalse(decision.launch)
+        fork.assert_not_called()
+        self.assertEqual([], self.harness.spawn_calls)
+
+    def test_span_starting_after_decision_suppresses_fork(self):
+        plan = self.make_plan()
+        span_start = plan.t0_epoch_s - wd.PLAN_LEAD_S
+        self.set_wall(span_start - 0.001)
+        write = self.harness.storage.atomic_json
+
+        def write_and_advance(path, value):
+            write(path, value)
+            if path.name == "state.json":
+                self.set_wall(span_start)
+
+        with mock.patch.object(self.harness.storage, "atomic_json", side_effect=write_and_advance), \
+                mock.patch.object(wd.os, "fork", return_value=12345) as fork:
+            decision = wd.tick(self.harness.storage, self.harness.deps)
+        self.assertEqual("FENCED", decision.state)
+        self.assertFalse(decision.launch)
+        fork.assert_not_called()
+        self.assertEqual("FENCED", wd.load_state(self.harness.storage)["state"])
+
+    def test_installed_only_span_starting_after_decision_suppresses_fork(self):
+        plan = self.make_plan()
+        self.installed_plan(plan)
+        span_start = plan.t0_epoch_s - wd.PLAN_LEAD_S
+        self.set_wall(span_start - 0.001)
+        write = self.harness.storage.atomic_json
+
+        def write_and_advance(path, value):
+            write(path, value)
+            if path.name == "state.json":
+                self.set_wall(span_start)
+
+        with mock.patch.object(self.harness.storage, "glob_plans", return_value=[]), \
+                mock.patch.object(self.harness.storage, "atomic_json", side_effect=write_and_advance), \
+                mock.patch.object(wd.os, "fork", return_value=12345) as fork:
+            decision = wd.tick(self.harness.storage, self.harness.deps)
+        self.assertEqual("FENCED", decision.state)
+        self.assertFalse(decision.launch)
+        fork.assert_not_called()
+
+    def test_installed_span_starting_during_guard_reads_suppresses_transport_and_fork(self):
+        plan = self.make_plan()
+        plist = self.installed_plan(plan)
+        span_start = plan.t0_epoch_s - wd.PLAN_LEAD_S
+        self.set_wall(span_start - 0.001)
+        self.harness.deps.git_probe = wd.remote_stop_probe
+        read = self.harness.storage.read_bytes
+        reads = 0
+
+        def read_and_advance(path):
+            nonlocal reads
+            value = read(path)
+            if path == plist:
+                reads += 1
+                if reads == 2:
+                    self.set_wall(span_start)
+            return value
+
+        with mock.patch.object(self.harness.storage, "glob_plans", return_value=[]), \
+                mock.patch.object(self.harness.storage, "read_bytes", side_effect=read_and_advance), \
+                mock.patch.object(wd.subprocess, "run") as transport, \
+                mock.patch.object(wd.os, "fork", return_value=12345) as fork:
+            decision = wd.tick(self.harness.storage, self.harness.deps)
+        self.assertEqual("FENCED", decision.state)
+        self.assertFalse(decision.launch)
+        transport.assert_not_called()
+        fork.assert_not_called()
 
     def test_unreadable_installed_fence_keeps_resident_state_and_notices(self):
         # Review F4: a torn installed plist suppresses transport but changes

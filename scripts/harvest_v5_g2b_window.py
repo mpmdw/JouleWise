@@ -498,6 +498,25 @@ def recover_no_science(inputs, plan, night, pack, runs):
             "consumes_s2": False, "tooling_failure": locator}
 
 
+def native_null_refusals(night, plan):
+    """Retain validated native refusal reasons from this occurrence's bytes."""
+    from scripts import run_night
+    codes, references = set(), []
+    paths = sorted({*night.glob("refusal.json"), *night.glob("refusal-[0-9]*.json")})
+    for path in paths:
+        ref = q.reference(path)
+        value = q.read(q.authenticated_reference(ref))
+        validator = (run_night.validate_refusal if value.get("schema") == run_night.REFUSAL_SCHEMA
+                     else night_gate.validate_receipt)
+        if validator(value) or value.get("verdict") != "REFUSED" or not value.get("refusal"):
+            raise q.HarvestRefusal("native_refusal_invalid")
+        if value.get("plan_id") != plan.plan_id or value.get("receipt_class") != plan.receipt_class:
+            raise q.HarvestRefusal("native_refusal_identity_mismatch")
+        codes.add(q.identifier(value["refusal"]["reason"]))
+        references.append(ref)
+    return sorted(codes), references
+
+
 def harvest(args, *, runner=subprocess.run, now=None, clear=q.group_clear):
     input_path = q.authenticated_reference({"path": str(args.inputs.absolute()), "sha256": args.inputs_sha256})
     inputs = q.read(input_path)
@@ -522,7 +541,16 @@ def harvest(args, *, runner=subprocess.run, now=None, clear=q.group_clear):
                "chain": Path(plan.chain_path), "chain-sidecar": Path(plan.chain_sha256_path),
                "bound-runs": Path(inputs["bound_runs_root"])}
     started = (night / "chain.started").exists()
-    admission_abort, admission_other_causes = q.native_admission_abort(custody / "runs") if started else (None, [])
+    admission_abort, admission_other_causes = None, []
+    if started:
+        for runs in dict.fromkeys((custody / "runs", Path(inputs["bound_runs_root"]))):
+            abort, causes = q.native_admission_abort(runs)
+            admission_other_causes.extend(causes)
+            if abort is not None:
+                if admission_abort is not None:
+                    admission_other_causes.append("multiple_idle_admission_aborts_in_attempt")
+                else:
+                    admission_abort = abort
     no_science = recover_no_science(inputs, plan, night, pack, custody / "runs") if started and occurrence == "s1" else None
     missing_after_start = []
     if no_science:
@@ -584,7 +612,9 @@ def harvest(args, *, runner=subprocess.run, now=None, clear=q.group_clear):
         if desk_error is not None:
             raise desk_error
         if not (night / "chain.started").exists():
-            record.update(verdict="NULL", cause_codes=["chain_never_started"])
+            codes, refusals = native_null_refusals(night, plan)
+            record.update(verdict="NULL", cause_codes=["chain_never_started", *codes],
+                          native_refusal_codes=codes, native_refusals=refusals)
         elif no_science:
             record.update(no_science)
         elif admission_abort:
