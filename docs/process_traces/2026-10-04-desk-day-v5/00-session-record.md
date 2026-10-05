@@ -259,3 +259,12 @@ coordinated multi-file forgery is outside the threat model (D-161). **F2:** fix.
   two stale tests (F1 a pre-generation absence sentinel; F2 a generator census missing the emitted contrast generator):
   **fix** seat [56](56-sol-packs-tests-brief.md). Floors regenerated on the packs branch with #476 (`196e532c`; only
   `plan_tree*` and `producer_contract.json` change).
+
+## 21:25-21:52
+
+- **PR #474 merged `b53c58d8`** (G2-b unattended one-block stop; gates in its `pr474-gates.md`).
+- PR #475 (A6) round 5 [50r5](50-sol-a6-report-r5.md) (`aba27481`, main merged): pending-launch closure and pid-reuse checks;
+  barrier capability checked in the measurement checkout before `Popen`; bounded first-byte wait (timeout records a start →
+  RECOVER, never NULL); fsync; malformed barrier refuses. The seat's early test runs created and removed legacy fixture
+  directories directly under `/tmp` (existing test overrides), outside its scratch: **accepted** (transient, cleaned, no
+  tracked byte). Second cold Fable pass [57](57-fable-a6-2-brief.md) and whole suite at `aba27481` running.
