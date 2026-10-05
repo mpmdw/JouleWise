@@ -449,7 +449,8 @@ def _execute_probe(argv: _Sequence[str], *, cwd: _Path) -> _ProbeResult:
     timeout_s = _PROBE_TIMEOUT_OVERRIDES.get(tuple(argv), _PROBE_TIMEOUT_SECONDS)
     try:
         with _tempfile.TemporaryFile() as stdout, _tempfile.TemporaryFile() as stderr:
-            process = _subprocess.Popen(
+            from joulewise.t0_rehearsal import observed_popen
+            process = observed_popen(
                 list(argv),
                 cwd=cwd,
                 env=environment,
@@ -1220,7 +1221,8 @@ def _derive_clock_attestation(context: _Context) -> _DerivedRow:
         "PROBE",
         input_artifacts=(r0_identity, disable_identity),
         probes=r1_probes,
-        derivation={"sample_policy_id": _clock_reference.SAMPLE_POLICY_ID},
+        derivation={"sample_policy_id": _clock_reference.SAMPLE_POLICY_ID,
+                    "r1_batch_started_monotonic_ns": r1_started_monotonic_ns},
     )
 
 
