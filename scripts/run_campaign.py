@@ -8306,6 +8306,11 @@ def run_campaign(args: argparse.Namespace) -> int:
     )
     block_limit_reached = False
     if block_limit is not None:
+        # A bounded occurrence stops at its first failed member (D-078: never
+        # topped up into a complete block), so a wider failure budget would be
+        # silently ignored; refuse it instead.
+        if args.max_failures != 1:
+            raise ValueError("--max-blocks stops at the first failure; --max-failures must be 1")
         preflight["block_limit"] = block_limit.binding
     if args.shakedown_gate is not None:
         if args.backup is None:

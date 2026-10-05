@@ -123,9 +123,15 @@ class CampaignMaxBlocksTests(unittest.TestCase):
             with self.subTest(position=position):
                 self.runs = self.root / f"failure-{position}"
                 self.invoked = []
-                self.assertEqual(self.invoke(["--max-blocks", "1", "--max-failures", "9"], fail_at=position), 1)
+                self.assertEqual(self.invoke(["--max-blocks", "1"], fail_at=position), 1)
                 self.assertEqual(len(self.invoked), position)
                 self.assertFalse(any(row.get("record_type") == "campaign_stop" for row in self.rows()))
+
+    def test_wider_failure_budget_with_block_limit_refuses_before_dispatch(self):
+        # D-078: a bounded occurrence is never topped up past a failed member.
+        with self.assertRaisesRegex(ValueError, "--max-failures must be 1"):
+            self.invoke(["--max-blocks", "1", "--max-failures", "9"])
+        self.assertEqual(self.invoked, [])
 
     def test_exit_zero_with_invalid_member_is_not_a_complete_block(self):
         self.assertEqual(self.invoke(["--max-blocks", "1"], invalid_at="block1-member4"), 1)
