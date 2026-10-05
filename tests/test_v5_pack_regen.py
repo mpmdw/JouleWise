@@ -22,16 +22,20 @@ PIN = ROOT / "configs/campaigns/d117_contrast_v5/prefill_pin/prefill-prompt-pin.
 
 class V5PackRegenerationTests(unittest.TestCase):
     def test_generators_emit_75_second_idle_from_issued_pin(self):
-        """Generate afresh: committed member bytes cannot conceal an old constant."""
+        """Generate afresh until freeze; then respect the frozen-byte guard."""
         with tempfile.TemporaryDirectory(prefix="v5-idle-") as temporary:
             output = Path(temporary)
             for pack_id in PACKS:
                 with self.subTest(pack=pack_id):
+                    source = ROOT / "configs/campaigns" / pack_id
+                    tree = json.loads((source / "plan_tree.json").read_bytes())
+                    frozen = tree["arm_attachments"]["arm_readiness"]["freeze_receipt"] is not None
+                    preserve = ("--preserve-current-frozen-bytes" if frozen else
+                                "--no-preserve-current-frozen-bytes")
                     result = subprocess.run(
-                        [sys.executable, "-B", str(ROOT / "configs/campaigns" / pack_id
-                                                  / "generate_configs.py"),
+                        [sys.executable, "-B", str(source / "generate_configs.py"),
                          "--prefill-prompt-pin", str(PIN),
-                         "--no-preserve-current-frozen-bytes", "--output-root", str(output)],
+                         preserve, "--output-root", str(output)],
                         cwd=ROOT, capture_output=True, text=True,
                     )
                     self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
