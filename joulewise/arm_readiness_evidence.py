@@ -830,38 +830,34 @@ def _derive_doctrine_pin(context: _DerivationContext) -> _DerivedKind:
     if not isinstance(launch, Mapping) or not isinstance(stage_graph, list):
         raise _underivable(kind, "pack lacks a frozen launch recipe/stage graph")
     section_5a = _extract_section(runbook, "5A", kind=kind).decode("utf-8")
-    restore_after_verdict = (
-        "whole-window verdict, and the backup, re-enable it" in section_5a
-        and "The restore comes last" in section_5a
+    # Match the governing prose across Markdown emphasis and line wrapping.
+    # The saved arm receipt, reused without another toggle, establishes the
+    # one-OFF-receipt policy; this fact does not attest a live OFF operation.
+    clock_policy = " ".join(section_5a.replace("*", "").replace("`", "").split())
+    required_clock_doctrine = (
+        "Network time stays OFF after completion, refusal, crash, verdict and both backups.",
+        "Resync happens only in the arm step.",
+        "a write-once receipt, including failed attempts.",
+        "The clock-disable step uses that saved receipt. It does not issue a second toggle.",
+        "Record the OFF receipt and its identity in close-out; do not restore ON.",
     )
-    closeout = context.tree.get("closeout_attachments")
-    backups = closeout.get("backup_requirements") if isinstance(closeout, Mapping) else None
-    backup_command_count = sum(
-        1
-        for stage in stage_graph
-        if isinstance(stage, Mapping)
-        for command in (
-            stage.get("launch", {}).get("commands", [])
-            if isinstance(stage.get("launch"), Mapping)
-            else []
-        )
-        if isinstance(command, Mapping) and command.get("command_kind") == "backup"
+    # A retained stays-OFF sentence cannot license a contradictory restore
+    # step. Ignore the explicit prohibition itself, then reject restore prose
+    # and instructions to enable ON after a window/capture/verdict/backup.
+    restore_prose = clock_policy.lower().replace("do not restore on", "")
+    restore_step = re.search(
+        r"\b(?:restore|re-enable|re-enabling)\s+"
+        r"(?:it|on|(?:automatic\s+)?network time)\b"
+        r"|\b(?:the restore comes last|restore uses the on vector)\b"
+        r"|\b(?:after (?:the )?(?:window|capture|verdict|(?:both )?backups)|close-out)"
+        r"\b[^.]*\b(?:enable|re-enable|restore|turn on)\b",
+        restore_prose,
     )
-    restore_after_both = (
-        restore_after_verdict
-        and backup_command_count == 2
-        and (
-            backups is None
-            or (
-                isinstance(backups, Mapping)
-                and backups.get("required_successful_backups") == 2
-            )
-        )
-    )
-    if not restore_after_verdict or not restore_after_both:
+    if any(sentence not in clock_policy for sentence in required_clock_doctrine) or restore_step:
         raise _underivable(
             kind,
-            "runbook/pack do not derive clock restoration after verdict and both backups",
+            "runbook section 5A does not derive network time staying OFF across windows, "
+            "arm-only resync and one OFF receipt per window without restoration",
         )
     launch_sha = _readiness.sha256_bytes(
         _readiness.render_json({"launch": launch, "stage_graph": stage_graph})
@@ -872,10 +868,11 @@ def _derive_doctrine_pin(context: _DerivationContext) -> _DerivedKind:
         "frozen_launch_recipe_sha256": launch_sha,
     }
     facts = {
-        "clock.restore_recipe.v1": {
-            "close_out_recipe_hashes_match_pack": True,
-            "restore_after_both_backups": True,
-            "restore_after_verdict": True,
+        "clock.network_time_policy.v1": {
+            "network_time_stays_off_across_windows": True,
+            "one_off_receipt_per_window": True,
+            "resync_only_in_arm_step": True,
+            "restore_on_after_window": False,
         },
         "desk.arming_procedure.v1": {
             "frozen_launch_recipe_hash_matches_pack": True,

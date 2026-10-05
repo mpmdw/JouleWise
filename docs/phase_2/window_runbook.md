@@ -637,8 +637,12 @@ remain interpretable. H7 remains report-only science (state, standing rate,
 drift and predecessor B comparison); its H6-dependent fields are superseded.
 The full drift term, anchor refusals, 250 µs allowance and registration before
 ON/OFF pooling remain unchanged. Clock fits do not prove every correction
-harmless. The sealed restore-recipe registry row must be retired through its
-coordinated registry change before successor freeze/ARM can pass.
+harmless. The live v2 registry prospectively replaces `clock.restore_recipe`
+with `clock.network_time_policy`: freeze/ARM derives this stays-OFF doctrine
+from §5A. The archival v1 registry and historical restore predicates remain
+unchanged. New plan trees and receipts bind the committed live registry's
+digest; historical pins are not rewritten. See the
+[network-time policy contract](../contracts/arm_readiness_network_time_policy.md).
 
 ### If a single member still fails the anchor
 

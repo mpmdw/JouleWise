@@ -382,7 +382,7 @@
       },
       {
         "freshness_policy_id": "r1.re_derivable.v1",
-        "row_id": "clock.restore_recipe"
+        "row_id": "clock.network_time_policy"
       },
       {
         "freshness_policy_id": "r1.execution_bound.freeze_generic_168h.v1",
@@ -542,7 +542,7 @@
       "required_row_ids": [
         "clock.correct_and_prior_state",
         "clock.network_time_off",
-        "clock.restore_recipe",
+        "clock.network_time_policy",
         "desk.acceptance_owner",
         "desk.acceptance_successor",
         "desk.arming_procedure",
@@ -583,7 +583,7 @@
       "required_row_ids": [
         "clock.correct_and_prior_state",
         "clock.network_time_off",
-        "clock.restore_recipe",
+        "clock.network_time_policy",
         "desk.acceptance_owner",
         "desk.acceptance_successor",
         "desk.arming_procedure",
@@ -624,7 +624,7 @@
       "required_row_ids": [
         "clock.correct_and_prior_state",
         "clock.network_time_off",
-        "clock.restore_recipe",
+        "clock.network_time_policy",
         "desk.acceptance_owner",
         "desk.acceptance_successor",
         "desk.arming_procedure",
@@ -684,11 +684,11 @@
     {
       "applicability_rule": "ALWAYS",
       "evaluation_phase": "FREEZE_AND_ARM",
-      "predicate_id": "clock.restore_recipe.v1",
+      "predicate_id": "clock.network_time_policy.v1",
       "required_evidence_kinds": [
         "DOCTRINE_PIN"
       ],
-      "row_id": "clock.restore_recipe"
+      "row_id": "clock.network_time_policy"
     },
     {
       "applicability_rule": "ALWAYS",
