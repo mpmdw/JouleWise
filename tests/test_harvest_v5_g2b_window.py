@@ -362,8 +362,11 @@ class G2bStructureTests(unittest.TestCase):
         destination = Path(plan.block_archive_root) / "attempts" / plan.plan_id
         args = SimpleNamespace(inputs=input_path, inputs_sha256=q.sha(input_path), archive_root=destination,
             scratch_root=self.base, prepare_desk=False, previous_harvest=None)
+        # These minimal bundles carry status/clock evidence only. Adapt their
+        # strict shape while retaining the real shared member assessment.
         with mock.patch.object(q, "load_plan", return_value=plan), mock.patch.object(h, "authenticate_launch"), \
-             mock.patch.object(q, "battery_boundaries", return_value=True), mock.patch.object(h, "battery_attempts", return_value=(True, [])):
+             mock.patch.object(q, "battery_boundaries", return_value=True), mock.patch.object(h, "battery_attempts", return_value=(True, [])), \
+             mock.patch.object(h, "validate_bundle", return_value=[]):
             result = h.harvest(args, clear=lambda *a, **k: True)
         self.assertEqual(result["verdict"], "RECOVER")
         self.assertFalse(result["end_state"])
@@ -373,7 +376,8 @@ class G2bStructureTests(unittest.TestCase):
         shutil.rmtree(destination)
         put(self.runs / self.ids[1] / "summary_metrics.json", {"status": "failed", "failure_message": "another physics failure"})
         with mock.patch.object(q, "load_plan", return_value=plan), mock.patch.object(h, "authenticate_launch"), \
-             mock.patch.object(q, "battery_boundaries", return_value=True), mock.patch.object(h, "battery_attempts", return_value=(True, [])):
+             mock.patch.object(q, "battery_boundaries", return_value=True), mock.patch.object(h, "battery_attempts", return_value=(True, [])), \
+             mock.patch.object(h, "validate_bundle", return_value=[]):
             mixed = h.harvest(args, clear=lambda *a, **k: True)
         self.assertTrue(mixed["end_state"])
         self.assertEqual(mixed["recovery_classification"], "admission_abort_with_other_recover_cause")

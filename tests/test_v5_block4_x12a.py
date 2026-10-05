@@ -1,6 +1,7 @@
 """Addendum F harvest/history regressions on desk fixtures, never hardware."""
 from pathlib import Path
 import copy
+import io
 import shutil
 import subprocess
 import tempfile
@@ -11,9 +12,12 @@ from unittest import mock
 from joulewise import network_time_off, v5_qualification as q
 from scripts import capture_t0_step as capture, restore_v5_null_reservation as restore
 from scripts import v5_s1_desk_closeout as desk
+from scripts import harvest_v5_g2b_window as g2b, harvest_v5_qualification as qualification
+from scripts import write_v5_qualification_plan as writer
 from tests import test_v5_block4_x7 as x7, test_v5_block4_x2 as x2
 from tests import test_v5_s1_desk_closeout as desk_tests
 from tests.test_arm_readiness_evidence_t0 import _clock_reference_value
+from tests import test_harvest_v5_g2b_window as harvest_tests
 
 
 def capture_off(path, pack_id, window_id, boot_id, *, epoch=1000., monotonic=1000.):
@@ -133,6 +137,157 @@ class ComposedReceiptTests(unittest.TestCase):
         self.assertEqual(closed["off_identity"]["plan_id"], frozen_id)
 
 
+class AdmissionAssessmentTests(unittest.TestCase):
+    def setUp(self):
+        f = self.fixture = harvest_tests.G2bStructureTests()
+        f.setUp()
+        self.addCleanup(f.doCleanups)
+        self.root = f.runs
+        self.success = f.runs / f.ids[1]
+        x7.AttemptHistoryTests.admission(self, f.ids[2], {"none": True})
+        for run_id in (f.ids[0], f.ids[3]):
+            shutil.rmtree(f.runs / run_id)
+        self.custody = f.base / "admission-night"
+        self.night = self.custody / "night"
+        x7.put(self.night / "chain.started", {"pgid": 99999999, "pid": 99999999})
+        chain = f.base / "admission-chain.zsh"
+        chain.write_text("export V5_QUALIFICATION_OCCURRENCE=s1\nexit 1\n")
+        self.plan_path = self.custody / "night_plan.json"
+        self.plan = x7.bind_history_fixture(self.plan_path, SimpleNamespace(
+            plan_id="admission-attempt", custody_root=str(self.custody), chain_path=str(chain),
+            chain_sha256_path=str(chain) + ".sha256", pack_night={
+                "pack_id": writer.GAMMA, "pack_root": str(f.pack)}), f.base / "block-archive")
+        self.bound = f.base / "bound"
+        self.bound.mkdir()
+        self.refs = {name: x7.put(f.base / (name + ".json"), {})
+                     for name in ("policy", "acceptance", "go", "consumption", "battery_boundaries")}
+        inputs = f.base / "inputs.json"
+        x7.put(inputs, {"schema": g2b.INPUT_SCHEMA, "occurrence": "s1", "plan": q.reference(self.plan_path),
+            "custody_root": str(f.custody), "bound_runs_root": str(self.bound), **self.refs})
+        self.args = SimpleNamespace(inputs=inputs, inputs_sha256=q.sha(inputs),
+            archive_root=Path(self.plan.block_archive_root) / "attempts" / self.plan.plan_id,
+            scratch_root=f.base, prepare_desk=False, previous_harvest=None)
+        # Only external launch/battery validation and strict fixture shape are
+        # adapters. Native abort replay, shared member/clock assessment,
+        # disposition, immutable archive and history run their real code.
+        for obj, name, value in ((q, "load_plan", self.plan), (g2b, "authenticate_launch", {}),
+                                (q, "battery_boundaries", True),
+                                (g2b, "battery_attempts", (True, [])), (g2b, "validate_bundle", [])):
+            patch = mock.patch.object(obj, name, return_value=value)
+            patch.start()
+            self.addCleanup(patch.stop)
+
+    def harvest(self):
+        return g2b.harvest(self.args, clear=lambda *a, **kw: True)
+
+    def test_unbounded_success_then_admission_abort_is_physics_end_state(self):
+        metadata = q.read(self.success / "metadata.json")
+        metadata["uncertainty_evidence"]["clock_anchor"]["status"] = "unbounded"
+        x7.put(self.success / "metadata.json", metadata)
+        result = self.harvest()
+        self.assertEqual(result["verdict"], "RECOVER", result)
+        self.assertIn("member_not_strict_valid_bounded_success", result["cause_codes"])
+        self.assertEqual(result["cause_classes"], ["instrument_physics"])
+        self.assertTrue(result["end_state"])
+        self.assertEqual(result["next_step"], "design_consult_cold_gate")
+        self.assertFalse(q.is_admission_abort(result))
+        self.assertEqual(result["members"][0]["clock_anchor_status"], "unbounded")
+        prior = q.reference(self.args.archive_root / "harvest.json")
+        with self.assertRaisesRegex(q.HarvestRefusal, "fresh_s1_predecessor_not_rearmable"):
+            q.attempt_history(x7.attempt("fresh", prior), self.plan.block_archive_root)
+
+    def test_observer_write_fault_only_affects_qualification(self):
+        (self.night / "producer-faults.jsonl").write_text(
+            '{"producer":"HID_observer","fault":"fixture observation write error"}\n')
+        result = self.harvest()
+        self.assertEqual(result["verdict"], "RECOVER", result)
+        self.assertEqual(result["cause_codes"], [q.ADMISSION_ABORT_CODE])
+        self.assertFalse(result["end_state"])
+        self.assertTrue(q.is_admission_abort(result))
+        self.assertIn("fresh_s1", result["next_step"])
+        args = SimpleNamespace(plan=self.plan_path, archive_root=self.args.archive_root / "qualification",
+            battery_evidence=Path(self.refs["battery_boundaries"]["path"]),
+            battery_evidence_sha256=self.refs["battery_boundaries"]["sha256"], previous_harvest=None)
+        qualified = qualification.harvest(args, clear=lambda *a, **kw: True)
+        self.assertEqual(qualified["verdict"], "FAIL", qualified)
+        self.assertEqual(qualified["cause_codes"], ["qualification_observation_producer_fault"])
+        self.assertEqual(qualified["cause_classes"], ["tooling"])
+        self.assertFalse(qualified["end_state"])
+        prior = q.reference(self.args.archive_root / "harvest.json")
+        proof = q.attempt_history(x7.attempt("fresh", prior), self.plan.block_archive_root)
+        q.authenticate_attempt_record(result, Path(self.plan.block_archive_root))
+        self.assertEqual(proof["admission_abort_count"], 1)
+
+
+class RepeatedNullWriterTests(unittest.TestCase):
+    def setUp(self):
+        self.fixture = x7.WriterHistoryTests()
+        self.fixture.setUp()
+        self.addCleanup(self.fixture.doCleanups)
+
+    def two_nulls(self, first_codes, second_codes):
+        f = self.fixture.fixture
+        first = self.fixture.prior("NULL")
+        record = q.read(Path(first["path"]))
+        first = x7.put(Path(first["path"]), dict(record, cause_codes=first_codes))
+        path = f.root / "prior-2/night_plan.json"
+        chain = f.root / "prior-2-chain.zsh"
+        chain.write_text("export V5_QUALIFICATION_OCCURRENCE=s1\nexit 0\n")
+        plan = x7.bind_history_fixture(path, SimpleNamespace(plan_id="prior-2", custody_root=str(path.parent),
+            chain_path=str(chain), chain_sha256_path=str(chain) + ".sha256", pack_night={
+                "pack_id": f.pack.name, "pack_root": str(f.pack)}),
+            Path(f.input["block_archive_root"]), previous=first)
+        second = x7.put(Path(plan.block_archive_root) / "attempts/prior-2/harvest.json",
+            q.attempt_record(plan, path, "s1", verdict="NULL", cause_codes=second_codes, cause_classes=[]))
+        f.input["previous_attempt"] = second
+        return f
+
+    def test_same_null_code_set_refuses_third_writer_before_authorization(self):
+        f = self.two_nulls(["t0_refused", "chain_never_started"], ["chain_never_started", "t0_refused"])
+        with self.assertRaisesRegex(q.HarvestRefusal, "same_refusal_twice") as refusal:
+            f.write()
+        self.assertEqual(refusal.exception.refusal_codes, ["chain_never_started", "t0_refused"])
+        self.assertFalse((f.custody / "authorization_record.json").exists())
+        self.assertFalse(f.output.exists())
+
+    def test_same_null_codes_are_named_by_writer_cli(self):
+        f = self.two_nulls(["chain_never_started"], ["chain_never_started"])
+        f.bind_clock_sizing()
+        inputs = f.root / "third-inputs.json"
+        x7.put(inputs, f.input)
+        output = io.BytesIO()
+        with mock.patch.object(writer.sys, "stdout", SimpleNamespace(buffer=output)):
+            status = writer.main(["s1", "--inputs", str(inputs), "--output", str(f.output)])
+        self.assertEqual(status, 2)
+        result = q.readiness.parse_json_bytes(output.getvalue())
+        self.assertEqual(result["reason_code"], "same_refusal_twice", result)
+        self.assertEqual(result["cause_codes"], ["chain_never_started"])
+        self.assertFalse((f.custody / "authorization_record.json").exists())
+
+    def test_different_second_null_code_permits_third_writer(self):
+        f = self.two_nulls(["chain_never_started"], ["different_t0_refusal"])
+        f.write()
+        self.assertTrue((f.custody / "authorization_record.json").is_file())
+        self.assertEqual(q.read(f.output)["previous_attempt"], f.input["previous_attempt"])
+
+
+class StageDigestTests(unittest.TestCase):
+    def test_single_row_substitution_refused_by_digest_guard(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            path = root / "before_midpoint_stages.txt"
+            original = b"configs/campaigns/science\n"
+            chain = ('test "$(/usr/bin/shasum -a 256 "$1/before_midpoint_stages.txt" | '
+                     "/usr/bin/awk '{print $1}')\" = \"" + q.readiness.sha256_bytes(original) + '"\n').encode()
+            path.write_bytes(original)
+            self.assertEqual(q.readiness.authenticated_stage_list(root, chain), q.reference(path))
+            # Still one unique, relative configs/ row with a canonical newline.
+            # Only authentication against the chain's digest can reject it.
+            path.write_bytes(b"configs/campaigns/other\n")
+            with self.assertRaisesRegex(ValueError, "differs from its authenticated chain"):
+                q.readiness.authenticated_stage_list(root, chain)
+
+
 class HistoryTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -173,11 +328,29 @@ class HistoryTests(unittest.TestCase):
     def test_multiple_null_s2_spend_nothing(self):
         prior = self.save(self.tooling("s1", {"none": True}))
         for index in range(3):
-            record = x7.attempt(f"null-{index}", prior, occurrence="s2")
+            record = x7.attempt(f"null-{index}", prior, occurrence="s2", cause_codes=[f"different_refusal_{index}"])
             proof = self.history(record)
             self.assertEqual((proof["s2_count"], proof["admission_abort_count"]), (0, 0))
             prior = self.save(record)
         self.assertEqual(self.history(x7.attempt("s2", prior, occurrence="s2", verdict="PASS"))["s2_count"], 1)
+
+    def test_two_nulls_report_repeated_codes_before_blocking_next_spend(self):
+        first = self.save(x7.attempt("first", {"none": True}, cause_codes=["t0_refused", "chain_never_started"]))
+        second = x7.attempt("second", first, cause_codes=["chain_never_started", "t0_refused"])
+        proof = self.history(second)
+        self.assertTrue(proof["same_refusal_twice"])
+        self.assertEqual(proof["same_refusal_codes"], ["chain_never_started", "t0_refused"])
+        self.assertEqual((proof["s2_count"], proof["admission_abort_count"]), (0, 0))
+        prior = self.save(second)
+        with self.assertRaisesRegex(q.HarvestRefusal, "same_refusal_twice"):
+            self.history(x7.attempt("third", prior))
+
+    def test_nonadjacent_matching_null_codes_do_not_trigger_consult(self):
+        first = self.save(x7.attempt("first", {"none": True}, cause_codes=["refusal_a"]))
+        second = self.save(x7.attempt("second", first, cause_codes=["refusal_b"]))
+        proof = self.history(x7.attempt("third", second, cause_codes=["refusal_a"]))
+        self.assertFalse(proof["same_refusal_twice"])
+        self.assertEqual(proof["same_refusal_codes"], [])
 
     def reharvest(self, verdict, *, number=1, previous=None):
         original = x7.attempt("s1", {"none": True}, verdict="REFUSED", cause_classes=["tooling"])

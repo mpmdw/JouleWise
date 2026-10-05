@@ -333,6 +333,31 @@ def empty_floors(path):
         raise q.HarvestRefusal("l10_floors_not_empty")
 
 
+def member_assessment(run_id, path, transcript, *, validator=validate_bundle):
+    """The shared strict-valid, successful, bounded-clock member predicate."""
+    problems = q.captured_call(validator, transcript, path, strict=True)
+    clock = anchor_status(path)
+    clock = clock if clock in {"bounded", "unbounded", "invalid", "missing", "not recorded"} else "unbounded"
+    succeeded = (path / "summary_metrics.json").is_file() and q.read(path / "summary_metrics.json").get("status") == "succeeded"
+    return {"run_id": q.identifier(run_id), "strict_valid": not bool(problems),
+            "succeeded": succeeded, "clock_anchor_status": clock,
+            "valid": not problems and succeeded and clock == "bounded"}
+
+
+def capture_clock_members(members, capture_paths):
+    """Include actual auxiliary/reference captures in the existing majority."""
+    recorded_ids = {row["run_id"] for row in members}
+    for capture_id, path in capture_paths:
+        if capture_id not in recorded_ids:
+            if (path / "instrument_evidence.json").exists():
+                clock = q.read(path / "instrument_evidence.json").get("clock_anchor", {}).get("status", "not recorded")
+            else:
+                clock = anchor_status(path)
+            clock = clock if clock in {"bounded", "unbounded", "invalid", "missing", "not recorded"} else "unbounded"
+            members.append({"run_id": q.identifier(capture_id), "clock_anchor_status": clock})
+    return clock_majority(members)
+
+
 def l10_a(custody, destination, bundle_ids, head, *, runner=subprocess.run, python=sys.executable,
           additional_bundles=None,
           validator=validate_bundle, reducer=reduce_bundle):
@@ -349,16 +374,11 @@ def l10_a(custody, destination, bundle_ids, head, *, runner=subprocess.run, pyth
             raise q.HarvestRefusal("bound_science_identity_overlap")
         paths[run_id] = path
     for run_id, path in sorted(paths.items()):
-        problems = q.captured_call(validator, transcripts / f"{run_id}-strict.txt", path, strict=True)
-        clock = anchor_status(path)
-        clock = clock if clock in {"bounded", "unbounded", "invalid", "missing", "not recorded"} else "unbounded"
-        succeeded = (path / "summary_metrics.json").is_file() and q.read(path / "summary_metrics.json").get("status") == "succeeded"
-        valid = not problems and succeeded and clock == "bounded"
-        members.append({"run_id": q.identifier(run_id), "strict_valid": not bool(problems),
-                        "succeeded": succeeded, "clock_anchor_status": clock, "valid": valid})
-        if not valid:
+        member = member_assessment(run_id, path, transcripts / f"{run_id}-strict.txt", validator=validator)
+        members.append(member)
+        if not member["valid"]:
             causes.append("member_not_strict_valid_bounded_success")
-        if not problems:
+        if member["strict_valid"]:
             metrics = q.captured_call(reducer, transcripts / f"{run_id}-reduce.txt", path)
             if hasattr(metrics, "to_dict"):
                 metrics = metrics.to_dict()
@@ -503,8 +523,6 @@ def harvest(args, *, runner=subprocess.run, now=None, clear=q.group_clear):
                "bound-runs": Path(inputs["bound_runs_root"])}
     started = (night / "chain.started").exists()
     admission_abort, admission_other_causes = q.native_admission_abort(custody / "runs") if started else (None, [])
-    if admission_abort and (night / "producer-faults.jsonl").exists():
-        admission_other_causes.append("qualification_observation_producer_fault")
     no_science = recover_no_science(inputs, plan, night, pack, custody / "runs") if started and occurrence == "s1" else None
     missing_after_start = []
     if no_science:
@@ -571,16 +589,36 @@ def harvest(args, *, runner=subprocess.run, now=None, clear=q.group_clear):
             record.update(no_science)
         elif admission_abort:
             causes = [q.ADMISSION_ABORT_CODE, *missing_after_start, *admission_other_causes]
+            # A later admission abort cannot discharge earlier successful
+            # members' physics. Reuse L10-A's predicate without requiring the
+            # finalizer/post bracket that the abort prevented from existing.
+            members = record["members"]
+            for runs in (custody / "runs", Path(inputs["bound_runs_root"])):
+                for metadata in sorted(runs.rglob("metadata.json")):
+                    path = metadata.parent
+                    summary = path / "summary_metrics.json"
+                    if summary.is_file() and q.read(summary).get("status") == "succeeded":
+                        member = member_assessment(path.name, path,
+                            destination / "withheld/member-assessment" / f"{q.identifier(path.name)}-strict.txt",
+                            validator=validate_bundle)
+                        members.append(member)
+                        if not member["valid"]:
+                            causes.append("member_not_strict_valid_bounded_success")
+            capture_paths = []
             if not missing_after_start:
                 authenticate_launch(plan, sources["go"], sources["consumption"])
                 if not q.battery_boundaries(sources["battery_boundaries"], inputs["battery_boundaries"]["sha256"],
                                             plan.plan_id, plan_path=plan_path):
                     causes.append("battery_observation_not_passed")
-                if not battery_attempts(custody, Path(inputs["bound_runs_root"]))[0]:
+                attempt_pass, capture_paths = battery_attempts(custody, Path(inputs["bound_runs_root"]))
+                if not attempt_pass:
                     causes.append("battery_observation_not_passed")
+            majority = capture_clock_members(members, capture_paths)
+            if majority["triggered"]:
+                causes.append("systematic_clock_majority")
             record.update(verdict="RECOVER", cause_codes=sorted(set(causes)), cause_classes=["instrument_physics"],
                           recovery_classification="admission_abort" if len(set(causes)) == 1 else "admission_abort_with_other_recover_cause",
-                          admission_abort=admission_abort)
+                          admission_abort=admission_abort, clock_majority=majority)
         elif missing_after_start:
             # Later artifacts legitimately do not exist after a started-chain
             # crash. Preserve/authenticate the retained occurrence first; this
@@ -672,16 +710,7 @@ def harvest(args, *, runner=subprocess.run, now=None, clear=q.group_clear):
             q.write(destination / "withheld/bracket-evaluation.json", {"assessment": bracket, "reasons": reasons})
             if bracket.get("status") != "passed" or reasons or snapshot.refusal_reasons:
                 causes.append("acceptance_bracket_not_passed")
-            recorded_ids = {row["run_id"] for row in members}
-            for capture_id, path in capture_paths:
-                if capture_id not in recorded_ids:
-                    if (path / "instrument_evidence.json").exists():
-                        clock = q.read(path / "instrument_evidence.json").get("clock_anchor", {}).get("status", "not recorded")
-                    else:
-                        clock = anchor_status(path)
-                    clock = clock if clock in {"bounded", "unbounded", "invalid", "missing", "not recorded"} else "unbounded"
-                    members.append({"run_id": q.identifier(capture_id), "clock_anchor_status": clock})
-            majority = clock_majority(members)
+            majority = capture_clock_members(members, capture_paths)
             if majority["triggered"]:
                 causes.append("systematic_clock_majority")
             physical = any(code in causes for code in ("member_not_strict_valid_bounded_success", "battery_observation_not_passed",
@@ -708,6 +737,8 @@ def harvest(args, *, runner=subprocess.run, now=None, clear=q.group_clear):
         history = q.checked_history(record, plan, replay=args.previous_harvest is not None,
                                     reharvest=destination if args.previous_harvest is not None else None)
         record["attempt_history"] = history
+        if record["verdict"] == "NULL" and history["same_refusal_twice"]:
+            record["next_step"] = "same_refusal_twice_consult_required"
         if q.is_admission_abort(record):
             record.update(q.admission_abort_disposition(record, history))
     except (OSError, ValueError, KeyError, TypeError) as error:

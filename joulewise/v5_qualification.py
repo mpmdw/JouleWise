@@ -158,7 +158,7 @@ def admission_abort_evidence(value):
 
 
 def native_admission_abort(runs):
-    """Find one native admission failure; a second failure is another cause."""
+    """Locate native aborts; the harvester also assesses successful members."""
     candidates, other_causes = [], []
     for metadata_path in sorted(Path(runs).rglob("metadata.json")):
         bundle = metadata_path.parent
@@ -370,8 +370,26 @@ def attempt_history(current, archive_root, *, current_harvest=None, reharvest=No
                for index, record in enumerate(records)]
     chronological = list(reversed(counted))
     s2_count, admission_count = 0, 0
+    repeated_null_codes = []
     prior = None
     for index, record in enumerate(chronological):
+        if repeated_null_codes:
+            refusal = HarvestRefusal("same_refusal_twice_consult_required")
+            refusal.refusal_codes = repeated_null_codes
+            raise refusal
+        # NULL spends neither allowance, but two adjacent NULL refusals still
+        # send the NEXT spend to a consult. Compare these records directly;
+        # `prior` deliberately skips NULL for the separate allowance rules.
+        if (index > 0 and record.get("verdict") == "NULL"
+                and chronological[index - 1].get("verdict") == "NULL"):
+            codes = record.get("cause_codes", [])
+            previous_codes = chronological[index - 1].get("cause_codes", [])
+            if (not isinstance(codes, list) or not isinstance(previous_codes, list)):
+                raise HarvestRefusal("attempt_history_refusal_codes_invalid")
+            current_codes = sorted({identifier(code) for code in codes})
+            previous_codes = sorted({identifier(code) for code in previous_codes})
+            if current_codes and current_codes == previous_codes:
+                repeated_null_codes = current_codes
         if record["occurrence"] == "s2":
             s2_count += record.get("verdict") != "NULL"
             if s2_count > 1:
@@ -393,7 +411,8 @@ def attempt_history(current, archive_root, *, current_harvest=None, reharvest=No
             prior = record
     return {"harvests": [reference(path) for path in sorted(chain)],
             "s2_count": s2_count, "admission_abort_count": admission_count,
-            "same_refusal_twice": admission_count > 1}
+            "same_refusal_twice": admission_count > 1 or bool(repeated_null_codes),
+            "same_refusal_codes": repeated_null_codes}
 
 
 def authenticate_attempt_record(record, root):
