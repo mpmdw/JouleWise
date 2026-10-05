@@ -72,3 +72,27 @@ tooling-recovery allowance, so a pack-path failure on it costs a window, not a n
 - Sizing (lane A F1): approved as a source-bound allowance adapter. GAMMA member estimates at the issued length come
   from block-3 archives (diagnostic reading, permitted after block 3 by its registration §10) and the committed
   pack configs; each allowance cites `{path, sha256, pointer}`. No `s1` byte is used for sizing.
+
+## Addendum A (2026-10-05 02:35, same seat): G9 on `s1`, sizing roster and the clock design check
+
+- **G9 stages on `s1`** (fold seat F1). `s1`'s night chain stops at physical-ahead and must not emit launch
+  completion, so the backups and close-out happen in the governed post-STOP desk step, after the quiet window and
+  before any later arm. `claim_backup` and `bound_backup` are two verified copies of the `s1` custody and runs
+  roots, to two distinct destinations named in the `s1` plan, made through the existing backup path
+  (`scripts/run_campaign.py::backup_runs`) with a SHA-256 census verified at each destination. `close_out` is the
+  runsheet's Phase G post-run assertion record plus the identity of the window's OFF receipt. `restore` is the
+  observed network-time-OFF state and stand-down. `launch`, `capability_consumption` and `capture` come from the
+  night itself. No G9 stage may be satisfied by an in-chain step that the G2-b chain forbids.
+- **Sizing roster** (sizing seat F2). The plan writer sizes exactly the stages the rendered one-block G2-b chain
+  runs. It must not size full-GAMMA stages that `s1` never dispatches (`gamma-reference-arm-boundary`,
+  `gamma-reference-prefill-midpoint`).
+- **Sizing allowances** (sizing seat F3). The labelled custody, control and backup allocations and the
+  auxiliary-model proxy are approved as design allowances. Their bytes are committed under
+  `configs/campaigns/v5_qualification_25g83/` so that every allowance cites a repository path and digest.
+- **Clock design check** (sizing seat F1). The worst-case product h + rho*T_stream (ladder-maximum anchor half-width,
+  maximum drift rate, a 613-second envelope that also counts the separate cooldown sampler) is 8.5 ms. It stacks
+  three worst cases, so it is reported as a diagnostic, not a gate. The design check uses observed effective
+  clock-anchor bounds from comparable streams on this machine, models and OS build: the block-3 SELECT re-harvest
+  holds 50 anchor records, all `bounded`, largest 4.02 ms. The margin to 5 ms is thin and is disclosed to the cold
+  gate. The binding admission is unchanged: every obligated `s1` member must be `bounded` at harvest, and the
+  majority trigger (at least five recorded anchors, more than half not bounded) ends the block.
