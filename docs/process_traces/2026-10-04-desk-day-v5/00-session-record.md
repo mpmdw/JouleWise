@@ -180,3 +180,24 @@ coordinated multi-file forgery is outside the threat model (D-161). **F2:** fix.
     the D-166 "G2-a record hash it selected from");
   - `prefill-prompt-ladder.json` sha256 `43a77ea99cb2ac1f087f19d2f672444727b3e73a839e5dcfd8db1198d1352885`.
   It lands in `configs/campaigns/d117_contrast_v5/prefill_pin/` with the generated packs (step 3), one PR.
+
+## 18:50-19:15
+
+- PR #469 merged `cfdb90d6` (lane G2A-ATTACH-GUARD-TESTS-01 closed, with #467's Fable N3/N5).
+- PR #474: cold Fable final pass [39](39-fable-g2bstop.md) **FAIL**, F1 MAJOR: the authenticated binding bounded every
+  contrast stage with no flag, including the claim chain (a clean stage could return rc 3 and end a claim window under
+  `set -euo pipefail`; the per-process count did not mean the per-attempt authorization). **Accepted**, Fable's cure (a):
+  the bound applies only to `purpose = G2B_SHAKEDOWN` with `--max-blocks`; every other authenticated path byte-identical
+  to main with a golden test. F2, F3, F6 fixed; F4 deferred to the block-4 desk proof (mock-runner rehearsal with the
+  production policy); F5 rejected (unreachable). Round 3 [43](43-sol-g2bstop-r3-brief.md). This is the one revision round
+  before a second Fable pass; a second refusal goes to Ed.
+- Block-4 registration DRAFT (unsealed) on branch `design/2026-10-04-v5-qualification-block` (`b3730186`):
+  `configs/campaigns/v5_qualification_25g83/registration_block4_draft.md` and [42](42-block4-required-code.md) (required
+  code/records). The drafter found no authenticated G10 positive-control record: Ed's privileged-anchor positive control is
+  the block's owner action unless prior evidence is found.
+- **Step 3 (packs) started:** branch `desk/2026-10-04-v5-pin-and-packs` `24741cab` = main + #472 + #473 + the pin bundle in
+  `configs/campaigns/d117_contrast_v5/prefill_pin/` + the three generated `_v5` packs (floors 100 science configs each;
+  contrast 40 decode + 40 prefill members). Every source generator `--check` and every emitted generator `--check` passes
+  (the contrast source `--check` with the canonical panel/workload/pin is Fable MINOR-1's procedure control on #473).
+  Executing review brief [45](45-sol-packs-review-brief.md); throwaway-clone re-proof seat (Opus 5.5) brief
+  [44](44-opus-clone-proof-brief.md), output `~/night-archive/desk-day-v5/clone-proof/REPORT.md`.
