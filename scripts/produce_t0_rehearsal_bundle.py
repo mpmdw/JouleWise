@@ -506,9 +506,8 @@ def assemble(custody, *, positive_control, positive_sha256, positive_artifacts,
             process["stdout"] = outputs.get(key, {}).get("stdout")
         processes_record.append(process)
     execution = write(records / "execution.json", {"schema_version": t0.QUALIFICATION_EXECUTION_SCHEMA if qualification else t0.EXECUTION_SCHEMA,
-          "sequence_completed": all(p["state"] == "EXITED" and p["exit_code"] == (p["expected_outcome"]["exit_code"] if qualification else 0)
-                                    and (not qualification or "stdout" not in p["expected_outcome"]
-                                         or p["stdout"] == p["expected_outcome"]["stdout"])
+          "sequence_completed": all(t0.qualification_process_completed(p) if qualification else
+                                    p["state"] == "EXITED" and p["exit_code"] == 0
                                     and p["timed_out"] is False for p in processes_record), "processes": processes_record})
     namespace = custody / go["pack_id"]
     # Observe HID during the non-inference lifecycle, after all T-0 author

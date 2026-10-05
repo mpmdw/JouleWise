@@ -211,6 +211,8 @@ def size_window(occurrence, sizing, *, roster=(), auxiliary=(), brackets=(), non
     require(observed <= Fraction(0.005), "clock_bound_exceeded")
     return {"programmed_span_s": span, "window_max_s": window,
             "t0_stage_cap_s": float(stage_cap),
+            "pack_t0_s": float(allowance(sizing["fixed"]["pack_t0"])),
+            "remaining_chain_span_s": float(span - allowance(sizing["fixed"]["pack_t0"])),
             "clean_dwell_cap_s": DWELL_CAP_S,
             "longest_sampler_stream_s": float(longest),
             "worst_case_effective_clock_bound_s": effective,
@@ -383,7 +385,7 @@ def render_qualification_chain(occurrence, template, sizing, root, t0_epoch_s, o
     for name in ("NIGHT_PROGRAMMED_SPAN_S", "NIGHT_LATEST_CHAIN_START_EPOCH_S"):
         require(not re.search(r"(?m)^(?:export )?" + name + "=", text), "duplicate_span_literal")
     number(t0_epoch_s, "t0_epoch_s")
-    latest = math.floor(t0_epoch_s + sized["window_max_s"] - sized["programmed_span_s"])
+    latest = math.floor(t0_epoch_s + sized["t0_stage_cap_s"] + sized["pack_t0_s"])
     output = safe_path(output, exists=False)
     require(bool(roster), "first_stage_required")
     stage = (root / roster[0]["config_path"]).parent.relative_to(readiness._repo_for_pack(root)).as_posix()
@@ -425,11 +427,13 @@ def render_qualification_chain(occurrence, template, sizing, root, t0_epoch_s, o
             "latest_chain_start_epoch_s": latest}
 
 
-def deadlines(plan, span, declared):
+def deadlines(plan, span, declared, *, sizing=None):
     from scripts.run_night import COURIER_DEADLINE_S, WINDOW_SHUTDOWN_GRACE_S, deadman_epoch
     exact(declared, {"latest_chain_start_epoch_s", "shutdown_epoch_s", "courier_epoch_s", "deadman_epoch_s"}, "deadlines")
     end = plan.t0_epoch_s + plan.window_max_s
-    computed = {"latest_chain_start_epoch_s": end - span,
+    latest = (math.floor(plan.t0_epoch_s + sizing["t0_stage_cap_s"] + sizing["pack_t0_s"])
+              if sizing is not None else end - span)
+    computed = {"latest_chain_start_epoch_s": latest,
                 "shutdown_epoch_s": end + WINDOW_SHUTDOWN_GRACE_S,
                 "courier_epoch_s": end + WINDOW_SHUTDOWN_GRACE_S + COURIER_DEADLINE_S,
                 "deadman_epoch_s": deadman_epoch(plan)}
@@ -512,7 +516,8 @@ def authenticate_frozen_pack(root, confirmation):
     return locator(path)
 
 
-def write_qualification(occurrence, inputs, output):
+def write_qualification(occurrence, inputs, output, *, g10_inputs=False):
+    require(not g10_inputs or occurrence == "a1", "g10_sizing_route")
     require(occurrence in {"a1", "a2", "s1", "s2"}, "occurrence_retired_or_invalid")
     keys = {"schema_version", "head", "plan", "pack", "authorization", "confirmation", "sizing", "deadlines", "other_custody_roots", "arm_context", "prerequisites", "kernel_frequency"}
     if occurrence in {"s1", "s2"}:
@@ -613,7 +618,7 @@ def write_qualification(occurrence, inputs, output):
                 pack_night={"pack_id": root.name, "pack_root": str(root), "pack_sha256": digest,
                             "attempt_ordinal": inputs["pack"]["attempt_ordinal"], **records})
     plan = night_gate.NightPlan.from_mapping(base)
-    bound_deadlines = deadlines(plan, sizing["programmed_span_s"], inputs["deadlines"])
+    bound_deadlines = deadlines(plan, sizing["programmed_span_s"], inputs["deadlines"], sizing=sizing)
     chain_deadline = night_gate.qualification_start_deadline(plan, text, purpose, sizing=inputs["sizing"])
     require(chain_deadline is not None and chain_deadline == bound_deadlines["latest_chain_start_epoch_s"], "qualification_chain_deadline")
     # Authenticate exact records and sidecar with canonical preparation before
@@ -682,6 +687,12 @@ def write_qualification(occurrence, inputs, output):
                               "arm_api": "joulewise.arm_readiness.generate_arm_receipt",
                               "confirmation_record": records["confirmation_record"],
                               "expiry_checker": "scripts/check_v5_arm_abort.py"})
+        if g10_inputs:
+            # Reuse the full a1 sizing/confirmation checks, but do not create
+            # an a1/a2 control context or a launchable night plan.
+            record.update(mode="G10_INPUT_CAPTURE_NO_LAUNCH", recipe={
+                "capture_argv": record["t0_capture_recipe"]["argv"],
+                "author_inputs": str(input_root)})
         create_record(output, record)
     else:
         write_night_plan(output, plan, create_once=True)
@@ -701,14 +712,14 @@ def write_qualification(occurrence, inputs, output):
         "schema": "joulewise.v5_qualification_clock_binding.v1", "occurrence": occurrence,
         "plan": locator(output), "sizing": sizing_ref, "plan_id": plan.plan_id,
         "pack_root": str(root), "pack_sha256": digest})
-    return {"status": "STAGED", "occurrence": occurrence, "output": locator(output),
+    return {"status": "STAGED", "occurrence": "g10-inputs" if g10_inputs else occurrence, "output": locator(output),
             "kernel_frequency_margin_ms": gate["margin_ms"]}
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="occurrence", required=True)
-    for name in ("a1", "a2", "s1", "s2"):
+    for name in ("a1", "a2", "s1", "s2", "g10-inputs"):
         command = commands.add_parser(name)
         command.add_argument("--inputs", type=Path, required=True)
         command.add_argument("--output", type=Path, required=True)
@@ -727,7 +738,8 @@ def main(argv=None):
                 read_object(args.sizing), args.pack_root, args.t0_epoch_s, args.output,
                 arm_context=read_object(args.arm_context))
         else:
-            result = write_qualification(args.occurrence, read_object(args.inputs), args.output)
+            result = write_qualification("a1" if args.occurrence == "g10-inputs" else args.occurrence,
+                read_object(args.inputs), args.output, g10_inputs=args.occurrence == "g10-inputs")
     except QualificationError as exc:
         result = {"status": "REFUSED", "reason_code": "qualification_inputs_invalid"}
         if hasattr(exc, "kernel_frequency_gate"):

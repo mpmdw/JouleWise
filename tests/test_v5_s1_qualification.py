@@ -50,8 +50,7 @@ class QualificationSubsetTests(unittest.TestCase):
         argv_roster = [list(producer.night_gate.AGENT_CENSUS_ARGV),
                       ["/usr/bin/pgrep", "-x", "caffeinate"],
                       ["/usr/bin/pgrep", "-lf", author._BROWSER_CENSUS_PATTERN],
-                      ["/usr/bin/pgrep", "-lf", author._MONITOR_CENSUS_PATTERN],
-                      ["/usr/bin/pgrep", "-lf", "-g", "12345", "."]]
+                      ["/usr/bin/pgrep", "-lf", author._MONITOR_CENSUS_PATTERN]]
         for argv in argv_roster:
             for code, stdout, expected in ((1, "", "PASS"), (0, "", "FAIL"),
                                            (1, None, "FAIL"), (1, "42 process", "FAIL"), (2, "", "FAIL")):

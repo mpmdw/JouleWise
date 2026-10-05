@@ -3441,17 +3441,42 @@ def _revision6_window(plan):
 
 def _derivation_start_budget(plan):
     span = DERIVATION_PROGRAMMED_SPAN_S
+    text = ""
     if not _revision6_window(plan):
-        literal = night_gate.chain_literal(Path(plan.chain_path).read_text(), "NIGHT_PROGRAMMED_SPAN_S")
+        text = Path(plan.chain_path).read_text()
+        literal = night_gate.chain_literal(text, "NIGHT_PROGRAMMED_SPAN_S")
         if not re.fullmatch(r"[1-9][0-9]*", literal):
             raise ValueError("NIGHT_PROGRAMMED_SPAN_S must be a positive literal integer")
         span = int(literal)
     now_epoch, now_monotonic = time.time(), time.monotonic()
     deadline = plan.t0_epoch_s + plan.window_max_s - span
-    return {"programmed_span_s": span,
+    remaining_span = None
+    if (plan.receipt_class == "TRANSACTION_PACK" and isinstance(plan.pack_night, Mapping)
+            and re.search(r"^export V5_QUALIFICATION_OCCURRENCE=", text, re.MULTILINE)):
+        pin = night_gate.chain_literal(text, "NIGHT_CLOCK_SIZING_SHA256")
+        inputs = Path(plan.custody_root) / plan.pack_night["pack_id"] / "arm_readiness.t0.inputs"
+        sizing_path = inputs / "kernel-frequency-sizing.json"
+        if re.fullmatch(r"[0-9a-f]{64}", pin) and sizing_path.is_file():
+            from scripts import write_v5_qualification_plan as writer
+            sizing = _pack_object(sizing_path, "qualification_stage_sizing", pin)
+            fixed = writer.sizing_adapter(sizing)["fixed"]
+            if "t0_stage_cap" in fixed:
+                authorization = plan.pack_night.get("authorization_record")
+                if not isinstance(authorization, Mapping):
+                    raise PackNightRefusal("qualification start budget authorization")
+                purpose = _pack_object(Path(authorization["path"]), "authorization_record",
+                                       authorization["sha256"])["purpose"]
+                deadline = night_gate.qualification_start_deadline(plan, text, purpose, sizing=sizing)
+                if deadline is None:
+                    raise PackNightRefusal("qualification start budget deadline")
+                remaining_span = span - float(writer.allowance(fixed["pack_t0"]))
+    budget = {"programmed_span_s": span,
             "window_end_epoch_s": plan.t0_epoch_s + plan.window_max_s,
             "latest_chain_start_epoch_s": deadline,
             "latest_chain_start_monotonic_s": now_monotonic + deadline - now_epoch}
+    if remaining_span is not None:
+        budget["remaining_chain_span_s"] = remaining_span
+    return budget
 
 
 def _derivation_budget_remaining(budget):
@@ -3680,7 +3705,7 @@ def _admit_qualification_clean_dwell(plan, night_dir, budget):
             or capture.get("boot_session_id") != readiness._current_boot_session_id()
             or capture.get("argv") != manifest.get("prewindow_command")
             or not 600_000_000_000 <= elapsed <= 2_700_000_000_000
-            or _derivation_budget_remaining(budget) <= 0):
+            or _derivation_budget_remaining(budget) < 0):
         raise PackNightRefusal("qualification clean dwell cap or start budget")
     _write_bytes_exclusive(night_dir / "clean_dwell.json", readiness.render_json({
         "schema": "joulewise.v5_qualification_clean_dwell.v1", "plan_id": plan.plan_id,

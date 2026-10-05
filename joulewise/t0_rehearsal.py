@@ -653,18 +653,111 @@ def _verify_artifact_reference(
     return artifact
 
 
-# Ruling 76 addendum C: all governed pgrep argv are absence probes.
-# The executable selector is exhaustive; remaining argv use the success row.
-QUALIFICATION_PROCESS_OUTCOMES = {
-    "/usr/bin/pgrep": {"exit_code": 1, "stdout": ""},
-    "default": {"exit_code": 0},
-}
+# Ruling 76 F.1: full argv, never the executable, selects census semantics.
+# Regex slots below are individual dynamic arguments; every literal argument
+# and the argv length must match. Sources are the consuming code, not a list
+# inferred from the executable. test_v5_block4_x12b inventories the call sites
+# and runs the entire real author roster through journal -> assembler -> G1.
+_ARG = re.compile(r"[\s\S]+")
+_IDS = re.compile(r"[1-9][0-9]*(?:,[1-9][0-9]*)*")
+_PYTHON = re.compile(r"(?:.*/)?python(?:3(?:\.[0-9]+)?)?")
+_REPO_SCRIPT = lambda name: re.compile(r".*/" + re.escape(name))
+_ZERO = {"exit_code": 0}
+_ABSENT = {"exit_code": 1, "stdout": ""}
+_CENSUS = {"exit_codes": [0, 1]}
+
+QUALIFICATION_PROCESS_OUTCOMES = (
+    # Author and driver absence censuses; only these require empty stdout.
+    (("/usr/bin/pgrep", "-lf", "[c]odex|[c]laude|[t]3"), _ABSENT, "joulewise/arm_readiness_evidence_t0.py:1849; joulewise/night_gate.py:736"),
+    (("/usr/bin/pgrep", "-x", "caffeinate"), _ABSENT, "joulewise/arm_readiness_evidence_t0.py:1848"),
+    (("/usr/bin/pgrep", "-lf", t0_author._BROWSER_CENSUS_PATTERN), _ABSENT, "joulewise/arm_readiness_evidence_t0.py:1850"),
+    (("/usr/bin/pgrep", "-lf", t0_author._MONITOR_CENSUS_PATTERN), _ABSENT, "joulewise/arm_readiness_evidence_t0.py:1851"),
+    (("/usr/bin/pgrep", "-lf", t0_author._prewindow.CONTAMINANTS), _CENSUS, "joulewise/arm_readiness_evidence_t0.py:1425"),
+    # A live group is a normal intermediate poll, not a failed sequence.
+    (("/usr/bin/pgrep", "-lf", "-g", _IDS, "."), _CENSUS, "scripts/run_night.py:4431; scripts/run_night.py:4486"),
+    (("/bin/ps", "-o", "pgid=,pid=,command=", "-p", _IDS), _ZERO, "scripts/run_night.py:4515"),
+    (t0_author._prewindow.PS_ARGV, _ZERO, "joulewise/arm_readiness_evidence_t0.py:1434"),
+    (("/usr/sbin/sysctl", "-n", "kern.bootsessionuuid"), _ZERO, "joulewise/arm_readiness_evidence_t0.py:530; joulewise/night_gate.py:1868"),
+    (("/usr/bin/pmset", "-g", "therm"), _ZERO, "joulewise/arm_readiness_evidence_t0.py:1480; joulewise/night_gate.py:1745"),
+    (("/usr/bin/pmset", "-g", "batt"), _ZERO, "joulewise/arm_readiness_evidence_t0.py:1961; joulewise/night_gate.py:1657"),
+    (("/usr/bin/pmset", "-g", "custom"), _ZERO, "joulewise/arm_readiness_evidence_t0.py:1962"),
+    (("/usr/bin/pmset", "-g"), _ZERO, "joulewise/night_gate.py:1698"),
+    (("/usr/sbin/system_profiler", "SPPowerDataType", "-json"), _ZERO, "joulewise/arm_readiness_evidence_t0.py:1963"),
+    (t0_author._battery_float.IOREG_BATTERY_ARGV, _ZERO, "joulewise/arm_readiness_evidence_t0.py:1985; joulewise/night_gate.py:1684"),
+    (("/usr/bin/sudo", "-n", "/usr/bin/powermetrics", "-i", "200", "-n", "1"), _ZERO, "joulewise/arm_readiness_evidence_t0.py:1932"),
+    (("sudo", "-n", "/usr/bin/powermetrics", "-n", "300", "-b", "0", "-i", "100", "--samplers", "cpu_power,gpu_power,ane_power,thermal", "--format", "plist", "-o", _ARG), _ZERO, "scripts/run_night.py:4709"),
+    (("/usr/bin/defaults", "-currentHost", "read", "com.apple.screensaver", "idleTime"), _ZERO, "joulewise/night_gate.py:1633"),
+    (("/usr/sbin/sysctl", "-n", "vm.loadavg"), _ZERO, "joulewise/night_gate.py:1721"),
+    (("/usr/bin/log", "show", "--last", "10m", "--style", "syslog", "--predicate", 'process == "launchd" AND eventMessage CONTAINS "corecaptured"'), _ZERO, "joulewise/night_gate.py:1783"),
+    # Stage commands, including R0's optional resync and unconditional OFF.
+    ((_PYTHON, _REPO_SCRIPT("scripts/collect_clock_reference.py")), _ZERO, "scripts/capture_t0_step.py:746"),
+    (("/usr/bin/sudo", "-n", "/usr/sbin/systemsetup", "-setusingnetworktime", "on"), _ZERO, "scripts/capture_t0_step.py:765"),
+    (network_time_off.OFF_ARGV, _ZERO, "scripts/capture_t0_step.py:771"),
+    (("/bin/bash", _REPO_SCRIPT("scripts/quiet_mac_prep.sh")), _ZERO, "scripts/capture_t0_step.py:834; joulewise/arm_readiness_evidence_t0.py:1506"),
+    ((_PYTHON, _REPO_SCRIPT("joulewise/prewindow.py"), "--t0-wait", "--timeout-min", "45", "--window", _ARG), _ZERO, "scripts/capture_t0_step.py:834"),
+    ((_PYTHON, _REPO_SCRIPT("scripts/recover_calibration_ledger.py"), "--ledger", _ARG, "--head-pin", _ARG, "readiness", "--phase", "pre-reserve", "--session-id", _ARG, "--plan", _ARG), _ZERO, "scripts/capture_t0_step.py:834"),
+    ((_PYTHON, _REPO_SCRIPT("scripts/reserve_calibration_window_bracket.py"), "--ledger", _ARG, "--head-pin", _ARG, "--session-id", _ARG, "--window-id", _ARG, "--plan-id", _ARG, "--plan-sha256", _ARG, "--plan", _ARG, "--evidence-root-id", _ARG, "--runs-root", _ARG, "--pre-attempt-id", _ARG, "--post-attempt-id", _ARG, "--pre-custody-locator", _ARG, "--post-custody-locator", _ARG, "--identity-epoch-json", _ARG, "--t1-bindings-json", _ARG, "--execute"), _ZERO, "scripts/capture_t0_step.py:834"),
+    # Driver launches and read-only probes. Parameter slots are full argv
+    # fields, not a command prefix or executable-wide rule.
+    (("/bin/zsh", _ARG), _ZERO, "scripts/run_night.py:737; scripts/run_night.py:1000; scripts/run_night.py:4664; scripts/run_night.py:4790"),
+    (("/bin/zsh", "-c", "sleep 2; echo REHEARSAL"), _ZERO, "scripts/run_night.py:4008"),
+    ((_PYTHON, _REPO_SCRIPT("scripts/capture_t0_step.py"), "sequence", "--pack-root", _ARG, "--custody-root", _ARG, "--window-plan-root", _ARG), _ZERO, "scripts/run_night.py:3790"),
+    ((_PYTHON, _REPO_SCRIPT("scripts/launch_window.py"), "--pack-root", _ARG, "--arm-receipt", _ARG, "--arm-readiness-custody-root", _ARG, "--launch-manifest", _ARG, "--night-plan", _ARG, "--go-receipt", _ARG, "--step6-confirmation-table", _ARG, "--expected-confirmation-digest", _ARG), _ZERO, "scripts/run_night.py:2481"),
+    (("/usr/bin/caffeinate", "-is", "/bin/zsh", _ARG, _ARG), _ZERO, "scripts/capture_t0_step.py:425; scripts/run_night.py:2481"),
+    ((_PYTHON, "-B", _REPO_SCRIPT("scripts/run_night.py"), "run", "--plan", _ARG), _ZERO, "scripts/produce_t0_rehearsal_bundle.py:199"),
+    ((_PYTHON, "-B", _REPO_SCRIPT("scripts/run_night.py"), "run", "--plan", _ARG, "--courier-bin", _ARG), _ZERO, "scripts/produce_t0_rehearsal_bundle.py:199"),
+    ((_PYTHON, "-B", _REPO_SCRIPT("scripts/run_night.py"), "_bind-worker", "--kind", _ARG, "--job-id", _ARG, "--result-fd", _ARG, "--request", _ARG), _ZERO, "scripts/run_night.py:2711"),
+    ((_PYTHON, "-B", "-m", "joulewise.quiet_admission", "--observation", "--sample-interval-s", _ARG, "--observer-pid", _ARG, "--job-id", _ARG, "--result-fd", _ARG), _ZERO, "scripts/run_night.py:2711"),
+    ((_PYTHON, "-B", _REPO_SCRIPT("scripts/run_night.py"), "_probe-worker", "--plan", _ARG, "--receipt", _ARG, "--progress", _ARG, "--deadline", _ARG), _ZERO, "scripts/run_night.py:4588"),
+    ((_ARG, "-p", _ARG, "--output-format", "text", "--allowedTools", _ARG), _ZERO, "scripts/run_night.py:1793"),
+    ((_ARG, "--wait", "--timeout-s", _ARG), _ZERO, "scripts/run_night.py:3652"),
+    (("git", "-C", _ARG, "rev-parse", "HEAD"), _ZERO, "scripts/run_night.py:419; scripts/run_night.py:425"),
+    (("git", "-C", _ARG, "remote", "get-url", "origin"), _ZERO, "scripts/run_night.py:1351"),
+    (("git", "clone", "--depth", "1", _ARG, _ARG), _ZERO, "scripts/run_night.py:1360"),
+    (("git", "-C", _ARG, "checkout", "-B", _ARG), _ZERO, "scripts/run_night.py:1368"),
+    (("git", "-C", _ARG, "add", _ARG), _ZERO, "scripts/run_night.py:1398"),
+    (("git", "-C", _ARG, "commit", "-m", _ARG), _ZERO, "scripts/run_night.py:1405"),
+    (("git", "-C", _ARG, "push", "origin", _ARG), _ZERO, "scripts/run_night.py:1412"),
+    (("/usr/bin/git", "-c", "core.fsmonitor=false", "-C", _ARG, "--no-optional-locks", "status", "--porcelain=v1", "--untracked-files=all"), _ZERO, "joulewise/night_gate.py:1484"),
+    (("/usr/bin/git", "-C", _ARG, "show", _ARG), _ZERO, "joulewise/night_gate.py:1606"),
+    # R1 ignores every nonzero leg; quorum still requires two parsed successes.
+    *((tuple(clock_reference.build_sntp_argv(server)), {"exit_codes": "any"},
+       "joulewise/arm_readiness_evidence_t0.py:1167") for server in clock_reference.SERVER_ROSTER),
+)
+
+
+def qualification_process_registration(argv):
+    if not isinstance(argv, (list, tuple)) or not all(isinstance(arg, str) for arg in argv):
+        return None
+    for template, outcome, consumer in QUALIFICATION_PROCESS_OUTCOMES:
+        if len(argv) == len(template) and all(
+                slot.fullmatch(arg) is not None if isinstance(slot, re.Pattern) else slot == arg
+                for slot, arg in zip(template, argv)):
+            return outcome, consumer
+    return None
 
 
 def qualification_process_outcome(argv):
-    return dict(QUALIFICATION_PROCESS_OUTCOMES.get(
-        argv[0] if isinstance(argv, (list, tuple)) and argv else None,
-        QUALIFICATION_PROCESS_OUTCOMES["default"]))
+    registered = qualification_process_registration(argv)
+    # Imported subprocess helpers and historical fixture commands require
+    # success. Unknown census argv never inherit an absence/maintenance rule.
+    if registered is None:
+        return {"unregistered": True} if argv and argv[0] == "/usr/bin/pgrep" else dict(_ZERO)
+    outcome = dict(registered[0])
+    if isinstance(outcome.get("exit_codes"), list):
+        outcome["exit_codes"] = list(outcome["exit_codes"])
+    return outcome
+
+
+def qualification_process_completed(process):
+    expected = qualification_process_outcome(process.get("argv"))
+    code = process.get("exit_code")
+    codes = expected.get("exit_codes", [expected.get("exit_code")])
+    return (process.get("expected_outcome") == expected and not expected.get("unregistered")
+            and process.get("state") == "EXITED" and type(code) is int
+            and (codes == "any" or code in codes)
+            and ("stdout" not in expected or process.get("stdout") == expected["stdout"])
+            and process.get("timed_out") is False)
 
 
 # Shared by the plan writer, desk producer and G9. night_custody is the
@@ -718,12 +811,10 @@ def evaluate_g1(bundle: EvidenceBundle) -> GateResult:
         if process.get("stdin_fd0_target") != "/dev/null":
             return _result("G1", name, GateStatus.FAIL, f"governed process {index} stdin was not bound to /dev/null", artifact.citation())
         expected = qualification_process_outcome(process.get("argv")) if qualified else {"exit_code": 0}
-        census = "stdout" in expected
         if qualified and process.get("expected_outcome") != expected:
             return _result("G1", name, GateStatus.FAIL, f"governed process {index} expected outcome is not registered", artifact.citation())
-        if (process.get("state") != "EXITED" or qualified and type(process.get("exit_code")) is not int
-                or process.get("exit_code") != expected["exit_code"]
-                or census and process.get("stdout") != ""):
+        if (not qualification_process_completed(process) if qualified else
+                process.get("state") != "EXITED" or process.get("exit_code") != 0):
             return _result("G1", name, GateStatus.FAIL, f"governed process {index} did not complete successfully", artifact.citation())
         if not qualified and process.get("prompt_count") != 0:
             return _result("G1", name, GateStatus.FAIL, f"governed process {index} recorded a surviving prompt", artifact.citation())
@@ -1634,6 +1725,9 @@ def _run_real_author_boundary(
             mock.patch.object(t0_author, "_captured_clock_reference", return_value=(r0, {"path": "r0", "sha256": "0" * 64}, agreement)),
             mock.patch.object(t0_author, "_capture", return_value=(disable, {"path": "off", "sha256": "1" * 64})),
             mock.patch.object(t0_author, "_fresh_clock_reference_batch", side_effect=fresh),
+            # This software-only numeric boundary has no plan custody. The
+            # native author/G10 compositions separately replay the binding.
+            mock.patch.object(t0_author, "_authenticate_clock_sizing"),
             mock.patch.object(kernel_clock, "read_kernel_frequency", return_value=frequency),
         ):
             t0_author._derive_clock_attestation(context)

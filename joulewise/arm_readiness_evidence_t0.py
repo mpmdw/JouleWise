@@ -779,21 +779,30 @@ def _captured_clock_reference(
         raise _underivable(kind, "qualification kernel frequency gate is missing")
     value = {**value, "kernel_frequency": frequency,
              "t_stream_max_s": capture.get("t_stream_max_s")}
+    result = (value, identity, agreement)
+    context.values["clock_reference"] = result
+    return result
+
+
+def _authenticate_clock_sizing(context: _Context, r0: dict[str, _Any], *, kind: str) -> None:
+    """Binding replay is mandatory before a clock row can be returned/published.
+
+    Refusal precedence (ruling 76 F.2 / X11 F1): missing chain, then anchor
+    continuity, then sizing. G10's isolated copy can prove an anchor refusal;
+    a copy can never acquire a PASS by bypassing the original-path binding.
+    """
     binding_path = context.custody_pack_root / _INPUT_DIRECTORY / "kernel-frequency-binding.json"
     if (_readiness.requires_t0_frequency_gate(context.pack_root)
             or binding_path.exists() or binding_path.is_symlink()):
         from joulewise.v5_qualification import authenticated_clock_budget, reference
         try:
             maximum, refs = authenticated_clock_budget(binding_path.parent, context.pack_root)
-            if value["t_stream_max_s"] != maximum:
+            if r0["t_stream_max_s"] != maximum:
                 raise ValueError("R0 stream maximum differs from authenticated sizing")
         except (OSError, ValueError) as exc:
             raise _underivable(kind, str(exc)) from exc
-        value["clock_sizing_binding"] = reference(binding_path)
+        r0["clock_sizing_binding"] = reference(binding_path)
         context.values["clock_sizing_artifacts"] = refs
-    result = (value, identity, agreement)
-    context.values["clock_reference"] = result
-    return result
 
 
 def _arm_context(
@@ -1184,6 +1193,23 @@ def _fresh_clock_reference_batch(
     )
 
 
+def _require_window_chain_presence(context: _Context, *, kind: str) -> None:
+    # Presence precedes the sizing replay. Full launch/custody authentication
+    # still runs before publication; G10's copy is allowed only to refuse.
+    path = context.custody_pack_root / _INPUT_DIRECTORY / "launch-manifest.json"
+    try:
+        manifest, _identity, _raw = _canonical_object(path, kind=kind, label="launch manifest")
+    except T0EvidenceAuthoringError as exc:
+        raise _refuse(kind, "evidence_author_t0_launch_manifest_missing", str(exc)) from exc
+    chain_root = manifest.get("window_plan_root")
+    if not isinstance(chain_root, str) or not _Path(chain_root).is_absolute():
+        raise _underivable(kind, "launch manifest window plan root is invalid")
+    try:
+        _input_identity(_Path(chain_root) / "window-chain.zsh", kind=kind, label="window-chain.zsh")
+    except T0EvidenceAuthoringError as exc:
+        raise _missing_artifact(kind, "window_chain", str(exc)) from exc
+
+
 def _derive_clock_attestation(context: _Context) -> _DerivedRow:
     kind = "CLOCK_ATTESTATION"
     r0, r0_identity, _r0_agreement = _captured_clock_reference(
@@ -1241,6 +1267,7 @@ def _derive_clock_attestation(context: _Context) -> _DerivedRow:
                       "R0-to-author kernel frequency word changed")
     if author_anchor.read_skew_ns > 1_000_000:
         raise _underivable(kind, "author anchor read skew exceeds 1000000 ns")
+    _authenticate_clock_sizing(context, r0, kind=kind)
     r1_finished_raw = author_anchor.monotonic_raw_ns
     r1_duration = r1_finished_raw - r1_started_raw
     value = {
@@ -2413,6 +2440,7 @@ def author_arm_readiness_evidence_t0(
     )
     context.values["frozen_plan"] = frozen_plan
     rows = _required_rows(context)
+    _require_window_chain_presence(context, kind="CLOCK_ATTESTATION")
     source_dir = context.custody_pack_root / _SOURCE_DIRECTORY
     evidence_dir = context.custody_pack_root / _EVIDENCE_DIRECTORY
     if source_dir.exists() or evidence_dir.exists():

@@ -1234,6 +1234,7 @@ def qualification_start_deadline(plan, chain_text, purpose, *, sizing=None):
         raise PackNightRefusal("qualification programmed span")
     span = int(span)
     window_cap = 2700
+    pack_t0 = None
     if (plan.receipt_class == "TRANSACTION_PACK" and purpose == "G2B_SHAKEDOWN"
             and marker in {"s1", "s2"} and isinstance(plan.pack_night, Mapping)):
         from joulewise import arm_readiness as readiness
@@ -1262,11 +1263,15 @@ def qualification_start_deadline(plan, chain_text, purpose, *, sizing=None):
                 sizing = readiness.parse_json_bytes(_pack_bytes(
                     sizing_path, "qualification_stage_sizing", expected_sizing))
             window_cap = writer.allowance(writer.sizing_adapter(sizing)["fixed"]["t0_stage_cap"])
+            pack_t0 = writer.allowance(writer.sizing_adapter(sizing)["fixed"]["pack_t0"])
+            if not 0 < pack_t0 < span:
+                raise PackNightRefusal("qualification remaining chain span")
             if not 3180 <= window_cap <= 3480:
                 raise PackNightRefusal("qualification t0_stage_cap_band")
     if plan.window_max_s != 60 * math.ceil((span + window_cap) / 60):
         raise PackNightRefusal("qualification window/dwell cap")
-    deadline = plan.t0_epoch_s + plan.window_max_s - span
+    deadline = (plan.t0_epoch_s + float(window_cap + pack_t0) if pack_t0 is not None
+                else plan.t0_epoch_s + plan.window_max_s - span)
     if (not isinstance(latest, str) or re.fullmatch(r"[0-9]+", latest) is None
             or not math.ceil(plan.t0_epoch_s) <= int(latest) <= math.floor(deadline)):
         raise PackNightRefusal("qualification latest chain start")

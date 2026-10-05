@@ -63,10 +63,6 @@ class PositiveControlTests(unittest.TestCase):
         self.on_duration_s = 0
         self.poll_duration_s = 0
         self.command_argv = []
-        # Anchor refusal is independent of plan/dispatch sizing replay. Keep
-        # the binding in custody and inject only that separately tested seam.
-        (self.inputs / "kernel-frequency-binding.json").write_bytes(
-            readiness.render_json({"fixture": "sizing supplied by injected replay"}))
 
     def stamp(self):
         self.sequence += 1
@@ -137,9 +133,9 @@ class PositiveControlTests(unittest.TestCase):
         endpoint = ClockAnchor(self.base_ns + SYNTHETIC_REALTIME_OFFSET_NS
                               + drift + self.movement, self.base_ns, 1000)
         with (author_environment(self.repository, sample_anchor=lambda: endpoint,
-                                  now_monotonic_ns=self.base_ns, kernel_frequency=self.after_frequency),
+                                  now_monotonic_ns=self.base_ns, kernel_frequency=self.after_frequency,
+                                  real_clock_budget=True),
               mock.patch.object(author_cli, "REPO_ROOT", self.repository),
-              mock.patch.object(v5_qualification, "authenticated_clock_budget", return_value=(320., ())),
               redirect_stdout(sink), redirect_stderr(stderr)):
             rc = author_cli.main(argv[2:])
         raw = stdout.getvalue()
