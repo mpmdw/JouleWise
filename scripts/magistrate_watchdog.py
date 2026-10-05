@@ -1859,7 +1859,7 @@ class ResidentSupervisor:
             self.state["remote_stop"] = {
                 "state": observation.state,
                 "detail": observation.detail,
-                "observed_monotonic": monotonic if not allowed else observed_monotonic,
+                "observed_monotonic": monotonic if observation.state == "NOT_PROBED" else observed_monotonic,
             }
         return observation
 

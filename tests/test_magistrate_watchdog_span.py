@@ -385,3 +385,23 @@ class TickSpanTests(WatchdogTestCase):
             self.assertFalse(thread.is_alive())
         self.assertEqual("ACTIVE", state["state"])
         self.assertEqual([], [notice["kind"] for notice in state["notice_pending"]])
+
+    def test_unreadable_installed_fence_keeps_cached_observation_age(self):
+        # Review F5: a suppressed refresh keeps the completed observation's
+        # timestamp, so the next readable tick refreshes on baseline cadence.
+        plan = self.make_plan()
+        self.installed_plan(plan).write_bytes(b"torn plist")
+        original = self.supervisor(plan)
+        state = wd.initial_state()
+        state.update(state="ACTIVE", activation_id="activation-a")
+        observed = self.harness.clock.mono - 299
+        state["remote_stop"] = {"state": "CLEAR", "detail": "last completed", "observed_monotonic": observed}
+        resident = wd.ResidentSupervisor(self.harness.storage, self.harness.deps, state, self.harness.child,
+                                         original.lock_record, original.stdout_path, original.stderr_path)
+        resident.step()
+        if resident._remote_probe_thread is not None:
+            resident._remote_probe_thread.join(5)
+            self.assertFalse(resident._remote_probe_thread.is_alive())
+        persisted = wd.load_state(self.harness.storage)["remote_stop"]
+        self.assertEqual("CLEAR", persisted["state"])
+        self.assertEqual(observed, persisted["observed_monotonic"])
