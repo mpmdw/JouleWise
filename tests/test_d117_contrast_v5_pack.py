@@ -910,6 +910,8 @@ class D117ContrastV5PackTests(unittest.TestCase):
                 and path.name != "order_manifest.json"
             ]
             self.assertEqual(len(configs), 80)
+            for path in configs:
+                self.assertEqual(json.loads(path.read_bytes())["sampling"]["idle_seconds"], 75.0)
             for config_path in configs:
                 model = json.loads(config_path.read_text(encoding="utf-8"))["model"]
                 with self.subTest(config=config_path.name):
@@ -1003,8 +1005,8 @@ class D117ContrastV5PackTests(unittest.TestCase):
                 shutil.copyfile(source, target)
         for relative in (
             "configs/campaign_policies",
-            "configs/campaigns/neg8_reference_corpus",
-            "configs/campaigns/window_references",
+            "configs/campaigns/neg8_reference_corpus_v5",
+            "configs/campaigns/window_references_v5",
             "configs/arm_readiness",
             "configs/analysis_registry",
         ):

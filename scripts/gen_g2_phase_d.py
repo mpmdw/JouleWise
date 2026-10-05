@@ -512,12 +512,27 @@ def render_g2a_generated_region(runbook: str) -> str:
     )
 
 
-def render_generated_region(runbook: str) -> str:
-    """Render the sole G2-b chain variant from the complete runbook chain bytes."""
+def render_generated_region(runbook: str, *, v5_references: bool = False) -> str:
+    """Render G2-b, retaining the historical projection unless v5 is requested.
+
+    Prospective v5 callers must opt in: pinned Markdown and historical chains
+    continue to authenticate the original 30-second reference paths.
+    """
 
     from scripts.run_campaign import MAX_BLOCKS_REACHED_RC
 
     chain = extract_runbook_chain(runbook)
+    if v5_references:
+        for name, directory in (
+            ("REF_ROOT", "window_references"),
+            ("BOUND_CONFIG_ROOT", "neg8_reference_corpus"),
+        ):
+            chain = _replace_once(
+                chain,
+                f'{name}="$REPO/configs/campaigns/{directory}"\n',
+                f'{name}="$REPO/configs/campaigns/{directory}_v5"\n',
+                label=f"v5 {name}",
+            )
     chain = _replace_once(
         chain,
         '  --launch-manifest "$LAUNCH_MANIFEST" \\\n'

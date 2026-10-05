@@ -30,7 +30,8 @@ FACTORY_ALLOWLIST = {"joulewise/bundle_read.py": "text 8 reader states"}
 REPLACE_REASON = "predates PairVerdict (64e39bb9); cannot receive a PairVerdict"
 # (repo-relative path, enclosing function qualname, ast.unparse(call)).
 # The replaced values are, in order: _ProbeResult; ProbeResult; Receipt;
-# Receipt; Refusal; Receipt; Probes; FiducialDetection; FiducialDetection.
+# Receipt; Refusal; Receipt; Probes; FiducialDetection; FiducialDetection;
+# RuntimeEvent; BenchmarkConfig; SamplingConfig; BenchmarkConfig.
 REPLACE_CALL_ALLOWLIST = {
     ("joulewise/arm_readiness_evidence_t0.py", "_derive_power",
      "_replace(battery, stdout=battery.stdout_bytes)"): REPLACE_REASON,
@@ -50,6 +51,14 @@ REPLACE_CALL_ALLOWLIST = {
      "replace(detection, anchor_method=method, derivation_role='prospective')"): REPLACE_REASON,
     ("scripts/validate_powermetrics_fiducial.py", "rederive_artifact",
      "replace(fresh, b_fiducial_s=max(float(stored_bound), float(fresh.b_fiducial_s)))"): REPLACE_REASON,
+    ("joulewise/controller.py", "_Execution._axi_request_events",
+     "replace(event, metadata=metadata)"): REPLACE_REASON,
+    ("joulewise/controller.py", "cooldown_gate",
+     "replace(config, run_id=run_id if run_id is not None else config.run_id, sampling=replace(config.sampling, idle_seconds=selected.subwindow_s))"): REPLACE_REASON,
+    ("joulewise/controller.py", "cooldown_gate",
+     "replace(config.sampling, idle_seconds=selected.subwindow_s)"): REPLACE_REASON,
+    ("joulewise/controller.py", "run_experiment",
+     "replace(config, run_id=f'{experiment_id}__r{rep}')"): REPLACE_REASON,
 }
 # file::function -> the guarded names it may reference; exactly seven rows.
 ALLOWLIST = {
@@ -334,7 +343,7 @@ class ConsumerGuardTests(unittest.TestCase):
                 if _tracked(ROOT, relative):
                     violations(relative, path.read_text(encoding="utf-8", errors="replace"), sites)
         self.assertEqual(Counter(sites), Counter(REPLACE_CALL_ALLOWLIST.keys()))
-        self.assertEqual(len(REPLACE_CALL_ALLOWLIST), 9)
+        self.assertEqual(len(REPLACE_CALL_ALLOWLIST), 13)
         self.assertEqual(set(REPLACE_CALL_ALLOWLIST.values()), {REPLACE_REASON})
 
     def test_new_replace_is_flagged_existing_one_is_allowed_and_stale_row_fails(self) -> None:

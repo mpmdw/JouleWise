@@ -37,7 +37,7 @@
   },
   "sampling": {
     "power_hz": 10.0,
-    "idle_seconds": 30.0,
+    "idle_seconds": 75.0,
     "warmup_seconds": 5.0
   },
   "run_metadata": {
@@ -49,7 +49,7 @@
       "production-window",
       "floor-calibration",
       "df-condition=df-ph-decode-qwen3-8b",
-      "calibration-plan-sha256=fed2a431162d8f0938d573a33d048862dac36947a7d2828280f4174c8724d949",
+      "calibration-plan-sha256=246af3753007fddbd14f655acfd7f3149e918edc93cd9a7392368ecf93887594",
       "rep6",
       "launch_lineage_required"
     ]
