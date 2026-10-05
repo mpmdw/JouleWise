@@ -415,6 +415,7 @@ class FloorEvidenceBinding:
 _FLOOR_BINDING_REASON_CODES = frozenset(
     {
         "calibration_plan_bytes_hash_mismatch",
+        "calibration_producer_set_hash_mismatch",
         "calibration_plan_identity_mismatch",
         "calibration_abba_block_mismatch",
         "calibration_abba_label_mismatch",
@@ -1418,60 +1419,151 @@ def supersession_visibility_scan(
     return audit
 
 
+@dataclass(frozen=True)
+class _FloorProducerPlan:
+    pin: Mapping[str, Any]
+    value: Mapping[str, Any]
+    path: Path
+
+
+def _floor_producer_plans(
+    artifact: Mapping[str, Any],
+    floor_path: Path,
+) -> tuple[Mapping[str, _FloorProducerPlan], tuple[str, ...]]:
+    """Authenticate plan bytes and select owners from the v2 producer pins.
+
+    The aggregate hash commits to the full pinset producer array, not to a
+    plan file or the smaller provenance plan list. Cell ownership must never
+    be inferred from a bundle's self-declared plan tag.
+    """
+
+    provenance = artifact.get("provenance", {})
+    aggregate_pin = provenance.get("calibration_plan")
+    producer_pins = provenance.get("producer_calibration_plans")
+    problems: list[str] = []
+    owner_pins: dict[str, Mapping[str, Any]] = {}
+    pins = [aggregate_pin]
+    if producer_pins is not None:
+        try:
+            pinset_path = _lexical_child_path(
+                floor_path.parent, aggregate_pin.get("relative_path"),
+                label="floor producer pinset", require_directory=False,
+            )
+            raw = _read_analysis_input(pinset_path, label="floor producer pinset")
+            pinset = _strict_json_admission_bytes(raw, "floor producer pinset")
+            errors = validate_floor_artifact(
+                artifact, pinset_path=pinset_path,
+                expected_pinset_sha256=hashlib.sha256(raw).hexdigest(),
+            )
+            if errors:
+                raise ValueError(errors[0])
+            producers = pinset["producer_plans"]
+            aggregate = pinset["aggregate"]
+            if (
+                canonical_json_sha256(producers) != aggregate_pin.get("sha256")
+                or aggregate["producer_set_sha256"] != aggregate_pin.get("sha256")
+                or aggregate["plan_set_id"] != aggregate_pin.get("plan_id")
+                or aggregate["artifact_id"] != artifact.get("artifact_id")
+                or pinset["mint_tool_version"] != provenance.get("mint_tool_version")
+            ):
+                raise ValueError("aggregate producer-set identity differs from pinset")
+            pins = [
+                {
+                    key: producer["plan"][key]
+                    for key in (
+                        "plan_id", "declared_calibration_scope", "relative_path", "sha256"
+                    )
+                }
+                for producer in producers
+            ]
+            if pins != producer_pins:
+                raise ValueError("producer calibration plan provenance differs from pinset")
+            cells = {cell["cell_id"]: cell for cell in artifact["cells"]}
+            if [cell["cell_id"] for cell in artifact["cells"]] != aggregate["cell_ids"]:
+                raise ValueError("aggregate cell inventory differs from pinset")
+            for producer, pin in zip(producers, pins):
+                for cell_pin in producer["cells"]:
+                    cell_id = cell_pin["cell_id"]
+                    cell = cells[cell_id]
+                    for kind in ("absolute", "comparative"):
+                        component = cell["provenance"][kind]
+                        component_pin = cell_pin[kind]
+                        order_pin = component["order_manifest"]
+                        if (
+                            component["evidence_root_id"] != producer["evidence_root_id"]
+                            or component["calibration_cell_id"] != component_pin["calibration_cell_id"]
+                            or order_pin["manifest_id"] != component_pin["order_manifest_id"]
+                            or order_pin["sha256"] != component_pin["order_manifest_sha256"]
+                        ):
+                            raise ValueError(f"cell {cell_id!r} component differs from producer pins")
+                    owner_pins[cell_id] = pin
+        except (OSError, RuntimeError, ValueError, TypeError, KeyError, AttributeError) as exc:
+            return {}, (f"calibration_producer_set_hash_mismatch: {exc}",)
+    else:
+        owner_pins = {
+            cell["cell_id"]: aggregate_pin for cell in artifact.get("cells", [])
+        }
+
+    plans: dict[str, _FloorProducerPlan] = {}
+    for pin in pins:
+        if not isinstance(pin, Mapping):
+            problems.append("calibration_plan_provenance_missing")
+            continue
+        try:
+            relative = _safe_relative_posix(pin.get("relative_path"), "floor calibration plan")
+            root = floor_path.parent.resolve()
+            path = (root / relative).resolve()
+            path.relative_to(root)
+            if producer_pins is not None:
+                path = _lexical_child_path(
+                    root, relative,
+                    label="floor calibration plan", require_directory=False,
+                )
+        except (OSError, RuntimeError, ValueError) as exc:
+            problems.append(f"calibration_plan_path_invalid: {exc}")
+            continue
+        try:
+            raw = _read_analysis_input(path, label="floor calibration plan")
+        except OSError as exc:
+            problems.append(f"calibration_plan_bytes_unreadable: {exc}")
+            continue
+        if hashlib.sha256(raw).hexdigest() != pin.get("sha256"):
+            problems.append("calibration_plan_bytes_hash_mismatch")
+            continue
+        try:
+            plan = _strict_json_admission_bytes(raw, "calibration plan bytes")
+        except AnalysisInputError:
+            problems.append("calibration_plan_bytes_invalid")
+            continue
+        if (
+            not isinstance(plan, Mapping)
+            or plan.get("plan_id") != pin.get("plan_id")
+            or plan.get("calibration_scope") != pin.get("declared_calibration_scope")
+        ):
+            problems.append("calibration_plan_declared_provenance_mismatch")
+            continue
+        plans[pin["sha256"]] = _FloorProducerPlan(pin, plan, path)
+    return {
+        cell_id: plans[pin["sha256"]]
+        for cell_id, pin in owner_pins.items()
+        if isinstance(pin, Mapping) and pin.get("sha256") in plans
+    }, tuple(dict.fromkeys(problems))
+
+
 def _campaign_order_binding_problems(
     artifact: Mapping[str, Any],
     floor_path: Path,
     evidence_roots: Mapping[str, Path],
+    producer_plans: Mapping[str, _FloorProducerPlan],
 ) -> tuple[str, ...]:
-    """Authenticate v2 plan and component-scoped order/campaign evidence."""
+    """Authenticate component-scoped order/campaign evidence."""
 
     problems: list[str] = []
+    multi_producer = artifact.get("provenance", {}).get("producer_calibration_plans") is not None
     try:
         _assert_floor_artifact_path_independent(artifact)
     except ValueError as exc:
         return (f"artifact_absolute_path_leakage: {exc}",)
-
-    provenance = artifact.get("provenance")
-    plan_pin = provenance.get("calibration_plan") if isinstance(provenance, Mapping) else None
-    if isinstance(plan_pin, Mapping):
-        try:
-            relative_plan = _safe_relative_posix(
-                plan_pin.get("relative_path"),
-                "artifact.provenance.calibration_plan.relative_path",
-            )
-            plan_root = floor_path.parent.resolve()
-            plan_path = (plan_root / relative_plan).resolve()
-            plan_path.relative_to(plan_root)
-        except (OSError, RuntimeError, ValueError) as exc:
-            problems.append(f"calibration_plan_path_invalid: {exc}")
-        else:
-            try:
-                plan_raw = _read_analysis_input(
-                    plan_path, label="floor calibration plan"
-                )
-            except OSError as exc:
-                problems.append(f"calibration_plan_bytes_unreadable: {exc}")
-            else:
-                if hashlib.sha256(plan_raw).hexdigest() != plan_pin.get("sha256"):
-                    problems.append("calibration_plan_bytes_hash_mismatch")
-                try:
-                    plan = _strict_json_admission_bytes(
-                        plan_raw, "calibration plan bytes"
-                    )
-                except AnalysisInputError:
-                    problems.append("calibration_plan_bytes_invalid")
-                else:
-                    if (
-                        not isinstance(plan, Mapping)
-                        or plan.get("plan_id") != plan_pin.get("plan_id")
-                        or plan.get("calibration_scope")
-                        != plan_pin.get("declared_calibration_scope")
-                    ):
-                        problems.append(
-                            "calibration_plan_declared_provenance_mismatch"
-                        )
-    else:
-        problems.append("calibration_plan_provenance_missing")
 
     for cell_index, cell in enumerate(artifact.get("cells", [])):
         if not isinstance(cell, Mapping):
@@ -1496,10 +1588,27 @@ def _campaign_order_binding_problems(
                 )
                 continue
             root = Path(root_value)
+            producer = producer_plans.get(cell.get("cell_id"))
+            order_path = root / "order_manifest.json"
+            if producer is not None and multi_producer:
+                try:
+                    order_path = _lexical_child_path(
+                        producer.path.parent,
+                        _safe_relative_posix(
+                            producer.value.get("order_manifest"), "producer order manifest"
+                        ),
+                        label="producer order manifest", require_directory=False,
+                    )
+                except (OSError, RuntimeError, ValueError) as exc:
+                    problems.append(
+                        f"component_evidence_root_disagreement: {where}."
+                        f"order_manifest path invalid: {exc}"
+                    )
+                    continue
             evidence = (
                 (
                     "order_manifest",
-                    root / "order_manifest.json",
+                    order_path,
                     component.get("order_manifest"),
                     False,
                 ),
@@ -1564,6 +1673,19 @@ def _campaign_order_binding_problems(
                     problems.append(
                         f"component_evidence_root_disagreement: {where}."
                         "order_manifest id mismatch"
+                    )
+                    continue
+                if (
+                    not is_log
+                    and multi_producer
+                    and producer is not None
+                    and (
+                        parsed.get("plan_id") != producer.pin["plan_id"]
+                        or parsed.get("calibration_plan_sha256") != producer.pin["sha256"]
+                    )
+                ):
+                    problems.append(
+                        f"component_evidence_root_disagreement: {where}.order_manifest producer plan mismatch"
                     )
                     continue
                 members = _order_member_ids(parsed, campaign_log=is_log)
@@ -1652,12 +1774,16 @@ def bind_floor_artifact_evidence(
     normalized_roots, root_mapping_problems = _normalize_evidence_roots(
         authenticated_floor.root_ids, evidence_roots
     )
+    producer_plans, plan_problems = _floor_producer_plans(artifact, floor_path)
+    multi_producer = artifact.get("provenance", {}).get("producer_calibration_plans") is not None
     global_problems = [
         *root_mapping_problems,
+        *plan_problems,
         *_campaign_order_binding_problems(
             artifact,
             floor_path,
             normalized_roots,
+            producer_plans,
         ),
     ]
     salvage_records_present = False
@@ -1771,14 +1897,14 @@ def bind_floor_artifact_evidence(
             tuple[str, ...],
         ],
     ] = {}
-    plan = artifact.get("provenance", {}).get("calibration_plan")
-    plan_sha256 = plan.get("sha256") if isinstance(plan, Mapping) else None
     cell_bound_hashes: dict[str, set[str]] = {}
 
     for cell in artifact.get("cells", []):
         if not isinstance(cell, Mapping) or not isinstance(cell.get("cell_id"), str):
             continue
         cell_id = str(cell["cell_id"])
+        producer = producer_plans.get(cell_id)
+        plan_sha256 = producer.pin["sha256"] if producer is not None else None
         key = cell.get("key")
         metric_name = key.get("metric") if isinstance(key, Mapping) else None
         cell_problems: list[str] = list(global_problems)
@@ -1849,6 +1975,14 @@ def bind_floor_artifact_evidence(
             and comparative_root is not None
         ):
             for block in comparative["blocks"]:
+                if (
+                    multi_producer
+                    and isinstance(block, Mapping)
+                    and block.get("calibration_plan_sha256") != plan_sha256
+                ):
+                    cell_problems.append(
+                        f"calibration_plan_identity_mismatch: {block.get('block_id')}"
+                    )
                 members = block.get("members") if isinstance(block, Mapping) else None
                 if isinstance(members, list):
                     records.extend(
