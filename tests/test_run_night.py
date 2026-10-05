@@ -2079,9 +2079,11 @@ runpy.run_path(script, run_name='__main__')
         assignment = next(node for node in base.body if isinstance(node, ast.Assign)
                           and any(isinstance(t, ast.Name) and t.id == '_WRITE_ONCE_RECORDS' for t in node.targets))
         self.assertIn("network_time_off.json", self.driver._WRITE_ONCE_RECORDS)
+        self.assertIn("launch.pending", self.driver._WRITE_ONCE_RECORDS)
         self.assertEqual(tuple(name for name in self.driver._WRITE_ONCE_RECORDS
                                if name not in {"network_time_off.json", "clean_dwell.output.txt",
-                                               "clean_dwell.json", "start_conditions.json"}), ast.literal_eval(assignment.value))
+                                               "clean_dwell.json", "start_conditions.json",
+                                               "launch.pending"}), ast.literal_eval(assignment.value))
 
     def test_v2_existing_quiet_journal_reaches_legacy_evaluator(self):
         night = self.custody / 'night'
@@ -2249,6 +2251,81 @@ runpy.run_path(script, run_name='__main__')
         self.assertEqual(refusal["refusal"]["reason"], self.driver._CODES["chain_alive"])
         self.driver.run_courier.assert_not_called()
         self.driver._durable_record.assert_called_once()
+
+    def test_dead_man_guards_pending_launcher_even_with_chain_exit(self):
+        night = self.custody / "night"
+        night.mkdir()
+        original = b'{"pid":7272,"pgid":7272,"start_time":"prior","plan_id":"attempt"}\n'
+        (night / "launch.pending").write_bytes(original)
+        for exited in (False, True):
+            for error in (None, PermissionError()):
+                with self.subTest(exited=exited, denied=error is not None):
+                    if exited:
+                        (night / "chain.exited").write_bytes(b'{}\n')
+                    with mock.patch.object(self.driver.os, "killpg", side_effect=error) as kill:
+                        code = self.driver.dead_man(self.plan_path)
+                    self.assertEqual(code, self.driver.EXIT_REFUSED)
+                    kill.assert_called_once_with(7272, 0)
+                    self.driver.run_courier.assert_not_called()
+                    document = json.loads(sorted(night.glob("refusal*.json"))[-1].read_bytes())
+                    self.assertEqual(document["refusal"]["reason"], "night_chain_alive")
+        self.assertEqual((night / "launch.pending").read_bytes(), original)
+        self.assertFalse((night / "chain.started").exists())
+
+    def test_dead_man_gone_pending_launcher_couriers_without_chain_markers(self):
+        night = self.custody / "night"
+        night.mkdir()
+        (night / "launch.pending").write_bytes(b'{"pid":7272,"pgid":7272}\n')
+        with mock.patch.object(self.driver.os, "killpg", side_effect=ProcessLookupError):
+            self.assertEqual(self.driver.dead_man(self.plan_path), self.driver.EXIT_GO)
+        self.driver.run_courier.assert_called_once()
+        self.assertFalse((night / "chain.started").exists())
+        self.assertFalse((night / "chain.exited").exists())
+        artifacts = self.driver._artifact_list(self.custody, night)
+        self.assertIn("night/launch.pending", [row["path"] for row in artifacts])
+        self.assertEqual(self.driver._existing_record(night).name, "launch.pending")
+
+    def test_dead_man_unreadable_pending_identity_fails_closed(self):
+        night = self.custody / "night"
+        night.mkdir()
+        for payload in (b"", b"null", b'{"pgid":true}', b'{"pgid":1}'):
+            with self.subTest(payload=payload):
+                (night / "launch.pending").write_bytes(payload)
+                with mock.patch.object(self.driver.os, "killpg") as kill:
+                    self.assertEqual(self.driver.dead_man(self.plan_path), self.driver.EXIT_REFUSED)
+                kill.assert_not_called()
+                self.driver.run_courier.assert_not_called()
+                self.assertFalse((night / "chain.exited").exists())
+
+    def test_direct_courier_suppresses_a_live_pending_launcher(self):
+        night = self.custody / "night"
+        night.mkdir()
+        (night / "launch.pending").write_bytes(b'{"pid":7272,"pgid":7272}\n')
+        plan = self.driver._load_plan(self.plan_path)
+        # setUp replaces run_courier; exercise the actual delivery entrypoint.
+        driver = _load_driver()
+        with mock.patch.object(driver.os, "killpg"), \
+             mock.patch.object(driver.subprocess, "Popen") as spawn:
+            result = driver.run_courier(self.custody, plan, self.courier)
+        self.assertEqual(result["attempted"], 0)
+        self.assertFalse(result["sent"])
+        self.assertIn("pending launcher", result["last_error"])
+        spawn.assert_not_called()
+
+    def test_pending_launcher_record_is_exclusive_and_fsynced_before_release(self):
+        night = self.custody / "night"
+        night.mkdir()
+        plan = self.driver._load_plan(self.plan_path)
+        with mock.patch.object(self.driver, "_fsync_path", wraps=self.driver._fsync_path) as sync:
+            self.driver._write_launch_pending(types.SimpleNamespace(pid=7272), night, plan)
+        sync.assert_called_once_with(night)
+        original = (night / "launch.pending").read_bytes()
+        record = json.loads(original)
+        self.assertEqual(record["plan_id"], plan.plan_id)
+        self.assertEqual(record["start_time"], "Tue Sep 8 01:02:03 2026")
+        with self.assertRaises(FileExistsError):
+            self.driver._write_launch_pending(types.SimpleNamespace(pid=8282), night, plan)
+        self.assertEqual((night / "launch.pending").read_bytes(), original)
 
     def test_dead_man_refuses_a_fresh_live_courier_lock(self) -> None:
         night = self.custody / "night"
@@ -3944,6 +4021,7 @@ class PackNightProducerTests(unittest.TestCase):
             kwargs["stdout"].flush()
             return FakeProcess(command, return_code=2)
         with mock.patch.object(self.driver.subprocess, "Popen", side_effect=spawn), \
+             mock.patch.object(self.driver, "_group_census", return_value=(True, [])), \
              mock.patch.object(self.driver, "_claim_chain_start", wraps=self.driver._claim_chain_start) as claim:
             self.assertEqual(self.driver.run_night(self.plan_path), self.driver.EXIT_REFUSED)
         claim.assert_not_called()

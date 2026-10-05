@@ -5,6 +5,8 @@ import copy
 import io
 import json
 import os
+import signal
+import subprocess
 import sys
 import tempfile
 import time
@@ -185,7 +187,7 @@ class LaunchRealizationRecheckTests(unittest.TestCase):
         execute.assert_not_called()
         create.assert_not_called()
 
-    def _driver_launch(self, mutation, *, fixture_group_census=False, start_fd198=False):
+    def _driver_launch(self, mutation, *, fixture_group_census=True, start_fd198=False):
         """Real launcher child/barrier, projection hashing, exec and bundle writer."""
         collect = self.root / "collect.py"
         collect.write_text(f'''
@@ -282,6 +284,12 @@ with mock.patch.object(launch_window, "_assemble_launch_inputs", return_value={{
         self.assertFalse((self.night / "chain.exited").exists())
         self.assertFalse(self.runs.exists())
         self.assertTrue(self.consumption.exists())
+        pending = json.loads((self.night / "launch.pending").read_bytes())
+        self.assertEqual(pending["plan_id"], "driver-recheck")
+        self.assertEqual(pending["pid"], pending["pgid"])
+        self.assertIn("start_time", pending)
+        self.assertEqual(len(pending["attempt_id"]), 32)
+        self.assertEqual((self.night / "launch.pending").stat().st_mode & 0o777, 0o600)
 
     def test_driver_model_mutation_after_consumed_replay_never_claims_start(self):
         _driver, result, claim = self._driver_launch("model")
@@ -321,6 +329,117 @@ with mock.patch.object(launch_window, "_assemble_launch_inputs", return_value={{
         self.assertEqual(result[0:2], (0, None))
         claim.assert_called_once_with(self.night)
         self.assertTrue(self.runs.exists())
+
+
+class PendingLauncherCustodyTests(unittest.TestCase):
+    def test_driver_death_before_custody_ack_refuses_before_consumption_or_recheck(self):
+        import socket
+        parent, child = socket.socketpair()
+        parent.close()
+        descriptor = child.detach()  # launch() owns and closes the descriptor.
+        with mock.patch.dict(os.environ, {launch_window.CHAIN_START_FD_ENV: str(descriptor)}), \
+             mock.patch.object(launch_window, "_launch") as proceed:
+            with self.assertRaises((launch_window.LaunchLineageError, OSError)):
+                launch_window.launch(argparse.Namespace())
+        proceed.assert_not_called()
+
+    def test_driver_death_during_stalled_recheck_retains_deadman_custody(self):
+        """Review V5: kill the driver after the real launch enters recheck."""
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            night = root / "night"
+            night.mkdir()
+            ready = root / "ready"
+            launcher = root / "launcher.py"
+            launcher.write_text(f'''
+import argparse, json, os, time
+from pathlib import Path
+from unittest import mock
+from scripts import launch_window
+night = Path({str(night)!r})
+def stalled(pack):
+    record = json.loads((night / "launch.pending").read_bytes())
+    assert record["pid"] == record["pgid"] == os.getpid()
+    assert record["plan_id"] == "driver-death"
+    assert not (night / "chain.started").exists()
+    Path({str(ready)!r}).write_text(str(os.getpid()))
+    time.sleep(30)
+args = argparse.Namespace(pack_root=Path('pack'), launch_manifest=Path('manifest'),
+    step6_confirmation_table=None, expected_confirmation_digest=None)
+with mock.patch.object(launch_window, "_assemble_launch_inputs", return_value={{"pack_root": Path('pack'), "exec_argv": ['/usr/bin/true']}}), \\
+     mock.patch.object(launch_window, "_consume_launch_capability", return_value={{"consumption_path": Path('consumed')}}), \\
+     mock.patch.object(launch_window, "verify_consumed_launch", return_value={{"exec_argv": ['/usr/bin/true']}}), \\
+     mock.patch.object(launch_window, "_recheck_identity_projection", side_effect=stalled):
+    launch_window.launch(args)
+''')
+            worker = root / "driver.py"
+            worker.write_text(f'''
+import os, sys, time, types
+from pathlib import Path
+from unittest import mock
+from tests.test_run_night import _load_driver, ProbeSource
+driver = _load_driver()
+plan = types.SimpleNamespace(plan_id="driver-death", t0_epoch_s=time.time(), window_max_s=60)
+with mock.patch.object(driver, "_chain_environment", return_value=dict(os.environ)):
+    driver._run_chain_once(Path({str(launcher)!r}), plan, ProbeSource(time.time()).probes(),
+        Path({str(night)!r}), None, command=[sys.executable, '-B', {str(launcher)!r}])
+''')
+            environment = dict(os.environ, PYTHONPATH=str(launch_window.REPOSITORY_ROOT))
+            with (root / "driver.log").open("wb") as log:
+                process = subprocess.Popen([sys.executable, "-B", str(worker)],
+                    env=environment, stdout=log, stderr=log, start_new_session=True)
+                child_pid = None
+                try:
+                    deadline = time.monotonic() + 10
+                    while not ready.exists():
+                        if process.poll() is not None or time.monotonic() >= deadline:
+                            self.fail((root / "driver.log").read_text())
+                        time.sleep(.02)
+                    child_pid = int(ready.read_text())
+                    process.kill()
+                    process.wait(timeout=3)
+                    os.kill(child_pid, 0)
+                    self.assertFalse((night / "chain.started").exists())
+                    self.assertFalse((night / "chain.exited").exists())
+                    original = (night / "launch.pending").read_bytes()
+                    case = night_fixtures.NightDriverTests()
+                    case.setUp()
+                    try:
+                        from dataclasses import replace
+                        plan = replace(case.driver._load_plan(case.plan_path), custody_root=str(root))
+                        with mock.patch.object(case.driver, "_load_plan", return_value=plan):
+                            code = case.driver.dead_man(root / "plan.json")
+                        self.assertEqual(code, case.driver.EXIT_REFUSED)
+                        case.driver.run_courier.assert_not_called()
+                        refusal = json.loads((night / "refusal.json").read_bytes())
+                        self.assertEqual(refusal["refusal"]["reason"], "night_chain_alive")
+                        self.assertEqual(refusal["refusal"]["evidence"]["pgid"], child_pid)
+                        self.assertEqual((night / "launch.pending").read_bytes(), original)
+                        self.assertFalse((night / "chain.exited").exists())
+                    finally:
+                        case.tearDown()
+                        case.doCleanups()
+                finally:
+                    if process.poll() is None:
+                        process.kill()
+                        process.wait(timeout=3)
+                    if child_pid is None and (night / "launch.pending").exists():
+                        child_pid = json.loads((night / "launch.pending").read_bytes())["pgid"]
+                    if child_pid is not None:
+                        try:
+                            os.killpg(child_pid, signal.SIGKILL)
+                        except ProcessLookupError:
+                            pass
+                        # Wait for all group members, not just the dead driver.
+                        deadline = time.monotonic() + 5
+                        while time.monotonic() < deadline:
+                            try:
+                                os.killpg(child_pid, 0)
+                            except ProcessLookupError:
+                                break
+                            time.sleep(.02)
+                        else:
+                            self.fail("pending launcher group survived test cleanup")
 
 
 class NonPackLaunchRouteTests(unittest.TestCase):

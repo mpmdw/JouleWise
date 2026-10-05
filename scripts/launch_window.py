@@ -291,6 +291,21 @@ def _recheck_identity_projection(pack_root: Path) -> None:
 
 def launch(args: argparse.Namespace) -> int:
     start_fd = os.environ.pop(CHAIN_START_FD_ENV, None)
+    if start_fd is not None:
+        with socket.socket(fileno=int(start_fd)) as channel:
+            # Do not consume or recheck until the driver has fsynced the
+            # separate launcher identity. Driver death before custody closes
+            # this channel and refuses; death during recheck retains custody.
+            channel.sendall(b"C")
+            if channel.recv(1) != b"R":
+                raise LaunchLineageError(
+                    "launch_consumption_invalid", "driver did not record launcher custody"
+                )
+            return _launch(args, channel)
+    return _launch(args, None)
+
+
+def _launch(args: argparse.Namespace, channel: socket.socket | None) -> int:
     launch_inputs = _assemble_launch_inputs(args)
     argv = list(launch_inputs["exec_argv"])
     token = secrets.token_bytes(HANDOFF_TOKEN_BYTES)
@@ -314,16 +329,15 @@ def launch(args: argparse.Namespace) -> int:
         raise LaunchLineageError(
             "launch_binding_mismatch", "verified exec argv changed before execve"
         )
-    if start_fd is not None:
-        # The driver publishes its exclusive start claim and full process
-        # identity only after this launch's consumed replay and recheck pass.
+    if channel is not None:
+        # The exclusive chain start still follows consumed replay and recheck.
         # EOF (including a dead driver) refuses rather than starting a chain.
-        with socket.socket(fileno=int(start_fd)) as channel:
-            channel.sendall(b"P")
-            if channel.recv(1) != b"G":
-                raise LaunchLineageError(
-                    "launch_consumption_invalid", "driver did not claim the chain start"
-                )
+        channel.sendall(b"P")
+        if channel.recv(1) != b"G":
+            raise LaunchLineageError(
+                "launch_consumption_invalid", "driver did not claim the chain start"
+            )
+        channel.close()  # Never pass the private barrier to the collection.
     # Successful execve never returns. There is deliberately no child process
     # or automatic retry after the capability's linearization point.
     os.execve(argv[0], argv, dict(os.environ))

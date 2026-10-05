@@ -135,6 +135,7 @@ _WRITE_ONCE_RECORDS = (
     "go-census.json",
     "result.json",
     "refusal.json",
+    "launch.pending",
     "chain.started",
     "chain.exited",
     "courier.json",
@@ -591,6 +592,23 @@ def _complete_chain_start(descriptor: int, process: subprocess.Popen[Any],
     return pgid
 
 
+def _write_launch_pending(process, night_dir, plan):
+    """Retain launcher custody independently of the PASS-only chain claim.
+
+    A harvester must census this pgid even without chain.started. Only a
+    proven-gone group plus absent chain.started means a never-started/NULL
+    attempt. Missing start_time is uncertainty, never proof of group absence.
+    """
+    identity = observe_identity(process.pid)
+    _write_json(night_dir / "launch.pending", {
+        "schema": "joulewise.launch_pending.v1", "plan_id": plan.plan_id,
+        "attempt_id": uuid.uuid4().hex, "pid": process.pid, "pgid": process.pid,
+        "epoch_s": time.time(),
+        "start_time": identity.start_time if identity.state == "LIVE" else None,
+    })
+    _fsync_path(night_dir)
+
+
 def _complete_chain_launch_failure(descriptor: int, error: OSError) -> str:
     launch_error = f"{type(error).__name__}: {error}"
     try:
@@ -802,7 +820,9 @@ class _WindowDeadline:
                 return self.outcome
             evidence: dict[str, Any] = {}
             proven = _terminate_process_group(
-                self.process, self.night_dir, pgid=self.pgid, evidence=evidence
+                self.process,
+                self.night_dir if (self.night_dir / "chain.started").exists() else None,
+                pgid=self.pgid, evidence=evidence
             )
             fired_epoch_s = time.time()
             census = list(evidence.get("group_census", []))
@@ -990,6 +1010,13 @@ def _run_chain_once_impl(chain_path, plan, probes, night_dir, claim_descriptor,
             return (None, _refusal_mapping(reason, detail, evidence),
                     census_count, census_hits, proven)
 
+        if awaiting_start:
+            try:
+                _write_launch_pending(process, night_dir, plan)
+            except OSError as error:
+                return refuse_start(_CODES["chain_launch_failed"],
+                    f"launcher custody could not be recorded: {type(error).__name__}: {error}")
+
         next_census = time.monotonic()
         while process.poll() is None or awaiting_start:
             if awaiting_start:
@@ -1003,7 +1030,12 @@ def _run_chain_once_impl(chain_path, plan, probes, night_dir, claim_descriptor,
                     signal_byte = None
                 except OSError as error:
                     return refuse_start(_CODES["chain_launch_failed"], str(error))
-                if signal_byte == b"P":
+                if signal_byte == b"C":
+                    try:
+                        channel.sendall(b"R")
+                    except OSError as error:
+                        return refuse_start(_CODES["chain_launch_failed"], str(error))
+                elif signal_byte == b"P":
                     descriptor = _claim_chain_start(night_dir)
                     if descriptor is None:
                         return refuse_start(_CODES["chain_already_started"],
@@ -1056,7 +1088,8 @@ def _run_chain_once_impl(chain_path, plan, probes, night_dir, claim_descriptor,
                             return exceeded(fired)
                         evidence: dict[str, Any] = {}
                         proven = _terminate_process_group(
-                            process, night_dir, pgid=pgid, evidence=evidence
+                            process, night_dir if claimed else None,
+                            pgid=pgid, evidence=evidence
                         )
                         if not proven:
                             _write_json(
@@ -1099,6 +1132,11 @@ def _run_chain_once_impl(chain_path, plan, probes, night_dir, claim_descriptor,
         exit_code = process.wait()
         if not claimed:
             evidence = {"launcher_exit_code": exit_code}
+            proven = _terminate_process_group(process, pgid=pgid, evidence=evidence)
+            if not proven:
+                return (None, _refusal_mapping(_CODES["chain_alive"],
+                    "launcher process-group termination could not be proven", evidence),
+                    census_count, census_hits, False)
             try:
                 refusal = readiness.parse_json_bytes(stdout_path.read_bytes())
                 reason = refusal["reason_codes"][0]
@@ -1113,7 +1151,7 @@ def _run_chain_once_impl(chain_path, plan, probes, night_dir, claim_descriptor,
             # Launcher codes belong to its own refusal schema. Keep that
             # exact document as evidence under the existing driver code.
             return (None, _refusal_mapping(_CODES["chain_launch_failed"], detail, evidence),
-                    census_count, census_hits, True)
+                    census_count, census_hits, proven)
         _record_chain_exit(night_dir, exit_code)
         return exit_code, None, census_count, census_hits, True
 
@@ -1151,6 +1189,7 @@ def _artifact_list(custody_root: Path, night_dir: Path) -> list[dict[str, Any]]:
         # result.json's refusal_documents or the courier's refusal discovery.
         *sorted(night_dir.glob("rerun.refusal*.json")),
         night_dir / "result.json",
+        night_dir / "launch.pending",
         night_dir / "chain.started",
         night_dir / "chain.exited",
         night_dir / "chain.unkilled",
@@ -1599,6 +1638,10 @@ def run_courier(
 
     night_dir = custody_root / "night"
     night_dir.mkdir(parents=True, exist_ok=True)
+    pending_refusal = _pending_launch_refusal(night_dir)
+    if pending_refusal is not None:
+        return {"attempted": 0, "sent": False, "heartbeat_seen": False,
+                "last_error": pending_refusal["detail"]}
     heartbeat = night_dir / "courier.heartbeat"
     sent = night_dir / "courier.sent"
     attempts_path = night_dir / "courier.attempts.jsonl"
@@ -1620,6 +1663,10 @@ def run_courier(
     last_error: str | None = None
     try:
         for attempt in range(1 + len(COURIER_BACKOFF_S)):
+            pending_refusal = _pending_launch_refusal(night_dir)
+            if pending_refusal is not None:
+                last_error = pending_refusal["detail"]
+                break
             if deadman_epoch_s is not None and time.time() >= deadman_epoch_s:
                 last_error = "dead-man epoch reached; run-path courier handed off"
                 break
@@ -3829,6 +3876,31 @@ def _read_started_pgid(path: Path) -> int | None:
     return pgid
 
 
+def _pending_launch_refusal(night_dir: Path) -> dict[str, Any] | None:
+    """Fail closed on a live or unreadable pending launcher, even after exit.
+
+    Keep the record immutable on refusal and success. A dead leader or a
+    changed start-time token cannot disprove surviving group members.
+    """
+    pending = night_dir / "launch.pending"
+    if not pending.exists() and not pending.is_symlink():
+        return None
+    pgid = None if pending.is_symlink() else _read_started_pgid(pending)
+    if pgid is None or pgid <= 1:
+        return _refusal_mapping(_CODES["chain_alive"],
+            "pending launcher process-group identity cannot be read",
+            {"record": "launch.pending"})
+    try:
+        os.killpg(pgid, 0)
+    except ProcessLookupError:
+        return None
+    except PermissionError:
+        pass
+    return _refusal_mapping(_CODES["chain_alive"],
+        "pending launcher process group is still alive or cannot be disproven",
+        {"pgid": pgid, "record": "launch.pending"})
+
+
 def dead_man(plan_path: Path, *, courier_bin: Path | None = None) -> int:
     try:
         plan = _load_plan(plan_path)
@@ -3863,6 +3935,14 @@ def dead_man(plan_path: Path, *, courier_bin: Path | None = None) -> int:
             "a fresh courier lock belongs to a live process",
         )
         _append_log(custody_root, "dead-man refused while courier was running")
+        _durable_record(custody_root, night_dir, plan)
+        return EXIT_REFUSED
+
+    pending_refusal = _pending_launch_refusal(night_dir)
+    if pending_refusal is not None:
+        _write_driver_refusal(night_dir / "refusal.json", plan,
+            pending_refusal["reason"], pending_refusal["detail"], pending_refusal["evidence"])
+        _append_log(custody_root, "dead-man refused while pending launcher was alive or unknown")
         _durable_record(custody_root, night_dir, plan)
         return EXIT_REFUSED
 
