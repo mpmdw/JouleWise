@@ -275,3 +275,12 @@ coordinated multi-file forgery is outside the threat model (D-161). **F2:** fix.
   [58](58-sol-a6-r6-brief.md) fixes G1 (test only), G2 (pin TZ in the identity probe) and G3 (readers that prove a pending
   group gone write the closure). A third Fable pass limited to that delta follows; a further Fable refusal goes to Ed.
   The stale whole suite at `aba27481` was stopped.
+
+## 21:52-22:35
+
+- **PR #476 merged `1f49625f`** (floors decode identity; gates in `pr476-gates.md`; lead clone check: both floor identity
+  projections PASS with the issued pin).
+- PR #475 round 6 [58r6](58-sol-a6-report-r6.md) (`8f4fbb71`; main merged → `baa9bb7b`): G1 test fixed, G2 identity probe pinned
+  to UTC, G3 closure written by readers that prove a pending group gone. Lead ran the two A6 test modules OUTSIDE the
+  sandbox with real `ps`: 50 passed. Third Fable pass (delta-limited) [59](59-fable-a6-3-brief.md) and whole suite at
+  `baa9bb7b` running.
