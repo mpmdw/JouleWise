@@ -1,0 +1,41 @@
+{
+  "evidence": "REAL archived Revision-5 block-3 pre capture; byte-preserving gzip, no scientific edits",
+  "files": {
+    "events.jsonl": {
+      "bytes": 50287,
+      "gzip_bytes": 4197,
+      "sha256": "093b7d5b485a7abcb61e7949b41d1e1cf3c634480d77f8357a3d3c74a7ad4c6c"
+    },
+    "instrument_evidence.json": {
+      "bytes": 34846,
+      "gzip_bytes": 6838,
+      "sha256": "dc267c54bf9d5c7b957f081c7612f2c7dc69790409a4761afb36a8c9bca1072f"
+    },
+    "manifest.json": {
+      "bytes": 1111,
+      "gzip_bytes": 621,
+      "sha256": "c531e54fdb01345569b310669f085154ffeaea4530c458e08f21b50e21170e26"
+    },
+    "power_trace.csv": {
+      "bytes": 410777,
+      "gzip_bytes": 41148,
+      "sha256": "270427a750ee114ff73f5296768a6e8c8531f44fe83ec123fb24e889bbbecd39"
+    },
+    "raw/battery_float.post.ioreg": {
+      "bytes": 17348,
+      "gzip_bytes": 3619,
+      "sha256": "7bba8cda4989c9eab2003d1308d3789a6d627af0256997f011e4460548016cd1"
+    },
+    "raw/battery_float.pre.ioreg": {
+      "bytes": 17342,
+      "gzip_bytes": 3617,
+      "sha256": "9eea291a850768b0ffe913df74c5e70616997958260eee5760f29caeab816438"
+    },
+    "raw/powermetrics.plist": {
+      "bytes": 82642039,
+      "gzip_bytes": 2213205,
+      "sha256": "f8d8553bb3b0ed3a6ec7ba9723263717c4b92df6f922434bc8163c6fd9c32955"
+    }
+  },
+  "source": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261004T1305Z-r2/g2a-root/runs/instrument_validation/d117-g2a-prefill-probe-20261004T1305Z-cal-pre"
+}

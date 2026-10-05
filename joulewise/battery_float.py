@@ -24,6 +24,7 @@ from pathlib import Path
 import re
 import stat
 import subprocess
+from subprocess import Popen as _BatteryPopen
 import time
 from typing import Any, Callable, Mapping
 
@@ -301,6 +302,28 @@ def parse(raw: bytes, wall_time_s: float) -> dict[str, Any]:
         "passed": not reasons,
         "reasons": reasons,
     }
+
+
+def run_bundle_probe(argv) -> subprocess.CompletedProcess:
+    """Run ioreg independently of measurement backends' subprocess seams.
+
+    Keep a battery-owned process factory: patching a backend's shared
+    ``subprocess.run`` or ``subprocess.Popen`` must not spend its scripted
+    results on this observation. Tests can inject a battery runner instead.
+    """
+    if tuple(argv) != IOREG_BATTERY_ARGV:
+        raise ValueError("unregistered battery probe argv")
+    with _BatteryPopen(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE) as process:
+        try:
+            stdout, stderr = process.communicate(timeout=PROBE_TIMEOUT_S)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.communicate()
+            raise
+        except BaseException:
+            process.kill()
+            raise
+    return subprocess.CompletedProcess(argv, process.returncode, stdout, stderr)
 
 
 def observe(*, phase: str, runner: Callable | None = None, wall_time_s: float | None = None,
