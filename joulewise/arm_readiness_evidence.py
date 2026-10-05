@@ -800,6 +800,72 @@ def _extract_section(raw: bytes, label: str, *, kind: str) -> bytes:
     return text[match.start() : end].encode("utf-8")
 
 
+def _doctrine_sentences(text: str) -> tuple[str, ...]:
+    """Fold prose wraps, but keep checklist, paragraph and code-line boundaries."""
+    blocks = []
+    pending = []
+    fenced = False
+
+    def flush() -> None:
+        if pending:
+            blocks.append(" ".join(pending))
+            pending.clear()
+
+    for line in text.splitlines():
+        line = line.strip()
+        if line.startswith("```"):
+            flush()
+            fenced = not fenced
+            continue
+        if fenced:
+            if line:
+                blocks.append(line)
+            continue
+        if not line or re.match(r"^(?:#{1,6} |[-*] |[0-9]+\. )", line):
+            flush()
+        if line:
+            line = re.sub(r"^(?:#{1,6} |[-*] (?:\[[ xX]\] )?|[0-9]+\. )", "", line)
+            pending.append(line)
+    flush()
+    sentences = []
+    for block in blocks:
+        normalized = " ".join(block.replace("*", "").replace("`", "").split())
+        normalized = re.sub(r"(?<!\w)_+|_+(?!\w)", "", normalized)
+        # A full stop in a path/version is not a sentence boundary.
+        sentences.extend(re.split(r"(?<=[.!?])\s+", normalized))
+    return tuple(sentences)
+
+
+# Exact normalized sentences/command lines in the current doctrine. Keeping
+# permissions literal makes altered timing or negation fail closed.
+_NETWORK_TIME_ALLOWED_SENTENCES = frozenset((
+    "D-127 authorizes only the exact off and on writes; "
+    "the arm step uses ON only for a needed resync and finishes with OFF.",
+    "Cmnd_Alias JOULEWISE_NETWORK_TIME = /usr/sbin/systemsetup -setusingnetworktime off, "
+    "/usr/sbin/systemsetup -setusingnetworktime on",
+    "/usr/bin/sudo -n /usr/sbin/systemsetup -setusingnetworktime on",
+    "If needed, it enables network time at arm only and uses a "
+    "120-second polling budget (each command is bounded to 30 seconds) "
+    "for the reference check to pass.",
+    "No ON command is permitted after the first capture of a window.",
+    "Record the OFF receipt and its identity in close-out; do not restore ON.",
+    "A manual /usr/bin/sudo -n /usr/sbin/systemsetup -setusingnetworktime on "
+    "command is a supervised desk action between windows only.",
+))
+_NETWORK_TIME_TOPIC = re.compile(
+    r"\b(?:network[\s_-]+time|time[\s_-]+sync\w*|setusingnetworktime|systemsetup|sntp|timed)\b",
+    re.IGNORECASE,
+)
+_NETWORK_TIME_ENABLING = re.compile(
+    r"\b(?:on|enabl(?:e|es|ed|ing)|re[\s-]?enabl(?:e|es|ed|ing)|"
+    r"restor(?:e|es|ed|ing)|resum(?:e|es|ed|ing))\b|\bundo\b.*\boff\b",
+    re.IGNORECASE,
+)
+_NETWORK_TIME_IMPLICIT = re.compile(
+    r"\b(?:restore\b.*\bon|undo\b.*\boff|on\s+command)\b", re.IGNORECASE,
+)
+
+
 def _derive_doctrine_pin(context: _DerivationContext) -> _DerivedKind:
     kind = "DOCTRINE_PIN"
     authoring_artifacts = tuple(
@@ -818,7 +884,7 @@ def _derive_doctrine_pin(context: _DerivationContext) -> _DerivedKind:
     )
     sections = {
         label: _readiness.sha256_bytes(_extract_section(runbook, label, kind=kind))
-        for label in ("5", "5A", "5B", "5C", "6", "10")
+        for label in ("5", "5A", "5B", "5C", "6", "10", "11", "12")
     }
     try:
         decision_text = decision.decode("utf-8", errors="strict")
@@ -829,36 +895,76 @@ def _derive_doctrine_pin(context: _DerivationContext) -> _DerivedKind:
     stage_graph = context.tree.get("stage_graph")
     if not isinstance(launch, Mapping) or not isinstance(stage_graph, list):
         raise _underivable(kind, "pack lacks a frozen launch recipe/stage graph")
+    # These pack checks govern desk.arming_procedure, independent of the
+    # procedural clock fact; a hash binding alone cannot make commands safe.
+    backup_command_count = sum(
+        1
+        for stage in stage_graph
+        if isinstance(stage, Mapping)
+        for command in (
+            stage.get("launch", {}).get("commands", [])
+            if isinstance(stage.get("launch"), Mapping)
+            else []
+        )
+        if isinstance(command, Mapping) and command.get("command_kind") == "backup"
+    )
+    closeout = context.tree.get("closeout_attachments")
+    backups = closeout.get("backup_requirements") if isinstance(closeout, Mapping) else None
+    required_backups = (
+        backups.get("required_successful_backups", 2) if isinstance(backups, Mapping) else 2
+    )
+    if (
+        backup_command_count != 2
+        or (
+            isinstance(closeout, Mapping)
+            and "backup_requirements" in closeout
+            and not isinstance(backups, Mapping)
+        )
+        or type(required_backups) is not int
+        or required_backups != 2
+    ):
+        raise _underivable(kind, "arming procedure requires exactly two successful backup commands")
+    launch_bytes = _readiness.render_json({"launch": launch, "stage_graph": stage_graph})
+    if any(
+        token in launch_bytes.lower()
+        for token in (b"setusingnetworktime", b"systemsetup", b"sntp", b"timed")
+    ):
+        raise _underivable(kind, "frozen launch recipe/stage graph contains a clock-control command")
+
     section_5a = _extract_section(runbook, "5A", kind=kind).decode("utf-8")
-    # Match the governing prose across Markdown emphasis and line wrapping.
-    # The saved arm receipt, reused without another toggle, establishes the
-    # one-OFF-receipt policy; this fact does not attest a live OFF operation.
-    clock_policy = " ".join(section_5a.replace("*", "").replace("`", "").split())
+    clock_sentences = _doctrine_sentences(section_5a)
     required_clock_doctrine = (
         "Network time stays OFF after completion, refusal, crash, verdict and both backups.",
         "Resync happens only in the arm step.",
-        "a write-once receipt, including failed attempts.",
-        "The clock-disable step uses that saved receipt. It does not issue a second toggle.",
+        "It then commands OFF and saves a write-once receipt, including failed attempts.",
+        "The clock-disable step uses that saved receipt.",
+        "It does not issue a second toggle.",
         "Record the OFF receipt and its identity in close-out; do not restore ON.",
+        "No ON command is permitted after the first capture of a window.",
+        "D-127 authorizes only the exact off and on writes; "
+        "the arm step uses ON only for a needed resync and finishes with OFF.",
+        "A manual /usr/bin/sudo -n /usr/sbin/systemsetup -setusingnetworktime on "
+        "command is a supervised desk action between windows only.",
+        "ED-OWED: exercise both exact vectors from a cold credential state, "
+        "leaving off at the end, between windows only:",
     )
-    # A retained stays-OFF sentence cannot license a contradictory restore
-    # step. Ignore the explicit prohibition itself, then reject restore prose
-    # and instructions to enable ON after a window/capture/verdict/backup.
-    restore_prose = clock_policy.lower().replace("do not restore on", "")
-    restore_step = re.search(
-        r"\b(?:restore|re-enable|re-enabling)\s+"
-        r"(?:it|on|(?:automatic\s+)?network time)\b"
-        r"|\b(?:the restore comes last|restore uses the on vector)\b"
-        r"|\b(?:after (?:the )?(?:window|capture|verdict|(?:both )?backups)|close-out)"
-        r"\b[^.]*\b(?:enable|re-enable|restore|turn on)\b",
-        restore_prose,
-    )
-    if any(sentence not in clock_policy for sentence in required_clock_doctrine) or restore_step:
+    if any(sentence not in clock_sentences for sentence in required_clock_doctrine):
         raise _underivable(
             kind,
             "runbook section 5A does not derive network time staying OFF across windows, "
             "arm-only resync and one OFF receipt per window without restoration",
         )
+    for label in sections:
+        governed = _extract_section(runbook, label, kind=kind).decode("utf-8")
+        for sentence in _doctrine_sentences(governed):
+            sensitive = (
+                _NETWORK_TIME_TOPIC.search(sentence) and _NETWORK_TIME_ENABLING.search(sentence)
+            ) or _NETWORK_TIME_IMPLICIT.search(sentence)
+            # Command-line exceptions belong only to the governed §5A exercise.
+            if sensitive and (label != "5A" or sentence not in _NETWORK_TIME_ALLOWED_SENTENCES):
+                raise _underivable(
+                    kind, f"runbook section {label} has an unapproved network-time enabling sentence"
+                )
     launch_sha = _readiness.sha256_bytes(
         _readiness.render_json({"launch": launch, "stage_graph": stage_graph})
     )

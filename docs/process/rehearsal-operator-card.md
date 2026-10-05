@@ -118,6 +118,17 @@ cd /Users/edr/JouleWise-measurement-20260818 && ARM_RECEIPT=/Users/edr/JouleWise
 
 ## 11. Restore and reset for retry
 
+**SUPERSEDED — do not turn network time back ON.** The current procedure is
+[runbook §5A](../phase_2/window_runbook.md#5a-pre-window-clock-stabilization-administrator-step-ed-performs-it):
+network time stays OFF after completion, refusal, crash, verdict and both backups,
+because a sync would step the clock that timestamps power samples. Close-out records
+the OFF receipt and its identity. The only resync happens in the next window's arm
+step, before its fresh OFF receipt and 600-second dwell. The restore text and ON
+command below are kept as history only. The clean-retry namespace reset below is
+still valid.
+
+Historical instruction (SUPERSEDED):
+
 Restore network time immediately after the final step, including a refusal; expected final line is `Network Time: On`. Then, only for a clean retry, remove exactly the three no-clobber T-0 namespaces. Likely refusal on restore is a broken D-127 sudoers vector and requires Ed intervention.
 
 ```sh

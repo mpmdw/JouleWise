@@ -805,7 +805,7 @@ class NetworkTimePolicyDoctrineTests(unittest.TestCase):
         )
         self.addCleanup(temporary.cleanup)
         self.repository = repository.resolve(strict=True)
-        self.pack = pack
+        self.pack = pack.resolve(strict=True)
         self.runbook = self.repository / "docs/phase_2/window_runbook.md"
         self.current_runbook = (ROOT / "docs/phase_2/window_runbook.md").read_bytes()
         self.assertEqual(self.runbook.read_bytes(), self.current_runbook)
@@ -874,13 +874,57 @@ class NetworkTimePolicyDoctrineTests(unittest.TestCase):
                 b"It does not issue a\n  second toggle.", b"It issues a second toggle."
             ),
         }
-        for label, instruction in {
-            "restore_on": b"- [ ] After both backups, restore ON.\n",
-            "reenable": b"- [ ] After the whole-window verdict, and the backup, re-enable it.\n",
-            "enable_after_window": b"- [ ] After the window closes, enable network time.\n",
-        }.items():
-            mutations[label] = self.current_runbook.replace(
-                b"### If a single member still fails the anchor", instruction + b"\n### If a single member still fails the anchor"
+        mutations.update({
+            "no_on_after_capture_removed": self.current_runbook.replace(
+                b" No ON command is permitted\n  after the first capture of a window.", b""
+            ),
+            "arm_step_finishes_on": self.current_runbook.replace(
+                b"the arm step uses ON only for a needed resync and finishes with OFF.",
+                b"the arm step uses ON for a needed resync and may finish with ON.",
+            ),
+            "manual_on_during_window": self.current_runbook.replace(
+                b"command is a supervised desk action between windows only.",
+                b"command may be run at any time, including during a window.",
+            ),
+            "negated_stays_off": self.current_runbook.replace(
+                b"- [ ] **Network time stays OFF** after",
+                b"- [ ] It is no longer required that **Network time stays OFF** after",
+            ),
+        })
+        # All sixteen lines from the cold Fable probe, including implicit
+        # clock references and a two-sentence instruction.
+        instructions = (
+            "After both backups, restore ON.",
+            "After the verdict, turn on network time.",
+            "After each window, restore\n  network time.",
+            "After both backups, turn network time back on.",
+            "After the whole-window verdict, enable network time.",
+            "After the whole-window verdict and both backups, set network time ON.",
+            "Once the window closes, run `/usr/bin/sudo -n /usr/sbin/systemsetup -setusingnetworktime on`.",
+            "When the window is complete, switch automatic network time back on and verify it.",
+            "After the second backup, reenable network time.",
+            "After the verdict, network time is re-enabled.",
+            "At close-out, network time goes back ON.",
+            "After the backups, resume network time synchronisation.",
+            "Following the verdict, re-enable automatic time sync.",
+            "After the window, undo the OFF toggle.",
+            "After the verdict. Then enable network time.",
+            "Restore the network-time setting once both backups verify.",
+        )
+        anchor = b"### If a single member still fails the anchor"
+        for instruction in instructions:
+            mutations[instruction] = self.current_runbook.replace(
+                anchor, f"- [ ] {instruction}\n\n".encode() + anchor
+            )
+        # Every hashed section is governed, including backup and close-out.
+        for label in ("5", "5A", "5B", "5C", "6", "10", "11", "12"):
+            section = evidence._extract_section(self.current_runbook, label, kind="DOCTRINE_PIN")
+            mutations[f"restore_in_section_{label}"] = self.current_runbook.replace(
+                section, section + b"- [ ] After both backups, restore network time ON.\n\n"
+            )
+        for daemon in ("sntp", "timed", "systemsetup"):
+            mutations[f"enable_{daemon}"] = self.current_runbook.replace(
+                anchor, f"- [ ] Resume {daemon} after the verdict.\n\n".encode() + anchor
             )
         for label, raw in mutations.items():
             with self.subTest(label=label):
@@ -889,6 +933,84 @@ class NetworkTimePolicyDoctrineTests(unittest.TestCase):
                 with self.assertRaises(evidence.EvidenceAuthoringError) as caught:
                     evidence._derive_doctrine_pin(self.context)
                 self.assertEqual(caught.exception.reason_code, "evidence_author_doctrine_pin_underivable")
+
+    def test_pure_rewrap_passes(self) -> None:
+        rewrapped = self.current_runbook.replace(
+            b"**Network time stays OFF** after completion, refusal, crash, verdict and\n  both backups.",
+            b"**Network time stays OFF** after completion,\n  refusal, crash, verdict and both backups.",
+        ).replace(
+            b"command is a supervised desk action between windows only.",
+            b"command is a supervised desk action\n  between windows only.",
+        )
+        self.assertNotEqual(rewrapped, self.current_runbook)
+        self.commit_runbook(rewrapped)
+        receipt, _source = self.doctrine_receipt()
+        self.assertTrue(readiness._predicate_passes(receipt, "clock.network_time_policy.v1"))
+
+    def test_retired_fixture_doctrine_refuses(self) -> None:
+        historical = (ROOT / "tests/fixtures/historical_clock_restore_5a.md").read_bytes()
+        section = evidence._extract_section(self.current_runbook, "5A", kind="DOCTRINE_PIN")
+        self.commit_runbook(self.current_runbook.replace(section, historical + b"\n"))
+        with self.assertRaises(evidence.EvidenceAuthoringError) as caught:
+            evidence._derive_doctrine_pin(self.context)
+        self.assertEqual(caught.exception.reason_code, "evidence_author_doctrine_pin_underivable")
+
+    def commit_tree(self, tree: dict) -> None:
+        path = self.pack / "plan_tree.json"
+        raw = readiness.render_json(tree)
+        path.write_bytes(raw)
+        sidecar = self.pack / "plan_tree.sha256"
+        sidecar.write_bytes(readiness.gnu_sidecar(readiness.sha256_bytes(raw), "plan_tree.json"))
+        git(self.repository, "add", str(path.relative_to(self.repository)), str(sidecar.relative_to(self.repository)))
+        git(self.repository, "commit", "-qm", "frozen recipe mutation")
+        git(self.repository, "update-ref", "refs/remotes/origin/main", "HEAD")
+        self.refresh_context()
+
+    def test_arming_procedure_requires_exactly_two_backups(self) -> None:
+        original = copy.deepcopy(self.context.tree)
+        commands = original["stage_graph"][1]["launch"]["commands"]
+        for count in (0, 1, 3):
+            with self.subTest(command_count=count):
+                tree = copy.deepcopy(original)
+                tree["stage_graph"][1]["launch"]["commands"] = (commands * 2)[:count]
+                self.commit_tree(tree)
+                with self.assertRaises(evidence.EvidenceAuthoringError) as caught:
+                    evidence._derive_doctrine_pin(self.context)
+                self.assertEqual(caught.exception.reason_code, "evidence_author_doctrine_pin_underivable")
+        for required in (0, 1, 3, "2", None, True):
+            with self.subTest(required_successful_backups=required):
+                tree = copy.deepcopy(original)
+                tree["closeout_attachments"]["backup_requirements"]["required_successful_backups"] = required
+                self.commit_tree(tree)
+                with self.assertRaises(evidence.EvidenceAuthoringError):
+                    evidence._derive_doctrine_pin(self.context)
+        for missing in ("required_successful_backups", "backup_requirements"):
+            with self.subTest(absent=missing):
+                tree = copy.deepcopy(original)
+                if missing == "required_successful_backups":
+                    del tree["closeout_attachments"]["backup_requirements"][missing]
+                else:
+                    del tree["closeout_attachments"][missing]
+                self.commit_tree(tree)
+                derived = evidence._derive_doctrine_pin(self.context)
+                self.assertIn("desk.arming_procedure.v1", derived.facts)
+
+    def test_frozen_recipes_refuse_clock_control_commands(self) -> None:
+        original = copy.deepcopy(self.context.tree)
+        for token in ("setusingnetworktime", "systemsetup", "sntp", "timed"):
+            for location in ("launch", "stage_graph"):
+                for command_key in ("argv_template", "command"):
+                    with self.subTest(token=token, location=location, command_key=command_key):
+                        tree = copy.deepcopy(original)
+                        command = {command_key: [f"/usr/sbin/{token.upper()}", "on"]}
+                        if location == "launch":
+                            tree["arm_attachments"]["launch"]["commands"] = [command]
+                        else:
+                            tree["stage_graph"][0]["launch"]["commands"].append(command)
+                        self.commit_tree(tree)
+                        with self.assertRaises(evidence.EvidenceAuthoringError) as caught:
+                            evidence._derive_doctrine_pin(self.context)
+                        self.assertEqual(caught.exception.reason_code, "evidence_author_doctrine_pin_underivable")
 
     def test_successor_freeze_and_arm_select_policy_and_keep_live_off_refusal(self) -> None:
         receipt, _source = self.doctrine_receipt()
