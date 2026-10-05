@@ -522,7 +522,11 @@ class SuiteControlParityTests(unittest.TestCase):
         )
         self.assertEqual(
             mlx_result.workload_provenance["generator"],
-            {"name": "mlx_lm.stream_generate", "version": "literal-mlx-1"},
+            {
+                "name": "mlx_lm.stream_generate",
+                "version": "literal-mlx-1",
+                "detokenizer": {"path": "fallback", "reason": "not_prepared"},
+            },
         )
         self.assertEqual(
             mock_result.workload_provenance["tokenizer"],
