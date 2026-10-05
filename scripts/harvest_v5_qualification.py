@@ -56,8 +56,9 @@ def harvest(args, *, now=None, clear=q.group_clear, load=load_qualification):
     q.authenticate_attempt_record(structural, Path(plan.block_archive_root))
     if structural.get("plan") != q.reference(args.plan):
         raise q.HarvestRefusal("qualification_structural_attempt_mismatch")
-    history = q.attempt_history(structural, plan.block_archive_root, current_harvest=structural_path)
-    admission_abort = q.is_admission_abort(structural)
+    history = q.checked_history(structural, plan, replay=True)
+    counted_structural = q.counted_attempt(structural, structural_path)
+    admission_abort = q.is_admission_abort(counted_structural)
     sources = {"night-custody": custody, "chain": Path(plan.chain_path),
                "chain-sidecar": Path(plan.chain_sha256_path)}
     sources["structural-harvest"] = structural_path
@@ -82,13 +83,19 @@ def harvest(args, *, now=None, clear=q.group_clear, load=load_qualification):
             record.update(verdict="NULL", cause_codes=["chain_never_started"])
         elif admission_abort:
             causes = [q.ADMISSION_ABORT_CODE]
-            if (custody / "night/producer-faults.jsonl").exists():
-                causes.append("qualification_observation_producer_fault")
+            producer_fault = (custody / "night/producer-faults.jsonl").exists()
             if not q.battery_boundaries(boundary, args.battery_evidence_sha256, plan.plan_id, plan_path=args.plan.absolute()):
                 causes.append("battery_boundary_not_passed")
             record.update(verdict="RECOVER", cause_codes=causes, cause_classes=["instrument_physics"],
-                          admission_abort=structural["admission_abort"],
+                          admission_abort=counted_structural["admission_abort"],
                           recovery_classification="admission_abort" if len(causes) == 1 else "admission_abort_with_other_recover_cause")
+            if producer_fault:
+                if len(causes) == 1:
+                    record.update(verdict="FAIL", cause_codes=["qualification_observation_producer_fault"],
+                                  cause_classes=["tooling"])
+                    record.pop("recovery_classification")
+                else:
+                    record["cause_codes"].append("qualification_observation_producer_fault")
         else:
             if (custody / "night/producer-faults.jsonl").exists():
                 record.update(verdict="FAIL", cause_codes=["qualification_observation_producer_fault"], cause_classes=["tooling"])
@@ -119,6 +126,8 @@ def harvest(args, *, now=None, clear=q.group_clear, load=load_qualification):
         record.update(q.admission_abort_disposition(record, history))
     elif record.get("recovery_classification") == "admission_abort_with_other_recover_cause":
         record.update(end_state=True, next_step="lead_adjudication_qualification_failure")
+    if record["verdict"] == "NULL" and history["same_refusal_twice"]:
+        record["next_step"] = "same_refusal_twice_consult_required"
     return q.publish(destination, record)
 
 

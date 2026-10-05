@@ -30,6 +30,7 @@ class DeskCloseoutTests(unittest.TestCase):
             shutil.copyfile(producer.REPO_ROOT / relative, path)
         self.pack = self.measurement / "pack"; self.pack.mkdir()
         (self.pack / "config.json").write_text('{"run_id":"fixture"}\n')
+        (self.pack / "calibration_plan.json").write_bytes(readiness.render_json({"plan_id": self.custody.name}))
         init_git_fixture(self.measurement, "-q")
         subprocess.run(["git", "-C", str(self.measurement), "add", "."], check=True)
         subprocess.run(["git", "-C", str(self.measurement), "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",

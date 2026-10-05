@@ -25,7 +25,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from joulewise import arm_readiness as readiness
-from joulewise import night_gate, kernel_clock, t0_rehearsal
+from joulewise import night_gate, kernel_clock, t0_rehearsal, v5_qualification as q
 from joulewise.night_plan_writer import night_plan_mapping, write_night_plan
 
 INPUT_SCHEMA = "joulewise.v5_qualification_inputs.v1"
@@ -566,7 +566,6 @@ def write_qualification(occurrence, inputs, output):
     auth = dict(inputs["authorization"])
     auth_keys = {"purpose", "attempt_id", "claim_eligible", "pack_sha256", "permitted_chain_sha256", "permitted_blocks", "authority"}
     if occurrence in {"s1", "s2"}:
-        from joulewise import v5_qualification as q
         night_gate.validate_attempt_bindings(inputs["previous_attempt"], inputs["block_archive_root"],
                                            inputs.get("null_reservation_restore"))
         require(night_gate.chain_literal(text, "V5_QUALIFICATION_OCCURRENCE") == occurrence, "chain_occurrence")
@@ -734,6 +733,11 @@ def main(argv=None):
             result.update(reason_code="kernel_frequency_gate_exceeded",
                           kernel_frequency_margin_ms=exc.kernel_frequency_gate["margin_ms"],
                           kernel_frequency_gate=exc.kernel_frequency_gate)
+        code = 2
+    except q.HarvestRefusal as exc:
+        result = {"status": "REFUSED", "reason_code": "qualification_inputs_invalid"}
+        if str(exc) == "same_refusal_twice_consult_required" and hasattr(exc, "refusal_codes"):
+            result.update(reason_code="same_refusal_twice", cause_codes=exc.refusal_codes)
         code = 2
     except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
         # Input text, validator details and inference logs are never public.
