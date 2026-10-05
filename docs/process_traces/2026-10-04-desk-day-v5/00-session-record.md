@@ -268,3 +268,10 @@ coordinated multi-file forgery is outside the threat model (D-161). **F2:** fix.
   RECOVER, never NULL); fsync; malformed barrier refuses. The seat's early test runs created and removed legacy fixture
   directories directly under `/tmp` (existing test overrides), outside its scratch: **accepted** (transient, cleaned, no
   tracked byte). Second cold Fable pass [57](57-fable-a6-2-brief.md) and whole suite at `aba27481` running.
+- PR #475 second cold Fable pass [57r](57-fable-a6-2.md) **FAIL**, but only on a TEST: the product code is sound and F1/F2 are
+  cured; G1 MAJOR = the driver-death custody regression test is red wherever `/bin/ps` works (the Sol sandbox denies `ps`,
+  which hid it). Orchestrator ruling: this is a fixable failure (a stale/wrong test), not a science refusal, so it goes
+  through R3 (Ed's standing rule: fixable failures are fixed, never halted on), not to Ed. Round 6
+  [58](58-sol-a6-r6-brief.md) fixes G1 (test only), G2 (pin TZ in the identity probe) and G3 (readers that prove a pending
+  group gone write the closure). A third Fable pass limited to that delta follows; a further Fable refusal goes to Ed.
+  The stale whole suite at `aba27481` was stopped.
