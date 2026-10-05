@@ -1,0 +1,9 @@
+# Fix seat (Sol 6.1 high): build the mlx-lm detokenizer outside the measured prefill window
+
+Worktree: /Users/edr/code/JouleWise-wt-dd5-detok (branch fix/2026-10-05-detokenizer-outside-prefill off main b2ff2f36). Scratch /tmp/dd5-detok/ only. Leave changes uncommitted; never push.
+
+Finding (Opus pre-mortem, `/Users/edr/night-archive/ia-0a40/MEMO.md` §3.1; repros under `/Users/edr/night-archive/ia-0a40/premortem/scratch-*/`): `joulewise/adapters/mlx_runtime.py:751-757` stamps `phase_start prefill`, then creates mlx-lm's `stream_generate` generator; on its first `next()`, mlx-lm 0.31.3 reads `tokenizer.detokenizer`, which rebuilds a ~151k-entry vocabulary map in a Python loop (55–65 ms of CPU-only work, GPU idle) inside the measured prefill window. Decode windows are unaffected.
+
+Fix: in `MlxRuntimeAdapter.prepare()` (outside every measured window) build the detokenizer once; inside generation hand mlx-lm a reset shallow copy so no construction happens after `phase_start prefill`. Assert the class is mlx-lm's `BPEStreamingDetokenizer` (or the exact class in the installed mlx-lm; check the installed version in /Users/edr/code/JouleWise/.venv) and fall back to current behavior otherwise, recording which path ran in the run's provenance. Generated tokens and text must be identical. Tests (no Metal in your sandbox: use mlx-lm's tokenizer wrapper with a small local tokenizer or a faithful stub of the TokenizerWrapper property; label it): (1) no detokenizer construction occurs between `phase_start prefill` and the first token; (2) a reused detokenizer is reset between runs (no carried state); (3) the fallback path is taken and recorded for an unknown class. Do not touch the four pinned estimator files. Run the new tests and every existing `tests/test_mlx_runtime*.py` and `tests/test_adapter*.py`. Finish in this turn.
+
+WRITE_SCOPE: ["joulewise/adapters/mlx_runtime.py", "tests/test_mlx_runtime_detokenizer.py"]

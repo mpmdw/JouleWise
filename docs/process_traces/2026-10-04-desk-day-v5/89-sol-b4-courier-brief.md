@@ -1,0 +1,7 @@
+# Block-4 fix seat (Sol 6.1 high): reap the successful courier before the journal seals
+
+Worktree: /Users/edr/code/JouleWise-wt-dd5-b4int (head after the replay commit and the merge of main b2ff2f36). Scratch /tmp/dd5-courier/ only. Leave changes uncommitted; never push.
+
+Executing review finding F1 (BLOCKER), report `/Users/edr/night-archive/desk-day-v5/sol-b4rev.md`, repro `/tmp/dd5-b4rev/courier_repro.py`: `scripts/run_night.py:1781` journals the courier spawn, but the success branch near `:1832` returns on `courier.sent` without `wait()`/`poll()`, so the journal holds spawn and seal with no observed exit, and `scripts/produce_t0_rehearsal_bundle.py:471` rejects the unmatched spawn. Fix: observe and reap the successful courier (bounded wait, existing courier budget) before the journal is sealed, so a delivered courier records its observed exit; a courier that does not exit within the bound is recorded as such (timed out) and does not change delivery or the structural verdict. Add the success-path regression (the repro, made a test) and a still-running-courier regression. Run `tests/test_run_night.py` (compare failures with origin/main; the watchdog group is load-sensitive, rerun failures serially) and `tests/test_v5_s1_qualification.py tests/test_v5_block4_replay.py`. Finish in this turn.
+
+WRITE_SCOPE: ["scripts/run_night.py", "scripts/produce_t0_rehearsal_bundle.py", "tests/test_run_night.py", "tests/test_v5_s1_qualification.py", "tests/test_v5_block4_replay.py"]
