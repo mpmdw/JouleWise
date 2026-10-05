@@ -595,8 +595,9 @@ class CheckWindowProvenanceTests(unittest.TestCase):
             'run_stage "$BOUND_RUNS_ROOT"',
             '--derive-neg8-drift-bound "$BOUND_MANIFEST"',
             'run_stage "$RUNS_ROOT" "$CLAIM_LOG" "$REF_ROOT/start_triplet"',
-            "# G2-b delta: stop the authentic first stage after block 1",
-            'test "$SCIENCE_RC" = 130',
+            "# G2-b: one complete A/B/B/A block, stopped by the controller between",
+            '"$PRE_CAL_CUSTODY" "$stage" --max-blocks 1',
+            'test "$SCIENCE_RC" = 3',
             'run_stage "$RUNS_ROOT" "$CLAIM_LOG" "$REF_ROOT/midpoint"',
             'run_stage "$RUNS_ROOT" "$CLAIM_LOG" "$REF_ROOT/end_triplet"',
             'POST_CAL_CUSTODY="$(calibrate_slot post "$POST_ATTEMPT_ID")"',
@@ -607,8 +608,19 @@ class CheckWindowProvenanceTests(unittest.TestCase):
         self.assertEqual(positions, sorted(positions))
         self.assertNotIn('SLOT="$SLOT"', runsheet)
         self.assertNotIn('ATTEMPT_ID="$ATTEMPT_ID"', runsheet)
-        self.assertIn("TERMINATE HERE", runsheet)
-        self.assertIn('/bin/kill -INT "$SCIENCE_PID"', runsheet)
+        self.assertNotIn("TERMINATE HERE", runsheet)
+        self.assertNotIn('/bin/kill -INT "$SCIENCE_PID"', runsheet)
+        self.assertIn("single-repetition, strict-valid, succeeded A/B/B/A members", runsheet)
+        self.assertIn("Failures, waivers and interrupted blocks never qualify.", runsheet)
+        for token in (
+            "schema_version=joulewise.campaign_stop.v1",
+            "record_type=campaign_stop",
+            "stop_reason=max_blocks_reached",
+            "exit_code=3",
+            "completed_blocks=1",
+            "different rc",
+        ):
+            self.assertIn(token, runsheet)
         self.assertIn("four block-1 bundle", runsheet)
         self.assertIn("diagnostic and non-claim by construction", runsheet)
         self.assertIn("exact refusal-set equality", runsheet)

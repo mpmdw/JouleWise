@@ -15,7 +15,10 @@ from pathlib import Path
 from typing import Any, Iterable
 
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
+SOURCE_PATH = Path(__file__).resolve()
+REPO_ROOT = SOURCE_PATH.parents[3]
+# Replaced in emitted generators; paths resolve beneath the emitted pack.
+EMITTED_REPLAY_INPUTS: dict[str, Any] = {}
 GENERATOR_REL = Path("configs/campaigns/d117_contrast_v5")
 PACK_REL = GENERATOR_REL
 CALIBRATION_PLAN_REFERENCE = "calibration_plan.json"
@@ -400,8 +403,24 @@ render_json = make_render_json(thread_generation_identity)
 
 
 def embedded_generator_bytes() -> bytes:
-    source = (REPO_ROOT / GENERATOR_REL / "generate_configs.py").read_text(
-        encoding="utf-8"
+    source = SOURCE_PATH.read_text(encoding="utf-8")
+    declaration = f"EMITTED_REPLAY_INPUTS: dict[str, Any] = {EMITTED_REPLAY_INPUTS!r}"
+    baked = {
+        "panel": "generator_inputs/model_panel.json",
+        "model_a": MODEL_IDS["A"],
+        "model_b": MODEL_IDS["B"],
+        "decode_workload": "generator_inputs/decode_workload.json",
+        "prefill_length": PREFILL_LENGTH,
+        "prefill_prompt_pin": "prefill_pin/prefill_prompt_pin.json",
+        "sha256": {
+            path.as_posix(): sha256_bytes(raw)
+            for path, raw in sorted(REPLAY_INPUT_BYTES.items())
+        },
+    }
+    if source.count(declaration) != 1:
+        raise ValueError("generator replay-input declaration is not unique")
+    source = source.replace(
+        declaration, f"EMITTED_REPLAY_INPUTS: dict[str, Any] = {baked!r}"
     )
     identity = active_generation()
     if identity.target_is_current:
@@ -431,9 +450,9 @@ def preserved_generator_sha256() -> str:
     return tree["generator"]["sha256"]
 
 
-# D-138 dual-generation acceptance. The frozen `_v1` identity is permanently
-# bound to the D-116 initial issuance; successor generations bind the reissue
-# derived at the integrated estimator head.
+# The frozen `_v1` identity retains D-116. Prospective successors bind the
+# registry's issued live default at this generator revision (25G83 r2).
+# Its ledger_cutoff is the acceptance baseline, never the live ledger head.
 PREDECESSOR_ACCEPTANCE = {
     "acceptance_id": "d079_calibration_acceptance_v2_n19",
     "rel": "configs/calibration/calibration_acceptance_d079_v2.json",
@@ -445,13 +464,13 @@ PREDECESSOR_ACCEPTANCE = {
     ),
 }
 SUCCESSOR_ACCEPTANCE = {
-    "acceptance_id": "d079_calibration_acceptance_v2_n17_r6",
-    "rel": "configs/calibration/calibration_acceptance_d079_v2_n17_r6.json",
+    "acceptance_id": "d079_calibration_acceptance_v2_n24_25g83_r2",
+    "rel": "configs/calibration/calibration_acceptance_d079_v2_n24_25g83_r2.json",
     "artifact_sha256": (
-        "0227bca3f826edc7f0a1baf98a394df01d8f48e9609966088870d712f765697d"
+        "f949f511254e03b50b0be1cea37f74c1e8e6b4c49926c6c197024beea07b3660"
     ),
     "derivation_sha256": (
-        "18d09aa9d4accb16a8dff770de85cd7e7525bdb0b6e68f1de716e20fb8a9b9f3"
+        "10965d36527c73217154efdbd75ab923412685f3e79526bd31f33e6f9142e5c0"
     ),
 }
 
@@ -460,8 +479,8 @@ def acceptance_pin() -> dict[str, str]:
     """Return the acceptance generation this pack binds.
 
     Preserve mode replays the frozen `_v1` bytes, which are permanently bound
-    to the D-116 initial issuance. Any successor generation binds the D-138
-    reissue instead, so the two generations never share a pin.
+    to the D-116 initial issuance. Prospective successors bind the issued
+    25G83 r2 live default, including its original derivation and cutoff.
     """
 
     return (
@@ -499,6 +518,7 @@ SHARED_TOKENIZER_JSON_SHA256 = ""
 PREFILL_LENGTH: int | None = None
 PREFILL_ARM = "prefill_unresolved"
 DECODE_WORKLOAD_FILE_ARGUMENT = ""
+REPLAY_INPUT_BYTES: dict[Path, bytes] = {}
 DECODE_PROFILE: dict[str, Any] = {}
 DECODE_RENDERINGS: dict[str, list[dict[str, Any]]] = {}
 DECODE_PROMPT_TOKENS: dict[str, int] = {}
@@ -958,6 +978,7 @@ def configure_model_pair(
     global PREFILL_TOKEN_IDS, PREFILL_TOKEN_IDS_SHA256
     global SHARED_TOKENIZER_JSON_SHA256
     global PREFILL_LENGTH, PREFILL_ARM, DECODE_WORKLOAD_FILE_ARGUMENT
+    global REPLAY_INPUT_BYTES
     global DECODE_PROFILE, DECODE_RENDERINGS, DECODE_PROMPT_TOKENS
     global CHAT_TEMPLATE_SHA256, STAGE_SPECS, REFERENCE_AFTER_STAGE
 
@@ -1125,11 +1146,31 @@ def configure_model_pair(
         arm: _token_ids_sha256(token_ids[arm]) for arm in ("A", "B")
     }
     SHARED_TOKENIZER_JSON_SHA256 = tokenizer_hashes["A"]
-    PANEL_FILE_ARGUMENT = panel_path.as_posix()
-    PREFILL_PIN_FILE_ARGUMENT = prefill_prompt_pin_path.as_posix()
+    # Carry byte-exact inputs with the pack, retaining the pin's relative
+    # bundle references. No original checkout or issuance path is replay input.
+    replay_inputs = {
+        Path("generator_inputs/model_panel.json"): panel_path.read_bytes(),
+        Path("generator_inputs/decode_workload.json"): decode_workload_path.read_bytes(),
+        Path("prefill_pin/prefill_prompt_pin.json"): prefill_prompt_pin_path.read_bytes(),
+    }
+    for field in ("selection_record", "prompt_ladder"):
+        relative = Path(prefill_pin[field]["path"])
+        if relative.is_absolute() or ".." in relative.parts:
+            raise ValueError(f"prefill_prompt_pin_invalid: {field}.path")
+        target = Path("prefill_pin") / relative
+        if target in replay_inputs:
+            raise ValueError(f"prefill_prompt_pin_invalid: colliding {field}.path")
+        replay_inputs[target] = (prefill_prompt_pin_path.parent / relative).read_bytes()
+    REPLAY_INPUT_BYTES = replay_inputs
+    PANEL_FILE_ARGUMENT = (PACK_REL / "generator_inputs/model_panel.json").as_posix()
+    PREFILL_PIN_FILE_ARGUMENT = (
+        PACK_REL / "prefill_pin/prefill_prompt_pin.json"
+    ).as_posix()
     PREFILL_LENGTH = prefill_length
     PREFILL_ARM = f"prefill_p{prefill_length}"
-    DECODE_WORKLOAD_FILE_ARGUMENT = decode_workload_path.as_posix()
+    DECODE_WORKLOAD_FILE_ARGUMENT = (
+        PACK_REL / "generator_inputs/decode_workload.json"
+    ).as_posix()
     DECODE_PROFILE = {
         "schema_version": decode_profile.schema_version,
         "profile_id": decode_profile.profile_id,
@@ -1283,6 +1324,7 @@ def expected_pack_paths(*, include_generator: bool = True) -> tuple[Path, ...]:
         family_relpath(PREFILL_ARM, "A"),
         family_relpath(PREFILL_ARM, "B"),
     ]
+    paths.extend(sorted(REPLAY_INPUT_BYTES))
     if include_generator:
         paths.append(Path("generate_configs.py"))
     for arm in ("A", "B"):
@@ -2880,11 +2922,8 @@ def readme_bytes() -> bytes:
     identity = active_generation()
     version = identity.family_suffix.removeprefix("_")
     regeneration_command = (
-        "python configs/campaigns/d117_contrast_v5/generate_configs.py "
-        f"--panel {PANEL_FILE_ARGUMENT} --model-a {MODEL_IDS['A']} "
-        f"--model-b {MODEL_IDS['B']} --decode-workload "
-        f"{DECODE_WORKLOAD_FILE_ARGUMENT} --prefill-length {PREFILL_LENGTH} "
-        f"--prefill-prompt-pin {PREFILL_PIN_FILE_ARGUMENT}"
+        f"python {(identity.pack_rel / 'generate_configs.py').as_posix()} "
+        "--no-preserve-current-frozen-bytes"
     )
     identity_statement = (
         ""
@@ -3064,6 +3103,8 @@ def _generate(output_repo_root: Path) -> dict[str, str]:
     )
     if not active_generation().preserve_current_frozen_bytes:
         write_bytes(out / "generate_configs.py", generator_bytes)
+    for relative, raw in REPLAY_INPUT_BYTES.items():
+        write_bytes(out / relative, raw)
 
     family_bytes, domain_hashes = build_condition_families()
     for key, data in family_bytes.items():
@@ -3534,25 +3575,56 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true")
     parser.add_argument("--output-root", type=Path)
-    parser.add_argument("--panel", required=True, type=Path)
-    parser.add_argument("--model-a", required=True)
-    parser.add_argument("--model-b", required=True)
+
+    def baked_path(name: str) -> Path | None:
+        relative = EMITTED_REPLAY_INPUTS.get(name)
+        return SOURCE_PATH.parent / relative if relative is not None else None
+
+    parser.add_argument(
+        "--panel",
+        required=not EMITTED_REPLAY_INPUTS,
+        type=Path,
+        default=baked_path("panel"),
+    )
+    parser.add_argument(
+        "--model-a", required=not EMITTED_REPLAY_INPUTS,
+        default=EMITTED_REPLAY_INPUTS.get("model_a"),
+    )
+    parser.add_argument(
+        "--model-b", required=not EMITTED_REPLAY_INPUTS,
+        default=EMITTED_REPLAY_INPUTS.get("model_b"),
+    )
     parser.add_argument(
         "--decode-workload",
         type=Path,
-        default=Path("configs/workloads/real_prompts_v1.json"),
+        default=(
+            baked_path("decode_workload")
+            or Path("configs/workloads/real_prompts_v1.json")
+        ),
     )
     parser.add_argument(
         "--prefill-length",
         type=int,
         choices=(512, 1024, 2048, 4096),
+        default=EMITTED_REPLAY_INPUTS.get("prefill_length"),
     )
-    parser.add_argument("--prefill-prompt-pin", type=Path)
+    parser.add_argument(
+        "--prefill-prompt-pin", type=Path, default=baked_path("prefill_prompt_pin"),
+    )
+    parser.add_argument(
+        "--preserve-current-frozen-bytes",
+        action=argparse.BooleanOptionalAction,
+        default=PRESERVE_CURRENT_FROZEN_BYTES,
+    )
     return parser.parse_args(argv)
 
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
+    for relative, expected_sha256 in EMITTED_REPLAY_INPUTS.get("sha256", {}).items():
+        path = SOURCE_PATH.parent / relative
+        if file_sha256(path) != expected_sha256:
+            raise ValueError(f"pinned replay input drifted: {relative}")
     configure_model_pair(
         args.panel,
         args.model_a,
@@ -3561,7 +3633,9 @@ def main(argv: list[str] | None = None) -> int:
         prefill_length=args.prefill_length,
         prefill_prompt_pin_path=args.prefill_prompt_pin,
     )
-    identity = GenerationIdentity()
+    identity = GenerationIdentity(
+        preserve_current_frozen_bytes=args.preserve_current_frozen_bytes
+    )
     hashes = (
         check(
             args.output_root.resolve() if args.output_root else REPO_ROOT,

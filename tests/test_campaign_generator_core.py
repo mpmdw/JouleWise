@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import importlib.util
+import json
 import subprocess
 import shutil
 import sys
@@ -34,14 +35,14 @@ GENERATION_LEDGER_HEAD_BYTES = (
 GENERATION_LEDGER_HEAD_SHA256 = (
     "6bbe26258165bbd11ca996324a5862c2e6e34faae7999b6c06f5e12f27ac2902"
 )
-def generation_repository(case: unittest.TestCase, root: Path = ROOT) -> Path:
+def generation_repository(case: unittest.TestCase, root: Path = ROOT, *, live_v5=False) -> Path:
     """Disposable ``git clone --shared`` of ``root`` carrying the generation-time
     head-pin bytes and the working tree's d117 generator files, so a generator
     is exercised as a function of its declared inputs while uncommitted
     generator edits stay visible (counter-review record 15 F1). One home for the
     helper the frozen-path test modules share (delta re-audit record 27 R2).
     Removed after ``case`` finishes."""
-    temporary = tempfile.TemporaryDirectory(prefix="d117-head-fixture-", dir="/tmp")
+    temporary = tempfile.TemporaryDirectory(prefix="d117-head-fixture-")
     case.addCleanup(temporary.cleanup)
     repository = Path(temporary.name) / "repository"
     subprocess.run(
@@ -53,9 +54,14 @@ def generation_repository(case: unittest.TestCase, root: Path = ROOT) -> Path:
         hashlib.sha256(GENERATION_LEDGER_HEAD_BYTES).hexdigest(),
         GENERATION_LEDGER_HEAD_SHA256,
     )
-    (repository / "configs/calibration/calibration_ledger_head.json").write_bytes(
-        GENERATION_LEDGER_HEAD_BYTES
-    )
+    head_bytes = GENERATION_LEDGER_HEAD_BYTES
+    if live_v5:
+        acceptance = json.loads((root / "configs/calibration/calibration_acceptance_d079_v2_n24_25g83_r2.json").read_bytes())
+        cutoff = acceptance["ledger_cutoff"]
+        head_bytes = (json.dumps({"sequence": cutoff["sequence"], "head_digest": cutoff["head_digest"],
+                                 "ledger_schema": "joulewise.calibration_observation_ledger.v1"},
+                                indent=2) + "\n").encode()
+    (repository / "configs/calibration/calibration_ledger_head.json").write_bytes(head_bytes)
     for source in (root / "configs/campaigns").glob("d117_*/generate_configs.py"):
         shutil.copy2(source, repository / source.relative_to(root))
     return repository
@@ -110,6 +116,16 @@ def load_generator(path: Path):
 
 class CampaignGeneratorCoreTests(unittest.TestCase):
     maxDiff = None
+
+    def test_live_v5_fixture_binds_the_issued_acceptance_cutoff(self) -> None:
+        repository = generation_repository(self, live_v5=True)
+        head = json.loads((repository / "configs/calibration/calibration_ledger_head.json").read_bytes())
+        self.assertEqual(head["sequence"], 376)
+        self.assertEqual(head["head_digest"],
+                         "a5b825b7dd77856be8d612be759be84f925a32f6e671481c2662bb03cbf57014")
+        for pack_id in ("d117_floor_qwen3-1p7b_v5", "d117_floor_qwen3-8b_v5"):
+            generator = load_generator(repository / "configs/campaigns" / pack_id / "generate_configs.py")
+            self.assertEqual(generator.LEDGER_HEAD_SHA256, head["head_digest"])
 
     def assert_generation_uses_shared_write_boundary(
         self,

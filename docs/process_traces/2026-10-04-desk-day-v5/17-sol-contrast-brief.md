@@ -1,0 +1,20 @@
+# Implementation seat: the `_v5` contrast generator replays under generic generator authentication, and binds the acceptance in force
+
+Repository worktree: /Users/edr/code/JouleWise-wt-dd5-contrast (branch feat/2026-10-04-v5-contrast-replay-acceptance, based on main 8fa002f7). Commit if your sandbox allows; otherwise leave changes uncommitted and say so. Do not push.
+
+## Why
+A read-only scout (`/Users/edr/night-archive/desk-day-v5/sol-scout.md` §2, "Two current code conditions") found:
+1. **Contrast cannot pass generic generator authentication.** `joulewise/arm_readiness_evidence.py` (~1180-1212, ~1340-1368) replays a pack's embedded generator with `--check` and rejects the contrast generator's preservation mechanism without a required boolean preservation flag; generic replay also cannot supply the contrast generator's required `--panel/--model-a/--model-b/--decode-workload/--prefill-length/--prefill-prompt-pin` arguments, because the emitted generator keeps source bytes instead of a self-contained invocation (contrast `generate_configs.py` ~402-414, ~3533-3562). The floors (`configs/campaigns/d117_floor_qwen3-*_v5/generate_configs.py`) embed their inputs and pass. Reproduce this first (read-only, in /tmp), then fix it so the EMITTED contrast pack's generator replays under the same generic authentication path the floors use, with its inputs baked (panel, model ids, decode workload, prefill length and pin path relative to the pack), without weakening the authentication (the replay must still regenerate byte-identical outputs and refuse on any drift).
+2. **Acceptance.** The contrast generator binds `SUCCESSOR_ACCEPTANCE` = `d079_calibration_acceptance_v2_n17_r6` (~434-470, `acceptance_pin()`, used at ~2710-2714), an acceptance of the previous OS identity epoch. The acceptance in force, used for every G2-a bracket on this machine, is `configs/calibration/calibration_acceptance_d079_v2_n24_25g83_r2.json`. Find how the code-pinned acceptance registry (`joulewise/calibration_bracketing.py` `load_calibration_acceptance_bound` and its registry; RUN_STATE "live-default move") names the live default and bind the contrast pack to it exactly (id, artifact sha256, derivation sha256). Keep cutoff-vs-live-head semantics: never substitute the live ledger head (402) for the acceptance cutoff.
+
+Which choice is right for (1) — fix the generator's emission, or teach `arm_readiness_evidence.py` the contrast invocation — is yours to argue; prefer the change that keeps ONE generic authentication path and changes the fewest frozen contracts. Say which contracts (freeze, receipts, histsem pinsets) see a change.
+
+## Tests
+`tests/test_d117_contrast_v5_pack.py`, `tests/test_arm_readiness_evidence*.py` (grep), and any test importing the contrast generator. Add: the emitted contrast generator passes generic authentication on a generated pack in /tmp (synthetic pin built like existing fixtures); a one-byte drift in an output refuses; the acceptance binding equals the registry's live default. Run `--check` against committed outputs and report which committed pack bytes would change.
+
+## Write scope (exhaustive)
+WRITE_SCOPE: ["configs/campaigns/d117_contrast_v5/generate_configs.py", "joulewise/arm_readiness_evidence.py", "tests/test_d117_contrast_v5_pack.py", "tests/test_arm_readiness_evidence.py", "tests/fixtures/**", "tests/fixtures/custody_read_replay_allowlist.json"]
+Scratch: /tmp/dd5-contrast/ only. Do not touch the floor generators (another seat), the issuer, the four pinned estimator files (`joulewise/powermetrics_fiducial.py`, `joulewise/uncertainty_evidence.py`, `joulewise/adapters/powermetrics.py`, `joulewise/reduce.py`), registrations or the ledger. Do NOT generate into the repository's committed pack roots.
+
+## Report
+The reproduced refusal (command, code); the fix and why; files changed; commit sha or "uncommitted"; tests with counts; the acceptance binding with the registry line; contracts touched; findings outside scope (file:line). Finish in this turn.
