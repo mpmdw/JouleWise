@@ -182,7 +182,35 @@ def _inspect_identity(record: dict, path: Path, result: Census,
     result.refusals.append(f"live measurement owner: {path}")
 
 
-def _inspect_chain(night: Path, result: Census, observer: Callable[[int], Identity]) -> None:
+def _pending_present(path: Path) -> bool:
+    # A dangling link is unreadable custody, not an absent launcher record.
+    return _exists(path) or path.is_symlink()
+
+
+def _inspect_pending(path: Path, result: Census,
+                     observer: Callable[[int], Identity]) -> None:
+    if not _pending_present(path):
+        return
+    if path.is_symlink():
+        raise ValueError(f"pending launcher identity is a symlink: {path}")
+    record = _read_marker(path)
+    pid, pgid = record.get("pid"), record.get("pgid")
+    if type(pid) is not int or pid <= 1 or type(pgid) is not int or pgid <= 1:
+        raise ValueError(f"invalid pending launcher identity: {path}")
+    try:
+        os.killpg(pgid, 0)
+    except ProcessLookupError:
+        result.warnings.append(f"stale dead pending process group: {path}")
+        return
+    # A dead or reused leader cannot disprove surviving group members.
+    refusal_count = len(result.refusals)
+    _inspect_identity(record, path, result, observer)
+    if len(result.refusals) == refusal_count:
+        result.refusals.append(f"live measurement owner process group: {path}")
+
+
+def _inspect_started_chain(night: Path, result: Census,
+                           observer: Callable[[int], Identity]) -> None:
     started, exited = night / "chain.started", night / "chain.exited"
     if not _exists(started):
         return
@@ -199,6 +227,15 @@ def _inspect_chain(night: Path, result: Census, observer: Callable[[int], Identi
     if _start_token(record.get("start_time")) is None:
         raise ValueError(f"chain start identity unavailable: {started}")
     _inspect_identity(record, started, result, observer)
+
+
+def _inspect_chain(night: Path, result: Census, observer: Callable[[int], Identity]) -> None:
+    pending = Census()
+    _inspect_pending(night / "launch.pending", pending, observer)
+    _inspect_started_chain(night, pending, observer)
+    # Commit diagnostics only after both reads, so reconciliation cannot duplicate them.
+    result.refusals.extend(pending.refusals)
+    result.warnings.extend(pending.warnings)
 
 
 def _inspect_campaign(path: Path, result: Census, observer: Callable[[int], Identity]) -> None:
@@ -257,7 +294,8 @@ def census(*, parents: list[Path] | None = None,
                         continue
                     if is_dir:
                         _reconciled(lambda: _inspect_chain(child / "night", result, observer),
-                                    lambda: _exists(child / "night" / "chain.started"))
+                                    lambda: (_exists(child / "night" / "chain.started")
+                                             or _pending_present(child / "night" / "launch.pending")))
     except (OSError, ValueError, TypeError, UnicodeError, RuntimeError) as exc:
         result.refusals.append(f"census indeterminate: {exc}")
     return result
