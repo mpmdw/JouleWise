@@ -7,6 +7,7 @@ mapping and event shape with fakes, while real runs use the same adapter path.
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import importlib
 import importlib.machinery
@@ -226,6 +227,10 @@ class MlxRuntimeAdapter:
         self._tokenizer: Any | None = None
         self._model_config: dict[str, Any] | None = None
         self._model_artifact_identity: dict[str, Any] | None = None
+        self._detokenizer_provenance: dict[str, Any] = {
+            "path": "fallback",
+            "reason": "not_prepared",
+        }
 
     def prepare(
         self, config: BenchmarkConfig, context: RunContext | None = None
@@ -291,6 +296,7 @@ class MlxRuntimeAdapter:
 
         self._mlx_lm = mlx_lm
         self._model, self._tokenizer, self._model_config = loaded
+        self._prepare_detokenizer()
 
         self._model_artifact_identity = model_artifact_identity(source)
         metadata = {
@@ -305,12 +311,58 @@ class MlxRuntimeAdapter:
             "weight_format": config.model.weight_format,
             "quantization": config.quantization.name,
             "model_artifact_identity": self._model_artifact_identity,
+            "detokenizer": dict(self._detokenizer_provenance),
         }
         if isinstance(self._model_config, dict):
             metadata["model_config_name"] = self._model_config.get("model_type")
             metadata["model_config_eos_token_id"] = self._model_config.get("eos_token_id")
         metadata["memory_snapshots"] = [self._memory_snapshot("prepare_end")]
         return AdapterResult(ok=True, metadata=metadata)
+
+    def _prepare_detokenizer(self) -> None:
+        """Build the supported BPE vocabulary map outside measured windows.
+
+        mlx-lm 0.31.3 constructs a detokenizer on each wrapper property access.
+        Its BPE reset replaces all mutable stream state; shallow copies can
+        safely share the vocabulary map and byte decoder. Keep the wrapper's
+        type contract so stream_generate does not wrap it again.
+        """
+
+        self._detokenizer_provenance = {"path": "fallback"}
+        try:
+            tokenizer_utils = importlib.import_module("mlx_lm.tokenizer_utils")
+            wrapper_class = tokenizer_utils.TokenizerWrapper
+            bpe_class = tokenizer_utils.BPEStreamingDetokenizer
+        except (ImportError, AttributeError):
+            self._detokenizer_provenance["reason"] = "tokenizer_api_unavailable"
+            return
+        # Do not change semantics of custom wrapper subclasses either.
+        if type(self._tokenizer) is not wrapper_class:
+            self._detokenizer_provenance["reason"] = "unsupported_tokenizer_wrapper"
+            return
+
+        template = self._tokenizer.detokenizer
+        self._detokenizer_provenance["class"] = (
+            f"{type(template).__module__}.{type(template).__qualname__}"
+        )
+        if type(template) is not bpe_class:
+            self._detokenizer_provenance["reason"] = "unsupported_detokenizer_class"
+            return
+
+        class PreparedTokenizerWrapper(wrapper_class):
+            @property
+            def detokenizer(self):
+                detokenizer = copy.copy(self._joulewise_detokenizer_template)
+                detokenizer.reset()
+                return detokenizer
+
+        # Preserve every wrapper field (EOS, chat/thinking/tool metadata, and
+        # the underlying HF tokenizer) without running its initializer again.
+        wrapper = object.__new__(PreparedTokenizerWrapper)
+        wrapper.__dict__.update(self._tokenizer.__dict__)
+        wrapper._joulewise_detokenizer_template = template
+        self._tokenizer = wrapper
+        self._detokenizer_provenance["path"] = "prepared_bpe_shallow_copy"
 
     def identity_projection_metadata(
         self, config: BenchmarkConfig
@@ -411,6 +463,7 @@ class MlxRuntimeAdapter:
                 "generator": {
                     "name": "mlx_lm.stream_generate",
                     "version": _module_or_distribution_version(self._mlx_lm, "mlx-lm"),
+                    "detokenizer": dict(self._detokenizer_provenance),
                 },
                 "sampler": record.sampler_provenance,
                 "tokenizer": _tokenizer_identity(self._tokenizer, config),
@@ -488,6 +541,7 @@ class MlxRuntimeAdapter:
                 "generator": {
                     "name": "mlx_lm.stream_generate",
                     "version": _module_or_distribution_version(self._mlx_lm, "mlx-lm"),
+                    "detokenizer": dict(self._detokenizer_provenance),
                 },
                 "sampler": sampler_provenance,
                 "tokenizer": _tokenizer_identity(self._tokenizer, config),
@@ -920,6 +974,7 @@ class MlxRuntimeAdapter:
         self._model_config = None
         self._mlx_lm = None
         self._model_artifact_identity = None
+        self._detokenizer_provenance = {"path": "fallback", "reason": "not_prepared"}
         return AdapterResult(ok=True, metadata=metadata)
 
     def _memory_snapshot(self, label: str) -> dict[str, Any]:
