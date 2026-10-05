@@ -93,11 +93,14 @@ check_once() {
     ok "no contaminating daemon above ${CPU_LIMIT}% CPU"
   fi
 
-  # 2. Overall load. A high load average with no named culprit is still a reason
-  #    not to launch; the campaign's CPU admission would likely refuse.
+  # 2. T-0 records this proxy without vetoing or resetting the dwell. Its
+  #    production CPU-idle admission remains authoritative (lead A-F6 ruling).
+  #    Ordinary operator invocations retain the load-average veto.
   local load1
   load1="$(uptime | sed -n 's/.*load averages*: *\([0-9.]*\).*/\1/p')"
-  if awk -v l="$load1" -v m="$LOAD_LIMIT" 'BEGIN{exit !(l+0 > m)}'; then
+  if [ "${JOULEWISE_PREWINDOW_T0_CPU_ADMISSION:-}" = 1 ]; then
+    echo "  REPORT 1-minute load average ${load1}; limit ${LOAD_LIMIT}; T-0 production CPU-idle admission governs"
+  elif awk -v l="$load1" -v m="$LOAD_LIMIT" 'BEGIN{exit !(l+0 > m)}'; then
     bad "1-minute load average ${load1} exceeds ${LOAD_LIMIT}"
     blocked=1
   else

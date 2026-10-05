@@ -134,27 +134,63 @@ class G2bStructureTests(unittest.TestCase):
         with self.assertRaisesRegex(q.HarvestRefusal, "copy_not_exact"):
             h.authoritative_row(self.runs)
 
+    def committed_gamma(self):
+        """Exact git-show bytes, never fields added to calibration_plan.json."""
+        source = Path(__file__).parent / "fixtures/v5_qualification_harvest/committed_gamma"
+        manifest = q.read(source / "SOURCE.json")
+        for name, digest in manifest["files"].items():
+            self.assertEqual(q.sha(source / name), digest)
+            for target in (self.pack / name, self.custody / "prospective" / name):
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(source / name, target)
+        frozen, tree, identity = h.frozen_identity(self.custody, pack=self.pack)
+        self.assertTrue({"window_id", "evidence_root_id", "active_acceptance", "calibration_ledger"}.isdisjoint(frozen))
+        session = SimpleNamespace(session_id="recorded-session", state="finalized", runs_root=str(self.runs),
+            plan_id=frozen["plan_id"], plan_sha256=q.sha(self.pack / "calibration_plan.json"),
+            window_id=identity["window_id"], evidence_root_id=identity["evidence_root_id"],
+            finalized_slots={"pre": SimpleNamespace(disposition="valid"), "post": SimpleNamespace(disposition="valid")})
+        return SimpleNamespace(refusal_reasons=(), bracket_session_by_id={session.session_id: session}), session
+
     def test_acceptance_cutoff_not_seed_and_failed_post_endpoint(self):
-        frozen = self.custody / "prospective/calibration_plan.json"
-        put(frozen, {"active_acceptance": {"acceptance_id": h.ACCEPTANCE_ID, "sha256": h.ACCEPTANCE_SHA256},
-                     "calibration_ledger": {"head_sequence": 402, "head_digest": "c" * 64},
-                     "plan_id": "frozen", "evidence_root_id": "evidence"})
-        put(self.runs / "bracket-binding.json", {"session_id": "session"})
-        acceptance = Path(__file__).resolve().parents[1] / "configs/calibration/calibration_acceptance_d079_v2_n24_25g83_r2.json"
-        live = SimpleNamespace(state="finalized", runs_root=str(self.runs), plan_sha256=q.sha(frozen),
-                               finalized_slots={"pre": SimpleNamespace(disposition="valid"),
-                                                "post": SimpleNamespace(disposition="valid")})
-        snap = SimpleNamespace(refusal_reasons=(), bracket_session_by_id={"session": live})
-        plan = SimpleNamespace(measurement_root=str(h.ROOT), plan_id="plan")
-        with mock.patch.object(h, "load_calibration_ledger_snapshot", return_value=snap) as load, \
-             mock.patch.object(h.brackets, "load_calibration_acceptance_bound", return_value=q.read(acceptance)), \
-             mock.patch.object(h.brackets, "validate_calibration_bracket_binding", return_value=(object(), object())):
+        snapshot, live = self.committed_gamma()
+        put(self.runs / "bracket-binding.json", {"session_id": live.session_id})
+        acceptance = h.ROOT / "configs/calibration/calibration_acceptance_d079_v2_n24_25g83_r2.json"
+        plan = SimpleNamespace(measurement_root=str(h.ROOT), plan_id="occurrence-id",
+                               pack_night={"pack_root": str(self.pack)})
+        # Mock seam: ledger replay supplies finalized synthetic physical slots;
+        # plan-tree and acceptance bindings use the real committed bytes.
+        with mock.patch.object(h, "load_calibration_ledger_snapshot", return_value=snapshot) as load, \
+             mock.patch.object(h.brackets, "validate_calibration_bracket_binding", return_value=(object(), object())) as validate:
             self.assertEqual(h.bracket_assessment(self.custody, plan, None, acceptance)[3], [])
-            calls = load.call_args_list
-            self.assertEqual([call.kwargs["baseline_sequence"] for call in calls], [402, 376])
-            self.assertTrue(all(call.kwargs["verify_custody"] for call in calls))
+            self.assertNotIn("baseline_sequence", load.call_args_list[0].kwargs)
+            self.assertEqual(load.call_args_list[1].kwargs["baseline_sequence"], 376)
+            self.assertTrue(all(call.kwargs["verify_custody"] for call in load.call_args_list))
+            self.assertEqual(validate.call_args.kwargs["window_id"], live.window_id)
             live.finalized_slots["post"].disposition = "failed"
             self.assertIn("acceptance_bracket_endpoint_not_passed", h.bracket_assessment(self.custody, plan, None, acceptance)[3])
+            live.window_id = "wrong"
+            self.assertEqual(h.bracket_assessment(self.custody, plan, None, acceptance)[3], ["bracket_session_not_complete"])
+        tree_path = self.custody / "prospective/plan_tree.json"
+        tree = q.read(tree_path); tree["window_identity"]["window_id"] = "wrong"; put(tree_path, tree)
+        with self.assertRaisesRegex(q.HarvestRefusal, "frozen_pack_copy_mismatch"):
+            h.bracket_assessment(self.custody, plan, None, acceptance)
+
+    def test_physical_ledger_is_authenticated_without_invented_plan_seed(self):
+        from joulewise import calibration_ledger
+        self.committed_gamma()
+        ledger = self.custody / "calibration/calibration_observation_ledger.jsonl"
+        ledger.parent.mkdir(parents=True)
+        ledger.write_bytes(b"")
+        pin = ledger.parent / "calibration_ledger_head.json"
+        put(pin, {"ledger_schema": calibration_ledger.LEDGER_SCHEMA, "sequence": 0,
+                  "head_digest": calibration_ledger.GENESIS_DIGEST})
+        # No authenticator is replaced: genesis supplies no qualifying endpoint.
+        snapshot = h.physical_snapshot(self.custody, self.base)
+        self.assertEqual(snapshot.refusal_reasons, ())
+        self.assertEqual(dict(snapshot.bracket_session_by_id), {})
+        ledger.write_text("malformed physical ledger\n")
+        with self.assertRaisesRegex(q.HarvestRefusal, "physical_ledger_custody_invalid"):
+            h.physical_snapshot(self.custody, self.base)
 
     def test_five_anchor_majority_preserves_threshold_and_strict_majority(self):
         member = lambda status: {"clock_anchor_status": status}
@@ -209,8 +245,7 @@ class G2bStructureTests(unittest.TestCase):
 
     def test_prepare_desk_calls_binding_before_verdict_and_never_reappends(self):
         frozen = self.custody / "prospective/calibration_plan.json"
-        put(frozen, {"window_id": "window", "plan_id": "plan", "session_id": "session",
-                     "evidence_root_id": "evidence", "calibration_ledger": {}})
+        snapshot, session = self.committed_gamma()
         ledger = self.custody / "calibration/calibration_observation_ledger.jsonl"
         pin = self.custody / "calibration/calibration_ledger_head.json"
         ledger.parent.mkdir(parents=True)
@@ -233,11 +268,15 @@ class G2bStructureTests(unittest.TestCase):
                 self.log.write_bytes(self.log.read_bytes() + raw)
                 (self.runs / "whole-window-verdict.json").write_bytes(raw)
             return subprocess.CompletedProcess(argv, 0, "UNFILTERED-TAIL secret metric", "")
-        with mock.patch.object(h, "validate_whole_window_verdict_row", return_value=SimpleNamespace(authentic=True)):
+        with mock.patch.object(h, "validate_whole_window_verdict_row", return_value=SimpleNamespace(authentic=True)), \
+             mock.patch.object(h, "load_calibration_ledger_snapshot", return_value=snapshot):
             events = h.prepare_desk(self.custody, frozen, self.base / "policy.json", measurement,
                                     self.base / "transcripts", runner=runner)
         self.assertEqual([event["producer"] for event in events["events"]], ["build_bracket_binding", "whole_window_verdict"])
         self.assertEqual(len(calls), 2)
+        self.assertEqual(calls[0][calls[0].index("--session-id") + 1], session.session_id)
+        self.assertEqual(calls[0][calls[0].index("--window-id") + 1], session.window_id)
+        self.assertEqual(calls[0][calls[0].index("--evidence-root-id") + 1], session.evidence_root_id)
         self.assertIn("--whole-window-verdict", calls[1])
         with self.assertRaisesRegex(q.HarvestRefusal, "authentication_only"):
             h.prepare_desk(self.custody, frozen, self.base / "policy.json", measurement,

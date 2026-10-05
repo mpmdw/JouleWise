@@ -89,7 +89,41 @@ def authenticate_order(events, runs):
         raise q.HarvestRefusal("desk_producer_order_invalid")
 
 
-def prepare_desk(custody, frozen, policy, measurement_root, transcripts, *, runner=subprocess.run):
+def frozen_identity(custody, *, pack=None):
+    """Read immutable generator identities from the authenticated plan tree."""
+    prospective = custody / "prospective"
+    frozen_path = prospective / "calibration_plan.json"
+    tree_path = prospective / "plan_tree.json"
+    frozen, tree = q.read(frozen_path), q.read(tree_path)
+    if pack is not None:
+        for path in (frozen_path, tree_path):
+            if path.read_bytes() != (pack / path.name).read_bytes():
+                raise q.HarvestRefusal("frozen_pack_copy_mismatch")
+    reference = tree.get("plan", {})
+    if (reference.get("path") != frozen_path.name or reference.get("plan_id") != frozen.get("plan_id")
+            or reference.get("actual_sha256") != q.sha(frozen_path)
+            or reference.get("declared_sha256") != q.sha(frozen_path)):
+        raise q.HarvestRefusal("frozen_plan_tree_binding_invalid")
+    identity = tree.get("window_identity", {})
+    for key in ("window_id", "evidence_root_id"):
+        q.identifier(identity.get(key))
+    return frozen, tree, identity
+
+
+def physical_snapshot(custody, measurement_root):
+    # The custody pin is the authenticated seed. The generator does not put a
+    # mutable ledger head in calibration_plan.json. Never infer it from fields
+    # added to that frozen file.
+    snapshot = load_calibration_ledger_snapshot(
+        custody / "calibration/calibration_observation_ledger.jsonl",
+        custody / "calibration/calibration_ledger_head.json",
+        require_committed_pin=False, verify_custody=True, mode="read_replay", repo_root=measurement_root)
+    if snapshot.refusal_reasons:
+        raise q.HarvestRefusal("physical_ledger_custody_invalid")
+    return snapshot
+
+
+def prepare_desk(custody, frozen, policy, measurement_root, transcripts, *, runner=subprocess.run, pack=None):
     """Execute registered E1/E2, protecting every pre-existing collection byte.
 
     This explicit desk phase is before the immutable archive's source census.
@@ -103,7 +137,7 @@ def prepare_desk(custody, frozen, policy, measurement_root, transcripts, *, runn
         raise q.HarvestRefusal("desk_output_preexists")
     before = q.census_sources({"custody": custody})["custody"]
     old_log = (runs / "campaign_log.jsonl").read_bytes()
-    plan = q.read(frozen)
+    plan, tree, identity = frozen_identity(custody, pack=pack)
     py = measurement_root / ".venv/bin/python"
     ledger = custody / "calibration/calibration_observation_ledger.jsonl"
     pin = custody / "calibration/calibration_ledger_head.json"
@@ -113,11 +147,18 @@ def prepare_desk(custody, frozen, policy, measurement_root, transcripts, *, runn
                          (pin, measurement_root / "configs/calibration/calibration_ledger_head.json")):
         if staged.read_bytes() != live.read_bytes():
             raise q.HarvestRefusal("desk_default_ledger_not_restaged")
-    session_id = plan.get("session_id") or plan["window_id"] + "-calibration"
+    snapshot = physical_snapshot(custody, measurement_root)
+    sessions = [session for session in snapshot.bracket_session_by_id.values()
+        if (session.window_id, session.plan_id, session.plan_sha256, session.evidence_root_id, session.runs_root)
+        == (identity["window_id"], plan["plan_id"], q.sha(frozen), identity["evidence_root_id"], str(runs))
+        and session.state == "finalized"]
+    if len(sessions) != 1:
+        raise q.HarvestRefusal("bracket_session_identity_not_unique")
+    session_id = sessions[0].session_id
     binding_argv = [py, "-B", measurement_root / "scripts/build_bracket_binding.py",
-        "--custody-root", custody, "--session-id", session_id, "--window-id", plan["window_id"],
+        "--custody-root", custody, "--session-id", session_id, "--window-id", identity["window_id"],
         "--plan-id", plan["plan_id"], "--plan-sha256", q.sha(frozen), "--frozen-plan", frozen,
-        "--evidence-root-id", plan["evidence_root_id"], "--runs-root", runs,
+        "--evidence-root-id", identity["evidence_root_id"], "--runs-root", runs,
         "--calibration-ledger", ledger, "--head-pin", pin, "--output", runs / "bracket-binding.json"]
     events = []
     start = time.monotonic_ns()
@@ -239,33 +280,31 @@ def authenticate_launch(plan, go_path, consumed_path):
 
 def bracket_assessment(custody, plan, policy, acceptance_path):
     frozen_path = custody / "prospective/calibration_plan.json"
-    frozen, binding = q.read(frozen_path), q.read(custody / "runs/bracket-binding.json")
+    frozen, tree, identity = frozen_identity(custody, pack=Path(plan.pack_night["pack_root"]))
+    binding = q.read(custody / "runs/bracket-binding.json")
     acceptance = brackets.load_calibration_acceptance_bound(acceptance_path)
     if (acceptance is None or acceptance["acceptance_id"] != ACCEPTANCE_ID
             or q.sha(acceptance_path) != ACCEPTANCE_SHA256
-            or frozen["active_acceptance"]["sha256"] != q.sha(acceptance_path)
-            or frozen["active_acceptance"]["acceptance_id"] != ACCEPTANCE_ID):
+            or tree.get("acceptance_policy", {}).get("issued_artifact_sha256") != q.sha(acceptance_path)
+            or tree.get("acceptance_policy", {}).get("issued_artifact_id") != ACCEPTANCE_ID):
         raise q.HarvestRefusal("acceptance_r2_binding_invalid")
-    seed = frozen["calibration_ledger"]
     ledger = custody / "calibration/calibration_observation_ledger.jsonl"
     pin = custody / "calibration/calibration_ledger_head.json"
     # Authentication first binds the frozen seed; acceptance decisions use a
     # SECOND snapshot whose baseline is explicitly the issuance CUTOFF (#467).
     kwargs = dict(require_committed_pin=False, verify_custody=True, mode="read_replay",
                   repo_root=Path(plan.measurement_root))
-    physical = load_calibration_ledger_snapshot(ledger, pin, baseline_sequence=seed["head_sequence"],
-                                               baseline_digest=seed["head_digest"], **kwargs)
-    if physical.refusal_reasons:
-        raise q.HarvestRefusal("physical_ledger_custody_invalid")
+    physical = physical_snapshot(custody, Path(plan.measurement_root))
     cutoff = acceptance["ledger_cutoff"]
     snapshot = load_calibration_ledger_snapshot(ledger, pin, baseline_sequence=cutoff["sequence"],
                                                baseline_digest=cutoff["head_digest"], **kwargs)
     session = snapshot.bracket_session_by_id.get(binding["session_id"])
     if (session is None or session.state != "finalized" or session.plan_sha256 != q.sha(frozen_path)
-            or session.runs_root != str(custody / "runs")):
+            or session.runs_root != str(custody / "runs") or session.window_id != identity["window_id"]
+            or session.plan_id != frozen["plan_id"] or session.evidence_root_id != identity["evidence_root_id"]):
         return snapshot, binding, {"status": "failed"}, ["bracket_session_not_complete"]
-    pair = brackets.validate_calibration_bracket_binding(binding, snapshot, window_id=plan.plan_id,
-        plan_id=frozen["plan_id"], plan_sha256=q.sha(frozen_path), evidence_root_id=frozen["evidence_root_id"],
+    pair = brackets.validate_calibration_bracket_binding(binding, snapshot, window_id=identity["window_id"],
+        plan_id=frozen["plan_id"], plan_sha256=q.sha(frozen_path), evidence_root_id=identity["evidence_root_id"],
         runs_root=custody / "runs")
     causes = []
     if pair is None or any(session.finalized_slots.get(role) is None
@@ -457,14 +496,28 @@ def harvest(args, *, runner=subprocess.run, now=None, clear=q.group_clear):
                "bound-runs": Path(inputs["bound_runs_root"])}
     started = (night / "chain.started").exists()
     no_science = recover_no_science(inputs, plan, night, pack, custody / "runs") if started and occurrence == "s1" else None
+    missing_after_start = []
     if no_science:
         sources["pre-science-tooling-failure"] = q.authenticated_reference(inputs["pre_science_tooling_failure"])
     if started and not no_science:
         for field in ("terminal_boundary", "go", "consumption", "battery_boundaries"):
-            sources[field] = q.authenticated_reference(inputs[field])
-        sources.update(q.boundary_sources(sources["battery_boundaries"]))
-        if not args.prepare_desk and not args.previous_harvest:
-            sources["desk-producer-events"] = q.authenticated_reference(inputs["desk_producer_events"])
+            if field not in inputs:
+                missing_after_start.append(field + "_missing")
+            else:
+                sources[field] = q.authenticated_reference(inputs[field])
+        if "battery_boundaries" in sources:
+            sources.update(q.boundary_sources(sources["battery_boundaries"]))
+        if not args.prepare_desk:
+            prior_sources = q.read(args.previous_harvest / "replay-locators.json")["sources"] if args.previous_harvest else None
+            external_events = prior_sources is None or any(row["name"] == "desk-producer-events" for row in prior_sources)
+            if external_events:
+                if "desk_producer_events" in inputs:
+                    sources["desk-producer-events"] = q.authenticated_reference(inputs["desk_producer_events"])
+                else:
+                    missing_after_start.append("desk_producer_events_missing")
+            for name in ("bracket-binding.json", "whole-window-verdict.json"):
+                if not (custody / "runs" / name).is_file():
+                    missing_after_start.append(name.replace("-", "_").replace(".json", "_missing"))
     destination = args.archive_root.absolute()
     # No recovery authority is inferred from a harvester's classification.
     if occurrence == "s2":
@@ -486,14 +539,15 @@ def harvest(args, *, runner=subprocess.run, now=None, clear=q.group_clear):
     with tempfile.TemporaryDirectory(prefix="desk-", dir=args.scratch_root) as temporary:
         transcripts = Path(temporary)
         events = None
-        if started and not no_science:
+        if started and not no_science and not missing_after_start:
             if args.prepare_desk:
                 if args.previous_harvest:
                     raise q.HarvestRefusal("reharvest_cannot_prepare_desk")
                 events = prepare_desk(custody, custody / "prospective/calibration_plan.json", policy_path,
-                                      Path(plan.measurement_root), transcripts, runner=runner)
+                                      Path(plan.measurement_root), transcripts, runner=runner, pack=pack)
             elif args.previous_harvest:
-                events = q.read(args.previous_harvest / "derived/desk-producer-events.json")
+                derived = args.previous_harvest / "derived/desk-producer-events.json"
+                events = q.read(sources["desk-producer-events"] if "desk-producer-events" in sources else derived)
             else:
                 events = q.read(q.authenticated_reference(inputs["desk_producer_events"]))
         original = q.archive_sources(sources, destination, previous=args.previous_harvest)
@@ -506,6 +560,14 @@ def harvest(args, *, runner=subprocess.run, now=None, clear=q.group_clear):
             record.update(verdict="NULL", cause_codes=["chain_never_started"])
         elif no_science:
             record.update(no_science)
+        elif missing_after_start:
+            # Later artifacts legitimately do not exist after a started-chain
+            # crash. Preserve/authenticate the retained occurrence first; this
+            # is recovery evidence, not an exception from the harvest tool.
+            causes = ["started_chain_incomplete", *missing_after_start]
+            if (night / "chain.exited").exists() and q.read(night / "chain.exited").get("exit_code") != 0:
+                causes.append("started_chain_crashed")
+            record.update(verdict="RECOVER", cause_codes=sorted(causes), cause_classes=["tooling"])
         else:
             terminal = q.authenticated_reference(inputs["terminal_boundary"])
             go_path = q.authenticated_reference(inputs["go"])
@@ -578,12 +640,12 @@ def harvest(args, *, runner=subprocess.run, now=None, clear=q.group_clear):
                           whole_window_verdict_sha256=q.sha(runs / "whole-window-verdict.json"))
             record["members"] = members
             valid_paths = [runs / row["run_id"] for row in members if row["valid"] and row["run_id"] in bundle_ids]
-            frozen = q.read(custody / "prospective/calibration_plan.json")
+            frozen, _tree, identity = frozen_identity(custody, pack=pack)
             bracket, reasons = q.captured_call(brackets.calibration_bracket_for_bundles,
                 destination / "withheld/bracket-evaluation.txt", runs, valid_paths, policy.calibration_bracketing,
-                mode="read_replay", ledger_snapshot=snapshot, bracket_binding=binding, bracket_window_id=plan.plan_id,
+                mode="read_replay", ledger_snapshot=snapshot, bracket_binding=binding, bracket_window_id=identity["window_id"],
                 bracket_plan_id=frozen["plan_id"], bracket_plan_sha256=q.sha(custody / "prospective/calibration_plan.json"),
-                bracket_evidence_root_id=frozen["evidence_root_id"])
+                bracket_evidence_root_id=identity["evidence_root_id"])
             q.write(destination / "withheld/bracket-evaluation.json", {"assessment": bracket, "reasons": reasons})
             if bracket.get("status") != "passed" or reasons or snapshot.refusal_reasons:
                 causes.append("acceptance_bracket_not_passed")

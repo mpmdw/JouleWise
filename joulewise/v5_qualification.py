@@ -15,7 +15,7 @@ import tempfile
 import time
 
 from joulewise import arm_readiness as readiness, night_gate
-from joulewise.measurement_liveness import pending_launch_closed
+from joulewise.measurement_liveness import pending_launch_closed, observe_identity, _start_token
 from scripts.harvest_g2a_window import archive, sha
 from scripts.harvest_window import inventory
 
@@ -82,7 +82,7 @@ def s1_desk_records(bundle):
     return result
 
 
-def group_clear(night, *, killpg=os.killpg, plan_id=None):
+def group_clear(night, *, killpg=os.killpg, plan_id=None, observer=None):
     """Read #475 custody even if the PASS-only chain marker was never made.
 
     Do not write launch.resolved: absence is recorded in the derived harvest.
@@ -105,6 +105,10 @@ def group_clear(night, *, killpg=os.killpg, plan_id=None):
             resolved = night / "launch.resolved"
             if resolved.exists() and read(resolved)["pgid"] != value["pgid"]:
                 raise HarvestRefusal("pending_launcher_closure_mismatch")
+            return True
+        identity = (observer or observe_identity)(value["pid"])
+        recorded, current = _start_token(value["start_time"]), _start_token(identity.start_time)
+        if identity.state == "LIVE" and recorded is not None and current is not None and recorded != current:
             return True
         pgid = value["pgid"]
     else:

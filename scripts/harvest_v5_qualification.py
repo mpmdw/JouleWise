@@ -68,28 +68,30 @@ def harvest(args, *, now=None, clear=q.group_clear, load=load_qualification):
             record.update(verdict="NULL", cause_codes=["chain_never_started"])
         else:
             if (custody / "night/producer-faults.jsonl").exists():
-                raise q.HarvestRefusal("qualification_observation_producer_fault")
-            bundle = load(custody)
-            record["desk_stages"] = q.s1_desk_records(bundle)
-            verdict = evaluate(bundle, transcript=destination / "withheld/t0-evaluation.txt")
-            q.write(derived / "s1-qualification-verdict.json", verdict)
-            causes = [f"{row['gate_id'].lower()}_not_passed" for row in verdict["gates"]
-                      if row["gate_id"] not in {"G6", "G7"} and row["status"] != "PASS"]
-            if not q.battery_boundaries(boundary, args.battery_evidence_sha256, plan.plan_id):
-                causes.append("battery_boundary_not_passed")
-            record.update(verdict="FAIL" if causes else "PASS", cause_codes=causes,
-                          cause_classes=["qualification"] if causes else [],
-                          gate_counts=verdict["gate_counts"],
-                          evaluation=q.reference(derived / "s1-qualification-verdict.json"))
+                record.update(verdict="FAIL", cause_codes=["qualification_observation_producer_fault"], cause_classes=["tooling"])
+            else:
+                bundle = load(custody)
+                record["desk_stages"] = q.s1_desk_records(bundle)
+                verdict = evaluate(bundle, transcript=destination / "withheld/t0-evaluation.txt")
+                q.write(derived / "s1-qualification-verdict.json", verdict)
+                causes = [f"{row['gate_id'].lower()}_not_passed" for row in verdict["gates"]
+                          if row["gate_id"] not in {"G6", "G7"} and row["status"] != "PASS"]
+                if not q.battery_boundaries(boundary, args.battery_evidence_sha256, plan.plan_id):
+                    causes.append("battery_boundary_not_passed")
+                record.update(verdict="FAIL" if causes else "PASS", cause_codes=causes,
+                              cause_classes=["qualification"] if causes else [],
+                              gate_counts=verdict["gate_counts"],
+                              evaluation=q.reference(derived / "s1-qualification-verdict.json"))
         q.unchanged(sources, original)
         if not clear(custody / "night", plan_id=plan.plan_id):
             raise q.HarvestRefusal("launcher_group_alive")
     except Exception as error:
         record.update(verdict="REFUSED", cause_codes=[str(error) if isinstance(error, q.HarvestRefusal)
                       else "archive_authentication_or_evaluator_fault"], cause_classes=["tooling"])
-    record.update(end_state=record["verdict"] == "FAIL", s2_eligible=False,
-                  next_step="lead_adjudication_qualification_failure" if record["verdict"] == "FAIL" else
-                            "r3_identical_byte_reharvest" if record["verdict"] == "REFUSED" else "lead_ratification")
+    live_failure = record["verdict"] == "FAIL" and record["cause_classes"] == ["qualification"]
+    record.update(end_state=live_failure, s2_eligible=False,
+                  next_step="lead_adjudication_qualification_failure" if live_failure else
+                            "r3_identical_byte_reharvest" if record["verdict"] in {"REFUSED", "FAIL"} else "lead_ratification")
     return q.publish(destination, record)
 
 

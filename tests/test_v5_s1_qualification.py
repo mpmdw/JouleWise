@@ -226,11 +226,15 @@ class QualificationSubsetTests(unittest.TestCase):
         life = self.qualified_lifecycle(); self.put("records/lifecycle.json", life)
         result = t0.evaluate_g9(self.bundle())
         self.assertEqual(result.status.value, "PASS", result.message)
-        for name in ("claim_backup", "bound_backup", "close_out", "restore"):
+        for name in t0._LIFECYCLE_STAGES:
             altered = copy.deepcopy(life)
             next(row for row in altered["stages"] if row["stage_id"] == name)["status"] = "MISSING"
             self.put("records/lifecycle.json", altered)
             self.assertEqual(t0.evaluate_g9(self.bundle()).status.value, "FAIL")
+            altered = copy.deepcopy(life)
+            next(row for row in altered["stages"] if row["stage_id"] == name)["evidence"]["sha256"] = "0" * 64
+            self.put("records/lifecycle.json", altered)
+            self.assertEqual(t0.evaluate_g9(self.bundle()).status.value, "FAIL", name)
 
     def test_unverified_backup_digest_mismatch_fails(self):
         life = self.qualified_lifecycle(); self.put("records/lifecycle.json", life)

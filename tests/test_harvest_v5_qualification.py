@@ -74,13 +74,15 @@ class QualificationHarvestTests(unittest.TestCase):
         self.assertEqual(record["cause_codes"], ["s1_desk_stage_digest_mismatch"])
         evaluate.assert_not_called()
 
-    def test_producer_fault_refuses_only_qualification_no_recover(self):
+    def test_producer_fault_fails_only_qualification_no_recover(self):
         (self.root / "night/producer-faults.jsonl").write_text('{"producer":"hid"}\n')
         with mock.patch.object(h.t0_rehearsal, "evaluate_qualification") as evaluate:
             record = self.harvest()
         evaluate.assert_not_called()
-        self.assertEqual(record["verdict"], "REFUSED")
+        self.assertEqual(record["verdict"], "FAIL")
         self.assertEqual(record["cause_codes"], ["qualification_observation_producer_fault"])
+        self.assertFalse(record["end_state"])
+        self.assertEqual(record["next_step"], "r3_identical_byte_reharvest")
         self.assertFalse(record["s2_eligible"])
         self.assertFalse((self.root / "night/g2b-verdict.json").exists())
 

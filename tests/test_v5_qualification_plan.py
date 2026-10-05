@@ -15,6 +15,8 @@ from joulewise.night_plan_writer import night_plan_mapping, write_night_plan
 from scripts import write_v5_qualification_plan as writer
 from tests.test_arm_readiness_schemas import arm_context
 
+REAL_G2B_BODY = writer.g2b_body
+
 
 class SizingTests(unittest.TestCase):
     def setUp(self):
@@ -296,6 +298,45 @@ class PlanWriterTests(SizingTests):
         self.assertEqual(record["backup_destinations"], writer.backup_destinations(self.input["arm_context"]))
         self.assertTrue(record["observation_recipe"]["desk_closeout_after_quiet_window"])
         self.assertIn("v5_s1_desk_closeout.py", " ".join(record["observation_recipe"]["desk_closeout_argv"]))
+        from scripts.produce_t0_rehearsal_bundle import parser
+        for name in ("standdown_argv", "supervised_driver_argv"):
+            parser().parse_args(record["observation_recipe"][name][2:])
+
+    def test_specialized_reviewed_body_is_accepted_before_plan_hashing(self):
+        from scripts import capture_t0_step as capture
+        from tests.test_arm_readiness_evidence_t0 import make_t0_fixture, TEST_BOOT_SESSION_ID
+        import shutil
+        runbook = self.repo / "docs/phase_2/window_runbook.md"; runbook.parent.mkdir(parents=True)
+        shutil.copyfile(writer.REPO_ROOT / "docs/phase_2/window_runbook.md", runbook)
+        body = REAL_G2B_BODY(self.repo)
+        self.assertIn('REPO="' + str(self.repo) + '"\n', body)
+        header = self.chain.read_text().split("echo fixture\n")[0]
+        self.chain.write_text(header + body)
+        self.sidecar.write_bytes(readiness.gnu_sidecar(writer.locator(self.chain)["sha256"], self.chain.name))
+        self.input["authorization"]["permitted_chain_sha256"] = writer.locator(self.chain)["sha256"]
+        with mock.patch.object(writer, "g2b_body", REAL_G2B_BODY):
+            self.write()
+        self.assertEqual(writer.read_object(self.output)["chain_path"], str(self.chain))
+        # End the writer-only frozen-input fixture before building the capture
+        # fixture; its parser and freeze author must see production functions.
+        self.doCleanups()
+        temporary, repository, pack, custody, _, _ = make_t0_fixture()
+        self.addCleanup(temporary.cleanup)
+        runbook = repository / "docs/phase_2/window_runbook.md"; runbook.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(writer.REPO_ROOT / "docs/phase_2/window_runbook.md", runbook)
+        # Adding the reviewed source changes the fixture's reviewed tree. Issue
+        # the same terminal-review proof for that tree, without mocking review.
+        from tests.test_arm_readiness_evidence_t0 import git
+        git(repository, "add", ".")
+        tree_oid = subprocess.check_output(["git", "-C", str(repository), "write-tree"], text=True).strip()
+        pack_sha = readiness.committed_pack_tree_sha256(pack)
+        git(repository, "commit", "-qm", "terminal review\n\nJouleWise-Terminal-Review: PASS\n"
+            + "JouleWise-Terminal-Review-Tree-Oid: " + tree_oid + "\n"
+            + "JouleWise-Terminal-Review-Pack-Sha256: " + pack_sha)
+        git(repository, "update-ref", "refs/remotes/origin/main", "HEAD")
+        (custody / "window-plan/window-chain.zsh").write_text(REAL_G2B_BODY(repository))
+        with mock.patch.object(capture, "REPO_ROOT", repository), mock.patch.object(capture, "_current_boot_session_id", return_value=TEST_BOOT_SESSION_ID):
+            self.assertEqual(capture._load_context(pack, custody, custody / "window-plan").repository, repository)
 
     def test_equal_or_nested_backup_destinations_refuse_before_write(self):
         context = self.input["arm_context"]

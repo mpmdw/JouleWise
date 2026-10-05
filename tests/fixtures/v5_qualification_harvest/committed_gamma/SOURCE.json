@@ -1,0 +1,8 @@
+{
+  "commit": "db41703cef99176fff2afa51d8a85b0651f1a48e",
+  "source": "configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5/",
+  "files": {
+    "calibration_plan.json": "72c776bcb410d103b9ab49991e626f1c4e2ffa4fd6c2a40c67be4a1138b67da6",
+    "plan_tree.json": "995c7ca548c718c96ef2b44b7efa37d356ba82619f391ac6abe2ecb636d0c730"
+  }
+}

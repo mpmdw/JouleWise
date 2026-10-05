@@ -613,6 +613,11 @@ def _require_sequence(context: CaptureContext, step_id: str) -> None:
 
 
 def _execute(argv: Sequence[str], *, cwd: Path) -> subprocess.CompletedProcess[bytes]:
+    environment = dict(GOVERNED_SUBPROCESS_ENVIRONMENT)
+    if len(argv) > 1 and Path(argv[1]) == cwd / "scripts/prewindow_check.sh":
+        # Preserve the authored exact argv; only this native T-0 execution gets
+        # the ruled report-only load proxy. No inherited override is trusted.
+        environment["JOULEWISE_PREWINDOW_T0_CPU_ADMISSION"] = "1"
     try:
         return subprocess.run(
             list(argv),
@@ -621,7 +626,7 @@ def _execute(argv: Sequence[str], *, cwd: Path) -> subprocess.CompletedProcess[b
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             check=False,
-            env=GOVERNED_SUBPROCESS_ENVIRONMENT,
+            env=environment,
             timeout=30 if "systemsetup" in " ".join(argv) or "collect_clock_reference.py" in " ".join(argv) else None,
         )
     except (OSError, subprocess.SubprocessError) as exc:

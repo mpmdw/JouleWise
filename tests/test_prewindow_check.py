@@ -44,7 +44,7 @@ class PrewindowCheckTests(unittest.TestCase):
         # Counterfactual: removing the six offending lines admits readiness.
         self.assertEqual(self._check_lines([]).returncode, 0)
 
-    def _check_lines(self, process_lines, *args):
+    def _check_lines(self, process_lines, *args, load="0.10", t0=False, fast_dwell=False):
         # Explicit (comm, args) pairs preserve executable names containing spaces.
         # Legacy fixtures use ps aux rows or a bare executable name.
         processes = []
@@ -73,7 +73,7 @@ class PrewindowCheckTests(unittest.TestCase):
                 ),
                 "uptime": (
                     "#!/bin/sh\nprintf '%s\\n' "
-                    "'12:00 up 1 day, load averages: 0.10 0.20 0.30'"
+                    f"'12:00 up 1 day, load averages: {load} 0.20 0.30'"
                 ),
                 "pmset": (
                     "#!/bin/sh\nprintf \"%s\\n\" \"Now drawing from 'AC Power'\""
@@ -89,12 +89,20 @@ class PrewindowCheckTests(unittest.TestCase):
                 path.write_text(source + "\n", encoding="utf-8")
                 path.chmod(0o755)
 
+            script = SCRIPT
+            if fast_dwell:
+                # Mock seam: advance only Bash's elapsed clock at sleep. All
+                # 600-second dwell, reset and deadline logic stays production.
+                script = fake_bin / "scripts/prewindow_check.sh"
+                script.parent.mkdir()
+                script.write_text(SCRIPT.read_text().replace('sleep "$pause"', 'SECONDS=$((SECONDS + pause))'))
             completed = subprocess.run(
-                ["/bin/bash", str(SCRIPT), *args],
+                ["/bin/bash", str(script), *args],
                 cwd=REPOSITORY,
                 env={
                     **os.environ,
                     "PATH": f"{fake_bin}:/usr/bin:/bin:/usr/sbin:/sbin",
+                    "JOULEWISE_PREWINDOW_T0_CPU_ADMISSION": "1" if t0 else "",
                 },
                 text=True,
                 capture_output=True,
@@ -102,6 +110,23 @@ class PrewindowCheckTests(unittest.TestCase):
             )
 
         return completed
+
+    def test_t0_high_load_is_report_only_and_does_not_reset_dwell(self):
+        ordinary = self._check_lines([], load="2.10")
+        self.assertEqual(ordinary.returncode, 1)
+        self.assertIn("BLOCK", ordinary.stdout)
+        native = self._check_lines([], load="2.10", t0=True)
+        self.assertEqual(native.returncode, 0, native.stdout + native.stderr)
+        self.assertIn("REPORT 1-minute load average 2.10; limit 2.0", native.stdout)
+        self.assertNotIn("BLOCK", native.stdout)
+        args = ("--wait", "--timeout-s", "630")
+        native = self._check_lines([], *args, load="2.10", t0=True, fast_dwell=True)
+        self.assertEqual(native.returncode, 0, native.stdout + native.stderr)
+        self.assertRegex(native.stdout, r"continuous clean dwell 6[0-2][0-9]/600s")
+        ordinary = self._check_lines([], *args, load="2.10", fast_dwell=True)
+        self.assertEqual(ordinary.returncode, 1)
+        self.assertIn("TIMED OUT", ordinary.stdout)
+        self.assertNotIn("READY after", ordinary.stdout)
 
     def test_wait_seconds_cap_refuses_without_a_full_dwell(self):
         refused = self._check_lines([], "--wait", "--timeout-s", "1")

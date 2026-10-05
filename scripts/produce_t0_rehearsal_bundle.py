@@ -147,7 +147,7 @@ def observe_standdown(plan_path, timeout_s):
                  "before": reference(night / "pre-standdown.json"), "exits": exits, "after": after})
 
 
-def run_driver(plan_path, timeout_s):
+def run_driver(plan_path, timeout_s, *, courier_bin=None):
     """Foreground supervisor records the real driver's eventual exit."""
     bounded_timeout(timeout_s)
     plan = plan_at(plan_path)
@@ -184,8 +184,10 @@ def run_driver(plan_path, timeout_s):
         origin()
     environment = os.environ.copy()
     environment["JOULEWISE_REHEARSAL_PROCESS_JOURNAL"] = str(journal)
-    command = [str(Path(plan.measurement_root) / ".venv/bin/python"), "-B",
+    command = [sys.executable, "-B",
                str(Path(plan.measurement_root) / "scripts/run_night.py"), "run", "--plan", str(plan_path)]
+    if courier_bin is not None:
+        command += ["--courier-bin", str(courier_bin)]
     # The driver owns the window deadline. An observer timeout must not kill
     # it or turn a science result into a tooling RECOVER.
     context = t0.process_journal(journal, observe_only=qualified)
@@ -636,6 +638,8 @@ def parser():
         cmd.add_argument("--plan", required=True, type=Path)
         if name != "lifecycle":
             cmd.add_argument("--timeout-s", required=True, type=float)
+        if name == "run-driver":
+            cmd.add_argument("--courier-bin", type=Path)
     cmd = sub.add_parser("assemble")
     cmd.add_argument("--custody-root", required=True, type=Path)
     cmd.add_argument("--positive-control", required=True, type=Path)
@@ -665,7 +669,7 @@ def main(argv=None):
         if args.command == "observe-standdown":
             observe_standdown(args.plan, args.timeout_s)
         elif args.command == "run-driver":
-            return run_driver(args.plan, args.timeout_s)
+            return run_driver(args.plan, args.timeout_s, courier_bin=args.courier_bin)
         else:
             plan = plan_at(args.plan)
             with t0.process_journal(Path(plan.custody_root) / "night/process-observations.jsonl"):

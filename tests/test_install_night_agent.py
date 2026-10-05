@@ -34,6 +34,52 @@ SCRIPT_PATH = REPO_ROOT / "scripts" / "install_night_agent.sh"
 RETIRED_V1 = REPO_ROOT / "tests" / "fixtures" / "night_plan_v1_retired.json"
 
 
+class QualificationInstalledArgvTests(unittest.TestCase):
+    def test_authenticated_g2b_install_supervises_driver_and_preserves_courier(self):
+        from joulewise import night_agent_install as installer
+        from scripts import produce_t0_rehearsal_bundle as producer
+        from tests.test_run_night import PackNightProducerTests
+        fixture = PackNightProducerTests(); fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
+        prepared = installer.Prepared(fixture.plan, fixture.plan_path, REPO_ROOT, sys.executable,
+            (REPO_ROOT / "configs/launchd/com.joulewise.night.plist.template").read_text(),
+            "/scratch/courier", "/usr/bin:/bin", {"night_calendar": {"Month": 10, "Day": 5, "Hour": 1, "Minute": 0},
+            "deadman_calendar": {"Hour": 3, "Minute": 0}}, None)
+        rendered = list(prepared.render(installer.LABELS))
+        values = [plistlib.loads(payload) for _, payload in rendered]
+        argv = values[0]["ProgramArguments"]
+        self.assertEqual(argv, [sys.executable, str(REPO_ROOT / "scripts/produce_t0_rehearsal_bundle.py"),
+            "run-driver", "--plan", str(fixture.plan_path), "--timeout-s", str(fixture.plan.window_max_s),
+            "--courier-bin", "/scratch/courier"])
+        for value in values:
+            self.assertEqual(value["ProcessType"], "Interactive")
+        self.assertIn("dead-man", values[1]["ProgramArguments"])
+        args = producer.parser().parse_args(argv[2:])
+        boot = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+        night = fixture.custody / "night"; night.mkdir(exist_ok=True)
+        before = producer.write(night / "pre-standdown.json", {"boot_session_id": boot,
+            "plan_sha256": producer.reference(fixture.plan_path)["sha256"]})
+        producer.write(night / "standdown-observed.json", {"schema_version": producer.STANDDOWN_SCHEMA,
+            "boot_session_id": boot, "before": producer.reference(before)})
+        # Mock seam: portable benign child stands in for physical driver work.
+        # The exact parsed installed argv reaches the real supervisor, origin
+        # author and process journal. No launchctl or physical command executes.
+        observed = producer.t0.observed_run
+        calls = []
+        def physical_child(command, **kwargs):
+            calls.append(command)
+            return observed([sys.executable, "-B", "-c", "pass"], **kwargs)
+        with mock.patch.object(producer.readiness, "_current_boot_session_id", return_value=boot), \
+             mock.patch.object(producer.t0, "observed_run", side_effect=physical_child):
+            self.assertEqual(producer.main(argv[2:]), 0)
+        self.assertEqual(calls[0][-2:], ["--courier-bin", "/scratch/courier"])
+        self.assertEqual(calls[0][0], sys.executable)
+        self.assertTrue((night / "observation-origin.json").is_file())
+        events = [json.loads(line) for line in (night / "process-observations.jsonl").read_bytes().splitlines()]
+        self.assertEqual([row["event"] for row in events], ["spawn", "exit", "seal"])
+        self.assertEqual(events[1]["exit_code"], 0)
+
+
 def _git_head(root: Path) -> str:
     return subprocess.check_output(
         ["/usr/bin/git", "-C", str(root), "rev-parse", "HEAD"], text=True

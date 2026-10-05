@@ -728,6 +728,17 @@ class CaptureT0StepTests(unittest.TestCase):
         self.assertNotIn("999", completed.stdout)
         self.assertIn("NOT READY.", completed.stdout)
 
+    def test_only_native_prewindow_execution_marks_load_report_only(self):
+        repository = Path("/fixture/checkout")
+        argv = ("/bin/bash", str(repository / "scripts/prewindow_check.sh"), "--wait",
+                "--timeout-min", "45", "--window", "gamma")
+        with mock.patch.object(capture.subprocess, "run", return_value=subprocess.CompletedProcess(argv, 0)) as run:
+            capture._execute(argv, cwd=repository)
+            self.assertEqual(run.call_args.args[0], list(argv))
+            self.assertEqual(run.call_args.kwargs["env"]["JOULEWISE_PREWINDOW_T0_CPU_ADMISSION"], "1")
+            capture._execute(("/bin/bash", "/other/prewindow_check.sh"), cwd=repository)
+            self.assertNotIn("JOULEWISE_PREWINDOW_T0_CPU_ADMISSION", run.call_args.kwargs["env"])
+
     def test_refuses_dollar_bearing_window_environment(self) -> None:
         (
             _temporary,

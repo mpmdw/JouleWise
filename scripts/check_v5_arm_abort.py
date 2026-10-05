@@ -131,6 +131,9 @@ def t0_sources(plan, arm, at):
 
 def battery_sources(value, plan):
     exact(value, {"arm", "publication", "t0"}, "battery_sites")
+    native_phases = {"arm": {"arm", "arm_check"},
+                     "publication": {"publication", "publish_install", "validate_install"},
+                     "t0": {"t0", "t0_power_row"}}
     refs = []
     for phase, item in value.items():
         exact(item, {"record", "raw"}, "battery_source")
@@ -138,7 +141,7 @@ def battery_sources(value, plan):
         record = readiness.parse_json_bytes(raw_record)
         _, raw = read_locator(item["raw"])
         require(record["schema"] == battery_float.SCHEMA and record["plan_id"] == plan.plan_id
-                and record["phase"] == phase
+                and record["phase"] in native_phases[phase]
                 and record["raw_stdout_sha256"] == readiness.sha256_bytes(raw)
                 and record["argv"] == list(battery_float.IOREG_BATTERY_ARGV)
                 and record["exit_code"] == 0 and not record["probe_error"]

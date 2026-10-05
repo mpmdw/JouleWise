@@ -632,6 +632,18 @@ class Prepared:
         return selected
 
     def render(self, labels, require_published=True):
+        qualified = False
+        if self.plan.receipt_class == "TRANSACTION_PACK" and getattr(self.plan, "pack_night", None) is not None:
+            locator = self.plan.pack_night["authorization_record"]
+            try:
+                path = Path(locator["path"])
+                if path.is_absolute() and not any(p.is_symlink() for p in (path, *path.parents)):
+                    raw = path.read_bytes()
+                    if _digest_bytes(raw) == locator["sha256"]:
+                        authorization = json.loads(raw)
+                        qualified = isinstance(authorization, dict) and authorization.get("purpose") == "G2B_SHAKEDOWN"
+            except (OSError, ValueError):
+                pass  # Routing adds observation; the driver still authenticates launch authority.
         # Validate the future installed argv even when reading staged plan bytes.
         plan_path = (self.plan_path if require_published else
                      (Path(self.plan.custody_root) / "night_plan.json").resolve())
@@ -653,7 +665,14 @@ class Prepared:
             values.update({"@@{}@@".format(key.upper()): str(value) for key, value in calendar.items()})
             payload = re.sub(r"com\.joulewise\.night|@@[A-Z_]+@@",
                 lambda match: escape(values.get(match.group(0), match.group(0))), text).encode("utf-8")
-            if plistlib.loads(payload).get("ProcessType") != "Interactive":
+            rendered = plistlib.loads(payload)
+            if not index and qualified:
+                rendered["ProgramArguments"] = [self.python,
+                    str(self.repo / "scripts/produce_t0_rehearsal_bundle.py"), "run-driver",
+                    "--plan", str(plan_path), "--timeout-s", str(self.plan.window_max_s),
+                    "--courier-bin", self.courier]
+                payload = plistlib.dumps(rendered, sort_keys=False)
+            if rendered.get("ProcessType") != "Interactive":
                 raise Refused(3, "ProcessType must be exactly Interactive: " + label)
             yield label, payload
 

@@ -245,6 +245,8 @@ def dispatched_stages(root, graph, science_stage):
     logical = body.replace("\\\n", " ")
     bindings = {"REPO": ""}
     for name, value in re.findall(r'^(?:export )?([A-Z_]+)="([^"\n]+)"$', logical, re.M):
+        if name == "REPO":
+            continue  # dispatch graph paths are repository-relative
         for key, bound in bindings.items():
             value = value.replace("$" + key, bound)
         bindings[name] = value
@@ -323,7 +325,13 @@ def g2b_body(measurement):
            '  --step6-confirmation-table "$STEP6_CONFIRMATION_TABLE" \\\n'
            '  --expected-confirmation-digest "$EXPECTED_CONFIRMATION_DIGEST"\n')
     require(body.count(old) == 1, "g2b_consumption_interface_drift")
-    return body.replace(old, "  --lifecycle-event start\n")
+    # One reviewed specialization, before canonical-body validation and hashing.
+    # Capture and the evidence author require the executing checkout's literal.
+    repo_binding = "REPO=/Users/edr/JouleWise-measurement-20260813\n"
+    require(body.count(repo_binding) == 1, "g2b_repo_binding_drift")
+    repository = str(measurement.resolve())
+    require(not any(char in repository for char in "\n\r\"$`\\"), "g2b_repo_binding_invalid")
+    return body.replace(old, "  --lifecycle-event start\n").replace(repo_binding, 'REPO="' + repository + '"\n')
 
 
 def render_qualification_chain(occurrence, template, sizing, root, t0_epoch_s, output):
@@ -552,8 +560,8 @@ def write_qualification(occurrence, inputs, output):
         write_night_plan(output, plan, create_once=True)
         record.update(plan=locator(output), driver_argv=[str(measurement / ".venv/bin/python"), str(measurement / "scripts/run_night.py"), "run", "--plan", str(output)])
         record["observation_recipe"] = {
-            "standdown_argv": [str(measurement / ".venv/bin/python"), str(measurement / "scripts/produce_t0_rehearsal_bundle.py"), "observe-standdown", "--plan", str(output)],
-            "supervised_driver_argv": [str(measurement / ".venv/bin/python"), str(measurement / "scripts/produce_t0_rehearsal_bundle.py"), "run-driver", "--plan", str(output)],
+            "standdown_argv": [str(measurement / ".venv/bin/python"), str(measurement / "scripts/produce_t0_rehearsal_bundle.py"), "observe-standdown", "--plan", str(output), "--timeout-s", "300"],
+            "supervised_driver_argv": [str(measurement / ".venv/bin/python"), str(measurement / "scripts/produce_t0_rehearsal_bundle.py"), "run-driver", "--plan", str(output), "--timeout-s", str(plan.window_max_s)],
             "desk_closeout_argv": [str(measurement / ".venv/bin/python"), str(measurement / "scripts/v5_s1_desk_closeout.py"), "--plan", str(output)],
             "desk_closeout_after_quiet_window": True,
             "bundle_manifest": str(custody / "s1-qualification-bundle.json"),

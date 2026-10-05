@@ -141,6 +141,25 @@ class ArmAbortTests(unittest.TestCase):
         self.clock = self.valid_until + 1
         self.epoch = 2300.000000001
 
+    def test_native_battery_phases_bind_sites_and_preserve_raw_authentication(self):
+        for site, phase in (("arm", "arm_check"), ("publication", "publish_install"),
+                            ("publication", "validate_install"), ("t0", "t0_power_row")):
+            path = Path(self.evidence["battery"][site]["record"]["path"])
+            value = writer.read_object(path); value["phase"] = phase
+            path.write_bytes(readiness.render_json(value))
+            self.evidence["battery"][site]["record"] = writer.locator(path)
+            self.assertEqual(len(checker.battery_sources(self.evidence["battery"], self.plan)), 6)
+        value["phase"] = "publish_install"
+        path.write_bytes(readiness.render_json(value))
+        self.evidence["battery"]["t0"]["record"] = writer.locator(path)
+        with self.assertRaisesRegex(ValueError, "battery_record"):
+            checker.battery_sources(self.evidence["battery"], self.plan)
+        value["phase"] = "t0_power_row"; value["raw_stdout_sha256"] = "0" * 64
+        path.write_bytes(readiness.render_json(value))
+        self.evidence["battery"]["t0"]["record"] = writer.locator(path)
+        with self.assertRaisesRegex(ValueError, "battery_record"):
+            checker.battery_sources(self.evidence["battery"], self.plan)
+
     def test_real_verifier_pass_then_canonical_expiry_and_create_once_control(self):
         observed = self.observe()
         self.assertEqual("PASS", observed["arm_verification"]["status"])
