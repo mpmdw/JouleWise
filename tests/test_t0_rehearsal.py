@@ -705,24 +705,46 @@ class T0RehearsalTests(unittest.TestCase):
             self.assertIn("residual differs", result.message)
 
     def test_g4_replays_versioned_drift_step_and_slew_from_raw_custody(self):
+        from dataclasses import replace
         from fractions import Fraction
+        from joulewise import v5_qualification as qualification
+        from tests.test_v5_qualification_plan import PlanWriterTests
+
+        plan_fixture = PlanWriterTests()
+        plan_fixture.setUp()
+        self.addCleanup(plan_fixture.doCleanups)
+        frequency = frequency_probe(-207749)
+        plan_fixture.input["kernel_frequency"] = frequency
+        for stream in plan_fixture.input["sizing"]["streams"]:
+            plan_fixture.input["sizing"]["streams"][stream] = plan_fixture.allow(320)
+        plan_fixture.write()
+        input_root = plan_fixture.custody / plan_fixture.pack.name / "arm_readiness.t0.inputs"
+        maximum, sizing_refs = qualification.authenticated_clock_budget(input_root, plan_fixture.pack)
+        self.assertEqual(maximum, 320.)
+        # Retain the writer's independently authenticated inputs in G4 custody.
+        sizing_artifacts = tuple(rehearsal.EvidenceArtifact(
+            ref["path"], Path(ref["path"]), Path(ref["path"]).read_bytes(), ref["sha256"],
+            qualification.read(Path(ref["path"])) if ref["path"].endswith(".json") else None,
+        ) for ref in sizing_refs)
         with tempfile.TemporaryDirectory() as temporary:
             builder = FixtureBuilder(Path(temporary))
             root = builder.build()
             source_path = builder.sources / "clock-correct-and-prior-state.json"
             receipt_path = builder.receipts / "evidence-t0-clock-correct-and-prior-state.json"
             source_original = json.loads(source_path.read_bytes())
+            source_original["input_artifacts"].extend(sizing_refs)
             receipt_original = json.loads(receipt_path.read_bytes())
             capture_path = builder.inputs / "clock-reference.json"
             capture = json.loads(capture_path.read_bytes())
-            frequency = frequency_probe(-207749)
-            capture.update(kernel_frequency=frequency, t_stream_max_s=320.)
+            capture.update(kernel_frequency=frequency, t_stream_max_s=maximum)
             _write_json(capture_path, capture)
-            for seconds, step, end_word, expected in (
-                    (1600, 0, -207749, rehearsal.GateStatus.PASS),
-                    (3600, 0, -207749, rehearsal.GateStatus.PASS),
-                    (1000, 6_000_000, -207749, rehearsal.GateStatus.FAIL),
-                    (1000, 1000, -207748, rehearsal.GateStatus.FAIL)):
+            for seconds, step, end_word, expected, reason in (
+                    (1600, 0, -207749, rehearsal.GateStatus.PASS, None),
+                    (3600, 0, -207749, rehearsal.GateStatus.PASS, None),
+                    (1000, 6_000_000, -207749, rehearsal.GateStatus.FAIL,
+                     "RAW anchor residual exceeds 5000000 ns"),
+                    (1000, 1000, -207748, rehearsal.GateStatus.FAIL,
+                     "R0-to-author kernel frequency word changed")):
                 with self.subTest(seconds=seconds, step=step, end_word=end_word):
                     source = copy.deepcopy(source_original)
                     receipt = copy.deepcopy(receipt_original)
@@ -732,7 +754,8 @@ class T0RehearsalTests(unittest.TestCase):
                     endpoint = value["r0_anchor_monotonic_raw_ns"] + span
                     value.update(anchor_check_version=kernel_clock.ANCHOR_CHECK_VERSION,
                         r0_kernel_frequency=frequency, kernel_frequency=frequency_probe(end_word),
-                        t_stream_max_s=320., t0_span_ns=span,
+                        t_stream_max_s=maximum, t0_span_ns=span,
+                        clock_sizing_binding=qualification.reference(input_root / "kernel-frequency-binding.json"),
                         anchor_monotonic_raw_ns=endpoint, anchor_realtime_ns=OFFSET_NS + endpoint + movement,
                         anchor_delta_ns=abs(movement),
                         anchor_residual_ns=float(kernel_clock.anchor_residual_ns(movement, span, frequency)),
@@ -745,8 +768,11 @@ class T0RehearsalTests(unittest.TestCase):
                     receipt["facts"][0].update(value=copy.deepcopy(value),
                         source_sha256=readiness.sha256_bytes(source_path.read_bytes()))
                     _write_json(receipt_path, receipt)
-                    result = rehearsal.evaluate_g4(fixture_bundle(root))
+                    bundle = fixture_bundle(root)
+                    result = rehearsal.evaluate_g4(replace(bundle, artifacts=bundle.artifacts + sizing_artifacts))
                     self.assertEqual(result.status, expected, result.message)
+                    if reason is not None:
+                        self.assertIn(reason, result.message)
 
     maxDiff = None
 
