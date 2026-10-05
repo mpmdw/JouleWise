@@ -14,7 +14,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from joulewise import arm_readiness, calibration_bracketing
+from joulewise import arm_readiness, calibration_bracketing, identity_pins
 from joulewise.dominance_closeout import ABSOLUTE_COMMON_MODE_REASON
 from joulewise.provenance import prompt_token_ids_sha256
 from joulewise.paper_reported_energy import _validate_registered_spec, registration_sha256
@@ -365,6 +365,51 @@ class D117FloorQwen3V5PackTests(unittest.TestCase):
                             config = json.loads(path.read_text(encoding="utf-8"))
                             self.assertEqual(config["workload_profile"]["prompt_token_expectation"]
                                              ["token_count"], length)
+
+    def test_generated_floor_identity_declarations_match_typed_projection(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="floor-identity-projection-") as tmp:
+            root = Path(tmp)
+            pin = fixture_prefill_pin(root, 2048)
+            for profile, pack_id, _, _, _ in FLOORS:
+                with self.subTest(pack_id=pack_id):
+                    module = load_generator(pack_id)
+                    module.configure_prefill_pin(pin)
+                    output = root / pack_id
+                    module.generate(output)
+                    pack = output / module.PACK_REL
+                    _, projection, _ = identity_pins._load_pack_projection(pack)
+                    self.assertEqual(len(projection["identity_units"]), 2)
+                    # Exercise freeze's exact declaration comparison on every
+                    # typed config, without requiring model/runtime hardware.
+                    for unit in projection["identity_units"]:
+                        configs, _ = identity_pins._read_unit_configs(pack, unit)
+                        self.assertEqual(len(configs), 50)
+                        for config in configs:
+                            self.assertEqual(
+                                identity_pins._declared_identity_from_config(config),
+                                unit["declared_identity"],
+                            )
+
+                    decode_unit = next(
+                        unit for unit in projection["identity_units"]
+                        if unit["identity_unit_id"] == profile.lower()
+                    )
+                    workload = decode_unit["declared_identity"]["workload_profile"]
+                    self.assertIsNone(workload.pop("prompt_tokens"))
+                    # Reintroducing F1 must reach the real deriver's named
+                    # refusal before any runtime or artifact probing occurs.
+                    with self.assertRaises(
+                        identity_pins.IdentityPinProjectionError
+                    ) as caught:
+                        identity_pins._derive_projection_units(pack, projection)
+                    self.assertEqual(
+                        caught.exception.reason_code,
+                        "readiness_identity_environment_dirty",
+                    )
+                    self.assertEqual(
+                        str(caught.exception),
+                        f"identity unit {profile.lower()!r} config declaration differs from pack",
+                    )
 
     def test_mixed_declared_prefill_family_refuses(self) -> None:
         from copy import deepcopy
