@@ -104,6 +104,19 @@ def write_pinset(path: Path, mutate: callable) -> Path:
 
 
 class ReceiptHistoricalSemanticsTests(unittest.TestCase):
+    def test_archival_restore_fact_keeps_its_predicate_after_live_replacement(self) -> None:
+        archival = json.loads((ROOT / "configs/arm_readiness/d117_row_registry_v1.json").read_bytes())
+        old_row = next(row for row in archival["rows"] if row["row_id"] == "clock.restore_recipe")
+        self.assertEqual(old_row["predicate_id"], "clock.restore_recipe.v1")
+        receipt = json.loads((REPRESENTATIVE_PACK / "arm_readiness.evidence/evidence-doctrine-pin.json").read_bytes())
+        self.assertTrue(readiness._predicate_passes(receipt, old_row["predicate_id"]))
+        self.assertFalse(readiness._predicate_passes(receipt, "clock.network_time_policy.v1"))
+        tampered = copy.deepcopy(receipt)
+        for fact in tampered["facts"]:
+            if fact["fact_id"] == old_row["predicate_id"]:
+                fact["value"]["restore_after_both_backups"] = False
+        self.assertFalse(readiness._predicate_passes(tampered, old_row["predicate_id"]))
+
     def test_contract_defines_custody_coordinate_and_tautology_at_first_use(
         self,
     ) -> None:

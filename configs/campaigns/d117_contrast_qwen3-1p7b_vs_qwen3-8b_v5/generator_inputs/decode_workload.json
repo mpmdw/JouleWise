@@ -1,0 +1,48 @@
+{
+  "schema_version": "joulewise.workload_profile.v1",
+  "profile_id": "real_prompts_v1",
+  "license": "CC0-1.0; original text authored for JouleWise",
+  "prompts": [
+    {
+      "prompt_id": "sky_color",
+      "text": "Why does the sky look blue on a clear day? Explain the main physical mechanism with one everyday analogy for a curious beginner, using plain language briefly.",
+      "text_utf8_sha256": "887dd1128ee9265102abf106624546278e7781bf97f7cb475f286bd18240a2d2"
+    },
+    {
+      "prompt_id": "weather_climate",
+      "text": "How are weather and climate different? Give one example that shows why a single cold day does not settle the question for a curious beginner in plain language.",
+      "text_utf8_sha256": "267c64df472d09c77b5004ec4bd785cd770543e64bab7acae6f8db1d54073277"
+    },
+    {
+      "prompt_id": "kyoto_itinerary",
+      "text": "Plan a balanced three-day visit to Kyoto for someone who enjoys history, gardens, and local food. Keep travel between stops practical for a curious beginner.",
+      "text_utf8_sha256": "ac252d390faa4b9542e6fac3cc4d6d95740fda63e4ab78819d032160bdde4282"
+    },
+    {
+      "prompt_id": "interest_math",
+      "text": "What is the difference between simple and compound interest? Show the intuition with a small numerical example with practical details for a curious beginner, step by step.",
+      "text_utf8_sha256": "7775680dc34a4e772f7129c3d53ff0543b4a8cdef153c4ec8cb8ed38a89fd32a"
+    },
+    {
+      "prompt_id": "plant_diagnosis",
+      "text": "Why might the leaves of a well-watered houseplant turn yellow? List the most likely causes and a sensible order for checking them with practical details.",
+      "text_utf8_sha256": "4bacef0acb791d13322db8d947b2c37ac3ac0254bfd5bc034a484b69408d87e4"
+    },
+    {
+      "prompt_id": "web_request",
+      "text": "What happens after I enter a web address and press Return? Describe the main steps from DNS lookup through the page appearing using plain language and practical details.",
+      "text_utf8_sha256": "50882b3f20e60afb7aebeb5976bd791f7b8464f5ad64e3236e268e68cc019ac9"
+    },
+    {
+      "prompt_id": "falsifiability",
+      "text": "What makes a scientific claim falsifiable? Explain the idea and give one testable and one non-testable example in a few clear steps, clearly.",
+      "text_utf8_sha256": "e39a7d0e3a783b2d1f964b7c745ff15a16e742cc0db2e60bf31c3e7aa736541c"
+    },
+    {
+      "prompt_id": "pantry_dinner",
+      "text": "I have chickpeas, tomatoes, spinach, rice, and common spices. Suggest a simple dinner and outline the cooking order with practical details.",
+      "text_utf8_sha256": "db7db057918464eaeecdb93dfd01c8eda69bf0b1362b3e2cd1087569e9b08f1e"
+    }
+  ],
+  "prompt_set_sha256": "20debdb41eb4983339a160176dcf4e475153b5d6f16b1ef3ada39447e99f3474"
+}

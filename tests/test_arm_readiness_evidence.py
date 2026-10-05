@@ -698,7 +698,18 @@ class R1EvidenceLifecycleTests(unittest.TestCase):
         an EXPLICIT grandfathering refusal.  That is what is asserted here.
         """
 
-        pack = ROOT / "configs/campaigns/d117_floor_qwen25_1p5b_v1"
+        temporary, repository, _commit = self.make_repository()
+        self.addCleanup(temporary.cleanup)
+        registry_path = repository / readiness.ROW_REGISTRY_RELATIVE_PATH
+        registry_path.parent.mkdir(parents=True)
+        registry_path.write_bytes(
+            (ROOT / readiness.ROW_REGISTRY_RELATIVE_PATH).read_bytes()
+        )
+        pack = repository / "configs/campaigns/d117_floor_qwen25_1p5b_v1"
+        pack.mkdir(parents=True)
+        (pack / "copy-marker.txt").write_text("historical pack identity\n")
+        git(repository, "add", ".")
+        git(repository, "commit", "-qm", "install live registry for historical profile")
         registry, registry_raw, reference = readiness._registry_reference(pack)
         before_digest = hashlib.sha256(registry_raw).hexdigest()
         self.assertEqual(registry["schema_version"], readiness.R1_ROW_REGISTRY_SCHEMA)
@@ -713,7 +724,7 @@ class R1EvidenceLifecycleTests(unittest.TestCase):
         self.assertEqual(readiness._plan_profile(pack, registry), "ALPHA")
         self.assertEqual(
             hashlib.sha256(
-                (ROOT / readiness.ROW_REGISTRY_RELATIVE_PATH).read_bytes()
+                registry_path.read_bytes()
             ).hexdigest(),
             before_digest,
         )
@@ -783,6 +794,249 @@ class R1EvidenceLifecycleTests(unittest.TestCase):
                     ),
                     alias_findings,
                 )
+
+
+class NetworkTimePolicyDoctrineTests(unittest.TestCase):
+    def setUp(self) -> None:
+        from tests.test_arm_readiness_evidence_author import make_author_fixture
+
+        temporary, repository, pack, _custody, _arm = make_author_fixture(
+            "d117_floor_qwen3-1p7b_v5"
+        )
+        self.addCleanup(temporary.cleanup)
+        self.repository = repository.resolve(strict=True)
+        self.pack = pack.resolve(strict=True)
+        self.runbook = self.repository / "docs/phase_2/window_runbook.md"
+        self.current_runbook = (ROOT / "docs/phase_2/window_runbook.md").read_bytes()
+        self.assertEqual(self.runbook.read_bytes(), self.current_runbook)
+        self.refresh_context()
+
+    def commit_runbook(self, raw: bytes) -> None:
+        self.runbook.write_bytes(raw)
+        git(self.repository, "add", "docs/phase_2/window_runbook.md")
+        git(self.repository, "commit", "-qm", "current network-time doctrine")
+        git(self.repository, "update-ref", "refs/remotes/origin/main", "HEAD")
+        self.refresh_context()
+
+    def refresh_context(self) -> None:
+        tree, _raw = readiness._plan_tree(self.pack)
+        self.context = evidence._DerivationContext(
+            pack_root=self.pack,
+            repository=self.repository,
+            tree=tree,
+            pack_sha256=readiness.committed_pack_tree_sha256(self.pack),
+            head_commit=git(self.repository, "rev-parse", "HEAD"),
+        )
+
+    def doctrine_receipt(self) -> tuple[dict, dict]:
+        derived = evidence._derive_doctrine_pin(self.context)
+        registry, _raw = readiness.load_registry(self.repository)
+        policy = next(
+            row for row in registry["freeze_evidence_lifecycle"]["evidence_policies"]
+            if row["kind"] == "DOCTRINE_PIN"
+        )
+        source_raw = evidence._r1_fact_source(self.context, derived, policy, None)
+        receipt = evidence._assemble_r1_receipt(
+            self.context, derived, source_raw, policy,
+            issued_at_utc="2026-10-04T00:00:00Z",
+            boot_session_id=TEST_BOOT_SESSION_ID,
+            now_monotonic_ns=1_000,
+            environment_fingerprint=None,
+        )
+        return receipt, json.loads(source_raw)
+
+    def test_current_runbook_derives_new_fact_and_rederives_at_arm(self) -> None:
+        receipt, source = self.doctrine_receipt()
+        self.assertEqual(
+            {fact["fact_id"] for fact in receipt["facts"]},
+            {"clock.network_time_policy.v1", "desk.arming_procedure.v1"},
+        )
+        self.assertTrue(readiness._predicate_passes(receipt, "clock.network_time_policy.v1"))
+        self.assertFalse(readiness._predicate_passes(receipt, "clock.restore_recipe.v1"))
+        evidence._r1_rederive_at_arm(self.pack, receipt, source)
+        section_sha = hashlib.sha256(
+            evidence._extract_section(self.current_runbook, "5A", kind="DOCTRINE_PIN")
+        ).hexdigest()
+        self.assertEqual(
+            source["derivation"]["pack_pin_material"]["runbook_section_sha256"]["5A"],
+            section_sha,
+        )
+
+    def test_deriver_refuses_missing_doctrine_and_reinstated_restore(self) -> None:
+        mutations = {
+            "stays_off_removed": self.current_runbook.replace(
+                b"**Network time stays OFF**", b"**Network time is managed**"
+            ),
+            "resync_restricted_sentence_removed": self.current_runbook.replace(
+                b"Resync happens only in the arm step.", b"Resync may happen later."
+            ),
+            "second_toggle_allowed": self.current_runbook.replace(
+                b"It does not issue a\n  second toggle.", b"It issues a second toggle."
+            ),
+        }
+        mutations.update({
+            "no_on_after_capture_removed": self.current_runbook.replace(
+                b" No ON command is permitted\n  after the first capture of a window.", b""
+            ),
+            "arm_step_finishes_on": self.current_runbook.replace(
+                b"the arm step uses ON only for a needed resync and finishes with OFF.",
+                b"the arm step uses ON for a needed resync and may finish with ON.",
+            ),
+            "manual_on_during_window": self.current_runbook.replace(
+                b"command is a supervised desk action between windows only.",
+                b"command may be run at any time, including during a window.",
+            ),
+            "negated_stays_off": self.current_runbook.replace(
+                b"- [ ] **Network time stays OFF** after",
+                b"- [ ] It is no longer required that **Network time stays OFF** after",
+            ),
+        })
+        # All sixteen lines from the cold Fable probe, including implicit
+        # clock references and a two-sentence instruction.
+        instructions = (
+            "After both backups, restore ON.",
+            "After the verdict, turn on network time.",
+            "After each window, restore\n  network time.",
+            "After both backups, turn network time back on.",
+            "After the whole-window verdict, enable network time.",
+            "After the whole-window verdict and both backups, set network time ON.",
+            "Once the window closes, run `/usr/bin/sudo -n /usr/sbin/systemsetup -setusingnetworktime on`.",
+            "When the window is complete, switch automatic network time back on and verify it.",
+            "After the second backup, reenable network time.",
+            "After the verdict, network time is re-enabled.",
+            "At close-out, network time goes back ON.",
+            "After the backups, resume network time synchronisation.",
+            "Following the verdict, re-enable automatic time sync.",
+            "After the window, undo the OFF toggle.",
+            "After the verdict. Then enable network time.",
+            "Restore the network-time setting once both backups verify.",
+        )
+        anchor = b"### If a single member still fails the anchor"
+        for instruction in instructions:
+            mutations[instruction] = self.current_runbook.replace(
+                anchor, f"- [ ] {instruction}\n\n".encode() + anchor
+            )
+        # Every hashed section is governed, including backup and close-out.
+        for label in ("5", "5A", "5B", "5C", "6", "10", "11", "12"):
+            section = evidence._extract_section(self.current_runbook, label, kind="DOCTRINE_PIN")
+            mutations[f"restore_in_section_{label}"] = self.current_runbook.replace(
+                section, section + b"- [ ] After both backups, restore network time ON.\n\n"
+            )
+        for daemon in ("sntp", "timed", "systemsetup"):
+            mutations[f"enable_{daemon}"] = self.current_runbook.replace(
+                anchor, f"- [ ] Resume {daemon} after the verdict.\n\n".encode() + anchor
+            )
+        for label, raw in mutations.items():
+            with self.subTest(label=label):
+                self.assertNotEqual(raw, self.current_runbook)
+                self.commit_runbook(raw)
+                with self.assertRaises(evidence.EvidenceAuthoringError) as caught:
+                    evidence._derive_doctrine_pin(self.context)
+                self.assertEqual(caught.exception.reason_code, "evidence_author_doctrine_pin_underivable")
+
+    def test_pure_rewrap_passes(self) -> None:
+        rewrapped = self.current_runbook.replace(
+            b"**Network time stays OFF** after completion, refusal, crash, verdict and\n  both backups.",
+            b"**Network time stays OFF** after completion,\n  refusal, crash, verdict and both backups.",
+        ).replace(
+            b"command is a supervised desk action between windows only.",
+            b"command is a supervised desk action\n  between windows only.",
+        )
+        self.assertNotEqual(rewrapped, self.current_runbook)
+        self.commit_runbook(rewrapped)
+        receipt, _source = self.doctrine_receipt()
+        self.assertTrue(readiness._predicate_passes(receipt, "clock.network_time_policy.v1"))
+
+    def test_retired_fixture_doctrine_refuses(self) -> None:
+        historical = (ROOT / "tests/fixtures/historical_clock_restore_5a.md").read_bytes()
+        section = evidence._extract_section(self.current_runbook, "5A", kind="DOCTRINE_PIN")
+        self.commit_runbook(self.current_runbook.replace(section, historical + b"\n"))
+        with self.assertRaises(evidence.EvidenceAuthoringError) as caught:
+            evidence._derive_doctrine_pin(self.context)
+        self.assertEqual(caught.exception.reason_code, "evidence_author_doctrine_pin_underivable")
+
+    def commit_tree(self, tree: dict) -> None:
+        path = self.pack / "plan_tree.json"
+        raw = readiness.render_json(tree)
+        path.write_bytes(raw)
+        sidecar = self.pack / "plan_tree.sha256"
+        sidecar.write_bytes(readiness.gnu_sidecar(readiness.sha256_bytes(raw), "plan_tree.json"))
+        git(self.repository, "add", str(path.relative_to(self.repository)), str(sidecar.relative_to(self.repository)))
+        git(self.repository, "commit", "-qm", "frozen recipe mutation")
+        git(self.repository, "update-ref", "refs/remotes/origin/main", "HEAD")
+        self.refresh_context()
+
+    def test_arming_procedure_requires_exactly_two_backups(self) -> None:
+        original = copy.deepcopy(self.context.tree)
+        commands = original["stage_graph"][1]["launch"]["commands"]
+        for count in (0, 1, 3):
+            with self.subTest(command_count=count):
+                tree = copy.deepcopy(original)
+                tree["stage_graph"][1]["launch"]["commands"] = (commands * 2)[:count]
+                self.commit_tree(tree)
+                with self.assertRaises(evidence.EvidenceAuthoringError) as caught:
+                    evidence._derive_doctrine_pin(self.context)
+                self.assertEqual(caught.exception.reason_code, "evidence_author_doctrine_pin_underivable")
+        for required in (0, 1, 3, "2", None, True):
+            with self.subTest(required_successful_backups=required):
+                tree = copy.deepcopy(original)
+                tree["closeout_attachments"]["backup_requirements"]["required_successful_backups"] = required
+                self.commit_tree(tree)
+                with self.assertRaises(evidence.EvidenceAuthoringError):
+                    evidence._derive_doctrine_pin(self.context)
+        for missing in ("required_successful_backups", "backup_requirements"):
+            with self.subTest(absent=missing):
+                tree = copy.deepcopy(original)
+                if missing == "required_successful_backups":
+                    del tree["closeout_attachments"]["backup_requirements"][missing]
+                else:
+                    del tree["closeout_attachments"][missing]
+                self.commit_tree(tree)
+                derived = evidence._derive_doctrine_pin(self.context)
+                self.assertIn("desk.arming_procedure.v1", derived.facts)
+
+    def test_frozen_recipes_refuse_clock_control_commands(self) -> None:
+        original = copy.deepcopy(self.context.tree)
+        for token in ("setusingnetworktime", "systemsetup", "sntp", "timed"):
+            for location in ("launch", "stage_graph"):
+                for command_key in ("argv_template", "command"):
+                    with self.subTest(token=token, location=location, command_key=command_key):
+                        tree = copy.deepcopy(original)
+                        command = {command_key: [f"/usr/sbin/{token.upper()}", "on"]}
+                        if location == "launch":
+                            tree["arm_attachments"]["launch"]["commands"] = [command]
+                        else:
+                            tree["stage_graph"][0]["launch"]["commands"].append(command)
+                        self.commit_tree(tree)
+                        with self.assertRaises(evidence.EvidenceAuthoringError) as caught:
+                            evidence._derive_doctrine_pin(self.context)
+                        self.assertEqual(caught.exception.reason_code, "evidence_author_doctrine_pin_underivable")
+
+    def test_successor_freeze_and_arm_select_policy_and_keep_live_off_refusal(self) -> None:
+        receipt, _source = self.doctrine_receipt()
+        registry, _raw, reference = readiness._registry_reference(self.pack)
+        for phase in ("freeze", "arm"):
+            with self.subTest(phase=phase):
+                definitions = [
+                    row for row in readiness._profile_rows(registry, reference["plan_profile"], phase=phase)
+                    if row["row_id"].startswith("clock.")
+                ]
+                rows, refusals = readiness._evaluate_rows(
+                    definitions, {receipt["evidence_id"]: receipt},
+                    clock_route="MANUAL", successor_acceptance=True,
+                )
+                by_id = {row["row_id"]: row for row in rows}
+                self.assertNotIn("clock.restore_recipe", by_id)
+                self.assertEqual(by_id["clock.network_time_policy"]["verdict"], "PASS")
+                if phase == "freeze":
+                    self.assertEqual(refusals, [])
+                else:
+                    self.assertEqual(by_id["clock.network_time_off"]["verdict"], "REFUSE")
+                    self.assertEqual(by_id["clock.network_time_off"]["evidence_ids"], [])
+                    self.assertIn(
+                        ("clock.network_time_off", "readiness_clock_preflight_refused"),
+                        [(item["row_id"], item["code"]) for item in refusals],
+                    )
 
 
 if __name__ == "__main__":

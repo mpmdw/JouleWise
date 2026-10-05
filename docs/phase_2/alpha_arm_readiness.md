@@ -98,7 +98,7 @@ rows when the manual clock route is used. Every other row is required.
 
 | Stable row ID | Checkpoint status and physical meaning |
 |---|---|
-| `clock.restore_recipe` | **PRIOR PASS; successor recheck required.** ALPHA `freeze-0001` records `freeze-doctrine-pin-v1` as passing; #152 landed the D-127 route that must be bound into the successor procedure. |
+| `clock.network_time_policy` | **CURRENT DOCTRINE EVIDENCE PENDING.** Derive §5A's stays-OFF policy: resync only in the arm step, one OFF receipt per window reused by `clock-disable`, and close-out records its identity without restoring ON after completion, refusal, crash, verdict or both backups. Historical restore evidence does not satisfy this prospective row. |
 | `desk.acceptance_owner` | **PRIOR PASS; successor recheck required.** ALPHA `freeze-0001` passed after PR #142 removed the copied scalar and bound the authenticated owner value. |
 | `desk.acceptance_successor` | **NOT_APPLICABLE in the prior receipt.** The issued artifact remained selected; any selected successor must carry its own authenticated pass before member one. |
 | `desk.arming_procedure` | **PRIOR PASS; successor recheck required.** The old receipt and dry run passed, but #152 changed the runbook/T-0 route and the new exact-head rehearsal is pending. |

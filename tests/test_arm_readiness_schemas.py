@@ -477,6 +477,22 @@ def apply_freeze_projection(
 
 
 class ArmReadinessSchemaTests(unittest.TestCase):
+    def test_live_policy_replaces_restore_in_all_35_row_profiles(self) -> None:
+        registry, raw = load_registry(ROOT)
+        self.assertEqual(raw, render_json(validate_registry(registry)))
+        row_ids = [row["row_id"] for row in registry["rows"]]
+        self.assertEqual(len(row_ids), 35)
+        self.assertIn("clock.network_time_policy", row_ids)
+        self.assertNotIn("clock.restore_recipe", row_ids)
+        for profile in registry["plan_profiles"]:
+            self.assertEqual(profile["required_row_ids"], row_ids)
+        policy_ids = [row["row_id"] for row in registry["freeze_evidence_lifecycle"]["row_policies"]]
+        self.assertEqual(policy_ids, row_ids)
+        definition = next(row for row in registry["rows"] if row["row_id"] == "clock.network_time_policy")
+        self.assertEqual(definition["predicate_id"], "clock.network_time_policy.v1")
+        self.assertEqual(definition["evaluation_phase"], "FREEZE_AND_ARM")
+        self.assertEqual(definition["required_evidence_kinds"], ["DOCTRINE_PIN"])
+
     def test_resolved_r1_registry_coordinate_allowlist_horizons_and_vocabulary(self) -> None:
         registry, raw = load_registry(ROOT)
         self.assertEqual(readiness.ROW_REGISTRY_RELATIVE_PATH.as_posix(), "configs/arm_readiness/d117_row_registry_v2.json")
@@ -1298,9 +1314,16 @@ class ArmReadinessSchemaTests(unittest.TestCase):
 
     def test_all_35_contract_predicates_require_named_content_and_admissible_sources(self) -> None:
         registry, _raw = load_registry(ROOT)
+        archival = validate_registry(
+            json.loads((ROOT / "configs/arm_readiness/d117_row_registry_v1.json").read_bytes())
+        )
+        live_predicates = {row["predicate_id"] for row in registry["rows"]}
+        archival_predicates = {row["predicate_id"] for row in archival["rows"]}
+        self.assertEqual(len(live_predicates), 35)
+        self.assertEqual(archival_predicates - live_predicates, {"clock.restore_recipe.v1"})
         self.assertEqual(
             set(readiness._PREDICATE_CONTENT_REQUIREMENTS),
-            {row["predicate_id"] for row in registry["rows"]},
+            live_predicates | archival_predicates,
         )
         self.assertEqual(
             set(readiness._EVIDENCE_SOURCE_KINDS),
@@ -1310,7 +1333,11 @@ class ArmReadinessSchemaTests(unittest.TestCase):
                 for kind in row["required_evidence_kinds"]
             },
         )
-        for row in registry["rows"]:
+        # Test both the current 35 predicates and the retained historical one.
+        rows_by_predicate = {
+            row["predicate_id"]: row for row in (*archival["rows"], *registry["rows"])
+        }
+        for row in rows_by_predicate.values():
             predicate_id = row["predicate_id"]
             kind = row["required_evidence_kinds"][0]
             if kind == "IDENTITY_PIN_PROJECTION":

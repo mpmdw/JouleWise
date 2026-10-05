@@ -976,6 +976,14 @@ _PREDICATE_CONTENT_REQUIREMENTS: dict[str, Mapping[str, Any]] = {
         "restore_after_both_backups": True,
         "restore_after_verdict": True,
     },
+    # Prospective live doctrine; retain restore_recipe.v1 above byte-for-byte
+    # for receipts bound to the archival registry.
+    "clock.network_time_policy.v1": {
+        "network_time_stays_off_across_windows": True,
+        "one_off_receipt_per_window": True,
+        "resync_only_in_arm_step": True,
+        "restore_on_after_window": False,
+    },
     "desk.acceptance_owner.v1": {
         "active_acceptance_artifact_authenticated": True,
         "copied_scalar_accepted": False,
@@ -1148,6 +1156,7 @@ _PREDICATE_EVIDENCE_KIND = {
     "clock.correct_and_prior_state.v1": "CLOCK_ATTESTATION",
     "clock.network_time_off.v1": "CLOCK_PROBE",
     "clock.restore_recipe.v1": "DOCTRINE_PIN",
+    "clock.network_time_policy.v1": "DOCTRINE_PIN",
     "desk.acceptance_owner.v1": "ACCEPTANCE_OWNER",
     "desk.acceptance_successor.v1": "ACCEPTANCE_SUCCESSOR",
     "desk.arming_procedure.v1": "DOCTRINE_PIN",

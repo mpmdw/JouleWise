@@ -1649,7 +1649,8 @@ if __name__ == "__main__":
 class D179V5ReportedEnergyRegistrationTests(unittest.TestCase):
     def test_both_v5_generators_install_cell_bound_registrations_before_spec(self):
         from joulewise.paper_reported_energy import (
-            _validate_registered_spec, registration_sha256, reported_energy_registration,
+            _spec_prefill_length, _validate_registered_spec, registration_sha256,
+            reported_energy_registration, verify_registration_ordering,
         )
         from tests.test_d117_floor_qwen3_v5_generate import fixture_prefill_pin, load_generator
         temporary = tempfile.TemporaryDirectory(prefix="d179-v5-pin-")
@@ -1697,5 +1698,17 @@ class D179V5ReportedEnergyRegistrationTests(unittest.TestCase):
                     _validate_registered_spec(missing)
                 self.assertEqual(validate_extraction_spec(missing), [])
                 self.assertEqual(spec["cells"], missing["cells"])
-                self.assertFalse((ROOT / generator.SPEC_REL).exists(),
-                                 "registration-first proof must be revisited at first spec freeze")
+                # The committed spec binds the pack's declared long-prefill
+                # length, independently of the synthetic p512 mutation fixture.
+                committed_spec = load_json(ROOT / generator.SPEC_REL)
+                _validate_registered_spec(committed_spec)
+                proof = verify_registration_ordering(ROOT, model)
+                self.assertEqual(
+                    proof["registration_sha256"],
+                    registration_sha256(model, _spec_prefill_length(committed_spec)),
+                )
+                self.assertEqual(
+                    proof["registration_sha256"],
+                    committed_spec["reported_energy_registration"]["registration_sha256"],
+                )
+                self.assertNotEqual(proof["registration_commit"], proof["spec_commit"])

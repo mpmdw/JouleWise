@@ -59,11 +59,6 @@ def install_passing_freeze(
         target = repo / relative
         target.parent.mkdir(parents=True, exist_ok=True)
         body = source.read_bytes()
-        if relative == "docs/phase_2/window_runbook.md":
-            # The sealed historical registry predates permanent OFF.
-            start = body.index(b"## 5A.")
-            end = body.index(b"\n## ", start + 1)
-            body = body[:start] + (Path(__file__).parent / "fixtures/historical_clock_restore_5a.md").read_bytes() + body[end:]
         target.write_bytes(body)
     for family_pack in evidence_author._PACKS_BY_PROFILE.values():
         relative = f"configs/campaigns/{family_pack}/plan_tree.json"
