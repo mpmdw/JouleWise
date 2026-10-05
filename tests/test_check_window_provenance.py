@@ -64,7 +64,7 @@ def _tree_digest(root: Path) -> dict[str, str]:
 
 
 def _normal_argv(fixture: dict) -> list[str]:
-    return [
+    return ["--acceptance", str(fixture["root"] / "genesis-acceptance.json"),
         "--runs-root",
         str(fixture["runs_root"]),
         "--pack-root",
@@ -118,7 +118,9 @@ def _run(argv: list[str]) -> tuple[int, str]:
 
 
 def _install_s11_checker_fixture(root: Path) -> dict:
+    from tests.test_calibration_bracketing import _unissued_acceptance_fixture_bytes
     fixture = install_synthetic_finalization_fixture(root)
+    (root / "genesis-acceptance.json").write_bytes(_unissued_acceptance_fixture_bytes())
     runs_root = fixture["runs_root"]
     manifest_path = runs_root / "campaign_manifests" / "synthetic.json"
     manifest = json.loads(manifest_path.read_text())

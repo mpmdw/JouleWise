@@ -24,6 +24,7 @@ from scripts.finalize_analysis_manifest import main as finalize_main
 from tests.test_analysis_finalizer import install_synthetic_finalization_fixture
 from tests.test_analysis_integration import (
     CLEAN_SOURCE_STATE,
+    pinned_genesis_acceptance,
     prepared_minted_consumption_session,
 )
 
@@ -53,7 +54,7 @@ def _finalizer_argv(fixture: dict) -> list[str]:
 
 def _run_finalizer(fixture: dict) -> tuple[int, dict, str]:
     stdout = io.StringIO()
-    with redirect_stdout(stdout):
+    with pinned_genesis_acceptance(fixture), redirect_stdout(stdout):
         exit_code = finalize_main(_finalizer_argv(fixture))
     raw = stdout.getvalue()
     lines = raw.splitlines()
@@ -132,12 +133,13 @@ class PipelineSmokeTailTests(unittest.TestCase):
             self.assertEqual(result["status"], "FINALIZED")
             finalized_path = Path(result["output"])
             self.assertTrue(finalized_path.is_file())
-            artifact = analyze_claims(
-                finalized_path,
-                fixture["runs_root"],
-                fixture["floor_path"],
-                strict_validator=lambda path, strict=True: [],
-            )
+            with pinned_genesis_acceptance(fixture):
+                artifact = analyze_claims(
+                    finalized_path,
+                    fixture["runs_root"],
+                    fixture["floor_path"],
+                    strict_validator=lambda path, strict=True: [],
+                )
             for contrast in artifact["contrasts"]:
                 reasons = contrast["claim_evaluation"]["reason_codes"]
                 self.assertEqual(

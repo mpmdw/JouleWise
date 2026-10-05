@@ -22,6 +22,7 @@ from pathlib import PurePosixPath
 from typing import Any, Mapping, Sequence
 
 from joulewise.calibration_ledger import _refuse_custody_override_mint
+from joulewise.calibration_bracketing import load_calibration_acceptance_bound
 
 from joulewise.authentication_io import read_authentication_input
 
@@ -3535,6 +3536,7 @@ def _authenticate_finalization_inputs(
     calibration_ledger_path: Path,
     aggregate_floor_artifact_path: Path,
     dominance_replay_sidecar_path: Path | None = None,
+    acceptance_bound_path: Path | None = None,
 ) -> dict[str, Any]:
     schemas = _declared_attachment_schemas(prospective)
     custody_input = Path(custody_root).absolute()
@@ -3636,11 +3638,22 @@ def _authenticate_finalization_inputs(
             "analysis_finalization_ledger_head_mismatch",
             "bracket terminal head is not the actual ledger terminal head",
         )
+    acceptance = (load_calibration_acceptance_bound(acceptance_bound_path)
+                  if acceptance_bound_path is not None else load_calibration_acceptance_bound())
+    if acceptance is None:
+        raise AnalysisManifestFinalizationError(
+            "analysis_finalization_attachment_invalid",
+            "calibration acceptance artifact is absent or invalid",
+        )
+    cutoff = acceptance["ledger_cutoff"]
     snapshot = load_calibration_ledger_snapshot(
         ledger_path,
         head_pin_path,
+        baseline_sequence=cutoff["sequence"],
+        baseline_digest=cutoff["head_digest"],
         require_committed_pin=False,
         verify_custody=True,
+        mode="read_replay",
     )
     if snapshot.refusal_reasons:
         raise AnalysisManifestFinalizationError(
@@ -4056,6 +4069,7 @@ def finalize_prospective_analysis_manifest_v3(
     aggregate_floor_artifact_path: Path,
     output_dir: Path,
     dominance_replay_sidecar_path: Path | None = None,
+    acceptance_bound_path: Path | None = None,
 ) -> dict[str, Any]:
     """Derive one immutable finalized artifact without reading an effect value."""
     _refuse_custody_override_mint()
@@ -4103,6 +4117,7 @@ def finalize_prospective_analysis_manifest_v3(
         calibration_ledger_path=calibration_ledger_path,
         aggregate_floor_artifact_path=aggregate_floor_artifact_path,
         dominance_replay_sidecar_path=dominance_replay_sidecar_path,
+        acceptance_bound_path=acceptance_bound_path,
     )
     tree_raw = _read_manifest_input(tree_path, label="finalized plan tree")
     manifest = _build_finalized_manifest(
@@ -4117,7 +4132,8 @@ def finalize_prospective_analysis_manifest_v3(
     path = output / filename
     raw = render_manifest(manifest)
     refusals = validate_finalized_analysis_manifest_v3(
-        manifest, manifest_path=path, custody_root=custody_input
+        manifest, manifest_path=path, custody_root=custody_input,
+        acceptance_bound_path=acceptance_bound_path,
     )
     if refusals:
         raise AnalysisManifestFinalizationError(
@@ -4133,6 +4149,7 @@ def _validate_finalized_analysis_manifest_v3_unchecked(
     *,
     manifest_path: Path,
     custody_root: Path,
+    acceptance_bound_path: Path | None = None,
 ) -> tuple[ManifestRefusal, ...]:
     """Validate a finalized artifact and independently replay its lineage."""
 
@@ -4386,6 +4403,7 @@ def _validate_finalized_analysis_manifest_v3_unchecked(
             calibration_ledger_path=custody / evidence["calibration_ledger"]["path"],
             aggregate_floor_artifact_path=custody
             / evidence["aggregate_floor_artifact"]["path"],
+            acceptance_bound_path=acceptance_bound_path,
             dominance_replay_sidecar_path=(
                 custody / evidence[_DOMINANCE_REPLAY_SIDECAR_ROLE]["path"]
                 if _DOMINANCE_REPLAY_SIDECAR_ROLE in evidence
@@ -4457,6 +4475,7 @@ def validate_finalized_analysis_manifest_v3(
     *,
     manifest_path: Path,
     custody_root: Path,
+    acceptance_bound_path: Path | None = None,
 ) -> tuple[ManifestRefusal, ...]:
     """Total boundary with region-based malformed/defect classification."""
 
@@ -4495,6 +4514,7 @@ def validate_finalized_analysis_manifest_v3(
             value,
             manifest_path=manifest_path,
             custody_root=custody_root,
+            acceptance_bound_path=acceptance_bound_path,
         )
     except Exception as exc:
         return (

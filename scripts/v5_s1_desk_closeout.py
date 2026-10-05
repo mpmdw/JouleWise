@@ -93,17 +93,21 @@ def phase_g(plan, record):
             raise ValueError("Phase G scratch residue")
     head = subprocess.check_output(["git", "-C", plan.measurement_root, "rev-parse", "HEAD"], text=True).strip()
     status = subprocess.check_output(["git", "-C", plan.measurement_root, "status", "--short", "--branch"], text=True)
-    if head != record["head"] or any(line and not line.startswith("##") for line in status.splitlines()):
+    if any(line and not line.startswith("##") for line in status.splitlines()):
         raise ValueError("Phase G modified measurement checkout")
+    extension = q.pin_only_head_extension(plan.measurement_root, record["head"], head)
     if readiness.committed_pack_tree_sha256(pack) != plan.pack_night["pack_sha256"]:
         raise ValueError("Phase G modified pack byte")
-    return {"whole_window_verdict_count": 1, "campaign_log": producer.reference(log),
+    assertions = {"whole_window_verdict_count": 1, "campaign_log": producer.reference(log),
             "expected_bundles": {role: sorted(ids) for role, ids in expected.items()},
             "runs_tree": {role: sorted(str(p.relative_to(Path(roots[role])))
                 for p in Path(roots[role]).rglob("*")) for role in ("claim_runs", "bound_runs")},
             "custody_files": producer.tree_files(custody),
             "git_status": status, "head": head, "pack_sha256": plan.pack_night["pack_sha256"],
             "no_extra_bundles": True, "no_scratch_residue": True, "pack_unchanged": True}
+    if extension is not None:
+        assertions["head_extension"] = extension
+    return assertions
 
 
 def closeout(plan_path, *, now=time.time, clear=q.group_clear):
@@ -145,13 +149,25 @@ def closeout(plan_path, *, now=time.time, clear=q.group_clear):
         if observed.get("schema_version") != t0.QUALIFICATION_STAGE_SCHEMA or observed.get("stage_id") != name:
             raise ValueError("night lifecycle stage absent")
     assertions = phase_g(plan, record)
+    if (assertions.get("head_extension") is not None
+            and assertions["head_extension"]["terminal_head_pin"] != stop["terminal_head_pin_candidate"]):
+        raise ValueError("Phase G H_pin differs from the STOP terminal candidate")
     assertions["campaign_log"] = producer.reference(producer.copy_record(
         assertions["campaign_log"]["path"], stage_dir / "phase-g-campaign-log.jsonl"))
     runsheet = producer.copy_record(Path(plan.measurement_root) / RUNSHEET, stage_dir / "runsheet.md")
-    off_path = custody / go["pack_id"] / "arm_readiness.t0.inputs" / network_time_off.RECEIPT_BASENAME
+    off_path = q.off_receipt_path(plan)
     off = network_time_off.read_receipt(off_path, plan_id=plan.plan_id, window_id=record["window_id"])
     if off["boot_id"].lower() != go["boot_session_id"].lower():
         raise ValueError("OFF receipt boot mismatch")
+    standdown_path = night / "standdown-observed.json"
+    standdown = producer.read(standdown_path)
+    if (standdown.get("schema_version") != producer.STANDDOWN_SCHEMA
+            or standdown.get("boot_session_id") != go["boot_session_id"] or not standdown.get("exits")
+            or standdown.get("after", {}).get("processes") != []):
+        raise ValueError("stand-down observation absent")
+    # Check before any create-once backup/stage writes, so an unavailable
+    # witness can be repaired without consuming the backup destinations.
+    observation = producer.observe_network_time_off()
     def stage(name, **facts):
         return producer.write(stage_dir / (name + ".json"), {
             "schema_version": t0.QUALIFICATION_STAGE_SCHEMA, "stage_id": name,
@@ -163,13 +179,6 @@ def closeout(plan_path, *, now=time.time, clear=q.group_clear):
           runsheet=producer.reference(runsheet),
           off_receipt=producer.reference(off_path),
           off_identity={key: off[key] for key in ("plan_id", "window_id", "boot_id")})
-    standdown_path = night / "standdown-observed.json"
-    standdown = producer.read(standdown_path)
-    if (standdown.get("schema_version") != producer.STANDDOWN_SCHEMA
-            or standdown.get("boot_session_id") != go["boot_session_id"] or not standdown.get("exits")
-            or standdown.get("after", {}).get("processes") != []):
-        raise ValueError("stand-down observation absent")
-    observation = producer.observe_network_time_off()
     stage("restore", network_time="OFF", stand_down=True, observation=observation,
           off_receipt=producer.reference(off_path), standdown=producer.reference(standdown_path))
     return {"status": "COMPLETE", "plan": producer.reference(plan_path),

@@ -1,0 +1,7 @@
+{
+  "fixture_sha256": "b642156da477cdcc7fbd280996c44d14ad33896b735200548c20d6ba0d04f185",
+  "proof_scope": "read-only ledger cutoff replay; no live validation or energy result",
+  "recipe": "first 376 newline-preserved rows, zlib compressed, base85 encoded",
+  "schema": "joulewise.v5_block4_x2_fixture_source.v1",
+  "source": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261004T1305Z-r2/derived/terminal-ledger.jsonl"
+}

@@ -9497,6 +9497,7 @@ def _attested_launch_artifact_references(
     arm_receipt: Mapping[str, Any],
     *,
     launch_binding_cache: dict[Path, bytes],
+    now_monotonic_ns: int | None = None,
 ) -> dict[str, dict[str, str]]:
     """Resolve the digest-bound T-0 LAUNCH_RECIPE input identities."""
 
@@ -9515,6 +9516,7 @@ def _attested_launch_artifact_references(
                 expected_pack_sha256=arm_receipt["pack"]["pack_sha256"],
                 expected_head_commit=arm_receipt["reviewed_main"]["head_commit"],
                 expected_boot_session_id=arm_receipt["boot_session_id"],
+                now_monotonic_ns=now_monotonic_ns,
                 launch_binding_cache=launch_binding_cache,
             )
             if _predicate_passes(
@@ -9631,6 +9633,7 @@ def _reconcile_launch_binding(
     window_chain_sha256: str,
     exec_argv: Sequence[str],
     launch_binding_cache: dict[Path, bytes],
+    now_monotonic_ns: int | None = None,
 ) -> None:
     """Bind supplied launch inputs to the arm-attested T-0 identities."""
 
@@ -9639,6 +9642,7 @@ def _reconcile_launch_binding(
         custody_pack_root,
         arm_receipt,
         launch_binding_cache=launch_binding_cache,
+        now_monotonic_ns=now_monotonic_ns,
     )
     try:
         canonical_manifest = (
@@ -9927,20 +9931,20 @@ def _authenticate_go_t0_evidence(go, arm, custody_pack_root: Path, night_root: P
         previous = end
 
 
-def _authenticate_launcher_identity(measurement_root) -> Path:
+def _authenticate_launcher_identity(measurement_root, *, live: bool = True) -> Path:
     path = Path(measurement_root)
     if not path.is_absolute() or any(p.is_symlink() for p in (path, *path.parents)):
         raise _go_invalid("measurement_root")
     try:
-        path = path.resolve(strict=True)
+        path = path.resolve(strict=live)
     except (OSError, RuntimeError) as exc:
         raise _go_invalid("measurement_root: resolution_error") from exc
-    if path != Path(__file__).resolve().parents[1]:
+    if live and path != Path(__file__).resolve().parents[1]:
         raise _go_invalid("measurement_root: launcher is not the planned clone")
     return path
 
 
-def _authenticate_go_purpose(go, arm, plan) -> None:
+def _authenticate_go_purpose(go, arm, plan, *, live: bool = True) -> None:
     from joulewise.t0_rehearsal import REHEARSAL_WINDOW_PREFIX
 
     prefixed = arm["pack"]["window_id"].startswith(REHEARSAL_WINDOW_PREFIX)
@@ -9949,7 +9953,7 @@ def _authenticate_go_purpose(go, arm, plan) -> None:
         raise _go_invalid("rehearsal_purpose_on_production_id")
     if prefixed and not rehearsal:
         raise _go_invalid("purpose")
-    measurement = _authenticate_launcher_identity(plan["measurement_root"])
+    measurement = _authenticate_launcher_identity(plan["measurement_root"], live=live)
     if rehearsal:
         from joulewise.t0_rehearsal import _contains
 
@@ -9967,7 +9971,7 @@ def _authenticate_go_purpose(go, arm, plan) -> None:
             if not path.is_absolute() or any(p.is_symlink() for p in (path, *path.parents)):
                 raise _go_invalid(field)
             try:
-                path = path.resolve(strict=True)
+                path = path.resolve(strict=live)
             except (OSError, RuntimeError) as exc:
                 raise _go_invalid(field + ": resolution_error") from exc
             for root in production:
@@ -10035,6 +10039,7 @@ def _authenticate_pack_launch_go(
     arm, arm_sha256, custody_pack_root, manifest_ref, env_ref, chain_ref,
     step6_confirmation_table, expected_confirmation_digest,
     require_current_boot: bool, at_monotonic_ns: int,
+    require_unexpired: bool = True,
     expected_plan_sha256: str | None = None,
     launch_binding_cache: dict[Path, bytes] | None = None,
 ) -> tuple[dict[str, Any], tuple[int, int]]:
@@ -10189,7 +10194,7 @@ def _authenticate_pack_launch_go(
                         record.get("refusal") is None for record in records)
         if not census_matched:
             raise _go_invalid("census.timestamp_lineage")
-        _authenticate_go_purpose(go, arm, plan)
+        _authenticate_go_purpose(go, arm, plan, live=require_current_boot and require_unexpired)
         return {
             "go_receipt": {"receipt_id": go["receipt_id"], "path": str(go_path), "sha256": digest,
                 "purpose": go["purpose"], "receipt_class": go["receipt_class"],
@@ -10231,6 +10236,7 @@ def _replay_consumed_go(consumption, arm, path, *, require_current_boot, require
         expected_plan_sha256=consumption["night_plan"]["sha256"],
         launch_binding_cache=launch_binding_cache,
         require_current_boot=require_current_boot,
+        require_unexpired=require_unexpired,
         at_monotonic_ns=time.monotonic_ns() if require_current_boot and require_unexpired
                         else consumption["consumed_at_monotonic_ns"],
     )
@@ -10348,6 +10354,9 @@ def verify_consumed_launch(
         window_chain_sha256=consumption["window_chain"]["sha256"],
         exec_argv=consumption["exec_argv"],
         launch_binding_cache=launch_binding_cache,
+        # Historical evidence must have been valid at consumption. Live
+        # verification retains the current-clock expiry check.
+        now_monotonic_ns=None if require_current_boot else consumption["consumed_at_monotonic_ns"],
     )
     if expected_exec_argv is not None and list(expected_exec_argv) != manifest_argv:
         raise LaunchLineageError(

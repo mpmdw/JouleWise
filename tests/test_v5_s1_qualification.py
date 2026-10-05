@@ -176,7 +176,7 @@ class QualificationSubsetTests(unittest.TestCase):
         with historical.fixture_replay(self.root):
             self.assertEqual(t0.evaluate_g10(self.bundle()).status.value, "FAIL")
 
-    def qualified_lifecycle(self):
+    def qualified_lifecycle(self, *, head_extension=None, measurement_root=None):
         from tests.test_network_time_off import receipt
         stage_dir = self.root / "records/qualification-stages"; stage_dir.mkdir()
         self.put("night/chain.started", {"pid": 777, "monotonic_ns": 10})
@@ -186,7 +186,10 @@ class QualificationSubsetTests(unittest.TestCase):
         off_value = receipt(); go = producer.read(self.root / "night/go_receipt.json")
         off_value.update(plan_id=self.root.name, window_id=self.root.name, boot_id=go["boot_session_id"].lower())
         off = stage_dir / "off.json"; off.write_bytes(readiness.render_json(off_value))
-        plan = self.root / "night_plan.json"; plan.write_bytes(readiness.render_json({"plan_id": self.root.name}))
+        plan = self.root / "night_plan.json"; plan.write_bytes(readiness.render_json({"plan_id": self.root.name,
+            **({"measurement_root": str(measurement_root)} if measurement_root is not None else {})}))
+        if head_extension is not None:
+            go["repo_head"] = head_extension["armed_head"]
         go["plan_sha256"] = producer.reference(plan)["sha256"]
         self.put("night/go_receipt.json", go)
         sources = {"custody": str(self.root)}
@@ -209,7 +212,7 @@ class QualificationSubsetTests(unittest.TestCase):
             "window_id": self.root.name, "desk_sources": sources, "backup_destinations": destinations,
             "pack_night": {"pack_sha256": "a" * 64}}))
         stop = stage_dir / "stop.json"; stop.write_bytes(readiness.render_json({"session_state": "finalized",
-            "pin_relation": "physical_ahead", "refusal_code": "calibration_ledger_head_mismatch", "terminal_head_pin_candidate": {"fixture": True}}))
+            "pin_relation": "physical_ahead", "refusal_code": "calibration_ledger_head_mismatch", "terminal_head_pin_candidate": head_extension["terminal_head_pin"] if head_extension else {"fixture": True}}))
         runsheet = producer.copy_record(producer.REPO_ROOT / "docs/process_traces/2026-08-28-live-smoke/SHAKEDOWN-G2-RUNSHEET.md", stage_dir / "runsheet.md")
         log = stage_dir / "campaign_log.jsonl"; log.write_bytes(producer.calibration_ledger.canonical_json_bytes({"record_type": "idle_admission_whole_window_verdict"}) + b"\n")
         standdown = stage_dir / "standdown.json"; standdown.write_bytes(readiness.render_json({
@@ -235,11 +238,13 @@ class QualificationSubsetTests(unittest.TestCase):
                 phase_g={"whole_window_verdict_count": 1, "campaign_log": producer.reference(log),
                     "expected_bundles": {"claim_runs": [], "bound_runs": []}, "runs_tree": {"claim_runs": ["member.txt"], "bound_runs": ["member.txt"]},
                     "custody_files": producer.tree_files(Path(sources["custody"])), "git_status": "## fixture\n",
-                    "head": go["repo_head"], "pack_sha256": "a" * 64, "no_extra_bundles": True,
+                    "head": head_extension["head"] if head_extension else go["repo_head"],
+                    **({"head_extension": head_extension} if head_extension else {}),
+                    "pack_sha256": "a" * 64, "no_extra_bundles": True,
                     "no_scratch_residue": True, "pack_unchanged": True})
             elif name == "restore": value.update(network_time="OFF", stand_down=True, off_receipt=producer.reference(off),
-                standdown=producer.reference(standdown), observation={"argv": ["/usr/bin/sudo", "-n", "/usr/sbin/systemsetup", "-getusingnetworktime"],
-                             "exit_code": 0, "stdout": "Network Time: Off"})
+                standdown=producer.reference(standdown), observation={"argv": ["/usr/bin/sudo", "-n", "/usr/sbin/systemsetup", "-setusingnetworktime", "off"],
+                             "exit_code": 0, "stdout": "Network Time is already off."})
             path = stage_dir / (name + ".json"); path.write_bytes(readiness.render_json(value))
             stages.append({"stage_id": name, "status": "COMPLETE", "evidence": producer.reference(path)})
         return {"schema_version": t0.QUALIFICATION_LIFECYCLE_SCHEMA, "stages": stages,
@@ -285,6 +290,35 @@ class QualificationSubsetTests(unittest.TestCase):
         self.mutate_stage(life, "close_out", lambda value: value.pop("off_identity"))
         result = t0.evaluate_g9(self.bundle())
         self.assertEqual(result.status.value, "FAIL"); self.assertIn("OFF identity", result.message)
+
+    def test_g9_authenticates_h_pin_against_real_git_objects_and_stop(self):
+        from joulewise import v5_qualification as q, calibration_ledger as ledger
+        repository = Path(self.temp.name).resolve() / "head-replay"; repository.mkdir()
+        pin = repository / "configs/calibration/calibration_ledger_head.json"; pin.parent.mkdir(parents=True)
+        pin.write_bytes(readiness.render_json({"ledger_schema": ledger.LEDGER_SCHEMA, "sequence": 0, "head_digest": ledger.GENESIS_DIGEST}))
+        def git(*args):
+            return subprocess.check_output(["git", "-C", str(repository), *args], text=True, stderr=subprocess.PIPE).strip()
+        def commit(message):
+            git("add", "."); git("-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit", "-qm", message)
+        git("init", "-q"); commit("fixture H")
+        armed = git("rev-parse", "HEAD")
+        pin.write_bytes(readiness.render_json({"ledger_schema": ledger.LEDGER_SCHEMA, "sequence": 3, "head_digest": "a" * 64}))
+        commit("fixture H_pin"); head_pin = git("rev-parse", "HEAD")
+        extension = q.pin_only_head_extension(repository, armed, head_pin)
+        life = self.qualified_lifecycle(head_extension=extension, measurement_root=repository)
+        self.put("records/lifecycle.json", life)
+        result = t0.evaluate_g9(self.bundle())
+        self.assertEqual(result.status.value, "PASS", result.message)
+        # Replay the preserved H_pin from a later desk head; HEAD is irrelevant.
+        (repository / "later-record.md").write_text("fixture later desk record")
+        commit("fixture later head")
+        self.assertEqual(t0.evaluate_g9(self.bundle()).status.value, "PASS")
+
+    def test_g9_rejects_setter_that_had_to_turn_network_time_off(self):
+        life = self.qualified_lifecycle()
+        self.mutate_stage(life, "restore", lambda value: value["observation"].update(stdout="setUsingNetworkTime: Off"))
+        self.put("records/lifecycle.json", life)
+        self.assertEqual(t0.evaluate_g9(self.bundle()).status.value, "FAIL")
 
     def test_restore_network_time_on_fails(self):
         life = self.qualified_lifecycle()

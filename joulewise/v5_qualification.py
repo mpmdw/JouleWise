@@ -11,6 +11,7 @@ import io
 import os
 from pathlib import Path
 import re
+import subprocess
 import tempfile
 import time
 
@@ -125,6 +126,46 @@ def group_clear(night, *, killpg=os.killpg, plan_id=None, observer=None):
     except PermissionError:
         return False
     return False
+
+
+def off_receipt_path(plan, night_dir=None):
+    """Match capture_t0_step's pack custody and the diagnostic night layout."""
+    from joulewise import network_time_off
+    night = Path(night_dir) if night_dir is not None else Path(plan.custody_root) / "night"
+    if plan.receipt_class == "TRANSACTION_PACK":
+        return night.parent / identifier(plan.pack_night["pack_id"]) / "arm_readiness.t0.inputs" / network_time_off.RECEIPT_BASENAME
+    return night / network_time_off.RECEIPT_BASENAME
+
+
+def pin_only_head_extension(repository, armed_head, head):
+    """Authenticate H_pin from Git objects without changing the live checkout."""
+    if any(not isinstance(value, str) or not re.fullmatch(r"[0-9a-f]{40}", value)
+           for value in (armed_head, head)):
+        raise ValueError("Phase G invalid head identity")
+    command = ["git", "-C", str(repository)]
+    if head == armed_head:
+        return None
+    if subprocess.run(command + ["merge-base", "--is-ancestor", armed_head, head],
+                      capture_output=True, check=False).returncode != 0:
+        raise ValueError("Phase G head is not descended from the armed head")
+    try:
+        changed = subprocess.check_output(command + ["diff", "--name-only", armed_head, head],
+                                          text=True, stderr=subprocess.PIPE).splitlines()
+    except (OSError, subprocess.CalledProcessError) as error:
+        raise ValueError("Phase G head extension is unavailable") from error
+    if changed != ["configs/calibration/calibration_ledger_head.json"]:
+        raise ValueError("Phase G head extension is not pin-only")
+    try:
+        raw = subprocess.check_output(command + ["show", head + ":" + changed[0]], stderr=subprocess.PIPE)
+        pin = readiness.parse_json_bytes(raw)
+    except (OSError, subprocess.CalledProcessError, readiness.ArmReadinessError) as error:
+        raise ValueError("Phase G head extension pin is unavailable") from error
+    from joulewise.calibration_ledger import LEDGER_SCHEMA, _head_pin
+    if (not isinstance(pin, dict) or pin.get("ledger_schema") != LEDGER_SCHEMA
+            or _head_pin(pin) is None):
+        raise ValueError("Phase G head extension pin is malformed")
+    return {"armed_head": armed_head, "head": head, "changed_paths": changed,
+            "terminal_head_pin": pin}
 
 
 def load_plan(path, purpose, *, now=time.time, clear=group_clear):
