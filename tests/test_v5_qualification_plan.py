@@ -261,7 +261,7 @@ class PlanWriterTests(SizingTests):
         self.custody = self.root / "s1-fixture"
         self.custody.mkdir()
         self.chain = self.root / "chain.zsh"
-        self.chain.write_text("#!/bin/zsh\nexport NIGHT_PROGRAMMED_SPAN_S=40\nexport NIGHT_LATEST_CHAIN_START_EPOCH_S=4320\nexport V5_QUALIFICATION_OCCURRENCE=s1\necho fixture\n")
+        self.chain.write_text("#!/bin/zsh\nexport NIGHT_PROGRAMMED_SPAN_S=40\nexport NIGHT_LATEST_CHAIN_START_EPOCH_S=4308\nexport V5_QUALIFICATION_OCCURRENCE=s1\necho fixture\n")
         self.sidecar = self.root / "chain.sha256"
         self.sidecar.write_bytes(readiness.gnu_sidecar(writer.locator(self.chain)["sha256"], self.chain.name))
         self.table = self.root / "d117_step6_confirmation_table_v5.json"
@@ -302,7 +302,7 @@ class PlanWriterTests(SizingTests):
             "sizing": {"fixed": {name: self.allow(8) for name in writer.FIXED_COMPONENTS["s1"]},
                        "members": {}, "auxiliary": {}, "streams": {name: self.allow(100)
                            for name in ("calibration-pre", "calibration-post")}, "clock": self.sizing["clock"]},
-            "deadlines": {"latest_chain_start_epoch_s": 4320., "shutdown_epoch_s": 4660.,
+            "deadlines": {"latest_chain_start_epoch_s": 4308., "shutdown_epoch_s": 4660.,
                           "courier_epoch_s": 4960., "deadman_epoch_s": 8280.},
             "other_custody_roots": [], "arm_context": context, "prerequisites": {}}
         producers = {}
@@ -520,7 +520,7 @@ class PlanWriterTests(SizingTests):
         self.write()
         plan = night_gate.NightPlan.from_mapping(writer.read_object(self.output))
         prepared = night_gate._authenticate_pack_records(plan)
-        probes = mock.Mock(now_epoch_s=lambda: 4321.)
+        probes = mock.Mock(now_epoch_s=lambda: 4309.)
         with mock.patch.object(night_gate, "_authenticate_pack_records", return_value=prepared), \
              mock.patch.object(readiness, "_verify_arm_receipt") as verify:
             with self.assertRaises(night_gate.PlanError) as error:
@@ -541,11 +541,12 @@ class PlanWriterTests(SizingTests):
         output = self.root / "rendered-chain.zsh"
         with mock.patch.object(writer, "pack_roster", return_value=(
                 [{"config_path": "science/member.json"}], [], [], [])), mock.patch.object(writer, "size_window",
-                return_value={"programmed_span_s": 40, "window_max_s": 3360, "longest_sampler_stream_s": 100.}):
+                return_value={"programmed_span_s": 40, "window_max_s": 3360, "longest_sampler_stream_s": 100.,
+                              "t0_stage_cap_s": 3300., "pack_t0_s": 8.}):
             result = writer.render_qualification_chain("s1", template, self.input["sizing"], self.pack, 1000., output)
         self.assertEqual(40, result["programmed_span_s"])
         self.assertEqual("40", night_gate.chain_literal(output.read_text(), "NIGHT_PROGRAMMED_SPAN_S"))
-        self.assertEqual("4320", night_gate.chain_literal(output.read_text(), "NIGHT_LATEST_CHAIN_START_EPOCH_S"))
+        self.assertEqual("4308", night_gate.chain_literal(output.read_text(), "NIGHT_LATEST_CHAIN_START_EPOCH_S"))
         self.assertEqual("#!/bin/zsh\necho fixture\n", template.read_text())
         self.assertEqual(writer.locator(output)["sha256"], Path(str(output) + ".sha256").read_text().split()[0])
 

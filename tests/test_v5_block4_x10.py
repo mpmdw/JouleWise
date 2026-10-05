@@ -153,12 +153,15 @@ class WindowValidatorTests(unittest.TestCase):
         self.path = self.f.root / 'qualification/arm_readiness.t0.inputs/kernel-frequency-sizing.json'
         self.path.parent.mkdir(parents=True)
 
-    def chain(self, sizing, *, window=None, marker='s1'):
+    def chain(self, sizing, *, window=None, marker='s1', qualification=True):
         from joulewise import arm_readiness as readiness
         window = self.plan.window_max_s if window is None else window
+        fixed = sizing.get('fixed', {})
+        latest = (1000 + fixed['t0_stage_cap']['seconds'] + fixed['pack_t0']['seconds']
+                  if qualification and marker in {'s1', 's2'} and 't0_stage_cap' in fixed else 1000 + window - 860)
         return (f'export V5_QUALIFICATION_OCCURRENCE={marker}\n'
                 'export NIGHT_PROGRAMMED_SPAN_S=860\n'
-                f'export NIGHT_LATEST_CHAIN_START_EPOCH_S={1000 + window - 860}\n'
+                f'export NIGHT_LATEST_CHAIN_START_EPOCH_S={latest}\n'
                 f'export NIGHT_CLOCK_SIZING_SHA256={readiness.sha256_bytes(readiness.render_json(sizing))}\n')
 
     def publish(self, sizing):
@@ -174,10 +177,10 @@ class WindowValidatorTests(unittest.TestCase):
                     plan = self.replace(self.plan, window_max_s=window)
                     chain = self.chain(sizing, window=window, marker=marker)
                     self.assertEqual(night_gate.qualification_start_deadline(
-                        plan, chain, 'G2B_SHAKEDOWN', sizing=sizing), 1000 + window - 860)
+                        plan, chain, 'G2B_SHAKEDOWN', sizing=sizing), 1000 + cap + 100)
                     self.publish(sizing)
                     self.assertEqual(night_gate.qualification_start_deadline(
-                        plan, chain, 'G2B_SHAKEDOWN'), 1000 + window - 860)
+                        plan, chain, 'G2B_SHAKEDOWN'), 1000 + cap + 100)
 
     def test_cap_is_pinned_to_the_whole_sizing_input(self):
         chain = self.chain(self.f.sizing)
@@ -222,7 +225,7 @@ class WindowValidatorTests(unittest.TestCase):
         for receipt_class in ('DIAGNOSTIC_NO_PACK', 'REHEARSAL_STUB'):
             plan = self.replace(self.plan, receipt_class=receipt_class, window_max_s=3600)
             self.assertEqual(night_gate.qualification_start_deadline(
-                plan, self.chain(self.f.sizing, window=3600), 'G2B_SHAKEDOWN', sizing=self.f.sizing), 3740)
+            plan, self.chain(self.f.sizing, window=3600, qualification=False), 'G2B_SHAKEDOWN', sizing=self.f.sizing), 3740)
         plan = self.replace(self.plan, window_max_s=3600)
         self.assertEqual(night_gate.qualification_start_deadline(
             plan, self.chain(self.f.sizing, window=3600, marker='r1'),

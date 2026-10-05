@@ -932,6 +932,7 @@ def author_environment(
     synthetic_clock: bool = True,
     sample_anchor=None,
     kernel_frequency=None,
+    real_clock_budget: bool = False,
 ):
     if probe is passing_probe and boot_session_id != TEST_BOOT_SESSION_ID:
         def selected_probe(argv, *, cwd):
@@ -943,11 +944,13 @@ def author_environment(
     with contextlib.ExitStack() as stack:
         stack.enter_context(mock.patch.object(kernel_clock, "read_kernel_frequency",
             return_value=frequency_probe() if kernel_frequency is None else kernel_frequency))
-        stack.enter_context(mock.patch.object(_qualification, "authenticated_clock_budget",
-                                               side_effect=fixture_clock_budget))
+        if not real_clock_budget:
+            stack.enter_context(mock.patch.object(_qualification, "authenticated_clock_budget",
+                                                   side_effect=fixture_clock_budget))
         stack.enter_context(mock.patch.object(t0._time, "sleep"))
         stack.enter_context(mock.patch.object(t0, "_RUNNING_REPOSITORY", repository))
-        stack.enter_context(mock.patch.object(t0, "_execute_probe", side_effect=selected_probe))
+        if selected_probe is not None:
+            stack.enter_context(mock.patch.object(t0, "_execute_probe", side_effect=selected_probe))
         if real_offline:
             head = subprocess.run(
                 ["git", "rev-parse", "HEAD"],

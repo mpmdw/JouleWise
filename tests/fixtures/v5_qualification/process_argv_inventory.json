@@ -1,0 +1,400 @@
+{
+  "joulewise.arm_readiness_evidence_t0": [
+    [
+      "_boot_probe",
+      "_execute_probe",
+      "('/usr/sbin/sysctl', '-n', 'kern.bootsessionuuid')"
+    ],
+    [
+      "_capture",
+      "argv assignment",
+      "value.get('argv')"
+    ],
+    [
+      "_derive_power",
+      "_fresh_probe",
+      "('/usr/bin/pmset', '-g', 'batt')"
+    ],
+    [
+      "_derive_power",
+      "_fresh_probe",
+      "('/usr/bin/pmset', '-g', 'custom')"
+    ],
+    [
+      "_derive_power",
+      "_fresh_probe",
+      "('/usr/sbin/system_profiler', 'SPPowerDataType', '-json')"
+    ],
+    [
+      "_derive_power",
+      "_fresh_probe",
+      "_battery_float.IOREG_BATTERY_ARGV"
+    ],
+    [
+      "_derive_powermetrics",
+      "_fresh_probe",
+      "('/usr/bin/sudo', '-n', '/usr/bin/powermetrics', '-i', '200', '-n', '1')"
+    ],
+    [
+      "_derive_process_census",
+      "_fresh_probe",
+      "('/usr/bin/pgrep', '-lf', _BROWSER_CENSUS_PATTERN)"
+    ],
+    [
+      "_derive_process_census",
+      "_fresh_probe",
+      "('/usr/bin/pgrep', '-lf', _MONITOR_CENSUS_PATTERN)"
+    ],
+    [
+      "_derive_process_census",
+      "_fresh_probe",
+      "('/usr/bin/pgrep', '-x', 'caffeinate')"
+    ],
+    [
+      "_derive_process_census",
+      "_fresh_probe",
+      "AGENT_CENSUS_ARGV"
+    ],
+    [
+      "_execute_probe",
+      "observed_popen",
+      "list(argv)"
+    ],
+    [
+      "_fresh_clock_reference_batch",
+      "_fresh_probe",
+      "argv"
+    ],
+    [
+      "_fresh_clock_reference_batch",
+      "argv assignment",
+      "tuple(_clock_reference.build_sntp_argv(server))"
+    ],
+    [
+      "_fresh_probe",
+      "_execute_probe",
+      "argv"
+    ],
+    [
+      "_maintenance_probe",
+      "_fresh_probe",
+      "('/usr/bin/pgrep', '-lf', _prewindow.CONTAMINANTS)"
+    ],
+    [
+      "_maintenance_probe",
+      "_fresh_probe",
+      "_prewindow.PS_ARGV"
+    ],
+    [
+      "_thermal_probe",
+      "_fresh_probe",
+      "('/usr/bin/pmset', '-g', 'therm')"
+    ]
+  ],
+  "joulewise.night_gate": [
+    [
+      "_check_chain_identity",
+      "_run",
+      "('/usr/bin/git', '-C', plan.measurement_root, 'show', f'{plan.measurement_head}:{chain_path}')"
+    ],
+    [
+      "_check_clock",
+      "_run",
+      "BOOT_SESSION_ARGV"
+    ],
+    [
+      "_check_machine",
+      "_run",
+      "HID_IDLE_ARGV"
+    ],
+    [
+      "_check_machine",
+      "_run",
+      "LOAD_AVG_ARGV"
+    ],
+    [
+      "_check_machine",
+      "_run",
+      "PMSET_BATT_ARGV"
+    ],
+    [
+      "_check_machine",
+      "_run",
+      "PMSET_GENERAL_ARGV"
+    ],
+    [
+      "_check_machine",
+      "_run",
+      "THERMAL_ARGV"
+    ],
+    [
+      "_check_machine",
+      "_run",
+      "argv"
+    ],
+    [
+      "_check_machine",
+      "_run",
+      "corecaptured_loop.LOG_ARGV"
+    ],
+    [
+      "_check_static_start",
+      "_run",
+      "('/usr/bin/git', '-c', 'core.fsmonitor=false', '-C', plan.measurement_root, '--no-optional-locks', 'status', '--porcelain=v1', '--untracked-files=all')"
+    ],
+    [
+      "_validate_probe",
+      "argv assignment",
+      "value.get('argv')"
+    ],
+    [
+      "agent_census",
+      "_run",
+      "AGENT_CENSUS_ARGV"
+    ],
+    [
+      "battery_runner",
+      "_run",
+      "argv"
+    ]
+  ],
+  "scripts.capture_t0_step": [
+    [
+      "_arm_reference",
+      "execute",
+      "(*network_time_off.OFF_ARGV[:-1], 'on')"
+    ],
+    [
+      "_arm_reference",
+      "execute",
+      "_command_for_step(context, 'clock-reference')"
+    ],
+    [
+      "_arm_reference",
+      "execute",
+      "argv"
+    ],
+    [
+      "_capture_step_with_dependencies",
+      "argv assignment",
+      "_command_for_step(context, step_id)"
+    ],
+    [
+      "_capture_step_with_dependencies",
+      "execute",
+      "argv"
+    ],
+    [
+      "_command_for_step",
+      "builder",
+      "def _command_for_step(context: CaptureContext, step_id: str) -> tuple[str, ...]:\n    values = context.assignments\n    python = str(context.repository / '.venv/bin/python')\n    if step_id == 'clock-reference':\n        return (python, str(context.repository / 'scripts/collect_clock_reference.py'))\n    if step_id == 'clock-disable':\n        return ('/usr/bin/sudo', '-n', '/usr/sbin/systemsetup', '-setusingnetworktime', 'off')\n    if step_id == 'quiet-mac-prep':\n        return ('/bin/bash', str(context.repository / 'scripts/quiet_mac_prep.sh'))\n    if step_id == 'prewindow-check':\n        return context.prewindow_command\n    if step_id == 'ledger-readiness':\n        return (python, str(context.repository / 'scripts/recover_calibration_ledger.py'), '--ledger', values['CALIBRATION_LEDGER'], '--head-pin', values['LEDGER_HEAD_PIN'], 'readiness', '--phase', 'pre-reserve', '--session-id', values['BRACKET_SESSION_ID'], '--plan', str(context.frozen_plan_path))\n    if step_id == 'ledger-reservation':\n        return (python, str(context.repository / 'scripts/reserve_calibration_window_bracket.py'), '--ledger', values['CALIBRATION_LEDGER'], '--head-pin', values['LEDGER_HEAD_PIN'], '--session-id', values['BRACKET_SESSION_ID'], '--window-id', values['WINDOW_ID'], '--plan-id', context.plan_id, '--plan-sha256', context.plan_sha256, '--plan', str(context.frozen_plan_path), '--evidence-root-id', values['EVIDENCE_ROOT_ID'], '--runs-root', values['RUNS_ROOT'], '--pre-attempt-id', values['PRE_ATTEMPT_ID'], '--post-attempt-id', values['POST_ATTEMPT_ID'], '--pre-custody-locator', str(Path(values['RUNS_ROOT']) / 'instrument_validation' / values['PRE_ATTEMPT_ID']), '--post-custody-locator', str(Path(values['RUNS_ROOT']) / 'instrument_validation' / values['POST_ATTEMPT_ID']), '--identity-epoch-json', values['IDENTITY_EPOCH_JSON'], '--t1-bindings-json', values['T1_BINDINGS_JSON'], '--execute')\n    raise _refuse('evidence_author_t0_capture_usage_invalid', f'unknown T-0 step: {step_id}')"
+    ]
+  ],
+  "scripts.run_night": [
+    [
+      "_admit_derivation_clean_dwell",
+      "argv assignment",
+      "[str(script), '--wait', '--timeout-s', str(math.ceil(timeout_s))]"
+    ],
+    [
+      "_admit_derivation_clean_dwell",
+      "observed_run",
+      "command"
+    ],
+    [
+      "_attribute_pids",
+      "argv assignment",
+      "['/bin/ps', '-o', 'pgid=,pid=,command=', '-p', ','.join(pids)]"
+    ],
+    [
+      "_attribute_pids",
+      "observed_run",
+      "argv"
+    ],
+    [
+      "_bind_argv",
+      "builder",
+      "def _bind_argv(kind, job_id, descriptor, request):\n    if kind == 'sample':\n        return (sys.executable, '-B', '-m', 'joulewise.quiet_admission', '--observation', '--sample-interval-s', str(request['interval']), '--observer-pid', str(request['observer_pid']), '--job-id', job_id, '--result-fd', str(descriptor))\n    return (sys.executable, '-B', str(REPO_ROOT / 'scripts/run_night.py'), '_bind-worker', '--kind', kind, '--job-id', job_id, '--result-fd', str(descriptor), '--request', json.dumps(request, separators=(',', ':')))"
+    ],
+    [
+      "_capture_qualification_t0",
+      "argv assignment",
+      "[str(Path(plan.measurement_root) / '.venv/bin/python'), str(Path(plan.measurement_root) / 'scripts/capture_t0_step.py'), 'sequence', '--pack-root', plan.pack_night['pack_root'], '--custody-root', plan.custody_root, '--window-plan-root', str(Path(plan.chain_path).parent)]"
+    ],
+    [
+      "_capture_qualification_t0",
+      "observed_run",
+      "argv"
+    ],
+    [
+      "_census_chunk",
+      "argv assignment",
+      "['/usr/bin/pgrep', '-lf', '-g', ','.join((str(pgid) for pgid in chunk)), '.']"
+    ],
+    [
+      "_census_chunk",
+      "observed_run",
+      "argv"
+    ],
+    [
+      "_courier_argv",
+      "builder",
+      "def _courier_argv(custody_root: Path, plan: NightPlan, courier_bin: Path) -> tuple[str, ...]:\n    prompt = (REPO_ROOT / 'docs' / 'process' / 'NIGHT_COURIER_PROMPT.md').read_text(encoding='utf-8')\n    prompt = prompt.replace('{custody_root}', str(custody_root)).replace('{plan_id}', plan.plan_id).replace('@@REPO_ROOT@@', str(REPO_ROOT))\n    watchdog_path, watchdog_age_s, watchdog_decision = _watchdog_liveness_for_courier(plan)\n    prompt += f'\\nWatchdog state path: {watchdog_path}\\nWatchdog state age seconds: {watchdog_age_s}\\nWatchdog last decision: {watchdog_decision}\\nYou must include these watchdog fields in the email body. An age greater than 900 seconds, or an unavailable age, means the watchdog is dead.\\n'\n    cleanup_path = custody_root / 'night/evidence_cleanup.json'\n    if cleanup_path.exists():\n        prompt += f'\\nEvidence cleanup record: {cleanup_path}. Read this existing record and night/evidence_outcome.json; report success, partial evidence or refusal, including unproven cleanup and all refusal documents. Never recreate the record.\\n'\n    return (str(courier_bin), '-p', prompt, '--output-format', 'text', '--allowedTools', COURIER_ALLOWED_TOOLS)"
+    ],
+    [
+      "_courier_prelaunch",
+      "argv assignment",
+      "optional('courier prompt', lambda: _courier_argv(custody_root, plan, courier_bin))"
+    ],
+    [
+      "_durable_record",
+      "observed_run",
+      "['git', '-C', str(REPO_ROOT), 'remote', 'get-url', 'origin']"
+    ],
+    [
+      "_durable_record",
+      "observed_run",
+      "['git', '-C', str(clone), 'add', str(destination.relative_to(clone))]"
+    ],
+    [
+      "_durable_record",
+      "observed_run",
+      "['git', '-C', str(clone), 'checkout', '-B', branch]"
+    ],
+    [
+      "_durable_record",
+      "observed_run",
+      "['git', '-C', str(clone), 'commit', '-m', f'record night {plan.plan_id}']"
+    ],
+    [
+      "_durable_record",
+      "observed_run",
+      "['git', '-C', str(clone), 'push', 'origin', f'HEAD:{branch}']"
+    ],
+    [
+      "_durable_record",
+      "observed_run",
+      "['git', 'clone', '--depth', '1', origin, str(clone)]"
+    ],
+    [
+      "_evidence_probe_worker",
+      "observed_run",
+      "['/bin/zsh', plan.chain_path]"
+    ],
+    [
+      "_group_census",
+      "observed_run",
+      "['/usr/bin/pgrep', '-lf', '-g', str(pgid), '.']"
+    ],
+    [
+      "_pack_launcher_argv",
+      "builder",
+      "def _pack_launcher_argv(plan, plan_path, arm_path, manifest_path, go_path, confirmation):\n    return [str(Path(plan.measurement_root) / '.venv/bin/python'), str(Path(plan.measurement_root) / 'scripts/launch_window.py'), '--pack-root', plan.pack_night['pack_root'], '--arm-receipt', str(arm_path), '--arm-readiness-custody-root', plan.custody_root, '--launch-manifest', str(manifest_path), '--night-plan', str(plan_path), '--go-receipt', str(go_path), '--step6-confirmation-table', confirmation['table_path'], '--expected-confirmation-digest', confirmation['table_sha256']]"
+    ],
+    [
+      "_probe_cadence",
+      "Popen",
+      "command"
+    ],
+    [
+      "_probe_cadence",
+      "argv assignment",
+      "adapter._command(config, output, count=count)"
+    ],
+    [
+      "_probe_runner",
+      "argv assignment",
+      "tuple((str(part) for part in argv))"
+    ],
+    [
+      "_probe_runner",
+      "observed_run",
+      "command"
+    ],
+    [
+      "_probe_runner",
+      "observed_run",
+      "command"
+    ],
+    [
+      "_probe_worker",
+      "Popen",
+      "['/bin/zsh', plan.chain_path]"
+    ],
+    [
+      "_run",
+      "argv assignment",
+      "task.argv(task.writer)"
+    ],
+    [
+      "_run_chain_once_impl",
+      "observed_popen",
+      "command if command is not None else ['/bin/zsh', str(chain_path)]"
+    ],
+    [
+      "build_parser",
+      "argv assignment",
+      "subcommands.add_parser(name)"
+    ],
+    [
+      "checkout_head",
+      "_probe_runner",
+      "('git', '-C', str(REPO_ROOT), 'rev-parse', 'HEAD')"
+    ],
+    [
+      "make_probes",
+      "_probe_runner",
+      "('git', '-C', root, 'rev-parse', 'HEAD')"
+    ],
+    [
+      "make_probes",
+      "_probe_runner",
+      "('git', '-C', str(REPO_ROOT), 'rev-parse', 'HEAD')"
+    ],
+    [
+      "measurement_head",
+      "_probe_runner",
+      "('git', '-C', root, 'rev-parse', 'HEAD')"
+    ],
+    [
+      "probe_night",
+      "Popen",
+      "[sys.executable, '-B', str(Path(__file__).absolute()), '_probe-worker', '--plan', str(plan_path), '--receipt', str(output), '--progress', str(progress), '--deadline', str(deadline)]"
+    ],
+    [
+      "produce_g7_control",
+      "argv assignment",
+      "_pack_launcher_argv(plan, plan_path, night / 'absent-arm.json', night / 'absent-manifest.json', target, confirmation)"
+    ],
+    [
+      "produce_g7_control",
+      "observed_run",
+      "argv"
+    ],
+    [
+      "reservation_input_paths",
+      "observed_run",
+      "['/bin/zsh', plan.chain_path]"
+    ],
+    [
+      "run_courier",
+      "argv assignment",
+      "_courier_prelaunch(custody_root, plan, courier_bin, lock_descriptor, report)"
+    ],
+    [
+      "run_courier",
+      "observed_popen",
+      "argv"
+    ],
+    [
+      "run_night",
+      "argv assignment",
+      "['/bin/zsh', '-c', 'sleep 2; echo REHEARSAL']"
+    ],
+    [
+      "run_night",
+      "argv assignment",
+      "['/bin/zsh', str(chain_path)]"
+    ]
+  ]
+}

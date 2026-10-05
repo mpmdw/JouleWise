@@ -565,7 +565,7 @@ def authenticated_clock_budget(input_root, pack_root):
     plan_record = read(plan_path)
     if binding["occurrence"] in {"a1", "a2"}:
         if (plan_record.get("schema_version") != writer.ARM_ONLY_SCHEMA
-                or plan_record.get("mode") != "ARM_ONLY_NO_LAUNCH"
+                or plan_record.get("mode") not in {"ARM_ONLY_NO_LAUNCH", "G10_INPUT_CAPTURE_NO_LAUNCH"}
                 or plan_record.get("occurrence") != binding["occurrence"]):
             raise HarvestRefusal("clock_sizing_plan_invalid")
         plan_record = plan_record["plan_binding"]
