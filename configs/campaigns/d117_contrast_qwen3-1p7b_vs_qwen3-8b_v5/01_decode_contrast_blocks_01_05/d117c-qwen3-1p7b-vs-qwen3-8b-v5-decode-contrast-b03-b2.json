@@ -50,7 +50,7 @@
       "comparative-contrast",
       "measurement-arm=decode",
       "df-condition=sw-decode-b-qwen3-8b",
-      "calibration-plan-sha256=b3f4679563f7d2bd84291a386b2e3fd8662cb2f7eaa7f492b2ee09544565d7ef",
+      "calibration-plan-sha256=72c776bcb410d103b9ab49991e626f1c4e2ffa4fd6c2a40c67be4a1138b67da6",
       "calibration-abba-block-id=d117-decode-contrast-b03",
       "calibration-abba-label=B",
       "calibration-abba-sequence-index=3",

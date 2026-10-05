@@ -55,13 +55,13 @@
       "comparative-contrast",
       "measurement-arm=prefill_p2048",
       "df-condition=sw-prefill-p2048-a-qwen3-1p7b",
-      "calibration-plan-sha256=b3f4679563f7d2bd84291a386b2e3fd8662cb2f7eaa7f492b2ee09544565d7ef",
+      "calibration-plan-sha256=72c776bcb410d103b9ab49991e626f1c4e2ffa4fd6c2a40c67be4a1138b67da6",
       "calibration-abba-block-id=d117-prefill-p2048-contrast-b01",
       "calibration-abba-label=A",
       "calibration-abba-sequence-index=1",
       "prompt-tokens=2048",
       "prompt-text-sha256=0fe603bae8d5af6d54c5b209b0a9122632a642708aa53bca423c28bcd75194b1",
-      "prompt-status=PROPOSED-PENDING-LEAD-RATIFICATION",
+      "prompt-status=ISSUED-BY-G2A-PROMPT-PIN",
       "launch_lineage_required"
     ]
   }

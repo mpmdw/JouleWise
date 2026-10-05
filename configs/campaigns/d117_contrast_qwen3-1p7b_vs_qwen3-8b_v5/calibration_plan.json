@@ -754,8 +754,8 @@
       },
       "prompt_candidate": {
         "path": "prefill_prompt_candidate.json",
-        "sha256": "801f57cfa3318e81452dbfdd626cba25e40704eac2616e3b50f99279169815fa",
-        "status": "PROPOSED-PENDING-LEAD-RATIFICATION"
+        "sha256": "b79abb259014bb28e9273b9d5c0ee02d26af2010a0b82a697e829592c5be0adf",
+        "status": "ISSUED-BY-G2A-PROMPT-PIN"
       },
       "test": "two_sided",
       "scientific_hypothesis_direction": "positive",

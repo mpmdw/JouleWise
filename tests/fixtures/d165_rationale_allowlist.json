@@ -6,6 +6,66 @@
     "reason": "Registered corrected absolute disposition explicitly denies an implemented absolute common-time replay; it preserves the comparative-only reason for not_applicable."
   },
   {
+    "path": "configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5/analysis_manifest_v3.json",
+    "line": 205,
+    "phrase": "common-time",
+    "reason": "Registered corrected absolute disposition explicitly denies an implemented absolute common-time replay; it preserves the comparative-only reason for not_applicable."
+  },
+  {
+    "path": "configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5/analysis_manifest_v3.json",
+    "line": 768,
+    "phrase": "common-time",
+    "reason": "Registered corrected absolute disposition explicitly denies an implemented absolute common-time replay; it preserves the comparative-only reason for not_applicable."
+  },
+  {
+    "path": "configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5/calibration_plan.json",
+    "line": 176,
+    "phrase": "common-time",
+    "reason": "Registered corrected absolute disposition explicitly denies an implemented absolute common-time replay; it preserves the comparative-only reason for not_applicable."
+  },
+  {
+    "path": "configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5/calibration_plan.json",
+    "line": 713,
+    "phrase": "common-time",
+    "reason": "Registered corrected absolute disposition explicitly denies an implemented absolute common-time replay; it preserves the comparative-only reason for not_applicable."
+  },
+  {
+    "path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/calibration_plan.json",
+    "line": 477,
+    "phrase": "common-time",
+    "reason": "Registered corrected absolute disposition explicitly denies an implemented absolute common-time replay; it preserves the comparative-only reason for not_applicable."
+  },
+  {
+    "path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/calibration_plan.json",
+    "line": 950,
+    "phrase": "common-time",
+    "reason": "Registered corrected absolute disposition explicitly denies an implemented absolute common-time replay; it preserves the comparative-only reason for not_applicable."
+  },
+  {
+    "path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/calibration_plan.json",
+    "line": 1423,
+    "phrase": "common-time",
+    "reason": "Registered corrected absolute disposition explicitly denies an implemented absolute common-time replay; it preserves the comparative-only reason for not_applicable."
+  },
+  {
+    "path": "configs/campaigns/d117_floor_qwen3-8b_v5/calibration_plan.json",
+    "line": 477,
+    "phrase": "common-time",
+    "reason": "Registered corrected absolute disposition explicitly denies an implemented absolute common-time replay; it preserves the comparative-only reason for not_applicable."
+  },
+  {
+    "path": "configs/campaigns/d117_floor_qwen3-8b_v5/calibration_plan.json",
+    "line": 950,
+    "phrase": "common-time",
+    "reason": "Registered corrected absolute disposition explicitly denies an implemented absolute common-time replay; it preserves the comparative-only reason for not_applicable."
+  },
+  {
+    "path": "configs/campaigns/d117_floor_qwen3-8b_v5/calibration_plan.json",
+    "line": 1423,
+    "phrase": "common-time",
+    "reason": "Registered corrected absolute disposition explicitly denies an implemented absolute common-time replay; it preserves the comparative-only reason for not_applicable."
+  },
+  {
     "path": "docs/campaign_packs/d117_contrast_v5.md",
     "line": 127,
     "phrase": "common-time",

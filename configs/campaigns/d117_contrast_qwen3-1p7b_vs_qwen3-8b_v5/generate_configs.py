@@ -195,7 +195,7 @@ SUCCESSOR_FREEZE_RATIFICATION = (
 )
 CURRENT_FROZEN_RECEIPT_SHA256 = ""
 CURRENT_FROZEN_GENERATOR_SHA256 = ""
-PROMPT_STATUS = "PROPOSED-PENDING-LEAD-RATIFICATION"
+PROMPT_STATUS = "ISSUED-BY-G2A-PROMPT-PIN"
 EMPTY_STATUS = "EMPTY"
 PLAN_SCHEMA = "joulewise.detection_floor_calibration_plan.v1"
 ORDER_SCHEMA = "joulewise.order_manifest.v1"
@@ -2976,8 +2976,8 @@ places references after science members 20, 40, and 60: both arm midpoints
 plus the decode/prefill boundary; the committed D-134 freeze receipt and its
 plan-tree attachment are the ratification authority for that reading.
 
-The prefill prompt text is a labelled
-`PROPOSED-PENDING-LEAD-RATIFICATION` candidate. The pack records the exact
+The prefill prompt is `ISSUED-BY-G2A-PROMPT-PIN`, issued by
+`prefill_pin/prefill_prompt_pin.json`. The pack records the exact
 generated hashes so regeneration can be tested; the D-134 freeze receipt, not
 this text, is what pins them.
 
