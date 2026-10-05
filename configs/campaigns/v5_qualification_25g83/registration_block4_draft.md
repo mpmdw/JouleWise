@@ -94,8 +94,11 @@ packs #477, the network-time policy #479 and the block-4 qualification code
    `FILL[PRODUCTION-LEDGER-SEED]`. The live head is not the acceptance cutoff (sequence 376); brackets read the
    cutoff view (the #467 lesson). `s1`'s ARM, GO, consumption and runs sit in shakedown custody, isolated from claim
    roots. **Only `s1` (and a fresh attempt or `s2`) reserves in the production ledger** (addendum D, item 4).
-   - G10's preparation, `a1` and `a2` each bind `CALIBRATION_LEDGER` to their own byte-exact copy of the seed.
-   - Each copy lies outside all four ARM-context roots and stays unchanged until `s1`'s writer has run.
+   - G10's preparation, `a1` and `a2` each bind `CALIBRATION_LEDGER` to their own working ledger, made as a
+     byte-exact copy of the seed. Each control's T-0 reservation appends its native rows to its own copy, never to
+     production.
+   - Each copy lies outside all four ARM-context roots. After its control's reservation it is not touched again
+     until `s1`'s writer has run, because the control records pin its digest.
    - Before every T-0, the recipe asserts that the production ledger's SHA-256 and the committed pin still equal
      the seed's.
 
@@ -358,8 +361,8 @@ The integration branch fixes these interfaces before seal; this table grants no 
 | Arm-only controls | `FILL[ARM-ONLY-CLI]`, `FILL[ARM-ABORT-CHECK-CLI]` | `a1`/`a2` contexts and an authenticated `arm-abort-control.json` each. |
 | Qualification | `FILL[QUALIFICATION-OBSERVE-CLI]`, `FILL[DESK-CLOSEOUT-CLI]`, `FILL[QUALIFICATION-HARVEST-CLI]` | Observation records, the desk step's backup, close-out and restore records, and the qualification verdict. |
 | G2-b harvest | `FILL[G2B-HARVEST-CLI]` | `harvest.json`, bracket, whole-window, desk and L10 proofs, tree hashes, restricted re-reductions and the L10-A record. A re-harvest authenticates the existing verdict row and never appends another. |
-| Terminal refresh | `FILL[TERMINAL-REFRESH-CLI]` | The guarded pin advance, readiness and freeze refresh and record 47's changed-path proof. |
-| Q110 | `FILL[Q110-RECORD-CLI]`, `FILL[Q110-RECORD-PATH]` | At least three real bundles from `a1`, `a2` and `s1` (a NULL `s1` attempt's ARM receipt may substitute), with receipt ids, paths, hashes and boots. |
+| Terminal refresh | `FILL[TERMINAL-REFRESH-CLI]` (due before the first claim arm, not at seal) | Two separate steps. First, the desk step's guarded ledger pin advance, which the desk close-out checks as a pin-only change with the pack digests unchanged. Then, after both harvests, the readiness and freeze re-authoring, with record 47's changed-path proof covering both. |
+| Q110 | `FILL[Q110-RECORD-CLI]`, `FILL[Q110-RECORD-PATH]` (due before ALPHA, not at seal) | At least three real bundles from `a1`, `a2` and `s1` (a NULL `s1` attempt's ARM receipt may substitute), with receipt ids, paths, hashes and boots. |
 
 Q110's formula is unchanged: `validity_origin = valid_until_monotonic_ns − _validity_horizon_ns(kind)` and
 `elapsed = validity_origin − t_batch_finished`, where `t_batch_finished` is the existing
@@ -459,7 +462,7 @@ coverage before any recovery or claim arm. Any other head difference or operatin
 | GAMMA | `configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5`, `FILL[GAMMA-PACK-DIGEST-AND-FREEZE]`; predecessor `d117_contrast_qwen25_1p5b_vs_7b_v3`, expected `freeze-0004` | Seal |
 | Desk proof, family, history, identity, battery S3/S4 disposition | `FILL[DESK-PROOF-AND-FAMILY-BINDINGS]` | Seal |
 | Step-6 confirmation | `d117_step6_confirmation_table_v5.json`; `FILL[STEP6-CUSTODY-PATHS-AND-RECORD-SHA256]`; hC stays in custody only | Each arm |
-| Authorizations | `FILL[A1-AUTHORIZATION]`, `FILL[A2-AUTHORIZATION]`, `FILL[S1-AUTHORIZATION]`: the seven contract §4 keys, mode 0600, create-once | Each arm |
+| Authorizations | `FILL[A1-AUTHORIZATION]`, `FILL[A2-AUTHORIZATION]`, `FILL[S1-AUTHORIZATION]`: the seven contract §4 keys plus, for `s1` and `s2`, `previous_attempt` and `block_archive_root` (§7); mode 0600, create-once | Each arm |
 | Ids, T-0, ordinal, ARM/GO/consumption, rosters | `FILL[PER-OCCURRENCE-ID-AND-RECEIPT-MAP]`, §3 rosters | Interfaces at seal; bytes at runtime |
 | Roots and production census | `FILL[ROOTS-AND-CUSTODY-MAP]` | Recipe at seal; each arm |
 | Backups | `FILL[BACKUP-DESTINATIONS-AND-VERIFICATION]` | Recipe at seal; desk step |
