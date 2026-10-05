@@ -218,6 +218,24 @@ class AdmissionAssessmentTests(unittest.TestCase):
         q.authenticate_attempt_record(result, Path(self.plan.block_archive_root))
         self.assertEqual(proof["admission_abort_count"], 1)
 
+    def test_both_harvesters_refuse_lower_number_before_archive_publication(self):
+        self.harvest()
+        attempt = self.args.archive_root
+        # A reserved replay without a verdict still consumes its number.
+        (attempt / "reharvest-10").mkdir()
+        lower = attempt / "reharvest-2"
+        self.args.archive_root = lower
+        self.args.previous_harvest = attempt
+        args = SimpleNamespace(plan=self.plan_path, archive_root=lower,
+            battery_evidence=Path(self.refs["battery_boundaries"]["path"]),
+            battery_evidence_sha256=self.refs["battery_boundaries"]["sha256"],
+            previous_harvest=attempt / "qualification")
+        for harvest in (self.harvest, lambda: qualification.harvest(args, clear=lambda *a, **kw: True)):
+            with self.subTest(harvest=harvest):
+                with self.assertRaisesRegex(q.HarvestRefusal, "attempt_reharvest_number_not_increasing"):
+                    harvest()
+                self.assertFalse(lower.exists())
+
 
 class RepeatedNullWriterTests(unittest.TestCase):
     def setUp(self):
@@ -361,11 +379,12 @@ class HistoryTests(unittest.TestCase):
             q.archive_sources({"capture": source}, unit)
             self.save(original)
         replay = unit / f"reharvest-{number}"
+        plan = SimpleNamespace(plan_id="s1", block_archive_root=str(self.archive))
+        q.attempt_destination(plan, replay, replay=previous or unit)
         q.archive_sources({"capture": source}, replay, previous=previous or unit)
         record = dict(original, verdict=verdict, cause_classes=["tooling"] if verdict == "RECOVER" else [],
                       cause_codes=["named_tooling_fault"] if verdict == "RECOVER" else ["chain_never_started"])
         x7.put(replay / "harvest.json", record)
-        plan = SimpleNamespace(plan_id="s1", block_archive_root=str(self.archive))
         return record, plan, unit, replay
 
     def test_refused_then_null_reharvest_allows_fresh_s1(self):
@@ -389,6 +408,48 @@ class HistoryTests(unittest.TestCase):
             self.history(x7.attempt("fresh", q.reference(unit / "harvest.json")))
         self.assertEqual(self.history(x7.attempt("s2", q.reference(unit / "harvest.json"),
                                                occurrence="s2", verdict="PASS"))["s2_count"], 1)
+
+    def test_lower_number_written_later_refuses_before_publication(self):
+        record, plan, unit, replay = self.reharvest("RECOVER", number=2)
+        physics = dict(record, cause_classes=["instrument_physics"],
+                       cause_codes=["member_not_strict_valid_bounded_success"], end_state=True)
+        x7.put(replay / "harvest.json", physics)
+        q.checked_history(physics, plan, replay=True)
+        before = {path: path.read_bytes() for path in unit.rglob("*") if path.is_file()}
+        with self.assertRaisesRegex(q.HarvestRefusal, "attempt_reharvest_number_not_increasing"):
+            self.reharvest("NULL", number=1)
+        self.assertFalse((unit / "reharvest-1").exists())
+        self.assertEqual({path: path.read_bytes() for path in unit.rglob("*") if path.is_file()}, before)
+        self.assertEqual(q.counted_attempt(q.read(unit / "harvest.json"), unit / "harvest.json"), physics)
+        with self.assertRaisesRegex(q.HarvestRefusal, "fresh_s1_predecessor_not_rearmable"):
+            self.history(x7.attempt("fresh", q.reference(unit / "harvest.json"), verdict="REFUSED"))
+
+    def test_lower_number_pending_path_refuses_before_archiving(self):
+        record, plan, unit, replay = self.reharvest("RECOVER", number=2)
+        physics = dict(record, cause_classes=["instrument_physics"],
+                       cause_codes=["member_not_strict_valid_bounded_success"], end_state=True)
+        x7.put(replay / "harvest.json", physics)
+        q.checked_history(physics, plan, replay=True)
+        with self.assertRaisesRegex(q.HarvestRefusal, "attempt_reharvest_number_not_increasing"):
+            self.reharvest("RECOVER", number=1)
+        self.assertFalse((unit / "reharvest-1").exists())
+        with self.assertRaisesRegex(q.HarvestRefusal, "s2_not_after_named_tooling_recover"):
+            self.history(x7.attempt("s2", q.reference(unit / "harvest.json"), occurrence="s2", verdict="REFUSED"))
+
+    def test_reharvest_number_reserves_unpublished_and_qualification_directories(self):
+        _, plan, unit, _ = self.reharvest("REFUSED", number=2)
+        for number, verdict_kind in ((7, None), (10, "qualification")):
+            reserved = unit / f"reharvest-{number}"
+            reserved.mkdir()
+            if verdict_kind:
+                x7.put(reserved / "harvest.json", {"verdict_kind": verdict_kind, "verdict": "REFUSED"})
+            with self.subTest(number=number, verdict_kind=verdict_kind):
+                for candidate in (number - 1, number):
+                    with self.assertRaisesRegex(q.HarvestRefusal, "attempt_reharvest_number_not_increasing"):
+                        q.attempt_destination(plan, unit / f"reharvest-{candidate}", replay=unit)
+                higher = unit / f"reharvest-{number + 1}"
+                self.assertEqual(q.attempt_destination(plan, higher, replay=unit), unit)
+                self.assertFalse(higher.exists())
 
     def test_refused_reharvest_then_null_counts_null(self):
         self.reharvest("REFUSED", number=1)
