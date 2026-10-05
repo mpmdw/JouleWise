@@ -1,7 +1,8 @@
-# Recipe 46: the clock-anchor positive control (G10), before measurement block 4
+# Recipe 46: the clock-anchor positive control (G10), inside measurement block 4
 
-2026-10-05, desk-day seat 2 (Opus 5.5). For Ed. The software is ready; **the control has not been performed.**
-Registration V5-QUAL-25G83-B4 §5 is the rule this recipe carries out.
+2026-10-05, desk-day seat 2 (Opus 5.5); revised the same day by seat 3 for ruling 76 addendum D (G10 moves from
+before `a1` to between `a2` and `s1`, and waits for a measured clock offset). For Ed. The software is ready; **the
+control has not been performed.** Registration V5-QUAL-25G83-B4 §5 is the rule this recipe carries out.
 
 ## What this proves, and why it is needed
 
@@ -20,12 +21,37 @@ control passes only if the clock is really reset (after removing steady drift, t
 
 ## When
 
-Once, before the block's first arm-only control (`a1`) starts its T-0. Nothing may be armed, no capture may be
-running, and no Claude or Codex agent session may be open. Close every agent session first.
+Once, after the block's two arm-only controls (`a1`, then `a2`) have finished and before the consuming night `s1`
+starts its T-0, on the same boot (do not restart the Mac between `a1` and `s1`). Nothing may be armed, no capture
+may be running, and no Claude or Codex agent session may be open. Close every agent session first.
+
+**Why not first.** The control only proves something if turning network time on actually moves the clock. How far
+it moves is the *offset*: how far the Mac's clock has drifted from true time since it last synchronized. Today the
+clock is about 1.15 s off. Every T-0 preparation checks the clock against internet time servers and, if it is more
+than 0.5 s off, synchronizes it first. So the first T-0 preparation of the block (`a1`'s) will synchronize the
+clock and bring the offset near zero. If G10 ran first, that synchronization would happen inside G10's own
+preparation, and G10's switch-on would then find almost nothing to correct. Run after `a1`, G10 instead finds the
+drift that has built up since `a1`'s synchronization, about 11 ms per hour at today's drift rate.
+
+**How long to wait.** G10 needs an offset of at least 20 ms, so that the switch-on moves the clock well past the
+5 ms threshold. It also needs the offset to stay under 0.4 s, so that its own preparation does not synchronize.
+Twenty milliseconds accrues about two hours after `a1`'s synchronization. The lead checks this before handing you
+anything (next section), so you are only called when the clock is ready.
 
 ## What the lead hands you beforehand
 
-Four paths, filled in when the block is prepared:
+First the lead runs a read-only offset check. It queries the time servers with the same fixed command T-0 uses,
+and changes nothing:
+
+```zsh
+(cd '<execution checkout>' && .venv/bin/python scripts/ed_session/capture_t0_anchor_positive_control.py preflight)
+```
+
+Exit 0 (`PASS`) means the offset is in the band. Exit 3 means it is still under 20 ms: wait and check again later.
+Exit 4 means it is over 0.4 s, which should not happen after `a1`: the lead decides. Only after a PASS does the lead
+prepare the inputs below, because they expire within an hour.
+
+Then four paths:
 
 1. a clean, reviewed execution checkout of JouleWise containing the helper;
 2. a committed control pack inside that checkout;
@@ -36,6 +62,8 @@ Four paths, filled in when the block is prepared:
 Preparing those inputs finishes with network time OFF and no agent running.
 
 ## What to type
+
+Run this within an hour of the inputs being prepared.
 
 In an ordinary terminal:
 
@@ -49,6 +77,8 @@ In an ordinary terminal:
 The helper asks you to confirm that no agent, armed window or capture is running. Type `OUTSIDE` only if that is
 true. It then:
 
+0. measures the offset again, exactly as the lead's check did, and stops at once, without touching the clock, if it
+   is outside the band;
 1. copies the author inputs into the custody directory and stamps both clocks;
 2. turns network time ON with the same command every window's arm step already uses,
    `/usr/bin/sudo -n /usr/sbin/systemsetup -setusingnetworktime on` (no password; existing sudoers entry);
@@ -66,6 +96,10 @@ stamps, every poll, the author's response, the OFF receipt, a SHA-256 manifest) 
 directory. The lead authenticates it and combines it with the software boundary checks.
 
 ## If it does not work
+
+- **`g10_preflight_offset_too_small` or `g10_preflight_offset_too_large`** (exit 2, with `"g10_attempt": false`):
+  nothing was spent and the clock was not touched. Tell the lead. A later try needs a new, empty custody directory
+  and, if the inputs have expired, fresh inputs.
 
 - **The anchor moved 5 ms or less** (exit 2, `NOT-DISCHARGED`): stop and tell the lead, with the custody path.
   **Do not run it again**, and do not change the time any other way. The lead decides the next step.
