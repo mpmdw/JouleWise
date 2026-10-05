@@ -40,6 +40,7 @@ from joulewise import arm_readiness as _readiness
 from joulewise import battery_float as _battery_float
 from joulewise import calibration_ledger as _ledger
 from joulewise import clock_reference as _clock_reference
+from joulewise import kernel_clock as _kernel_clock
 from joulewise import identity_pins as _identity
 
 
@@ -74,6 +75,7 @@ _AUTHORING_ARTIFACTS = (
     "joulewise/prewindow.py",
     "joulewise/network_time_off.py",
     "joulewise/clock_reference.py",
+    "joulewise/kernel_clock.py",
     "joulewise/arm_readiness_evidence_t0.py",
     "scripts/author_arm_evidence_t0.py",
     "scripts/capture_t0_step.py",
@@ -557,7 +559,10 @@ def _capture(
             ],
             str(exc),
         ) from exc
-    if set(value) != _CAPTURE_KEYS or value.get("schema_version") != _COMMAND_SCHEMA:
+    capture_keys = _CAPTURE_KEYS
+    if step_id == "clock-reference" and "kernel_frequency" in value:
+        capture_keys = _CAPTURE_KEYS | {"kernel_frequency", "t_stream_max_s"}
+    if set(value) != capture_keys or value.get("schema_version") != _COMMAND_SCHEMA:
         raise _underivable(kind, f"{step_id} command capture schema/keys are invalid")
     if value.get("step_id") != step_id:
         raise _underivable(kind, f"{step_id} command capture names a different step")
@@ -763,6 +768,15 @@ def _captured_clock_reference(
     if value["anchor_read_skew_ns"] > 1_000_000:
         raise _underivable(kind, "R0 anchor read skew exceeds 1000000 ns")
     agreement = _reference_agreement(legs, kind=kind, label="R0 reference")
+    try:
+        frequency = _kernel_clock.validate_probe(capture.get("kernel_frequency"))
+    except ValueError as exc:
+        raise _underivable(kind, str(exc)) from exc
+    if (context.pack_root.name == "d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5"
+            and capture.get("t_stream_max_s") is None):
+        raise _underivable(kind, "qualification kernel frequency gate is missing")
+    value = {**value, "kernel_frequency": frequency,
+             "t_stream_max_s": capture.get("t_stream_max_s")}
     result = (value, identity, agreement)
     context.values["clock_reference"] = result
     return result
@@ -1188,12 +1202,25 @@ def _derive_clock_attestation(context: _Context) -> _DerivedRow:
         raise _underivable(kind, "T-0 RAW anchor span is below 600000000000 ns")
     if span > _MAX_T0_SEQUENCE_AGE_NS:
         raise _underivable(kind, "T-0 RAW anchor span exceeds 3600000000000 ns")
-    anchor_delta = abs(
-        (author_anchor.realtime_ns - author_anchor.monotonic_raw_ns)
-        - (r0["anchor_realtime_ns"] - r0["anchor_monotonic_raw_ns"])
-    )
-    if anchor_delta > 5_000_000:
+    anchor_movement = ((author_anchor.realtime_ns - author_anchor.monotonic_raw_ns)
+                       - (r0["anchor_realtime_ns"] - r0["anchor_monotonic_raw_ns"]))
+    anchor_delta = abs(anchor_movement)
+    try:
+        r0_frequency = _kernel_clock.validate_probe(r0.get("kernel_frequency"))
+        author_frequency = _kernel_clock.validate_probe(_kernel_clock.read_kernel_frequency())
+        residual = _kernel_clock.anchor_residual_ns(anchor_movement, span, r0_frequency)
+        stream_max = r0.get("t_stream_max_s")
+        if stream_max is not None and not _kernel_clock.frequency_gate(r0_frequency, stream_max)["passes"]:
+            raise ValueError("R0 kernel frequency exceeds the stream clock budget")
+    except (OSError, ValueError) as exc:
+        raise _underivable(kind, str(exc)) from exc
+    # Keep the registered G10 refusal when a real resync exceeds the residual
+    # bound, even if that intervention also changes the frequency word.
+    if residual > 5_000_000:
         raise _underivable(kind, "R0-to-author RAW anchor delta exceeds 5000000 ns")
+    if author_frequency["raw_word"] != r0_frequency["raw_word"]:
+        raise _refuse(kind, "evidence_author_t0_kernel_frequency_changed",
+                      "R0-to-author kernel frequency word changed")
     if author_anchor.read_skew_ns > 1_000_000:
         raise _underivable(kind, "author anchor read skew exceeds 1000000 ns")
     r1_finished_raw = author_anchor.monotonic_raw_ns
@@ -1217,6 +1244,11 @@ def _derive_clock_attestation(context: _Context) -> _DerivedRow:
         "anchor_monotonic_raw_ns": author_anchor.monotonic_raw_ns,
         "anchor_read_skew_ns": author_anchor.read_skew_ns,
         "anchor_delta_ns": anchor_delta,
+        "anchor_check_version": _kernel_clock.ANCHOR_CHECK_VERSION,
+        "r0_kernel_frequency": r0_frequency,
+        "kernel_frequency": author_frequency,
+        "anchor_residual_ns": float(residual),
+        "t_stream_max_s": stream_max,
         "t0_span_ns": span,
         "r1_batch_started_monotonic_raw_ns": r1_started_raw,
         "r1_batch_finished_monotonic_raw_ns": r1_finished_raw,

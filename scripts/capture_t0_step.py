@@ -25,7 +25,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from joulewise import network_time_off, arm_readiness_evidence_t0 as t0
+from joulewise import network_time_off, kernel_clock, arm_readiness_evidence_t0 as t0
 from joulewise import arm_readiness as readiness  # noqa: E402
 from joulewise.dwell import final_clean_dwell
 from joulewise.arm_readiness_evidence_t0 import (  # noqa: E402
@@ -569,7 +569,8 @@ def _require_sequence(context: CaptureContext, step_id: str) -> None:
             )
             if (
                 not isinstance(value, Mapping)
-                or set(value) != CAPTURE_KEYS
+                or set(value) != (CAPTURE_KEYS | {"kernel_frequency", "t_stream_max_s"}
+                    if prior == "clock-reference" and "kernel_frequency" in value else CAPTURE_KEYS)
                 or value.get("schema_version") != COMMAND_CAPTURE_SCHEMA
                 or value.get("step_id") != prior
                 or value.get("argv") != list(_command_for_step(context, prior))
@@ -732,7 +733,7 @@ def _validate_result(
             )
 
 
-def _arm_reference(context, execute, monotonic_ns):
+def _arm_reference(context, execute, monotonic_ns, *, frequency_probe=None):
     """Resync only on fresh empty arm roots; OFF even on resync failure."""
     path = context.input_root / network_time_off.RECEIPT_BASENAME
     if path.exists() or path.is_symlink() or (context.input_root / "clock-reference.json").exists():
@@ -744,6 +745,8 @@ def _arm_reference(context, execute, monotonic_ns):
     resync = False
     try:
         for attempt in range(25):
+            frequency_before = (kernel_clock.validate_probe(frequency_probe())
+                                if frequency_probe is not None else None)
             completed = execute(_command_for_step(context, "clock-reference"), cwd=context.repository)
             finished = monotonic_ns()
             try:
@@ -753,6 +756,11 @@ def _arm_reference(context, execute, monotonic_ns):
                 t0._reference_agreement(legs, kind="CLOCK_ATTESTATION", label="arm reference")
                 if completed.returncode != 0:
                     raise ValueError("reference command failed")
+                if frequency_probe is not None:
+                    frequency = kernel_clock.validate_probe(frequency_probe())
+                    if frequency["raw_word"] != frequency_before["raw_word"]:
+                        raise ValueError("kernel frequency changed during R0 batch")
+                    completed.kernel_frequency = frequency
                 return completed, finished
             except (ValueError, t0.T0EvidenceAuthoringError):
                 if finished >= deadline or attempt == 24:
@@ -797,7 +805,22 @@ def _capture_step_with_dependencies(
     started = monotonic_ns()
     try:
         if step_id == "clock-reference":
-            completed, finished = _arm_reference(context, execute, monotonic_ns)
+            completed, finished = _arm_reference(context, execute, monotonic_ns,
+                                                 frequency_probe=kernel_clock.read_kernel_frequency)
+            r0_frequency = completed.kernel_frequency
+            after_off_frequency = kernel_clock.validate_probe(kernel_clock.read_kernel_frequency())
+            if after_off_frequency["raw_word"] != r0_frequency["raw_word"]:
+                raise ValueError("kernel frequency changed during R0; fresh R0 required")
+            gate_path = context.input_root / "kernel-frequency-gate.json"
+            stream_max = None
+            if gate_path.exists() or gate_path.is_symlink():
+                gate = kernel_clock.validate_gate(readiness.parse_json_bytes(
+                    _regular_bytes(gate_path, label="kernel frequency gate"), require_canonical=True))
+                stream_max = gate["t_stream_max_s"]
+                if not kernel_clock.frequency_gate(r0_frequency, stream_max)["passes"]:
+                    raise ValueError("R0 kernel frequency exceeds the stream clock budget")
+            elif context.pack_root.name == "d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5":
+                raise ValueError("qualification kernel frequency gate is missing")
         elif step_id == "clock-disable":
             off = network_time_off.read_receipt(
                 context.input_root / network_time_off.RECEIPT_BASENAME,
@@ -835,6 +858,8 @@ def _capture_step_with_dependencies(
         "finished_monotonic_ns": finished,
         "boot_session_id": starting_boot,
     }
+    if step_id == "clock-reference":
+        capture.update(kernel_frequency=r0_frequency, t_stream_max_s=stream_max)
     if completed.returncode != 0:
         raise _refuse(
             "evidence_author_t0_capture_command_failed",

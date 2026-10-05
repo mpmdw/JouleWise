@@ -43,6 +43,37 @@ class _Clock:
 class CaptureT0StepTests(unittest.TestCase):
     maxDiff = None
 
+    def setUp(self):
+        from tests.test_kernel_clock import frequency_probe
+        patcher = mock.patch.object(capture.kernel_clock, "read_kernel_frequency", return_value=frequency_probe())
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_r0_frequency_gate_refuses_changed_draw_before_capture_publication(self):
+        from joulewise import kernel_clock
+        from tests.test_kernel_clock import frequency_probe
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            context = SimpleNamespace(input_root=root, repository=root,
+                pack_root=root / "fixture", boot_session_id=TEST_BOOT_SESSION_ID)
+            (root / "kernel-frequency-gate.json").write_bytes(readiness.render_json(
+                kernel_clock.frequency_gate(frequency_probe(-207749), 320)))
+            completed = subprocess.CompletedProcess(["/fixture/reference"], 0, b"{}\n", b"")
+            completed.kernel_frequency = frequency_probe(12 * 65536)
+            with (mock.patch.object(capture, "_load_context", return_value=context),
+                  mock.patch.object(capture, "_prepare_derived_inputs", return_value=[]),
+                  mock.patch.object(capture, "_require_sequence"),
+                  mock.patch.object(capture, "_command_for_step", return_value=("/fixture/reference",)),
+                  mock.patch.object(capture, "_current_boot_session_id", return_value=TEST_BOOT_SESSION_ID),
+                  mock.patch.object(capture, "_arm_reference", return_value=(completed, 20)),
+                  mock.patch.object(kernel_clock, "read_kernel_frequency", return_value=completed.kernel_frequency),
+                  self.assertRaises(capture.CaptureT0Error) as caught):
+                capture._capture_step_with_dependencies("clock-reference", root, root, root,
+                                                       monotonic_ns=lambda: 10)
+            self.assertEqual(caught.exception.reason_code, "evidence_author_t0_capture_result_invalid")
+            self.assertIn("stream clock budget", str(caught.exception))
+            self.assertFalse((root / "clock-reference.json").exists())
+
     @staticmethod
     def _terminal_review_message(tree_oid: str, packs: tuple[str, ...]) -> str:
         return "\n".join(
@@ -255,6 +286,12 @@ class CaptureT0StepTests(unittest.TestCase):
             self.assertEqual(code, 0, buffer.getvalue())
             result = json.loads(buffer.getvalue())
             self.assertEqual([row["step_id"] for row in result["captures"]], list(capture.STEP_ORDER))
+            from tests.test_kernel_clock import frequency_probe
+            r0_capture = json.loads((input_root / "clock-reference.json").read_bytes())
+            self.assertEqual(r0_capture["kernel_frequency"], frequency_probe())
+            self.assertIsNone(r0_capture["t_stream_max_s"])
+            self.assertEqual(json.loads(r0_capture["stdout"])["anchor_monotonic_raw_ns"],
+                             SYNTHETIC_MONOTONIC_NS - 900 * 1_000_000_000)
 
         self.assertEqual(
             {path.name for path in input_root.iterdir()},

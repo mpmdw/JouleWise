@@ -13,6 +13,8 @@ from unittest import mock
 
 from joulewise import arm_readiness as readiness
 from joulewise import clock_reference
+from joulewise import kernel_clock
+from tests.test_kernel_clock import frequency_probe
 from joulewise import network_time_off
 from joulewise import t0_rehearsal as rehearsal
 from scripts import rehearse_t0_unattended as cli
@@ -156,6 +158,11 @@ def install_t0_inventory(fixture):
     from joulewise import arm_readiness_evidence_t0 as author
     from tests.test_arm_readiness_schemas import sample_evidence
     root = fixture.custody / fixture.pack.name
+    if Path(fixture.arm["arm_context"]["custody_root"]) == fixture.custody:
+        capture_root = fixture.custody.with_name(fixture.custody.name + "-captures")
+        capture_root.mkdir(exist_ok=True)
+        fixture.arm["arm_context"]["custody_root"] = str(capture_root)
+    _write_json(root / author._INPUT_DIRECTORY / "arm-context.json", fixture.arm["arm_context"])
     recipe_path = root / fixture.arm["evidence"][0]["path"]
     recipe = readiness.parse_json_bytes(recipe_path.read_bytes())
     source_path = root / recipe["facts"][0]["source_path"]
@@ -168,6 +175,8 @@ def install_t0_inventory(fixture):
                                  started=now - 100 + index * 2,
                                  finished=now - 99 + index * 2)
         value["boot_session_id"] = fixture.arm["boot_session_id"]
+        if step == "clock-reference":
+            value.update(kernel_frequency=frequency_probe(), t_stream_max_s=None)
         _write_json(path, value)
         source["input_artifacts"].append(fixture._artifact(path))
         paths.append(path)
@@ -673,6 +682,50 @@ class FixtureBuilder:
 
 
 class T0RehearsalTests(unittest.TestCase):
+    def test_g4_replays_versioned_drift_step_and_slew_from_raw_custody(self):
+        from fractions import Fraction
+        with tempfile.TemporaryDirectory() as temporary:
+            builder = FixtureBuilder(Path(temporary))
+            root = builder.build()
+            source_path = builder.sources / "clock-correct-and-prior-state.json"
+            receipt_path = builder.receipts / "evidence-t0-clock-correct-and-prior-state.json"
+            source_original = json.loads(source_path.read_bytes())
+            receipt_original = json.loads(receipt_path.read_bytes())
+            capture_path = builder.inputs / "clock-reference.json"
+            capture = json.loads(capture_path.read_bytes())
+            frequency = frequency_probe(-207749)
+            capture.update(kernel_frequency=frequency, t_stream_max_s=320.)
+            _write_json(capture_path, capture)
+            for seconds, step, end_word, expected in (
+                    (1600, 0, -207749, rehearsal.GateStatus.PASS),
+                    (3600, 0, -207749, rehearsal.GateStatus.PASS),
+                    (1000, 6_000_000, -207749, rehearsal.GateStatus.FAIL),
+                    (1000, 1000, -207748, rehearsal.GateStatus.FAIL)):
+                with self.subTest(seconds=seconds, step=step, end_word=end_word):
+                    source = copy.deepcopy(source_original)
+                    receipt = copy.deepcopy(receipt_original)
+                    value = source["facts"][0]["value"]
+                    span = seconds * 10**9
+                    movement = round(Fraction(-207749 * span, 65536 * 10**6)) + step
+                    endpoint = value["r0_anchor_monotonic_raw_ns"] + span
+                    value.update(anchor_check_version=kernel_clock.ANCHOR_CHECK_VERSION,
+                        r0_kernel_frequency=frequency, kernel_frequency=frequency_probe(end_word),
+                        t_stream_max_s=320., t0_span_ns=span,
+                        anchor_monotonic_raw_ns=endpoint, anchor_realtime_ns=OFFSET_NS + endpoint + movement,
+                        anchor_delta_ns=abs(movement),
+                        anchor_residual_ns=float(kernel_clock.anchor_residual_ns(movement, span, frequency)),
+                        r1_batch_started_monotonic_raw_ns=endpoint - 1000,
+                        r1_batch_finished_monotonic_raw_ns=endpoint)
+                    for ref in source["input_artifacts"]:
+                        if ref["path"].endswith("clock-reference.json"):
+                            ref["sha256"] = readiness.sha256_bytes(capture_path.read_bytes())
+                    _write_json(source_path, source)
+                    receipt["facts"][0].update(value=copy.deepcopy(value),
+                        source_sha256=readiness.sha256_bytes(source_path.read_bytes()))
+                    _write_json(receipt_path, receipt)
+                    result = rehearsal.evaluate_g4(fixture_bundle(root))
+                    self.assertEqual(result.status, expected, result.message)
+
     maxDiff = None
 
     def _run_rehearsal_arm_liveness_boundary(
@@ -1014,11 +1067,18 @@ class PackGoReplayTests(unittest.TestCase):
     """Real GO/consumption replay; synthetic ARM semantics and T0 prerequisites."""
 
     def setUp(self):
-        from tests.test_arm_readiness import PackNightConsumerTests
+        from tests.test_arm_readiness import PackNightConsumerTests, LaunchConsumptionV2Tests
         self.case = PackNightConsumerTests()
-        self.case.setUp()
+        self.case.fixture = LaunchConsumptionV2Tests()
+        self.case.fixture.setUp()
+        self.case.addCleanup(self.case.fixture.doCleanups)
         self.addCleanup(self.case.doCleanups)
         self.fixture = self.case.fixture
+        _write_json(self.fixture.custody / self.fixture.pack.name /
+                    "arm_readiness.t0.inputs/arm-context.json", self.fixture.arm["arm_context"])
+        self.case.inputs = self.fixture._consumer_inputs()
+        self.case.consumption = (self.fixture.custody / self.fixture.pack.name /
+                                "arm_readiness.consumptions/arm-0001.consumed.json")
         self.case.rewrite_go(lambda go: go["conditions"][3].update(
             evidence=copy.deepcopy(go["conditions"][1]["evidence"])))
         self.case.consume()

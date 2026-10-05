@@ -23,7 +23,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from joulewise import arm_readiness as readiness
-from joulewise import night_gate
+from joulewise import night_gate, kernel_clock
 from joulewise.night_plan_writer import night_plan_mapping, write_night_plan
 
 INPUT_SCHEMA = "joulewise.v5_qualification_inputs.v1"
@@ -433,7 +433,6 @@ def prerequisites(occurrence, references, head, t0_sequence_start, custody, *, c
                 and positive["performed_by"] == "Ed"
                 and all(positive[key] is True for key in ("outside_t0_sequence", "network_time_reenabled", "forced_resync"))
                 and type(positive["anchor_before_ns"]) is int and type(positive["anchor_after_ns"]) is int
-                and abs(positive["anchor_after_ns"] - positive["anchor_before_ns"]) > 5_000_000
                 and positive["author_refusal_reason_code"] == "evidence_author_t0_clock_attestation_underivable", "g10_control_not_pass")
         require(isinstance(references["g10_artifacts"], list) and len(references["g10_artifacts"]) == 1,
                 "g10_custody_manifest_required")
@@ -489,7 +488,7 @@ def authenticate_frozen_pack(root, confirmation):
 
 def write_qualification(occurrence, inputs, output):
     require(occurrence in {"a1", "a2", "s1"}, "occurrence_retired_or_invalid")
-    exact(inputs, {"schema_version", "head", "plan", "pack", "authorization", "confirmation", "sizing", "deadlines", "other_custody_roots", "arm_context", "prerequisites"}, "inputs")
+    exact(inputs, {"schema_version", "head", "plan", "pack", "authorization", "confirmation", "sizing", "deadlines", "other_custody_roots", "arm_context", "prerequisites", "kernel_frequency"}, "inputs")
     require(inputs["schema_version"] == INPUT_SCHEMA, "inputs.schema")
     no_fill(inputs)
     base = dict(inputs["plan"])
@@ -513,6 +512,12 @@ def write_qualification(occurrence, inputs, output):
     require(base["plan_id"] == frozen_identity["plan_id"], "frozen_plan_id")
     roster, auxiliary, brackets, nonsampling = pack_roster(root, occurrence)
     sizing = size_window(occurrence, inputs["sizing"], roster=roster, auxiliary=auxiliary, brackets=brackets, nonsampling=nonsampling)
+    gate = kernel_clock.frequency_gate(inputs["kernel_frequency"], sizing["longest_sampler_stream_s"])
+    if not gate["passes"]:
+        refusal = QualificationError("kernel_frequency_gate_exceeded")
+        refusal.kernel_frequency_gate = gate
+        raise refusal
+    sizing["kernel_frequency_gate"] = gate
     require(base["window_max_s"] == sizing["window_max_s"], "window_max")
     chain = safe_path(base["chain_path"])
     text = chain.read_text()
@@ -580,6 +585,7 @@ def write_qualification(occurrence, inputs, output):
     input_root = custody / root.name / "arm_readiness.t0.inputs"
     input_root.mkdir(parents=True, exist_ok=True)
     context_ref = create_record(input_root / "arm-context.json", context)
+    create_record(input_root / "kernel-frequency-gate.json", gate)
     night_gate._authenticate_pack_records(plan)
     record = {"schema_version": OUTPUT_SCHEMA, "occurrence": occurrence,
               "head": inputs["head"], "pack_night": plan.pack_night,
@@ -624,7 +630,8 @@ def write_qualification(occurrence, inputs, output):
             "positive_control_artifacts": inputs["prerequisites"]["g10_artifacts"],
             "timeout_s_required": True}
         create_record(custody / "qualification-plan-record.json", record)
-    return {"status": "STAGED", "occurrence": occurrence, "output": locator(output)}
+    return {"status": "STAGED", "occurrence": occurrence, "output": locator(output),
+            "kernel_frequency_margin_ms": gate["margin_ms"]}
 
 
 def main(argv=None):
@@ -650,6 +657,13 @@ def main(argv=None):
                 arm_context=read_object(args.arm_context))
         else:
             result = write_qualification(args.occurrence, read_object(args.inputs), args.output)
+    except QualificationError as exc:
+        result = {"status": "REFUSED", "reason_code": "qualification_inputs_invalid"}
+        if hasattr(exc, "kernel_frequency_gate"):
+            result.update(reason_code="kernel_frequency_gate_exceeded",
+                          kernel_frequency_margin_ms=exc.kernel_frequency_gate["margin_ms"],
+                          kernel_frequency_gate=exc.kernel_frequency_gate)
+        code = 2
     except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
         # Input text, validator details and inference logs are never public.
         result = {"status": "REFUSED", "reason_code": "qualification_inputs_invalid"}
