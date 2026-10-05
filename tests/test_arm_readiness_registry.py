@@ -54,7 +54,7 @@ ROW_ID_RE = re.compile(r"`((?:desk|privilege|clock|t0)\.[a-z0-9_]+)`")
 EXPECTED_ROW_IDS = [
     "clock.correct_and_prior_state",
     "clock.network_time_off",
-    "clock.restore_recipe",
+    "clock.network_time_policy",
     "desk.acceptance_owner",
     "desk.acceptance_successor",
     "desk.arming_procedure",
