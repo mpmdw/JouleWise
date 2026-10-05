@@ -304,11 +304,16 @@ def prepare_native_qualification(mapping):
         shutil.copyfile(ROOT / relative, target)
     # All custody and observations live outside the tracked measurement tree.
     (measurement / '.git/info/exclude').write_text('*\n')
-    subprocess.run(['git', '-C', str(measurement), 'add', '-f', 'scripts/backup_runs.sh', desk.RUNSHEET], check=True)
+    # OFF custody belongs to the frozen pack plan, not the night plan (F.3).
+    frozen_pack_plan = {'plan_id': case.arm['pack']['plan_id']}
+    producer.write(case.pack / 'calibration_plan.json', frozen_pack_plan)
+    subprocess.run(['git', '-C', str(measurement), 'add', '-f',
+        'scripts/backup_runs.sh', desk.RUNSHEET, str(case.pack / 'calibration_plan.json')], check=True)
     subprocess.run(['git', '-C', str(measurement), '-c', 'user.name=Fixture',
         '-c', 'user.email=fixture@example.invalid', 'commit', '-qm', 'desk fixture sources'], check=True)
     head = subprocess.check_output(['git', '-C', str(measurement), 'rev-parse', 'HEAD'], text=True).strip()
     case.arm['reviewed_main']['head_commit'] = head
+    case.arm['pack']['pack_sha256'] = readiness.committed_pack_tree_sha256(case.pack)
     chain = case.chain_path.read_text()
     case.chain_path.write_text('export V5_QUALIFICATION_OCCURRENCE=s1\n' + chain)
     Path(str(case.chain_path) + '.sha256').write_bytes(readiness.gnu_sidecar(q.sha(case.chain_path), case.chain_path.name))
@@ -322,6 +327,7 @@ def prepare_native_qualification(mapping):
     for path in (namespace / author._SOURCE_DIRECTORY).glob('*.json'):
         row = q.read(path)
         row['head_commit'] = head
+        row['pack_sha256'] = case.arm['pack']['pack_sha256']
         for ref in row.get('input_artifacts', []):
             ref.update(producer.reference(ref['path']))
         path.write_bytes(readiness.render_json(row))
@@ -388,7 +394,7 @@ def prepare_native_qualification(mapping):
     producer.write(Path(record['terminal_boundary_path']), dict(session_state='finalized', pin_relation='physical_ahead',
         refusal_code='calibration_ledger_head_mismatch', terminal_head_pin_candidate={'fixture': True}))
     off = off_receipt()
-    off.update(plan_id=plan.plan_id, window_id=record['window_id'], boot_id=case.arm['boot_session_id'])
+    off.update(plan_id=frozen_pack_plan['plan_id'], window_id=record['window_id'], boot_id=case.arm['boot_session_id'])
     producer.write(namespace / author._INPUT_DIRECTORY / 'network_time_off.json', off)
     standdown_path = mapping.night / 'standdown-observed.json'
     standdown = q.read(standdown_path)
