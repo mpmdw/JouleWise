@@ -131,6 +131,9 @@ _METADATA_KEYS = frozenset(
         # Private diagnostics can contain adapter-defined metadata paths, so
         # the public transform accepts the field but redacts its whole subtree.
         "serialization_quarantine",
+        # Private battery diagnostics include raw property lines, stderr and
+        # identity bindings. Redact the entire subtree, including future keys.
+        "battery_float",
     }
 )
 
@@ -269,6 +272,10 @@ _REQUIRED_CORE_PATHS = frozenset(
 _RAW_PATHS = frozenset(
     {
         "raw/mock_samples.json",
+        # AppleSmartBattery output can contain battery/device serial numbers.
+        # Keep source hashes in the transformation manifest, never raw bytes.
+        "raw/battery_float.pre.ioreg",
+        "raw/battery_float.post.ioreg",
         "raw/powermetrics.plist",
         "raw/powermetrics_idle.plist",
         "raw/powermetrics_idle_post.plist",
@@ -919,6 +926,8 @@ def _transform_metadata(value: dict[str, Any], public_id: str) -> dict[str, Any]
             result[key] = _scrub_path_strings(inner)
         elif key in {"platform", "machine"}:
             result[key] = _redacted(inner, REDACTED_IDENTITY)
+        elif key == "battery_float":
+            result[key] = _redacted_subtree(CLASS_OMIT_RAW)
         else:
             result[key] = _redacted_subtree(f"metadata.{key}")
     return result
@@ -1115,7 +1124,8 @@ def verify_public_bundle(bundle: Path, expected_public_id: str | None = None) ->
             }:
                 problems.append(f"config.{section}.{key} is not redacted")
     for key in _METADATA_KEYS - _METADATA_RETAIN_KEYS - {"run_id", "platform", "machine"}:
-        if key in metadata and metadata[key] != _redacted_subtree(f"metadata.{key}"):
+        label = CLASS_OMIT_RAW if key == "battery_float" else f"metadata.{key}"
+        if key in metadata and metadata[key] != _redacted_subtree(label):
             problems.append(f"metadata.{key} is not a redacted subtree")
     for key in ("platform", "machine"):
         if key in metadata and metadata[key] not in {None, REDACTED_IDENTITY}:

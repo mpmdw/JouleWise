@@ -6,8 +6,9 @@ manifests arrive with the experiment runner in Slice 2F) and applies:
 - D-002: raw evidence first - every run, including failed ones, leaves a
   complete bundle whose artifacts can be re-reduced without re-running
   hardware.
-- D-003/D-019: every timestamp comes from the injected
-  :class:`joulewise.clock.Clock`; this module never reads the wall clock.
+- D-003/D-019: measurement timestamps come from the injected
+  :class:`joulewise.clock.Clock`. Battery observations and their span stamps
+  use an independent clock so they cannot consume measurement timing inputs.
 - D-011: ``summary_metrics.json`` is the completion marker. No code path
   between ``RunBundleWriter.create`` and ``finalize()`` exits without a
   finalized bundle except process death: stage failures, structured adapter
@@ -77,7 +78,7 @@ from joulewise.bundle import (
     write_experiment_manifest,
     write_experiment_rejection_verdict,
 )
-from joulewise.clock import Clock, ClockStamp, FakeClock
+from joulewise.clock import Clock, ClockStamp, FakeClock, SystemClock
 from joulewise.cooldown_anchor import (
     COOLDOWN_ANCHOR_VERDICT_SCHEMA_VERSION,
     cooldown_anchor_eligibility,
@@ -254,6 +255,7 @@ def run_benchmark(
     instrument_power_policy: str | None = None,
     post_window_sampling_dwell_s: float | None = None,
     battery_runner: Callable | None = None,
+    battery_clock: Clock | None = None,
 ) -> tuple[Path, SummaryMetrics | SummaryMetricsV060]:
     """Run one benchmark and return ``(bundle path, summary)``.
 
@@ -357,6 +359,7 @@ def run_benchmark(
         pre_resolved_telemetry,
         float(post_window_sampling_dwell_s),
         battery_runner,
+        battery_clock,
     ).execute()
 
 
@@ -977,6 +980,7 @@ class _Execution:
         pre_resolved_telemetry: TelemetryAdapter | None = None,
         post_window_sampling_dwell_s: float = 0.0,
         battery_runner: Callable | None = None,
+        battery_clock: Clock | None = None,
     ) -> None:
         self._config = config
         self._writer = writer
@@ -1002,6 +1006,7 @@ class _Execution:
         self._pre_resolved_telemetry = pre_resolved_telemetry
         self._post_window_sampling_dwell_s = post_window_sampling_dwell_s
         self._battery_runner = battery_runner
+        self._battery_clock = battery_clock
         self._battery_float: dict[str, Any] = {"pre": None, "post": None}
         self._trace_window_margins: dict[str, float] | None = None
         self._environment_admission: dict[str, Any] | None = None
@@ -1123,18 +1128,22 @@ class _Execution:
         if self._config.hardware_target.telemetry_backend == TelemetryBackend.MOCK:
             return
         name = f"battery_float.{phase}.ioreg"
-        kwargs = dict(
-            runner=self._battery_runner,
-            wall_time_s=self._clock.now(),
-            monotonic_ns=lambda: battery_float.monotonic_ns_from_s(
-                _clock_stamp(self._clock).monotonic_after_s
-            ),
-            raw_path=f"raw/{name}", session_id=self._writer.run_id,
-        )
-        if phase == "pre":
-            record, raw = battery_float.observe(phase="bundle_pre", **kwargs)
-        else:
-            record, raw = battery_float.observe(phase="bundle_post", **kwargs)
+        try:
+            stamp = self._battery_stamp()
+            probe_kwargs = {
+                "runner": (battery_float.run_bundle_probe
+                           if self._battery_runner is None else self._battery_runner),
+                "wall_time_s": stamp.epoch_s,
+                "monotonic_ns": self._battery_monotonic_ns,
+                "raw_path": f"raw/{name}", "session_id": self._writer.run_id,
+            }
+            if phase == "pre":
+                record, raw = battery_float.observe(phase="bundle_pre", **probe_kwargs)
+            else:
+                record, raw = battery_float.observe(phase="bundle_post", **probe_kwargs)
+        except Exception as exc:
+            self._record_battery_observation_failure(phase, exc)
+            return
         self._battery_float[phase] = record
         try:
             self._writer.write_raw(name, raw)
@@ -1142,13 +1151,30 @@ class _Execution:
             record["probe_error"] = True
             record["passed"] = False
             record["reasons"].append(f"battery raw write failed: {type(exc).__name__}: {exc}")
-            self._log(self._controller_log, record["reasons"][-1])
+            self._controller_log.append(record["reasons"][-1])
+
+    def _battery_stamp(self) -> ClockStamp:
+        if self._battery_clock is None:
+            self._battery_clock = SystemClock()
+        return _clock_stamp(self._battery_clock)
+
+    def _battery_monotonic_ns(self) -> int:
+        return battery_float.monotonic_ns_from_s(self._battery_stamp().monotonic_after_s)
+
+    def _record_battery_observation_failure(self, phase: str, exc: Exception) -> None:
+        reason = f"battery {phase} not observed: {type(exc).__name__}: {exc}"
+        self._battery_float.setdefault("not_observed", {})[phase] = reason
+        # Battery diagnostics must not read the measurement clock, including
+        # on the error/logging path.
+        self._controller_log.append(reason)
 
     def _salvage_battery_float_post(self) -> None:
         if self._battery_float["pre"] is not None and self._battery_float["post"] is None:
             # Do not launch a probe if teardown failed and the sampler is live.
             if self._sampling_active or self._sampling_start_in_progress:
-                self._log(self._controller_log, "battery post not observed: sampler teardown incomplete")
+                reason = "battery post not observed: sampler teardown incomplete"
+                self._battery_float.setdefault("not_observed", {})["post"] = reason
+                self._controller_log.append(reason)
                 return
             self._observe_battery_float("post")
 
@@ -2367,7 +2393,7 @@ class _Execution:
         extra: dict[str, Any] = {}
         if self._config.hardware_target.telemetry_backend == TelemetryBackend.MOCK:
             extra["battery_float"] = {"pre": None, "post": None, "not_applicable": "mock"}
-        elif self._battery_float["pre"] is None:
+        elif self._battery_float["pre"] is None and "not_observed" not in self._battery_float:
             extra["battery_float"] = {"pre": None, "post": None, "not_reached": self._current_stage}
         else:
             extra["battery_float"] = dict(self._battery_float)
@@ -2666,18 +2692,21 @@ class _Execution:
         self._current_stage = name
         metadata = None
         if name == "idle_baseline" and self._config.hardware_target.telemetry_backend != TelemetryBackend.MOCK:
-            metadata = {"monotonic_ns": battery_float.monotonic_ns_from_s(
-                _clock_stamp(self._clock).monotonic_after_s
-            )}
+            metadata = self._battery_span_metadata(name)
         self._buffer_event("stage_started", name, f"stage {name} started", metadata)
 
     def _complete_stage(self, name: str, metadata: dict[str, Any] | None = None) -> None:
         if name == "idle_drift_sentinel" and self._config.hardware_target.telemetry_backend != TelemetryBackend.MOCK:
             metadata = dict(metadata or {})
-            metadata["monotonic_ns"] = battery_float.monotonic_ns_from_s(
-                _clock_stamp(self._clock).monotonic_after_s
-            )
+            metadata.update(self._battery_span_metadata(name))
         self._buffer_event("stage_completed", name, f"stage {name} completed", metadata)
+
+    def _battery_span_metadata(self, stage: str) -> dict[str, Any]:
+        try:
+            return {"monotonic_ns": self._battery_monotonic_ns()}
+        except Exception as exc:
+            self._record_battery_observation_failure(stage, exc)
+            return {"monotonic_ns": None}
 
     def _log(self, buffer: list[str], message: str) -> None:
         buffer.append(f"{self._clock.now():.6f} {message}")

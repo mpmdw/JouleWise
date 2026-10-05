@@ -284,6 +284,47 @@ class BundlePackTests(unittest.TestCase):
             package_bundle_pack.package_bundles([source_bundle], pack_dir)
         self.assertFalse(pack_dir.exists())
 
+    def test_battery_metadata_and_raw_device_identifiers_are_not_published(self) -> None:
+        source = self.make_bundle("pack-private-battery")
+        secret = "PRIVATE-BATTERY-SERIAL-12345"
+        metadata_path = source / "metadata.json"
+        metadata = json.loads(metadata_path.read_bytes())
+        metadata["battery_float"] = {
+            "pre": {"property_lines": [f'"Serial" = "{secret}"'], "stderr": secret},
+            "post": {"future_nested_identity": {"serial_number": secret}},
+        }
+        metadata_path.write_text(json.dumps(metadata) + "\n")
+        raw = f'"Serial" = "{secret}"\n'.encode()
+        for phase in ("pre", "post"):
+            (source / "raw" / f"battery_float.{phase}.ioreg").write_bytes(raw)
+        before = {path.relative_to(source).as_posix(): _sha256(path)
+                  for path in source.rglob("*") if path.is_file()}
+        pack = self.tmp / "battery-pack"
+        manifest = package_bundle_pack.package_bundles([source], pack)
+        public = pack / "bundles" / manifest["bundles"][0]["bundle_id"]
+        projected = json.loads((public / "metadata.json").read_bytes())
+        self.assertEqual(projected["battery_float"], {
+            "redacted": True, "classification": publication_privacy.CLASS_OMIT_RAW,
+        })
+        transformation = json.loads((pack / "TRANSFORMATION_MANIFEST.json").read_bytes())
+        records = {row["path"]: row for row in transformation["bundles"][0]["files"]}
+        for phase in ("pre", "post"):
+            relative = f"raw/battery_float.{phase}.ioreg"
+            self.assertFalse((public / relative).exists())
+            self.assertEqual(records[relative]["classification"], publication_privacy.CLASS_OMIT_RAW)
+            self.assertEqual(records[relative]["operation"], publication_privacy.OP_OMIT)
+            self.assertEqual(records[relative]["source_sha256"], hashlib.sha256(raw).hexdigest())
+            self.assertIsNone(records[relative]["output_sha256"])
+        self.assertEqual(package_bundle_pack.verify_pack(pack), [])
+        for path in pack.rglob("*"):
+            if path.is_file():
+                self.assertNotIn(secret.encode(), path.read_bytes(), str(path))
+        self.assertEqual(before, {path.relative_to(source).as_posix(): _sha256(path)
+                                 for path in source.rglob("*") if path.is_file()})
+        projected["battery_float"] = metadata["battery_float"]
+        (public / "metadata.json").write_text(json.dumps(projected) + "\n")
+        self.assertIn("metadata.battery_float is not a redacted subtree", verify_public_bundle(public))
+
     def test_pack_gate_hard_excludes_dirty_unknown_and_changed_source_provenance(self) -> None:
         unknown = _source_state(
             commit="unknown",

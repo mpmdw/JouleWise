@@ -11,7 +11,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from joulewise import adapters, battery_float, controller
 from joulewise.clock import FakeClock
@@ -66,10 +66,11 @@ class BatteryControllerTests(unittest.TestCase):
         self.runs = Path(self.tmp.name) / 'runs'
         self.trace = []
         self.clock = FakeClock(start=1700000000)
+        self.battery_clock = FakeClock(start=1700000000)
         self.telemetry = None
         self.raw = []
 
-    def run_member(self, *, probe_error=None, failure=False, stop_error=False, mock=False, sentinel=True, write_error=False):
+    def run_member(self, *, probe_error=None, failure=False, stop_error=False, mock=False, sentinel=True, write_error=False, battery_clock=None, default_runner=False):
         config = make_config('battery-member')
         if not mock:
             config = replace(config, hardware_target=replace(config.hardware_target, telemetry_backend=TelemetryBackend.POWERMETRICS))
@@ -95,19 +96,25 @@ class BatteryControllerTests(unittest.TestCase):
         def labelled_ioreg_stub(argv):
             self.assertEqual(tuple(argv), battery_float.IOREG_BATTERY_ARGV)
             self.assertFalse(getattr(self.telemetry, 'live', False), 'battery observation inside sampler lifetime')
-            self.trace.append(('ioreg', self.clock.now()))
-            self.clock.sleep(0.25)
+            self.trace.append(('ioreg', self.battery_clock.now()))
+            self.battery_clock.sleep(0.25)
             if probe_error is not None:
                 raise probe_error
-            raw = battery_float_fixture.fresh_ioreg(now_s=self.clock.now())
+            raw = battery_float_fixture.fresh_ioreg(now_s=self.battery_clock.now())
             self.raw.append(raw)
             return subprocess.CompletedProcess(list(argv), 0, raw, b'')
         begin = controller._Execution._begin_stage
         complete = controller._Execution._complete_stage
+        def sync_battery_clock():
+            # Advance this independently injected fixture clock to the
+            # simulated stage boundary; production never couples the clocks.
+            self.battery_clock.sleep(max(0, self.clock.now() - self.battery_clock.now()))
         def record_begin(execution, name):
+            sync_battery_clock()
             self.trace.append(('begin_' + name, self.clock.now()))
             return begin(execution, name)
         def record_complete(execution, name, metadata=None):
+            sync_battery_clock()
             self.trace.append(('end_' + name, self.clock.now()))
             return complete(execution, name, metadata)
         raw_writer = controller.RunBundleWriter.write_raw
@@ -119,7 +126,8 @@ class BatteryControllerTests(unittest.TestCase):
              patch.object(controller._Execution, '_complete_stage', record_complete), \
              patch.object(controller.RunBundleWriter, 'write_raw', write_raw):
             path, summary = controller.run_benchmark(config, self.runs, self.clock, registry=StubRegistry(),
-                environment_snapshot=None, battery_runner=labelled_ioreg_stub)
+                environment_snapshot=None, battery_runner=None if default_runner else labelled_ioreg_stub,
+                battery_clock=battery_clock or self.battery_clock)
         metadata = json.loads((path / 'metadata.json').read_bytes())
         events = [json.loads(line) for line in (path / 'events.jsonl').read_text().splitlines()]
         return path, summary, metadata, events
@@ -198,10 +206,104 @@ class BatteryControllerTests(unittest.TestCase):
         self.assertEqual(battery_float.authenticate_bundle(path).status, 'pass')
 
     def test_mock_skips_ioreg(self):
-        _, summary, metadata, _ = self.run_member(mock=True)
+        clock = Mock()
+        clock.stamp.side_effect = AssertionError('mock battery clock consumed')
+        _, summary, metadata, _ = self.run_member(mock=True, battery_clock=clock)
         self.assertEqual(summary.status, RunStatus.SUCCEEDED)
         self.assertFalse(any(row[0] == 'ioreg' for row in self.trace))
         self.assertEqual(metadata['battery_float'], {'pre': None, 'post': None, 'not_applicable': 'mock'})
+        clock.stamp.assert_not_called()
+
+    def test_battery_does_not_consume_measurement_clock_reads(self):
+        class ScriptedClock(FakeClock):
+            def __init__(inner, limit=None):
+                super().__init__(start=1700000000)
+                inner.reads = []
+                inner.limit = limit
+
+            def read(inner, kind):
+                inner.reads.append(kind)
+                if inner.limit is not None:
+                    self.assertEqual(kind, next(inner.limit))
+
+            def now(inner):
+                inner.read('now')
+                return super().now()
+
+            def stamp(inner):
+                inner.read('stamp')
+                return super().stamp()
+
+        self.clock = ScriptedClock()
+        with patch.object(controller._Execution, '_observe_battery_float'), \
+             patch.object(controller._Execution, '_battery_span_metadata', return_value={}):
+            _, baseline, _, events = self.run_member()
+        self.assertEqual(baseline.status, RunStatus.SUCCEEDED)
+        reads = list(self.clock.reads)
+        self.clock = ScriptedClock(iter(reads))
+        self.battery_clock = FakeClock(start=1700000000)
+        self.runs = self.runs / 'observed'
+        self.trace = []
+        _, observed, metadata, observed_events = self.run_member()
+        self.assertEqual(observed.status, RunStatus.SUCCEEDED)
+        self.assertEqual(self.clock.reads, reads)
+        self.assertEqual([row['timestamp_s'] for row in observed_events],
+                         [row['timestamp_s'] for row in events])
+        self.assertTrue(metadata['battery_float']['pre']['passed'])
+
+    def test_battery_clock_failure_does_not_change_member_status(self):
+        clock = Mock()
+        clock.stamp.side_effect = StopIteration('labelled battery clock exhaustion')
+        _, summary, metadata, _ = self.run_member(battery_clock=clock)
+        self.assertEqual(summary.status, RunStatus.SUCCEEDED)
+        pair = metadata['battery_float']
+        self.assertIsNone(pair['pre'])
+        self.assertIsNone(pair['post'])
+        self.assertIn('labelled battery clock exhaustion', pair['not_observed']['pre'])
+        self.assertIn('labelled battery clock exhaustion', pair['not_observed']['post'])
+        self.assertIn('idle_baseline', pair['not_observed'])
+        self.assertIn('idle_drift_sentinel', pair['not_observed'])
+
+    def test_probe_runner_exhaustion_does_not_change_member_status(self):
+        _, summary, metadata, _ = self.run_member(probe_error=StopIteration('battery runner exhausted'))
+        self.assertEqual(summary.status, RunStatus.SUCCEEDED)
+        self.assertTrue(metadata['battery_float']['pre']['probe_error'])
+        self.assertTrue(metadata['battery_float']['post']['probe_error'])
+
+    def test_default_bundle_runner_does_not_consume_backend_process_seams(self):
+        raw = battery_float_fixture.fresh_ioreg(now_s=self.battery_clock.now())
+        process = Mock()
+        process.__enter__ = Mock(return_value=process)
+        process.__exit__ = Mock(return_value=False)
+        process.communicate.return_value = (raw, b'')
+        process.returncode = 0
+        with patch.object(battery_float, '_BatteryPopen', return_value=process) as battery_process, \
+             patch.object(subprocess, 'run', side_effect=AssertionError('measurement runner consumed')) as backend_run, \
+             patch.object(subprocess, 'Popen', side_effect=AssertionError('measurement process consumed')) as backend_process:
+            _, summary, metadata, _ = self.run_member(default_runner=True)
+        self.assertEqual(summary.status, RunStatus.SUCCEEDED)
+        self.assertTrue(metadata['battery_float']['pre']['passed'])
+        self.assertTrue(metadata['battery_float']['post']['passed'])
+        self.assertEqual(battery_process.call_count, 2)
+        battery_process.assert_called_with(battery_float.IOREG_BATTERY_ARGV,
+                                          stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        self.assertEqual(process.communicate.call_count, 2)
+        process.communicate.assert_called_with(timeout=battery_float.PROBE_TIMEOUT_S)
+        backend_run.assert_not_called()
+        backend_process.assert_not_called()
+
+    def test_default_bundle_runner_kills_and_reaps_timed_out_probe(self):
+        process = Mock()
+        process.__enter__ = Mock(return_value=process)
+        process.__exit__ = Mock(return_value=False)
+        error = subprocess.TimeoutExpired(battery_float.IOREG_BATTERY_ARGV, battery_float.PROBE_TIMEOUT_S)
+        process.communicate.side_effect = [error, (b'', b'')]
+        with patch.object(battery_float, '_BatteryPopen', return_value=process):
+            with self.assertRaises(subprocess.TimeoutExpired):
+                battery_float.run_bundle_probe(battery_float.IOREG_BATTERY_ARGV)
+        process.kill.assert_called_once_with()
+        self.assertEqual(process.communicate.call_count, 2)
+        process.communicate.assert_called_with()
 
 
 if __name__ == '__main__':
