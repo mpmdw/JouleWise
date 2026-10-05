@@ -23,6 +23,8 @@ import signal as _signal
 import subprocess as _subprocess
 import tempfile as _tempfile
 import time as _time
+from joulewise.dwell import final_clean_dwell as _final_clean_dwell
+from joulewise import prewindow as _prewindow
 from dataclasses import dataclass as _dataclass, field as _field, replace as _replace
 from datetime import datetime as _datetime
 from decimal import Decimal as _Decimal
@@ -57,12 +59,19 @@ _MIN_BACKUP_FREE_BYTES = 20 * 1024**3
 _PROBE_TIMEOUT_SECONDS = 45
 # The battery-float probe carries its own ruled bound (final texts v1.1 §5.1).
 _PROBE_TIMEOUT_OVERRIDES = {_battery_float.IOREG_BATTERY_ARGV: _battery_float.PROBE_TIMEOUT_S}
+_MAINTENANCE_CPU_SAMPLES = 2
+_MAINTENANCE_CPU_INTERVAL_S = 1
+# The two new read-only probes use 11 s of the retired OFF site's 45 s
+# allowance, preserving the existing 610 s post-R1 admission horizon.
+_PROBE_TIMEOUT_OVERRIDES[_prewindow.PS_ARGV] = 5
 # Census browser executables in app bundles, rather than every command line
 # mentioning a browser name; OS extensions and services must not block the row.
 _BROWSER_CENSUS_PATTERN = r"/Contents/MacOS/(Safari|Google Chrome|Chromium|firefox)( |$)"
 _MONITOR_CENSUS_PATTERN = r"powermetrics|window-chain|run_campaign|tail -f|(^|/)watch( |$)"
 _RUNNING_REPOSITORY = _Path(__file__).resolve().parents[1]
 _AUTHORING_ARTIFACTS = (
+    "joulewise/dwell.py",
+    "joulewise/prewindow.py",
     "joulewise/network_time_off.py",
     "joulewise/clock_reference.py",
     "joulewise/arm_readiness_evidence_t0.py",
@@ -1312,9 +1321,7 @@ def _prewindow_capture(
         raise _underivable(kind, "prewindow capture differs from the frozen command")
     if capture["finished_monotonic_ns"] - capture["started_monotonic_ns"] < _MIN_IDLE_NS:
         raise _underivable(kind, "prewindow capture does not prove the required ten-minute idle")
-    if "TIMED OUT" in capture["stdout"] or "BLOCK" in capture["stdout"] or _re.search(
-        r"READY after [0-9]+ min\.", capture["stdout"]
-    ) is None:
+    if not _final_clean_dwell(capture["stdout"]):
         raise _underivable(kind, "prewindow capture does not end in READY")
     return capture, identity, artifacts
 
@@ -1324,7 +1331,7 @@ def _expect_absent(result: _ProbeResult, *, kind: str, label: str) -> None:
         raise _underivable(kind, f"fresh {label} census found a forbidden process")
 
 
-def _maintenance_probe(context: _Context, *, kind: str) -> _ProbeResult:
+def _maintenance_probe(context: _Context, *, kind: str) -> tuple[_ProbeResult, ...]:
     probe = _fresh_probe(
         context,
         kind,
@@ -1332,11 +1339,26 @@ def _maintenance_probe(context: _Context, *, kind: str) -> _ProbeResult:
         (
             "/usr/bin/pgrep",
             "-lf",
-            "XProtect|mds_stores|mdworker|mdbulkimport|backupd|photoanalysisd|softwareupdated|Spotlight|mediaanalysisd",
+            _prewindow.CONTAMINANTS,
         ),
     )
-    _expect_absent(probe, kind=kind, label="maintenance")
-    return probe
+    if probe.exit_code not in (0, 1) or probe.stderr.strip():
+        raise _underivable(kind, "fresh maintenance pgrep probe failed")
+    probes = [probe]
+    for index in range(_MAINTENANCE_CPU_SAMPLES):
+        if index:
+            _time.sleep(_MAINTENANCE_CPU_INTERVAL_S)
+        sample = _fresh_probe(context, kind, f"maintenance CPU {index + 1}", _prewindow.PS_ARGV)
+        probes.append(sample)
+        if sample.exit_code != 0 or sample.stderr.strip():
+            raise _underivable(kind, "fresh maintenance CPU probe failed")
+        try:
+            busy = _prewindow.busy_contaminants(sample.stdout)
+        except ValueError as exc:
+            raise _underivable(kind, "fresh maintenance CPU probe malformed") from exc
+        if busy:
+            raise _underivable(kind, "fresh maintenance census found a process above 5.0% CPU")
+    return tuple(probes)
 
 
 def _derive_background_quiet(context: _Context) -> _DerivedRow:
@@ -1349,7 +1371,7 @@ def _derive_background_quiet(context: _Context) -> _DerivedRow:
         {"observation_status": "PASS", "fresh_maintenance_census": True},
         "PROBE",
         input_artifacts=(prewindow_identity, *manifest_artifacts),
-        probes=(probe,),
+        probes=probe,
     )
 
 
@@ -1515,9 +1537,12 @@ def _derive_ledger(context: _Context) -> _DerivedRow:
     expected_recovery_script = str(
         context.repository / "scripts/recover_calibration_ledger.py"
     )
+    assignments = _launch_manifest(context, kind=kind)[2]
     expected_diagnostic = [
         expected_python,
         expected_recovery_script,
+        "--ledger", assignments["CALIBRATION_LEDGER"],
+        "--head-pin", assignments["LEDGER_HEAD_PIN"],
         "readiness",
         "--phase",
         "pre-reserve",
@@ -1559,12 +1584,17 @@ def _derive_ledger(context: _Context) -> _DerivedRow:
         or _Path(reservation["cwd"]).resolve() != context.repository
     ):
         raise _underivable(kind, "reservation did not execute from the reviewed checkout")
+    if any(flags[flag] != assignments[name] for flag, name in
+           (("--ledger", "CALIBRATION_LEDGER"), ("--head-pin", "LEDGER_HEAD_PIN"))):
+        raise _underivable(kind, "reservation ledger inputs differ from the pinned environment")
     head_pin = _Path(str(flags["--head-pin"]))
-    if head_pin.resolve() != (context.repository / "configs/calibration/calibration_ledger_head.json").resolve():
-        raise _underivable(kind, "reservation head pin is not the reviewed checkout pin")
+    try:
+        head_pin_relative = head_pin.relative_to(context.repository).as_posix()
+    except ValueError as exc:
+        raise _underivable(kind, "reservation head pin is not in the reviewed checkout") from exc
     head_pin_identity, _head_pin_raw = _committed_artifact(
         context.repository,
-        "configs/calibration/calibration_ledger_head.json",
+        head_pin_relative,
         kind=kind,
     )
     recovery_identity, _recovery_raw = _committed_artifact(

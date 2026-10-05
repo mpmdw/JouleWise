@@ -187,9 +187,15 @@ def observe(context_path, arm_path, evidence_path, *, now_ns=None, now_epoch=Non
     off_path, _ = read_locator(evidence["network_time_off"])
     off = network_time_off.read_receipt(off_path, plan_id=plan.plan_id, window_id=arm["pack"]["window_id"])
     require(off["boot_id"] == arm["boot_session_id"], "off_boot")
-    # The settle must precede ARM/T-0, not merely the later expiry check.
-    require(network_time_off.seconds_since_receipt(off, {"epoch_s": epoch - (at - first_boundary) / 1e9,
-            "monotonic_s": first_boundary / 1e9, "boot_id": arm["boot_session_id"]}) >= 600, "off_settle")
+    # OFF is written inside R0. E-9 readiness is the first governed settled
+    # ledger use; using R0's start would always produce a negative interval.
+    readiness_capture = read_object(Path(plan.custody_root) / plan.pack_night["pack_id"]
+                                   / author._INPUT_DIRECTORY / "ledger-readiness.json")
+    settled_at = readiness_capture["started_monotonic_ns"]
+    require(type(settled_at) is int and first_boundary <= settled_at <= at
+            and readiness_capture["boot_session_id"] == arm["boot_session_id"], "off_settle_boundary")
+    require(network_time_off.seconds_since_receipt(off, {"epoch_s": epoch - (at - settled_at) / 1e9,
+            "monotonic_s": settled_at / 1e9, "boot_id": arm["boot_session_id"]}) >= 600, "off_settle")
     expiry_epoch = epoch + (arm["valid_until_monotonic_ns"] + 1 - at) / 1e9
     deadline = evidence["expiry_check_deadline_epoch_s"]
     require(expiry_epoch < deadline <= evidence["s1_t0_not_before_epoch_s"], "expiry_deadline")

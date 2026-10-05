@@ -9,9 +9,12 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import asdict
+from contextlib import contextmanager
 import os
 from pathlib import Path
 import subprocess
+import signal
+import threading
 import sys
 import time
 
@@ -95,6 +98,19 @@ def snapshot_inputs(source, target):
             raise NotDischarged("author_capture_missing")
 
 
+@contextmanager
+def _uninterrupted_off():
+    saved = {}
+    if threading.current_thread() is threading.main_thread():
+        for number in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
+            saved[number] = signal.signal(number, signal.SIG_IGN)
+    try:
+        yield
+    finally:
+        for number, handler in saved.items():
+            signal.signal(number, handler)
+
+
 def run_control(*, pack_root, author_inputs, custody_root, resync_timeout_s=120,
                 sample=stamp, runner=run_command, monotonic_ns=time.monotonic_ns,
                 sleep=time.sleep):
@@ -122,6 +138,9 @@ def run_control(*, pack_root, author_inputs, custody_root, resync_timeout_s=120,
         # The real author owns span/quorum/order admission and its exact refusal.
         if r0["boot_session_id"].lower() != boot:
             raise NotDischarged("r0_boot_mismatch")
+        span = before["monotonic_raw_ns"] - r0["anchor_monotonic_raw_ns"]
+        if not 600_000_000_000 <= span <= (3600 - resync_timeout_s - 120) * 1_000_000_000:
+            raise NotDischarged("pre_on_author_span_out_of_range")
         if abs(r0["anchor_realtime_ns"] - r0["anchor_monotonic_raw_ns"] - anchor(before)) > 5_000_000:
             raise NotDischarged("author_sequence_already_above_anchor_bound")
         write_json(root / "author-input-lineage.json", {
@@ -207,10 +226,11 @@ def run_control(*, pack_root, author_inputs, custody_root, resync_timeout_s=120,
             try:
                 print("Finishing with network time OFF.", flush=True)
             finally:
-                off = network_time_off.set_network_time_off(
-                    path, root.name, root.name, runner=runner,
-                    clock=lambda: {"epoch_s": time.time(), "monotonic_s": monotonic_ns() / 1e9},
-                    boot_probe=lambda: network_time_off.boot_id(runner))
+                with _uninterrupted_off():
+                    off = network_time_off.set_network_time_off(
+                        path, root.name, root.name, runner=runner,
+                        clock=lambda: {"epoch_s": time.time(), "monotonic_s": monotonic_ns() / 1e9},
+                        boot_probe=lambda: network_time_off.boot_id(runner))
             network_time_off.read_receipt(path, plan_id=root.name, window_id=root.name)
             write_json(root / "commands" / "off.json", off)
             write_bytes(root / "commands" / "off" / "stdout.txt", off["stdout"].encode())
@@ -229,6 +249,114 @@ def run_control(*, pack_root, author_inputs, custody_root, resync_timeout_s=120,
     return outcome
 
 
+def verify_g10_custody(positive_path, manifest_path, *, code_root, head,
+                       before_monotonic_ns, boot_id):
+    """Replay the physical control's complete support census, never a locator alone."""
+    positive_path, manifest_path = Path(positive_path), Path(manifest_path)
+    root = manifest_path.parent
+    if (manifest_path.name != "custody-manifest.json" or positive_path != root / "positive-control.json"
+            or not root.is_absolute() or any(p.is_symlink() for p in (root, *root.parents))):
+        raise NotDischarged("g10_custody_locator")
+    manifest = read_json(manifest_path)
+    if set(manifest) != {"files"} or not isinstance(manifest["files"], dict):
+        raise NotDischarged("g10_manifest_schema")
+    observed = {}
+    for path in sorted(root.rglob("*")):
+        if path.is_symlink():
+            raise NotDischarged("g10_custody_symlink")
+        if path.is_file() and path != manifest_path:
+            observed[path.relative_to(root).as_posix()] = readiness.sha256_bytes(path.read_bytes())
+    if manifest["files"] != observed:
+        raise NotDischarged("g10_custody_hash_or_census")
+    before, after = read_json(root / "before.json"), read_json(root / "after.json")
+    positive = read_json(positive_path)
+    if (set(positive) != t0_rehearsal._POSITIVE_CONTROL_KEYS
+            or positive["schema_version"] != t0_rehearsal.POSITIVE_CONTROL_SCHEMA
+            or positive["performed_by"] != "Ed"
+            or any(positive[key] is not True for key in
+                   ("outside_t0_sequence", "network_time_reenabled", "forced_resync"))
+            or positive["anchor_before_ns"] != anchor(before)
+            or positive["anchor_after_ns"] != anchor(after)
+            or abs(anchor(after) - anchor(before)) <= 5_000_000
+            or positive["author_refusal_reason_code"] != REFUSAL
+            or read_json(root / "anchor-movement.json") !=
+               {"absolute_movement_ns": abs(anchor(after) - anchor(before))}):
+        raise NotDischarged("g10_anchor_or_record")
+    on, execution = read_json(root / "commands/on.json"), read_json(root / "author-execution.json")
+    response = read_json(root / "author.stdout.json")
+    lineage = read_json(root / "author-input-lineage.json")
+    r0_capture = read_json(root / "author-custody" / Path(lineage["pack_root"]).name /
+                           author._INPUT_DIRECTORY / "clock-reference.json")
+    r0 = readiness.parse_json_bytes(r0_capture["stdout"].encode())
+    r0_anchor = r0["anchor_realtime_ns"] - r0["anchor_monotonic_raw_ns"]
+    if (lineage["r0_anchor_ns"] != r0_anchor or r0["boot_session_id"].lower() != boot_id
+            or abs(r0_anchor - anchor(before)) > 5_000_000
+            or abs(r0_anchor - anchor(after)) <= 5_000_000):
+        raise NotDischarged("g10_r0_binding")
+    if (on["argv"] != list(ON_ARGV) or on["exit_code"] != 0
+            or " ".join(on["stdout"].split()).lower().rstrip(".") not in
+               {"setusingnetworktime: on", "network time is already on"}
+            or execution["exit_code"] != 2 or execution["present_namespaces"] != []
+            or response.get("status") != "REFUSE" or response.get("kind") != "CLOCK_ATTESTATION"
+            or response.get("reason_codes") != [REFUSAL] or response.get("detail") != ANCHOR_DETAIL
+            or Path(execution["argv"][1]) != Path(code_root) / "scripts/author_arm_evidence_t0.py"
+            or execution["argv"][2:] != ["--pack-root", lineage["pack_root"],
+                "--custody-root", str(root / "author-custody")]):
+        raise NotDischarged("g10_on_or_author_refusal")
+    for label, command in (("on", on),):
+        directory = root / "commands" / label
+        if (read_json(directory / "started.json") != command["started"]
+                or read_json(directory / "finished.json") != command["finished"]
+                or (directory / "stdout.txt").read_bytes() != command["stdout"].encode()
+                or (directory / "stderr.txt").read_bytes() != command["stderr"].encode()):
+            raise NotDischarged("g10_command_support")
+    off = network_time_off.read_receipt(root / network_time_off.RECEIPT_BASENAME,
+                                       plan_id=root.name, window_id=root.name)
+    stamps = [before, on["started"], on["finished"], after, execution["started"], execution["finished"]]
+    times = [value["monotonic_ns"] for value in stamps]
+    if (any(value["boot_id"] != boot_id or value["read_skew_ns"] > 1_000_000 for value in stamps)
+            or times != sorted(times) or off["boot_id"] != boot_id
+            or not times[-1] <= round(off["monotonic_s"] * 1e9) < before_monotonic_ns
+            or lineage["boot_id"] != boot_id):
+        raise NotDischarged("g10_boot_or_order")
+    expected_codes = {"scripts/author_arm_evidence_t0.py", "joulewise/arm_readiness_evidence_t0.py"}
+    if set(lineage["author_code_sha256"]) != expected_codes:
+        raise NotDischarged("g10_code_inventory")
+    for relative, digest in lineage["author_code_sha256"].items():
+        raw = subprocess.check_output(["git", "-C", str(code_root), "show", f"{head}:{relative}"])
+        if readiness.sha256_bytes(raw) != digest:
+            raise NotDischarged("g10_code_pin")
+    if read_json(root / "commands/off.json") != off:
+        raise NotDischarged("g10_off_support")
+    if ((root / "commands/off/stdout.txt").read_bytes() != off["stdout"].encode()
+            or (root / "commands/off/stderr.txt").read_bytes() != off["stderr"].encode()):
+        raise NotDischarged("g10_off_streams")
+    outcome = read_json(root / "outcome.json")
+    if outcome != {"status": "DISCHARGED", "positive_control_path": str(positive_path)}:
+        raise NotDischarged("g10_outcome")
+    return positive
+
+
+_run_control = run_control
+
+
+def run_control(**kwargs):
+    """Translate termination signals into an unwind that still enforces OFF."""
+    previous = {}
+    def interrupted(signum, frame):
+        for number in previous:
+            signal.signal(number, signal.SIG_IGN)
+        raise KeyboardInterrupt
+    if threading.current_thread() is threading.main_thread():
+        for number in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
+            previous[number] = signal.signal(number, interrupted)
+    try:
+        return _run_control(**kwargs)
+    finally:
+        for number, handler in previous.items():
+            signal.signal(number, handler)
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="operation", required=True)
@@ -244,7 +372,14 @@ def main(argv=None):
     if args.operation == "stamp":
         write_json(args.output, stamp())
         return 0
-    if input("Ed: confirm no agent seat, armed window or capture is running; type OUTSIDE: ").strip() != "OUTSIDE":
+    try:
+        print("Ed: confirm no agent seat, armed window or capture is running; type OUTSIDE: ",
+              end="", file=sys.stderr, flush=True)
+        confirmed = input().strip()
+    except EOFError:
+        print(readiness.render_json({"status": "NOT-DISCHARGED", "reason": "outside_confirmation_missing"}).decode(), end="")
+        return 2
+    if confirmed != "OUTSIDE":
         return 2
     try:
         result = run_control(pack_root=args.pack_root, author_inputs=args.author_inputs,

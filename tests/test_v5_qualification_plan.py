@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import copy
 import json
+import re
 from pathlib import Path
 from types import SimpleNamespace
 import subprocess
@@ -221,7 +222,10 @@ class PlanWriterTests(SizingTests):
             "confirmed_at": {"epoch_s": 0., "iso8601_utc": "1970-01-01T00:00:00.000000Z"}})
         digest = readiness.committed_pack_tree_sha256(self.pack)
         context = arm_context(self.root)
-        context["custody_root"] = str(self.custody)
+        context["custody_root"] = str(self.root / "arm-root")
+        self.chain.write_text(self.chain.read_text() + "export NIGHT_ARM_CONTEXT_SHA256="
+                              + readiness.sha256_bytes(readiness.render_json(context)) + "\n")
+        self.sidecar.write_bytes(readiness.gnu_sidecar(writer.locator(self.chain)["sha256"], self.chain.name))
         for key in readiness.ARM_CONTEXT_KEYS - readiness.ARM_CONTEXT_NON_PATH_KEYS:
             path = Path(context[key])
             if key == "waiver_path":
@@ -278,9 +282,18 @@ class PlanWriterTests(SizingTests):
         plan = night_gate.NightPlan.from_mapping(json.loads(self.output.read_bytes()))
         self.assertEqual(night_plan_mapping(plan), json.loads(self.output.read_bytes()))
         record = json.loads((self.custody / "qualification-plan-record.json").read_bytes())
+        self.assertEqual(record["terminal_boundary_path"],
+                         str(self.custody / "night/transcript/post-bracket-terminal-boundary.json"))
         self.assertIn("run", record["driver_argv"])
         self.assertNotIn("rehearse", record["driver_argv"])
         self.assertEqual(2, plan.pack_night["attempt_ordinal"])
+        native = self.custody / self.pack.name / "arm_readiness.t0.inputs/arm-context.json"
+        self.assertEqual(native.read_bytes(), readiness.render_json(self.input["arm_context"]))
+        self.assertEqual(night_gate.authenticate_arm_context(plan), self.input["arm_context"])
+        self.assertEqual(record["t0_capture_recipe"]["steps"], [
+            "clock-reference", "clock-disable", "quiet-mac-prep", "prewindow-check",
+            "ledger-readiness", "ledger-reservation"])
+        self.assertEqual(record["t0_capture_recipe"]["stage"], "before_ARM")
         for key in ("authorization_record", "confirmation_record"):
             ref = plan.pack_night[key]
             self.assertEqual(ref, writer.locator(ref["path"]))
@@ -302,6 +315,17 @@ class PlanWriterTests(SizingTests):
         for name in ("standdown_argv", "supervised_driver_argv"):
             parser().parse_args(record["observation_recipe"][name][2:])
 
+    def test_backup_destination_cannot_nest_in_separate_plan_custody(self):
+        context = self.input["arm_context"]
+        context["claim_backup_destination"] = str(self.custody / "backup")
+        old = re.search(r"NIGHT_ARM_CONTEXT_SHA256=([0-9a-f]{64})", self.chain.read_text()).group(1)
+        self.chain.write_text(self.chain.read_text().replace(
+            old, readiness.sha256_bytes(readiness.render_json(context))))
+        self.sidecar.write_bytes(readiness.gnu_sidecar(writer.locator(self.chain)["sha256"], self.chain.name))
+        self.input["authorization"]["permitted_chain_sha256"] = writer.locator(self.chain)["sha256"]
+        with self.assertRaisesRegex(ValueError, "backup_plan_custody_overlap"):
+            self.write()
+
     def test_specialized_reviewed_body_is_accepted_before_plan_hashing(self):
         from scripts import capture_t0_step as capture
         from tests.test_arm_readiness_evidence_t0 import make_t0_fixture, TEST_BOOT_SESSION_ID
@@ -310,7 +334,7 @@ class PlanWriterTests(SizingTests):
         shutil.copyfile(writer.REPO_ROOT / "docs/phase_2/window_runbook.md", runbook)
         body = REAL_G2B_BODY(self.repo)
         self.assertIn('REPO="' + str(self.repo) + '"\n', body)
-        header = self.chain.read_text().split("echo fixture\n")[0]
+        header = self.chain.read_text().replace("echo fixture\n", "")
         self.chain.write_text(header + body)
         self.sidecar.write_bytes(readiness.gnu_sidecar(writer.locator(self.chain)["sha256"], self.chain.name))
         self.input["authorization"]["permitted_chain_sha256"] = writer.locator(self.chain)["sha256"]
@@ -330,9 +354,10 @@ class PlanWriterTests(SizingTests):
         git(repository, "add", ".")
         tree_oid = subprocess.check_output(["git", "-C", str(repository), "write-tree"], text=True).strip()
         pack_sha = readiness.committed_pack_tree_sha256(pack)
-        git(repository, "commit", "-qm", "terminal review\n\nJouleWise-Terminal-Review: PASS\n"
-            + "JouleWise-Terminal-Review-Tree-Oid: " + tree_oid + "\n"
-            + "JouleWise-Terminal-Review-Pack-Sha256: " + pack_sha)
+        if subprocess.run(["git", "-C", str(repository), "diff", "--cached", "--quiet"]).returncode:
+            git(repository, "commit", "-qm", "terminal review\n\nJouleWise-Terminal-Review: PASS\n"
+                + "JouleWise-Terminal-Review-Tree-Oid: " + tree_oid + "\n"
+                + "JouleWise-Terminal-Review-Pack-Sha256: " + pack_sha)
         git(repository, "update-ref", "refs/remotes/origin/main", "HEAD")
         (custody / "window-plan/window-chain.zsh").write_text(REAL_G2B_BODY(repository))
         with mock.patch.object(capture, "REPO_ROOT", repository), mock.patch.object(capture, "_current_boot_session_id", return_value=TEST_BOOT_SESSION_ID):
@@ -342,7 +367,7 @@ class PlanWriterTests(SizingTests):
         context = self.input["arm_context"]
         for bound in (context["claim_backup_destination"], context["claim_backup_destination"] + "/nested"):
             context["bound_backup_destination"] = bound
-            with self.assertRaisesRegex(ValueError, "backup_destinations_overlap"):
+            with self.assertRaisesRegex(ValueError, "backup_destinations_overlap|arm_context.pin"):
                 self.write()
             self.assertFalse(self.output.exists())
 
@@ -403,7 +428,10 @@ class PlanWriterTests(SizingTests):
         template = self.root / "template.zsh"
         template.write_text("#!/bin/zsh\necho fixture\n")
         output = self.root / "rendered-chain.zsh"
-        result = writer.render_qualification_chain("s1", template, self.input["sizing"], self.pack, 1000., output)
+        with mock.patch.object(writer, "pack_roster", return_value=(
+                [{"config_path": "science/member.json"}], [], [], [])), mock.patch.object(writer, "size_window",
+                return_value={"programmed_span_s": 40, "window_max_s": 2760}):
+            result = writer.render_qualification_chain("s1", template, self.input["sizing"], self.pack, 1000., output)
         self.assertEqual(40, result["programmed_span_s"])
         self.assertEqual("40", night_gate.chain_literal(output.read_text(), "NIGHT_PROGRAMMED_SPAN_S"))
         self.assertEqual("3720", night_gate.chain_literal(output.read_text(), "NIGHT_LATEST_CHAIN_START_EPOCH_S"))
@@ -417,7 +445,6 @@ class PlanWriterTests(SizingTests):
                 custody = self.root / (occurrence + "-context-fixture")
                 custody.mkdir()
                 inputs["plan"].update(plan_id=custody.name, custody_root=str(custody))
-                inputs["arm_context"]["custody_root"] = str(custody)
                 inputs["sizing"]["fixed"] = {key: self.allow(8) for key in writer.FIXED_COMPONENTS["s1"]}
                 inputs["authorization"].update(purpose="G2B_SHAKEDOWN", authority="D-171 §3", attempt_id=custody.name + "/2")
                 chain = self.root / (occurrence + "-chain.zsh")
@@ -486,7 +513,10 @@ class PrerequisiteTests(unittest.TestCase):
     def test_fold_has_no_r1_and_requires_a1_a2_g10_and_source_pins(self):
         writer.prerequisites("a1", {}, self.head, 500, self.custody)
         writer.prerequisites("a2", {"a1_control": self.refs["a1_control"]}, self.head, 1500, self.custody)
-        writer.prerequisites("s1", self.refs, self.head, 3000, self.custody)
+        # This older fixture supplied its positive-control record as its own
+        # support. It now refuses; full physical custody is tested in X1.
+        with self.assertRaisesRegex(ValueError, "g10_custody_locator"):
+            writer.prerequisites("s1", self.refs, self.head, 3000, self.custody)
         for key in self.refs:
             changed = dict(self.refs); changed.pop(key)
             with self.subTest(key=key), self.assertRaises(ValueError):
@@ -513,7 +543,8 @@ class PrerequisiteTests(unittest.TestCase):
         control["checked_monotonic_ns"] = 1900
         path.write_bytes(readiness.render_json(control))
         refs = dict(self.refs, a1_control=writer.locator(path))
-        with self.assertRaisesRegex(ValueError, "a1_before_a2"):
+        with mock.patch("scripts.ed_session.capture_t0_anchor_positive_control.verify_g10_custody"), \
+             self.assertRaisesRegex(ValueError, "a1_before_a2"):
             writer.prerequisites("s1", refs, self.head, 3000, self.custody)
 
 

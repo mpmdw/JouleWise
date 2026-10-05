@@ -3957,7 +3957,16 @@ class PackNightProducerTests(unittest.TestCase):
         confirmation_ref = self.write(self.custody / "confirmation.json", self.confirmation)
         self.manifest = self.inputs / "launch-manifest.json"
         self.write(self.manifest, {"schema_version": readiness.LAUNCH_MANIFEST_SCHEMA})
-        self.write(self.inputs / "arm-context.json", {"custody_root": str(self.custody)})
+        from tests.test_arm_readiness_schemas import arm_context
+        context = arm_context(self.root)
+        context["custody_root"] = str(self.root / "arm-root")
+        for key in readiness.ARM_CONTEXT_KEYS - readiness.ARM_CONTEXT_NON_PATH_KEYS:
+            path = Path(context[key])
+            if key == "waiver_path":
+                path.write_bytes(b"[]\n")
+            else:
+                path.mkdir(parents=True, exist_ok=True)
+        self.write(self.inputs / "arm-context.json", context)
         self.plan = night_gate.NightPlan(plan_id="pack-plan", receipt_class="TRANSACTION_PACK",
             t0_epoch_s=datetime(2026, 9, 2, 1, 0).timestamp(), window_max_s=60,
             authored_epoch_s=datetime(2026, 9, 2, 0, 59).timestamp(), repo_head=HEAD,
@@ -4038,6 +4047,8 @@ class PackNightProducerTests(unittest.TestCase):
         def spawn(command, **kwargs):
             self.events.append("LAUNCH")
             self.assertIs(kwargs["stdin"], subprocess.DEVNULL)
+            self.assertEqual(kwargs["env"]["ARM_RECEIPT"], str(self.arm_path))
+            self.assertEqual(kwargs["env"]["LAUNCH_MANIFEST"], str(self.manifest))
             calls.append(command)
             import socket
             channel = socket.socket(fileno=os.dup(kwargs["pass_fds"][0]))
@@ -4408,6 +4419,10 @@ class PackNightProducerTests(unittest.TestCase):
                         case._window_id = case.custody.name if prefixed else "production-window"
                         case.authorization.update(purpose="T0_REHEARSAL" if rehearsal else "CAMPAIGN_TRANSACTION",
                             authority="T0-UNATTENDED-01" if rehearsal else "V5-TRANSACTION-GO-01")
+                        if rehearsal:
+                            context = json.loads((case.inputs / "arm-context.json").read_bytes())
+                            context["custody_root"] = str(case.custody)
+                            case.write(case.inputs / "arm-context.json", context)
                         ref = case.write(case.custody / "authorization.json", case.authorization)
                         case.plan = replace(case.plan, measurement_root=str(measurement),
                             pack_night={**case.plan.pack_night, "authorization_record": ref})
@@ -6658,12 +6673,14 @@ class Ruling76DriverTests(unittest.TestCase):
             try:
                 driver = fixture.driver
                 context_path = fixture.custody / 'arm-only-context.json'
-                context = {'occurrence': occurrence, 'arm_context': {'custody_root': str(fixture.custody)}}
+                context = {'occurrence': occurrence, 'arm_context':
+                           json.loads((fixture.inputs / 'arm-context.json').read_bytes())}
                 fixture.write(context_path, context)
                 prepared = driver._prepare_pack_night(fixture.plan, fixture.plan_path, fixture.raw)
                 with mock.patch.object(checker, 'context_at', return_value=(context, fixture.plan, prepared)), \
                      mock.patch.object(checker, 'absence', return_value={key: True for key in checker.ABSENCE_KEYS}), \
                      mock.patch.object(driver, '_admit_qualification_control_order'), \
+                     mock.patch.object(driver, '_capture_qualification_t0'), \
                      mock.patch.object(driver, '_admit_network_time_off'), \
                      mock.patch.object(driver, '_admit_derivation_clean_dwell'), \
                      mock.patch.object(driver, '_derivation_start_budget', return_value={}), \

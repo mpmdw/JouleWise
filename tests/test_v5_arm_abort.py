@@ -89,8 +89,8 @@ class ArmAbortTests(unittest.TestCase):
             writer.create_record(input_dir / name, {"schema_version": author._COMMAND_SCHEMA,
                 "step_id": step, "argv": ["fixture-command"], "cwd": str(self.root), "exit_code": 0,
                 "stdout": "fixture", "stderr": "", "boot_session_id": TEST_BOOT_SESSION_ID,
-                "started_monotonic_ns": self.clock - (620 - index * 100) * 1_000_000_000,
-                "finished_monotonic_ns": self.clock - (610 - index * 100) * 1_000_000_000})
+                "started_monotonic_ns": self.clock - (1000, 991, 980, 950, 330, 310)[index] * 1_000_000_000,
+                "finished_monotonic_ns": self.clock - (990, 991, 970, 350, 320, 300)[index] * 1_000_000_000})
         self.arm["evidence"].sort(key=lambda r: r["evidence_id"])
         self.save_arm()
         self.evidence = {"network_time_off": {}, "battery": {},
@@ -99,7 +99,7 @@ class ArmAbortTests(unittest.TestCase):
         off = {"schema": network_time_off.SCHEMA, "argv": list(network_time_off.OFF_ARGV),
                "exit_code": 0, "stdout": "Network Time is already off.\n", "stderr": "",
                "boot_id": TEST_BOOT_SESSION_ID, "plan_id": self.plan.plan_id, "window_id": "a1-fixture",
-               "epoch_s": self.epoch - 1500, "monotonic_s": self.clock / 1e9 - 1500}
+               "epoch_s": self.epoch - 991, "monotonic_s": self.clock / 1e9 - 991}
         self.evidence["network_time_off"] = writer.create_record(off_path, off)
         for phase in ("arm", "publication", "t0"):
             raw = corpus.document(corpus.required(int(self.epoch)))

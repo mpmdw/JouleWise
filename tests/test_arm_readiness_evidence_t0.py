@@ -357,6 +357,8 @@ def make_t0_fixture(
         shutil.copytree(ROOT / "joulewise", repository / "joulewise", dirs_exist_ok=True)
     for relative in (
         "joulewise/network_time_off.py",
+        "joulewise/dwell.py",
+        "joulewise/prewindow.py",
         "joulewise/clock_reference.py",
         "joulewise/arm_readiness_evidence_t0.py",
         "joulewise/identity_pins.py",
@@ -666,7 +668,7 @@ def make_t0_fixture(
             repository,
             time_origin + 400,
             time_origin + 400 + t0._MIN_IDLE_NS,
-            stdout="READY after 10 min.\n",
+            stdout="continuous clean dwell 0/600s (check 1)\ncontinuous clean dwell 600/600s (check 2)\nREADY after 10 min.\n",
             boot_session_id=boot_session_id,
         ),
         "ledger-readiness.json": _capture(
@@ -674,6 +676,8 @@ def make_t0_fixture(
             [
                 str(repository / ".venv/bin/python"),
                 str(repository / "scripts/recover_calibration_ledger.py"),
+                "--ledger", str(ledger_path),
+                "--head-pin", str(repository / "configs/calibration/calibration_ledger_head.json"),
                 "readiness",
                 "--phase",
                 "pre-reserve",
@@ -780,6 +784,8 @@ def passing_probe(argv, *, cwd):
         )
     if "/usr/bin/pgrep" in command:
         return _probe_result(command, cwd, exit_code=1)
+    if command == t0._prewindow.PS_ARGV:
+        return _probe_result(command, cwd, stdout="1 0.0 launchd\n")
     if command[-2:] == ("-g", "therm"):
         return _probe_result(
             command,
@@ -829,6 +835,7 @@ def author_environment(
     else:
         selected_probe = probe
     with contextlib.ExitStack() as stack:
+        stack.enter_context(mock.patch.object(t0._time, "sleep"))
         stack.enter_context(mock.patch.object(t0, "_RUNNING_REPOSITORY", repository))
         stack.enter_context(mock.patch.object(t0, "_execute_probe", side_effect=selected_probe))
         if real_offline:
@@ -1075,7 +1082,7 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
         )
 
     def test_t0_liveness_constant_is_derived_from_the_post_r1_probe_census(self) -> None:
-        """The ruled 610 s = eleven 45 s sites + one 10 s battery site + 105 s.
+        """The ruled 610 s retains room for WO-CENSUS-SEMANTICS' CPU probes.
 
         What this test pins: the PROVENANCE ARITHMETIC of cold gate T26
         item 3, which states the constant as eleven governed post-R1 probe
@@ -1083,7 +1090,9 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
         work. Each factor is read from the code (the sites by an AST
         census of direct ``_fresh_probe`` calls, the timeout from the
         module constant), so an edit to either factor fails here while
-        the constant stays 610 s. The one site inside
+        the constant stays 610 s. The added CPU call site runs twice, with a
+        five-second timeout and a one-second pause, spending 11 s of the
+        retired OFF site's 45 s spare allowance. The one site inside
         ``_fresh_clock_reference_batch`` IS R1 and is excluded.
 
         What this test does NOT protect: the runtime R1→stamp envelope.
@@ -1161,14 +1170,21 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
         self.assertEqual(sites_by_function.pop("_fresh_clock_reference_batch"), 1)
         post_r1_sites = len(direct_call_names) - 1
         self.assertEqual(sum(sites_by_function.values()), post_r1_sites)
-        self.assertEqual(post_r1_sites, 11, sites_by_function)
+        self.assertEqual(post_r1_sites, 12, sites_by_function)
+        self.assertEqual(sites_by_function["_maintenance_probe"], 2)
         self.assertEqual(t0._PROBE_TIMEOUT_SECONDS, 45)
-        # The retired second OFF leaves 45 s of the existing budget spare.
+        self.assertEqual(t0._MAINTENANCE_CPU_SAMPLES, 2)
+        self.assertEqual(t0._MAINTENANCE_CPU_INTERVAL_S, 1)
+        self.assertEqual(t0._PROBE_TIMEOUT_OVERRIDES[t0._prewindow.PS_ARGV], 5)
+        # One site is the 10 s battery probe; another is the repeated 5 s
+        # CPU probe. Charge both executions and the inter-sample pause.
         self.assertGreaterEqual(
             readiness._T0_R1_TO_VALIDITY_ORIGIN_LIVENESS_NS,
             (
-                (post_r1_sites - 1) * t0._PROBE_TIMEOUT_SECONDS
+                (post_r1_sites - 2) * t0._PROBE_TIMEOUT_SECONDS
                 + t0._PROBE_TIMEOUT_OVERRIDES[t0._battery_float.IOREG_BATTERY_ARGV]
+                + t0._MAINTENANCE_CPU_SAMPLES * t0._PROBE_TIMEOUT_OVERRIDES[t0._prewindow.PS_ARGV]
+                + (t0._MAINTENANCE_CPU_SAMPLES - 1) * t0._MAINTENANCE_CPU_INTERVAL_S
                 + 105
             )
             * 1_000_000_000,
@@ -2857,7 +2873,7 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
             ("CLOCK_ATTESTATION", lambda _r, _p, _c, _x: ( _x / "clock-reference.json").unlink(), {}),
             ("CLOCK_PROBE", lambda _repo, _pack, _custody, inputs: (inputs / network_time_off.RECEIPT_BASENAME).unlink(), {}),
             ("TERMINAL_REVIEW", lambda *_args: None, {"patch_message": True}),
-            ("MAINTENANCE_CENSUS", lambda *_args: None, {"probe": lambda argv, *, cwd: _probe_result(argv, cwd, exit_code=0, stdout="123 XProtect\n") if "XProtect" in " ".join(argv) else passing_probe(argv, cwd=cwd)}),
+            ("MAINTENANCE_CENSUS", lambda *_args: None, {"probe": lambda argv, *, cwd: _probe_result(argv, cwd, stdout="123 5.1 XProtect\n") if tuple(argv) == t0._prewindow.PS_ARGV else passing_probe(argv, cwd=cwd)}),
             ("ROOT_PREFLIGHT", lambda _r, _p, c, _x: (Path(c["claim_runs_root"]) / "campaign.lock").write_text("busy\n"), {}),
             ("MACHINE_PREFLIGHT", lambda _r, _p, _c, x: _write_json(x / "quiet-mac-prep.json", {**json.loads((x / "quiet-mac-prep.json").read_text()), "stdout": "READY.\n"}), {}),
             ("LEDGER_RESERVATION", lambda _r, _p, _c, x: _write_json(x / "ledger-reservation.json", {**json.loads((x / "ledger-reservation.json").read_text()), "stdout": json.dumps({"status": "refused"})}), {}),

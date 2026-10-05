@@ -1,0 +1,1081 @@
+[1mPre-window readiness check — 2026-10-03 22:26:00 PDT[0m
+  [31mBLOCK[0m background daemon active: /System/Library/PrivateFrameworks/XprotectFramework.framework/Versions/A/XPCServices/XprotectService.xpc/Contents/MacOS/XprotectService(36.8%) 
+  [31mBLOCK[0m 1-minute load average 2.20 exceeds 2.0
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  not ready; re-checking in 30s[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [31mBLOCK[0m 1-minute load average 2.12 exceeds 2.0
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  not ready; re-checking in 30s[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [31mBLOCK[0m 1-minute load average 2.10 exceeds 2.0
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  not ready; re-checking in 30s[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [32mOK[0m    load average 1.98
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  continuous clean dwell 0/600s (check 1)[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [32mOK[0m    load average 1.91
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  continuous clean dwell 30/600s (check 2)[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [31mBLOCK[0m 1-minute load average 2.23 exceeds 2.0
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  not ready; re-checking in 30s[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [31mBLOCK[0m 1-minute load average 2.12 exceeds 2.0
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  not ready; re-checking in 30s[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [32mOK[0m    load average 1.90
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  continuous clean dwell 0/600s (check 1)[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [32mOK[0m    load average 1.89
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  continuous clean dwell 30/600s (check 2)[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [32mOK[0m    load average 2.00
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  continuous clean dwell 61/600s (check 3)[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [32mOK[0m    load average 1.94
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  continuous clean dwell 91/600s (check 4)[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [32mOK[0m    load average 1.98
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  continuous clean dwell 121/600s (check 5)[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [31mBLOCK[0m 1-minute load average 2.14 exceeds 2.0
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  not ready; re-checking in 30s[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [31mBLOCK[0m 1-minute load average 2.03 exceeds 2.0
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  not ready; re-checking in 30s[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [31mBLOCK[0m 1-minute load average 2.09 exceeds 2.0
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  not ready; re-checking in 30s[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [31mBLOCK[0m 1-minute load average 2.01 exceeds 2.0
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  not ready; re-checking in 30s[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [32mOK[0m    load average 1.83
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  continuous clean dwell 0/600s (check 1)[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [32mOK[0m    load average 1.90
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  continuous clean dwell 31/600s (check 2)[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [32mOK[0m    load average 1.99
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  continuous clean dwell 61/600s (check 3)[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [31mBLOCK[0m 1-minute load average 2.90 exceeds 2.0
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  not ready; re-checking in 30s[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [31mBLOCK[0m 1-minute load average 2.43 exceeds 2.0
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  not ready; re-checking in 30s[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [31mBLOCK[0m 1-minute load average 2.19 exceeds 2.0
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  not ready; re-checking in 30s[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [32mOK[0m    load average 1.99
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  continuous clean dwell 0/600s (check 1)[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [32mOK[0m    load average 1.81
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  continuous clean dwell 30/600s (check 2)[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [32mOK[0m    load average 1.87
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  continuous clean dwell 61/600s (check 3)[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [32mOK[0m    load average 2.00
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  continuous clean dwell 91/600s (check 4)[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [32mOK[0m    load average 1.88
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  continuous clean dwell 121/600s (check 5)[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [32mOK[0m    load average 1.86
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  continuous clean dwell 151/600s (check 6)[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [32mOK[0m    load average 1.92
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  continuous clean dwell 181/600s (check 7)[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [31mBLOCK[0m 1-minute load average 2.86 exceeds 2.0
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  not ready; re-checking in 30s[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [31mBLOCK[0m 1-minute load average 2.52 exceeds 2.0
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  not ready; re-checking in 30s[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [31mBLOCK[0m 1-minute load average 2.25 exceeds 2.0
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  not ready; re-checking in 30s[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [31mBLOCK[0m 1-minute load average 2.10 exceeds 2.0
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  not ready; re-checking in 30s[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [32mOK[0m    load average 1.92
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  continuous clean dwell 0/600s (check 1)[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [32mOK[0m    load average 1.89
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  continuous clean dwell 30/600s (check 2)[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [32mOK[0m    load average 1.93
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  continuous clean dwell 60/600s (check 3)[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [32mOK[0m    load average 1.88
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  continuous clean dwell 90/600s (check 4)[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [32mOK[0m    load average 1.76
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  continuous clean dwell 120/600s (check 5)[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [32mOK[0m    load average 1.62
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  continuous clean dwell 150/600s (check 6)[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [32mOK[0m    load average 1.66
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  continuous clean dwell 181/600s (check 7)[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [32mOK[0m    load average 1.67
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  continuous clean dwell 211/600s (check 8)[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [32mOK[0m    load average 1.66
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  continuous clean dwell 241/600s (check 9)[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [32mOK[0m    load average 1.72
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  continuous clean dwell 271/600s (check 10)[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [32mOK[0m    load average 1.94
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  continuous clean dwell 301/600s (check 11)[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [32mOK[0m    load average 1.97
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  continuous clean dwell 331/600s (check 12)[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [31mBLOCK[0m 1-minute load average 2.04 exceeds 2.0
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  not ready; re-checking in 30s[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [32mOK[0m    load average 1.92
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  continuous clean dwell 0/600s (check 1)[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [32mOK[0m    load average 1.95
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  continuous clean dwell 30/600s (check 2)[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [32mOK[0m    load average 1.97
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  continuous clean dwell 60/600s (check 3)[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [31mBLOCK[0m 1-minute load average 2.12 exceeds 2.0
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  not ready; re-checking in 30s[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [31mBLOCK[0m 1-minute load average 2.51 exceeds 2.0
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  not ready; re-checking in 30s[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [31mBLOCK[0m 1-minute load average 2.10 exceeds 2.0
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  not ready; re-checking in 30s[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [31mBLOCK[0m 1-minute load average 2.74 exceeds 2.0
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  not ready; re-checking in 30s[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [31mBLOCK[0m 1-minute load average 2.18 exceeds 2.0
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  not ready; re-checking in 30s[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [32mOK[0m    load average 1.99
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  continuous clean dwell 0/600s (check 1)[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [32mOK[0m    load average 1.84
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  continuous clean dwell 30/600s (check 2)[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [32mOK[0m    load average 2.00
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  continuous clean dwell 60/600s (check 3)[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [31mBLOCK[0m 1-minute load average 2.06 exceeds 2.0
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  not ready; re-checking in 30s[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [31mBLOCK[0m 1-minute load average 2.10 exceeds 2.0
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  not ready; re-checking in 30s[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [31mBLOCK[0m 1-minute load average 2.56 exceeds 2.0
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  not ready; re-checking in 30s[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [31mBLOCK[0m 1-minute load average 2.27 exceeds 2.0
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  not ready; re-checking in 30s[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [31mBLOCK[0m 1-minute load average 2.16 exceeds 2.0
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  not ready; re-checking in 30s[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [31mBLOCK[0m 1-minute load average 2.11 exceeds 2.0
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  not ready; re-checking in 30s[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [32mOK[0m    load average 2.00
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  continuous clean dwell 0/600s (check 1)[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [31mBLOCK[0m 1-minute load average 2.08 exceeds 2.0
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  not ready; re-checking in 30s[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [32mOK[0m    load average 1.86
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  continuous clean dwell 0/600s (check 1)[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [32mOK[0m    load average 1.84
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  continuous clean dwell 30/600s (check 2)[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [31mBLOCK[0m 1-minute load average 2.01 exceeds 2.0
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  not ready; re-checking in 30s[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [32mOK[0m    load average 1.96
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  continuous clean dwell 0/600s (check 1)[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [32mOK[0m    load average 1.96
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  continuous clean dwell 31/600s (check 2)[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [32mOK[0m    load average 1.87
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  continuous clean dwell 61/600s (check 3)[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [32mOK[0m    load average 1.93
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  continuous clean dwell 91/600s (check 4)[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [31mBLOCK[0m 1-minute load average 2.01 exceeds 2.0
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  not ready; re-checking in 30s[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [31mBLOCK[0m 1-minute load average 2.01 exceeds 2.0
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  not ready; re-checking in 30s[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [32mOK[0m    load average 1.94
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  continuous clean dwell 0/600s (check 1)[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [32mOK[0m    load average 1.83
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  continuous clean dwell 30/600s (check 2)[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [32mOK[0m    load average 1.96
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  continuous clean dwell 61/600s (check 3)[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [32mOK[0m    load average 1.98
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  continuous clean dwell 91/600s (check 4)[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [32mOK[0m    load average 1.82
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  continuous clean dwell 121/600s (check 5)[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [31mBLOCK[0m 1-minute load average 2.39 exceeds 2.0
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  not ready; re-checking in 30s[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [31mBLOCK[0m 1-minute load average 2.12 exceeds 2.0
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  not ready; re-checking in 30s[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [32mOK[0m    load average 2.00
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  continuous clean dwell 0/600s (check 1)[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [32mOK[0m    load average 1.55
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  continuous clean dwell 30/600s (check 2)[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [32mOK[0m    load average 1.21
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  continuous clean dwell 60/600s (check 3)[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [32mOK[0m    load average 1.07
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  continuous clean dwell 91/600s (check 4)[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [32mOK[0m    load average 0.98
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  continuous clean dwell 121/600s (check 5)[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [32mOK[0m    load average 1.06
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  continuous clean dwell 151/600s (check 6)[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [32mOK[0m    load average 1.03
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  continuous clean dwell 181/600s (check 7)[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [32mOK[0m    load average 1.00
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  continuous clean dwell 211/600s (check 8)[0m
+  [32mOK[0m    no contaminating daemon above 5.0% CPU
+  [32mOK[0m    load average 1.13
+  [32mOK[0m    on AC power
+  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement
+  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):
+        keyboard_backlight.level=0
+        keyboard_backlight.automatic_adjust=false
+        keyboard_backlight.inactivity=never
+        keyboard_backlight.verification=operator_visual
+  [32mOK[0m    258 GB free
+  [32mOK[0m    no agent or measurement process running
+[1m  continuous clean dwell 241/600s (check 9)[0m

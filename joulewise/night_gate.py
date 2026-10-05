@@ -1198,6 +1198,42 @@ def qualification_start_deadline(plan, chain_text, purpose):
     return int(latest)
 
 
+def authenticate_arm_context(plan, context=None, *, legacy_rehearsal=False):
+    """Bind qualification context bytes through the already pinned chain."""
+    from joulewise import arm_readiness as readiness
+    text = _pack_bytes(Path(plan.chain_path), "window_chain").decode("utf-8")
+    legacy_rehearsal = legacy_rehearsal and "export V5_QUALIFICATION_OCCURRENCE=" not in text
+    path = Path(plan.custody_root) / plan.pack_night["pack_id"] / "arm_readiness.t0.inputs/arm-context.json"
+    expected = None
+    if "export NIGHT_ARM_CONTEXT_SHA256=" in text:
+        expected = chain_literal(text, "NIGHT_ARM_CONTEXT_SHA256")
+        if re.fullmatch(r"[0-9a-f]{64}", expected) is None:
+            raise PackNightRefusal("arm_context pin invalid")
+    elif "export V5_QUALIFICATION_OCCURRENCE=" in text:
+        raise PackNightRefusal("arm_context pin missing")
+    # Historical T0_REHEARSAL custody predates the native input directory.
+    # Its authenticated ARM remains the context source; qualification always
+    # requires the chain-pinned native input, including for rehearsal purposes.
+    if legacy_rehearsal and expected is None and not path.exists() and not path.is_symlink() and context is not None:
+        pinned = context
+    else:
+        pinned = _pack_object(path, "arm_context", expected)
+    try:
+        pinned = dict(readiness.validate_arm_context(pinned))
+    except ValueError as exc:
+        raise PackNightRefusal("arm_context invalid") from exc
+    if context is not None and pinned != context:
+        raise PackNightRefusal("arm_context differs from pinned input")
+    root, custody = Path(pinned["custody_root"]), Path(plan.custody_root)
+    if (not root.is_absolute() or ".." in root.parts
+            or any(p.is_symlink() for p in (root, *root.parents))
+            or root.resolve() != root or custody.resolve() != custody
+            or root in custody.parents or custody in root.parents
+            or root == custody and not legacy_rehearsal):
+        raise PackNightRefusal("arm_context custody roots must be absolute, distinct and non-nested")
+    return pinned
+
+
 def _evaluate_pack_conditions(plan, probes, rows, arm_path):
     """Derive C1/C2 from bound custody bytes, never caller condition labels."""
     from joulewise import arm_readiness as readiness
@@ -1228,9 +1264,10 @@ def _evaluate_pack_conditions(plan, probes, rows, arm_path):
     _pack_digest(plan, arm)
     if (arm["status"] != "PASS" or arm["arm_disposition"] != "GO"
             or arm["pack"]["plan_id"] != plan.plan_id
-            or arm["reviewed_main"]["head_commit"] != plan.repo_head
-            or arm["arm_context"]["custody_root"] != plan.custody_root):
+            or arm["reviewed_main"]["head_commit"] != plan.repo_head):
         raise PackNightRefusal("arm_receipt.plan/HEAD/custody/disposition")
+    authenticate_arm_context(plan, arm["arm_context"],
+                             legacy_rehearsal=prepared["authorization_record"]["purpose"] == "T0_REHEARSAL")
     if (arm["boot_session_id"] != readiness._current_boot_session_id()
             or _clock_value(probes, "monotonic") >= arm["valid_until_monotonic_ns"]):
         raise PackNightRefusal("arm_receipt.boot/expiry")

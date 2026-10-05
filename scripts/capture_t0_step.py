@@ -27,6 +27,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from joulewise import network_time_off, arm_readiness_evidence_t0 as t0
 from joulewise import arm_readiness as readiness  # noqa: E402
+from joulewise.dwell import final_clean_dwell
 from joulewise.arm_readiness_evidence_t0 import (  # noqa: E402
     WINDOW_ENV_KEYS,
     WindowEnvironmentParseError,
@@ -494,6 +495,8 @@ def _command_for_step(context: CaptureContext, step_id: str) -> tuple[str, ...]:
         return (
             python,
             str(context.repository / "scripts/recover_calibration_ledger.py"),
+            "--ledger", values["CALIBRATION_LEDGER"],
+            "--head-pin", values["LEDGER_HEAD_PIN"],
             "readiness",
             "--phase",
             "pre-reserve",
@@ -661,11 +664,7 @@ def _validate_result(
                 "E-7a contains a failed or missing quiet-Mac predicate",
             )
     elif step_id == "prewindow-check":
-        if (
-            "TIMED OUT" in stdout
-            or "BLOCK" in stdout
-            or re.search(r"READY after [0-9]+ min\.", stdout) is None
-        ):
+        if not final_clean_dwell(stdout):
             raise _refuse(
                 "evidence_author_t0_capture_result_invalid",
                 "E-7b did not end in the governed READY result",
@@ -913,7 +912,7 @@ class _ArgumentParser(argparse.ArgumentParser):
 
 def _parser() -> argparse.ArgumentParser:
     parser = _ArgumentParser(description=__doc__)
-    parser.add_argument("step_id", choices=STEP_ORDER)
+    parser.add_argument("step_id", choices=(*STEP_ORDER, "sequence"))
     parser.add_argument("--pack-root", required=True, type=Path)
     parser.add_argument("--custody-root", required=True, type=Path)
     parser.add_argument("--window-plan-root", required=True, type=Path)
@@ -924,12 +923,11 @@ def main(argv: list[str] | None = None) -> int:
     args: argparse.Namespace | None = None
     try:
         args = _parser().parse_args(argv)
-        result = capture_step(
-            args.step_id,
-            args.pack_root,
-            args.custody_root,
-            args.window_plan_root,
-        )
+        steps = STEP_ORDER if args.step_id == "sequence" else (args.step_id,)
+        results = [capture_step(step, args.pack_root, args.custody_root, args.window_plan_root)
+                   for step in steps]
+        result = ({"status": "PASS", "step_id": "sequence", "captures": results}
+                  if args.step_id == "sequence" else results[0])
     except CaptureT0Error as exc:
         result = {
             "status": "REFUSE",

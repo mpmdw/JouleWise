@@ -34,7 +34,7 @@ class PositiveControlTests(unittest.TestCase):
     def setUp(self):
         self.temporary, self.repository, self.pack, self.custody, _, self.inputs = make_t0_fixture()
         self.addCleanup(self.temporary.cleanup)
-        self.control = Path(self.temporary.name) / "isolated-control"
+        self.control = Path(self.temporary.name).resolve() / "isolated-control"
         self.movement = 5_000_001
         self.author_calls = []
         self.command_calls = []
@@ -55,15 +55,15 @@ class PositiveControlTests(unittest.TestCase):
 
     def stamp(self):
         self.sequence += 1
-        raw = SYNTHETIC_MONOTONIC_NS + self.sequence * 1000
+        raw = SYNTHETIC_MONOTONIC_NS + self.elapsed_ns + self.sequence * 1000
         return {"realtime_ns": raw + SYNTHETIC_REALTIME_OFFSET_NS
                 + (self.movement if "on" in self.command_calls
                    and self.elapsed_ns >= self.movement_after_s * 1e9 else 0),
                 "monotonic_raw_ns": raw, "read_skew_ns": 1000,
-                "monotonic_ns": raw, "boot_id": TEST_BOOT_SESSION_ID}
+                "monotonic_ns": SYNTHETIC_MONOTONIC_NS + self.elapsed_ns, "boot_id": TEST_BOOT_SESSION_ID}
 
     def monotonic_ns(self):
-        return self.elapsed_ns
+        return SYNTHETIC_MONOTONIC_NS + self.elapsed_ns
 
     def sleep(self, seconds):
         self.sleeps.append(seconds)
@@ -121,16 +121,73 @@ class PositiveControlTests(unittest.TestCase):
         return subprocess.CompletedProcess(argv, rc, raw, stderr.getvalue().encode())
 
     def run_control(self):
-        return helper.run_control(pack_root=self.pack, author_inputs=self.inputs,
-                                  custody_root=self.control,
-                                  resync_timeout_s=30, sample=self.sample,
-                                  runner=self.runner, monotonic_ns=self.monotonic_ns,
-                                  sleep=self.sleep)
+        with mock.patch.object(helper, "REPO_ROOT", self.repository):
+            return helper.run_control(pack_root=self.pack, author_inputs=self.inputs,
+                                      custody_root=self.control,
+                                      resync_timeout_s=30, sample=self.sample,
+                                      runner=self.runner, monotonic_ns=self.monotonic_ns,
+                                      sleep=self.sleep)
 
     def assert_not_discharged(self, result, reason):
         self.assertEqual(result, {"status": "NOT-DISCHARGED", "reason": reason})
         self.assertFalse((self.control / "positive-control.json").exists())
         self.assertEqual(self.command_calls[-1], "off")
+
+    def verify_custody(self):
+        head = subprocess.check_output(["git", "-C", str(self.repository), "rev-parse", "HEAD"], text=True).strip()
+        return helper.verify_g10_custody(self.control / "positive-control.json",
+            self.control / "custody-manifest.json", code_root=self.repository, head=head,
+            before_monotonic_ns=SYNTHETIC_MONOTONIC_NS + 1_000_000_000,
+            boot_id=TEST_BOOT_SESSION_ID)
+
+    def test_custody_verifier_binds_supports_boot_code_and_order(self):
+        self.assertEqual(self.run_control()["status"], "DISCHARGED")
+        # The verifier and file census are real; only capture probes are synthetic.
+        self.assertEqual(self.verify_custody()["performed_by"], "Ed")
+        path = self.control / "before.json"
+        raw = path.read_bytes()
+        path.write_bytes(raw + b" ")
+        with self.assertRaisesRegex(ValueError, "g10_custody_hash_or_census"):
+            self.verify_custody()
+        path.write_bytes(raw)
+        head = subprocess.check_output(["git", "-C", str(self.repository), "rev-parse", "HEAD"], text=True).strip()
+        with self.assertRaisesRegex(ValueError, "g10_boot_or_order"):
+            helper.verify_g10_custody(self.control / "positive-control.json", self.control / "custody-manifest.json",
+                code_root=self.repository, head=head, before_monotonic_ns=SYNTHETIC_MONOTONIC_NS,
+                boot_id=TEST_BOOT_SESSION_ID)
+
+    def test_pre_on_span_guard_refuses_before_on_but_still_runs_off(self):
+        self.elapsed_ns = 3500_000_000_000
+        self.assert_not_discharged(self.run_control(), "pre_on_author_span_out_of_range")
+        self.assertNotIn("on", self.command_calls)
+
+    def test_sigterm_unwinds_through_off_and_restores_handler(self):
+        import signal
+        previous = signal.getsignal(signal.SIGTERM)
+        original = self.runner
+        def interrupted(argv, *, timeout):
+            if tuple(argv) == ON_ARGV:
+                signal.raise_signal(signal.SIGTERM)
+            return original(argv, timeout=timeout)
+        self.runner = interrupted
+        result = self.run_control()
+        self.assertEqual(result["status"], "NOT-DISCHARGED")
+        self.assertEqual(self.command_calls[-1], "off")
+        self.assertEqual(signal.getsignal(signal.SIGTERM), previous)
+
+    def test_first_sigterm_during_off_cannot_interrupt_the_setter(self):
+        import signal
+        previous = signal.getsignal(signal.SIGTERM)
+        original = self.runner
+        def interrupted(argv, *, timeout):
+            if tuple(argv) == network_time_off.OFF_ARGV:
+                signal.raise_signal(signal.SIGTERM)
+            return original(argv, timeout=timeout)
+        self.runner = interrupted
+        self.assertEqual(self.run_control()["status"], "DISCHARGED")
+        self.assertEqual(self.command_calls[-1], "off")
+        self.assertEqual(signal.getsignal(signal.SIGTERM), previous)
+        self.verify_custody()
 
     def test_real_author_refusal_and_record_validate_under_evaluate_g10(self):
         result = self.run_control()
@@ -140,7 +197,7 @@ class PositiveControlTests(unittest.TestCase):
         self.assertEqual(set(record), t0_rehearsal._POSITIVE_CONTROL_KEYS)
         receipt = network_time_off.read_receipt(self.control / "network_time_off.json")
         self.assertEqual(receipt["boot_id"], TEST_BOOT_SESSION_ID)
-        bundle = fixture_bundle(FixtureBuilder(Path(self.temporary.name) / "rehearsal").build())
+        bundle = fixture_bundle(FixtureBuilder(Path(self.temporary.name).resolve() / "rehearsal").build())
         old = bundle.record("positive_control")
         raw = (self.control / "positive-control.json").read_bytes()
         artifact = replace(old, raw=raw, value=record, sha256=readiness.sha256_bytes(raw))

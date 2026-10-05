@@ -69,6 +69,9 @@ class PrewindowCheckTests(unittest.TestCase):
                     f'  "-A -o comm=")\n{output(0)}\n;;\n'
                     f'  "-A -o args=")\n{output(1)}\n;;\n'
                     f'  aux)\n{output(2)}\n;;\n'
+                    '  "-Ao pid=,pcpu=,args=")\n'
+                    + ("\n".join(f"printf '%s\\n' {shlex.quote('201 ' + (row[2].split()[2] if row[2].startswith('edr ') else '0.0') + ' ' + row[1])}"
+                                 for row in processes) or "printf '%s\\n' '1 0.0 launchd'") + "\n;;\n"
                     '  *) echo "unsupported fake ps columns: $*" >&2; exit 2;;\nesac'
                 ),
                 "uptime": (
@@ -95,6 +98,9 @@ class PrewindowCheckTests(unittest.TestCase):
                 # 600-second dwell, reset and deadline logic stays production.
                 script = fake_bin / "scripts/prewindow_check.sh"
                 script.parent.mkdir()
+                policy = fake_bin / "joulewise/prewindow.py"
+                policy.parent.mkdir()
+                policy.write_bytes((REPOSITORY / "joulewise/prewindow.py").read_bytes())
                 script.write_text(SCRIPT.read_text().replace('sleep "$pause"', 'SECONDS=$((SECONDS + pause))'))
             completed = subprocess.run(
                 ["/bin/bash", str(script), *args],

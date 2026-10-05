@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 import inspect
+import io
 import json
 import os
 import re
@@ -207,7 +208,7 @@ class CaptureT0StepTests(unittest.TestCase):
                 stderr = b""
             elif Path(command[1]).name == "prewindow_check.sh":
                 clock.advance(600)
-                stdout = b"READY after 10 min.\n"
+                stdout = b"continuous clean dwell 0/600s (check 1)\ncontinuous clean dwell 600/600s (check 2)\nREADY after 10 min.\n"
                 stderr = b""
             elif Path(command[1]).name == "recover_calibration_ledger.py":
                 stdout = json.dumps(
@@ -245,16 +246,15 @@ class CaptureT0StepTests(unittest.TestCase):
                 + (clock.value - SYNTHETIC_MONOTONIC_NS) / 1e9)
             wall.start()
             self.addCleanup(wall.stop)
-            for step_id in capture.STEP_ORDER:
-                result = capture._capture_step_for_test(
-                    step_id,
-                    pack,
-                    custody,
-                    window_root,
-                    execute=execute,
-                    monotonic_ns=clock.monotonic_ns,
-                )
-                self.assertEqual(result["status"], "PASS")
+            buffer = io.BytesIO()
+            with mock.patch.object(capture, "_execute", side_effect=execute), \
+                 mock.patch.object(capture.time, "monotonic_ns", side_effect=clock.monotonic_ns), \
+                 mock.patch.object(capture.sys, "stdout", SimpleNamespace(buffer=buffer)):
+                code = capture.main(["sequence", "--pack-root", str(pack), "--custody-root", str(custody),
+                                     "--window-plan-root", str(window_root)])
+            self.assertEqual(code, 0, buffer.getvalue())
+            result = json.loads(buffer.getvalue())
+            self.assertEqual([row["step_id"] for row in result["captures"]], list(capture.STEP_ORDER))
 
         self.assertEqual(
             {path.name for path in input_root.iterdir()},
@@ -397,7 +397,7 @@ class CaptureT0StepTests(unittest.TestCase):
                 60,
             ),
             "prewindow-check": (
-                "READY after 10 min.\n",
+                "continuous clean dwell 0/600s (check 1)\ncontinuous clean dwell 600/600s (check 2)\nREADY after 10 min.\n",
                 "",
                 100,
                 100 + 600 * 1_000_000_000,
@@ -700,7 +700,7 @@ class CaptureT0StepTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             fake_bin = Path(directory)
             commands = {
-                "ps": "printf '%s\\n' 'edr 123 50.0 0.0 0 0 ?? R 0:00 0:00 /usr/libexec/XProtectRemediator'\n",
+                "ps": "case \"$*\" in '-Ao pid=,pcpu=,args=') printf '%s\\n' '123 50.0 /usr/libexec/XProtectRemediator';; *) printf '%s\\n' 'edr 123 50.0 0.0 0 0 ?? R 0:00 0:00 /usr/libexec/XProtectRemediator';; esac\n",
                 "uptime": "printf '%s\\n' '12:00  up 1 day, load averages: 0.10 0.20 0.30'\n",
                 "pmset": "printf \"%s\\n\" \"Now drawing from 'AC Power'\"\n",
                 "df": "printf '%s\\n' 'Filesystem blocks Used Available Capacity Mounted' '/dev/disk 1 1 100 1% /'\n",
@@ -921,11 +921,14 @@ class CaptureT0StepTests(unittest.TestCase):
             script = repository / "scripts/prewindow_check.sh"
             script.parent.mkdir()
             script.write_text(source + unreachable_live_table, encoding="utf-8")
+            policy = repository / "joulewise/prewindow.py"
+            policy.parent.mkdir()
+            policy.write_bytes((source_repository / "joulewise/prewindow.py").read_bytes())
 
             fake_bin = repository / "fake-bin"
             fake_bin.mkdir()
             commands = {
-                "ps": "exit 0\n",
+                "ps": "case \"$*\" in '-Ao pid=,pcpu=,args=') printf '%s\\n' '1 0.0 launchd';; *) exit 0;; esac\n",
                 "uptime": (
                     "printf '%s\\n' "
                     "'12:00 up 1 day, load averages: 0.10 0.20 0.30'\n"

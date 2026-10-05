@@ -330,11 +330,15 @@ def g2b_body(measurement):
     repo_binding = "REPO=/Users/edr/JouleWise-measurement-20260813\n"
     require(body.count(repo_binding) == 1, "g2b_repo_binding_drift")
     repository = str(measurement.resolve())
+    status_call = '"$REPO/scripts/recover_calibration_ledger.py" session-status \\\n'
+    require(body.count(status_call) == 1, "g2b_ledger_binding_drift")
+    body = body.replace(status_call, '"$REPO/scripts/recover_calibration_ledger.py" \\\n'
+                        '    --ledger "$CALIBRATION_LEDGER" --head-pin "$LEDGER_HEAD_PIN" session-status \\\n')
     require(not any(char in repository for char in "\n\r\"$`\\"), "g2b_repo_binding_invalid")
     return body.replace(old, "  --lifecycle-event start\n").replace(repo_binding, 'REPO="' + repository + '"\n')
 
 
-def render_qualification_chain(occurrence, template, sizing, root, t0_epoch_s, output):
+def render_qualification_chain(occurrence, template, sizing, root, t0_epoch_s, output, *, arm_context=None):
     """Emit exact sizing literals and a chain sidecar before authorization.
 
     Templates are reviewed, fully bound shell bytes. s1 must contain the complete
@@ -346,6 +350,7 @@ def render_qualification_chain(occurrence, template, sizing, root, t0_epoch_s, o
     template = safe_path(template)
     text = template.read_text()
     no_fill(text)
+    require(not re.search(r"(?m)^\s*(?:export\s+)?TRANSCRIPT_ROOT\s*=", text), "transcript_root_override")
     roster, auxiliary, brackets, nonsampling = pack_roster(root, occurrence)
     sized = size_window(occurrence, sizing, roster=roster, auxiliary=auxiliary, brackets=brackets, nonsampling=nonsampling)
     if occurrence == "s1":
@@ -355,15 +360,32 @@ def render_qualification_chain(occurrence, template, sizing, root, t0_epoch_s, o
         require(not re.search(r"(?m)^(?:export )?" + name + "=", text), "duplicate_span_literal")
     number(t0_epoch_s, "t0_epoch_s")
     latest = math.floor(t0_epoch_s + sized["window_max_s"] - sized["programmed_span_s"])
+    output = safe_path(output, exists=False)
+    require(bool(roster), "first_stage_required")
+    stage = (root / roster[0]["config_path"]).parent.relative_to(readiness._repo_for_pack(root)).as_posix()
+    stage_path = output.parent / "before_midpoint_stages.txt"
+    stage_raw = (stage + "\n").encode()
+    stage_hash = readiness.sha256_bytes(stage_raw)
+    require(not stage_path.exists() and not stage_path.is_symlink(), "stage_list_create_once")
+    context_prefix = ""
+    if arm_context is not None:
+        context = readiness.validate_arm_context(arm_context)
+        context_prefix = f"export NIGHT_ARM_CONTEXT_SHA256={readiness.sha256_bytes(readiness.render_json(context))}\n"
     prefix = ("#!/bin/zsh\nset -e\n"
               f"export NIGHT_PROGRAMMED_SPAN_S={sized['programmed_span_s']}\n"
               f"export NIGHT_LATEST_CHAIN_START_EPOCH_S={latest}\n"
               f"export V5_QUALIFICATION_OCCURRENCE={occurrence}\n"
+              + context_prefix
+              + ': "${NIGHT_DIR:?}"\nexport TRANSCRIPT_ROOT="$NIGHT_DIR/transcript"\n'
+              '/bin/mkdir -p "$TRANSCRIPT_ROOT"\n'
+              f'test "$(/usr/bin/shasum -a 256 "$1/before_midpoint_stages.txt" | /usr/bin/awk \'{{print $1}}\')" = "{stage_hash}"\n'
               'test "$(/bin/date +%s)" -le "$NIGHT_LATEST_CHAIN_START_EPOCH_S"\n')
-    output = safe_path(output, exists=False)
     sidecar = safe_path(str(output) + ".sha256", exists=False)
     require(not output.exists() and not sidecar.exists(), "chain_create_once")
     raw = (prefix + text).encode()
+    with stage_path.open("xb") as stream:
+        os.chmod(stage_path, 0o600)
+        stream.write(stage_raw)
     with output.open("xb") as stream:
         os.chmod(output, 0o600)
         stream.write(raw)
@@ -371,6 +393,8 @@ def render_qualification_chain(occurrence, template, sizing, root, t0_epoch_s, o
         os.chmod(sidecar, 0o600)
         stream.write(readiness.gnu_sidecar(readiness.sha256_bytes(raw), output.name))
     return {"status": "STAGED", "chain": locator(output), "sidecar": locator(sidecar),
+            "before_midpoint_stages": locator(stage_path),
+            "terminal_boundary": "$NIGHT_DIR/transcript/post-bracket-terminal-boundary.json",
             "programmed_span_s": sized["programmed_span_s"], "window_max_s": sized["window_max_s"],
             "latest_chain_start_epoch_s": latest}
 
@@ -391,7 +415,7 @@ def deadlines(plan, span, declared):
     return declared
 
 
-def prerequisites(occurrence, references, head, t0_sequence_start, custody):
+def prerequisites(occurrence, references, head, t0_sequence_start, custody, *, code_root=None):
     expected = (set() if occurrence == "a1" else {"a1_control"} if occurrence == "a2" else
                 {"a1_control", "a2_control", "observation_producers", "g10_control", "g10_artifacts"})
     exact(references, expected, "prerequisites")
@@ -411,7 +435,8 @@ def prerequisites(occurrence, references, head, t0_sequence_start, custody):
                 and type(positive["anchor_before_ns"]) is int and type(positive["anchor_after_ns"]) is int
                 and abs(positive["anchor_after_ns"] - positive["anchor_before_ns"]) > 5_000_000
                 and positive["author_refusal_reason_code"] == "evidence_author_t0_clock_attestation_underivable", "g10_control_not_pass")
-        require(isinstance(references["g10_artifacts"], list) and references["g10_artifacts"], "g10_support_required")
+        require(isinstance(references["g10_artifacts"], list) and len(references["g10_artifacts"]) == 1,
+                "g10_custody_manifest_required")
         for ref in references["g10_artifacts"]:
             read_locator(ref)
     controls = {}
@@ -436,6 +461,14 @@ def prerequisites(occurrence, references, head, t0_sequence_start, custody):
             read_locator(ref)
         controls[label] = control
     if occurrence == "s1":
+        from scripts.ed_session.capture_t0_anchor_positive_control import verify_g10_custody
+        _, raw = read_locator(controls["a1"]["observation"])
+        first_control = readiness.parse_json_bytes(raw)
+        positive_path, _ = read_locator(references["g10_control"])
+        manifest_path, _ = read_locator(references["g10_artifacts"][0])
+        verify_g10_custody(positive_path, manifest_path, code_root=code_root or REPO_ROOT, head=head,
+            before_monotonic_ns=first_control["first_t0_boundary_monotonic_ns"],
+            boot_id=controls["a1"]["boot_session_id"])
         _, raw = read_locator(controls["a2"]["observation"])
         observation = readiness.parse_json_bytes(raw)
         require(controls["a1"]["checked_monotonic_ns"] < observation["first_t0_boundary_monotonic_ns"]
@@ -521,19 +554,32 @@ def write_qualification(occurrence, inputs, output):
     require(auth.get("pack_sha256") == digest and auth.get("permitted_chain_sha256") == readiness.sha256_bytes(chain.read_bytes()), "authorization_bindings")
     exact(auth, {"purpose", "attempt_id", "claim_eligible", "pack_sha256", "permitted_chain_sha256", "permitted_blocks", "authority"}, "authorization")
     context = readiness.validate_arm_context(inputs["arm_context"])
-    require(context["custody_root"] == str(custody), "arm_context.custody_root")
+    arm_root = safe_path(context["custody_root"])
+    require(arm_root != custody and arm_root not in custody.parents and custody not in arm_root.parents,
+            "arm_context.custody_roots_overlap")
+    require(not any(arm_root.iterdir()), "arm_context.root_not_fresh")
+    require(night_gate.chain_literal(text, "NIGHT_ARM_CONTEXT_SHA256") ==
+            readiness.sha256_bytes(readiness.render_json(context)), "arm_context.pin")
     for key, value in context.items():
         if key.endswith("root") or key.endswith("path"):
             safe_path(value, exists=False)
     destinations = backup_destinations(context)
+    for value in destinations.values():
+        destination = Path(value)
+        require(destination != custody and destination not in custody.parents
+                and custody not in destination.parents, "backup_plan_custody_overlap")
     prerequisites(occurrence, inputs["prerequisites"], inputs["head"],
-                  plan.t0_epoch_s - float(allowance(sizing_adapter(inputs["sizing"])["fixed"]["pack_t0"])), custody)
+                  plan.t0_epoch_s - float(allowance(sizing_adapter(inputs["sizing"])["fixed"]["pack_t0"])), custody,
+                  code_root=measurement)
     if occurrence == "s1":
         for name, relative in (("driver", "scripts/run_night.py"), ("bundle", "scripts/produce_t0_rehearsal_bundle.py"),
                                ("evaluator", "joulewise/t0_rehearsal.py")):
             require(inputs["prerequisites"]["observation_producers"][name] == locator(measurement / relative), "observation_producer_checkout")
     create_record(auth_path, auth)
     create_record(confirm_path, confirmation)
+    input_root = custody / root.name / "arm_readiness.t0.inputs"
+    input_root.mkdir(parents=True, exist_ok=True)
+    context_ref = create_record(input_root / "arm-context.json", context)
     night_gate._authenticate_pack_records(plan)
     record = {"schema_version": OUTPUT_SCHEMA, "occurrence": occurrence,
               "head": inputs["head"], "pack_night": plan.pack_night,
@@ -545,9 +591,18 @@ def write_qualification(occurrence, inputs, output):
               "sizing": sizing, "deadlines": bound_deadlines,
               "input_sha256": readiness.sha256_bytes(readiness.render_json(inputs)),
               "prerequisites": inputs["prerequisites"],
+              "arm_context": context_ref,
+              "t0_capture_recipe": {"argv": [str(measurement / ".venv/bin/python"),
+                  str(measurement / "scripts/capture_t0_step.py"), "sequence",
+                  "--pack-root", str(root), "--custody-root", str(custody),
+                  "--window-plan-root", str(chain.parent)], "stdin": "/dev/null",
+                  "stage": "before_ARM", "steps": ["clock-reference", "clock-disable",
+                  "quiet-mac-prep", "prewindow-check", "ledger-readiness", "ledger-reservation"]},
               "backup_destinations": destinations,
               "desk_sources": {name: context[key] for name, key in (("custody", "custody_root"),
                   ("claim_runs", "claim_runs_root"), ("bound_runs", "bound_runs_root"))}}
+    if occurrence == "s1":
+        record["terminal_boundary_path"] = str(custody / "night/transcript/post-bracket-terminal-boundary.json")
     if occurrence in {"a1", "a2"}:
         record.update(schema_version=ARM_ONLY_SCHEMA, mode="ARM_ONLY_NO_LAUNCH",
                       arm_context=context, plan_binding=night_plan_mapping(plan),
@@ -586,11 +641,13 @@ def main(argv=None):
     render.add_argument("--pack-root", type=Path, required=True)
     render.add_argument("--t0-epoch-s", type=float, required=True)
     render.add_argument("--output", type=Path, required=True)
+    render.add_argument("--arm-context", type=Path, required=True)
     args = parser.parse_args(argv)
     try:
         if args.occurrence == "render-chain":
             result = render_qualification_chain(args.render_occurrence, args.template,
-                read_object(args.sizing), args.pack_root, args.t0_epoch_s, args.output)
+                read_object(args.sizing), args.pack_root, args.t0_epoch_s, args.output,
+                arm_context=read_object(args.arm_context))
         else:
             result = write_qualification(args.occurrence, read_object(args.inputs), args.output)
     except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
