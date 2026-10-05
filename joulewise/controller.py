@@ -525,8 +525,10 @@ def _authenticate_g2a_pre_bracket_attachment(
 
     C-2's legacy readers remain closed. A derivation observation cannot use
     this path, even after its epoch has an issued acceptance (D-102 clause 2).
-    This attachment supplies bindings; the member's own telemetry supplies
-    its within-capture clock anchor, and harvest still judges the whole bracket.
+    This attachment supplies bindings and the recorded fiducial bound
+    b_fiducial_s, which the reducer folds into the member's clock-anchor bound.
+    The member's stored clock_anchor.status comes from its own telemetry,
+    and harvest still judges the whole bracket.
     """
     from joulewise.calibration_ledger import (  # noqa: PLC0415
         SESSION_KIND_BRACKET, load_calibration_ledger_snapshot,
