@@ -348,6 +348,25 @@ class SummarizeG2APrefillProbeTests(unittest.TestCase):
             self.assertIsNone(record.get("selected_prefill_tokens"))
             self.assertNotEqual(record.get("status"), "selected")
 
+    def test_valid_filter_excludes_nongating_large_member_without_rejecting_select(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            config_root, inventory_path, runs_root = self.copy_fixture(temporary)
+            inventory = json.loads(inventory_path.read_bytes())
+            valid = {member["run_id"] for stage in inventory["stages"] for member in stage["members"]}
+            excluded = next(stage["members"][0]["run_id"] for stage in inventory["stages"]
+                            if stage["stage_id"] == "large-p512")
+            valid.remove(excluded)
+            # Invalid provenance must not be inspected or counted.
+            (runs_root / excluded / "metadata.json").write_bytes(b"invalid excluded metadata")
+            members, rows = summarizer.summarize(config_root=config_root, input_inventory=inventory_path,
+                                                runs_root=runs_root, valid_run_ids=valid)
+            self.assertNotIn(excluded, {member["run_id"] for member in members})
+            self.assertEqual(rows[0]["large_members"], 0)
+            issuer._validate_summary(rows)
+            selection = selector.select(rows, summary_sha256=hashlib.sha256(summarizer._summary_bytes(rows)).hexdigest())
+            self.assertEqual(selection["collection_prefill_tokens"], 512)
+            self.assertEqual(selection["status"], "selected")
+
     def test_wrong_run_id_refuses_even_when_the_mutated_config_hash_is_rebound(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -546,6 +565,8 @@ class SummarizeG2APrefillProbeTests(unittest.TestCase):
         tokenizer = _DeskChainTokenizer()
         with tempfile.TemporaryDirectory(prefix="g2a-desk-chain-") as temporary:
             root = Path(temporary) / "g2a"
+            plan_id = "fixture-desk-chain-b3w1"
+            block3_policy = ROOT / issuer.BLOCK3_POLICY_PATH
             with mock.patch.object(
                 probe, "_load_runtime_tokenizer", return_value=tokenizer
             ):
@@ -590,13 +611,13 @@ class SummarizeG2APrefillProbeTests(unittest.TestCase):
                             "--head-pin",
                             str(ROOT / "configs/calibration/calibration_ledger_head.json"),
                             "--campaign-policy",
-                            str(POLICY),
+                            str(block3_policy),
                             "--power-policy",
                             "ac_high_power",
                             "--window-id",
-                            "window-g2a-chain",
+                            plan_id,
                             "--session-id",
-                            "session-g2a-chain",
+                            plan_id + "-calibration",
                             "--evidence-root-id",
                             "evidence-g2a-chain",
                         ]
@@ -607,7 +628,7 @@ class SummarizeG2APrefillProbeTests(unittest.TestCase):
             inventory_path = plan_root / "g2a-input-inventory.json"
             inventory = json.loads(inventory_path.read_text())
             by_length = {row["prefill_tokens"]: row for row in ladder["rungs"]}
-            runs_root = root / "synthetic-runs"
+            runs_root = root / "runs"
             for stage in inventory["stages"]:
                 rung = by_length[stage["prefill_tokens"]]
                 for member in stage["members"]:
@@ -622,7 +643,7 @@ class SummarizeG2APrefillProbeTests(unittest.TestCase):
                         json.dumps(retained_summary(6)) + "\n"
                     )
 
-            counts_path = plan_root / "g2a-counts-receipt.json"
+            counts_path = plan_root / "d166-prefill-counts-receipt.json"
             summary_path = plan_root / "d166-prefill-resolvability-summary.json"
             summary_code = summarizer.main(
                 [
@@ -642,7 +663,77 @@ class SummarizeG2APrefillProbeTests(unittest.TestCase):
             selection_code = selector.main(
                 ["--summary", str(summary_path), "--output", str(selection_path)]
             )
-            pin_path = plan_root / "prefill-prompt-pin.json"
+            self.assertEqual((summary_code, selection_code), (0, 0))
+
+            # Wrap the generated artifacts in the harvester's copytree layout.
+            # Only scratch coordinates and their receipt hash change: configs,
+            # run bundles, ladder, summary and selector output retain their bytes.
+            archive = Path(temporary) / "harvest"
+            archived_g2a = archive / "g2a-root"
+            shutil.copytree(root, archived_g2a)
+            archived_plan = archived_g2a / "window-plan"
+            live_root = issuer.LIVE_WINDOWS_ROOT / plan_id
+            inventory["config_root"] = str(live_root / "prefill-probe-configs")
+            for key in ("prompt_ladder", "identity_epoch", "t1_bindings", "calibration_plan"):
+                inventory[key]["path"] = str(live_root / Path(inventory[key]["path"]).relative_to(root.resolve()))
+            archived_inventory = archived_plan / inventory_path.name
+            archived_inventory.write_bytes(issuer._pin_bytes(inventory))
+            self.assertEqual(inventory["campaign_policy"], {
+                "path": issuer.BLOCK3_POLICY_PATH, "sha256": issuer.BLOCK3_POLICY_SHA256,
+            })
+            counts = json.loads(counts_path.read_bytes())
+            counts["input_inventory_sha256"] = hashlib.sha256(archived_inventory.read_bytes()).hexdigest()
+            counts["runs_root"] = str(live_root / "runs")
+            (archived_plan / counts_path.name).write_bytes(issuer._pin_bytes(counts))
+            derived = archive / "derived"
+            derived.mkdir()
+            for source, name in ((archived_plan / counts_path.name, "counts.json"),
+                                 (summary_path, "summary.json"), (selection_path, "selection.json")):
+                shutil.copyfile(source, derived / name)
+            custody = archive / "night-custody"
+            custody.mkdir()
+            chain_raw = (
+                "export NIGHT_CHAIN_INTERFACE=g2a-reservation-v1\n"
+                f"export G2A_ROOT={live_root}\n"
+                f"export POLICY=/fixture-measurement-g2a-b3w1/{issuer.BLOCK3_POLICY_PATH}\n"
+            ).encode()
+            (custody / "chain.zsh").write_bytes(chain_raw)
+            (custody / "chain.zsh.sha256").write_text(hashlib.sha256(chain_raw).hexdigest() + "  chain.zsh\n")
+            night_plan = {
+                "schema": "joulewise.night_plan.v2", "plan_id": plan_id,
+                "receipt_class": "DIAGNOSTIC_NO_PACK", "t0_epoch_s": 1000,
+                "measurement_root": "/fixture-measurement-g2a-b3w1", "custody_root": "/fixture-custody",
+                "chain_path": "/fixture-custody/chain.zsh", "chain_sha256_path": "/fixture-custody/chain.zsh.sha256",
+            }
+            (custody / "night_plan.json").write_bytes(issuer._pin_bytes(night_plan))
+            selection_sha256 = hashlib.sha256(selection_path.read_bytes()).hexdigest()
+            harvest_path = archive / "harvest.json"
+            harvest_path.write_bytes(issuer._pin_bytes({
+                "schema": "joulewise.harvest_g2a_window.v1", "archive_root": str(archive.resolve()),
+                "plan_id": plan_id, "plan_sha256": hashlib.sha256((custody / "night_plan.json").read_bytes()).hexdigest(),
+                "verdict": "SELECT", "cause_codes": [], "capture_made": True,
+                "members": [{"run_id": member["run_id"], "clock_anchor_status": "bounded", "valid": True}
+                            for stage in inventory["stages"] for member in stage["members"]],
+                "selection": {"path": str((derived / "selection.json").resolve()), "sha256": selection_sha256},
+                "outputs": {path.name: hashlib.sha256(path.read_bytes()).hexdigest() for path in derived.iterdir()},
+                "chain_summary_copy": {"d166-prefill-counts-receipt.json": "equal",
+                                       "d166-prefill-resolvability-summary.json": "equal"},
+            }))
+            reviewed_root = Path(temporary) / "reviewed-windows"
+            reviewed_window = reviewed_root / plan_id
+            reviewed_window.mkdir(parents=True)
+            shutil.copyfile(harvest_path, reviewed_window / "harvest.json")
+            shutil.copyfile(derived / "selection.json", reviewed_window / "selection.json")
+            source_files = sorted(path for path in archive.rglob("*") if path.is_file()
+                                  and path.name != "harvest.json" and "derived" not in path.relative_to(archive).parts)
+            (archive / "SHA256SUMS").write_text("".join(
+                f"{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.relative_to(archive).as_posix()}\n"
+                for path in source_files))
+            # The issuer must now succeed with only the archive present.
+            shutil.rmtree(root)
+            bundle = Path(temporary) / "pin-bundle"
+            bundle.mkdir()
+            pin_path = bundle / "prefill-prompt-pin.json"
             by_text = {
                 row["prompt_text"]: list(row["prompt_token_ids"])
                 for row in ladder["rungs"]
@@ -651,19 +742,14 @@ class SummarizeG2APrefillProbeTests(unittest.TestCase):
                 issuer,
                 "runtime_prompt_token_ids",
                 side_effect=lambda prompt_text, **_kwargs: list(by_text[prompt_text]),
-            ):
+            ), mock.patch.object(issuer, "BLOCK3_WINDOWS_PATH", reviewed_root), \
+                    mock.patch.object(issuer, "_committed_record_bytes", side_effect=lambda path: path.read_bytes()):
                 issue_code = issuer.main(
                     [
-                        "--selection-record",
-                        str(selection_path),
-                        "--summary",
-                        str(summary_path),
-                        "--prompt-ladder",
-                        str(ladder_path),
-                        "--input-inventory",
-                        str(inventory_path),
-                        "--counts-receipt",
-                        str(counts_path),
+                        "--harvest",
+                        str(harvest_path),
+                        "--registration",
+                        str(ROOT / "configs/campaigns/g2a_prefill_probe_25g83/registration_block3.md"),
                         "--ruling-trace",
                         str(RULING),
                         "--output",
@@ -679,6 +765,7 @@ class SummarizeG2APrefillProbeTests(unittest.TestCase):
                 panel_sha256=hashlib.sha256(PANEL.read_bytes()).hexdigest(),
             )
             self.assertEqual(loaded["special_token_policy"], "add_special_tokens=true")
+            self.assertEqual(loaded["g2a_record_sha256"], selection_sha256)
 
 
 if __name__ == "__main__":
