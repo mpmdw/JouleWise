@@ -201,3 +201,23 @@ coordinated multi-file forgery is outside the threat model (D-161). **F2:** fix.
   (the contrast source `--check` with the canonical panel/workload/pin is Fable MINOR-1's procedure control on #473).
   Executing review brief [45](45-sol-packs-review-brief.md); throwaway-clone re-proof seat (Opus 5.5) brief
   [44](44-opus-clone-proof-brief.md), output `~/night-archive/desk-day-v5/clone-proof/REPORT.md`.
+
+## 19:15-20:25
+
+- PR #472 merged `a93604c8`; PR #473 merged `784d12f1` (whole suites at their heads: no failure attributable; hosted CI
+  green on the heads with main merged in). Packs branch `desk/2026-10-04-v5-pin-and-packs` merged main (`7f6297d0`).
+- PR #475 (A6) round 3 [40r3](40-sol-a6-report-r3.md): durable `launch.pending` (schema `joulewise.launch_pending.v1`) before
+  the recheck; dead-man and courier guard it. Round 4 [46r4](46-sol-a6-report-r4.md) (scope granted): the measurement-owner
+  census (`joulewise/measurement_liveness.py`) refuses a live or indeterminate pending group. F2 deferred: the block-4
+  pack harvesters (`scripts/harvest_v5_pack_rehearsal.py`, `scripts/harvest_v5_g2b_window.py`, to be written) must read
+  `launch.pending` (`schema`, `pgid`, `pid`, `start_time`, `plan_id`, `attempt_id`, `epoch_s`); NULL needs no
+  `chain.started` AND a proven-gone pending group; unknown liveness refuses. Delta check [48](48-sol-a6-delta-brief.md) and
+  cold Fable pass [49](49-fable-a6-brief.md) running on `14324c52`.
+- PR #474 round 3 [43r3](43-sol-g2bstop-report-r3.md) (`ffc18054`, main merged): bound only `G2B_SHAKEDOWN` runs with
+  `--max-blocks`; golden test that other authenticated paths match main; 9/12 mutants killed, 3 equivalent. The seat's
+  pytest wrote `.pytest_cache` (gitignored) outside its scope: **accepted** and removed by the lead (no effect on any
+  tracked byte). Second cold Fable pass [47](47-fable-g2bstop-2-brief.md) and whole suite at `ffc18054` running.
+- Clone re-proof (Opus seat, in progress) already shows desk findings, which is what the proof is for: the floor packs'
+  identity projection refuses (`readiness_identity_environment_dirty`: the floors' declared decode identity lacks
+  `prompt_tokens: null`, `configs/campaigns/d117_floor_qwen3-*_v5/generate_configs.py:~2442`); evidence authoring refuses
+  `evidence_author_doctrine_pin_underivable`; the contrast sacrificial freeze did not PASS. Triage follows its report.

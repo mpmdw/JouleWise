@@ -1,0 +1,19 @@
+You are giving a cold final pass on one change before merge. You have no prior context. Your working directory is a detached checkout of `14324c52` (branch feat/2026-10-04-launch-realization-recheck, PR #475). Read `git diff $(git merge-base origin/main HEAD)..14324c52 -- scripts joulewise tests` (the branch merged unrelated main PRs; review only the files of this change) and the surrounding code. You may run read-only commands and unit tests with `/Users/edr/code/JouleWise/.venv/bin/python -B -m pytest -q -p no:cacheprovider <files>` from this directory.
+
+Rules:
+- Scratch: /tmp/dd5-fable-a6/ only (set TMPDIR there). Do not edit files in the checkout, and do not run git commands that write.
+- Never run powermetrics, sudo, launchctl or a model. Never arm or launch a window.
+- Do not read RUN_STATE.md, CLAUDE*.md, memory or skill files, and do not read GitHub pull-request bodies.
+- One non-interactive session, every command in the foreground, no background task or subagent. Budget 50 minutes. Ending before your ruling file exists is a protocol failure.
+- Write your ruling to /Users/edr/night-archive/desk-day-v5/fable-a6.md; first line `FINAL PASS: PASS` or `FINAL PASS: FAIL`, then findings with severity (BLOCKER/MAJOR/MINOR/NIT), file:line and evidence.
+
+What the change is for:
+- JouleWise measures LLM inference energy on a Mac in unattended "windows". A window is armed (an arm receipt records the identity projection of model files, tokenizer and runtime), then at T-0 the night driver (`scripts/run_night.py`) starts the launcher (`scripts/launch_window.py`), which verifies the one-use consumed arm and `execve`s the measurement chain. A ruling (`docs/process_traces/2026-09-02-projection-02/150a-RULING-post-arm-recheck.md`; queue row A6 V5-LAUNCH-REALIZATION-RECHECK-01) requires the launch step to re-derive the identity projection after consumed-arm replay and refuse `readiness_identity_environment_dirty` on any mismatch BEFORE any bundle is written, with the chain NOT started (no `chain.started`): a harvest reads `chain.started` as the line between NULL (never started) and RECOVER.
+- The change: the launcher rechecks with the existing derivation helpers; the driver no longer claims `chain.started` before launching. Instead the driver writes a durable exclusive `launch.pending` record (pid, pgid, start time, plan and attempt ids) before the recheck; after recheck PASS the launcher asks the driver to claim the chain start and waits for an ACK before `execve`. Dead-man, courier and the measurement-owner census (`joulewise/measurement_liveness.py`) treat a live or indeterminate pending launcher as alive. Non-pack window kinds (DIAGNOSTIC_NO_PACK, REHEARSAL_STUB) are claimed byte-identical to main. An executing review found and the author fixed one blocker (driver death before PASS lost launcher custody).
+
+Judge as the last reviewer before merge on the launch path of every claim window:
+1. Is the ruled property met: drift refuses before any bundle and with no `chain.started`, and a clean launch claims exactly one `chain.started` with main's fields?
+2. Can collection begin without a claimed start, or a start be claimed without a recheck PASS? Any deadlock, lost custody, or stale-record case that turns a live chain into "clear", or blocks all future windows?
+3. Are the non-pack paths byte-identical to main?
+4. Does the recheck use the same derivation as arm time (no second implementation)?
+5. Do the tests kill the regressions they claim?
