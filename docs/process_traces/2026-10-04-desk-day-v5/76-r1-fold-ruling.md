@@ -96,3 +96,53 @@ tooling-recovery allowance, so a pack-path failure on it costs a window, not a n
   holds 50 anchor records, all `bounded`, largest 4.02 ms. The margin to 5 ms is thin and is disclosed to the cold
   gate. The binding admission is unchanged: every obligated `s1` member must be `bounded` at harvest, and the
   majority trigger (at least five recorded anchors, more than half not bounded) ends the block.
+
+## Addendum B (2026-10-05 04:55, same seat): clock, idle admission and the pre-mortem rulings
+
+Inputs: the Opus pre-mortem memo (`~/night-archive/ia-0a40/MEMO.md`, lane ia-0a40, run from the interactive session
+at Ed's request) and the blind consult in brief 90, with both answers beside it (`90-opus-clock-idle.md`,
+`90-sol-clock-idle.md`).
+
+**What each clock guard protects.** The per-member effective bound (at most 5 ms, pinned estimator) decides where an
+energy trace sits against the wall-stamped phase edges; it is the guard that protects the joules. At 40 W, 5 ms is
+0.2 J per edge, below the roughly 1 J attribution limit. The T-0 anchor check protects provenance: it shows that
+nothing reset the clock between R0 and authoring. With network time OFF the anchor drifts steadily at the kernel's
+stored frequency correction (−3.17 ppm today, read-only `ntp_adjtime(modes=0)`), so a fixed 5 ms check refuses any
+T-0 span longer than about 1579 s even when nothing happened.
+
+1. **Idle 75 s** (memo 1.8). All `_v5` science, NEG-8 bound and reference configs move from `idle_seconds` 30 to 75,
+   the value block 3 ran with (all 50 anchors bounded, largest 4.02 ms). At 30 s every stream is shorter than the
+   60-second clock-fit minimum and returns `unknown`. The packs are regenerated and re-pinned through a gated PR.
+2. **Frequency gate** (memo 1.1). After G10's OFF and at every R0, read the kernel frequency word `f`. Arm only if
+   `H_max + 0.10 ms + (|f| + 0.25 ppm) · T_stream_max ≤ 5 ms`, where `H_max` = 3.60 ms (largest observed half-width)
+   and `T_stream_max` is the longest continuous sampler stream of the regenerated packs, including one admission
+   retry and the guards (record 44 is recomputed after regeneration). The gate is this inequality, not a fixed ppm
+   number; the Opus seat's 5 ppm (for a 250 s stream) and the Sol seat's 3.5 ppm (for 320 s) are two evaluations of
+   it. If the draw after G10 fails, one reviewed network-time ON/OFF redraw is allowed before `a1`; a second failure
+   goes to the lead and nothing arms.
+3. **T-0 anchor check in residual form** (memo 1.1, 1.21). The author, ARM, G4 replay and the G10 helper all use
+   `|Δanchor − f_R0 · span| ≤ 5 ms`, plus: the kernel frequency word read at authoring equals `f_R0`, and
+   `|f_R0|` passes the gate above. Any intervention by `timed` rewrites the frequency word, so the equality test
+   catches slews as well as steps at any accrued offset, including right after G10. The fixed form
+   `5 ms + RATE_CAP · span` (Sol seat) is not adopted: just after G10 the accrued offset is small, and at 12.5 ppm
+   and 3600 s the fixed form would pass a stray resync of up to about 45 ms. Dissent recorded. G10's discharge is
+   unaffected: before G10 the accrued offset since the last sync is hundreds of milliseconds.
+4. **Backoff stays 0 s; one admission abort re-arms** (memo 1.14). Admission thresholds are unchanged. Exactly one
+   guard-attested idle-admission abort per block, with no other RECOVER cause present, re-arms a fresh complete
+   `s1` (new plan id, authorization and T-0) without END STATE and without spending `s2`. The aborted attempt's bytes
+   are kept and never pooled with the fresh attempt (D-078). A second abort follows the same-refusal-twice consult
+   rule. Dissent (Sol seat): allow this only when no science energy window has started yet. Not adopted: `s1` is
+   non-claim and the fresh attempt collects a complete new block, so nothing is pooled or topped up. Retry as a new
+   sampler stream, which would make a real backoff affordable, is deferred to block 5 (with the v3.1 identity).
+5. **Census** (memo 1.15), recorded as the WO-CENSUS-SEMANTICS cure: the ARM maintenance census keeps its `pgrep`
+   probe for custody and judges by CPU: it fails only on a probe error or a matching process above 5.0% CPU, the
+   constant shared with `scripts/prewindow_check.sh`. A resident daemon idling at 0–0.3% is not a contaminant.
+6. **Revision-5 attachment** (memo 1.16): an authenticated G2-b pre-slot route, selected when the runs root holds the
+   launch lineage file, taking session and plan from that lineage and confirming through session status that the
+   attached directory is that session's finalized pre slot. Measurement code; cold final pass.
+7. **Detokenizer** (memo 3.1): mlx-lm's detokenizer is built once in `prepare()`, outside every measured window, and
+   handed out as reset copies. This shortens prefill windows by 55–65 ms of CPU-only work. It must land before the
+   seal, so that `s1` qualifies the code that collects claims; the registration carries a prospective note, and the
+   claim registration states it again.
+8. **G10 owner** (memo 1.5, C1): stays Ed-owned, as the registration says. Ed's 2026-10-05 email asking to make it
+   agent-run could not be recorded by the headless seats (the safety classifier blocked it), so it is not applied.
