@@ -1660,6 +1660,10 @@ class D117ContrastV5PackTests(unittest.TestCase):
                 row["model_id"]: row
                 for row in candidate["token_count_basis"]["per_model"]
             }
+            self.assertEqual(candidate["candidate_status"], "ISSUED-BY-G2A-PROMPT-PIN")
+            readme = (pack / "README.md").read_text(encoding="utf-8")
+            self.assertIn("`ISSUED-BY-G2A-PROMPT-PIN`, issued by", readme)
+            self.assertIn("`prefill_pin/prefill_prompt_pin.json`", readme)
             tree = json.loads(
                 (pack / "plan_tree.json").read_text(encoding="utf-8")
             )
@@ -1685,6 +1689,10 @@ class D117ContrastV5PackTests(unittest.TestCase):
                     self.assertNotIn("prompt_token_expectation", workload)
                     continue
                 prefill_count += 1
+                self.assertIn(
+                    "prompt-status=ISSUED-BY-G2A-PROMPT-PIN",
+                    raw["run_metadata"]["tags"],
+                )
                 expectation = workload["prompt_token_expectation"]
                 candidate_row = candidate_by_model[self.generator.MODEL_IDS[arm]]
                 family = json.loads(
