@@ -58,13 +58,23 @@ class G2bAttachmentTests(unittest.TestCase):
         self.config = BenchmarkConfig.from_mapping(config_value)
         self.config_path = self.launch.pack / 'member.json'
         self.config_path.write_text(json.dumps(self.config.to_dict()) + '\n')
+        # Both controls are sealed pack bytes: only the ordinary member and
+        # the untagged member are registered in the authenticated inventory.
+        self.unregistered_path = self.launch.pack / 'unregistered.json'
+        self.unregistered_path.write_bytes(self.config_path.read_bytes())
+        plain_config = replace(self.config, run_id='plain-registered-member',
+            run_metadata=replace(self.config.run_metadata, tags=()))
+        self.plain_config_path = self.launch.pack / 'plain.json'
+        self.plain_config_path.write_text(json.dumps(plain_config.to_dict()) + '\n')
         self.plan_path = self.launch.pack / 'calibration_plan.json'
         self.plan_path.write_text(json.dumps({'plan_id': self.launch.arm['pack']['plan_id']}) + '\n')
         self.plan_sha = hashlib.sha256(self.plan_path.read_bytes()).hexdigest()
         tree = {'plan': {'path': 'calibration_plan.json', 'plan_id': self.launch.arm['pack']['plan_id'],
                          'actual_sha256': self.plan_sha},
                 'arm_attachments': {'identity_pin_projection': {'identity_units': [{
-                    'config_inventory': [{'path': 'member.json', 'sha256': hashlib.sha256(self.config_path.read_bytes()).hexdigest()}]}]}}}
+                    'config_inventory': [
+                        {'path': path.name, 'sha256': hashlib.sha256(path.read_bytes()).hexdigest()}
+                        for path in (self.config_path, self.plain_config_path)]}]}}}
         tree_raw = arm_readiness.render_json(tree)
         (self.launch.pack / 'plan_tree.json').write_bytes(tree_raw)
         (self.launch.pack / 'plan_tree.sha256').write_bytes(arm_readiness.gnu_sidecar(hashlib.sha256(tree_raw).hexdigest(), 'plan_tree.json'))
@@ -132,7 +142,11 @@ class G2bAttachmentTests(unittest.TestCase):
     def test_real_revision_five_capture_runs_and_remains_independently_readable(self):
         path, summary = self.run_member()
         self.assertEqual(summary.status, RunStatus.SUCCEEDED, summary.failure_message)
-        metadata = json.loads((path / 'metadata.json').read_bytes())['instrument_calibration']
+        bundle_metadata = json.loads((path / 'metadata.json').read_bytes())
+        metadata = bundle_metadata['instrument_calibration']
+        self.assertEqual(bundle_metadata['extra']['launch_lineage']['bracket_session_id'], self.session_id)
+        self.assertEqual(bundle_metadata['extra']['launch_lineage_locator_sha256'],
+            metadata['g2b_pre_slot']['launch_lineage_locator_sha256'])
         self.assertEqual(metadata['g2b_pre_slot']['session_id'], self.session_id)
         self.assertEqual(metadata['g2b_pre_slot']['plan_sha256'], self.plan_sha)
         self.assertNotIn('g2a_pre_bracket', metadata)
@@ -191,6 +205,42 @@ class G2bAttachmentTests(unittest.TestCase):
     def test_no_lineage_retains_revision_five_refusal(self):
         (self.runs / arm_readiness.LAUNCH_LINEAGE_LOCATOR_BASENAME).unlink()
         with self.assertRaisesRegex(ValueError, 'revision_five'):
+            self.run_member()
+
+    def test_plain_unregistered_member_retains_revision_five_refusal(self):
+        self.config = replace(self.config, run_id='plain-unregistered-review-member',
+            run_metadata=replace(self.config.run_metadata, tags=()))
+        with self.assertRaisesRegex(ValueError, 'revision_five'):
+            self.run_member()
+        self.assertFalse((self.runs / self.config.run_id).exists())
+
+    def test_tagged_unregistered_member_retains_revision_five_refusal(self):
+        self.config_path = self.unregistered_path
+        with self.assertRaisesRegex(ValueError, 'revision_five'):
+            self.run_member()
+        self.assertFalse((self.runs / self.config.run_id).exists())
+
+    def test_authenticated_untagged_member_retains_revision_five_refusal(self):
+        self.config_path = self.plain_config_path
+        self.config = BenchmarkConfig.from_mapping(json.loads(self.config_path.read_bytes()))
+        context = arm_readiness.authenticate_campaign_launch_lineage(
+            self.runs, config_paths=(self.config_path,))
+        self.assertIn(self.config_path.name, context['config_inventory'])
+        with self.assertRaisesRegex(ValueError, 'revision_five'):
+            self.run_member()
+        self.assertFalse((self.runs / self.config.run_id).exists())
+
+    def test_running_config_must_match_authenticated_source(self):
+        self.config = replace(self.config, run_id='changed-running-member')
+        with self.assertRaisesRegex(ValueError, 'revision_five'):
+            self.run_member()
+        self.assertFalse((self.runs / self.config.run_id).exists())
+
+    def test_reserved_directory_symlink_is_refused(self):
+        relocated = self.capture.with_name('relocated')
+        self.capture.rename(relocated)
+        self.capture.symlink_to(relocated, target_is_directory=True)
+        with self.assertRaisesRegex(ValueError, 'finalized pre slot'):
             self.run_member()
 
     def test_corrupt_lineage_has_no_g2a_fallback(self):

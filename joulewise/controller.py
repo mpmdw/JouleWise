@@ -68,7 +68,9 @@ from joulewise import battery_float
 from joulewise.aggregate import aggregate_experiment
 from joulewise import reduce as reduce_module
 from joulewise.bundle import (
+    BundleError,
     RunBundleWriter,
+    _writer_launch_lineage,
     generate_run_id,
     sanitize_id_component,
     write_experiment_manifest,
@@ -299,6 +301,7 @@ def run_benchmark(
         runtime_powermetrics_sha256=runtime_powermetrics_sha256,
         runtime_power_policy=runtime_power_policy,
         runs_root=runs_root,
+        config=config,
         g2a_context=(config, runs_root, Path(os.environ["JOULEWISE_G2A_PRE_BRACKET_PLAN"]))
         if "JOULEWISE_G2A_PRE_BRACKET_PLAN" in os.environ else None,
     )
@@ -378,6 +381,7 @@ def _load_instrument_calibration_attachment(
     runtime_power_policy: str | None = None,
     g2a_context: tuple[BenchmarkConfig, Path, Path] | None = None,
     runs_root: Path | None = None,
+    config: BenchmarkConfig | None = None,
 ) -> _InstrumentCalibrationAttachment | None:
     """Authenticate a validation directory before a bundle is created."""
 
@@ -451,7 +455,7 @@ def _load_instrument_calibration_attachment(
     locator = Path(runs_root) / LAUNCH_LINEAGE_LOCATOR_BASENAME if runs_root is not None else None
     if locator is not None and (locator.exists() or locator.is_symlink()):
         g2b_provenance = _authenticate_g2b_pre_slot_attachment(
-            resolved_root, files, evidence, Path(runs_root)
+            resolved_root, files, evidence, Path(runs_root), config
         )
     elif g2a_context is not None:
         bracket_provenance = _authenticate_g2a_pre_bracket_attachment(
@@ -533,7 +537,8 @@ def _load_instrument_calibration_attachment(
 
 def _authenticate_g2b_pre_slot_attachment(
     directory: Path, files: dict[str, bytes], evidence: Any, runs_root: Path,
-) -> dict[str, Any]:
+    config: BenchmarkConfig | None,
+) -> dict[str, Any] | None:
     """Authenticate the launch lineage and its ordinary finalized pre slot.
 
     The root-local locator selects this route; it is never an authorization
@@ -549,6 +554,18 @@ def _authenticate_g2b_pre_slot_attachment(
     )
 
     context = authenticate_campaign_launch_lineage(runs_root)
+    # A root locator alone cannot authorize the running member. Reuse the
+    # writer's marker, CLI-source equality and authenticated pack-inventory
+    # checks before granting the Revision-5 exception. Ineligible members
+    # retain the loader's ordinary Revision-5 refusal, without G2-a fallback.
+    if config is None:
+        return None
+    try:
+        member_lineage = _writer_launch_lineage(runs_root, config)
+    except BundleError:
+        return None
+    if member_lineage is None:
+        return None
     lineage = context["launch_lineage"]
     pack_root = Path(context["pack_root"])
     repo = _repo_for_pack(pack_root)
