@@ -147,3 +147,21 @@ coordinated multi-file forgery is outside the threat model (D-161). **F2:** fix.
 - Merge plan: PRs touch disjoint files. Each merges after its own gates; the next PR then merges main in and its
   hosted CI (the whole suite: six shards plus both exclusive modules, on the merged tree) is its row-2 evidence,
   with the local suite at its pre-merge head recorded beside it.
+
+## 17:45-18:40
+
+- Whole suites (CI shard method, local venv) at the PR heads under 4-5 concurrent suites: base `8fa002f7` has 67
+  local-environment failures. Extra failures under load in `test_calibration_ledger_custody`,
+  `test_magistrate_watchdog_cli`, `test_mint_floor_artifact_generalized`, `test_collector_analysis_manifest_id` pass
+  serially; `test_calibration_exits` errors at base too. None attributable to a diff. Per-PR tails in each PR's
+  `pr<N>-gates.md`.
+- PR #474 (G2-b stop): executing review [36r](36-sol-g2bstop-review.md) FAIL. R1 (a bounded run silently ignored
+  `--max-failures`): **fixed** (`0636046c`) by refusing any failure budget other than 1 with a block limit; stopping at
+  the first failure is intended (D-078 / Q3 fence: a one-block occurrence is never topped up). R2 (the shared
+  `run_stage` helper in the G2-a region changed): **rejected**, the edit adds explicit `|| return $?` so rc 3 can be
+  captured; behaviour under the G2-a chain's `set -e` is unchanged, and block 3 is over. Cold Fable pass launched
+  (brief [39](39-fable-g2bstop-brief.md)).
+- PR #475 (A6): executing review [38r](38-sol-a6-review.md) FAIL, R1 BLOCKER: until recheck PASS the launcher's
+  PID/PGID lived only in driver memory, so a driver death left a live launcher that dead-man and harvest would treat
+  as clear. **Accepted**; round 3 [40](40-sol-a6-r3-brief.md) persists a pending-launcher record before the recheck.
+- PRs #469, #470, #471: gate records landed on each branch, ledgers filled; waiting for CI on the record heads.
