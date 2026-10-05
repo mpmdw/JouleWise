@@ -1430,7 +1430,7 @@ def _floor_producer_plans(
     artifact: Mapping[str, Any],
     floor_path: Path,
 ) -> tuple[Mapping[str, _FloorProducerPlan], tuple[str, ...]]:
-    """Authenticate plan bytes and select owners from the v2 producer pins.
+    """Authenticate plan bytes and, for v2, select owners from producer pins.
 
     The aggregate hash commits to the full pinset producer array, not to a
     plan file or the smaller provenance plan list. Cell ownership must never
@@ -1510,7 +1510,11 @@ def _floor_producer_plans(
             problems.append("calibration_plan_provenance_missing")
             continue
         try:
-            relative = _safe_relative_posix(pin.get("relative_path"), "floor calibration plan")
+            relative = _safe_relative_posix(
+                pin.get("relative_path"),
+                "artifact.provenance.calibration_plan.relative_path"
+                if producer_pins is None else "floor calibration plan",
+            )
             root = floor_path.parent.resolve()
             path = (root / relative).resolve()
             path.relative_to(root)
@@ -1529,7 +1533,10 @@ def _floor_producer_plans(
             continue
         if hashlib.sha256(raw).hexdigest() != pin.get("sha256"):
             problems.append("calibration_plan_bytes_hash_mismatch")
-            continue
+            # Legacy admission reports JSON/declared-identity failures as
+            # well as byte mismatches; v2 owner selection requires exact bytes.
+            if producer_pins is not None:
+                continue
         try:
             plan = _strict_json_admission_bytes(raw, "calibration plan bytes")
         except AnalysisInputError:
@@ -1564,6 +1571,11 @@ def _campaign_order_binding_problems(
         _assert_floor_artifact_path_independent(artifact)
     except ValueError as exc:
         return (f"artifact_absolute_path_leakage: {exc}",)
+
+    if not multi_producer:
+        # Keep single-plan authentication inside the established pre-v2 seam.
+        _, plan_problems = _floor_producer_plans(artifact, floor_path)
+        problems.extend(plan_problems)
 
     for cell_index, cell in enumerate(artifact.get("cells", [])):
         if not isinstance(cell, Mapping):
@@ -1774,8 +1786,11 @@ def bind_floor_artifact_evidence(
     normalized_roots, root_mapping_problems = _normalize_evidence_roots(
         authenticated_floor.root_ids, evidence_roots
     )
-    producer_plans, plan_problems = _floor_producer_plans(artifact, floor_path)
-    multi_producer = artifact.get("provenance", {}).get("producer_calibration_plans") is not None
+    artifact_provenance = artifact.get("provenance", {})
+    multi_producer = artifact_provenance.get("producer_calibration_plans") is not None
+    producer_plans, plan_problems = (
+        _floor_producer_plans(artifact, floor_path) if multi_producer else ({}, ())
+    )
     global_problems = [
         *root_mapping_problems,
         *plan_problems,
@@ -1897,6 +1912,8 @@ def bind_floor_artifact_evidence(
             tuple[str, ...],
         ],
     ] = {}
+    plan_pin = artifact_provenance.get("calibration_plan")
+    legacy_plan_sha256 = plan_pin.get("sha256") if isinstance(plan_pin, Mapping) else None
     cell_bound_hashes: dict[str, set[str]] = {}
 
     for cell in artifact.get("cells", []):
@@ -1904,7 +1921,10 @@ def bind_floor_artifact_evidence(
             continue
         cell_id = str(cell["cell_id"])
         producer = producer_plans.get(cell_id)
-        plan_sha256 = producer.pin["sha256"] if producer is not None else None
+        if multi_producer:
+            plan_sha256 = producer.pin["sha256"] if producer is not None else None
+        else:
+            plan_sha256 = legacy_plan_sha256
         key = cell.get("key")
         metric_name = key.get("metric") if isinstance(key, Mapping) else None
         cell_problems: list[str] = list(global_problems)

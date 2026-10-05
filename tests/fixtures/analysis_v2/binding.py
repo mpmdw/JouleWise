@@ -13,6 +13,7 @@ import plistlib
 import shutil
 import tempfile
 import unittest
+from contextlib import contextmanager
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
@@ -49,7 +50,7 @@ def _copy_seed(source: str, destination: str) -> str:
     return destination
 
 
-def install(root: Path) -> SimpleNamespace:
+def install(root: Path, *, folded_artifact: bool = False) -> SimpleNamespace:
     # Preserve every record, time, power, energy and GPU state needed for the
     # strict replay; omit the large unused CPU census from this synthetic seed.
     seed = root / "seed"
@@ -65,6 +66,11 @@ def install(root: Path) -> SimpleNamespace:
             compact.append(plistlib.dumps(projected))
         path.write_bytes(b"\0".join(compact) + b"\0")
     metadata = fixtures.load_json(seed / "metadata.json")
+    if folded_artifact:
+        metadata["workload_provenance"]["model"]["artifact_identity"] = fixtures.load_json(
+            ROOT / "tests/fixtures/d078_r01/metadata.json"
+        )["workload_provenance"]["model"]["artifact_identity"]
+        write_json(seed / "metadata.json", metadata)
     endpoint = metadata["uncertainty_evidence"]["clock_anchor"]["first_sample_end_point_epoch_s"]
     (seed / "rich_telemetry.jsonl").write_text(rich_telemetry_jsonl(
         (seed / "raw/powermetrics.plist").read_bytes(), first_record_endpoint_s=endpoint))
@@ -254,12 +260,58 @@ def load(fixture, **kwargs):
         calibration_ledger_snapshot=fixture.snapshot, **kwargs)
 
 
+@contextmanager
+def single_producer_v1(fixture):
+    """Mint a real pre-v2 artifact with its legacy staged order evidence."""
+    producer = fixture.pinset["producer_plans"][0]
+    cell_pin = producer["cells"][0]
+    source = fixture.producer_inputs[producer["plan"]["plan_id"]]
+    components = source.cells["decode"]
+    pinset = fixtures.seven_b_pinset()
+    pinset["plan"] = {key: producer["plan"][key] for key in pinset["plan"]}
+    pinset["artifact"].update(cell_id=cell_pin["cell_id"], transport_group_id=cell_pin["transport_group_id"])
+    for key in ("condition_family_id", "condition_family_sha256", "metric", "window_class", "target_precheck_path"):
+        pinset["cell"][key] = cell_pin[key]
+    pinset["cell"]["operative_floor_six_decimal"] = cell_pin["postcollection"]["operative_floor_six_decimal"]
+    for kind in ("absolute", "comparative"):
+        pinset[kind] = {key: cell_pin[kind][key] for key in pinset[kind]}
+    pinset_path = fixture.root / "registry/v1.json"
+    digest = write_json(pinset_path, pinset)
+    artifact = mint.mint_authenticated_artifact(
+        pinset_path=pinset_path, pinset_sha256=digest, artifact_id="single-producer-v1",
+        plan=source.plan, plan_sha256=source.plan_sha256,
+        calibration_plan_relative_path=producer["plan"]["relative_path"],
+        absolute=components.absolute, comparative=components.comparative,
+        project_commit="0" * 40, project_tree_state="clean")
+    floor_path = fixture.root / "single-producer-v1.json"
+    write_json(floor_path, artifact)
+    staged = source.evidence_root / "order_manifest.json"
+    staged.write_bytes(fixture.order_paths[0].read_bytes())
+    try:
+        yield SimpleNamespace(artifact=artifact, floor_path=floor_path, producer=producer,
+                              source=source, cell_id=cell_pin["cell_id"])
+    finally:
+        staged.unlink()
+        pinset_path.unlink()
+        floor_path.unlink()
+
+
+def load_single_producer_v1(fixture, single):
+    return load_analysis_inputs(
+        fixture.manifest_path, fixture.analysis_root, single.floor_path,
+        strict_validator=fixture.strict_validator,
+        evidence_roots={single.producer["evidence_root_id"]: single.source.evidence_root},
+        calibration_ledger_snapshot=fixture.snapshot)
+
+
 class MintedAnalysisV2TestCase(unittest.TestCase):
+    folded_artifact = False
+
     @classmethod
     def setUpClass(cls):
         cls.temporary = tempfile.TemporaryDirectory(prefix="analysis-v2-")
         cls.addClassCleanup(cls.temporary.cleanup)
-        cls.fixture = install(Path(cls.temporary.name))
+        cls.fixture = install(Path(cls.temporary.name), folded_artifact=cls.folded_artifact)
 
     def setUp(self):
         # Registry discovery points at the fixture pinset; validation stays real.

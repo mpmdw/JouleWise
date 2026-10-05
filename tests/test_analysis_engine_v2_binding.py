@@ -4,7 +4,9 @@ import copy
 import json
 
 from joulewise.detection_floor import complete_bundle_sha256
-from tests.fixtures.analysis_v2.binding import load, MintedAnalysisV2TestCase
+from tests.fixtures.analysis_v2.binding import (
+    load, load_single_producer_v1, MintedAnalysisV2TestCase, single_producer_v1,
+)
 from tests.fixtures.analysis_v2.binding import write_json
 
 
@@ -108,44 +110,62 @@ class AnalysisEngineV2BindingTests(MintedAnalysisV2TestCase):
 
 
     def test_real_v1_mint_preserves_single_plan_and_staged_order_behavior(self):
-        from scripts import mint_floor_artifact_generalized as mint
-        from tests import test_mint_floor_artifact_generalized as mint_fixtures
-        from joulewise.analysis_engine.inputs import load_analysis_inputs
+        with single_producer_v1(self.fixture) as single:
+            binding = load_single_producer_v1(self.fixture, single).floor_binding
+            assert binding.global_problems == ()
+            assert binding.bound_cell_ids == frozenset({single.cell_id})
+            assert "producer_calibration_plans" not in single.artifact["provenance"]
+
+
+class AnalysisEngineLegacyBindingTests(MintedAnalysisV2TestCase):
+    folded_artifact = True
+
+    def test_real_folded_v1_mint_binds_stack_and_plan(self):
+        with single_producer_v1(self.fixture) as single:
+            member = single.source.cells["decode"].absolute.members[0]
+            model = member.metadata["workload_provenance"]["model"]["artifact_identity"]
+            assert model["kind"] == "file_set"
+            assert "sha256" not in model
+            cell = single.artifact["cells"][0]
+            assert cell["source_regime"]["stack_identity"]["model_artifact_sha256"] == model["folded_sha256"]
+            binding = load_single_producer_v1(self.fixture, single).floor_binding
+            assert binding.global_problems == ()
+            assert binding.bound_cell_ids == frozenset({single.cell_id})
+            assert binding.cell_stack_identity_sha256[single.cell_id] == cell["source_regime"]["stack_identity_sha256"]
+
+    def test_real_folded_v1_plan_authentication_stays_in_campaign_seam(self):
+        from joulewise.analysis_engine.inputs import _campaign_order_binding_problems
 
         fixture = self.fixture
-        producer = fixture.pinset["producer_plans"][0]
-        cell_pin = producer["cells"][0]
-        source = fixture.producer_inputs[producer["plan"]["plan_id"]]
-        components = source.cells["decode"]
-        pinset = mint_fixtures.seven_b_pinset()
-        pinset["plan"] = {key: producer["plan"][key] for key in pinset["plan"]}
-        pinset["artifact"].update(cell_id=cell_pin["cell_id"], transport_group_id=cell_pin["transport_group_id"])
-        for key in ("condition_family_id", "condition_family_sha256", "metric", "window_class", "target_precheck_path"):
-            pinset["cell"][key] = cell_pin[key]
-        pinset["cell"]["operative_floor_six_decimal"] = cell_pin["postcollection"]["operative_floor_six_decimal"]
-        for kind in ("absolute", "comparative"):
-            pinset[kind] = {key: cell_pin[kind][key] for key in pinset[kind]}
-        pinset_path = fixture.root / "registry/v1.json"
-        digest = write_json(pinset_path, pinset)
-        artifact = mint.mint_authenticated_artifact(
-            pinset_path=pinset_path, pinset_sha256=digest, artifact_id="single-producer-v1",
-            plan=source.plan, plan_sha256=source.plan_sha256,
-            calibration_plan_relative_path=producer["plan"]["relative_path"],
-            absolute=components.absolute, comparative=components.comparative,
-            project_commit="0" * 40, project_tree_state="clean")
-        floor_path = fixture.root / "single-producer-v1.json"
-        write_json(floor_path, artifact)
-        staged = source.evidence_root / "order_manifest.json"
-        staged.write_bytes(fixture.order_paths[0].read_bytes())
-        try:
-            binding = load_analysis_inputs(
-                fixture.manifest_path, fixture.analysis_root, floor_path,
-                strict_validator=fixture.strict_validator,
-                evidence_roots={producer["evidence_root_id"]: source.evidence_root},
-                calibration_ledger_snapshot=fixture.snapshot).floor_binding
-            assert binding.global_problems == ()
-            assert binding.bound_cell_ids == frozenset({cell_pin["cell_id"]})
-            assert "producer_calibration_plans" not in artifact["provenance"]
-        finally:
-            staged.unlink()
-            pinset_path.unlink()
+        with single_producer_v1(fixture) as single:
+            path = fixture.plan_paths[0]
+            original = path.read_bytes()
+            try:
+                path.write_bytes(original + b" ")
+                problems = _campaign_order_binding_problems(
+                    single.artifact, single.floor_path,
+                    {single.producer["evidence_root_id"]: single.source.evidence_root}, {})
+                assert problems == ("calibration_plan_bytes_hash_mismatch",)
+            finally:
+                path.write_bytes(original)
+
+    def test_real_folded_v1_loader_preserves_all_plan_failure_diagnostics(self):
+        fixture = self.fixture
+        with single_producer_v1(fixture) as single:
+            path = fixture.plan_paths[0]
+            original = path.read_bytes()
+            for raw, secondary in (
+                (b"{", "calibration_plan_bytes_invalid"),
+                (b"{}", "calibration_plan_declared_provenance_mismatch"),
+            ):
+                with self.subTest(secondary=secondary):
+                    try:
+                        path.write_bytes(raw)
+                        binding = load_single_producer_v1(fixture, single).floor_binding
+                        assert binding.global_problems == (
+                            "calibration_plan_bytes_hash_mismatch", secondary)
+                        assert not binding.bound_cell_ids
+                        assert not any("calibration_plan_identity_mismatch" in p
+                                       for p in binding.problems_by_cell[single.cell_id])
+                    finally:
+                        path.write_bytes(original)
