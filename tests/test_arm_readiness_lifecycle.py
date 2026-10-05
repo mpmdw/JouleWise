@@ -411,7 +411,8 @@ def make_go_fixture(
 
     registry_relative = readiness.ROW_REGISTRY_RELATIVE_PATH
     temporary = tempfile.TemporaryDirectory()
-    repo = Path(temporary.name) / "repo"
+    fixture_root = Path(temporary.name).resolve()
+    repo = fixture_root / "repo"
     pack = repo / "configs/campaigns" / pack_name
     registry_source = ROOT / registry_relative
     registry_target = repo / registry_relative
@@ -515,8 +516,8 @@ def make_go_fixture(
         )
     git(repo, "update-ref", "refs/remotes/origin/main", "HEAD")
 
-    custody = Path(temporary.name) / "window-custody"
-    context_root = Path(temporary.name) / "context"
+    custody = fixture_root / "window-custody"
+    context_root = fixture_root / "context"
     context = sample_arm(context_root)["arm_context"]
     for name in (
         "claim_runs_root",
@@ -602,7 +603,9 @@ class ArmReadinessLifecycleTests(unittest.TestCase):
         window_root.mkdir()
         (window_root / "window.env").write_text("PACK_ROOT=/tmp/pack\n")
         chain_path = window_root / "window-chain.zsh"
-        chain_path.write_text("#!/bin/zsh\nexit 0\n")
+        arm = json.loads(arm_path.read_bytes())
+        context_digest = readiness.sha256_bytes(render_json(arm["arm_context"]))
+        chain_path.write_text(f'#!/bin/zsh\nexport NIGHT_ARM_CONTEXT_SHA256="{context_digest}"\nexit 0\n')
         exec_argv = [
             "/usr/bin/caffeinate",
             "-is",
@@ -865,11 +868,11 @@ class ArmReadinessLifecycleTests(unittest.TestCase):
             pack,
             custody,
             "race-rehearsal",
-            Path(temporary.name) / "race-synthetic",
+            Path(temporary.name).resolve() / "race-synthetic",
         )
         self.assertEqual(dry["status"], "PASS", dry)
         install_passing_evidence(pack, custody)
-        context = sample_arm(Path(temporary.name) / "context")["arm_context"]
+        context = sample_arm(Path(temporary.name).resolve() / "context")["arm_context"]
         with mock.patch(
             "joulewise.arm_readiness.verify_frozen_projection",
             side_effect=synthetic_identity_verifier,
@@ -878,7 +881,7 @@ class ArmReadinessLifecycleTests(unittest.TestCase):
         self.assertEqual(arm_result["status"], "PASS", arm_result)
         arm_path = Path(arm_result["receipt_path"])
         args, exec_argv = self.install_launch_manifest(
-            Path(temporary.name), pack, custody, arm_path
+            Path(temporary.name).resolve(), pack, custody, arm_path
         )
         barrier = threading.Barrier(8)
         outcomes: dict[int, str] = {}
@@ -1028,11 +1031,11 @@ class ArmReadinessLifecycleTests(unittest.TestCase):
             pack,
             custody,
             "boot-rehearsal",
-            Path(temporary.name) / "boot-synthetic",
+            Path(temporary.name).resolve() / "boot-synthetic",
         )
         self.assertEqual(dry["status"], "PASS", dry)
         install_passing_evidence(pack, custody)
-        context = sample_arm(Path(temporary.name) / "context")["arm_context"]
+        context = sample_arm(Path(temporary.name).resolve() / "context")["arm_context"]
         with mock.patch.object(
             readiness,
             "verify_frozen_projection",
@@ -1042,7 +1045,7 @@ class ArmReadinessLifecycleTests(unittest.TestCase):
         self.assertEqual(arm_result["status"], "PASS", arm_result)
         arm_path = Path(arm_result["receipt_path"])
         args, _exec_argv = self.install_launch_manifest(
-            Path(temporary.name), pack, custody, arm_path
+            Path(temporary.name).resolve(), pack, custody, arm_path
         )
 
         same_boot = verify_arm_receipt(pack, arm_path)
@@ -1185,7 +1188,7 @@ class ArmReadinessLifecycleTests(unittest.TestCase):
         # verification behind a real GO. Bind the GO to the real ARM, then
         # present the dry-run receipt in its place.
         args, _exec_argv = self.install_launch_manifest(
-            Path(temporary.name), pack, custody, arm_path, pack_go=True
+            Path(temporary.name).resolve(), pack, custody, arm_path, pack_go=True
         )
         args.arm_receipt = dry_path
         with self.assertRaisesRegex(
@@ -2807,7 +2810,7 @@ class FreezeReplayExpiryTests(unittest.TestCase):
         self.addCleanup(boot.stop)
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
-        self.pack = Path(temporary.name) / "pack"
+        self.pack = Path(temporary.name).resolve() / "pack"
         evidence_directory = self.pack / "arm_readiness.evidence"
         evidence_directory.mkdir(parents=True)
         self.deadline = 1_000
@@ -3121,7 +3124,7 @@ class PostSupersessionLayeringTests(unittest.TestCase):
         readiness.validate_family_publication_marker(
             marker_value, first_generation=5
         )
-        marker_path = Path(temporary.name) / readiness.FAMILY_PUBLICATION_MARKER_NAME
+        marker_path = Path(temporary.name).resolve() / readiness.FAMILY_PUBLICATION_MARKER_NAME
         marker_raw = render_json(marker_value)
         marker_path.write_bytes(marker_raw)
         marker_path.with_name(f"{marker_path.name}.sha256").write_bytes(

@@ -7,6 +7,8 @@ import tempfile
 import unittest
 from unittest import mock
 
+from tests.git_fixture import init_git_fixture
+
 from joulewise import arm_readiness as readiness, t0_rehearsal as t0
 from scripts import produce_t0_rehearsal_bundle as producer
 from scripts import v5_s1_desk_closeout as desk
@@ -28,7 +30,7 @@ class DeskCloseoutTests(unittest.TestCase):
             shutil.copyfile(producer.REPO_ROOT / relative, path)
         self.pack = self.measurement / "pack"; self.pack.mkdir()
         (self.pack / "config.json").write_text('{"run_id":"fixture"}\n')
-        subprocess.run(["git", "init", "-q", str(self.measurement)], check=True)
+        init_git_fixture(self.measurement, "-q")
         subprocess.run(["git", "-C", str(self.measurement), "add", "."], check=True)
         subprocess.run(["git", "-C", str(self.measurement), "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
                         "commit", "-qm", "fixture-only desk sources"], check=True)

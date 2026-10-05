@@ -8,6 +8,8 @@ import tempfile
 import unittest
 from unittest import mock
 
+from tests.git_fixture import init_git_fixture
+
 from joulewise import arm_readiness as readiness, t0_rehearsal as t0
 from scripts import produce_t0_rehearsal_bundle as producer, rehearse_t0_unattended as loader
 from tests import test_t0_rehearsal as historical
@@ -357,7 +359,7 @@ class QualificationSubsetTests(unittest.TestCase):
             return subprocess.check_output(["git", "-C", str(repository), *args], text=True, stderr=subprocess.PIPE).strip()
         def commit(message):
             git("add", "."); git("-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit", "-qm", message)
-        git("init", "-q"); commit("fixture H")
+        init_git_fixture(repository, "-q"); commit("fixture H")
         armed = git("rev-parse", "HEAD")
         pin.write_bytes(readiness.render_json({"ledger_schema": ledger.LEDGER_SCHEMA, "sequence": 3, "head_digest": "a" * 64}))
         commit("fixture H_pin"); head_pin = git("rev-parse", "HEAD")

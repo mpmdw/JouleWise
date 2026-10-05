@@ -52,14 +52,14 @@
       ],
       "inventory": {
         "base": "runs_root",
-        "expected_sha256": "39ecdf48fc47a515644beccb65c748e974d6e74a5fafbcbd06cdd1fb4003998e",
+        "expected_sha256": "932500d105bef97c70973ff02eb5336512a23fa29c3d0eb31fb529ca293b5e2b",
         "path": "claim_evidence/inventory.json"
       },
       "issuance_gate_id": null,
       "mode": "test_fixture_non_issuing",
       "receipt": {
         "base": "runs_root",
-        "expected_sha256": "7624dc4e0016c2cd1bbac2478d20f3c563ced58a154d8081b710a9871572726c",
+        "expected_sha256": "e7c61a4626559da96218aa5dab91518fde3eb8d22f0f8548f48f406e89db4c49",
         "path": "claim_evidence/inputs/validator_receipt.json"
       },
       "source_census": [
@@ -107,14 +107,14 @@
       ],
       "inventory": {
         "base": "runs_root",
-        "expected_sha256": "df3bf7bc378c581273c4a2405934f9314c66dbcd6ae3d57f48934d94bfc44eab",
+        "expected_sha256": "ba4eaae914b2171ee6b48429777874b347b486cc2004d5c9c6f7ea558723ba31",
         "path": "d165_closeout/inventory.json"
       },
       "issuance_gate_id": null,
       "mode": "test_fixture_non_issuing",
       "receipt": {
         "base": "runs_root",
-        "expected_sha256": "cd03fa85b6ecaa26ea064fc4c241991c8f97e0973eeb7f09e3efb8393900a556",
+        "expected_sha256": "f1822a7be49e729b1c9094a465581e1b839453be8b892bb08e7be8eb0dc20540",
         "path": "d165_closeout/inputs/validator_receipt.json"
       },
       "source_census": [

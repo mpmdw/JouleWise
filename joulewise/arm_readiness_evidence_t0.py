@@ -945,7 +945,7 @@ def _launch_manifest(
         raise _underivable(kind, "window-chain.zsh does not bind exactly the reviewed repository")
     if _re.search(r"(?m)^QUARANTINE_ROOT=", chain_text):
         raise _underivable(kind, "window-chain.zsh overrides the sibling quarantine binding")
-    expected_prewindow_script = context.repository / "scripts/prewindow_check.sh"
+    expected_prewindow_script = context.repository / "joulewise/prewindow.py"
     readiness_attachment = context.tree.get("arm_attachments", {}).get(
         "arm_readiness", {}
     )
@@ -960,9 +960,9 @@ def _launch_manifest(
         else None
     )
     expected_prewindow = [
-        "/bin/bash",
+        str(context.repository / ".venv/bin/python"),
         str(expected_prewindow_script),
-        "--wait",
+        "--t0-wait",
         "--timeout-min",
         "45",
         "--window",
@@ -970,8 +970,7 @@ def _launch_manifest(
     ]
     if (
         len(prewindow) != len(expected_prewindow)
-        or _Path(prewindow[0]).name != "bash"
-        or prewindow[1:] != expected_prewindow[1:]
+        or prewindow != expected_prewindow
     ):
         raise _underivable(
             kind,
@@ -1376,7 +1375,11 @@ def _prewindow_capture(
         raise _underivable(kind, "prewindow capture does not prove the required ten-minute idle")
     if not _final_clean_dwell(capture["stdout"]):
         raise _underivable(kind, "prewindow capture does not end in READY")
-    return capture, identity, artifacts
+    module_identity, _raw = _committed_artifact(
+        context.repository, "joulewise/prewindow.py", kind=kind)
+    dwell_identity = {**module_identity,
+                      "path": str(context.repository / module_identity["path"])}
+    return capture, identity, (*artifacts, dwell_identity)
 
 
 def _expect_absent(result: _ProbeResult, *, kind: str, label: str) -> None:

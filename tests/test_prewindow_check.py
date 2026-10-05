@@ -10,6 +10,9 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
+
+from joulewise import prewindow, dwell
 
 
 REPOSITORY = Path(__file__).resolve().parents[1]
@@ -44,7 +47,7 @@ class PrewindowCheckTests(unittest.TestCase):
         # Counterfactual: removing the six offending lines admits readiness.
         self.assertEqual(self._check_lines([]).returncode, 0)
 
-    def _check_lines(self, process_lines, *args, load="0.10", t0=False, fast_dwell=False):
+    def _check_lines(self, process_lines, *args, load="0.10", fast_dwell=False):
         # Explicit (comm, args) pairs preserve executable names containing spaces.
         # Legacy fixtures use ps aux rows or a bare executable name.
         processes = []
@@ -108,7 +111,6 @@ class PrewindowCheckTests(unittest.TestCase):
                 env={
                     **os.environ,
                     "PATH": f"{fake_bin}:/usr/bin:/bin:/usr/sbin:/sbin",
-                    "JOULEWISE_PREWINDOW_T0_CPU_ADMISSION": "1" if t0 else "",
                 },
                 text=True,
                 capture_output=True,
@@ -117,22 +119,10 @@ class PrewindowCheckTests(unittest.TestCase):
 
         return completed
 
-    def test_t0_high_load_is_report_only_and_does_not_reset_dwell(self):
+    def test_sealed_shell_keeps_its_load_veto(self):
         ordinary = self._check_lines([], load="2.10")
         self.assertEqual(ordinary.returncode, 1)
         self.assertIn("BLOCK", ordinary.stdout)
-        native = self._check_lines([], load="2.10", t0=True)
-        self.assertEqual(native.returncode, 0, native.stdout + native.stderr)
-        self.assertIn("REPORT 1-minute load average 2.10; limit 2.0", native.stdout)
-        self.assertNotIn("BLOCK", native.stdout)
-        args = ("--wait", "--timeout-s", "630")
-        native = self._check_lines([], *args, load="2.10", t0=True, fast_dwell=True)
-        self.assertEqual(native.returncode, 0, native.stdout + native.stderr)
-        self.assertRegex(native.stdout, r"continuous clean dwell 6[0-2][0-9]/600s")
-        ordinary = self._check_lines([], *args, load="2.10", fast_dwell=True)
-        self.assertEqual(ordinary.returncode, 1)
-        self.assertIn("TIMED OUT", ordinary.stdout)
-        self.assertNotIn("READY after", ordinary.stdout)
 
     def test_wait_seconds_cap_refuses_without_a_full_dwell(self):
         refused = self._check_lines([], "--wait", "--timeout-s", "1")
@@ -196,6 +186,92 @@ class PrewindowCheckTests(unittest.TestCase):
         refused = self._check_lines([(name, "worker") for name in names])
         self.assertEqual(refused.returncode, 1, refused.stdout + refused.stderr)
         self.assertIn("6 agent/measurement process(es) already running", refused.stdout)
+
+
+class T0DwellTests(unittest.TestCase):
+    def check(self, *, repository=REPOSITORY, cpu="0.3", load="2.10", agents="", ac=True, free=100, invalid=False):
+        output = []
+        answers = {
+            ("ps", *prewindow.PS_ARGV[1:]): "bad row" if invalid else f"1 {cpu} XProtect\n",
+            ("uptime",): f"12:00 up 1 day, load averages: {load} 0.20 0.30\n",
+            ("pmset", "-g", "batt"): "AC Power\n" if ac else "Battery Power\n",
+            ("ps", "-A", "-o", "comm="): agents,
+        }
+        def run(argv, **kwargs):
+            return subprocess.CompletedProcess(argv, 0, answers[tuple(argv)], "")
+        with (mock.patch("subprocess.run", side_effect=run),
+              mock.patch("shutil.disk_usage", return_value=mock.Mock(free=free * 1024**3))):
+            ready = prewindow.t0_check(repository, "gamma", emit=output.append)
+        return ready, output
+
+    def wait(self, samples, timeout=630, *, probe_seconds=0):
+        clock = [0.]
+        output = []
+        values = iter(samples)
+        last = [True]
+        def check():
+            last[0] = next(values, last[0])
+            clock[0] += probe_seconds
+            return last[0]
+        code = prewindow.t0_wait(REPOSITORY, "gamma", timeout, check=check,
+            monotonic=lambda: clock[0], sleep=lambda seconds: clock.__setitem__(0, clock[0] + seconds),
+            emit=output.append)
+        return code, "\n".join(output)
+
+    def test_t0_high_load_is_report_only_and_does_not_reset_dwell(self):
+        ready, output = self.check()
+        self.assertTrue(ready, output)
+        self.assertIn("REPORT 1-minute load average 2.10; limit 2.0", "\n".join(output))
+        code, transcript = self.wait([ready] * 21)
+        self.assertEqual(code, 0, transcript)
+        self.assertTrue(dwell.final_clean_dwell(transcript))
+
+    def test_cpu_census_threshold_and_other_readiness_domains(self):
+        for cpu, expected in (("0", True), ("0.3", True), ("5.0", True), ("5.1", False)):
+            with self.subTest(cpu=cpu): self.assertEqual(self.check(cpu=cpu)[0], expected)
+        for options in ({"invalid": True}, {"agents": "/Applications/Codex (Service)\n"},
+                        {"ac": False}, {"free": 19}):
+            with self.subTest(options=options): self.assertFalse(self.check(**options)[0])
+        self.assertTrue(self.check(agents="/usr/bin/python /tmp/claude/plan.json\n")[0])
+
+    def test_failed_sample_resets_continuous_clean_time(self):
+        code, transcript = self.wait([True] * 10 + [False] + [True] * 21, timeout=960)
+        self.assertEqual(code, 0, transcript)
+        self.assertEqual(transcript.count("continuous clean dwell 0/600s (check 1)"), 2)
+        self.assertTrue(dwell.final_clean_dwell(transcript))
+        code, transcript = self.wait([True] * 10 + [False] + [True] * 11)
+        self.assertEqual(code, 1)
+        self.assertFalse(dwell.final_clean_dwell(transcript))
+
+    def test_t0_refuses_occupied_stale_family_but_admits_live_family(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            repository = Path(temporary).resolve()
+            live = repository / "runs_d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5"
+            live.mkdir()
+            (live / "retained.json").write_text("fixture")
+            stale = repository / prewindow.STALE_RUNS_PREFIXES["gamma"]
+            stale.mkdir()
+            self.assertTrue(self.check(repository=repository)[0])
+            (stale / "retained.json").write_text("fixture")
+            self.assertFalse(self.check(repository=repository)[0])
+
+    def test_first_probe_time_is_not_counted_and_deadline_is_exclusive(self):
+        self.assertEqual(self.wait([True], timeout=600)[0], 1)
+        self.assertEqual(self.wait([True], timeout=630)[0], 0)
+        self.assertEqual(self.wait([True], timeout=630, probe_seconds=31)[0], 1)
+        self.assertEqual(self.wait([False], timeout=1)[0], 1)
+
+    def test_t0_caps_are_governed_by_the_sealed_shell(self):
+        source = SCRIPT.read_text()
+        self.assertIn(f"MIN_CLEAN_DWELL_S={prewindow.MIN_CLEAN_DWELL_S}", source)
+        self.assertIn(f"INTERVAL_S={prewindow.INTERVAL_S}", source)
+        self.assertIn(f"TIMEOUT_MIN={prewindow.DEFAULT_TIMEOUT_S // 60}", source)
+        self.assertIn(f"CPU_LIMIT={prewindow.CPU_LIMIT_PERCENT}", source)
+        for timeout in ("0", "2701"):
+            refused = subprocess.run([sys.executable, str(REPOSITORY / "joulewise/prewindow.py"),
+                "--t0-wait", "--timeout-s", timeout], capture_output=True, text=True)
+            self.assertEqual(refused.returncode, 2)
+            self.assertIn("at most 2700 seconds", refused.stderr)
 
 
 if __name__ == "__main__":

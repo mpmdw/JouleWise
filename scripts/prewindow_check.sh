@@ -32,11 +32,7 @@ TIMEOUT_S=""
 WINDOW=""
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)"
 MEASUREMENT_REPO="$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd -P)"
-PREWINDOW_PY="${PY:-python3}"
-if ! census_constants="$("$PREWINDOW_PY" "$MEASUREMENT_REPO/joulewise/prewindow.py" --shell)"; then
-  echo "maintenance CPU policy unavailable" >&2; exit 2
-fi
-eval "$census_constants"
+CPU_LIMIT=5.0                         # governed percent per contaminating process
 LOAD_LIMIT=2.0                        # governed 1-minute load average
 readonly CPU_LIMIT LOAD_LIMIT
 MIN_CLEAN_DWELL_S=600                # continuous clean time required by D-134
@@ -81,30 +77,27 @@ warn() { printf '  \033[33mWARN\033[0m  %s\n' "$*"; }
 
 # Daemons observed or documented to contaminate a quiet window. XProtect is the
 # one with a confirmed incident; the rest are the same class and cheap to include.
+CONTAMINANTS='XProtect|mds_stores|mdworker|mdbulkimport|backupd|photoanalysisd|softwareupdated|Spotlight|mediaanalysisd'
 
 check_once() {
   local blocked=0
 
   # 1. Contaminating daemons, by actual CPU use rather than mere presence.
   local busy
-  if ! busy="$(ps -Ao pid=,pcpu=,args= | "$PREWINDOW_PY" "$MEASUREMENT_REPO/joulewise/prewindow.py" --check)"; then
-    bad "maintenance CPU probe failed"
-    blocked=1
-  elif [ -n "$busy" ]; then
+  busy="$(ps aux | grep -iE "$CONTAMINANTS" | grep -v grep \
+          | awk -v lim="$CPU_LIMIT" '$3+0 > lim {printf "%s(%.1f%%) ", $11, $3}')"
+  if [ -n "$busy" ]; then
     bad "background daemon active: $busy"
     blocked=1
   else
     ok "no contaminating daemon above ${CPU_LIMIT}% CPU"
   fi
 
-  # 2. T-0 records this proxy without vetoing or resetting the dwell. Its
-  #    production CPU-idle admission remains authoritative (lead A-F6 ruling).
-  #    Ordinary operator invocations retain the load-average veto.
+  # 2. Overall load. A high load average with no named culprit is still a reason
+  #    not to launch; the campaign's CPU admission would likely refuse.
   local load1
   load1="$(uptime | sed -n 's/.*load averages*: *\([0-9.]*\).*/\1/p')"
-  if [ "${JOULEWISE_PREWINDOW_T0_CPU_ADMISSION:-}" = 1 ]; then
-    echo "  REPORT 1-minute load average ${load1}; limit ${LOAD_LIMIT}; T-0 production CPU-idle admission governs"
-  elif awk -v l="$load1" -v m="$LOAD_LIMIT" 'BEGIN{exit !(l+0 > m)}'; then
+  if awk -v l="$load1" -v m="$LOAD_LIMIT" 'BEGIN{exit !(l+0 > m)}'; then
     bad "1-minute load average ${load1} exceeds ${LOAD_LIMIT}"
     blocked=1
   else

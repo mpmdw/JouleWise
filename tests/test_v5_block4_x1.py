@@ -14,6 +14,8 @@ from types import SimpleNamespace
 import unittest
 from unittest import mock
 
+from tests.git_fixture import init_git_fixture
+
 from joulewise import arm_readiness as readiness, arm_readiness_evidence_t0 as author, night_gate
 from joulewise.dwell import final_clean_dwell
 from joulewise import prewindow
@@ -46,13 +48,19 @@ class DwellTests(unittest.TestCase):
         text = "\033[31mBLOCK\033[0m daemon busy\nnot ready; re-checking in 30s\n" + CLEAN
         self.assertTrue(final_clean_dwell(text))
         capture._validate_result(None, "prewindow-check", text, "")
-        context = SimpleNamespace()
+        context = SimpleNamespace(repository=ROOT)
         command = ["fixture"]
+        module_raw = (ROOT / "joulewise/prewindow.py").read_bytes()
+        module_identity = {"path": "joulewise/prewindow.py",
+                           "sha256": readiness.sha256_bytes(module_raw)}
         with mock.patch.object(author, "_capture", return_value=(
                 {"argv": command, "exit_code": 0, "stderr": "", "stdout": text,
                  "started_monotonic_ns": 0, "finished_monotonic_ns": 660_000_000_000}, {})), \
-             mock.patch.object(author, "_launch_manifest", return_value=({"prewindow_command": command}, (), {})):
-            author._prewindow_capture(context, kind="MAINTENANCE_CENSUS")
+             mock.patch.object(author, "_launch_manifest", return_value=({"prewindow_command": command}, (), {})), \
+             mock.patch.object(author, "_committed_artifact", return_value=(module_identity, module_raw)) as artifact:
+            _capture, _identity, artifacts = author._prewindow_capture(context, kind="MAINTENANCE_CENSUS")
+            artifact.assert_called_once_with(ROOT, "joulewise/prewindow.py", kind="MAINTENANCE_CENSUS")
+            self.assertIn({**module_identity, "path": str(ROOT / module_identity["path"])}, artifacts)
         for bad in ("READY after 10 min.\n", CLEAN + "trailing\n", CLEAN.replace("600/600", "599/600"),
                     CLEAN + "TIMED OUT\n", CLEAN.replace("600/600", "BLOCK\n600/600"),
                     CLEAN.replace("check 2", "check 3")):
@@ -153,7 +161,7 @@ class RenderedChainTests(unittest.TestCase):
         runbook = self.repo / "docs/phase_2/window_runbook.md"
         runbook.parent.mkdir(parents=True)
         shutil.copyfile(ROOT / "docs/phase_2/window_runbook.md", runbook)
-        subprocess.run(["git", "init", "-q", str(self.repo)], check=True)
+        init_git_fixture(self.repo, "-q")
         self.window = self.root / "plan/window-plan"
         self.window.mkdir(parents=True)
         self.context = arm_context(self.root)
