@@ -2127,6 +2127,7 @@ _PROVENANCE_KEYS = {
 }
 _PROVENANCE_OPTIONAL_KEYS = {
     "producer_calibration_plans",
+    "producer_config_sets",
     "assurance",
     "calibration_custody_store",
     "launch_lineage",
@@ -2241,6 +2242,7 @@ def _is_hex(value, length: int = 64) -> bool:
 class _FloorMintPinsetProjection:
     family_identities: frozenset[tuple[str, str, str]]
     evidence_root_ids: frozenset[str]
+    config_sets_by_identity: Mapping[tuple[str, str, str], list[Mapping]] = field(default_factory=dict)
 
 
 def _is_trimmed_string(value: object) -> bool:
@@ -2325,6 +2327,41 @@ _V2_MEMBER_KEYS = {"bundle_id", "config_sha256"}
 
 def _v2_exact_mapping(value: object, keys: set[str]) -> bool:
     return isinstance(value, Mapping) and set(value) == keys
+
+
+def floor_mint_config_set_sha256(scientific_hashes: Sequence[str]) -> str:
+    """Hash the canonical JSON array of sorted distinct per-cell config hashes.
+
+    This is the prospective v2 floor-mint inventory, including singleton sets.
+    Legacy v2 pins without per-cell identities retain their single-config hash.
+    """
+
+    if not scientific_hashes or any(not _is_hex(value) for value in scientific_hashes):
+        raise ValueError("per-cell scientific config identities must be lowercase SHA-256")
+    payload = json.dumps(sorted(set(scientific_hashes)), separators=(",", ":"), allow_nan=False)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def floor_mint_producer_config_set(producer: Mapping) -> dict | None:
+    """Project a full per-cell binding, or the unchanged legacy single-config form."""
+
+    cells = producer["cells"]
+    present = ["scientific_config_identity_sha256" in cell for cell in cells]
+    if not any(present):
+        return None
+    if not all(present):
+        raise ValueError("per-cell scientific config pins must cover every producer cell")
+    hashes = [cell["scientific_config_identity_sha256"] for cell in cells]
+    digest = floor_mint_config_set_sha256(hashes)
+    if producer["model_runtime_config"]["config_set_sha256"] != digest:
+        raise ValueError("config-set pin does not match the sorted per-cell config set")
+    return {
+        "plan_id": producer["plan"]["plan_id"],
+        "config_set_sha256": digest,
+        "cells": [{"cell_id": cell["cell_id"],
+                   "scientific_config_identity_sha256": cell["scientific_config_identity_sha256"]}
+                  for cell in cells],
+    }
 
 
 def _v2_plain_decimal(value: object) -> bool:
@@ -2490,6 +2527,8 @@ def _project_floor_mint_pinset_v2(
     component_artifact_ids: list[str] = []
     component_artifact_hashes: list[str] = []
     cell_allowlists: list[list[Mapping]] = []
+    config_sets: list[Mapping] = []
+    config_sets_by_identity = {}
     for producer in producers:
         if not _v2_exact_mapping(producer, _V2_PRODUCER_KEYS):
             return None
@@ -2546,7 +2585,11 @@ def _project_floor_mint_pinset_v2(
         producer_members: set[str] = set()
         custody_pins: list[tuple[object, ...]] = []
         for cell in cells:
-            if not _v2_exact_mapping(cell, _V2_CELL_KEYS):
+            optional = ({"scientific_config_identity_sha256"}
+                        if isinstance(cell, Mapping) and "scientific_config_identity_sha256" in cell else set())
+            if not _v2_exact_mapping(cell, _V2_CELL_KEYS | optional):
+                return None
+            if optional and not _is_hex(cell["scientific_config_identity_sha256"]):
                 return None
             role = cell.get("role")
             expected_metric = {
@@ -2703,6 +2746,15 @@ def _project_floor_mint_pinset_v2(
             return None
         if len(set(custody_pins)) != 1:
             return None
+        try:
+            config_set = floor_mint_producer_config_set(producer)
+        except ValueError:
+            return None
+        config_sets_by_identity[(mint_tool_version, plan["plan_id"], plan["sha256"])] = (
+            [config_set] if config_set is not None else []
+        )
+        if config_set is not None:
+            config_sets.append(config_set)
         # The authenticated extraction specification may govern reference
         # cells that are not inputs to the floor mint.  The explicit pinset
         # therefore closes the mint-member subset while the production
@@ -2783,6 +2835,10 @@ def _project_floor_mint_pinset_v2(
     return _FloorMintPinsetProjection(
         family_identities=frozenset(identities),
         evidence_root_ids=frozenset(root_ids),
+        config_sets_by_identity={
+            **config_sets_by_identity,
+            (mint_tool_version, aggregate["plan_set_id"], aggregate["producer_set_sha256"]): config_sets,
+        },
     )
 
 
@@ -2915,6 +2971,9 @@ def _resolve_evidence_root_ids(
             None,
             "artifact.pinset: multiple pinsets match artifact family identity",
         )
+    expected_configs = matches[0].config_sets_by_identity.get(identity)
+    if expected_configs is not None and value["provenance"].get("producer_config_sets", []) != expected_configs:
+        return None, "artifact.pinset: producer config-set provenance does not match registered per-cell pins"
     return matches[0].evidence_root_ids, None
 
 
@@ -3047,6 +3106,47 @@ def _validate_idle_drift_guard(guard, where, errors) -> None:
         errors.append(f"{where}.calibration_status: invalid status {status!r}")
 
 
+def _validate_producer_config_sets(records, where, errors) -> None:
+    if not isinstance(records, list) or not 1 <= len(records) <= 2:
+        errors.append(f"{where}: expected one or two producer config sets")
+        return
+    plan_ids = set()
+    cell_ids = set()
+    for index, record in enumerate(records):
+        label = f"{where}[{index}]"
+        if not _v2_exact_mapping(record, {"plan_id", "config_set_sha256", "cells"}):
+            errors.append(f"{label}: config-set record must have exactly plan_id, config_set_sha256 and cells")
+            continue
+        plan_id = record["plan_id"]
+        if not _is_trimmed_string(plan_id) or plan_id in plan_ids:
+            errors.append(f"{label}.plan_id: invalid or duplicate producer")
+        else:
+            plan_ids.add(plan_id)
+        cells = record["cells"]
+        if not isinstance(cells, list) or len(cells) != 2:
+            errors.append(f"{label}.cells: expected two per-cell config identities")
+            continue
+        hashes = []
+        for cell_index, cell in enumerate(cells):
+            cell_label = f"{label}.cells[{cell_index}]"
+            if not _v2_exact_mapping(cell, {"cell_id", "scientific_config_identity_sha256"}):
+                errors.append(f"{cell_label}: malformed per-cell config binding")
+                continue
+            cell_id = cell["cell_id"]
+            if not _is_trimmed_string(cell_id) or cell_id in cell_ids:
+                errors.append(f"{cell_label}.cell_id: invalid or duplicate config cell")
+            else:
+                cell_ids.add(cell_id)
+            hashes.append(cell["scientific_config_identity_sha256"])
+        try:
+            digest = floor_mint_config_set_sha256(hashes)
+        except ValueError:
+            errors.append(f"{label}: invalid scientific config identity")
+            continue
+        if record["config_set_sha256"] != digest:
+            errors.append(f"{label}: config-set hash does not match the sorted per-cell identities")
+
+
 def _validate_provenance(
     provenance, where, errors
 ) -> frozenset[str] | None:
@@ -3110,6 +3210,10 @@ def _validate_provenance(
 
     mint_tool_version = provenance["mint_tool_version"]
     is_v2 = mint_tool_version == _FLOOR_MINT_TOOL_VERSION_V2
+    if "producer_config_sets" in provenance:
+        if not is_v2:
+            errors.append(f"{where}.producer_config_sets: allowed only for the v2 mint")
+        _validate_producer_config_sets(provenance["producer_config_sets"], f"{where}.producer_config_sets", errors)
     implementation = provenance["implementation"]
     if _check_keys_with_optional(
         implementation,

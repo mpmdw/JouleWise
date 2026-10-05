@@ -53,7 +53,15 @@ class FloorMintEmitterTests(unittest.TestCase):
             value = build_pinset(contracts=contracts_from_pins(original), producer_inputs=inputs,
                 ledger_snapshot=snapshot, relative_plan_paths=[p["plan"]["relative_path"] for p in original["producer_plans"]],
                 pinset_path=issued, project_commit="0" * 40)
-            self.assertEqual(value, original)  # independent golden pins, including component hashes
+            # Legacy fixture goldens remain immutable. New pins add the config
+            # inventory to provenance, so component hashes necessarily change.
+            for actual, expected in zip(value["producer_plans"], original["producer_plans"], strict=True):
+                for key in ("plan", "evidence_root_id", "extraction_spec", "calibration_acceptance"):
+                    self.assertEqual(actual[key], expected[key])
+                for key in ("model_artifact_sha256", "runtime_identity_sha256"):
+                    self.assertEqual(actual["model_runtime_config"][key], expected["model_runtime_config"][key])
+                self.assertEqual([{k: v for k, v in cell.items() if k != "scientific_config_identity_sha256"}
+                                  for cell in actual["cells"]], expected["cells"])
             rows = []
             for producer in original["producer_plans"]:
                 plan_id = producer["plan"]["plan_id"]
@@ -140,7 +148,7 @@ class FloorMintEmitterTests(unittest.TestCase):
                                     {}, {}, "0" * 64, None, "alpha/calibration_plan.json", "prefill_p2048")
             self.assertFalse((root / "issued.json").exists())
 
-    def test_v5_decode_and_p2048_inventory_still_requires_a_ruling(self) -> None:
+    def test_v5_decode_and_p2048_inventory_mints_under_the_lead_ruling(self) -> None:
         from scripts.emit_floor_mint_pinset import build_pinset
         from joulewise.identity_pins import scientific_config_identity_sha256
         pack_names = ("d117_floor_qwen3-1p7b_v5", "d117_floor_qwen3-8b_v5")
@@ -168,10 +176,14 @@ class FloorMintEmitterTests(unittest.TestCase):
                         absolute=replace(cell.absolute, scientific_config_identity_sha256=digest),
                         comparative=replace(cell.comparative, scientific_config_identity_sha256=digest))
                 inputs[plan_id] = replace(source, cells=updated)
-            with self.assertRaisesRegex(mint.MintError, "config-set inventory mismatch"):
-                build_pinset(contracts=contracts_from_pins(pins), producer_inputs=inputs,
-                    ledger_snapshot=snapshot, relative_plan_paths=[p["plan"]["relative_path"] for p in pins["producer_plans"]],
-                    pinset_path=root / "issued.json", project_commit="0" * 40)
+            value = build_pinset(contracts=contracts_from_pins(pins), producer_inputs=inputs,
+                ledger_snapshot=snapshot, relative_plan_paths=[p["plan"]["relative_path"] for p in pins["producer_plans"]],
+                pinset_path=root / "issued.json", project_commit="0" * 40)
+            for producer in value["producer_plans"]:
+                source = inputs[producer["plan"]["plan_id"]]
+                for cell in producer["cells"]:
+                    self.assertEqual(cell["scientific_config_identity_sha256"],
+                                     source.cells[cell["role"]].absolute.scientific_config_identity_sha256)
             self.assertFalse((root / "issued.json").exists())
 
     def test_emitted_document_conforms_to_schema_v2_when_available(self) -> None:

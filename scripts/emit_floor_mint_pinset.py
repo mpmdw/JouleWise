@@ -25,6 +25,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from joulewise.authentication_io import V2AuthenticationReadSession, V2AuthenticationInputError  # noqa: E402
+from joulewise.identity_pins import scientific_config_identity_sha256  # noqa: E402
 from scripts import mint_floor_artifact_generalized as mint  # noqa: E402
 
 
@@ -126,6 +127,27 @@ def _component_pins(component: Any) -> dict:
     }
 
 
+def _registered_cell_config_sha256(tree: Mapping[str, Any], mapping: Mapping[str, Any]) -> str:
+    """Derive a workload pin from every prospectively registered member config.
+
+    Bundle config bytes may be reserialized by the harness. Scientific identity
+    is the stable workload binding; the existing mint-member pins still bind the
+    exact collected config bytes separately.
+    """
+    hashes = set()
+    core = mint._fresh_original_core()
+    for member in mapping["members"]:
+        row = _one(tree["science"], "run_id", member["bundle_id"])
+        relative = core._safe_relative_posix(row["config_path"], "registered config path")
+        config, byte_hash = _read(REPO_ROOT / relative)
+        _equal(byte_hash, row["config_sha256"], "registered config bytes")
+        _equal(byte_hash, member["config_sha256"], "registered config member")
+        hashes.add(scientific_config_identity_sha256(config))
+    if len(hashes) != 1:
+        raise mint.MintError("registered config cell must have exactly one scientific identity")
+    return hashes.pop()
+
+
 def build_pinset(*, contracts: Sequence[Mapping[str, Any]],
                  producer_inputs: Mapping[str, mint.V2ProducerInputs],
                  ledger_snapshot: Any, relative_plan_paths: Sequence[str],
@@ -147,6 +169,9 @@ def build_pinset(*, contracts: Sequence[Mapping[str, Any]],
             cell_inputs = source.cells[role]
             mapping = _one(contract["roles"], "artifact_cell_id", contract["selected_cells"][role])
             absolute, comparative = cell_inputs.absolute, cell_inputs.comparative
+            config_hash = mapping.get("scientific_config_identity_sha256", absolute.scientific_config_identity_sha256)
+            for component in (absolute, comparative):
+                _equal(component.scientific_config_identity_sha256, config_hash, f"{role} scientific config")
             binding = core._definition_binding(absolute)
             _equal(absolute.calibration_cell_id, mapping["absolute_calibration_cell_id"], "absolute cell")
             _equal(comparative.calibration_cell_id, mapping["comparative_calibration_cell_id"], "comparative cell")
@@ -158,6 +183,7 @@ def build_pinset(*, contracts: Sequence[Mapping[str, Any]],
                 ledger_snapshot, source.calibration_allowance_projection)
             cells.append({
                 "role": role, "cell_id": mapping["artifact_cell_id"],
+                "scientific_config_identity_sha256": config_hash,
                 "transport_group_id": mapping["transport_group_id"],
                 **_family_pins([binding])[0], "metric": mapping["metric"], "window_class": "phase",
                 "target_precheck_path": mapping["target_precheck_path"],
@@ -165,6 +191,10 @@ def build_pinset(*, contracts: Sequence[Mapping[str, Any]],
                 "absolute": absolute_pins, "comparative": comparative_pins, "postcollection": post,
             })
         first = source.cells["decode"].absolute
+        runtime = mint.derive_model_runtime_config(
+            first.source_regime["stack_identity"], first.scientific_config_identity_sha256)
+        runtime["config_set_sha256"] = mint.detection_floor.floor_mint_config_set_sha256(
+            [cell["scientific_config_identity_sha256"] for cell in cells])
         producers.append({
             "plan": {"plan_id": source.plan["plan_id"], "sha256": source.plan_sha256,
                      "declared_sha256": source.plan_declared_sha256,
@@ -173,8 +203,7 @@ def build_pinset(*, contracts: Sequence[Mapping[str, Any]],
                      "artifact_calibration_scope": "production_window"},
             "evidence_root_id": contract["evidence_root_id"],
             "component_artifact": {"artifact_id": contract["component_artifact_id"], "sha256": "0" * 64},
-            "model_runtime_config": mint.derive_model_runtime_config(
-                first.source_regime["stack_identity"], first.scientific_config_identity_sha256),
+            "model_runtime_config": runtime,
             "extraction_spec": {"sha256": first.spec_sha256,
                                 "member_count": len(set(mint._v2_spec_member_ids(first.spec)))},
             "calibration_acceptance": {
@@ -251,6 +280,10 @@ def _bootstrap_producer(pack: Path, runs: Path, report_path: Path, bracket_path:
     runtime = None
     for role, pack_role in (("decode", "decode"), ("prefill", prefill_role)):
         mapping = _one(contract["roles"], "role", pack_role)
+        config_hash = _registered_cell_config_sha256(tree, mapping)
+        # This in-memory projection carries the pack-derived pin into the final
+        # author after independent bundle authentication; the frozen pack stays intact.
+        mapping["scientific_config_identity_sha256"] = config_hash
         contract["selected_cells"][role] = mapping["artifact_cell_id"]
         allowed = [consumer_bindings[name] for name in mapping["allowed_consumer_families"]]
         projected_components, component_paths = {}, {}
@@ -286,12 +319,15 @@ def _bootstrap_producer(pack: Path, runs: Path, report_path: Path, bracket_path:
                 family = spec_cell["condition_family_definitions"]["all"]
                 _equal(family["condition_family_id"], mapping["condition_family_id"], "producer family")
         cells.append({"role": role, "cell_id": mapping["artifact_cell_id"],
+                      "scientific_config_identity_sha256": config_hash,
                       "transport_group_id": mapping["transport_group_id"], **_family_pins([family])[0],
                       "metric": mapping["metric"], "window_class": "phase", "target_precheck_path": mapping["target_precheck_path"],
                       "allowed_consumer_condition_families": _family_pins(allowed), **projected_components,
                       "postcollection": _postcollection(report_cells["absolute"], report_cells["comparative"],
                           binding, binding_hash, report_hash, snapshot, allowance)})
         manifest_cells.append({"role": role, **component_paths, "allowed_consumer_condition_families": allowed})
+    runtime["config_set_sha256"] = mint.detection_floor.floor_mint_config_set_sha256(
+        [cell["scientific_config_identity_sha256"] for cell in cells])
     producer = {"plan": {"plan_id": plan["plan_id"], "sha256": plan_hash, "declared_sha256": plan_hash,
                          "sidecar_sha256": sidecar_hash, "relative_path": relative,
                          "declared_calibration_scope": plan["calibration_scope"], "artifact_calibration_scope": "production_window"},

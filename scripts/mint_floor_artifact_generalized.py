@@ -860,8 +860,11 @@ def _parse_v2_pinset(value: object) -> V2Pinset:
                     "absolute",
                     "comparative",
                     "postcollection",
-                },
+                } | ({"scientific_config_identity_sha256"}
+                     if isinstance(cell_value, Mapping) and "scientific_config_identity_sha256" in cell_value else set()),
             )
+            if "scientific_config_identity_sha256" in cell:
+                _sha256(cell["scientific_config_identity_sha256"], f"{cell_label}.scientific_config_identity_sha256")
             role = _string(cell["role"], f"{cell_label}.role")
             roles.append(role)
             expected_metric = {
@@ -969,6 +972,10 @@ def _parse_v2_pinset(value: object) -> V2Pinset:
             )
         if set(roles) != {"decode", "prefill"} or len(roles) != len(set(roles)):
             raise MintError(f"{label}.cells must contain one decode and one prefill role")
+        try:
+            detection_floor.floor_mint_producer_config_set(producer)
+        except ValueError as exc:
+            raise MintError(f"{label}: {exc}") from exc
         if len(set(producer_custody_pins)) != 1:
             raise MintError(
                 f"{label}.cells must share one authenticated producer custody record"
@@ -2357,8 +2364,24 @@ def _v2_gate_producer_inventory(
         raise MintError(f"producer {plan_id!r}: model artifact inventory mismatch")
     if runtime_hashes != {runtime_pins["runtime_identity_sha256"]}:
         raise MintError(f"producer {plan_id!r}: runtime identity inventory mismatch")
-    if config_hashes != {runtime_pins["config_set_sha256"]}:
-        raise MintError(f"producer {plan_id!r}: config-set inventory mismatch")
+    try:
+        config_set = detection_floor.floor_mint_producer_config_set(producer) if "cells" in producer else None
+    except ValueError as exc:
+        raise MintError(f"producer {plan_id!r}: {exc}") from exc
+    if config_set is None:
+        # Historical v2 pinsets bind one scientific config to every component.
+        if config_hashes != {runtime_pins["config_set_sha256"]}:
+            raise MintError(f"producer {plan_id!r}: config-set inventory mismatch")
+    else:
+        for cell_pin in producer["cells"]:
+            cell_inputs = inputs.cells[cell_pin["role"]]
+            for component in (cell_inputs.absolute, cell_inputs.comparative):
+                if component.scientific_config_identity_sha256 != cell_pin["scientific_config_identity_sha256"]:
+                    raise MintError(
+                        f"producer {plan_id!r}, cell {cell_pin['cell_id']!r}: per-cell scientific config identity mismatch"
+                    )
+        if detection_floor.floor_mint_config_set_sha256(list(config_hashes)) != runtime_pins["config_set_sha256"]:
+            raise MintError(f"producer {plan_id!r}: config-set inventory mismatch")
 
 
 def _v2_gate_postcollection(
@@ -2902,6 +2925,9 @@ def _mint_v2_cell_artifact(
     custody_store_provenance = core._expected_custody_store_provenance(
         calibration_ledger_snapshot
     )
+    config_set = detection_floor.floor_mint_producer_config_set(producer)
+    if config_set is not None:
+        provenance["producer_config_sets"] = [config_set]
     if custody_store_provenance is not None:
         provenance["calibration_custody_store"] = dict(
             custody_store_provenance
@@ -3109,6 +3135,10 @@ def _build_v2_artifacts(
         "assurance": copy.deepcopy(V2_ASSURANCE_PROFILE),
         "implementation": implementation,
     }
+    config_sets = [record for producer in pinset.value["producer_plans"]
+                   if (record := detection_floor.floor_mint_producer_config_set(producer)) is not None]
+    if config_sets:
+        aggregate_provenance["producer_config_sets"] = config_sets
     custody_store_provenance = component_artifacts[0]["provenance"].get(
         "calibration_custody_store"
     )
@@ -3170,6 +3200,10 @@ def _validate_v2_artifact_binding(
     if not isinstance(provenance, Mapping):
         errors.append("artifact.provenance: v2 aggregate provenance is missing")
     else:
+        expected_config_sets = [record for producer in value["producer_plans"]
+                                if (record := detection_floor.floor_mint_producer_config_set(producer)) is not None]
+        if provenance.get("producer_config_sets", []) != expected_config_sets:
+            errors.append("artifact.provenance: producer config-set pins mismatch")
         expected_aggregate_plan = {
             "plan_id": aggregate["plan_set_id"],
             "declared_calibration_scope": "production_window",
@@ -3315,6 +3349,9 @@ def _validate_v2_artifact_binding(
                     provenance.get("implementation")
                 ),
             }
+            config_set = detection_floor.floor_mint_producer_config_set(producer)
+            if config_set is not None:
+                component["provenance"]["producer_config_sets"] = [config_set]
             if provenance.get("calibration_custody_store") is not None:
                 component["provenance"]["calibration_custody_store"] = (
                     copy.deepcopy(provenance["calibration_custody_store"])

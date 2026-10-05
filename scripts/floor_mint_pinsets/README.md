@@ -68,15 +68,29 @@ Finalization stages an external sidecar's exact bytes as
 idempotent; differing occupied bytes refuse. A sidecar already inside custody
 retains its path. Omitting it preserves the dominance attachment refusal.
 
-## Outstanding `_v5` inventory ruling
+## Per-cell scientific config binding
 
-The current v2 schema and mint bind one scientific config hash to every
-component of a producer. The committed decode and p2048 configurations have
-different scientific config hashes for both models. The emitter preserves the
-existing `config-set inventory mismatch` refusal. The lead must rule on a
-prospective identity contract that supports those distinct configurations
-before this final pinset can be issued for the actual `_v5` pair. Selecting
-p42 would not supply GAMMA's registered p2048 transport groups.
+The 2026-10-05 lead ruling permits a producer's decode and p2048 workloads to
+have different scientific configs. Newly emitted v2 cells carry
+`scientific_config_identity_sha256`; both absolute and comparative components
+must equal their own cell's pin. The production emitter derives each workload
+pin from every selected member's registered config in the frozen plan tree,
+checking the pack's exact config-byte commitments before authoring. Collected
+config-byte hashes remain separately bound by the existing member pins.
+
+The producer's `model_runtime_config.config_set_sha256` is SHA-256 of the
+canonical JSON array of sorted distinct per-cell scientific config hashes,
+using UTF-8 and compact separators with no trailing newline. The minted
+artifact records each producer's digest and cell bindings in
+`provenance.producer_config_sets`. Claim discovery checks those records against
+the registered pinset. Swapping the two workloads between cells remains a
+refusal even when the producer's set is unchanged. Model-artifact and runtime
+identity equality checks are unchanged.
+
+Legacy v2 pinsets without per-cell scientific config pins keep their original
+single-config check and artifact bytes. New singleton sets use the canonical
+array hash; v1 behavior is unchanged. A producer may not mix legacy and new
+cell bindings.
 
 The fixture regression exercises the real pin author, mint, artifact validator
 and claim loader without mocking those seams. It uses explicitly synthetic
