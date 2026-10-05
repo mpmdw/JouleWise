@@ -70,6 +70,7 @@ from joulewise import reduce as reduce_module
 from joulewise.bundle import (
     BundleError,
     RunBundleWriter,
+    _cli_config_source,
     _writer_launch_lineage,
     generate_run_id,
     sanitize_id_component,
@@ -535,6 +536,56 @@ def _load_instrument_calibration_attachment(
     )
 
 
+def _g2b_auxiliary_config_matches(
+    config: BenchmarkConfig, context: dict[str, Any], tree: dict[str, Any], repo: Path,
+) -> bool:
+    """Match a pinned external campaign member and its stage's runs-root binding.
+
+    GAMMA uses input IDs; ALPHA/BETA embed the manifest descriptor directly.
+    Neither directory names nor external artifacts alone confer eligibility.
+    The caller has already authenticated the launch and its committed pack.
+    """
+    from joulewise.arm_readiness import LaunchLineageError  # noqa: PLC0415
+
+    try:
+        source, raw = _cli_config_source(config)
+        relative = source.relative_to(repo.resolve(strict=True)).as_posix()
+    except (LaunchLineageError, OSError, ValueError):
+        return False
+    digest = hashlib.sha256(raw).hexdigest()
+    inputs = tree.get("external_inputs", [])
+    if isinstance(inputs, dict):
+        inputs = inputs.get("manifests", [])
+    if not isinstance(inputs, list) or not isinstance(tree.get("stage_graph"), list):
+        return False
+    for external in inputs:
+        if not isinstance(external, dict) or not isinstance(external.get("members"), list):
+            continue
+        if not any(isinstance(member, dict) and member.get("path") == relative
+                   and member.get("sha256") == digest for member in external["members"]):
+            continue
+        for stage in tree["stage_graph"]:
+            if not isinstance(stage, dict) or stage.get("kind") != "campaign_collection":
+                continue
+            input_ref = stage.get("input_ref", {})
+            if "input_id" in external:
+                matches = input_ref == {"kind": "external_input", "input_id": external["input_id"]}
+            else:
+                matches = isinstance(external.get("manifest"), dict) and stage.get("input") == external["manifest"]
+            if not matches:
+                continue
+            commands = stage.get("launch", {}).get("commands", [])
+            for command in commands:
+                if command.get("command_kind") != "campaign_collection":
+                    continue
+                arguments = command.get("argv_template", {}).get("arguments", [])
+                for index, argument in enumerate(arguments[:-1]):
+                    if (argument == {"kind": "literal", "value": "--runs-dir"}
+                            and arguments[index + 1] == {"kind": "binding", "value": context["root_role"]}):
+                        return True
+    return False
+
+
 def _authenticate_g2b_pre_slot_attachment(
     directory: Path, files: dict[str, bytes], evidence: Any, runs_root: Path,
     config: BenchmarkConfig | None,
@@ -556,20 +607,20 @@ def _authenticate_g2b_pre_slot_attachment(
     context = authenticate_campaign_launch_lineage(runs_root)
     # A root locator alone cannot authorize the running member. Reuse the
     # writer's marker, CLI-source equality and authenticated pack-inventory
-    # checks before granting the Revision-5 exception. Ineligible members
-    # retain the loader's ordinary Revision-5 refusal, without G2-a fallback.
+    # checks, or authenticate an external auxiliary against the same plan.
+    # Ineligible configs retain ordinary Revision-5 refusal, without G2-a fallback.
     if config is None:
         return None
     try:
         member_lineage = _writer_launch_lineage(runs_root, config)
     except BundleError:
-        return None
-    if member_lineage is None:
-        return None
+        member_lineage = None
     lineage = context["launch_lineage"]
     pack_root = Path(context["pack_root"])
     repo = _repo_for_pack(pack_root)
     tree, _ = _plan_tree(pack_root)
+    if member_lineage is None and not _g2b_auxiliary_config_matches(config, context, tree, repo):
+        return None
     plan = tree["plan"]
     plan_path = pack_root / plan["path"]
     ledger_path = repo / "runs/calibration_observation_ledger.jsonl"

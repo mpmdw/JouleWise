@@ -31,6 +31,9 @@ FIXTURE = ROOT / 'tests/fixtures/controller_g2b/block3-pre'
 
 
 class G2bAttachmentTests(unittest.TestCase):
+    def auxiliary_plan_tree(self):
+        return json.loads((ROOT / 'configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5/plan_tree.json').read_bytes())
+
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
@@ -75,6 +78,23 @@ class G2bAttachmentTests(unittest.TestCase):
                     'config_inventory': [
                         {'path': path.name, 'sha256': hashlib.sha256(path.read_bytes()).hexdigest()}
                         for path in (self.config_path, self.plain_config_path)]}]}}}
+        # Preserve the real GAMMA external-input descriptors and stage dispatch
+        # bindings, with tracked config bytes in the synthetic launch repository.
+        real_tree = self.auxiliary_plan_tree()
+        tree['external_inputs'] = real_tree['external_inputs']
+        tree['stage_graph'] = real_tree['stage_graph']
+        inputs = tree['external_inputs']
+        if isinstance(inputs, dict):
+            inputs = inputs['manifests']
+        self.auxiliary_inputs = [external for external in inputs if 'members' in external]
+        for external in self.auxiliary_inputs:
+            for member in external['members']:
+                source = getattr(self, 'auxiliary_source_paths', {}).get(member['path'], ROOT / member['path'])
+                raw = source.read_bytes()
+                self.assertEqual(hashlib.sha256(raw).hexdigest(), member['sha256'])
+                target = self.root / member['path']
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(raw)
         tree_raw = arm_readiness.render_json(tree)
         (self.launch.pack / 'plan_tree.json').write_bytes(tree_raw)
         (self.launch.pack / 'plan_tree.sha256').write_bytes(arm_readiness.gnu_sidecar(hashlib.sha256(tree_raw).hexdigest(), 'plan_tree.json'))
@@ -160,6 +180,109 @@ class G2bAttachmentTests(unittest.TestCase):
         path, summary = self.run_member(root=self.bound_runs)
         self.assertEqual(summary.status, RunStatus.SUCCEEDED, summary.failure_message)
         self.assertEqual(json.loads((path / 'metadata.json').read_bytes())['instrument_calibration']['g2b_pre_slot']['session_id'], self.session_id)
+
+    def load_auxiliary(self, path, root, *, config=None, argv=None):
+        config = config or BenchmarkConfig.from_mapping(json.loads(path.read_bytes()))
+        with patch.object(sys, 'argv', argv or ['joulewise', 'run', str(path)]):
+            return controller._load_instrument_calibration_attachment(
+                self.capture, power_policy='ac_high_power',
+                runtime_powermetrics_sha256=self.evidence['bindings']['powermetrics_sha256'],
+                runtime_power_policy='ac_high_power', runs_root=root, config=config)
+
+    def test_tracked_bound_corpus_and_all_window_references_attach(self):
+        for external in self.auxiliary_inputs:
+            root = self.bound_runs if external['input_id'] == 'neg8_bound_corpus' else self.runs
+            for member in external['members']:
+                with self.subTest(config=member['path'], root=root.name):
+                    path = self.root / member['path']
+                    config = BenchmarkConfig.from_mapping(json.loads(path.read_bytes()))
+                    self.assertFalse(arm_readiness.launch_lineage_required(config.to_dict()))
+                    attachment = self.load_auxiliary(path, root, config=config)
+                    self.assertEqual(attachment.metadata['g2b_pre_slot']['session_id'], self.session_id)
+                    self.assertEqual(attachment.metadata['g2b_pre_slot']['plan_sha256'], self.plan_sha)
+
+    def test_auxiliary_in_wrong_root_is_refused(self):
+        for external in self.auxiliary_inputs:
+            root = self.runs if external['input_id'] == 'neg8_bound_corpus' else self.bound_runs
+            with self.subTest(input=external['input_id']):
+                path = self.root / external['members'][0]['path']
+                with self.assertRaisesRegex(ValueError, 'revision_five'):
+                    self.load_auxiliary(path, root)
+
+    def test_unpinned_auxiliary_path_is_refused(self):
+        source = self.root / self.auxiliary_inputs[0]['members'][0]['path']
+        unpinned = source.with_name('unpinned-copy.json')
+        unpinned.write_bytes(source.read_bytes())
+        with self.assertRaisesRegex(ValueError, 'revision_five'):
+            self.load_auxiliary(unpinned, self.bound_runs)
+
+    def test_pinned_auxiliary_with_changed_bytes_is_refused(self):
+        source = self.root / self.auxiliary_inputs[0]['members'][0]['path']
+        source.write_bytes(source.read_bytes() + b'\n')
+        with self.assertRaisesRegex(ValueError, 'revision_five'):
+            self.load_auxiliary(source, self.bound_runs)
+
+    def test_auxiliary_running_config_must_equal_cli_file(self):
+        source = self.root / self.auxiliary_inputs[0]['members'][0]['path']
+        config = BenchmarkConfig.from_mapping(json.loads(source.read_bytes()))
+        with self.assertRaisesRegex(ValueError, 'revision_five'):
+            self.load_auxiliary(source, self.bound_runs, config=replace(config, run_id='different-running-config'))
+
+    def test_auxiliary_requires_run_cli_and_nonsymlink_source(self):
+        source = self.root / self.auxiliary_inputs[0]['members'][0]['path']
+        alias = source.with_name('symlink.json')
+        alias.symlink_to(source)
+        for argv in (['joulewise', 'validate-config', str(source)], ['joulewise', 'run', str(alias)]):
+            with self.subTest(argv=argv), self.assertRaisesRegex(ValueError, 'revision_five'):
+                self.load_auxiliary(source, self.bound_runs, argv=argv)
+
+    def test_auxiliary_directories_are_read_from_authenticated_plan(self):
+        tree = self.auxiliary_plan_tree()
+        sources = {}
+        # Model a future pack whose dispatched inputs live under new directories.
+        replacements = {}
+        for external in tree['external_inputs']:
+            if 'members' not in external:
+                continue
+            old_dir = str(Path(external['manifest_path']).parent)
+            new_dir = 'configs/campaigns/relocated/' + external['input_id']
+            replacements[old_dir] = new_dir
+            external['manifest_path'] = new_dir + '/order_manifest.json'
+            for member in external['members']:
+                original = ROOT / member['path']
+                member['path'] = new_dir + '/' + original.name
+                sources[member['path']] = original
+        for stage in tree['stage_graph']:
+            for command in stage.get('launch', {}).get('commands', []):
+                for argument in command.get('argv_template', {}).get('arguments', []):
+                    if argument.get('kind') == 'repo_path' and argument.get('value') in replacements:
+                        argument['value'] = replacements[argument['value']]
+        fixture = G2bAttachmentTests()
+        fixture.auxiliary_plan_tree = lambda: tree
+        fixture.auxiliary_source_paths = sources
+        self.addCleanup(fixture.doCleanups)
+        fixture.setUp()
+        for external in fixture.auxiliary_inputs:
+            root = fixture.bound_runs if external['input_id'] == 'neg8_bound_corpus' else fixture.runs
+            with self.subTest(input=external['input_id']):
+                attachment = fixture.load_auxiliary(fixture.root / external['members'][0]['path'], root)
+                self.assertEqual(attachment.metadata['g2b_pre_slot']['session_id'], fixture.session_id)
+
+    def test_floor_plan_manifest_descriptors_assign_auxiliary_roots(self):
+        tree = json.loads((ROOT / 'configs/campaigns/d117_floor_qwen3-1p7b_v5/plan_tree.json').read_bytes())
+        fixture = G2bAttachmentTests()
+        fixture.auxiliary_plan_tree = lambda: tree
+        self.addCleanup(fixture.doCleanups)
+        fixture.setUp()
+        for external in fixture.auxiliary_inputs:
+            root = fixture.bound_runs if external['external_input_id'] == 'neg8_bound' else fixture.runs
+            path = fixture.root / external['members'][0]['path']
+            with self.subTest(input=external['external_input_id']):
+                attachment = fixture.load_auxiliary(path, root)
+                self.assertEqual(attachment.metadata['g2b_pre_slot']['session_id'], fixture.session_id)
+                wrong_root = fixture.runs if root == fixture.bound_runs else fixture.bound_runs
+                with self.assertRaisesRegex(ValueError, 'revision_five'):
+                    fixture.load_auxiliary(path, wrong_root)
 
     def test_foreign_session_refused_before_bundle_creation(self):
         self.ledger.unlink()

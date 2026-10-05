@@ -84,6 +84,37 @@ class BundleError(Exception):
     """Raised when a bundle invariant (layout, ordering, immutability) breaks."""
 
 
+def _cli_config_source(config: BenchmarkConfig) -> tuple[Path, bytes]:
+    """Read the CLI-selected file and require equality with the running config."""
+
+    argv = sys.argv[1:]
+    if len(argv) < 2 or argv[0] != "run":
+        raise LaunchLineageError(
+            "launch_binding_mismatch",
+            "writer cannot identify the CLI-selected config source",
+        )
+    source_path = Path(argv[1])
+    if source_path.is_symlink():
+        raise LaunchLineageError(
+            "launch_binding_mismatch", "writer config source is a symlink",
+        )
+    try:
+        resolved_source = source_path.resolve(strict=True)
+        source_raw = resolved_source.read_bytes()
+        source_config = BenchmarkConfig.from_mapping(json.loads(source_raw))
+    except (OSError, ValueError, TypeError) as exc:
+        raise LaunchLineageError(
+            "launch_binding_mismatch",
+            f"writer config source is unavailable or invalid: {exc}",
+        ) from exc
+    if source_config != config:
+        raise LaunchLineageError(
+            "launch_binding_mismatch",
+            "writer config differs from the CLI-selected source bytes",
+        )
+    return resolved_source, source_raw
+
+
 def _writer_launch_lineage(
     runs_root: Path,
     config: BenchmarkConfig,
@@ -93,33 +124,7 @@ def _writer_launch_lineage(
     if not launch_lineage_required(config.to_dict()):
         return None
     try:
-        argv = sys.argv[1:]
-        if len(argv) < 2 or argv[0] != "run":
-            raise LaunchLineageError(
-                "launch_binding_mismatch",
-                "writer cannot identify the CLI-selected config source",
-            )
-        source_path = Path(argv[1])
-        if source_path.is_symlink():
-            raise LaunchLineageError(
-                "launch_binding_mismatch",
-                "writer config source is a symlink",
-            )
-        try:
-            resolved_source = source_path.resolve(strict=True)
-            source_raw = resolved_source.read_bytes()
-            source_value = json.loads(source_raw)
-            source_config = BenchmarkConfig.from_mapping(source_value)
-        except (OSError, ValueError, TypeError) as exc:
-            raise LaunchLineageError(
-                "launch_binding_mismatch",
-                f"writer config source is unavailable or invalid: {exc}",
-            ) from exc
-        if source_config != config:
-            raise LaunchLineageError(
-                "launch_binding_mismatch",
-                "writer config differs from the CLI-selected source bytes",
-            )
+        resolved_source, source_raw = _cli_config_source(config)
         context = authenticate_campaign_launch_lineage(
             runs_root,
             config_paths=(resolved_source,),
