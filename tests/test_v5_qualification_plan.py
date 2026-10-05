@@ -14,6 +14,7 @@ from unittest import mock
 from joulewise import arm_readiness as readiness, night_gate
 from joulewise.night_plan_writer import night_plan_mapping, write_night_plan
 from scripts import write_v5_qualification_plan as writer
+from tests.test_kernel_clock import frequency_probe
 from tests.test_arm_readiness_schemas import arm_context
 
 REAL_G2B_BODY = writer.g2b_body
@@ -233,6 +234,7 @@ class PlanWriterTests(SizingTests):
             else:
                 path.mkdir(exist_ok=True)
         self.input = {"schema_version": writer.INPUT_SCHEMA, "head": self.head,
+                      "kernel_frequency": frequency_probe(),
             "plan": {"schema": night_gate.PACK_PLAN_SCHEMA, "schema_version": 3,
                 "plan_id": self.custody.name, "receipt_class": "TRANSACTION_PACK", "t0_epoch_s": 1000.,
                 "window_max_s": 2760, "authored_epoch_s": 0., "repo_head": self.head,
@@ -246,7 +248,8 @@ class PlanWriterTests(SizingTests):
             "confirmation": {"record": writer.locator(self.confirm), "transcript": writer.locator(self.transcript),
                 "expected_confirmation_digest": self.hc},
             "sizing": {"fixed": {name: self.allow(8) for name in writer.FIXED_COMPONENTS["s1"]},
-                       "members": {}, "auxiliary": {}, "streams": {}, "clock": self.sizing["clock"]},
+                       "members": {}, "auxiliary": {}, "streams": {name: self.allow(100)
+                           for name in ("calibration-pre", "calibration-post")}, "clock": self.sizing["clock"]},
             "deadlines": {"latest_chain_start_epoch_s": 3720., "shutdown_epoch_s": 4060.,
                           "courier_epoch_s": 4360., "deadman_epoch_s": 7680.},
             "other_custody_roots": [], "arm_context": context, "prerequisites": {}}
@@ -262,7 +265,7 @@ class PlanWriterTests(SizingTests):
         for target, name, replacement in (
             (writer, "g2b_body", mock.Mock(return_value="echo fixture\n")),
             (writer, "prerequisites", mock.Mock()),
-            (writer, "pack_roster", mock.Mock(return_value=([], [], [], []))),
+            (writer, "pack_roster", mock.Mock(return_value=([], [], ["calibration-pre", "calibration-post"], []))),
             (readiness, "_pack_record", mock.Mock(return_value={"plan_id": self.custody.name, "window_id": self.custody.name})),
             (writer, "authenticate_frozen_pack", mock.Mock(return_value={"path": "/fixture/freeze.json", "sha256": "0" * 64})),
             (readiness, "_authenticate_confirmation_table", mock.Mock()),
@@ -276,6 +279,30 @@ class PlanWriterTests(SizingTests):
 
     def write(self):
         return writer.write_qualification("s1", self.input, self.output)
+
+    def test_kernel_frequency_gate_persists_margin_and_rejects_twelve_ppm(self):
+        self.input["sizing"]["streams"] = {name: self.allow(320)
+            for name in ("calibration-pre", "calibration-post")}
+        self.input["kernel_frequency"] = frequency_probe(12 * 65536)
+        with self.assertRaisesRegex(ValueError, "kernel_frequency_gate_exceeded") as caught:
+            self.write()
+        self.assertAlmostEqual(caught.exception.kernel_frequency_gate["margin_ms"], -2.62)
+        self.assertFalse(self.output.exists())
+        self.input["kernel_frequency"] = frequency_probe(-207749)
+        result = self.write()
+        gate_path = self.custody / self.pack.name / "arm_readiness.t0.inputs/kernel-frequency-gate.json"
+        from joulewise import kernel_clock
+        gate = kernel_clock.validate_gate(writer.read_object(gate_path))
+        self.assertEqual(gate["t_stream_max_s"], 320.)
+        self.assertEqual(result["kernel_frequency_margin_ms"], gate["margin_ms"])
+        self.assertEqual(writer.read_object(self.custody / "qualification-plan-record.json")["sizing"]["kernel_frequency_gate"], gate)
+
+    def test_missing_or_failed_kernel_frequency_probe_refuses(self):
+        for probe in (None, frequency_probe(call_status=-1, errno=1)):
+            self.input["kernel_frequency"] = probe
+            with self.assertRaises(ValueError):
+                self.write()
+            self.assertFalse(self.output.exists())
 
     def test_canonical_create_once_records_and_run_command(self):
         self.write()

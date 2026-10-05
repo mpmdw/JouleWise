@@ -28,6 +28,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Iterable, Mapping, Sequence
 
 from joulewise import clock_reference as _clock_reference
+from joulewise import kernel_clock as _kernel_clock
 from joulewise import network_time_off as _network_time_off
 from joulewise.identity_pins import (
     IDENTITY_PIN_PROJECTION_RECEIPT_SCHEMA,
@@ -6763,6 +6764,10 @@ _CLOCK_PROBE_VALUE_KEYS = frozenset(
         "r1_batch_finished_monotonic_ns",
     }
 )
+_CLOCK_PROBE_RESIDUAL_VALUE_KEYS = _CLOCK_PROBE_VALUE_KEYS | {
+    "anchor_check_version", "r0_kernel_frequency", "kernel_frequency",
+    "anchor_residual_ns", "t_stream_max_s",
+}
 _LIVE_ANCHOR_KEYS = frozenset(
     {"boot_session_id", "realtime_ns", "monotonic_raw_ns", "read_skew_ns"}
 )
@@ -6795,12 +6800,19 @@ def _sample_live_clock_anchor() -> Mapping[str, Any] | None:
         boot_session_id = _current_boot_session_id()
     except Exception:
         return None
-    return {
+    result = {
         "boot_session_id": boot_session_id,
         "realtime_ns": anchor.realtime_ns,
         "monotonic_raw_ns": anchor.monotonic_raw_ns,
         "read_skew_ns": anchor.read_skew_ns,
     }
+    try:
+        result["kernel_frequency"] = _kernel_clock.validate_probe(_kernel_clock.read_kernel_frequency())
+    except Exception:
+        # Historical fixed-bound receipts do not require this new probe. The
+        # versioned predicate still refuses a live anchor missing frequency.
+        pass
+    return result
 
 
 def _clock_probe_predicate_passes(
@@ -6810,7 +6822,12 @@ def _clock_probe_predicate_passes(
 ) -> bool:
     """Recompute every ruled PROBE gate from the published numeric inputs."""
 
-    if set(value) != _CLOCK_PROBE_VALUE_KEYS:
+    residual_version = "anchor_check_version" in value
+    if residual_version:
+        if (value.get("anchor_check_version") != _kernel_clock.ANCHOR_CHECK_VERSION
+                or set(value) != _CLOCK_PROBE_RESIDUAL_VALUE_KEYS):
+            return False
+    elif set(value) != _CLOCK_PROBE_VALUE_KEYS:
         return False
     if any(
         value.get(name) is not True
@@ -6853,6 +6870,25 @@ def _clock_probe_predicate_passes(
             - value["r0_anchor_monotonic_raw_ns"]
         )
     )
+    if residual_version:
+        try:
+            r0_frequency = _kernel_clock.validate_probe(value["r0_kernel_frequency"])
+            frequency = _kernel_clock.validate_probe(value["kernel_frequency"])
+            delta = ((value["anchor_realtime_ns"] - value["anchor_monotonic_raw_ns"])
+                     - (value["r0_anchor_realtime_ns"] - value["r0_anchor_monotonic_raw_ns"]))
+            residual = _kernel_clock.anchor_residual_ns(delta, t0_span, r0_frequency)
+            if (frequency["raw_word"] != r0_frequency["raw_word"]
+                    or type(value["anchor_residual_ns"]) is not float
+                    or value["anchor_residual_ns"] != float(residual)
+                    or residual > 5_000_000):
+                return False
+            stream_max = value["t_stream_max_s"]
+            if stream_max is not None and not _kernel_clock.frequency_gate(r0_frequency, stream_max)["passes"]:
+                return False
+        except (ValueError, TypeError, OverflowError, ZeroDivisionError):
+            return False
+    elif anchor_delta > 5_000_000:
+        return False
     r1_duration = (
         value["r1_batch_finished_monotonic_raw_ns"]
         - value["r1_batch_started_monotonic_raw_ns"]
@@ -6861,7 +6897,7 @@ def _clock_probe_predicate_passes(
         600_000_000_000 <= value["t0_span_ns"] <= 3_600_000_000_000
         and value["t0_span_ns"] == t0_span
         and value["anchor_delta_ns"] == anchor_delta
-        and 0 <= value["anchor_delta_ns"] <= 5_000_000
+        and 0 <= value["anchor_delta_ns"]
         and 0 <= value["r0_anchor_read_skew_ns"] <= 1_000_000
         and 0 <= value["anchor_read_skew_ns"] <= 1_000_000
         and 0 <= value["r1_batch_duration_ns"] <= 30_000_000_000
@@ -6882,7 +6918,9 @@ def _clock_probe_predicate_passes(
         # Missing/None is a programming error for a live PROBE evaluation and
         # deliberately fails closed instead of sampling implicitly here.
         return False
-    if set(live_clock_anchor) != _LIVE_ANCHOR_KEYS or any(
+    live_keys = _LIVE_ANCHOR_KEYS | {"kernel_frequency"} if residual_version else _LIVE_ANCHOR_KEYS
+    if (set(live_clock_anchor) != live_keys and not (
+            not residual_version and set(live_clock_anchor) == _LIVE_ANCHOR_KEYS | {"kernel_frequency"})) or any(
         not _is_real_int(live_clock_anchor.get(name))
         for name in ("realtime_ns", "monotonic_raw_ns", "read_skew_ns")
     ):
@@ -6899,6 +6937,17 @@ def _clock_probe_predicate_passes(
         )
         - (value["anchor_realtime_ns"] - value["anchor_monotonic_raw_ns"])
     )
+    if residual_version:
+        try:
+            live_frequency = _kernel_clock.validate_probe(live_clock_anchor["kernel_frequency"])
+            live_span = live_clock_anchor["monotonic_raw_ns"] - value["anchor_monotonic_raw_ns"]
+            movement = ((live_clock_anchor["realtime_ns"] - live_clock_anchor["monotonic_raw_ns"])
+                        - (value["anchor_realtime_ns"] - value["anchor_monotonic_raw_ns"]))
+            return (live_span >= 0
+                    and live_frequency["raw_word"] == r0_frequency["raw_word"]
+                    and _kernel_clock.anchor_residual_ns(movement, live_span, r0_frequency) <= 5_000_000)
+        except (ValueError, TypeError):
+            return False
     return live_delta <= 5_000_000
 
 
@@ -9914,8 +9963,18 @@ def _authenticate_go_t0_evidence(go, arm, custody_pack_root: Path, night_root: P
             raise _go_invalid("t0_evidence receipt binding/expiry")
     previous = -1
     for step, path in zip(author._CAPTURE_FILES, capture_paths, strict=True):
-        value = _require_exact_keys(parse_json_bytes(path.read_bytes()), author._CAPTURE_KEYS,
-                                    "t0_evidence.capture")
+        raw_value = parse_json_bytes(path.read_bytes())
+        keys = author._CAPTURE_KEYS
+        if step == "clock-reference" and isinstance(raw_value, Mapping) and "kernel_frequency" in raw_value:
+            keys = keys | {"kernel_frequency", "t_stream_max_s"}
+            try:
+                _kernel_clock.validate_probe(raw_value["kernel_frequency"])
+                stream_max = raw_value.get("t_stream_max_s")
+                if stream_max is not None and not _kernel_clock.frequency_gate(raw_value["kernel_frequency"], stream_max)["passes"]:
+                    raise ValueError("R0 kernel frequency exceeds the stream clock budget")
+            except (TypeError, ValueError) as exc:
+                raise _go_invalid("t0_evidence kernel frequency") from exc
+        value = _require_exact_keys(raw_value, keys, "t0_evidence.capture")
         start, end = value["started_monotonic_ns"], value["finished_monotonic_ns"]
         if (value["schema_version"] != author._COMMAND_SCHEMA or value["step_id"] != step
                 or value["boot_session_id"] != arm["boot_session_id"]

@@ -44,6 +44,7 @@ from unittest import mock
 
 from joulewise import arm_readiness as readiness
 from joulewise import arm_readiness_evidence_t0 as t0_author
+from joulewise import kernel_clock
 from joulewise import clock_reference
 from joulewise import network_time_off
 
@@ -813,6 +814,10 @@ def evaluate_g4(bundle: EvidenceBundle) -> GateResult:
         value = source_facts[0].get("value")
         if not isinstance(value, Mapping) or receipt_fact.get("value") != value:
             raise ValueError("clock receipt value differs from the published source")
+        keys = (readiness._CLOCK_PROBE_RESIDUAL_VALUE_KEYS if "anchor_check_version" in value
+                else readiness._CLOCK_PROBE_VALUE_KEYS)
+        if set(value) != keys:
+            raise ValueError("clock fact keys do not match its recorded anchor semantics")
         if receipt_fact.get("source_sha256") != source_artifact.sha256:
             raise ValueError("clock receipt source SHA-256 does not match custodied source bytes")
 
@@ -882,7 +887,27 @@ def evaluate_g4(bundle: EvidenceBundle) -> GateResult:
             (value["anchor_realtime_ns"] - value["anchor_monotonic_raw_ns"])
             - (value["r0_anchor_realtime_ns"] - value["r0_anchor_monotonic_raw_ns"])
         )
-        if anchor_delta > 5_000_000:
+        if "anchor_check_version" in value:
+            if value["anchor_check_version"] != kernel_clock.ANCHOR_CHECK_VERSION:
+                raise ValueError("unsupported anchor check version")
+            frequency = kernel_clock.validate_probe(value.get("r0_kernel_frequency"))
+            if frequency != r0_capture.get("kernel_frequency"):
+                raise ValueError("published R0 frequency differs from custodied probe")
+            if value.get("t_stream_max_s") != r0_capture.get("t_stream_max_s"):
+                raise ValueError("published stream maximum differs from R0 custody")
+            current = kernel_clock.validate_probe(value.get("kernel_frequency"))
+            residual = kernel_clock.anchor_residual_ns(
+                (value["anchor_realtime_ns"] - value["anchor_monotonic_raw_ns"])
+                - (value["r0_anchor_realtime_ns"] - value["r0_anchor_monotonic_raw_ns"]), span, frequency)
+            if current["raw_word"] != frequency["raw_word"]:
+                raise ValueError("R0-to-author kernel frequency word changed")
+            if (residual > 5_000_000 or type(value.get("anchor_residual_ns")) is not float
+                    or value["anchor_residual_ns"] != float(residual)):
+                raise ValueError("RAW anchor residual exceeds 5000000 ns or differs from arithmetic")
+            if (value.get("t_stream_max_s") is not None
+                    and not kernel_clock.frequency_gate(frequency, value["t_stream_max_s"])["passes"]):
+                raise ValueError("R0 kernel frequency exceeds the stream clock budget")
+        elif anchor_delta > 5_000_000:
             raise ValueError("RAW anchor delta exceeds 5000000 ns")
         if value.get("t0_span_ns") != span:
             raise ValueError("published T-0 span differs from RAW endpoint arithmetic")
@@ -1488,6 +1513,12 @@ def _run_real_author_boundary(
             "r0_batch_finished_monotonic_raw_ns"
         ],
     }
+    frequency = inputs.get("r0_kernel_frequency")
+    if frequency is None:
+        frequency = {"schema_version": kernel_clock.PROBE_SCHEMA, "modes": 0,
+                     "raw_word": 0, "ppm": 0.0, "call_status": 0,
+                     "timex_status": 0, "errno": 0, "raw_hex": bytes(kernel_clock.Timex()).hex()}
+    r0.update(kernel_frequency=frequency, t_stream_max_s=inputs.get("t_stream_max_s"))
     disable = {
         "exit_code": 0,
         "argv": ["/usr/bin/sudo", "-n", "/usr/sbin/systemsetup", "-setusingnetworktime", "off"],
@@ -1533,6 +1564,7 @@ def _run_real_author_boundary(
             mock.patch.object(t0_author, "_captured_clock_reference", return_value=(r0, {"path": "r0", "sha256": "0" * 64}, agreement)),
             mock.patch.object(t0_author, "_capture", return_value=(disable, {"path": "off", "sha256": "1" * 64})),
             mock.patch.object(t0_author, "_fresh_clock_reference_batch", side_effect=fresh),
+            mock.patch.object(kernel_clock, "read_kernel_frequency", return_value=frequency),
         ):
             t0_author._derive_clock_attestation(context)
     except t0_author.T0EvidenceAuthoringError as exc:
@@ -1555,6 +1587,8 @@ def _run_real_arm_boundary(
         "monotonic_raw_ns": value.get("anchor_monotonic_raw_ns"),
         "read_skew_ns": 1_000,
     }
+    if value.get("anchor_check_version") == kernel_clock.ANCHOR_CHECK_VERSION:
+        live["kernel_frequency"] = value["kernel_frequency"]
     rows, refusals = readiness._evaluate_rows(
         [_CLOCK_ROW_DEFINITION],
         {str(receipt.get("evidence_id")): receipt},
@@ -1654,11 +1688,36 @@ def evaluate_g10(bundle: EvidenceBundle) -> GateResult:
             raise ValueError("privileged anchor positive control lacks network-time re-enable/forced-resync evidence")
         before = positive.get("anchor_before_ns")
         after = positive.get("anchor_after_ns")
-        if not _real_int(before) or not _real_int(after) or abs(after - before) <= 5_000_000:
+        if not _real_int(before) or not _real_int(after):
+            raise ValueError("privileged anchor positive control endpoints are invalid")
+        movement_artifact = _artifact_for_path(bundle, str(positive_artifact.path.with_name("anchor-movement.json")))
+        movement = movement_artifact.value if movement_artifact is not None else None
+        if isinstance(movement, Mapping) and "anchor_check_version" in movement:
+            if movement["anchor_check_version"] != kernel_clock.ANCHOR_CHECK_VERSION:
+                raise ValueError("unsupported positive-control anchor semantics")
+            before_artifact = _artifact_for_path(bundle, str(positive_artifact.path.with_name("before.json")))
+            after_artifact = _artifact_for_path(bundle, str(positive_artifact.path.with_name("after.json")))
+            if before_artifact is None or after_artifact is None:
+                raise ValueError("positive-control residual stamps are absent")
+            stamps = (before_artifact.value, after_artifact.value)
+            frequency = kernel_clock.validate_probe(stamps[0].get("kernel_frequency"))
+            kernel_clock.validate_probe(stamps[1].get("kernel_frequency"))
+            if (stamps[0]["realtime_ns"] - stamps[0]["monotonic_raw_ns"] != before
+                    or stamps[1]["realtime_ns"] - stamps[1]["monotonic_raw_ns"] != after):
+                raise ValueError("positive-control endpoints differ from residual stamps")
+            residual = kernel_clock.anchor_residual_ns(after - before,
+                stamps[1]["monotonic_raw_ns"] - stamps[0]["monotonic_raw_ns"], frequency)
+            if (movement.get("absolute_movement_ns") != abs(after - before)
+                    or movement.get("residual_movement_ns") != float(residual)):
+                raise ValueError("positive-control residual differs from arithmetic")
+            moved = residual > 5_000_000
+        else:
+            moved = abs(after - before) > 5_000_000
+        if not moved:
             raise ValueError("privileged anchor positive control did not visibly move the RAW anchor beyond 5 ms")
         if positive.get("author_refusal_reason_code") != "evidence_author_t0_clock_attestation_underivable":
             raise ValueError("privileged anchor positive control did not record the real author refusal code")
-    except ValueError as exc:
+    except (ValueError, TypeError, KeyError) as exc:
         return _result("G10", name, GateStatus.FAIL, str(exc), *evidence)
     return _result("G10", name, GateStatus.PASS, "real author and arm paths enforce 5 ms +/- 1 ns, and Ed's adjacent privileged control visibly moved the RAW anchor", *evidence)
 

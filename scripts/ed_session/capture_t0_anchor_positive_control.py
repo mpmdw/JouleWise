@@ -22,7 +22,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
 from joulewise import arm_readiness as readiness
 from joulewise import arm_readiness_evidence_t0 as author
-from joulewise import clock_reference, network_time_off, t0_rehearsal
+from joulewise import clock_reference, kernel_clock, network_time_off, t0_rehearsal
 
 ON_ARGV = (*network_time_off.OFF_ARGV[:-1], "on")
 REFUSAL = "evidence_author_t0_clock_attestation_underivable"
@@ -54,11 +54,29 @@ def read_json(path):
 def stamp():
     return {**asdict(clock_reference.sample_anchor()),
             "monotonic_ns": time.monotonic_ns(),
-            "boot_id": network_time_off.boot_id()}
+            "boot_id": network_time_off.boot_id(),
+            "kernel_frequency": kernel_clock.validate_probe(kernel_clock.read_kernel_frequency())}
 
 
 def anchor(value):
     return value["realtime_ns"] - value["monotonic_raw_ns"]
+
+
+def residual_between(before, after, frequency):
+    return kernel_clock.anchor_residual_ns(anchor(after) - anchor(before),
+        after["monotonic_raw_ns"] - before["monotonic_raw_ns"], frequency)
+
+
+def r0_residual(r0, stamp):
+    return kernel_clock.anchor_residual_ns(
+        anchor(stamp) - (r0["anchor_realtime_ns"] - r0["anchor_monotonic_raw_ns"]),
+        stamp["monotonic_raw_ns"] - r0["anchor_monotonic_raw_ns"], r0["kernel_frequency"])
+
+
+def movement_record(before, after, frequency):
+    return {"anchor_check_version": kernel_clock.ANCHOR_CHECK_VERSION,
+            "absolute_movement_ns": abs(anchor(after) - anchor(before)),
+            "residual_movement_ns": float(residual_between(before, after, frequency))}
 
 
 def run_command(argv, *, timeout):
@@ -134,6 +152,13 @@ def run_control(*, pack_root, author_inputs, custody_root, resync_timeout_s=120,
         boot = before["boot_id"]
         reference_capture = read_json(inputs / "clock-reference.json")
         r0 = readiness.parse_json_bytes(reference_capture["stdout"].encode())
+        r0["kernel_frequency"] = kernel_clock.validate_probe(reference_capture.get("kernel_frequency"))
+        before_frequency = kernel_clock.validate_probe(before.get("kernel_frequency"))
+        if before_frequency["raw_word"] != r0["kernel_frequency"]["raw_word"]:
+            raise NotDischarged("pre_on_kernel_frequency_changed")
+        stream_max = reference_capture.get("t_stream_max_s")
+        if stream_max is not None and not kernel_clock.frequency_gate(r0["kernel_frequency"], stream_max)["passes"]:
+            raise NotDischarged("pre_on_kernel_frequency_gate_failed")
         # Bind the observed step to the unchanged real author's R0 sequence.
         # The real author owns span/quorum/order admission and its exact refusal.
         if r0["boot_session_id"].lower() != boot:
@@ -141,14 +166,14 @@ def run_control(*, pack_root, author_inputs, custody_root, resync_timeout_s=120,
         span = before["monotonic_raw_ns"] - r0["anchor_monotonic_raw_ns"]
         if not 600_000_000_000 <= span <= (3600 - resync_timeout_s - 120) * 1_000_000_000:
             raise NotDischarged("pre_on_author_span_out_of_range")
-        if abs(r0["anchor_realtime_ns"] - r0["anchor_monotonic_raw_ns"] - anchor(before)) > 5_000_000:
+        if r0_residual(r0, before) > 5_000_000:
             raise NotDischarged("author_sequence_already_above_anchor_bound")
         write_json(root / "author-input-lineage.json", {
             "input_source": str(Path(author_inputs).resolve()),
             "pack_root": str(pack), "r0_anchor_ns": r0["anchor_realtime_ns"] - r0["anchor_monotonic_raw_ns"],
             "boot_id": boot,
             "author_code_sha256": {p: readiness.sha256_bytes((REPO_ROOT / p).read_bytes())
-                for p in ("scripts/author_arm_evidence_t0.py", "joulewise/arm_readiness_evidence_t0.py")}})
+                for p in ("scripts/author_arm_evidence_t0.py", "joulewise/arm_readiness_evidence_t0.py", "joulewise/kernel_clock.py")}})
         if before["read_skew_ns"] > 1_000_000:
             raise NotDischarged("anchor_read_skew")
         deadline = monotonic_ns() + resync_timeout_s * 1_000_000_000
@@ -171,19 +196,20 @@ def run_control(*, pack_root, author_inputs, custody_root, resync_timeout_s=120,
                 raise NotDischarged("boot_changed")
             if after["read_skew_ns"] > 1_000_000:
                 raise NotDischarged("anchor_read_skew")
-            movement = abs(anchor(after) - anchor(before))
+            kernel_clock.validate_probe(after.get("kernel_frequency"))
+            movement = residual_between(before, after, r0["kernel_frequency"])
             # A slow sample may finish beyond the deadline; never admit it.
             if monotonic_ns() > deadline:
                 raise NotDischarged("resync_deadline_exceeded")
-            print(f"RAW anchor movement: {movement} ns (must exceed 5000000 ns).", flush=True)
+            print(f"Drift-corrected anchor movement: {float(movement):.3f} ns (must exceed 5000000 ns).", flush=True)
             if movement > 5_000_000:
                 break
             sleep(min(5, max(0, (deadline - monotonic_ns()) / 1e9)))
         write_json(root / "after.json", after)
-        write_json(root / "anchor-movement.json", {"absolute_movement_ns": movement})
+        write_json(root / "anchor-movement.json", movement_record(before, after, r0["kernel_frequency"]))
         if movement <= 5_000_000:
             raise NotDischarged("anchor_movement_at_or_below_5ms")
-        if abs(anchor(after) - (r0["anchor_realtime_ns"] - r0["anchor_monotonic_raw_ns"])) <= 5_000_000:
+        if r0_residual(r0, after) <= 5_000_000:
             raise NotDischarged("changed_author_sequence_not_above_bound")
         argv = [sys.executable, str(REPO_ROOT / "scripts/author_arm_evidence_t0.py"),
                 "--pack-root", str(pack), "--custody-root", str(root / "author-custody")]
@@ -232,6 +258,8 @@ def run_control(*, pack_root, author_inputs, custody_root, resync_timeout_s=120,
                         clock=lambda: {"epoch_s": time.time(), "monotonic_s": monotonic_ns() / 1e9},
                         boot_probe=lambda: network_time_off.boot_id(runner))
             network_time_off.read_receipt(path, plan_id=root.name, window_id=root.name)
+            write_json(root / "kernel-frequency-after-off.json",
+                       kernel_clock.validate_probe(kernel_clock.read_kernel_frequency()))
             write_json(root / "commands" / "off.json", off)
             write_bytes(root / "commands" / "off" / "stdout.txt", off["stdout"].encode())
             write_bytes(root / "commands" / "off" / "stderr.txt", off["stderr"].encode())
@@ -270,6 +298,16 @@ def verify_g10_custody(positive_path, manifest_path, *, code_root, head,
         raise NotDischarged("g10_custody_hash_or_census")
     before, after = read_json(root / "before.json"), read_json(root / "after.json")
     positive = read_json(positive_path)
+    movement = read_json(root / "anchor-movement.json")
+    residual_version = "anchor_check_version" in movement
+    if residual_version:
+        frequency = kernel_clock.validate_probe(before.get("kernel_frequency"))
+        kernel_clock.validate_probe(after.get("kernel_frequency"))
+        expected_movement = movement_record(before, after, frequency)
+        control_moved = residual_between(before, after, frequency) > 5_000_000
+    else:
+        expected_movement = {"absolute_movement_ns": abs(anchor(after) - anchor(before))}
+        control_moved = abs(anchor(after) - anchor(before)) > 5_000_000
     if (set(positive) != t0_rehearsal._POSITIVE_CONTROL_KEYS
             or positive["schema_version"] != t0_rehearsal.POSITIVE_CONTROL_SCHEMA
             or positive["performed_by"] != "Ed"
@@ -277,10 +315,9 @@ def verify_g10_custody(positive_path, manifest_path, *, code_root, head,
                    ("outside_t0_sequence", "network_time_reenabled", "forced_resync"))
             or positive["anchor_before_ns"] != anchor(before)
             or positive["anchor_after_ns"] != anchor(after)
-            or abs(anchor(after) - anchor(before)) <= 5_000_000
+            or not control_moved
             or positive["author_refusal_reason_code"] != REFUSAL
-            or read_json(root / "anchor-movement.json") !=
-               {"absolute_movement_ns": abs(anchor(after) - anchor(before))}):
+            or movement != expected_movement):
         raise NotDischarged("g10_anchor_or_record")
     on, execution = read_json(root / "commands/on.json"), read_json(root / "author-execution.json")
     response = read_json(root / "author.stdout.json")
@@ -288,10 +325,19 @@ def verify_g10_custody(positive_path, manifest_path, *, code_root, head,
     r0_capture = read_json(root / "author-custody" / Path(lineage["pack_root"]).name /
                            author._INPUT_DIRECTORY / "clock-reference.json")
     r0 = readiness.parse_json_bytes(r0_capture["stdout"].encode())
+    if residual_version:
+        r0["kernel_frequency"] = kernel_clock.validate_probe(r0_capture.get("kernel_frequency"))
+        if (frequency["raw_word"] != r0["kernel_frequency"]["raw_word"]
+                or r0_residual(r0, before) > 5_000_000 or r0_residual(r0, after) <= 5_000_000):
+            raise NotDischarged("g10_r0_binding")
+        stream_max = r0_capture.get("t_stream_max_s")
+        if stream_max is not None and not kernel_clock.frequency_gate(frequency, stream_max)["passes"]:
+            raise NotDischarged("g10_frequency_gate")
+        kernel_clock.validate_probe(read_json(root / "kernel-frequency-after-off.json"))
     r0_anchor = r0["anchor_realtime_ns"] - r0["anchor_monotonic_raw_ns"]
     if (lineage["r0_anchor_ns"] != r0_anchor or r0["boot_session_id"].lower() != boot_id
-            or abs(r0_anchor - anchor(before)) > 5_000_000
-            or abs(r0_anchor - anchor(after)) <= 5_000_000):
+            or (not residual_version and (abs(r0_anchor - anchor(before)) > 5_000_000
+                or abs(r0_anchor - anchor(after)) <= 5_000_000))):
         raise NotDischarged("g10_r0_binding")
     if (on["argv"] != list(ON_ARGV) or on["exit_code"] != 0
             or " ".join(on["stdout"].split()).lower().rstrip(".") not in
@@ -320,6 +366,8 @@ def verify_g10_custody(positive_path, manifest_path, *, code_root, head,
             or lineage["boot_id"] != boot_id):
         raise NotDischarged("g10_boot_or_order")
     expected_codes = {"scripts/author_arm_evidence_t0.py", "joulewise/arm_readiness_evidence_t0.py"}
+    if residual_version:
+        expected_codes.add("joulewise/kernel_clock.py")
     if set(lineage["author_code_sha256"]) != expected_codes:
         raise NotDischarged("g10_code_inventory")
     for relative, digest in lineage["author_code_sha256"].items():

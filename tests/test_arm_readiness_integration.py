@@ -79,6 +79,7 @@ T0_EVIDENCE_AUTHOR_REASON_CODES = frozenset(
         "evidence_author_t0_identity_epoch_missing",
         "evidence_author_t0_input_changed",
         "evidence_author_t0_internal_error",
+        "evidence_author_t0_kernel_frequency_changed",
         "evidence_author_t0_launch_manifest_missing",
         "evidence_author_t0_launch_recipe_underivable",
         "evidence_author_t0_ledger_readiness_missing",

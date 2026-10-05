@@ -21,7 +21,8 @@ from types import ModuleType, SimpleNamespace
 from typing import Mapping
 from unittest import mock
 
-from joulewise import network_time_off
+from joulewise import network_time_off, kernel_clock
+from tests.test_kernel_clock import frequency_probe
 import joulewise.arm_readiness as readiness
 import joulewise.arm_readiness_evidence as generic_evidence
 import joulewise.arm_readiness_evidence_t0 as t0
@@ -302,6 +303,7 @@ def stream_generate(model, tokenizer, prompt, *, max_tokens=1, sampler=None):
             "realtime_ns": clock_anchor_override.realtime_ns,
             "monotonic_raw_ns": clock_anchor_override.monotonic_raw_ns,
             "read_skew_ns": clock_anchor_override.read_skew_ns,
+            "kernel_frequency": frequency_probe(),
         }
         customization += (
             "arm_readiness._sample_live_clock_anchor = "
@@ -360,6 +362,7 @@ def make_t0_fixture(
         "joulewise/dwell.py",
         "joulewise/prewindow.py",
         "joulewise/clock_reference.py",
+        "joulewise/kernel_clock.py",
         "joulewise/arm_readiness_evidence_t0.py",
         "joulewise/identity_pins.py",
         "scripts/author_arm_evidence_t0.py",
@@ -724,6 +727,7 @@ def make_t0_fixture(
         "plan_id": tree["plan"]["plan_id"], "window_id": tree["window_identity"]["window_id"],
         "epoch_s": now_epoch - (now_monotonic_ns - off_finished) / 1e9,
         "monotonic_s": off_finished / 1e9})
+    captures["clock-reference.json"].update(kernel_frequency=frequency_probe(), t_stream_max_s=None)
     for name, value in captures.items():
         _write_json(input_root / name, value)
 
@@ -826,6 +830,7 @@ def author_environment(
     now_monotonic_ns: int = SYNTHETIC_MONOTONIC_NS,
     synthetic_clock: bool = True,
     sample_anchor=None,
+    kernel_frequency=None,
 ):
     if probe is passing_probe and boot_session_id != TEST_BOOT_SESSION_ID:
         def selected_probe(argv, *, cwd):
@@ -835,6 +840,8 @@ def author_environment(
     else:
         selected_probe = probe
     with contextlib.ExitStack() as stack:
+        stack.enter_context(mock.patch.object(kernel_clock, "read_kernel_frequency",
+            return_value=frequency_probe() if kernel_frequency is None else kernel_frequency))
         stack.enter_context(mock.patch.object(t0._time, "sleep"))
         stack.enter_context(mock.patch.object(t0, "_RUNNING_REPOSITORY", repository))
         stack.enter_context(mock.patch.object(t0, "_execute_probe", side_effect=selected_probe))
@@ -936,12 +943,44 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
                 + SYNTHETIC_MONOTONIC_NS,
                 "monotonic_raw_ns": SYNTHETIC_MONOTONIC_NS,
                 "read_skew_ns": 1_000,
+                "kernel_frequency": frequency_probe(),
             },
         )
         publication_patcher.start()
         clock_patcher.start()
         self.addCleanup(clock_patcher.stop)
         self.addCleanup(publication_patcher.stop)
+
+    def test_versioned_receipts_author_steady_negative_drift_at_long_spans(self):
+        from fractions import Fraction
+        frequency = frequency_probe(-207749)
+        now = 5_000_000_000_000
+        for seconds in (1600, 3600):
+            with self.subTest(seconds=seconds):
+                temporary, repository, pack, custody, _, inputs = make_t0_fixture(now_monotonic_ns=now)
+                try:
+                    span = seconds * 10**9
+                    self._replace_r0(inputs, anchor_raw=now - span,
+                                     anchor_realtime=SYNTHETIC_REALTIME_OFFSET_NS + now - span)
+                    path = inputs / "clock-reference.json"
+                    capture = json.loads(path.read_bytes())
+                    capture.update(kernel_frequency=frequency, t_stream_max_s=320.)
+                    _write_json(path, capture)
+                    drift = round(Fraction(-207749 * span, 65536 * 10**6))
+                    endpoint = t0._clock_reference.ClockAnchor(SYNTHETIC_REALTIME_OFFSET_NS + now + drift, now, 1000)
+                    with author_environment(repository, now_monotonic_ns=now,
+                                            sample_anchor=lambda: endpoint, kernel_frequency=frequency):
+                        result = author_arm_readiness_evidence_t0(pack, custody)
+                    receipt = next(json.loads(Path(p).read_bytes()) for p in result["receipt_paths"]
+                                   if json.loads(Path(p).read_bytes())["kind"] == "CLOCK_ATTESTATION")
+                    value = receipt["facts"][0]["value"]
+                    self.assertEqual(value["anchor_check_version"], kernel_clock.ANCHOR_CHECK_VERSION)
+                    self.assertGreater(value["anchor_delta_ns"], 5_000_000)
+                    self.assertLess(value["anchor_residual_ns"], 1)
+                    self.assertTrue(readiness._clock_probe_predicate_passes(
+                        receipt, value, readiness._PREDICATE_LIVE_ANCHOR_NOT_APPLICABLE))
+                finally:
+                    temporary.cleanup()
 
     def test_generated_gamma_roots_pass_and_legacy_keys_are_refused(self) -> None:
         from tests import test_d117_contrast_v5_pack as gamma_fixture
@@ -2979,7 +3018,9 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
         with author_environment(repository, probe=recording_probe):
             author_arm_readiness_evidence_t0(pack, custody)
         self.assertIn(t0._battery_float.IOREG_BATTERY_ARGV, seen)
-        self.assertEqual(t0._PROBE_TIMEOUT_OVERRIDES, {t0._battery_float.IOREG_BATTERY_ARGV: 10})
+        self.assertEqual(t0._PROBE_TIMEOUT_OVERRIDES, {
+            t0._battery_float.IOREG_BATTERY_ARGV: 10, t0._prewindow.PS_ARGV: 5,
+        })
         source = json.loads(
             (custody / pack.name / t0._SOURCE_DIRECTORY / "t0-power-path.json").read_text()
         )
@@ -3032,7 +3073,10 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
         )
         fact = receipt["facts"][0]
         self.assertEqual(fact["source_kind"], "PROBE")
-        self.assertEqual(set(fact["value"]), readiness._CLOCK_PROBE_VALUE_KEYS)
+        self.assertEqual(set(fact["value"]), readiness._CLOCK_PROBE_RESIDUAL_VALUE_KEYS)
+        self.assertEqual(fact["value"]["anchor_check_version"], kernel_clock.ANCHOR_CHECK_VERSION)
+        self.assertEqual(fact["value"]["r0_kernel_frequency"], frequency_probe())
+        self.assertEqual(fact["value"]["kernel_frequency"], frequency_probe())
         boolean_names = {
             name for name, value in fact["value"].items() if isinstance(value, bool)
         }

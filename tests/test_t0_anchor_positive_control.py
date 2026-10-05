@@ -11,7 +11,8 @@ import subprocess
 import unittest
 from unittest import mock
 
-from joulewise import arm_readiness as readiness, network_time_off, t0_rehearsal
+from joulewise import arm_readiness as readiness, kernel_clock, network_time_off, t0_rehearsal
+from tests.test_kernel_clock import frequency_probe
 from joulewise.clock_reference import ClockAnchor
 from scripts import author_arm_evidence_t0 as author_cli
 from tests.test_arm_readiness_evidence_t0 import (
@@ -39,6 +40,14 @@ class PositiveControlTests(unittest.TestCase):
         self.author_calls = []
         self.command_calls = []
         self.sequence = 0
+        self.base_ns = SYNTHETIC_MONOTONIC_NS
+        self.r0_ns = SYNTHETIC_MONOTONIC_NS - 600_000_000_980
+        self.drift_word = 0
+        self.frequency = frequency_probe()
+        self.after_frequency = self.frequency
+        patcher = mock.patch.object(kernel_clock, "read_kernel_frequency", side_effect=lambda: self.after_frequency)
+        patcher.start()
+        self.addCleanup(patcher.stop)
         self.namespace_defect = False
         self.refusal_defect = None
         self.off_defect = False
@@ -55,15 +64,18 @@ class PositiveControlTests(unittest.TestCase):
 
     def stamp(self):
         self.sequence += 1
-        raw = SYNTHETIC_MONOTONIC_NS + self.elapsed_ns + self.sequence * 1000
-        return {"realtime_ns": raw + SYNTHETIC_REALTIME_OFFSET_NS
+        raw = self.base_ns + self.elapsed_ns + self.sequence * 1000
+        from fractions import Fraction
+        drift = round(Fraction(self.drift_word * (raw - self.r0_ns), 65536 * 10**6))
+        return {"realtime_ns": raw + SYNTHETIC_REALTIME_OFFSET_NS + drift
                 + (self.movement if "on" in self.command_calls
                    and self.elapsed_ns >= self.movement_after_s * 1e9 else 0),
                 "monotonic_raw_ns": raw, "read_skew_ns": 1000,
-                "monotonic_ns": SYNTHETIC_MONOTONIC_NS + self.elapsed_ns, "boot_id": TEST_BOOT_SESSION_ID}
+                "monotonic_ns": self.base_ns + self.elapsed_ns, "boot_id": TEST_BOOT_SESSION_ID,
+                "kernel_frequency": self.after_frequency if "on" in self.command_calls else self.frequency}
 
     def monotonic_ns(self):
-        return SYNTHETIC_MONOTONIC_NS + self.elapsed_ns
+        return self.base_ns + self.elapsed_ns
 
     def sleep(self, seconds):
         self.sleeps.append(seconds)
@@ -101,9 +113,12 @@ class PositiveControlTests(unittest.TestCase):
         # CLI writes canonical JSON to sys.stdout.buffer. Everything below
         # executes the actual author; only ambient probes/clocks are fixtures.
         sink = io.TextIOWrapper(stdout, encoding="utf-8", write_through=True)
-        endpoint = ClockAnchor(SYNTHETIC_MONOTONIC_NS + SYNTHETIC_REALTIME_OFFSET_NS
-                              + self.movement, SYNTHETIC_MONOTONIC_NS, 1000)
-        with (author_environment(self.repository, sample_anchor=lambda: endpoint),
+        from fractions import Fraction
+        drift = round(Fraction(self.drift_word * (self.base_ns - self.r0_ns), 65536 * 10**6))
+        endpoint = ClockAnchor(self.base_ns + SYNTHETIC_REALTIME_OFFSET_NS
+                              + drift + self.movement, self.base_ns, 1000)
+        with (author_environment(self.repository, sample_anchor=lambda: endpoint,
+                                  now_monotonic_ns=self.base_ns, kernel_frequency=self.after_frequency),
               mock.patch.object(author_cli, "REPO_ROOT", self.repository),
               redirect_stdout(sink), redirect_stderr(stderr)):
             rc = author_cli.main(argv[2:])
@@ -137,7 +152,7 @@ class PositiveControlTests(unittest.TestCase):
         head = subprocess.check_output(["git", "-C", str(self.repository), "rev-parse", "HEAD"], text=True).strip()
         return helper.verify_g10_custody(self.control / "positive-control.json",
             self.control / "custody-manifest.json", code_root=self.repository, head=head,
-            before_monotonic_ns=SYNTHETIC_MONOTONIC_NS + 1_000_000_000,
+            before_monotonic_ns=self.base_ns + self.elapsed_ns + 1_000_000_000,
             boot_id=TEST_BOOT_SESSION_ID)
 
     def test_custody_verifier_binds_supports_boot_code_and_order(self):
@@ -203,6 +218,7 @@ class PositiveControlTests(unittest.TestCase):
         artifact = replace(old, raw=raw, value=record, sha256=readiness.sha256_bytes(raw))
         bundle = replace(bundle, artifacts=tuple(artifact if a == old else a for a in bundle.artifacts))
         self.assertEqual(t0_rehearsal.evaluate_g10(bundle).status, t0_rehearsal.GateStatus.PASS)
+
         manifest = helper.read_json(self.control / "custody-manifest.json")["files"]
         for path, digest in manifest.items():
             self.assertEqual(readiness.sha256_bytes((self.control / path).read_bytes()), digest)
@@ -212,6 +228,61 @@ class PositiveControlTests(unittest.TestCase):
             if path.is_file():
                 copy = self.control / "author-custody" / self.pack.name / "arm_readiness.t0.inputs" / path.relative_to(self.inputs)
                 self.assertEqual(copy.read_bytes(), path.read_bytes())
+
+    def test_real_resync_shape_after_1600_seconds_of_drift_still_discharges(self):
+        self.frequency = frequency_probe(-207749)
+        self.after_frequency = frequency_probe(-190000)
+        self.drift_word = -207749
+        self.base_ns = self.r0_ns + 1600 * 10**9
+        self.movement = 500_000_000
+        capture_path = self.inputs / "clock-reference.json"
+        capture = helper.read_json(capture_path)
+        capture.update(kernel_frequency=self.frequency, t_stream_max_s=320.)
+        capture_path.write_bytes(readiness.render_json(capture))
+        result = self.run_control()
+        self.assertEqual(result["status"], "DISCHARGED", result)
+        self.assertEqual(helper.read_json(self.control / "author.stdout.json")["detail"], helper.ANCHOR_DETAIL)
+        self.assertGreater(helper.read_json(self.control / "anchor-movement.json")["residual_movement_ns"], 5_000_000)
+        self.assertEqual(helper.read_json(self.control / "kernel-frequency-after-off.json"), self.after_frequency)
+        self.verify_custody()
+
+    def test_pre_on_changed_word_refuses_without_spending_on(self):
+        capture_path = self.inputs / "clock-reference.json"
+        capture = helper.read_json(capture_path)
+        capture["kernel_frequency"] = frequency_probe(1)
+        capture_path.write_bytes(readiness.render_json(capture))
+        self.assert_not_discharged(self.run_control(), "pre_on_kernel_frequency_changed")
+        self.assertEqual(self.command_calls, ["off"])
+
+    def test_residual_control_discharges_when_steady_drift_cancels_raw_movement(self):
+        self.frequency = frequency_probe(-207749)
+        self.after_frequency = frequency_probe(-190000)
+        self.drift_word = -207749
+        self.on_duration_s = 1
+        capture_path = self.inputs / "clock-reference.json"
+        capture = helper.read_json(capture_path)
+        capture.update(kernel_frequency=self.frequency, t_stream_max_s=320.)
+        capture_path.write_bytes(readiness.render_json(capture))
+        result = self.run_control()
+        self.assertEqual(result["status"], "DISCHARGED", result)
+        movement = helper.read_json(self.control / "anchor-movement.json")
+        self.assertLess(movement["absolute_movement_ns"], 5_000_000)
+        self.assertGreater(movement["residual_movement_ns"], 5_000_000)
+        self.verify_custody()
+        bundle = fixture_bundle(FixtureBuilder(Path(self.temporary.name).resolve() / "rehearsal").build())
+        old = bundle.record("positive_control")
+        raw = (self.control / "positive-control.json").read_bytes()
+        positive = replace(old, path=self.control / "positive-control.json", raw=raw,
+            value=helper.read_json(self.control / "positive-control.json"), sha256=readiness.sha256_bytes(raw))
+        support = []
+        for name in ("before.json", "after.json", "anchor-movement.json"):
+            path = self.control / name
+            raw = path.read_bytes()
+            support.append(t0_rehearsal.EvidenceArtifact("physical-control/" + name,
+                path, raw, readiness.sha256_bytes(raw), helper.read_json(path)))
+        bundle = replace(bundle, artifacts=tuple(positive if a == old else a for a in bundle.artifacts) + tuple(support))
+        result = t0_rehearsal.evaluate_g10(bundle)
+        self.assertEqual(result.status, t0_rehearsal.GateStatus.PASS, result.message)
 
     def test_at_or_below_5ms_does_not_discharge_or_run_author(self):
         path = self.inputs / "clock-reference.json"
