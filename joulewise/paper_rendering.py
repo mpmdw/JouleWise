@@ -179,12 +179,15 @@ def render_claim(value: VerifiedClaimEvidence) -> str:
                          else "unavailable (no issued token contrast)" if unit == "J"
                          else "unavailable (not estimable)")
             reasons = ", ".join(evaluation["reason_codes"]) or "none"
+            # An "equivalent" outcome means nothing without the margin it was tested against.
+            margin = ("" if row["equivalence"] is None
+                      else f'equivalence margin = ±{_number(row["equivalence"]["margin"], unit)} {unit}; ')
             lines.append(
                 f'{row["contrast_id"]}: outcome = {evaluation["outcome"]}; '
                 f'estimate = {estimate}; 95% metrology interval = '
                 f'{_interval(estimator["metrology_aware_CI95"], unit)}; '
                 f'decision interval = {_interval(row["deterministic_bounds"]["decision_interval"], unit)}; '
-                f'J/token = {per_token}; n = {_count(estimator["n"])} blocks; '
+                f'{margin}J/token = {per_token}; n = {_count(estimator["n"])} blocks; '
                 f'direction = {evaluation["direction"] or "unavailable"}; '
                 f'claim ceiling = {evaluation["claim_level_ceiling"]}; '
                 f'claim ready = {str(evaluation["claim_ready_for_l2_l3"]).lower()}; reasons = {reasons}.'

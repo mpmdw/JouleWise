@@ -70,6 +70,18 @@ class PaperRenderingV5Tests(unittest.TestCase):
             if outcome == "not_estimable":
                 self.assertIn("estimate = unavailable", text)
                 self.assertIn("metric_missing_or_nonfinite", text)
+            if outcome == "unresolved":
+                # The two intervals differ here, so a swap of the two slots is caught.
+                self.assertIn("95% metrology interval = [-23.412, 27.412] J", text)
+                self.assertIn("decision interval = [-23.662, 27.662] J", text)
+            if outcome == "equivalent":
+                self.assertIn("equivalence margin = ±1.000 J", text)
+
+    def test_interval_bounds_round_outward_on_negative_values(self):
+        self.assertEqual(rendering._interval({"lower": -1.2345, "upper": -0.0001}, "J"), "[-1.235, 0.000] J")
+        self.assertEqual(rendering._number(-0.0004), "0.000")
+        with self.assertRaises((ValueError, ArithmeticError)):
+            rendering._interval({"lower": 1.0, "upper": 0.5}, "J")
 
     def test_real_token_ratio_prints_its_own_unit_and_sample_count(self):
         artifact = produced_token_verdict()

@@ -141,6 +141,9 @@ class ResultsFillAdapterTests(unittest.TestCase):
                 self.assertEqual(row["interval"], source["estimator"]["metrology_aware_CI95"])
                 self.assertEqual(row["decision_interval"], source["deterministic_bounds"]["decision_interval"])
                 self.assertEqual(row["n"], source["estimator"]["n"])
+                self.assertEqual(row["deterministic_widening_total"], source["deterministic_bounds"]["total"])
+                self.assertEqual(row["floor"], source["floor"])
+                self.assertEqual(row["multiplicity"], source["multiplicity"])
                 self.assertIsNone(row["j_per_token"])
                 self.assertNotIn("STOP_FILL", json.dumps(output))
 
