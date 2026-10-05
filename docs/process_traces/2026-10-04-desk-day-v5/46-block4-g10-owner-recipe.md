@@ -2,14 +2,15 @@
 
 Status: software procedure prepared; **physical control not performed**. This
 recipe supplies registration §5's mechanism, not a discharge or permission to
-arm. The lead must review and pin the forced-resync vector and its deadline
-before handing this recipe to Ed. The repository contains the reviewed
-ON/OFF setter vectors in `scripts/joulewise-network-time.sudoers` and
-`joulewise/network_time_off.py`; no existing reviewed forced-resync vector was
-found. The proposed vector from the lane brief is
-`/usr/bin/sudo /usr/bin/sntp -sS time.apple.com`. Its approval and timeout are
-still lead inputs, required explicitly by the helper. This creates no new
-passwordless privilege. Normal clock-reference probes remain report-only.
+arm. The lead's round-2 ruling adopts exactly the existing arm-step resync
+vector: `(*joulewise.network_time_off.OFF_ARGV[:-1], "on")`, as used by
+`scripts/capture_t0_step.py::_arm_reference`. The helper imports that vector,
+executes the reviewed passwordless `sudo -n` setter once, and polls the RAW
+anchor for up to 120 seconds before finishing OFF through the existing receipt
+producer in `finally`. No password prompt or new sudoers grant is needed under
+the existing D-127 fragment. The privileged positive control remains Ed-owned
+(D-176), with `performed_by="Ed"`. Normal clock-reference probes remain
+report-only.
 
 ## When and why
 
@@ -20,7 +21,7 @@ run it between the three block occurrences or during a capture. Close every
 agent seat before starting. The helper runs in your own terminal.
 
 With automatic network time off for days, the wall clock can drift from true
-time. Re-enabling network time and forcing synchronization can step the wall
+time. Re-enabling network time and waiting for synchronization can step the wall
 clock relative to the monotonic hardware counter. Their difference is the
 clock anchor. The test succeeds only if the anchor moves by more than five
 milliseconds and the real evidence author refuses that changed sequence.
@@ -42,81 +43,63 @@ author's 600–3600 second RAW span and reference quorum/order rules still apply
 Preparation must finish with network time OFF and without a running agent.
 
 Lane B owns this input-preparation choreography. The helper snapshots the
-input directory into new control custody before presenting any ON command;
+input directory into new control custody before executing the ON command;
 it does not generate replacements for the captures, shorten their dwell,
 reserve a production bracket, or repair source inputs. The lead supplies the
-following five exact values in the handoff: checkout, pack, input directory,
-new control custody directory, and approved resync timeout/vector. Bind them
-before seal. They are runtime inputs, not values guessed in this recipe.
+following four exact paths in the handoff: checkout, pack, input directory,
+and new control custody directory. Bind them before seal. They are runtime inputs, not values guessed in this recipe.
 
 ## What to type
 
-1. Open two ordinary terminals. In the first, substitute only the paths and
-   values supplied by the lead, then run:
+In your own ordinary terminal, run this one command, substituting only the
+four paths supplied by the lead:
 
-   ```zsh
-   cd '<reviewed execution checkout>'
-   .venv/bin/python scripts/ed_session/capture_t0_anchor_positive_control.py run \
-     --pack-root '<committed control pack>' \
-     --author-inputs '<real control arm_readiness.t0.inputs directory>' \
-     --custody-root '<new isolated control custody directory>' \
-     --reviewed-resync-argv '<lead-approved JSON argv>' \
-     --resync-timeout-s '<lead-approved seconds>'
-   ```
+```zsh
+(cd '<reviewed execution checkout>' && .venv/bin/python scripts/ed_session/capture_t0_anchor_positive_control.py run \
+  --pack-root '<committed control pack>' \
+  --author-inputs '<real control arm_readiness.t0.inputs directory>' \
+  --custody-root '<new isolated control custody directory>')
+```
 
-   For example, the **proposed, awaiting review** JSON argv is
-   `["/usr/bin/sudo","/usr/bin/sntp","-sS","time.apple.com"]`.
-   The helper also accepts the identical vector with `-n` immediately after
-   `sudo`, if that is the vector the lead reviews. There is no default command
-   or default resync timeout; the explicit timeout must be 1–300 seconds.
-   Never add a different clock-setting command.
+Read the prompt and type `OUTSIDE` only when no agent, armed window or capture
+is running. The helper snapshots the inputs, stamps CLOCK_REALTIME and
+CLOCK_MONOTONIC_RAW, then executes exactly:
 
-2. Read the first prompt and type `OUTSIDE` only when no agent, armed window
-   or capture is running. The helper snapshots inputs and takes its before
-   CLOCK_REALTIME/CLOCK_MONOTONIC_RAW stamps. It then prints a complete shell
-   block for the second terminal. Copy that entire block there, unchanged.
-   The first privileged command is exactly:
+```zsh
+/usr/bin/sudo -n /usr/sbin/systemsetup -setusingnetworktime on
+```
 
-   ```zsh
-   /usr/bin/sudo -n /usr/sbin/systemsetup -setusingnetworktime on
-   ```
+You see `Enabling network time once; polling RAW anchor for at most 120 s.`,
+followed by the absolute anchor movement in nanoseconds on each poll. The
+helper polls every five seconds, stopping as soon as movement is **greater
+than** 5,000,000 ns or the deadline expires. The deadline includes the ON
+command's execution; that command also has a maximum 30-second process timeout.
+There is no separate synchronization command and no free command argument.
+`--resync-timeout-s` defaults to 120 and accepts only 1–300 seconds; use the
+default unless the lead explicitly supplies another bounded timeout.
 
-   The surrounding printed commands record machine start/end stamps, separate
-   stdout and stderr, and the actual shell return code. Type `DONE` in the
-   first terminal only after the block finishes. Each setter has a 30-second
-   admission deadline. If a command hangs past its printed deadline, interrupt
-   it in the second terminal and preserve its failed transcript; do not rerun.
-   These deadlines are checked from stamps; the helper cannot interrupt a
-   privileged command it did not launch.
+If movement exceeds five milliseconds, the helper runs the real author once
+on the preserved input sequence. Success requires exit 2, status `REFUSE`,
+exactly `evidence_author_t0_clock_attestation_underivable`, and the detail
+`R0-to-author RAW anchor delta exceeds 5000000 ns`. Neither the source nor
+evidence publication namespace may exist. A different clock failure with the
+same reason code is insufficient.
 
-3. The helper prints the reviewed forced-resync block. Copy that entire block
-   to the second terminal once, then type `DONE` in the first terminal. Enter
-   a sudo password there if the approved vector requires it. The helper never
-   calls sudo. It samples the after anchor and computes its absolute movement.
+You then see `Finishing with network time OFF.` On success, failure or an
+exception, the helper's `finally` calls
+`joulewise.network_time_off.set_network_time_off`, which executes exactly:
 
-4. Let the helper continue. If movement exceeds 5,000,000 nanoseconds, it runs
-   the real author once on the preserved input sequence. Success requires exit
-   2, status `REFUSE`, exactly
-   `evidence_author_t0_clock_attestation_underivable`, and the specific detail
-   `R0-to-author RAW anchor delta exceeds 5000000 ns`. Neither the source nor
-   evidence publication namespace may exist. A different clock failure with
-   the same reason code is insufficient.
+```zsh
+/usr/bin/sudo -n /usr/sbin/systemsetup -setusingnetworktime off
+```
 
-5. On every attempted ON path, including a failed control, the helper prints
-   the OFF cleanup block. Run the entire block in the second terminal, then
-   type `DONE` in the first:
-
-   ```zsh
-   /usr/bin/sudo -n /usr/sbin/systemsetup -setusingnetworktime off
-   ```
-
-   The helper serializes Ed's retained result through the existing OFF-receipt
-   producer using an injected, non-executing runner, then reopens it with
-   `joulewise.network_time_off.read_receipt`. Exit 0 plus either normalized
-   `setUsingNetworkTime: Off` or `Network Time is already off` is admitted.
-   If the helper is interrupted or OFF cannot be confirmed, run this same OFF
-   command manually, retain its output, and hand the failed custody to the
-   lead. Do not enter the block without an authenticated OFF receipt.
+It retains the real result in the shared OFF receipt and reopens it with
+`joulewise.network_time_off.read_receipt`. Exit 0 plus either normalized
+`setUsingNetworkTime: Off` or `Network Time is already off` is admitted. OFF
+has a 30-second process timeout and does not depend on a working anchor probe.
+If the helper is forcibly terminated or OFF cannot be confirmed, run this same
+OFF command manually, retain its output, and hand the failed custody to the
+lead. Do not enter the block without an authenticated OFF receipt.
 
 ## Success, failure and evidence hand-back
 
@@ -125,11 +108,11 @@ Success is helper exit 0 with `status=DISCHARGED` and a path to
 the lead still authenticates lineage and combines it with the software
 boundary controls for `evaluate_g10`. It is not rehearsal PASS or ARM authority.
 
-If movement is at or below five milliseconds, the author is not invoked. The
-helper completes OFF cleanup, records `NOT-DISCHARGED`, emits no positive
-record and exits 2. Stop and return the custody path to the lead. The lead
-decides the next step; do not repeatedly resynchronize, adjust the time by
-another method, or retry inside a window. Treat every other nonzero exit the
+If movement stays at or below five milliseconds through the deadline, the
+author is not invoked. The helper completes OFF cleanup, records `NOT-DISCHARGED`, emits no positive
+record and exits 2. Stop and tell the lead `NOT-DISCHARGED`, with the custody
+path. **Do not retry.** The lead decides the next step; do not repeatedly
+resynchronize or adjust the time by another method. Treat every other nonzero exit the
 same way. Keep the complete directory, including failed attempts, immutable.
 
 The output map, relative to the new control custody directory, is:
@@ -139,7 +122,9 @@ The output map, relative to the new control custody directory, is:
 | `before.json`, `after.json`, `anchor-movement.json` | Machine REALTIME/RAW/skew, ordinary monotonic time, boot, absolute anchor movement. |
 | `author-custody/<pack-name>/arm_readiness.t0.inputs/**` | Exact copies of the real author input bytes; original absolute references remain unchanged. |
 | `author-input-lineage.json` | Source/pack paths, R0 anchor, boot and real author code SHA-256s. |
-| `commands/{on,resync,off}/**`, `commands/{on,resync,off}.json` | Raw separated streams, actual return codes, exact argv and machine start/end stamps. |
+| `polls/*.json` | Retained REALTIME/RAW/boot stamps for every resync poll. |
+| `commands/on/**`, `commands/on.json` | Raw separated streams, actual ON return code, imported argv and machine start/end stamps. |
+| `commands/off/**`, `commands/off.json` | OFF streams and admitted shared receipt, including exact argv, exit code, boot and completion clocks. |
 | `author.stdout.json`, `author.stderr.txt`, `author-execution.json` | Real author's retained response, raw stderr, argv/exit/stamps and namespace absence census. |
 | `network_time_off.json` | Existing `joulewise.network_time_off.v1` receipt, admitted by the shared reader; control identity only. |
 | `positive-control.json` | Exact `joulewise.t0_unattended_anchor_positive_control.v1`, only after refusal and OFF admission. |
@@ -148,8 +133,10 @@ The output map, relative to the new control custody directory, is:
 The positive record has exactly eight keys: `schema_version`,
 `performed_by="Ed"`, `outside_t0_sequence=true`,
 `network_time_reenabled=true`, `forced_resync=true`, `anchor_before_ns`,
-`anchor_after_ns`, `author_refusal_reason_code`. The two anchor values are
-REALTIME minus RAW in nanoseconds. Supporting data belongs beside the record,
+`anchor_after_ns`, `author_refusal_reason_code`. `forced_resync=true` requires
+the ON command to exit 0 and the observed anchor movement to exceed five
+milliseconds within the deadline; it is never recorded on a failed control.
+The two anchor values are REALTIME minus RAW in nanoseconds. Supporting data belongs beside the record,
 never in extra record keys. Lane B maps these authenticated bytes into the
 rehearsal manifest's `positive_control` locator; its software falsifier record
 remains separate. The lead fills the registration's record path/digest and

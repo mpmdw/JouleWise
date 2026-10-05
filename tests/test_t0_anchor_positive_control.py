@@ -8,7 +8,6 @@ import io
 import os
 from pathlib import Path
 import subprocess
-import tempfile
 import unittest
 from unittest import mock
 
@@ -28,7 +27,7 @@ spec = importlib.util.spec_from_file_location("g10_helper", os.environ.get(
 helper = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(helper)
 helper.REPO_ROOT = ROOT
-RESYNC = ["/usr/bin/sudo", "/usr/bin/sntp", "-sS", "time.apple.com"]
+ON_ARGV = (*network_time_off.OFF_ARGV[:-1], "on")
 
 
 class PositiveControlTests(unittest.TestCase):
@@ -38,33 +37,65 @@ class PositiveControlTests(unittest.TestCase):
         self.control = Path(self.temporary.name) / "isolated-control"
         self.movement = 5_000_001
         self.author_calls = []
-        self.owner_calls = []
+        self.command_calls = []
         self.sequence = 0
         self.namespace_defect = False
         self.refusal_defect = None
         self.off_defect = False
         self.on_defect = False
+        self.on_exit = 0
+        self.elapsed_ns = 0
+        self.sleeps = []
+        self.movement_after_s = 0
+        self.injected_exception = None
+        self.poll_exception = None
+        self.on_duration_s = 0
+        self.poll_duration_s = 0
+        self.command_argv = []
 
     def stamp(self):
         self.sequence += 1
         raw = SYNTHETIC_MONOTONIC_NS + self.sequence * 1000
         return {"realtime_ns": raw + SYNTHETIC_REALTIME_OFFSET_NS
-                + (self.movement if "resync" in self.owner_calls else 0),
+                + (self.movement if "on" in self.command_calls
+                   and self.elapsed_ns >= self.movement_after_s * 1e9 else 0),
                 "monotonic_raw_ns": raw, "read_skew_ns": 1000,
                 "monotonic_ns": raw, "boot_id": TEST_BOOT_SESSION_ID}
 
-    def owner(self, root, label, argv, timeout):
-        self.owner_calls.append(label)
-        if label == "off" and self.off_defect:
-            raise FileNotFoundError("OFF transcript absent")
-        stdout = {"on": "setUsingNetworkTime: On\n", "resync": "resynchronized\n",
-                  "off": "Network Time is already off.\n"}[label]
-        if label == "on" and self.on_defect:
-            stdout = "You need administrator access to run this tool... exiting!\n"
-        return {"argv": list(argv), "exit_code": 0, "stdout": stdout, "stderr": "",
-                "started": self.stamp(), "finished": self.stamp()}
+    def monotonic_ns(self):
+        return self.elapsed_ns
+
+    def sleep(self, seconds):
+        self.sleeps.append(seconds)
+        self.elapsed_ns += round(seconds * 1e9)
+
+    def sample(self):
+        # ON has two command stamps; the next sample is the first poll.
+        if self.command_calls == ["on"] and self.sequence >= 3:
+            if self.poll_exception:
+                raise self.poll_exception
+            self.elapsed_ns += round(self.poll_duration_s * 1e9)
+        return self.stamp()
 
     def runner(self, argv, *, timeout):
+        if tuple(argv) == network_time_off.BOOT_ARGV:
+            return subprocess.CompletedProcess(argv, 0, TEST_BOOT_SESSION_ID.encode(), b"")
+        if tuple(argv) in (ON_ARGV, network_time_off.OFF_ARGV):
+            label = "on" if tuple(argv) == ON_ARGV else "off"
+            self.command_calls.append(label)
+            self.command_argv.append((tuple(argv), timeout))
+            if label == "on":
+                self.elapsed_ns += round(self.on_duration_s * 1e9)
+                if self.injected_exception:
+                    raise self.injected_exception
+                stdout = ("You need administrator access to run this tool... exiting!\n"
+                          if self.on_defect else "setUsingNetworkTime: On\n")
+                return subprocess.CompletedProcess(argv, self.on_exit, stdout.encode(), b"")
+            if self.off_defect:
+                raise FileNotFoundError("OFF command failed")
+            return subprocess.CompletedProcess(argv, 0, b"Network Time is already off.\n", b"")
+        if self.injected_exception:
+            raise self.injected_exception
         self.author_calls.append(argv)
         stdout, stderr = io.BytesIO(), io.StringIO()
         # CLI writes canonical JSON to sys.stdout.buffer. Everything below
@@ -91,14 +122,15 @@ class PositiveControlTests(unittest.TestCase):
 
     def run_control(self):
         return helper.run_control(pack_root=self.pack, author_inputs=self.inputs,
-                                  custody_root=self.control, resync_argv=RESYNC,
-                                  resync_timeout_s=30, sample=self.stamp,
-                                  runner=self.runner, owner=self.owner)
+                                  custody_root=self.control,
+                                  resync_timeout_s=30, sample=self.sample,
+                                  runner=self.runner, monotonic_ns=self.monotonic_ns,
+                                  sleep=self.sleep)
 
     def assert_not_discharged(self, result, reason):
         self.assertEqual(result, {"status": "NOT-DISCHARGED", "reason": reason})
         self.assertFalse((self.control / "positive-control.json").exists())
-        self.assertEqual(self.owner_calls[-1], "off")
+        self.assertEqual(self.command_calls[-1], "off")
 
     def test_real_author_refusal_and_record_validate_under_evaluate_g10(self):
         result = self.run_control()
@@ -137,7 +169,8 @@ class PositiveControlTests(unittest.TestCase):
                 capture["stdout"] = readiness.render_json(r0).decode()
                 path.write_bytes(readiness.render_json(capture))
                 self.control = Path(self.temporary.name) / f"control-{movement}"
-                self.owner_calls.clear()
+                self.command_calls.clear()
+                self.elapsed_ns = 0
                 self.movement = movement
                 self.assert_not_discharged(self.run_control(), "anchor_movement_at_or_below_5ms")
                 self.assertEqual(self.author_calls, [])
@@ -176,7 +209,7 @@ class PositiveControlTests(unittest.TestCase):
     def test_zero_exit_administrator_refusal_does_not_prove_on(self):
         self.on_defect = True
         self.assert_not_discharged(self.run_control(), "network_time_on_not_observed")
-        self.assertEqual(self.owner_calls, ["on", "off"])
+        self.assertEqual(self.command_calls, ["on", "off"])
 
     def test_reused_custody_is_not_overwritten(self):
         self.run_control()
@@ -185,11 +218,144 @@ class PositiveControlTests(unittest.TestCase):
             self.run_control()
         self.assertEqual((self.control / "custody-manifest.json").read_bytes(), before)
 
-    def test_resync_vector_is_required_and_closed(self):
-        with self.assertRaisesRegex(helper.NotDischarged, "reviewed_resync_recipe_required"):
-            helper.run_control(pack_root=self.pack, author_inputs=self.inputs,
-                               custody_root=self.control, resync_argv=["/bin/date"], resync_timeout_s=30)
+    def test_imported_on_vector_and_single_off_through_shared_producer(self):
+        with mock.patch.object(network_time_off, "set_network_time_off",
+                               wraps=network_time_off.set_network_time_off) as off:
+            self.assertEqual(self.run_control()["status"], "DISCHARGED")
+        self.assertEqual(helper.ON_ARGV, ON_ARGV)
+        self.assertEqual(self.command_argv, [(ON_ARGV, 30), (network_time_off.OFF_ARGV, 30)])
+        self.assertEqual(self.command_calls, ["on", "off"])
+        off.assert_called_once()
+        record = helper.read_json(self.control / "positive-control.json")
+        self.assertIs(record["forced_resync"], True)
+        self.assertEqual(record["performed_by"], "Ed")
+        self.assertGreater(abs(record["anchor_after_ns"] - record["anchor_before_ns"]), 5_000_000)
+
+    def test_nonzero_on_exit_never_discharges_even_if_anchor_moves(self):
+        self.on_exit = 1
+        self.assert_not_discharged(self.run_control(), "on_command_not_admitted")
+        self.assertEqual(self.author_calls, [])
+        self.assertEqual(self.command_calls, ["on", "off"])
+
+    def test_polling_waits_for_movement_without_repeating_on(self):
+        self.movement_after_s = 10
+        self.assertEqual(self.run_control()["status"], "DISCHARGED")
+        self.assertEqual(self.sleeps, [5, 5])
+        self.assertEqual(self.command_calls, ["on", "off"])
+        polls = sorted((self.control / "polls").glob("*.json"))
+        self.assertEqual(len(polls), 3)
+        before = helper.read_json(self.control / "before.json")
+        self.assertEqual([abs(helper.anchor(helper.read_json(p)) - helper.anchor(before))
+                          for p in polls], [0, 0, 5_000_001])
+
+    def test_deadline_stops_polling_and_rejects_later_movement(self):
+        self.movement_after_s = 31
+        self.assert_not_discharged(self.run_control(), "anchor_movement_at_or_below_5ms")
+        self.assertEqual(self.elapsed_ns, 30_000_000_000)
+        self.assertEqual(self.sleeps, [5] * 6)
+        self.assertEqual(len(list((self.control / "polls").glob("*.json"))), 6)
+        self.assertEqual(self.author_calls, [])
+
+    def test_on_execution_counts_against_deadline(self):
+        self.on_duration_s = 28
+        self.movement = 0
+        self.assert_not_discharged(self.run_control(), "anchor_movement_at_or_below_5ms")
+        self.assertEqual(self.sleeps, [2])
+        self.assertEqual(self.elapsed_ns, 30_000_000_000)
+
+    def test_on_uses_remaining_short_timeout_and_cannot_overrun(self):
+        self.on_duration_s = 4
+        result = helper.run_control(pack_root=self.pack, author_inputs=self.inputs,
+                                   custody_root=self.control, resync_timeout_s=3,
+                                   sample=self.sample, runner=self.runner,
+                                   monotonic_ns=self.monotonic_ns, sleep=self.sleep)
+        self.assert_not_discharged(result, "anchor_movement_at_or_below_5ms")
+        self.assertEqual(self.command_argv[0], (ON_ARGV, 3))
+        self.assertEqual(self.author_calls, [])
+
+    def test_sample_past_deadline_cannot_discharge(self):
+        self.poll_duration_s = 31
+        self.assert_not_discharged(self.run_control(), "resync_deadline_exceeded")
+        self.assertEqual(self.author_calls, [])
+
+    def test_off_after_on_exceptions_and_interrupt(self):
+        for error in (OSError("on failed"), subprocess.TimeoutExpired(ON_ARGV, 30),
+                      RuntimeError("injected runner failure"), KeyboardInterrupt()):
+            with self.subTest(error=type(error).__name__):
+                self.control = Path(self.temporary.name) / type(error).__name__
+                self.command_calls.clear()
+                self.injected_exception = error
+                self.assert_not_discharged(self.run_control(), "control_evidence_invalid")
+                self.assertEqual(self.command_calls, ["on", "off"])
+
+    def test_off_after_anchor_probe_exception(self):
+        self.poll_exception = RuntimeError("anchor probe failed")
+        self.assert_not_discharged(self.run_control(), "control_evidence_invalid")
+        self.assertEqual(self.author_calls, [])
+
+    def test_off_after_initial_probe_exception(self):
+        with mock.patch.object(self, "sample", side_effect=RuntimeError("initial probe failed")):
+            self.assert_not_discharged(self.run_control(), "control_evidence_invalid")
+        self.assertEqual(self.command_calls, ["off"])
+        receipt = network_time_off.read_receipt(self.control / "network_time_off.json")
+        self.assertEqual(receipt["boot_id"], TEST_BOOT_SESSION_ID)
+
+    def test_off_runner_exception_clears_positive_record(self):
+        original = self.runner
+        def failed_off(argv, *, timeout):
+            if tuple(argv) == network_time_off.OFF_ARGV:
+                self.command_calls.append("off")
+                raise RuntimeError("OFF runner failed")
+            return original(argv, timeout=timeout)
+        with mock.patch.object(self, "runner", side_effect=failed_off):
+            self.assert_not_discharged(self.run_control(), "off_receipt_missing_or_invalid")
+        self.assertEqual(self.command_calls, ["on", "off"])
+
+    def test_off_after_author_exception(self):
+        original = self.runner
+        def failing_author(argv, *, timeout):
+            if tuple(argv) not in (ON_ARGV, network_time_off.OFF_ARGV, network_time_off.BOOT_ARGV):
+                raise RuntimeError("author failed")
+            return original(argv, timeout=timeout)
+        with mock.patch.object(self, "runner", side_effect=failing_author):
+            self.assert_not_discharged(self.run_control(), "control_evidence_invalid")
+        self.assertEqual(self.command_calls, ["on", "off"])
+
+    def test_off_even_when_pre_on_evidence_is_invalid(self):
+        (self.inputs / "clock-reference.json").write_text("invalid")
+        self.assert_not_discharged(self.run_control(), "control_evidence_invalid")
+        self.assertEqual(self.command_calls, ["off"])
+
+    def test_resync_timeout_default_maximum_and_cli_vector_closed(self):
+        for timeout in (0, 301, True, 1.5):
+            with self.subTest(timeout=timeout):
+                with self.assertRaisesRegex(helper.NotDischarged, "resync_timeout_out_of_range"):
+                    helper.run_control(pack_root=self.pack, author_inputs=self.inputs,
+                                       custody_root=self.control, resync_timeout_s=timeout)
         self.assertFalse(self.control.exists())
+        args = ["run", "--pack-root", str(self.pack), "--author-inputs", str(self.inputs),
+                "--custody-root", str(self.control)]
+        for extra, expected_timeout in (([], 120), (["--resync-timeout-s", "300"], 300)):
+            with (mock.patch("builtins.input", return_value="OUTSIDE"),
+                  mock.patch.object(helper, "run_control", return_value={"status": "DISCHARGED"}) as run,
+                  redirect_stdout(io.StringIO())):
+                self.assertEqual(helper.main(args + extra), 0)
+                self.assertEqual(run.call_args.kwargs["resync_timeout_s"], expected_timeout)
+                self.assertNotIn("resync_argv", run.call_args.kwargs)
+        for extra in (["--reviewed-resync-argv", "[]"], ["--resync-timeout-s", "301"]):
+            with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as caught:
+                helper.main(args + extra)
+            self.assertEqual(caught.exception.code, 2)
+
+    def test_main_reports_exit_two_for_not_discharged(self):
+        args = ["run", "--pack-root", str(self.pack), "--author-inputs", str(self.inputs),
+                "--custody-root", str(self.control)]
+        result = {"status": "NOT-DISCHARGED", "reason": "anchor_movement_at_or_below_5ms"}
+        with (mock.patch("builtins.input", return_value="OUTSIDE"),
+              mock.patch.object(helper, "run_control", return_value=result),
+              redirect_stdout(io.StringIO()) as output):
+            self.assertEqual(helper.main(args), 2)
+        self.assertEqual(readiness.parse_json_bytes(output.getvalue().encode()), result)
 
 
 if __name__ == "__main__":

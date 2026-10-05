@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Ed-owned, pre-window physical RAW-anchor control; never execute sudo here.
+"""Ed-owned, pre-window physical RAW-anchor control using the reviewed ON/OFF vector.
 
-The lead supplies a reviewed resync vector/deadline and real, un-authored T-0
-inputs. Ed executes the printed commands in a second terminal. Synthetic
-inputs are useful only in tests, never physical qualification evidence.
+Ed runs this helper himself against real, un-authored T-0 inputs. Network time
+is enabled once, the RAW anchor is polled to a bounded deadline, and OFF is
+always attempted in finally. Synthetic inputs are only test evidence.
 """
 from __future__ import annotations
 
@@ -11,7 +11,6 @@ import argparse
 from dataclasses import asdict
 import os
 from pathlib import Path
-import shlex
 import subprocess
 import sys
 import time
@@ -59,52 +58,26 @@ def anchor(value):
     return value["realtime_ns"] - value["monotonic_raw_ns"]
 
 
-def run_unprivileged(argv, *, timeout):
-    # This runner has a single executable purpose: the real author CLI.
+def run_command(argv, *, timeout):
     return subprocess.run(argv, capture_output=True, timeout=timeout, check=False,
                           cwd=REPO_ROOT, stdin=subprocess.DEVNULL)
 
 
-def owner_command(root, label, argv, timeout):
-    """Ed's shell executes the privileged vector, capturing separate raw streams.
-
-    Stamp subprocesses merely read clocks and boot identity. The helper never
-    spawns the displayed privileged command, including the OFF command.
-    """
+def execute_command(root, label, argv, timeout, sample, runner):
+    """Retain exact argv, actual exit and separated streams for the ON command."""
+    started = sample()
+    completed = runner(argv, timeout=timeout)
+    finished = sample()
     directory = root / "commands" / label
-    directory.mkdir(parents=True)
-    base = [sys.executable, str(Path(__file__).resolve()), "stamp", "--output"]
-    print(f"In your second terminal, run this once (deadline {timeout} seconds; "
-          "interrupt there if it hangs):", flush=True)
-    print("\n".join([
-        "umask 077",
-        shlex.join([*base, str(directory / "started.json")]) + " && {",
-        shlex.join(argv) + " > " + shlex.quote(str(directory / "stdout.txt"))
-        + " 2> " + shlex.quote(str(directory / "stderr.txt")),
-        "g10_command_rc=$?",
-        "printf '%s\\n' \"$g10_command_rc\" > " + shlex.quote(str(directory / "exit_code.txt")),
-        shlex.join([*base, str(directory / "finished.json")]),
-        "}",
-    ]), flush=True)
-    if input("Type DONE here after that command finishes: ").strip() != "DONE":
-        raise NotDischarged("owner_command_unconfirmed")
-    started, finished = read_json(directory / "started.json"), read_json(directory / "finished.json")
-    return {"argv": list(argv), "exit_code": int((directory / "exit_code.txt").read_text()),
-            "stdout": (directory / "stdout.txt").read_text(),
-            "stderr": (directory / "stderr.txt").read_text(),
-            "started": started, "finished": finished}
-
-
-def checked_command(root, label, argv, timeout, boot, owner):
-    result = owner(root, label, argv, timeout)
+    for name, value in (("stdout.txt", completed.stdout), ("stderr.txt", completed.stderr)):
+        write_bytes(directory / name, value if isinstance(value, bytes) else value.encode())
+    write_json(directory / "started.json", started)
+    write_json(directory / "finished.json", finished)
+    result = {"argv": list(argv), "exit_code": completed.returncode,
+              "stdout": network_time_off._text(completed.stdout),
+              "stderr": network_time_off._text(completed.stderr),
+              "started": started, "finished": finished}
     write_json(root / "commands" / f"{label}.json", result)
-    start, end = result["started"], result["finished"]
-    if (result["argv"] != list(argv) or type(result["exit_code"]) is not int
-            or result["exit_code"] != 0
-            or not isinstance(result["stdout"], str) or not isinstance(result["stderr"], str)
-            or start["boot_id"] != boot or end["boot_id"] != boot
-            or not 0 <= end["monotonic_ns"] - start["monotonic_ns"] <= timeout * 1e9):
-        raise NotDischarged(f"{label}_command_not_admitted")
     return result
 
 
@@ -122,28 +95,21 @@ def snapshot_inputs(source, target):
             raise NotDischarged("author_capture_missing")
 
 
-def run_control(*, pack_root, author_inputs, custody_root, resync_argv,
-                resync_timeout_s, sample=stamp, runner=run_unprivileged,
-                owner=owner_command):
-    """Execute once, retaining failed evidence and always requesting OFF cleanup.
-
-    Only the author runner executes a process; the owner callback mediates all
-    privileged acts. There is deliberately no automatic retry or ON restore.
-    """
-    # The missing reviewed vector is a required lead input, not a default.
-    if (list(resync_argv) not in (["/usr/bin/sudo", "/usr/bin/sntp", "-sS", "time.apple.com"],
-                                 ["/usr/bin/sudo", "-n", "/usr/bin/sntp", "-sS", "time.apple.com"])
-            or type(resync_timeout_s) is not int or not 1 <= resync_timeout_s <= 300):
-        raise NotDischarged("reviewed_resync_recipe_required")
+def run_control(*, pack_root, author_inputs, custody_root, resync_timeout_s=120,
+                sample=stamp, runner=run_command, monotonic_ns=time.monotonic_ns,
+                sleep=time.sleep):
+    """Ed's single attempt: reviewed ON, bounded anchor polling, author, then OFF."""
+    if type(resync_timeout_s) is not int or not 1 <= resync_timeout_s <= 300:
+        raise NotDischarged("resync_timeout_out_of_range")
     root = Path(custody_root).absolute()
     source = Path(author_inputs).resolve(strict=True)
     if root.resolve().is_relative_to(source) or source.is_relative_to(root.resolve()):
         raise NotDischarged("control_custody_not_isolated")
-    root.mkdir(mode=0o700, parents=True, exist_ok=False)
     pack = Path(pack_root).resolve(strict=True)
+    root.mkdir(mode=0o700, parents=True, exist_ok=False)
     inputs = root / "author-custody" / pack.name / author._INPUT_DIRECTORY
     outcome = {"status": "NOT-DISCHARGED", "reason": "control_incomplete"}
-    on_attempted = False
+    boot = None
     positive = None
     try:
         snapshot_inputs(source, inputs)
@@ -164,19 +130,37 @@ def run_control(*, pack_root, author_inputs, custody_root, resync_argv,
             "boot_id": boot,
             "author_code_sha256": {p: readiness.sha256_bytes((REPO_ROOT / p).read_bytes())
                 for p in ("scripts/author_arm_evidence_t0.py", "joulewise/arm_readiness_evidence_t0.py")}})
-        on_attempted = True
-        on = checked_command(root, "on", ON_ARGV, 30, boot, owner)
+        if before["read_skew_ns"] > 1_000_000:
+            raise NotDischarged("anchor_read_skew")
+        deadline = monotonic_ns() + resync_timeout_s * 1_000_000_000
+        print(f"Enabling network time once; polling RAW anchor for at most {resync_timeout_s} s.", flush=True)
+        on = execute_command(root, "on", ON_ARGV, min(30, resync_timeout_s), sample, runner)
+        if (on["exit_code"] != 0
+                or on["started"]["boot_id"] != boot or on["finished"]["boot_id"] != boot):
+            raise NotDischarged("on_command_not_admitted")
         if " ".join(on["stdout"].split()).lower().rstrip(".") not in {
                 "setusingnetworktime: on", "network time is already on"}:
             raise NotDischarged("network_time_on_not_observed")
-        checked_command(root, "resync", resync_argv, resync_timeout_s, boot, owner)
-        after = sample()
+        after = before
+        movement = 0
+        poll = 0
+        while monotonic_ns() < deadline:
+            after = sample()
+            poll += 1
+            write_json(root / "polls" / f"{poll:03d}.json", after)
+            if after["boot_id"] != boot:
+                raise NotDischarged("boot_changed")
+            if after["read_skew_ns"] > 1_000_000:
+                raise NotDischarged("anchor_read_skew")
+            movement = abs(anchor(after) - anchor(before))
+            # A slow sample may finish beyond the deadline; never admit it.
+            if monotonic_ns() > deadline:
+                raise NotDischarged("resync_deadline_exceeded")
+            print(f"RAW anchor movement: {movement} ns (must exceed 5000000 ns).", flush=True)
+            if movement > 5_000_000:
+                break
+            sleep(min(5, max(0, (deadline - monotonic_ns()) / 1e9)))
         write_json(root / "after.json", after)
-        if after["boot_id"] != boot:
-            raise NotDischarged("boot_changed")
-        if max(before["read_skew_ns"], after["read_skew_ns"]) > 1_000_000:
-            raise NotDischarged("anchor_read_skew")
-        movement = abs(anchor(after) - anchor(before))
         write_json(root / "anchor-movement.json", {"absolute_movement_ns": movement})
         if movement <= 5_000_000:
             raise NotDischarged("anchor_movement_at_or_below_5ms")
@@ -212,25 +196,28 @@ def run_control(*, pack_root, author_inputs, custody_root, resync_argv,
                     "network_time_reenabled": True, "forced_resync": True,
                     "anchor_before_ns": anchor(before), "anchor_after_ns": anchor(after),
                     "author_refusal_reason_code": REFUSAL}
-    except (OSError, ValueError, KeyError, TypeError, EOFError, KeyboardInterrupt, subprocess.SubprocessError) as exc:
+    except (Exception, KeyboardInterrupt) as exc:
+        positive = None
         outcome["reason"] = str(exc) if isinstance(exc, NotDischarged) else "control_evidence_invalid"
     finally:
-        if on_attempted:
+        try:
+            path = root / network_time_off.RECEIPT_BASENAME
+            # OFF execution must not depend on the anchor sampler: a probe
+            # exception (including an interrupt) still reaches the real setter.
             try:
-                off = checked_command(root, "off", network_time_off.OFF_ARGV, 30, boot, owner)
-                # Reuse the established receipt producer with Ed's retained result;
-                # its injected runner returns bytes and never executes sudo.
-                path = root / network_time_off.RECEIPT_BASENAME
-                network_time_off.set_network_time_off(
-                    path, root.name, root.name,
-                    runner=lambda argv, timeout: subprocess.CompletedProcess(argv, off["exit_code"], off["stdout"], off["stderr"]),
-                    clock=lambda: {"epoch_s": off["finished"]["realtime_ns"] / 1e9,
-                                   "monotonic_s": off["finished"]["monotonic_ns"] / 1e9},
-                    boot_probe=lambda: boot)
-                network_time_off.read_receipt(path, plan_id=root.name, window_id=root.name)
-            except (OSError, ValueError, KeyError, TypeError, EOFError, KeyboardInterrupt, subprocess.SubprocessError):
-                positive = None
-                outcome["reason"] = "off_receipt_missing_or_invalid"
+                print("Finishing with network time OFF.", flush=True)
+            finally:
+                off = network_time_off.set_network_time_off(
+                    path, root.name, root.name, runner=runner,
+                    clock=lambda: {"epoch_s": time.time(), "monotonic_s": monotonic_ns() / 1e9},
+                    boot_probe=lambda: network_time_off.boot_id(runner))
+            network_time_off.read_receipt(path, plan_id=root.name, window_id=root.name)
+            write_json(root / "commands" / "off.json", off)
+            write_bytes(root / "commands" / "off" / "stdout.txt", off["stdout"].encode())
+            write_bytes(root / "commands" / "off" / "stderr.txt", off["stderr"].encode())
+        except (Exception, KeyboardInterrupt):
+            positive = None
+            outcome["reason"] = "off_receipt_missing_or_invalid"
         if positive is not None:
             write_json(root / "positive-control.json", positive)
             outcome = {"status": "DISCHARGED", "positive_control_path": str(root / "positive-control.json")}
@@ -251,8 +238,8 @@ def main(argv=None):
     run.add_argument("--pack-root", type=Path, required=True)
     run.add_argument("--author-inputs", type=Path, required=True)
     run.add_argument("--custody-root", type=Path, required=True)
-    run.add_argument("--reviewed-resync-argv", required=True, help="JSON argv from the lead's reviewed recipe; no default")
-    run.add_argument("--resync-timeout-s", type=int, required=True)
+    run.add_argument("--resync-timeout-s", type=int, default=120, choices=range(1, 301),
+                     metavar="1..300", help="ON plus polling deadline in seconds (default: 120)")
     args = parser.parse_args(argv)
     if args.operation == "stamp":
         write_json(args.output, stamp())
@@ -262,7 +249,6 @@ def main(argv=None):
     try:
         result = run_control(pack_root=args.pack_root, author_inputs=args.author_inputs,
                              custody_root=args.custody_root,
-                             resync_argv=readiness.parse_json_bytes(args.reviewed_resync_argv.encode()),
                              resync_timeout_s=args.resync_timeout_s)
     except (OSError, ValueError):
         result = {"status": "NOT-DISCHARGED", "reason": "control_setup_refused"}
