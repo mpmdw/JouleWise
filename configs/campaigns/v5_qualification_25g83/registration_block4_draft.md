@@ -126,14 +126,10 @@ occurrence's check set is fresh in the sense of the D-149 fence. `FILL[ARM-CONTR
 computed deadlines and the expiry, check and courier caps. `a1` completes before `a2` starts, `a2` before G10, and G10 before
 `s1`'s T-0 and clean dwell.
 
-**`s1`.** One launch. A settled OFF receipt and a 600-second clean dwell. There are two dwells, and both must pass
-(addendum D, item 2):
-- T-0's dwell judges every process by CPU (above 5.0% is a contaminant) and records the load average without
-  vetoing on it;
-- the night's pre-chain dwell runs the sealed Revision-6 `scripts/prewindow_check.sh` unchanged (named daemons
-  above 5.0% CPU, and a load-average veto).
-
-Then the pre settle and the pre bracket with the
+**`s1`.** One launch. At t0 the driver runs the native six-step T-0 stage, bounded by `T0_STAGE_CAP_S` = 3300 s.
+It includes the settled OFF receipt and the one 600-second clean dwell, which judges every process by CPU (above
+5.0% is a contaminant) and records the load average without vetoing on it. The sealed Revision-6
+`scripts/prewindow_check.sh` is not used by a pack night (addenda D and E). After ARM: the pre settle and the pre bracket with the
 acceptance-derived screen; NEG-8 bound work and start references; the first before-midpoint science stage with
 `scripts/run_campaign.py --max-blocks 1` (#474); the midpoint and end references; the post bracket in the same
 session; finalization and the ratified physical-ahead STOP. There is no after-midpoint science, no fifth science
@@ -156,9 +152,13 @@ the rendered one-block G2-b chain runs, and nothing it does not dispatch.
 - `E_ABBA = 2·E_small + 2·E_large`, each member estimate covering load, warmup, the stage's input and forced
   decode, cooldown, idle admission and the policy's bounded retry.
 - `NIGHT_PROGRAMMED_SPAN_S_s1 = ceil(T_pack_t0 + T_fixed_settles + T_pre_post_calibration +
-  T_bound_and_references + E_ABBA + T_stage_custody + T_terminal_shutdown)`, each term counted once.
-- `WINDOW_MAX_S_s1 = 60·ceil((NIGHT_PROGRAMMED_SPAN_S_s1 + 2700)/60)`. The 2700-second clean-dwell cap is added
-  once, outside the programmed span. The writer emits these literals and enforces a latest chain start of
+  T_bound_and_references + E_ABBA + T_stage_custody + T_terminal_shutdown)`, each term counted once. `T_pack_t0` is
+  the post-stage author, verification and consuming start.
+- `WINDOW_MAX_S_s1 = 60·ceil((NIGHT_PROGRAMMED_SPAN_S_s1 + T0_STAGE_CAP_S)/60)`. The T-0 stage cap (which contains
+  the 2700-second dwell cap) is added once, outside the programmed span, and the writer refuses a cap outside
+  3180-3480 s.
+- `T_stream_max` excludes the cooldown, which runs on its own sampler. Every anchor-bearing stream is at least
+  60 s by allowance. The writer emits these literals and enforces a latest chain start of
   `t0 + WINDOW_MAX_S − NIGHT_PROGRAMMED_SPAN_S`. A chain still running at expiry is RECOVER, never a partial PASS.
   Completion, courier and dead-man bounds: `FILL[PER-OCCURRENCE-SHUTDOWN-CAPS]`.
 

@@ -238,3 +238,38 @@ pre-mortem memo (`~/night-archive/ia-0a40/MEMO.md` 1.4, 1.6, 1.11 and 3.M).
 7. **The magistrate watchdog makes no network call during a plan span** (memo 3.M). Its five-minute tick ran two
    HTTPS `git ls-remote` probes before checking for an active plan. Separate PR off main (lane WD, brief 122),
    because it protects every window, not only block 4.
+
+## Addendum E (2026-10-05 10:50, desk-day seat 3): one dwell, the T-0 stage cap, and the stream bounds
+
+Input: the sizing round-2 seat (brief 124, `~/night-archive/desk-day-v5/sol-sz2-r1.md`).
+
+1. **Correction to addendum D, item 2: a pack night has one dwell, not two.** `scripts/run_night.py` runs the
+   native six-step T-0 stage at t0, inside the window (`_capture_qualification_t0`, memo 1.9). The clean dwell is
+   that stage's `prewindow-check` step. The night then binds that capture (`_admit_qualification_clean_dwell`); it
+   never runs a second dwell. So for block 4:
+   - the one dwell is T-0's: lane X8 makes it judge every process by CPU and record the load average without a
+     veto;
+   - the sealed Revision-6 `scripts/prewindow_check.sh` stays byte-identical and keeps serving derivation nights
+     (`_admit_derivation_clean_dwell`);
+   - the "both dwells must pass" sentence in registration §4 is withdrawn.
+2. **The T-0 stage has its own cap, outside the chain's span.** Until now `T_pack_t0` was counted inside the
+   programmed span, and the window added the 2700 s dwell cap again. That double-counts the stage and leaves the
+   latest chain start (t0 + window − span, about t0 + 2706 s) earlier than the stage can finish when the dwell runs
+   long.
+   - **`T0_STAGE_CAP_S` = 3300 s**, the sizing seat's provisional value inside its band of 3180-3480 s. It is the
+     2700 s dwell cap plus 600 s for the other five captures and the OFF margin.
+   - `run_night.py` bounds the stage by this cap, not by 3600 s.
+   - R0 to authoring then stays within G4's 3600 s ceiling: 3300 s for the stage plus the 120 s author allowance.
+   - `T_pack_t0` inside the span returns to the post-stage author, verification and consuming start: 360 s.
+   - `WINDOW_MAX_S = 60·ceil((NIGHT_PROGRAMMED_SPAN_S + T0_STAGE_CAP_S)/60)`, and the latest chain start is
+     t0 + WINDOW_MAX_S − NIGHT_PROGRAMMED_SPAN_S, which is at least t0 + 3300 s.
+   - The writer refuses a cap outside 3180-3480 s.
+3. **Stream bounds.**
+   - The cooldown runs on its own sampler: the main sampler stops at `joulewise/controller.py:1607` before cooldown
+     begins. So the writer's stream-coverage check excludes it, and `T_stream_max` is 335 s. At today's −3.17 ppm the
+     frequency gate gives 3.70 ms + 3.42 ppm × 335 s = 4.85 ms ≤ 5 ms; the largest |f| that passes is about 3.63 ppm.
+   - Every anchor-bearing stream (science members, NEG-8 bound members, references, both brackets) must be at least
+     60 s by allowance. Helper captures that carry no clock anchor (cooldown subwindows, the post-run sentinel) are
+     exempt.
+
+Lane X10 (brief 127) implements items 2-3. Record 44 is rewritten from the round-2 derivation.
