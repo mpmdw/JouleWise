@@ -991,14 +991,15 @@ class T0RehearsalTests(unittest.TestCase):
         self.assertEqual(parsed["overall_verdict"], "PASS")
         self.assertEqual(output.getvalue(), readiness.render_json(parsed))
 
-    def test_real_custody_cli_mode_uses_the_same_evidence_only_loader(self) -> None:
+    def test_real_custody_cli_refuses_unlabelled_fixture_evidence(self) -> None:
         _temporary, root, _verdict = self._evaluate()
         output = io.BytesIO()
         with fixture_replay(root):
             code = cli.main(["--custody-root", str(root)], stdout=output, home=root.parents[1], inventory=fixture_inventory(root))
         parsed = readiness.parse_json_bytes(output.getvalue(), require_canonical=True)
-        self.assertEqual(code, 0)
-        self.assertEqual(parsed["gate_counts"], {"PASS": 10, "FAIL": 0, "UNRULED": 0})
+        self.assertEqual(code, 2)
+        self.assertEqual(parsed["overall_verdict"], "FAIL")
+        self.assertIn("producer provenance", parsed["load_issues"][0])
 
 
 class PackGoReplayTests(unittest.TestCase):

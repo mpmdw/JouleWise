@@ -21,6 +21,7 @@ import queue
 import resource
 import socket
 from contextlib import ExitStack
+from contextvars import copy_context
 from dataclasses import asdict, replace
 from datetime import date, datetime, time as wall_time, timedelta, timezone
 from pathlib import Path
@@ -358,7 +359,7 @@ def _probe_runner(argv: tuple[str, ...] | list[str]) -> ProbeResult:
             # Obligation R2-11: the battery grammar judges the exact stdout
             # bytes, so this probe is captured without text mode (universal
             # newlines would turn a CR into an LF before the grammar sees it).
-            completed = subprocess.run(
+            completed = t0_rehearsal.observed_run(
                 command,
                 capture_output=True,
                 timeout=timeout_s,
@@ -372,7 +373,7 @@ def _probe_runner(argv: tuple[str, ...] | list[str]) -> ProbeResult:
                 monotonic_ns=time.monotonic_ns(),
                 stdout_bytes=completed.stdout,
             )
-        completed = subprocess.run(
+        completed = t0_rehearsal.observed_run(
             command,
             capture_output=True,
             text=True,
@@ -589,7 +590,8 @@ def _complete_chain_start(descriptor: int, process: subprocess.Popen[Any],
                           night_dir: Path) -> int:
     # start_new_session=True makes the child the process-group leader.
     pgid = process.pid
-    record = {"pid": process.pid, "pgid": pgid, "epoch_s": time.time()}
+    record = {"pid": process.pid, "pgid": pgid, "epoch_s": time.time(),
+              "monotonic_ns": time.monotonic_ns()}
     try:
         # Publish the dead-man's complete identity before any subprocess probe.
         _write_all(descriptor, _json_bytes(record))
@@ -727,7 +729,7 @@ def reservation_input_paths(plan: NightPlan, plan_path: Path) -> list[Path]:
     """
     environment = _chain_environment(plan, Path(plan.custody_root) / "night")
     environment.update(NIGHT_VERIFY_ONLY="1", NIGHT_RESERVATION_ARGV_ONLY="1")
-    completed = subprocess.run(["/bin/zsh", plan.chain_path], env=environment,
+    completed = t0_rehearsal.observed_run(["/bin/zsh", plan.chain_path], env=environment,
         stdin=subprocess.DEVNULL, capture_output=True, timeout=10, check=True)
     if not completed.stdout.endswith(b"\0"):
         raise ValueError("input_digests: chain did not describe reservation arguments")
@@ -983,7 +985,7 @@ def _run_chain_once_impl(chain_path, plan, probes, night_dir, claim_descriptor,
             environment[start_fd_env] = str(child_channel.fileno())
             launch_options["pass_fds"] = (child_channel.fileno(),)
         try:
-            process = subprocess.Popen(
+            process = t0_rehearsal.observed_popen(
                 command if command is not None else ["/bin/zsh", str(chain_path)],
                 stdin=subprocess.DEVNULL,
                 stdout=stdout,
@@ -1326,7 +1328,7 @@ def _durable_record(custody_root: Path, night_dir: Path, plan: NightPlan) -> str
 
     omitted: list[str] = []
     try:
-        origin = subprocess.run(
+        origin = t0_rehearsal.observed_run(
             ["git", "-C", str(REPO_ROOT), "remote", "get-url", "origin"],
             capture_output=True,
             text=True,
@@ -1335,7 +1337,7 @@ def _durable_record(custody_root: Path, night_dir: Path, plan: NightPlan) -> str
         ).stdout.strip()
         clone = custody_root / "results-clone"
         if not clone.exists():
-            subprocess.run(
+            t0_rehearsal.observed_run(
                 ["git", "clone", "--depth", "1", origin, str(clone)],
                 capture_output=True,
                 text=True,
@@ -1343,7 +1345,7 @@ def _durable_record(custody_root: Path, night_dir: Path, plan: NightPlan) -> str
                 check=True,
             )
         branch = f"night-results/{plan.plan_id}"
-        subprocess.run(
+        t0_rehearsal.observed_run(
             ["git", "-C", str(clone), "checkout", "-B", branch],
             capture_output=True,
             text=True,
@@ -1363,21 +1365,21 @@ def _durable_record(custody_root: Path, night_dir: Path, plan: NightPlan) -> str
             target = destination / relative
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source, target)
-        subprocess.run(
+        t0_rehearsal.observed_run(
             ["git", "-C", str(clone), "add", str(destination.relative_to(clone))],
             capture_output=True,
             text=True,
             timeout=30,
             check=True,
         )
-        subprocess.run(
+        t0_rehearsal.observed_run(
             ["git", "-C", str(clone), "commit", "-m", f"record night {plan.plan_id}"],
             capture_output=True,
             text=True,
             timeout=30,
             check=True,
         )
-        subprocess.run(
+        t0_rehearsal.observed_run(
             ["git", "-C", str(clone), "push", "origin", f"HEAD:{branch}"],
             capture_output=True,
             text=True,
@@ -1756,7 +1758,7 @@ def run_courier(
             started_epoch_s = time.time()
             attempted += 1
             try:
-                process = subprocess.Popen(
+                process = t0_rehearsal.observed_popen(
                     argv,
                     cwd=REPO_ROOT,
                     start_new_session=True,
@@ -2473,7 +2475,7 @@ def produce_g7_control(control_plan_path, rehearsal_receipt_path, rehearsal_go_p
             argv = _pack_launcher_argv(plan, plan_path, night / "absent-arm.json",
                                       night / "absent-manifest.json", target, confirmation)
             at = time.monotonic_ns()
-            result = subprocess.run(argv, stdin=subprocess.DEVNULL, capture_output=True, check=False)
+            result = t0_rehearsal.observed_run(argv, stdin=subprocess.DEVNULL, capture_output=True, check=False)
             _pack_bytes(plan_path, "G7 control plan", readiness.sha256_bytes(plan_raw))
             try:
                 refusal = readiness.parse_json_bytes(result.stdout)
@@ -2568,7 +2570,8 @@ class _BindLauncher:
         self.requests = queue.Queue(maxsize=_BIND_MAX_JOBS)
         self.stopping = False
         # Bounded bootstrap: service threads start before the bind deadline is established.
-        threading.Thread(target=self._run, daemon=True, name='night-bind-launch').start()
+        context = copy_context()
+        threading.Thread(target=lambda: context.run(self._run), daemon=True, name='night-bind-launch').start()
 
     def _run(self):
         while True:
@@ -2582,7 +2585,8 @@ class _BindLauncher:
                     argv = task.argv(task.writer)
                     # Publish the Popen object before __init__: pid becomes
                     # visible even if Popen is waiting for exec's error pipe.
-                    task.process = subprocess.Popen.__new__(subprocess.Popen)
+                    process_type = t0_rehearsal.observed_process_type()
+                    task.process = process_type.__new__(process_type)
                     task.process.__init__(argv, start_new_session=True, close_fds=True, cwd=str(REPO_ROOT),
                         pass_fds=(task.writer,) + task.test_pass_fds, stdin=subprocess.DEVNULL,
                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -3499,7 +3503,7 @@ def _admit_derivation_clean_dwell(plan, night_dir, budget):
     # timeout. Bound the script and any hung probe by the remaining runway.
     with output_path.open("xb") as output:
         try:
-            completed = subprocess.run(command, cwd=plan.measurement_root,
+            completed = t0_rehearsal.observed_run(command, cwd=plan.measurement_root,
                 stdin=subprocess.DEVNULL, stdout=output, stderr=subprocess.STDOUT,
                 timeout=timeout_s, check=False)
             exit_status = completed.returncode
@@ -3786,6 +3790,9 @@ def run_night(
 
     if is_pack:
         try:
+            if plan.plan_id.startswith(t0_rehearsal.REHEARSAL_WINDOW_PREFIX):
+                _write_bytes_exclusive(night_dir / "rehearsal-plan-path.txt",
+                                       (str(plan_path) + "\n").encode())
             command = _produce_pack_go(plan, plan_path, plan_raw, prepared, arm_state, receipt, probes)
         except (OSError, ValueError, RuntimeError, KeyError, TypeError) as error:
             receipt = _pack_refused_receipt(plan, error, probes)
@@ -4137,7 +4144,7 @@ def _group_census(pgid: int, timeout_s: float = 1) -> tuple[bool, list[str]]:
 
     # pgrep also works where the sandbox denies killpg(..., 0) after exit.
     try:
-        result = subprocess.run(["/usr/bin/pgrep", "-lf", "-g", str(pgid), "."],
+        result = t0_rehearsal.observed_run(["/usr/bin/pgrep", "-lf", "-g", str(pgid), "."],
                                 capture_output=True, text=True, timeout=timeout_s, check=False)
     except (OSError, subprocess.SubprocessError) as error:
         return False, [f"census_failed: {type(error).__name__}: {error}"]
@@ -4191,7 +4198,7 @@ def _group_census_batch(
 def _census_chunk(chunk: list[int], timeout_s: float) -> dict[int, tuple[bool, list[str]]]:
     argv = ["/usr/bin/pgrep", "-lf", "-g", ",".join(str(pgid) for pgid in chunk), "."]
     try:
-        result = subprocess.run(argv, capture_output=True, text=True,
+        result = t0_rehearsal.observed_run(argv, capture_output=True, text=True,
                                 timeout=timeout_s, check=False)
     except (OSError, subprocess.SubprocessError) as error:
         return {pgid: (False, [f"census_failed: {type(error).__name__}: {error}"])
@@ -4221,7 +4228,7 @@ def _attribute_pids(
     """Map the matched pids back to their process groups with one `ps` call."""
     argv = ["/bin/ps", "-o", "pgid=,pid=,command=", "-p", ",".join(pids)]
     try:
-        result = subprocess.run(argv, capture_output=True, text=True,
+        result = t0_rehearsal.observed_run(argv, capture_output=True, text=True,
                                 timeout=timeout_s, check=False)
     except (OSError, subprocess.SubprocessError) as error:
         return {}, [f"{type(error).__name__}: {error}"]
@@ -4375,7 +4382,7 @@ def _evidence_probe_worker(plan, plan_path, receipt_path, deadline, phase):
         with tempfile.TemporaryDirectory(prefix="evidence-probe-", dir=receipt_path.parent) as directory:
             env = _chain_environment(plan, Path(directory))
             env["NIGHT_VERIFY_ONLY"] = "1"
-            result = subprocess.run(["/bin/zsh", plan.chain_path], env=env,
+            result = t0_rehearsal.observed_run(["/bin/zsh", plan.chain_path], env=env,
                 stdin=subprocess.DEVNULL, capture_output=True, text=True,
                 timeout=max(.001, deadline - time.monotonic()))
             lines = [line for line in result.stdout.splitlines() if line.startswith("VERIFY_ONLY_OK")]
@@ -4641,7 +4648,7 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main(argv: list[str] | None = None) -> int:
+def _main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.command == "_bind-worker":
         return _bind_worker(args.kind, args.job_id, args.result_fd, args.request)
@@ -4686,6 +4693,21 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "rehearse":
         return run_night(args.plan, rehearsal=True, courier_bin=args.courier_bin)
     return dead_man(args.plan, courier_bin=args.courier_bin)
+
+
+def main(argv: list[str] | None = None) -> int:
+    # This selects observation custody only; it cannot select replay inputs.
+    journal = os.environ.get("JOULEWISE_REHEARSAL_PROCESS_JOURNAL")
+    if journal is None:
+        return _main(argv)
+    path = Path(journal)
+    if (not path.is_absolute() or path.name != "process-observations.jsonl"
+            or path.parent.name != "night"
+            or not path.parent.parent.name.startswith(t0_rehearsal.REHEARSAL_WINDOW_PREFIX)
+            or any(p.is_symlink() for p in (path, *path.parents))):
+        raise ValueError("invalid rehearsal observation custody")
+    with t0_rehearsal.process_journal(path):
+        return _main(argv)
 
 
 if __name__ == "__main__":

@@ -21,6 +21,15 @@ contained by, any such root.
 
 from __future__ import annotations
 import json
+import os
+import stat
+import subprocess
+import time
+import queue
+import threading
+import uuid
+from contextvars import ContextVar
+from contextlib import contextmanager
 import re
 from dataclasses import dataclass
 from decimal import Decimal
@@ -145,6 +154,177 @@ _POSITIVE_CONTROL_KEYS = {
     "anchor_after_ns",
     "author_refusal_reason_code",
 }
+
+
+# An opt-in journal records observations at spawn/wait, never PASS labels.
+# Keep it in-process: an inherited shell variable cannot select fixture data.
+_PROCESS_JOURNAL = ContextVar("rehearsal_process_journal", default=None)
+PROCESS_EVENT_SCHEMA = "joulewise.t0_rehearsal_process_event.v1"
+
+
+def append_observation(path: Path, value: Mapping[str, Any]) -> None:
+    from joulewise.calibration_ledger import canonical_json_bytes
+    payload = canonical_json_bytes(value) + b"\n"
+    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND | os.O_NOFOLLOW, 0o600)
+    try:
+        if os.write(descriptor, payload) != len(payload):
+            raise OSError("short observation write")
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
+class _ProcessJournal:
+    """A capped queue keeps custody I/O off the process supervision seams."""
+    def __init__(self, path):
+        self.path = Path(path)
+        self.journal_id = str(uuid.uuid4())
+        self.pending = queue.Queue(maxsize=1024)
+        self.count = 0
+        self.error = None
+        self.writer = threading.Thread(target=self._write, daemon=True,
+                                       name="rehearsal-process-journal")
+        self.writer.start()
+
+    def _write(self):
+        try:
+            while True:
+                value = self.pending.get()
+                if value is None:
+                    append_observation(self.path, {
+                        "schema_version": PROCESS_EVENT_SCHEMA, "event": "seal",
+                        "journal_id": self.journal_id, "record_count": self.count})
+                    return
+                append_observation(self.path, value)
+                self.count += 1
+        except Exception as exc:
+            self.error = str(exc)
+
+    def emit(self, value):
+        value = dict(value, journal_id=self.journal_id)
+        try:
+            self.pending.put_nowait(value)
+        except queue.Full:
+            # Retain control of the child even if its observation was lost.
+            # This context can never seal successfully after overflow.
+            self.error = "process observation queue overflow"
+
+    def close(self):
+        try:
+            self.pending.put_nowait(None)
+        except queue.Full:
+            self.error = "process observation queue overflow"
+        self.writer.join(timeout=2)
+        if self.writer.is_alive() or self.error is not None:
+            raise ValueError("process observation journal incomplete: " + (self.error or "drain timed out"))
+
+
+@contextmanager
+def process_journal(path: Path):
+    journal = _ProcessJournal(path)
+    token = _PROCESS_JOURNAL.set(journal)
+    try:
+        yield
+    finally:
+        _PROCESS_JOURNAL.reset(token)
+        journal.close()
+
+
+class ObservedProcess(subprocess.Popen):
+    """Popen with retained DEVNULL descriptor custody and observed reaping.
+
+    fd0 is identified from the actual descriptor supplied to Popen, rather
+    than inferred later from argv. A non-DEVNULL launch is retained as such.
+    """
+    def __init__(self, args, **kwargs):
+        self._journal = _PROCESS_JOURNAL.get()
+        self._exit_recorded = False
+        self._timed_out = None
+        self._command = list(args) if not isinstance(args, str) else [args]
+        self._spawned_ns = time.monotonic_ns()
+        self._fd0 = "unobserved"
+        descriptor = None
+        if self._journal is not None and kwargs.get("stdin") == subprocess.DEVNULL:
+            descriptor = os.open(os.devnull, os.O_RDONLY)
+            actual, expected = os.fstat(descriptor), os.stat(os.devnull)
+            if (stat.S_ISCHR(actual.st_mode) and
+                    (actual.st_dev, actual.st_ino, actual.st_rdev) ==
+                    (expected.st_dev, expected.st_ino, expected.st_rdev)):
+                self._fd0 = "/dev/null"
+            kwargs["stdin"] = descriptor
+        try:
+            super().__init__(args, **kwargs)
+        finally:
+            if descriptor is not None:
+                os.close(descriptor)
+        self._event("spawn", None)
+
+    def _event(self, event, exit_code):
+        if self._journal is not None:
+            self._journal.emit({
+                "schema_version": PROCESS_EVENT_SCHEMA, "event": event,
+                "pid": self.pid, "argv": self._command,
+                "stdin_fd0_target": self._fd0, "exit_code": exit_code,
+                "timed_out": self._timed_out,
+                "monotonic_ns": time.monotonic_ns(),
+                "spawned_monotonic_ns": self._spawned_ns,
+            })
+
+    def _observe_exit(self, code):
+        if code is not None and not self._exit_recorded:
+            self._event("exit", code)
+            self._exit_recorded = True
+        return code
+
+    def wait(self, *args, **kwargs):
+        return self._observe_exit(super().wait(*args, **kwargs))
+
+    def poll(self):
+        return self._observe_exit(super().poll())
+
+
+def observed_process_type():
+    return subprocess.Popen if _PROCESS_JOURNAL.get() is None else ObservedProcess
+
+
+def observed_popen(args, **kwargs):
+    if _PROCESS_JOURNAL.get() is None:
+        return subprocess.Popen(args, **kwargs)
+    kwargs.setdefault("stdin", subprocess.DEVNULL)
+    return ObservedProcess(args, **kwargs)
+
+
+def observed_run(args, **kwargs):
+    """subprocess.run semantics with the same spawn/reap journal seam."""
+    if _PROCESS_JOURNAL.get() is None:
+        return subprocess.run(args, **kwargs)
+    input = kwargs.pop("input", None)
+    capture_output = kwargs.pop("capture_output", False)
+    timeout = kwargs.pop("timeout", None)
+    check = kwargs.pop("check", False)
+    if input is not None:
+        if "stdin" in kwargs:
+            raise ValueError("stdin and input arguments may not both be used")
+        kwargs["stdin"] = subprocess.PIPE
+    if capture_output:
+        if "stdout" in kwargs or "stderr" in kwargs:
+            raise ValueError("stdout/stderr with capture_output")
+        kwargs.update(stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    if input is None:
+        kwargs.setdefault("stdin", subprocess.DEVNULL)
+    with ObservedProcess(args, **kwargs) as process:
+        process._timed_out = False
+        try:
+            stdout, stderr = process.communicate(input, timeout=timeout)
+        except subprocess.TimeoutExpired:
+            process._timed_out = True
+            process.kill()
+            process.communicate()
+            raise
+        code = process.wait()
+        if check and code:
+            raise subprocess.CalledProcessError(code, args, output=stdout, stderr=stderr)
+        return subprocess.CompletedProcess(args, code, stdout, stderr)
 
 
 class GateStatus(str, Enum):
@@ -996,12 +1176,85 @@ def evaluate_g9(bundle: EvidenceBundle) -> GateResult:
                 raise ValueError(f"lifecycle stage {stage_id} is not complete")
             used = _verify_artifact_reference(bundle, stage.get("evidence"), label=f"lifecycle {stage_id}")
             evidence.append(used.citation())
+            facts = used.value
+            if isinstance(facts, Mapping) and facts.get("schema_version") == "joulewise.t0_rehearsal_lifecycle_stage.v1":
+                if facts.get("stage_id") != stage_id:
+                    raise ValueError("lifecycle producer stage was swapped")
+                if stage_id in {"launch", "capability_consumption"}:
+                    source = _verify_artifact_reference(bundle, facts.get("source"), label=f"{stage_id} source")
+                    evidence.append(source.citation())
+                    source_value = readiness.parse_json_bytes(source.raw, require_canonical=True)
+                    if not isinstance(source_value, Mapping):
+                        raise ValueError(f"{stage_id} source has no observed record")
+                    if stage_id == "launch" and (not _real_int(source_value.get("pid"))
+                            or source_value["pid"] <= 0 or not _real_int(source_value.get("monotonic_ns"))):
+                        raise ValueError("launch source lacks observed pid/time")
+                    if stage_id == "capability_consumption" and not source.path.name.endswith(".consumed.json"):
+                        raise ValueError("capability source is not a retained consumption")
+                if stage_id in {"capture", "close_out"}:
+                    references = facts.get("artifacts" if stage_id == "capture" else "sources")
+                    if not isinstance(references, list) or len(references) != 2:
+                        raise ValueError(f"{stage_id} lacks both activity artifacts")
+                    for reference in references:
+                        activity = _verify_artifact_reference(bundle, reference, label=f"{stage_id} activity")
+                        if (not isinstance(activity.value, Mapping)
+                                or activity.value.get("schema_version") != "joulewise.t0_rehearsal_activity.v1"
+                                or activity.value.get("claim_eligible") is not False):
+                            raise ValueError(f"{stage_id} activity is not non-inference evidence")
+                        evidence.append(activity.citation())
+                    if stage_id == "close_out":
+                        closed = _verify_artifact_reference(bundle, facts.get("ledger_close_out"), label="ledger close-out")
+                        if (not isinstance(closed.value, Mapping) or closed.value.get("status") != "aborted"
+                                or closed.value.get("terminal_result") != "session_aborted"):
+                            raise ValueError("close-out does not record the unused bracket abort")
+                        backup_records = facts.get("backup_records")
+                        if not isinstance(backup_records, list) or len(backup_records) != 2:
+                            raise ValueError("close-out lacks both backup records")
+                        for reference in backup_records:
+                            _verify_artifact_reference(bundle, reference, label="close-out backup")
+                if stage_id == "restore":
+                    if facts.get("network_time") != "OFF" or facts.get("stand_down") is not True:
+                        raise ValueError("restore-ON is forbidden")
+                    observation = facts.get("observation", {})
+                    if (observation.get("exit_code") != 0 or observation.get("stdout", "").strip() != "Network Time: Off"
+                            or observation.get("argv") != ["/usr/bin/sudo", "-n", "/usr/sbin/systemsetup", "-getusingnetworktime"]):
+                        raise ValueError("restore lacks observed OFF query")
+                    off_artifact = _verify_artifact_reference(bundle, facts.get("off_receipt"), label="restore OFF receipt")
+                    network_time_off.admit(readiness.parse_json_bytes(off_artifact.raw))
+                if stage_id in {"claim_backup", "bound_backup"}:
+                    files = facts.get("files")
+                    source, destination = Path(facts.get("source", "")), Path(facts.get("destination", ""))
+                    if not source.is_absolute() or not destination.is_absolute() or not isinstance(files, Mapping) or not files:
+                        raise ValueError("backup lacks independently verified file census")
+                    if _contains(source, destination) or _contains(destination, source):
+                        raise ValueError("backup source/destination overlap")
+                    for relative, digest in files.items():
+                        path = Path(relative)
+                        if path.is_absolute() or ".." in path.parts:
+                            raise ValueError("backup member escapes tree")
+                        for root in (source, destination):
+                            member = root / path
+                            if any(p.is_symlink() for p in (member, *member.parents)) or not member.is_file() or readiness.sha256_bytes(member.read_bytes()) != digest:
+                                raise ValueError("backup member digest mismatch")
+        producer_stages = [bundle.artifact(stage["evidence"]["path"]) if not Path(stage["evidence"]["path"]).is_absolute()
+                           else _artifact_for_path(bundle, stage["evidence"]["path"]) for stage in stages]
+        observed = [item.value for item in producer_stages if item is not None and isinstance(item.value, Mapping)
+                    and item.value.get("schema_version") == "joulewise.t0_rehearsal_lifecycle_stage.v1"]
+        if observed:
+            if len(observed) != len(_LIFECYCLE_STAGES):
+                raise ValueError("mixed lifecycle producer and fixture evidence")
+            stamps = [item.get("monotonic_ns") for item in observed]
+            if any(not _real_int(stamp) for stamp in stamps) or stamps != sorted(stamps):
+                raise ValueError("lifecycle observed order is invalid")
+            backups = [Path(item["destination"]) for item in observed if item["stage_id"] in {"claim_backup", "bound_backup"}]
+            if _contains(backups[0], backups[1]) or _contains(backups[1], backups[0]):
+                raise ValueError("backup destinations are not independent")
         if value.get("operator_actions_at_t0") != 0:
             raise ValueError("operator action occurred during T-0")
         interventions = value.get("human_interventions")
         if not isinstance(interventions, list) or interventions:
             raise ValueError("human intervention occurred during the rehearsal")
-    except ValueError as exc:
+    except (ValueError, OSError, TypeError, readiness.ArmReadinessError) as exc:
         return _result("G9", name, GateStatus.FAIL, str(exc), *evidence)
     return _result("G9", name, GateStatus.PASS, "launch, capability consumption, capture, both backups, close-out, and restore are complete with zero human intervention", *evidence)
 
