@@ -3,7 +3,7 @@
   "draft_status": "as_generated_pre_d134_freeze",
   "manifest_id": "d117-gamma-03-prefill-p2048-contrast-blocks-01-05-order-v1",
   "plan_id": "plan-d117-contrast-qwen3-1p7b-vs-qwen3-8b-decode-prefill-p2048-v5",
-  "calibration_plan_sha256": "72c776bcb410d103b9ab49991e626f1c4e2ffa4fd6c2a40c67be4a1138b67da6",
+  "calibration_plan_sha256": "75fe8d58462ebdd1a258ec6dad2784d384588b5a42f5a8dc567d539cc9c4ec40",
   "successor_stage_id": "gamma-reference-prefill-midpoint",
   "ordering_note": "Fixed contiguous A/B/B/A blocks 1-5 for prefill_p2048; numbering does not reset across the split.",
   "planned_n_bundles": 20,
@@ -11,7 +11,7 @@
     {
       "index": 1,
       "config": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b01-a1.json",
-      "config_sha256": "bf179de2c8e5f656e185a883c7366f14bf6a70a6cf899bd98cb129901d8b83ed",
+      "config_sha256": "2b511e961925807a66ad9c9fb55b8e7cb8eac59a01004a3d5c8ae46af0c65936",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b01-a1",
       "model_tag": "qwen3-1p7b-mlx",
       "role": "comparative_contrast_member",
@@ -27,7 +27,7 @@
     {
       "index": 2,
       "config": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b01-b1.json",
-      "config_sha256": "fe1815c74c901e31c3a2bdcb5b0274dc75f07b42330f5d5421ad7b22681e97c0",
+      "config_sha256": "4f88e6d3e6709b63adc3c1521c8a89340779eb9281b3912204c6fed3ee3e7a16",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b01-b1",
       "model_tag": "qwen3-8b-mlx",
       "role": "comparative_contrast_member",
@@ -43,7 +43,7 @@
     {
       "index": 3,
       "config": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b01-b2.json",
-      "config_sha256": "c872ee3dd80720c37a253b2da0dae8644e7a0b85c36ec7d0c625fc579a7cdc1a",
+      "config_sha256": "3809342d114961f5fea701ef319233c8c99dba049b3d573874243cf4f6ec81d8",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b01-b2",
       "model_tag": "qwen3-8b-mlx",
       "role": "comparative_contrast_member",
@@ -59,7 +59,7 @@
     {
       "index": 4,
       "config": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b01-a2.json",
-      "config_sha256": "952c27dd155036aa68b8773237241d50ebd172825ead682d98276d007106d988",
+      "config_sha256": "94bf97af201c6f23c1eb9b11265c71c4f08c4fe480aa67a3a6794c11846d18fa",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b01-a2",
       "model_tag": "qwen3-1p7b-mlx",
       "role": "comparative_contrast_member",
@@ -75,7 +75,7 @@
     {
       "index": 5,
       "config": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b02-a1.json",
-      "config_sha256": "68d1f0f39b12a34e9aa2e17da9b412fe845f2f22b1b048997df5a51fed6c4405",
+      "config_sha256": "1c403a897ef2634c9575ea8d6bf63ea7ef41c5ecca1912f87902715063fe14bd",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b02-a1",
       "model_tag": "qwen3-1p7b-mlx",
       "role": "comparative_contrast_member",
@@ -91,7 +91,7 @@
     {
       "index": 6,
       "config": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b02-b1.json",
-      "config_sha256": "93aa507138e315692ad763c981ec71b74d69470ac24b1853d306001ccaf659cf",
+      "config_sha256": "3c00eb7b061d62ede2b0c04dd8e09d8c13cea8ae81c2f689b170a71334143dde",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b02-b1",
       "model_tag": "qwen3-8b-mlx",
       "role": "comparative_contrast_member",
@@ -107,7 +107,7 @@
     {
       "index": 7,
       "config": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b02-b2.json",
-      "config_sha256": "7724210d579f4af75e0ee686e94353c392e9b4b4bbec22a34c2d06067ba56ea5",
+      "config_sha256": "a99426ea216027e3a98351dab617b5489feecec6776b576a257765f2d3ebeb69",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b02-b2",
       "model_tag": "qwen3-8b-mlx",
       "role": "comparative_contrast_member",
@@ -123,7 +123,7 @@
     {
       "index": 8,
       "config": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b02-a2.json",
-      "config_sha256": "346c96f5f578d6802dc2cc02058ae769114e19a2225300f4d11a7d71109ea0fc",
+      "config_sha256": "df96ac1552fe8c6d14918a29ca96df48c86363c9919a2ed8338a4b52bc22c084",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b02-a2",
       "model_tag": "qwen3-1p7b-mlx",
       "role": "comparative_contrast_member",
@@ -139,7 +139,7 @@
     {
       "index": 9,
       "config": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b03-a1.json",
-      "config_sha256": "bd6590e4a9b48f3296b2e4a890449215c92651d2b46a6cfa208602138d43b305",
+      "config_sha256": "3924283711bc7435795360dbe3d6204b0d23bc3c90770c47e850ddb07ebb82fd",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b03-a1",
       "model_tag": "qwen3-1p7b-mlx",
       "role": "comparative_contrast_member",
@@ -155,7 +155,7 @@
     {
       "index": 10,
       "config": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b03-b1.json",
-      "config_sha256": "e111c4e620d48760739702f58c21ca499b2d8f88345be98cb110a6d3a0ccdbe0",
+      "config_sha256": "8f7ad022f069e454c86eb842b731fcb74141b8d44b92a7b0429140d26fff4a70",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b03-b1",
       "model_tag": "qwen3-8b-mlx",
       "role": "comparative_contrast_member",
@@ -171,7 +171,7 @@
     {
       "index": 11,
       "config": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b03-b2.json",
-      "config_sha256": "af4c93d6a4dd843c38111b7fa4483880263d9c4c8b35e41e451c60e2d13f8926",
+      "config_sha256": "0e12fa72b2b52dffb0e8211f268b0fd653de6711d886a4310c8ad1cc91bedf7f",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b03-b2",
       "model_tag": "qwen3-8b-mlx",
       "role": "comparative_contrast_member",
@@ -187,7 +187,7 @@
     {
       "index": 12,
       "config": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b03-a2.json",
-      "config_sha256": "d6d3f36e248bc4bba2c63f6ce342d505537f9d7dd142c959372a5781776f4725",
+      "config_sha256": "588f2221cd27158dd9dea6b4f0d10d77d20c3d6c22b1e7c980e5849ac8f7c649",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b03-a2",
       "model_tag": "qwen3-1p7b-mlx",
       "role": "comparative_contrast_member",
@@ -203,7 +203,7 @@
     {
       "index": 13,
       "config": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b04-a1.json",
-      "config_sha256": "5c0027ac017755c0269bce1dc17927c8c02f727b7715ae013b46a202f6509599",
+      "config_sha256": "14eb4ca8073954ede3b93581e84a77837517dc516595cd76deea691e1ab33215",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b04-a1",
       "model_tag": "qwen3-1p7b-mlx",
       "role": "comparative_contrast_member",
@@ -219,7 +219,7 @@
     {
       "index": 14,
       "config": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b04-b1.json",
-      "config_sha256": "e363bbcc16049462a5d9bf567bf523b4ee1e5cdcd5c96fdeb6b426017b3075eb",
+      "config_sha256": "3bda2d5753c45f4b90f23fd8a8dfebfe681f1877a96ea0757f728f3aaabbef0a",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b04-b1",
       "model_tag": "qwen3-8b-mlx",
       "role": "comparative_contrast_member",
@@ -235,7 +235,7 @@
     {
       "index": 15,
       "config": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b04-b2.json",
-      "config_sha256": "36884951c8d965c20e26bbbf6b85fffcd8fe3e8447b5ed0a03e942c843cf66d3",
+      "config_sha256": "455d484ef83809ee2a8dece4c58e62a3eeabe0d2a07877a8b089cbcf8390ed8c",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b04-b2",
       "model_tag": "qwen3-8b-mlx",
       "role": "comparative_contrast_member",
@@ -251,7 +251,7 @@
     {
       "index": 16,
       "config": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b04-a2.json",
-      "config_sha256": "c09d988a441826f6c2e553f2fdf3fc4090aaa048e1606fe06b2a976ffefac0d1",
+      "config_sha256": "2895b77dbbdd1ad6a557d1ea5b201ceac41339cc6224ffd516f3155f610eca5a",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b04-a2",
       "model_tag": "qwen3-1p7b-mlx",
       "role": "comparative_contrast_member",
@@ -267,7 +267,7 @@
     {
       "index": 17,
       "config": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b05-a1.json",
-      "config_sha256": "a1376fcd83e51c63b34148c65f4aeba387939701c8106b08aa0f045df91b1007",
+      "config_sha256": "6d27df29d2df683a59dcb59935e751ab7ac8503f7ce494f641358a23e37c857b",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b05-a1",
       "model_tag": "qwen3-1p7b-mlx",
       "role": "comparative_contrast_member",
@@ -283,7 +283,7 @@
     {
       "index": 18,
       "config": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b05-b1.json",
-      "config_sha256": "6f2c02d9fe26b246723803742efaadadae73c83e079f1d208a1c8fc7fb5f8535",
+      "config_sha256": "1ff2d42f2c36eb8f06dde40b3b78a1892a01ba36ac77eeeea3367298ba1a1981",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b05-b1",
       "model_tag": "qwen3-8b-mlx",
       "role": "comparative_contrast_member",
@@ -299,7 +299,7 @@
     {
       "index": 19,
       "config": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b05-b2.json",
-      "config_sha256": "e22eac6ad08cc0bcf2c5006d73719b157f0f03c341fc0dc49932c234603c83f0",
+      "config_sha256": "9acebceec7c6dfef2e3b7171ff53dc6379b6df7132a1e02ad51fca167c8bbc66",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b05-b2",
       "model_tag": "qwen3-8b-mlx",
       "role": "comparative_contrast_member",
@@ -315,7 +315,7 @@
     {
       "index": 20,
       "config": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b05-a2.json",
-      "config_sha256": "ebcbbabdd2281940a1f609c7cbbe5a8ce3cf280f56febde9722ca1654781e4be",
+      "config_sha256": "bc3c1ef74f0b873e6d0e684242e58a75cf3fcabe229d1da35b894282466cb792",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b05-a2",
       "model_tag": "qwen3-1p7b-mlx",
       "role": "comparative_contrast_member",

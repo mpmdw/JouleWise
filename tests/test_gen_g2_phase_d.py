@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import hashlib
 import io
+import json
 import os
 import subprocess
 import importlib.util
 import re
 import shutil
+import shlex
+import sys
 import tempfile
 import unittest
 from contextlib import redirect_stdout
@@ -220,6 +223,17 @@ class G2bOneBlockChainTests(unittest.TestCase):
         self.generator = _load_generator()
         self.chain = self.generator.render_generated_region(self.generator.RUNBOOK_PATH.read_text())
 
+    def test_v5_reference_routing_preserves_the_pinned_historical_chain(self):
+        runsheet = RUNSHEET_PATH.read_text()
+        start = runsheet.index(self.generator.BEGIN_MARKER)
+        end = runsheet.index(self.generator.END_MARKER, start) + len(self.generator.END_MARKER) + 1
+        self.assertEqual(self.chain, runsheet[start:end])
+        prospective = self.generator.render_generated_region(
+            self.generator.RUNBOOK_PATH.read_text(), v5_references=True)
+        self.assertEqual(prospective.replace("/window_references_v5\"", "/window_references\"")
+                                   .replace("/neg8_reference_corpus_v5\"", "/neg8_reference_corpus\""),
+                         self.chain)
+
     def test_chain_asserts_registered_stop_rc_and_preserves_bracket_path(self):
         from scripts.run_campaign import MAX_BLOCKS_REACHED_RC, CAMPAIGN_STOP_RETURN_CODES
 
@@ -233,6 +247,64 @@ class G2bOneBlockChainTests(unittest.TestCase):
         self.assertLess(self.chain.index('test "$SCIENCE_RC" = '), self.chain.index('  midpoint-reference'))
         self.assertIn('POST_CAL_CUSTODY="$(calibrate_slot post', self.chain)
         self.assertIn('post-bracket-terminal-boundary.json', self.chain)
+
+    @unittest.skipUnless(shutil.which("zsh"), "zsh required for generated chain")
+    def test_rendered_g2b_dispatches_unique_75_second_idle_run_ids(self):
+        """Execute the rendered dispatch body with a read-only roster collector."""
+        pack = REPO_ROOT / "configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5"
+        tree = json.loads((pack / "plan_tree.json").read_bytes())
+        science = [row for row in tree["stage_graph"]
+                   if row["stage_id"].startswith("gamma-science-")]
+        chain = self.generator.render_generated_region(
+            self.generator.RUNBOOK_PATH.read_text(), v5_references=True)
+        # Execute the renderer's actual root assignments; environment overrides
+        # would conceal a historical 30-second dispatch route.
+        bindings = chain[chain.index('POLICY="$REPO/'):
+                         chain.index('\nmkdir -p')]
+        body = chain[chain.index("# The reference corpus"):
+                     chain.index('POST_CAL_CUSTODY="$(calibrate_slot post')]
+        with tempfile.TemporaryDirectory(prefix="g2b-roster-") as temporary:
+            root = Path(temporary)
+            (root / "before_midpoint_stages.txt").write_text("\n".join(
+                row["launch"]["commands"][0]["argv_template"]["arguments"][0]["value"]
+                for row in science[:2]) + "\n")
+            collector = root / "collect.py"
+            collector.write_text(
+                "import json, pathlib, sys\n"
+                "directory = pathlib.Path(sys.argv[1])\n"
+                "limited = '--max-blocks' in sys.argv\n"
+                "manifest = json.loads((directory / 'order_manifest.json').read_bytes())\n"
+                "for row in manifest['executed_order']:\n"
+                "    if limited and row['block_index'] > 1: continue\n"
+                "    config = json.loads((directory / row['config']).read_bytes())\n"
+                "    assert config['run_id'] == row['run_id']\n"
+                "    assert config['sampling']['idle_seconds'] == 75.0\n"
+                "    print(config['run_id'])\n"
+                "sys.exit(3 if limited else 0)\n"
+            )
+            shell = ('set -euo pipefail\ntimestamp() { echo roster; }\n'
+                     'run_stage() { ' + shlex.quote(sys.executable) + ' -B '
+                     + shlex.quote(str(collector)) + ' "$3" "$@"; }\n' + bindings + '\n' + body)
+            environment = {**os.environ, "REPO": str(REPO_ROOT), "PY": "/usr/bin/true",
+                "BOUND_RUNS_ROOT": str(root / "bound"), "BOUND_LOG": str(root / "bound.log"),
+                "NEG8_DRIFT_BOUND": str(root / "bound.json"),
+                "RUNS_ROOT": str(root / "claim"), "CLAIM_LOG": str(root / "claim.log"),
+                "PRE_CAL_CUSTODY": "roster-only", "WINDOW_PLAN_ROOT": str(root),
+                "WINDOW_CUSTODY_ROOT": str(root)}
+            (root / "operator_logs").mkdir()
+            result = subprocess.run(["/bin/zsh", "-c", shell], env=environment,
+                                    capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            run_ids = result.stdout.splitlines()
+            self.assertEqual(len(run_ids), 23)
+            self.assertEqual(len(set(run_ids)), 23)
+            self.assertEqual(sum("contrast-b01-" in run_id for run_id in run_ids), 4)
+            self.assertEqual(sum("midpoint" in run_id for run_id in run_ids), 1)
+            midpoint_stage = next(row for row in tree["stage_graph"]
+                                  if row["stage_id"] == "gamma-reference-decode-midpoint")
+            external = next(row for row in tree["external_inputs"]
+                            if row["input_id"] == midpoint_stage["input_ref"]["input_id"])
+            self.assertEqual(run_ids[19], external["members"][0]["run_id"])
 
     @unittest.skipUnless(shutil.which("zsh"), "zsh required for generated chain")
     def test_first_stage_only_and_failure_propagation_with_errexit_disabled(self):

@@ -25,7 +25,7 @@
     "quantization": "int4",
     "sampling": {
       "power_hz": 10.0,
-      "idle_seconds": 30.0,
+      "idle_seconds": 75.0,
       "warmup_seconds": 5.0
     },
     "decode_condition_family_id": "df-ph-decode-qwen3-1p7b",
