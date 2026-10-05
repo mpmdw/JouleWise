@@ -807,16 +807,18 @@ class NetworkTimePolicyDoctrineTests(unittest.TestCase):
         self.repository = repository.resolve(strict=True)
         self.pack = pack
         self.runbook = self.repository / "docs/phase_2/window_runbook.md"
-        # The shared helper deliberately supplies historical restore prose.
-        # This prospective fixture uses the current committed doctrine instead.
         self.current_runbook = (ROOT / "docs/phase_2/window_runbook.md").read_bytes()
-        self.commit_runbook(self.current_runbook)
+        self.assertEqual(self.runbook.read_bytes(), self.current_runbook)
+        self.refresh_context()
 
     def commit_runbook(self, raw: bytes) -> None:
         self.runbook.write_bytes(raw)
         git(self.repository, "add", "docs/phase_2/window_runbook.md")
         git(self.repository, "commit", "-qm", "current network-time doctrine")
         git(self.repository, "update-ref", "refs/remotes/origin/main", "HEAD")
+        self.refresh_context()
+
+    def refresh_context(self) -> None:
         tree, _raw = readiness._plan_tree(self.pack)
         self.context = evidence._DerivationContext(
             pack_root=self.pack,

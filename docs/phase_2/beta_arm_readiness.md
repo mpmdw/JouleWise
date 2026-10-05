@@ -26,7 +26,7 @@ replace it.
 
 | Stable row ID | Required fact |
 |---|---|
-| `clock.restore_recipe` | The frozen close-out recipe restores network time only after measurement completion, the verdict, and both backups, and then verifies the restored state. |
+| `clock.network_time_policy` | Current runbook §5A keeps network time OFF across windows, including completion, refusal, crash, verdict and both backups. Resync happens only in the arm step; `clock-disable` reuses that window's one OFF receipt, and close-out records its identity without restoring ON. |
 | `desk.acceptance_owner` | The writer reads the authenticated active acceptance artifact; a copied scalar or unknown key refuses. |
 | `desk.acceptance_successor` | A successor needs its own authenticated passing receipt selected before member one. This row is not applicable only while the issued D-079 artifact remains selected. |
 | `desk.arming_procedure` | Committed hashes of runbook sections 5, 5A, 5B, 5C, 6, and 10 and the frozen launch recipe equal the pack's recorded hashes. |

@@ -74,10 +74,6 @@ def _copy_primary(repository: Path, relative: str) -> None:
     target = repository / relative
     target.parent.mkdir(parents=True, exist_ok=True)
     body = (ROOT / relative).read_bytes()
-    if relative == "docs/phase_2/window_runbook.md":
-        start = body.index(b"## 5A.")
-        end = body.index(b"\n## ", start + 1)
-        body = body[:start] + (Path(__file__).parent / "fixtures/historical_clock_restore_5a.md").read_bytes() + body[end:]
     target.write_bytes(body)
 
 
@@ -757,23 +753,21 @@ class ArmReadinessEvidenceAuthorTests(unittest.TestCase):
             },
         )
 
-    def test_first_authoring_refuses_when_restore_after_verdict_and_both_backups_is_removed(
+    def test_first_authoring_refuses_when_arm_only_resync_doctrine_is_removed(
         self,
     ) -> None:
         temporary, repository, pack, _custody, _arm_path = make_author_fixture()
         self.addCleanup(temporary.cleanup)
         runbook = repository / "docs/phase_2/window_runbook.md"
         text = runbook.read_text(encoding="utf-8")
+        self.assertIn("Resync happens only in the arm step.", text)
         text = text.replace(
-            "whole-window verdict, and the backup, re-enable it:",
-            "window close-out, re-enable it:",
-        ).replace(
-            "The restore comes last because re-enabling automatic network time permits",
-            "Re-enabling automatic network time permits",
+            "Resync happens only in the arm step.",
+            "Resync happens during window close-out.",
         )
         runbook.write_text(text, encoding="utf-8")
         git(repository, "add", "docs/phase_2/window_runbook.md")
-        git(repository, "commit", "-qm", "tamper restore doctrine")
+        git(repository, "commit", "-qm", "tamper arm-only resync doctrine")
         git(repository, "update-ref", "refs/remotes/origin/main", "HEAD")
 
         with self.assertRaises(EvidenceAuthoringError) as caught:
