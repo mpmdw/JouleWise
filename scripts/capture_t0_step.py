@@ -816,7 +816,8 @@ def _capture_step_with_dependencies(
             if gate_path.exists() or gate_path.is_symlink():
                 gate = kernel_clock.validate_gate(readiness.parse_json_bytes(
                     _regular_bytes(gate_path, label="kernel frequency gate"), require_canonical=True))
-                stream_max = gate["t_stream_max_s"]
+                from joulewise.v5_qualification import authenticated_clock_budget
+                stream_max, _binding = authenticated_clock_budget(context.input_root, context.pack_root)
                 if not kernel_clock.frequency_gate(r0_frequency, stream_max)["passes"]:
                     raise ValueError("R0 kernel frequency exceeds the stream clock budget")
             elif readiness.requires_t0_frequency_gate(context.pack_root):

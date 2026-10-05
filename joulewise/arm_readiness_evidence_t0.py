@@ -779,6 +779,18 @@ def _captured_clock_reference(
         raise _underivable(kind, "qualification kernel frequency gate is missing")
     value = {**value, "kernel_frequency": frequency,
              "t_stream_max_s": capture.get("t_stream_max_s")}
+    binding_path = context.custody_pack_root / _INPUT_DIRECTORY / "kernel-frequency-binding.json"
+    if (_readiness.requires_t0_frequency_gate(context.pack_root)
+            or binding_path.exists() or binding_path.is_symlink()):
+        from joulewise.v5_qualification import authenticated_clock_budget, reference
+        try:
+            maximum, refs = authenticated_clock_budget(binding_path.parent, context.pack_root)
+            if value["t_stream_max_s"] != maximum:
+                raise ValueError("R0 stream maximum differs from authenticated sizing")
+        except (OSError, ValueError) as exc:
+            raise _underivable(kind, str(exc)) from exc
+        value["clock_sizing_binding"] = reference(binding_path)
+        context.values["clock_sizing_artifacts"] = refs
     result = (value, identity, agreement)
     context.values["clock_reference"] = result
     return result
@@ -974,7 +986,12 @@ def _launch_manifest(
         or _Path(launch[4]).resolve() != resolved_window
     ):
         raise _underivable(kind, "launch command is not the exact foreground single-launch recipe")
-    artifacts = (manifest_identity, env_identity, chain_identity, arm_identity)
+    try:
+        stage = _readiness.authenticated_stage_list(resolved_window, chain_raw)
+    except (OSError, ValueError) as exc:
+        raise _underivable(kind, str(exc)) from exc
+    artifacts = (manifest_identity, env_identity, chain_identity, arm_identity,
+                 *((stage,) if stage is not None else ()))
     result = (value, artifacts, assignments)
     context.values["launch_manifest"] = result
     return result
@@ -1257,12 +1274,14 @@ def _derive_clock_attestation(context: _Context) -> _DerivedRow:
         "r1_batch_duration_ns": r1_duration,
         "r1_batch_finished_monotonic_ns": r1_finished_monotonic_ns,
     }
+    if "clock_sizing_binding" in r0:
+        value["clock_sizing_binding"] = r0["clock_sizing_binding"]
     return _DerivedRow(
         "clock.correct_and_prior_state",
         kind,
         value,
         "PROBE",
-        input_artifacts=(r0_identity, disable_identity),
+        input_artifacts=(r0_identity, disable_identity, *context.values.get("clock_sizing_artifacts", ())),
         probes=r1_probes,
         derivation={"sample_policy_id": _clock_reference.SAMPLE_POLICY_ID,
                     "r1_batch_started_monotonic_ns": r1_started_monotonic_ns},

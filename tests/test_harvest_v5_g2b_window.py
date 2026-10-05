@@ -336,31 +336,24 @@ class G2bStructureTests(unittest.TestCase):
 
 class BatteryBoundaryTests(unittest.TestCase):
     def test_non_pass_and_raw_digest_mismatch_use_real_battery_reader(self):
+        from tests.test_v5_block4_x6 import battery_fixture
+        from scripts.assemble_v5_battery_boundaries import assemble
         SCRATCH.mkdir(exist_ok=True)
         with tempfile.TemporaryDirectory(dir=SCRATCH) as tmp:
             root = Path(tmp).resolve()
-            mapping = {"schema": "joulewise.v5_qualification_battery_boundaries.v1", "plan_id": "plan", "observations": {}}
-            for role in ("arm", "publication", "t0"):
-                raw_path = root / f"{role}.ioreg"
-                raw_path.write_bytes(battery_raw())
-                stored, _ = battery_float.observe(phase=q.BATTERY_BOUNDARY_PHASES[role], wall_time_s=UPDATE + 1, monotonic_ns=lambda: 1,
-                    plan_id="plan", runner=lambda argv: subprocess.CompletedProcess(argv, 0, raw_path.read_bytes(), b""))
-                path = root / f"{role}.json"
-                put(path, stored)
-                mapping["observations"][role] = {"record": q.reference(path), "raw": q.reference(raw_path)}
+            observations, lifecycle = battery_fixture(root)
             manifest = root / "boundaries.json"
-            put(manifest, mapping)
+            assemble("plan", observations, manifest, lifecycle=lifecycle)
             self.assertTrue(q.battery_boundaries(manifest, q.sha(manifest), "plan"))
-            raw_path.write_bytes(battery_raw("charging-synthetic-from-real.ioreg"))
-            stored, _ = battery_float.observe(phase="t0", wall_time_s=UPDATE + 1, monotonic_ns=lambda: 1,
-                plan_id="plan", runner=lambda argv: subprocess.CompletedProcess(argv, 0, raw_path.read_bytes(), b""))
-            put(path, stored)
-            mapping["observations"]["t0"] = {"record": q.reference(path), "raw": q.reference(raw_path)}
-            put(manifest, mapping)
-            self.assertFalse(q.battery_boundaries(manifest, q.sha(manifest), "plan"))
+            charged = root / "charged"
+            observations, lifecycle = battery_fixture(charged, charged_t0=True)
+            bad_manifest = charged / "boundaries.json"
+            assemble("plan", observations, bad_manifest, lifecycle=lifecycle)
+            self.assertFalse(q.battery_boundaries(bad_manifest, q.sha(bad_manifest), "plan"))
+            raw_path = Path(observations["t0"]["raw"]["path"])
             raw_path.write_bytes(battery_raw())
             with self.assertRaisesRegex(q.HarvestRefusal, "digest_mismatch"):
-                q.battery_boundaries(manifest, q.sha(manifest), "plan")
+                q.battery_boundaries(bad_manifest, q.sha(bad_manifest), "plan")
 
 
 class FoldedL10Tests(unittest.TestCase):

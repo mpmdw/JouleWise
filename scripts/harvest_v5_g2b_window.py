@@ -610,7 +610,7 @@ def harvest(args, *, runner=subprocess.run, now=None, clear=q.group_clear):
                 causes.append("auxiliary_roster_incomplete_or_extra")
             bundle_ids.update(declared)
             # Old, failed and superseded attempts are enumerated from disk too.
-            battery_pass = q.battery_boundaries(boundary, inputs["battery_boundaries"]["sha256"], plan.plan_id)
+            battery_pass = q.battery_boundaries(boundary, inputs["battery_boundaries"]["sha256"], plan.plan_id, plan_path=plan_path)
             attempt_pass, capture_paths = battery_attempts(custody, Path(inputs["bound_runs_root"]))
             battery_pass = battery_pass and attempt_pass
             if not battery_pass:

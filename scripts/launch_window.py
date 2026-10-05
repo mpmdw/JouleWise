@@ -180,6 +180,11 @@ def _assemble_launch_inputs(args: argparse.Namespace) -> dict[str, object]:
     _chain_path, chain_raw = _read_required_launch_input(
         window_root / "window-chain.zsh", "window chain"
     )
+    from joulewise.arm_readiness import authenticated_stage_list
+    try:
+        authenticated_stage_list(window_root, chain_raw)
+    except (OSError, ValueError) as exc:
+        raise LaunchLineageError("launch_binding_mismatch", str(exc)) from exc
     return {
         "night_plan": args.night_plan,
         "go_receipt": args.go_receipt,

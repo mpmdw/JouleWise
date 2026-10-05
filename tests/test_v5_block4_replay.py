@@ -20,9 +20,10 @@ from joulewise.night_plan_writer import write_night_plan
 from scripts import harvest_v5_g2b_window as g2b, run_night as driver
 from scripts import harvest_v5_qualification as qualification
 from scripts import write_v5_qualification_plan as writer
+from tests.test_kernel_clock import frequency_probe
 
 
-SCRATCH = Path("/tmp/dd5-replay").resolve()
+SCRATCH = (Path(tempfile.gettempdir()) / "v5-block4-replay").resolve()
 PACK_RELATIVE = "configs/campaigns/" + writer.GAMMA
 PACK_SOURCE_COMMIT = "c88565c48fe7a8f0a1e6973cba3e03dfaeaacdab"
 
@@ -110,6 +111,7 @@ class CommittedGammaJoinedReplayTests(unittest.TestCase):
                 "authorization_record": {"path": str(custody / "authorization_record.json"), "sha256": "0" * 64},
                 "confirmation_record": {"path": str(custody / "step6_confirmation_record.json"), "sha256": "0" * 64}}})
         return {"schema_version": writer.INPUT_SCHEMA, "head": self.head, "plan": binding,
+            "kernel_frequency": frequency_probe(),
             "pack": {"root": str(self.pack), "sha256": self.digest, "attempt_ordinal": 1},
             "authorization": {"purpose": "G2B_SHAKEDOWN", "attempt_id": plan_id + "/1",
                 "claim_eligible": False, "permitted_blocks": 1, "pack_sha256": self.digest,
@@ -130,8 +132,7 @@ class CommittedGammaJoinedReplayTests(unittest.TestCase):
                 output = Path(inputs["plan"]["custody_root"]) / "plan.json"
                 with self.assertRaises(ar.ArmReadinessError) as caught:
                     writer.write_qualification(occurrence, inputs, output)
-                self.assertEqual(caught.exception.reason_code, "readiness_freeze_receipt_unreadable")
-                self.assertEqual(str(caught.exception), "plan does not pin a freeze receipt")
+                self.assertEqual(caught.exception.reason_code, "readiness_row_registry_mismatch")
                 self.assertFalse(output.exists())
                 self.assertEqual(list(output.parent.iterdir()), [])
         self.assertEqual(ar.committed_pack_tree_sha256(self.pack), before)
@@ -144,7 +145,7 @@ class CommittedGammaJoinedReplayTests(unittest.TestCase):
             ar.generate_arm_receipt(self.pack, arm_context(self.root),
                 inputs["plan"]["custody_root"], step6_confirmation_table=confirmation["table_path"],
                 expected_confirmation_digest=inputs["confirmation"]["expected_confirmation_digest"])
-        self.assertEqual(caught.exception.reason_code, "readiness_freeze_receipt_unreadable")
+        self.assertEqual(caught.exception.reason_code, "readiness_row_registry_mismatch")
         self.assertFalse(list(self.root.rglob("arm_readiness.receipts/arm-*.json")))
 
     def joined_stop(self):

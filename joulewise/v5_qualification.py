@@ -63,6 +63,56 @@ def reference(path):
     return {"path": str(path), "sha256": sha(path)}
 
 
+def authenticated_clock_budget(input_root, pack_root):
+    """Replay sizing against the chain pinned by the occurrence's authority.
+
+    A self-consistent gate is not authority for its stream maximum. Both the
+    source allowances and the computed maximum are pinned in the permitted
+    chain before the authorization record is made.
+    """
+    from scripts import write_v5_qualification_plan as writer
+    from joulewise import kernel_clock
+    input_root, pack_root = Path(input_root), Path(pack_root)
+    binding_path = input_root / "kernel-frequency-binding.json"
+    binding = read(binding_path)
+    if (set(binding) != {"schema", "occurrence", "plan", "sizing", "plan_id", "pack_root", "pack_sha256"}
+            or binding["schema"] != "joulewise.v5_qualification_clock_binding.v1"
+            or binding["occurrence"] not in {"a1", "a2", "s1"}
+            or binding["pack_root"] != str(pack_root)):
+        raise HarvestRefusal("clock_sizing_binding_invalid")
+    plan_path = authenticated_reference(binding["plan"])
+    plan_record = read(plan_path)
+    if binding["occurrence"] in {"a1", "a2"}:
+        if (plan_record.get("schema_version") != writer.ARM_ONLY_SCHEMA
+                or plan_record.get("mode") != "ARM_ONLY_NO_LAUNCH"
+                or plan_record.get("occurrence") != binding["occurrence"]):
+            raise HarvestRefusal("clock_sizing_plan_invalid")
+        plan_record = plan_record["plan_binding"]
+    plan = night_gate.NightPlan.from_mapping(plan_record)
+    if (plan.plan_id != binding["plan_id"] or plan.pack_night["pack_root"] != str(pack_root)
+            or plan.pack_night["pack_sha256"] != binding["pack_sha256"]
+            or input_root != Path(plan.custody_root) / pack_root.name / "arm_readiness.t0.inputs"):
+        raise HarvestRefusal("clock_sizing_plan_mismatch")
+    night_gate._authenticate_pack_records(plan)
+    chain = Path(plan.chain_path)
+    if sha(chain) != Path(plan.chain_sha256_path).read_text().split()[0]:
+        raise HarvestRefusal("clock_sizing_chain_mismatch")
+    sizing_path = authenticated_reference(binding["sizing"])
+    sizing = read(sizing_path)
+    text = chain.read_text()
+    if night_gate.chain_literal(text, "NIGHT_CLOCK_SIZING_SHA256") != sha(sizing_path):
+        raise HarvestRefusal("clock_sizing_source_mismatch")
+    roster, auxiliary, brackets, nonsampling = writer.pack_roster(pack_root, binding["occurrence"])
+    computed = writer.size_window(binding["occurrence"], sizing, roster=roster,
+        auxiliary=auxiliary, brackets=brackets, nonsampling=nonsampling)["longest_sampler_stream_s"]
+    gate_path = input_root / "kernel-frequency-gate.json"
+    gate = kernel_clock.validate_gate(read(gate_path))
+    if (night_gate.chain_literal(text, "NIGHT_CLOCK_STREAM_MAX_S") != str(computed)
+            or gate["t_stream_max_s"] != computed):
+        raise HarvestRefusal("clock_stream_maximum_mismatch")
+    return computed, tuple(reference(p) for p in (binding_path, plan_path, sizing_path, gate_path, chain))
+
+
 def s1_desk_records(bundle):
     """Require the four post-STOP observations, each bound by its lifecycle hash."""
     from joulewise import t0_rehearsal as t0
@@ -356,7 +406,7 @@ def persist_battery_observation(directory, name, observation, raw):
     return {"record": reference(record_path.absolute()), "raw": reference(raw_path.absolute())}
 
 
-def battery_boundaries(path, digest, plan_id):
+def battery_boundaries(path, digest, plan_id, *, plan_path=None):
     """Authenticate recorded #421 boundary probes with the shared raw parser."""
     from joulewise import battery_float
     authenticated_reference({"path": str(path), "sha256": digest})
@@ -366,6 +416,7 @@ def battery_boundaries(path, digest, plan_id):
             or set(value.get("observations", {})) != {"arm", "publication", "t0"}):
         raise HarvestRefusal("battery_boundary_census_invalid")
     passed = True
+    observed = {}
     for role, item in value["observations"].items():
         stored = read(authenticated_reference(item["record"]))
         raw = authenticated_reference(item["raw"]).read_bytes()
@@ -376,9 +427,10 @@ def battery_boundaries(path, digest, plan_id):
             raise HarvestRefusal("battery_boundary_digest_or_identity_mismatch")
         if "source_capture" in stored:
             capture = authenticated_reference(stored["source_capture"])
-            observed, original = captured_battery_observation(capture)
-            if {k: v for k, v in stored.items() if k != "source_capture"} != observed or original != raw:
+            captured, original = captured_battery_observation(capture)
+            if {k: v for k, v in stored.items() if k != "source_capture"} != captured or original != raw:
                 raise HarvestRefusal("battery_boundary_capture_mismatch")
+        observed[role] = stored
         if stored.get("probe_error") or stored.get("timed_out") or stored.get("exit_code") != 0 or stored.get("argv") != list(battery_float.IOREG_BATTERY_ARGV):
             passed = False
             continue
@@ -390,7 +442,76 @@ def battery_boundaries(path, digest, plan_id):
         if any(stored.get(key) != val for key, val in parsed.items()):
             raise HarvestRefusal("battery_boundary_replay_mismatch")
         passed = passed and parsed["passed"]
+    authenticate_battery_lifecycle(value, observed, plan_path=plan_path)
     return passed
+
+
+def authenticate_battery_lifecycle(value, observations, *, plan_path=None):
+    """Bind readings to native check/install/T-0 records of this occurrence."""
+    import math
+    refs = value.get("lifecycle")
+    if not isinstance(refs, dict) or set(refs) != {"plan", "prepare", "arm_check", "publication", "t0_receipt"}:
+        raise HarvestRefusal("battery_boundary_lifecycle_missing")
+    paths = {name: authenticated_reference(ref) for name, ref in refs.items()}
+    if plan_path is not None and paths["plan"] != Path(plan_path):
+        raise HarvestRefusal("battery_boundary_plan_locator_mismatch")
+    plan = night_gate.NightPlan.from_mapping(read(paths["plan"]))
+    if paths["t0_receipt"] != Path(plan.custody_root) / "night" / "receipt.json":
+        raise HarvestRefusal("battery_boundary_t0_receipt_locator_mismatch")
+    prepare, arm, publication, t0 = (read(paths[name]) for name in ("prepare", "arm_check", "publication", "t0_receipt"))
+    if (plan.plan_id != value["plan_id"] or prepare.get("schema") != "joulewise.evidence_prepare.v1"
+            or prepare.get("plan_id") != plan.plan_id
+            or prepare.get("custody_root") != plan.custody_root
+            or prepare.get("digests", {}).get(prepare.get("plan_path")) != refs["plan"]["sha256"]
+            or arm.get("schema") != "joulewise.evidence_check.v1"
+            or arm.get("prepare_sha256") != refs["prepare"]["sha256"]
+            or arm.get("fake_launchctl") is not False
+            or publication.get("schema") != "joulewise.evidence_install.v1"
+            or publication.get("plan_sha256") != refs["plan"]["sha256"]
+            or publication.get("published_plan") != str(paths["plan"])
+            or publication.get("fake_launchctl") is not False
+            or publication.get("outcome") != "installed"
+            or t0.get("schema") != night_gate.SCHEMA or t0.get("plan_id") != plan.plan_id):
+        raise HarvestRefusal("battery_boundary_lifecycle_identity_mismatch")
+    arm_row = arm.get("checks", {}).get("battery_float", {})
+    if (arm_row.get("record") != value["observations"]["arm"]["record"]
+            or arm_row.get("raw") != value["observations"]["arm"]["raw"]
+            or arm_row.get("observation") != observations["arm"]):
+        raise HarvestRefusal("battery_boundary_arm_capture_mismatch")
+    # Publication's native producer writes this observation in the immutable
+    # install attempt, immediately before publishing the pinned plan.
+    attempt = paths["publication"].parent
+    if (publication.get("attempt_path") != str(attempt)
+            or paths["publication"].name != "install.json"
+            or authenticated_reference(value["observations"]["publication"]["record"]) != attempt / "battery-float-at-publication.json"
+            or authenticated_reference(value["observations"]["publication"]["raw"]) != attempt / "battery-float-at-publication.ioreg"):
+        raise HarvestRefusal("battery_boundary_publication_capture_mismatch")
+    original, _raw = captured_battery_observation(paths["t0_receipt"])
+    captured = {key: val for key, val in observations["t0"].items() if key != "source_capture"}
+    if captured != original or observations["t0"].get("source_capture") != refs["t0_receipt"]:
+        raise HarvestRefusal("battery_boundary_t0_capture_mismatch")
+    def number(item):
+        if type(item) not in (int, float) or not math.isfinite(item):
+            raise HarvestRefusal("battery_boundary_timing_invalid")
+        return item
+    starts, ends, walls = {}, {}, {}
+    for role, observation in observations.items():
+        starts[role] = number(observation.get("monotonic_before_ns"))
+        ends[role] = number(observation.get("monotonic_after_ns"))
+        walls[role] = number(observation.get("wall_time_s"))
+        if (type(starts[role]) is not int or type(ends[role]) is not int
+                or not 0 <= starts[role] <= ends[role]):
+            raise HarvestRefusal("battery_boundary_timing_invalid")
+    if not (ends["arm"] < starts["publication"] and ends["publication"] < starts["t0"]
+            and number(arm.get("started_epoch_s")) <= walls["arm"] <= number(arm.get("finished_epoch_s"))
+            and arm["finished_epoch_s"] < number(publication.get("started_epoch_s"))
+            # Native publish-install admits a check no older than 60 minutes.
+            and publication["started_epoch_s"] - arm["finished_epoch_s"] <= 3600
+            and publication["started_epoch_s"] <= walls["publication"] <= number(publication.get("published_epoch_s"))
+            and publication["published_epoch_s"] < plan.t0_epoch_s
+            and plan.t0_epoch_s <= walls["t0"] <= plan.t0_epoch_s + plan.window_max_s
+            and ends["t0"] <= number(t0.get("authored_monotonic_ns"))):
+        raise HarvestRefusal("battery_boundary_order_or_timing_invalid")
 
 
 def disposition(occurrence, verdict, cause_classes, majority=None):
@@ -444,4 +565,6 @@ def boundary_sources(path):
         stored = read(sources[f"battery-{role}-record"])
         if "source_capture" in stored:
             sources[f"battery-{role}-capture"] = authenticated_reference(stored["source_capture"])
+    for name, ref in (value.get("lifecycle") or {}).items():
+        sources[f"battery-lifecycle-{identifier(name)}"] = authenticated_reference(ref)
     return sources

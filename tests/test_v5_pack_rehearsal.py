@@ -101,8 +101,8 @@ class ObservedDeskMappingTests(unittest.TestCase):
                 from tests.test_network_time_off import receipt
                 _write_json(off_path, receipt())
                 facts.update(network_time="OFF", stand_down=True, off_receipt=producer.reference(off_path),
-                    observation={"argv": ["/usr/bin/sudo", "-n", "/usr/sbin/systemsetup", "-getusingnetworktime"],
-                                 "exit_code": 0, "stdout": "Network Time: Off\n"})
+                    observation={"argv": list(t0.network_time_off.OFF_ARGV),
+                                 "exit_code": 0, "stdout": "Network Time is already off\n"})
             _write_json(stage_dir / (stage + ".json"), facts)
         # Preserve the fixture record as an input; assembly derives fresh records.
         self.positive = self.base / "owner-control-fixture.json"

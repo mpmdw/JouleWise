@@ -844,7 +844,8 @@ def evaluate_g4(bundle: EvidenceBundle) -> GateResult:
             raise ValueError("clock receipt value differs from the published source")
         keys = (readiness._CLOCK_PROBE_RESIDUAL_VALUE_KEYS if "anchor_check_version" in value
                 else readiness._CLOCK_PROBE_VALUE_KEYS)
-        if set(value) != keys:
+        if set(value) not in (keys, keys | {"clock_sizing_binding"}) or (
+                "clock_sizing_binding" in value and "anchor_check_version" not in value):
             raise ValueError("clock fact keys do not match its recorded anchor semantics")
         if receipt_fact.get("source_sha256") != source_artifact.sha256:
             raise ValueError("clock receipt source SHA-256 does not match custodied source bytes")
@@ -923,6 +924,18 @@ def evaluate_g4(bundle: EvidenceBundle) -> GateResult:
                 raise ValueError("published R0 frequency differs from custodied probe")
             if value.get("t_stream_max_s") != r0_capture.get("t_stream_max_s"):
                 raise ValueError("published stream maximum differs from R0 custody")
+            binding = value.get("clock_sizing_binding")
+            required_binding = value.get("t_stream_max_s") is not None
+            if binding is not None or required_binding:
+                from joulewise.v5_qualification import authenticated_clock_budget
+                bound = _verify_artifact_reference(bundle, binding, label="clock sizing binding")
+                maximum, refs = authenticated_clock_budget(bound.path.parent, Path(bound.value["pack_root"]))
+                for ref in refs:
+                    _verify_artifact_reference(bundle, ref, label="clock sizing input")
+                    if ref not in input_refs:
+                        raise ValueError("clock sizing input is not attested by G4 source")
+                if value.get("t_stream_max_s") != maximum:
+                    raise ValueError("published stream maximum differs from authenticated sizing")
             current = kernel_clock.validate_probe(value.get("kernel_frequency"))
             residual = kernel_clock.anchor_residual_ns(
                 (value["anchor_realtime_ns"] - value["anchor_monotonic_raw_ns"])

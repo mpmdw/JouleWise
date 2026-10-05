@@ -20,13 +20,14 @@ from joulewise import v5_qualification as q
 SCHEMA = "joulewise.v5_qualification_battery_boundaries.v1"
 
 
-def assemble(plan_id, observations, output):
+def assemble(plan_id, observations, output, *, lifecycle=None):
     q.identifier(plan_id)
     if set(observations) != set(q.BATTERY_BOUNDARY_PHASES):
         raise q.HarvestRefusal("battery_boundary_census_invalid")
     # Authenticate before publishing a create-once manifest. Failed physics
     # readings remain assemblable, so harvest can classify the recorded result.
-    value = {"schema": SCHEMA, "plan_id": plan_id, "observations": observations}
+    value = {"schema": SCHEMA, "plan_id": plan_id, "observations": observations,
+             "lifecycle": lifecycle}
     for role, item in observations.items():
         if set(item) != {"record", "raw"}:
             raise q.HarvestRefusal("battery_boundary_locator_invalid")
@@ -61,6 +62,11 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--plan-id", required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--plan", type=Path, required=True)
+    parser.add_argument("--prepare", type=Path, required=True)
+    parser.add_argument("--arm-check", type=Path, required=True)
+    parser.add_argument("--publication", type=Path, required=True)
+    parser.add_argument("--t0-receipt", type=Path, required=True)
     parser.add_argument("--t0-capture", type=Path, help="Native T-0 observation or C3 receipt with retained raw stdout")
     for role in q.BATTERY_BOUNDARY_PHASES:
         parser.add_argument(f"--{role}-record", type=Path, required=role != "t0")
@@ -76,7 +82,9 @@ def main(argv=None):
     observations["t0"] = (retain_t0_capture(args.t0_capture, args.plan_id, args.output.absolute().parent)
                           if args.t0_capture else {kind: q.reference(getattr(args, f"t0_{kind}").absolute())
                                                   for kind in ("record", "raw")})
-    result = assemble(args.plan_id, observations, args.output)
+    lifecycle = {name: q.reference(getattr(args, name).absolute())
+                 for name in ("plan", "prepare", "arm_check", "publication", "t0_receipt")}
+    result = assemble(args.plan_id, observations, args.output, lifecycle=lifecycle)
     print(f"battery_boundaries={result['path']} sha256={result['sha256']}")
     return 0
 

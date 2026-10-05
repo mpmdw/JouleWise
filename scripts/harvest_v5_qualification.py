@@ -78,7 +78,7 @@ def harvest(args, *, now=None, clear=q.group_clear, load=load_qualification):
                 q.write(derived / "s1-qualification-verdict.json", verdict)
                 causes = [f"{row['gate_id'].lower()}_not_passed" for row in verdict["gates"]
                           if row["gate_id"] not in {"G6", "G7"} and row["status"] != "PASS"]
-                if not q.battery_boundaries(boundary, args.battery_evidence_sha256, plan.plan_id):
+                if not q.battery_boundaries(boundary, args.battery_evidence_sha256, plan.plan_id, plan_path=args.plan.absolute()):
                     causes.append("battery_boundary_not_passed")
                 record.update(verdict="FAIL" if causes else "PASS", cause_codes=causes,
                               cause_classes=["qualification"] if causes else [],

@@ -16,6 +16,7 @@ from joulewise.night_plan_writer import night_plan_mapping, write_night_plan
 from scripts import write_v5_qualification_plan as writer
 from tests.test_kernel_clock import frequency_probe
 from tests.test_arm_readiness_schemas import arm_context
+from tests.git_fixture import init_git_fixture
 
 REAL_G2B_BODY = writer.g2b_body
 
@@ -203,7 +204,8 @@ class PlanWriterTests(SizingTests):
         self.pack = self.repo / "rehearsal-pack"
         self.pack.mkdir()
         (self.pack / "placeholder").write_text("fixture")
-        for argv in (["init", "-q"], ["add", "."], ["-c", "user.name=Fixture", "-c", "user.email=fixture@example.test", "commit", "-qm", "fixture"]):
+        init_git_fixture(self.repo, "-q")
+        for argv in (["add", "."], ["-c", "user.name=Fixture", "-c", "user.email=fixture@example.test", "commit", "-qm", "fixture"]):
             subprocess.run(["git", "-C", str(self.repo), *argv], check=True, capture_output=True)
         self.head = subprocess.check_output(["git", "-C", str(self.repo), "rev-parse", "HEAD"], text=True).strip()
         self.custody = self.root / "s1-fixture"
@@ -276,9 +278,22 @@ class PlanWriterTests(SizingTests):
             patcher = mock.patch.object(target, name, replacement)
             patcher.start()
             self.addCleanup(patcher.stop)
+        self.bind_clock_sizing()
 
     def write(self):
+        self.bind_clock_sizing()
         return writer.write_qualification("s1", self.input, self.output)
+
+    def bind_clock_sizing(self):
+        maximum = max(item["seconds"] for item in self.input["sizing"]["streams"].values())
+        text = self.chain.read_text()
+        text = re.sub(r"(?m)^export NIGHT_CLOCK_(?:STREAM_MAX_S|SIZING_SHA256)=.*\n", "", text)
+        text += (f"export NIGHT_CLOCK_STREAM_MAX_S={float(maximum)}\n"
+                 f"export NIGHT_CLOCK_SIZING_SHA256={readiness.sha256_bytes(readiness.render_json(self.input['sizing']))}\n")
+        self.chain.write_text(text)
+        self.input["authorization"]["permitted_chain_sha256"] = readiness.sha256_bytes(self.chain.read_bytes())
+        Path(self.input["plan"]["chain_sha256_path"]).write_bytes(
+            readiness.gnu_sidecar(self.input["authorization"]["permitted_chain_sha256"], self.chain.name))
 
     def test_kernel_frequency_gate_persists_margin_and_rejects_twelve_ppm(self):
         self.input["sizing"]["streams"] = {name: self.allow(320)
@@ -352,6 +367,21 @@ class PlanWriterTests(SizingTests):
         self.input["authorization"]["permitted_chain_sha256"] = writer.locator(self.chain)["sha256"]
         with self.assertRaisesRegex(ValueError, "backup_plan_custody_overlap"):
             self.write()
+
+    def test_reviewed_body_opts_into_v5_references_when_generator_supports_it(self):
+        from scripts import gen_g2_phase_d as generator
+        import shutil
+        runbook = self.repo / "docs/phase_2/window_runbook.md"
+        runbook.parent.mkdir(parents=True)
+        shutil.copyfile(writer.REPO_ROOT / "docs/phase_2/window_runbook.md", runbook)
+        real_render = generator.render_generated_region
+        calls = []
+        def supported_render(text, *, v5_references=False):
+            calls.append(v5_references)
+            return real_render(text)
+        with mock.patch.object(generator, "render_generated_region", supported_render):
+            REAL_G2B_BODY(self.repo)
+        self.assertEqual(calls, [True])
 
     def test_specialized_reviewed_body_is_accepted_before_plan_hashing(self):
         from scripts import capture_t0_step as capture
@@ -457,7 +487,7 @@ class PlanWriterTests(SizingTests):
         output = self.root / "rendered-chain.zsh"
         with mock.patch.object(writer, "pack_roster", return_value=(
                 [{"config_path": "science/member.json"}], [], [], [])), mock.patch.object(writer, "size_window",
-                return_value={"programmed_span_s": 40, "window_max_s": 2760}):
+                return_value={"programmed_span_s": 40, "window_max_s": 2760, "longest_sampler_stream_s": 100.}):
             result = writer.render_qualification_chain("s1", template, self.input["sizing"], self.pack, 1000., output)
         self.assertEqual(40, result["programmed_span_s"])
         self.assertEqual("40", night_gate.chain_literal(output.read_text(), "NIGHT_PROGRAMMED_SPAN_S"))
@@ -494,6 +524,10 @@ class PlanWriterTests(SizingTests):
                         night_gate.NightPlan.from_mapping(value)
                 else:
                     self.assertEqual("TRANSACTION_PACK", night_gate.NightPlan.from_mapping(value).receipt_class)
+                from joulewise.v5_qualification import authenticated_clock_budget
+                maximum, _refs = authenticated_clock_budget(
+                    custody / self.pack.name / "arm_readiness.t0.inputs", self.pack)
+                self.assertEqual(maximum, 100.)
 
 
 class PrerequisiteTests(unittest.TestCase):

@@ -6416,6 +6416,21 @@ def _authenticate_generic_evidence_item(
                 "evidence fact source is not an object",
             )
         source_payloads[fact["source_path"]] = (source_raw, source_value)
+        if receipt["kind"] == "CLOCK_ATTESTATION" and fact.get("source_kind") == "PROBE":
+            binding = fact.get("value", {}).get("clock_sizing_binding")
+            if (binding is not None or "anchor_check_version" in fact.get("value", {})
+                    and fact["value"].get("t_stream_max_s") is not None):
+                try:
+                    from joulewise.v5_qualification import authenticated_clock_budget, authenticated_reference
+                    binding_path = authenticated_reference(binding)
+                    if binding_path != custody_pack_root / _T0_INPUT_DIRECTORY / "kernel-frequency-binding.json":
+                        raise ValueError("clock sizing binding is outside the selected pack custody")
+                    maximum, refs = authenticated_clock_budget(binding_path.parent, pack_root)
+                    if (fact["value"].get("t_stream_max_s") != maximum
+                            or any(ref not in source_value.get("input_artifacts", []) for ref in refs)):
+                        raise ValueError("clock sizing differs from ARM source attestation")
+                except (OSError, ValueError, KeyError, TypeError) as exc:
+                    raise ArmReadinessError("readiness_evidence_digest_mismatch", str(exc)) from exc
     if receipt["schema_version"] != EVIDENCE_RECEIPT_SCHEMA:
         if lifecycle_registry is None:
             raise ArmReadinessError(
@@ -6836,7 +6851,8 @@ def _clock_probe_predicate_passes(
     residual_version = "anchor_check_version" in value
     if residual_version:
         if (value.get("anchor_check_version") != _kernel_clock.ANCHOR_CHECK_VERSION
-                or set(value) != _CLOCK_PROBE_RESIDUAL_VALUE_KEYS):
+                or set(value) not in (_CLOCK_PROBE_RESIDUAL_VALUE_KEYS,
+                                     _CLOCK_PROBE_RESIDUAL_VALUE_KEYS | {"clock_sizing_binding"})):
             return False
     elif set(value) != _CLOCK_PROBE_VALUE_KEYS:
         return False
@@ -6894,9 +6910,15 @@ def _clock_probe_predicate_passes(
                     or residual > 5_000_000):
                 return False
             stream_max = value["t_stream_max_s"]
+            if "clock_sizing_binding" in value:
+                from joulewise.v5_qualification import authenticated_clock_budget, authenticated_reference, read
+                binding_path = authenticated_reference(value["clock_sizing_binding"])
+                maximum, _refs = authenticated_clock_budget(binding_path.parent, Path(read(binding_path)["pack_root"]))
+                if stream_max != maximum:
+                    return False
             if stream_max is not None and not _kernel_clock.frequency_gate(r0_frequency, stream_max)["passes"]:
                 return False
-        except (ValueError, TypeError, OverflowError, ZeroDivisionError):
+        except (OSError, KeyError, ValueError, TypeError, OverflowError, ZeroDivisionError):
             return False
     elif anchor_delta > 5_000_000:
         return False
@@ -9551,6 +9573,27 @@ def _read_launch_binding_artifact(
     return raw
 
 
+def authenticated_stage_list(window_root: Path, chain_raw: bytes) -> dict[str, str] | None:
+    """Preflight the dispatch list against its digest in the permitted chain."""
+    text = chain_raw.decode("utf-8")
+    if "before_midpoint_stages.txt" not in text:
+        return None
+    hashes = re.findall(r'(?m)^test .*shasum -a 256 .*before_midpoint_stages\.txt.* = "([0-9a-f]{64})"$', text)
+    if len(hashes) != 1:
+        raise ValueError("dispatch stage list has no unique authenticated digest")
+    path = window_root / "before_midpoint_stages.txt"
+    if any(p.is_symlink() for p in (path, *path.parents)) or not path.is_file():
+        raise ValueError("dispatch stage list is missing or not regular")
+    raw = path.read_bytes()
+    stages = raw.decode("utf-8").splitlines()
+    if (sha256_bytes(raw) != hashes[0] or not stages or len(stages) != len(set(stages))
+            or raw != ("\n".join(stages) + "\n").encode()
+            or any(not stage or Path(stage).is_absolute() or ".." in Path(stage).parts
+                   or not stage.startswith("configs/") for stage in stages)):
+        raise ValueError("dispatch stage list differs from its authenticated chain")
+    return {"path": str(path), "sha256": sha256_bytes(raw)}
+
+
 def _attested_launch_artifact_references(
     pack_root: Path,
     custody_pack_root: Path,
@@ -9657,6 +9700,12 @@ def _attested_launch_artifact_references(
                 if Path(item["path"]).name == "window-chain.zsh"
             ],
         }
+        chain_reference = selections["window_chain"]
+        if len(chain_reference) == 1:
+            chain_path = Path(chain_reference[0]["path"])
+            stage = authenticated_stage_list(chain_path.parent, chain_path.read_bytes())
+            if stage is not None:
+                selections["stage_list"] = [item for item in artifacts if item == stage]
         if any(len(items) != 1 for items in selections.values()):
             raise ValueError("launch-recipe artifact identities are ambiguous")
         return {name: dict(items[0]) for name, items in selections.items()}
@@ -9704,6 +9753,15 @@ def _reconcile_launch_binding(
         launch_binding_cache=launch_binding_cache,
         now_monotonic_ns=now_monotonic_ns,
     )
+    # This executes inside capability reconciliation, before the atomic claim.
+    # The author also attests these bytes, so a deleted/changed list cannot
+    # spend launch authority merely by deferring refusal to the shell chain.
+    try:
+        stage = authenticated_stage_list(window_plan_root, Path(window_chain_reference["path"]).read_bytes())
+        if stage is not None and attested.get("stage_list") != stage:
+            raise ValueError("dispatch stage list differs from launch attestation")
+    except (OSError, ValueError) as exc:
+        raise LaunchLineageError("launch_binding_mismatch", str(exc)) from exc
     try:
         canonical_manifest = (
             custody_pack_root / _T0_INPUT_DIRECTORY / "launch-manifest.json"

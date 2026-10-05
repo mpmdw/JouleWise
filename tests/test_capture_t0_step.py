@@ -24,9 +24,19 @@ from tests.test_arm_readiness_evidence_t0 import (
     _clock_reference_value,
     author_arm_readiness_evidence_t0,
     author_environment,
-    make_t0_fixture,
+    make_t0_fixture as _base_make_t0_fixture,
 )
 from joulewise import network_time_off, arm_readiness as readiness
+
+
+def make_t0_fixture():
+    result = _base_make_t0_fixture()
+    _temporary, _repository, pack, _custody, _context, inputs = result
+    # This module tests command capture/ordering, with the sizing authority
+    # seam substituted explicitly. X6 tests exercise its real authentication.
+    (inputs / "kernel-frequency-binding.json").write_bytes(readiness.render_json({
+        "schema": "fixture_clock_sizing_boundary_only", "pack_root": str(pack)}))
+    return result
 
 
 class _Clock:
@@ -48,6 +58,13 @@ class CaptureT0StepTests(unittest.TestCase):
         patcher = mock.patch.object(capture.kernel_clock, "read_kernel_frequency", return_value=frequency_probe())
         patcher.start()
         self.addCleanup(patcher.stop)
+        from joulewise import v5_qualification as q
+        def budget(inputs, pack):
+            path = inputs / "kernel-frequency-binding.json"
+            return 320., (q.reference(path),) if path.is_file() else ()
+        sizing = mock.patch.object(q, "authenticated_clock_budget", side_effect=budget)
+        sizing.start()
+        self.addCleanup(sizing.stop)
 
     def test_r0_frequency_gate_refuses_changed_draw_before_capture_publication(self):
         from joulewise import kernel_clock
@@ -211,9 +228,11 @@ class CaptureT0StepTests(unittest.TestCase):
             )
         )
         gate_raw = (input_root / "kernel-frequency-gate.json").read_bytes()
+        binding_raw = (input_root / "kernel-frequency-binding.json").read_bytes()
         shutil.rmtree(input_root)
         input_root.mkdir()
         (input_root / "kernel-frequency-gate.json").write_bytes(gate_raw)
+        (input_root / "kernel-frequency-binding.json").write_bytes(binding_raw)
         return (
             temporary,
             repository,
@@ -323,6 +342,7 @@ class CaptureT0StepTests(unittest.TestCase):
             {
                 "network_time_off.json",
                 "kernel-frequency-gate.json",
+                "kernel-frequency-binding.json",
                 "arm-context.json",
                 "clock-disable.json",
                 "clock-reference.json",
