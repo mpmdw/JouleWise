@@ -1449,7 +1449,10 @@ class SupervisorTests(WatchdogTestCase):
             plan.t0_epoch_s - wd.KILL_LEAD_S + 1, tz=self.local_tz
         )
 
-        decision = wd.tick(self.harness.storage, self.harness.deps)
+        with mock.patch.object(self.harness.deps, "git_probe",
+                               side_effect=AssertionError("in-span network probe")) as probe:
+            decision = wd.tick(self.harness.storage, self.harness.deps)
+            probe.assert_not_called()
 
         self.assertEqual("HOLD_UNSAFE", decision.state)
         self.assertEqual(

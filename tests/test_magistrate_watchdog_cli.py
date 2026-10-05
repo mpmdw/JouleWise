@@ -328,6 +328,36 @@ class MagistrateWatchdogCliTests(unittest.TestCase):
         self.assertNotIn("decision=LAUNCHING", positive.stdout)
         self.assertNotIn("decision=HOLD_UNSAFE", positive.stdout)
 
+    def test_real_cli_active_span_skips_only_network_probe(self) -> None:
+        custody_parent = self.root / "span-tick-custody"
+        self._write_valid(custody_parent, "active-plan")
+        source = (
+            "import sys\n"
+            "from unittest import mock\n"
+            "from scripts import magistrate_watchdog as wd\n"
+            "with mock.patch.object(wd, 'remote_stop_probe', side_effect=AssertionError('network')) as probe, "
+            "mock.patch.object(wd, 'production_census', return_value=wd.CensusObservation(True, 1, '', '')) as census:\n"
+            " result=wd.main(sys.argv[1:])\n"
+            " probe.assert_not_called()\n"
+            " census.assert_called_once_with()\n"
+            " raise SystemExit(result)\n"
+        )
+        completed = subprocess.run(
+            [sys.executable, "-c", source, "tick", "--custody-root",
+             str(custody_parent / "magistrate")],
+            cwd=REPO_ROOT, env=self.environment, capture_output=True, text=True,
+            check=False,
+        )
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        watchdog_root = custody_parent / "magistrate"
+        state = json.loads((watchdog_root / "state.json").read_text())
+        self.assertEqual("FENCED", state["state"])
+        self.assertEqual("NOT_PROBED", state["remote_stop"]["state"])
+        self.assertEqual([], state["notice_pending"])
+        events = [json.loads(line) for line in
+                  (watchdog_root / "events.jsonl").read_text().splitlines()]
+        self.assertTrue(any(row["kind"] == "census" for row in events))
+
     def test_real_cli_resident_records_drain_after_plan_is_truncated(self) -> None:
         custody_parent = self.root / "resident-drain-custody"
         plan_path = self._write_valid(

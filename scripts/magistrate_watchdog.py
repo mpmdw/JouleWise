@@ -419,7 +419,7 @@ def production_driver_probe() -> CensusObservation:
     )
 
 
-def remote_stop_probe() -> StopObservation:
+def remote_stop_probe(*, probe_allowed: Callable[[], bool] | None = None) -> StopObservation:
     base = (
         "/usr/bin/git",
         "-c",
@@ -431,10 +431,14 @@ def remote_stop_probe() -> StopObservation:
         STOP_REPOSITORY,
     )
 
-    def run(ref: str) -> subprocess.CompletedProcess[str]:
+    def run(ref: str) -> subprocess.CompletedProcess[str] | None:
         environment = dict(os.environ)
         environment["GIT_TERMINAL_PROMPT"] = "0"
         environment["GIT_CONFIG_NOSYSTEM"] = "1"
+        # Each transport has its own admission check: the positive control
+        # may still be in flight when a night span begins.
+        if probe_allowed is not None and not probe_allowed():
+            return None
         return subprocess.run(
             (*base, ref),
             check=False,
@@ -448,6 +452,8 @@ def remote_stop_probe() -> StopObservation:
         control = run(POSITIVE_CONTROL_REF)
     except Exception as exc:
         return StopObservation("NETWORK_UNCERTAIN", f"positive control exception: {exc}")
+    if control is None:
+        return StopObservation("NOT_PROBED", "remote stop probe skipped during plan span")
     if control.returncode != 0:
         return StopObservation(
             "NETWORK_UNCERTAIN",
@@ -457,6 +463,8 @@ def remote_stop_probe() -> StopObservation:
         stop = run(STOP_REF_GLOB)
     except Exception as exc:
         return StopObservation("NETWORK_UNCERTAIN", f"stop-ref exception: {exc}")
+    if stop is None:
+        return StopObservation("NOT_PROBED", "remote stop probe skipped during plan span")
     if stop.returncode == 0:
         return StopObservation("STOPPED", stop.stdout.strip() or STOP_REF_GLOB)
     if stop.returncode == 2:
@@ -1505,6 +1513,25 @@ def reset_backoff_after_reboot(
     )
 
 
+def _remote_probe_allowed(storage: Storage, deps: Dependencies, state: Mapping[str, Any]) -> bool:
+    now = deps.wall_now().astimezone()
+    snapshot = load_plans(storage, now_epoch_s=now.timestamp())
+    if snapshot.errors:
+        raise ValueError("; ".join(snapshot.errors))
+    # Re-read the clock after the filesystem reads, so a span that starts
+    # during them is still seen before any transport (review F3).
+    now = deps.wall_now().astimezone()
+    return not any(
+        plan_span_active(plan, now.timestamp(), storage, state) for plan in snapshot.plans
+    ) and installed_agent_fence(now, storage, state=state) is None
+
+
+def _probe_remote_stop(storage: Storage, deps: Dependencies, state: Mapping[str, Any]) -> StopObservation:
+    if deps.git_probe is remote_stop_probe:
+        return remote_stop_probe(probe_allowed=lambda: _remote_probe_allowed(storage, deps, state))
+    return deps.git_probe()
+
+
 def decide(
     storage: Storage,
     deps: Dependencies,
@@ -1525,6 +1552,11 @@ def decide(
     # Delivery is only a candidate for release. The courier and driver can
     # both outlive courier.sent; each has its own process-table observation.
     try:
+        # Capture the span before a zero-capture refusal can release it. That
+        # release still permits fast retry on this tick, without a remote probe.
+        probe_span_active = any(
+            plan_span_active(plan, wall.timestamp(), storage, state) for plan in plans
+        )
         release_candidates = [
             plan for plan in plans
             if plan.t0_epoch_s - PLAN_LEAD_S <= wall.timestamp() <= plan_completion_epoch(plan)
@@ -1590,10 +1622,13 @@ def decide(
     except (OSError, ValueError, OverflowError) as exc:
         return Decision("HOLD_UNSAFE", f"installed_agent_fence: {exc}")
     active_plans = [plan for plan in plans if plan_span_active(plan, wall.timestamp(), storage, state)]
-    try:
-        stop = deps.git_probe()
-    except Exception as exc:
-        stop = StopObservation("NETWORK_UNCERTAIN", f"git probe exception: {exc}")
+    if probe_span_active or installed is not None:
+        stop = StopObservation("NOT_PROBED", "remote stop probe skipped during plan span")
+    else:
+        try:
+            stop = _probe_remote_stop(storage, deps, state)
+        except Exception as exc:
+            stop = StopObservation("NETWORK_UNCERTAIN", f"git probe exception: {exc}")
     state["remote_stop"] = {
         "state": stop.state,
         "detail": stop.detail,
@@ -1621,7 +1656,7 @@ def decide(
         return Decision("FENCED", "plan span active and census empty")
     if stop.state == "STOPPED":
         return Decision("STOPPED", stop.detail, adopt=owner is not None)
-    if stop.state != "CLEAR":
+    if stop.state not in {"CLEAR", "NOT_PROBED"}:
         return Decision("NETWORK_UNCERTAIN", stop.detail, adopt=owner is not None)
     if installed is not None:
         return Decision("FENCED", installed)
@@ -1775,11 +1810,20 @@ class ResidentSupervisor:
 
     def _run_remote_probe(self) -> None:
         try:
-            observation = self.deps.git_probe()
+            observation = _probe_remote_stop(self.storage, self.deps, self.state)
         except Exception as exc:
             observation = StopObservation("NETWORK_UNCERTAIN", f"git probe exception: {exc}")
         observed_monotonic = self.deps.monotonic()
         with self._remote_probe_lock:
+            if observation.state == "NOT_PROBED":
+                # Record the abandoned refresh without replacing the last
+                # completed remote observation or its freshness timestamp.
+                self.state["remote_stop"] = {
+                    "state": observation.state,
+                    "detail": observation.detail,
+                    "observed_monotonic": observed_monotonic,
+                }
+                return
             self._remote_stop = observation
             self._remote_stop_observed_monotonic = observed_monotonic
 
@@ -1792,7 +1836,17 @@ class ResidentSupervisor:
                 self._remote_probe_thread = None
                 thread = None
             due = monotonic - self._remote_probe_started_monotonic >= REMOTE_STOP_PROBE_CADENCE_S
-            if thread is None and due:
+            try:
+                allowed = _remote_probe_allowed(self.storage, self.deps, self.state)
+            except Exception as exc:
+                allowed = False
+                # An unreadable fence suppresses transport but keeps the cached
+                # observation, so state and notices stay as at baseline (review F4).
+                observation = self._remote_stop
+            else:
+                observation = (self._remote_stop if allowed else
+                               StopObservation("NOT_PROBED", "remote stop probe skipped during plan span"))
+            if thread is None and due and allowed:
                 self._remote_probe_started_monotonic = monotonic
                 thread = threading.Thread(
                     target=self._run_remote_probe,
@@ -1801,13 +1855,12 @@ class ResidentSupervisor:
                 )
                 self._remote_probe_thread = thread
                 thread.start()
-            observation = self._remote_stop
             observed_monotonic = self._remote_stop_observed_monotonic
-        self.state["remote_stop"] = {
-            "state": observation.state,
-            "detail": observation.detail,
-            "observed_monotonic": observed_monotonic,
-        }
+            self.state["remote_stop"] = {
+                "state": observation.state,
+                "detail": observation.detail,
+                "observed_monotonic": monotonic if observation.state == "NOT_PROBED" else observed_monotonic,
+            }
         return observation
 
     def _output_tail(self) -> str:
@@ -2141,7 +2194,7 @@ class ResidentSupervisor:
                 state_name="STOP_REQUESTED",
                 plan=plan,
             )
-        if stop.state != "CLEAR":
+        if stop.state not in {"CLEAR", "NOT_PROBED"}:
             transition(
                 self.storage,
                 self.state,
