@@ -1518,6 +1518,9 @@ def _remote_probe_allowed(storage: Storage, deps: Dependencies, state: Mapping[s
     snapshot = load_plans(storage, now_epoch_s=now.timestamp())
     if snapshot.errors:
         raise ValueError("; ".join(snapshot.errors))
+    # Re-read the clock after the filesystem reads, so a span that starts
+    # during them is still seen before any transport (review F3).
+    now = deps.wall_now().astimezone()
     return not any(
         plan_span_active(plan, now.timestamp(), storage, state) for plan in snapshot.plans
     ) and installed_agent_fence(now, storage, state=state) is None
@@ -1837,7 +1840,9 @@ class ResidentSupervisor:
                 allowed = _remote_probe_allowed(self.storage, self.deps, self.state)
             except Exception as exc:
                 allowed = False
-                observation = StopObservation("NETWORK_UNCERTAIN", f"git probe exception: {exc}")
+                # An unreadable fence suppresses transport but keeps the cached
+                # observation, so state and notices stay as at baseline (review F4).
+                observation = self._remote_stop
             else:
                 observation = (self._remote_stop if allowed else
                                StopObservation("NOT_PROBED", "remote stop probe skipped during plan span"))

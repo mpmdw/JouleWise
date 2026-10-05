@@ -337,3 +337,51 @@ class TickSpanTests(WatchdogTestCase):
         decision = wd.tick(self.harness.storage, self.harness.deps)
         self.assertEqual("NETWORK_UNCERTAIN", decision.state)
         probe.assert_called_once_with()
+
+    def test_span_starting_during_guard_reads_suppresses_transport(self):
+        # Review F3: the guard re-reads the clock after its filesystem reads.
+        plan = self.make_plan()
+        span_start = plan.t0_epoch_s - wd.PLAN_LEAD_S
+        self.set_wall(span_start - 0.001)
+        self.harness.deps.git_probe = wd.remote_stop_probe
+        calls = []
+        reads = 0
+        read = self.harness.storage.read_text
+
+        def read_and_advance(path):
+            nonlocal reads
+            value = read(path)
+            if path.name == "night_plan.json":
+                reads += 1
+                if reads == 2:
+                    self.set_wall(span_start)
+            return value
+
+        def transport(argv, **kwargs):
+            calls.append(argv[-1])
+            return subprocess.CompletedProcess(argv, 0 if argv[-1] == wd.POSITIVE_CONTROL_REF else 2, "control", "")
+
+        with mock.patch.object(self.harness.storage, "read_text", side_effect=read_and_advance), \
+                mock.patch.object(wd.subprocess, "run", side_effect=transport):
+            wd.tick(self.harness.storage, self.harness.deps, dry_run=True)
+        self.assertEqual([], calls)
+
+    def test_unreadable_installed_fence_keeps_resident_state_and_notices(self):
+        # Review F4: a torn installed plist suppresses transport but changes
+        # neither the resident state nor its notices (baseline: ACTIVE, none).
+        plan = self.make_plan()
+        self.installed_plan(plan).write_bytes(b"torn plist")
+        original = self.supervisor(plan)
+        state = wd.initial_state()
+        state.update(state="ACTIVE", activation_id="activation-a")
+        state["remote_stop"] = {"state": "CLEAR", "detail": "last completed",
+                                "observed_monotonic": self.harness.clock.mono}
+        supervisor = wd.ResidentSupervisor(self.harness.storage, self.harness.deps, state, self.harness.child,
+                                           original.lock_record, original.stdout_path, original.stderr_path)
+        supervisor.step()
+        thread = supervisor._remote_probe_thread
+        if thread is not None:
+            thread.join(5)
+            self.assertFalse(thread.is_alive())
+        self.assertEqual("ACTIVE", state["state"])
+        self.assertEqual([], [notice["kind"] for notice in state["notice_pending"]])
