@@ -1,0 +1,231 @@
+{
+  "models": {
+    "qwen3-1p7b": {
+      "projection_json_sha256": "44096c3b33b3b33bbc3f1bbc63f91a4c2aa1a5568c4059390b1f87622a52aa09",
+      "registration_manifest": [
+        {
+          "absolute_repeats": 10,
+          "attribution_floor": "labelled_beside_never_composed",
+          "authority": "D-179",
+          "cell_id": "d117-reported-mean-ph-decode-qwen3-1p7b",
+          "complete_abba_blocks": 10,
+          "deterministic_bound_kinds": [
+            "E_clock_anchor_shift_bound_j",
+            "E_interpolation_joint_edge_bound_j",
+            "E_whole_window_drift_allowance_j"
+          ],
+          "excluded_prediction_term": "detection_floor.py:sqrt(1+1/n)",
+          "expected_n": 50,
+          "independence_units": 20,
+          "interval_method": "stratified_repeat_abba_mean_t9_plus_kind_bounds.v1",
+          "missing_or_invalid_member": "refuse_reported_mean",
+          "model": "qwen3-1p7b",
+          "phase": "decode",
+          "phase_ratio_estimand": {
+            "cell_id": "d117-reported-mean-ph-decode-qwen3-1p7b",
+            "denominator": "runtime_observed_output_tokens",
+            "denominator_unit": "token",
+            "form": "ratio_of_totals",
+            "numerator": "gross_phase_energy_j",
+            "output_policy_scope": "same_policy_required",
+            "phase": "decode",
+            "tokenizer_scope": "same_identity_required"
+          },
+          "reducer": "arithmetic_mean_over_fixed_member_universe.v1",
+          "reference_df": 9,
+          "schema_version": "joulewise.paper_reported_energy_registration.v1",
+          "stratum_weights": [
+            0.2,
+            0.8
+          ]
+        },
+        {
+          "absolute_repeats": 10,
+          "attribution_floor": "labelled_beside_never_composed",
+          "authority": "D-179",
+          "cell_id": "d117-reported-mean-ph-prefill-p42-qwen3-1p7b",
+          "complete_abba_blocks": 10,
+          "deterministic_bound_kinds": [
+            "E_clock_anchor_shift_bound_j",
+            "E_interpolation_joint_edge_bound_j",
+            "E_whole_window_drift_allowance_j"
+          ],
+          "excluded_prediction_term": "detection_floor.py:sqrt(1+1/n)",
+          "expected_n": 50,
+          "independence_units": 20,
+          "interval_method": "stratified_repeat_abba_mean_t9_plus_kind_bounds.v1",
+          "missing_or_invalid_member": "refuse_reported_mean",
+          "model": "qwen3-1p7b",
+          "phase": "prefill",
+          "phase_ratio_estimand": {
+            "cell_id": "d117-reported-mean-ph-prefill-p42-qwen3-1p7b",
+            "denominator": "runtime_observed_prompt_tokens",
+            "denominator_unit": "token",
+            "form": "ratio_of_totals",
+            "numerator": "gross_phase_energy_j",
+            "output_policy_scope": "same_policy_required",
+            "phase": "prefill",
+            "tokenizer_scope": "same_identity_required"
+          },
+          "reducer": "arithmetic_mean_over_fixed_member_universe.v1",
+          "reference_df": 9,
+          "schema_version": "joulewise.paper_reported_energy_registration.v1",
+          "stratum_weights": [
+            0.2,
+            0.8
+          ]
+        },
+        {
+          "absolute_repeats": 10,
+          "attribution_floor": "labelled_beside_never_composed",
+          "authority": "D-179",
+          "cell_id": "d117-reported-mean-ph-prefill-p512-qwen3-1p7b",
+          "complete_abba_blocks": 10,
+          "deterministic_bound_kinds": [
+            "E_clock_anchor_shift_bound_j",
+            "E_interpolation_joint_edge_bound_j",
+            "E_whole_window_drift_allowance_j"
+          ],
+          "excluded_prediction_term": "detection_floor.py:sqrt(1+1/n)",
+          "expected_n": 50,
+          "independence_units": 20,
+          "interval_method": "stratified_repeat_abba_mean_t9_plus_kind_bounds.v1",
+          "missing_or_invalid_member": "refuse_reported_mean",
+          "model": "qwen3-1p7b",
+          "phase": "prefill",
+          "phase_ratio_estimand": {
+            "cell_id": "d117-reported-mean-ph-prefill-p512-qwen3-1p7b",
+            "denominator": "runtime_observed_prompt_tokens",
+            "denominator_unit": "token",
+            "form": "ratio_of_totals",
+            "numerator": "gross_phase_energy_j",
+            "output_policy_scope": "same_policy_required",
+            "phase": "prefill",
+            "tokenizer_scope": "same_identity_required"
+          },
+          "reducer": "arithmetic_mean_over_fixed_member_universe.v1",
+          "reference_df": 9,
+          "schema_version": "joulewise.paper_reported_energy_registration.v1",
+          "stratum_weights": [
+            0.2,
+            0.8
+          ]
+        }
+      ]
+    },
+    "qwen3-8b": {
+      "projection_json_sha256": "8161378603ba71f1671cc2c948f989125daac1b4a0c0c9f4db4bd3ec85f9a280",
+      "registration_manifest": [
+        {
+          "absolute_repeats": 10,
+          "attribution_floor": "labelled_beside_never_composed",
+          "authority": "D-179",
+          "cell_id": "d117-reported-mean-ph-decode-qwen3-8b",
+          "complete_abba_blocks": 10,
+          "deterministic_bound_kinds": [
+            "E_clock_anchor_shift_bound_j",
+            "E_interpolation_joint_edge_bound_j",
+            "E_whole_window_drift_allowance_j"
+          ],
+          "excluded_prediction_term": "detection_floor.py:sqrt(1+1/n)",
+          "expected_n": 50,
+          "independence_units": 20,
+          "interval_method": "stratified_repeat_abba_mean_t9_plus_kind_bounds.v1",
+          "missing_or_invalid_member": "refuse_reported_mean",
+          "model": "qwen3-8b",
+          "phase": "decode",
+          "phase_ratio_estimand": {
+            "cell_id": "d117-reported-mean-ph-decode-qwen3-8b",
+            "denominator": "runtime_observed_output_tokens",
+            "denominator_unit": "token",
+            "form": "ratio_of_totals",
+            "numerator": "gross_phase_energy_j",
+            "output_policy_scope": "same_policy_required",
+            "phase": "decode",
+            "tokenizer_scope": "same_identity_required"
+          },
+          "reducer": "arithmetic_mean_over_fixed_member_universe.v1",
+          "reference_df": 9,
+          "schema_version": "joulewise.paper_reported_energy_registration.v1",
+          "stratum_weights": [
+            0.2,
+            0.8
+          ]
+        },
+        {
+          "absolute_repeats": 10,
+          "attribution_floor": "labelled_beside_never_composed",
+          "authority": "D-179",
+          "cell_id": "d117-reported-mean-ph-prefill-p42-qwen3-8b",
+          "complete_abba_blocks": 10,
+          "deterministic_bound_kinds": [
+            "E_clock_anchor_shift_bound_j",
+            "E_interpolation_joint_edge_bound_j",
+            "E_whole_window_drift_allowance_j"
+          ],
+          "excluded_prediction_term": "detection_floor.py:sqrt(1+1/n)",
+          "expected_n": 50,
+          "independence_units": 20,
+          "interval_method": "stratified_repeat_abba_mean_t9_plus_kind_bounds.v1",
+          "missing_or_invalid_member": "refuse_reported_mean",
+          "model": "qwen3-8b",
+          "phase": "prefill",
+          "phase_ratio_estimand": {
+            "cell_id": "d117-reported-mean-ph-prefill-p42-qwen3-8b",
+            "denominator": "runtime_observed_prompt_tokens",
+            "denominator_unit": "token",
+            "form": "ratio_of_totals",
+            "numerator": "gross_phase_energy_j",
+            "output_policy_scope": "same_policy_required",
+            "phase": "prefill",
+            "tokenizer_scope": "same_identity_required"
+          },
+          "reducer": "arithmetic_mean_over_fixed_member_universe.v1",
+          "reference_df": 9,
+          "schema_version": "joulewise.paper_reported_energy_registration.v1",
+          "stratum_weights": [
+            0.2,
+            0.8
+          ]
+        },
+        {
+          "absolute_repeats": 10,
+          "attribution_floor": "labelled_beside_never_composed",
+          "authority": "D-179",
+          "cell_id": "d117-reported-mean-ph-prefill-p512-qwen3-8b",
+          "complete_abba_blocks": 10,
+          "deterministic_bound_kinds": [
+            "E_clock_anchor_shift_bound_j",
+            "E_interpolation_joint_edge_bound_j",
+            "E_whole_window_drift_allowance_j"
+          ],
+          "excluded_prediction_term": "detection_floor.py:sqrt(1+1/n)",
+          "expected_n": 50,
+          "independence_units": 20,
+          "interval_method": "stratified_repeat_abba_mean_t9_plus_kind_bounds.v1",
+          "missing_or_invalid_member": "refuse_reported_mean",
+          "model": "qwen3-8b",
+          "phase": "prefill",
+          "phase_ratio_estimand": {
+            "cell_id": "d117-reported-mean-ph-prefill-p512-qwen3-8b",
+            "denominator": "runtime_observed_prompt_tokens",
+            "denominator_unit": "token",
+            "form": "ratio_of_totals",
+            "numerator": "gross_phase_energy_j",
+            "output_policy_scope": "same_policy_required",
+            "phase": "prefill",
+            "tokenizer_scope": "same_identity_required"
+          },
+          "reducer": "arithmetic_mean_over_fixed_member_universe.v1",
+          "reference_df": 9,
+          "schema_version": "joulewise.paper_reported_energy_registration.v1",
+          "stratum_weights": [
+            0.2,
+            0.8
+          ]
+        }
+      ]
+    }
+  },
+  "source_commit": "03235037d2cccafd83debbf53ff733b79f1825a1"
+}

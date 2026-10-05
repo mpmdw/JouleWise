@@ -1,6 +1,7 @@
 """D-179 adversarial synthetic controls; these confer no production acceptance."""
 from contextlib import contextmanager
 from copy import deepcopy
+import hashlib
 import json
 import math
 from pathlib import Path
@@ -17,13 +18,13 @@ from tests.test_paper_custody import _FamilyFixture, _json_bytes, _sha
 from tests.git_fixture import init_git_fixture
 
 
-def synthetic_spec(model="qwen3-1p7b"):
+def synthetic_spec(model="qwen3-1p7b", prefill_length=512):
     reported, floor = [], []
-    for role in ("decode", "prefill-p42", "prefill-p512"):
+    for role in ("decode", "prefill-p42", f"prefill-p{prefill_length}"):
         cell_id = f"d117-reported-mean-ph-{role}-{model}"
         phase = "decode" if role == "decode" else "prefill"
         reg = energy.reported_energy_registration(cell_id)
-        members = [{"ordinal": i + 1, "bundle_id": f"{'p512' if role.endswith('p512') else 'shared'}-{i}",
+        members = [{"ordinal": i + 1, "bundle_id": f"{f'p{prefill_length}' if role == f'prefill-p{prefill_length}' else 'shared'}-{i}",
                     "config_sha256": f"{i:064x}"} for i in range(50)]
         reported.append({"cell_id": cell_id, "metric": f"phase_energy_j.{phase}", "window_class": "phase",
                          "target_precheck_path": ["phase", phase], "measurand": "gross_phase_energy_j",
@@ -39,13 +40,16 @@ def synthetic_spec(model="qwen3-1p7b"):
                    "blocks": [{"block_id": f"b{i}", "members": dict(zip(("A1", "B1", "B2", "A2"),
                                [row["bundle_id"] for row in members[10 + i * 4:14 + i * 4]]))} for i in range(10)],
                    "member_config_sha256": pins[10:]}]
+    registration = {"registration_sha256": energy.registration_sha256(model, prefill_length)}
+    if prefill_length != 512:
+        registration["prefill_prompt_tokens"] = prefill_length
     return {"schema_version": "joulewise.detection_floor_extraction_spec.v1", "cells": floor,
             "reported_energy_cells": reported,
-            "reported_energy_registration": {"registration_sha256": energy.registration_sha256(model)}}
+            "reported_energy_registration": registration}
 
 
-def synthetic_input(model="qwen3-1p7b"):
-    spec = synthetic_spec(model)
+def synthetic_input(model="qwen3-1p7b", prefill_length=512):
+    spec = synthetic_spec(model, prefill_length)
     data = []
     for cell in spec["reported_energy_cells"]:
         phase = cell["projection_registration"]["phase"]
@@ -59,7 +63,7 @@ def synthetic_input(model="qwen3-1p7b"):
             # Repeat stratum 10..19, block means 31.5,35.5,...67.5.
             value = 10 + i if i < 10 else 30 + (i - 10)
             output = i + 1
-            prompt = 512 if "p512" in cell["cell_id"] else 42
+            prompt = prefill_length if f"prefill-p{prefill_length}-" in cell["cell_id"] else 42
             rows.append({"member": deepcopy(member), "model": model, "phase": phase,
                          **{k: binding[k] for k in ("selection_sha256", "prompt_pin_sha256", "whole_window_basis_sha256")},
                          "strict_valid": True, "unit": unit, "energy_j": value,
@@ -72,6 +76,57 @@ def synthetic_input(model="qwen3-1p7b"):
 
 
 class ReportedEnergyTests(unittest.TestCase):
+    def test_historical_p512_manifest_and_projection_replay_are_unchanged(self):
+        replay = json.loads((Path(__file__).parent / "fixtures/paper_reported_energy/p512_replay.json").read_bytes())
+        for model, digest in (
+            ("qwen3-1p7b", "d89011dbda01172c41ebaa200d2410b37419fc2ee626700945a811d51b136952"),
+            ("qwen3-8b", "88e0f5c179a7ecccb1f048f209e25ed0f239772cc078cf650c50957beceab138"),
+        ):
+            with self.subTest(model=model):
+                self.assertEqual(energy.registration_sha256(model), digest)
+                self.assertEqual(energy.registration_sha256(model, 512), digest)
+                self.assertEqual(energy.registration_manifest(model),
+                                 energy.registration_manifest(model, 512))
+                frozen = replay["models"][model]
+                self.assertEqual(_json_bytes(energy.registration_manifest(model)),
+                                 _json_bytes(frozen["registration_manifest"]))
+                # The digest covers the complete historical projection bytes,
+                # including its own projection digest, from the r1 owner.
+                self.assertEqual(hashlib.sha256(_json_bytes(energy._synthetic_projection(
+                    synthetic_input(model)))).hexdigest(), frozen["projection_json_sha256"])
+
+    def test_p2048_family_registers_censuses_and_projects(self):
+        for model in energy.MODELS:
+            with self.subTest(model=model):
+                data = synthetic_input(model, 2048)
+                energy._validate_registered_spec(data["spec"])
+                self.assertEqual([r["cell_id"] for r in energy.registration_manifest(model, 2048)],
+                                 [c["cell_id"] for c in data["spec"]["reported_energy_cells"]])
+                self.assertNotEqual(energy.registration_sha256(model, 2048),
+                                    energy.registration_sha256(model))
+                result = energy._synthetic_projection(data)
+                self.assertEqual(result["cells"][2]["cell_id"],
+                                 f"d117-reported-mean-ph-prefill-p2048-{model}")
+                self.assertAlmostEqual(result["cells"][2]["per_token"]["j_per_token"],
+                                       2125 / (50 * 2048))
+
+    def test_mixed_prefill_lengths_and_p512_alias_refuse(self):
+        for changed_index, length in ((4, 512), (5, 4096)):
+            spec = synthetic_spec(prefill_length=2048)
+            spec["cells"][changed_index]["cell_id"] = spec["cells"][changed_index]["cell_id"].replace(
+                "p2048", f"p{length}")
+            with self.subTest(index=changed_index, length=length), self.assert_code("floor_identity_mismatch"):
+                energy._validate_registered_spec(spec)
+        spec = synthetic_spec(prefill_length=2048)
+        spec["reported_energy_cells"][2] = synthetic_spec()["reported_energy_cells"][2]
+        with self.assert_code("cell_census_invalid"):
+            energy._validate_registered_spec(spec)
+        # A name cannot grant length authority in an undeclared legacy spec.
+        spec = synthetic_spec(prefill_length=2048)
+        del spec["reported_energy_registration"]["prefill_prompt_tokens"]
+        with self.assert_code("cell_census_invalid"):
+            energy._validate_registered_spec(spec)
+
     def setUp(self):
         self.input = synthetic_input()
         self.cell = self.input["spec"]["reported_energy_cells"][0]
@@ -300,6 +355,47 @@ class ReportedEnergyTests(unittest.TestCase):
                         reason = {"digest_mismatch": "registration_digest_mismatch", "absent_spec": "ordering_history_invalid"}.get(
                             order, "registration_not_before_spec")
                         with self.assert_code(reason):
+                            energy.verify_registration_ordering(repo, model)
+
+    def test_p2048_registration_ordering_uses_prospective_ladder_commit(self):
+        source = Path(energy.__file__).read_bytes()
+        historical = source.replace(
+            b"PREFILL_LADDER_PROMPT_TOKENS = (512, 1024, 2048, 4096)",
+            b"PREFILL_LADDER_PROMPT_TOKENS = (512,)",
+        )
+        self.assertNotEqual(historical, source)
+        for model in energy.MODELS:
+            for ladder_first in (True, False):
+                with self.subTest(model=model, ladder_first=ladder_first), tempfile.TemporaryDirectory() as tmp:
+                    repo = Path(tmp)
+                    init_git_fixture(repo, "-q")
+                    def git(*args):
+                        return subprocess.check_output(["git", "-C", tmp, *args], text=True).strip()
+                    git("config", "user.email", "synthetic@example.invalid")
+                    git("config", "user.name", "Synthetic test")
+                    owner = repo / "joulewise/paper_reported_energy.py"
+                    owner.parent.mkdir(parents=True)
+                    owner.write_bytes(historical)
+                    git("add", ".")
+                    git("commit", "-qm", "original p512 owner")
+                    spec = repo / f"configs/campaigns/d117_floor_{model}_v5/extraction_spec.json"
+                    spec.parent.mkdir(parents=True)
+                    changes = [(owner, source), (spec, _json_bytes(synthetic_spec(model, 2048)))]
+                    if not ladder_first:
+                        changes.reverse()
+                    ladder_commit = None
+                    for path, raw in changes:
+                        path.write_bytes(raw)
+                        git("add", ".")
+                        git("commit", "-qm", path.name)
+                        if path == owner:
+                            ladder_commit = git("rev-parse", "HEAD")
+                    if ladder_first:
+                        proof = energy.verify_registration_ordering(repo, model)
+                        self.assertEqual(proof["registration_commit"], ladder_commit)
+                        self.assertEqual(proof["registration_sha256"], energy.registration_sha256(model, 2048))
+                    else:
+                        with self.assert_code("registration_not_before_spec"):
                             energy.verify_registration_ordering(repo, model)
 
     def test_mean_of_ratios_changes_decode_value(self):

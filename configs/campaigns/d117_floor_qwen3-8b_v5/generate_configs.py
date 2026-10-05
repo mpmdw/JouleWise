@@ -75,7 +75,19 @@ from joulewise.suite import (  # noqa: E402
 
 
 N = 10
-PREFILL_LENGTH = 512
+PREFILL_LENGTH: int | None = None
+# Planning inputs only, never night-plan limits or measurement claims. The
+# non-prefill allowance retains the inherited 314-minute estimate at p512.
+# Rate = max(mean phase seconds / tokens) over block-3 p0512 and p2048
+# diagnostic members (n=1 per rung), archive 20261004T1305Z-r2.
+PLANNING_BASELINE_SECONDS = 18840.0
+PLANNING_PREFILL_SECONDS_PER_TOKEN = 0.0015653804875910282
+# Issuer PR #471, _end_state_record: copy its schema id and closed key set
+# only; harvest/registration replay remains issuer-owned.
+PREFILL_END_STATE_SCHEMA = "joulewise.g2a_prefill_end_state.v1"
+PREFILL_END_STATE_KEYS = frozenset({
+    "schema_version", "registration_sha256", "recover_harvests", "trigger",
+})
 PREFILL_LADDER_PROMPT_TOKENS = [512, 1024, 2048, 4096]
 PREFILL_MIN_SMALL_MODEL_MEMBERS_PER_RUNG = 5
 PREFILL_MIN_OVERLAPPING_POWER_INTERVAL_COUNT = 5
@@ -195,21 +207,21 @@ ACCEPTANCE_DERIVATION_SHA256 = (
     "4f6633d5fb89a6e8fd137a834728b843915027b6f0b0afd6c37ae24e65d23f02"
 )
 ACCEPTANCE_ID = "d079_calibration_acceptance_v2_n19"
-# D-138 dual-generation acceptance. The frozen `_v1` identity is permanently
-# bound to the D-116 initial issuance; successor generations bind the reissue
-# derived at the integrated estimator head.
+# D-138: retain the historical issuance for preserve-mode replay. New v5
+# floors bind the issued 25G83 r2 live default at this implementation head.
+# LEDGER_HEAD_SHA256 below pins that acceptance's cutoff, not the live head.
 SUCCESSOR_ACCEPTANCE_REL = Path(
-    "configs/calibration/calibration_acceptance_d079_v2_n17_r6.json"
+    "configs/calibration/calibration_acceptance_d079_v2_n24_25g83_r2.json"
 )
 SUCCESSOR_ACCEPTANCE_SHA256 = (
-    "0227bca3f826edc7f0a1baf98a394df01d8f48e9609966088870d712f765697d"
+    "f949f511254e03b50b0be1cea37f74c1e8e6b4c49926c6c197024beea07b3660"
 )
 SUCCESSOR_ACCEPTANCE_DERIVATION_SHA256 = (
-    "18d09aa9d4accb16a8dff770de85cd7e7525bdb0b6e68f1de716e20fb8a9b9f3"
+    "10965d36527c73217154efdbd75ab923412685f3e79526bd31f33e6f9142e5c0"
 )
-SUCCESSOR_ACCEPTANCE_ID = "d079_calibration_acceptance_v2_n17_r6"
+SUCCESSOR_ACCEPTANCE_ID = "d079_calibration_acceptance_v2_n24_25g83_r2"
 LEDGER_HEAD_SHA256 = (
-    "08456d5076c18a9a7f758969b02f5b6f7ad9fcc267dd12e2d3778c22458094d7"
+    "a5b825b7dd77856be8d612be759be84f925a32f6e671481c2662bb03cbf57014"
 )
 NEG8_MANIFEST_REL = Path("configs/campaigns/neg8_reference_corpus/order_manifest.json")
 NEG8_SETTLED_REL = Path(
@@ -420,6 +432,12 @@ def thread_generation_identity(value: Any) -> Any:
     if isinstance(value, str):
         for token in _SUCCESSOR_IDENTITY_TOKENS:
             value = value.replace(token, _successor_token(token, identity))
+            # Thread the f-string spelling in embedded successor source too.
+            template = token.replace("p512", "p{PREFILL_LENGTH}")
+            value = value.replace(template, _successor_token(template, identity))
+            if PREFILL_LENGTH is not None:
+                derived = token.replace("p512", f"p{PREFILL_LENGTH}")
+                value = value.replace(derived, _successor_token(derived, identity))
         return value
     if isinstance(value, dict):
         return {
@@ -651,6 +669,63 @@ def write_json(output_root: Path, relative: Path, value: Any) -> bytes:
     return raw
 
 
+_PREFILL_IDENTITY_TEMPLATES = {
+    "PLAN_ID": PLAN_ID,
+    "P512_FAMILY_ID": P512_FAMILY_ID,
+    "P512_FAMILY_REL": P512_FAMILY_REL.as_posix(),
+    "P512_WORKLOAD_NAME": P512_WORKLOAD_NAME,
+}
+_PREFILL_STAGE_TEMPLATES = STAGES
+
+
+def projected_runtime_budget() -> dict[str, Any]:
+    """Scale only long-prefill work; fixed occupancy and decode stay fixed."""
+    if PREFILL_LENGTH is None:
+        raise ValueError("prefill_prompt_pin_unresolved")
+    # Fifty long-prompt members each prefill once in warmup and once in the
+    # measured request (mlx_runtime.warmup uses the member's own prompt).
+    passes = 50 * 2
+    prefill_seconds = passes * PREFILL_LENGTH * PLANNING_PREFILL_SECONDS_PER_TOKEN
+    fixed_seconds = (
+        PLANNING_BASELINE_SECONDS
+        - passes * 512 * PLANNING_PREFILL_SECONDS_PER_TOKEN
+    )
+    subtotal = fixed_seconds + prefill_seconds
+    margin_seconds = subtotal * 0.2
+    seconds = subtotal + margin_seconds
+    minutes = seconds / 60
+    return {
+        "planning_estimate_minutes_with_margin": minutes,
+        "planning_estimate_hours_with_margin": minutes / 60,
+        "planning_estimate_seconds_with_margin": round(seconds),
+        "projection_basis": "diagnostic_prefill_rate_plus_inherited_fixed_allowance",
+        "baseline_prompt_tokens": 512,
+        "baseline_minutes_with_margin": 376.8,
+        "prefill_prompt_tokens": PREFILL_LENGTH,
+        "prefill_seconds_per_token": PLANNING_PREFILL_SECONDS_PER_TOKEN,
+        "long_prefill_member_count": 50,
+        "prefill_passes_per_member": 2,
+        "components_seconds": {
+            "long_prefill": prefill_seconds,
+            "fixed_decode_cooldown_calibration_and_overhead": fixed_seconds,
+            "time_headroom": margin_seconds,
+        },
+        "fixed_allowance_includes": [
+            "forced_512_token_decode", "warmup_decode", "short_prompt_prefill",
+            "cooldowns", "idle_sampling", "post_warmup_settling",
+            "bound_and_reference_members", "calibration_observations",
+            "model_loading_and_fixed_overhead",
+        ],
+        "planning_only": True,
+        "margin_percent": 20,
+        "margin_authority": "time_headroom_only_never_member_replacement",
+        "science_count": 100,
+        "bound_count": 12,
+        "reference_count": 7,
+        "calibration_observation_count": 2,
+    }
+
+
 def dominance_criterion_registration() -> dict[str, Any]:
     return {
         "kind": "comparative",
@@ -755,6 +830,8 @@ def prefill_family_definition() -> dict[str, Any]:
 
 
 def p512_family_definition() -> dict[str, Any]:
+    if PREFILL_LENGTH is None:
+        raise ValueError("prefill_prompt_pin_unresolved")
     return {
         "schema_version": "joulewise.condition_family_definition.v1",
         "condition_family_id": P512_FAMILY_ID,
@@ -977,6 +1054,8 @@ def decode_workload_candidate() -> dict[str, Any]:
 
 
 def configure_prefill_pin(path: Path) -> None:
+    global PREFILL_LENGTH, PLAN_ID, P512_FAMILY_ID, P512_FAMILY_REL
+    global P512_WORKLOAD_NAME, STAGES
     global P512_PROMPT_UTF8_SHA256, P512_SHARED_TOKENIZER_JSON_SHA256
     global P512_PROMPT_TOKEN_IDS_SHA256, P512_PROMPT_TEXT
     global PREFILL_PIN_SOURCE_PATH, PREFILL_PIN_SOURCE_RAW
@@ -1029,13 +1108,16 @@ def configure_prefill_pin(path: Path) -> None:
         != value["sample_count_margin_floor"]
         or value["selection_expression"] != PREFILL_SELECTION_EXPRESSION
         or value["exhausted_ladder_branch"] != PREFILL_EXHAUSTED_LADDER_BRANCH
-        or value["prefill_length"] != PREFILL_LENGTH
-        or value["prompt_tokens"] != PREFILL_LENGTH
+        or type(value["prefill_length"]) is not int
+        or value["prefill_length"] not in PREFILL_LADDER_PROMPT_TOKENS
+        or type(value["prompt_tokens"]) is not int
+        or value["prompt_tokens"] != value["prefill_length"]
         or value["tokenizer_json_sha256"] != MODEL["tokenizer_json_sha256"]
         or value["panel_sha256"] != PANEL_SHA256
         or value["special_token_policy"] != "add_special_tokens=true"
     ):
         raise ValueError("prefill_prompt_pin_invalid: ruled constants mismatch")
+    prefill_length = value["prefill_length"]
     authority = value["selection_authority"]
     if (
         not isinstance(authority, dict)
@@ -1102,31 +1184,67 @@ def configure_prefill_pin(path: Path) -> None:
         raise ValueError(
             f"prefill_prompt_pin_invalid: selection_record: {exc}"
         ) from exc
-    selection_keys = {
-        "collection_prefill_tokens",
-        "qualifying_prefill_tokens",
-        "refusal",
-        "rule",
-        "schema_version",
-        "selected_prefill_tokens",
-        "status",
-        "summary_sha256",
-    }
-    if not isinstance(selection, dict) or set(selection) != selection_keys:
-        raise ValueError("selection_record_closed_schema_mismatch")
-    if selection.get("schema_version") != "joulewise.g2a_prefill_selection.v1":
-        raise ValueError("selection_record_schema_version_invalid")
-    if selection.get("status") == "refused":
-        raise ValueError("selection_record_refused_not_supported")
-    if selection.get("status") != "selected":
-        raise ValueError("selection_record_status_invalid")
-    if selection.get("collection_prefill_tokens") != PREFILL_LENGTH:
-        raise ValueError("selection_record_collection_prefill_tokens_mismatch")
-    if (
-        selection.get("selected_prefill_tokens") != PREFILL_LENGTH
-        or selection.get("refusal") is not None
-    ):
-        raise ValueError("selection_record_selected_branch_malformed")
+    if isinstance(selection, dict) and selection.get("schema_version") == PREFILL_END_STATE_SCHEMA:
+        if set(selection) != PREFILL_END_STATE_KEYS:
+            raise ValueError("end_state_record_closed_schema_mismatch")
+        if prefill_length != 4096:
+            raise ValueError("end_state_record_requires_4096")
+
+        def is_sha256(item: Any) -> bool:
+            return (isinstance(item, str) and len(item) == 64
+                    and all(character in "0123456789abcdef" for character in item))
+
+        if not is_sha256(selection["registration_sha256"]):
+            raise ValueError("end_state_record_registration_sha256_invalid")
+        harvests = selection["recover_harvests"]
+        if not isinstance(harvests, list) or len(harvests) not in (1, 2):
+            raise ValueError("end_state_record_recover_harvests_invalid")
+        for harvest in harvests:
+            if (not isinstance(harvest, dict) or set(harvest) != {"path", "sha256"}
+                    or not isinstance(harvest["path"], str) or not harvest["path"].strip()
+                    or not Path(harvest["path"]).is_absolute()
+                    or ".." in Path(harvest["path"]).parts
+                    or not is_sha256(harvest["sha256"])):
+                raise ValueError("end_state_record_recover_harvests_invalid")
+        if (len({item["path"] for item in harvests}) != len(harvests)
+                or len({item["sha256"] for item in harvests}) != len(harvests)):
+            raise ValueError("end_state_record_recover_harvests_invalid")
+        expected_trigger = (
+            "first_recover_systematic_clock_anchor_failure" if len(harvests) == 1
+            else "recovery_window_also_recover"
+        )
+        if selection["trigger"] != expected_trigger:
+            raise ValueError("end_state_record_trigger_invalid")
+    else:
+        selection_keys = {
+            "collection_prefill_tokens",
+            "qualifying_prefill_tokens",
+            "refusal",
+            "rule",
+            "schema_version",
+            "selected_prefill_tokens",
+            "status",
+            "summary_sha256",
+        }
+        if not isinstance(selection, dict) or set(selection) != selection_keys:
+            raise ValueError("selection_record_closed_schema_mismatch")
+        if selection.get("schema_version") != "joulewise.g2a_prefill_selection.v1":
+            raise ValueError("selection_record_schema_version_invalid")
+        if selection.get("status") == "refused":
+            raise ValueError("selection_record_refused_not_supported")
+        if selection.get("status") != "selected":
+            raise ValueError("selection_record_status_invalid")
+        if (
+            type(selection.get("collection_prefill_tokens")) is not int
+            or selection["collection_prefill_tokens"] != prefill_length
+        ):
+            raise ValueError("selection_record_collection_prefill_tokens_mismatch")
+        if (
+            type(selection.get("selected_prefill_tokens")) is not int
+            or selection["selected_prefill_tokens"] != prefill_length
+            or selection.get("refusal") is not None
+        ):
+            raise ValueError("selection_record_selected_branch_malformed")
     ladder = json.loads(
         ladder_raw,
         object_pairs_hook=reject_duplicates,
@@ -1170,7 +1288,7 @@ def configure_prefill_pin(path: Path) -> None:
         rungs_by_length[length] = row
     if tuple(sorted(rungs_by_length)) != tuple(PREFILL_LADDER_PROMPT_TOKENS):
         raise ValueError("prompt_ladder_lengths_mismatch")
-    rung = rungs_by_length[PREFILL_LENGTH]
+    rung = rungs_by_length[prefill_length]
     ids = value["prompt_token_ids"]
     text = value["prompt_text"]
     if (
@@ -1182,7 +1300,7 @@ def configure_prefill_pin(path: Path) -> None:
         or rung["repeat_count"] <= 0
         or not isinstance(text, str)
         or not isinstance(ids, list)
-        or len(ids) != PREFILL_LENGTH
+        or len(ids) != prefill_length
         or any(isinstance(item, bool) or not isinstance(item, int) or item < 0 for item in ids)
         or sha256_bytes(text.encode("utf-8")) != value["prompt_text_utf8_sha256"]
         or prompt_token_ids_sha256(ids) != value["prompt_token_ids_sha256"]
@@ -1210,6 +1328,15 @@ def configure_prefill_pin(path: Path) -> None:
     )
     if text != expected_text or value["generation_method"] != expected_method:
         raise ValueError("prefill_prompt_pin_prompt_construction_mismatch")
+    # Publish length and its derived identities only after all pin checks pass.
+    PREFILL_LENGTH = prefill_length
+    for name, template in _PREFILL_IDENTITY_TEMPLATES.items():
+        derived = template.replace("p512", f"p{prefill_length}")
+        globals()[name] = Path(derived) if name == "P512_FAMILY_REL" else derived
+    STAGES = tuple(
+        {key: value.replace("p512", f"p{prefill_length}") for key, value in stage.items()}
+        for stage in _PREFILL_STAGE_TEMPLATES
+    )
     PREFILL_PIN_SOURCE_PATH = path
     PREFILL_PIN_SOURCE_RAW = raw
     PREFILL_LADDER_SOURCE_PATH = ladder_path
@@ -1251,7 +1378,7 @@ def load_and_verify_families() -> tuple[
     p512 = p512_family_definition()
     errors = validate_condition_family_definition(p512)
     if errors:
-        raise ValueError(f"p512 condition-family definition is invalid: {errors[0]}")
+        raise ValueError(f"p{PREFILL_LENGTH} condition-family definition is invalid: {errors[0]}")
     p512_raw = render_json(p512)
     P512_FAMILY_DOMAIN_SHA256 = canonical_domain_sha256(
         CONDITION_FAMILY_DOMAIN, p512
@@ -1324,7 +1451,7 @@ def build_assembly() -> tuple[
 
     p512_absolute_ids: list[str] = []
     for rep in range(1, N + 1):
-        run_id = f"d117fq38-df-ph-prefill-p512-abs-r{rep:02d}"
+        run_id = f"d117fq38-df-ph-prefill-p{PREFILL_LENGTH}-abs-r{rep:02d}"
         run = {
             "run_id": run_id,
             "filename": f"{run_id}.json",
@@ -1344,12 +1471,12 @@ def build_assembly() -> tuple[
     p512_blocks: list[dict[str, Any]] = []
     for block in range(1, N + 1):
         block_id = (
-            f"d117-df-cmp-abba-ph-prefill-p512-qwen3-8b-b{block:02d}"
+            f"d117-df-cmp-abba-ph-prefill-p{PREFILL_LENGTH}-qwen3-8b-b{block:02d}"
         )
         members: dict[str, str] = {}
         for sequence_index, (label, position) in enumerate(positions, start=1):
             run_id = (
-                f"d117fq38-df-cmp-abba-ph-prefill-p512-b{block:02d}-"
+                f"d117fq38-df-cmp-abba-ph-prefill-p{PREFILL_LENGTH}-b{block:02d}-"
                 f"{position.lower()}"
             )
             run = {
@@ -1765,35 +1892,35 @@ def stage_graph(
             ),
         },
         {
-            "stage_id": "beta-science-prefill-p512-absolute",
+            "stage_id": f"beta-science-prefill-p{PREFILL_LENGTH}-absolute",
             "kind": "campaign_collection",
             "expected_count": 10,
-            "input": stage_manifest_refs["04_phase_prefill_p512_absolute"],
+            "input": stage_manifest_refs[f"04_phase_prefill_p{PREFILL_LENGTH}_absolute"],
             "launch": campaign_launch(
-                "beta-science-prefill-p512-absolute",
-                PACK_REL / "04_phase_prefill_p512_absolute",
+                f"beta-science-prefill-p{PREFILL_LENGTH}-absolute",
+                PACK_REL / f"04_phase_prefill_p{PREFILL_LENGTH}_absolute",
                 "claim_runs_root",
             ),
         },
         {
-            "stage_id": "beta-science-prefill-p512-abba-01-05",
+            "stage_id": f"beta-science-prefill-p{PREFILL_LENGTH}-abba-01-05",
             "kind": "campaign_collection",
             "expected_count": 20,
-            "input": stage_manifest_refs["05_phase_prefill_p512_abba_blocks_01_05"],
+            "input": stage_manifest_refs[f"05_phase_prefill_p{PREFILL_LENGTH}_abba_blocks_01_05"],
             "launch": campaign_launch(
-                "beta-science-prefill-p512-abba-01-05",
-                PACK_REL / "05_phase_prefill_p512_abba_blocks_01_05",
+                f"beta-science-prefill-p{PREFILL_LENGTH}-abba-01-05",
+                PACK_REL / f"05_phase_prefill_p{PREFILL_LENGTH}_abba_blocks_01_05",
                 "claim_runs_root",
             ),
         },
         {
-            "stage_id": "beta-science-prefill-p512-abba-06-10",
+            "stage_id": f"beta-science-prefill-p{PREFILL_LENGTH}-abba-06-10",
             "kind": "campaign_collection",
             "expected_count": 20,
-            "input": stage_manifest_refs["06_phase_prefill_p512_abba_blocks_06_10"],
+            "input": stage_manifest_refs[f"06_phase_prefill_p{PREFILL_LENGTH}_abba_blocks_06_10"],
             "launch": campaign_launch(
-                "beta-science-prefill-p512-abba-06-10",
-                PACK_REL / "06_phase_prefill_p512_abba_blocks_06_10",
+                f"beta-science-prefill-p{PREFILL_LENGTH}-abba-06-10",
+                PACK_REL / f"06_phase_prefill_p{PREFILL_LENGTH}_abba_blocks_06_10",
                 "claim_runs_root",
             ),
         },
@@ -2039,7 +2166,7 @@ def build_extraction_spec(
             PREFILL_FAMILY_DOMAIN_SHA256,
         ),
         absolute_cell(
-            "d117-df-ph-prefill-p512-qwen3-8b-absolute",
+            f"d117-df-ph-prefill-p{PREFILL_LENGTH}-qwen3-8b-absolute",
             "phase_energy_j.prefill",
             ["phase", "prefill"],
             P512_FAMILY_ID,
@@ -2048,7 +2175,7 @@ def build_extraction_spec(
             p512_absolute_ids,
         ),
         comparative_cell(
-            "d117-df-cmp-abba-ph-prefill-p512-qwen3-8b",
+            f"d117-df-cmp-abba-ph-prefill-p{PREFILL_LENGTH}-qwen3-8b",
             "phase_energy_j.prefill",
             ["phase", "prefill"],
             P512_FAMILY_ID,
@@ -2098,7 +2225,7 @@ def build_extraction_spec(
             "numeric_value": None,
         },
         {
-            "cell_id": "d117-reported-mean-ph-prefill-p512-qwen3-8b",
+            "cell_id": f"d117-reported-mean-ph-prefill-p{PREFILL_LENGTH}-qwen3-8b",
             "metric": "phase_energy_j.prefill",
             "window_class": "phase",
             "target_precheck_path": ["phase", "prefill"],
@@ -2124,7 +2251,7 @@ def build_extraction_spec(
         "reported_energy_cells": reported_cells,
         "reported_energy_registration": {
             "authority": "D-123 / D-179",
-            "registration_sha256": registration_sha256("qwen3-8b"),
+            "registration_sha256": registration_sha256("qwen3-8b", PREFILL_LENGTH),
             "registration_ordering": "registration_digest_must_predate_first_frozen_spec",
             "procedure_only": True,
             "postcollection_numeric_values": "structurally_absent_until_governed_reduction",
@@ -2213,15 +2340,15 @@ def build_producer_contract(
             "members": decode_config_rows,
         },
         {
-            "role": "prefill_p512",
-            "artifact_cell_id": "d117-qwen3-8b-prefill-p512-floor-v5",
-            "transport_group_id": "tg-d117-qwen3-8b-prefill-p512-v5",
+            "role": f"prefill_p{PREFILL_LENGTH}",
+            "artifact_cell_id": f"d117-qwen3-8b-prefill-p{PREFILL_LENGTH}-floor-v5",
+            "transport_group_id": f"tg-d117-qwen3-8b-prefill-p{PREFILL_LENGTH}-v5",
             "metric": "phase_energy_j.prefill",
             "target_precheck_path": ["phase", "prefill"],
             "condition_family_id": P512_FAMILY_ID,
-            "absolute_calibration_cell_id": "d117-df-ph-prefill-p512-qwen3-8b-absolute",
-            "comparative_calibration_cell_id": "d117-df-cmp-abba-ph-prefill-p512-qwen3-8b",
-            "allowed_consumer_families": ["sw-prefill-p512-b-qwen3-8b"],
+            "absolute_calibration_cell_id": f"d117-df-ph-prefill-p{PREFILL_LENGTH}-qwen3-8b-absolute",
+            "comparative_calibration_cell_id": f"d117-df-cmp-abba-ph-prefill-p{PREFILL_LENGTH}-qwen3-8b",
+            "allowed_consumer_families": [f"sw-prefill-p{PREFILL_LENGTH}-b-qwen3-8b"],
             "members": p512_config_rows,
         },
     ]
@@ -2253,7 +2380,7 @@ def build_producer_contract(
             "workload_profile": decode_identity_workload,
             "workload_profiles": {
                 "decode_and_prefill_p42": decode_identity_workload,
-                "prefill_p512": {
+                f"prefill_p{PREFILL_LENGTH}": {
                     "name": P512_WORKLOAD_NAME,
                     "repetitions": 1,
                     "warmup_runs": 1,
@@ -2324,7 +2451,7 @@ def build_producer_contract(
                     },
                 },
                 {
-                    "identity_unit_id": "beta/prefill_p512",
+                    "identity_unit_id": f"beta/prefill_p{PREFILL_LENGTH}",
                     "producer_plan_reference": {
                         "plan_id": PLAN_ID,
                         "path": emitted_plan_reference(),
@@ -2332,8 +2459,8 @@ def build_producer_contract(
                     "consumer_bindings": [
                         {
                             "arm": CONSUMER_ARM,
-                            "family": "sw-prefill-p512-b-qwen3-8b",
-                            "measurement_arm": "prefill_p512",
+                            "family": f"sw-prefill-p{PREFILL_LENGTH}-b-qwen3-8b",
+                            "measurement_arm": f"prefill_p{PREFILL_LENGTH}",
                         }
                     ],
                     "declared_identity": {
@@ -2407,9 +2534,9 @@ def readme_bytes() -> bytes:
             "This pack pre-registers the beta window's 10 absolute decode members, "
             "ten null A/B/B/A blocks (40 members), and a zero-member prefill metric "
             "rider over the same 50 physical bundles. It also carries a dedicated "
-            "D-166 p512 prefill domain with 10 absolute members and ten null A/B/B/A "
+            f"D-166 p{PREFILL_LENGTH} prefill domain with 10 absolute members and ten null A/B/B/A "
             "blocks (50 additional members), plus three D-123 reported phase-energy "
-            "means. The p512 workload name remains `df_ph_prefill_p512_candidate` "
+            f"means. The p{PREFILL_LENGTH} workload name remains `df_ph_prefill_p{PREFILL_LENGTH}_candidate` "
             "for byte identity with the gamma consumer even though Q1 has frozen its "
             "prompt.\n\n"
             "Its receipt oracle is replay-derived from "
@@ -2436,9 +2563,9 @@ def readme_bytes() -> bytes:
         "This pack pre-registers the beta window's 10 absolute decode members, "
         "ten null A/B/B/A blocks (40 members), and a zero-member prefill metric "
         "rider over the same 50 physical bundles. It also carries a dedicated "
-        "D-166 p512 prefill domain with 10 absolute members and ten null A/B/B/A "
+        f"D-166 p{PREFILL_LENGTH} prefill domain with 10 absolute members and ten null A/B/B/A "
         "blocks (50 additional members), plus three D-123 reported phase-energy "
-        "means. The p512 workload name remains `df_ph_prefill_p512_candidate` "
+        f"means. The p{PREFILL_LENGTH} workload name remains `df_ph_prefill_p{PREFILL_LENGTH}_candidate` "
         "for byte identity with the gamma consumer even though Q1 has frozen its "
         "prompt.\n\n"
         "The pack is not armable. Its receipt oracle is replay-derived from "
@@ -2526,6 +2653,11 @@ def _generate(output_root: Path) -> tuple[int, str, str]:
         plan_raw = (REPO_ROOT / active_generation().pack_rel / "calibration_plan.json").read_bytes()
         tree_raw = (REPO_ROOT / active_generation().pack_rel / "plan_tree.json").read_bytes()
         return 100, sha256_bytes(plan_raw), sha256_bytes(tree_raw)
+    # The reported-energy registry must recognize the selected cell before any
+    # output is written. Never silently retain a misleading p512 cell identity.
+    reported_energy_registration(
+        f"d117-reported-mean-ph-prefill-p{PREFILL_LENGTH}-{MODEL_ID}"
+    )
     source_raw = embedded_generator_bytes()
     source_sha256 = (
         preserved_generator_sha256()
@@ -2606,7 +2738,7 @@ def _generate(output_root: Path) -> tuple[int, str, str]:
             "ordered_bundle_ids": decode_ids,
         },
         {
-            "cell_id": "d117-reported-mean-ph-prefill-p512-qwen3-8b",
+            "cell_id": f"d117-reported-mean-ph-prefill-p{PREFILL_LENGTH}-qwen3-8b",
             "metric": "phase_energy_j.prefill",
             "measurand": "gross_phase_energy_j",
             "reducer": "arithmetic_mean_over_fixed_member_universe.v1",
@@ -2641,8 +2773,8 @@ def _generate(output_root: Path) -> tuple[int, str, str]:
             "decode_condition_family_sha256": DECODE_FAMILY_DOMAIN_SHA256,
             "prefill_condition_family_id": PREFILL_FAMILY_ID,
             "prefill_condition_family_sha256": PREFILL_FAMILY_DOMAIN_SHA256,
-            "prefill_p512_condition_family_id": P512_FAMILY_ID,
-            "prefill_p512_condition_family_sha256": P512_FAMILY_DOMAIN_SHA256,
+            f"prefill_p{PREFILL_LENGTH}_condition_family_id": P512_FAMILY_ID,
+            f"prefill_p{PREFILL_LENGTH}_condition_family_sha256": P512_FAMILY_DOMAIN_SHA256,
         },
         "replacement_rule": {
             "policy": "abort_window_on_any_required_member_failure",
@@ -2688,7 +2820,7 @@ def _generate(output_root: Path) -> tuple[int, str, str]:
                 "floor_estimator_registration": floor_estimator_registration(),
             },
             {
-                "cell_id": "d117-df-ph-prefill-p512-qwen3-8b-absolute",
+                "cell_id": f"d117-df-ph-prefill-p{PREFILL_LENGTH}-qwen3-8b-absolute",
                 "kind": "absolute",
                 "metric": "phase_energy_j.prefill",
                 "condition_family_id": P512_FAMILY_ID,
@@ -2696,7 +2828,7 @@ def _generate(output_root: Path) -> tuple[int, str, str]:
                 "estimator": "d054_false_effect_guard.v1",
             },
             {
-                "cell_id": "d117-df-cmp-abba-ph-prefill-p512-qwen3-8b",
+                "cell_id": f"d117-df-cmp-abba-ph-prefill-p{PREFILL_LENGTH}-qwen3-8b",
                 "kind": "comparative_abba",
                 "metric": "phase_energy_j.prefill",
                 "condition_family_id": P512_FAMILY_ID,
@@ -3056,16 +3188,7 @@ def _generate(output_root: Path) -> tuple[int, str, str]:
             "sha256": sha256_bytes(decode_workload_candidate_raw),
             "assignment_rule_id": "ruling-171a-floor-index-zero.v1",
         },
-        "runtime_budget": {
-            "planning_estimate_minutes_with_margin": 376.8,
-            "planning_estimate_hours_with_margin": 6.28,
-            "margin_percent": 20,
-            "margin_authority": "time_headroom_only_never_member_replacement",
-            "science_count": 100,
-            "bound_count": 12,
-            "reference_count": 7,
-            "calibration_observation_count": 2,
-        },
+        "runtime_budget": projected_runtime_budget(),
     }
     if active_generation().preserve_current_frozen_bytes:
         tree_raw = (REPO_ROOT / PACK_REL / "plan_tree.json").read_bytes()
@@ -3099,13 +3222,13 @@ def expected_pack_paths() -> list[Path]:
         Path("prefill_pin/prefill_prompt_pin.json"),
         Path("condition_families/condition_family_df_ph_decode.json"),
         Path("condition_families/condition_family_df_ph_prefill_p42_qwen3_8b.json"),
-        Path("condition_families/condition_family_df_ph_prefill_p512_qwen3_8b.json"),
+        Path(f"condition_families/condition_family_df_ph_prefill_p{PREFILL_LENGTH}_qwen3_8b.json"),
         Path("01_phase_decode_absolute/order_manifest.json"),
         Path("02_phase_decode_abba_blocks_01_05/order_manifest.json"),
         Path("03_phase_decode_abba_blocks_06_10/order_manifest.json"),
-        Path("04_phase_prefill_p512_absolute/order_manifest.json"),
-        Path("05_phase_prefill_p512_abba_blocks_01_05/order_manifest.json"),
-        Path("06_phase_prefill_p512_abba_blocks_06_10/order_manifest.json"),
+        Path(f"04_phase_prefill_p{PREFILL_LENGTH}_absolute/order_manifest.json"),
+        Path(f"05_phase_prefill_p{PREFILL_LENGTH}_abba_blocks_01_05/order_manifest.json"),
+        Path(f"06_phase_prefill_p{PREFILL_LENGTH}_abba_blocks_06_10/order_manifest.json"),
     ]
     if PREFILL_LADDER_SOURCE_REL is None or PREFILL_SELECTION_SOURCE_REL is None:
         raise ValueError("prefill_prompt_pin_unresolved")
@@ -3133,20 +3256,20 @@ def expected_pack_paths() -> list[Path]:
         )
     paths.extend(
         Path(
-            f"04_phase_prefill_p512_absolute/"
-            f"d117fq38-df-ph-prefill-p512-abs-r{rep:02d}.json"
+            f"04_phase_prefill_p{PREFILL_LENGTH}_absolute/"
+            f"d117fq38-df-ph-prefill-p{PREFILL_LENGTH}-abs-r{rep:02d}.json"
         )
         for rep in range(1, 11)
     )
     for block in range(1, 11):
         stage = (
-            "05_phase_prefill_p512_abba_blocks_01_05"
+            f"05_phase_prefill_p{PREFILL_LENGTH}_abba_blocks_01_05"
             if block <= 5
-            else "06_phase_prefill_p512_abba_blocks_06_10"
+            else f"06_phase_prefill_p{PREFILL_LENGTH}_abba_blocks_06_10"
         )
         paths.extend(
             Path(
-                f"{stage}/d117fq38-df-cmp-abba-ph-prefill-p512-"
+                f"{stage}/d117fq38-df-cmp-abba-ph-prefill-p{PREFILL_LENGTH}-"
                 f"b{block:02d}-{position}.json"
             )
             for position in ("a1", "b1", "b2", "a2")

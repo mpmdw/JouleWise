@@ -6,6 +6,7 @@ import ast
 import hashlib
 import importlib.util
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -13,9 +14,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from joulewise import arm_readiness
+from joulewise import arm_readiness, calibration_bracketing
 from joulewise.dominance_closeout import ABSOLUTE_COMMON_MODE_REASON
 from joulewise.provenance import prompt_token_ids_sha256
+from joulewise.paper_reported_energy import _validate_registered_spec, registration_sha256
 from scripts import issue_g2a_prefill_prompt_pin as issuer
 from scripts import select_g2a_prefill_length as selector
 
@@ -48,6 +50,11 @@ MODEL_PANEL_ROWS = {
 
 
 def load_generator(pack_id: str, *, repository: Path = ROOT):
+    if repository != ROOT and pack_id.startswith("d117_floor_qwen3-"):
+        # CLI checks in disposable clones must see the working tree's owner
+        # as well as the generator; the clone's committed owner is still r1.
+        relative = Path("joulewise/paper_reported_energy.py")
+        shutil.copy2(ROOT / relative, repository / relative)
     path = repository / "configs/campaigns" / pack_id / "generate_configs.py"
     spec = importlib.util.spec_from_file_location(f"{pack_id}_generator", path)
     assert spec is not None and spec.loader is not None
@@ -56,7 +63,7 @@ def load_generator(pack_id: str, *, repository: Path = ROOT):
     return module
 
 
-def fixture_prefill_pin(root: Path) -> Path:
+def fixture_prefill_pin(root: Path, prefill_length: int = 512) -> Path:
     contrast = load_generator("d117_contrast_v5")
     bundle = root / "authority"
     bundle.mkdir()
@@ -67,8 +74,9 @@ def fixture_prefill_pin(root: Path) -> Path:
             "large_members": 1,
             "small_minimum_count": (
                 contrast.PREFILL_MIN_OVERLAPPING_POWER_INTERVAL_COUNT
+                if token_count >= prefill_length else 4
             ),
-            "all_small_count_ge_5": True,
+            "all_small_count_ge_5": token_count >= prefill_length,
         }
         for token_count in contrast.PREFILL_LADDER_PROMPT_TOKENS
     ]
@@ -105,7 +113,7 @@ def fixture_prefill_pin(root: Path) -> Path:
         }
 
     rungs = [rung(token_count) for token_count in contrast.PREFILL_LADDER_PROMPT_TOKENS]
-    target = next(row for row in rungs if row["prefill_tokens"] == 512)
+    target = next(row for row in rungs if row["prefill_tokens"] == prefill_length)
     ladder_path = bundle / "prompt-ladder.json"
     ladder_path.write_text(
         json.dumps(
@@ -155,14 +163,14 @@ def fixture_prefill_pin(root: Path) -> Path:
         },
         "panel_sha256": hashlib.sha256(PANEL.read_bytes()).hexdigest(),
         "exhausted_ladder_branch": contrast.PREFILL_EXHAUSTED_LADDER_BRANCH,
-        "prefill_length": 512,
+        "prefill_length": prefill_length,
         "tokenizer_json_sha256": TOKENIZER_SHA256,
         "special_token_policy": "add_special_tokens=true",
         "prompt_text": target["prompt_text"],
         "prompt_text_utf8_sha256": target["prompt_text_utf8_sha256"],
         "prompt_token_ids": target["prompt_token_ids"],
         "prompt_token_ids_sha256": target["prompt_token_ids_sha256"],
-        "prompt_tokens": 512,
+        "prompt_tokens": prefill_length,
         "repeat_count": target["repeat_count"],
         "closing_sentence": target["closing_sentence"],
         "generation_method": target["generation_method"],
@@ -284,6 +292,216 @@ class D117FloorQwen3V5PackTests(unittest.TestCase):
             relative = Path("configs/campaigns") / pack_id / "generate_configs.py"
             shutil.copy2(ROOT / relative, repository / relative)
         return repository
+
+    def test_each_ladder_rung_realizes_pin_and_derived_identities(self) -> None:
+        fixed_by_model = {}
+        for length in selector.LADDER:
+            with tempfile.TemporaryDirectory(prefix=f"floor-rung-{length}-") as tmp:
+                pin = fixture_prefill_pin(Path(tmp), length)
+                for _, pack_id, model_id, _, _ in FLOORS:
+                    with self.subTest(length=length, pack_id=pack_id):
+                        module = load_generator(pack_id)
+                        self.assertIsNone(module.PREFILL_LENGTH)
+                        module.configure_prefill_pin(pin)
+                        module.load_model_inputs()
+                        self.assertEqual(module.PREFILL_LENGTH, length)
+                        self.assertIn(f"prefill-p{length}-", module.PLAN_ID)
+                        family = module.p512_family_definition()
+                        self.assertEqual(family["workload_profile"]["prompt_tokens"], length)
+                        self.assertEqual(family["condition_family_id"],
+                                         f"df-ph-prefill-p{length}-{model_id}")
+                        stages, _, _, absolute, blocks = module.build_assembly()
+                        prefill_runs = [run for stage in stages[3:] for run in stage["runs"]]
+                        self.assertEqual(len(prefill_runs), 50)
+                        self.assertEqual(len(absolute), 10)
+                        self.assertEqual(len(blocks), 10)
+                        for run in prefill_runs:
+                            config = module.config_for(run, "0" * 64, module.P512_PROMPT_TEXT)
+                            workload = config["workload_profile"]
+                            self.assertEqual(workload["prompt_token_expectation"]["token_count"], length)
+                            self.assertEqual(workload["name"], f"df_ph_prefill_p{length}_candidate")
+                            self.assertIn(f"prefill-p{length}-", config["run_id"])
+                            self.assertEqual(workload["output_tokens"], 512)
+                        budget = module.projected_runtime_budget()
+                        components = budget["components_seconds"]
+                        fixed = components["fixed_decode_cooldown_calibration_and_overhead"]
+                        self.assertEqual(fixed, fixed_by_model.setdefault(model_id, fixed))
+                        self.assertEqual(budget["prefill_passes_per_member"], 2)
+                        self.assertEqual(budget["long_prefill_member_count"], 50)
+                        self.assertAlmostEqual(components["long_prefill"] / length,
+                                               100 * {"qwen3-1p7b": 0.0005217025056481362,
+                                                      "qwen3-8b": 0.0015653804875910282}[model_id])
+                        self.assertAlmostEqual(budget["planning_estimate_minutes_with_margin"],
+                                               sum(components.values()) / 60)
+                        self.assertEqual(budget["planning_estimate_seconds_with_margin"],
+                                         round(sum(components.values())))
+                        self.assertAlmostEqual(components["time_headroom"],
+                                               0.2 * (fixed + components["long_prefill"]))
+                        self.assertTrue(budget["planning_only"])
+                        self.assertTrue(all(f"p{length}" in stage["stage_id"] for stage in stages[3:]))
+                        self.assertTrue(any(f"prefill_p{length}_" in str(path)
+                                            for path in module.expected_pack_paths()))
+
+    def test_complete_pack_generation_at_each_ladder_rung(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="floor-all-rungs-") as tmp:
+            root = Path(tmp)
+            for length in selector.LADDER:
+                authority = root / str(length)
+                authority.mkdir()
+                pin = fixture_prefill_pin(authority, length)
+                for _, pack_id, _, _, _ in FLOORS:
+                    with self.subTest(length=length, pack_id=pack_id):
+                        module = load_generator(pack_id)
+                        module.configure_prefill_pin(pin)
+                        output = authority / pack_id
+                        module.generate(output)
+                        spec = json.loads((output / module.SPEC_REL).read_bytes())
+                        _validate_registered_spec(spec)
+                        self.assertEqual(spec["reported_energy_registration"]["registration_sha256"],
+                                         registration_sha256(module.MODEL_ID, length))
+                        configs = list((output / module.PACK_REL).glob("0[456]_*/d117*.json"))
+                        self.assertEqual(len(configs), 50)
+                        for path in configs:
+                            config = json.loads(path.read_text(encoding="utf-8"))
+                            self.assertEqual(config["workload_profile"]["prompt_token_expectation"]
+                                             ["token_count"], length)
+
+    def test_mixed_declared_prefill_family_refuses(self) -> None:
+        from copy import deepcopy
+        from joulewise.paper_reported_energy import PaperReportedEnergyRefusal
+        with tempfile.TemporaryDirectory(prefix="floor-mixed-family-") as tmp:
+            pin = fixture_prefill_pin(Path(tmp), 2048)
+            for _, pack_id, _, _, _ in FLOORS:
+                with self.subTest(pack_id=pack_id):
+                    module = load_generator(pack_id)
+                    module.configure_prefill_pin(pin)
+                    output = Path(tmp) / pack_id
+                    module.generate(output)
+                    spec = json.loads((output / module.SPEC_REL).read_bytes())
+                    mixed = deepcopy(spec)
+                    # Keep the floor binding hash valid to reach the independent
+                    # length census rather than fail a generic hash check.
+                    from joulewise.detection_floor import CONDITION_FAMILY_DOMAIN, canonical_domain_sha256
+                    for binding in mixed["cells"][5]["condition_family_definitions"].values():
+                        definition = binding["condition_family_definition"]
+                        definition["workload_profile"]["prompt_tokens"] = 4096
+                        binding["condition_family_sha256"] = canonical_domain_sha256(CONDITION_FAMILY_DOMAIN, definition)
+                    with self.assertRaises(PaperReportedEnergyRefusal) as caught:
+                        _validate_registered_spec(mixed)
+                    self.assertEqual(caught.exception.code, "paper_reported_energy_cell_census_invalid")
+
+    def test_end_state_record_authorizes_both_4096_trigger_branches(self) -> None:
+        for count, trigger in ((1, "first_recover_systematic_clock_anchor_failure"),
+                               (2, "recovery_window_also_recover")):
+            with tempfile.TemporaryDirectory(prefix="floor-end-state-") as tmp:
+                pin = fixture_prefill_pin(Path(tmp), 4096)
+                record = {
+                    "schema_version": "joulewise.g2a_prefill_end_state.v1",
+                    "registration_sha256": "84dd04268a2aed17118bd98b87c10ebe38e5f1bce2ea330a02048537b0342476",
+                    "recover_harvests": [{"path": f"/archive/b3w{i}/harvest.json", "sha256": str(i) * 64}
+                                         for i in range(1, count + 1)],
+                    "trigger": trigger,
+                }
+                rewrite_bound_json(pin, "selection_record", record)
+                for _, pack_id, _, _, _ in FLOORS:
+                    with self.subTest(count=count, pack_id=pack_id):
+                        module = load_generator(pack_id)
+                        module.configure_prefill_pin(pin)
+                        self.assertEqual(module.PREFILL_LENGTH, 4096)
+                        output = Path(tmp) / pack_id
+                        module.generate(output)
+                        copied = output / module.PREFILL_PIN_REL.parent / "authority/selection-record.json"
+                        self.assertEqual(json.loads(copied.read_bytes()), record)
+                        module.check_current(output, module.GenerationIdentity())
+
+    def test_end_state_record_rejects_invalid_closed_schema_and_length(self) -> None:
+        from copy import deepcopy
+        valid = {
+            "schema_version": "joulewise.g2a_prefill_end_state.v1",
+            "registration_sha256": "a" * 64,
+            "recover_harvests": [{"path": "/archive/b3w1/harvest.json", "sha256": "b" * 64}],
+            "trigger": "first_recover_systematic_clock_anchor_failure",
+        }
+        cases = (
+            ("extra_key", lambda v: v.update(extra=True), "closed_schema"),
+            ("missing_key", lambda v: v.pop("registration_sha256"), "closed_schema"),
+            ("bad_registration", lambda v: v.update(registration_sha256="invalid"), "registration_sha256"),
+            ("empty_harvests", lambda v: v.update(recover_harvests=[]), "recover_harvests"),
+            ("duplicate_harvest", lambda v: v["recover_harvests"].append(v["recover_harvests"][0]), "recover_harvests"),
+            ("relative_path", lambda v: v["recover_harvests"][0].update(path="harvest.json"), "recover_harvests"),
+            ("bad_harvest_digest", lambda v: v["recover_harvests"][0].update(sha256="invalid"), "recover_harvests"),
+            ("extra_harvest_key", lambda v: v["recover_harvests"][0].update(extra=True), "recover_harvests"),
+            ("unknown_trigger", lambda v: v.update(trigger="selected"), "trigger"),
+            ("trigger_count", lambda v: v.update(trigger="recovery_window_also_recover"), "trigger"),
+        )
+        for case, mutate, code in cases:
+            with tempfile.TemporaryDirectory(prefix=f"floor-end-state-{case}-") as tmp:
+                pin = fixture_prefill_pin(Path(tmp), 4096)
+                record = deepcopy(valid)
+                mutate(record)
+                rewrite_bound_json(pin, "selection_record", record)
+                for _, pack_id, _, _, _ in FLOORS:
+                    with self.subTest(case=case, pack_id=pack_id):
+                        module = load_generator(pack_id)
+                        with self.assertRaisesRegex(ValueError, f"end_state_record_{code}"):
+                            module.configure_prefill_pin(pin)
+                        self.assertIsNone(module.PREFILL_LENGTH)
+        with tempfile.TemporaryDirectory(prefix="floor-end-state-length-") as tmp:
+            pin = fixture_prefill_pin(Path(tmp), 2048)
+            rewrite_bound_json(pin, "selection_record", valid)
+            for _, pack_id, _, _, _ in FLOORS:
+                with self.subTest(pack_id=pack_id), self.assertRaisesRegex(ValueError, "requires_4096"):
+                    load_generator(pack_id).configure_prefill_pin(pin)
+
+    def test_non_ladder_prefill_length_refuses(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="floor-non-ladder-") as tmp:
+            pin = fixture_prefill_pin(Path(tmp))
+            value = json.loads(pin.read_text(encoding="utf-8"))
+            value["prefill_length"] = value["prompt_tokens"] = 768
+            pin.write_text(json.dumps(value), encoding="utf-8")
+            for _, pack_id, *_ in FLOORS:
+                with self.subTest(pack_id=pack_id):
+                    module = load_generator(pack_id)
+                    with self.assertRaisesRegex(ValueError, "ruled constants mismatch"):
+                        module.configure_prefill_pin(pin)
+                    self.assertIsNone(module.PREFILL_LENGTH)
+
+    def test_reconfiguration_publishes_only_authenticated_length(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="floor-reconfigure-") as tmp:
+            root = Path(tmp)
+            for _, pack_id, *_ in FLOORS:
+                module = load_generator(pack_id)
+                for length in (4096, 512, 2048):
+                    authority = root / f"{pack_id}-{length}"
+                    authority.mkdir()
+                    pin = fixture_prefill_pin(authority, length)
+                    module.configure_prefill_pin(pin)
+                    self.assertIn(f"prefill-p{length}-", module.PLAN_ID)
+                    self.assertEqual(module.PREFILL_LENGTH, length)
+                value = json.loads(pin.read_text(encoding="utf-8"))
+                value["prompt_token_ids_sha256"] = "0" * 64
+                pin.write_text(json.dumps(value), encoding="utf-8")
+                with self.assertRaisesRegex(ValueError, "prompt realization"):
+                    module.configure_prefill_pin(pin)
+                self.assertEqual(module.PREFILL_LENGTH, 2048)
+
+    def test_acceptance_binding_is_registry_live_default_and_cutoff(self) -> None:
+        acceptance = calibration_bracketing.load_calibration_acceptance_bound()
+        self.assertIsNotNone(acceptance)
+        registry = calibration_bracketing.ISSUED_ACCEPTANCE_REGISTRY[
+            calibration_bracketing.ACTIVE_ACCEPTANCE_ID
+        ]
+        for _, pack_id, *_ in FLOORS:
+            with self.subTest(pack_id=pack_id):
+                module = load_generator(pack_id)
+                binding = module.acceptance_pin()
+                self.assertEqual(binding["acceptance_id"], calibration_bracketing.ACTIVE_ACCEPTANCE_ID)
+                self.assertEqual(binding["rel"].as_posix(), registry["relative_path"])
+                self.assertEqual(binding["artifact_sha256"], registry["file_sha256"])
+                self.assertEqual(binding["derivation_sha256"], acceptance["derivation_sha256"])
+                self.assertEqual(module.LEDGER_HEAD_SHA256, acceptance["ledger_cutoff"]["head_digest"])
+                self.assertGreaterEqual(module.verify_ledger_head_pin()["sequence"],
+                                        acceptance["ledger_cutoff"]["sequence"])
 
     def test_routing_constants_are_the_only_producer_routing_sources(self) -> None:
         observed = {}
@@ -491,6 +709,13 @@ class D117FloorQwen3V5PackTests(unittest.TestCase):
                 "selection_record_collection_prefill_tokens_mismatch",
             ),
             (
+                "wrong_selected_tokens",
+                lambda selection: selection.update(
+                    {"selected_prefill_tokens": 1024}
+                ),
+                "selection_record_selected_branch_malformed",
+            ),
+            (
                 "refused",
                 lambda selection: selection.update(
                     {
@@ -568,7 +793,7 @@ class D117FloorQwen3V5PackTests(unittest.TestCase):
                             temporary,
                         ],
                         cwd=ROOT,
-                        env={"PYTHONDONTWRITEBYTECODE": "1"},
+                        env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
                         check=False,
                         capture_output=True,
                         text=True,
@@ -619,7 +844,7 @@ class D117FloorQwen3V5PackTests(unittest.TestCase):
                             str(first),
                         ],
                         cwd=repository,
-                        env={"PYTHONDONTWRITEBYTECODE": "1"},
+                        env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
                         check=False,
                         capture_output=True,
                         text=True,

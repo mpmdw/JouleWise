@@ -169,14 +169,14 @@
       ],
       "inventory": {
         "base": "runs_root",
-        "expected_sha256": "8b6e0c9b53ae3e5efa6036d2e279eb4516a269c196f284e4b544f70943af9af5",
+        "expected_sha256": "f8a9c7cb282f6f44a189779a271abd090aa9468cfa27af36fb24527df7556290",
         "path": "reported_energy_parents/inventory.json"
       },
       "issuance_gate_id": null,
       "mode": "test_fixture_non_issuing",
       "receipt": {
         "base": "runs_root",
-        "expected_sha256": "625420397fff88cec8a3ce63754f47f2dd8d4e357a5918c21d3ce5080cfbdfeb",
+        "expected_sha256": "28483084d7a1580fb7b49015e34a0d2fd42ba5e020170466799229dec6d1f422",
         "path": "reported_energy_parents/inputs/validator_receipt.json"
       },
       "source_census": [

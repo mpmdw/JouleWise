@@ -26,7 +26,8 @@ BOUND_KINDS = (
     "E_whole_window_drift_allowance_j",
 )
 MODELS = ("qwen3-1p7b", "qwen3-8b")
-CELL_RE = re.compile(r"d117-reported-mean-ph-(decode|prefill-p42|prefill-p512)-(qwen3-1p7b|qwen3-8b)")
+PREFILL_LADDER_PROMPT_TOKENS = (512, 1024, 2048, 4096)
+CELL_RE = re.compile(r"d117-reported-mean-ph-(decode|prefill-p42|prefill-p(?:512|1024|2048|4096))-(qwen3-1p7b|qwen3-8b)")
 SHA_RE = re.compile(r"[0-9a-f]{64}")
 
 
@@ -156,20 +157,47 @@ def reported_energy_registration(cell_id):
     }
 
 
-def registration_manifest(model):
+def _prefill_length(value):
+    if type(value) is not int or value not in PREFILL_LADDER_PROMPT_TOKENS:
+        raise PaperReportedEnergyRefusal("paper_reported_energy_cell_census_invalid")
+    return value
+
+
+def registration_manifest(model, prefill_length=512):
     if model not in MODELS:
         raise PaperReportedEnergyRefusal("paper_reported_energy_model_invalid")
+    length = _prefill_length(prefill_length)
     return [reported_energy_registration(f"d117-reported-mean-ph-{role}-{model}")
-            for role in ("decode", "prefill-p42", "prefill-p512")]
+            for role in ("decode", "prefill-p42", f"prefill-p{length}")]
 
 
-def registration_sha256(model):
-    return _digest(registration_manifest(model))
+def registration_sha256(model, prefill_length=512):
+    return _digest(registration_manifest(model, prefill_length))
+
+
+def _spec_prefill_length(spec):
+    """Read the pack declaration, never infer authority from a reported name.
+
+    Historical specs without a declaration retain the original p512 contract.
+    Native floor specs declare the length in each long-prefill family binding;
+    a registration-level declaration also supports minimal synthetic specs.
+    Every declaration must agree before a manifest can be chosen.
+    """
+    lengths = []
+    registration = spec.get("reported_energy_registration", {})
+    if "prefill_prompt_tokens" in registration:
+        lengths.append(_prefill_length(registration["prefill_prompt_tokens"]))
+    for cell in spec.get("cells", [])[4:6]:
+        for binding in cell.get("condition_family_definitions", {}).values():
+            length = binding["condition_family_definition"]["workload_profile"]["prompt_tokens"]
+            lengths.append(_prefill_length(length))
+    if len(set(lengths)) > 1:
+        raise PaperReportedEnergyRefusal("paper_reported_energy_cell_census_invalid")
+    return lengths[0] if lengths else 512
 
 
 def verify_registration_ordering(repository, model):
     """Read committed history only; this check grants no evidence custody."""
-    expected = registration_sha256(model)
     source = "joulewise/paper_reported_energy.py"
     spec = f"configs/campaigns/d117_floor_{model}_v5/extraction_spec.json"
 
@@ -180,6 +208,9 @@ def verify_registration_ordering(repository, model):
         return result.stdout.strip()
 
     try:
+        current = json.loads(git("show", f"HEAD:{spec}"))
+        length = _spec_prefill_length(current)
+        expected = registration_sha256(model, length)
         # Require a complete, unambiguous addition history; never infer dates.
         if git("rev-parse", "--is-shallow-repository") != "false":
             raise PaperReportedEnergyRefusal("paper_reported_energy_ordering_history_invalid")
@@ -188,6 +219,15 @@ def verify_registration_ordering(repository, model):
         if any(len(commits) != 1 for commits in additions):
             raise PaperReportedEnergyRefusal("paper_reported_energy_ordering_history_invalid")
         registration_commit, spec_commit = (commits[0] for commits in additions)
+        if length != 512:
+            # Ladder roles are prospective: their first registration is the
+            # addition of this exact declaration, not the original p512 owner.
+            introductions = git("log", "--format=%H", "--reverse", "-S",
+                                "PREFILL_LADDER_PROMPT_TOKENS = (512, 1024, 2048, 4096)",
+                                "HEAD", "--", source).splitlines()
+            if not introductions:
+                raise PaperReportedEnergyRefusal("paper_reported_energy_ordering_history_invalid")
+            registration_commit = introductions[0]
         ancestor = subprocess.run(["git", "-C", str(repository), "merge-base", "--is-ancestor",
                                    registration_commit, spec_commit], capture_output=True)
         if ancestor.returncode not in (0, 1):
@@ -197,7 +237,8 @@ def verify_registration_ordering(repository, model):
         # Both the first blob and current frozen blob must bind this registration.
         for revision in (spec_commit, "HEAD"):
             document = json.loads(git("show", f"{revision}:{spec}"))
-            if document["reported_energy_registration"]["registration_sha256"] != expected:
+            if (_spec_prefill_length(document) != length
+                or document["reported_energy_registration"]["registration_sha256"] != expected):
                 raise PaperReportedEnergyRefusal("paper_reported_energy_registration_digest_mismatch")
     except (OSError, ValueError, KeyError, TypeError) as exc:
         if isinstance(exc, PaperReportedEnergyRefusal):
@@ -216,7 +257,8 @@ def _verify_gate_ordering(repository):
             or set(proof) != {"registration_commit", "spec_commit", "registration_sha256"}
             or not proof["registration_commit"] or not proof["spec_commit"]
             or proof["registration_commit"] == proof["spec_commit"]
-            or proof["registration_sha256"] != registration_sha256(model)):
+            or proof["registration_sha256"] not in {
+                registration_sha256(model, length) for length in PREFILL_LADDER_PROMPT_TOKENS}):
             raise PaperReportedEnergyRefusal("paper_reported_energy_ordering_history_invalid")
 
 
@@ -270,16 +312,17 @@ def _validate_registered_spec(spec):
     if type(cells) is not list or len(cells) != 3:
         raise PaperReportedEnergyRefusal("paper_reported_energy_cell_census_invalid")
     model, _ = _validate_members(cells[0])
-    if [cell.get("cell_id") for cell in cells] != [r["cell_id"] for r in registration_manifest(model)]:
+    length = _spec_prefill_length(spec)
+    if [cell.get("cell_id") for cell in cells] != [r["cell_id"] for r in registration_manifest(model, length)]:
         raise PaperReportedEnergyRefusal("paper_reported_energy_cell_census_invalid")
-    if spec.get("reported_energy_registration", {}).get("registration_sha256") != registration_sha256(model):
+    if spec.get("reported_energy_registration", {}).get("registration_sha256") != registration_sha256(model, length):
         raise PaperReportedEnergyRefusal("paper_reported_energy_registration_digest_mismatch")
     if len(spec["cells"]) != 6:
         raise PaperReportedEnergyRefusal("paper_reported_energy_floor_census_invalid")
     for index, cell in enumerate(cells):
         _validate_members(cell)
         absolute, comparative = spec["cells"][index * 2:index * 2 + 2]
-        role = ("decode", "prefill-p42", "prefill-p512")[index]
+        role = ("decode", "prefill-p42", f"prefill-p{length}")[index]
         if (absolute["cell_id"] != f"d117-df-ph-{role}-{model}-absolute"
             or comparative["cell_id"] != f"d117-df-cmp-abba-ph-{role}-{model}"):
             raise PaperReportedEnergyRefusal("paper_reported_energy_floor_identity_mismatch")
