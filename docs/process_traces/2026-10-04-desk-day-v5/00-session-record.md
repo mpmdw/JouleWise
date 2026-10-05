@@ -298,3 +298,9 @@ coordinated multi-file forgery is outside the threat model (D-161). **F2:** fix.
   `clock.network_time_policy` (35 rows; archival v1 and historical predicates unchanged; `clock.network_time_off` unchanged).
   Committed and main merged (`cda64e28`). Six more paths requested (prospective fixtures; the three live readiness views):
   **granted**; round 3 [60](60-sol-doctrine-pin-r3-brief.md) running.
+
+## 22:55-23:05
+
+- Packs: stale tests fixed [56r](56-sol-packs-tests-report.md) (432 tests across 15 modules pass); committed, main merged:
+  **PR #477** `ca5f3f11` (pin bundle + three generated packs + two test updates). Cold Fable pass
+  [61](61-fable-packs-brief.md), Sol delta [62](62-sol-packs-delta-brief.md) and the whole suite at `ca5f3f11` running.
