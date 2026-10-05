@@ -1,7 +1,7 @@
 You are giving a cold final pass on a large change before merge. You have no prior context.
 
-Your working directory is a detached checkout of `__HEAD__` (PR #483, branch feat/2026-10-05-v5-qualification-code). An earlier cold pass at `898c49a7` failed it. Its ruling is `/Users/edr/night-archive/desk-day-v5/fable-int.md`: read it first.
-- Then read `git diff --stat 898c49a7 __HEAD__` and the code diff since then (focus on `joulewise/` and `scripts/`; the docs under `docs/process_traces/` are records).
+Your working directory is a detached checkout of `6796b8e033b8515e12b8c1e6a8da3b94014f7266` (PR #483, branch feat/2026-10-05-v5-qualification-code). An earlier cold pass at `898c49a7` failed it. Its ruling is `/Users/edr/night-archive/desk-day-v5/fable-int.md`: read it first.
+- Then read `git diff --stat 898c49a7 6796b8e033b8515e12b8c1e6a8da3b94014f7266` and the code diff since then (focus on `joulewise/` and `scripts/`; the docs under `docs/process_traces/` are records).
 - Check the whole change only where the delta touches it.
 - You may run read-only commands, and unit tests with `/Users/edr/code/JouleWise/.venv/bin/python -B -m pytest -q -p no:cacheprovider <files>` (TMPDIR=/tmp/dd5-fable-int2).
 

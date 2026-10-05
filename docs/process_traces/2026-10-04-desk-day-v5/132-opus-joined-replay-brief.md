@@ -17,7 +17,7 @@ You are a headless Claude Opus 5.5 seat. This is one non-interactive session, an
 
 ## Head
 
-HEAD = `__HEAD__`, the PR #483 integration head (block-4 qualification code, lanes X1-X10, with main merged).
+HEAD = `6796b8e033b8515e12b8c1e6a8da3b94014f7266`, the PR #483 integration head (block-4 qualification code, lanes X1-X10, with main merged).
 
 ## Step 1: freeze the three `_v5` packs in the clone
 

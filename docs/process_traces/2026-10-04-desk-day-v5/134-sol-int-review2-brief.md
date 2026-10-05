@@ -1,6 +1,6 @@
-# Executing review (Sol 6.1 xhigh, non-author): PR #483 block-4 qualification code, delta since 898c49a7, at __HEAD__
+# Executing review (Sol 6.1 xhigh, non-author): PR #483 block-4 qualification code, delta since 898c49a7, at 6796b8e033b8515e12b8c1e6a8da3b94014f7266
 
-Worktree: /Users/edr/code/JouleWise-wt-dd5-intrev, detached at __HEAD__. Whole diff: `git diff origin/main...__HEAD__`. **Focus: `git diff 898c49a7 __HEAD__`** (lanes X5-X10 and the merges of main). Scratch /tmp/dd5-intrev2/ only.
+Worktree: /Users/edr/code/JouleWise-wt-dd5-intrev, detached at 6796b8e033b8515e12b8c1e6a8da3b94014f7266. Whole diff: `git diff origin/main...6796b8e033b8515e12b8c1e6a8da3b94014f7266`. **Focus: `git diff 898c49a7 6796b8e033b8515e12b8c1e6a8da3b94014f7266`** (lanes X5-X10 and the merges of main). Scratch /tmp/dd5-intrev2/ only.
 
 Spec: the registration draft and ruling 76 with addenda A-E on `origin/design/2026-10-04-v5-qualification-block`:
 - `configs/campaigns/v5_qualification_25g83/registration_block4_draft.md`;

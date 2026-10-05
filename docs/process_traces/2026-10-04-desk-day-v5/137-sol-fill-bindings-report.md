@@ -1,0 +1,45 @@
+```json
+{
+  "schema":"claude-codex-report/v1",
+  "genre":"review",
+  "status":"blocked",
+  "completion":"partial",
+  "summary":"Derived all 45 named bindings in memory; archive delivery blocked by empty WRITE_SCOPE.",
+  "workspace":{"base_requested":"2c1f64de","base_mode":"exact","head_start":"2c1f64de7ebbe915abf38ed2c51fb07f9ef919a8","head_end":"2c1f64de7ebbe915abf38ed2c51fb07f9ef919a8","upstream_end":"35fbfa8409ea473911227934e8a6cb62fe5531c7","branch":null},
+  "pathspec":[],
+  "unowned_dirty":[],
+  "verdict":{"findings":[
+    {"id":"F1","severity":"blocker","title":"NEEDS_SCOPE: requested artifacts cannot be written"},
+    {"id":"F2","severity":"blocker","title":"NEEDS_RULING: control seed-copy immutability conflicts with native reservation","evidence":["scripts/capture_t0_step.py:508","scripts/capture_t0_step.py:550","design branch registration:97-98"]},
+    {"id":"F3","severity":"blocker","title":"NEEDS_RULING: combined terminal refresh is refused by desk closeout","evidence":["joulewise/v5_qualification.py:643","scripts/v5_s1_desk_closeout.py:104","design branch record47:39-43"]},
+    {"id":"F4","severity":"should_fix","title":"No integrated terminal-refresh or aggregate Q110 CLI"},
+    {"id":"F5","severity":"should_fix","title":"Seal inventory has absent future classes and design/head record differences","files":482,"absent_classes":14},
+    {"id":"F6","severity":"should_fix","title":"s1 authorization requires nine keys; registration says seven","evidence":["scripts/write_v5_qualification_plan.py:567","scripts/write_v5_qualification_plan.py:578","design branch registration:462"]}
+  ]},
+  "verification":[
+    {"id":"V1","kind":"inspection","cmd":"git status --short --branch","cwd":".","observed":{"result":"pass","exit_code":0,"tail":["## HEAD (no branch)"]},"expected":{"exit_code":0,"tail_regex":"^## HEAD \\(no branch\\)$"}},
+    {"id":"V2","kind":"smoke","cmd":"python3 -B - <<'PY'\nimport json,subprocess,shlex,os\ncommands=json.loads(\"[\\\"python3 -B scripts/write_v5_qualification_plan.py a1 --help\\\",\\\"python3 -B scripts/write_v5_qualification_plan.py a2 --help\\\",\\\"python3 -B scripts/write_v5_qualification_plan.py s1 --help\\\",\\\"python3 -B scripts/write_v5_qualification_plan.py s2 --help\\\",\\\"python3 -B scripts/write_v5_qualification_plan.py render-chain --help\\\",\\\"python3 -B scripts/check_v5_arm_abort.py arm --help\\\",\\\"python3 -B scripts/check_v5_arm_abort.py observe --help\\\",\\\"python3 -B scripts/check_v5_arm_abort.py finish --help\\\",\\\"python3 -B scripts/produce_t0_rehearsal_bundle.py observe-standdown --help\\\",\\\"python3 -B scripts/produce_t0_rehearsal_bundle.py run-driver --help\\\",\\\"python3 -B scripts/produce_t0_rehearsal_bundle.py assemble --help\\\",\\\"python3 -B scripts/v5_s1_desk_closeout.py --help\\\",\\\"python3 -B scripts/harvest_v5_qualification.py --help\\\",\\\"python3 -B scripts/harvest_v5_g2b_window.py --help\\\",\\\"python3 -B scripts/restore_v5_null_reservation.py --help\\\",\\\"python3 -B scripts/ed_session/capture_t0_anchor_positive_control.py stamp --help\\\",\\\"python3 -B scripts/ed_session/capture_t0_anchor_positive_control.py preflight --help\\\",\\\"python3 -B scripts/ed_session/capture_t0_anchor_positive_control.py run --help\\\",\\\"python3 -B scripts/recover_calibration_ledger.py --ledger /tmp/dd5-fill/not-executed.jsonl --head-pin configs/calibration/calibration_ledger_head.json advance-head-pin --help\\\",\\\"python3 -B scripts/generate_arm_readiness.py freeze --help\\\",\\\"python3 -B scripts/produce_t0_rehearsal_bundle.py lifecycle --help\\\"]\")\nenv=dict(os.environ,PYTHONDONTWRITEBYTECODE='1')\nfor cmd in commands:\n r=subprocess.run(shlex.split(cmd),capture_output=True,text=True,env=env)\n assert r.returncode==0 and 'usage:' in r.stdout,(cmd,r.returncode,r.stderr)\nr=subprocess.run(['python3','-B','scripts/produce_t0_rehearsal_bundle.py','observe-hid','--help'],capture_output=True,text=True,env=env)\nassert r.returncode==2 and 'invalid choice' in r.stderr\nprint('CLI_HELP_PASS commands='+str(len(commands)))\nprint('MISSING_OBSERVE_HID_PARSE_PASS rc=2')\nPY","cwd":".","observed":{"result":"pass","exit_code":0,"tail":["CLI_HELP_PASS commands=21","MISSING_OBSERVE_HID_PARSE_PASS rc=2"]},"expected":{"exit_code":0,"tail_regex":"CLI_HELP_PASS commands=21\\nMISSING_OBSERVE_HID_PARSE_PASS rc=2"}},
+    {"id":"V3","kind":"inspection","cmd":"python3 -B - <<'PY'\nimport hashlib,subprocess,re\nfrom pathlib import Path\nref='origin/design/2026-10-04-v5-qualification-block'\np='configs/campaigns/v5_qualification_25g83/registration_block4_draft.md'\nraw=subprocess.check_output(['git','show',ref+':'+p])\ntokens=set(re.findall(r'FILL\\[([A-Z0-9/-]+)\\]',raw.decode()))\nassert len(tokens)==45\nprint('DRAFT_TOKEN_CENSUS_PASS unique=45')\nprint('DRAFT_SHA256 '+hashlib.sha256(raw).hexdigest())\npolicy=Path('configs/campaign_policies/quiet_mac_p2_production.json')\nassert hashlib.sha256(policy.read_bytes()).hexdigest()=='b0d7b228b88bea717aa9269c103aca760cc36cf05239e0f86c235b4b29665efd'\nseed=Path('/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261004T1305Z-r2/derived/terminal-ledger.jsonl')\nassert hashlib.sha256(seed.read_bytes()).hexdigest()=='6ee89e5a1b83c88d865a65cca71177d19a4b23b47d6af2979f92a6840857530e'\nprint('POLICY_AND_SEED_SHA256_PASS')\nPY","cwd":".","observed":{"result":"pass","exit_code":0,"tail":["DRAFT_TOKEN_CENSUS_PASS unique=45","DRAFT_SHA256 db5a7d4c126c053cb267e43f9e05782f9ad913730aa3eec922f33761d30a15f8","POLICY_AND_SEED_SHA256_PASS"]},"expected":{"exit_code":0,"tail_regex":"DRAFT_TOKEN_CENSUS_PASS unique=45[\\s\\S]*POLICY_AND_SEED_SHA256_PASS"}}
+  ],
+  "flags":[
+    {"id":"F1","kind":"scope_deviation","level":"blocking","text":"No scope violation occurred. Empty exhaustive WRITE_SCOPE prevents both requested archive artifacts.","needs":"Lead-issued prospective output scope and runner materialization."},
+    {"id":"F2","kind":"lead_ruling","level":"blocking","text":"Control CALIBRATION_LEDGER outside four ARM roots is accepted, but --execute appends two native ledger rows.","needs":"Clarify immutable seed snapshot versus mutable control working copy before sealing."},
+    {"id":"F3","kind":"lead_ruling","level":"blocking","text":"Desk permits only pin-only extension and unchanged pack digest; record47 permits additional readiness/freeze changes.","needs":"Resolve producer/checker coverage and ordering before sealing."},
+    {"id":"F7","kind":"baseline_drift","level":"nonblocking","text":"39 bindings depend on X11-authorized files and require recensus at final X11 head.","needs":"Repeat interface and digest census at final H."}
+  ],
+  "scope_expansion":{"requested_paths":["/Users/edr/night-archive/desk-day-v5/fill-bindings.json","/Users/edr/night-archive/desk-day-v5/fill-bindings.md"],"reason":"Deliver the requested JSON and short Markdown report while preserving read-only repository authority.","blocked_work":"Writing/materializing the two archive artifacts.","minimal_change":"Authorize only these two report paths for the lead/runner; repository remains read-only."}
+}
+```
+
+## Findings
+
+- **F1 — NEEDS_SCOPE:** All 45 binding rows are assembled in memory; neither output file was written. The authoritative empty allowlist explicitly requires this early return. Next step: authorize the two report paths for lead/runner materialization.
+- **F2 — NEEDS_RULING:** Writer and ARM accept `CALIBRATION_LEDGER` outside the four ARM roots. However, native reservation appends two rows to the selected control copy, conflicting with “stays unchanged.” Recommend distinguishing an immutable seed snapshot from a mutable control working copy. See [reservation command](/Users/edr/code/JouleWise-wt-dd5-fill/scripts/capture_t0_step.py:508).
+- **F3 — NEEDS_RULING:** Record 47 permits readiness/freeze refresh, but [head validation](/Users/edr/code/JouleWise-wt-dd5-fill/joulewise/v5_qualification.py:643) permits only the ledger-pin change; desk also requires an unchanged pack digest. Resolve checker coverage or refresh ordering before seal.
+- **F4:** No integrated terminal-refresh CLI or aggregate Q110-record CLI exists. Pin advancement, freeze generation and per-control Q110 facts are implemented separately.
+- **F5:** Expanded and hashed **482 concrete files**. Missing: records 44/47 and each pack’s readiness sources, evidence, freeze receipts and projection receipts—**14 classes**. All three packs remain unprojected/unfrozen. Local registration, record 42 and ruling 76 differ from the designated branch.
+- **F6:** [s1 authorization](/Users/edr/code/JouleWise-wt-dd5-fill/scripts/write_v5_qualification_plan.py:567) requires nine keys, or ten after NULL restore; §13 says seven.
+
+## Residual risk
+
+Thirty-nine bindings depend on X11-authorized files and need rechecking at final H. CLI proof used help/argument parsing; no physical producers or harvests ran. The worktree remained clean at the requested head.
