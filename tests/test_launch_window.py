@@ -832,7 +832,7 @@ class ProductionArmRelocationLaunchTests(unittest.TestCase):
         tree, _tree_raw = arm_readiness._plan_tree(pack)
         plan_sha256 = arm_readiness._pack_identity(pack, tree)["plan_sha256"]
         session = _valid_session_receipt(context, plan_sha256, tree)
-        temporary_root = Path(temporary.name)
+        temporary_root = Path(temporary.name).resolve()
         (temporary_root / "identity-epoch.json").write_bytes(
             arm_readiness.render_json(
                 session["slots"]["pre"]["identity_epoch"]
@@ -872,6 +872,8 @@ class ProductionArmRelocationLaunchTests(unittest.TestCase):
         reservation_capture_path.write_bytes(
             arm_readiness.render_json(reservation_capture)
         )
+        from tests.test_arm_readiness_evidence_t0 import install_clock_sizing_inputs
+        install_clock_sizing_inputs(repository, pack, custody)
         # R0, the author, and the subprocess carry the same numeric clock
         # relation. Only observations are supplied; all gates adjudicate them.
         with author_environment(
@@ -1037,7 +1039,7 @@ class ProductionArmRelocationLaunchTests(unittest.TestCase):
             self._mint_v4_arm()
         )
         self.addCleanup(temporary.cleanup)
-        root = Path(temporary.name)
+        root = Path(temporary.name).resolve()
         pack_relative = pack.relative_to(repository)
         go_inputs = self._install_launch_inputs(
             repository, pack, arm_path, manifest_path, custody)
@@ -1494,7 +1496,7 @@ class OperatorConfirmationDigestCliTests(unittest.TestCase):
         )
 
         table_path = (
-            Path(temporary.name)
+            Path(temporary.name).resolve()
             / "operator-confirmations"
             / arm_readiness.STEP6_CONFIRMATION_TABLE_NAME
         )
@@ -1511,7 +1513,7 @@ class OperatorConfirmationDigestCliTests(unittest.TestCase):
             )
         )
 
-        arm = sample_arm(Path(temporary.name) / "context")
+        arm = sample_arm(Path(temporary.name).resolve() / "context")
         arm["pack"] = arm_readiness._pack_record(pack)
         arm["reviewed_main"] = arm_readiness.reviewed_main(pack)
         tree, _tree_raw = arm_readiness._plan_tree(pack)
@@ -2139,8 +2141,6 @@ class PackNightLaunchBoundaryTests(unittest.TestCase):
         events = []
         custody_pack = fixture.custody / fixture.pack.name
         input_root = custody_pack / t0_evidence._INPUT_DIRECTORY
-        fixture.arm["arm_context"]["custody_root"] = str(fixture.custody)
-        (input_root / "arm-context.json").write_bytes(arm_readiness.render_json(fixture.arm["arm_context"]))
         plan_path = self.case.inputs["night_plan"]
         plan = json.loads(plan_path.read_bytes())
         plan["t0_epoch_s"] = datetime(2026, 9, 2, 1, 0).timestamp()

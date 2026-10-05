@@ -30,13 +30,7 @@ from joulewise import network_time_off, arm_readiness as readiness
 
 
 def make_t0_fixture():
-    result = _base_make_t0_fixture()
-    _temporary, _repository, pack, _custody, _context, inputs = result
-    # This module tests command capture/ordering, with the sizing authority
-    # seam substituted explicitly. X6 tests exercise its real authentication.
-    (inputs / "kernel-frequency-binding.json").write_bytes(readiness.render_json({
-        "schema": "fixture_clock_sizing_boundary_only", "pack_root": str(pack)}))
-    return result
+    return _base_make_t0_fixture()
 
 
 class _Clock:
@@ -227,12 +221,13 @@ class CaptureT0StepTests(unittest.TestCase):
                 encoding="utf-8"
             )
         )
-        gate_raw = (input_root / "kernel-frequency-gate.json").read_bytes()
-        binding_raw = (input_root / "kernel-frequency-binding.json").read_bytes()
+        retained = {path.name: path.read_bytes() for path in input_root.iterdir()
+                    if path.name in {"kernel-frequency-gate.json", "kernel-frequency-binding.json"}
+                    or path.name.startswith("clock-sizing") or path.name == "clock-observed-bound.json"}
         shutil.rmtree(input_root)
         input_root.mkdir()
-        (input_root / "kernel-frequency-gate.json").write_bytes(gate_raw)
-        (input_root / "kernel-frequency-binding.json").write_bytes(binding_raw)
+        for name, raw in retained.items():
+            (input_root / name).write_bytes(raw)
         return (
             temporary,
             repository,
@@ -281,7 +276,7 @@ class CaptureT0StepTests(unittest.TestCase):
                     b"OK: post-arm evidence reports screensaver disengaged.\nREADY.\n"
                 )
                 stderr = b""
-            elif Path(command[1]).name == "prewindow_check.sh":
+            elif Path(command[1]).name == "prewindow.py":
                 clock.advance(600)
                 stdout = b"continuous clean dwell 0/600s (check 1)\ncontinuous clean dwell 600/600s (check 2)\nREADY after 10 min.\n"
                 stderr = b""
@@ -343,6 +338,9 @@ class CaptureT0StepTests(unittest.TestCase):
                 "network_time_off.json",
                 "kernel-frequency-gate.json",
                 "kernel-frequency-binding.json",
+                "clock-sizing-source.json", "clock-observed-bound.json", "clock-sizing.json",
+                "clock-sizing-plan.json", "clock-sizing-authorization.json",
+                "clock-sizing-confirmation.json", "clock-sizing-confirmation-table.json",
                 "arm-context.json",
                 "clock-disable.json",
                 "clock-reference.json",
@@ -811,16 +809,15 @@ class CaptureT0StepTests(unittest.TestCase):
         self.assertNotIn("999", completed.stdout)
         self.assertIn("NOT READY.", completed.stdout)
 
-    def test_only_native_prewindow_execution_marks_load_report_only(self):
+    def test_t0_dwell_command_uses_module_without_an_environment_switch(self):
         repository = Path("/fixture/checkout")
-        argv = ("/bin/bash", str(repository / "scripts/prewindow_check.sh"), "--wait",
+        argv = (str(repository / ".venv/bin/python"),
+                str(repository / "joulewise/prewindow.py"), "--t0-wait",
                 "--timeout-min", "45", "--window", "gamma")
         with mock.patch.object(capture.subprocess, "run", return_value=subprocess.CompletedProcess(argv, 0)) as run:
             capture._execute(argv, cwd=repository)
             self.assertEqual(run.call_args.args[0], list(argv))
-            self.assertEqual(run.call_args.kwargs["env"]["JOULEWISE_PREWINDOW_T0_CPU_ADMISSION"], "1")
-            capture._execute(("/bin/bash", "/other/prewindow_check.sh"), cwd=repository)
-            self.assertNotIn("JOULEWISE_PREWINDOW_T0_CPU_ADMISSION", run.call_args.kwargs["env"])
+            self.assertEqual(run.call_args.kwargs["env"], capture.GOVERNED_SUBPROCESS_ENVIRONMENT)
 
     def test_refuses_dollar_bearing_window_environment(self) -> None:
         (

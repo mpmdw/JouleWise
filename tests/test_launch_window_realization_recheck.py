@@ -199,7 +199,8 @@ from joulewise.schemas import BenchmarkConfig
 night = Path({str(self.night)!r})
 record = json.loads((night / "chain.started").read_bytes())
 assert record["pid"] == record["pgid"] == os.getpid()
-assert set(record) == {{"pid", "pgid", "epoch_s", "start_time"}}
+assert set(record) == {{"pid", "pgid", "epoch_s", "monotonic_ns", "start_time"}}
+assert type(record["monotonic_ns"]) is int and record["monotonic_ns"] > 0
 assert "{launch_window.CHAIN_START_FD_ENV}" not in os.environ
 config = BenchmarkConfig.from_mapping(json.loads(Path({str(self.pack / 'configs/member-1.json')!r}).read_bytes()))
 RunBundleWriter.create(Path({str(self.runs)!r}), config, FakeClock())

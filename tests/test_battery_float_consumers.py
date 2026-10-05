@@ -72,6 +72,13 @@ ALLOWLIST = {
         frozenset({"verdict_record"}),
     ("tests/fixtures/epoch_bootstrap/build.py", "write_verdict_record"): frozenset({"verdict_record"}),
 }
+# Raw-boundary semantics: these calls replay one authenticated ioreg observation
+# at its recorded wall time. They do not consume or synthesize a window verdict.
+# Register only the exact parser call, retaining the seven verdict-seam rows.
+RAW_BOUNDARY_PARSE_CALLS = {
+    ("joulewise/v5_qualification.py", "battery_boundaries", "battery_float.parse(raw, stored['wall_time_s'])"),
+    ("scripts/check_v5_arm_abort.py", "battery_sources", "battery_float.parse(raw, record['wall_time_s'])"),
+}
 # The only test file the production guard walks.
 GUARDED_TEST_FILES = ("tests/fixtures/epoch_bootstrap/build.py",)
 # Test files that may use a primitive directly (§3.10, last sentence).
@@ -138,6 +145,7 @@ class _Checker(ast.NodeVisitor):
                 self.allowed_type_loads.update(id(part) for annotation in annotations if annotation for part in ast.walk(annotation))
             if isinstance(node, ast.AnnAssign):
                 self.allowed_type_loads.update(id(part) for part in ast.walk(node.annotation))
+        self.raw_parse_references: set[int] = set()
         self.functions: list[str] = []
         self.qualname: list[str] = []
         self.replace_sites: list[tuple[str, str, str]] = []
@@ -182,6 +190,8 @@ class _Checker(ast.NodeVisitor):
 
     def _flag(self, node: ast.AST, name: str) -> None:
         function = self.functions[-1] if self.functions else None
+        if name == "parse" and id(node) in self.raw_parse_references:
+            return
         if name in ALLOWLIST.get((self.relative, function), frozenset()):
             return
         self.found.append((self.relative, node.lineno, name))
@@ -222,6 +232,9 @@ class _Checker(ast.NodeVisitor):
 
     def visit_Call(self, node: ast.Call) -> None:
         callee = node.func
+        site = (self.relative, ".".join(self.qualname), ast.unparse(node))
+        if site in RAW_BOUNDARY_PARSE_CALLS:
+            self.raw_parse_references.add(id(callee))
         if not self.in_module:
             if (isinstance(callee, ast.Name) and callee.id in self.factory_names
                     or isinstance(callee, ast.Attribute) and callee.attr in FACTORIES
@@ -300,6 +313,20 @@ class ConsumerGuardTests(unittest.TestCase):
 
     def test_the_allowlist_has_exactly_seven_rows(self) -> None:
         self.assertEqual(len(ALLOWLIST), 7)
+
+    def test_raw_boundary_registration_is_exact_and_rejects_verdict_primitives(self):
+        found = set()
+        for relative, function, call in RAW_BOUNDARY_PARSE_CALLS:
+            tree = ast.parse((ROOT / relative).read_text())
+            body = next(node for node in ast.walk(tree) if isinstance(node, ast.FunctionDef) and node.name == function)
+            matches = [node for node in ast.walk(body) if isinstance(node, ast.Call) and ast.unparse(node) == call]
+            self.assertEqual(len(matches), 1)
+            found.add((relative, function, call))
+            source = "from joulewise import battery_float\ndef " + function + "(raw, stored, record):\n    "
+            self.assertEqual(violations(relative, source + call + "\n"), [])
+            self.assertTrue(violations(relative, source + "battery_float.parse(raw, 0)\n"))
+            self.assertTrue(violations(relative, source + "battery_float.validate_window(raw)\n"))
+        self.assertEqual(len(found), 2)
 
     def test_new_parse_reference_outside_pair_seam_is_flagged(self) -> None:
         source = "def new_reader(raw):\n    return parse(raw, 1)\n"

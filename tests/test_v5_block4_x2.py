@@ -14,6 +14,8 @@ from types import SimpleNamespace
 import unittest
 from unittest import mock
 
+from tests.git_fixture import init_git_fixture
+
 from joulewise import arm_readiness as ar
 from joulewise import network_time_off as off, v5_qualification as q
 from scripts import harvest_v5_g2b_window as h, run_night as driver
@@ -346,7 +348,7 @@ class NoMockDeskHeadTests(unittest.TestCase):
             shutil.copyfile(h.ROOT / relative, target)
         self.pin = self.measurement / "configs/calibration/calibration_ledger_head.json"
         self.pin.write_bytes(ar.render_json({"sequence": 0, "head_digest": ledger.GENESIS_DIGEST, "ledger_schema": ledger.LEDGER_SCHEMA}))
-        self.git("init", "-q"); self.git("add", "."); self.commit("fixture production config snapshot")
+        init_git_fixture(self.measurement, "-q"); self.git("add", "."); self.commit("fixture production config snapshot")
         self.head = self.git("rev-parse", "HEAD").strip()
         self.pack = self.measurement / "configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5"
         self.sources = {name: str(self.root / name) for name in ("custody", "claim_runs", "bound_runs")}

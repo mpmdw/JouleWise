@@ -414,9 +414,9 @@ def _load_context(
 
     boot_session_id = _current_boot_session_id()
     prewindow_command = (
-        "/bin/bash",
-        str(repository / "scripts/prewindow_check.sh"),
-        "--wait",
+        str(repository / ".venv/bin/python"),
+        str(repository / "joulewise/prewindow.py"),
+        "--t0-wait",
         "--timeout-min",
         "45",
         "--window",
@@ -618,10 +618,6 @@ def _require_sequence(context: CaptureContext, step_id: str) -> None:
 
 def _execute(argv: Sequence[str], *, cwd: Path) -> subprocess.CompletedProcess[bytes]:
     environment = dict(GOVERNED_SUBPROCESS_ENVIRONMENT)
-    if len(argv) > 1 and Path(argv[1]) == cwd / "scripts/prewindow_check.sh":
-        # Preserve the authored exact argv; only this native T-0 execution gets
-        # the ruled report-only load proxy. No inherited override is trusted.
-        environment["JOULEWISE_PREWINDOW_T0_CPU_ADMISSION"] = "1"
     try:
         return subprocess.run(
             list(argv),

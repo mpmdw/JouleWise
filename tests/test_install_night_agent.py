@@ -137,7 +137,10 @@ class InstallNightAgentTests(unittest.TestCase):
         # the fake HOME's user site.
         battery_float_fixture.install_user_site_runner(self.root / "home")
         from joulewise import night_agent_install as installer
-        battery_patch = mock.patch.object(installer, "BATTERY_PROBE_RUNNER", battery_float_fixture.runner())
+        def battery_runner(argv):
+            stamp = float(self.clock_file.read_text()) if hasattr(self, "clock_file") else time.time()
+            return subprocess.CompletedProcess(argv, 0, battery_float_fixture.fresh_ioreg(now_s=stamp), b"")
+        battery_patch = mock.patch.object(installer, "BATTERY_PROBE_RUNNER", battery_runner)
         battery_patch.start()
         self.addCleanup(battery_patch.stop)
 
@@ -260,9 +263,13 @@ class InstallNightAgentTests(unittest.TestCase):
             "elif args[0] == '-m':\n"
             f"    sys.path.insert(0, {str(REPO_ROOT)!r})\n"
             "    from scripts import run_night\n"
+            "    from joulewise import night_agent_install\n"
+            "    from tests import battery_float_fixture\n"
+            "    night_agent_install.BATTERY_PROBE_RUNNER = battery_float_fixture.runner()\n"
             f"    spans = {spans!r}\n"
             "    if spans is not None: run_night.INSTALL_SPANS = spans\n"
             "    module = args[1]; sys.argv = args[1:]\n"
+            "    if module == 'joulewise.night_agent_install': raise SystemExit(night_agent_install.main(args[2:]))\n"
             "    runpy.run_module(module, run_name='__main__')\n"
             "else:\n"
             "    runpy.run_path(args[0], run_name='__main__')\n",
@@ -857,9 +864,15 @@ class InstallNightAgentTests(unittest.TestCase):
         self.assertEqual(observation["plan_id"], json.loads(plan_path.read_bytes())["plan_id"])
         self.assertEqual(observation["raw_stdout_sha256"], hashlib.sha256(raw).hexdigest())
         from joulewise import battery_float
-        parsed = battery_float.parse(raw, observation["wall_time_s"])
-        self.assertTrue(parsed["passed"])
-        self.assertTrue(all(observation[key] == value for key, value in parsed.items()))
+        stamps = iter((observation["monotonic_before_ns"], observation["monotonic_after_ns"]))
+        replayed, retained = battery_float.observe(
+            phase=observation["phase"], wall_time_s=observation["wall_time_s"],
+            monotonic_ns=lambda: next(stamps), raw_path=observation["raw_path"],
+            runner=lambda argv: subprocess.CompletedProcess(argv, 0, raw, b""),
+            **{key: observation[key] for key in ("plan_id", "session_id", "slot", "attempt_id")})
+        self.assertTrue(replayed["passed"])
+        self.assertEqual(retained, raw)
+        self.assertEqual(replayed, observation)
 
     def test_install_with_both_pins_matching_renders_both_plists(self) -> None:
         completed = self._run(self._write_plan())

@@ -180,6 +180,7 @@ class LaunchConsumptionV2Tests(unittest.TestCase):
 
     def _set_up_fixture(self, root: Path, *, existing_context: bool = False) -> None:
         """Build synthetic custody; only the rehearsal factory reuses context."""
+        root = root.resolve()
         patch_pack_night_dependencies(self)
         self.pack = root / sample_arm(root / "context")["pack"]["pack_id"]
         self.pack.mkdir()
@@ -278,6 +279,10 @@ class LaunchConsumptionV2Tests(unittest.TestCase):
         }
 
     def _install_attested_launch_recipe(self) -> None:
+        import re
+        context_digest = readiness.sha256_bytes(readiness.render_json(self.arm["arm_context"]))
+        chain = re.sub(r"(?m)^export NIGHT_ARM_CONTEXT_SHA256=.*\n", "", self.chain_path.read_text())
+        self.chain_path.write_text(f'export NIGHT_ARM_CONTEXT_SHA256="{context_digest}"\n' + chain)
         custody_pack_root = self.custody / self.pack.name
         source_relative = (
             "arm_readiness.t0.sources/t0-single-launch-capability.json"
@@ -1657,9 +1662,9 @@ class ArmPackReplayComparisonTests(unittest.TestCase):
 
         temporary, repository, pack, _custody, arm_path = make_go_fixture()
         self.addCleanup(temporary.cleanup)
-        relocated_repository = Path(temporary.name) / "relocated-repository"
+        relocated_repository = Path(temporary.name).resolve() / "relocated-repository"
         git(
-            Path(temporary.name),
+            Path(temporary.name).resolve(),
             "clone",
             "-q",
             "--no-local",
@@ -1862,7 +1867,7 @@ class R1ArmLifecycleGateTests(unittest.TestCase):
 
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
-        root = Path(temporary.name)
+        root = Path(temporary.name).resolve()
         pack = root / "pack"
         pack.mkdir()
         custody_pack = root / "custody" / pack.name
@@ -2150,14 +2155,26 @@ class PackNightConsumerTests(unittest.TestCase):
                         inputs = fixture._consumer_inputs()
                         if prefixed:
                             fixture.arm["pack"]["window_id"] = fixture._custody_window
+                        if rehearsal:
+                            # Historical rehearsal uses the exact named HOME
+                            # sibling for both contexts; qualification requires
+                            # independent custody and was bootstrapped above.
+                            fixture.arm["arm_context"]["custody_root"] = str(fixture.custody)
+                            (fixture.manifest_path.parent / "arm-context.json").write_bytes(
+                                readiness.render_json(fixture.arm["arm_context"]))
+                            fixture._install_attested_launch_recipe()
+                            fixture.chain_path.with_name(fixture.chain_path.name + ".sha256").write_bytes(
+                                readiness.gnu_sidecar(fixture._artifact(fixture.chain_path)["sha256"], fixture.chain_path.name))
                         fixture._rewrite_arm()
                         arm_sha = readiness.sha256_bytes(fixture.arm_path.read_bytes())
-                        inputs.update(authenticated_arm_receipt=copy.deepcopy(fixture.arm), arm_receipt_sha256=arm_sha)
+                        inputs.update(authenticated_arm_receipt=copy.deepcopy(fixture.arm), arm_receipt_sha256=arm_sha,
+                                      window_chain_sha256=fixture._artifact(fixture.chain_path)["sha256"])
                         plan = readiness.parse_json_bytes(inputs["night_plan"].read_bytes())
                         auth_path = Path(plan["pack_night"]["authorization_record"]["path"])
                         authorization = readiness.parse_json_bytes(auth_path.read_bytes())
                         authorization.update(purpose="T0_REHEARSAL" if rehearsal else "CAMPAIGN_TRANSACTION",
                                              authority="T0-UNATTENDED-01" if rehearsal else "V5-TRANSACTION-GO-01")
+                        authorization["permitted_chain_sha256"] = fixture._artifact(fixture.chain_path)["sha256"]
                         auth_path.write_bytes(readiness.render_json(authorization))
                         auth_sha = readiness.sha256_bytes(auth_path.read_bytes())
                         plan["pack_night"]["authorization_record"]["sha256"] = auth_sha
@@ -2166,6 +2183,7 @@ class PackNightConsumerTests(unittest.TestCase):
                         go.update(purpose=authorization["purpose"], plan_sha256=readiness.sha256_bytes(inputs["night_plan"].read_bytes()))
                         go["authorization"].update(purpose=authorization["purpose"], sha256=auth_sha)
                         go["arm_receipt"]["sha256"] = arm_sha
+                        go["window_chain_sha256"] = fixture._artifact(fixture.chain_path)["sha256"]
                         for condition in go["conditions"]:
                             for ref in condition["evidence"]:
                                 ref["sha256"] = readiness.sha256_bytes((fixture.custody / ref["path"]).read_bytes())

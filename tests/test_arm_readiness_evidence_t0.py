@@ -309,6 +309,22 @@ def stream_generate(model, tokenizer, prompt, *, max_tokens=1, sampler=None):
             "arm_readiness._sample_live_clock_anchor = "
             f"lambda: {live_anchor!r}\n"
         )
+    customization += (
+        "from joulewise import kernel_clock, v5_qualification as _q\n"
+        "from scripts import write_v5_qualification_plan as _writer\n"
+        "from pathlib import Path as _Path\n"
+        "from unittest import mock as _mock\n"
+        f"kernel_clock.read_kernel_frequency = lambda: {frequency_probe()!r}\n"
+        "_clock_budget = _q.authenticated_clock_budget\n"
+        "def _fixture_budget(inputs, pack):\n"
+        "    repo = _Path(pack).parents[2]\n"
+        "    def checkout(value):\n"
+        "        if _Path(value) != repo: raise ValueError('fixture clock checkout mismatch')\n"
+        "        return repo\n"
+        "    with _mock.patch.object(_writer, 'pack_roster', return_value=([], [], ['pre', 'post'], [])), _mock.patch.object(arm_readiness, '_authenticate_launcher_identity', side_effect=checkout):\n"
+        "        return _clock_budget(inputs, pack)\n"
+        "_q.authenticated_clock_budget = _fixture_budget\n"
+    )
     (repository / "sitecustomize.py").write_text(
         customization,
         encoding="utf-8",
@@ -340,6 +356,80 @@ def _patched_sys_module(name: str, module: object):
             sys.modules[name] = previous
 
 
+from joulewise import v5_qualification as _qualification
+_REAL_CLOCK_BUDGET = _qualification.authenticated_clock_budget
+
+
+def fixture_clock_budget(inputs, pack):
+    """Replay real sizing/custody; specify only this small fixture's roster/checkout."""
+    from scripts import write_v5_qualification_plan as writer
+    repository = Path(pack).parents[2]
+    def checkout(value):
+        if Path(value) != repository:
+            raise readiness.LaunchLineageError("fixture checkout differs from clock plan")
+        return repository
+    with (mock.patch.object(writer, "pack_roster", return_value=([], [], ["pre", "post"], [])),
+          mock.patch.object(readiness, "_authenticate_launcher_identity", side_effect=checkout)):
+        return _REAL_CLOCK_BUDGET(inputs, pack)
+
+
+def install_clock_sizing_inputs(repository, pack, custody, *, maximum=320.):
+    """Source-bound synthetic sizing; the small test pack has a specified roster."""
+    from joulewise import v5_qualification as q, night_gate
+    from scripts import write_v5_qualification_plan as writer
+    root = custody / pack.name / t0._INPUT_DIRECTORY
+    window = custody / 'window-plan'
+    source = root / 'clock-sizing-source.json'
+    _write_json(source, {'seconds': maximum, 'basis': 'synthetic fixture only',
+        'diagnostic_anchor_half_width_s': .001, 'stamp_resolution_s': 1e-9,
+        'rho_per_s': 1e-6})
+    allowance = {'seconds': maximum, 'source': q.reference(source), 'source_pointer': '/seconds'}
+    observed = root / 'clock-observed-bound.json'
+    _write_json(observed, {'seconds': .004, 'basis': 'synthetic fixture only'})
+    sizing = root / 'clock-sizing.json'
+    _write_json(sizing, {'fixed': {name: allowance for name in writer.FIXED_COMPONENTS['s1']},
+        'members': {}, 'auxiliary': {}, 'streams': {name: allowance for name in ('pre', 'post')},
+        'clock': {'diagnostic_anchor_half_width_s': .001, 'stamp_resolution_s': 1e-9,
+            'rho_per_s': 1e-6, 'source': q.reference(source),
+            'observed_max_effective_bound': {'seconds': .004, 'source': q.reference(observed),
+                                           'source_pointer': '/seconds'}}})
+    chain = window / 'window-chain.zsh'
+    text = re.sub(r'^export NIGHT_(?:CLOCK_(?:SIZING_SHA256|STREAM_MAX_S)|ARM_CONTEXT_SHA256)=.*\n', '', chain.read_text(), flags=re.M)
+    chain.write_text(f'export NIGHT_CLOCK_SIZING_SHA256="{q.sha(sizing)}"\n'
+                    + f'export NIGHT_CLOCK_STREAM_MAX_S="{maximum}"\n'
+                    + f'export NIGHT_ARM_CONTEXT_SHA256="{q.sha(root / "arm-context.json")}"\n' + text)
+    sidecar = chain.with_name(chain.name + '.sha256')
+    sidecar.write_bytes(readiness.gnu_sidecar(q.sha(chain), chain.name))
+    tree, _ = readiness._plan_tree(pack)
+    head = readiness.reviewed_main(pack)['head_commit']
+    digest = readiness.committed_pack_tree_sha256(pack)
+    auth = root / 'clock-sizing-authorization.json'
+    _write_json(auth, {'purpose': 'G2B_SHAKEDOWN', 'attempt_id': tree['plan']['plan_id'] + '/1',
+        'claim_eligible': False, 'pack_sha256': digest, 'permitted_chain_sha256': q.sha(chain),
+        'permitted_blocks': 1, 'authority': 'D-171 §3'})
+    table = root / 'clock-sizing-confirmation-table.json'
+    _write_json(table, {'fixture': True})
+    confirmation = root / 'clock-sizing-confirmation.json'
+    _write_json(confirmation, {'table_path': str(table), 'table_sha256': q.sha(table),
+        'transcript_sha256': '0'*64,
+        'confirmed_at': {'epoch_s': 1., 'iso8601_utc': '1970-01-01T00:00:01.000000Z'}})
+    plan = root / 'clock-sizing-plan.json'
+    _write_json(plan, {'schema': night_gate.PACK_PLAN_SCHEMA, 'schema_version': 3,
+        'plan_id': tree['plan']['plan_id'], 'receipt_class': 'TRANSACTION_PACK',
+        't0_epoch_s': 1., 'authored_epoch_s': 0., 'window_max_s': 4320,
+        'repo_head': head, 'measurement_root': str(repository), 'measurement_head': head,
+        'chain_path': str(chain), 'chain_sha256_path': str(sidecar),
+        'custody_root': str(custody), 'registration_path': None,
+        'pack_night': {'pack_id': pack.name, 'pack_root': str(pack), 'pack_sha256': digest,
+            'attempt_ordinal': 1, 'authorization_record': q.reference(auth),
+            'confirmation_record': q.reference(confirmation)}})
+    _write_json(root / 'kernel-frequency-binding.json', {
+        'schema': 'joulewise.v5_qualification_clock_binding.v1', 'occurrence': 's1',
+        'plan': q.reference(plan), 'sizing': q.reference(sizing),
+        'plan_id': tree['plan']['plan_id'], 'pack_root': str(pack), 'pack_sha256': digest})
+    _write_json(root / 'kernel-frequency-gate.json', kernel_clock.frequency_gate(frequency_probe(), maximum))
+
+
 def make_t0_fixture(
     *,
     boot_session_id: str = TEST_BOOT_SESSION_ID,
@@ -357,6 +447,8 @@ def make_t0_fixture(
     clear_initial_arm(custody, pack.name)
     if real_identity:
         shutil.copytree(ROOT / "joulewise", repository / "joulewise", dirs_exist_ok=True)
+        shutil.copytree(ROOT / "scripts", repository / "scripts", dirs_exist_ok=True,
+                        ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
     for relative in (
         "joulewise/network_time_off.py",
         "joulewise/dwell.py",
@@ -480,15 +572,15 @@ def make_t0_fixture(
         ):
             install_passing_dry_run(pack, custody)
 
-    context = arm_context(Path(temporary.name) / "context")
+    context = arm_context(Path(temporary.name).resolve() / "context")
     input_root = custody / pack.name / t0._INPUT_DIRECTORY
     _write_json(input_root / "arm-context.json", context)
 
     plan_sha = readiness._pack_identity(pack, tree)["plan_sha256"]
     plan_path = pack / "calibration_plan.json"
-    epoch_path = Path(temporary.name) / "identity-epoch.json"
-    t1_path = Path(temporary.name) / "t1-bindings.json"
-    ledger_path = Path(temporary.name) / "production-ledger.jsonl"
+    epoch_path = Path(temporary.name).resolve() / "identity-epoch.json"
+    t1_path = Path(temporary.name).resolve() / "t1-bindings.json"
+    ledger_path = Path(temporary.name).resolve() / "production-ledger.jsonl"
     session_receipt = _valid_session_receipt(context, plan_sha, tree)
     _write_json(epoch_path, session_receipt["slots"]["pre"]["identity_epoch"])
     _write_json(t1_path, session_receipt["slots"]["pre"]["t1_bindings"])
@@ -533,9 +625,9 @@ def make_t0_fixture(
     chain_path = window_root / "window-chain.zsh"
     chain_path.write_text(f"#!/bin/zsh\nREPO={repository}\n")
     prewindow_argv = [
-        "/bin/bash",
-        str(repository / "scripts/prewindow_check.sh"),
-        "--wait",
+        str(repository / ".venv/bin/python"),
+        str(repository / "joulewise/prewindow.py"),
+        "--t0-wait",
         "--timeout-min",
         "45",
         "--window",
@@ -729,6 +821,7 @@ def make_t0_fixture(
         "monotonic_s": off_finished / 1e9})
     captures["clock-reference.json"].update(kernel_frequency=frequency_probe(), t_stream_max_s=320.)
     _write_json(input_root / "kernel-frequency-gate.json", kernel_clock.frequency_gate(frequency_probe(), 320.))
+    install_clock_sizing_inputs(repository, pack, custody)
     for name, value in captures.items():
         _write_json(input_root / name, value)
 
@@ -843,6 +936,8 @@ def author_environment(
     with contextlib.ExitStack() as stack:
         stack.enter_context(mock.patch.object(kernel_clock, "read_kernel_frequency",
             return_value=frequency_probe() if kernel_frequency is None else kernel_frequency))
+        stack.enter_context(mock.patch.object(_qualification, "authenticated_clock_budget",
+                                               side_effect=fixture_clock_budget))
         stack.enter_context(mock.patch.object(t0._time, "sleep"))
         stack.enter_context(mock.patch.object(t0, "_RUNNING_REPOSITORY", repository))
         stack.enter_context(mock.patch.object(t0, "_execute_probe", side_effect=selected_probe))
@@ -2416,6 +2511,17 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
                     self.assertEqual(source["derivation"]["policy"], network_time_off.SCHEMA)
                     self.assertTrue(any(ref["path"].endswith(network_time_off.RECEIPT_BASENAME)
                                         for ref in source["input_artifacts"]))
+                if row["row_id"] == "t0.background_quiet":
+                    module = repository / "joulewise/prewindow.py"
+                    self.assertIn({"path": str(module),
+                                   "sha256": hashlib.sha256(module.read_bytes()).hexdigest()},
+                                  source["input_artifacts"])
+                    manifest = json.loads((_inputs / "launch-manifest.json").read_bytes())
+                    self.assertEqual(manifest["prewindow_command"], [
+                        str(repository / ".venv/bin/python"), str(module), "--t0-wait",
+                        "--timeout-min", "45", "--window", "alpha"])
+                    self.assertFalse(any(ref["path"].endswith("scripts/prewindow_check.sh")
+                                         for ref in source["input_artifacts"]))
                 self.assertEqual(source["facts"][0]["fact_id"], row["predicate_id"])
                 self.assertEqual(source["facts"][0]["value"], fact["value"])
                 independently_observed_rows.append(row["row_id"])

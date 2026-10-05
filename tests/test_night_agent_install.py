@@ -232,7 +232,7 @@ class FakeLaunchctl:
 
 class FakeLaunchctlTests(unittest.TestCase):
     def setUp(self):
-        temporary = tempfile.TemporaryDirectory(prefix="iw-txn-instrument-", dir="/tmp")
+        temporary = tempfile.TemporaryDirectory(prefix="iw-txn-instrument-", dir=tempfile.gettempdir())
         self.addCleanup(temporary.cleanup)
         self.fake = FakeLaunchctl(Path(temporary.name) / "fake")
 
@@ -366,7 +366,7 @@ print(json.dumps({"version": list(sys.version_info[:3]),
                                             if name == "joulewise"
                                             or name.startswith("joulewise."))}))
 '''
-        with tempfile.TemporaryDirectory(prefix="iw-txn-system-python-", dir="/tmp") as root:
+        with tempfile.TemporaryDirectory(prefix="iw-txn-system-python-", dir=tempfile.gettempdir()) as root:
             completed = subprocess.run(
                 ["/usr/bin/python3", "-B", "-S", "-c", script, str(repo)],
                 cwd=root,
@@ -838,7 +838,7 @@ def run_signal_cell(machine, prepared, fake, root, options, trace, save_trace):
 
 class TransactionTests(unittest.TestCase):
     def fixture(self, priors=False):
-        temporary = tempfile.TemporaryDirectory(prefix="iw-txn-matrix-", dir="/tmp")
+        temporary = tempfile.TemporaryDirectory(prefix="iw-txn-matrix-", dir=tempfile.gettempdir())
         self.addCleanup(temporary.cleanup)
         fixture = TransactionFixture(temporary.name, priors)
         self.assertEqual(fixture.now, float(fixture.clock_file.read_text()))
@@ -847,7 +847,7 @@ class TransactionTests(unittest.TestCase):
     @contextlib.contextmanager
     def cell(self, priors=False):
         # SubTest does not run TestCase cleanups until the entire product ends.
-        with tempfile.TemporaryDirectory(prefix="iw-txn-cell-", dir="/tmp") as root:
+        with tempfile.TemporaryDirectory(prefix="iw-txn-cell-", dir=tempfile.gettempdir()) as root:
             fixture = TransactionFixture(root, priors)
             self.assertEqual(fixture.now, float(fixture.clock_file.read_text()))
             yield fixture
@@ -1563,7 +1563,7 @@ class CapabilityTests(SignalTestCase):
         super().setUp()
         from joulewise import night_agent_install as engine
         self.engine = engine
-        temporary = tempfile.TemporaryDirectory(prefix="iw-txn-capability-", dir="/tmp")
+        temporary = tempfile.TemporaryDirectory(prefix="iw-txn-capability-", dir=tempfile.gettempdir())
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name)
         self.fake = FakeLaunchctl(self.root / "fake")
@@ -2321,7 +2321,7 @@ class RenderedProcessTypeTests(unittest.TestCase):
             root = Path(directory)
             calendar = {"Month": 9, "Day": 25, "Hour": 22, "Minute": 0}
             prepared = installer.Prepared(
-                SimpleNamespace(custody_root=str(root), plan_id="test"),
+                SimpleNamespace(custody_root=str(root), plan_id="test", receipt_class="DIAGNOSTIC_NO_PACK"),
                 root / "night_plan.json", repo, sys.executable,
                 (repo / "configs/launchd/com.joulewise.night.plist.template").read_text(),
                 "/bin/true", "/usr/bin:/bin",
@@ -2362,7 +2362,7 @@ class RenderedProcessTypeTests(unittest.TestCase):
             root = Path(directory)
             calendar = {"Month": 9, "Day": 25, "Hour": 22, "Minute": 0}
             prepared = installer.Prepared(
-                SimpleNamespace(custody_root=str(root), plan_id="test"),
+                SimpleNamespace(custody_root=str(root), plan_id="test", receipt_class="DIAGNOSTIC_NO_PACK"),
                 root / "night_plan.json", repo, sys.executable,
                 (repo / "configs/launchd/com.joulewise.night.plist.template").read_text(),
                 "/bin/true", "/usr/bin:/bin",
