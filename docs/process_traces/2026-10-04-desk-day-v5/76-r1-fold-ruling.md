@@ -273,3 +273,59 @@ Input: the sizing round-2 seat (brief 124, `~/night-archive/desk-day-v5/sol-sz2-
      exempt.
 
 Lane X10 (brief 127) implements items 2-3. Record 44 is rewritten from the round-2 derivation.
+
+## Addendum F (2026-10-05 12:30, desk-day seat 3): the second cold pass on PR #483
+
+Input: the cold Fable pass at 6796b8e0 (`~/night-archive/desk-day-v5/fable-int2.md`, FAIL: B1-B3, M1, M2, L1). All
+three blockers would refuse a good window after its launch was consumed, or spend Ed's G10 attempt for nothing. Each
+has a cure that only makes the code agree with this ruling.
+
+1. **Correction to addendum C, item 1: G1's registered outcomes come from the code's full roster, per exact argv.**
+   Not every `pgrep` is an absence probe. The T-0 author's maintenance census
+   (`pgrep -lf 'XProtect|mds_stores|...'`) lists resident daemons. It exits 0 on every real Mac, and the author
+   accepts exit 0 or 1 because the CPU samples that follow decide.
+
+   This is the second time G1's table has been wrong, and both times the cause was a hand-picked list. So the
+   table is now derived from the code:
+   - every governed argv the driver, the T-0 stage and the author can run;
+   - with the outcomes its consuming code accepts.
+
+   It is tested by running the real author probe roster through the real journal into G1. The R1 time-server
+   query the author tolerates as a missing leg, and the driver's group-census polls, get the outcomes their
+   consumers accept.
+2. **G10 must reach the anchor check** (B2). The author replays the new sizing binding as it loads R0. G10's
+   helper runs the real author on a copy of the inputs in its own custody, so the binding's path test refuses the
+   copy before the anchor comparison.
+   - The cure keeps the production author refusing on any defect, and keeps G10 running the real author
+     unmodified.
+   - The lane chooses the smaller of two designs, with evidence: (a) a provenance-bound copy, whose binding
+     replay authenticates the original inputs path and digests; or (b) evaluating the anchor refusal before the
+     binding replay, when both must pass for a PASS anyway.
+   - G10's input capture also needs a staged custody of its own (`scripts/capture_t0_step.py:815-820`). The plan
+     writer provides it, and recipe 46 names it.
+3. **One plan id for the OFF receipt** (B3). The T-0 capture writes the network-time OFF receipt under the pack
+   plan id (the frozen calibration identity), and the author reads it back the same way. The G2-b harvest and the
+   desk close-out read it under the same pack plan id, never the attempt's night plan id.
+4. **Allowances are judged against the nearest non-NULL predecessor** (M1). A NULL attempt spends nothing and
+   changes no allowance:
+   - after an `s1` tooling RECOVER and a NULL `s2`, the next attempt is the authorized `s2` again;
+   - a fresh `s1` there is refused;
+   - NULL `s2` records count toward nothing, and they open no new `s2`.
+5. **A REFUSED harvest is superseded by its identical-bytes re-harvest** (M2). REFUSED is not a science outcome
+   (registration §7). For an attempt whose original harvest is REFUSED, the history counts the newest
+   `reharvest-N` verdict. The chain pointer keeps naming the original attempt record, so the chain stays stable,
+   and the original is kept.
+6. **Latest chain start includes the post-stage authoring** (L1). It is t0 + `T0_STAGE_CAP_S` + `T_pack_t0`, and
+   the remaining chain span is the programmed span minus `T_pack_t0`. The window bound
+   (t0 + `WINDOW_MAX_S`) is unchanged.
+7. **The NULL restore's replay authenticates the pin bytes it recorded, not the live pin file** (L1), so a later
+   pin advance cannot void the history replay of a restored attempt.
+8. **The composed tests the first pass required are written now, with no mock at the seams.** They cover four
+   seams:
+   - the real journal into the real assembler into `evaluate_qualification`, for G1, G3, G5, G8 and G9;
+   - the real author inside the real G10 helper, with the production sizing replay;
+   - a G2-b harvest and a desk close-out with the night plan id different from the pack plan id;
+   - the full author probe roster through the journal into G1.
+
+Lanes X12a (items 3, 4, 5, 7 and the harvest-side composed test) and X12b (items 1, 2, 6 and the G1/G10 composed
+tests), briefs 139 and 140.
