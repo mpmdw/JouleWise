@@ -245,17 +245,42 @@ class ClockSizingTests(unittest.TestCase):
                     self.fixture.custody, self.fixture.root, monotonic_ns=lambda: 10)
         put(self.input_root / 'kernel-frequency-gate.json', kernel_clock.frequency_gate(frequency_probe(), 100))
         context = SimpleNamespace(pack_root=self.fixture.pack, values={}, boot_session_id=boot,
-                                  custody_pack_root=self.input_root.parent)
+                                  custody_pack_root=self.input_root.parent, captures={'clock-reference': (captured, {})})
         captured['argv'] = ['/fixture/collector']
-        with (mock.patch.object(author, '_capture', return_value=(captured, {})),
+        disable = {'argv': ['/fixture/sudo', '/fixture/systemsetup', '-setusingnetworktime', 'off'],
+                   'exit_code': 0, 'started_monotonic_ns': 21, 'finished_monotonic_ns': 30}
+        context.values['r1_batch_started_monotonic_ns'] = 40
+        anchor_shift = 0
+
+        def fresh_reference(_context, *, kind):
+            from joulewise.clock_reference import ClockAnchor
+            raw = value['anchor_monotonic_raw_ns'] + 1_000_000_000_000
+            anchor = ClockAnchor(value['anchor_realtime_ns'] + 1_000_000_000_000 + anchor_shift, raw, 0)
+            return agreement, (), raw - 100, anchor, 50
+
+        with (mock.patch.object(author, '_capture', side_effect=lambda _context, step, **kw:
+                                (captured if step == 'clock-reference' else disable, {})),
               mock.patch.object(author, '_clock_reference_capture_argv', return_value=captured['argv']),
-              mock.patch.object(ar, 'requires_t0_frequency_gate', return_value=True)):
-            value, _identity, _agreement = author._captured_clock_reference(context, kind='CLOCK_ATTESTATION')
-            self.assertEqual(value['clock_sizing_binding'], q.reference(self.input_root / 'kernel-frequency-binding.json'))
-            context.values.clear()
+              mock.patch.object(ar, 'requires_t0_frequency_gate', return_value=True),
+              mock.patch.object(author, '_fresh_clock_reference_batch', side_effect=fresh_reference),
+              mock.patch.object(kernel_clock, 'read_kernel_frequency', return_value=frequency_probe())):
+            value, _identity, agreement = author._captured_clock_reference(context, kind='CLOCK_ATTESTATION')
+            # F.2: capture replay precedes the anchor, then mandatory sizing.
+            self.assertNotIn('clock_sizing_binding', value)
+            row = author._derive_clock_attestation(context)
+            self.assertEqual(row.value['clock_sizing_binding'], q.reference(self.input_root / 'kernel-frequency-binding.json'))
+            context.values.pop('clock_reference')
             captured['t_stream_max_s'] = 1.
+            anchor_shift = 6_000_000
+            with mock.patch.object(author, '_authenticate_clock_sizing', wraps=author._authenticate_clock_sizing) as sizing:
+                with self.assertRaisesRegex(author.T0EvidenceAuthoringError, 'RAW anchor delta exceeds'):
+                    author._derive_clock_attestation(context)
+                sizing.assert_not_called()
+            # A valid anchor must reach sizing; a rehashed short maximum
+            # cannot return a row that the author could publish as PASS.
+            anchor_shift = 0
             with self.assertRaisesRegex(author.T0EvidenceAuthoringError, 'authenticated sizing'):
-                author._captured_clock_reference(context, kind='CLOCK_ATTESTATION')
+                author._derive_clock_attestation(context)
 
     def test_g4_replays_real_binding_and_refuses_rehashed_short_maximum(self):
         from dataclasses import replace

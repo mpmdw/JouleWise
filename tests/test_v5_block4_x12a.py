@@ -380,11 +380,55 @@ class HistoryTests(unittest.TestCase):
         q.checked_history(record, plan, replay=True)
         self.assertEqual(self.history(x7.attempt("s2", q.reference(unit / "harvest.json"), occurrence="s2", verdict="PASS"))["s2_count"], 1)
 
-    def test_newest_numeric_reharvest_counts(self):
-        self.reharvest("RECOVER", number=2)
+    def test_first_non_refused_numeric_reharvest_counts(self):
+        first, _, _, _ = self.reharvest("RECOVER", number=2)
         record, plan, unit, replay = self.reharvest("NULL", number=10)
         q.checked_history(record, plan, replay=True)
+        self.assertEqual(q.counted_attempt(q.read(unit / "harvest.json"), unit / "harvest.json"), first)
+        with self.assertRaisesRegex(q.HarvestRefusal, "fresh_s1_predecessor_not_rearmable"):
+            self.history(x7.attempt("fresh", q.reference(unit / "harvest.json")))
+        self.assertEqual(self.history(x7.attempt("s2", q.reference(unit / "harvest.json"),
+                                               occurrence="s2", verdict="PASS"))["s2_count"], 1)
+
+    def test_refused_reharvest_then_null_counts_null(self):
+        self.reharvest("REFUSED", number=1)
+        record, plan, unit, replay = self.reharvest("NULL", number=2)
+        q.checked_history(record, plan, replay=True)
+        self.assertEqual(q.counted_attempt(q.read(unit / "harvest.json"), unit / "harvest.json"), record)
         self.history(x7.attempt("fresh", q.reference(unit / "harvest.json")))
+
+    def test_cold_pass_reharvest_real_verdict_is_final(self):
+        record, plan, unit, replay = self.reharvest("RECOVER", number=1)
+        physics = dict(record, cause_classes=["instrument_physics"],
+                       cause_codes=["member_not_strict_valid_bounded_success"], end_state=True)
+        x7.put(replay / "harvest.json", physics)
+        original = (unit / "harvest.json").read_bytes()
+        prior = q.reference(unit / "harvest.json")
+        q.checked_history(physics, plan, replay=True)
+        # Cold-pass matrix: physics re-harvest blocks both launches; later
+        # NULL and tooling verdicts of the same bytes cannot reopen them.
+        with self.assertRaisesRegex(q.HarvestRefusal, "fresh_s1_predecessor_not_rearmable"):
+            self.history(x7.attempt("fresh", prior, verdict="REFUSED"))
+        with self.assertRaisesRegex(q.HarvestRefusal, "s2_not_after_named_tooling_recover"):
+            self.history(x7.attempt("s2", prior, occurrence="s2", verdict="REFUSED"))
+        record, plan, unit, replay = self.reharvest("NULL", number=2)
+        q.checked_history(record, plan, replay=True)
+        with self.assertRaisesRegex(q.HarvestRefusal, "fresh_s1_predecessor_not_rearmable"):
+            self.history(x7.attempt("fresh", prior, verdict="REFUSED"))
+        record, plan, unit, replay = self.reharvest("RECOVER", number=3)
+        q.checked_history(record, plan, replay=True)
+        with self.assertRaisesRegex(q.HarvestRefusal, "s2_not_after_named_tooling_recover"):
+            self.history(x7.attempt("s2", prior, occurrence="s2", verdict="REFUSED"))
+        self.assertEqual((unit / "harvest.json").read_bytes(), original)
+
+    def test_cold_pass_original_real_verdict_is_final(self):
+        _, _, unit, _ = self.reharvest("NULL")
+        original = dict(q.read(unit / "harvest.json"), verdict="RECOVER",
+                        cause_classes=["instrument_physics"],
+                        cause_codes=["member_not_strict_valid_bounded_success"], end_state=True)
+        self.save(original)
+        with self.assertRaisesRegex(q.HarvestRefusal, "fresh_s1_predecessor_not_rearmable"):
+            self.history(x7.attempt("fresh", q.reference(unit / "harvest.json"), verdict="REFUSED"))
 
     def test_reharvest_changed_source_bytes_refuse(self):
         record, plan, unit, replay = self.reharvest("NULL")
@@ -416,12 +460,11 @@ class HistoryTests(unittest.TestCase):
         with self.assertRaisesRegex(q.HarvestRefusal, "reharvest_source_bytes_changed"):
             q.checked_history(record, plan, replay=True, reharvest=replay)
 
-    def test_newest_refused_does_not_fall_back_to_older_null(self):
+    def test_later_refused_does_not_supersede_first_null(self):
         self.reharvest("NULL", number=1)
         record, plan, unit, replay = self.reharvest("REFUSED", number=2)
         q.checked_history(record, plan, replay=True)
-        with self.assertRaisesRegex(q.HarvestRefusal, "fresh_s1_predecessor_not_rearmable"):
-            self.history(x7.attempt("fresh", q.reference(unit / "harvest.json")))
+        self.history(x7.attempt("fresh", q.reference(unit / "harvest.json")))
 
 
 class AuthorityTests(unittest.TestCase):

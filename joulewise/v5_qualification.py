@@ -261,7 +261,7 @@ def authenticate_reharvest(record, destination, original, original_path):
 
 
 def counted_attempt(record, original_path, *, pending=None):
-    """Keep the chain's original pointer, superseding only REFUSED verdicts."""
+    """Keep the original pointer and count the first non-REFUSED verdict."""
     if record.get("verdict") != "REFUSED":
         return record
     original_path = Path(original_path)
@@ -273,12 +273,16 @@ def counted_attempt(record, original_path, *, pending=None):
         destination, replacement = pending
         authenticate_reharvest(replacement, destination, record, original_path)
         candidates[int(Path(destination).name.removeprefix("reharvest-"))] = (destination, replacement)
-    if not candidates:
-        return record
-    destination, replacement = candidates[max(candidates)]
-    if replacement is None:
-        replacement = read(Path(destination) / "harvest.json")
-    return authenticate_reharvest(replacement, destination, record, original_path)
+    counted = record
+    for number in sorted(candidates):
+        destination, replacement = candidates[number]
+        if replacement is None:
+            replacement = read(Path(destination) / "harvest.json")
+        authenticate_reharvest(replacement, destination, record, original_path)
+        if counted.get("verdict") == "REFUSED" and replacement.get("verdict") != "REFUSED":
+            counted = replacement
+        # Later archives remain authenticated, but their verdicts are derived only.
+    return counted
 
 
 def nearest_counted_predecessor(previous):
@@ -382,8 +386,11 @@ def attempt_history(current, archive_root, *, current_harvest=None, reharvest=No
         # `prior` deliberately skips NULL for the separate allowance rules.
         if (index > 0 and record.get("verdict") == "NULL"
                 and chronological[index - 1].get("verdict") == "NULL"):
-            codes = record.get("cause_codes", [])
-            previous_codes = chronological[index - 1].get("cause_codes", [])
+            # New NULL harvests retain authenticated native refusal reasons.
+            # Older retained records have only their original cause census.
+            codes = record.get("native_refusal_codes", record.get("cause_codes", []))
+            previous_record = chronological[index - 1]
+            previous_codes = previous_record.get("native_refusal_codes", previous_record.get("cause_codes", []))
             if (not isinstance(codes, list) or not isinstance(previous_codes, list)):
                 raise HarvestRefusal("attempt_history_refusal_codes_invalid")
             current_codes = sorted({identifier(code) for code in codes})
