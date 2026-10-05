@@ -101,18 +101,59 @@ class ArchivedBatteryTests(unittest.TestCase):
         raw = (capture / 'raw/battery_float.pre.ioreg').read_bytes()
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary).resolve()
+            from joulewise import night_gate
+            from joulewise.night_plan_writer import night_plan_mapping
+            from tests.test_night_gate import make_plan
+            from tests.test_v5_block4_x6 import put
+            wall = original['wall_time_s']
+            plan_path = root / 'night_plan.json'
+            plan = make_plan(plan_id='occurrence', custody_root=str(root),
+                             t0_epoch_s=wall + 100, authored_epoch_s=wall - 100,
+                             window_max_s=3600)
+            plan_ref = put(plan_path, night_plan_mapping(plan))
             observations = {}
-            for role, phase in q.BATTERY_BOUNDARY_PHASES.items():
+            attempt = root / 'arm-attempts/000001'
+            for index, (role, phase) in enumerate(q.BATTERY_BOUNDARY_PHASES.items()):
                 # Only probe transport/identity are a fixture. The captured
                 # block-3 bytes, parser and all authenticators are real.
                 record, observed = battery_float.observe(phase=phase, plan_id='occurrence',
-                    wall_time_s=original['wall_time_s'], runner=lambda argv: subprocess.CompletedProcess(argv, 0, raw, b''))
-                observations[role] = q.persist_battery_observation(root, role, record, observed)
+                    wall_time_s=wall + index * 50, monotonic_ns=lambda: (index + 1) * 100,
+                    runner=lambda argv: subprocess.CompletedProcess(argv, 0, raw, b''))
+                if role == 't0':
+                    record['raw_stdout'] = observed.decode()
+                    receipt_ref = put(root / 'night/receipt.json', {
+                        'schema': night_gate.SCHEMA, 'plan_id': 'occurrence',
+                        'authored_monotonic_ns': 310, 'conditions': [
+                            {'condition_id': 'C3', 'measured': {'battery_float': record}}]})
+                    observations[role] = assembler.retain_t0_capture(
+                        Path(receipt_ref['path']), 'occurrence', root)
+                else:
+                    directory = attempt if role == 'publication' else root
+                    name = 'battery-float-at-publication' if role == 'publication' else role
+                    observations[role] = q.persist_battery_observation(directory, name, record, observed)
+            prepare_ref = put(root / 'prepare.json', {
+                'schema': 'joulewise.evidence_prepare.v1', 'plan_id': 'occurrence',
+                'custody_root': str(root), 'plan_path': str(plan_path),
+                'digests': {str(plan_path): plan_ref['sha256']}})
+            arm_ref = put(root / 'lifecycle/check.json', {
+                'schema': 'joulewise.evidence_check.v1', 'prepare_sha256': prepare_ref['sha256'],
+                'started_epoch_s': wall - 1, 'finished_epoch_s': wall + 1,
+                'fake_launchctl': False, 'checks': {'battery_float': {
+                    **observations['arm'], 'observation': q.read(observations['arm']['record']['path'])}}})
+            publication_ref = put(attempt / 'install.json', {
+                'schema': 'joulewise.evidence_install.v1', 'plan_sha256': plan_ref['sha256'],
+                'published_plan': str(plan_path), 'attempt_path': str(attempt),
+                'fake_launchctl': False, 'outcome': 'installed',
+                'started_epoch_s': wall + 49, 'published_epoch_s': wall + 51})
+            lifecycle = {'plan': plan_ref, 'prepare': prepare_ref, 'arm_check': arm_ref,
+                         'publication': publication_ref, 't0_receipt': receipt_ref}
             output = root / 'boundaries.json'
-            locator = assembler.assemble('occurrence', observations, output)
+            locator = assembler.assemble('occurrence', observations, output, lifecycle=lifecycle)
             self.assertTrue(q.battery_boundaries(output, locator['sha256'], 'occurrence'))
             from scripts.check_v5_arm_abort import battery_sources
-            self.assertEqual(len(battery_sources(observations, SimpleNamespace(plan_id='occurrence'))), 6)
+            sources = battery_sources(observations, SimpleNamespace(plan_id='occurrence'))
+            self.assertEqual(len(sources), 7)  # Six probe files plus the native T-0 receipt.
+            self.assertIn(receipt_ref, sources)
             with self.assertRaisesRegex(q.HarvestRefusal, 'identity_mismatch'):
                 assembler.assemble('foreign', observations, root / 'foreign.json')
             path = Path(observations['t0']['record']['path'])

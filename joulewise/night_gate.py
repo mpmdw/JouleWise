@@ -1235,7 +1235,7 @@ def qualification_start_deadline(plan, chain_text, purpose, *, sizing=None):
     span = int(span)
     window_cap = 2700
     if (plan.receipt_class == "TRANSACTION_PACK" and purpose == "G2B_SHAKEDOWN"
-            and marker == "s1" and isinstance(plan.pack_night, Mapping)):
+            and marker in {"s1", "s2"} and isinstance(plan.pack_night, Mapping)):
         from joulewise import arm_readiness as readiness
         # During initial staging the writer has verified sizing but has not
         # published its custody file yet. Runtime uses the same chain-pinned

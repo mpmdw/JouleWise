@@ -167,16 +167,17 @@ class WindowValidatorTests(unittest.TestCase):
 
     def test_initial_and_runtime_validation_use_the_same_authenticated_cap(self):
         for cap, window in ((3180, 4080), (3300, 4200), (3480, 4380)):
-            with self.subTest(cap=cap):
-                sizing = copy.deepcopy(self.f.sizing)
-                sizing['fixed']['t0_stage_cap'] = self.f.allow(cap)
-                plan = self.replace(self.plan, window_max_s=window)
-                chain = self.chain(sizing, window=window)
-                self.assertEqual(night_gate.qualification_start_deadline(
-                    plan, chain, 'G2B_SHAKEDOWN', sizing=sizing), 1000 + window - 860)
-                self.publish(sizing)
-                self.assertEqual(night_gate.qualification_start_deadline(
-                    plan, chain, 'G2B_SHAKEDOWN'), 1000 + window - 860)
+            for marker in ('s1', 's2'):
+                with self.subTest(cap=cap, marker=marker):
+                    sizing = copy.deepcopy(self.f.sizing)
+                    sizing['fixed']['t0_stage_cap'] = self.f.allow(cap)
+                    plan = self.replace(self.plan, window_max_s=window)
+                    chain = self.chain(sizing, window=window, marker=marker)
+                    self.assertEqual(night_gate.qualification_start_deadline(
+                        plan, chain, 'G2B_SHAKEDOWN', sizing=sizing), 1000 + window - 860)
+                    self.publish(sizing)
+                    self.assertEqual(night_gate.qualification_start_deadline(
+                        plan, chain, 'G2B_SHAKEDOWN'), 1000 + window - 860)
 
     def test_cap_is_pinned_to_the_whole_sizing_input(self):
         chain = self.chain(self.f.sizing)

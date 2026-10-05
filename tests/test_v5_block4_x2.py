@@ -23,6 +23,7 @@ from tests import test_harvest_v5_g2b_window as harvest_tests
 put = harvest_tests.put
 from tests import test_arm_readiness as arm_tests
 from tests.test_night_gate import make_plan
+from tests.test_v5_block4_x7 import bind_history_fixture
 
 
 class G2bHarness:
@@ -48,6 +49,10 @@ class G2bHarness:
             measurement_root=str(h.ROOT), measurement_head="a" * 40,
             chain_path=str(self.chain), chain_sha256_path=str(self.sidecar),
             pack_night={"pack_id": "d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5", "pack_root": str(c.pack)})
+        # X7 requires the pinned occurrence, static authority and canonical
+        # attempt archive even when launch/physics are component boundaries.
+        self.plan = bind_history_fixture(self.night_root / "night_plan.json", self.plan,
+                                         self.root / "block-archive")
         self.terminal = self.night / "transcript/post-bracket-terminal-boundary.json"
         put(self.terminal, {})
         put(self.night_root / "qualification-plan-record.json", {
@@ -77,7 +82,8 @@ class G2bHarness:
             "desk_producer_events": q.reference(self.root / "events.json"),
             "auxiliary_bundle_ids": [], "bound_bundle_ids": ["bound0"]})
         self.args = SimpleNamespace(inputs=self.input_path, inputs_sha256=q.sha(self.input_path),
-            archive_root=self.root / "archive-1", scratch_root=self.root, prepare_desk=False, previous_harvest=None)
+            archive_root=Path(self.plan.block_archive_root) / "attempts" / self.plan.plan_id,
+            scratch_root=self.root, prepare_desk=False, previous_harvest=None)
         self.stack = ExitStack()
         self.desk = self.stack.enter_context(mock.patch.object(h, "desk_check", return_value=True))
         for obj, name, value in (
@@ -122,10 +128,11 @@ class HarvestReplayTests(unittest.TestCase):
         self.assertEqual(driver._chain_environment(plan, f.night)["JOULEWISE_NETWORK_TIME_OFF_RECEIPT"], str(f.off_path))
         result = f.run()
         self.assertEqual(result["verdict"], "PASS", result)
-        wrong = dict(f.off_value, window_id=f.plan.plan_id)
-        put(f.off_path, wrong)
-        f.args.archive_root = f.root / "wrong-window"
-        self.assertEqual(f.run()["verdict"], "REFUSED")
+        # A changed witness is a separate fixture, never a re-harvest of
+        # immutable source bytes from the successful occurrence.
+        wrong = self.fixture()
+        put(wrong.off_path, dict(wrong.off_value, window_id=wrong.plan.plan_id))
+        self.assertEqual(wrong.run()["verdict"], "REFUSED")
 
     def test_external_events_census_is_identical_across_reharvest(self):
         f = self.fixture()
@@ -135,7 +142,7 @@ class HarvestReplayTests(unittest.TestCase):
         original = (f.args.archive_root / "harvest.json").read_bytes()
         f.desk.side_effect = None
         f.args.previous_harvest = f.args.archive_root
-        f.args.archive_root = f.root / "archive-2"
+        f.args.archive_root = f.args.archive_root / "reharvest-1"
         self.assertEqual(f.run()["verdict"], "PASS")
         for name in ("replay-locators.json", "derived/desk-producer-events.json"):
             first = q.read(f.args.previous_harvest / name)
@@ -159,7 +166,7 @@ class HarvestReplayTests(unittest.TestCase):
         events = (f.args.archive_root / "derived/desk-producer-events.json").read_bytes()
         first = (f.args.archive_root / "harvest.json").read_bytes()
         f.args.previous_harvest = f.args.archive_root
-        f.args.archive_root = f.root / "archive-2"; f.args.prepare_desk = False
+        f.args.archive_root = f.args.archive_root / "reharvest-1"; f.args.prepare_desk = False
         with mock.patch.object(h, "prepare_desk", side_effect=AssertionError("must not rerun producers")):
             result = f.run()
         self.assertEqual(result["verdict"], "PASS", result)

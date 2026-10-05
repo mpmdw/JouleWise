@@ -30,7 +30,45 @@ from joulewise import network_time_off, arm_readiness as readiness
 
 
 def make_t0_fixture():
-    return _base_make_t0_fixture()
+    fixture = _base_make_t0_fixture()
+    # This producer exercises X10's sizing replay at authoring. Update the
+    # older shared fixture prospectively, rebinding each custody digest.
+    from joulewise import v5_qualification as q
+    from scripts import write_v5_qualification_plan as writer
+    inputs = fixture[5]
+    source_path = inputs / "clock-sizing-source.json"
+    source = q.read(source_path)
+    source["t0_stage_cap_s"] = 3300
+    source_path.write_bytes(readiness.render_json(source))
+    source_ref = q.reference(source_path)
+    sizing_path = inputs / "clock-sizing.json"
+    sizing = q.read(sizing_path)
+    for group in (sizing["fixed"], sizing["streams"]):
+        for allowance in group.values():
+            allowance["source"] = source_ref
+    sizing["clock"]["source"] = source_ref
+    sizing["fixed"]["t0_stage_cap"] = {
+        "seconds": 3300, "source": source_ref, "source_pointer": "/t0_stage_cap_s"}
+    sizing_path.write_bytes(readiness.render_json(sizing))
+    plan_path = inputs / "clock-sizing-plan.json"
+    plan = q.read(plan_path)
+    plan["window_max_s"] = writer.size_window("s1", sizing, brackets=("pre", "post"))["window_max_s"]
+    chain = Path(plan["chain_path"])
+    chain.write_text(re.sub(r'(?m)^export NIGHT_CLOCK_SIZING_SHA256=.*$',
+                           'export NIGHT_CLOCK_SIZING_SHA256="' + q.sha(sizing_path) + '"',
+                           chain.read_text()))
+    Path(plan["chain_sha256_path"]).write_bytes(readiness.gnu_sidecar(q.sha(chain), chain.name))
+    auth_path = inputs / "clock-sizing-authorization.json"
+    auth = q.read(auth_path)
+    auth["permitted_chain_sha256"] = q.sha(chain)
+    auth_path.write_bytes(readiness.render_json(auth))
+    plan["pack_night"]["authorization_record"] = q.reference(auth_path)
+    plan_path.write_bytes(readiness.render_json(plan))
+    binding_path = inputs / "kernel-frequency-binding.json"
+    binding = q.read(binding_path)
+    binding.update(plan=q.reference(plan_path), sizing=q.reference(sizing_path))
+    binding_path.write_bytes(readiness.render_json(binding))
+    return fixture
 
 
 class _Clock:

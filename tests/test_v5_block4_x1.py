@@ -255,61 +255,53 @@ elif name not in {"launch_window.py", "run_campaign.py"}:
 
 
 class RunnerTests(unittest.TestCase):
+    def capture_fixture(self):
+        from tests.test_v5_qualification_plan import PlanWriterTests
+        fixture = PlanWriterTests()
+        fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
+        fixture.write()
+        (fixture.custody / "night").mkdir()
+        plan = night_gate.NightPlan.from_mapping(writer.read_object(fixture.output))
+        return fixture, plan
+
     def test_driver_stages_native_sequence_unattended_before_arm_and_refuses_partial_retry(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary).resolve()
-            custody = root / "plan"
-            (custody / "night").mkdir(parents=True)
-            inputs = custody / "pack" / capture.INPUT_DIRECTORY
-            inputs.mkdir(parents=True)
-            context = arm_context(root)
-            (inputs / "arm-context.json").write_bytes(readiness.render_json(context))
-            window = custody / "window-plan"
-            window.mkdir()
-            chain = window / "window-chain.zsh"
-            chain.write_text("export V5_QUALIFICATION_OCCURRENCE=s1\n"
-                             "export NIGHT_ARM_CONTEXT_SHA256="
-                             + readiness.sha256_bytes(readiness.render_json(context)) + "\n")
-            plan = SimpleNamespace(custody_root=str(custody), chain_path=str(chain),
-                measurement_root=str(root / "measurement"), measurement_head="0" * 40,
-                plan_id="s1", receipt_class="TRANSACTION_PACK",
-                pack_night={"pack_id": "pack", "pack_root": str(root / "measurement/pack")})
-            def completed(argv, **kwargs):
-                self.assertEqual(argv, [str(root / "measurement/.venv/bin/python"),
-                    str(root / "measurement/scripts/capture_t0_step.py"), "sequence",
-                    "--pack-root", plan.pack_night["pack_root"], "--custody-root", str(custody),
-                    "--window-plan-root", str(window)])
-                self.assertEqual(kwargs["stdin"], subprocess.DEVNULL)
-                self.assertEqual(kwargs["cwd"], plan.measurement_root)
-                self.assertEqual(kwargs["env"]["NIGHT_DIR"], str(custody / "night"))
-                for name in capture.STEP_FILENAMES.values():
-                    (inputs / name).write_bytes(b"{}\n")
-                return SimpleNamespace(returncode=0, stdout=b"sequence complete\n", stderr=b"")
-            with mock.patch.object(run_night.t0_rehearsal, "observed_run", side_effect=completed) as execute:
+        fixture, plan = self.capture_fixture()
+        custody = fixture.custody
+        inputs = custody / fixture.pack.name / capture.INPUT_DIRECTORY
+        window = Path(plan.chain_path).parent
+        def completed(argv, **kwargs):
+            self.assertEqual(argv, [str(fixture.repo / ".venv/bin/python"),
+                str(fixture.repo / "scripts/capture_t0_step.py"), "sequence",
+                "--pack-root", plan.pack_night["pack_root"], "--custody-root", str(custody),
+                "--window-plan-root", str(window)])
+            self.assertEqual(kwargs["stdin"], subprocess.DEVNULL)
+            self.assertEqual(kwargs["cwd"], plan.measurement_root)
+            self.assertEqual(kwargs["timeout"], 3300)
+            self.assertEqual(kwargs["env"]["NIGHT_DIR"], str(custody / "night"))
+            for name in capture.STEP_FILENAMES.values():
+                (inputs / name).write_bytes(b"{}\n")
+            return SimpleNamespace(returncode=0, stdout=b"sequence complete\n", stderr=b"")
+        with mock.patch.object(run_night.t0_rehearsal, "observed_run", side_effect=completed) as execute:
+            run_night._capture_qualification_t0(plan)
+            run_night._capture_qualification_t0(plan)
+            execute.assert_called_once()
+            self.assertEqual((custody / "night/t0-capture.stdout.json").read_bytes(),
+                             b"sequence complete\n")
+            (inputs / capture.STEP_FILENAMES["clock-reference"]).unlink()
+            with self.assertRaisesRegex(ValueError, "incomplete prior T-0"):
                 run_night._capture_qualification_t0(plan)
-                run_night._capture_qualification_t0(plan)
-                execute.assert_called_once()
-                self.assertEqual((custody / "night/t0-capture.stdout.json").read_bytes(),
-                                 b"sequence complete\n")
-                (inputs / capture.STEP_FILENAMES["clock-reference"]).unlink()
-                with self.assertRaisesRegex(ValueError, "incomplete prior T-0"):
-                    run_night._capture_qualification_t0(plan)
-                execute.assert_called_once()
+            execute.assert_called_once()
 
     def test_capture_timeout_preserves_partial_output_and_refuses_cleanly(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary).resolve()
-            (root / "night").mkdir()
-            plan = SimpleNamespace(custody_root=str(root), chain_path=str(root / "chain"),
-                measurement_root="/measurement", pack_night={"pack_id": "pack", "pack_root": "/pack"})
-            error = subprocess.TimeoutExpired(["capture"], 3600, output=b"partial\n", stderr=b"deadline\n")
-            with mock.patch.object(night_gate, "authenticate_arm_context"), \
-                 mock.patch.object(run_night, "_chain_environment", return_value={}), \
-                 mock.patch.object(run_night.t0_rehearsal, "observed_run", side_effect=error):
-                with self.assertRaisesRegex(ValueError, "T-0 capture stage timed out"):
-                    run_night._capture_qualification_t0(plan)
-            self.assertEqual((root / "night/t0-capture.stdout.json").read_bytes(), b"partial\n")
-            self.assertEqual((root / "night/t0-capture.stderr.txt").read_bytes(), b"deadline\n")
+        fixture, plan = self.capture_fixture()
+        error = subprocess.TimeoutExpired(["capture"], 3300, output=b"partial\n", stderr=b"deadline\n")
+        with mock.patch.object(run_night.t0_rehearsal, "observed_run", side_effect=error) as execute:
+            with self.assertRaisesRegex(ValueError, "T-0 capture stage timed out"):
+                run_night._capture_qualification_t0(plan)
+        self.assertEqual(execute.call_args.kwargs["timeout"], 3300)
+        self.assertEqual((fixture.custody / "night/t0-capture.stdout.json").read_bytes(), b"partial\n")
+        self.assertEqual((fixture.custody / "night/t0-capture.stderr.txt").read_bytes(), b"deadline\n")
 
     def test_sequence_cli_runs_all_six_in_order_and_stops_on_error(self):
         args = ["sequence", "--pack-root", "/pack", "--custody-root", "/custody", "--window-plan-root", "/window"]
