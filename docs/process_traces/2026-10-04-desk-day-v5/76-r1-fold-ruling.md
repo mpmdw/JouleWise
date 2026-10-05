@@ -329,3 +329,17 @@ has a cure that only makes the code agree with this ruling.
 
 Lanes X12a (items 3, 4, 5, 7 and the harvest-side composed test) and X12b (items 1, 2, 6 and the G1/G10 composed
 tests), briefs 139 and 140.
+9. **Correction to addendum E, item 1 (executing review D1).** The T-0 dwell judges the named maintenance daemons by
+   CPU, as addendum B item 5 ruled ("a matching process above 5.0% CPU"). It does not judge every process: E.1 and
+   registration §4 said "every process", which was a restatement error. A busy process outside the list is not a
+   dwell contaminant. Each member's CPU-idle admission inside the chain refuses to measure on a busy machine, and
+   that admission is what protects the joules. The dwell's load average is recorded.
+10. **The executing review at 6796b8e0** (`~/night-archive/desk-day-v5/sol-intrev2.md`) adds four more to lane X12a.
+    - D2: an admission abort is re-armable only if every member already harvested is otherwise clean, including
+      clock-bounded; any other RECOVER cause in the attempt removes the re-arm.
+    - D4: an observation-producer fault never enters the structural cause set (ruling 76 decision 5).
+    - D5: the same NULL refusal code on two consecutive attempts sends the next spend to the consult; the writer
+      refuses a third attempt (registration §7).
+    - C2: a single-row stage-list substitution regression.
+
+    D3 is item 5 above.

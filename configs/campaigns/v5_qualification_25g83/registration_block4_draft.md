@@ -130,8 +130,10 @@ computed deadlines and the expiry, check and courier caps. `a1` completes before
 `s1`'s T-0 and clean dwell.
 
 **`s1`.** One launch. At t0 the driver runs the native six-step T-0 stage, bounded by `T0_STAGE_CAP_S` = 3300 s.
-It includes the settled OFF receipt and the one 600-second clean dwell, which judges every process by CPU (above
-5.0% is a contaminant) and records the load average without vetoing on it. The sealed Revision-6
+It includes the settled OFF receipt and the one 600-second clean dwell. The dwell judges the named maintenance
+daemons by CPU (a matching process above 5.0% is a contaminant; addendum B, item 5) and records the load average
+without vetoing on it. A busy process outside that list is not a dwell contaminant: each science and auxiliary
+member's CPU-idle admission inside the chain refuses to start a measurement on a busy machine. The sealed Revision-6
 `scripts/prewindow_check.sh` is not used by a pack night (addenda D and E). After ARM: the pre settle and the pre bracket with the
 acceptance-derived screen; NEG-8 bound work and start references; the first before-midpoint science stage with
 `scripts/run_campaign.py --max-blocks 1` (#474); the midpoint and end references; the post bracket in the same
