@@ -469,6 +469,30 @@ def test_off_at_fifteen_minutes_when_frequency_stays_high(tmp_path):
     assert gate["passes"] is True and gate["bound_ms"] == pytest.approx(4.8457, abs=1e-3)
 
 
+def test_settling_cap_is_honoured_off_the_minute_grid(tmp_path):
+    mac = FakeMac()
+    record, _, _ = run(mac, tmp_path, settle_max_s=150.0)
+    assert [r["elapsed_since_on_s"] for r in record["settling"]["reads"]] == [60.0, 120.0, 150.0]
+    off_call = [c for c in mac.calls if c["argv"] == g10.OFF_ARGV][0]
+    assert off_call["since_on"] == pytest.approx(150.0)
+
+
+def test_signal_guard_raises_once_then_defers():
+    guard = g10.SignalGuard()
+    guard.install()
+    try:
+        with pytest.raises(g10.Interrupted):
+            os.kill(os.getpid(), signal.SIGTERM)
+            time.monotonic()  # a bytecode boundary for the handler to run at
+        os.kill(os.getpid(), signal.SIGHUP)
+        os.kill(os.getpid(), signal.SIGTERM)
+        time.monotonic()
+        assert guard.received == [signal.SIGTERM, signal.SIGHUP, signal.SIGTERM]
+        assert guard.deferred == [signal.SIGHUP, signal.SIGTERM]
+    finally:
+        guard.restore()
+
+
 def test_frequency_target_is_inclusive_and_exact():
     bound = 3 * kernel_clock.FREQUENCY_SCALE
     assert g10.frequency_within(probe(bound), 3.0)
