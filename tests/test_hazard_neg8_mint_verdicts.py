@@ -74,6 +74,7 @@ class _CorpusFixture(_SentinelMixin):
         self.calibration_unrecorded: set[int] = set()
         self.inventory_error: set[int] = set()
         self.span_missing: set[int] = set()
+        self.authenticated_unstamped: set[int] = set()
 
     def bundle(self, number: int) -> Path:
         return self.w.bound / f"neg8-refcorpus-r{number:02d}"
@@ -90,6 +91,8 @@ class _CorpusFixture(_SentinelMixin):
         def lineage(path, **_kwargs):
             if _member_number(Path(path)) in self.lineage_error:
                 raise arm_readiness.LaunchLineageError("launch_binding_mismatch", "fixture")
+            if _member_number(Path(path)) in self.authenticated_unstamped:
+                return {"authenticated": "fixture"}  # metadata carries no stamp
             return None
 
         def fields(metadata):
@@ -210,6 +213,16 @@ class MintMemberVerdictTests(_CorpusFixture, unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, pattern):
                     self.mint()
 
+    def test_an_authenticated_launch_without_its_stamp_refuses_the_corpus(self) -> None:
+        # Review F5: the lineage authenticates but metadata carries no
+        # extra.launch_lineage stamp; that is not evidence about the number.
+        self.authenticated_unstamped.add(5)
+        pattern = "refused.*neg8-refcorpus-r05=launch_lineage:launch_consumption_invalid"
+        with self.assertRaisesRegex(ValueError, pattern):
+            self.drops()
+        with self.assertRaisesRegex(ValueError, pattern):
+            self.mint()
+
     def test_a_member_of_another_condition_refuses_instead_of_a_majority_drop(self) -> None:
         self.identity[9] = ("c" * 64, True)
         with self.assertRaisesRegex(ValueError, "<corpus>=condition_differs"):
@@ -242,7 +255,7 @@ class MintPhysicalTimestampTests(_CorpusFixture, unittest.TestCase):
 class ValidatorEndReferenceTimeTests(unittest.TestCase):
     """The validator re-derives the end-reference evaluation time on a HAZARD root."""
 
-    def _decide(self, *, hazard: bool, stored: float) -> float:
+    def _decide(self, *, hazard: bool, stored: float, unreadable: frozenset = frozenset()) -> float:
         root = Path("/nonexistent-hazard-root")
         manifest = {"members": [
             {"execution": "invoked", "role": "neg8_daily_reference_end",
@@ -263,7 +276,8 @@ class ValidatorEndReferenceTimeTests(unittest.TestCase):
                 patch.object(whole_window, "_current_strict_summary", return_value=False), \
                 patch.object(whole_window, "_reference_energy_evidence", return_value=energy), \
                 patch.object(whole_window, "_measured_window_end_s", create=True,
-                             side_effect=lambda path: 5000.0 + int(path.name[-1])), \
+                             side_effect=lambda path: None if int(path.name[-1]) in unreadable
+                             else 5000.0 + int(path.name[-1])), \
                 patch.object(whole_window, "_is_hazard_runs_root", return_value=hazard), \
                 patch.object(whole_window, "build_neg8_freshness_observation", side_effect=observation), \
                 patch.object(whole_window, "evaluate_neg8_point_drift", return_value={"decision": "passed"}):
@@ -278,6 +292,16 @@ class ValidatorEndReferenceTimeTests(unittest.TestCase):
 
     def test_other_roots_keep_the_stored_evaluation_time(self) -> None:
         self.assertEqual(self._decide(hazard=False, stored=1234.0), 1234.0)
+
+    def test_an_unreadable_end_reference_keeps_the_stored_time_but_never_earlier_than_a_read_end(
+            self) -> None:
+        # Review F2: the readable subset alone would understate the evaluation
+        # time (a fresher-looking bound), so the stored time stands; a stored
+        # time earlier than any physical end that reads is raised to it.
+        self.assertEqual(self._decide(hazard=True, stored=9000.0, unreadable=frozenset({2})), 9000.0)
+        self.assertEqual(self._decide(hazard=True, stored=4000.0, unreadable=frozenset({2})), 5001.0)
+        self.assertEqual(self._decide(hazard=True, stored=4000.0, unreadable=frozenset({0, 1, 2})),
+                         4000.0)
 
 
 class EnergyCauseTests(unittest.TestCase):

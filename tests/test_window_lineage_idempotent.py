@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import os
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -74,6 +75,59 @@ class IdempotentPublicationTests(unittest.TestCase):
         os.symlink(target, authorization)
         with self.assertRaisesRegex(window_lineage.LineagePublicationError, "records"):
             publish_lineage(self.w)
+
+
+
+class ExistingRecordEdgeTests(unittest.TestCase):
+    """Review F1 and F3: what ``_write_once`` does with an existing path."""
+
+    def setUp(self) -> None:
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.dir = Path(tmp.name)
+
+    def test_a_record_replaced_while_being_compared_is_not_acknowledged(self) -> None:
+        record = self.dir / "authorization.json"
+        record.write_bytes(b'{"authorized":true}\n')
+        replacement = self.dir / "replacement.json"
+        replacement.write_bytes(b'{"unauthorized":true}\n')
+
+        def replaced_after(read):
+            def wrapper(*args, **kwargs):
+                value = read(*args, **kwargs)
+                os.replace(replacement, record)
+                return value
+            return wrapper
+
+        hooks = [(name, getattr(window_lineage, name)) for name in
+                 ("_read_descriptor", "_read_regular_nofollow") if hasattr(window_lineage, name)]
+        with patch.multiple(window_lineage, **{name: replaced_after(fn) for name, fn in hooks}), \
+                self.assertRaises(FileExistsError):
+            window_lineage._write_once(record, b'{"authorized":true}\n')
+        self.assertEqual(record.read_bytes(), b'{"unauthorized":true}\n')
+
+    def test_an_existing_fifo_is_refused_without_blocking(self) -> None:
+        fifo = self.dir / "authorization.json"
+        os.mkfifo(fifo)
+        outcome: list[BaseException | None] = []
+
+        def attempt() -> None:
+            try:
+                window_lineage._write_once(fifo, b"{}\n")
+                outcome.append(None)
+            except BaseException as exc:  # noqa: BLE001 - recorded for the assertion
+                outcome.append(exc)
+
+        thread = threading.Thread(target=attempt, daemon=True)
+        thread.start()
+        thread.join(timeout=5.0)
+        if thread.is_alive():
+            # Unblock the hung open so the test process can exit.
+            os.close(os.open(fifo, os.O_WRONLY | os.O_NONBLOCK))
+            thread.join(timeout=5.0)
+            self.fail("_write_once blocked on an existing FIFO")
+        self.assertEqual(len(outcome), 1)
+        self.assertIsInstance(outcome[0], FileExistsError)
 
 
 if __name__ == "__main__":

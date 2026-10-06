@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+from concurrent.futures import Future
+from concurrent.futures.process import BrokenProcessPool
 from pathlib import Path
 from unittest.mock import patch
 
@@ -56,6 +58,65 @@ class ParallelStrictValidationTests(unittest.TestCase):
         self.assertIs(caches[0], caches[1])
         self.assertEqual(whole_window.strict_validate_bundles(
             [Path("a"), Path("b")], workers=1, validator=without_cache), [[], []])
+
+    def _with_fake_pool(self, pool_factory):
+        """Run the pool path with a fake executor and an in-process validator."""
+
+        def validator(path, strict):
+            return [f"invalid {Path(path).name}"]
+
+        with patch.object(cli, "validate_bundle", side_effect=validator), \
+                patch("concurrent.futures.ProcessPoolExecutor", side_effect=pool_factory):
+            return whole_window.strict_validate_bundles(
+                [Path("b0"), Path("b1"), Path("b2")], workers=3)
+
+    def test_a_dead_worker_leaves_its_bundles_to_be_validated_in_process(self) -> None:
+        # Review F4: a worker that dies must never turn its bundles into an
+        # empty (valid) problem list.
+        class DyingPool:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+            def submit(self, _fn, path_text):
+                future = Future()
+                if path_text == "b1":
+                    future.set_result(["pooled b1"])
+                else:
+                    future.set_exception(BrokenProcessPool("worker exited"))
+                return future
+
+        self.assertEqual(self._with_fake_pool(DyingPool),
+                         [["invalid b0"], ["pooled b1"], ["invalid b2"]])
+
+    def test_a_pool_that_cannot_start_validates_every_bundle_in_process(self) -> None:
+        def no_pool(*args, **kwargs):
+            raise OSError("cannot spawn")
+
+        self.assertEqual(self._with_fake_pool(no_pool),
+                         [["invalid b0"], ["invalid b1"], ["invalid b2"]])
+
+    def test_a_single_hazard_member_takes_the_serial_path(self) -> None:
+        # Review F6: one member gains nothing from a pool.
+        calls = []
+
+        def member(source, waivers, *, strict_problems=None):
+            calls.append(strict_problems)
+            return source.path.name
+
+        with patch.object(run_campaign, "_whole_window_member", side_effect=member), \
+                patch.object(run_campaign._window_lineage, "is_hazard_runs_root", return_value=True), \
+                patch.object(run_campaign, "strict_validate_bundles") as pooled:
+            result = run_campaign._whole_window_member_evaluations(
+                [run_campaign.WholeWindowMemberSource(path=Path("/r/one"))], {}, runs_dir=Path("/r"))
+        self.assertEqual(result, ["one"])
+        self.assertEqual(calls, [None])
+        self.assertFalse(pooled.called)
 
     def test_worker_count(self) -> None:
         with patch.dict("os.environ", {whole_window.WHOLE_WINDOW_WORKERS_ENV: "3"}):

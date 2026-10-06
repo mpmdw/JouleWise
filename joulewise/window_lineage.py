@@ -801,19 +801,8 @@ def _write_once(path: Path, raw: bytes) -> None:
     try:
         descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
     except FileExistsError:
-        try:
-            existing = _read_regular_nofollow(path)
-        except OSError:
-            existing = None
-        if existing != raw:
+        if not _existing_record_is(path, raw):
             raise
-        # The identical bytes may not have reached the disk before the earlier
-        # attempt failed; make them (and their directory entry) durable now.
-        handle_descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
-        try:
-            os.fsync(handle_descriptor)
-        finally:
-            os.close(handle_descriptor)
         _fsync_directory(path.parent)
         return
     try:
@@ -825,22 +814,48 @@ def _write_once(path: Path, raw: bytes) -> None:
         _fsync_directory(path.parent)
 
 
-def _read_regular_nofollow(path: Path) -> bytes:
-    """The bytes of a regular file, never through a symlink."""
+def _existing_record_is(path: Path, raw: bytes) -> bool:
+    """Whether ``path`` is a regular file holding exactly ``raw``, made durable.
 
-    descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+    One descriptor does everything (P2-B1 review F1, F3): it is opened without
+    following a symlink and without blocking (a FIFO or device at the path is
+    then refused by the regular-file check instead of hanging the open), its
+    bytes are compared, and that same file is fsynced (the identical bytes may
+    not have reached the disk before the earlier attempt failed).  Last, the
+    path must still name that file, so a record replaced while it was being
+    compared is never acknowledged as written.
+    """
+
     try:
-        if not stat.S_ISREG(os.fstat(descriptor).st_mode):
-            raise OSError(f"not a regular file: {path}")
-        chunks = []
-        while True:
-            chunk = os.read(descriptor, 1 << 20)
-            if not chunk:
-                break
-            chunks.append(chunk)
-        return b"".join(chunks)
+        descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    except OSError:
+        return False
+    try:
+        opened = os.fstat(descriptor)
+        if not stat.S_ISREG(opened.st_mode):
+            return False
+        if _read_descriptor(descriptor) != raw:
+            return False
+        os.fsync(descriptor)
+        try:
+            current = os.lstat(path)
+        except OSError:
+            return False
+        return (current.st_dev, current.st_ino) == (opened.st_dev, opened.st_ino)
     finally:
         os.close(descriptor)
+
+
+def _read_descriptor(descriptor: int) -> bytes:
+    """Every byte readable from ``descriptor``, from its current offset."""
+
+    chunks = []
+    while True:
+        chunk = os.read(descriptor, 1 << 20)
+        if not chunk:
+            break
+        chunks.append(chunk)
+    return b"".join(chunks)
 
 
 def _fsync_directory(path: Path) -> None:

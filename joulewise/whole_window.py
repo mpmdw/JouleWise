@@ -4384,10 +4384,14 @@ def neg8_corpus_mint_drops(
 def _hazard_bound_derived_at_s(rows: Sequence[Mapping[str, Any]]) -> float:
     """The bound's derivation time: the latest kept member's measured-window end.
 
-    Every kept member passed a fresh reduction, which integrates over its
-    measured window, so each has one; the maximum is taken over those that
-    read.  Only if none reads (a synthetic corpus without events) does the
-    mint fall back to its own clock, as before.
+    Every kept member passed a fresh reduction, which raises without a
+    measured window (reduce.py ``_ReduceError``: "no measured_run window"), so
+    each real kept member has one; the maximum is taken over those that read
+    (a subset can only make the bound older, never fresher).  Only a corpus
+    whose energy evaluation never reduced anything (a synthetic fixture) has
+    no readable end; then the mint falls back to its own clock, as before.
+    Making that fallback a refusal waits for the harvest fixtures that rely
+    on it (P2-B1 review F2, deferred to P2-HARV).
     """
 
     ends = [row["span_end_s"] for row in rows if row.get("span_end_s") is not None]
@@ -4685,11 +4689,18 @@ def _derived_neg8_decision(
         # moment the bound is last used, as the verdict writer evaluates it.
         # Re-derive that time from the bundles instead of trusting the row's
         # stored value; a row evaluated at any other clock then conflicts.
+        # When an end reference's window does not read, the stored value
+        # stands (the writer then used its own, later, clock), but never
+        # earlier than a physical end that does read: an earlier time would
+        # make the bound look fresher (P2-B1 review F2).
         end_times = [_measured_window_end_s(path) for path in end_reference_paths]
-        if all(value is not None for value in end_times):
-            freshness_evaluated_at_s = max(
-                value for value in end_times if value is not None
-            )
+        readable = [value for value in end_times if value is not None]
+        if readable and len(readable) == len(end_times):
+            freshness_evaluated_at_s = max(readable)
+        elif readable:
+            stored_at = _finite_number(freshness_evaluated_at_s)
+            if stored_at is not None:
+                freshness_evaluated_at_s = max(stored_at, max(readable))
     legacy_pair = (
         len(references["start"]) == 1
         and not references["midpoint"]
