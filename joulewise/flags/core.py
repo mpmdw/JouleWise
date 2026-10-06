@@ -47,6 +47,9 @@ CORE_FLAG_CODES: Mapping[str, tuple[str, str]] = {
     "campaign.runner_record_flagged": ("RECORDS", "REPRESENTATION"),
     "calibration.writer_record_flagged": ("CALIBRATION", "REPRESENTATION"),
     "code.executed_differs_from_sealed": ("CODE_IDENTITY", "NUMBER"),
+    # --- gate-prune round 2, lane P2-RC (scripts/run_campaign.py; PLAN2 row 8) ---
+    # A member child killed at the wall-clock cap.  Proposed effect EXCLUDE_MEMBER.
+    "member.timeout": ("MEMBER_VALIDITY", "NUMBER"),
 }
 
 
