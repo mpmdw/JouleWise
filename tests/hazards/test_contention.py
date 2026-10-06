@@ -390,6 +390,60 @@ class PsFormatTests(unittest.TestCase):
         self.assertEqual(contention.PS_ARGV[:2], quiet_admission.PS_ARGV[:2])
         self.assertEqual(contention.PS_ARGV[2].split(",")[:4], quiet_admission.PS_ARGV[2].split(",")[:4])
 
+    def assert_parse_is_parse_ps(self, stdout: bytes):
+        expected = {identity: {**row, "command": row["command"].strip()}
+                    for identity, row in quiet_admission.parse_ps(stdout.decode()).items()}
+        self.assertEqual(contention.parse(stdout), expected)
+
+    def test_parse_equals_parse_ps_with_and_without_its_row_cache(self):
+        clocks, table, _ctx = machine()
+        first = table.ps(contention.PS_ARGV).stdout
+        clocks.advance(10)
+        table.processes[340].cpu_per_s = 0.3
+        table.add(Process(9500, DRIVER, "python3.13", cpu_per_s=0.5, start_epoch=clocks.wall_s))
+        second = table.ps(contention.PS_ARGV).stdout
+        contention._ROW_CACHE.clear()
+        for stdout in (first, first, second, first, second):  # cold, warm, mixed
+            self.assert_parse_is_parse_ps(stdout)
+        # each call returns its own rows: a caller's edit never reaches the next call
+        rows = contention.parse(second)
+        next(iter(rows.values()))["cumulative_cpu_seconds"] = -1.0
+        self.assert_parse_is_parse_ps(second)
+
+    def test_a_cached_row_is_still_refused_when_duplicated(self):
+        _clocks, table, _ctx = machine()
+        stdout = table.ps(contention.PS_ARGV).stdout
+        contention.parse(stdout)  # every row now cached
+        header, row, *rest = stdout.decode().splitlines()
+        with self.assertRaisesRegex(ValueError, "duplicate"):
+            contention.parse("\n".join([header, row, row, *rest]).encode() + b"\n")
+
+    @unittest.skipUnless(sys.platform == "darwin", "reads the real process table (macOS)")
+    def test_parse_equals_parse_ps_on_live_ps_output(self):
+        for _ in range(2):
+            completed_ps = base.run_probe(contention.PS_ARGV)
+            self.assertEqual(completed_ps.returncode, 0)
+            self.assert_parse_is_parse_ps(completed_ps.stdout)
+
+    def test_tree_is_the_fixpoint_of_the_ppid_closure(self):
+        import random
+
+        def fixpoint(rows, roots):  # the closure as first written (L1)
+            members = set(roots)
+            while True:
+                grown = members | {row["pid"] for row in rows if row["ppid"] in members}
+                if grown == members:
+                    return members
+                members = grown
+
+        generator = random.Random(20261006)
+        for _ in range(200):
+            count = generator.randint(1, 60)
+            rows = [{"pid": pid, "ppid": generator.choice([0, *range(1, pid + 3)])}
+                    for pid in range(1, count + 1)]
+            roots = generator.sample(range(0, count + 3), generator.randint(1, 3))
+            self.assertEqual(contention.tree_identities(rows, roots), fixpoint(rows, roots))
+
     @unittest.skipUnless(sys.platform == "darwin", "reads the real process table (macOS)")
     def test_live_snapshot_parses_and_this_process_is_in_the_tree(self):
         ctx = base.Context()

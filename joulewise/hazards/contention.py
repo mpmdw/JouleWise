@@ -207,42 +207,62 @@ class Snapshot:
 
 
 _START_EPOCH_CACHE: dict[str, float] = {}
+# Each row line of the previous snapshot -> its parsed fields.  Most rows of
+# a 10 s snapshot repeat byte for byte (an idle process's TIME does not move),
+# so a row is parsed once and looked up after that.
+_ROW_CACHE: dict[str, tuple[int, int, str, float, str, float]] = {}
+
+
+def _parse_row(line: str) -> tuple[int, int, str, float, str, float]:
+    parts = line.split(None, 8)
+    if len(parts) != 9:
+        raise ValueError(f"malformed ps row: {line!r}")
+    pid, ppid = int(parts[0]), int(parts[1])
+    start = " ".join(parts[2:7])
+    epoch = _START_EPOCH_CACHE.get(start)
+    if epoch is None:
+        epoch = datetime.strptime(start, "%a %b %d %H:%M:%S %Y").timestamp()
+        if len(_START_EPOCH_CACHE) > 50_000:
+            _START_EPOCH_CACHE.clear()
+        _START_EPOCH_CACHE[start] = epoch
+    if pid < 0 or ppid < 0:
+        raise ValueError("duplicate or invalid process identity")
+    return (pid, ppid, start, epoch, parts[8].strip(), quiet_admission._cpu_seconds(parts[7]))
 
 
 def parse(stdout: bytes) -> dict[tuple[int, str], dict[str, Any]]:
-    """``quiet_admission.parse_ps`` with the lstart conversion cached.
+    """``quiet_admission.parse_ps`` with the lstart conversion and repeated rows cached.
 
     The same grammar and the same rows (the command stripped of ucomm's
     padding); ``strptime`` on every row cost 3.6 ms per snapshot, most of the
-    monitor's own CPU, and a process's start text never changes.
+    monitor's own CPU, and a process's start text never changes.  A row line
+    identical to one of the previous snapshot's is not parsed again (10-06:
+    0.9 ms of CPU per 680-row snapshot without it).
     tests/hazards/test_contention.py checks equality with ``parse_ps``.
     """
 
+    global _ROW_CACHE
     text = stdout.decode("utf-8", errors="replace")
     lines = text.strip().splitlines()
     if not lines or not lines[0].split()[:2] == ["PID", "PPID"]:
         raise ValueError("ps header missing")
+    cache = _ROW_CACHE
+    seen: dict[str, tuple[int, int, str, float, str, float]] = {}
     result: dict[tuple[int, str], dict[str, Any]] = {}
     for line in lines[1:]:
-        parts = line.split(None, 8)
-        if len(parts) != 9:
-            raise ValueError(f"malformed ps row: {line!r}")
-        pid, ppid = int(parts[0]), int(parts[1])
-        start = " ".join(parts[2:7])
-        epoch = _START_EPOCH_CACHE.get(start)
-        if epoch is None:
-            epoch = datetime.strptime(start, "%a %b %d %H:%M:%S %Y").timestamp()
-            if len(_START_EPOCH_CACHE) > 50_000:
-                _START_EPOCH_CACHE.clear()
-            _START_EPOCH_CACHE[start] = epoch
+        fields = cache.get(line)
+        if fields is None:
+            fields = _parse_row(line)
+        seen[line] = fields
+        pid, ppid, start, epoch, command, cpu = fields
         identity = (pid, start)
-        if identity in result or pid < 0 or ppid < 0:
+        if identity in result:
             raise ValueError("duplicate or invalid process identity")
         result[identity] = dict(pid=pid, ppid=ppid, start_identity=start, start_epoch_s=epoch,
-                                command=parts[8].strip(),
-                                cumulative_cpu_seconds=quiet_admission._cpu_seconds(parts[7]))
+                                command=command, cumulative_cpu_seconds=cpu)
     if not result:
         raise ValueError("ps contains no processes")
+    _ROW_CACHE = seen
     return result
 
 
@@ -286,12 +306,16 @@ def tree_identities(rows: Iterable[Mapping[str, Any]], roots: Iterable[int]) -> 
     """Pids of the roots and every descendant by ppid closure."""
 
     members = set(int(pid) for pid in roots)
-    rows = list(rows)
-    while True:
-        grown = members | {row["pid"] for row in rows if row["ppid"] in members}
-        if grown == members:
-            return members
-        members = grown
+    children: dict[int, list[int]] = {}
+    for row in rows:
+        children.setdefault(row["ppid"], []).append(row["pid"])
+    pending = list(members)
+    while pending:
+        for child in children.get(pending.pop(), ()):
+            if child not in members:
+                members.add(child)
+                pending.append(child)
+    return members
 
 
 def interval(before: Snapshot, after: Snapshot, *, tree_roots: Iterable[int],
@@ -384,7 +408,7 @@ def interval(before: Snapshot, after: Snapshot, *, tree_roots: Iterable[int],
         outside_total_cpu_s_per_s=outside_total,
         outside_process_count=len(outside),
         tree_cpu_s_per_s=tree_cpu,
-        tree_process_count=len([pid for pid in tree if any(r["pid"] == pid for r in union.values())]),
+        tree_process_count=len(tree & {r["pid"] for r in union.values()}),
         kernel_task_cpu_s_per_s=kernel_task_cpu,
         kernel_task_included=include_kernel_task,
         **host,

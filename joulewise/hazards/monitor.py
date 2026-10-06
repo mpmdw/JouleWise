@@ -16,20 +16,39 @@ restarts and gaps, written by the driver side).  Cadence (plan §2.3):
 journal     every    reading
 =========== ======== ==================================================
 clock       1 s      anchor (REALTIME - MONOTONIC_RAW); f every 5 s
-battery     ~30 s    ioreg ~2 s after each 60 s gauge publication (retry
-                     every 5 s while one is late; at most 30 s apart);
-                     raw bytes kept whenever UpdateTime changes
+battery     5 s      poll of the grammar's six fields in process
+                     (``battery.RegistryReader``); ``ioreg`` whenever one
+                     of them changes (each 60 s gauge publication, read
+                     within 5 s), at least every 90 s, and whenever the
+                     poll fails; raw bytes kept whenever UpdateTime or a
+                     polled field changes.  Without the reader (or after a
+                     failed poll): ``ioreg`` ~2 s after each publication,
+                     retried every 5 s while one is late, at most 30 s apart
 thermal     5 s      OS thermal pressure level (notify_get_state in process;
                      notifyutil when that fails)
 contention  10 s     ps interval, CPU-s/s outside the tree, host CPU ticks
                      (in process); raw ps (gzip)
 disk        60 s     statvfs; ``disk.low`` marker below 10 GiB
-monitor     30 s     own pid, pgid, CPU time of itself and its children
+monitor     30 s     own pid, pgid, CPU time of itself and its children,
+                     battery poll and ``ioreg`` counts
 =========== ======== ==================================================
 
 Every line carries ``started`` and ``finished`` stamps, each with the three
 clocks (wall, ``time.monotonic_ns``, MONOTONIC_RAW), so a harvest joins it
 exactly to a member's sampler stream.  :func:`member_findings` is that join.
+
+Cost.  The monitor's CPU lands inside every member's package energy, so it is
+kept small (tests/hazards/test_monitor.py measures it on a desk run).  On
+10-06, under ``taskpolicy -b``, one ``ps -Ao`` child cost 22-36 ms of CPU on a
+quiet desk and 55-67 ms with other work running (load average 2-3.5), one
+``ioreg`` child 43-53 ms and 70-85 ms; everything read in process (clock,
+frequency word, host ticks, thermal level, battery poll, statvfs) costs well
+under 1 ms.  ``ps`` every 10 s is therefore most of the cost, and it cannot be
+replaced in process: it is setuid root, and an unprivileged ``proc_pidinfo``
+cannot read another user's CPU time (EPERM), which is where the contaminants
+live; its kernel time does not shrink with fewer columns (``ps -Ao pid`` costs
+the same).  Every task runs on the 1 s grid of the clock journal, so the
+process wakes once a second.
 """
 
 from __future__ import annotations
@@ -60,8 +79,13 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 MONITOR_SCRIPT = REPO_ROOT / "scripts" / "hazard_monitor.py"
 TASKPOLICY_PREFIX = ("/usr/sbin/taskpolicy", "-b")
 
+# battery_s: the poll (and the ioreg retry without the reader); battery_max_s:
+# the longest gap between ioreg reads without the reader; battery_full_max_s:
+# the longest gap between ioreg reads with it, longer than one publication
+# period plus one poll so it never fires while the gauge publishes.
 DEFAULT_CADENCE: dict[str, float] = {"clock_s": 1.0, "frequency_s": 5.0, "battery_s": 5.0,
                                      "battery_max_s": 30.0, "battery_publication_s": 60.0,
+                                     "battery_full_max_s": 90.0,
                                      "thermal_s": 5.0, "contention_s": 10.0, "disk_s": 60.0,
                                      "self_s": 30.0}
 
@@ -162,7 +186,7 @@ class Monitor:
     def __init__(self, config: Mapping[str, Any], *, ctx: Context | None = None,
                  frequency_reader: Callable[[], Mapping[str, Any]] = clock.read_frequency,
                  statvfs: Callable[[str], Any] = os.statvfs, stat: Callable[[str], Any] = os.stat,
-                 notify_reader: Any = None,
+                 notify_reader: Any = None, battery_reader: Any = None,
                  host_reader: contention.HostReader | None = contention.read_host_cpu) -> None:
         self.config = validate_config(config)
         self.custody = Path(self.config["custody_dir"])
@@ -172,6 +196,12 @@ class Monitor:
         self.frequency_reader = frequency_reader
         self.statvfs, self.stat = statvfs, stat
         self.notify_reader = notify_reader  # None: read the level through notifyutil
+        # None: ioreg on the publication schedule; else polled every battery_s
+        # (``battery.RegistryReader`` in production) and ioreg on a change.
+        self.battery_reader = battery_reader
+        self.battery_poll_at_read: dict[str, Any] | None = None  # the poll before the last good ioreg
+        self.battery_read_ns: int | None = None                  # when that ioreg finished
+        self.counts = {"battery_polls": 0, "battery_poll_failures": 0, "battery_ioreg_reads": 0}
         self.host_reader = host_reader
         self.cadence = self.config["cadence"]
         self.tree_roots = tuple(self.config["tree_roots"])
@@ -196,7 +226,7 @@ class Monitor:
                finished: Stamp | Mapping[str, Any] | None = None, values: Any = None,
                error: str | None = None, raw: Sequence[Mapping[str, Any]] = ()) -> None:
         self.seq[name] += 1
-        stamp = self.ctx.stamp()
+        stamp = None if started is not None and finished is not None else self.ctx.stamp()
         self.journals[name].write({
             "schema": JOURNAL_SCHEMA, "module": name, "session": self.session,
             "seq": self.seq[name], "kind": kind,
@@ -274,11 +304,70 @@ class Monitor:
                     error=item["error"])
 
     def _battery(self) -> None:
+        """The 5 s battery task: an in-process poll, and ``ioreg`` when it changed.
+
+        Without a reader, ``ioreg`` on the publication schedule
+        (:meth:`_next_battery_poll`).  With one, the poll runs on the fixed 5 s
+        grid and ``ioreg`` runs when a polled field differs from the poll taken
+        before the last good ``ioreg`` (a publication, or a state change between
+        publications), when no good ``ioreg`` finished within
+        ``battery_full_max_s``, or when the poll fails.  A failed poll falls back
+        to the publication schedule until the next poll succeeds, so a broken
+        reader never turns into an ``ioreg`` every 5 s.  An unchanged poll
+        writes no line: the reading in force is the last ``ioreg`` line, and the
+        ``monitor`` journal's cost lines count the polls.
+        """
+
+        if self.battery_reader is None:
+            self._battery_ioreg(None, schedule=True)
+            return
+        self.counts["battery_polls"] += 1
+        started = self.ctx.stamp()
+        try:
+            poll = dict(self.battery_reader.read())
+            if type(poll.get("UpdateTime")) is not int:
+                raise ValueError(f"UpdateTime is {poll.get('UpdateTime')!r}, not an integer")
+            error = None
+        except Exception as exc:  # any reader failure: ioreg now, on its own schedule
+            poll, error = None, f"{type(exc).__name__}: {exc}"
+        finished = self.ctx.stamp()
+        trigger: dict[str, Any] = {"poll": poll, "poll_started": started.to_json(),
+                                   "poll_finished": finished.to_json()}
+        if error is not None:
+            self.counts["battery_poll_failures"] += 1
+            self._battery_ioreg({**trigger, "reason": "poll failed", "poll_error": error},
+                                schedule=True)
+            return
+        previous = self.battery_poll_at_read
+        if previous is None:
+            reason = "first read"
+        elif poll != previous:
+            reason = "changed: " + ", ".join(sorted(key for key in set(poll) | set(previous)
+                                                    if poll.get(key) != previous.get(key)))
+        elif (self.battery_read_ns is None or finished.monotonic_ns - self.battery_read_ns
+              >= int(self.cadence["battery_full_max_s"] * 1e9)):
+            reason = f"no ioreg read for {self.cadence['battery_full_max_s']:g} s"
+        else:
+            return
+        if self._battery_ioreg({**trigger, "reason": reason}, schedule=False):
+            self.battery_poll_at_read = poll
+
+    def _battery_ioreg(self, trigger: Mapping[str, Any] | None, *, schedule: bool) -> bool:
+        """One ``ioreg`` read through the frozen grammar, journaled; True when good.
+
+        Raw bytes are kept when the read failed, when UpdateTime changed, or
+        when a polled field changed (``trigger``).  ``schedule`` re-plans the
+        next battery task on the publication schedule.
+        """
+
+        self.counts["battery_ioreg_reads"] += 1
         started = self.ctx.stamp()
         completed = self.ctx.run(battery.IOREG_BATTERY_ARGV, battery.PROBE_TIMEOUT_S)
         finished = self.ctx.stamp()
         error = None
         values: dict[str, Any] = {"returncode": completed.returncode}
+        if trigger is not None:
+            values["trigger"] = dict(trigger)
         raw: list[dict[str, Any]] = []
         stamp_update = None
         if not completed.ok:
@@ -290,15 +379,19 @@ class Monitor:
                 values.update(battery.parse_reading(completed.stdout, started.wall_ns / 1e9))
             except ValueError as exc:  # battery.ProbeError is a ValueError
                 error = f"ioreg bytes refused by the BFG grammar: {exc}"
-            if error is not None or stamp_update != self.last_update_time:
+            changed = trigger is not None and str(trigger.get("reason", "")).startswith("changed")
+            if error is not None or stamp_update != self.last_update_time or changed:
                 ref = self._raw_context("battery").keep_raw("battery.ioreg", completed.stdout)
                 raw.append(ref.to_json())
                 values["publication"] = error is None
             if error is None:
                 self.last_update_time = stamp_update
+                self.battery_read_ns = finished.monotonic_ns
         self._write("battery", "reading", started=started, finished=finished, values=values,
                     error=error, raw=raw)
-        self.due["battery"] = self._next_battery_poll(finished, None if error else stamp_update)
+        if schedule:
+            self.due["battery"] = self._next_battery_poll(finished, None if error else stamp_update)
+        return error is None
 
     def _next_battery_poll(self, finished: Stamp, update_time_s: int | None) -> int:
         """Poll just after the gauge's next publication, never more than ``battery_max_s`` apart.
@@ -386,7 +479,8 @@ class Monitor:
             "pid": os.getpid(), "pgid": os.getpgrp(),
             "cpu_self_s": own.ru_utime + own.ru_stime,
             "cpu_children_s": children.ru_utime + children.ru_stime,
-            "maxrss": own.ru_maxrss})
+            "maxrss": own.ru_maxrss, "battery_reader": self.battery_reader is not None,
+            **self.counts})
 
 
 def _stamp_json(value: Stamp | Mapping[str, Any] | None) -> dict[str, int] | None:
@@ -405,7 +499,11 @@ def run_forever(config_path: Path, argv: Sequence[str] = ()) -> int:
         notify_reader = thermal.NotifyReader()
     except OSError:
         notify_reader = None  # notifyutil every 5 s instead
-    monitor = Monitor(config, notify_reader=notify_reader)
+    try:
+        battery_reader = battery.RegistryReader()
+    except OSError:
+        battery_reader = None  # ioreg on the publication schedule instead
+    monitor = Monitor(config, notify_reader=notify_reader, battery_reader=battery_reader)
 
     def stop(signum, _frame):
         monitor.stopping = True

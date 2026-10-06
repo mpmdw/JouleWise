@@ -13,7 +13,11 @@ UNMEASURED and refuses.
 
 In the window the monitor polls every 5 s and keeps the raw bytes whenever
 UpdateTime changes (a new gauge publication; the gauge publishes every 60 s).
-The member rule of plan §3.4 is :func:`span_findings`.
+The 5 s poll reads the grammar's six fields in process
+(:class:`RegistryReader`, about 0.03 ms of CPU against 13 ms for an ``ioreg``
+child); ``ioreg`` itself runs only when one of them changes, so each
+publication is read once, by the grammar, within 5 s of appearing.  The
+member rule of plan §3.4 is :func:`span_findings`.
 
 Accumulator units (lane L1 check, 2026-10-05, on recorded and live bytes)
 -------------------------------------------------------------------------
@@ -72,8 +76,10 @@ a member's span is flagged when |d(accumulated)/d(count)| exceeds
 
 from __future__ import annotations
 
+import ctypes
 import json
 import re
+import sys
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
@@ -145,6 +151,107 @@ def update_time(raw: bytes) -> int | None:
 
     match = _UPDATE_TIME.search(raw)
     return int(match.group(1)) if match else None
+
+
+# --------------------------------------------------------------------------
+# The in-process poll
+
+
+REGISTRY_CLASS = b"AppleSmartBattery"
+# The six top-level properties the frozen grammar judges (ExternalConnected,
+# IsCharging, InstantAmperage, Amperage, UpdateTime, Voltage).
+REGISTRY_KEYS = ("UpdateTime", "ExternalConnected", "IsCharging", "InstantAmperage", "Amperage",
+                 "Voltage")
+_CF_STRING_ENCODING_UTF8 = 0x08000100
+_CF_NUMBER_SINT64 = 4
+
+
+class RegistryReader:
+    """The grammar's six fields read in process from the AppleSmartBattery entry
+    of the IO registry: the same properties ``ioreg -r -c AppleSmartBattery``
+    prints, without a child process.
+
+    ``read()`` returns ``{key: int | bool | None}`` (None: the property is
+    absent); InstantAmperage and Amperage come back signed.  Each read matches
+    the service afresh (``IOServiceGetMatchingService``) and copies one
+    property at a time (``IORegistryEntryCreateCFProperty``): read-only, and a
+    driver that re-registers is never read through a stale entry.  Raises
+    OSError off macOS, when the service is absent, or on an unexpected value
+    type.  tests/hazards/test_battery.py checks it against ``ioreg`` live.
+
+    It is a trigger, never a measurement: the monitor runs ``ioreg``, whose
+    bytes the frozen grammar judges and the custody keeps, whenever a value
+    read here changes.
+    """
+
+    def __init__(self) -> None:
+        if sys.platform != "darwin":
+            raise OSError("the IO registry requires macOS")
+        iokit = ctypes.CDLL("/System/Library/Frameworks/IOKit.framework/IOKit")
+        cf = ctypes.CDLL("/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation")
+        iokit.IOServiceMatching.restype = ctypes.c_void_p
+        iokit.IOServiceMatching.argtypes = [ctypes.c_char_p]
+        iokit.IOServiceGetMatchingService.restype = ctypes.c_uint
+        iokit.IOServiceGetMatchingService.argtypes = [ctypes.c_uint, ctypes.c_void_p]
+        iokit.IORegistryEntryCreateCFProperty.restype = ctypes.c_void_p
+        iokit.IORegistryEntryCreateCFProperty.argtypes = [ctypes.c_uint, ctypes.c_void_p,
+                                                          ctypes.c_void_p, ctypes.c_uint]
+        iokit.IOObjectRelease.restype = ctypes.c_int
+        iokit.IOObjectRelease.argtypes = [ctypes.c_uint]
+        cf.CFStringCreateWithCString.restype = ctypes.c_void_p
+        cf.CFStringCreateWithCString.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_uint32]
+        cf.CFGetTypeID.restype = ctypes.c_ulong
+        cf.CFGetTypeID.argtypes = [ctypes.c_void_p]
+        cf.CFNumberGetTypeID.restype = ctypes.c_ulong
+        cf.CFBooleanGetTypeID.restype = ctypes.c_ulong
+        cf.CFNumberGetValue.restype = ctypes.c_bool
+        cf.CFNumberGetValue.argtypes = [ctypes.c_void_p, ctypes.c_long, ctypes.c_void_p]
+        cf.CFBooleanGetValue.restype = ctypes.c_bool
+        cf.CFBooleanGetValue.argtypes = [ctypes.c_void_p]
+        cf.CFRelease.argtypes = [ctypes.c_void_p]
+        self._iokit, self._cf = iokit, cf
+        self._number, self._boolean = cf.CFNumberGetTypeID(), cf.CFBooleanGetTypeID()
+        self._keys: dict[str, int] = {}
+        for name in REGISTRY_KEYS:
+            ref = cf.CFStringCreateWithCString(None, name.encode("ascii"), _CF_STRING_ENCODING_UTF8)
+            if not ref:
+                self.close()
+                raise OSError(f"CFStringCreateWithCString({name}) failed")
+            self._keys[name] = ref
+
+    def read(self) -> dict[str, int | bool | None]:
+        matching = self._iokit.IOServiceMatching(REGISTRY_CLASS)
+        if not matching:
+            raise OSError("IOServiceMatching(AppleSmartBattery) failed")
+        service = self._iokit.IOServiceGetMatchingService(0, matching)  # consumes ``matching``
+        if not service:
+            raise OSError("no AppleSmartBattery service in the IO registry")
+        try:
+            return {name: self._value(service, name, key) for name, key in self._keys.items()}
+        finally:
+            self._iokit.IOObjectRelease(service)
+
+    def _value(self, service: int, name: str, key: int) -> int | bool | None:
+        ref = self._iokit.IORegistryEntryCreateCFProperty(service, key, None, 0)
+        if not ref:
+            return None
+        try:
+            kind = self._cf.CFGetTypeID(ref)
+            if kind == self._boolean:
+                return bool(self._cf.CFBooleanGetValue(ref))
+            if kind == self._number:
+                value = ctypes.c_int64()
+                if not self._cf.CFNumberGetValue(ref, _CF_NUMBER_SINT64, ctypes.byref(value)):
+                    raise OSError(f"{name} is not an exact 64-bit integer")
+                return value.value
+            raise OSError(f"{name} has CF type id {kind}, not a number or boolean")
+        finally:
+            self._cf.CFRelease(ref)
+
+    def close(self) -> None:
+        for ref in self._keys.values():
+            self._cf.CFRelease(ref)
+        self._keys = {}
 
 
 def _grammar(raw: bytes, wall_time_s: float) -> dict[str, Any]:

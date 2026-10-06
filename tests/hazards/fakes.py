@@ -168,6 +168,45 @@ def update_time(raw: bytes) -> int:
     return battery.update_time(raw)
 
 
+def registry_values(raw: bytes) -> dict[str, Any]:
+    """The six top-level AppleSmartBattery properties as the IO registry holds
+    them (what ``battery.RegistryReader.read`` returns), read off ioreg's text:
+    Yes/No as booleans, integers signed 64-bit."""
+
+    import re
+    from joulewise.hazards import battery
+    out: dict[str, Any] = {}
+    for key in battery.REGISTRY_KEYS:
+        match = re.search(rb'^ {6}"' + key.encode() + rb'" = (Yes|No|[0-9]{1,20})$', raw, re.M)
+        if match is None:
+            out[key] = None
+        elif match.group(1) in (b"Yes", b"No"):
+            out[key] = match.group(1) == b"Yes"
+        else:
+            value = int(match.group(1))
+            out[key] = value - 2 ** 64 if value >= 2 ** 63 else value
+    return out
+
+
+class FakeRegistry:
+    """``battery.RegistryReader`` at the seam: the same fake gauge ioreg reads.
+
+    ``source()`` returns the bytes ioreg would print now; ``fail`` makes reads
+    raise as a missing service does.
+    """
+
+    def __init__(self, source: Callable[[], bytes]) -> None:
+        self.source = source
+        self.calls = 0
+        self.fail = False
+
+    def read(self) -> dict[str, Any]:
+        self.calls += 1
+        if self.fail:
+            raise OSError("no AppleSmartBattery service in the IO registry")
+        return registry_values(self.source())
+
+
 # --------------------------------------------------------------------------
 # ps
 
