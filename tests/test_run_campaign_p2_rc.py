@@ -14,6 +14,8 @@ runs root and on a plain (legacy) runs root, whose behaviour must not change:
   releases the lock.
 - Yield E: the child's stderr goes to a per-member file, is copied into the
   stage log, and a failed member's last line (digits as ``#``) is ``child_refusal``.
+- Battery thermistor: one ``ioreg`` reading per member at the cooldown release,
+  in the campaign manifest.
 
 The stages run in process (``run_campaign.main``) with the fake CLI of
 ``tests.test_run_campaign_hazard_flags`` plus a few extra member behaviours.
@@ -482,6 +484,44 @@ class ChildStderrTests(_P2Stage):
         self.assertNotIn("child_refusal", row)
         self.assertNotIn("child_stderr", row)
         self.assertFalse((self.custody / "operator-logs").exists())
+
+
+class BatteryThermistorTests(_P2Stage):
+    """The thermistor reading at each cooldown release (timing ruling 2026-10-06)."""
+
+    def test_each_member_gets_one_reading_in_the_manifest(self) -> None:
+        runs = self.hazard_root()
+        result = self.run_stage(self.configs("hz-temp-a", "hz-temp-b"), runs)
+        self.assertEqual(result.code, 0, result.err)
+        readings = [reading for manifest in self.manifests(runs)
+                    for reading in manifest.get("battery_temperature_readings", [])]
+        self.assertEqual([reading["following_run_id"] for reading in readings],
+                         ["hz-temp-a", "hz-temp-b"])
+        for reading in readings:
+            self.assertEqual(reading["temperature_centi_c"], 3035)
+            self.assertEqual(reading["temperature_c"], 30.35)
+            self.assertIsNone(reading["error"])
+            self.assertEqual(reading["schema_version"], "joulewise.battery_thermistor_reading.v1")
+        self.assertEqual(readings[0]["cooldown_result"], "first_run_exempt")
+
+    def test_an_unreadable_thermistor_is_recorded_and_collection_continues(self) -> None:
+        runs = self.hazard_root()
+        with patch.object(run_campaign, "BATTERY_TEMPERATURE_COMMAND",
+                          (sys.executable, "-c", "raise SystemExit(3)"), create=True):
+            result = self.run_stage(self.configs("hz-temp-x"), runs)
+        self.assertEqual(result.code, 0, result.err)
+        readings = [reading for manifest in self.manifests(runs)
+                    for reading in manifest.get("battery_temperature_readings", [])]
+        self.assertEqual(len(readings), 1)
+        self.assertIsNone(readings[0]["temperature_centi_c"])
+        self.assertEqual(readings[0]["error"], "exit 3")
+
+    def test_legacy_root_records_no_reading(self) -> None:
+        runs = self.plain_root()
+        result = self.run_stage(self.configs("pl-temp-a"), runs)
+        self.assertEqual(result.code, 0, result.err)
+        for manifest in self.manifests(runs):
+            self.assertNotIn("battery_temperature_readings", manifest)
 
 
 if __name__ == "__main__":

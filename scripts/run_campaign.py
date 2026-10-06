@@ -3756,8 +3756,9 @@ def _hazard_stage_preflight_not_admitted(
 # --- HAZARD_PACK gate-prune round 2 (lane P2-RC) -----------------------------
 # night-archive gate-prune/prune2/PLAN2.md: M3 (strict validation deferred to the
 # harvest), S4 (minimal stage verdict), row 8 (member wall-clock cap, teardown
-# proof, drain after consecutive timeouts, SIGTERM handler) and yield E (per-member
-# child stderr and ``child_refusal``).  Everything here runs only when ``hazard`` is a
+# proof, drain after consecutive timeouts, SIGTERM handler), yield E (per-member
+# child stderr and ``child_refusal``) and the battery-thermistor diagnostic
+# (timing ruling 2026-10-06).  Everything here runs only when ``hazard`` is a
 # HAZARD context; the legacy path never reaches it.
 
 HAZARD_STRICT_VALIDATION_DEFERRED = "deferred_to_harvest"
@@ -3777,6 +3778,13 @@ HAZARD_INTERRUPTED_RC = 128 + int(signal.SIGTERM)
 # Yield E.
 HAZARD_MEMBER_STDERR_DIRNAME = "member-stderr"
 HAZARD_CHILD_REFUSAL_MAX_CHARS = 300
+# Battery thermistor (timing ruling 2026-10-06): read at each cooldown release,
+# outside every sampler stream, into the campaign manifest.  Hundredths of degC.
+BATTERY_TEMPERATURE_COMMAND: tuple[str, ...] = ("/usr/sbin/ioreg", "-rn", "AppleSmartBattery")
+BATTERY_TEMPERATURE_TIMEOUT_S = 5.0
+BATTERY_TEMPERATURE_SCHEMA = "joulewise.battery_thermistor_reading.v1"
+BATTERY_TEMPERATURE_MANIFEST_KEY = "battery_temperature_readings"
+_BATTERY_TEMPERATURE_PATTERN = re.compile(rb'^\s*"Temperature"\s*=\s*(-?\d+)\s*$', re.MULTILINE)
 _PROCESS_TABLE_COMMAND = ("/bin/ps", "-A", "-o", "pid=,ppid=,pgid=,uid=,args=")
 
 
@@ -4309,6 +4317,68 @@ def _hazard_flag_member_timeout(
                           "census_completed": teardown.get("census_completed"),
                           "survivors": survivors[:16]},
             )
+
+
+def _hazard_read_battery_temperature(
+    *, following_run_id: str, cooldown_result: Any
+) -> dict[str, Any]:
+    """One battery-thermistor reading (``ioreg -rn AppleSmartBattery``, key ``Temperature``).
+
+    Unprivileged and outside every sampler stream: it runs after the cooldown
+    gate released and before the member child starts.  A failed read is a
+    record with ``temperature_centi_c`` null; it never stops collection.
+    """
+
+    reading: dict[str, Any] = {
+        "schema_version": BATTERY_TEMPERATURE_SCHEMA,
+        "following_run_id": following_run_id,
+        "cooldown_result": cooldown_result if isinstance(cooldown_result, str) else None,
+        "read_at": utc_timestamp(),
+        "source": "ioreg -rn AppleSmartBattery: Temperature",
+        "unit": "centi_degC",
+        "temperature_centi_c": None,
+        "temperature_c": None,
+        "error": None,
+    }
+    try:
+        completed = subprocess.run(
+            list(BATTERY_TEMPERATURE_COMMAND), capture_output=True,
+            timeout=BATTERY_TEMPERATURE_TIMEOUT_S, check=False,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        reading["error"] = f"{type(exc).__name__}: {exc}"[:200]
+        return reading
+    if completed.returncode != 0:
+        reading["error"] = f"exit {completed.returncode}"
+        return reading
+    matches = _BATTERY_TEMPERATURE_PATTERN.findall(completed.stdout or b"")
+    if not matches:
+        reading["error"] = "Temperature key absent"
+        return reading
+    value = int(matches[0])
+    reading["temperature_centi_c"] = value
+    reading["temperature_c"] = value / 100.0
+    if len(matches) > 1:
+        reading["error"] = f"{len(matches)} Temperature keys; first used"
+    return reading
+
+
+def _hazard_record_battery_temperature(
+    campaign_provenance: dict[str, Any] | None, *, following_run_id: str, cooldown_result: Any
+) -> None:
+    """Append one reading to the manifest in memory; the member's provenance write persists it."""
+
+    if campaign_provenance is None:
+        return
+    try:
+        reading = _hazard_read_battery_temperature(
+            following_run_id=following_run_id, cooldown_result=cooldown_result
+        )
+    except Exception as exc:  # noqa: BLE001 - a diagnostic never stops collection
+        reading = {"schema_version": BATTERY_TEMPERATURE_SCHEMA,
+                   "following_run_id": following_run_id, "temperature_centi_c": None,
+                   "temperature_c": None, "error": f"{type(exc).__name__}: {exc}"[:200]}
+    campaign_provenance.setdefault(BATTERY_TEMPERATURE_MANIFEST_KEY, []).append(reading)
 
 
 def _hazard_minimal_verdict_row(
@@ -10638,6 +10708,14 @@ def run_campaign(args: argparse.Namespace) -> int:
                 continue
 
             member_run: _HazardMemberRun | None = None
+            if hazard is not None:
+                # Battery thermistor at the cooldown release: after the gate's
+                # bounded captures, before the child's sampler starts.
+                _hazard_record_battery_temperature(
+                    campaign_provenance,
+                    following_run_id=first_physical_bundle_id,
+                    cooldown_result=cooldown_note.get("result"),
+                )
             start = time.monotonic()
             absent_child_metadata: list[Path] = []
             if hazard is not None:
