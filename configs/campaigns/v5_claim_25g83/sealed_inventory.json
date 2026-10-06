@@ -1,0 +1,16 @@
+{
+  "schema_version": "joulewise.b5_sealed_inventory.v1",
+  "status": "STUB_NOT_SEALED",
+  "head": null,
+  "files": null,
+  "todo": {
+    "summary": "TODO(seal): this stub is replaced at seal (registration_block5.md sections 11 and 12) by the inventory of the commit H_claim. Code heads are not final yet, so no digest is written here.",
+    "fails_closed": "With files null and no SHA-256 values, the executed-code collector (joulewise/flags/collect.py) raises and emits code.identity_unmeasured, and the harvest (joulewise/b5/harvest.py) compares against an empty map and emits code.executed_differs_from_sealed and pack.identity_unmeasured. Every window is therefore not claim-usable until this file is filled. That is intended.",
+    "head": "H_claim: the 40-hex commit carrying PR #483 and gate-prune lanes L1-L4, L7 and L8, merged under the merge gates (registration 2 item 1, FILL[H-CLAIM]).",
+    "files": "A map {repo-relative path: SHA-256 of the file bytes at H_claim} for every tracked file under joulewise/, scripts/, configs/campaigns/d117_floor_qwen3-1p7b_v5/, configs/campaigns/d117_floor_qwen3-8b_v5/ and configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5/ (GAMMA's entries are re-tied by the L10 change or its cold erratum before GAMMA-1), plus configs/campaigns/v5_claim_25g83/flag_catalog.json. Generated mechanically from the H_claim tree (git ls-files under those roots, SHA-256 of each blob's bytes), never typed.",
+    "excluded": "configs/calibration/calibration_ledger_head.json is data (pin-only commits keep H_claim's code identity) and is not listed.",
+    "roots": "Do not declare a roots key. A window's executed-file inventory covers joulewise/, scripts/ and only its own pack; consumers compare only the sealed entries under the window's own roots (registration 14 Q2: joulewise/flags/collect.py collect_executed_code must filter the sealed map by the window's roots before computing missing files).",
+    "consumers": "joulewise/flags/collect.py (executed_code, pack identity) reads files as {path: sha256} or [{path, sha256}]; joulewise/b5/harvest.py reads files and head (_inventory_map) from <archive>/sources/inputs/sealed_inventory.json.",
+    "sealed_with": "registration_block5.md, analysis_plan_block5.md and flag_catalog.json, by one cold gate; the seal record pins this file's SHA-256 (FILL[B5-SEAL-RECORD])."
+  }
+}

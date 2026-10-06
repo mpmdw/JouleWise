@@ -1,0 +1,834 @@
+{
+  "codes": {
+    "battery.accumulator_activity": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "PHYSICS",
+      "note": "Battery accumulator activity below the 200 mA x V limit (brief assist, about -130 mW on calibration captures)."
+    },
+    "battery.accumulator_diagnostic": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "PHYSICS",
+      "note": "Accumulator intervals recorded without a registered unit scale (should not occur: the scale is registered)."
+    },
+    "battery.accumulator_excursion": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_MEMBER",
+      "family": "PHYSICS_IN_SPAN",
+      "klass": "PHYSICS",
+      "note": "An accumulator interval overlapping the span implies a mean battery power above 200 mA x V (0.001 W per unit, lane L1 units check)."
+    },
+    "battery.accumulator_unavailable": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "PHYSICS",
+      "note": "The accumulator rule could not be evaluated on an interval; the publication rule still applies (60 s limitation)."
+    },
+    "battery.capture_pair_failed": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_MEMBER",
+      "family": "MEMBER_VALIDITY",
+      "klass": "PHYSICS",
+      "note": "The member's #421 per-capture battery pair is present and fails."
+    },
+    "battery.capture_pair_missing": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "RECORDS",
+      "klass": "REPRESENTATION",
+      "note": "#421 per-capture pair missing where the continuous journal does not cover the span; battery.unmeasured removes that member."
+    },
+    "battery.capture_pair_missing_covered": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "PHYSICS",
+      "note": "#421 per-capture pair missing while the continuous journal covers the span."
+    },
+    "battery.member_span": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_MEMBER",
+      "family": "PHYSICS_IN_SPAN",
+      "klass": "PHYSICS",
+      "note": "An in-force gauge publication is out of float (|InstantAmperage| or |Amperage| > 200 mA, charging, or external power disconnected), or a 5 s poll inside the span reads charging or disconnected."
+    },
+    "battery.unmeasured": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_MEMBER",
+      "family": "PHYSICS_IN_SPAN",
+      "klass": "PHYSICS",
+      "note": "No gauge publication observed for more than 120 s overlapping the span, or an in-force publication lacks a needed field."
+    },
+    "calibration.acceptance_mismatch": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_WINDOW",
+      "family": "CALIBRATION",
+      "klass": "NUMBER",
+      "note": "The acceptance bytes are unreadable or differ from the plan tree's pin; the acceptance sets the bracket bound."
+    },
+    "calibration.binding_failed": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_WINDOW",
+      "family": "CALIBRATION",
+      "klass": "NUMBER",
+      "note": "The bracket binding could not be built from the ledger, so the bracket cannot be evaluated."
+    },
+    "calibration.bracket_acceptance_failed": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_WINDOW",
+      "family": "CALIBRATION",
+      "klass": "NUMBER",
+      "note": "The bracket fails the acceptance, evaluated with the acceptance's ledger-cutoff baseline."
+    },
+    "calibration.capture_battery_pair_failed": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_WINDOW",
+      "family": "CALIBRATION",
+      "klass": "PHYSICS",
+      "note": "A calibration capture's #421 battery pair shows the battery not floating; the bracket feeds every member's clock bound."
+    },
+    "calibration.capture_invalid": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_WINDOW",
+      "family": "CALIBRATION",
+      "klass": "NUMBER",
+      "note": "Pre or post calibration capture missing, not valid, or its artifacts differ from the ledger's recorded digests."
+    },
+    "calibration.ledger_not_ready": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "CALIBRATION",
+      "klass": "REPRESENTATION",
+      "note": "Desk ledger readiness refused; the chain's own reservation binds the window."
+    },
+    "calibration.ledger_readiness_unmeasured": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "CALIBRATION",
+      "klass": "REPRESENTATION",
+      "note": "Desk ledger readiness could not run."
+    },
+    "calibration.ledger_snapshot_refused": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "CALIBRATION",
+      "klass": "REPRESENTATION",
+      "note": "The ledger snapshot reports record-keeping refusals. The window's own captures are checked byte for byte (calibration.capture_invalid) and the bracket decision is calibration.bracket_acceptance_failed. Emitter class NUMBER, restated REPRESENTATION here."
+    },
+    "calibration.no_bracket": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_WINDOW",
+      "family": "CALIBRATION",
+      "klass": "NUMBER",
+      "note": "No finalized bracket session: includes a chain stopped before post-calibration by disk.low, the agent census or the deadline."
+    },
+    "calibration.session_not_bound": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_WINDOW",
+      "family": "CALIBRATION",
+      "klass": "NUMBER",
+      "note": "The bracket session names another plan, plan digest, window, evidence root or runs root."
+    },
+    "cell.below_minimum": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_WINDOW",
+      "family": "ROSTER",
+      "klass": "NUMBER",
+      "note": "A target cell kept fewer than rules.cell_unit_minimum units in a stratum (derived by the exclusion function)."
+    },
+    "clock.frequency_changed": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "PHYSICS",
+      "note": "The kernel frequency word changed in the window; each member's own anchor bound stays authoritative."
+    },
+    "clock.sntp_offset": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "REPRESENTATION",
+      "note": "Offset from a time server; enters no energy."
+    },
+    "clock.step": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "PHYSICS",
+      "note": "A clock step in the monitor journal; members whose span it falls in get clock.step_overlap."
+    },
+    "clock.step_overlap": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_MEMBER",
+      "family": "PHYSICS_IN_SPAN",
+      "klass": "PHYSICS",
+      "note": "A clock step (residual move > 1 ms between consecutive 1 Hz samples) falls inside the span."
+    },
+    "clock.step_overlap_calibration": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_WINDOW",
+      "family": "CLOCK_SYSTEMATIC",
+      "klass": "PHYSICS",
+      "note": "A clock step falls inside a calibration capture."
+    },
+    "clock.systematic": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_WINDOW",
+      "family": "CLOCK_SYSTEMATIC",
+      "klass": "NUMBER",
+      "note": "At least 5 members with a recorded anchor status and more than half not bounded. Counted across attempts it is END STATE (registration 7.4)."
+    },
+    "clock.unmeasured": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "PHYSICS",
+      "note": "A gap in the 1 Hz clock journal; each member's own anchor bound stays authoritative."
+    },
+    "code.executed_differs_from_sealed": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_WINDOW",
+      "family": "CODE_IDENTITY",
+      "klass": "NUMBER",
+      "note": "Executed-file inventory differs from the sealed inventory; or chain bytes differ from their sidecar; or the checkout HEAD is not H_claim plus pin-only commits; or tracked edits or untracked files under the executed roots."
+    },
+    "code.identity_unmeasured": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_WINDOW",
+      "family": "CODE_IDENTITY",
+      "klass": "NUMBER",
+      "note": "The executed-code comparison could not run. A harvest problem first (registration 7.2)."
+    },
+    "contention.kernel_task_share": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "PHYSICS",
+      "note": "kernel_task's largest CPU share during a request (excluded from the contention rule in the window)."
+    },
+    "contention.request_overlap": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_MEMBER",
+      "family": "PHYSICS_IN_SPAN",
+      "klass": "PHYSICS",
+      "note": "An outside process (not kernel_task) exceeds 0.05 CPU-s/s in an interval overlapping the member's request."
+    },
+    "contention.unmeasured": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_MEMBER",
+      "family": "PHYSICS_IN_SPAN",
+      "klass": "PHYSICS",
+      "note": "Part of the member's request is covered by no ps interval."
+    },
+    "diagnostic.s1_structural": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "REPRESENTATION",
+      "note": "s1's structural checks run on ALPHA-1's bytes (registration 3)."
+    },
+    "disk.low": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "PHYSICS",
+      "note": "Free disk below 10 GiB; the driver stops the chain, and the window gets calibration.no_bracket."
+    },
+    "g10.discharged": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "PHYSICS",
+      "note": "G10: the clock arm check refused a real network-time step."
+    },
+    "g10.error": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "PHYSICS",
+      "note": "G10 failed unexpectedly; OFF ran."
+    },
+    "g10.interrupted": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "PHYSICS",
+      "note": "G10 was interrupted by a signal; OFF ran."
+    },
+    "g10.not_discharged": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "PHYSICS",
+      "note": "G10 did not discharge; one consult before BETA arms."
+    },
+    "g10.unmeasured": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "PHYSICS",
+      "note": "G10 could not measure (a capture process was alive, or reads failed); one consult before BETA arms."
+    },
+    "g3.assertion_failed": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "RECORDS",
+      "klass": "REPRESENTATION",
+      "note": "A G3 provenance assertion other than F5-2 failed."
+    },
+    "g3.not_applicable": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "REPRESENTATION",
+      "note": "G3 does not apply (floor packs have no analysis manifest)."
+    },
+    "g3.recompute_failed": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "NEG8",
+      "klass": "NUMBER",
+      "note": "Aggregate: G3's F5-2 recompute did not find a clean pass. It requires every member admitted, so it is not window-removing; window-level parts are neg8.screen_failed and calibration.bracket_acceptance_failed (registration 6.5)."
+    },
+    "instrument.cadence_ratio_below_threshold": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_MEMBER",
+      "family": "PHYSICS_IN_SPAN",
+      "klass": "PHYSICS",
+      "note": "The sampler's cadence in the member's target phase is below the threshold."
+    },
+    "instrument.insufficient_in_window_samples": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_MEMBER",
+      "family": "PHYSICS_IN_SPAN",
+      "klass": "PHYSICS",
+      "note": "Too few sampler records in the member's target phase."
+    },
+    "instrument.precal_screen_failed": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_WINDOW",
+      "family": "INSTRUMENT",
+      "klass": "NUMBER",
+      "note": "The pre-calibration fiducial bound exceeded the pre screen; the chain stops before member 1."
+    },
+    "lineage.arm_decision_digest_differs": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "RECORDS",
+      "klass": "REPRESENTATION",
+      "note": "Window-lineage records audit finding (joulewise/window_lineage.py). Configuration bytes are checked per member at write time; the plan-tree digest is pack identity."
+    },
+    "lineage.arm_decision_unrecorded": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "RECORDS",
+      "klass": "REPRESENTATION",
+      "note": "Window-lineage records audit finding (joulewise/window_lineage.py). Configuration bytes are checked per member at write time; the plan-tree digest is pack identity."
+    },
+    "lineage.bundle_locator_digest_differs": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "RECORDS",
+      "klass": "REPRESENTATION",
+      "note": "Window-lineage records audit finding (joulewise/window_lineage.py). Configuration bytes are checked per member at write time; the plan-tree digest is pack identity."
+    },
+    "lineage.bundle_stamp_absent": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "RECORDS",
+      "klass": "REPRESENTATION",
+      "note": "Window-lineage records audit finding (joulewise/window_lineage.py). Configuration bytes are checked per member at write time; the plan-tree digest is pack identity."
+    },
+    "lineage.bundle_stamp_differs": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "RECORDS",
+      "klass": "REPRESENTATION",
+      "note": "Window-lineage records audit finding (joulewise/window_lineage.py). Configuration bytes are checked per member at write time; the plan-tree digest is pack identity."
+    },
+    "lineage.collection_boot_unrecorded": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "RECORDS",
+      "klass": "REPRESENTATION",
+      "note": "Window-lineage records audit finding (joulewise/window_lineage.py). Configuration bytes are checked per member at write time; the plan-tree digest is pack identity."
+    },
+    "lineage.completion_records_absent": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "RECORDS",
+      "klass": "REPRESENTATION",
+      "note": "Window-lineage records audit finding (joulewise/window_lineage.py). Configuration bytes are checked per member at write time; the plan-tree digest is pack identity."
+    },
+    "lineage.context_root_differs": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "RECORDS",
+      "klass": "REPRESENTATION",
+      "note": "Window-lineage records audit finding (joulewise/window_lineage.py). Configuration bytes are checked per member at write time; the plan-tree digest is pack identity."
+    },
+    "lineage.locator_noncanonical": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "RECORDS",
+      "klass": "REPRESENTATION",
+      "note": "Window-lineage records audit finding (joulewise/window_lineage.py). Configuration bytes are checked per member at write time; the plan-tree digest is pack identity."
+    },
+    "lineage.locator_role_differs": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "RECORDS",
+      "klass": "REPRESENTATION",
+      "note": "Window-lineage records audit finding (joulewise/window_lineage.py). Configuration bytes are checked per member at write time; the plan-tree digest is pack identity."
+    },
+    "lineage.locator_root_path_differs": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "RECORDS",
+      "klass": "REPRESENTATION",
+      "note": "Window-lineage records audit finding (joulewise/window_lineage.py). Configuration bytes are checked per member at write time; the plan-tree digest is pack identity."
+    },
+    "lineage.locator_sidecar_mismatch": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "RECORDS",
+      "klass": "REPRESENTATION",
+      "note": "Window-lineage records audit finding (joulewise/window_lineage.py). Configuration bytes are checked per member at write time; the plan-tree digest is pack identity."
+    },
+    "lineage.locator_unreadable": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "RECORDS",
+      "klass": "REPRESENTATION",
+      "note": "Window-lineage records audit finding (joulewise/window_lineage.py). Configuration bytes are checked per member at write time; the plan-tree digest is pack identity."
+    },
+    "lineage.pack_digest_unrecorded": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "RECORDS",
+      "klass": "REPRESENTATION",
+      "note": "Window-lineage records audit finding (joulewise/window_lineage.py). Configuration bytes are checked per member at write time; the plan-tree digest is pack identity."
+    },
+    "lineage.plan_tree_digest_differs": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_WINDOW",
+      "family": "PACK_IDENTITY",
+      "klass": "NUMBER",
+      "note": "The pack's plan_tree.json bytes differ from the digest recorded in the window lineage at publication."
+    },
+    "lineage.record_chain_unverified": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "RECORDS",
+      "klass": "REPRESENTATION",
+      "note": "Window-lineage records audit finding (joulewise/window_lineage.py). Configuration bytes are checked per member at write time; the plan-tree digest is pack identity."
+    },
+    "lineage.sibling_lineage_differs": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "RECORDS",
+      "klass": "REPRESENTATION",
+      "note": "Window-lineage records audit finding (joulewise/window_lineage.py). Configuration bytes are checked per member at write time; the plan-tree digest is pack identity."
+    },
+    "member.admission_aborted": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_MEMBER",
+      "family": "MEMBER_VALIDITY",
+      "klass": "NUMBER",
+      "note": "Idle admission refused the member after its one immediate retry."
+    },
+    "member.anchor_energy_envelope_exceeded": {
+      "blinding": "RESTRICTED",
+      "effect": "EXCLUDE_MEMBER",
+      "family": "MEMBER_VALIDITY",
+      "klass": "NUMBER",
+      "note": "Target-phase precheck anchor_energy_envelope_exceeds_quarter_metric; computed from a science energy."
+    },
+    "member.anchor_not_bounded": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_MEMBER",
+      "family": "MEMBER_VALIDITY",
+      "klass": "NUMBER",
+      "note": "Per-member clock anchor status is not bounded (5 ms effective bound, 60 s fit span)."
+    },
+    "member.anchor_recompute_mismatch": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_MEMBER",
+      "family": "MEMBER_VALIDITY",
+      "klass": "NUMBER",
+      "note": "The harvest's recomputed anchor status differs from the recorded one."
+    },
+    "member.bytes_ambiguous": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_MEMBER",
+      "family": "MEMBER_VALIDITY",
+      "klass": "NUMBER",
+      "note": "Two admissible bundles for one member; neither is used (derived)."
+    },
+    "member.bytes_missing": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_MEMBER",
+      "family": "MEMBER_VALIDITY",
+      "klass": "NUMBER",
+      "note": "A required bundle file is missing, or the member has no admissible bundle (derived)."
+    },
+    "member.config_not_in_inventory": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_MEMBER",
+      "family": "MEMBER_VALIDITY",
+      "klass": "NUMBER",
+      "note": "The member's configuration bytes are not in the pack's committed inventory."
+    },
+    "member.cooldown_cap_hit": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_MEMBER",
+      "family": "MEMBER_VALIDITY",
+      "klass": "NUMBER",
+      "note": "The member's cooldown reached the 300 s cap."
+    },
+    "member.cooldown_evidence_unverified": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_MEMBER",
+      "family": "MEMBER_VALIDITY",
+      "klass": "NUMBER",
+      "note": "The member's campaign cooldown evidence does not verify."
+    },
+    "member.idle_window_suspect": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_MEMBER",
+      "family": "MEMBER_VALIDITY",
+      "klass": "NUMBER",
+      "note": "measurement_quality.idle_window_suspect is true."
+    },
+    "member.reduction_mismatch": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_MEMBER",
+      "family": "MEMBER_VALIDITY",
+      "klass": "NUMBER",
+      "note": "Re-reduction is not byte-identical to the stored summary."
+    },
+    "member.span_unknown": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_MEMBER",
+      "family": "PHYSICS_IN_SPAN",
+      "klass": "PHYSICS",
+      "note": "The member's sampler span cannot be placed, so the physics-in-span rules cannot be applied."
+    },
+    "member.status_not_succeeded": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_MEMBER",
+      "family": "MEMBER_VALIDITY",
+      "klass": "NUMBER",
+      "note": "Member status is not succeeded."
+    },
+    "member.strict_validation_failed": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_MEMBER",
+      "family": "MEMBER_VALIDITY",
+      "klass": "NUMBER",
+      "note": "Strict bundle validation, which re-reduces the raw evidence, failed or could not run."
+    },
+    "member.target_phase_precheck_failed": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_MEMBER",
+      "family": "MEMBER_VALIDITY",
+      "klass": "NUMBER",
+      "note": "The member's target phase (decode or prefill) fails its precheck."
+    },
+    "member.token_count_mismatch": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_MEMBER",
+      "family": "MEMBER_VALIDITY",
+      "klass": "NUMBER",
+      "note": "Runtime-observed token counts differ from the registered counts."
+    },
+    "member.unreadable": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_MEMBER",
+      "family": "MEMBER_VALIDITY",
+      "klass": "NUMBER",
+      "note": "A required bundle file is unreadable."
+    },
+    "model.identity_inconsistent_in_window": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_WINDOW",
+      "family": "MODEL_IDENTITY",
+      "klass": "NUMBER",
+      "note": "Two distinct model or runtime identities within one identity unit of one window."
+    },
+    "model.identity_mismatch": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_WINDOW",
+      "family": "MODEL_IDENTITY",
+      "klass": "NUMBER",
+      "note": "Model, tokenizer or runtime realized at arm or recorded in a bundle differs from the frozen pins."
+    },
+    "model.identity_underivable": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_MEMBER",
+      "family": "MODEL_IDENTITY",
+      "klass": "NUMBER",
+      "note": "The member's model and runtime identity cannot be derived from its own metadata; which model was measured is unproven for that member."
+    },
+    "model.identity_unmeasured": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_WINDOW",
+      "family": "MODEL_IDENTITY",
+      "klass": "NUMBER",
+      "note": "The model identity comparison could not run. A harvest problem first (registration 7.2)."
+    },
+    "model.identity_unpinned": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_WINDOW",
+      "family": "MODEL_IDENTITY",
+      "klass": "NUMBER",
+      "note": "No frozen model or runtime pin to compare against. The three packs carry frozen pins in identity_pin_projection, so this should not fire."
+    },
+    "monitor.probe_in_phase": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "PHYSICS",
+      "note": "A monitor probe fell inside a target phase."
+    },
+    "monitor.restarted": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "REPRESENTATION",
+      "note": "The hazard monitor was restarted by the driver; the gap appears as the modules' unmeasured flags."
+    },
+    "neg8.bound_not_derived": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_WINDOW",
+      "family": "NEG8",
+      "klass": "NUMBER",
+      "note": "The NEG-8 bound was not derived inside the window (fewer than 10 of 12 corpus members, or the bound reader refused; registration 5.3)."
+    },
+    "neg8.screen_failed": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_WINDOW",
+      "family": "NEG8",
+      "klass": "NUMBER",
+      "note": "The NEG-8 screen failed. The harvest emits it from the whole-window verdict's NEG-8 conditions (neg8_gross_point_drift_exceeded, neg8_idle_sub_point_drift_exceeded, neg8_bracket_missing, neg8_bracket_reference_invalid, neg8_drift_bound_stale, the bound-underived conditions)."
+    },
+    "network_time.off_output": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "REPRESENTATION",
+      "note": "Output of the network-time OFF action at the arm; recorded only, never read for wording."
+    },
+    "pack.identity_mismatch": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_WINDOW",
+      "family": "PACK_IDENTITY",
+      "klass": "NUMBER",
+      "note": "Pack plan tree, a configuration, prompt pin, extraction spec, NEG-8 or reference manifest differs from the sealed inventory or the plan tree's own pins (recomputed at harvest)."
+    },
+    "pack.identity_unmeasured": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_WINDOW",
+      "family": "PACK_IDENTITY",
+      "klass": "NUMBER",
+      "note": "The pack identity comparison could not run. A harvest problem first: R3 and re-harvest on identical bytes before re-arming (registration 7.2)."
+    },
+    "records.arm_record_absent": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "RECORDS",
+      "klass": "REPRESENTATION",
+      "note": "hazards/arm.json is absent although the chain started."
+    },
+    "records.attempt_history": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "RECORDS",
+      "klass": "REPRESENTATION",
+      "note": "Attempt history formality."
+    },
+    "records.checkout_untracked": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "RECORDS",
+      "klass": "REPRESENTATION",
+      "note": "Untracked files in the measurement checkout outside the executed roots."
+    },
+    "records.collector_failed": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "RECORDS",
+      "klass": "REPRESENTATION",
+      "note": "A harvest collector failed; the number-protecting ones also emit their own unmeasured code."
+    },
+    "records.lineage_formality": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "RECORDS",
+      "klass": "REPRESENTATION",
+      "note": "A lineage formality other than configuration bytes."
+    },
+    "records.monitor_journal_absent": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "RECORDS",
+      "klass": "REPRESENTATION",
+      "note": "A monitor journal is absent; its members get the module's unmeasured flag."
+    },
+    "records.monitor_line_malformed": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "RECORDS",
+      "klass": "REPRESENTATION",
+      "note": "A monitor journal line is malformed."
+    },
+    "records.naming": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "RECORDS",
+      "klass": "REPRESENTATION",
+      "note": "A naming formality."
+    },
+    "records.notice": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "RECORDS",
+      "klass": "REPRESENTATION",
+      "note": "A notice formality."
+    },
+    "records.pin_ledger": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "RECORDS",
+      "klass": "REPRESENTATION",
+      "note": "Pin-ledger matching."
+    },
+    "records.provenance_digest": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "RECORDS",
+      "klass": "REPRESENTATION",
+      "note": "A provenance digest formality."
+    },
+    "records.receipt": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "RECORDS",
+      "klass": "REPRESENTATION",
+      "note": "A receipt formality."
+    },
+    "records.source_changed_during_harvest": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_WINDOW",
+      "family": "RECORDS",
+      "klass": "NUMBER",
+      "note": "Bytes the harvest reads changed while it read them; the harvested numbers may not be the collected ones. A harvest problem first (registration 7.2)."
+    },
+    "records.terminal_record_absent": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "RECORDS",
+      "klass": "REPRESENTATION",
+      "note": "The driver's terminal record is absent."
+    },
+    "roster.before_chain_started": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_MEMBER",
+      "family": "ROSTER",
+      "klass": "NUMBER",
+      "note": "A bundle created before chain.started; it is ignored, not used."
+    },
+    "roster.foreign_attempt": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_MEMBER",
+      "family": "ROSTER",
+      "klass": "NUMBER",
+      "note": "A bundle bound to another attempt; it is ignored, not used."
+    },
+    "roster.no_science_bundles": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_WINDOW",
+      "family": "ROSTER",
+      "klass": "NUMBER",
+      "note": "No planned science member has a bundle."
+    },
+    "roster.not_in_plan": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_MEMBER",
+      "family": "ROSTER",
+      "klass": "NUMBER",
+      "note": "A bundle not in the plan roster; it is ignored, not used."
+    },
+    "roster.run_id_mismatch": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_MEMBER",
+      "family": "ROSTER",
+      "klass": "NUMBER",
+      "note": "The bundle's recorded run_id differs from its directory, so which planned member its bytes are is ambiguous. Emitter class REPRESENTATION, restated NUMBER here."
+    },
+    "thermal.os_level_nonzero": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_MEMBER",
+      "family": "PHYSICS_IN_SPAN",
+      "klass": "PHYSICS",
+      "note": "An in-force 5 s OS thermal-pressure sample is nonzero."
+    },
+    "thermal.powermetrics_pressure_elevated": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_MEMBER",
+      "family": "PHYSICS_IN_SPAN",
+      "klass": "PHYSICS",
+      "note": "The member's own powermetrics records show elevated thermal pressure."
+    },
+    "thermal.unmeasured": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "PHYSICS",
+      "note": "A gap in OS thermal samples; the member's own powermetrics records still carry thermal pressure."
+    },
+    "whole_window.not_passed": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "NEG8",
+      "klass": "NUMBER",
+      "note": "Aggregate: the stored whole-window verdict did not pass. It fails on any one member's admission or environment refusal, so it is not window-removing; its NEG-8 conditions are neg8.screen_failed and its bracket is calibration.bracket_acceptance_failed (registration 6.5)."
+    },
+    "whole_window.producer_failed": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "NEG8",
+      "klass": "REPRESENTATION",
+      "note": "The desk producer of the binding or verdict failed; an absent verdict is whole_window.verdict_absent."
+    },
+    "whole_window.verdict_absent": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_WINDOW",
+      "family": "NEG8",
+      "klass": "NUMBER",
+      "note": "No whole-window verdict file, so the NEG-8 screen held in it was not evaluated. A harvest problem first (registration 7.2)."
+    },
+    "whole_window.verdict_unauthenticated": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "NEG8",
+      "klass": "REPRESENTATION",
+      "note": "The whole-window verdict row does not authenticate against the campaign log."
+    }
+  },
+  "notes": {
+    "aggregate_disclosures": "whole_window.not_passed and g3.recompute_failed are DISCLOSE because they fail on any single member's refusal; the harvest must emit neg8.screen_failed from the verdict's NEG-8 conditions.",
+    "authority": "registration_block5.md section 6 states these rules in words; this file is normative for each code's effect.",
+    "restated_classes": "roster.run_id_mismatch (REPRESENTATION to NUMBER) and calibration.ledger_snapshot_refused (NUMBER to REPRESENTATION) restate their emitter's class; each note says why.",
+    "status": "DRAFT, NOT SEALED. Revision 3, 2026-10-05, lane L6. Sealed with registration_block5.md, analysis_plan_block5.md and sealed_inventory.json by one cold gate (registration 12).",
+    "unclassified": "A code not listed here is UNCLASSIFIED: it blocks only the release event until classified blind by a cold erratum (registration 7.2). records.malformed_flag and collector.unmeasured are deliberately absent so that they always block release until read."
+  },
+  "rules": {
+    "cell_unit_minimum": 8
+  },
+  "schema_version": "joulewise.flag_catalog.v1"
+}
