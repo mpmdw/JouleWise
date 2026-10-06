@@ -267,3 +267,55 @@ class DeskConcurrencyTests(base.WindowTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class WorkerCalibrationCacheTests(base.WindowTestCase):
+    """X3 (t3-9): one calibration physics cache per worker, for the re-reduction and (with J2) strict."""
+
+    CACHE_ASSESSMENTS = False
+
+    def assess_two(self, *, j2: bool):
+        window = self.window()
+        seen = {"reduce": [], "strict": []}
+        from joulewise import cli, reduce as reducer
+        real_reduce, real_validate = reducer.reduce_bundle, cli.validate_bundle
+
+        def reduce_spy(path, **kwargs):
+            seen["reduce"].append(kwargs.get("_instrument_calibration_physics_cache"))
+            return real_reduce(path, **kwargs)
+
+        if j2:
+            def validate_spy(path, strict=False, physics_cache=None):
+                seen["strict"].append(physics_cache)
+                return real_validate(path, strict)
+        else:
+            def validate_spy(path, strict=False):
+                seen["strict"].append("no-keyword")
+                return real_validate(path, strict)
+
+        h._WORKER_PHYSICS_CACHE.clear()
+        self.addCleanup(h._WORKER_PHYSICS_CACHE.clear)
+        with mock.patch.object(reducer, "reduce_bundle", reduce_spy), \
+                mock.patch.object(cli, "validate_bundle", validate_spy):
+            results = [h.assess_member({"run_id": run_id, "bundle_path": str(window.claim / run_id),
+                                        "withheld_dir": str(window.root / "withheld")})
+                       for run_id in ("b5t-abs-r01", "b5t-abs-r02")]
+        return seen, results
+
+    def test_the_rereduction_uses_the_workers_cache(self):
+        seen, results = self.assess_two(j2=False)
+        rereduce = [cache for cache in seen["reduce"] if cache is not None]
+        # Strict (without J2) reduces without a cache; the re-reduction with the worker's.
+        self.assertEqual(len(rereduce), 2)
+        self.assertTrue(all(cache is h._WORKER_PHYSICS_CACHE for cache in rereduce))
+        self.assertEqual(seen["strict"], ["no-keyword", "no-keyword"])
+        for result in results:
+            self.assertTrue(result["strict_valid"], result["strict_problems"])
+            self.assertTrue(result["rereduced"]["identical_to_stored"])
+            self.assertFalse(result["calibration_cache"]["strict_uses_cache"])
+
+    def test_strict_validation_shares_the_cache_once_the_cli_takes_it(self):
+        seen, results = self.assess_two(j2=True)
+        self.assertEqual(len(seen["strict"]), 2)
+        self.assertTrue(all(cache is h._WORKER_PHYSICS_CACHE for cache in seen["strict"]))
+        self.assertTrue(all(result["calibration_cache"]["strict_uses_cache"] for result in results))

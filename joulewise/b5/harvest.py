@@ -1603,6 +1603,31 @@ def _precheck_structure(summary: Mapping[str, Any]) -> dict[str, Any]:
     return result
 
 
+# X3 (PLAN2 t3-9): one calibration physics cache per worker process, keyed by
+# the calibration evidence's artifact SHA-256.  The reducer consults it only
+# after every hash check of the bundle's calibration copy has run, so a hit
+# skips only the refit of bytes already proven identical.  It starts empty in
+# each process: every worker's first refit is cold, from the raw plist.  The
+# window calibration verdict (J1) is never read here.
+_WORKER_PHYSICS_CACHE: dict[str, float] = {}
+
+
+def _accepts_keyword(function: Callable[..., Any], name: str) -> bool:
+    import inspect
+    try:
+        return name in inspect.signature(function).parameters
+    except (TypeError, ValueError):
+        return False
+
+
+def strict_problems(bundle: Path, cache: dict[str, float]) -> list[str]:
+    """``validate_bundle(strict=True)``, with the worker's cache once the CLI takes it (J2)."""
+    from joulewise.cli import validate_bundle
+    if _accepts_keyword(validate_bundle, "physics_cache"):
+        return list(validate_bundle(bundle, strict=True, physics_cache=cache))
+    return list(validate_bundle(bundle, strict=True))
+
+
 def assess_member(task: Mapping[str, Any]) -> dict[str, Any]:
     """Strict validation, re-reduction, anchor recompute and identity for one bundle."""
     from joulewise import battery_float
@@ -1639,7 +1664,10 @@ def assess_member(task: Mapping[str, Any]) -> dict[str, Any]:
     result["metadata_run_id"] = metadata.get("run_id") if isinstance(metadata, Mapping) else None
     result["config_sha256"] = sha256_bytes(config_raw) if config_raw is not None else None
     result["stored_summary_sha256"] = sha256_bytes(summary_raw) if summary_raw is not None else None
-    problems = guarded("strict", lambda: list(validate_bundle(bundle, strict=True)))
+    cache = _WORKER_PHYSICS_CACHE
+    result["calibration_cache"] = {"entries_before": len(cache),
+                                   "strict_uses_cache": _accepts_keyword(validate_bundle, "physics_cache")}
+    problems = guarded("strict", lambda: strict_problems(bundle, cache))
     result["strict_problems"] = problems
     result["strict_valid"] = problems == []
     anchor = metadata.get("uncertainty_evidence", {}).get("clock_anchor") \
@@ -1652,7 +1680,8 @@ def assess_member(task: Mapping[str, Any]) -> dict[str, Any]:
     provenance = summary.get("summary_provenance") if isinstance(summary.get("summary_provenance"), Mapping) else {}
 
     def rereduce() -> dict[str, Any]:
-        payload = reduce_bundle(bundle, reducer_version=provenance.get("reducer_version")).to_dict()
+        payload = reduce_bundle(bundle, reducer_version=provenance.get("reducer_version"),
+                                _instrument_calibration_physics_cache=cache).to_dict()
         raw = (json.dumps(payload, indent=2, sort_keys=True) + "\n").encode()
         target = Path(task["withheld_dir"]) / "reductions" / f"{run_id}.summary_metrics.rereduced.json"
         digest = write_once(target, raw)
