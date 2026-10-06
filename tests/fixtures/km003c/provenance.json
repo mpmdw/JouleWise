@@ -1,0 +1,23 @@
+{
+  "plain50_slice.jsonl": {
+    "source": "~/night-archive/wallmeter-probe/s5m_r2_p200_plain.jsonl",
+    "source_sha256": "11b3053abc7b02f6a743d6cc28df6a9f313b1d3c59f696977c8dc9b3e03469db",
+    "lines": "1 (header) + 101-250 (150 polls, 30 s); no trailer",
+    "fixture_sha256": "6e5afde26e7b41c497ef5762dab3a4c682de21cf0b17f22b86fb749afc44b909",
+    "note": "Wall-meter probe 2026-10-06, 50 SPS, 200 ms polls, plain QoS, probe's own reader (pyusb). The device sequence wraps once inside the slice (source line 137). Header predates the status field."
+  },
+  "redelivery1000_slice.jsonl": {
+    "source": "~/night-archive/wallmeter-probe/xc1/meter.jsonl",
+    "source_sha256": "8a0e9172a49fc6aea664bb7e8b64883aab4a5902727a831e37b6ba5b5c6d7f69",
+    "lines": "1 (header) + 411-440 (30 polls at 40 ms); no trailer",
+    "fixture_sha256": "0a9978ae4080c4001c7b6b8cfaa3ea7965b60c57b8bd160f2e381a13cfa933ca",
+    "note": "Probe cross-check run xc1, 1000 SPS. Source line 425 opens with samples the meter had already sent (sequence 49790 after 49816): a real re-delivery of 27 samples."
+  },
+  "repo_live_50sps.jsonl": {
+    "source": "scripts/km003c_monitor.py --duration 20 on the desk Mac, 2026-10-06 15:07 PDT, meter serial 081858, firmware 2.0.5",
+    "source_sha256": null,
+    "lines": "whole file (header, 100 polls, trailer)",
+    "fixture_sha256": "4b716475a618650129b54020f4c8b44a0a16b7e552b527ef69147846521e8ace",
+    "note": "Recorded with this repository's reader: per-poll SMC keys B0AC, B0AV, PDTR, PSTR, PPBR. Desk idle on the 140 W adapter."
+  }
+}

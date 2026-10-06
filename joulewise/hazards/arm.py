@@ -5,8 +5,9 @@ Runs inside the launchd job after t0, in this fixed order:
 1. **Agent census** ``pgrep -lf '[c]odex|[c]laude|[t]3'``: it must exit 1 with
    empty output, or the arm refuses before any action (kept by doctrine:
    never start [QUIET-MAC] work while an agent session is alive).
-2. **Instant reads**: battery, thermal (with ``pmset -g therm`` kept as a
-   diagnostic), disk, and the clock's frequency gate.  When the config names
+2. **Instant reads**: battery (state from ioreg, current from SMC B0AC),
+   thermal (with ``pmset -g therm`` kept as a diagnostic), disk, and the
+   clock's frequency gate.  When the config names
    the acceptance's judged epochs (``expected_epochs``), ``kern.osversion`` and
    ``hw.model`` are read too: an epoch no acceptance judges refuses here,
    before the dwell, instead of at the pre-slot writer's epoch check after it.
@@ -44,7 +45,7 @@ from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
-from joulewise.hazards import battery, clock, contention, disk, instrument, thermal
+from joulewise.hazards import battery, clock, contention, disk, instrument, smc, thermal
 from joulewise.hazards.base import (
     PASS, Context, Measurement, Verdict, canonical_json, row, write_create_once,
 )
@@ -108,6 +109,9 @@ class Seams:
     stat: Callable[[str], Any] = os.stat
     python: str = sys.executable
     host_cpu: contention.HostReader | None = contention.read_host_cpu
+    # The battery current (SMC B0AC) at the instant and final battery reads;
+    # None judges the registry InstantAmperage instead (battery.smc_unavailable).
+    smc_read: Callable[[], Mapping[str, Any]] | None = smc.read_once
 
 
 @dataclasses.dataclass(frozen=True)
@@ -195,7 +199,7 @@ def run(config: ArmConfig, seams: Seams | None = None) -> ArmResult:
         return recorder.hazard("instant", measurement, module.judge(measurement, thresholds[name]))
 
     verdicts = [
-        instant("battery", battery.measure(_labelled(ctx, "instant"))),
+        instant("battery", battery.measure(_labelled(ctx, "instant"), smc_read=seams.smc_read)),
         instant("thermal", thermal.measure(_labelled(ctx, "instant"), diagnostics=True)),
         instant("disk", disk.measure(ctx, targets=config.disk_targets, statvfs=seams.statvfs,
                                      stat=seams.stat)),
@@ -252,7 +256,7 @@ def run(config: ArmConfig, seams: Seams | None = None) -> ArmResult:
 
     # 7. Final reads, then GO.  The GO clock sample closes the dwell series, so
     # f is compared at dwell start, dwell end and GO.
-    final_battery = battery.measure(_labelled(ctx, "final"))
+    final_battery = battery.measure(_labelled(ctx, "final"), smc_read=seams.smc_read)
     final_thermal = thermal.measure(_labelled(ctx, "final"))
     finals = [
         recorder.hazard("final", final_battery,

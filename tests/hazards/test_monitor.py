@@ -13,9 +13,10 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
-from joulewise.hazards import base, battery, contention, monitor, thermal
+from joulewise.hazards import base, battery, contention, monitor, smc, thermal
 from tests.hazards.fakes import (
-    FakeClocks, FakeProcessTable, FakeRegistry, FrequencyReader, Runner, battery_bytes, completed,
+    FakeClocks, FakeProcessTable, FakeRegistry, FakeSmc, FrequencyReader, Runner, battery_bytes,
+    completed,
 )
 
 GIB = 1024 ** 3
@@ -43,6 +44,7 @@ class FakeMac:
         # a test installs), without being a probe child.
         self.registry = FakeRegistry(lambda: self.runner.handlers[battery.IOREG_BATTERY_ARGV](
             battery.IOREG_BATTERY_ARGV).stdout)
+        self.smc = FakeSmc(self.clocks)  # passed only by monitor(smc=True)
 
     def publication_index(self) -> int:
         return int((self.clocks.wall_s - self.first_publication) // 60)
@@ -62,9 +64,11 @@ class FakeMac:
     def stat(self, path):
         return SimpleNamespace(st_dev=1)
 
-    def monitor(self, *, poll: bool = False, **cadence) -> monitor.Monitor:
+    def monitor(self, *, poll: bool = False, smc: bool = False, **cadence) -> monitor.Monitor:
         """``poll``: the production battery path (in-process poll, ioreg on a
-        change); otherwise ioreg on the publication schedule."""
+        change); otherwise ioreg on the publication schedule.  ``smc``: the
+        1 s SMC battery-current read (production); without it the join falls
+        back to the registry current and discloses battery.smc_unavailable."""
 
         config = monitor.build_config(custody_dir=self.custody, tree_roots=[DRIVER],
                                       disk_targets=[{"path": "/runs", "copies": 1}],
@@ -72,7 +76,8 @@ class FakeMac:
         return monitor.Monitor(config, ctx=base.Context(run=self.runner, clocks=self.clocks),
                                frequency_reader=FrequencyReader(self.clocks), statvfs=self.statvfs,
                                stat=self.stat, host_reader=self.table.host_cpu,
-                               battery_reader=self.registry if poll else None)
+                               battery_reader=self.registry if poll else None,
+                               smc_reader=self.smc if smc else None)
 
     def ioreg_reads(self) -> int:
         return sum(1 for argv in self.runner.calls if argv == battery.IOREG_BATTERY_ARGV)
@@ -140,10 +145,11 @@ class MonitorJournalTests(unittest.TestCase):
         frequencies = [line for line in journals["clock"]
                        if line["kind"] == "reading" and line["values"]["frequency"]]
         self.assertEqual(len(frequencies), 13)  # f every 5 s over 65 s
-        # a member between two observed gauge publications (t = 0 s and 30 s) has no finding
-        self.assertEqual(monitor.member_findings(journals, span={"monotonic_ns": [
+        # a member between two observed gauge publications (t = 0 s and 30 s) has
+        # no finding beyond the disclosed fallback (this monitor has no SMC reader)
+        self.assertEqual([f["code"] for f in monitor.member_findings(journals, span={"monotonic_ns": [
             journals["clock"][3]["finished"]["monotonic_ns"],
-            journals["clock"][20]["finished"]["monotonic_ns"]]}), [])
+            journals["clock"][20]["finished"]["monotonic_ns"]]})], [battery.SMC_UNAVAILABLE])
 
     def test_every_gauge_publication_is_read_within_7_s_and_reads_are_at_most_30_s_apart(self):
         journals = self.run_monitor(600)
@@ -157,8 +163,9 @@ class MonitorJournalTests(unittest.TestCase):
                 for a, b in zip(lines, lines[1:])]
         self.assertLessEqual(max(gaps), 30.1)
         self.assertLessEqual(len(lines), 2 * len(publications) + 2)  # not one read every 5 s
-        self.assertEqual(battery.span_findings(lines, {"monotonic_ns": [
-            publications[2]["monotonic_ns"], publications[5]["monotonic_ns"]]}), [])
+        self.assertEqual([f["code"] for f in battery.span_findings(lines, {"monotonic_ns": [
+            publications[2]["monotonic_ns"], publications[5]["monotonic_ns"]]})],
+            [battery.SMC_UNAVAILABLE])
 
     def test_late_publication_is_retried_every_5_s(self):
         late = {"n": 0}
@@ -310,8 +317,9 @@ class PollMonitorJournalTests(MonitorJournalTests):
         cost = self.cost_lines()[-1]["values"]
         self.assertEqual((cost["battery_reader"], cost["battery_polls"], cost["battery_ioreg_reads"],
                           cost["battery_poll_failures"]), (True, 120, 11, 0))
-        self.assertEqual(battery.span_findings(lines, {"monotonic_ns": [
-            publications[2]["monotonic_ns"], publications[5]["monotonic_ns"]]}), [])
+        self.assertEqual([f["code"] for f in battery.span_findings(lines, {"monotonic_ns": [
+            publications[2]["monotonic_ns"], publications[5]["monotonic_ns"]]})],
+            [battery.SMC_UNAVAILABLE])
 
     def test_late_publication_is_retried_every_5_s(self):
         self.test_late_publication_is_read_when_the_poll_sees_it()
@@ -449,6 +457,89 @@ class PollMonitorJournalTests(MonitorJournalTests):
                          [stamp])
 
 
+class SmcMonitorTests(unittest.TestCase):
+    """The 1 s SMC battery-current read (lane 2026-10-06-smc-battery-meter) on
+    the production battery path."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory(dir=os.environ.get("TMPDIR"))
+        self.addCleanup(self.tmp.cleanup)
+        self.mac = FakeMac(Path(self.tmp.name))
+
+    def run_monitor(self, seconds: float) -> dict:
+        instance = self.mac.monitor(poll=True, smc=True)
+        instance.open_session(["test"])
+        instance.run(max_seconds=seconds)
+        instance.close_session("test end")
+        return monitor.load_journals(self.mac.custody)
+
+    @staticmethod
+    def smc_lines(journals) -> list[dict]:
+        return [line for line in monitor.readings(journals["battery"])
+                if line["values"].get("source") == "smc"]
+
+    def test_b0ac_is_read_every_second_and_journaled_as_a_battery_reading(self):
+        journals = self.run_monitor(65)
+        lines = self.smc_lines(journals)
+        clock_lines = [line for line in journals["clock"] if line["kind"] == "reading"]
+        self.assertEqual(len(lines), len(clock_lines))  # the same 1 s grid
+        self.assertEqual(len(lines), 65)
+        gaps = [(b["finished"]["monotonic_ns"] - a["finished"]["monotonic_ns"]) / 1e9
+                for a, b in zip(lines, lines[1:])]
+        self.assertLess(max(gaps), 1.01)
+        for line in lines:
+            for key in ("started", "finished"):
+                base.Stamp.from_json(line[key])
+            self.assertIsNone(line["error"])
+            self.assertEqual(line["values"]["smc"]["values"]["B0AC"], 0)
+            self.assertEqual(set(line["values"]["smc"]["values"]), set(smc.KEYS))
+        # each ioreg line carries the SMC read taken with it (InstantAmperage beside B0AC)
+        ioreg_lines = [line for line in monitor.readings(journals["battery"])
+                       if line["values"].get("source") != "smc"]
+        self.assertTrue(ioreg_lines)
+        for line in ioreg_lines:
+            self.assertEqual(line["values"]["smc"]["values"]["B0AC"], 0)
+            self.assertEqual(line["values"]["instant_amperage_ma"], 0)
+        cost = [line for line in journals["monitor"] if line["kind"] == "cost"][-1]["values"]
+        self.assertEqual(cost["smc_reads"], 65)
+        span = {"monotonic_ns": [clock_lines[3]["finished"]["monotonic_ns"],
+                                 clock_lines[20]["finished"]["monotonic_ns"]]}
+        self.assertEqual(monitor.member_findings(journals, span=span), [])
+
+    def test_a_burst_the_registry_never_shows_flags_the_member_it_overlaps(self):
+        # -865 mA for two seconds at t = 100 s; every registry value stays 0.
+        self.mac.smc.current = lambda t: -865 if 100.0 <= t < 102.0 else 0
+        journals = self.run_monitor(240)
+        burst = [line for line in self.smc_lines(journals)
+                 if line["values"]["smc"]["values"]["B0AC"] == -865]
+        self.assertEqual(len(burst), 2)
+        at = burst[0]["finished"]["monotonic_ns"]
+        self.assertTrue(all(line["values"]["instant_amperage_ma"] == 0
+                            for line in monitor.readings(journals["battery"])
+                            if line["values"].get("source") != "smc"))
+        inside = {"monotonic_ns": [at - 10 * 10**9, at + 10 * 10**9]}
+        found = [f for f in monitor.member_findings(journals, span=inside)
+                 if f["code"] == "battery.member_span"]
+        self.assertEqual(len(found), 1)
+        self.assertEqual((found[0]["observed"]["source"], found[0]["observed"]["max_abs_ma"]),
+                         ("smc", 865))
+        later = {"monotonic_ns": [at + 30 * 10**9, at + 60 * 10**9]}
+        self.assertEqual(monitor.member_findings(journals, span=later), [])
+
+    def test_an_unreadable_smc_is_journaled_and_the_join_falls_back_to_the_registry(self):
+        self.mac.smc.fail = True
+        self.mac.excursion_index = 3  # the registry's -447 mA publication
+        journals = self.run_monitor(420)
+        lines = self.smc_lines(journals)
+        self.assertGreaterEqual(len(lines), 400)
+        self.assertTrue(all(line["error"] and "no AppleSMC service" in line["error"] for line in lines))
+        pub = [p for p in battery.publications(monitor.readings(journals["battery"]))
+               if p["values"]["instant_amperage_ma"] == -447][0]
+        span = {"monotonic_ns": [pub["monotonic_ns"] - 20 * 10**9, pub["monotonic_ns"] + 20 * 10**9]}
+        codes = [f["code"] for f in monitor.member_findings(journals, span=span)]
+        self.assertEqual(codes[:2], [battery.SMC_UNAVAILABLE, "battery.member_span"])
+
+
 class SupervisorTests(unittest.TestCase):
     """The real monitor process: started, killed, restarted with the gap recorded, stopped."""
 
@@ -506,8 +597,16 @@ class SupervisorTests(unittest.TestCase):
         if sys.platform == "darwin":  # production polls the battery in process
             costs = [line["values"] for line in journals["monitor"] if line["kind"] == "cost"]
             self.assertTrue(costs and all(cost["battery_reader"] for cost in costs))
-            self.assertTrue(all(line["values"]["trigger"]["poll"] is not None
-                                for line in monitor.readings(journals["battery"])))
+            ioreg_lines = [line for line in monitor.readings(journals["battery"])
+                           if line["values"].get("source") != "smc"]
+            self.assertTrue(all(line["values"]["trigger"]["poll"] is not None for line in ioreg_lines))
+            # ...and reads the battery current from the SMC every second
+            smc_lines = [line for line in monitor.readings(journals["battery"])
+                         if line["values"].get("source") == "smc"]
+            self.assertGreaterEqual(len(smc_lines), 4)
+            self.assertTrue(all(isinstance(line["values"]["smc"]["values"]["B0AC"], int)
+                                for line in smc_lines))
+            self.assertTrue(all("smc" in line["values"] for line in ioreg_lines))
 
     @unittest.skipUnless(sys.platform == "darwin", "a desk run of the real read-only probes (macOS)")
     def test_all_probes_together_cost_at_most_half_a_percent_of_one_core(self):

@@ -1,15 +1,27 @@
 """Battery hazard: the Mac is on battery, charging, or its battery current is not ~0.
 
-Measured directly from ``/usr/sbin/ioreg -r -c AppleSmartBattery``; the exact
-stdout bytes are kept.  The frozen BFG grammar (``battery_float.parse``)
+Two sources (lane 2026-10-06-smc-battery-meter):
+
+- **State** (on AC or not, charging or not) comes from
+  ``/usr/sbin/ioreg -r -c AppleSmartBattery``; the exact stdout bytes are kept.
+- **Current** comes from the SMC key ``B0AC`` (battery current in mA, negative
+  = discharging), read in process by :mod:`joulewise.hazards.smc` once a
+  second in the window and once at each arm read.  The registry's
+  ``InstantAmperage`` is republished only every 60 s; the wall-meter probe of
+  2026-10-06 saw B0AC bursts to -865 mA during inference while every registry
+  value read 0.  ``InstantAmperage`` stays in every record as a cross-check
+  and is judged only when no SMC reading is available, which is disclosed as
+  ``battery.smc_unavailable``.
+
+The registry side, as before:  The frozen BFG grammar (``battery_float.parse``)
 reads ExternalConnected, IsCharging, InstantAmperage (signed), Amperage
 (gauge-averaged), UpdateTime and Voltage; it is reused, not edited.  The
 ``PowerTelemetryData`` accumulators and the adapter wattage are read by a
 separate line reader in this module.
 
-Arm (plan §2.3): ExternalConnected Yes; IsCharging No; |InstantAmperage| <=
-200 mA; the reading no older than 180 s.  A probe or parse failure is
-UNMEASURED and refuses.
+Arm (plan §2.3): ExternalConnected Yes; IsCharging No; |SMC B0AC| <= 200 mA
+(|InstantAmperage| <= 200 mA when B0AC cannot be read); the ioreg reading no
+older than 180 s.  An ioreg probe or parse failure is UNMEASURED and refuses.
 
 In the window the monitor polls every 5 s and keeps the raw bytes whenever
 UpdateTime changes (a new gauge publication; the gauge publishes every 60 s).
@@ -17,7 +29,10 @@ The 5 s poll reads the grammar's six fields in process
 (:class:`RegistryReader`, about 0.03 ms of CPU against 13 ms for an ``ioreg``
 child); ``ioreg`` itself runs only when one of them changes, so each
 publication is read once, by the grammar, within 5 s of appearing.  The
-member rule of plan §3.4 is :func:`span_findings`.
+monitor also reads the SMC keys once a second and journals each read as a
+battery ``reading`` line with ``values = {"source": "smc", "smc": {...}}``.
+The member rule of plan §3.4 is :func:`span_findings`; its current half is
+:func:`smc_span_findings`.
 
 Accumulator units (lane L1 check, 2026-10-05, on recorded and live bytes)
 -------------------------------------------------------------------------
@@ -80,11 +95,12 @@ import ctypes
 import json
 import re
 import sys
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
 from joulewise import battery_float
+from joulewise.hazards import smc
 from joulewise.hazards.base import (
     PASS, REFUSE, UNMEASURED, Context, Measurement, Verdict, coverage_gap, finding,
     require_thresholds, row,
@@ -100,6 +116,16 @@ DEFAULT_THRESHOLDS: dict[str, Any] = {
     "max_update_age_s": battery_float.MAX_UPDATE_AGE_S,  # 180 s
     "max_unobserved_s": 120,  # in window: no publication for longer -> battery.unmeasured
 }
+# In window: B0AC refreshes once a second and the monitor reads it once a
+# second; a span with a gap longer than this between good B0AC reads (or none
+# at all) falls back to the registry current rule and is disclosed as
+# battery.smc_unavailable.  Read as ``thresholds.get("smc_max_gap_s", ...)``,
+# not a DEFAULT_THRESHOLDS key: window plans copy every DEFAULT_THRESHOLDS key
+# from the sealed registration (joulewise/b5/plan.py), which predates it.
+SMC_MAX_GAP_S = 5
+SMC_CURRENT_KEY = "B0AC"   # mA, signed; negative = discharging
+SMC_VOLTAGE_KEY = "B0AV"   # mV
+SMC_UNAVAILABLE = "battery.smc_unavailable"
 ARM_THRESHOLD_KEYS = ("limit_ma", "max_update_age_s")
 
 ACCUMULATOR_FIELDS = (
@@ -296,12 +322,63 @@ def parse_reading(raw: bytes, wall_time_s: float) -> dict[str, Any]:
     return values
 
 
-def measure(ctx: Context) -> Measurement:
+SmcRead = Callable[[], Mapping[str, Any]]
+
+
+def smc_sample(read: SmcRead | None, ctx: Context | None = None) -> dict[str, Any]:
+    """One SMC read as journaled: ``{"values", "errors", "started", "finished"}``.
+
+    ``read`` returns :meth:`smc.Reader.read`'s shape; None, or a read that
+    raises, gives every key an error.  Never raises.
+    """
+
+    started = ctx.stamp().to_json() if ctx is not None else None
+    if read is None:
+        sample: dict[str, Any] = {"values": {key: None for key in smc.KEYS},
+                                  "errors": {key: "no SMC reader" for key in smc.KEYS}}
+    else:
+        try:
+            got = read()
+            sample = {"values": dict(got.get("values") or {}), "errors": dict(got.get("errors") or {})}
+        except Exception as exc:  # a reader that raises is a failed read, never a crash
+            sample = {"values": {key: None for key in smc.KEYS},
+                      "errors": {key: f"{type(exc).__name__}: {exc}" for key in smc.KEYS}}
+    if ctx is not None:
+        sample["started"] = started
+        sample["finished"] = ctx.stamp().to_json()
+    return sample
+
+
+def smc_current(sample: Mapping[str, Any] | None) -> tuple[int | None, str | None]:
+    """``(B0AC in mA, None)`` from a journaled SMC sample, or ``(None, why not)``."""
+
+    if not isinstance(sample, Mapping):
+        return None, "no SMC sample"
+    value = (sample.get("values") or {}).get(SMC_CURRENT_KEY)
+    error = (sample.get("errors") or {}).get(SMC_CURRENT_KEY)
+    if error:  # a value beside an error is not trusted
+        return None, str(error)
+    if isinstance(value, bool) or not isinstance(value, int):
+        return None, f"{SMC_CURRENT_KEY} is {value!r}, not an integer"
+    return value, None
+
+
+def measure(ctx: Context, *, smc_read: SmcRead | None = None) -> Measurement:
+    """The arm's instant read: ioreg (state, the frozen grammar) and one SMC read (current).
+
+    ``smc_read`` is the SMC seam (:func:`smc.read_once` in production through
+    ``arm.Seams``); None records the SMC as unavailable and the judge falls
+    back to the registry's InstantAmperage.
+    """
+
     started = ctx.stamp()
     completed = ctx.run(IOREG_BATTERY_ARGV, PROBE_TIMEOUT_S)
+    sample = smc_sample(smc_read, ctx)
     raw_refs = (ctx.keep_raw("battery.ioreg", completed.stdout),)
+    current, why = smc_current(sample)
     values: dict[str, Any] = {"argv": list(IOREG_BATTERY_ARGV), "returncode": completed.returncode,
-                              "stderr": completed.stderr.decode("utf-8", errors="replace")}
+                              "stderr": completed.stderr.decode("utf-8", errors="replace"),
+                              "smc": sample, "smc_current_ma": current, "smc_unavailable": why}
     error = None
     if completed.error:
         error = f"ioreg could not run: {completed.error}"
@@ -329,7 +406,13 @@ def judge(measurement: Measurement, thresholds: Mapping[str, Any]) -> Verdict:
     if measurement.error:
         return Verdict(MODULE, UNMEASURED, (measurement.error,), limits)
     values = measurement.values
-    reasons = list(reading_reasons(values, limits, include_amperage=False))
+    current, why = smc_current(values.get("smc"))
+    # The current rule reads SMC B0AC; the registry InstantAmperage is judged
+    # only when B0AC could not be read (disclosed as battery.smc_unavailable).
+    reasons = list(reading_reasons(values, limits, include_amperage=False,
+                                   include_instant=current is None))
+    if current is not None and abs(current) > limits["limit_ma"]:
+        reasons.append(f"|SMC B0AC| {abs(current)} mA > {limits['limit_ma']} mA")
     if values["update_age_s"] > limits["max_update_age_s"]:
         reasons.append(f"UpdateTime stale: {values['update_age_s']:g} s > "
                        f"{limits['max_update_age_s']} s")
@@ -337,17 +420,27 @@ def judge(measurement: Measurement, thresholds: Mapping[str, Any]) -> Verdict:
                                              "instant_amperage_ma", "amperage_ma",
                                              "update_age_s", "voltage_mv")}
     observed["adapter_watts"] = values.get("adapter_watts")
+    observed["current_source"] = "smc" if current is not None else "registry"
+    observed["smc_current_ma"] = current
+    observed["smc"] = values.get("smc")
+    observed["flags"] = ([] if current is not None else
+                         [{"code": SMC_UNAVAILABLE, "detail": f"SMC B0AC not read ({why}); "
+                           "the registry InstantAmperage was judged instead"}])
     return Verdict(MODULE, REFUSE if reasons else PASS, tuple(reasons), limits, observed)
 
 
 def reading_reasons(values: Mapping[str, Any], limits: Mapping[str, Any], *,
-                    include_amperage: bool) -> list[str]:
+                    include_amperage: bool, include_instant: bool = True) -> list[str]:
+    """The registry rule on one reading.  ``include_instant``/``include_amperage``
+    judge the registry's InstantAmperage/Amperage; both are off when SMC B0AC
+    covers the current (the state fields are always judged)."""
+
     reasons = []
     if values["external_connected"] is not True:
         reasons.append("ExternalConnected is not Yes (on battery)")
     if values["is_charging"] is not False:
         reasons.append("IsCharging is not No (charging)")
-    if abs(values["instant_amperage_ma"]) > limits["limit_ma"]:
+    if include_instant and abs(values["instant_amperage_ma"]) > limits["limit_ma"]:
         reasons.append(f"|InstantAmperage| {abs(values['instant_amperage_ma'])} mA > "
                        f"{limits['limit_ma']} mA")
     amperage = values.get("amperage_ma")
@@ -428,28 +521,133 @@ def publications(readings: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
     return [seen[key] for key in sorted(seen)]
 
 
+def smc_samples(readings: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """Every SMC read in battery journal readings, in time order.
+
+    A reading carries one when its ``values`` hold an ``smc`` sample (the
+    monitor's 1 s ``source: smc`` lines, and the SMC read attached to each
+    ``ioreg`` line).  Its time is the sample's own ``finished`` stamp when it
+    has one, else the line's.  ``current_ma`` is B0AC, or None with ``error``.
+    ``fresh`` is False for a good read whose five SMC values all equal the
+    previous good read's: the SMC republishes the block about once a second
+    (largest gap between changes 1.01 s over 580 s of recorded idle, load and
+    recovery on 10-06), so an unchanged block is a repeat, not a new reading.
+    """
+
+    out = []
+    for item in readings:
+        values = item.get("values") or {}
+        sample = values.get("smc")
+        if not isinstance(sample, Mapping):
+            continue
+        stamp = sample.get("finished") or item.get("finished") or {}
+        moment = stamp.get("monotonic_ns")
+        if isinstance(moment, bool) or not isinstance(moment, int):
+            continue
+        current, why = smc_current(sample)
+        if current is None and values.get("source") == "smc" and item.get("error"):
+            why = item["error"]
+        block = tuple((sample.get("values") or {}).get(key) for key in smc.KEYS)
+        out.append({"monotonic_ns": moment, "current_ma": current, "error": why,
+                    "voltage_mv": (sample.get("values") or {}).get(SMC_VOLTAGE_KEY), "block": block})
+    out.sort(key=lambda entry: entry["monotonic_ns"])
+    previous = None
+    for entry in out:
+        if entry["current_ma"] is None:
+            entry["fresh"] = False
+            continue
+        entry["fresh"] = entry["block"] != previous
+        previous = entry["block"]
+    return out
+
+
+def smc_span_findings(readings: Sequence[Mapping[str, Any]], span: Mapping[str, Any],
+                      thresholds: Mapping[str, Any] = DEFAULT_THRESHOLDS,
+                      ) -> tuple[list[dict[str, Any]], bool]:
+    """The 200 mA rule on SMC B0AC: ``(findings, covered)``.
+
+    The good B0AC reads in force are the last at or before the span's start,
+    every one inside it and the first at or after its stop (the publication
+    rule's conservative choice).  Any with |B0AC| above ``limit_ma`` gives one
+    ``battery.member_span`` listing them.  ``covered`` is True when good,
+    fresh reads (:func:`smc_samples`: the SMC block changed since the previous
+    read, so a frozen SMC does not count as coverage) lie no more than
+    ``smc_max_gap_s`` apart across the whole span (:func:`base.coverage_gap`);
+    otherwise ``battery.smc_unavailable`` (DISCLOSE) is added and the caller
+    judges the registry current instead.
+
+    Example: limit 200 mA, span [100 s, 110 s], reads every second reading 0
+    except -865 mA at 104 s: one member_span (1 of 12 in-force reads above the
+    limit), covered.  The same span with no read between 101 s and 109 s:
+    no member_span from SMC, smc_unavailable (an 8 s gap > 5 s), not covered.
+    """
+
+    limit = thresholds["limit_ma"]
+    max_gap_ns = int(thresholds.get("smc_max_gap_s", SMC_MAX_GAP_S) * 1_000_000_000)
+    start, stop = span["monotonic_ns"]
+    samples = smc_samples(readings)
+    good = [entry for entry in samples if entry["current_ma"] is not None]
+    before = [entry for entry in good if entry["monotonic_ns"] <= start]
+    inside = [entry for entry in good if start < entry["monotonic_ns"] < stop]
+    after = [entry for entry in good if entry["monotonic_ns"] >= stop]
+    in_force = ([before[-1]] if before else []) + inside + ([after[0]] if after else [])
+    found: list[dict[str, Any]] = []
+    over = [entry for entry in in_force if abs(entry["current_ma"]) > limit]
+    if over:
+        worst = max(over, key=lambda entry: abs(entry["current_ma"]))
+        found.append(finding(
+            "battery.member_span", span=span, expected=limit,
+            observed={"source": "smc", "key": SMC_CURRENT_KEY, "over_limit": over[:8],
+                      "over_count": len(over), "in_force_count": len(in_force),
+                      "max_abs_ma": abs(worst["current_ma"])},
+            interval={"monotonic_ns": [over[0]["monotonic_ns"], over[-1]["monotonic_ns"]]},
+            detail=(f"|SMC B0AC| above {limit} mA in {len(over)} of {len(in_force)} reads in "
+                    f"force (largest {worst['current_ma']:+d} mA)")))
+    fresh = [entry for entry in good if entry["fresh"]]
+    gap = coverage_gap([entry["monotonic_ns"] for entry in fresh], start, stop, max_gap_ns)
+    if gap is not None:
+        errors = sorted({entry["error"] for entry in samples
+                         if entry["current_ma"] is None and entry["error"]})
+        if len(fresh) < len(good):
+            errors.append(f"{len(good) - len(fresh)} reads repeated the previous SMC block unchanged")
+        found.append(finding(
+            SMC_UNAVAILABLE, span=span, expected=max_gap_ns / 1e9,
+            observed={"gap_monotonic_ns": gap, "good_reads": len(good), "fresh_reads": len(fresh),
+                      "reads": len(samples), "errors": errors[:4]},
+            interval={"monotonic_ns": gap},
+            detail=(f"no good, fresh SMC B0AC read for more than {max_gap_ns / 1e9:g} s overlapping the "
+                    "span; the registry InstantAmperage/Amperage rule was applied instead"
+                    + (f" (errors: {'; '.join(errors[:2])})" if errors else ""))))
+    return found, gap is None
+
+
 def span_findings(readings: Sequence[Mapping[str, Any]], span: Mapping[str, Any],
                   thresholds: Mapping[str, Any] = DEFAULT_THRESHOLDS) -> list[dict[str, Any]]:
     """``battery.member_span``, ``battery.accumulator_activity``,
-    ``battery.accumulator_unavailable`` and ``battery.unmeasured``.
+    ``battery.accumulator_unavailable``, ``battery.unmeasured`` and
+    ``battery.smc_unavailable``.
 
     ``span`` is ``{"monotonic_ns": [start, stop], ...}`` (the member's
-    sampler stream, controller ``time.monotonic_ns``).  The publications in
-    force are the last one at or before the start, every one inside the span
-    and the first one at or after the end.  Conservative by design: it can
-    also flag a neighbouring member.
+    sampler stream, controller ``time.monotonic_ns``).  The current is judged
+    on SMC B0AC (:func:`smc_span_findings`).  The publications in force are
+    the last one at or before the start, every one inside the span and the
+    first one at or after the end; their state (ExternalConnected, IsCharging)
+    is always judged, and their InstantAmperage and Amperage only when B0AC
+    does not cover the span.  Conservative by design: it can also flag a
+    neighbouring member.
     """
 
     limits = dict(thresholds)
     start, stop = span["monotonic_ns"]
+    found, smc_covered = smc_span_findings(readings, span, limits)
     pubs = publications(readings)
     before = [p for p in pubs if p["monotonic_ns"] <= start]
     inside = [p for p in pubs if start < p["monotonic_ns"] < stop]
     after = [p for p in pubs if p["monotonic_ns"] >= stop]
     in_force = ([before[-1]] if before else []) + inside + ([after[0]] if after else [])
-    found: list[dict[str, Any]] = []
     for pub in in_force:
-        reasons = reading_reasons(pub["values"], limits, include_amperage=True)
+        reasons = reading_reasons(pub["values"], limits, include_amperage=not smc_covered,
+                                  include_instant=not smc_covered)
         if reasons:
             found.append(finding(
                 "battery.member_span", span=span, observed=_observed(pub), expected=limits,

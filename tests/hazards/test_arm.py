@@ -16,8 +16,8 @@ from unittest import mock
 from joulewise import night_gate
 from joulewise.hazards import arm, base, battery, clock, contention, thermal
 from tests.hazards.fakes import (
-    BOOT_UUID, FAKE_POWERMETRICS, INSTRUMENT, FakeClocks, FakeProcessTable, FrequencyReader, Runner,
-    battery_bytes, completed, ppm_word,
+    BOOT_UUID, FAKE_POWERMETRICS, INSTRUMENT, FakeClocks, FakeProcessTable, FakeSmc, FrequencyReader,
+    Runner, battery_bytes, completed, ppm_word,
 )
 
 GIB = 1024 ** 3
@@ -41,6 +41,8 @@ class Rig:
         self.off = (0, OFF_ALREADY)
         self.cadence_fixture = INSTRUMENT / "cadence-20261004-block3-idle.json"
         self.reader = FrequencyReader(self.clocks)
+        self.smc = FakeSmc(self.clocks)  # B0AC 0 mA unless a test sets ``current``
+        self.smc_enabled = True
         self.boot = BOOT_UUID
         self.fail: set[str] = set()
         self.t_start = self.clocks.raw_ns
@@ -122,7 +124,8 @@ class Rig:
     def run(self, **overrides) -> arm.ArmResult:
         seams = arm.Seams(ctx=base.Context(run=self.runner, clocks=self.clocks),
                           frequency_reader=self.reader, statvfs=self.statvfs, stat=self.stat,
-                          host_cpu=self.table.host_cpu)
+                          host_cpu=self.table.host_cpu,
+                          smc_read=self.smc if self.smc_enabled else None)
         with mock.patch.dict(os.environ, {"FAKE_PM_FIXTURE": str(self.cadence_fixture)}):
             return arm.run(self.config(**overrides), seams)
 
@@ -248,6 +251,39 @@ class ArmTests(unittest.TestCase):
         result = self.rig.run()
         self.assertEqual((result.decision, result.refused_at), (arm.NULL, "final"))
         self.assertTrue(result.reasons[0].startswith("battery REFUSE"))
+
+    def test_a_battery_current_burst_at_the_instant_read_refuses_before_network_time(self):
+        # B0AC -865 mA (the 10-06 probe burst) while the registry reads a clean float.
+        self.rig.smc.current = lambda t: -865
+        result = self.rig.run()
+        self.assertEqual((result.decision, result.refused_at), (arm.NULL, "instant"))
+        self.assertIn("|SMC B0AC| 865 mA > 200 mA", result.reasons[0])
+        self.assertNotIn(arm.NETWORK_TIME_OFF_ARGV, self.rig.runner.calls)
+
+    def test_a_battery_current_that_starts_during_the_dwell_refuses_at_the_final_read(self):
+        self.rig.smc.current = lambda t: -450 if t >= 300.0 else 0
+        result = self.rig.run()
+        self.assertEqual((result.decision, result.refused_at), (arm.NULL, "final"))
+        self.assertIn("|SMC B0AC| 450 mA", result.reasons[0])
+
+    def test_without_the_smc_the_arm_judges_the_registry_and_records_the_fallback(self):
+        self.rig.smc_enabled = False
+        result = self.rig.run()
+        self.assertEqual(result.decision, arm.GO, result.reasons)
+        record = json.loads(result.path.read_text())
+        for entry in record["hazards"]["battery"]:
+            observed = entry["verdict"]["observed"]
+            self.assertEqual(observed["current_source"], "registry")
+            self.assertEqual([flag["code"] for flag in observed["flags"]], [battery.SMC_UNAVAILABLE])
+
+    def test_go_records_the_smc_current_beside_the_registry_cross_check(self):
+        result = self.rig.run()
+        record = json.loads(result.path.read_text())
+        self.assertEqual([entry["phase"] for entry in record["hazards"]["battery"]], ["instant", "final"])
+        for entry in record["hazards"]["battery"]:
+            observed = entry["verdict"]["observed"]
+            self.assertEqual((observed["current_source"], observed["smc_current_ma"],
+                              observed["instant_amperage_ma"], observed["flags"]), ("smc", 0, 0, []))
 
     def test_clock_step_during_the_dwell_refuses(self):
         self.rig.clocks.step_at(500.0, 6_000_000)

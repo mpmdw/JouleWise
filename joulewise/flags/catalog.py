@@ -153,6 +153,19 @@ _DISCLOSE_CODES = {
     # applies to it).
     "battery.accumulator_activity": _code("DIAGNOSTIC", "PHYSICS", DISCLOSE),
     "battery.accumulator_unavailable": _code("DIAGNOSTIC", "PHYSICS", DISCLOSE),
+    # Lane 2026-10-06-smc-battery-meter: the battery current is judged on SMC
+    # B0AC (1 Hz); a span (or an arm read) without good B0AC reads falls back
+    # to the registry InstantAmperage and is disclosed.
+    "battery.smc_unavailable": _code("DIAGNOSTIC", "PHYSICS", DISCLOSE),
+    # The KM003C whole-machine DC-in stream (joulewise.external.km003c_parse):
+    # a recorded diagnostic, never a refusal or a claim number.
+    "meter.absent": _code("DIAGNOSTIC", "PHYSICS", DISCLOSE),
+    "meter.drops_excess": _code("DIAGNOSTIC", "PHYSICS", DISCLOSE),
+    "meter.duplicates": _code("DIAGNOSTIC", "PHYSICS", DISCLOSE),
+    "meter.clock_fit_residual": _code("DIAGNOSTIC", "PHYSICS", DISCLOSE),
+    "meter.pdtr_gain_out_of_band": _code("DIAGNOSTIC", "PHYSICS", DISCLOSE),
+    "meter.battery_activity": _code("DIAGNOSTIC", "PHYSICS", DISCLOSE),
+    "meter.vbus_out_of_contract": _code("DIAGNOSTIC", "PHYSICS", DISCLOSE),
     "g10.discharged": _code("DIAGNOSTIC", "PHYSICS", DISCLOSE),
     "g10.not_discharged": _code("DIAGNOSTIC", "PHYSICS", DISCLOSE),
     "diagnostic.s1_structural": _code("DIAGNOSTIC", "REPRESENTATION", DISCLOSE),
