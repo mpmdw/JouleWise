@@ -264,6 +264,32 @@ class HazardWindowAttachmentTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "does not match the authenticated finalized pre slot"):
                 run_window_member(self.w)
 
+    def test_a5_keeper_receipt_t1_binding_mismatch_still_refuses(self) -> None:
+        real = ledger.load_calibration_ledger_snapshot
+
+        def foreign_t1(*args, **kwargs):
+            snapshot = real(*args, **kwargs)
+            sessions = []
+            for session in snapshot.bracket_sessions:
+                pre = session.finalized_slots.get("pre")
+                if pre is not None:
+                    pre = replace(pre, t1_bindings={**pre.t1_bindings, "power_policy": "foreign"})
+                    session = replace(session, finalized_slots={**session.finalized_slots, "pre": pre})
+                sessions.append(session)
+            return replace(snapshot, bracket_sessions=tuple(sessions))
+
+        with patch.object(ledger, "load_calibration_ledger_snapshot", side_effect=foreign_t1):
+            with self.assertRaisesRegex(ValueError, "does not match the authenticated finalized pre slot"):
+                run_window_member(self.w)
+        self.assertFalse((self.w.claim / "hazard-member").exists())
+
+    def test_a5_uncommitted_pin_refuses_on_legacy_and_is_not_read_on_hazard(self) -> None:
+        with patch.object(ledger, "_committed_pin_bytes", return_value=b"another pin\n"):
+            with self.assertRaises(ValueError):
+                load_attachment(self.w, hazard=None)
+            attachment = load_attachment(self.w, hazard=self.hazard)
+        self.assertEqual(attachment.metadata["g2b_pre_slot"]["slot"], "pre")
+
     # A14 -----------------------------------------------------------------
 
     def test_a14_runtime_power_policy_unverified_collects_and_flags(self) -> None:
@@ -468,6 +494,23 @@ class EnvironmentGuardTests(_LifecycleBase):
         phases = {row.get("phase") for row in observed(flags[0])["findings"]}
         self.assertEqual(phases, {"per_run_evaluation", "before_attempt_1", "after_attempt_1"})
         self.assertEqual(self.member_flags("env.member_guard_flagged"), [])
+
+    def test_a11_failed_power_and_thermal_findings_are_guard_flags(self) -> None:
+        # Measured by the battery and thermal hazard journals: DISCLOSE here.
+        policy, binding, preflight, snapshot = campaign_policy_fixture(exploratory=False)
+        snapshot = {**snapshot, "thermal_pressure": "serious", "power_source": "Battery Power"}
+        with self.hazard():
+            bundle, summary = controller.run_benchmark(
+                make_config("hazard-a11-proxies"), self.runs_root, FakeClock(start=1_700_000_000.0),
+                registry=AdmissionIdleRegistry([False]), environment_snapshot=snapshot,
+                campaign_policy=policy, campaign_policy_binding=binding,
+                campaign_environment_preflight=preflight)
+        self.assertEqual(summary.status, RunStatus.SUCCEEDED, summary.failure_message)
+        self.assertEqual(self.member_flags("env.member_quiet_state_violated"), [])
+        flags = self.member_flags("env.member_guard_flagged")
+        self.assertEqual(len(flags), 1)
+        found = {row["code"] for row in observed(flags[0])["findings"]}
+        self.assertEqual(found, {"thermal_not_nominal", "power_source_not_ac"})
 
     def test_a11_legacy_awake_display_still_aborts(self) -> None:
         bundle, summary = self.run_awake("legacy-a11-awake")
@@ -814,6 +857,24 @@ class TeardownTests(_LifecycleBase):
         token_times = [event["timestamp_s"] for event in events if event["event_type"] == "token"]
         self.assertLessEqual(max(token_times), stops[0]["timestamp_s"])
 
+    def test_s2_02_true_stop_marker_is_stamped_before_the_tail(self) -> None:
+        stamps: list[tuple[float, float]] = []
+        real = controller._Execution._append_sampling_stopped
+
+        def capture(execution, stamp):
+            stamps.append((stamp.epoch_s, execution._clock.now()))
+            return real(execution, stamp)
+
+        with self.hazard(), patch.object(controller._Execution, "_append_sampling_stopped", capture):
+            bundle, _summary = controller.run_benchmark(
+                make_config("hazard-s202-tail"), self.runs_root, FakeClock(start=1_700_000_000.0),
+                post_window_sampling_dwell_s=3.0)
+        self.assertEqual(len(stamps), 1)
+        self.assertAlmostEqual(stamps[0][1] - stamps[0][0], 3.0)
+        events = [json.loads(line) for line in (bundle / "events.jsonl").read_text().splitlines()]
+        stops = [event for event in events if event["event_type"] == "sampling_stopped"]
+        self.assertEqual([event["timestamp_s"] for event in stops], [stamps[0][0]])
+
     def test_s2_02_legacy_stop_failure_loses_the_runtime_result(self) -> None:
         bundle, summary = self.run_stop_raises("legacy-s202")
         self.assertEqual(summary.status, RunStatus.FAILED)
@@ -894,10 +955,75 @@ class HeldStopEvidenceTests(unittest.TestCase):
             self.assertEqual(execution._samples, ["held"])
             self.assertEqual(execution._uncertainty_evidence, {"clock_anchor": {"identity": "held"}})
 
+    def test_hazard_keeps_held_samples_or_anchor_independently(self) -> None:
+        from joulewise.clock import ClockStamp
+        from types import SimpleNamespace
+
+        hazard = flags_core.HazardFlagContext(
+            writer=WRITER, custody_root=None, plan_id=None, attempt=None, scope_resolved=False)
+        anchor_only = self.execution(hazard, self.telemetry(["retry"]))
+        anchor_only._samples = []
+        anchor_only._stop_sampling_once(ClockStamp(2.0, 2.0, 2.0, 0.001, 0.001))
+        self.assertEqual(anchor_only._samples, [])
+        self.assertEqual(anchor_only._uncertainty_evidence, {"clock_anchor": {"identity": "held"}})
+        samples_only = self.execution(hazard, self.telemetry(["retry"]))
+        samples_only._uncertainty_evidence = {}
+        samples_only._stop_sampling_once(ClockStamp(2.0, 2.0, 2.0, 0.001, 0.001))
+        self.assertEqual(samples_only._samples, ["held"])
+        unbounded = self.execution(
+            hazard, SimpleNamespace(name="mock", stop_sampling=lambda *_args: ["retry"]))
+        unbounded._stop_sampling_once(ClockStamp(2.0, 2.0, 2.0, 0.001, 0.001))
+        self.assertEqual(unbounded._samples, ["held"])
+
     def test_legacy_retry_still_replaces_the_stop_evidence(self) -> None:
         execution = self.stop_again(None, ["retry"])
         self.assertEqual(execution._samples, ["retry"])
         self.assertEqual(execution._uncertainty_evidence, {})
+
+
+class CarriedSurvivorUnitTests(unittest.TestCase):
+    """s2-02 carried survivors: identity and ordering."""
+
+    def test_reused_pid_naming_another_command_is_not_carried(self) -> None:
+        from types import SimpleNamespace
+
+        with tempfile.TemporaryDirectory() as tmp:
+            hazard = flags_core.HazardFlagContext(
+                writer=WRITER, custody_root=Path(tmp), plan_id=None, attempt=None,
+                scope_resolved=False)
+            flags_core.emit(hazard, "teardown.survivors", level="member", run_id="earlier",
+                            observed={"pids": [{"pid": 55555, "argv": ["/bin/sleep", "60"]}]})
+            execution = object.__new__(controller._Execution)
+            execution._hazard = hazard
+            execution._writer = SimpleNamespace(run_id="current")
+            with patch.object(controller, "_measure_survivor_processes",
+                              return_value={55555: {"command": "/bin/other", "cpu_percent": 6.0}}):
+                execution._measure_carried_sampler_survivors()
+            self.assertEqual(len(read_flags(Path(tmp))), 1, "a reused pid is not this survivor")
+
+    def test_survivor_probe_runs_before_the_settle(self) -> None:
+        order: list[str] = []
+        real_settle = controller._Execution._settle_before_idle
+        real_probe = controller._Execution._check_carried_sampler_survivors
+
+        def settle(execution):
+            order.append("settle")
+            return real_settle(execution)
+
+        def probe(execution):
+            order.append("probe")
+            return real_probe(execution)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            context = flags_core.HazardFlagContext(
+                writer=WRITER, custody_root=Path(tmp), plan_id=None, attempt=None,
+                scope_resolved=False)
+            with patch.object(flags_core, "hazard_flag_context", return_value=context), \
+                    patch.object(controller._Execution, "_settle_before_idle", settle), \
+                    patch.object(controller._Execution, "_check_carried_sampler_survivors", probe):
+                controller.run_benchmark(make_config("hazard-probe-order"), Path(tmp) / "runs",
+                                         FakeClock(start=1_700_000_000.0))
+        self.assertEqual(order[:2], ["probe", "settle"])
 
 
 class DispatchTests(unittest.TestCase):
