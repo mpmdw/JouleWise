@@ -17,7 +17,7 @@ Runs inside the launchd job after t0, in this fixed order:
 4. **Record-only collectors** (the flag package's desk/arm collectors), each
    a child process with a timeout.  Their result never changes the decision.
 5. **Instrument cadence probe** (about 40 s).
-6. **Dwell** (600-2700 s): contention in 30 s intervals; the clock sampled at
+6. **Dwell** (180-2700 s): contention in 30 s intervals; the clock sampled at
    1 Hz for its linearity.
 7. **Final reads** of battery, thermal and the frequency word (f must equal
    its dwell value), then the **agent census again** (an agent that started

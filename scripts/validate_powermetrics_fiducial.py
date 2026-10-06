@@ -376,6 +376,7 @@ def _derive_preflight_systematic_screen_s(
     preflight_record: dict[str, Any] | None = None,
     ledger_snapshot: CalibrationLedgerSnapshot | None = None,
     allow_stale_code: bool = False,
+    allow_stale_pin: bool = False,
 ) -> Decimal:
     """Authenticate the active acceptance and derive its level comparator.
 
@@ -384,6 +385,12 @@ def _derive_preflight_systematic_screen_s(
     acceptance's ``prospective_rederivation`` is recorded in
     ``preflight_record["stale_code"]`` instead of refused, and the caller flags
     it ``code.executed_differs_from_sealed``.  Every other check stays.
+
+    ``allow_stale_pin`` is the same path (gate prune 2, P2-VPF; vpf review Sol
+    F2): continued epochs are authenticated against a snapshot whose head pin
+    lags the window's reservation (the reservation-anchored extension shape),
+    so a continued epoch is not dropped because the pin is stale.  The
+    continuation's session-row cross-check is unchanged.
     """
 
     path = (
@@ -439,6 +446,7 @@ def _derive_preflight_systematic_screen_s(
     continuation_refusals: list[dict[str, str]] = []
     judged_epochs = acceptance_judged_epochs(
         artifact, ledger_snapshot=ledger_snapshot, refusal_details=continuation_refusals,
+        **({"allow_stale_pin": True} if allow_stale_pin else {}),
     )
     record = {
         "acceptance_id": acceptance_id,
@@ -554,6 +562,7 @@ def _derivation_only_screen_basis(
     *,
     acceptance_path: Path | None = None,
     ledger_snapshot: CalibrationLedgerSnapshot | None = None,
+    allow_stale_pin: bool = False,
 ) -> tuple[Decimal, dict[str, Any]]:
     """Authenticate the active acceptance WITHOUT its identity-epoch equality.
 
@@ -576,6 +585,7 @@ def _derivation_only_screen_basis(
     level_screen_s = _derive_preflight_systematic_screen_s(
         None, acceptance_path=path, preflight_record=preflight_record,
         ledger_snapshot=ledger_snapshot,
+        **({"allow_stale_pin": True} if allow_stale_pin else {}),
     )
     artifact = load_calibration_acceptance_bound(path)
     if artifact is None:
@@ -1360,6 +1370,140 @@ def rederive_artifact(source_dir: Path, output: Path) -> dict[str, object]:
     return payload
 
 
+def _anchored_from_native_records(
+    native_records: list[Any], first_record_endpoint_s: float
+) -> list[Any]:
+    """Re-anchor already parsed records instead of parsing the plist a second time.
+
+    HAZARD_PACK path only (gate prune 2, P2-VPF S5, finding t3-10: each slot
+    parsed its 90 MB plist twice, about 4 s per slot).  The result equals
+    ``parse_powermetrics_records(data, first_record_endpoint_s=...)`` record
+    for record: that parse differs from the native one only in
+    ``timestamp_s``, which it sets to the endpoint plus the running sum of
+    ``elapsed_ns / 1e9`` over records 1..i, accumulated in the same order and
+    float arithmetic as here (``joulewise/adapters/powermetrics.py``
+    ``_parse_powermetrics_records``).  Every other field is copied.
+    """
+
+    from joulewise.adapters.powermetrics import PowermetricsRecord  # noqa: PLC0415
+    from joulewise.validation import finite_float  # noqa: PLC0415
+
+    anchor_s = finite_float(first_record_endpoint_s, "first_record_endpoint_s")
+    cumulative_elapsed_s = 0.0
+    anchored = []
+    for index, record in enumerate(native_records):
+        if index > 0:
+            cumulative_elapsed_s += record.elapsed_ns / 1_000_000_000.0
+        # Built field by field, not with dataclasses.replace: this module
+        # imports battery_float, whose consumer guard
+        # (tests/test_battery_float_consumers.py) admits no new replace site.
+        anchored.append(PowermetricsRecord(
+            timestamp_s=anchor_s + cumulative_elapsed_s,
+            elapsed_ns=record.elapsed_ns,
+            rail_power_w=dict(record.rail_power_w),
+            combined_power_w=record.combined_power_w,
+            rail_energy_mj=dict(record.rail_energy_mj),
+            thermal_pressure=record.thermal_pressure,
+            metadata=dict(record.metadata),
+        ))
+    return anchored
+
+
+class _SessionCustodyWorkerNotQuiescent(Exception):
+    """The session custody worker's teardown raised; it may still be running."""
+
+
+def _session_custody_check(
+    ledger_path: Path,
+    head_pin_path: Path,
+    *,
+    session_id: str,
+    budget_s: float,
+    deadline_epoch_s: float | None = None,
+) -> dict[str, Any]:
+    """Verify custody of this session's own finalized rows only.
+
+    HAZARD_PACK path only (gate prune 2, P2-VPF S5).  The historical custody
+    pass is skipped there (A6-R2/R3) and the harvest runs the one full pass;
+    in the window a slot re-hashes only the rows its own session already
+    finalized (the post slot: the pre capture).  The result is a record: the
+    caller flags anything but ``verified``, and the harvest's byte-for-byte
+    check of this window's captures (``calibration.capture_invalid``) is the
+    check that excludes.  Reads go through the bounded custody worker on a
+    separate allowance (``budget_s``, still inside the window's absolute
+    ``deadline_epoch_s``), so a slow or hung file times out as ``unmeasured``;
+    the caller credits the time spent back to the preparation allowance.
+
+    One outcome is not a record.  The bounded request reaps its worker in a
+    ``finally``; when that teardown itself raises (the worker could not be
+    killed and reaped inside its cleanup grace), the worker may still be
+    burning CPU, and our own CPU work must not run inside the capture.  That
+    raises ``CalibrationLedgerError(LEDGER_CUSTODY_INVALID)`` with reason
+    ``session_custody_worker_not_quiescent`` (P2-VPF review R2): a physical
+    hazard, so the slot refuses before the sampler starts.  Every
+    ``CalibrationLedgerError`` from the request is raised only after the
+    teardown in its ``finally`` returned, so those stay records.
+    """
+
+    from joulewise.calibration_ledger import bounded_custody_reasons  # noqa: PLC0415
+
+    result: dict[str, Any] = {"session_id": session_id, "status": "unmeasured",
+                              "attempt_ids": [], "reasons": []}
+    try:
+        snapshot = load_calibration_ledger_snapshot(
+            ledger_path, head_pin_path, require_committed_pin=False,
+            verify_custody=False, mode="issuing",
+        )
+        session = snapshot.bracket_session_by_id.get(session_id)
+        rows = [] if session is None else [
+            row for row in session.finalized_slots.values()
+            if row.bracket_session_id == session_id
+        ]
+        result["attempt_ids"] = sorted(row.attempt_id for row in rows)
+        if not rows:
+            result["status"] = "no_rows"
+            return result
+        deadline = CustodyDeadline(budget_s, deadline_epoch_s=deadline_epoch_s,
+                                   telemetry_stream=None)
+        deadline.ledger_head_sha256 = snapshot.head_digest
+        try:
+            reasons = bounded_custody_reasons(rows, REPO_ROOT, deadline)
+        except CalibrationLedgerError:
+            raise
+        except Exception as exc:  # noqa: BLE001 - teardown state unknown
+            raise _SessionCustodyWorkerNotQuiescent(
+                f"{type(exc).__name__}: {exc}"[:300]) from exc
+        result["reasons"] = sorted(reasons)
+        result["status"] = "mismatch" if reasons else "verified"
+    except _SessionCustodyWorkerNotQuiescent as exc:
+        raise CalibrationLedgerError(
+            RefusalCode.LEDGER_CUSTODY_INVALID,
+            context={"reason": "session_custody_worker_not_quiescent",
+                     "session_id": session_id, "detail": str(exc)},
+        ) from exc
+    except Exception as exc:  # noqa: BLE001 - a record never stops the capture
+        result["error"] = f"{type(exc).__name__}: {exc}"[:300]
+    return result
+
+
+def _credit_preparation_allowance(deadline: CustodyDeadline, spent_s: float) -> None:
+    """Give the preparation allowance back the time the session check spent.
+
+    The session custody check runs on its own allowance (P2-VPF review R1), so
+    its elapsed time must not shorten the preparation allowance that the slot
+    claim is judged against.  The absolute window deadline is never moved.
+    """
+
+    if not math.isfinite(spent_s) or spent_s <= 0:
+        return
+    extended = deadline.deadline + spent_s
+    if deadline.window_deadline is not None:
+        extended = min(extended, deadline.window_deadline)
+    if extended > deadline.deadline:
+        deadline.budget_s += extended - deadline.deadline
+        deadline.deadline = extended
+
+
 def _validate_reserved_bracket_slot(
     ledger_path: Path,
     head_pin_path: Path,
@@ -1460,6 +1604,9 @@ class _CaptureLedgerLifecycle:
         # that lags the reservation is accepted (erratum s3-reservation-stop).
         # This capture's own custody verification at finalization is unchanged.
         self.verify_historical_custody = verify_historical_custody
+        # HAZARD only: the result of the session-scoped custody check
+        # (_session_custody_check), or None when it did not run.
+        self.session_custody: dict[str, Any] | None = None
         self.ledger_path = Path(ledger_path)
         self.head_pin_path = Path(head_pin_path)
         self.attempt_id = attempt_id
@@ -1615,6 +1762,21 @@ class _CaptureLedgerLifecycle:
                 attestation_reason="automatic pre-capture ledger recovery",
             )
             _writer_stage(WriterStage.AFTER_REPAIR)
+            if not self.verify_historical_custody and self.is_bracket_session:
+                # HAZARD (gate prune 2, S5): this session's own rows only,
+                # after recovery so a row it finalized is included.
+                assert self.session_id is not None
+                session_check_started = time.monotonic()
+                try:
+                    self.session_custody = _session_custody_check(
+                        self.ledger_path, self.head_pin_path, session_id=self.session_id,
+                        budget_s=self.custody_deadline.configured_budget_s,
+                        deadline_epoch_s=self.custody_deadline.deadline_epoch_s,
+                    )
+                finally:
+                    # Its own allowance: the time is not charged to preparation.
+                    _credit_preparation_allowance(
+                        self.custody_deadline, time.monotonic() - session_check_started)
             self._begin_once()
             _writer_stage(WriterStage.CLAIM_RETURNED_BEFORE_BEGUN)
             self.begun = True
@@ -2184,6 +2346,7 @@ def main(argv: list[str] | None = None) -> int:
         try:
             _level_screen_s, basis = _derivation_only_screen_basis(
                 ledger_snapshot=preflight_snapshot,
+                **({} if hazard is None else {"allow_stale_pin": True}),
             )
         except _AcceptancePreflightError as exc:
             return emit_refusal(
@@ -2236,7 +2399,7 @@ def main(argv: list[str] | None = None) -> int:
             preflight_systematic_screen_s = _derive_preflight_systematic_screen_s(
                 planned_epoch, preflight_record=acceptance_preflight,
                 ledger_snapshot=preflight_snapshot,
-                **({} if hazard is None else {"allow_stale_code": True}),
+                **({} if hazard is None else {"allow_stale_code": True, "allow_stale_pin": True}),
             )
         except _AcceptancePreflightError as exc:
             return emit_refusal(
@@ -2334,6 +2497,21 @@ def main(argv: list[str] | None = None) -> int:
             exc.code or RefusalCode.LEDGER_MALFORMED,
             context=dict(exc.context) | {"detail": str(exc)},
             stream=sys.stderr,
+        )
+    session_custody = ledger_lifecycle.session_custody
+    if (
+        hazard is not None
+        and session_custody is not None
+        and session_custody.get("status") not in ("verified", "no_rows")
+    ):
+        flags_core.emit(
+            hazard, "calibration.writer_record_flagged", level="window",
+            observed={"kind": "session_custody_unverified", "slot": args.slot,
+                      **session_custody},
+            legacy_site="scripts/validate_powermetrics_fiducial.py:1554@e6b6a0ce",
+            legacy_code="calibration_ledger_custody_invalid",
+            detail="this bracket session's own finalized rows did not verify before the "
+                   "capture; the harvest re-verifies them byte for byte",
         )
     try:
         if args.arm_countdown_s < 0:
@@ -2662,6 +2840,9 @@ def main(argv: list[str] | None = None) -> int:
         # remain in custody, but the expensive full-resolution projection is
         # skipped and the explicit causal linkage is serialized below.
         anchored = native_records
+    elif hazard is not None:
+        # Gate prune 2 (S5): one parse per slot; the same records, re-anchored.
+        anchored = _anchored_from_native_records(native_records, point_anchor_s)
     else:
         anchored = parse_powermetrics_records(
             data, first_record_endpoint_s=point_anchor_s
