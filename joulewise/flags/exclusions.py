@@ -1,7 +1,6 @@
 """Blind exclusions: which members and windows the sealed catalog removes.
 
-Three parts, all pure functions of their arguments (no I/O, no clock reads
-except the ``emitted`` stamp of a new flag, which callers may pin):
+Two parts, both pure functions of their arguments (no I/O, no clock reads):
 
 1. :func:`compute` -- the exclusion function of plan section 3.3. It applies
    the catalog's effect to every flag, joins interval flags to member spans,
@@ -13,15 +12,18 @@ except the ``emitted`` stamp of a new flag, which callers may pin):
    duration. ``tests/flags/test_flags_exclusions.py`` proves this by passing
    inputs whose other fields raise when read.
 
-2. The physics-in-span joins of section 3.4 (:func:`battery_span_flags`,
-   :func:`thermal_span_flags`, :func:`contention_span_flags`,
-   :func:`clock_span_flags`, :func:`clock_systematic_flags`). They turn the
-   monitor's journals, normalized as documented on each function, into
-   member-level flags. The harvest (lane L5) normalizes the journals and calls
-   them; the flags they return go into ``compute`` like any other flag.
-
-3. :func:`first_claim_usable` -- a pack's analysed window is its first
+2. :func:`first_claim_usable` -- a pack's analysed window is its first
    claim-usable attempt, so attempts are never mixed.
+
+The physics-in-span joins of plan section 3.4 (monitor journals against
+member spans) have one implementation: the harvest's
+(``joulewise.b5.harvest``: ``battery_member_flags``, ``thermal_member_flags``,
+``contention_member_flags``, ``clock_member_flags``, ``clock_steps`` and the
+``clock.systematic`` rule), which reads lane L1's journals and is held equal to
+L1's own member join on L1's journal bytes. Their flags reach :func:`compute`
+like any other flag. This module once carried a second copy of those joins
+with a different interval shape that nothing on the block-5 path called; it
+was removed (fix lane fx-flags, 2026-10-06) so that the two could not drift.
 
 Input shapes for :func:`compute`
 --------------------------------
@@ -59,13 +61,11 @@ A, B, B, A drift cancellation is kept.
 
 ``spans``: ``{run_id: {"monotonic_ns": [start, stop]}}`` -- the member's
 sampler stream, from the ``start_sampling`` stamp to the stop stamp, in the
-controller's ``time.monotonic_ns()`` domain. Optional
-``"request_monotonic_ns": [start, end]`` is used by the contention join.
+controller's ``time.monotonic_ns()`` domain. Other keys are ignored.
 """
 
 from __future__ import annotations
 
-import bisect
 from collections import defaultdict
 from typing import Any, Iterable, Mapping, Sequence
 
@@ -76,25 +76,12 @@ from joulewise.flags.catalog import (
     UNCLASSIFIED,
     Catalog,
 )
-from joulewise.flags.schema import (
-    canonical_json_bytes,
-    make_flag,
-    make_interval,
-    make_scope,
-    make_source,
-)
+from joulewise.flags.schema import canonical_json_bytes
 
 EXCLUSIONS_SCHEMA = "joulewise.exclusions.v1"
-BATTERY_LIMIT_MA = 200
-BATTERY_MAX_GAP_S = 120.0
-THERMAL_MAX_GAP_S = 15.0
-CONTENTION_LIMIT_CPU_S_PER_S = 0.05
-CONTENTION_EXCLUDED_IN_WINDOW = ("kernel_task",)
-CLOCK_SYSTEMATIC_MINIMUM_N = 5
 # Every target cell has a quad stratum (floors: repeats and quads; GAMMA
 # contrasts: quads only). A roster cell may declare its full set in "strata".
 REQUIRED_STRATA = ("quad",)
-_NS = 1_000_000_000
 
 
 class ExclusionInputError(ValueError):
@@ -403,440 +390,3 @@ def first_claim_usable(attempts: Sequence[Mapping[str, Any]]) -> Any:
             return None
         return attempt["attempt"]
     return None
-
-
-# --------------------------------------------------------------------------
-# Physics in span (plan section 3.4)
-# --------------------------------------------------------------------------
-
-
-def _member_flag(
-    code: str,
-    family: str,
-    run_id: str,
-    span: tuple[int, int],
-    observed: Any,
-    expected: Any,
-    detail: str,
-    collector: str,
-    context: Mapping[str, Any] | None,
-    span_entry: Mapping[str, Any],
-    emitted: Mapping[str, Any] | None,
-    level: str = "member",
-) -> dict[str, Any]:
-    context = context or {}
-    return make_flag(
-        code=code,
-        family=family,
-        klass="PHYSICS",
-        scope=make_scope(
-            level,
-            plan_id=context.get("plan_id"),
-            attempt=context.get("attempt"),
-            stage_id=span_entry.get("stage_id"),
-            run_id=run_id if level == "member" else None,
-            bundle_id=span_entry.get("bundle_id"),
-        ),
-        source=make_source("harvest", f"joulewise.flags.exclusions.{collector}"),
-        observed=observed,
-        expected=expected,
-        detail=detail,
-        interval=make_interval(monotonic_ns=span),
-        catalog_sha256=context.get("catalog_sha256"),
-        emitted=emitted,
-    )
-
-
-def _in_force(times: Sequence[int], span: tuple[int, int]) -> tuple[list[int], bool]:
-    """Indices of the in-force readings for ``span`` and whether both ends are covered.
-
-    In force: the last reading at or before the start, every reading inside,
-    and the first reading at or after the end.
-    """
-
-    start, stop = span
-    first_after_start = bisect.bisect_right(times, start)
-    last_before_stop = bisect.bisect_left(times, stop)
-    chosen: list[int] = []
-    if first_after_start > 0:
-        chosen.append(first_after_start - 1)
-    chosen.extend(range(first_after_start, last_before_stop))
-    covered_after = last_before_stop < len(times)
-    if covered_after:
-        chosen.append(last_before_stop)
-    return sorted(set(chosen)), first_after_start > 0 and covered_after
-
-
-def _max_gap_exceeded(times: Sequence[int], chosen: Sequence[int], limit_ns: int) -> bool:
-    return any(times[b] - times[a] > limit_ns for a, b in zip(chosen, chosen[1:]))
-
-
-def _span_items(spans: Mapping[str, Mapping[str, Any]]) -> list[tuple[str, tuple[int, int], Mapping[str, Any]]]:
-    items = []
-    for run_id in sorted(spans):
-        entry = spans[run_id]
-        span = _pair(entry.get("monotonic_ns"))
-        if span is not None:
-            items.append((run_id, span, entry))
-    return items
-
-
-def battery_span_flags(
-    publications: Sequence[Mapping[str, Any]],
-    spans: Mapping[str, Mapping[str, Any]],
-    *,
-    limit_ma: int = BATTERY_LIMIT_MA,
-    max_gap_s: float = BATTERY_MAX_GAP_S,
-    accumulator: Mapping[str, Any] | None = None,
-    context: Mapping[str, Any] | None = None,
-    emitted: Mapping[str, Any] | None = None,
-) -> list[dict[str, Any]]:
-    """``battery.member_span``, ``battery.unmeasured`` and the accumulator rule.
-
-    ``publications``: one entry per gauge publication (a change of the
-    battery's ``UpdateTime``), each ``{"monotonic_ns": int,
-    "instant_amperage_ma": int | None, "amperage_ma": int | None,
-    "is_charging": bool | None, "external_connected": bool | None,
-    "voltage_mv": int | None, "accumulated_battery_power": number | None,
-    "battery_power_accumulator_count": int | None}``. ``monotonic_ns`` is when
-    the publication took effect in the controller's clock domain.
-
-    A member is flagged ``battery.member_span`` if any in-force publication
-    has ``|InstantAmperage| > limit``, ``|Amperage| > limit``, ``IsCharging``
-    true or ``ExternalConnected`` false. A missing field in an in-force
-    publication, a missing publication before the start or after the end, or
-    a gap of more than ``max_gap_s`` between in-force publications flags
-    ``battery.unmeasured``.
-
-    ``accumulator`` enables the accumulator rule only once lane L1 has
-    confirmed the units: ``{"scale_w_per_unit": float, "voltage_v": float}``.
-    For each pair of consecutive in-force publications the mean battery power
-    over the nonzero seconds is ``(delta AccumulatedBatteryPower x scale) /
-    delta BatteryPowerAccumulatorCount``; above ``limit_ma x V`` it flags
-    ``battery.accumulator_excursion``. Without it the rule is not evaluated.
-    """
-
-    ordered = sorted(publications, key=lambda item: int(item["monotonic_ns"]))
-    times = [int(item["monotonic_ns"]) for item in ordered]
-    limit_ns = int(max_gap_s * _NS)
-    out: list[dict[str, Any]] = []
-    for run_id, span, entry in _span_items(spans):
-        chosen, covered = _in_force(times, span)
-        violations = []
-        missing_fields = False
-        for index in chosen:
-            pub = ordered[index]
-            inst = pub.get("instant_amperage_ma")
-            avg = pub.get("amperage_ma")
-            charging = pub.get("is_charging")
-            external = pub.get("external_connected")
-            if inst is None or avg is None or charging is None or external is None:
-                missing_fields = True
-            reasons = []
-            if inst is not None and abs(inst) > limit_ma:
-                reasons.append("instant_amperage")
-            if avg is not None and abs(avg) > limit_ma:
-                reasons.append("amperage")
-            if charging is True:
-                reasons.append("is_charging")
-            if external is False:
-                reasons.append("external_disconnected")
-            if reasons:
-                violations.append(
-                    {
-                        "monotonic_ns": times[index],
-                        "instant_amperage_ma": inst,
-                        "amperage_ma": avg,
-                        "is_charging": charging,
-                        "external_connected": external,
-                        "reasons": reasons,
-                    }
-                )
-        if violations:
-            out.append(
-                _member_flag(
-                    "battery.member_span", "PHYSICS_IN_SPAN", run_id, span,
-                    {"violations": violations}, {"abs_ma_max": limit_ma,
-                     "is_charging": False, "external_connected": True},
-                    f"{len(violations)} in-force battery publication(s) out of float",
-                    "battery_span_flags", context, entry, emitted,
-                )
-            )
-        gap = _max_gap_exceeded(times, chosen, limit_ns)
-        if not covered or gap or missing_fields:
-            out.append(
-                _member_flag(
-                    "battery.unmeasured", "PHYSICS_IN_SPAN", run_id, span,
-                    {"publications_in_force": len(chosen), "ends_covered": covered,
-                     "gap_exceeded": gap, "missing_fields": missing_fields},
-                    {"max_gap_s": max_gap_s},
-                    "battery publications do not cover the member span",
-                    "battery_span_flags", context, entry, emitted,
-                )
-            )
-        if accumulator is not None:
-            scale = float(accumulator["scale_w_per_unit"])
-            excursions = []
-            for a, b in zip(chosen, chosen[1:]):
-                first, second = ordered[a], ordered[b]
-                c0 = first.get("battery_power_accumulator_count")
-                c1 = second.get("battery_power_accumulator_count")
-                p0 = first.get("accumulated_battery_power")
-                p1 = second.get("accumulated_battery_power")
-                if None in (c0, c1, p0, p1) or c1 <= c0:
-                    continue
-                volts = (
-                    second.get("voltage_mv") / 1000.0
-                    if second.get("voltage_mv") is not None
-                    else float(accumulator["voltage_v"])
-                )
-                mean_w = abs(p1 - p0) * scale / (c1 - c0)
-                threshold_w = limit_ma / 1000.0 * volts
-                if mean_w > threshold_w:
-                    excursions.append(
-                        {"interval_monotonic_ns": [times[a], times[b]],
-                         "mean_w": mean_w, "threshold_w": threshold_w,
-                         "nonzero_seconds": c1 - c0}
-                    )
-            if excursions:
-                out.append(
-                    _member_flag(
-                        "battery.accumulator_excursion", "PHYSICS_IN_SPAN", run_id, span,
-                        {"excursions": excursions}, {"abs_ma_max": limit_ma},
-                        "battery accumulator implies a mean power above the float limit",
-                        "battery_span_flags", context, entry, emitted,
-                    )
-                )
-    return out
-
-
-def thermal_span_flags(
-    samples: Sequence[Mapping[str, Any]],
-    spans: Mapping[str, Mapping[str, Any]],
-    *,
-    max_gap_s: float = THERMAL_MAX_GAP_S,
-    context: Mapping[str, Any] | None = None,
-    emitted: Mapping[str, Any] | None = None,
-) -> list[dict[str, Any]]:
-    """``thermal.os_level_nonzero`` and ``thermal.unmeasured``.
-
-    ``samples``: ``{"monotonic_ns": int, "level": int | None}`` from the
-    monitor's 5 s reads of ``com.apple.system.thermalpressurelevel``; ``None``
-    means the probe failed. A member is flagged when any in-force sample (the
-    last at or before the start, every one inside, the first at or after the
-    end) is nonzero. Failed probes in force, an uncovered end, or a gap above
-    ``max_gap_s`` flag ``thermal.unmeasured``.
-    """
-
-    ordered = sorted(samples, key=lambda item: int(item["monotonic_ns"]))
-    times = [int(item["monotonic_ns"]) for item in ordered]
-    limit_ns = int(max_gap_s * _NS)
-    out: list[dict[str, Any]] = []
-    for run_id, span, entry in _span_items(spans):
-        chosen, covered = _in_force(times, span)
-        levels = [(times[i], ordered[i].get("level")) for i in chosen]
-        nonzero = [{"monotonic_ns": t, "level": level} for t, level in levels if level not in (0, None)]
-        failed = any(level is None for _, level in levels)
-        if nonzero:
-            out.append(
-                _member_flag(
-                    "thermal.os_level_nonzero", "PHYSICS_IN_SPAN", run_id, span,
-                    {"samples": nonzero}, {"level": 0},
-                    "OS thermal pressure level nonzero in the member span",
-                    "thermal_span_flags", context, entry, emitted,
-                )
-            )
-        gap = _max_gap_exceeded(times, chosen, limit_ns)
-        if not covered or gap or failed:
-            out.append(
-                _member_flag(
-                    "thermal.unmeasured", "DIAGNOSTIC", run_id, span,
-                    {"samples_in_force": len(chosen), "ends_covered": covered,
-                     "gap_exceeded": gap, "probe_failed": failed},
-                    {"max_gap_s": max_gap_s},
-                    "thermal samples do not cover the member span",
-                    "thermal_span_flags", context, entry, emitted,
-                )
-            )
-    return out
-
-
-def contention_span_flags(
-    intervals: Sequence[Mapping[str, Any]],
-    spans: Mapping[str, Mapping[str, Any]],
-    *,
-    limit_cpu_s_per_s: float = CONTENTION_LIMIT_CPU_S_PER_S,
-    excluded_comms: Iterable[str] = CONTENTION_EXCLUDED_IN_WINDOW,
-    context: Mapping[str, Any] | None = None,
-    emitted: Mapping[str, Any] | None = None,
-) -> list[dict[str, Any]]:
-    """``contention.request_overlap``, ``contention.unmeasured`` and the kernel_task share.
-
-    ``intervals``: one per pair of ``ps`` snapshots, ``{"monotonic_ns": [a, b],
-    "processes": [{"pid": int, "comm": str, "cpu_s_per_s": float,
-    "outside": bool}]}``. ``cpu_s_per_s`` is the difference of cumulative CPU
-    time over the interval divided by its length. ``outside`` is false for
-    the measurement tree (driver, chain process group, sudo and powermetrics,
-    caffeinate, the monitor); it defaults to true.
-
-    The member's request span is ``spans[run_id]["request_monotonic_ns"]``,
-    falling back to the sampler span. An outside process above the limit in
-    an interval that overlaps the request flags the member. ``kernel_task``
-    is excluded in window (its time during a request is the workload's own
-    driver and I/O work); its largest share is disclosed. Any part of the
-    request no interval covers flags ``contention.unmeasured``.
-    """
-
-    excluded = set(excluded_comms)
-    ordered = []
-    for item in intervals:
-        pair = _pair(item.get("monotonic_ns"))
-        if pair is not None:
-            ordered.append((pair, item.get("processes") or []))
-    ordered.sort(key=lambda entry: entry[0])
-    out: list[dict[str, Any]] = []
-    for run_id, span, entry in _span_items(spans):
-        request = _pair(entry.get("request_monotonic_ns")) or span
-        overlapping = [(pair, procs) for pair, procs in ordered if _overlaps(pair, request)]
-        offenders: dict[tuple[int, str], float] = {}
-        kernel_share = None
-        for _pair_value, procs in overlapping:
-            for proc in procs:
-                comm = str(proc.get("comm"))
-                cpu = float(proc.get("cpu_s_per_s") or 0.0)
-                if comm in excluded:
-                    kernel_share = cpu if kernel_share is None else max(kernel_share, cpu)
-                    continue
-                if proc.get("outside", True) is False:
-                    continue
-                if cpu > limit_cpu_s_per_s:
-                    key = (int(proc.get("pid") or 0), comm)
-                    offenders[key] = max(offenders.get(key, 0.0), cpu)
-        if offenders:
-            top = sorted(offenders.items(), key=lambda kv: (-kv[1], kv[0]))[:10]
-            out.append(
-                _member_flag(
-                    "contention.request_overlap", "PHYSICS_IN_SPAN", run_id, request,
-                    {"offenders": [{"pid": pid, "comm": comm, "cpu_s_per_s": cpu}
-                                   for (pid, comm), cpu in top]},
-                    {"cpu_s_per_s_max": limit_cpu_s_per_s},
-                    f"{len(offenders)} outside process(es) above the contention limit",
-                    "contention_span_flags", context, entry, emitted,
-                )
-            )
-        # Coverage of the request by the union of overlapping intervals.
-        cursor = request[0]
-        for pair, _procs in overlapping:
-            if pair[0] > cursor:
-                break
-            cursor = max(cursor, pair[1])
-        if cursor < request[1] or not overlapping:
-            out.append(
-                _member_flag(
-                    "contention.unmeasured", "PHYSICS_IN_SPAN", run_id, request,
-                    {"covered_until_monotonic_ns": cursor, "intervals": len(overlapping)},
-                    {"covered_until_monotonic_ns": request[1]},
-                    "ps intervals do not cover the member request",
-                    "contention_span_flags", context, entry, emitted,
-                )
-            )
-        if kernel_share is not None:
-            out.append(
-                _member_flag(
-                    "contention.kernel_task_share", "DIAGNOSTIC", run_id, request,
-                    {"kernel_task_cpu_s_per_s_max": kernel_share}, None,
-                    "kernel_task CPU share during the request (disclosed)",
-                    "contention_span_flags", context, entry, emitted,
-                )
-            )
-    return out
-
-
-def _step_interval(step: Mapping[str, Any]) -> tuple[int, int] | None:
-    value = step.get("monotonic_ns")
-    if isinstance(value, int) and not isinstance(value, bool):
-        return value, value
-    return _pair(value)
-
-
-def clock_span_flags(
-    steps: Sequence[Mapping[str, Any]],
-    spans: Mapping[str, Mapping[str, Any]],
-    *,
-    calibration_spans: Mapping[str, Sequence[int]] | None = None,
-    context: Mapping[str, Any] | None = None,
-    emitted: Mapping[str, Any] | None = None,
-) -> list[dict[str, Any]]:
-    """``clock.step_overlap`` (member) and ``clock.step_overlap_calibration`` (window).
-
-    ``steps``: the monitor's ``clock.step`` events, each ``{"monotonic_ns":
-    [t_before, t_after]}`` (the two 1 Hz samples between which the residual
-    moved more than 1 ms) or a single ``int``. ``calibration_spans`` maps a
-    capture name (``pre``/``post``) to its ``[start, stop]``.
-    """
-
-    intervals = sorted(i for i in (_step_interval(step) for step in steps) if i is not None)
-    out: list[dict[str, Any]] = []
-    for run_id, span, entry in _span_items(spans):
-        hits = [list(i) for i in intervals if _overlaps(i, span)]
-        if hits:
-            out.append(
-                _member_flag(
-                    "clock.step_overlap", "PHYSICS_IN_SPAN", run_id, span,
-                    {"steps_monotonic_ns": hits}, {"steps": 0},
-                    "a clock step falls inside the member span",
-                    "clock_span_flags", context, entry, emitted,
-                )
-            )
-    for name in sorted(calibration_spans or {}):
-        span = _pair(list((calibration_spans or {})[name]))
-        if span is None:
-            continue
-        hits = [list(i) for i in intervals if _overlaps(i, span)]
-        if hits:
-            out.append(
-                _member_flag(
-                    "clock.step_overlap_calibration", "CLOCK_SYSTEMATIC", name, span,
-                    {"capture": name, "steps_monotonic_ns": hits}, {"steps": 0},
-                    f"a clock step falls inside the {name} calibration capture",
-                    "clock_span_flags", context, {"stage_id": name}, emitted,
-                    level="window",
-                )
-            )
-    return out
-
-
-def clock_systematic_flags(
-    anchor_statuses: Mapping[str, Any],
-    *,
-    minimum_n: int = CLOCK_SYSTEMATIC_MINIMUM_N,
-    context: Mapping[str, Any] | None = None,
-    emitted: Mapping[str, Any] | None = None,
-) -> list[dict[str, Any]]:
-    """``clock.systematic``: more than half of at least ``minimum_n`` recorded anchors not ``bounded``.
-
-    ``anchor_statuses`` maps run_id to the recorded per-member anchor status
-    (``None`` when not recorded). The per-member anchor bound itself stays
-    authoritative and is its own member exclusion (``member.anchor_not_bounded``).
-    """
-
-    recorded = {run_id: status for run_id, status in anchor_statuses.items() if status is not None}
-    not_bounded = sorted(run_id for run_id, status in recorded.items() if status != "bounded")
-    n = len(recorded)
-    if n < minimum_n or len(not_bounded) * 2 <= n:
-        return []
-    context = context or {}
-    return [
-        make_flag(
-            code="clock.systematic",
-            family="CLOCK_SYSTEMATIC",
-            klass="NUMBER",
-            scope=make_scope("window", plan_id=context.get("plan_id"), attempt=context.get("attempt")),
-            source=make_source("harvest", "joulewise.flags.exclusions.clock_systematic_flags"),
-            observed={"recorded": n, "not_bounded": len(not_bounded), "run_ids": not_bounded},
-            expected={"not_bounded_at_most_half_of": n, "minimum_n": minimum_n},
-            detail=f"{len(not_bounded)} of {n} recorded anchors not bounded",
-            catalog_sha256=context.get("catalog_sha256"),
-            emitted=emitted,
-        )
-    ]

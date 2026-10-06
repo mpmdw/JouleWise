@@ -52,6 +52,7 @@ EXPECTED_ROWS = 1674
 
 T_COLLECT = "tests/flags/test_flags_collect.py"
 T_EXCL = "tests/flags/test_flags_exclusions.py"
+T_HARV = "tests/test_harvest_b5_window.py"
 
 # Test files owned by other lanes that do not exist in this lane's tree.
 PENDING_LANE_TESTS = {
@@ -186,16 +187,20 @@ EQUIV = {
                   "tests/test_g10_clock_step_control.py"),
     "process_group": _equiv(None, "scripts/run_night.py:_terminate_process_group", "window", "@index"),
     "harvest_custody": _equiv(None, "joulewise/b5/harvest.py", "harvest", "tests/test_harvest_b5_window.py"),
-    "battery": _equiv("battery.member_span", "joulewise/flags/exclusions.py:battery_span_flags", "harvest",
-                      f"{T_EXCL}::BatterySpanTests::test_in_force_publication_out_of_float_flags_member"),
-    "thermal": _equiv("thermal.os_level_nonzero", "joulewise/flags/exclusions.py:thermal_span_flags", "harvest",
-                      f"{T_EXCL}::ThermalSpanTests::test_nonzero_level_in_span_flags_member"),
-    "contention": _equiv("contention.request_overlap", "joulewise/flags/exclusions.py:contention_span_flags",
-                         "harvest", f"{T_EXCL}::ContentionSpanTests::test_outside_process_over_limit_flags_member"),
-    "clock": _equiv("clock.step_overlap", "joulewise/flags/exclusions.py:clock_span_flags", "harvest",
-                    f"{T_EXCL}::ClockSpanTests::test_step_inside_span_flags_member"),
-    "clock_systematic": _equiv("clock.systematic", "joulewise/flags/exclusions.py:clock_systematic_flags",
-                               "harvest", f"{T_EXCL}::ClockSpanTests::test_clock_systematic_needs_majority_of_five"),
+    # Physics in span: the harvest's joins are the only implementation (fx-flags 2026-10-06).
+    "battery": _equiv("battery.member_span", "joulewise/b5/harvest.py:battery_member_flags", "harvest",
+                      f"{T_HARV}::JoinTests::test_publication_before_the_span_is_in_force"),
+    "thermal": _equiv("thermal.os_level_nonzero", "joulewise/b5/harvest.py:thermal_member_flags", "harvest",
+                      f"{T_HARV}::JoinTests::test_thermal_nonzero_and_unmeasured"),
+    "contention": _equiv("contention.request_overlap", "joulewise/b5/harvest.py:contention_member_flags",
+                         "harvest",
+                         f"{T_HARV}::JoinTests::test_contention_counts_only_outside_processes_above_five_percent"),
+    "clock": _equiv("clock.step_overlap", "joulewise/b5/harvest.py:clock_steps", "harvest",
+                    f"{T_HARV}::CollectedWindowTests::test_physics_in_span_thermal_contention_and_clock_step"),
+    "clock_systematic": _equiv("clock.systematic", "joulewise/b5/harvest.py:_Harvest.clock_systematic",
+                               "harvest",
+                               f"{T_HARV}::CollectedWindowTests::"
+                               "test_clock_systematic_fires_when_most_recorded_anchors_are_not_bounded"),
     "cell": _equiv("cell.below_minimum", "joulewise/flags/exclusions.py:compute", "harvest",
                    f"{T_EXCL}::CellMinimumTests::test_three_lost_quads_put_cell_below_minimum"),
     "disk": _equiv("disk.low", "joulewise/hazards/disk.py", "window", "tests/hazards"),

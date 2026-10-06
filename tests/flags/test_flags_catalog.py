@@ -93,23 +93,34 @@ class CatalogTests(unittest.TestCase):
             self.skipTest("sealed catalog not in this tree yet (lane L6)")
         catalog = load_catalog(sealed)
         self.assertEqual(missing_codes(catalog, EMITTED_BY_THIS_LANE), [])
+        self.assertEqual(missing_codes(catalog, EMITTED_BY_THE_SPAN_JOINS), [])
         self.assertEqual(catalog.effect("cell.below_minimum"), EXCLUDE_WINDOW)
 
     def test_draft_classifies_every_code_this_lane_emits(self) -> None:
         self.assertEqual(missing_codes(draft_catalog(), EMITTED_BY_THIS_LANE), [])
+        self.assertEqual(missing_codes(draft_catalog(), EMITTED_BY_THE_SPAN_JOINS), [])
         # These two stay unclassified on purpose: they always block release.
         self.assertEqual(missing_codes(draft_catalog(), NEVER_CLASSIFIED_CODES), sorted(NEVER_CLASSIFIED_CODES))
 
 
-# Codes that joulewise.flags.collect and joulewise.flags.exclusions can emit.
+# Codes that joulewise.flags.collect and joulewise.flags.exclusions.compute can emit.
 EMITTED_BY_THIS_LANE = (
     "pack.identity_mismatch", "code.executed_differs_from_sealed", "model.identity_mismatch",
-    "model.identity_unpinned", "calibration.ledger_not_ready", "battery.member_span",
-    "battery.unmeasured", "battery.accumulator_excursion", "thermal.os_level_nonzero",
-    "thermal.unmeasured", "contention.request_overlap", "contention.unmeasured",
-    "contention.kernel_task_share", "clock.step_overlap", "clock.step_overlap_calibration",
-    "clock.systematic", "pack.identity_unmeasured", "code.identity_unmeasured", "model.identity_unmeasured",
-    "calibration.ledger_readiness_unmeasured", "records.checkout_untracked", *DERIVED_CODES,
+    "model.identity_unpinned", "calibration.ledger_not_ready", "pack.identity_unmeasured",
+    "code.identity_unmeasured", "model.identity_unmeasured", "calibration.ledger_readiness_unmeasured",
+    "records.checkout_untracked", *DERIVED_CODES,
+)
+
+# Physics-in-span codes the harvest's joins (joulewise.b5.harvest) and lane
+# L1's monitor join emit; their flags reach exclusions.compute, so the draft
+# must classify every one. (L4's own copy of these joins was removed by fix
+# lane fx-flags, 2026-10-06; the harvest's are the only implementation.)
+EMITTED_BY_THE_SPAN_JOINS = (
+    "battery.member_span", "battery.unmeasured", "battery.accumulator_excursion",
+    "battery.accumulator_diagnostic", "battery.accumulator_activity", "battery.accumulator_unavailable",
+    "thermal.os_level_nonzero", "thermal.unmeasured", "contention.request_overlap", "contention.unmeasured",
+    "contention.kernel_task_share", "clock.step_overlap", "clock.step_overlap_calibration", "clock.unmeasured",
+    "clock.systematic",
 )
 
 

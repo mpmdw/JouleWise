@@ -29,7 +29,7 @@ def sample_flag(**overrides):
         family="PHYSICS_IN_SPAN",
         klass="PHYSICS",
         scope=make_scope("member", plan_id="plan-a", attempt=1, stage_id="s1", run_id="r01"),
-        source=make_source("harvest", "joulewise.flags.exclusions.battery_span_flags"),
+        source=make_source("harvest", "joulewise.b5.harvest.battery_member_flags"),
         observed={"violations": [{"instant_amperage_ma": -447}]},
         expected={"abs_ma_max": 200},
         evidence=[{"path": "hazards/monitor/battery.jsonl", "sha256": "a" * 64}],
