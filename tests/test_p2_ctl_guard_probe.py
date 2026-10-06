@@ -130,7 +130,7 @@ class SpawnSeamThreadTests(unittest.TestCase):
         with patch("joulewise.sampler_teardown.subprocess.Popen",
                    side_effect=[helper_process, sampler_process]), \
                 patch("joulewise.sampler_teardown.os.setpgid"):
-            with custodian.intercept_popen():
+            with custodian.intercept_popen(owner_thread_only=True):
                 helper = threading.Thread(target=lambda: returned.append(
                     subprocess.Popen(["/usr/bin/powermetrics", "-o", "elsewhere"])))
                 helper.start()
@@ -140,6 +140,124 @@ class SpawnSeamThreadTests(unittest.TestCase):
                 subprocess.Popen(["/usr/bin/powermetrics", "-o", "capture"])
         self.assertTrue(custodian.spawned)
         self.assertEqual(custodian._direct_child_pid, 302)
+
+    def test_legacy_seam_still_adopts_a_sampler_spawn_from_another_thread(self) -> None:
+        # Review F1: the thread filter is HAZARD-only; the default seam keeps
+        # the base behaviour (first sampler spawn from any thread is adopted).
+        custodian = SamplerTeardown(termination_grace_s=0.0, census_timeout_s=0.0)
+        with patch("joulewise.sampler_teardown.subprocess.Popen",
+                   return_value=FakeProcess(302)), \
+                patch("joulewise.sampler_teardown.os.setpgid"):
+            with custodian.intercept_popen():
+                helper = threading.Thread(
+                    target=lambda: subprocess.Popen(["/usr/bin/powermetrics", "-o", "capture"]))
+                helper.start()
+                helper.join()
+        self.assertTrue(custodian.spawned)
+        self.assertEqual(custodian._direct_child_pid, 302)
+
+
+class GuardProbeSafetyTests(unittest.TestCase):
+    """Review F2/F5: the probe's work ends before idle and before a failed
+    member returns; its error cannot become success; legacy has no helper."""
+
+    def fixture(self) -> GuardProbeDuringSamplerStartTests:
+        case = GuardProbeDuringSamplerStartTests()
+        case.setUp()
+        self.addCleanup(case.doCleanups)
+        return case
+
+    def test_probe_finishes_before_the_idle_capture(self) -> None:
+        case = self.fixture()
+        started, entered_idle, done = threading.Event(), threading.Event(), threading.Event()
+        original_init = controller._GuardProbe.__init__
+        original_start = controller._Execution._start_telemetry_with_parent_adoption
+        original_measure = controller._Execution._measure_idle_admission_attempt
+
+        def init(probe, collect):
+            def delayed():
+                started.wait(10)
+                entered_idle.wait(0.5)
+                result = collect()
+                done.set()
+                return result
+            original_init(probe, delayed)
+
+        def start(execution, *args, **kwargs):
+            result = original_start(execution, *args, **kwargs)
+            started.set()
+            return result
+
+        def measure(execution, *args, **kwargs):
+            completed = done.is_set()
+            entered_idle.set()
+            if not completed:
+                raise AssertionError("guard probe still running when idle starts")
+            return original_measure(execution, *args, **kwargs)
+
+        with patch.object(flags_core, "hazard_flag_context", return_value=case.context), \
+                patch.object(controller._GuardProbe, "__init__", init), \
+                patch.object(controller._Execution, "_start_telemetry_with_parent_adoption", start), \
+                patch.object(controller._Execution, "_measure_idle_admission_attempt", measure):
+            _bundle, summary, _calls = case.run_member("probe-before-idle")
+        self.assertEqual(summary.status, RunStatus.SUCCEEDED, summary.failure_message)
+
+    def test_a_probe_error_fails_the_member(self) -> None:
+        case = self.fixture()
+        original = controller._Execution._guard_observation_payload
+
+        def payload(execution):
+            if threading.current_thread().name == "joulewise-guard-probe":
+                raise RuntimeError("synthetic probe failure")
+            return original(execution)
+
+        with patch.object(flags_core, "hazard_flag_context", return_value=case.context), \
+                patch.object(controller._Execution, "_guard_observation_payload", payload):
+            _bundle, summary, _calls = case.run_member("probe-error")
+        self.assertEqual(summary.status, RunStatus.FAILED)
+        self.assertIn("synthetic probe failure", summary.failure_message)
+
+    def test_legacy_runs_no_helper_probe(self) -> None:
+        case = self.fixture()
+        _bundle, summary, calls = case.run_member("legacy-no-helper")
+        self.assertEqual(summary.status, RunStatus.SUCCEEDED, summary.failure_message)
+        self.assertTrue(calls)
+        self.assertTrue(all(not call["helper_thread"] for call in calls), calls)
+
+    def test_a_failed_sampler_start_waits_for_the_probe(self) -> None:
+        case = self.fixture()
+        ready, release, done = threading.Event(), threading.Event(), threading.Event()
+        original_payload = controller._Execution._guard_observation_payload
+
+        def payload(execution):
+            if threading.current_thread().name == "joulewise-guard-probe":
+                ready.set()
+                release.wait(30)
+                try:
+                    return original_payload(execution)
+                finally:
+                    done.set()
+            return original_payload(execution)
+
+        def start(execution, *args, **kwargs):
+            ready.wait(10)
+            # Let the probe finish shortly after the failure is raised: the
+            # member must still be inside run_benchmark when that happens.
+            threading.Timer(0.3, release.set).start()
+            raise RuntimeError("synthetic sampler start failure")
+
+        try:
+            with patch.object(flags_core, "hazard_flag_context", return_value=case.context), \
+                    patch.object(controller._Execution, "_guard_observation_payload", payload), \
+                    patch.object(controller._Execution, "_start_telemetry_with_parent_adoption", start):
+                _bundle, summary, _calls = case.run_member("failed-sampler-start")
+            self.assertEqual(summary.status, RunStatus.FAILED)
+            self.assertIn("synthetic sampler start failure", summary.failure_message)
+            self.assertTrue(done.is_set(), "guard probe outlived the failed member")
+        finally:
+            release.set()
+            done.wait(10)
+
 
 if __name__ == "__main__":
     unittest.main()

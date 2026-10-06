@@ -218,6 +218,13 @@ class WindowVerdictRoutingTests(_WindowCase):
         attachment, stub = self.attach(hazard=self.hazard)
         self.assertEqual((stub.calls, attachment.refit_cache_miss["reason"]), (1, "verdict_malformed"))
 
+    def test_an_out_of_range_integer_bound_is_a_miss_not_a_refusal(self) -> None:
+        # Review F6: float(10**400) raises OverflowError; it must be a miss.
+        write_verdict(self.w.capture, effective_b_fiducial_s=10**400)
+        attachment, stub = self.attach(hazard=self.hazard)
+        self.assertEqual(stub.calls, 1)
+        self.assertEqual(attachment.refit_cache_miss, {"reason": "verdict_bound_invalid"})
+
     def test_hit_uses_the_verdict_bound_and_seeds_it(self) -> None:
         write_verdict(self.w.capture)
         attachment, stub = self.attach(hazard=self.hazard)
@@ -234,6 +241,44 @@ class WindowVerdictRoutingTests(_WindowCase):
         self.assertEqual(stub.calls, 1, "the legacy path always refits")
         self.assertIsNone(getattr(attachment, "physics_seed", None))
         self.assertIsNone(getattr(attachment, "sources", None))
+
+
+class SeededReduceCustodyTests(unittest.TestCase):
+    """Review F4: the member's seed has the shape {evidence sha256: bound}.
+    On a calibrated bundle, a populated seed still lets every installed
+    calibration file's hash check refuse a changed byte (the mock-telemetry
+    member fixtures never reach this verification)."""
+
+    def test_a_seeded_cache_still_checks_each_installed_file(self) -> None:
+        from joulewise import reduce as reducer
+        from joulewise.bundle_read import BundleReader
+        from tests.test_reduce import D078R01RegressionTests
+
+        helper = D078R01RegressionTests()
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = helper._bundle_with_calibration(
+                tmp, evidence=helper._valid_instrument_evidence())
+            reader = BundleReader(bundle)
+            metadata = reader.metadata()
+            calibration = metadata["instrument_calibration"]
+            seed = {calibration["artifact_sha256"]: calibration["b_fiducial_s"]}
+            bound, reason = reducer._verify_instrument_calibration(
+                reader, metadata, calibration, physics_cache=dict(seed))
+            self.assertIsNone(reason)
+            self.assertIsNotNone(bound)
+            for relative in ("manifest.json", "instrument_evidence.json",
+                             "raw/powermetrics.plist", "events.jsonl"):
+                with self.subTest(relative=relative):
+                    path = bundle / "calibration" / relative
+                    original = path.read_bytes()
+                    path.write_bytes(original + b"\nchanged\n")
+                    try:
+                        bound, reason = reducer._verify_instrument_calibration(
+                            reader, metadata, calibration, physics_cache=dict(seed))
+                        self.assertIsNone(bound)
+                        self.assertEqual(reason, "instrument_calibration_invalid")
+                    finally:
+                        path.write_bytes(original)
 
 
 # ---------------------------------------------------------------------------

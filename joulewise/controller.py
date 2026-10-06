@@ -366,50 +366,68 @@ def run_benchmark(
             "for powermetrics collection"
         )
     writer = RunBundleWriter.create(runs_root, config, clock)
-    if binary_identity_unmeasured is not None:
-        flags_core.emit(
-            hazard, "instrument.binary_identity_unmeasured", level="member",
-            run_id=writer.run_id,
-            observed={"runtime_powermetrics_sha256": None},
-            detail=binary_identity_unmeasured,
-            legacy_site="joulewise/controller.py:795@e6b6a0ce",
-            legacy_code="runtime_powermetrics_digest_unavailable",
+
+    def make_execution() -> _Execution:
+        return _Execution(
+            config,
+            writer,
+            clock,
+            registry,
+            reducer,
+            extra_metadata,
+            environment_snapshot,
+            suite_preparation,
+            suite_preparation_failure,
+            campaign_policy,
+            campaign_policy_binding,
+            campaign_environment_preflight,
+            attachment.metadata if attachment is not None else None,
+            pre_resolved_telemetry,
+            float(post_window_sampling_dwell_s),
+            battery_runner,
+            battery_clock,
+            hazard=hazard,
+            calibration_physics_seed=(
+                attachment.physics_seed if attachment is not None else None
+            ),
         )
-    if attachment is not None and attachment.refit_cache_miss is not None:
-        # M1: the member refit the calibration itself (no usable window
-        # verdict).  A record of time spent, not of the bound: the refit
-        # above verified the physics exactly as before.
-        flags_core.emit(
-            hazard, "calibration.refit_cache_miss", level="member",
-            run_id=writer.run_id, observed=attachment.refit_cache_miss,
-            legacy_site="joulewise/controller.py:575@89571045b",
-            legacy_code="verify_stored_evidence_physics",
-        )
-    if attachment is not None:
-        attachment.install(writer.path)
-    return _Execution(
-        config,
-        writer,
-        clock,
-        registry,
-        reducer,
-        extra_metadata,
-        environment_snapshot,
-        suite_preparation,
-        suite_preparation_failure,
-        campaign_policy,
-        campaign_policy_binding,
-        campaign_environment_preflight,
-        attachment.metadata if attachment is not None else None,
-        pre_resolved_telemetry,
-        float(post_window_sampling_dwell_s),
-        battery_runner,
-        battery_clock,
-        hazard=hazard,
-        calibration_physics_seed=(
-            attachment.physics_seed if attachment is not None else None
-        ),
-    ).execute()
+
+    if hazard is None:
+        if attachment is not None:
+            attachment.install(writer.path)
+        return make_execution().execute()
+    # HAZARD (review F3 of PLAN2 row 8): the bundle exists from here on, so an
+    # interrupt (SIGTERM becomes SystemExit) during the flag records or the
+    # attachment install is salvaged and finalized like one in the lifecycle.
+    # The constructor only stores state; a custody ValueError from install
+    # still propagates unchanged.
+    execution = make_execution()
+    try:
+        if binary_identity_unmeasured is not None:
+            flags_core.emit(
+                hazard, "instrument.binary_identity_unmeasured", level="member",
+                run_id=writer.run_id,
+                observed={"runtime_powermetrics_sha256": None},
+                detail=binary_identity_unmeasured,
+                legacy_site="joulewise/controller.py:795@e6b6a0ce",
+                legacy_code="runtime_powermetrics_digest_unavailable",
+            )
+        if attachment is not None and attachment.refit_cache_miss is not None:
+            # M1: the member refit the calibration itself (no usable window
+            # verdict).  A record of time spent, not of the bound: the refit
+            # verified the physics exactly as before.
+            flags_core.emit(
+                hazard, "calibration.refit_cache_miss", level="member",
+                run_id=writer.run_id, observed=attachment.refit_cache_miss,
+                legacy_site="joulewise/controller.py:575@89571045b",
+                legacy_code="verify_stored_evidence_physics",
+            )
+        if attachment is not None:
+            attachment.install(writer.path)
+    except (KeyboardInterrupt, SystemExit) as interrupt:
+        execution._finalize_interrupted_run(interrupt)
+        raise
+    return execution.execute()
 
 
 @dataclass(frozen=True)
@@ -570,15 +588,16 @@ def _window_calibration_verdict_bound(
     if mismatched:
         return None, {"reason": "digest_mismatch", "fields": mismatched}
     bound = verdict.get("effective_b_fiducial_s")
-    if (
-        isinstance(bound, bool)
-        or not isinstance(bound, int | float)
-        or not math.isfinite(float(bound))
-        # widen-only, as verify_stored_evidence_physics returns it
-        or float(bound) < float(stored_bound)
-    ):
+    if isinstance(bound, bool) or not isinstance(bound, int | float):
         return None, {"reason": "verdict_bound_invalid"}
-    return float(bound), None
+    try:
+        value = float(bound)
+    except OverflowError:  # review F6: an integer beyond float range
+        return None, {"reason": "verdict_bound_invalid"}
+    # widen-only, as verify_stored_evidence_physics returns it
+    if not math.isfinite(value) or value < float(stored_bound):
+        return None, {"reason": "verdict_bound_invalid"}
+    return value, None
 
 
 def _load_instrument_calibration_attachment(
@@ -1845,10 +1864,17 @@ class _Execution:
                     else None
                 )
                 self._sampling_start_in_progress = True
-                # If the start raises (an interrupt included), the probe is a
-                # daemon thread and is not waited for: the failure path owns
-                # the sampler, and an unrecorded observation stops nothing.
-                result = self._start_telemetry_with_parent_adoption(begin_sampling)
+                try:
+                    result = self._start_telemetry_with_parent_adoption(begin_sampling)
+                except BaseException:
+                    # Review F2: the probe's own work (subprocesses with
+                    # command timeouts, then parsing) must end before this
+                    # member's failure path returns, so it can never run on
+                    # into a later capture.  Its observation is not recorded;
+                    # the start's exception stays authoritative.
+                    if probe is not None:
+                        probe.join()
+                    raise
                 if probe is not None:
                     observation = probe.join()
                     probe.raise_error()
@@ -2759,7 +2785,12 @@ class _Execution:
         assert self._telemetry is not None
         if self._telemetry.name != "powermetrics":
             return start(self._config, self._context)
-        with self._sampler_teardown.intercept_popen():
+        if self._hazard is None:
+            with self._sampler_teardown.intercept_popen():
+                return start(self._config, self._context)
+        # HAZARD (M4): the guard probe may spawn concurrently on its helper
+        # thread; only this (the start call's) thread can be adopted.
+        with self._sampler_teardown.intercept_popen(owner_thread_only=True):
             return start(self._config, self._context)
 
     def _emit_hazard_teardown_survivors(

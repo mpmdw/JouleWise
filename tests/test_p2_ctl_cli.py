@@ -126,5 +126,96 @@ class SigtermSalvageTests(unittest.TestCase):
         self.assertEqual(returncode, -signal.SIGTERM)
         self.assertFalse((bundle / "summary_metrics.json").exists())
 
+class SigtermHandlerShapeTests(unittest.TestCase):
+    """Review F5: the handler is one-shot, restored, and main-thread only."""
+
+    @staticmethod
+    def context() -> Any:
+        from joulewise.flags.core import HazardFlagContext
+
+        return HazardFlagContext(writer="core-controller", custody_root=None,
+                                 plan_id=None, attempt=None, scope_resolved=False)
+
+    def test_a_second_sigterm_does_not_interrupt_the_salvage(self) -> None:
+        prior = signal.getsignal(signal.SIGTERM)
+        try:
+            with patch("joulewise.flags.core.hazard_flag_context", return_value=self.context()):
+                with cli._hazard_sigterm_salvage(Path("/synthetic")):
+                    handler = signal.getsignal(signal.SIGTERM)
+                    with self.assertRaises(SystemExit):
+                        handler(signal.SIGTERM, None)
+                    handler(signal.SIGTERM, None)  # ignored, no raise
+        finally:
+            signal.signal(signal.SIGTERM, prior)
+
+    def test_the_previous_handler_is_restored(self) -> None:
+        prior = signal.getsignal(signal.SIGTERM)
+        try:
+            with patch("joulewise.flags.core.hazard_flag_context", return_value=self.context()):
+                with cli._hazard_sigterm_salvage(Path("/synthetic")):
+                    self.assertIsNot(signal.getsignal(signal.SIGTERM), prior)
+            self.assertIs(signal.getsignal(signal.SIGTERM), prior)
+        finally:
+            signal.signal(signal.SIGTERM, prior)
+
+    def test_a_worker_thread_installs_nothing(self) -> None:
+        errors: list[BaseException] = []
+
+        def worker() -> None:
+            try:
+                with cli._hazard_sigterm_salvage(Path("/synthetic")):
+                    pass
+            except BaseException as exc:  # noqa: BLE001
+                errors.append(exc)
+
+        import threading
+
+        with patch("joulewise.flags.core.hazard_flag_context", return_value=self.context()):
+            thread = threading.Thread(target=worker)
+            thread.start()
+            thread.join()
+        self.assertEqual(errors, [])
+
+
+class SigtermDuringInstallTests(unittest.TestCase):
+    """Review F3: a SIGTERM after bundle creation but before the lifecycle
+    (the calibration attachment install) is salvaged and finalized."""
+
+    def test_sigterm_during_the_attachment_install_finalizes_the_bundle(self) -> None:
+        import os
+
+        from joulewise.clock import FakeClock
+        from joulewise.flags.core import HazardFlagContext
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            context = HazardFlagContext(writer="core-controller", custody_root=root,
+                                        plan_id=None, attempt=None, scope_resolved=False)
+            attachment = controller._InstrumentCalibrationAttachment(files={}, metadata={})
+
+            def terminate_install(_self, _bundle):
+                os.kill(os.getpid(), signal.SIGTERM)
+
+            prior = signal.getsignal(signal.SIGTERM)
+            try:
+                with patch("joulewise.flags.core.hazard_flag_context", return_value=context), \
+                        patch.object(controller, "_load_instrument_calibration_attachment",
+                                     return_value=attachment), \
+                        patch.object(controller._InstrumentCalibrationAttachment, "install",
+                                     terminate_install):
+                    with self.assertRaises(SystemExit) as caught:
+                        with cli._hazard_sigterm_salvage(root):
+                            controller.run_benchmark(make_config("term-install"), root, FakeClock())
+            finally:
+                signal.signal(signal.SIGTERM, prior)
+            self.assertEqual(caught.exception.code, 128 + signal.SIGTERM)
+            bundle = root / "term-install"
+            summary = json.loads((bundle / "summary_metrics.json").read_bytes())
+            self.assertEqual(summary["status"], "failed")
+            self.assertEqual(summary["failure_message"], f"SystemExit: {128 + signal.SIGTERM}")
+            events = [json.loads(line) for line in (bundle / "events.jsonl").read_text().splitlines()]
+            self.assertEqual(events[-1]["event_type"], "run_finalized")
+
+
 if __name__ == "__main__":
     unittest.main()
