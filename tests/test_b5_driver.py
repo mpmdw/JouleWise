@@ -9,6 +9,7 @@ and the courier; the chain's tools are the fake measurement checkout's.
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import importlib.util
 import json
@@ -17,7 +18,9 @@ import signal
 import subprocess
 import sys
 import tempfile
+import threading
 import time
+import types
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -147,7 +150,7 @@ class Harness:
         t0 = (int(time.time()) // 60) * 60
         self.record = b5_plan.write_window_plan(
             fake_window.inputs(self.root, self.measurement, pack, plan_id=f"b5-{pack}-1", t0_epoch_s=t0, g10=g10),
-            settle_s=0, pack_digest=lambda _root: "e" * 64)
+            settle_s=0, pack_digest=lambda _root: "e" * 64, threshold_defaults=fake_window.threshold_defaults)
         self.plan_path = Path(self.record["plan"]["path"])
         self.plan = night_gate.NightPlan.from_mapping(json.loads(self.plan_path.read_text()))
         self.custody = Path(self.plan.custody_root)
@@ -280,6 +283,35 @@ class HazardRefusalTests(unittest.TestCase):
                 harness = Harness(self, arm=arm)
                 result, _ = self.assert_null(harness, off_expected=False)
                 self.assertEqual(b5_driver.REFUSED_HAZARD, result["aborted_reason"])
+
+    def test_an_arm_that_never_returns_is_null_and_nothing_launches(self):
+        # Review finding (L2 guards a): an arm that does not return within
+        # t0_stage_cap_s + ARM_RETURN_GRACE_S is NULL, never GO.
+        release = threading.Event()
+        self.addCleanup(release.set)
+
+        class BlockingArm(FakeArm):
+            def __call__(self, context):
+                self.contexts.append(context)
+                release.wait(60)
+                return {"go": True, "verdicts": {name: "PASS" for name in SIX}}
+        harness = Harness(self, g10=False, arm=BlockingArm())
+        harness.replace_chain("#!/bin/zsh -f\nexit 0\n")
+        plan = json.loads(harness.plan_path.read_text())
+        plan["hazard_window"]["t0_stage_cap_s"] = 0.2
+        harness.plan_path.write_text(json.dumps(plan))
+        grace = mock.patch.object(b5_driver, "ARM_RETURN_GRACE_S", 0.3)
+        grace.start()
+        self.addCleanup(grace.stop)
+        started = time.monotonic()
+        result, refusal = self.assert_null(harness, off_expected=False)
+        self.assertLess(time.monotonic() - started, 30)
+        self.assertEqual(1, len(harness.arm.contexts))
+        self.assertEqual(b5_driver.REFUSED_HAZARD, result["aborted_reason"])
+        decision = json.loads((harness.night / b5_driver.ARM_DECISION).read_text())
+        self.assertEqual((False, "timeout"), (decision["go"], decision["arm_error"]))
+        self.assertTrue(any("did not return" in reason for reason in decision["reasons"]))
+        self.assertEqual(sorted(SIX), decision["not_pass"])
 
     def test_agent_census_refuses_before_any_action(self):
         harness = Harness(self)
@@ -421,6 +453,44 @@ class LaunchTests(unittest.TestCase):
         self.assertTrue(census["proven"])
         self.assertTrue(any("sleep" in line for line in census["survivors"]))
         self.assertTrue((harness.night / "chain.exited").exists())
+
+    def test_monitor_keeps_journaling_while_chain_termination_is_unproven(self):
+        # Review finding (L2 guards b): when the chain's process group is not
+        # proven gone, the monitor is left running for the dead-man and no
+        # stop is recorded.
+        harness = Harness(self, g10=True)
+        harness.replace_chain("#!/bin/zsh -f\n/bin/sleep 120 &\nexit 0\n")
+        attempts = []
+
+        def unproven(process, *args, **kwargs):
+            attempts.append(kwargs.get("pgid"))
+            return False
+        harness.driver._terminate_process_group = unproven
+
+        def cleanup():
+            for line in (harness.night / b5_driver.MONITOR_JOURNAL).read_text().splitlines():
+                event = json.loads(line)
+                if event.get("pgid"):
+                    with contextlib.suppress(ProcessLookupError, PermissionError):
+                        os.killpg(event["pgid"], signal.SIGKILL)
+            for pgid in attempts:
+                with contextlib.suppress(ProcessLookupError, PermissionError, TypeError):
+                    os.killpg(pgid, signal.SIGKILL)
+        self.addCleanup(cleanup)
+        # Unproven termination withholds the courier (allow_courier=False).
+        self.assertEqual(harness.driver.EXIT_COURIER_FAILED, harness.run())
+        self.assertTrue(attempts)
+        self.assertTrue((harness.night / "chain.unkilled").exists())
+        hazard = harness.hazard()
+        self.assertFalse(hazard["chain"]["termination_proven"])
+        self.assertTrue(hazard["monitor"]["left_running"])
+        self.assertIsNone(hazard["monitor"]["stop"])
+        self.assertEqual((False, "chain termination not proven"), (hazard["g10"]["ran"], hazard["g10"]["reason"]))
+        events = [json.loads(line) for line in (harness.night / b5_driver.MONITOR_JOURNAL).read_text().splitlines()]
+        self.assertEqual("start", events[0]["event"])
+        self.assertNotIn("stop", [event["event"] for event in events])
+        os.killpg(events[0]["pgid"], 0)   # the monitor's group is still alive
+        self.assertEqual("REFUSED", harness.result()["verdict"])
 
     def test_monitor_that_dies_is_restarted_and_the_gap_recorded(self):
         harness = Harness(self, g10=False)
@@ -595,8 +665,12 @@ class MockRuntimeDryRenderTests(unittest.TestCase):
     def test_alpha_beta_and_gamma_run_end_to_end(self):
         for pack in ("alpha", "beta", "gamma"):
             with self.subTest(pack=pack):
-                _, hazard = self.run_pack(pack)
+                harness, hazard = self.run_pack(pack)
                 self.assertTrue(all(row["rc"] == 0 for row in hazard["chain"]["stages"]))
+                corpus = hazard["neg8_corpus"]
+                self.assertEqual((12, 12, False, []), (corpus["members_listed"], corpus["members_kept"],
+                                                       corpus["pruned"], corpus["errors"]))
+                self.assertEqual(corpus["committed_manifest"]["sha256"], corpus["collected_manifest"]["sha256"])
 
     def test_alpha_with_one_failed_science_member_and_eleven_corpus_members(self):
         order = json.loads((REPO_ROOT / "configs/campaigns/d117_floor_qwen3-1p7b_v5/"
@@ -609,9 +683,22 @@ class MockRuntimeDryRenderTests(unittest.TestCase):
         self.assertEqual((20, 1), (len(stage["attempted"]), stage["failures"]))
         derive = next(call for call in fake_window.calls(harness.measurement) if call["tool"] == "derive")
         self.assertEqual((11, True), (derive["members"], derive["ok"]))
-        rows = {row["stage_id"]: row["rc"] for row in harness.hazard()["chain"]["stages"]}
+        hazard = harness.hazard()
+        rows = {row["stage_id"]: row["rc"] for row in hazard["chain"]["stages"]}
         self.assertEqual(0, rows["alpha-bound-derivation"])
         self.assertEqual(0, rows["alpha-post-calibration"])
+        # Review finding (L2 NEG-8): the pruned manifest the derivation read is
+        # located in hazard_result.json by path and SHA-256, for the harvest.
+        collected = harness.night / "transcript" / b5_chain.NEG8_COLLECTED_MANIFEST
+        corpus = hazard["neg8_corpus"]
+        self.assertEqual({"path": str(collected), "sha256": fake_window.sha256(collected)},
+                         corpus["collected_manifest"])
+        self.assertEqual(fake_window.sha256(REPO_ROOT / "configs/campaigns/neg8_reference_corpus_v5/"
+                                                        "derivation/settled_corpus.json"),
+                         corpus["committed_manifest"]["sha256"])
+        self.assertEqual((12, 11, True), (corpus["members_listed"], corpus["members_kept"], corpus["pruned"]))
+        self.assertEqual(fake_window.sha256(harness.night / "transcript" / b5_chain.NEG8_COLLECTED_SUMMARY),
+                         corpus["summary"]["sha256"])
 
 
 
@@ -771,6 +858,18 @@ class UnitTests(unittest.TestCase):
             self.assertEqual("PASS", decision["verdicts"]["battery"])
             self.assertEqual("NOT_EVALUATED", decision["verdicts"]["instrument"])
             self.assertEqual("final", decision["refused_at"])
+
+    def test_the_windows_own_sizing_wins_over_copied_threshold_values(self):
+        # Review finding (L2 thresholds): a disk.planned_bytes or clock.t_stream_max_s
+        # copied into the thresholds never overrides the window's own values.
+        copied = {**{name: {} for name in SIX},
+                  "disk": {"planned_bytes": 1, "headroom_bytes": 5},
+                  "clock": {"t_stream_max_s": 100, "h_ms": 3.7}}
+        context = types.SimpleNamespace(thresholds=copied, planned_bytes=7, t_stream_max_s=335.0)
+        thresholds = b5_driver._arm_thresholds(context)
+        self.assertEqual({"planned_bytes": 7, "headroom_bytes": 5}, thresholds["disk"])
+        self.assertEqual({"t_stream_max_s": 335.0, "h_ms": 3.7}, thresholds["clock"])
+        self.assertEqual(1, copied["disk"]["planned_bytes"])   # the plan's mapping is not mutated
 
     def test_production_lineage_adapter_passes_the_pack_identity(self):
         import types

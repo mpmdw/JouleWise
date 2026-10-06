@@ -3,6 +3,7 @@ run under zsh against a fake measurement checkout (fakes only at the tools)."""
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import subprocess
@@ -73,7 +74,7 @@ class RenderedChainFixture(unittest.TestCase):
         t0 = (int(time.time()) // 60) * 60
         self.record = b5_plan.write_window_plan(
             fake_window.inputs(self.root, self.measurement, self.pack, plan_id=f"b5-{self.pack}-1", t0_epoch_s=t0),
-            settle_s=0, pack_digest=lambda _root: "e" * 64)
+            settle_s=0, pack_digest=lambda _root: "e" * 64, threshold_defaults=fake_window.threshold_defaults)
         self.plan = NightPlan.from_mapping(json.loads(Path(self.record["plan"]["path"]).read_text()))
         self.night = self.root / "custody/night"
         self.night.mkdir()
@@ -192,24 +193,68 @@ class FailedMemberTests(RenderedChainFixture):
 
 
 class Neg8CorpusTests(RenderedChainFixture):
-    """A corpus with 11 collected members derives the bound."""
+    """A corpus with 11 collected members runs the derivation on a pruned copy, which the
+    core's bound consumers do not authenticate (review finding, L2 NEG-8): the chain keeps
+    the pruned bytes and a summary with both manifests' SHA-256 for the harvest."""
+
+    COMMITTED = REPO_ROOT / "configs/campaigns/neg8_reference_corpus_v5/derivation/settled_corpus.json"
 
     def setUp(self):
         self.behavior = {"fail_run_ids": ["neg8-refcorpus-r05"],
                          "neg8_minimum_n": whole_window.NEG8_DRIFT_MINIMUM_N}
         super().setUp()
 
-    def test_eleven_of_twelve_derive_the_bound(self):
+    def test_eleven_of_twelve_run_the_derivation_on_a_custodied_pruned_copy(self):
         self.assertEqual(10, whole_window.NEG8_DRIFT_MINIMUM_N)
         completed = self.run_chain()
         self.assertEqual(0, completed.returncode, completed.stderr)
-        collected = json.loads((self.night / "transcript" / b5_chain.NEG8_COLLECTED_MANIFEST).read_text())
+        collected_path = self.night / "transcript" / b5_chain.NEG8_COLLECTED_MANIFEST
+        collected = json.loads(collected_path.read_text())
         self.assertEqual(11, len(collected["members"]))
         self.assertNotIn("neg8-refcorpus-r05", [member["bundle_id"] for member in collected["members"]])
         derive = next(call for call in fake_window.calls(self.measurement) if call["tool"] == "derive")
         self.assertTrue(derive["ok"])
         self.assertEqual(11, derive["members"])
         self.assertTrue((Path(self.plan.hazard_window["runs_roots"]["bound"]) / "neg8-drift-bound.json").is_file())
+        # The summary names both manifests by path and SHA-256 (create-once).
+        summary = json.loads((self.night / "transcript" / b5_chain.NEG8_COLLECTED_SUMMARY).read_text())
+        self.assertEqual({"path": str(collected_path), "sha256": fake_window.sha256(collected_path)},
+                         summary["collected_manifest"])
+        self.assertEqual(fake_window.sha256(self.COMMITTED), summary["committed_manifest"]["sha256"])
+        self.assertEqual((12, 11, False), (summary["members_listed"], summary["members_kept"],
+                                           summary["identical_to_committed"]))
+        self.assertEqual([{"bundle_id": "neg8-refcorpus-r05", "status": "failed"}], summary["dropped"])
+        record = b5_chain.neg8_corpus_record(self.night)
+        self.assertEqual(summary["collected_manifest"], record["collected_manifest"])
+        self.assertEqual((12, 11, True, []), (record["members_listed"], record["members_kept"],
+                                              record["pruned"], record["errors"]))
+
+    def test_the_core_authenticates_a_pruned_bound_only_against_the_custodied_bytes(self):
+        # What the deviation text must say: a pruned manifest's corpus identity
+        # fails against the registered 12-member bytes (the consumers' default,
+        # whole_window.load_neg8_drift_bound_artifact) and holds only against the
+        # pruned bytes the chain custodied.
+        completed = self.run_chain()
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        pruned_raw = (self.night / "transcript" / b5_chain.NEG8_COLLECTED_MANIFEST).read_bytes()
+        pruned = json.loads(pruned_raw)
+
+        def corpus(raw, manifest):
+            return {"manifest_sha256": hashlib.sha256(raw).hexdigest(), "corpus_id": manifest["corpus_id"],
+                    "condition_id": manifest["condition_id"],
+                    "member_ids": [member["bundle_id"] for member in manifest["members"]]}
+        committed_raw = self.COMMITTED.read_bytes()
+        self.assertTrue(whole_window._neg8_corpus_identity_is_authenticated(
+            corpus(committed_raw, json.loads(committed_raw)), None))
+        self.assertFalse(whole_window._neg8_corpus_identity_is_authenticated(corpus(pruned_raw, pruned), None))
+        self.assertFalse(whole_window._neg8_corpus_identity_is_authenticated(corpus(pruned_raw, pruned), committed_raw))
+        self.assertTrue(whole_window._neg8_corpus_identity_is_authenticated(corpus(pruned_raw, pruned), pruned_raw))
+        # So the registered deviation may not claim that 10 or 11 members save the window.
+        deviation = next(item for item in b5_chain.DEVIATIONS if item.startswith("bound_derivation"))
+        self.assertIn("neg8.bound_not_derived", deviation)
+        self.assertIn("night/hazard_result.json neg8_corpus", deviation)
+        self.assertNotIn("so 10 or 11 of 12 derive the bound", deviation)
+        self.assertIn(deviation, self.plan.hazard_window["chain_deviations"])
         # The committed manifest itself would have refused (its r05 bundle failed).
         committed = REPO_ROOT / "configs/campaigns/neg8_reference_corpus_v5/derivation/settled_corpus.json"
         refused = subprocess.run(
@@ -225,6 +270,9 @@ class Neg8CorpusTests(RenderedChainFixture):
         committed = REPO_ROOT / "configs/campaigns/neg8_reference_corpus_v5/derivation/settled_corpus.json"
         self.assertEqual(committed.read_bytes(),
                          (self.night / "transcript" / b5_chain.NEG8_COLLECTED_MANIFEST).read_bytes())
+        record = b5_chain.neg8_corpus_record(self.night)
+        self.assertEqual((12, 12, False), (record["members_listed"], record["members_kept"], record["pruned"]))
+        self.assertEqual(record["committed_manifest"]["sha256"], record["collected_manifest"]["sha256"])
 
     def test_too_few_members_is_recorded_and_the_chain_continues(self):
         fake_window.set_behavior(self.measurement, {"fail_run_ids": ["neg8-refcorpus-r01", "neg8-refcorpus-r02",
@@ -331,17 +379,26 @@ class HelperTests(unittest.TestCase):
                 (runs / name / "summary_metrics.json").write_text(json.dumps({"status": status}))
             (root / "c").mkdir()
             (root / "c/summary_metrics.json").write_text(json.dumps({"status": "succeeded"}))
-            result = self.run_helper(b5_chain.PRUNE_HELPER, root / "manifest.json", runs, root / "out.json")
+            result = self.run_helper(b5_chain.PRUNE_HELPER, root / "manifest.json", runs, root / "out.json",
+                                     root / "summary.json")
             self.assertEqual(0, result.returncode, result.stderr)
             pruned = json.loads((root / "out.json").read_text())
             self.assertEqual(set(manifest) , set(pruned))
             self.assertEqual([{"bundle_id": "a", "bundle_path": "a"}], pruned["members"])
-            summary = json.loads(result.stdout)
+            summary = json.loads((root / "summary.json").read_text())
+            self.assertEqual(summary, json.loads(result.stdout))
             self.assertEqual({"b": "failed", "c": None, "d": None},
                              {item["bundle_id"]: item["status"] for item in summary["dropped"]})
-            # Create-once: a second run never overwrites the window's copy.
+            self.assertEqual({"path": str(root / "manifest.json"), "sha256": fake_window.sha256(root / "manifest.json")},
+                             summary["committed_manifest"])
+            self.assertEqual({"path": str(root / "out.json"), "sha256": fake_window.sha256(root / "out.json")},
+                             summary["collected_manifest"])
+            self.assertEqual((4, 1, ["a"], False), (summary["members_listed"], summary["members_kept"],
+                                                    summary["kept_bundle_ids"], summary["identical_to_committed"]))
+            # Create-once: a second run never overwrites the window's copy or its summary.
             self.assertNotEqual(0, self.run_helper(b5_chain.PRUNE_HELPER, root / "manifest.json", runs,
-                                                   root / "out.json").returncode)
+                                                   root / "out.json", root / "summary-2.json").returncode)
+            self.assertFalse((root / "summary-2.json").exists())
 
 
 if __name__ == "__main__":

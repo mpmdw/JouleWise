@@ -6,7 +6,8 @@ committed ``plan_tree.json`` stage graph in ordinal order, in the block-3
 runbook protocol:
 
 1. the bracket reservation;
-2. a settle (``SETTLE_S``, 600 s) before the pre slot;
+2. a settle (``SETTLE_S``, 180 s: the runbook's ``SETTLE_S=180``, registration
+   §0.6) before the pre slot;
 3. the pre-calibration capture and its fiducial screen;
 4. the NEG-8 reference corpus and its bound derivation;
 5. the start references;
@@ -24,6 +25,19 @@ stage records its return code in ``$NIGHT_DIR/chain-stages.jsonl`` and the
 chain continues; a chain that reaches its end exits 0 whatever its stages
 returned. Collection stages pass ``--max-failures <expected_count>`` in place
 of the pack's literal ``1``, so a failed member costs only itself.
+
+The NEG-8 bound derivation reads a window-local copy of the settled-corpus
+manifest that lists only the collected, succeeded members. With all 12 that
+copy is byte-identical to the committed manifest. With 10 or 11 the derivation
+runs, but its bound artifact names the pruned copy's SHA-256, and the core's
+bound consumers (``whole_window.load_neg8_drift_bound_artifact``: the
+whole-window verdict and the harvest) authenticate the corpus only against the
+committed 12-member bytes. Such a window therefore still ends
+``neg8.bound_not_derived`` (EXCLUDE_WINDOW) until a prospective erratum lets a
+consumer authenticate against the custodied pruned bytes. The chain keeps those
+bytes and a create-once summary (both paths and SHA-256) under
+``$NIGHT_DIR/transcript/``; the driver copies the locator into
+``night/hazard_result.json`` (``neg8_corpus``).
 
 The rendered bytes carry every value as a literal. They read nothing from the
 driver's environment except ``NIGHT_DIR``, and they refuse both inspection
@@ -45,7 +59,9 @@ from typing import Any, Mapping, Sequence
 
 CHAIN_SCHEMA = "joulewise.b5_chain.v1"
 CHAIN_INTERFACE = "b5-hazard-chain-v1"
-SETTLE_S = 600
+# The registered settle: docs/phase_2/window_runbook.md `SETTLE_S=180`, the
+# block-5 registration §0.6 and §5.2 ("180 s settle per stage").
+SETTLE_S = 180
 # The pre-calibration screen is not re-implemented here: the chain embeds the
 # runbook's own D-079 clause 3 block (the literal bound and the
 # screen_pre_calibration function every live window since block 3 ran),
@@ -67,6 +83,7 @@ STOP_EXITS = {
 
 STAGE_JOURNAL = "chain-stages.jsonl"
 NEG8_COLLECTED_MANIFEST = "neg8-settled-corpus.collected.json"
+NEG8_COLLECTED_SUMMARY = "neg8-settled-corpus.collected.summary.json"
 TERMINAL_BOUNDARY = "post-bracket-terminal-boundary.json"
 
 
@@ -98,8 +115,12 @@ DEVIATIONS = (
     "calibration_capture stages add --arm-countdown-s 20 --sleep-display-before-capture, the "
     "block-3 runbook calibrate_slot protocol every live window has used",
     "bound_derivation reads a window-local copy of the settled-corpus manifest listing only the "
-    "collected, succeeded corpus members (byte-identical when all 12 succeeded), so 10 or 11 of 12 "
-    "derive the bound (whole_window.NEG8_DRIFT_MINIMUM_N = 10)",
+    "collected, succeeded corpus members (byte-identical when all 12 succeeded). With 10 or 11 of 12 "
+    "the derivation runs (whole_window.NEG8_DRIFT_MINIMUM_N = 10), but the bound names the pruned "
+    "copy's SHA-256 and the core consumers (whole_window.load_neg8_drift_bound_artifact: the "
+    "whole-window verdict, the harvest) authenticate only the committed 12-member bytes, so the "
+    "window still ends neg8.bound_not_derived (EXCLUDE_WINDOW) until a prospective erratum lets a "
+    "consumer authenticate the custodied pruned bytes (locator: night/hazard_result.json neg8_corpus)",
     "whole_window_verdict and backup stages are desk steps and are not in the chain",
 )
 
@@ -335,10 +356,11 @@ def _argv_text(argv: Sequence[str]) -> str:
 # Stdlib-only helpers the chain runs with the measurement interpreter. They
 # travel inside the chain bytes, so the chain's digest pins them.
 PRUNE_HELPER = r"""
-import json, os, sys
-manifest_path, runs_root, output = sys.argv[1:4]
+import hashlib, json, os, sys
+manifest_path, runs_root, output, summary_path = sys.argv[1:5]
 with open(manifest_path, "rb") as handle:
     raw = handle.read()
+committed_sha256 = hashlib.sha256(raw).hexdigest()
 manifest = json.loads(raw)
 kept, dropped = [], []
 for member in manifest["members"]:
@@ -360,13 +382,21 @@ if dropped:
     pruned = dict(manifest)
     pruned["members"] = kept
     raw = (json.dumps(pruned, indent=2, sort_keys=True) + "\n").encode("utf-8")
-descriptor = os.open(output, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
-with os.fdopen(descriptor, "wb") as handle:
-    handle.write(raw)
-    handle.flush()
-    os.fsync(handle.fileno())
-print(json.dumps({"members_listed": len(manifest["members"]), "members_kept": len(kept),
-                  "dropped": dropped, "identical_to_committed": not dropped}, sort_keys=True))
+def create_once(path, data):
+    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+    with os.fdopen(descriptor, "wb") as handle:
+        handle.write(data)
+        handle.flush()
+        os.fsync(handle.fileno())
+create_once(output, raw)
+summary = {"schema": "joulewise.b5_neg8_corpus_collected.v1",
+           "committed_manifest": {"path": os.path.abspath(manifest_path), "sha256": committed_sha256},
+           "collected_manifest": {"path": os.path.abspath(output), "sha256": hashlib.sha256(raw).hexdigest()},
+           "members_listed": len(manifest["members"]), "members_kept": len(kept),
+           "kept_bundle_ids": [member.get("bundle_id") for member in kept],
+           "dropped": dropped, "identical_to_committed": not dropped}
+create_once(summary_path, (json.dumps(summary, indent=2, sort_keys=True) + "\n").encode("utf-8"))
+print(json.dumps(summary, sort_keys=True))
 """
 
 def runbook_screen(runbook_text: str) -> str:
@@ -517,6 +547,7 @@ def render_chain(*, tree: Mapping[str, Any], tree_sha256: str, stages: Sequence[
         return "run_stage " + " ".join(_literal(item) for item in head) + " \\\n    " + _argv_text(argv)
 
     collected = Shell('"$TRANSCRIPT_ROOT/' + NEG8_COLLECTED_MANIFEST + '"')
+    collected_summary = Shell('"$TRANSCRIPT_ROOT/' + NEG8_COLLECTED_SUMMARY + '"')
     lines.append("# 1. The bracket reservation. A failed reservation stops the chain.")
     lines.append(run(reservation, reservation_argv))
     lines.append(f"(( $? == 0 )) || stop_chain reservation_failed {EXIT_RESERVATION_FAILED}")
@@ -550,8 +581,11 @@ def render_chain(*, tree: Mapping[str, Any], tree_sha256: str, stages: Sequence[
             runs_dir = value_after(argv, "--runs-dir")
             _require(argv.count("--derive-neg8-drift-bound") == 1 and manifest is not None and runs_dir is not None,
                      f"{stage.stage_id}: bound derivation names one manifest and --runs-dir")
-            lines.append("# 4b. The NEG-8 bound, from the collected and succeeded corpus members.")
-            lines.append(run(stage, [python, "-B", "-c", Shell('"$B5_PRUNE_PY"'), manifest, runs_dir, collected],
+            lines.append("# 4b. The NEG-8 bound, from the collected and succeeded corpus members. A pruned")
+            lines.append("# copy (10 or 11 of 12) derives, but the core consumers authenticate only the committed")
+            lines.append("# 12-member bytes: such a window ends neg8.bound_not_derived until an erratum.")
+            lines.append(run(stage, [python, "-B", "-c", Shell('"$B5_PRUNE_PY"'), manifest, runs_dir, collected,
+                                     collected_summary],
                              label=stage.stage_id + ".corpus", kind="neg8_corpus_collected", suffix=".corpus"))
             derive = list(argv)
             derive[derive.index("--derive-neg8-drift-bound") + 1] = collected
@@ -590,9 +624,64 @@ def stage_journal(night_dir: Path) -> list[dict[str, Any]]:
     return rows
 
 
+def neg8_corpus_record(night_dir: Path) -> dict[str, Any]:
+    """Locate the NEG-8 corpus manifest the bound derivation read, for the harvest.
+
+    Reads the window-local manifest copy and the prune helper's summary under
+    ``$NIGHT_DIR/transcript/`` after the chain. Every SHA-256 here is
+    recomputed from the bytes on disk, including the committed manifest the
+    summary names. ``pruned`` is true when the copy differs from the committed
+    bytes: the derivation then ran on 10 or 11 members, and the core consumers
+    will not authenticate the bound against the committed manifest (see
+    ``DEVIATIONS``). A missing or unreadable file is recorded, never fatal.
+    """
+
+    transcript = Path(night_dir) / "transcript"
+    errors: list[str] = []
+
+    def locate(path: Path | None, label: str) -> dict[str, str] | None:
+        if path is None:
+            return None
+        try:
+            raw = Path(path).read_bytes()
+        except OSError as error:
+            errors.append(f"{label}: {type(error).__name__}: {error}")
+            return None
+        return {"path": str(path), "sha256": sha256_bytes(raw)}
+
+    collected_path = transcript / NEG8_COLLECTED_MANIFEST
+    summary_path = transcript / NEG8_COLLECTED_SUMMARY
+    summary: Any = None
+    try:
+        summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, ValueError) as error:
+        errors.append(f"summary: {type(error).__name__}: {error}")
+    if not isinstance(summary, dict):
+        summary = {}
+    named = summary.get("committed_manifest")
+    named_path = named.get("path") if isinstance(named, dict) else None
+    collected = locate(collected_path, "collected manifest")
+    committed = locate(Path(named_path) if isinstance(named_path, str) and named_path else None,
+                       "committed manifest")
+    members_kept = None
+    if collected is not None:
+        try:
+            members = json.loads(collected_path.read_bytes()).get("members")
+            members_kept = len(members) if isinstance(members, list) else None
+        except (OSError, ValueError, AttributeError) as error:
+            errors.append(f"collected manifest members: {type(error).__name__}")
+    pruned = None if collected is None or committed is None else collected["sha256"] != committed["sha256"]
+    listed = summary.get("members_listed")
+    return {"collected_manifest": collected, "committed_manifest": committed,
+            "summary": locate(summary_path, "summary") if summary else None,
+            "members_listed": listed if type(listed) is int else None, "members_kept": members_kept,
+            "pruned": pruned, "errors": errors}
+
+
 __all__ = [
     "CHAIN_SCHEMA", "CHAIN_INTERFACE", "SETTLE_S", "RUNBOOK_RELATIVE", "STOP_EXITS", "runbook_screen",
     "DEVIATIONS", "TOOLS", "ChainRenderError", "Stage", "Command", "stage_plan", "bind_argument",
     "stage_argv", "render_chain", "sha256_bytes", "sidecar_bytes", "stage_journal",
-    "NEG8_COLLECTED_MANIFEST", "STAGE_JOURNAL", "TERMINAL_BOUNDARY",
+    "NEG8_COLLECTED_MANIFEST", "NEG8_COLLECTED_SUMMARY", "STAGE_JOURNAL", "TERMINAL_BOUNDARY",
+    "neg8_corpus_record",
 ]

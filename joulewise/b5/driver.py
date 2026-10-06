@@ -394,9 +394,17 @@ def disk_targets(window: Mapping[str, Any], *, arm: bool) -> list[dict[str, Any]
 
 
 def _arm_thresholds(context: ArmContext) -> dict[str, dict[str, Any]]:
+    """The window plan's thresholds, with the window's own sizing in the two sized keys.
+
+    ``disk.planned_bytes`` and ``clock.t_stream_max_s`` always come from the
+    window (its member count times bytes per member, and its sourced sizing),
+    never from a copied threshold value, so a stale copy can neither loosen nor
+    misstate either gate. The plan writer records any copy it replaced.
+    """
+
     thresholds = json.loads(json.dumps(context.thresholds))
-    thresholds.setdefault("disk", {}).setdefault("planned_bytes", int(context.planned_bytes))
-    thresholds.setdefault("clock", {}).setdefault("t_stream_max_s", float(context.t_stream_max_s))
+    thresholds.setdefault("disk", {})["planned_bytes"] = int(context.planned_bytes)
+    thresholds.setdefault("clock", {})["t_stream_max_s"] = float(context.t_stream_max_s)
     return thresholds
 
 
@@ -1191,6 +1199,12 @@ def run_hazard_night(rt: Any, plan_path: Path, plan: Any, probes: Any, initial_c
     hazard["chain"].update(exit_code=exit_code, started=started, termination_proven=proven,
                            stages=[{"stage_id": row.get("stage_id"), "kind": row.get("kind"), "rc": row.get("rc")}
                                    for row in b5_chain.stage_journal(night)])
+    # The NEG-8 manifest the derivation read: a locator for the harvest, which
+    # needs the custodied bytes when the copy was pruned (chain DEVIATIONS).
+    try:
+        hazard["neg8_corpus"] = b5_chain.neg8_corpus_record(night)
+    except Exception as error:  # noqa: BLE001 - a record; never a refusal
+        hazard["neg8_corpus"] = {"errors": [_error_text(error)]}
 
     # 7. G10, with the monitor still journaling, only after a natural exit proven gone.
     want_g10 = bool(plan.hazard_window.get("g10"))

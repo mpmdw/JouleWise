@@ -34,16 +34,52 @@ PACKS = {
     "gamma": "d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5",
 }
 AUXILIARY_PACKS = ("neg8_reference_corpus_v5", "window_references_v5")
-THRESHOLDS = {
-    # Gate-prune plan section 2.3 values, as the registration is expected to seal them.
-    "clock": {"h_ms": 3.7, "frequency_margin_ppm": 0.25, "bound_ms": 5.0, "residual_ms": 1.0,
-              "pair_skew_ms": 1.0},
-    "battery": {"limit_ma": 200, "max_update_age_s": 180},
-    "thermal": {"max_level": 0},
-    "contention": {"limit_cpu_s_per_s": 0.05, "interval_s": 30, "clean_s": 600, "cap_s": 2700},
-    "disk": {"margin_bytes": 20 * 1024 ** 3, "copies": 2, "low_bytes": 10 * 1024 ** 3},
-    "instrument": {"frames": 300, "bound_s": 55, "median_ms": 150, "max_ms": 200},
+# Block 4's committed sizing adapter output; its T_stream_max allowance is the
+# X10 sizing value the clock gate uses (335 s).
+SIZING_PACK = "v5_qualification_25g83"
+SIZING_ALLOWANCES = REPO_ROOT / "configs/campaigns" / SIZING_PACK / "sizing_allowances.json"
+# A fixture sizing output for the programmed span (block 5's own sizing output
+# is FILL[B5-SPAN-AND-WINDOW-MAX] in the registration draft).
+FIXTURE_SIZING_RELATIVE = "configs/sizing/b5_fixture_sizing.json"
+FIXTURE_SIZING = {"schema_version": "fixture.b5_sizing.v1", "totals": {"programmed_span_s": 3600}}
+# Lane L1's threshold contract (joulewise.hazards.arm.default_thresholds() at
+# L1 5fa6ddcf), injected into the plan writer here because L1's package lands
+# at integration; tests/test_b5_plan.py checks it against the real one when
+# the package is importable.
+L1_DEFAULT_THRESHOLDS = {
+    "battery": {"limit_ma": 200, "max_unobserved_s": 120, "max_update_age_s": 180},
+    "clock": {"frequency_margin_ppm": 0.25, "h_ms": 3.7, "limit_ms": 5.0, "residual_max_ns": 1000000,
+              "skew_max_ns": 1000000, "step_ns": 1000000, "t_stream_max_s": 335},
+    "contention": {"cap_s": 2700, "clean_s": 600, "cpu_limit_s_per_s": 0.05, "interval_s": 30,
+                   "window_interval_s": 10},
+    "disk": {"headroom_bytes": 21474836480, "low_bytes": 10737418240, "planned_bytes": 22710059008},
+    "instrument": {"bound_s": 55.0, "frames": 300, "max_ms_max": 200.0, "median_ms_max": 150.0},
+    "thermal": {"max_gap_s": 15, "max_level": 0},
 }
+# Gate-prune plan section 2.3 values, as the registration is expected to seal
+# them: every contract key except the two the window sizes itself.
+THRESHOLDS = {
+    module: {key: value for key, value in keys.items()
+             if (module, key) not in (("disk", "planned_bytes"), ("clock", "t_stream_max_s"))}
+    for module, keys in L1_DEFAULT_THRESHOLDS.items()
+}
+
+
+def threshold_defaults() -> dict[str, dict[str, Any]]:
+    return json.loads(json.dumps(L1_DEFAULT_THRESHOLDS))
+
+
+def stream_max_allowance() -> dict[str, Any]:
+    """The committed T_stream_max allowance, verbatim (335 s)."""
+
+    return json.loads(SIZING_ALLOWANCES.read_text())["totals"]["T_stream_max"]
+
+
+def span_allowance(measurement: Path) -> dict[str, Any]:
+    path = Path(measurement) / FIXTURE_SIZING_RELATIVE
+    return {"seconds": FIXTURE_SIZING["totals"]["programmed_span_s"],
+            "source": {"path": FIXTURE_SIZING_RELATIVE, "sha256": sha256(path)},
+            "source_pointer": "/totals/programmed_span_s"}
 
 _CALLS = '''
 def record(entry):
@@ -139,8 +175,10 @@ def build_checkout(root: Path, *, behavior: dict[str, Any] | None = None, git: b
     measurement = Path(root) / "measurement"
     campaigns = measurement / "configs/campaigns"
     campaigns.mkdir(parents=True)
-    for name in (*PACKS.values(), *AUXILIARY_PACKS):
+    for name in (*PACKS.values(), *AUXILIARY_PACKS, SIZING_PACK):
         (campaigns / name).symlink_to(REPO_ROOT / "configs/campaigns" / name)
+    (measurement / FIXTURE_SIZING_RELATIVE).parent.mkdir(parents=True)
+    (measurement / FIXTURE_SIZING_RELATIVE).write_text(json.dumps(FIXTURE_SIZING, indent=2) + "\n")
     (measurement / "configs/campaign_policies").mkdir()
     (measurement / "configs/campaign_policies/quiet_mac_p2_production.json").symlink_to(
         REPO_ROOT / "configs/campaign_policies/quiet_mac_p2_production.json")
@@ -184,7 +222,7 @@ def calls(measurement: Path) -> list[dict[str, Any]]:
 
 
 def inputs(root: Path, measurement: Path, pack: str, *, plan_id: str, t0_epoch_s: float,
-           g10: bool = True, attempt: int = 1, programmed_span_s: int = 3600) -> dict[str, Any]:
+           g10: bool = True, attempt: int = 1) -> dict[str, Any]:
     root = Path(root)
     identity = root / "identity-epoch.json"
     t1 = root / "t1-bindings.json"
@@ -194,7 +232,7 @@ def inputs(root: Path, measurement: Path, pack: str, *, plan_id: str, t0_epoch_s
     runs = root / "runs"
     runs.mkdir(exist_ok=True)
     return {
-        "schema": "joulewise.b5_window_plan_inputs.v1", "plan_id": plan_id, "attempt": attempt,
+        "schema": "joulewise.b5_window_plan_inputs.v2", "plan_id": plan_id, "attempt": attempt,
         "pack_root": str(measurement / "configs/campaigns" / PACKS.get(pack, pack)),
         "measurement_root": str(measurement), "measurement_head": "b" * 40, "repo_head": "a" * 40,
         "custody_root": str(root / "custody"), "runs_parent": str(runs),
@@ -204,7 +242,8 @@ def inputs(root: Path, measurement: Path, pack: str, *, plan_id: str, t0_epoch_s
         "post_attempt_id": plan_id + "-cal-post",
         "identity_epoch_json": {"path": str(identity), "sha256": sha256(identity)},
         "t1_bindings_json": {"path": str(t1), "sha256": sha256(t1)},
-        "t0_epoch_s": t0_epoch_s, "programmed_span_s": programmed_span_s, "T_stream_max_s": 335,
+        "t0_epoch_s": t0_epoch_s, "programmed_span_s": span_allowance(measurement),
+        "T_stream_max_s": stream_max_allowance(),
         "bytes_per_member": 190840832, "thresholds": json.loads(json.dumps(THRESHOLDS)),
         "g10": g10, "registration": None,
     }
@@ -269,7 +308,7 @@ def hazard_window_mapping(root: Path, *, pack_root: Path, g10: bool = False) -> 
         "runs_roots": {"claim": str(claim), "bound": str(bound)},
         "T_stream_max_s": 335, "planned_bytes": 0, "member_count": 0,
         "thresholds": json.loads(json.dumps(THRESHOLDS)), "g10": g10,
-        "programmed_span_s": 600, "t0_stage_cap_s": 3300, "settle_s": 600,
+        "programmed_span_s": 600, "t0_stage_cap_s": 3300, "settle_s": 180,
         "window_env": {"path": str(root / "custody/window.env"), "sha256": "d" * 64},
         "registration": None, "chain_deviations": [], "disk_volumes": [str(claim), str(bound)],
         "stages": [{"stage_id": "fixture-reservation", "kind": "bracket_reservation", "ordinal": 1,

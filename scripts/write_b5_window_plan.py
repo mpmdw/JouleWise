@@ -5,7 +5,7 @@ Usage::
 
     python scripts/write_b5_window_plan.py --inputs INPUTS.json
 
-INPUTS.json is a reviewed ``joulewise.b5_window_plan_inputs.v1`` object (see
+INPUTS.json is a reviewed ``joulewise.b5_window_plan_inputs.v2`` object (see
 ``joulewise/b5/plan.py``). The command creates the custody root, the fresh
 claim and bound runs roots, ``window.env``, the chain and its sidecar, the
 ``night_plan.json`` HAZARD_PACK plan and a plan record, then prints the record.

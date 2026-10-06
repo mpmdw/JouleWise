@@ -1,11 +1,18 @@
 """Desk-time writer of one block-5 HAZARD_PACK window plan.
 
-Input is one reviewed JSON object (schema ``joulewise.b5_window_plan_inputs.v1``),
+Input is one reviewed JSON object (schema ``joulewise.b5_window_plan_inputs.v2``),
 never defaults for the registration's values: the thresholds are copied from
-the sealed registration by whoever writes the inputs. The writer:
+the sealed registration by whoever writes the inputs, and the two sizing
+inputs (``programmed_span_s``, ``T_stream_max_s``) are sizing allowances read
+from a committed sizing output in the measurement checkout. The writer:
 
 1. reads the pack's committed ``plan_tree.json`` and walks its stage graph
-   (``joulewise.b5.chain.stage_plan``);
+   (``joulewise.b5.chain.stage_plan``); checks the thresholds against the
+   hazard modules' contract (``joulewise.hazards.arm.default_thresholds``):
+   every key a module reads must be present and numeric, so a missing key is
+   refused here at the desk rather than raising at the real arm; the two sized
+   keys (``disk.planned_bytes``, ``clock.t_stream_max_s``) are always the
+   window's own values; every difference from the module defaults is recorded;
 2. binds all fourteen launch bindings of ``arm_attachments.launch.bindings``,
    with ``ledger_path`` fixed to the measurement checkout's default ledger --
    the controller's pre-slot route reads
@@ -37,7 +44,7 @@ from typing import Any, Callable, Mapping
 from joulewise import night_gate
 from joulewise.b5 import chain as b5_chain
 
-INPUT_SCHEMA = "joulewise.b5_window_plan_inputs.v1"
+INPUT_SCHEMA = "joulewise.b5_window_plan_inputs.v2"
 RECORD_SCHEMA = "joulewise.b5_window_plan_record.v1"
 # Addendum E's T-0 stage cap. It holds the whole arm: census, instant reads,
 # network time OFF, the record-only collectors, the ~40 s cadence probe, the
@@ -51,6 +58,9 @@ CHAIN_BASENAME = "chain.zsh"
 WINDOW_ENV_BASENAME = "window.env"
 RECORD_BASENAME = "b5-window-plan-record.json"
 POWER_POLICY = "ac_high_power"
+# Threshold keys whose value is the window's own sizing, never a copied value.
+SIZED_THRESHOLD_KEYS = (("disk", "planned_bytes"), ("clock", "t_stream_max_s"))
+THRESHOLD_CONTRACT_SOURCE = "joulewise.hazards.arm.default_thresholds"
 
 _INPUT_KEYS = {
     "schema", "plan_id", "attempt", "pack_root", "measurement_root", "measurement_head",
@@ -159,6 +169,109 @@ def read_plan_tree(pack_root: Path) -> tuple[dict[str, Any], str]:
     return tree, _sha256(raw)
 
 
+def hazard_threshold_defaults() -> dict[str, dict[str, Any]]:
+    """The hazard modules' threshold contract: every key each module reads, with its default.
+
+    Lane L1's ``joulewise.hazards.arm.default_thresholds``. Imported at call
+    time from the checkout the driver runs, which is the code that will read
+    the thresholds at the real arm.
+    """
+
+    from joulewise.hazards.arm import default_thresholds
+    return default_thresholds()
+
+
+def _is_number(value: Any) -> bool:
+    return not isinstance(value, bool) and isinstance(value, (int, float)) and math.isfinite(value)
+
+
+def audit_thresholds(thresholds: Mapping[str, Any], defaults: Mapping[str, Any], *,
+                     sized: Mapping[tuple[str, str], Any]) -> tuple[dict[str, dict[str, Any]], dict[str, Any]]:
+    """Check copied thresholds against the modules' contract; return (thresholds, audit).
+
+    Refuses when a module lacks a key its defaults carry, or a value is not a
+    finite number: the module's judge would raise on it at the real arm, which
+    the driver reads as a NULL window. The sized keys are replaced by the
+    window's own values. The audit records every value that differs from the
+    module default, every key the contract does not know, and every copied
+    sized value that was replaced.
+    """
+
+    _require(isinstance(defaults, Mapping) and set(defaults) == set(night_gate.HAZARD_MODULES)
+             and all(isinstance(defaults[name], Mapping) for name in night_gate.HAZARD_MODULES),
+             f"the threshold contract ({THRESHOLD_CONTRACT_SOURCE}) must name the six hazard modules")
+    missing, not_numeric = [], []
+    differences, unknown, replaced = [], [], []
+    result: dict[str, dict[str, Any]] = {}
+    for module in night_gate.HAZARD_MODULES:
+        copied, contract = thresholds[module], defaults[module]
+        values = json.loads(json.dumps(copied))
+        for key, default in contract.items():
+            if (module, key) in sized:
+                continue
+            if key not in values:
+                missing.append(f"{module}.{key}")
+            elif _is_number(default) and not _is_number(values[key]):
+                not_numeric.append(f"{module}.{key}")
+            elif values[key] != default:
+                differences.append({"key": f"{module}.{key}", "value": values[key], "default": default})
+        unknown += [f"{module}.{key}" for key in values if key not in contract]
+        for (sized_module, key), value in sized.items():
+            if sized_module != module:
+                continue
+            if key in values and values[key] != value:
+                replaced.append({"key": f"{module}.{key}", "copied": values[key], "window": value})
+            values[key] = value
+        result[module] = values
+    _require(not missing, "thresholds lack keys the hazard modules read (copy them from the sealed "
+             f"registration): {', '.join(missing)}")
+    _require(not not_numeric, f"thresholds must be finite numbers: {', '.join(not_numeric)}")
+    audit = {"contract": THRESHOLD_CONTRACT_SOURCE, "differences_from_defaults": differences,
+             "keys_not_in_contract": unknown, "sized_keys_replaced": replaced,
+             "sized_keys": [f"{module}.{key}" for module, key in sized]}
+    return result, audit
+
+
+def read_allowance(value: Any, field: str, *, measurement: Path) -> tuple[float | int, dict[str, Any]]:
+    """One sizing allowance, ``{seconds, source: {path, sha256}, source_pointer}``.
+
+    The form of block 4's committed sizing adapter
+    (``configs/campaigns/v5_qualification_25g83/sizing_allowances.json``), so a
+    total from a committed sizing output is pasted verbatim. The source is a
+    file in the measurement checkout (a path relative to it); its bytes must
+    hash to ``source.sha256`` and the JSON pointer must resolve to exactly
+    ``seconds``.
+    """
+
+    _require(isinstance(value, Mapping) and set(value) == {"seconds", "source", "source_pointer"},
+             f"{field} must be a sizing allowance {{seconds, source, source_pointer}} from a committed "
+             "sizing output, not a free number")
+    seconds = value["seconds"]
+    _require(_is_number(seconds) and seconds > 0, f"{field}.seconds must be a positive number")
+    source, pointer = value["source"], value["source_pointer"]
+    _require(isinstance(source, Mapping) and isinstance(source.get("path"), str) and source["path"]
+             and not os.path.isabs(source["path"]),
+             f"{field}.source.path must be relative to the measurement checkout")
+    path, digest = _locator(source, f"{field}.source", base=measurement)
+    try:
+        node: Any = json.loads(path.read_bytes())
+    except (OSError, ValueError) as exc:
+        raise WindowPlanError(f"{field}.source is not readable JSON: {exc}") from exc
+    _require(isinstance(pointer, str) and pointer.startswith("/"), f"{field}.source_pointer must start with /")
+    for part in pointer[1:].split("/"):
+        part = part.replace("~1", "/").replace("~0", "~")
+        if isinstance(node, list) and part.isdigit() and int(part) < len(node):
+            node = node[int(part)]
+        elif isinstance(node, Mapping) and part in node:
+            node = node[part]
+        else:
+            raise WindowPlanError(f"{field}.source_pointer {pointer!r} does not resolve")
+    _require(_is_number(node) and node == seconds,
+             f"{field}.seconds ({seconds!r}) is not the value at {pointer} in the source ({node!r})")
+    return seconds, {"seconds": seconds, "source": {"path": source["path"], "sha256": digest},
+                     "source_pointer": pointer}
+
+
 def declared_bindings(tree: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
     """The pack's launch bindings; they must be exactly the fourteen v5 bindings.
 
@@ -244,8 +357,8 @@ def _validate_inputs(inputs: Mapping[str, Any]) -> None:
     t0 = inputs["t0_epoch_s"]
     _require(not isinstance(t0, bool) and isinstance(t0, (int, float)) and math.isfinite(t0) and t0 > 0
              and float(t0) % 60 == 0, "t0_epoch_s must be a positive whole-minute epoch")
-    _number(inputs["programmed_span_s"], "programmed_span_s", integer=True)
-    _number(inputs["T_stream_max_s"], "T_stream_max_s")
+    # programmed_span_s and T_stream_max_s are sizing allowances, read against
+    # their committed source once the measurement checkout is known.
     _number(inputs["bytes_per_member"], "bytes_per_member", integer=True)
     _require(type(inputs["g10"]) is bool, "g10 must be a boolean")
     thresholds = inputs["thresholds"]
@@ -256,11 +369,14 @@ def _validate_inputs(inputs: Mapping[str, Any]) -> None:
 
 def write_window_plan(inputs: Mapping[str, Any], *, settle_s: int | float = b5_chain.SETTLE_S,
                       now: Callable[[], float] = time.time,
-                      pack_digest: Callable[[Path], str] | None = None) -> dict[str, Any]:
+                      pack_digest: Callable[[Path], str] | None = None,
+                      threshold_defaults: Callable[[], Mapping[str, Any]] | None = None) -> dict[str, Any]:
     """Validate everything, then create the window's custody once; return the record.
 
     ``settle_s`` is a keyword for the mock-runtime render only; the command
-    line always renders the registered 600 s.
+    line always renders the registered 180 s. ``threshold_defaults`` returns
+    the hazard modules' threshold contract (default:
+    :func:`hazard_threshold_defaults`).
     """
 
     _validate_inputs(inputs)
@@ -283,6 +399,21 @@ def write_window_plan(inputs: Mapping[str, Any], *, settle_s: int | float = b5_c
         stages = b5_chain.stage_plan(tree)
     except b5_chain.ChainRenderError as exc:
         raise WindowPlanError(f"stage graph: {exc}") from exc
+    members = sum(stage.expected_count for stage in stages
+                  if stage.in_chain and stage.kind == "campaign_collection")
+    planned_bytes = inputs["bytes_per_member"] * members
+    span_seconds, span_allowance = read_allowance(inputs["programmed_span_s"], "programmed_span_s",
+                                                  measurement=measurement)
+    programmed_span_s = math.ceil(span_seconds)
+    t_stream_max_s, stream_allowance = read_allowance(inputs["T_stream_max_s"], "T_stream_max_s",
+                                                      measurement=measurement)
+    try:
+        defaults = (threshold_defaults or hazard_threshold_defaults)()
+    except Exception as exc:  # noqa: BLE001 - without the contract the thresholds cannot be checked
+        raise WindowPlanError(f"the hazard modules' threshold contract ({THRESHOLD_CONTRACT_SOURCE}) "
+                              f"is unavailable: {type(exc).__name__}: {exc}") from exc
+    thresholds, thresholds_audit = audit_thresholds(
+        inputs["thresholds"], defaults, sized=dict(zip(SIZED_THRESHOLD_KEYS, (planned_bytes, t_stream_max_s))))
     roots = tree.get("roots") or {}
     claim_leaf, bound_leaf = roots.get("claim_root_leaf"), roots.get("bound_root_leaf")
     _require(isinstance(claim_leaf, str) and isinstance(bound_leaf, str) and claim_leaf != bound_leaf
@@ -368,9 +499,7 @@ def write_window_plan(inputs: Mapping[str, Any], *, settle_s: int | float = b5_c
         "SETTLE_S": str(int(settle_s)) if float(settle_s).is_integer() else repr(float(settle_s)),
     }
     env_raw = window_env_bytes(env_values)
-    members = sum(stage.expected_count for stage in stages
-                  if stage.in_chain and stage.kind == "campaign_collection")
-    window_max_s = 60 * math.ceil((inputs["programmed_span_s"] + T0_STAGE_CAP_S) / 60)
+    window_max_s = 60 * math.ceil((programmed_span_s + T0_STAGE_CAP_S) / 60)
     pack_sha256, pack_digest_error = None, None
     try:
         if pack_digest is None:
@@ -389,12 +518,12 @@ def write_window_plan(inputs: Mapping[str, Any], *, settle_s: int | float = b5_c
         "bracket_session_id": inputs["bracket_session_id"],
         "bindings": bindings,
         "runs_roots": {"claim": str(claim_root), "bound": str(bound_root)},
-        "T_stream_max_s": inputs["T_stream_max_s"],
-        "planned_bytes": inputs["bytes_per_member"] * members,
+        "T_stream_max_s": t_stream_max_s,
+        "planned_bytes": planned_bytes,
         "member_count": members,
-        "thresholds": json.loads(json.dumps(inputs["thresholds"])),
+        "thresholds": thresholds,
         "g10": inputs["g10"],
-        "programmed_span_s": inputs["programmed_span_s"],
+        "programmed_span_s": programmed_span_s,
         "t0_stage_cap_s": T0_STAGE_CAP_S,
         "settle_s": settle_s,
         "window_env": {"path": str(custody / WINDOW_ENV_BASENAME), "sha256": _sha256(env_raw)},
@@ -445,6 +574,8 @@ def write_window_plan(inputs: Mapping[str, Any], *, settle_s: int | float = b5_c
         "planned_bytes": hazard_window["planned_bytes"], "pack_sha256": pack_sha256,
         "pack_digest_error": pack_digest_error, "plan_tree_sha256": tree_sha256,
         "inputs_sha256": _sha256(json.dumps(inputs, sort_keys=True, separators=(",", ":")).encode()),
+        "sizing": {"programmed_span_s": span_allowance, "T_stream_max_s": stream_allowance},
+        "thresholds_audit": thresholds_audit,
         "chain_deviations": list(b5_chain.DEVIATIONS),
         "driver_argv": ["<python>", "<repo>/scripts/run_night.py", "run", "--plan", plan["path"]],
     }
