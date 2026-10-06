@@ -3,9 +3,18 @@
 Real code runs unpatched throughout: strict validation, re-reduction, anchor
 re-derivation from the raw plist, the calibration ledger and bracket evaluator,
 battery-pair authentication, the pack/code/model replays and the monitor joins.
-Fakes stand only at the seams the plan names: the hazard-monitor journals (L1,
-written here as JSON lines), the exclusion function (L4), the process-group
-probe, and the subprocess runner for G3 and the desk producer.
+Fakes stand only at the seams the plan names, and each fake writes or reads the
+other lane's own format:
+
+* hazard-monitor journals (L1): written here line for line in the
+  ``joulewise.hazard_journal.v1`` form of ``joulewise.hazards.monitor``;
+  ``tests/fixtures/b5_harvest/l1_monitor`` holds journals L1's own monitor
+  wrote, and ``L1JournalFormatTests`` pins this writer to them;
+* the exclusion function (L4): ``joulewise.flags.exclusions.compute`` itself
+  whenever ``joulewise.flags`` is importable, else ``fake_exclusions``, which
+  reads L4's documented roster and span shape;
+* the arm record (L1), executed inventory and driver flags (L2) in their
+  writers' shapes; the process-group probe; the G3 and desk subprocesses.
 
 Members are clones of the committed strict-valid seed bundle
 (tests/fixtures/d117_v2_production/strict_seed_bundle).  Each clone gets its
@@ -19,6 +28,7 @@ import base64
 import contextlib
 import copy
 import hashlib
+import importlib.util
 import io
 import json
 import math
@@ -32,6 +42,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
+from joulewise import kernel_clock
 from joulewise.adapters.powermetrics import (
     RAW_SAMPLES_NAME, anchor_records_from_powermetrics, parse_powermetrics_records)
 from joulewise.b5 import harvest as h
@@ -46,11 +57,24 @@ from joulewise.uncertainty_evidence import resolve_clock_evidence_deriver, stamp
 ROOT = Path(__file__).resolve().parents[1]
 SEED = ROOT / "tests/fixtures/d117_v2_production/strict_seed_bundle"
 FIXTURES = ROOT / "tests/fixtures/b5_harvest"
+L1_JOURNALS = FIXTURES / "l1_monitor"
 PREFIX = ROOT / "tests/fixtures/v5_qualification_harvest/acceptance-prefix-376.jsonl.zlib.b85"
 ACCEPTANCE = "configs/calibration/calibration_acceptance_d079_v2_n24_25g83_r2.json"
 POLICY = "configs/campaign_policies/quiet_mac_p2_production.json"
 B3W1 = Path("/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261004T1305Z-r2")
 REAL_TMP = os.path.realpath(tempfile.gettempdir())
+
+
+def _importable(name: str) -> bool:
+    try:
+        return importlib.util.find_spec(name) is not None
+    except ModuleNotFoundError:
+        return False
+
+
+# Other lanes' modules, present once the lanes are integrated.
+L1_AVAILABLE = _importable("joulewise.hazards.monitor")
+L4_AVAILABLE = _importable("joulewise.flags.exclusions")
 
 PACK_ID = "b5test_floor_v5"
 PLAN_ID = "plan-b5test-floor-v5"
@@ -74,7 +98,10 @@ SEED_STREAM_S = (1487916.588365625, 1487921.314305041)
 SEED_REQUEST_S = (1487919.701423916, 1487919.860664583)
 RAW_OFFSET_NS = 7_000_000_000
 WALL_OFFSET_S = 1786206671.102036 - 1487916.588365625
+WALL_OFFSET_NS = round(WALL_OFFSET_S * 1e9)
+CHAIN_STARTED_NS = 1_487_000 * 10**9  # before every member's stream
 GIB = 2**30
+NS = 10**9
 
 
 def member_span_ns(run_id: str) -> tuple[int, int]:
@@ -151,70 +178,149 @@ def tearDownModule():  # noqa: N802 (unittest hook)
 
 
 # ---------------------------------------------------------------------------
-# Synthetic hazard-monitor journals (the L1 seam).
+# Hazard-monitor journals in L1's format (joulewise.hazards.monitor).
 # ---------------------------------------------------------------------------
 
-def _line(module: str, mono_ns: int, values: dict) -> dict:
-    return {"module": module, "monotonic_ns": mono_ns, "monotonic_raw_ns": mono_ns + RAW_OFFSET_NS,
-            "wall_s": mono_ns / 1e9 + WALL_OFFSET_S, "values": values, "raw": []}
+ACCUMULATOR_FIELDS = (
+    "BatteryPower", "AccumulatedBatteryPower", "BatteryPowerAccumulatorCount",
+    "AccumulatedBatteryDischarge", "BatteryDischargeAccumulatorCount",
+    "SystemPowerIn", "AccumulatedSystemPowerIn", "SystemPowerInAccumulatorCount",
+    "SystemLoad", "AccumulatedSystemLoad", "SystemLoadAccumulatorCount",
+    "SystemVoltageIn", "SystemCurrentIn", "PowerTelemetryErrorCount",
+)
+DRIFT_WORD = round(-3.17 * kernel_clock.FREQUENCY_SCALE)
 
 
-def clean_battery(**override) -> dict:
-    return {"ExternalConnected": "Yes", "IsCharging": "No", "InstantAmperage": 0, "Amperage": 0,
-            "Voltage": 12180, **override}
+def l1_stamp(monotonic_ns: int) -> dict:
+    return {"wall_ns": monotonic_ns + WALL_OFFSET_NS, "monotonic_ns": monotonic_ns,
+            "monotonic_raw_ns": monotonic_ns + RAW_OFFSET_NS}
+
+
+class L1Journal:
+    """Lines exactly as ``joulewise.hazards.monitor.Monitor._write`` writes them."""
+
+    def __init__(self, module: str):
+        self.module, self.lines, self.seq = module, [], 0
+
+    def write(self, kind: str, started_ns: int, finished_ns: int | None = None, values=None, error=None):
+        self.seq += 1
+        self.lines.append({"schema": "joulewise.hazard_journal.v1", "module": self.module, "session": "4242-1",
+                           "seq": self.seq, "kind": kind, "started": l1_stamp(started_ns),
+                           "finished": l1_stamp(started_ns if finished_ns is None else finished_ns),
+                           "values": values, "error": error, "raw": []})
+
+    def dump(self, path: Path) -> None:
+        path.write_text("".join(json.dumps(line, sort_keys=True, separators=(",", ":")) + "\n" for line in self.lines))
+
+
+def frequency_probe(raw_word: int) -> dict:
+    """A valid ``kernel_clock`` probe record (L1's tests/hazards/fakes.frequency_probe)."""
+    value = kernel_clock.Timex()
+    value.freq = raw_word
+    value.status = 5
+    return {"schema_version": kernel_clock.PROBE_SCHEMA, "modes": 0, "raw_word": raw_word,
+            "ppm": raw_word / kernel_clock.FREQUENCY_SCALE, "call_status": 5, "timex_status": 5, "errno": 0,
+            "raw_hex": bytes(value).hex()}
+
+
+def battery_values(update_time_s: int, **override) -> dict:
+    """``battery.parse_reading`` fields, as L1's monitor journals them."""
+    values = {"returncode": 0, "external_connected": True, "is_charging": False, "instant_amperage_ma": 0,
+              "amperage_ma": 0, "voltage_mv": 12180, "update_time_s": update_time_s, "update_age_s": 2.0,
+              "fully_charged": False, "current_capacity_pct": 80,
+              "power_telemetry": {name: None for name in ACCUMULATOR_FIELDS}, "adapter_watts": 140,
+              "publication": True}
+    telemetry = override.pop("power_telemetry", {})
+    values["power_telemetry"].update(telemetry)
+    values.update(override)
+    return values
+
+
+def contention_values(begin_ns: int, end_ns: int, outside=(), kernel_task=0.31) -> dict:
+    """``contention.interval`` output (kernel_task excluded, as in window)."""
+    rows = [{"pid": 310, "command": "WindowServer", "cpu_s_per_s": 0.01}, *outside]
+    rows.sort(key=lambda row: (-row["cpu_s_per_s"], row["pid"]))
+    return {"interval": {"monotonic_ns": [begin_ns, end_ns],
+                         "monotonic_raw_ns": [begin_ns + RAW_OFFSET_NS, end_ns + RAW_OFFSET_NS],
+                         "wall_ns": [begin_ns + WALL_OFFSET_NS, end_ns + WALL_OFFSET_NS]},
+            "elapsed_s": (end_ns - begin_ns) / 1e9, "clean": all(row["cpu_s_per_s"] <= 0.05 for row in rows),
+            "max_outside": rows[0], "outside_over_limit": [row for row in rows if row["cpu_s_per_s"] > 0.05],
+            "outside_listed": [row for row in rows if row["cpu_s_per_s"] >= 0.005],
+            "outside_total_cpu_s_per_s": sum(row["cpu_s_per_s"] for row in rows), "outside_process_count": 7,
+            "tree_cpu_s_per_s": 0.97, "tree_process_count": 3, "kernel_task_cpu_s_per_s": kernel_task,
+            "kernel_task_included": False, "unaccounted": [], "raw": []}
+
+
+def clock_values(raw_ns: int, anchor_ns: int, frequency: bool) -> dict:
+    return {"anchor": {"realtime_ns": raw_ns + anchor_ns, "monotonic_raw_ns": raw_ns, "read_skew_ns": 400,
+                       "anchor_ns": anchor_ns},
+            "frequency": frequency_probe(DRIFT_WORD) if frequency else None}
+
+
+def disk_values(free_bytes: int, low_bytes: int = 10 * GIB) -> dict:
+    target = {"path": "/runs", "copies": 1, "device": 1, "free_bytes": free_bytes, "total_bytes": 4096 * 10**9,
+              "f_bavail": free_bytes // 4096, "f_frsize": 4096}
+    return {"targets": [target], "low": [{"path": "/runs", "free_bytes": free_bytes, "low_bytes": low_bytes}]
+            if free_bytes < low_bytes else []}
 
 
 def write_journals(directory: Path, *, extra_publications=(), thermal_levels=(), contention_extra=(),
                    clock_steps=(), omit=(), battery_gap=None, contention_gap=None, disk_low=False) -> None:
-    """Every module from 300 s before the first member to 300 s after the last."""
+    """Every module from 300 s before the first member to 300 s after the last, in L1's format.
+
+    ``extra_publications``: (monotonic_ns, battery-value overrides); each is a
+    gauge publication taking effect at that instant (rounded to L1's whole-second
+    UpdateTime).  ``contention_extra``: ((lo, hi), {pid, command, cpu_s_per_s}).
+    """
     directory.mkdir(parents=True, exist_ok=True)
     spans = [member_span_ns(row[0]) for row in MEMBERS]
     # An odd offset keeps the journal's sampling grid off every span edge.
-    start, end = spans[0][0] - 300 * 10**9 - 1_234_567, spans[-1][1] + 300 * 10**9
-    step5, step10, step60 = 5 * 10**9, 10 * 10**9, 60 * 10**9
-    rows: dict[str, list[dict]] = {name: [] for name in ("battery", "thermal", "contention", "clock", "disk")}
-    publications = [(stamp, clean_battery()) for stamp in range(start, end, step60)]
-    publications += [(stamp, clean_battery(**values)) for stamp, values in extra_publications]
+    start, end = spans[0][0] - 300 * NS - 1_234_567, spans[-1][1] + 300 * NS
+    journals = {name: L1Journal(name) for name in ("battery", "thermal", "contention", "clock", "disk")}
+    for journal in journals.values():
+        journal.write("session_start", start - NS, values={"pid": 4242, "argv": ["test"]})
+
+    def update_of(monotonic_ns: int) -> int:
+        return round((monotonic_ns + WALL_OFFSET_NS) / 1e9)
+
+    publications = [(update_of(stamp), {}) for stamp in range(start, end, 60 * NS)]
+    publications += [(update_of(stamp), dict(values)) for stamp, values in extra_publications]
     if battery_gap is not None:
-        publications = [(stamp, values) for stamp, values in publications
-                        if not battery_gap[0] <= stamp <= battery_gap[1]]
-    publications.sort(key=lambda item: item[0])
-    for poll in range(start, end, step5):
-        current = [item for item in publications if item[0] <= poll]
-        if not current:
-            continue
-        stamp, values = current[-1]
-        if battery_gap is not None and battery_gap[0] <= poll <= battery_gap[1]:
-            continue
-        rows["battery"].append(_line("battery", poll, {**values, "UpdateTime": int(stamp / 1e9 + WALL_OFFSET_S)}))
+        publications = [(update, values) for update, values in publications
+                        if not battery_gap[0] <= update * NS - WALL_OFFSET_NS <= battery_gap[1]]
+    for update, values in sorted(publications, key=lambda item: item[0]):
+        effect = update * NS - WALL_OFFSET_NS
+        journals["battery"].write("reading", effect + 2 * NS, effect + 2 * NS + 30_000_000,
+                                  values=battery_values(update, **values))
     levels = dict(thermal_levels)
-    for poll in range(start, end, step5):
+    for poll in range(start, end, 5 * NS):
         level = next((value for (lo, hi), value in levels.items() if lo <= poll <= hi), 0)
-        rows["thermal"].append(_line("thermal", poll, {"level": level}))
-    extra = list(contention_extra)
-    for begin in range(start, end, step10):
-        if contention_gap is not None and begin < contention_gap[1] and contention_gap[0] < begin + step10:
+        journals["thermal"].write("reading", poll - 3_000_000, poll, values={"level": level, "source": "notifyutil"})
+    journals["contention"].write("snapshot", start - 10 * NS)
+    for begin in range(start, end, 10 * NS):
+        if contention_gap is not None and begin < contention_gap[1] and contention_gap[0] < begin + 10 * NS:
             continue
-        processes = [{"pid": 0, "comm": "kernel_task", "cpu_s_per_s": 0.31, "outside": True},
-                     {"pid": 88, "comm": "WindowServer", "cpu_s_per_s": 0.01, "outside": True},
-                     {"pid": 4242, "comm": "python3.13", "cpu_s_per_s": 0.97, "in_measurement_tree": True}]
-        processes += [row for (lo, hi), row in extra if lo < begin + step10 and begin < hi]
-        rows["contention"].append({**_line("contention", begin + step10, {"processes": processes}),
-                                   "interval": {"monotonic_ns": [begin, begin + step10]}})
+        outside = [dict(row) for (lo, hi), row in contention_extra if lo < begin + 10 * NS and begin < hi]
+        journals["contention"].write("interval", begin - 1_000_000, begin + 10 * NS + 1_000_000,
+                                     values=contention_values(begin, begin + 10 * NS, outside))
+    # Clock: 1 Hz around every member's stream, 5 s elsewhere; f every 5 s.
+    dense = set()
+    for lo, hi in spans:
+        dense.update(range(lo - 30 * NS - 1_234_567, hi + 30 * NS, NS))
+    polls = sorted(set(range(start, end, 5 * NS)) | dense)
+    raw_start = start + RAW_OFFSET_NS
     anchor0 = 1_784_718_754_513_670_000
-    offset = 0
-    steps = sorted(clock_steps)
-    for poll in range(start, end, step5):
-        offset = sum(size for at, size in steps if at <= poll)
+    for poll in polls:
         raw = poll + RAW_OFFSET_NS
-        anchor = anchor0 + round(-3.17e-6 * (raw - start - RAW_OFFSET_NS)) + offset
-        rows["clock"].append(_line("clock", poll, {"anchor_ns": anchor, "ppm": -3.17}))
-    for poll in range(start, end, step60):
-        rows["disk"].append(_line("disk", poll, {"free_bytes": (5 if disk_low else 200) * GIB}))
-    for name, lines in rows.items():
-        if name in omit:
-            continue
-        (directory / f"{name}.jsonl").write_text("".join(json.dumps(line, sort_keys=True) + "\n" for line in lines))
+        offset = sum(size for at, size in clock_steps if at <= poll)
+        anchor = anchor0 + DRIFT_WORD * (raw - raw_start) // (kernel_clock.FREQUENCY_SCALE * 1_000_000) + offset
+        journals["clock"].write("reading", poll - 600, poll, values=clock_values(raw, anchor, (poll - start) % (5 * NS) == 0))
+    for poll in range(start, end, 60 * NS):
+        journals["disk"].write("reading", poll - 500_000, poll, values=disk_values((5 if disk_low else 200) * GIB))
+    for name, journal in journals.items():
+        journal.write("session_end", end + NS, values={"reason": "test end"})
+        if name not in omit:
+            journal.dump(directory / f"{name}.jsonl")
 
 
 # ---------------------------------------------------------------------------
@@ -222,41 +328,79 @@ def write_journals(directory: Path, *, extra_publications=(), thermal_levels=(),
 # ---------------------------------------------------------------------------
 
 def fake_exclusions(flags, roster, spans, catalog):
-    """A stand-in for L4's exclusions.compute: catalog effects, quad rule, 8-of-10 minimum."""
+    """A stand-in for L4's ``exclusions.compute`` reading L4's documented input shape.
+
+    roster: {members: [{run_id, stage_id, units: [{cell_id, stratum,
+    unit_id}]}], cells: [{cell_id, target, strata}]}; spans: {run_id:
+    {monotonic_ns}}.  Catalog effects; a flagged member drops its whole unit;
+    each declared stratum needs ``rules.cell_unit_minimum`` kept units.
+    """
+    minimum = int(((catalog.raw or {}).get("rules") or {}).get("cell_unit_minimum", 8))
+    members = {member["run_id"]: member for member in roster["members"]}
     excluded: dict[str, set] = {}
     window = set()
     for flag in flags:
-        effect = catalog.effect(flag["code"])
+        effect, scope = catalog.effect(flag["code"]), flag["scope"]
         if effect == "EXCLUDE_WINDOW":
             window.add(flag["code"])
-        elif effect == "EXCLUDE_MEMBER" and flag["scope"].get("run_id"):
-            excluded.setdefault(flag["scope"]["run_id"], set()).add(flag["code"])
-    units: dict[str, dict[tuple, set]] = {}
+        elif effect == "EXCLUDE_MEMBER" and scope["level"] == "member":
+            if scope["run_id"] in members:
+                excluded.setdefault(scope["run_id"], set()).add(flag["code"])
+        elif effect == "EXCLUDE_MEMBER":
+            interval = flag["interval"]["monotonic_ns"]
+            for run_id in members:
+                span = (spans.get(run_id) or {}).get("monotonic_ns")
+                if interval is None or span is None or (span[0] <= interval[1] and interval[0] <= span[1]):
+                    excluded.setdefault(run_id, set()).add(flag["code"])
+    units: dict[tuple, list] = {}
     for member in roster["members"]:
-        for cell in member["cells"]:
-            units.setdefault(cell["cell_id"], {}).setdefault((cell["unit_kind"], cell["unit_id"]), set()).add(
-                member["run_id"])
-    dropped = {run_id: set(codes) for run_id, codes in excluded.items()}
+        for unit in member["units"]:
+            units.setdefault((unit["cell_id"], unit["stratum"], unit["unit_id"]), []).append(member["run_id"])
     cells = []
-    for cell_id, cell_units in sorted(units.items()):
-        kept = {key: members for key, members in cell_units.items() if not members & set(excluded)}
-        for key, members in cell_units.items():
-            if key[0] == "quad" and members & set(excluded):
-                for run_id in members:
-                    dropped.setdefault(run_id, set()).add("quad.member_flagged")
-        planned = {kind: sum(key[0] == kind for key in cell_units) for kind in ("repeat", "quad")}
-        n = {kind: sum(key[0] == kind for key in kept) for kind in ("repeat", "quad")}
-        resolvable = all(n[kind] >= math.ceil(0.8 * planned[kind]) for kind in planned)
-        cells.append({"cell_id": cell_id, "n_repeats": n["repeat"], "n_quads": n["quad"], "resolvable": resolvable})
-        if not resolvable:
+    for cell in roster["cells"]:
+        strata = sorted(set(cell["strata"]) | {key[1] for key in units if key[0] == cell["cell_id"]})
+        keys = {stratum: sorted(key for key in units if key[:2] == (cell["cell_id"], stratum)) for stratum in strata}
+        kept = {stratum: [key[2] for key in keys[stratum] if not any(run in excluded for run in units[key])]
+                for stratum in strata}
+        dropped = [{"stratum": key[1], "unit_id": key[2], "run_ids": sorted(units[key]),
+                    "codes": sorted({code for run in units[key] for code in excluded.get(run, ())})}
+                   for stratum in strata for key in keys[stratum] if any(run in excluded for run in units[key])]
+        resolvable = bool(strata) and all(len(kept[stratum]) >= minimum for stratum in strata)
+        cells.append({"cell_id": cell["cell_id"], "n_repeats": len(kept.get("repeat", [])),
+                      "n_quads": len(kept.get("quad", [])), "kept_units": kept, "dropped_units": dropped,
+                      "resolvable": resolvable})
+        if cell.get("target", True) and not resolvable:
             window.add("cell.below_minimum")
-    return {"members_excluded": [{"run_id": run_id, "codes": sorted(codes)} for run_id, codes in sorted(dropped.items())],
-            "cells": cells, "claim_usable": not window, "reasons": sorted(window)}
+    return {"members_excluded": [{"run_id": run_id, "codes": sorted(codes)} for run_id, codes in sorted(excluded.items())],
+            "cells": cells, "claim_usable": not window, "reasons": sorted(window),
+            "release_blocked": any(catalog.effect(flag["code"]) == "UNCLASSIFIED" for flag in flags)}
+
+
+# The production exclusion function when lane L4 is present, else the fake.
+EXCLUSIONS = h._l4_exclusions if L4_AVAILABLE else fake_exclusions
+
+
+def l4_flag_line(code: str, **fields) -> dict:
+    """A desk/arm/driver flag as L4's ``joulewise.flags.schema.make_flag`` writes it."""
+    if L4_AVAILABLE:
+        from joulewise.flags.schema import make_flag, make_scope, make_source
+        return make_flag(code=code, family=fields.get("family", "RECORDS"), klass=fields.get("klass", "REPRESENTATION"),
+                         scope=make_scope(fields.get("level", "window"), plan_id=PLAN_ID, attempt=1,
+                                          run_id=fields.get("run_id")),
+                         source=make_source(fields.get("stage", "arm"), fields.get("collector", "pack_tree")),
+                         observed=fields.get("observed"), detail="test", emitted={"wall_s": 1.0, "monotonic_ns": 2,
+                                                                                  "boot_session_uuid": None})
+    ledger = h.FlagLedger(plan_id=PLAN_ID, attempt=1, catalog=h.Catalog.load(None), boot_session_uuid=None,
+                          now=lambda: 1.0, monotonic_ns=lambda: 2)
+    return ledger.emit(code, level=fields.get("level", "window"), run_id=fields.get("run_id"),
+                       collector=fields.get("collector", "pack_tree"), stage=fields.get("stage", "arm"),
+                       observed=fields.get("observed"), detail="test")
 
 
 class Window:
     def __init__(self, root: Path, *, prefix_ledger=False, target_precheck=None, catalog_overrides=None,
-                 journals=None, executed_overrides=None, frozen_pins=True, register_prompt_tokens=32):
+                 journals=None, executed_overrides=None, frozen_pins=True, register_prompt_tokens=32,
+                 acceptance_policy=None, sealed_inventory=True):
         self.root = root
         self.measurement = root / "measurement"
         self.pack = self.measurement / "configs" / "campaigns" / PACK_ID
@@ -267,7 +411,7 @@ class Window:
         self.ledger = self.measurement / "runs" / "calibration_observation_ledger.jsonl"
         self.pin = self.measurement / "configs" / "calibration" / "calibration_ledger_head.json"
         self.plan_path = self.custody / "night_plan.json"
-        self._build_repo(target_precheck, register_prompt_tokens, frozen_pins)
+        self._build_repo(target_precheck, register_prompt_tokens, frozen_pins, acceptance_policy, sealed_inventory)
         self._build_catalog(catalog_overrides or {})
         self._build_runs()
         self._build_ledger(prefix_ledger)
@@ -275,7 +419,7 @@ class Window:
         write_journals(self.custody / "hazards" / "monitor", **(journals or {}))
 
     # -- measurement checkout and pack -------------------------------------
-    def _build_repo(self, target_precheck, register_prompt_tokens, frozen_pins):
+    def _build_repo(self, target_precheck, register_prompt_tokens, frozen_pins, acceptance_policy, sealed_inventory):
         for relative in (POLICY, ACCEPTANCE):
             target = self.measurement / relative
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -320,7 +464,8 @@ class Window:
                      "declared_sha256": hashlib.sha256(plan).hexdigest()},
             "window_identity": {"window_id": PLAN_ID, "evidence_root_id": EVIDENCE_ROOT_ID},
             "campaign_policy": {"path": POLICY, "sha256": sha(ROOT / POLICY)},
-            "acceptance_policy": {"issued_acceptance": {"path": ACCEPTANCE, "artifact_sha256": sha(ROOT / ACCEPTANCE)}},
+            "acceptance_policy": acceptance_policy if acceptance_policy is not None else {
+                "issued_acceptance": {"path": ACCEPTANCE, "artifact_sha256": sha(ROOT / ACCEPTANCE)}},
             "science": science,
             "external_inputs": {"manifests": [], "artifacts": []},
             "arm_attachments": {"identity_pin_projection": {"identity_units": [{
@@ -338,11 +483,15 @@ class Window:
         files = {path.relative_to(self.measurement).as_posix(): sha(path)
                  for path in sorted(self.measurement.rglob("*")) if path.is_file()}
         self.sealed_files = files
-        put(self.measurement / "configs/campaigns/v5_claim_25g83/sealed_inventory.json",
-            {"head": H_CLAIM, "files": files})
+        if sealed_inventory:  # L6's sealed inventory at its default location
+            put(self.measurement / "configs/campaigns/v5_claim_25g83/sealed_inventory.json",
+                {"head": H_CLAIM, "files": files})
 
     def _build_catalog(self, overrides):
         catalog = json.loads((FIXTURES / "flag_catalog.json").read_bytes())
+        # Six members cannot fill the registered 8-of-10 minimum; one unit per
+        # stratum keeps the unit rule observable in a window this small.
+        catalog["rules"]["cell_unit_minimum"] = 1
         for code, effect in overrides.items():
             catalog["codes"][code]["effect"] = effect
         put(self.measurement / "configs/campaigns/v5_claim_25g83/flag_catalog.json", catalog)
@@ -394,32 +543,43 @@ class Window:
     # -- night custody, hazards, plan ------------------------------------------
     def _build_night(self, executed_overrides):
         night = self.custody / "night"
-        put(night / "chain.started", {"epoch_s": 1786206000.0, "pgid": 999_999, "pid": 999_999})
+        # L2's run_night._complete_chain_start record.
+        put(night / "chain.started", {"epoch_s": 1786206000.0, "pgid": 999_999, "pid": 999_999,
+                                      "monotonic_ns": CHAIN_STARTED_NS, "start_time": None})
         put(night / "chain.exited", {"epoch_s": 1786216000.0, "exit_code": 0, "monotonic_ns": 1})
         put(night / "result.json", {"aborted_reason": None, "artifacts": []})
         chain = self.custody / "chain.zsh"
         chain.write_text("#!/bin/zsh\necho b5 test chain\n")
         (self.custody / "chain.zsh.sha256").write_text(f"{sha(chain)}  chain.zsh\n")
+        # L1's hazards.arm record: one entry per module and phase.
         put(self.custody / "hazards" / "arm.json", {
-            "schema": "joulewise.hazard_arm.v1", "verdict": "GO",
-            "modules": {name: {"verdict": "PASS", "measurement": {"probe": name}, "thresholds": {}, "raw": []}
+            "schema": "joulewise.hazard_arm.v1", "decision": "GO", "refused_at": None, "reasons": [],
+            "hazards": {name: [{"phase": "instant", "measurement": {"schema": "joulewise.hazard_measurement.v1",
+                                                                   "module": name, "error": None},
+                                "verdict": {"schema": "joulewise.hazard_verdict.v1", "module": name, "status": "PASS",
+                                            "reasons": [], "thresholds": {}, "observed": {}}}]
                         for name in ("clock", "battery", "thermal", "contention", "disk", "instrument")}})
-        executed = {"head": H_CLAIM, "status_porcelain": "", "files": dict(self.sealed_files)}
-        executed["files"].update(executed_overrides.get("files", {}))
+        # L2's driver.executed_inventory record (night/executed_inventory.json).
+        checkout = {"root": str(self.measurement), "head": H_CLAIM, "status_porcelain": "", "status_clean": True,
+                    "files": dict(self.sealed_files), "errors": []}
+        checkout["files"].update(executed_overrides.get("files", {}))
         for key in ("head", "status_porcelain"):
             if key in executed_overrides:
-                executed[key] = executed_overrides[key]
-        put(self.custody / "hazards" / "executed_inventory.json", executed)
+                checkout[key] = executed_overrides[key]
+        put(night / "executed_inventory.json", {
+            "schema": "joulewise.b5_executed_inventory.v1", "taken": {"wall_s": 1.0, "monotonic_ns": 1},
+            "measurement_checkout": checkout, "chain": {"path": str(chain), "sha256": sha(chain)},
+            "pack_root": str(self.pack)})
+        # The shape of L2's write_window_plan.
         plan = {
             "schema": "joulewise.hazard_window_plan.v1", "plan_id": PLAN_ID, "receipt_class": "HAZARD_PACK",
-            "t0_epoch_s": 1786205000.0, "window_max_s": 36000,
+            "t0_epoch_s": 1786205000.0, "window_max_s": 36000, "measurement_head": H_CLAIM,
             "measurement_root": str(self.measurement), "custody_root": str(self.custody),
             "chain_path": str(chain), "chain_sha256_path": str(self.custody / "chain.zsh.sha256"),
             "hazard_window": {
+                "attempt": 1,
                 "pack": {"pack_id": PACK_ID, "pack_root": str(self.pack)},
-                "bracket_session_id": SESSION_ID, "h_claim": H_CLAIM, "attempt": 1,
-                "sealed_inventory_path": "configs/campaigns/v5_claim_25g83/sealed_inventory.json",
-                "executed_inventory_path": "hazards/executed_inventory.json",
+                "bracket_session_id": SESSION_ID,
                 "thresholds": {},
                 "bindings": {"claim_runs_root": str(self.claim), "bound_runs_root": str(self.bound),
                              "ledger_path": str(self.ledger), "pre_attempt_id": f"{SESSION_ID}-pre",
@@ -429,7 +589,7 @@ class Window:
 
     # -- running ---------------------------------------------------------------
     def harvest(self, *, seams=None, **kwargs):
-        seams = seams or h.Seams(group_alive=lambda pgid: False, exclusions_compute=fake_exclusions,
+        seams = seams or h.Seams(group_alive=lambda pgid: False, exclusions_compute=EXCLUSIONS,
                                  boot_session_uuid=lambda: "B5-TEST-BOOT")
         inputs = h.resolve_inputs(self.plan_path)
         return h.harvest(inputs, self.archive, seams=seams, **kwargs)
@@ -446,6 +606,10 @@ class Window:
 
     def exclusions(self) -> dict:
         return json.loads((self.archive / "derived" / "exclusions.json").read_bytes())
+
+    def dropped(self) -> set[str]:
+        """Every member whose unit was dropped from any cell."""
+        return {run for cell in self.exclusions()["cells"] for unit in cell["dropped_units"] for run in unit["run_ids"]}
 
 
 _REAL_ASSESS = h.assess_member
@@ -491,9 +655,9 @@ def cached_assess(task):
 
 class WindowTestCase(unittest.TestCase):
     # The synthetic window has no campaign log, so the cooldown join cannot
-    # verify (member.cooldown_unverified fires on every member, correctly).
+    # verify (member.cooldown_evidence_unverified fires on every member, correctly).
     # Tests that isolate one member rule mark that code DISCLOSE.
-    ISOLATE = {"member.cooldown_unverified": "DISCLOSE"}
+    ISOLATE = {"member.cooldown_evidence_unverified": "DISCLOSE"}
     CACHE_ASSESSMENTS = True
 
     def setUp(self):
@@ -532,7 +696,15 @@ class CollectedWindowTests(WindowTestCase):
             self.assertEqual(len(flag["flag_id"]), 20)
             self.assertIn(flag["blinding"], (h.STRUCTURE, h.RESTRICTED))
         member_codes = {flag["code"] for flag in flags if flag["scope"]["level"] == "member"}
-        self.assertEqual(member_codes - {"battery.capture_pair_missing", "member.cooldown_unverified"}, set())
+        # The seed bundle has no #421 pair; the journal covers every member, so
+        # the missing pair is the disclosed "covered" case (plan 3.5).
+        self.assertEqual(member_codes - {"battery.capture_pair_missing_covered",
+                                         "member.cooldown_evidence_unverified"}, set())
+        for flag in flags:  # L4's flag schema, field for field
+            self.assertEqual(h.flag_problems(flag), [], flag["code"])
+        if L4_AVAILABLE:
+            from joulewise.flags.schema import validate_flag
+            self.assertEqual({flag["code"]: validate_flag(flag) for flag in flags if validate_flag(flag)}, {})
         self.assertNotIn("pack.identity_mismatch", window.codes())
         self.assertNotIn("code.executed_differs_from_sealed", window.codes())
         self.assertNotIn("model.identity_mismatch", window.codes())
@@ -542,12 +714,15 @@ class CollectedWindowTests(WindowTestCase):
         self.assertEqual(summary["schema"], "joulewise.window_flags.v1")
         self.assertEqual(set(summary), {"schema", "window", "catalog", "hazards", "flags", "collector_errors",
                                         "exclusions"})
-        self.assertEqual(summary["hazards"]["battery"]["arm"]["verdict"], "PASS")
+        self.assertEqual([phase["verdict"] for phase in summary["hazards"]["battery"]["arm"]], ["PASS"])
         self.assertEqual(summary["hazards"]["battery"]["continuous"]["journal"]["malformed"], 0)
         self.assertEqual(summary["flags"]["unclassified"], [])
         exclusions = window.exclusions()
         self.assertEqual(exclusions["members_excluded"], [])
-        self.assertTrue(all(cell["resolvable"] for cell in exclusions["cells"]))
+        # One floor cell: the condition family, its repeats and its quad.
+        self.assertEqual([(cell["cell_id"], cell["n_repeats"], cell["n_quads"], cell["resolvable"])
+                          for cell in exclusions["cells"]], [(FAMILY, 2, 1, True)])
+        self.assertNotIn("cell.below_minimum", exclusions["reasons"])
         # The fixture cannot produce a real bracket, NEG-8 bound or verdict, so
         # window-level calibration/NEG-8 flags keep it from being claim-usable.
         self.assertFalse(summary["exclusions"]["claim_usable"])
@@ -597,7 +772,7 @@ class CollectedWindowTests(WindowTestCase):
     def test_battery_excursion_excludes_the_named_member_and_its_quad(self):
         target = "b5t-cmp-b01-b1"
         start, end = member_span_ns(target)
-        excursion = ((start + end) // 2, {"InstantAmperage": -447, "Amperage": -380})
+        excursion = ((start + end) // 2, {"instant_amperage_ma": -447, "amperage_ma": -380})
         window = self.window(journals={"extra_publications": [excursion]})
         record = window.harvest()
         self.assertEqual(record["verdict"], "COLLECTED")
@@ -606,15 +781,16 @@ class CollectedWindowTests(WindowTestCase):
         battery = next(flag for flag in window.flags() if flag["code"] == "battery.member_span")
         self.assertEqual(battery["family"], "PHYSICS_IN_SPAN")
         self.assertIn("instant_amperage_above_limit", battery["observed"]["violations"][0]["reasons"])
-        excluded = {row["run_id"] for row in window.exclusions()["members_excluded"]}
-        self.assertEqual(excluded, set(QUAD))
-        cells = {cell["cell_id"]: cell for cell in window.exclusions()["cells"]}
-        self.assertEqual(cells["b5t-cmp"]["n_quads"], 0)
-        self.assertEqual(cells["b5t-abs"]["n_repeats"], 2)
+        self.assertEqual({row["run_id"] for row in window.exclusions()["members_excluded"]}, {target})
+        self.assertEqual(window.dropped(), set(QUAD))  # the flagged member takes its whole quad
+        (cell,) = window.exclusions()["cells"]
+        self.assertEqual((cell["cell_id"], cell["n_repeats"], cell["n_quads"], cell["resolvable"]),
+                         (FAMILY, 2, 0, False))
+        self.assertIn("cell.below_minimum", window.exclusions()["reasons"])
         roster = json.loads((window.archive / "derived" / "roster.json").read_bytes())
         member = next(row for row in roster["members"] if row["run_id"] == target)
-        self.assertEqual(member["cells"][0]["unit_kind"], "quad")
-        self.assertEqual(member["cells"][0]["unit_id"], "b5t-b01")
+        self.assertEqual(member["units"], [{"cell_id": FAMILY, "stratum": "quad", "unit_id": "b5t-b01"}])
+        self.assertEqual(roster["cells"], [{"cell_id": FAMILY, "target": True, "strata": ["quad", "repeat"]}])
 
     def test_missing_bundle_file_is_bytes_missing_and_harvest_completes(self):
         window = self.window()
@@ -625,9 +801,9 @@ class CollectedWindowTests(WindowTestCase):
         self.assertIn("member.bytes_missing", window.codes("b5t-abs-r02"))
         self.assertIn("member.bytes_missing", window.codes("b5t-cmp-b01-a2"))
         excluded = {row["run_id"] for row in window.exclusions()["members_excluded"]}
-        self.assertIn("b5t-abs-r02", excluded)
-        self.assertTrue(set(QUAD) <= excluded)
-        self.assertNotIn("b5t-abs-r01", excluded)
+        self.assertTrue({"b5t-abs-r02", "b5t-cmp-b01-a2"} <= excluded)
+        self.assertTrue(set(QUAD) <= window.dropped())
+        self.assertNotIn("b5t-abs-r01", window.dropped())
 
     def test_flipped_raw_plist_byte_is_a_member_exclusion_not_a_fault(self):
         window = self.window()
@@ -641,9 +817,9 @@ class CollectedWindowTests(WindowTestCase):
         self.assertEqual(record["verdict"], "COLLECTED")
         self.assertEqual(record["faults"], [])
         codes = window.codes("b5t-abs-r01")
-        self.assertIn("member.strict_invalid", codes)
+        self.assertIn("member.strict_validation_failed", codes)
         self.assertIn("b5t-abs-r01", {row["run_id"] for row in window.exclusions()["members_excluded"]})
-        self.assertNotIn("member.strict_invalid", window.codes("b5t-abs-r02"))
+        self.assertNotIn("member.strict_validation_failed", window.codes("b5t-abs-r02"))
 
     def test_tampered_pack_config_is_pack_identity_mismatch_and_not_claim_usable(self):
         window = self.window()
@@ -656,7 +832,7 @@ class CollectedWindowTests(WindowTestCase):
         flag = next(flag for flag in window.flags() if flag["code"] == "pack.identity_mismatch")
         paths = {row["path"] for row in flag["observed"]["mismatches"]}
         self.assertIn(f"configs/campaigns/{PACK_ID}/01_abs/b5t-abs-r01.json", paths)
-        self.assertIn("member.config_bytes_mismatch", window.codes("b5t-abs-r01"))
+        self.assertIn("member.config_not_in_inventory", window.codes("b5t-abs-r01"))
         self.assertIn("pack.identity_mismatch", window.exclusions()["reasons"])
         self.assertFalse(window.window_flags()["exclusions"]["claim_usable"])
         self.assertFalse(record["claim_usable"])
@@ -692,7 +868,7 @@ class CollectedWindowTests(WindowTestCase):
         window = self.window(journals={
             "thermal_levels": [((lo - 10**9, hi + 10**9), 1)],
             "contention_extra": [((request[0] - 10**9, request[1] + 10**9),
-                                  {"pid": 77, "comm": "fseventsd", "cpu_s_per_s": 1.84, "outside": True})],
+                                  {"pid": 77, "command": "fseventsd", "cpu_s_per_s": 1.84})],
             "clock_steps": [(step_at, 6_000_000)]})
         window.harvest()
         self.assertEqual({flag["scope"]["run_id"] for flag in window.flags() if flag["code"] == "thermal.os_level_nonzero"},
@@ -723,7 +899,7 @@ class CollectedWindowTests(WindowTestCase):
         window.harvest()
         codes = window.codes("b5t-abs-r01")
         self.assertIn("instrument.cadence_ratio_below_threshold", codes)
-        precheck = next(flag for flag in window.flags() if flag["code"] == "member.precheck_failed"
+        precheck = next(flag for flag in window.flags() if flag["code"] == "member.target_phase_precheck_failed"
                         and flag["scope"]["run_id"] == "b5t-abs-r01")
         self.assertEqual(precheck["observed"], {"target": "phase/decode", "reasons": ["instrument_calibration_missing"]})
         self.assertEqual(precheck["blinding"], h.STRUCTURE)
@@ -754,37 +930,49 @@ class CollectedWindowTests(WindowTestCase):
     def test_absent_frozen_pins_are_recorded(self):
         window = self.window(frozen_pins=False)
         window.harvest()
-        self.assertIn("model.frozen_pins_absent", window.codes())
+        self.assertIn("model.identity_unpinned", window.codes())
         self.assertNotIn("model.identity_mismatch", window.codes())
 
     def test_earlier_flag_files_are_absorbed_and_malformed_lines_recorded(self):
+        """Desk, arm and driver flags, as L4's make_flag and sink write them, reach the exclusion function."""
         window = self.window()
-        ledger = h.FlagLedger(plan_id=PLAN_ID, attempt=1, catalog=h.Catalog.load(None), boot_session_uuid="X")
-        earlier = ledger.emit("records.collector_failed", level="window", collector="arm:pack_tree", stage="arm",
-                              observed={"collector": "pack_tree", "error_type": "TimeoutExpired"})
+        arm_flag = l4_flag_line("model.identity_mismatch", family="MODEL_IDENTITY", klass="NUMBER",
+                                collector="model_identity", observed={"unit": "b5t-unit"})
+        driver_flag = l4_flag_line("records.collector_failed", stage="window", collector="driver",
+                                   observed={"collector": "lineage", "error_type": "OSError"})
+        self.assertEqual(set(arm_flag), h.FLAG_KEYS)  # schema_version included
         flags_dir = window.custody / "flags"
         flags_dir.mkdir(parents=True)
-        (flags_dir / "arm.jsonl").write_text(json.dumps(earlier) + "\n{not json\n")
+        (flags_dir / "arm.jsonl").write_text(json.dumps(arm_flag) + "\n{not json\n")
+        (flags_dir / "driver.jsonl").write_text(json.dumps(driver_flag) + "\n"
+                                                + json.dumps({**driver_flag, "detail": "edited"}) + "\n")
         window.harvest()
         ids = {flag["flag_id"] for flag in window.flags()}
-        self.assertIn(earlier["flag_id"], ids)
-        self.assertIn("records.flag_line_malformed", window.codes())
+        self.assertTrue({arm_flag["flag_id"], driver_flag["flag_id"]} <= ids)
+        malformed = sorted((flag["observed"]["file"], flag["observed"]["line"]) for flag in window.flags()
+                           if flag["code"] == "records.malformed_flag")
+        self.assertEqual(malformed, [("arm.jsonl", 2)])  # an edited detail keeps a valid flag_id: same fact
+        # The arm-time model mismatch excludes the window; the malformed line
+        # is never classified, so the release event is blocked until read.
+        self.assertIn("model.identity_mismatch", window.exclusions()["reasons"])
+        self.assertIn("records.malformed_flag", window.window_flags()["flags"]["unclassified"])
 
     def test_unknown_catalog_entry_is_reported_unclassified(self):
         window = self.window()
         catalog_path = window.measurement / "configs/campaigns/v5_claim_25g83/flag_catalog.json"
         catalog = json.loads(catalog_path.read_bytes())
-        del catalog["codes"]["battery.capture_pair_missing"]
+        del catalog["codes"]["battery.capture_pair_missing_covered"]
         put(catalog_path, catalog)
         window.harvest()
-        self.assertIn("battery.capture_pair_missing", window.window_flags()["flags"]["unclassified"])
+        self.assertIn("battery.capture_pair_missing_covered", window.window_flags()["flags"]["unclassified"])
+        self.assertTrue(window.window_flags()["exclusions"]["release_blocked"])
 
     def test_bundle_outside_roster_is_ignored_and_recorded(self):
         window = self.window()
         subprocess.run(["/bin/cp", "-c", "-R", str(window.claim / "b5t-abs-r01"), str(window.claim / "stray-r99")],
                        check=True)
         window.harvest()
-        self.assertIn("roster.bundle_not_in_roster", window.codes("stray-r99"))
+        self.assertIn("roster.not_in_plan", window.codes("stray-r99"))
         self.assertNotIn("stray-r99", json.loads((window.archive / "withheld" / "spans.json").read_bytes())["spans"])
 
     def test_exclusion_function_unavailable_still_emits_numbers_and_flags(self):
@@ -857,7 +1045,7 @@ class CalibrationBaselineTests(WindowTestCase):
         self.assertEqual(boundary["terminal_head_pin_candidate"]["sequence"], rows)
         self.assertGreater(rows, cutoff["sequence"])
         self.assertTrue((window.archive / "derived" / "bracket-binding.json").is_file())
-        self.assertNotIn("calibration.session_not_bound_to_plan", window.codes())
+        self.assertNotIn("calibration.session_not_bound", window.codes())
         self.assertNotIn("calibration.capture_invalid", window.codes())
         # Negative control: the same ledger without the cutoff baseline is the
         # memo-3.3 refusal the harvest must not reproduce.
@@ -877,7 +1065,7 @@ class CalibrationBaselineTests(WindowTestCase):
         plan["hazard_window"]["bindings"]["claim_runs_root"] = str(moved)
         put(window.plan_path, plan)
         window.harvest()
-        flag = next(flag for flag in window.flags() if flag["code"] == "calibration.session_not_bound_to_plan")
+        flag = next(flag for flag in window.flags() if flag["code"] == "calibration.session_not_bound")
         self.assertIn("runs_root", flag["observed"])
 
     def test_capture_artifact_change_is_capture_invalid(self):
@@ -941,7 +1129,7 @@ class DeskAndG3Tests(WindowTestCase):
             (runs / "b5t-abs-r01" / "logs" / "controller.log").write_text("tampered\n")
             return SimpleNamespace(returncode=1, stdout="", stderr="")
 
-        window.harvest(seams=h.Seams(group_alive=lambda pgid: False, exclusions_compute=fake_exclusions,
+        window.harvest(seams=h.Seams(group_alive=lambda pgid: False, exclusions_compute=EXCLUSIONS,
                                      runner=runner), prepare_desk=True, run_g3=False)
         self.assertEqual(len(calls), 1)
         argv = calls[0]
@@ -971,11 +1159,59 @@ class DeskAndG3Tests(WindowTestCase):
                                                          {"id": "S11-A5", "status": "FAIL"}]}))
             return SimpleNamespace(returncode=1, stdout="", stderr="")
 
-        window.harvest(seams=h.Seams(group_alive=lambda pgid: False, exclusions_compute=fake_exclusions,
+        window.harvest(seams=h.Seams(group_alive=lambda pgid: False, exclusions_compute=EXCLUSIONS,
                                      runner=runner))
         self.assertIn("g3.recompute_failed", window.codes())
         self.assertIn("g3.assertion_failed", window.codes())
         self.assertTrue((window.archive / "withheld" / "transcripts" / "g3.txt").is_file())
+
+    def g3_window(self, name: str, runner, **harvest) -> Window:
+        window = Window(self.tmp / name, prefix_ledger=True, catalog_overrides=self.ISOLATE)
+        (window.pack / "analysis_manifest_v3.json").write_text("{}\n")
+        (window.claim / "whole-window-verdict.json").write_text("{}\n")
+        (window.claim / "bracket-binding.json").write_text("{}\n")
+        window.harvest(seams=h.Seams(group_alive=lambda pgid: False, exclusions_compute=EXCLUSIONS,
+                                     runner=runner), **harvest)
+        return window
+
+    def test_g3_recompute_that_did_not_pass_is_never_silent(self):
+        """Review F3: F5-2 is the one independent recompute of the whole-window verdict.
+
+        Unless the report exists and holds F5-2 PASS, g3.recompute_failed
+        (EXCLUDE_WINDOW) fires: a crashed checker, a timeout, an exit outside
+        {0, 1}, an F5-2 SKIP behind a failed S11-A2, or a skipped G3.
+        """
+        def report(rows, returncode=0):
+            def runner(argv, **kwargs):
+                Path(argv[argv.index("--report-json") + 1]).write_text(json.dumps({"assertions": rows}))
+                return SimpleNamespace(returncode=returncode, stdout="", stderr="")
+            return runner
+
+        def crashed(argv, **kwargs):  # no report: an ImportError traceback
+            return SimpleNamespace(returncode=1, stdout="", stderr="Traceback ...\nImportError: x\n")
+
+        def timed_out(argv, **kwargs):
+            raise subprocess.TimeoutExpired(argv, 3600)
+
+        cases = {
+            "crashed": (crashed, {}, {"reason": "report_absent", "returncode": 1, "f5_2": []}),
+            "timed_out": (timed_out, {}, {"reason": "runner_error", "error_type": "TimeoutExpired"}),
+            "f52_skipped": (report([{"id": "S11-A2", "status": "FAIL"}, {"id": "F5-2", "status": "SKIP"}], 1), {},
+                            {"reason": "f5_2_not_passed", "returncode": 1, "f5_2": ["SKIP"]}),
+            "bad_exit": (report([{"id": "F5-2", "status": "PASS"}], 2), {},
+                         {"reason": "f5_2_not_passed", "returncode": 2, "f5_2": ["PASS"]}),
+            "skipped": (report([{"id": "F5-2", "status": "PASS"}]), {"run_g3": False}, {"reason": "g3_skipped"}),
+        }
+        for name, (runner, harvest, observed) in cases.items():
+            with self.subTest(name):
+                window = self.g3_window(name, runner, **harvest)
+                (flag,) = [flag for flag in window.flags() if flag["code"] == "g3.recompute_failed"]
+                self.assertEqual(flag["observed"], observed)
+                self.assertIn("g3.recompute_failed", window.exclusions()["reasons"])
+        passed = self.g3_window("passed", report([{"id": "S11-A2", "status": "PASS"}, {"id": "F5-2", "status": "PASS"},
+                                                  {"id": "S11-A5", "status": "FAIL"}], 1))
+        self.assertNotIn("g3.recompute_failed", passed.codes())
+        self.assertIn("g3.assertion_failed", passed.codes())
 
 
 _REAL_SEAMS = h.Seams
@@ -986,7 +1222,7 @@ class CliTests(WindowTestCase):
         from scripts import harvest_b5_window as cli
 
         def seams(**kwargs):  # the CLI builds Seams(workers=...); only the seams change
-            return _REAL_SEAMS(group_alive=lambda pgid: alive, exclusions_compute=fake_exclusions,
+            return _REAL_SEAMS(group_alive=lambda pgid: alive, exclusions_compute=EXCLUSIONS,
                                boot_session_uuid=lambda: "B5-CLI", **kwargs)
 
         stdout = io.StringIO()
@@ -1012,26 +1248,33 @@ class CliTests(WindowTestCase):
 
 
 # ---------------------------------------------------------------------------
-# Pure joins and parsers.
+# Pure joins and parsers, on lines in L1's journal format.
 # ---------------------------------------------------------------------------
 
-def _reading(module, mono_s, values, kind="reading", interval=None):
-    mono = int(mono_s * 1e9)
-    return h.Reading(module, mono, mono + RAW_OFFSET_NS, mono_s + 1000.0, values, kind, interval)
+def parsed(journal: L1Journal) -> list:
+    return sorted((reading for reading in (h.parse_monitor_line(journal.module, line) for line in journal.lines)
+                   if reading is not None), key=lambda item: item.monotonic_ns)
+
+
+def battery_journal(publications, start_s=0, end_s=600) -> list:
+    """A gauge publishing at each (second, overrides); read 2 s after it appears and 30 s later."""
+    journal = L1Journal("battery")
+    for second, overrides in publications:
+        update = second + 10_000
+        effect = update * NS - WALL_OFFSET_NS
+        for delay in (2, 32):
+            if start_s <= second + delay < end_s:
+                journal.write("reading", effect + delay * NS, effect + delay * NS + 1_000,
+                              values=battery_values(update, **overrides))
+    return parsed(journal)
+
+
+def publication_ns(second: int) -> int:
+    return (second + 10_000) * NS - WALL_OFFSET_NS
 
 
 class JoinTests(unittest.TestCase):
     T = h.DEFAULT_THRESHOLDS
-
-    def battery_polls(self, publications, start_s=0, end_s=600):
-        """Polls every 5 s report the latest publication (time, values) at or before them."""
-        rows = []
-        for poll in range(start_s, end_s, 5):
-            current = [item for item in publications if item[0] <= poll]
-            if current:
-                stamp, values = current[-1]
-                rows.append(_reading("battery", poll, {**clean_battery(**values), "UpdateTime": stamp + 1000}))
-        return rows
 
     def test_in_force_publications(self):
         self.assertEqual(h.in_force([0, 60, 120, 180], 70, 100), [1, 2])
@@ -1039,105 +1282,160 @@ class JoinTests(unittest.TestCase):
         self.assertEqual(h.in_force([0, 60, 120, 180], 61, 179), [1, 2, 3])
         self.assertEqual(h.in_force([], 1, 2), [])
 
+    def test_publication_time_is_update_time_through_the_readings_own_clocks(self):
+        readings = battery_journal([(0, {}), (60, {})])
+        self.assertEqual([item.monotonic_ns for item in h.battery_publications(readings)],
+                         [publication_ns(0), publication_ns(60)])  # one per UpdateTime, not per read
+
     def test_publication_before_the_span_is_in_force(self):
-        readings = self.battery_polls([(0, {}), (60, {"InstantAmperage": -447}), (120, {}), (180, {})])
-        flags = dict((code, observed) for code, observed, _ in
-                     h.battery_member_flags([int(70e9), int(100e9)], readings, self.T))
-        self.assertIn("battery.member_span", flags)
-        clean = h.battery_member_flags([int(130e9), int(170e9)], readings, self.T)
+        readings = battery_journal([(0, {}), (60, {"instant_amperage_ma": -447}), (120, {}), (180, {})])
+        span = [publication_ns(70), publication_ns(100)]
+        self.assertIn("battery.member_span", [code for code, *_ in h.battery_member_flags(span, readings, self.T)])
+        clean = h.battery_member_flags([publication_ns(130), publication_ns(170)], readings, self.T)
         self.assertNotIn("battery.member_span", [code for code, *_ in clean])
 
     def test_charging_and_disconnected_publications(self):
-        for values, reason in (({"IsCharging": "Yes"}, "is_charging"),
-                               ({"ExternalConnected": "No"}, "external_disconnected"),
-                               ({"Amperage": 250}, "amperage_above_limit")):
-            readings = self.battery_polls([(0, {}), (60, values), (120, {})])
-            ((code, observed, _interval), *_rest) = h.battery_member_flags([int(65e9), int(70e9)], readings, self.T)
+        for values, reason in (({"is_charging": True}, "is_charging"),
+                               ({"external_connected": False}, "external_disconnected"),
+                               ({"amperage_ma": 250}, "amperage_above_limit")):
+            readings = battery_journal([(0, {}), (60, values), (120, {})])
+            ((code, observed, _interval), *_rest) = h.battery_member_flags(
+                [publication_ns(65), publication_ns(70)], readings, self.T)
             self.assertEqual(code, "battery.member_span")
             self.assertIn(reason, observed["violations"][0]["reasons"])
 
     def test_float_reading_at_the_limit_passes(self):
-        readings = self.battery_polls([(0, {}), (60, {"InstantAmperage": -200}), (120, {})])
-        codes = [code for code, *_ in h.battery_member_flags([int(65e9), int(70e9)], readings, self.T)]
-        self.assertNotIn("battery.member_span", codes)
+        readings = battery_journal([(0, {}), (60, {"instant_amperage_ma": -200}), (120, {})])
+        codes = [code for code, *_ in h.battery_member_flags([publication_ns(65), publication_ns(70)], readings, self.T)]
+        self.assertEqual(codes, [])
 
     def test_publication_gap_over_120_s_is_unmeasured(self):
-        readings = self.battery_polls([(0, {}), (200, {}), (260, {})], end_s=300)
-        flagged = [code for code, *_ in h.battery_member_flags([int(100e9), int(110e9)], readings, self.T)]
+        readings = battery_journal([(0, {}), (200, {}), (260, {})], end_s=300)
+        flagged = [code for code, *_ in h.battery_member_flags([publication_ns(100), publication_ns(110)],
+                                                               readings, self.T)]
         self.assertIn("battery.unmeasured", flagged)
-        fine = [code for code, *_ in h.battery_member_flags([int(210e9), int(220e9)], readings, self.T)]
+        fine = [code for code, *_ in h.battery_member_flags([publication_ns(210), publication_ns(220)],
+                                                            readings, self.T)]
         self.assertNotIn("battery.unmeasured", fine)
 
-    def test_monitor_gap_record_is_unmeasured(self):
-        readings = self.battery_polls([(0, {}), (60, {}), (120, {}), (180, {})])
-        readings.append(_reading("battery", 95, {}, kind="gap", interval=(int(90e9), int(97e9))))
-        flagged = [code for code, *_ in h.battery_member_flags([int(92e9), int(96e9)], readings, self.T)]
-        self.assertIn("battery.unmeasured", flagged)
+    def test_failed_ioreg_reads_observe_nothing(self):
+        journal = L1Journal("battery")
+        for second in (0, 60, 120, 180):
+            effect = publication_ns(second)
+            journal.write("reading", effect + 2 * NS, values={"returncode": 1}, error="ioreg exit code 1")
+        readings = parsed(journal)
+        self.assertEqual({reading.status for reading in readings}, {"error"})
+        codes = [code for code, *_ in h.battery_member_flags([publication_ns(70), publication_ns(80)], readings, self.T)]
+        self.assertEqual(codes, ["battery.unmeasured"])
 
     def test_accumulator_is_diagnostic_until_units_are_confirmed(self):
-        publications = [(0, {"PowerTelemetryData": {"AccumulatedBatteryPower": 100, "BatteryPowerAccumulatorCount": 10}}),
-                        (60, {"PowerTelemetryData": {"AccumulatedBatteryPower": 1300, "BatteryPowerAccumulatorCount": 70}}),
-                        (120, {})]
-        readings = self.battery_polls(publications)
-        unconfirmed = [code for code, *_ in h.battery_member_flags([int(10e9), int(20e9)], readings, self.T)]
+        telemetry = [{"AccumulatedBatteryPower": 100, "BatteryPowerAccumulatorCount": 10},
+                     {"AccumulatedBatteryPower": 1300, "BatteryPowerAccumulatorCount": 70}, {}]
+        readings = battery_journal([(second, {"power_telemetry": values})
+                                    for second, values in zip((0, 60, 120), telemetry)])
+        span = [publication_ns(10), publication_ns(20)]
+        unconfirmed = [code for code, *_ in h.battery_member_flags(span, readings, self.T)]
         self.assertIn("battery.accumulator_diagnostic", unconfirmed)
-        self.assertNotIn("battery.accumulator_span", unconfirmed)
+        self.assertNotIn("battery.accumulator_excursion", unconfirmed)
         confirmed = dict(self.T, battery_accumulator_watts_per_unit=1.0)
-        codes = [code for code, *_ in h.battery_member_flags([int(10e9), int(20e9)], readings, confirmed)]
-        self.assertIn("battery.accumulator_span", codes)  # 1200 W·count / 60 counts = 20 W > 0.2 A × 12.18 V
+        codes = [code for code, *_ in h.battery_member_flags(span, readings, confirmed)]
+        self.assertIn("battery.accumulator_excursion", codes)  # 1200 W·count / 60 counts = 20 W > 0.2 A × 12.18 V
 
     def test_thermal_nonzero_and_unmeasured(self):
-        readings = [_reading("thermal", second, {"level": 1 if second == 50 else 0}) for second in range(0, 100, 5)]
-        codes = [code for code, *_ in h.thermal_member_flags([int(48e9), int(52e9)], readings, self.T)]
+        journal = L1Journal("thermal")
+        for second in range(0, 100, 5):
+            journal.write("reading", second * NS, values={"level": 1 if second == 50 else 0, "source": "notifyutil"})
+        readings = parsed(journal)
+        codes = [code for code, *_ in h.thermal_member_flags([48 * NS, 52 * NS], readings, self.T)]
         self.assertEqual(codes, ["thermal.os_level_nonzero"])
-        sparse = [_reading("thermal", second, {"level": 0}) for second in (0, 40)]
-        codes = [code for code, *_ in h.thermal_member_flags([int(10e9), int(20e9)], sparse, self.T)]
+        sparse = L1Journal("thermal")
+        for second in (0, 40):
+            sparse.write("reading", second * NS, values={"level": 0, "source": "notifyutil"})
+        codes = [code for code, *_ in h.thermal_member_flags([10 * NS, 20 * NS], parsed(sparse), self.T)]
+        self.assertEqual(codes, ["thermal.unmeasured"])
+        failed = L1Journal("thermal")
+        for second in range(0, 100, 5):
+            failed.write("reading", second * NS, values={"level": None, "source": "notifyutil"},
+                         error="notifyutil exit code 1")
+        codes = [code for code, *_ in h.thermal_member_flags([48 * NS, 52 * NS], parsed(failed), self.T)]
         self.assertEqual(codes, ["thermal.unmeasured"])
 
     def test_contention_counts_only_outside_processes_above_five_percent(self):
-        processes = [{"comm": "kernel_task", "cpu_s_per_s": 0.9, "outside": True},
-                     {"comm": "python3.13", "cpu_s_per_s": 0.9, "in_measurement_tree": True},
-                     {"comm": "mds", "cpu_s_per_s": 0.05, "outside": True}]
-        readings = [_reading("contention", 10, {"processes": processes}, interval=(0, int(10e9))),
-                    _reading("contention", 20, {"processes": processes + [
-                        {"comm": "mediaanalysisd", "cpu_s_per_s": 1.14, "outside": True}]},
-                        interval=(int(10e9), int(20e9)))]
-        self.assertEqual(h.contention_member_flags([int(2e9), int(3e9)], readings, self.T), [])
-        ((code, observed, _interval),) = h.contention_member_flags([int(12e9), int(13e9)], readings, self.T)
-        self.assertEqual((code, observed["offenders"][0]["comm"]), ("contention.request_overlap", "mediaanalysisd"))
-        ((code, observed, _interval),) = h.contention_member_flags([int(18e9), int(25e9)], readings[:1] + readings[1:],
-                                                                   self.T)[-1:]
+        journal = L1Journal("contention")
+        journal.write("snapshot", -NS)
+        journal.write("interval", 0, 10 * NS, values=contention_values(0, 10 * NS, [
+            {"pid": 400, "command": "mds", "cpu_s_per_s": 0.05}], kernel_task=0.9))
+        journal.write("interval", 10 * NS, 20 * NS, values=contention_values(10 * NS, 20 * NS, [
+            {"pid": 350, "command": "mediaanalysisd", "cpu_s_per_s": 1.14}], kernel_task=0.9))
+        readings = parsed(journal)
+        self.assertEqual(h.contention_member_flags([2 * NS, 3 * NS], readings, self.T), [])
+        ((code, observed, _interval),) = h.contention_member_flags([12 * NS, 13 * NS], readings, self.T)
+        self.assertEqual((code, observed["offenders"][0]["command"]), ("contention.request_overlap", "mediaanalysisd"))
+        ((code, observed, _interval),) = h.contention_member_flags([18 * NS, 25 * NS], readings, self.T)[-1:]
         self.assertEqual(code, "contention.unmeasured")
         # Named by the last covering interval's end, not by the request's end.
-        self.assertEqual(observed["holes_monotonic_ns"], [[int(20e9), None]])
-        ((code, observed, interval),) = h.contention_member_flags([int(25e9), int(26e9)], readings, self.T)
+        self.assertEqual(observed["holes_monotonic_ns"], [[20 * NS, None]])
+        ((code, observed, interval),) = h.contention_member_flags([25 * NS, 26 * NS], readings, self.T)
         self.assertEqual((code, observed["holes_monotonic_ns"], interval),
-                         ("contention.unmeasured", [[int(20e9), None]], {"monotonic_ns": None}))
+                         ("contention.unmeasured", [[20 * NS, None]], {"monotonic_ns": None}))
+
+    def test_a_failed_ps_interval_covers_nothing(self):
+        journal = L1Journal("contention")
+        journal.write("interval", 0, 10 * NS, values=contention_values(0, 10 * NS))
+        journal.write("interval", 10 * NS, 20 * NS, values={"interval": {"monotonic_ns": [10 * NS, 20 * NS]},
+                                                            "clean": None}, error="ps exit code 1")
+        codes = [code for code, *_ in h.contention_member_flags([12 * NS, 13 * NS], parsed(journal), self.T)]
+        self.assertEqual(codes, ["contention.unmeasured"])
 
     def test_clock_steps_net_of_the_frequency_word(self):
-        readings = []
-        for second in range(0, 20):
-            raw = second * 10**9
-            anchor = 10**15 + round(-3.17e-6 * raw) + (6_000_000 if second >= 10 else 0)
-            values = {"anchor_ns": anchor, "ppm": -3.17 if second < 15 else -3.0}
-            readings.append(h.Reading("clock", raw, raw, None, values))
-        steps, frequencies = h.clock_steps(readings, self.T)
-        self.assertEqual(len(steps), 1)
-        self.assertEqual(steps[0]["interval_monotonic_ns"], [9 * 10**9, 10 * 10**9])
-        self.assertEqual([row["ppm"] for row in frequencies], [-3.17, -3.0])
-        drift_only = [h.Reading("clock", s * 10**9, s * 10**9, None, {"anchor_ns": round(-3.17e-6 * s * 10**9 * 300),
-                                                                     "ppm": -3.17 * 300}) for s in range(5)]
-        self.assertEqual(h.clock_steps(drift_only, self.T)[0], [])
+        journal = L1Journal("clock")
+        word = DRIFT_WORD
+        for second in range(20):
+            raw = second * NS + RAW_OFFSET_NS
+            anchor = 10**15 + word * (second * NS) // (kernel_clock.FREQUENCY_SCALE * 10**6) \
+                + (6_000_000 if second >= 10 else 0)
+            values = clock_values(raw, anchor, frequency=second % 5 == 0)
+            if second == 15:
+                values["frequency"] = frequency_probe(round(-3.0 * kernel_clock.FREQUENCY_SCALE))
+            journal.write("reading", second * NS - 600, second * NS, values=values)
+        steps, changes = h.clock_steps(parsed(journal), self.T)
+        self.assertEqual([step["interval_monotonic_ns"] for step in steps], [[9 * NS - 600, 10 * NS]])
+        self.assertEqual([(change["previous_ppm"], change["ppm"]) for change in changes],
+                         [(word / kernel_clock.FREQUENCY_SCALE, -3.0)])
+        drift_only = L1Journal("clock")
+        big = round(-3.17 * 300 * kernel_clock.FREQUENCY_SCALE)  # drift a 1 ms step test would mistake
+        for second in range(5):
+            drift_only.write("reading", second * NS, values={"anchor": {
+                "anchor_ns": big * (second * NS) // (kernel_clock.FREQUENCY_SCALE * 10**6),
+                "monotonic_raw_ns": second * NS, "read_skew_ns": 0, "realtime_ns": 0},
+                "frequency": frequency_probe(big)})
+        self.assertEqual(h.clock_steps(parsed(drift_only), self.T)[0], [])
+
+    def test_disk_low_from_targets_and_marker(self):
+        journal = L1Journal("disk")
+        journal.write("reading", 0, values=disk_values(200 * GIB))
+        journal.write("reading", 60 * NS, values=disk_values(5 * GIB))
+        journal.write("event", 61 * NS, values={"code": "disk.low", "low": [], "marker": "x"})
+        low, paths = h.disk_low(parsed(journal), self.T)
+        self.assertEqual(([reading.monotonic_ns for reading in low], paths), ([60 * NS, 61 * NS], ["/runs"]))
 
     def test_monitor_line_shapes(self):
-        nested = h.parse_monitor_line("thermal", {"measurement": {"values": {"level": 0},
-                                                                  "stamps": {"monotonic_ns": 5, "wall_s": 1.0}}})
-        self.assertEqual((nested.monotonic_ns, nested.values["level"]), (5, 0))
-        gap = h.parse_monitor_line("battery", {"kind": "monitor_restart", "interval": {"monotonic_ns": [1, 9]}})
-        self.assertEqual((gap.kind, gap.interval), ("gap", (1, 9)))
-        self.assertIsNone(h.parse_monitor_line("battery", {"values": {"x": 1}}))
-        contention = h.parse_monitor_line("contention", {"monotonic_ns": 10 * 10**9, "values": {"interval_s": 10}})
-        self.assertEqual(contention.interval, (0, 10 * 10**9))
+        line = {"schema": "joulewise.hazard_journal.v1", "module": "thermal", "session": "1-1", "seq": 2,
+                "kind": "reading", "started": l1_stamp(4), "finished": l1_stamp(5),
+                "values": {"level": 0, "source": "notify_get_state"}, "error": None, "raw": []}
+        reading = h.parse_monitor_line("thermal", line)
+        self.assertEqual((reading.monotonic_ns, reading.started_monotonic_ns, reading.values["level"], reading.status),
+                         (5, 4, 0, "ok"))
+        self.assertIsNone(h.parse_monitor_line("thermal", {**line, "kind": "session_start"}))
+        for bad in ({**line, "schema": "x"}, {**line, "module": "battery"}, {**line, "kind": "mystery"},
+                    {**line, "finished": {"monotonic_ns": 5}}, {k: v for k, v in line.items() if k != "started"},
+                    # the shapes the earlier harvest invented are not L1's
+                    {"module": "thermal", "monotonic_ns": 5, "values": {"level": 0}}):
+            with self.assertRaises(h.MonitorLineError):
+                h.parse_monitor_line("thermal", bad)
+        interval = {**line, "module": "contention", "kind": "interval", "values": {"clean": True}}
+        with self.assertRaises(h.MonitorLineError):  # an interval line must carry its interval
+            h.parse_monitor_line("contention", interval)
 
     def test_member_spans_hull_stamps_and_battery_span_events(self):
         metadata = {"uncertainty_evidence": {"clock_anchor": {"clock_stamps": {
@@ -1154,6 +1452,99 @@ class JoinTests(unittest.TestCase):
         self.assertEqual(h.member_spans({}, []), {"member": None, "request": None})
 
 
+class L1JournalFormatTests(unittest.TestCase):
+    """Review F1: the harvest reads the journals L1's monitor writes.
+
+    ``tests/fixtures/b5_harvest/l1_monitor`` was written by L1's own
+    ``joulewise.hazards.monitor.Monitor`` under L1's FakeMac (see its
+    generator).  Before this fix the harvest parsed 0 of its readings and
+    every member came out battery/thermal/contention.unmeasured.
+    """
+
+    T = h.DEFAULT_THRESHOLDS
+
+    @classmethod
+    def setUpClass(cls):
+        cls.expected = json.loads((L1_JOURNALS / "expected.json").read_bytes())
+        cls.journals, cls.malformed = {}, {}
+        for module in h.MONITOR_MODULES:
+            cls.journals[module], cls.malformed[module] = h.read_monitor_journal(L1_JOURNALS / f"{module}.jsonl", module)
+
+    def l5_codes(self, span, request) -> set[str]:
+        codes = set()
+        for join, module, window in ((h.battery_member_flags, "battery", span), (h.thermal_member_flags, "thermal", span),
+                                     (h.contention_member_flags, "contention", request),
+                                     (h.clock_member_flags, "clock", span)):
+            codes |= {code for code, *_ in join(window, self.journals[module], self.T)}
+        steps, _changes = h.clock_steps(self.journals["clock"], self.T)
+        codes |= {"clock.step_overlap" for step in steps if h._overlaps(step["interval_monotonic_ns"], span)}
+        return codes
+
+    def test_every_line_parses(self):
+        self.assertEqual(self.malformed, {module: 0 for module in h.MONITOR_MODULES})
+        counts = {module: sum(reading.status == "ok" for reading in readings)
+                  for module, readings in self.journals.items()}
+        self.assertEqual(counts, {"battery": 15, "thermal": 84, "contention": 41, "clock": 420, "disk": 7})
+
+    def test_joins_equal_l1s_own_join_on_l1s_bytes(self):
+        physics = {"battery.member_span", "battery.unmeasured", "thermal.os_level_nonzero", "thermal.unmeasured",
+                   "contention.request_overlap", "contention.unmeasured", "clock.step_overlap", "clock.unmeasured"}
+        for name, case in sorted(self.expected["cases"].items()):
+            with self.subTest(name):
+                span = case["span"]["monotonic_ns"]
+                request = (case["request"] or case["span"])["monotonic_ns"]
+                self.assertEqual(self.l5_codes(span, request) & physics, set(case["l1_codes"]) & physics)
+        # The cases cover each rule firing at least once.
+        fired = set().union(*(case["l1_codes"] for case in self.expected["cases"].values()))
+        self.assertTrue({"battery.member_span", "contention.request_overlap", "thermal.os_level_nonzero",
+                         "clock.step_overlap"} <= fired)
+
+    def test_window_events_clock_step_and_disk_low(self):
+        steps, changes = h.clock_steps(self.journals["clock"], self.T)
+        self.assertEqual(len(steps), 1)
+        self.assertAlmostEqual(steps[0]["residual_move_ns"], 6_000_000, delta=1_000)
+        self.assertEqual(changes, [])
+        low, paths = h.disk_low(self.journals["disk"], self.T)
+        self.assertTrue(low)
+        self.assertEqual(paths, ["/runs"])
+        self.assertEqual(set(self.expected["window_events"]), {"clock.step", "disk.low"})
+
+    def test_kernel_task_rate_is_read_from_the_interval(self):
+        rates = {round(reading.values["kernel_task_cpu_s_per_s"], 3) for reading in self.journals["contention"]}
+        self.assertEqual(rates, {self.expected["kernel_task_cpu_s_per_s"]})
+
+    def test_the_synthetic_writer_writes_l1s_line_shapes(self):
+        """Every (module, kind, value keys) the test writer emits occurs in L1's own journals."""
+        def shape(line):
+            values = line.get("values")
+            keys = tuple(sorted(values)) if isinstance(values, dict) else None
+            nested = tuple(sorted(values["power_telemetry"])) if isinstance(values, dict) \
+                and isinstance(values.get("power_telemetry"), dict) else None
+            return (line["module"], line["kind"], tuple(sorted(line)), tuple(sorted(line["started"])), keys, nested)
+
+        real = set()
+        for module in (*h.MONITOR_MODULES, "monitor"):
+            for raw in (L1_JOURNALS / f"{module}.jsonl").read_text().splitlines():
+                real.add(shape(json.loads(raw)))
+        with tempfile.TemporaryDirectory(dir=REAL_TMP) as scratch:
+            directory = Path(scratch)
+            write_journals(directory, extra_publications=[(member_span_ns(MEMBERS[0][0])[0], {})])
+            synthetic = {shape(json.loads(raw)) for module in h.MONITOR_MODULES
+                         for raw in (directory / f"{module}.jsonl").read_text().splitlines()
+                         if json.loads(raw)["kind"] not in ("session_start", "session_end")}
+        self.assertEqual(synthetic - real, set())
+
+    @unittest.skipUnless(L1_AVAILABLE, "lane L1's joulewise.hazards is not in this tree")
+    def test_live_l1_member_findings_agree(self):
+        from joulewise.hazards import monitor
+        journals = {name: monitor.read_journal(L1_JOURNALS / f"{name}.jsonl")[0] for name in monitor.JOURNALS}
+        for name, case in sorted(self.expected["cases"].items()):
+            with self.subTest(name):
+                live = {finding["code"] for finding in monitor.member_findings(
+                    journals, span=case["span"], request=case["request"])}
+                self.assertEqual(sorted(live), case["l1_codes"])
+
+
 class RecordTests(unittest.TestCase):
     def test_flag_id_is_the_dedup_key_and_records_are_exact(self):
         catalog = h.Catalog.load(FIXTURES / "flag_catalog.json")
@@ -1166,7 +1557,13 @@ class RecordTests(unittest.TestCase):
         self.assertNotEqual(first["flag_id"], other["flag_id"])
         self.assertEqual(len(ledger.records), 2)
         self.assertEqual(first["flag_id"], h.default_flag_id(first["code"], first["scope"], first["observed"],
-                                                             first["source"]))
+                                                             first["source"], first["interval"]))
+        self.assertEqual(first["schema_version"], "joulewise.flag.v1")
+        self.assertEqual(h.flag_problems(first), [])
+        # Two intervals are two facts (L4's flag id covers the interval).
+        later = ledger.emit("disk.low", level="window", collector="monitor", observed={"readings_below": 1},
+                            interval={"monotonic_ns": [5, 6]})
+        self.assertNotEqual(later["flag_id"], first["flag_id"])
         self.assertEqual(first["catalog_sha256"], sha(FIXTURES / "flag_catalog.json"))
         self.assertEqual(first["scope"]["attempt"], 2)
         self.assertEqual(catalog.effect("disk.low"), "DISCLOSE")
@@ -1177,11 +1574,65 @@ class RecordTests(unittest.TestCase):
             ledger.emit("disk.low", level="window", collector="x", observed={"bad": float("nan")})
 
     def test_every_catalog_fixture_code_is_an_emitted_code(self):
+        """Review F2: the fixture is a joulewise.flag_catalog.v1 document (L4's loader accepts it)."""
         catalog = json.loads((FIXTURES / "flag_catalog.json").read_bytes())
-        self.assertEqual(set(catalog["codes"]), set(h.CODES))
+        self.assertEqual(catalog["schema_version"], "joulewise.flag_catalog.v1")
+        self.assertEqual(set(catalog) - {"schema_version", "codes", "rules", "notes"}, set())
+        self.assertEqual(catalog["rules"], {"cell_unit_minimum": 8})
+        # Every emitted code but the never-classified one, which must block release.
+        self.assertEqual(set(catalog["codes"]), set(h.CODES) - h.NEVER_CLASSIFIED_CODES)
         for code, entry in catalog["codes"].items():
+            self.assertRegex(code, h.CODE_RE)
+            self.assertEqual(set(entry) - {"family", "klass", "effect", "blinding", "note"}, set())
             self.assertIn(entry["effect"], h.EFFECTS)
-            self.assertEqual((entry["family"], entry["klass"]), (h.CODES[code].family, h.CODES[code].klass))
+            self.assertEqual((entry["family"], entry["klass"], entry["blinding"]),
+                             (h.CODES[code].family, h.CODES[code].klass, h.CODES[code].blinding))
+
+    @unittest.skipUnless(L4_AVAILABLE, "lane L4's joulewise.flags is not in this tree")
+    def test_catalog_and_codes_agree_with_l4(self):
+        from joulewise.flags import catalog as l4
+        loaded = l4.load_catalog(FIXTURES / "flag_catalog.json")
+        self.assertEqual(loaded.cell_unit_minimum, 8)
+        draft = l4.draft_catalog()
+        self.assertEqual(set(h.CODES) - set(draft.codes), set(h.L5_ONLY_CODES))
+        self.assertEqual(h.NEVER_CLASSIFIED_CODES, set(l4.NEVER_CLASSIFIED_CODES) & set(h.CODES))
+        for code in set(h.CODES) & set(draft.codes):
+            entry = draft.codes[code]
+            self.assertEqual((entry["family"], entry["klass"], entry["blinding"]),
+                             (h.CODES[code].family, h.CODES[code].klass, h.CODES[code].blinding), code)
+            self.assertEqual(loaded.effect(code), entry["effect"], code)
+
+    def test_flag_problems_rejects_what_is_not_a_flag(self):
+        ledger = h.FlagLedger(plan_id="p", attempt=1, catalog=h.Catalog.load(None), boot_session_uuid=None)
+        good = ledger.emit("battery.member_span", level="member", run_id="r1", collector="t",
+                           interval={"monotonic_ns": [1, 2]})
+        variants = self.flag_variants(good)
+        self.assertEqual(h.flag_problems(good), [])
+        for name, variant in variants.items():
+            self.assertTrue(h.flag_problems(variant), name)
+        if L4_AVAILABLE:  # the same verdicts as L4's validate_flag, which owns the schema
+            from joulewise.flags.schema import validate_flag
+            self.assertEqual(validate_flag(good), [])
+            self.assertEqual({name: bool(validate_flag(variant)) for name, variant in variants.items()},
+                             {name: True for name in variants})
+
+    @staticmethod
+    def flag_variants(good: dict) -> dict:
+        def without(key):
+            return {k: v for k, v in good.items() if k != key}
+        return {
+            "no_schema_version": without("schema_version"),
+            "id_without_interval": {**good, "flag_id": h.sha256_bytes(h.canonical_json_bytes(
+                {key: good[key] for key in ("code", "scope", "observed", "source")}))[:20]},
+            "extra_field": {**good, "note": "x"},
+            "wrong_flag_id": {**good, "flag_id": "0" * 20},
+            "interval_not_in_id": {**good, "interval": {**good["interval"], "monotonic_ns": [1, 3]}},
+            "member_without_run_id": {**good, "scope": {**good["scope"], "run_id": None}},
+            "bad_level": {**good, "scope": {**good["scope"], "level": "cell"}},
+            "unordered_interval": {**good, "interval": {**good["interval"], "monotonic_ns": [2, 1]}},
+            "absolute_evidence": {**good, "evidence": [{"path": "/abs", "sha256": "a" * 64}]},
+            "bad_stage": {**good, "source": {**good["source"], "stage": "later"}},
+        }
 
     def test_restricted_reasons(self):
         self.assertTrue(h.restricted_reason("anchor_energy_envelope_exceeds_quarter_metric"))
@@ -1193,6 +1644,10 @@ class RecordTests(unittest.TestCase):
         self.assertEqual(h._inventory_map({"head": "h", "files": {"a": digest}}), ({"a": digest}, "h"))
         self.assertEqual(h._inventory_map({"files": [{"path": "a", "sha256": digest}]}), ({"a": digest}, None))
         self.assertEqual(h._inventory_map({"a": digest, "head": "h"}), ({"a": digest}, "h"))
+        # L2's driver.executed_inventory record.
+        l2 = {"schema": "joulewise.b5_executed_inventory.v1", "chain": {"path": "c", "sha256": digest},
+              "measurement_checkout": {"head": "h", "status_porcelain": "", "files": {"joulewise/x.py": digest}}}
+        self.assertEqual(h._inventory_map(l2), ({"joulewise/x.py": digest}, "h"))
 
     def test_pinned_files_resolve_repo_and_pack_relative_paths(self):
         tree = {"plan": {"path": "calibration_plan.json", "actual_sha256": "1" * 64},
@@ -1226,6 +1681,155 @@ class RecordTests(unittest.TestCase):
         self.assertEqual(len(science), 80)
         self.assertTrue(all(cell["unit_kind"] == "quad" for row in science for cell in row["cells"]))
         self.assertEqual(len(roster["cells"]), 2)
+
+
+class ExclusionSeamTests(unittest.TestCase):
+    """Review F2: the roster and spans reach L4's ``exclusions.compute`` in L4's documented shape.
+
+    Before the fix L4 saw ``cells``/``unit_kind`` instead of
+    ``units``/``stratum`` and ``member`` instead of ``monotonic_ns``: zero
+    units per cell, so every clean window came out ``cell.below_minimum``.
+    """
+
+    ALPHA = ROOT / "configs/campaigns/d117_floor_qwen3-1p7b_v5"
+    GAMMA = ROOT / "configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5"
+
+    def inputs(self, pack, **kwargs):
+        roster = h.build_roster(pack, ROOT)
+        spans = {member["run_id"]: {"member": [(index + 1) * 100 * NS, (index + 1) * 100 * NS + 50 * NS],
+                                    "request": [(index + 1) * 100 * NS + 10 * NS, (index + 1) * 100 * NS + 40 * NS]}
+                 for index, member in enumerate(roster["members"])}
+        bundles = [{"bundle_id": f"claim/{run_id}", "run_id": run_id, "attempt": None,
+                    "created_monotonic_ns": span["member"][0]} for run_id, span in spans.items()]
+        document, spans_document = h.l4_exclusion_inputs(roster, spans, plan_id="plan", attempt=1,
+                                                         chain_started_monotonic_ns=50 * NS, bundles=bundles, **kwargs)
+        return roster, document, spans_document
+
+    def test_floor_cells_are_condition_families_with_repeat_and_quad_strata(self):
+        _roster, document, spans = self.inputs(self.ALPHA)
+        families = ["df-ph-decode-qwen3-1p7b", "df-ph-prefill-p2048-qwen3-1p7b", "df-ph-prefill-p42-qwen3-1p7b"]
+        self.assertEqual(document["cells"], [{"cell_id": family, "target": True, "strata": ["quad", "repeat"]}
+                                             for family in families])
+        units: dict[tuple, list] = {}
+        for member in document["members"]:
+            self.assertEqual(set(member), {"run_id", "stage_id", "kind", "units"})
+            for unit in member["units"]:
+                self.assertEqual(set(unit), {"cell_id", "stratum", "unit_id"})
+                units.setdefault((unit["cell_id"], unit["stratum"], unit["unit_id"]), []).append(member["run_id"])
+        per_stratum: dict[tuple, int] = {}
+        for cell_id, stratum, _unit in units:
+            per_stratum[(cell_id, stratum)] = per_stratum.get((cell_id, stratum), 0) + 1
+        self.assertEqual(per_stratum, {(family, stratum): 10 for family in families for stratum in ("quad", "repeat")})
+        self.assertEqual({len(runs) for (_cell, stratum, _unit), runs in units.items() if stratum == "quad"}, {4})
+        self.assertEqual(sum(not member["units"] for member in document["members"]), 19)  # auxiliaries feed no cell
+        (first, *_rest) = spans.values()
+        self.assertEqual(set(first), {"monotonic_ns", "request_monotonic_ns", "stage_id", "bundle_id"})
+        self.assertEqual((document["plan_id"], document["attempt"], document["chain_started_monotonic_ns"]),
+                         ("plan", 1, 50 * NS))
+        self.assertEqual(len(document["bundles"]), 119)
+
+    def test_contrast_cells_are_quads_only(self):
+        _roster, document, _spans = self.inputs(self.GAMMA)
+        self.assertEqual([(cell["cell_id"], cell["strata"]) for cell in document["cells"]],
+                         [("ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b", ["quad"]),
+                          ("ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b", ["quad"])])
+
+    @unittest.skipUnless(L4_AVAILABLE, "lane L4's joulewise.flags is not in this tree")
+    def test_l4_compute_on_the_real_alpha_roster(self):
+        from joulewise.flags import catalog as l4_catalog
+        from joulewise.flags import exclusions
+        roster, document, spans = self.inputs(self.ALPHA)
+        catalog = l4_catalog.load_catalog(FIXTURES / "flag_catalog.json")
+        clean = exclusions.compute([], document, spans, catalog)
+        self.assertTrue(clean["claim_usable"], clean["reasons"])
+        self.assertEqual({cell["cell_id"]: cell["planned"] for cell in clean["cells"]},
+                         {cell["cell_id"]: {"quad": 10, "repeat": 10} for cell in document["cells"]})
+        ledger = h.FlagLedger(plan_id="plan", attempt=1, catalog=h.Catalog.load(FIXTURES / "flag_catalog.json"),
+                              boot_session_uuid=None)
+        quads = [member["run_id"] for member in roster["members"]
+                 if any(cell["unit_kind"] == "quad" and "decode" in cell["cell_id"] for cell in member["cells"])]
+        one = ledger.emit("battery.member_span", level="member", run_id=quads[0], collector="test")
+        result = exclusions.compute([one], document, spans, catalog)
+        decode = next(cell for cell in result["cells"] if cell["cell_id"] == "df-ph-decode-qwen3-1p7b")
+        self.assertEqual((decode["n_quads"], decode["n_repeats"], decode["resolvable"], result["claim_usable"]),
+                         (9, 10, True, True))
+        three = [ledger.emit("battery.member_span", level="member", run_id=run_id, collector="test")
+                 for run_id in quads[0:12:4]]  # one member of each of three quads
+        result = exclusions.compute(three, document, spans, catalog)
+        self.assertEqual(result["reasons"], ["cell.below_minimum"])
+        foreign = h.FlagLedger(plan_id="another-plan", attempt=1, catalog=h.Catalog.load(None),
+                               boot_session_uuid=None).emit("pack.identity_mismatch", level="window", collector="test")
+        result = exclusions.compute([foreign], document, spans, catalog)
+        self.assertEqual((result["claim_usable"], result["flag_counts"]["foreign_scope"]), (True, 1))
+        early = [dict(bundle, created_monotonic_ns=10 * NS) if bundle["run_id"] == quads[0] else bundle
+                 for bundle in document["bundles"]]
+        result = exclusions.compute([], {**document, "bundles": early}, spans, catalog)
+        self.assertEqual([(row["bundle_id"], row["code"]) for row in result["bundles_ignored"]],
+                         [(f"claim/{quads[0]}", "roster.before_chain_started")])
+
+
+class IdentityReplayTests(WindowTestCase):
+    def test_acceptance_pin_reads_both_plan_tree_shapes(self):
+        floor = json.loads((ExclusionSeamTests.ALPHA / "plan_tree.json").read_bytes())["acceptance_policy"]
+        contrast = json.loads((ExclusionSeamTests.GAMMA / "plan_tree.json").read_bytes())["acceptance_policy"]
+        self.assertEqual(h.acceptance_pin(floor), (sha(ROOT / ACCEPTANCE),
+                                                   "acceptance_policy.issued_acceptance.artifact_sha256"))
+        self.assertEqual(h.acceptance_pin(contrast), (sha(ROOT / ACCEPTANCE), "acceptance_policy.issued_artifact_sha256"))
+        self.assertEqual(h.acceptance_pin({"selection": "issued_d116_artifact_only"}), (None, None))
+
+    def test_contrast_shaped_acceptance_pin_is_checked_against_the_bytes(self):
+        """Review F4: the GAMMA tree pins the acceptance as issued_artifact_sha256."""
+        contrast = json.loads((ExclusionSeamTests.GAMMA / "plan_tree.json").read_bytes())["acceptance_policy"]
+        window = self.window(acceptance_policy=contrast)
+        window.harvest()
+        self.assertNotIn("calibration.acceptance_mismatch", window.codes())
+        tampered = Window(self.tmp / "tampered", acceptance_policy=contrast, catalog_overrides=self.ISOLATE)
+        accept = tampered.measurement / ACCEPTANCE
+        accept.write_bytes(accept.read_bytes().replace(b"{", b'{"b5_test_edit": true, ', 1))
+        tampered.harvest()
+        flag = next(flag for flag in tampered.flags() if flag["code"] == "calibration.acceptance_mismatch")
+        self.assertEqual(flag["expected"], {"sha256": sha(ROOT / ACCEPTANCE),
+                                            "pin": "acceptance_policy.issued_artifact_sha256"})
+        self.assertIn("calibration.acceptance_mismatch", tampered.exclusions()["reasons"])
+        unpinned = Window(self.tmp / "unpinned", acceptance_policy={"selection": "issued_d116_artifact_only"},
+                          catalog_overrides=self.ISOLATE)
+        unpinned.harvest()
+        flag = next(flag for flag in unpinned.flags() if flag["code"] == "calibration.acceptance_mismatch")
+        self.assertEqual(flag["expected"], {"sha256": None, "pin": None})
+
+    def test_executed_inventory_without_a_head_is_identity_unmeasured(self):
+        """Review F5: an executed inventory with no head no longer skips the H_claim check silently."""
+        window = self.window(executed_overrides={"head": None})
+        window.harvest()
+        flag = next(flag for flag in window.flags() if flag["code"] == "code.identity_unmeasured")
+        self.assertEqual(flag["observed"]["unmeasured"], [{"check": "head", "missing_input": "executed_head"}])
+        self.assertIn("code.identity_unmeasured", window.exclusions()["reasons"])
+        self.assertNotIn("code.executed_differs_from_sealed", window.codes())
+
+    def test_tampered_pinned_config_without_a_sealed_inventory_is_still_a_mismatch(self):
+        """Review F6: the plan tree's own pins are compared even when the sealed inventory is absent."""
+        window = self.window(sealed_inventory=False)
+        config = window.pack / "01_abs" / "b5t-abs-r01.json"
+        value = json.loads(config.read_bytes())
+        value["workload_profile"]["output_tokens"] = 9
+        config.write_bytes(normalized_config(value))
+        window.harvest()
+        flag = next(flag for flag in window.flags() if flag["code"] == "pack.identity_mismatch")
+        self.assertEqual([(row["path"], row.get("pin")) for row in flag["observed"]["mismatches"]],
+                         [(f"configs/campaigns/{PACK_ID}/01_abs/b5t-abs-r01.json", None)])
+        self.assertIn("pack.identity_unmeasured", window.codes())
+        self.assertIn("pack.identity_mismatch", window.exclusions()["reasons"])
+
+    def test_sealed_files_outside_the_executed_roots_are_not_code(self):
+        """L2 inventories joulewise/, scripts/ and the pack; a sealed config elsewhere is not executed code."""
+        window = self.window()
+        executed = window.custody / "night" / "executed_inventory.json"
+        value = json.loads(executed.read_bytes())
+        del value["measurement_checkout"]["files"][POLICY]
+        put(executed, value)
+        window.harvest()
+        self.assertNotIn("code.executed_differs_from_sealed", window.codes())
+        self.assertNotIn("code.identity_unmeasured", window.codes())
 
 
 @unittest.skipUnless((B3W1 / "harvest.json").is_file(), "block-3 b3w1 archive is local to the measurement Mac")

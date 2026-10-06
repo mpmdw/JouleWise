@@ -1,402 +1,453 @@
 {
   "codes": {
     "battery.accumulator_diagnostic": {
+      "blinding": "STRUCTURE",
       "effect": "DISCLOSE",
       "family": "DIAGNOSTIC",
       "klass": "PHYSICS"
     },
-    "battery.accumulator_span": {
+    "battery.accumulator_excursion": {
+      "blinding": "STRUCTURE",
       "effect": "EXCLUDE_MEMBER",
       "family": "PHYSICS_IN_SPAN",
       "klass": "PHYSICS"
     },
     "battery.capture_pair_failed": {
+      "blinding": "STRUCTURE",
       "effect": "EXCLUDE_MEMBER",
-      "family": "PHYSICS_IN_SPAN",
+      "family": "MEMBER_VALIDITY",
       "klass": "PHYSICS"
     },
     "battery.capture_pair_missing": {
+      "blinding": "STRUCTURE",
       "effect": "DISCLOSE",
       "family": "RECORDS",
       "klass": "REPRESENTATION"
     },
+    "battery.capture_pair_missing_covered": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "PHYSICS"
+    },
     "battery.member_span": {
+      "blinding": "STRUCTURE",
       "effect": "EXCLUDE_MEMBER",
       "family": "PHYSICS_IN_SPAN",
       "klass": "PHYSICS"
     },
     "battery.unmeasured": {
+      "blinding": "STRUCTURE",
       "effect": "EXCLUDE_MEMBER",
       "family": "PHYSICS_IN_SPAN",
       "klass": "PHYSICS"
     },
     "calibration.acceptance_mismatch": {
+      "blinding": "STRUCTURE",
       "effect": "EXCLUDE_WINDOW",
       "family": "CALIBRATION",
       "klass": "NUMBER"
     },
     "calibration.binding_failed": {
+      "blinding": "STRUCTURE",
       "effect": "EXCLUDE_WINDOW",
       "family": "CALIBRATION",
       "klass": "NUMBER"
     },
-    "calibration.bracket_not_passed": {
+    "calibration.bracket_acceptance_failed": {
+      "blinding": "STRUCTURE",
       "effect": "EXCLUDE_WINDOW",
       "family": "CALIBRATION",
       "klass": "NUMBER"
     },
     "calibration.capture_battery_pair_failed": {
+      "blinding": "STRUCTURE",
       "effect": "EXCLUDE_WINDOW",
       "family": "CALIBRATION",
       "klass": "PHYSICS"
     },
     "calibration.capture_invalid": {
+      "blinding": "STRUCTURE",
       "effect": "EXCLUDE_WINDOW",
       "family": "CALIBRATION",
       "klass": "NUMBER"
     },
-    "calibration.clock_step_overlap": {
-      "effect": "EXCLUDE_WINDOW",
-      "family": "CALIBRATION",
-      "klass": "PHYSICS"
-    },
     "calibration.ledger_snapshot_refused": {
+      "blinding": "STRUCTURE",
       "effect": "EXCLUDE_WINDOW",
       "family": "CALIBRATION",
       "klass": "NUMBER"
     },
     "calibration.no_bracket": {
+      "blinding": "STRUCTURE",
       "effect": "EXCLUDE_WINDOW",
       "family": "CALIBRATION",
       "klass": "NUMBER"
     },
-    "calibration.session_not_bound_to_plan": {
+    "calibration.session_not_bound": {
+      "blinding": "STRUCTURE",
       "effect": "EXCLUDE_WINDOW",
       "family": "CALIBRATION",
       "klass": "NUMBER"
     },
     "clock.frequency_changed": {
+      "blinding": "STRUCTURE",
       "effect": "DISCLOSE",
-      "family": "CLOCK_SYSTEMATIC",
+      "family": "DIAGNOSTIC",
       "klass": "PHYSICS"
     },
-    "clock.step_outside_members": {
+    "clock.step": {
+      "blinding": "STRUCTURE",
       "effect": "DISCLOSE",
-      "family": "CLOCK_SYSTEMATIC",
+      "family": "DIAGNOSTIC",
       "klass": "PHYSICS"
     },
     "clock.step_overlap": {
+      "blinding": "STRUCTURE",
       "effect": "EXCLUDE_MEMBER",
       "family": "PHYSICS_IN_SPAN",
       "klass": "PHYSICS"
     },
+    "clock.step_overlap_calibration": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_WINDOW",
+      "family": "CLOCK_SYSTEMATIC",
+      "klass": "PHYSICS"
+    },
     "clock.systematic": {
+      "blinding": "STRUCTURE",
       "effect": "EXCLUDE_WINDOW",
       "family": "CLOCK_SYSTEMATIC",
       "klass": "NUMBER"
     },
     "clock.unmeasured": {
+      "blinding": "STRUCTURE",
       "effect": "DISCLOSE",
-      "family": "CLOCK_SYSTEMATIC",
+      "family": "DIAGNOSTIC",
       "klass": "PHYSICS"
     },
     "code.executed_differs_from_sealed": {
+      "blinding": "STRUCTURE",
       "effect": "EXCLUDE_WINDOW",
       "family": "CODE_IDENTITY",
       "klass": "NUMBER"
     },
-    "code.executed_inventory_absent": {
-      "effect": "DISCLOSE",
+    "code.identity_unmeasured": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_WINDOW",
       "family": "CODE_IDENTITY",
       "klass": "NUMBER"
     },
-    "code.h_claim_absent": {
+    "contention.kernel_task_share": {
+      "blinding": "STRUCTURE",
       "effect": "DISCLOSE",
-      "family": "CODE_IDENTITY",
-      "klass": "REPRESENTATION"
-    },
-    "code.head_unverified": {
-      "effect": "DISCLOSE",
-      "family": "CODE_IDENTITY",
-      "klass": "REPRESENTATION"
-    },
-    "code.sealed_inventory_absent": {
-      "effect": "DISCLOSE",
-      "family": "CODE_IDENTITY",
-      "klass": "REPRESENTATION"
+      "family": "DIAGNOSTIC",
+      "klass": "PHYSICS"
     },
     "contention.request_overlap": {
+      "blinding": "STRUCTURE",
       "effect": "EXCLUDE_MEMBER",
       "family": "PHYSICS_IN_SPAN",
       "klass": "PHYSICS"
     },
     "contention.unmeasured": {
+      "blinding": "STRUCTURE",
       "effect": "EXCLUDE_MEMBER",
       "family": "PHYSICS_IN_SPAN",
       "klass": "PHYSICS"
     },
-    "diagnostic.kernel_task_share": {
-      "effect": "DISCLOSE",
-      "family": "DIAGNOSTIC",
-      "klass": "PHYSICS"
-    },
-    "diagnostic.l10a_prefix": {
-      "effect": "DISCLOSE",
-      "family": "DIAGNOSTIC",
-      "klass": "REPRESENTATION"
-    },
-    "diagnostic.precheck_counts": {
-      "effect": "DISCLOSE",
-      "family": "DIAGNOSTIC",
-      "klass": "REPRESENTATION"
-    },
-    "diagnostic.stream_sizes": {
-      "effect": "DISCLOSE",
-      "family": "DIAGNOSTIC",
-      "klass": "REPRESENTATION"
-    },
-    "diagnostic.time_outside_members": {
+    "diagnostic.s1_structural": {
+      "blinding": "STRUCTURE",
       "effect": "DISCLOSE",
       "family": "DIAGNOSTIC",
       "klass": "REPRESENTATION"
     },
     "disk.low": {
+      "blinding": "STRUCTURE",
       "effect": "DISCLOSE",
-      "family": "INSTRUMENT",
+      "family": "DIAGNOSTIC",
       "klass": "PHYSICS"
     },
     "g3.assertion_failed": {
+      "blinding": "STRUCTURE",
       "effect": "DISCLOSE",
       "family": "RECORDS",
       "klass": "REPRESENTATION"
     },
     "g3.not_applicable": {
+      "blinding": "STRUCTURE",
       "effect": "DISCLOSE",
       "family": "DIAGNOSTIC",
       "klass": "REPRESENTATION"
     },
     "g3.recompute_failed": {
+      "blinding": "STRUCTURE",
       "effect": "EXCLUDE_WINDOW",
       "family": "NEG8",
       "klass": "NUMBER"
     },
     "instrument.cadence_ratio_below_threshold": {
+      "blinding": "STRUCTURE",
       "effect": "EXCLUDE_MEMBER",
       "family": "PHYSICS_IN_SPAN",
       "klass": "PHYSICS"
     },
     "instrument.insufficient_in_window_samples": {
+      "blinding": "STRUCTURE",
       "effect": "EXCLUDE_MEMBER",
       "family": "PHYSICS_IN_SPAN",
       "klass": "PHYSICS"
     },
     "member.admission_aborted": {
+      "blinding": "STRUCTURE",
       "effect": "EXCLUDE_MEMBER",
       "family": "MEMBER_VALIDITY",
-      "klass": "PHYSICS"
+      "klass": "NUMBER"
+    },
+    "member.anchor_energy_envelope_exceeded": {
+      "blinding": "RESTRICTED",
+      "effect": "EXCLUDE_MEMBER",
+      "family": "MEMBER_VALIDITY",
+      "klass": "NUMBER"
     },
     "member.anchor_not_bounded": {
+      "blinding": "STRUCTURE",
       "effect": "EXCLUDE_MEMBER",
       "family": "MEMBER_VALIDITY",
       "klass": "NUMBER"
     },
     "member.anchor_recompute_mismatch": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_MEMBER",
+      "family": "MEMBER_VALIDITY",
+      "klass": "NUMBER"
+    },
+    "member.bytes_ambiguous": {
+      "blinding": "STRUCTURE",
       "effect": "EXCLUDE_MEMBER",
       "family": "MEMBER_VALIDITY",
       "klass": "NUMBER"
     },
     "member.bytes_missing": {
+      "blinding": "STRUCTURE",
       "effect": "EXCLUDE_MEMBER",
       "family": "MEMBER_VALIDITY",
       "klass": "NUMBER"
     },
-    "member.config_bytes_mismatch": {
+    "member.config_not_in_inventory": {
+      "blinding": "STRUCTURE",
       "effect": "EXCLUDE_MEMBER",
       "family": "MEMBER_VALIDITY",
       "klass": "NUMBER"
     },
     "member.cooldown_cap_hit": {
+      "blinding": "STRUCTURE",
       "effect": "EXCLUDE_MEMBER",
       "family": "MEMBER_VALIDITY",
-      "klass": "PHYSICS"
+      "klass": "NUMBER"
     },
-    "member.cooldown_unverified": {
+    "member.cooldown_evidence_unverified": {
+      "blinding": "STRUCTURE",
       "effect": "EXCLUDE_MEMBER",
       "family": "MEMBER_VALIDITY",
       "klass": "NUMBER"
     },
     "member.idle_window_suspect": {
-      "effect": "EXCLUDE_MEMBER",
-      "family": "MEMBER_VALIDITY",
-      "klass": "PHYSICS"
-    },
-    "member.precheck_failed": {
+      "blinding": "STRUCTURE",
       "effect": "EXCLUDE_MEMBER",
       "family": "MEMBER_VALIDITY",
       "klass": "NUMBER"
     },
     "member.reduction_mismatch": {
+      "blinding": "STRUCTURE",
       "effect": "EXCLUDE_MEMBER",
       "family": "MEMBER_VALIDITY",
       "klass": "NUMBER"
     },
     "member.span_unknown": {
+      "blinding": "STRUCTURE",
       "effect": "EXCLUDE_MEMBER",
       "family": "PHYSICS_IN_SPAN",
       "klass": "PHYSICS"
     },
     "member.status_not_succeeded": {
+      "blinding": "STRUCTURE",
       "effect": "EXCLUDE_MEMBER",
       "family": "MEMBER_VALIDITY",
       "klass": "NUMBER"
     },
-    "member.strict_invalid": {
+    "member.strict_validation_failed": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_MEMBER",
+      "family": "MEMBER_VALIDITY",
+      "klass": "NUMBER"
+    },
+    "member.target_phase_precheck_failed": {
+      "blinding": "STRUCTURE",
       "effect": "EXCLUDE_MEMBER",
       "family": "MEMBER_VALIDITY",
       "klass": "NUMBER"
     },
     "member.token_count_mismatch": {
+      "blinding": "STRUCTURE",
       "effect": "EXCLUDE_MEMBER",
       "family": "MEMBER_VALIDITY",
       "klass": "NUMBER"
     },
     "member.unreadable": {
+      "blinding": "STRUCTURE",
       "effect": "EXCLUDE_MEMBER",
       "family": "MEMBER_VALIDITY",
       "klass": "NUMBER"
     },
-    "model.frozen_pins_absent": {
-      "effect": "DISCLOSE",
-      "family": "MODEL_IDENTITY",
-      "klass": "REPRESENTATION"
-    },
     "model.identity_inconsistent_in_window": {
+      "blinding": "STRUCTURE",
       "effect": "EXCLUDE_WINDOW",
       "family": "MODEL_IDENTITY",
       "klass": "NUMBER"
     },
     "model.identity_mismatch": {
+      "blinding": "STRUCTURE",
       "effect": "EXCLUDE_WINDOW",
       "family": "MODEL_IDENTITY",
       "klass": "NUMBER"
     },
     "model.identity_underivable": {
+      "blinding": "STRUCTURE",
       "effect": "EXCLUDE_MEMBER",
       "family": "MODEL_IDENTITY",
       "klass": "NUMBER"
     },
+    "model.identity_unpinned": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_WINDOW",
+      "family": "MODEL_IDENTITY",
+      "klass": "NUMBER"
+    },
     "neg8.bound_not_derived": {
+      "blinding": "STRUCTURE",
       "effect": "EXCLUDE_WINDOW",
       "family": "NEG8",
       "klass": "NUMBER"
     },
     "pack.identity_mismatch": {
+      "blinding": "STRUCTURE",
       "effect": "EXCLUDE_WINDOW",
       "family": "PACK_IDENTITY",
       "klass": "NUMBER"
     },
-    "pack.registered_digest_absent": {
-      "effect": "DISCLOSE",
+    "pack.identity_unmeasured": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_WINDOW",
       "family": "PACK_IDENTITY",
-      "klass": "REPRESENTATION"
+      "klass": "NUMBER"
     },
     "records.arm_record_absent": {
+      "blinding": "STRUCTURE",
       "effect": "DISCLOSE",
       "family": "RECORDS",
       "klass": "REPRESENTATION"
     },
     "records.collector_failed": {
-      "effect": "DISCLOSE",
-      "family": "RECORDS",
-      "klass": "REPRESENTATION"
-    },
-    "records.flag_line_malformed": {
+      "blinding": "STRUCTURE",
       "effect": "DISCLOSE",
       "family": "RECORDS",
       "klass": "REPRESENTATION"
     },
     "records.monitor_journal_absent": {
+      "blinding": "STRUCTURE",
       "effect": "DISCLOSE",
       "family": "RECORDS",
       "klass": "REPRESENTATION"
     },
     "records.monitor_line_malformed": {
+      "blinding": "STRUCTURE",
       "effect": "DISCLOSE",
       "family": "RECORDS",
       "klass": "REPRESENTATION"
     },
     "records.source_changed_during_harvest": {
+      "blinding": "STRUCTURE",
       "effect": "EXCLUDE_WINDOW",
       "family": "RECORDS",
       "klass": "NUMBER"
     },
     "records.terminal_record_absent": {
+      "blinding": "STRUCTURE",
       "effect": "DISCLOSE",
       "family": "RECORDS",
       "klass": "REPRESENTATION"
     },
-    "roster.bundle_before_chain_start": {
+    "roster.before_chain_started": {
+      "blinding": "STRUCTURE",
       "effect": "EXCLUDE_MEMBER",
       "family": "ROSTER",
       "klass": "NUMBER"
     },
-    "roster.bundle_not_in_roster": {
-      "effect": "DISCLOSE",
-      "family": "ROSTER",
-      "klass": "REPRESENTATION"
-    },
-    "roster.duplicate_bundle": {
-      "effect": "DISCLOSE",
-      "family": "ROSTER",
-      "klass": "REPRESENTATION"
-    },
     "roster.no_science_bundles": {
+      "blinding": "STRUCTURE",
       "effect": "EXCLUDE_WINDOW",
       "family": "ROSTER",
       "klass": "NUMBER"
     },
+    "roster.not_in_plan": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_MEMBER",
+      "family": "ROSTER",
+      "klass": "NUMBER"
+    },
     "roster.run_id_mismatch": {
+      "blinding": "STRUCTURE",
       "effect": "DISCLOSE",
       "family": "ROSTER",
       "klass": "REPRESENTATION"
     },
     "thermal.os_level_nonzero": {
+      "blinding": "STRUCTURE",
       "effect": "EXCLUDE_MEMBER",
       "family": "PHYSICS_IN_SPAN",
       "klass": "PHYSICS"
     },
-    "thermal.pressure_elevated_in_window": {
+    "thermal.powermetrics_pressure_elevated": {
+      "blinding": "STRUCTURE",
       "effect": "EXCLUDE_MEMBER",
       "family": "PHYSICS_IN_SPAN",
       "klass": "PHYSICS"
     },
     "thermal.unmeasured": {
-      "effect": "EXCLUDE_MEMBER",
-      "family": "PHYSICS_IN_SPAN",
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
       "klass": "PHYSICS"
     },
     "whole_window.not_passed": {
+      "blinding": "STRUCTURE",
       "effect": "EXCLUDE_WINDOW",
       "family": "NEG8",
       "klass": "NUMBER"
     },
     "whole_window.producer_failed": {
+      "blinding": "STRUCTURE",
       "effect": "DISCLOSE",
       "family": "NEG8",
       "klass": "REPRESENTATION"
     },
     "whole_window.verdict_absent": {
+      "blinding": "STRUCTURE",
       "effect": "EXCLUDE_WINDOW",
       "family": "NEG8",
       "klass": "NUMBER"
     },
     "whole_window.verdict_unauthenticated": {
+      "blinding": "STRUCTURE",
       "effect": "DISCLOSE",
       "family": "NEG8",
       "klass": "REPRESENTATION"
     }
   },
-  "note": "Harvest test catalog drafted from plan section 3.5; the sealed catalog is lane L6's configs/campaigns/v5_claim_25g83/flag_catalog.json.",
-  "schema": "joulewise.flag_catalog.v1",
-  "status": "TEST_FIXTURE_NOT_SEALED"
+  "notes": "TEST catalog for tests/test_harvest_b5_window.py, not the sealed one (lane L6 seals configs/campaigns/v5_claim_25g83/flag_catalog.json). Codes L4's draft names carry L4's draft effect; the codes in harvest.L5_ONLY_CODES carry an effect drafted from gate-prune plan section 3.5. records.malformed_flag is deliberately absent: it must stay UNCLASSIFIED.",
+  "rules": {
+    "cell_unit_minimum": 8
+  },
+  "schema_version": "joulewise.flag_catalog.v1"
 }

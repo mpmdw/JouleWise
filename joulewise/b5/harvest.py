@@ -27,12 +27,17 @@ Layout under the archive root (created once; a re-harvest uses a new root):
 * ``harvest.json``: the verdict and the digests of every output.
 
 Other-lane seams.  The harvest reads files written by lanes that land in the
-same integration change: the hazard monitor journals (L1), the window plan
-and the arm-time executed-file inventory (L2), the arm and desk flag files and
-the exclusion function (L4), the sealed inventory and flag catalog (L6).  Each
-format is read in exactly one function here (``_plan_value``,
-``read_monitor_journal``, ``_inventory_map``, ``Catalog.load``,
-``_l4_exclusions``), so an integration fix touches one place.
+same integration change: the hazard monitor journals and the arm record (L1),
+the window plan and the arm-time executed-file inventory (L2), the desk, arm
+and driver flag files and the exclusion function (L4), the sealed inventory
+and flag catalog (L6).  Each format is read in exactly one function here
+(``_plan_value``, ``parse_monitor_line``, ``_arm_modules``,
+``_inventory_map``, ``flag_problems``, ``Catalog.load``,
+``l4_exclusion_inputs``/``_l4_exclusions``), so an integration fix touches
+one place.  The formats are the ones those lanes write, not shapes invented
+here: ``tests/fixtures/b5_harvest/l1_monitor`` holds journals written by L1's
+own monitor, and the tests run L4's real ``exclusions.compute`` and
+``validate_flag`` whenever ``joulewise.flags`` is importable.
 """
 from __future__ import annotations
 
@@ -51,6 +56,7 @@ import tempfile
 import time
 from collections import Counter
 from collections.abc import Callable, Iterable, Mapping, Sequence
+from fractions import Fraction
 from pathlib import Path
 from typing import Any
 
@@ -75,6 +81,7 @@ STRUCTURE, RESTRICTED = "STRUCTURE", "RESTRICTED"
 # identity (plan section 6 item 13).  They are data, not code.
 PIN_ONLY_PATHS = frozenset({"configs/calibration/calibration_ledger_head.json"})
 CODE_PREFIXES = ("joulewise/", "scripts/")
+SEALED_DIRECTORY = "configs/campaigns/v5_claim_25g83"
 
 # Thresholds.  The window plan copies the sealed registration's values into
 # ``hazard_window.thresholds``; these defaults are the registered values in
@@ -82,15 +89,21 @@ CODE_PREFIXES = ("joulewise/", "scripts/")
 DEFAULT_THRESHOLDS = {
     "battery_limit_ma": 200,               # #421; battery_float.LIMIT_MA
     "battery_unmeasured_gap_s": 120.0,     # no publication for > 120 s
-    "battery_accumulator_watts_per_unit": None,  # None until L1 confirms units
+    # W per accumulator unit.  None keeps the accumulator a disclosed
+    # diagnostic (plan 3.4) until the registration confirms the units; L1
+    # reads AccumulatedBatteryPower / BatteryPowerAccumulatorCount as mW,
+    # which a registration would enter here as 0.001.
+    "battery_accumulator_watts_per_unit": None,
     "thermal_unmeasured_gap_s": 15.0,      # 5 s poll; three missed polls
     "contention_cpu_s_per_s": 0.05,        # 5 % of one core
     "clock_step_ns": 1_000_000,            # 1 ms residual move between samples
+    "clock_unmeasured_gap_s": 3.0,         # 1 Hz journal; L1's clock.span_findings gap
     "disk_low_bytes": 10 * 2**30,          # 10 GiB
     "clock_systematic_min_recorded": 5,
 }
 CONTENTION_EXEMPT = frozenset({"kernel_task"})
 INSTRUMENT_REASONS = frozenset({"insufficient_in_window_samples", "cadence_ratio_below_threshold"})
+ENVELOPE_REASON = "anchor_energy_envelope_exceeds_quarter_metric"
 ANCHOR_STATUSES = frozenset({"bounded", "unbounded", "invalid", "missing", "not recorded"})
 REQUIRED_BUNDLE_FILES = ("config.json", "metadata.json", "events.jsonl", "summary_metrics.json",
                          "raw/powermetrics.plist")
@@ -114,28 +127,29 @@ def _spec(family, klass, blinding=STRUCTURE, legacy=None):
     return CodeSpec(family, klass, blinding, legacy)
 
 
+# Codes use lane L4's vocabulary (``joulewise.flags.catalog.DRAFT_CODES``)
+# wherever L4 names the same fact, with L4's family and klass; the rest are
+# listed in ``L5_ONLY_CODES`` for the draft and sealed catalogs (L4, L6).
 CODES: dict[str, CodeSpec] = {
     # Pack, code and model identity: the arm-path NUMBER checks, replayed.
     "pack.identity_mismatch": _spec("PACK_IDENTITY", "NUMBER", legacy="joulewise/arm_readiness.py:3077"),
-    "pack.registered_digest_absent": _spec("PACK_IDENTITY", "REPRESENTATION"),
+    "pack.identity_unmeasured": _spec("PACK_IDENTITY", "NUMBER"),
     "code.executed_differs_from_sealed": _spec("CODE_IDENTITY", "NUMBER", legacy="scripts/run_night.py:4022"),
-    "code.executed_inventory_absent": _spec("CODE_IDENTITY", "NUMBER"),
-    "code.sealed_inventory_absent": _spec("CODE_IDENTITY", "REPRESENTATION"),
-    "code.h_claim_absent": _spec("CODE_IDENTITY", "REPRESENTATION"),
-    "code.head_unverified": _spec("CODE_IDENTITY", "REPRESENTATION"),
+    "code.identity_unmeasured": _spec("CODE_IDENTITY", "NUMBER"),
     "model.identity_mismatch": _spec("MODEL_IDENTITY", "NUMBER", legacy="joulewise/identity_pins.py:2401"),
     "model.identity_inconsistent_in_window": _spec("MODEL_IDENTITY", "NUMBER"),
     "model.identity_underivable": _spec("MODEL_IDENTITY", "NUMBER", legacy="joulewise/identity_pins.py:405"),
-    "model.frozen_pins_absent": _spec("MODEL_IDENTITY", "REPRESENTATION"),
+    "model.identity_unpinned": _spec("MODEL_IDENTITY", "NUMBER"),
     # Calibration bracket and ledger.
     "calibration.capture_invalid": _spec("CALIBRATION", "NUMBER"),
-    "calibration.bracket_not_passed": _spec("CALIBRATION", "NUMBER", legacy="scripts/harvest_v5_g2b_window.py:279"),
+    "calibration.bracket_acceptance_failed": _spec("CALIBRATION", "NUMBER",
+                                                   legacy="scripts/harvest_v5_g2b_window.py:279"),
     "calibration.binding_failed": _spec("CALIBRATION", "NUMBER"),
-    "calibration.session_not_bound_to_plan": _spec("CALIBRATION", "NUMBER"),
+    "calibration.session_not_bound": _spec("CALIBRATION", "NUMBER"),
     "calibration.no_bracket": _spec("CALIBRATION", "NUMBER"),
     "calibration.ledger_snapshot_refused": _spec("CALIBRATION", "NUMBER"),
-    "calibration.acceptance_mismatch": _spec("CALIBRATION", "NUMBER"),
-    "calibration.clock_step_overlap": _spec("CALIBRATION", "PHYSICS"),
+    "calibration.acceptance_mismatch": _spec("CALIBRATION", "NUMBER", legacy="scripts/harvest_v5_g2b_window.py:286"),
+    "clock.step_overlap_calibration": _spec("CLOCK_SYSTEMATIC", "PHYSICS"),
     "calibration.capture_battery_pair_failed": _spec("CALIBRATION", "PHYSICS", legacy="joulewise/battery_float.py:1092"),
     # NEG-8 bound and the whole-window verdict.
     "neg8.bound_not_derived": _spec("NEG8", "NUMBER"),
@@ -146,64 +160,91 @@ CODES: dict[str, CodeSpec] = {
     # Clock.
     "clock.systematic": _spec("CLOCK_SYSTEMATIC", "NUMBER", legacy="scripts/harvest_v5_g2b_window.py:347"),
     "clock.step_overlap": _spec("PHYSICS_IN_SPAN", "PHYSICS"),
-    "clock.step_outside_members": _spec("CLOCK_SYSTEMATIC", "PHYSICS"),
-    "clock.frequency_changed": _spec("CLOCK_SYSTEMATIC", "PHYSICS"),
-    "clock.unmeasured": _spec("CLOCK_SYSTEMATIC", "PHYSICS"),
+    "clock.step": _spec("DIAGNOSTIC", "PHYSICS"),
+    "clock.frequency_changed": _spec("DIAGNOSTIC", "PHYSICS"),
+    "clock.unmeasured": _spec("DIAGNOSTIC", "PHYSICS"),
     # Member validity.
     "member.bytes_missing": _spec("MEMBER_VALIDITY", "NUMBER"),
+    "member.bytes_ambiguous": _spec("MEMBER_VALIDITY", "NUMBER"),
     "member.unreadable": _spec("MEMBER_VALIDITY", "NUMBER"),
     "member.status_not_succeeded": _spec("MEMBER_VALIDITY", "NUMBER"),
-    "member.admission_aborted": _spec("MEMBER_VALIDITY", "PHYSICS"),
-    "member.strict_invalid": _spec("MEMBER_VALIDITY", "NUMBER", legacy="joulewise/cli.py:392"),
+    "member.admission_aborted": _spec("MEMBER_VALIDITY", "NUMBER"),
+    "member.strict_validation_failed": _spec("MEMBER_VALIDITY", "NUMBER", legacy="joulewise/cli.py:392"),
     "member.reduction_mismatch": _spec("MEMBER_VALIDITY", "NUMBER"),
     "member.anchor_not_bounded": _spec("MEMBER_VALIDITY", "NUMBER"),
     "member.anchor_recompute_mismatch": _spec("MEMBER_VALIDITY", "NUMBER"),
     "member.token_count_mismatch": _spec("MEMBER_VALIDITY", "NUMBER"),
-    "member.precheck_failed": _spec("MEMBER_VALIDITY", "NUMBER", legacy="joulewise/analysis_engine/inputs.py:3493"),
-    "member.idle_window_suspect": _spec("MEMBER_VALIDITY", "PHYSICS"),
-    "member.cooldown_cap_hit": _spec("MEMBER_VALIDITY", "PHYSICS"),
-    "member.cooldown_unverified": _spec("MEMBER_VALIDITY", "NUMBER", legacy="joulewise/analysis_engine/inputs.py:2095"),
-    "member.config_bytes_mismatch": _spec("MEMBER_VALIDITY", "NUMBER", legacy="joulewise/arm_readiness.py:11451"),
+    "member.target_phase_precheck_failed": _spec("MEMBER_VALIDITY", "NUMBER",
+                                                 legacy="joulewise/analysis_engine/inputs.py:3493"),
+    "member.anchor_energy_envelope_exceeded": _spec("MEMBER_VALIDITY", "NUMBER", RESTRICTED,
+                                                    legacy="joulewise/analysis_engine/inputs.py:3493"),
+    "member.idle_window_suspect": _spec("MEMBER_VALIDITY", "NUMBER"),
+    "member.cooldown_cap_hit": _spec("MEMBER_VALIDITY", "NUMBER"),
+    "member.cooldown_evidence_unverified": _spec("MEMBER_VALIDITY", "NUMBER",
+                                                 legacy="joulewise/analysis_engine/inputs.py:2095"),
+    "member.config_not_in_inventory": _spec("MEMBER_VALIDITY", "NUMBER", legacy="joulewise/arm_readiness.py:11451"),
     "member.span_unknown": _spec("PHYSICS_IN_SPAN", "PHYSICS"),
     # Physics in span (plan section 3.4).
     "battery.member_span": _spec("PHYSICS_IN_SPAN", "PHYSICS"),
     "battery.unmeasured": _spec("PHYSICS_IN_SPAN", "PHYSICS"),
-    "battery.accumulator_span": _spec("PHYSICS_IN_SPAN", "PHYSICS"),
+    "battery.accumulator_excursion": _spec("PHYSICS_IN_SPAN", "PHYSICS"),
     "battery.accumulator_diagnostic": _spec("DIAGNOSTIC", "PHYSICS"),
-    "battery.capture_pair_failed": _spec("PHYSICS_IN_SPAN", "PHYSICS", legacy="joulewise/battery_float.py:1049"),
+    "battery.capture_pair_failed": _spec("MEMBER_VALIDITY", "PHYSICS", legacy="joulewise/battery_float.py:1049"),
+    "battery.capture_pair_missing_covered": _spec("DIAGNOSTIC", "PHYSICS"),
     "battery.capture_pair_missing": _spec("RECORDS", "REPRESENTATION"),
     "thermal.os_level_nonzero": _spec("PHYSICS_IN_SPAN", "PHYSICS"),
-    "thermal.pressure_elevated_in_window": _spec("PHYSICS_IN_SPAN", "PHYSICS", legacy="joulewise/environment_admission.py:279"),
-    "thermal.unmeasured": _spec("PHYSICS_IN_SPAN", "PHYSICS"),
+    "thermal.powermetrics_pressure_elevated": _spec("PHYSICS_IN_SPAN", "PHYSICS",
+                                                    legacy="joulewise/environment_admission.py:279"),
+    "thermal.unmeasured": _spec("DIAGNOSTIC", "PHYSICS"),
     "contention.request_overlap": _spec("PHYSICS_IN_SPAN", "PHYSICS"),
     "contention.unmeasured": _spec("PHYSICS_IN_SPAN", "PHYSICS"),
-    "instrument.insufficient_in_window_samples": _spec("PHYSICS_IN_SPAN", "PHYSICS", legacy="joulewise/analysis_engine/claims.py:43"),
-    "instrument.cadence_ratio_below_threshold": _spec("PHYSICS_IN_SPAN", "PHYSICS", legacy="joulewise/analysis_engine/claims.py:44"),
-    "disk.low": _spec("INSTRUMENT", "PHYSICS"),
+    "contention.kernel_task_share": _spec("DIAGNOSTIC", "PHYSICS"),
+    "instrument.insufficient_in_window_samples": _spec("PHYSICS_IN_SPAN", "PHYSICS",
+                                                       legacy="joulewise/analysis_engine/claims.py:43"),
+    "instrument.cadence_ratio_below_threshold": _spec("PHYSICS_IN_SPAN", "PHYSICS",
+                                                      legacy="joulewise/analysis_engine/claims.py:44"),
+    "disk.low": _spec("DIAGNOSTIC", "PHYSICS"),
     # Roster.
-    "roster.bundle_not_in_roster": _spec("ROSTER", "REPRESENTATION"),
-    "roster.bundle_before_chain_start": _spec("ROSTER", "NUMBER"),
+    "roster.not_in_plan": _spec("ROSTER", "NUMBER"),
+    "roster.before_chain_started": _spec("ROSTER", "NUMBER"),
     "roster.run_id_mismatch": _spec("ROSTER", "REPRESENTATION"),
-    "roster.duplicate_bundle": _spec("ROSTER", "REPRESENTATION"),
     "roster.no_science_bundles": _spec("ROSTER", "NUMBER"),
     # Records.
     "records.monitor_journal_absent": _spec("RECORDS", "REPRESENTATION"),
     "records.monitor_line_malformed": _spec("RECORDS", "REPRESENTATION"),
-    "records.flag_line_malformed": _spec("RECORDS", "REPRESENTATION"),
     "records.arm_record_absent": _spec("RECORDS", "REPRESENTATION"),
     "records.terminal_record_absent": _spec("RECORDS", "REPRESENTATION"),
     "records.source_changed_during_harvest": _spec("RECORDS", "NUMBER"),
     "records.collector_failed": _spec("RECORDS", "REPRESENTATION"),
+    # An earlier flag line (desk, arm, driver) that is not a valid flag.  It
+    # may have been an exclusion, so it is never classified: L4's
+    # NEVER_CLASSIFIED_CODES, which blocks the release event until read.
+    "records.malformed_flag": _spec("RECORDS", "REPRESENTATION"),
     "g3.assertion_failed": _spec("RECORDS", "REPRESENTATION", legacy="scripts/check_window_provenance.py"),
     "g3.recompute_failed": _spec("NEG8", "NUMBER", legacy="scripts/check_window_provenance.py:837"),
     "g3.not_applicable": _spec("DIAGNOSTIC", "REPRESENTATION"),
-    # The s1-structural diagnostics, now read on the first real window.
-    "diagnostic.stream_sizes": _spec("DIAGNOSTIC", "REPRESENTATION"),
-    "diagnostic.time_outside_members": _spec("DIAGNOSTIC", "REPRESENTATION"),
-    "diagnostic.precheck_counts": _spec("DIAGNOSTIC", "REPRESENTATION", RESTRICTED),
-    "diagnostic.l10a_prefix": _spec("DIAGNOSTIC", "REPRESENTATION"),
-    "diagnostic.kernel_task_share": _spec("DIAGNOSTIC", "PHYSICS"),
+    # The s1-structural diagnostics (plan section 4), read on the first real
+    # window; ``observed.check`` names which one.
+    "diagnostic.s1_structural": _spec("DIAGNOSTIC", "REPRESENTATION"),
 }
+NEVER_CLASSIFIED_CODES = frozenset({"records.malformed_flag"})
+# Codes L4's draft catalog does not name (handed to L4 and L6 for the draft
+# and the sealed catalog).  ``tests/test_harvest_b5_window.py`` keeps this
+# list equal to CODES minus the draft whenever joulewise.flags is importable.
+L5_ONLY_CODES = frozenset({
+    "model.identity_inconsistent_in_window", "model.identity_underivable",
+    "calibration.binding_failed", "calibration.ledger_snapshot_refused", "calibration.acceptance_mismatch",
+    "calibration.capture_battery_pair_failed",
+    "whole_window.not_passed", "whole_window.verdict_absent", "whole_window.verdict_unauthenticated",
+    "whole_window.producer_failed",
+    "member.unreadable", "member.reduction_mismatch", "member.anchor_recompute_mismatch", "member.span_unknown",
+    "battery.capture_pair_missing",
+    "roster.run_id_mismatch", "roster.no_science_bundles",
+    "records.monitor_journal_absent", "records.monitor_line_malformed", "records.arm_record_absent",
+    "records.terminal_record_absent", "records.source_changed_during_harvest", "records.collector_failed",
+    "records.malformed_flag",
+    "g3.assertion_failed", "g3.recompute_failed", "g3.not_applicable",
+})
 
 
 def restricted_reason(code: str) -> bool:
@@ -295,14 +336,129 @@ def write_jsonl_once(path: Path, rows: Iterable[Mapping[str, Any]]) -> str:
 # Flag records (joulewise.flag.v1, plan section 3.1) and the catalog.
 # ---------------------------------------------------------------------------
 
-FLAG_KEYS = frozenset({"flag_id", "code", "family", "klass", "scope", "interval", "source", "observed",
-                       "expected", "evidence", "detail", "emitted", "catalog_sha256", "blinding"})
+# The record is lane L4's ``joulewise.flags.schema`` form of plan section 3.1:
+# the plan's fourteen fields plus ``schema_version``, and a flag_id that also
+# covers the interval (two intervals are two facts).
+FLAG_KEYS = frozenset({"schema_version", "flag_id", "code", "family", "klass", "scope", "interval", "source",
+                       "observed", "expected", "evidence", "detail", "emitted", "catalog_sha256", "blinding"})
+SCOPE_KEYS = ("level", "plan_id", "attempt", "stage_id", "run_id", "bundle_id")
+INTERVAL_KEYS = ("monotonic_ns", "monotonic_raw_ns", "wall_s")
+SOURCE_KEYS = ("stage", "collector", "legacy_site", "legacy_code")
+EMITTED_KEYS = ("wall_s", "monotonic_ns", "boot_session_uuid")
+LEVELS = ("window", "stage", "quad", "member")
+STAGES = ("desk", "arm", "window", "harvest")
+CODE_RE = re.compile(r"^[a-z0-9_]+(\.[a-z0-9_]+)+$")
+NULL_INTERVAL = {"monotonic_ns": None, "monotonic_raw_ns": None, "wall_s": None}
 
 
-def default_flag_id(code: str, scope: Mapping[str, Any], observed: Any, source: Mapping[str, Any]) -> str:
-    """``sha256(canonical(code, scope, observed, source))[:20]``, the dedup key."""
+def default_flag_id(code: str, scope: Mapping[str, Any], observed: Any, source: Mapping[str, Any],
+                    interval: Mapping[str, Any] | None = None) -> str:
+    """``sha256(canonical({code, scope, observed, source, interval}))[:20]``, the dedup key.
+
+    Identical to L4's ``joulewise.flags.schema.compute_flag_id``.
+    """
     return sha256_bytes(canonical_json_bytes(
-        {"code": code, "scope": scope, "observed": observed, "source": source}))[:20]
+        {"code": code, "scope": dict(scope), "observed": observed, "source": dict(source),
+         "interval": dict(interval) if interval is not None else dict(NULL_INTERVAL)}))[:20]
+
+
+def _is_int(value: Any) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+def _is_number(value: Any) -> bool:
+    return _is_int(value) or (isinstance(value, float) and math.isfinite(value))
+
+
+def _pair_problem(value: Any, where: str, integer: bool) -> list[str]:
+    check = _is_int if integer else _is_number
+    if value is None or (isinstance(value, list) and len(value) == 2 and all(check(item) for item in value)
+                         and value[0] <= value[1]):
+        return []
+    return [f"{where} must be null or an ordered pair [a, b]"]
+
+
+def flag_problems(value: Any) -> list[str]:
+    """Every ``joulewise.flag.v1`` problem in ``value`` (empty: it conforms).
+
+    The rules of L4's ``joulewise.flags.schema.validate_flag``, which owns the
+    schema; the tests compare the two whenever L4 is importable.
+    """
+    if not isinstance(value, Mapping):
+        return ["flag must be a JSON object"]
+    missing = sorted(FLAG_KEYS - set(value))
+    extra = sorted(set(value) - FLAG_KEYS)
+    if missing or extra:
+        return [f"missing fields: {missing}"] * bool(missing) + [f"unknown fields: {extra}"] * bool(extra)
+    problems: list[str] = []
+    if value["schema_version"] != FLAG_SCHEMA:
+        problems.append(f"schema_version must be {FLAG_SCHEMA}")
+    if not isinstance(value["code"], str) or CODE_RE.fullmatch(value["code"]) is None:
+        problems.append("code must be dotted lower-case")
+    if value["family"] not in FAMILIES:
+        problems.append("family is unknown")
+    if value["klass"] not in KLASSES:
+        problems.append("klass is unknown")
+    if value["blinding"] not in (STRUCTURE, RESTRICTED):
+        problems.append("blinding is unknown")
+    scope = value["scope"]
+    if not isinstance(scope, Mapping) or set(scope) != set(SCOPE_KEYS):
+        problems.append(f"scope must have exactly {SCOPE_KEYS}")
+    else:
+        if scope["level"] not in LEVELS:
+            problems.append("scope.level is unknown")
+        for key in ("plan_id", "stage_id", "run_id", "bundle_id"):
+            if scope[key] is not None and not isinstance(scope[key], str):
+                problems.append(f"scope.{key} must be a string or null")
+        if scope["attempt"] is not None and not isinstance(scope["attempt"], str) and not _is_int(scope["attempt"]):
+            problems.append("scope.attempt must be a string, integer or null")
+        if scope["level"] == "member" and not scope["run_id"]:
+            problems.append("a member-level flag needs scope.run_id")
+        if scope["level"] == "stage" and not scope["stage_id"]:
+            problems.append("a stage-level flag needs scope.stage_id")
+    interval = value["interval"]
+    if not isinstance(interval, Mapping) or set(interval) != set(INTERVAL_KEYS):
+        problems.append(f"interval must have exactly {INTERVAL_KEYS}")
+    else:
+        problems += _pair_problem(interval["monotonic_ns"], "interval.monotonic_ns", True)
+        problems += _pair_problem(interval["monotonic_raw_ns"], "interval.monotonic_raw_ns", True)
+        problems += _pair_problem(interval["wall_s"], "interval.wall_s", False)
+    source = value["source"]
+    if not isinstance(source, Mapping) or set(source) != set(SOURCE_KEYS):
+        problems.append(f"source must have exactly {SOURCE_KEYS}")
+    else:
+        if source["stage"] not in STAGES:
+            problems.append("source.stage is unknown")
+        if not isinstance(source["collector"], str) or not source["collector"]:
+            problems.append("source.collector must be a nonempty string")
+        for key in ("legacy_site", "legacy_code"):
+            if source[key] is not None and not isinstance(source[key], str):
+                problems.append(f"source.{key} must be a string or null")
+    evidence = value["evidence"]
+    if not isinstance(evidence, list) or any(
+            not isinstance(item, Mapping) or set(item) != {"path", "sha256"} or not isinstance(item["path"], str)
+            or not item["path"] or item["path"].startswith("/") or ".." in item["path"].split("/")
+            or not _is_sha256(item["sha256"]) for item in evidence):
+        problems.append("evidence must be [{path relative to custody, sha256}]")
+    if not isinstance(value["detail"], str) or "\n" in value["detail"]:
+        problems.append("detail must be one line of text")
+    emitted = value["emitted"]
+    if not isinstance(emitted, Mapping) or set(emitted) != set(EMITTED_KEYS) or not _is_number(emitted["wall_s"]) \
+            or not _is_int(emitted["monotonic_ns"]) or not (emitted["boot_session_uuid"] is None
+                                                            or isinstance(emitted["boot_session_uuid"], str)):
+        problems.append(f"emitted must have exactly {EMITTED_KEYS} with numeric clocks")
+    if value["catalog_sha256"] is not None and not _is_sha256(value["catalog_sha256"]):
+        problems.append("catalog_sha256 must be a SHA-256 or null")
+    try:
+        canonical_json_bytes({"observed": value["observed"], "expected": value["expected"]})
+    except (TypeError, ValueError):
+        return problems + ["observed/expected must be finite JSON"]
+    if not isinstance(value["flag_id"], str) or re.fullmatch(r"[0-9a-f]{20}", value["flag_id"]) is None:
+        problems.append("flag_id must be 20 lower-case hex characters")
+    elif not problems and value["flag_id"] != default_flag_id(value["code"], scope, value["observed"], source,
+                                                               interval):
+        problems.append("flag_id does not match canonical(code, scope, observed, source, interval)")
+    return problems
 
 
 @dataclasses.dataclass(frozen=True)
@@ -359,10 +515,12 @@ class FlagLedger:
         scope = {"level": level, "plan_id": self.plan_id, "attempt": self.attempt, "stage_id": stage_id,
                  "run_id": run_id, "bundle_id": bundle_id if bundle_id is not None else run_id}
         source = {"stage": stage, "collector": collector, "legacy_site": spec.legacy, "legacy_code": legacy_code}
+        interval_value = {**NULL_INTERVAL, **(interval or {})}
         record = {
-            "flag_id": self._flag_id(code, scope, observed, source),
+            "schema_version": FLAG_SCHEMA,
+            "flag_id": self._flag_id(code, scope, observed, source, interval_value),
             "code": code, "family": family, "klass": klass, "scope": scope,
-            "interval": {"monotonic_ns": None, "monotonic_raw_ns": None, "wall_s": None, **(interval or {})},
+            "interval": interval_value,
             "source": source, "observed": observed, "expected": expected,
             "evidence": [dict(item) for item in evidence],
             "detail": " ".join(str(detail).split())[:300],
@@ -373,12 +531,16 @@ class FlagLedger:
         canonical_json_bytes(record)  # JSON-safe or raise now, at the emitter
         return self._records.setdefault(record["flag_id"], record)
 
-    def absorb(self, record: Mapping[str, Any]) -> bool:
-        """Merge a flag written earlier (desk, arm) by its own writer."""
-        if not isinstance(record, Mapping) or set(record) != FLAG_KEYS or not isinstance(record.get("flag_id"), str):
-            return False
-        self._records.setdefault(record["flag_id"], dict(record))
-        return True
+    def absorb(self, record: Any) -> list[str]:
+        """Merge a flag written earlier (desk, arm, driver) by its own writer.
+
+        Returns the record's schema problems; a record with problems is not
+        merged (the caller records it as ``records.malformed_flag``).
+        """
+        problems = flag_problems(record)
+        if not problems:
+            self._records.setdefault(record["flag_id"], dict(record))
+        return problems
 
     @property
     def records(self) -> list[dict[str, Any]]:
@@ -494,12 +656,15 @@ def resolve_inputs(plan_path: Path | str, overrides: Mapping[str, Any] | None = 
         bracket_session_id=session if isinstance(session, str) else None,
         pre_attempt_id=pick("pre_attempt_id"), post_attempt_id=pick("post_attempt_id"),
         h_claim=pick("h_claim", "h_claim", "measurement_head"),
+        # L6 seals the inventory beside the catalog; L2's driver writes the
+        # arm-time inventory as night/executed_inventory.json.
         sealed_inventory_path=path("sealed_inventory_path", "sealed_inventory_path", "sealed_inventory",
-                                   base=measurement),
+                                   base=measurement) or measurement / SEALED_DIRECTORY / "sealed_inventory.json",
         executed_inventory_path=path("executed_inventory_path", "executed_inventory_path",
-                                     "executed_inventory", base=custody),
+                                     "executed_inventory", base=custody)
+        or custody / "night" / "executed_inventory.json",
         catalog_path=path("catalog_path", "catalog_path", "flag_catalog", base=measurement)
-        or measurement / "configs" / "campaigns" / "v5_claim_25g83" / "flag_catalog.json",
+        or measurement / SEALED_DIRECTORY / "flag_catalog.json",
         identity_pins_path=path("identity_pins_path", base=measurement),
         monitor_dir=path("monitor_dir") or custody / "hazards" / "monitor",
         arm_record_path=path("arm_record_path") or custody / "hazards" / "arm.json",
@@ -653,12 +818,17 @@ def build_roster(pack_root: Path, repo_root: Path) -> dict[str, Any]:
             for member in contrast.get("members", []):
                 attach(member["run_id"], entry, "quad", member["block_id"])
     else:  # Fallback from the plan tree's own roles.
+        fallback: dict[str, dict[str, Any]] = {}
         for member in members.values():
             if member["kind"] != "science":
                 continue
             unit_kind = "repeat" if member["role"] == "absolute_repeat" else "quad"
-            cell = {"cell_id": f"{member['stage_id']}", "target_precheck_path": None}
+            cell = fallback.setdefault(f"{member['stage_id']}", {
+                "cell_id": f"{member['stage_id']}", "kind": "absolute" if unit_kind == "repeat" else "comparative",
+                "target_precheck_path": None, "condition_family_id": None, "expected_n": None,
+                "registered_workload": {}})
             attach(member["run_id"], cell, unit_kind, member["run_id"] if unit_kind == "repeat" else member["block_id"])
+        cells.extend(fallback.values())
     for member in members.values():
         relative = member.get("config_path")
         if isinstance(relative, str):
@@ -910,17 +1080,55 @@ def assess_members(tasks: Sequence[Mapping[str, Any]], *, workers: int = 1) -> l
 
 # ---------------------------------------------------------------------------
 # Hazard monitor journals (L1 seam) and the physics-in-span joins.
+#
+# Lane L1's monitor (``joulewise.hazards.monitor.Monitor``) writes one JSON
+# line per observation, schema ``joulewise.hazard_journal.v1``:
+#
+#     {schema, module, session, seq, kind, started, finished, values, error, raw}
+#
+# ``started`` and ``finished`` are {wall_ns, monotonic_ns, monotonic_raw_ns};
+# monotonic_ns is the controller's ``time.monotonic_ns`` domain, the one member
+# spans are stamped in.  Observations are ``reading`` lines (battery, thermal,
+# clock, disk) and contention ``interval`` lines; a non-null ``error`` means the
+# probe failed.  The other kinds are bookkeeping.  ``parse_monitor_line`` is
+# the one reader of this format; tests/fixtures/b5_harvest/l1_monitor holds
+# journals L1's own monitor wrote.
 # ---------------------------------------------------------------------------
+
+JOURNAL_SCHEMA = "joulewise.hazard_journal.v1"
+MONITOR_MODULES = ("battery", "thermal", "contention", "clock", "disk")
+OBSERVATION_KIND = {"battery": "reading", "thermal": "reading", "clock": "reading", "disk": "reading",
+                    "contention": "interval"}
+BOOKKEEPING_KINDS = frozenset({"session_start", "session_end", "snapshot", "event", "cost"})
+STAMP_KEYS = ("wall_ns", "monotonic_ns", "monotonic_raw_ns")
+FREQUENCY_SCALE = 1 << 16  # ntp_adjtime frequency-word units per ppm (kernel_clock.FREQUENCY_SCALE)
+ACCUMULATOR_PAIRS = {"charge": ("AccumulatedBatteryPower", "BatteryPowerAccumulatorCount"),
+                     "discharge": ("AccumulatedBatteryDischarge", "BatteryDischargeAccumulatorCount")}
+
+
+class MonitorLineError(ValueError):
+    """A line that is not a ``joulewise.hazard_journal.v1`` line of the expected module."""
+
 
 @dataclasses.dataclass(frozen=True)
 class Reading:
+    """One observation line of a monitor journal.
+
+    ``monotonic_ns``, ``monotonic_raw_ns`` and ``wall_ns`` are the line's
+    ``finished`` stamp (L1 times thermal and clock samples there);
+    ``started_*`` is its ``started`` stamp (L1 maps a battery UpdateTime
+    through it).  ``status`` is ``ok`` for a good observation, ``error`` for a
+    failed probe (it observes nothing), or ``event`` for a disk.low marker.
+    """
     module: str
-    monotonic_ns: int | None
-    monotonic_raw_ns: int | None
-    wall_s: float | None
+    monotonic_ns: int
+    monotonic_raw_ns: int
+    wall_ns: int
+    started_monotonic_ns: int
+    started_wall_ns: int
     values: Mapping[str, Any]
-    kind: str = "reading"            # "reading" or "gap"
-    interval: tuple[int, int] | None = None   # gaps and contention intervals
+    status: str = "ok"
+    interval: tuple[int, int] | None = None  # contention: the ps interval in monotonic_ns
 
 
 def _num(value: Any) -> float | None:
@@ -934,134 +1142,67 @@ def _int(value: Any) -> int | None:
     return int(number) if number is not None else None
 
 
-def _first(mappings: Sequence[Any], *names: str) -> Any:
-    for mapping in mappings:
-        if isinstance(mapping, Mapping):
-            for name in names:
-                if mapping.get(name) is not None:
-                    return mapping.get(name)
-    return None
-
-
 def _pair(value: Any) -> tuple[int, int] | None:
     if isinstance(value, Mapping):
         value = value.get("monotonic_ns")
-    if isinstance(value, (list, tuple)) and len(value) == 2:
-        start, end = _int(value[0]), _int(value[1])
-        if start is not None and end is not None and start <= end:
-            return (start, end)
+    if isinstance(value, (list, tuple)) and len(value) == 2 and all(_is_int(item) for item in value) \
+            and value[0] <= value[1]:
+        return (value[0], value[1])
     return None
 
 
-def parse_monitor_line(module: str, value: Any) -> Reading | None:
-    """One journal line -> Reading.  Accepts a serialized hazards Measurement.
+def _stamp(value: Any, where: str) -> dict[str, int]:
+    if not isinstance(value, Mapping) or any(not _is_int(value.get(key)) for key in STAMP_KEYS):
+        raise MonitorLineError(f"{where} is not a {{wall_ns, monotonic_ns, monotonic_raw_ns}} stamp")
+    return {key: value[key] for key in STAMP_KEYS}
 
-    Timestamps may sit at top level or under ``stamps``/``timestamps``/
-    ``clocks``; values under ``values``, ``measurement.values``, ``raw_values``
-    or top level.  A ``kind``/``record_type``/``event`` of gap/restart records
-    a span the monitor did not observe.
+
+def parse_monitor_line(module: str, value: Any) -> Reading | None:
+    """One L1 journal line -> :class:`Reading`; ``None`` for a bookkeeping line.
+
+    Raises :class:`MonitorLineError` for a line that is not this module's
+    ``joulewise.hazard_journal.v1`` line; the caller counts it as malformed.
     """
-    if not isinstance(value, Mapping):
-        return None
-    measurement = value.get("measurement") if isinstance(value.get("measurement"), Mapping) else {}
-    holders = [value, value.get("stamps"), value.get("timestamps"), value.get("clocks"), measurement,
-               measurement.get("stamps"), measurement.get("timestamps")]
-    mono = _int(_first(holders, "monotonic_ns", "mono_ns"))
-    raw = _int(_first(holders, "monotonic_raw_ns", "raw_ns", "clock_monotonic_raw_ns"))
-    wall = _num(_first(holders, "wall_s", "wall_epoch_s", "epoch_s", "wall"))
-    values = _first([value, measurement], "values", "raw_values", "reading")
-    values = values if isinstance(values, Mapping) else value
-    kind_text = str(_first([value], "kind", "record_type", "event") or "reading").lower()
-    if any(word in kind_text for word in ("gap", "restart")):
-        interval = _pair(value.get("interval")) or _pair(_first([value], "gap_monotonic_ns")) or (
-            _pair([value.get("from_monotonic_ns"), value.get("to_monotonic_ns")]))
-        return Reading(module, mono, raw, wall, values, "gap", interval)
-    interval = _pair(value.get("interval")) or _pair(_first([values], "interval_monotonic_ns")) or _pair(
-        [_first([values, value], "start_monotonic_ns"), _first([values, value], "end_monotonic_ns")])
-    if interval is None and module == "contention" and mono is not None:
-        seconds = _num(_first([values, value], "interval_s", "duration_s"))
-        if seconds is not None:
-            interval = (mono - int(seconds * 1e9), mono)
-    if mono is None and interval is None:
-        return None
-    return Reading(module, mono, raw, wall, values, "reading", interval)
+    if not isinstance(value, Mapping) or value.get("schema") != JOURNAL_SCHEMA:
+        raise MonitorLineError(f"not a {JOURNAL_SCHEMA} line")
+    if value.get("module") != module:
+        raise MonitorLineError(f"a {value.get('module')!r} line in the {module} journal")
+    kind, values = value.get("kind"), value.get("values")
+    disk_event = (module == "disk" and kind == "event" and isinstance(values, Mapping)
+                  and values.get("code") == "disk.low")
+    if kind != OBSERVATION_KIND[module] and not disk_event:
+        if kind in BOOKKEEPING_KINDS:
+            return None
+        raise MonitorLineError(f"unknown kind {kind!r}")
+    started, finished = _stamp(value.get("started"), "started"), _stamp(value.get("finished"), "finished")
+    values = {} if values is None else values
+    if not isinstance(values, Mapping):
+        raise MonitorLineError("values is not an object")
+    interval = None
+    if module == "contention":
+        interval = _pair(values.get("interval"))
+        if interval is None:
+            raise MonitorLineError("contention interval lacks interval.monotonic_ns")
+    status = "event" if disk_event else ("error" if value.get("error") is not None else "ok")
+    return Reading(module, finished["monotonic_ns"], finished["monotonic_raw_ns"], finished["wall_ns"],
+                   started["monotonic_ns"], started["wall_ns"], values, status, interval)
 
 
 def read_monitor_journal(path: Path, module: str) -> tuple[list[Reading], int]:
+    """Every observation of one journal in ``finished`` order, and the malformed-line count."""
     readings, malformed = [], 0
     for line in path.read_bytes().splitlines():
         if not line.strip():
             continue
         try:
             reading = parse_monitor_line(module, json.loads(line))
-        except ValueError:
-            reading = None
-        if reading is None:
+        except ValueError:  # not JSON, not UTF-8, or MonitorLineError
             malformed += 1
-        else:
+            continue
+        if reading is not None:
             readings.append(reading)
-    readings.sort(key=lambda item: (item.monotonic_ns if item.monotonic_ns is not None else
-                                    (item.interval[0] if item.interval else 0)))
+    readings.sort(key=lambda item: (item.monotonic_ns, item.started_monotonic_ns))
     return readings, malformed
-
-
-def _yes(value: Any) -> bool | None:
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, str):
-        return {"yes": True, "no": False, "true": True, "false": False}.get(value.strip().lower())
-    return None
-
-
-@dataclasses.dataclass
-class Publication:
-    """One battery gauge publication (a distinct ``UpdateTime``)."""
-    monotonic_ns: int
-    update_time_s: float | None
-    instant_ma: float | None
-    amperage_ma: float | None
-    is_charging: bool | None
-    external_connected: bool | None
-    voltage_mv: float | None
-    accumulated_power: float | None
-    accumulator_count: float | None
-
-
-def _battery_values(values: Mapping[str, Any]) -> dict[str, Any]:
-    telemetry = values.get("PowerTelemetryData") if isinstance(values.get("PowerTelemetryData"), Mapping) else {}
-    holders = [values, telemetry]
-    return {
-        "update_time_s": _num(_first(holders, "UpdateTime", "update_time_s")),
-        "instant_ma": _num(_first(holders, "InstantAmperage", "instant_amperage_ma")),
-        "amperage_ma": _num(_first(holders, "Amperage", "amperage_ma")),
-        "is_charging": _yes(_first(holders, "IsCharging", "is_charging")),
-        "external_connected": _yes(_first(holders, "ExternalConnected", "external_connected")),
-        "voltage_mv": _num(_first(holders, "Voltage", "voltage_mv")),
-        "accumulated_power": _num(_first(holders, "AccumulatedBatteryPower", "accumulated_battery_power")),
-        "accumulator_count": _num(_first(holders, "BatteryPowerAccumulatorCount",
-                                         "battery_power_accumulator_count")),
-    }
-
-
-def battery_publications(readings: Sequence[Reading]) -> list[Publication]:
-    """Group 5 s polls into gauge publications; time each in the monotonic domain."""
-    publications: dict[float, Publication] = {}
-    for reading in readings:
-        if reading.kind != "reading" or reading.monotonic_ns is None:
-            continue
-        values = _battery_values(reading.values)
-        update = values["update_time_s"]
-        key = update if update is not None else float(reading.monotonic_ns)
-        if key in publications:
-            continue
-        stamp = reading.monotonic_ns
-        if update is not None and reading.wall_s is not None:
-            stamp = min(stamp, reading.monotonic_ns - int((reading.wall_s - update) * 1e9))
-        publications[key] = Publication(stamp, update, values["instant_ma"], values["amperage_ma"],
-                                        values["is_charging"], values["external_connected"],
-                                        values["voltage_mv"], values["accumulated_power"],
-                                        values["accumulator_count"])
-    return sorted(publications.values(), key=lambda item: item.monotonic_ns)
 
 
 def in_force(times: Sequence[int], start: int, end: int) -> list[int]:
@@ -1080,29 +1221,82 @@ def _overlaps(first: Sequence[int], second: Sequence[int]) -> bool:
     return first[0] <= second[1] and second[0] <= first[1]
 
 
-def _uncovered(times: Sequence[int], span: Sequence[int], gap_ns: int,
-               gaps: Sequence[tuple[int, int]]) -> list[list[int | None]]:
+def _uncovered(times: Sequence[int], span: Sequence[int], gap_ns: int) -> list[list[int | None]]:
     """Intervals longer than ``gap_ns`` without an observation that overlap ``span``.
 
     A hole is reported by the observations that bound it (``None`` where no
     observation exists on that side), never by the member span's own edges:
     span edges would publish the stream's timing in structure-only outputs.
     """
-    holes: list[list[int | None]] = []
     if not times:
         return [[None, None]]
-    edges = [None, *times, None]
+    holes: list[list[int | None]] = []
+    edges = [None, *sorted(times), None]
     for left, right in zip(edges, edges[1:]):
         lo = span[0] - gap_ns - 1 if left is None else left
         hi = span[1] + gap_ns + 1 if right is None else right
         if hi - lo > gap_ns and _overlaps((lo, hi), span):
             holes.append([left, right])
-    holes.extend([list(gap) for gap in gaps if _overlaps(gap, span)])
     return holes
 
 
 def _hole_interval(hole: Sequence[int | None]) -> dict[str, Any]:
     return {"monotonic_ns": list(hole) if None not in hole else None}
+
+
+@dataclasses.dataclass(frozen=True)
+class Publication:
+    """One battery gauge publication: the first good reading of a new ``UpdateTime``."""
+    monotonic_ns: int
+    update_time_s: int
+    instant_ma: float | None
+    amperage_ma: float | None
+    is_charging: bool | None
+    external_connected: bool | None
+    voltage_mv: float | None
+    accumulators: Mapping[str, tuple[float | None, float | None]]
+
+
+def _bool(value: Any) -> bool | None:
+    return value if isinstance(value, bool) else None
+
+
+def battery_publications(readings: Sequence[Reading]) -> list[Publication]:
+    """Distinct gauge publications in time order (L1's ``battery.publications`` rule).
+
+    A publication takes effect at its UpdateTime, mapped into the monotonic
+    domain through the (wall, monotonic) pair of the reading's own ``started``
+    stamp.  The gauge publishes every 60 s and every field, the accumulators
+    included, is frozen between publications.
+    """
+    seen: dict[int, Publication] = {}
+    for reading in readings:
+        values = reading.values
+        update = _int(values.get("update_time_s"))
+        if reading.status != "ok" or update is None or update in seen:
+            continue
+        telemetry = values.get("power_telemetry") if isinstance(values.get("power_telemetry"), Mapping) else {}
+        seen[update] = Publication(
+            monotonic_ns=update * 1_000_000_000 - (reading.started_wall_ns - reading.started_monotonic_ns),
+            update_time_s=update, instant_ma=_num(values.get("instant_amperage_ma")),
+            amperage_ma=_num(values.get("amperage_ma")), is_charging=_bool(values.get("is_charging")),
+            external_connected=_bool(values.get("external_connected")), voltage_mv=_num(values.get("voltage_mv")),
+            accumulators={label: (_num(telemetry.get(total)), _num(telemetry.get(count)))
+                          for label, (total, count) in ACCUMULATOR_PAIRS.items()})
+    return sorted(seen.values(), key=lambda item: (item.monotonic_ns, item.update_time_s))
+
+
+def _float_reasons(instant: Any, amperage: Any, charging: Any, external: Any, limit: float) -> list[str]:
+    reasons = []
+    if instant is not None and abs(instant) > limit:
+        reasons.append("instant_amperage_above_limit")
+    if amperage is not None and abs(amperage) > limit:
+        reasons.append("amperage_above_limit")
+    if charging is True:
+        reasons.append("is_charging")
+    if external is False:
+        reasons.append("external_disconnected")
+    return reasons
 
 
 def battery_member_flags(span: Sequence[int], readings: Sequence[Reading], thresholds: Mapping[str, Any]
@@ -1112,26 +1306,20 @@ def battery_member_flags(span: Sequence[int], readings: Sequence[Reading], thres
     limit = float(thresholds["battery_limit_ma"])
     publications = battery_publications(readings)
     times = [item.monotonic_ns for item in publications]
-    violations = []
+    violations, missing_fields = [], []
     for index in in_force(times, span[0], span[1]):
         item = publications[index]
-        reasons = []
-        if item.instant_ma is not None and abs(item.instant_ma) > limit:
-            reasons.append("instant_amperage_above_limit")
-        if item.amperage_ma is not None and abs(item.amperage_ma) > limit:
-            reasons.append("amperage_above_limit")
-        if item.is_charging is True:
-            reasons.append("is_charging")
-        if item.external_connected is False:
-            reasons.append("external_disconnected")
+        if None in (item.instant_ma, item.amperage_ma, item.is_charging, item.external_connected):
+            missing_fields.append(item.monotonic_ns)
+        reasons = _float_reasons(item.instant_ma, item.amperage_ma, item.is_charging, item.external_connected, limit)
         if reasons:
             violations.append({"publication_monotonic_ns": item.monotonic_ns, "update_time_s": item.update_time_s,
                                "instant_ma": item.instant_ma, "amperage_ma": item.amperage_ma, "reasons": reasons})
-    for reading in readings:  # Connection and charging state are read on every poll.
-        if reading.kind == "reading" and reading.monotonic_ns is not None and span[0] <= reading.monotonic_ns <= span[1]:
-            values = _battery_values(reading.values)
-            reasons = [name for name, bad in (("is_charging", values["is_charging"] is True),
-                                              ("external_disconnected", values["external_connected"] is False)) if bad]
+    for reading in readings:  # every good poll inside the span, published or not
+        if reading.status == "ok" and span[0] <= reading.monotonic_ns <= span[1]:
+            values = reading.values
+            reasons = _float_reasons(None, None, _bool(values.get("is_charging")),
+                                     _bool(values.get("external_connected")), limit)
             if reasons:
                 violations.append({"poll_monotonic_ns": reading.monotonic_ns, "reasons": reasons})
     if violations:
@@ -1139,43 +1327,47 @@ def battery_member_flags(span: Sequence[int], readings: Sequence[Reading], thres
         out.append(("battery.member_span", {"rule": "in_force_publication", "violations": violations[:8],
                                             "violation_count": len(violations)},
                     {"monotonic_ns": [first, first]}))
-    gap_ns = int(float(thresholds["battery_unmeasured_gap_s"]) * 1e9)
-    gaps = [reading.interval for reading in readings if reading.kind == "gap" and reading.interval]
-    holes = _uncovered(times, span, gap_ns, gaps)
-    if holes:
-        out.append(("battery.unmeasured", {"holes_monotonic_ns": holes[:8]}, _hole_interval(holes[0])))
+    holes = _uncovered(times, span, int(float(thresholds["battery_unmeasured_gap_s"]) * 1e9))
+    if holes or missing_fields:
+        out.append(("battery.unmeasured", {"holes_monotonic_ns": holes[:8],
+                                           "publications_missing_fields": missing_fields[:8]},
+                    _hole_interval(holes[0]) if holes else {"monotonic_ns": [missing_fields[0]] * 2}))
     unit = thresholds.get("battery_accumulator_watts_per_unit")
+    diagnostics, excursions = [], []
     for left, right in zip(publications, publications[1:]):
         if not _overlaps((left.monotonic_ns, right.monotonic_ns), span):
             continue
-        if None in (left.accumulated_power, right.accumulated_power, left.accumulator_count, right.accumulator_count):
-            continue
-        counts = right.accumulator_count - left.accumulator_count
-        delta = right.accumulated_power - left.accumulated_power
-        if counts <= 0 or delta == 0:
-            continue
-        observed = {"accumulated_power_delta": delta, "accumulator_count_delta": counts,
-                    "interval_monotonic_ns": [left.monotonic_ns, right.monotonic_ns]}
-        if unit is None:
-            out.append(("battery.accumulator_diagnostic", observed,
-                        {"monotonic_ns": [left.monotonic_ns, right.monotonic_ns]}))
-            continue
         volts = (right.voltage_mv or left.voltage_mv or 0) / 1000.0
-        mean_w = abs(delta) * float(unit) / counts
-        if volts > 0 and mean_w > limit / 1000.0 * volts:
-            out.append(("battery.accumulator_span", {**observed, "rule": "accumulator_mean_power"},
-                        {"monotonic_ns": [left.monotonic_ns, right.monotonic_ns]}))
+        for label in ACCUMULATOR_PAIRS:
+            (energy0, count0), (energy1, count1) = left.accumulators[label], right.accumulators[label]
+            if None in (energy0, count0, energy1, count1):
+                continue
+            ticks, delta = count1 - count0, energy1 - energy0
+            if ticks <= 0 or delta == 0:  # no nonzero second, or a counter reset
+                continue
+            entry = {"accumulator": label, "energy_delta": delta, "ticks": ticks,
+                     "interval_monotonic_ns": [left.monotonic_ns, right.monotonic_ns]}
+            if unit is None:
+                diagnostics.append(entry)
+                continue
+            mean_w, limit_w = abs(delta) * float(unit) / ticks, limit / 1000.0 * volts
+            if volts > 0 and mean_w > limit_w:
+                excursions.append({**entry, "mean_w": mean_w, "limit_w": limit_w})
+    if diagnostics:
+        out.append(("battery.accumulator_diagnostic", {"intervals": diagnostics[:8], "count": len(diagnostics)},
+                    {"monotonic_ns": diagnostics[0]["interval_monotonic_ns"]}))
+    if excursions:
+        out.append(("battery.accumulator_excursion", {"rule": "accumulator_mean_power", "excursions": excursions[:8],
+                                                      "count": len(excursions)},
+                    {"monotonic_ns": excursions[0]["interval_monotonic_ns"]}))
     return out
-
-
-def _thermal_level(values: Mapping[str, Any]) -> int | None:
-    return _int(_first([values], "level", "thermal_pressure_level", "os_level", "pressure_level"))
 
 
 def thermal_member_flags(span: Sequence[int], readings: Sequence[Reading], thresholds: Mapping[str, Any]
                          ) -> list[tuple[str, dict[str, Any], dict[str, Any]]]:
-    samples = [(reading.monotonic_ns, _thermal_level(reading.values)) for reading in readings
-               if reading.kind == "reading" and reading.monotonic_ns is not None]
+    """``thermal.os_level_nonzero`` for any in-force 5 s sample above 0; coverage holes."""
+    samples = [(reading.monotonic_ns, _int(reading.values.get("level"))) for reading in readings
+               if reading.status == "ok"]
     samples = [(stamp, level) for stamp, level in samples if level is not None]
     out = []
     times = [stamp for stamp, _level in samples]
@@ -1184,48 +1376,53 @@ def thermal_member_flags(span: Sequence[int], readings: Sequence[Reading], thres
     if nonzero:
         out.append(("thermal.os_level_nonzero", {"samples": nonzero[:8]},
                     {"monotonic_ns": [nonzero[0]["monotonic_ns"], nonzero[-1]["monotonic_ns"]]}))
-    gaps = [reading.interval for reading in readings if reading.kind == "gap" and reading.interval]
-    holes = _uncovered(times, span, int(float(thresholds["thermal_unmeasured_gap_s"]) * 1e9), gaps)
+    holes = _uncovered(times, span, int(float(thresholds["thermal_unmeasured_gap_s"]) * 1e9))
     if holes:
         out.append(("thermal.unmeasured", {"holes_monotonic_ns": holes[:8]}, _hole_interval(holes[0])))
     return out
 
 
 def _outside_processes(values: Mapping[str, Any]) -> list[dict[str, Any]]:
-    rows = []
-    for key in ("processes", "offenders", "outside"):
-        for row in values.get(key) or []:
-            if not isinstance(row, Mapping):
+    """Processes outside the measurement tree in one L1 interval.
+
+    L1 lists them in ``outside_over_limit`` (above the monitor's limit) and
+    ``outside_listed`` (at least 0.005 CPU-s/s); both are read so the
+    harvest's own limit applies.  kernel_task is excluded by the monitor and
+    journaled in ``kernel_task_cpu_s_per_s``.
+    """
+    rows: dict[tuple[Any, Any], dict[str, Any]] = {}
+    for key in ("outside_over_limit", "outside_listed"):
+        listed = values.get(key)
+        for row in listed if isinstance(listed, list) else []:
+            rate = _num(row.get("cpu_s_per_s")) if isinstance(row, Mapping) else None
+            if rate is None:
                 continue
-            inside = row.get("in_measurement_tree", row.get("inside"))
-            if inside is True or row.get("outside") is False:
-                continue
-            rate = _num(_first([row], "cpu_s_per_s", "cpu_seconds_per_second", "rate"))
-            if rate is not None:
-                rows.append({"pid": row.get("pid"), "comm": row.get("comm"), "cpu_s_per_s": rate})
-    return rows
+            identity = (row.get("pid"), row.get("command"))
+            if identity not in rows or rows[identity]["cpu_s_per_s"] < rate:
+                rows[identity] = {"pid": row.get("pid"), "command": row.get("command"), "cpu_s_per_s": rate}
+    return list(rows.values())
 
 
 def contention_member_flags(request: Sequence[int], readings: Sequence[Reading], thresholds: Mapping[str, Any]
                             ) -> list[tuple[str, dict[str, Any], dict[str, Any]]]:
+    """``contention.request_overlap`` and ``contention.unmeasured`` for one request."""
     limit = float(thresholds["contention_cpu_s_per_s"])
-    intervals = [reading for reading in readings if reading.kind == "reading" and reading.interval]
-    offenders, covered = [], []
+    intervals = [reading for reading in readings if reading.status == "ok" and reading.interval]
+    offenders = []
     for reading in intervals:
         if not _overlaps(reading.interval, request):
             continue
-        covered.append(reading.interval)
         for row in _outside_processes(reading.values):
-            if row["comm"] in CONTENTION_EXEMPT or row["cpu_s_per_s"] <= limit:
+            if row["command"] in CONTENTION_EXEMPT or row["cpu_s_per_s"] <= limit:
                 continue
             offenders.append({**row, "interval_monotonic_ns": list(reading.interval)})
     out = []
     if offenders:
         out.append(("contention.request_overlap", {"offenders": offenders[:8], "offender_count": len(offenders)},
                     {"monotonic_ns": offenders[0]["interval_monotonic_ns"]}))
-    gaps = [reading.interval for reading in readings if reading.kind == "gap" and reading.interval]
     # A hole is named by the interval edges around it (None where the journal
-    # has no interval on that side), never by the request's own edges.
+    # has no interval on that side), never by the request's own edges.  A
+    # failed ps interval covers nothing.
     every = sorted(reading.interval for reading in intervals)
     ended = [end for _start, end in every if end <= request[0]]
     previous_end: int | None = max(ended) if ended else None
@@ -1243,42 +1440,76 @@ def contention_member_flags(request: Sequence[int], readings: Sequence[Reading],
     if cursor < request[1]:
         following = [start for start, _end in every if start >= request[1]]
         holes.append([previous_end, min(following) if following else None])
-    holes.extend(list(gap) for gap in gaps if _overlaps(gap, request))
     if holes:
         out.append(("contention.unmeasured", {"holes_monotonic_ns": holes[:8]}, _hole_interval(holes[0])))
     return out
 
 
-def clock_steps(readings: Sequence[Reading], thresholds: Mapping[str, Any]) -> tuple[list[dict[str, Any]], list[Any]]:
-    """Residual moves between consecutive anchor samples, net of the frequency word."""
+def clock_member_flags(span: Sequence[int], readings: Sequence[Reading], thresholds: Mapping[str, Any]
+                       ) -> list[tuple[str, dict[str, Any], dict[str, Any]]]:
+    """``clock.unmeasured`` when the 1 Hz anchor journal has a hole overlapping the span."""
+    times = [reading.monotonic_ns for reading in readings
+             if reading.status == "ok" and isinstance(reading.values.get("anchor"), Mapping)]
+    holes = _uncovered(times, span, int(float(thresholds["clock_unmeasured_gap_s"]) * 1e9))
+    return [("clock.unmeasured", {"holes_monotonic_ns": holes[:8]}, _hole_interval(holes[0]))] if holes else []
+
+
+def clock_steps(readings: Sequence[Reading], thresholds: Mapping[str, Any]
+                ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Clock steps and frequency-word changes in the 1 Hz journal (L1's ``clock.window_events`` rule).
+
+    A step is a residual move above ``clock_step_ns`` between consecutive good
+    samples: the anchor's movement (REALTIME - MONOTONIC_RAW) minus f times the
+    MONOTONIC_RAW time elapsed, exactly, with the f in force at the earlier
+    sample.  Samples before the first f read cannot be judged; a failed sample
+    breaks the chain.
+    """
     step_ns = int(thresholds["clock_step_ns"])
-    samples = []
-    ppm: float | None = None
-    frequencies: list[Any] = []
+    steps: list[dict[str, Any]] = []
+    changes: list[dict[str, Any]] = []
+    word: int | None = None
+    previous: tuple[Reading, tuple[int, int]] | None = None
     for reading in readings:
-        if reading.kind != "reading":
+        anchor = reading.values.get("anchor") if reading.status == "ok" else None
+        point = (_int(anchor.get("anchor_ns")), _int(anchor.get("monotonic_raw_ns"))) \
+            if isinstance(anchor, Mapping) else (None, None)
+        if point[0] is None or point[1] is None:
+            previous = None
             continue
-        values = reading.values
-        frequency = values.get("frequency") if isinstance(values.get("frequency"), Mapping) else {}
-        word = _num(_first([values, frequency], "ppm", "frequency_ppm", "f_ppm"))
-        if word is not None:
-            if ppm is None or word != ppm:
-                frequencies.append({"monotonic_ns": reading.monotonic_ns, "ppm": word})
-            ppm = word
-        anchor = _int(_first([values], "anchor_ns", "realtime_minus_raw_ns"))
-        raw = reading.monotonic_raw_ns if reading.monotonic_raw_ns is not None else _int(
-            _first([values], "monotonic_raw_ns", "raw_ns"))
-        if anchor is None:
-            realtime = _int(_first([values], "realtime_ns", "clock_realtime_ns"))
-            anchor = realtime - raw if realtime is not None and raw is not None else None
-        if anchor is not None and raw is not None and reading.monotonic_ns is not None:
-            samples.append((reading.monotonic_ns, raw, anchor, ppm or 0.0))
-    steps = []
-    for (mono0, raw0, anchor0, _f0), (mono1, raw1, anchor1, f1) in zip(samples, samples[1:]):
-        residual = (anchor1 - anchor0) - f1 * 1e-6 * (raw1 - raw0)
-        if abs(residual) > step_ns:
-            steps.append({"interval_monotonic_ns": [mono0, mono1], "residual_move_ns": int(residual)})
-    return steps, frequencies
+        if previous is not None and word is not None:
+            (earlier, (anchor0, raw0)) = previous
+            moved = Fraction(point[0] - anchor0) - Fraction(word * (point[1] - raw0), FREQUENCY_SCALE * 1_000_000)
+            if abs(moved) > step_ns:
+                steps.append({"interval_monotonic_ns": [earlier.started_monotonic_ns, reading.monotonic_ns],
+                              "residual_move_ns": int(moved)})
+        frequency = reading.values.get("frequency")
+        raw_word = _int(frequency.get("raw_word")) if isinstance(frequency, Mapping) else None
+        if raw_word is not None:
+            if word is not None and raw_word != word:
+                changes.append({"monotonic_ns": reading.monotonic_ns, "ppm": raw_word / FREQUENCY_SCALE,
+                                "previous_ppm": word / FREQUENCY_SCALE})
+            word = raw_word
+        previous = (reading, point)
+    return steps, changes
+
+
+def disk_low(readings: Sequence[Reading], thresholds: Mapping[str, Any]) -> tuple[list[Reading], list[str]]:
+    """Readings with a target below ``disk_low_bytes``, a nonempty L1 ``low`` list, or a disk.low
+    marker, and the paths they name."""
+    limit = float(thresholds["disk_low_bytes"])
+    low: list[Reading] = []
+    paths: set[str] = set()
+    for reading in readings:
+        if reading.status not in ("ok", "event"):
+            continue
+        targets, listed = reading.values.get("targets"), reading.values.get("low")
+        below = [row for row in (targets if isinstance(targets, list) else [])
+                 if isinstance(row, Mapping) and _num(row.get("free_bytes")) is not None and row["free_bytes"] < limit]
+        marked = [row for row in (listed if isinstance(listed, list) else []) if isinstance(row, Mapping)]
+        if reading.status == "event" or below or marked:
+            low.append(reading)
+            paths.update(row["path"] for row in below + marked if isinstance(row.get("path"), str))
+    return low, sorted(paths)
 
 
 # ---------------------------------------------------------------------------
@@ -1305,23 +1536,68 @@ def boot_session_uuid() -> str | None:
     return result.stdout.strip() or None
 
 
+STRATUM_OF_CELL_KIND = {"absolute": "repeat", "comparative": "quad", "contrast": "quad"}
+
+
+def l4_exclusion_inputs(roster: Mapping[str, Any], spans: Mapping[str, Mapping[str, Any]], *, plan_id: Any,
+                        attempt: Any, chain_started_monotonic_ns: int | None = None,
+                        bundles: Sequence[Mapping[str, Any]] | None = None
+                        ) -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
+    """The roster and spans in the shape L4's ``joulewise.flags.exclusions.compute`` reads.
+
+    roster: ``{plan_id, attempt, chain_started_monotonic_ns, members: [{run_id,
+    stage_id, units: [{cell_id, stratum, unit_id}]}], cells: [{cell_id,
+    target, strata}], bundles: [{bundle_id, run_id, attempt,
+    created_monotonic_ns}]}``; spans: ``{run_id: {monotonic_ns,
+    request_monotonic_ns}}`` in the controller's ``time.monotonic_ns`` domain.
+
+    A floor's reported quantity is its condition family: the extraction
+    spec's absolute cell (repeat units) and comparative cell (quad units) of
+    one family become one L4 cell with strata ``["quad", "repeat"]``, so the
+    unit minimum applies to each stratum (plan 3.5).  A GAMMA contrast is one
+    cell of quad units.  Strata come from the cells' kinds, not from the units
+    present, so a cell that lost a whole stratum is below the minimum.
+    """
+    target_of: dict[str, str] = {}
+    strata: dict[str, set[str]] = {}
+    for cell in roster.get("cells", []):
+        family, kind = cell.get("condition_family_id"), cell.get("kind")
+        target = family if kind in ("absolute", "comparative") and isinstance(family, str) and family \
+            else str(cell["cell_id"])
+        target_of[cell["cell_id"]] = target
+        declared = strata.setdefault(target, set())
+        if kind in STRATUM_OF_CELL_KIND:
+            declared.add(STRATUM_OF_CELL_KIND[kind])
+    members, stage_of = [], {}
+    for member in roster.get("members", []):
+        stage_of[member["run_id"]] = member.get("stage_id")
+        members.append({"run_id": member["run_id"], "stage_id": member.get("stage_id"), "kind": member.get("kind"),
+                        "units": [{"cell_id": target_of.get(cell["cell_id"], str(cell["cell_id"])),
+                                   "stratum": cell["unit_kind"], "unit_id": str(cell["unit_id"])}
+                                  for cell in member.get("cells", [])]})
+    document: dict[str, Any] = {
+        "schema": ROSTER_SCHEMA, "pack_id": roster.get("pack_id"), "plan_id": plan_id, "attempt": attempt,
+        "chain_started_monotonic_ns": chain_started_monotonic_ns, "members": members,
+        "cells": [{"cell_id": cell_id, "target": True, "strata": sorted(declared)}
+                  for cell_id, declared in sorted(strata.items())]}
+    if bundles is not None:
+        document["bundles"] = [dict(bundle) for bundle in bundles]
+    spans_document = {
+        run_id: {"monotonic_ns": list(span["member"]) if span.get("member") else None,
+                 "request_monotonic_ns": list(span["request"]) if span.get("request") else None,
+                 "stage_id": stage_of.get(run_id), "bundle_id": run_id}
+        for run_id, span in sorted(spans.items())}
+    return document, spans_document
+
+
 def _l4_exclusions(flags: list[dict[str, Any]], roster: Mapping[str, Any], spans: Mapping[str, Any],
                    catalog: Catalog) -> Any:
-    """``joulewise.flags.exclusions.compute(flags, roster, spans, catalog)`` (L4)."""
+    """L4's ``joulewise.flags.exclusions.compute`` over the catalog read by L4's own loader."""
+    if catalog.path is None or catalog.sha256 is None:
+        raise HarvestFault("flag_catalog_absent")
     exclusions = importlib.import_module("joulewise.flags.exclusions")
-    loaded: Any = catalog.raw
-    try:
-        catalog_module = importlib.import_module("joulewise.flags.catalog")
-    except ImportError:
-        catalog_module = None
-    loader = None
-    for name in ("load_catalog", "load"):
-        loader = getattr(catalog_module, name, None) if catalog_module is not None else None
-        if callable(loader):
-            break
-    if loader is not None and catalog.path is not None and catalog.sha256 is not None:
-        loaded = loader(Path(catalog.path))
-    return exclusions.compute(flags, roster, spans, loaded)
+    load_catalog = importlib.import_module("joulewise.flags.catalog").load_catalog
+    return exclusions.compute(flags, roster, spans, load_catalog(Path(catalog.path)))
 
 
 @dataclasses.dataclass
@@ -1377,6 +1653,10 @@ class _Harvest:
         self.hazards: dict[str, Any] = {}
         self.outputs: dict[str, str] = {}
         self.repo_copy: Path | None = None
+        self.pair_missing: dict[str, Any] = {}  # run_id -> #421 pair status, joined to coverage later
+        self.exclusion_roster: dict[str, Any] | None = None
+        self.exclusion_spans: dict[str, Any] | None = None
+        self.h_claim = inputs.h_claim
 
     # -- step wrappers ------------------------------------------------------
     def step(self, name: str, function: Callable[[], Any], *, fault: bool = True) -> Any:
@@ -1469,8 +1749,8 @@ class _Harvest:
 
     def locate(self, run_id: str) -> Path | None:
         found = [root / run_id for root in self._runs_roots() if (root / run_id).is_dir()]
-        if len(found) > 1:
-            self.emit("roster.duplicate_bundle", level="member", run_id=run_id, collector="roster",
+        if len(found) > 1:  # which bytes are the member is ambiguous; neither is used (L4's rule)
+            self.emit("member.bytes_ambiguous", level="member", run_id=run_id, collector="roster",
                       observed={"locations": [str(path.parent) for path in found]})
         return found[0] if found else None
 
@@ -1514,7 +1794,7 @@ class _Harvest:
                 else:
                     self.emit("member.status_not_succeeded", observed={"status": status}, **kwargs)
             if result.get("strict_problems") is None or result.get("strict_problems"):
-                self.emit("member.strict_invalid", observed={
+                self.emit("member.strict_validation_failed", observed={
                     "problem_count": len(result.get("strict_problems") or []),
                     "validator_error": "strict" in result["errors"]},
                     evidence=getattr(self, "assessments_evidence", ()), **kwargs)
@@ -1539,7 +1819,7 @@ class _Harvest:
             if quality.get("cooldown_cap_hit") is True:
                 self.emit("member.cooldown_cap_hit", observed={"source": "summary"}, **kwargs)
             if result.get("thermal_pressure_elevated"):
-                self.emit("thermal.pressure_elevated_in_window", observed={"source": "environment_admission"},
+                self.emit("thermal.powermetrics_pressure_elevated", observed={"source": "environment_admission"},
                           **kwargs)
             metadata_run_id = result.get("metadata_run_id")
             if metadata_run_id is not None and metadata_run_id != run_id:
@@ -1552,8 +1832,8 @@ class _Harvest:
                                                                    "reasons": pair.get("reasons", [])[:8]}, **kwargs)
             elif not isinstance(pair, Mapping) or pair.get("status") in ("battery_float_evidence_missing",
                                                                         "unobserved_historical"):
-                self.emit("battery.capture_pair_missing",
-                          observed={"status": pair.get("status") if isinstance(pair, Mapping) else None}, **kwargs)
+                # Emitted by monitor_joins, which knows whether the journal covers the member.
+                self.pair_missing[run_id] = pair.get("status") if isinstance(pair, Mapping) else None
             if result.get("spans", {}).get("member") is None and result.get("present"):
                 self.emit("member.span_unknown", observed={"member_span": None}, **kwargs)
 
@@ -1578,10 +1858,12 @@ class _Harvest:
                     self.emit(f"instrument.{reason}", observed={"target": target}, **kwargs)
                 elif reason == "cooldown_cap_hit":
                     self.emit("member.cooldown_cap_hit", observed={"source": "precheck", "target": target}, **kwargs)
-            other = sorted(set(reasons) - INSTRUMENT_REASONS - {"cooldown_cap_hit"})
+            if ENVELOPE_REASON in reasons:  # computed from a science energy: blinding RESTRICTED
+                self.emit("member.anchor_energy_envelope_exceeded", observed={"target": target}, **kwargs)
+            other = sorted(set(reasons) - INSTRUMENT_REASONS - {"cooldown_cap_hit", ENVELOPE_REASON})
             if other:
                 restricted = any(restricted_reason(reason) for reason in other)
-                self.emit("member.precheck_failed", observed={"target": target, "reasons": other},
+                self.emit("member.target_phase_precheck_failed", observed={"target": target, "reasons": other},
                           blinding=RESTRICTED if restricted else STRUCTURE, **kwargs)
 
     def _token_flags(self, member: Mapping[str, Any], result: Mapping[str, Any], kwargs: Mapping[str, Any]) -> None:
@@ -1630,12 +1912,12 @@ class _Harvest:
                 if not path.is_dir() or path.name in {"campaign_manifests", "instrument_validation"} | calibration:
                     continue
                 if path.name not in known and (path / "metadata.json").exists():
-                    self.emit("roster.bundle_not_in_roster", level="member", run_id=path.name, collector="roster",
+                    self.emit("roster.not_in_plan", level="member", run_id=path.name, collector="roster",
                               observed={"runs_root": root.name})
         for run_id, result in self.members.items():
             started = result.get("run_started_epoch_s")
             if chain_epoch is not None and started is not None and started < chain_epoch:
-                self.emit("roster.bundle_before_chain_start", level="member", run_id=run_id, collector="roster",
+                self.emit("roster.before_chain_started", level="member", run_id=run_id, collector="roster",
                           observed={"run_started_before_chain_start": True})
         science = [member["run_id"] for member in self.roster["members"] if member["kind"] == "science"]
         if science and not any(run_id in self.members for run_id in science):
@@ -1667,7 +1949,7 @@ class _Harvest:
                 self.emit("member.cooldown_cap_hit", level="member", run_id=run_id, collector="cooldown",
                           observed={"source": "campaign_cooldown_evidence"})
             if not (verified and verdict in {"recovered", "first_run_exempt", "cap_hit"}):
-                self.emit("member.cooldown_unverified", level="member", run_id=run_id, collector="cooldown",
+                self.emit("member.cooldown_evidence_unverified", level="member", run_id=run_id, collector="cooldown",
                           observed={"verified": verified, "result": verdict})
 
     # -- 3. calibration bracket (memo 3.3 cure) --------------------------------
@@ -1683,13 +1965,20 @@ class _Harvest:
         frozen_path = self.pack_copy / str(plan.get("path", "calibration_plan.json"))
         plan_sha = sha256_file(frozen_path) if frozen_path.is_file() else None
         acceptance_path = self.archive / "sources" / "inputs" / "acceptance.json"
-        acceptance = brackets.load_calibration_acceptance_bound(acceptance_path) if acceptance_path.is_file() else None
-        issued = (roster.get("acceptance_policy") or {}).get("issued_acceptance") or {}
-        if acceptance is None or (issued.get("artifact_sha256") and sha256_file(acceptance_path) != issued["artifact_sha256"]):
+        try:
+            acceptance = brackets.load_calibration_acceptance_bound(acceptance_path) \
+                if acceptance_path.is_file() else None
+        except Exception:  # an unreadable acceptance sets no bound; flagged below
+            acceptance = None
+        # The acceptance sets the bracket bound, so its bytes are pinned against
+        # the plan tree: floor trees carry issued_acceptance.artifact_sha256,
+        # the contrast tree issued_artifact_sha256 (harvest_v5_g2b_window.py:286).
+        expected_sha, pin_key = acceptance_pin(roster.get("acceptance_policy"))
+        observed_sha = sha256_file(acceptance_path) if acceptance_path.is_file() else None
+        if acceptance is None or expected_sha is None or observed_sha != expected_sha:
             self.emit("calibration.acceptance_mismatch", level="window", collector="calibration",
-                      observed={"acceptance_loaded": acceptance is not None,
-                                "sha256": sha256_file(acceptance_path) if acceptance_path.is_file() else None},
-                      expected={"sha256": issued.get("artifact_sha256")})
+                      observed={"acceptance_loaded": acceptance is not None, "sha256": observed_sha},
+                      expected={"sha256": expected_sha, "pin": pin_key})
         session_id = inputs.bracket_session_id
         ledger = self.archive / "sources" / "ledger" / "calibration_observation_ledger.jsonl"
         committed_pin = self.archive / "sources" / "ledger" / "calibration_ledger_head.json"
@@ -1754,7 +2043,7 @@ class _Harvest:
                  "evidence_root_id": (session.evidence_root_id, identity.get("evidence_root_id"))}
         unbound = {key: {"session": pair[0], "plan": pair[1]} for key, pair in bound.items() if pair[0] != pair[1]}
         if unbound:
-            self.emit("calibration.session_not_bound_to_plan", level="window", collector="calibration",
+            self.emit("calibration.session_not_bound", level="window", collector="calibration",
                       observed=unbound)
         invalid = [slot for slot in ("pre", "post") if session.finalized_slots.get(slot) is None
                    or session.finalized_slots[slot].disposition != "valid"]
@@ -1818,7 +2107,7 @@ class _Harvest:
         write_json_once(self.withheld / "bracket-evaluation.json",
                         {"assessment": assessment, "reasons": list(reasons), "members": len(valid)})
         if assessment.get("status") != "passed" or reasons:
-            self.emit("calibration.bracket_not_passed", level="window", collector="calibration",
+            self.emit("calibration.bracket_acceptance_failed", level="window", collector="calibration",
                       observed={"status": assessment.get("status"), "reasons": sorted(map(str, reasons))})
 
     # -- whole-window verdict and NEG-8 bound ---------------------------------
@@ -1972,8 +2261,11 @@ class _Harvest:
         sealed = self._sealed()
         tree_relative = _relative_to(tree_path, repo)
         if sealed is None or tree_relative not in sealed:
-            self.emit("pack.registered_digest_absent", level="window", collector="pack_identity",
-                      observed={"plan_tree": tree_relative, "sealed_inventory": sealed is not None})
+            # The plan tree's own pins were still compared above; what could not
+            # be compared is the plan tree against its digest registered at H_claim.
+            self.emit("pack.identity_unmeasured", level="window", collector="pack_identity",
+                      observed={"check": "registered_digests", "plan_tree": tree_relative,
+                                "missing_input": "sealed_inventory" if sealed is None else "plan_tree_row"})
         else:
             pack_relative = _relative_to(pack, repo) or ""
             for relative, digest in sorted(sealed.items()):
@@ -2005,7 +2297,7 @@ class _Harvest:
             except Exception:
                 expected, pinned_ok = None, False
             if expected != result["config_sha256"] or not pinned_ok:
-                self.emit("member.config_bytes_mismatch", level="member", run_id=member["run_id"],
+                self.emit("member.config_not_in_inventory", level="member", run_id=member["run_id"],
                           collector="pack_identity",
                           observed={"bundle_config_sha256": result["config_sha256"], "pack_config_pinned": pinned_ok},
                           expected={"normalized_pack_config_sha256": expected})
@@ -2017,6 +2309,7 @@ class _Harvest:
     def code_identity(self) -> None:
         inputs = self.inputs
         differences: list[dict[str, Any]] = []
+        unmeasured: list[dict[str, Any]] = []
         chain = inputs.chain_path
         if chain is not None and inputs.chain_sha256_path is not None:
             observed = sha256_file(chain) if chain.is_file() else "absent"
@@ -2025,38 +2318,51 @@ class _Harvest:
                 differences.append({"check": "chain_sidecar", "observed": observed,
                                     "expected": sidecar[0] if sidecar else "absent",
                                     "legacy_code": "night_chain_digest_mismatch"})
+        else:
+            unmeasured.append({"check": "chain_sidecar", "missing_input": "chain_path" if chain is None
+                               else "chain_sha256_path"})
         sealed_path = self.archive / "sources" / "inputs" / "sealed_inventory.json"
-        sealed, sealed_head = _inventory_map(read_json(sealed_path)) if sealed_path.is_file() else (None, None)
+        sealed_value = read_json(sealed_path) if sealed_path.is_file() else None
+        sealed, sealed_head = _inventory_map(sealed_value)
         executed_path = inputs.executed_inventory_path
         executed = executed_head = porcelain = None
         if executed_path is not None and executed_path.is_file():
             value = read_json(executed_path)
             executed, executed_head = _inventory_map(value)
-            porcelain = value.get("status_porcelain", value.get("git_status_porcelain")) if isinstance(value, Mapping) else None
+            porcelain = _inventory_checkout(value).get("status_porcelain")
+            if not executed:
+                unmeasured.append({"check": "executed_inventory", "missing_input": "executed_files"})
         else:
-            self.emit("code.executed_inventory_absent", level="window", collector="code_identity",
-                      observed={"path": str(executed_path) if executed_path else None})
+            unmeasured.append({"check": "executed_inventory", "missing_input": "executed_inventory"})
         if sealed is None:
-            self.emit("code.sealed_inventory_absent", level="window", collector="code_identity",
-                      observed={"path": str(inputs.sealed_inventory_path) if inputs.sealed_inventory_path else None})
-        if sealed is not None and executed is not None:
+            unmeasured.append({"check": "executed_inventory", "missing_input": "sealed_inventory"})
+        if sealed is not None and executed:
+            # Executed code is what the driver inventories: joulewise/, scripts/
+            # and the pack (L2), or the sealed inventory's declared roots.  A
+            # sealed file outside those roots is not executed code here.
+            declared = sealed_value.get("roots") if isinstance(sealed_value, Mapping) else None
+            pack_relative = _relative_to(inputs.pack_root, inputs.measurement_root)
+            roots = tuple(str(root).rstrip("/") + "/" for root in declared) if isinstance(declared, list) and declared \
+                else CODE_PREFIXES + ((pack_relative + "/",) if pack_relative else ())
             for relative in sorted(set(sealed) | set(executed)):
-                if relative in PIN_ONLY_PATHS:
-                    continue
-                if relative not in sealed and not relative.startswith(CODE_PREFIXES):
+                if relative in PIN_ONLY_PATHS or not relative.startswith(roots):
                     continue
                 if sealed.get(relative) != executed.get(relative):
                     differences.append({"check": "executed_inventory", "path": relative,
                                         "expected": sealed.get(relative, "absent"),
                                         "observed": executed.get(relative, "absent")})
-        h_claim = inputs.h_claim or sealed_head
+        # H_claim is the head sealed with the registration; the plan's copy is a fallback.
+        h_claim = self.h_claim = sealed_head or inputs.h_claim
         if h_claim is None:
-            self.emit("code.h_claim_absent", level="window", collector="code_identity", observed={"h_claim": None})
-        elif executed_head is not None and executed_head != h_claim:
+            unmeasured.append({"check": "head", "missing_input": "h_claim"})
+        elif executed_head is None:
+            if executed is not None:
+                unmeasured.append({"check": "head", "missing_input": "executed_head"})
+        elif executed_head != h_claim:
             changed = self._changed_paths(h_claim, executed_head)
             if changed is None:
-                self.emit("code.head_unverified", level="window", collector="code_identity",
-                          observed={"head": executed_head, "h_claim": h_claim})
+                unmeasured.append({"check": "head", "missing_input": "git_diff", "head": executed_head,
+                                   "h_claim": h_claim})
             elif set(changed) - PIN_ONLY_PATHS:
                 differences.append({"check": "head", "observed": executed_head, "expected": h_claim,
                                     "changed_paths": sorted(set(changed) - PIN_ONLY_PATHS)[:16]})
@@ -2064,9 +2370,14 @@ class _Harvest:
             tracked = [line for line in porcelain.splitlines() if line.strip() and not line.startswith("??")]
             if tracked:
                 differences.append({"check": "tracked_edits", "observed": tracked[:16]})
+        elif executed is not None:
+            unmeasured.append({"check": "tracked_edits", "missing_input": "status_porcelain"})
         if differences:
             self.emit("code.executed_differs_from_sealed", level="window", collector="code_identity",
                       observed={"differences": differences[:32], "difference_count": len(differences)})
+        if unmeasured:
+            self.emit("code.identity_unmeasured", level="window", collector="code_identity",
+                      observed={"unmeasured": unmeasured})
 
     def _changed_paths(self, base: str, head: str) -> list[str] | None:
         try:
@@ -2095,7 +2406,7 @@ class _Harvest:
             if _is_sha256(triple.get("model_artifact_sha256")):
                 frozen[unit_id] = triple
         if not frozen:
-            self.emit("model.frozen_pins_absent", level="window", collector="model_identity",
+            self.emit("model.identity_unpinned", level="window", collector="model_identity",
                       observed={"identity_units": [unit.get("identity_unit_id") for unit in units]})
         pack_relative = _relative_to(self.pack_copy, self.repo_root_copy) or ""
         seen: dict[str, set[tuple[str, str]]] = {}
@@ -2131,12 +2442,12 @@ class _Harvest:
         directory = self.inputs.monitor_dir
         thresholds = self.inputs.thresholds
         journals: dict[str, list[Reading]] = {}
-        for module in ("battery", "thermal", "contention", "clock", "disk"):
+        for module in MONITOR_MODULES:
             path = directory / f"{module}.jsonl"
             if not path.is_file():
                 self.emit("records.monitor_journal_absent", level="window", collector="monitor",
                           observed={"module": module})
-                self.hazards.setdefault(module, {})["continuous"] = {"journal": None}
+                self.hazards.setdefault(module, {})["continuous"] = {"phase": "continuous", "journal": None}
                 continue
             readings, malformed = read_monitor_journal(path, module)
             journals[module] = readings
@@ -2144,9 +2455,11 @@ class _Harvest:
                 self.emit("records.monitor_line_malformed", level="window", collector="monitor",
                           observed={"module": module, "lines": malformed})
             self.hazards.setdefault(module, {})["continuous"] = {
-                "phase": "continuous", "journal": {"path": f"{module}.jsonl", "sha256": sha256_file(path),
-                                                   "readings": len(readings), "malformed": malformed}}
+                "phase": "continuous", "journal": {
+                    "path": f"{module}.jsonl", "sha256": sha256_file(path), "readings": len(readings),
+                    "failed_probes": sum(reading.status == "error" for reading in readings), "malformed": malformed}}
         roster = {member["run_id"]: member for member in self.roster["members"]}
+        battery_covered: set[str] = set()
         for run_id, spans in sorted(self.spans.items()):
             member_span, request = spans.get("member"), spans.get("request")
             kwargs = {"level": "member", "run_id": run_id, "stage_id": roster.get(run_id, {}).get("stage_id"),
@@ -2155,19 +2468,29 @@ class _Harvest:
                 continue
             for module, join, span in (("battery", battery_member_flags, member_span),
                                        ("thermal", thermal_member_flags, member_span),
-                                       ("contention", contention_member_flags, request or member_span)):
+                                       ("contention", contention_member_flags, request or member_span),
+                                       ("clock", clock_member_flags, member_span)):
                 readings = journals.get(module)
                 if readings is None:
                     self.emit(f"{module}.unmeasured", observed={"journal": "absent"}, **kwargs)
                     continue
-                for code, observed, interval in join(span, readings, thresholds):
+                found = join(span, readings, thresholds)
+                if module == "battery" and not any(code == "battery.unmeasured" for code, *_rest in found):
+                    battery_covered.add(run_id)
+                for code, observed, interval in found:
                     self.emit(code, observed=observed, interval=interval, **kwargs)
-        steps, frequencies = clock_steps(journals.get("clock", []), thresholds)
-        if "clock" not in journals:
-            self.emit("clock.unmeasured", level="window", collector="monitor", observed={"journal": "absent"})
-        if len(frequencies) > 1:
+        # Plan 3.5: a missing #421 per-capture pair is only disclosed when the
+        # continuous journal covers the member; otherwise battery.unmeasured
+        # stands for it and the missing pair is recorded beside it.
+        for run_id, status in sorted(self.pair_missing.items()):
+            code = "battery.capture_pair_missing_covered" if run_id in battery_covered else "battery.capture_pair_missing"
+            self.emit(code, level="member", run_id=run_id, stage_id=roster.get(run_id, {}).get("stage_id"),
+                      collector="battery_pair", observed={"status": status})
+        steps, changes = clock_steps(journals.get("clock", []), thresholds)
+        if changes:
             self.emit("clock.frequency_changed", level="window", collector="monitor",
-                      observed={"frequencies": frequencies[:16]})
+                      observed={"changes": changes[:16], "count": len(changes)},
+                      interval={"monotonic_ns": [changes[0]["monotonic_ns"], changes[-1]["monotonic_ns"]]})
         capture_spans = {attempt: capture.get("span") for attempt, capture in self.capture_assessments.items()}
         for step in steps:
             hit = False
@@ -2179,36 +2502,33 @@ class _Harvest:
             for attempt, span in capture_spans.items():
                 if span and _overlaps(step["interval_monotonic_ns"], span):
                     hit = True
-                    self.emit("calibration.clock_step_overlap", level="window", collector="monitor",
+                    self.emit("clock.step_overlap_calibration", level="window", collector="monitor",
                               observed={**step, "capture": attempt},
                               interval={"monotonic_ns": step["interval_monotonic_ns"]})
             if not hit:
-                self.emit("clock.step_outside_members", level="window", collector="monitor", observed=step,
+                self.emit("clock.step", level="window", collector="monitor", observed=step,
                           interval={"monotonic_ns": step["interval_monotonic_ns"]})
-        low = [reading for reading in journals.get("disk", []) if reading.kind == "reading"
-               and (_num(_first([reading.values], "free_bytes", "available_bytes")) or math.inf)
-               < float(thresholds["disk_low_bytes"])]
+        low, paths = disk_low(journals.get("disk", []), thresholds)
         if low:
             self.emit("disk.low", level="window", collector="monitor",
-                      observed={"readings_below": len(low)}, interval={"monotonic_ns": [low[0].monotonic_ns,
-                                                                                       low[-1].monotonic_ns]})
+                      observed={"readings_below": len(low), "paths": paths[:8]},
+                      interval={"monotonic_ns": [low[0].monotonic_ns, low[-1].monotonic_ns]})
         self._kernel_task_share(journals.get("contention", []))
 
     def _kernel_task_share(self, readings: Sequence[Reading]) -> None:
+        """kernel_task's CPU-seconds during requests (excluded in window, disclosed)."""
         total = 0.0
         for reading in readings:
-            if reading.kind != "reading" or not reading.interval:
+            rate = _num(reading.values.get("kernel_task_cpu_s_per_s"))
+            if reading.status != "ok" or not reading.interval or rate is None:
                 continue
             for spans in self.spans.values():
                 request = spans.get("request")
-                if not request or not _overlaps(reading.interval, request):
-                    continue
-                for row in reading.values.get("processes") or []:
-                    if isinstance(row, Mapping) and row.get("comm") == "kernel_task":
-                        overlap = min(reading.interval[1], request[1]) - max(reading.interval[0], request[0])
-                        total += max(0, overlap) / 1e9 * (_num(row.get("cpu_s_per_s")) or 0.0)
+                if request and _overlaps(reading.interval, request):
+                    overlap = min(reading.interval[1], request[1]) - max(reading.interval[0], request[0])
+                    total += max(0, overlap) / 1e9 * rate
         if total:
-            self.emit("diagnostic.kernel_task_share", level="window", collector="monitor",
+            self.emit("contention.kernel_task_share", level="window", collector="monitor",
                       observed={"kernel_task_cpu_s_in_requests": round(total, 6)})
 
     # -- arm record and earlier flag files -------------------------------------
@@ -2216,36 +2536,44 @@ class _Harvest:
         path = self.inputs.arm_record_path
         if path.is_file():
             value = read_json(path)
-            for module, entry in _arm_modules(value).items():
-                self.hazards.setdefault(module, {})["arm"] = {
-                    "phase": "arm", "verdict": entry.get("verdict"), "measurement": entry.get("measurement"),
-                    "thresholds": entry.get("thresholds"), "raw": entry.get("raw", [])}
-            errors = value.get("collector_errors") if isinstance(value, Mapping) else None
-            if isinstance(errors, list):
-                self.collector_errors.extend({"collector": f"arm:{item.get('collector')}", "error": item.get("error"),
-                                              "elapsed_s": item.get("elapsed_s")}
-                                             for item in errors if isinstance(item, Mapping))
+            for module, phases in _arm_modules(value).items():
+                self.hazards.setdefault(module, {})["arm"] = phases
         elif (self.inputs.night_dir / "chain.started").is_file():
             self.emit("records.arm_record_absent", level="window", collector="arm", observed={"arm_record": None})
-        for name in ("desk.jsonl", "arm.jsonl"):
-            flag_file = self.inputs.flags_dir / name
-            if not flag_file.is_file():
-                continue
-            bad = 0
-            for line in flag_file.read_bytes().splitlines():
+        # Every flag file written before harvest: L4's desk and arm collectors,
+        # L2's driver.jsonl.  A line that is not a valid flag may have been an
+        # exclusion, so it becomes records.malformed_flag, never classified.
+        directory = self.inputs.flags_dir
+        for flag_file in sorted(directory.glob("*.jsonl")) if directory.is_dir() else []:
+            for number, line in enumerate(flag_file.read_bytes().split(b"\n"), start=1):
                 if not line.strip():
                     continue
+                value: Any = None
                 try:
-                    ok = self.flags.absorb(json.loads(line))
-                except ValueError:
-                    ok = False
-                bad += not ok
-            if bad:
-                self.emit("records.flag_line_malformed", level="window", collector="flags",
-                          observed={"file": name, "lines": bad})
+                    value = json.loads(line)
+                except ValueError as exc:
+                    problems = [f"not JSON: {type(exc).__name__}"]
+                else:
+                    problems = self.flags.absorb(value)
+                if problems:
+                    salvaged = value.get("code") if isinstance(value, Mapping) else None
+                    self.emit("records.malformed_flag", level="window", collector="flags",
+                              observed={"file": flag_file.name, "line": number, "line_sha256": sha256_bytes(line),
+                                        "salvaged_code": salvaged if isinstance(salvaged, str) else None,
+                                        "problems": problems[:5]})
 
     # -- G3 provenance checker -------------------------------------------------
-    def g3(self) -> None:
+    def g3(self, *, skipped: bool = False) -> None:
+        """Run the G3 checker on a pack it applies to (one with an analysis manifest).
+
+        G3's F5-2 is the one independent recompute of the whole-window verdict
+        (``whole_window()`` itself trusts the row's stored status), so its
+        absence is never silent: unless the report exists and holds an F5-2
+        row with status PASS, ``g3.recompute_failed`` is emitted, whether the
+        checker was skipped, could not run, crashed, timed out, exited outside
+        {0, 1}, or reported F5-2 as FAIL or SKIP.  Other FAIL rows are
+        ``g3.assertion_failed``.
+        """
         inputs = self.inputs
         pack = inputs.pack_root
         runs = inputs.claim_runs_root
@@ -2253,12 +2581,18 @@ class _Harvest:
             self.emit("g3.not_applicable", level="window", collector="g3",
                       observed={"reason": "pack_has_no_analysis_manifest"})
             return
+
+        def recompute_failed(**observed: Any) -> None:
+            self.emit("g3.recompute_failed", level="window", collector="g3", observed=observed)
+
+        if skipped:
+            recompute_failed(reason="g3_skipped")
+            return
         needed = [runs / "bracket-binding.json", runs / "whole-window-verdict.json",
                   self.derived / "terminal-pin.json", self.derived / "terminal-boundary.json"]
-        if not all(path.is_file() for path in needed):
-            self.emit("g3.not_applicable", level="window", collector="g3",
-                      observed={"reason": "desk_outputs_absent",
-                                "missing": [path.name for path in needed if not path.is_file()]})
+        missing = [path.name for path in needed if not path.is_file()]
+        if missing:
+            recompute_failed(reason="desk_outputs_absent", missing=missing)
             return
         report = self.withheld / "g3-report.json"
         common = _common_root([runs, inputs.ledger_path.parent, self.derived])
@@ -2269,29 +2603,45 @@ class _Harvest:
                 "--calibration-ledger", str(inputs.ledger_path), "--head-pin", str(self.derived / "terminal-pin.json"),
                 "--terminal-boundary-record", str(self.derived / "terminal-boundary.json"),
                 "--acceptance", str(self._acceptance_path()), "--report-json", str(report)]
-        result = self.seams.runner(argv, capture_output=True, text=True, check=False, timeout=3600)
+        started = time.monotonic()
+        try:
+            result = self.seams.runner(argv, capture_output=True, text=True, check=False, timeout=3600)
+        except Exception as exc:  # timeout or spawn failure: recorded, never a fault
+            self._record_error("g3", exc, round(time.monotonic() - started, 3), fault=False)
+            recompute_failed(reason="runner_error", error_type=type(exc).__name__)
+            return
         write_once(self.withheld / "transcripts" / "g3.txt",
                    ((getattr(result, "stdout", "") or "") + (getattr(result, "stderr", "") or "")).encode())
-        rows = read_json(report).get("assertions", []) if report.is_file() else _g3_lines(getattr(result, "stdout", ""))
-        for row in rows:
-            if row.get("status") != "FAIL":
-                continue
-            code = "g3.recompute_failed" if row.get("id") == "F5-2" else "g3.assertion_failed"
-            self.emit(code, level="window", collector="g3", observed={"assertion": row.get("id")})
+        returncode = getattr(result, "returncode", None)
+        rows: Any = None
+        if report.is_file():
+            try:
+                rows = read_json(report).get("assertions")
+            except (OSError, ValueError, AttributeError):
+                rows = None
+        rows = [row for row in rows if isinstance(row, Mapping)] if isinstance(rows, list) else None
+        for row in rows if rows is not None else _g3_lines(getattr(result, "stdout", "")):
+            if row.get("status") == "FAIL" and row.get("id") != "F5-2":
+                self.emit("g3.assertion_failed", level="window", collector="g3", observed={"assertion": row.get("id")})
+        f52 = sorted({str(row.get("status")) for row in rows or [] if row.get("id") == "F5-2"})
+        if rows is None or returncode not in (0, 1) or f52 != ["PASS"]:
+            recompute_failed(reason="report_absent" if rows is None else "f5_2_not_passed",
+                             returncode=returncode if _is_int(returncode) else None, f5_2=f52)
 
     # -- diagnostics -----------------------------------------------------------
     def diagnostics(self) -> None:
         sizes = sorted((result["stream_bytes"], run_id) for run_id, result in self.members.items()
                        if isinstance(result.get("stream_bytes"), int))
         if sizes:
-            self.emit("diagnostic.stream_sizes", level="window", collector="diagnostics",
-                      observed={"shortest": {"run_id": sizes[0][1], "bytes": sizes[0][0]},
+            self.emit("diagnostic.s1_structural", level="window", collector="diagnostics",
+                      observed={"check": "stream_sizes",
+                                "shortest": {"run_id": sizes[0][1], "bytes": sizes[0][0]},
                                 "longest": {"run_id": sizes[-1][1], "bytes": sizes[-1][0]}, "streams": len(sizes)})
         spans = sorted(span["member"] for span in self.spans.values() if span.get("member"))
         if len(spans) > 1:
             gaps = [max(0, right[0] - left[1]) for left, right in zip(spans, spans[1:])]
-            self.emit("diagnostic.time_outside_members", level="window", collector="diagnostics",
-                      observed={"gaps": len(gaps), "total_s": round(sum(gaps) / 1e9, 3),
+            self.emit("diagnostic.s1_structural", level="window", collector="diagnostics",
+                      observed={"check": "time_outside_members", "gaps": len(gaps), "total_s": round(sum(gaps) / 1e9, 3),
                                 "max_s": round(max(gaps) / 1e9, 3)})
         counts = Counter()
         for member in self.roster["members"]:
@@ -2308,13 +2658,55 @@ class _Harvest:
                 ok = isinstance(node, Mapping) and node.get("eligible") is True and not node.get("reasons")
                 counts[(cell["cell_id"], "eligible" if ok else "ineligible")] += 1
         if counts:
-            self.emit("diagnostic.precheck_counts", level="window", collector="diagnostics",
-                      observed={f"{cell}:{state}": count for (cell, state), count in sorted(counts.items())})
+            # Eligibility can turn on an energy envelope, so the counts are RESTRICTED.
+            self.emit("diagnostic.s1_structural", level="window", collector="diagnostics", blinding=RESTRICTED,
+                      observed={"check": "precheck_counts",
+                                **{f"{cell}:{state}": count for (cell, state), count in sorted(counts.items())}})
         strict_valid = sum(bool(result.get("strict_valid")) for result in self.members.values())
         identical = sum(bool((result.get("rereduced") or {}).get("identical_to_stored")) for result in self.members.values())
-        self.emit("diagnostic.l10a_prefix", level="window", collector="diagnostics",
-                  observed={"bundles": len(self.members), "strict_valid": strict_valid,
+        self.emit("diagnostic.s1_structural", level="window", collector="diagnostics",
+                  observed={"check": "l10a_prefix", "bundles": len(self.members), "strict_valid": strict_valid,
                             "rereduced_identical": identical})
+
+    # -- exclusion-function inputs (L4 seam) ------------------------------------
+    def exclusion_inputs(self) -> None:
+        chain_started = None
+        try:
+            value = read_json(self.inputs.night_dir / "chain.started").get("monotonic_ns")
+            chain_started = value if _is_int(value) else None
+        except (OSError, ValueError, AttributeError):
+            pass
+        self.exclusion_roster, self.exclusion_spans = l4_exclusion_inputs(
+            self.roster, self.spans, plan_id=self.inputs.plan_id, attempt=self.inputs.attempt,
+            chain_started_monotonic_ns=chain_started, bundles=self.bundle_records())
+
+    def bundle_records(self) -> list[dict[str, Any]]:
+        """Every bundle directory in the runs roots, for L4's roster rule.
+
+        ``created_monotonic_ns`` is the earliest stamp of the bundle's own
+        stream (``member_spans``); unreadable stamps give ``None``, which L4
+        treats as created before the chain started.
+        """
+        calibration = {name for name in (self.inputs.pre_attempt_id, self.inputs.post_attempt_id) if name}
+        assessed = {result["bundle_path"]: result.get("spans") for result in self.members.values()}
+        rows = []
+        for label, root in (("claim", self.inputs.claim_runs_root), ("bound", self.inputs.bound_runs_root)):
+            if root is None or not root.is_dir():
+                continue
+            for path in sorted(root.iterdir()):
+                if not path.is_dir() or path.name in {"campaign_manifests", "instrument_validation"} | calibration \
+                        or not (path / "metadata.json").is_file():
+                    continue
+                span = assessed.get(str(path))
+                if span is None:
+                    try:
+                        span = member_spans(read_json(path / "metadata.json"), _events(path))
+                    except Exception:  # unreadable stamps: L4 cannot place the bundle after chain start
+                        span = None
+                member = span.get("member") if isinstance(span, Mapping) else None
+                rows.append({"bundle_id": f"{label}/{path.name}", "run_id": path.name, "attempt": None,
+                             "created_monotonic_ns": member[0] if member else None})
+        return rows
 
     # -- outputs ---------------------------------------------------------------
     def sources_unchanged(self) -> None:
@@ -2324,10 +2716,15 @@ class _Harvest:
                       observed={"sources": sorted(changed)})
 
     def finish(self, verdict: str) -> dict[str, Any]:
-        roster_view = {"schema": ROSTER_SCHEMA, "pack_id": self.roster.get("pack_id"),
-                       "cells": self.roster.get("cells", []), "members": self.roster.get("members", [])}
-        if self.roster:
-            self.outputs["derived/roster.json"] = write_json_once(self.derived / "roster.json", roster_view)
+        if self.exclusion_roster is not None:
+            # Structure only: the bundle creation stamps and the chain start
+            # are stream timing and stay in withheld/ with the spans.
+            self.outputs["derived/roster.json"] = write_json_once(self.derived / "roster.json", {
+                key: value for key, value in self.exclusion_roster.items()
+                if key not in ("bundles", "chain_started_monotonic_ns")})
+            write_json_once(self.withheld / "exclusion-inputs.json",
+                            {"schema": "joulewise.b5_exclusion_inputs.v1", "roster": self.exclusion_roster,
+                             "spans": self.exclusion_spans})
 
         def ordered() -> list[dict[str, Any]]:
             return sorted(self.flags.records, key=lambda row: (row["scope"]["level"], row["scope"].get("run_id") or "",
@@ -2339,10 +2736,11 @@ class _Harvest:
             exclusions = {"status": "NULL", "members_excluded": [], "cells": [], "claim_usable": False,
                           "reasons": ["window.null"]}
         else:
-            spans = {run_id: {"member": span.get("member"), "request": span.get("request")}
-                     for run_id, span in self.spans.items()}
             try:
-                exclusions = self.seams.exclusions_compute(flags, roster_view, spans, self.catalog)
+                if self.exclusion_roster is None:
+                    raise HarvestFault("exclusion_inputs_unavailable")
+                exclusions = self.seams.exclusions_compute(flags, self.exclusion_roster, self.exclusion_spans,
+                                                           self.catalog)
             except Exception as exc:
                 # Absent or failing L4 function: numbers and flags still stand;
                 # the window is simply not claim-usable until it is computed.
@@ -2363,7 +2761,7 @@ class _Harvest:
             "schema": WINDOW_FLAGS_SCHEMA,
             "window": {"plan_id": self.inputs.plan_id, "pack_id": self.inputs.pack_id, "attempt": self.inputs.attempt,
                        "t0_epoch_s": self.inputs.plan.get("t0_epoch_s"),
-                       "boot_session_uuid": self.flags._boot, "head": self.inputs.h_claim,
+                       "boot_session_uuid": self.flags._boot, "head": self.h_claim,
                        "custody_root": str(self.inputs.custody_root)},
             "catalog": {"path": self.catalog.path, "sha256": self.catalog.sha256},
             "hazards": self.hazards,
@@ -2376,6 +2774,8 @@ class _Harvest:
             "exclusions": {"members_excluded": exclusions.get("members_excluded", []),
                            "cells": exclusions.get("cells", []),
                            "claim_usable": claim_usable,
+                           "release_blocked": exclusions.get("release_blocked", True),
+                           "unclassified": exclusions.get("unclassified", []),
                            "reasons": list(exclusions.get("reasons", []))
                            + (["harvest.fault"] if verdict == HARVEST_FAULT else [])},
         }
@@ -2390,27 +2790,60 @@ class _Harvest:
         return record
 
 
-def _arm_modules(value: Any) -> dict[str, Mapping[str, Any]]:
-    """L1's arm record: modules under ``modules``/``hazards``/``verdicts`` or a list."""
-    if isinstance(value, Mapping):
-        for key in ("modules", "hazards", "verdicts"):
-            node = value.get(key)
-            if isinstance(node, Mapping):
-                return {str(name): item for name, item in node.items() if isinstance(item, Mapping)}
-            if isinstance(node, list):
-                return {str(item.get("module")): item for item in node
-                        if isinstance(item, Mapping) and item.get("module")}
-    if isinstance(value, list):
-        return {str(item.get("module")): item for item in value if isinstance(item, Mapping) and item.get("module")}
-    return {}
+def acceptance_pin(policy: Any) -> tuple[str | None, str | None]:
+    """The plan tree's digest of the issued calibration acceptance, and the key it came from."""
+    if not isinstance(policy, Mapping):
+        return None, None
+    issued = policy.get("issued_acceptance")
+    if isinstance(issued, Mapping) and _is_sha256(issued.get("artifact_sha256")):
+        return issued["artifact_sha256"], "acceptance_policy.issued_acceptance.artifact_sha256"
+    if _is_sha256(policy.get("issued_artifact_sha256")):
+        return policy["issued_artifact_sha256"], "acceptance_policy.issued_artifact_sha256"
+    return None, None
+
+
+def _arm_modules(value: Any) -> dict[str, list[dict[str, Any]]]:
+    """L1's arm record (``joulewise.hazard_arm.v1``) -> {module: [phase entries]}.
+
+    L1 writes ``hazards: {module: [{phase, verdict, measurement}, ...]}``, one
+    entry per phase (instant, probe, dwell, final, dwell_and_go).
+    """
+    hazards = value.get("hazards") if isinstance(value, Mapping) else None
+    out: dict[str, list[dict[str, Any]]] = {}
+    for module, entries in (hazards.items() if isinstance(hazards, Mapping) else ()):
+        rows = entries if isinstance(entries, list) else [entries]
+        phases = []
+        for entry in rows:
+            if not isinstance(entry, Mapping):
+                continue
+            verdict = entry.get("verdict") if isinstance(entry.get("verdict"), Mapping) else {}
+            phases.append({"phase": entry.get("phase"), "verdict": verdict.get("status"),
+                           "reasons": verdict.get("reasons"), "thresholds": verdict.get("thresholds"),
+                           "measurement": entry.get("measurement")})
+        out[str(module)] = phases
+    return out
+
+
+def _inventory_checkout(value: Any) -> Mapping[str, Any]:
+    """L2's executed inventory nests the checkout under ``measurement_checkout``."""
+    if isinstance(value, Mapping) and isinstance(value.get("measurement_checkout"), Mapping):
+        return value["measurement_checkout"]
+    return value if isinstance(value, Mapping) else {}
 
 
 def _inventory_map(value: Any) -> tuple[dict[str, str] | None, str | None]:
-    """Sealed (L6) or executed (L2) inventory -> ({relative path: sha256}, head)."""
+    """Sealed (L6) or executed (L2) inventory -> ({relative path: sha256}, head).
+
+    Shapes read: ``{files: {path: sha256} | [{path, sha256}], head?}`` (L4's
+    sealed-inventory reader accepts the same), L2's
+    ``{measurement_checkout: {head, status_porcelain, files}, chain, ...}``,
+    and a bare ``{path: sha256}`` map.
+    """
     if not isinstance(value, Mapping):
         return None, None
-    head = value.get("head") or value.get("h_claim") or value.get("git_head")
-    files = value.get("files", value.get("inventory"))
+    checkout = _inventory_checkout(value)
+    head = checkout.get("head") or checkout.get("h_claim") or checkout.get("git_head")
+    files = checkout.get("files", checkout.get("inventory"))
     result: dict[str, str] = {}
     if isinstance(files, Mapping):
         result = {str(key): item for key, item in files.items() if _is_sha256(item)}
@@ -2418,7 +2851,7 @@ def _inventory_map(value: Any) -> tuple[dict[str, str] | None, str | None]:
         result = {str(row["path"]): row["sha256"] for row in files
                   if isinstance(row, Mapping) and isinstance(row.get("path"), str) and _is_sha256(row.get("sha256"))}
     elif files is None:
-        result = {str(key): item for key, item in value.items() if _is_sha256(item)}
+        result = {str(key): item for key, item in checkout.items() if _is_sha256(item)}
     return result, head if isinstance(head, str) else None
 
 
@@ -2486,8 +2919,8 @@ def harvest(inputs: WindowInputs, archive_root: Path | str, *, seams: Seams | No
     run.step("code_identity", run.code_identity)
     run.step("model_identity", run.model_identity)
     run.step("monitor", run.monitor_joins)
-    if run_g3:
-        run.step("g3", run.g3, fault=False)
+    run.step("exclusion_inputs", run.exclusion_inputs)
+    run.step("g3", lambda: run.g3(skipped=not run_g3), fault=False)
     run.step("diagnostics", run.diagnostics, fault=False)
     run.step("sources_unchanged", run.sources_unchanged)
     return run.finish(COLLECTED)

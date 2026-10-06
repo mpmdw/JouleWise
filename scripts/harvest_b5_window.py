@@ -47,7 +47,9 @@ def build_parser() -> argparse.ArgumentParser:
                         help="member-assessment worker processes")
     parser.add_argument("--prepare-desk", action="store_true",
                         help="produce the whole-window verdict with the production writer when absent")
-    parser.add_argument("--skip-g3", action="store_true", help="do not run the G3 provenance checker")
+    parser.add_argument("--skip-g3", action="store_true",
+                        help="do not run the G3 provenance checker; on a pack G3 applies to, the missing "
+                             "whole-window recompute is then recorded as g3.recompute_failed")
     parser.add_argument("--allow-missing-terminal", action="store_true",
                         help="open even without night/result.json once the chain group is proven gone")
     return parser
