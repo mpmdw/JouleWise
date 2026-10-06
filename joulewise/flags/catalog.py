@@ -161,10 +161,38 @@ _DISCLOSE_CODES = {
     "records.checkout_untracked": _code("RECORDS", "REPRESENTATION", DISCLOSE),
 }
 
+# Gate-prune core prune (night-archive gate-prune/core-prune DESIGN.md section
+# 5): the codes protected-core writers emit on the HAZARD_PACK path
+# (joulewise.flags.core.CORE_FLAG_CODES, with that family and klass), the codes
+# the harvest adds for them, and whole_window.not_passed, which the block-5
+# draft catalog (revision 3) discloses because one member's failure fails the
+# aggregate verdict. records.pin_ledger, code.executed_differs_from_sealed and
+# calibration.capture_invalid are already above.
+_CORE_PRUNE_CODES = {
+    # Protected-core writers (core-controller, core-run_campaign, core-fiducial, core-reservation).
+    "calibration.capture_battery_pair_unverified": _code("CALIBRATION", "PHYSICS", DISCLOSE),
+    "calibration.power_policy_unverified": _code("CALIBRATION", "REPRESENTATION", DISCLOSE),
+    "instrument.binary_identity_unmeasured": _code("INSTRUMENT", "NUMBER", EXCLUDE_MEMBER),
+    "env.member_quiet_state_violated": _code("MEMBER_VALIDITY", "PHYSICS", EXCLUDE_MEMBER),
+    "env.member_guard_flagged": _code("DIAGNOSTIC", "REPRESENTATION", DISCLOSE),
+    "member.idle_admission_telemetry_missing": _code("MEMBER_VALIDITY", "PHYSICS", EXCLUDE_MEMBER),
+    "teardown.survivors": _code("DIAGNOSTIC", "PHYSICS", DISCLOSE),
+    "cooldown.result_unknown": _code("DIAGNOSTIC", "PHYSICS", DISCLOSE),
+    "env.stage_preflight_not_admitted": _code("DIAGNOSTIC", "REPRESENTATION", DISCLOSE),
+    "campaign.runner_record_flagged": _code("RECORDS", "REPRESENTATION", DISCLOSE),
+    "calibration.writer_record_flagged": _code("CALIBRATION", "REPRESENTATION", DISCLOSE),
+    # The harvest (joulewise.b5.harvest).
+    "neg8.corpus_member_dropped": _code("NEG8", "REPRESENTATION", DISCLOSE),
+    "calibration.capture_battery_span": _code("CALIBRATION", "PHYSICS", EXCLUDE_WINDOW),
+    "calibration.capture_battery_unmeasured": _code("CALIBRATION", "PHYSICS", EXCLUDE_WINDOW),
+    "whole_window.not_passed": _code("NEG8", "NUMBER", DISCLOSE),
+}
+
 DRAFT_CODES: Mapping[str, Mapping[str, str]] = {
     **_WINDOW_CODES,
     **_MEMBER_CODES,
     **_DISCLOSE_CODES,
+    **_CORE_PRUNE_CODES,
 }
 
 # Codes the cell rule and the roster rule of exclusions.compute derive

@@ -3145,6 +3145,392 @@ class RehearsalRound1Tests(WindowTestCase):
         self.assertEqual(argv[argv.index("--repo-root") + 1], str(window.measurement))
 
 
+# ---------------------------------------------------------------------------
+# Gate-prune core prune, lane NONCORE (night-archive core-prune DESIGN.md 3.4).
+# ---------------------------------------------------------------------------
+
+def desk_seams(runner):
+    return h.Seams(group_alive=lambda pgid: False, exclusions_compute=EXCLUSIONS, runner=runner)
+
+
+class CampaignLockAllowlistTests(WindowTestCase):
+    """N4 (sweep V3, harvest half): the producer's own lock is campaign.lock, not .campaign.lock."""
+
+    def test_a_stale_lock_the_producer_clears_is_not_a_source_change(self):
+        window = self.window(prefix_ledger=True)
+        (window.claim / "campaign.lock").write_text('pid=999999 start_time="stale"\n')
+
+        def runner(argv, **kwargs):
+            runs = Path(argv[argv.index("--runs-dir") + 1])
+            (runs / "campaign.lock").unlink()  # the producer reclaims its stale lock (core-prune A9/V3)
+            (runs / "whole-window-verdict.json").write_text('{"status":"failed"}\n')
+            (runs / "campaign_log.jsonl").write_text('{"status":"failed"}\n')
+            return SimpleNamespace(returncode=1, stdout="", stderr="")
+
+        window.harvest(seams=desk_seams(runner), prepare_desk=True, run_g3=False)
+        self.assertNotIn("records.source_changed_during_harvest", window.codes())
+        self.assertFalse((window.claim / "campaign.lock").exists())
+
+    def test_any_other_change_is_still_a_source_change(self):
+        window = self.window(prefix_ledger=True)
+
+        def runner(argv, **kwargs):
+            runs = Path(argv[argv.index("--runs-dir") + 1])
+            (runs / "whole-window-verdict.json").write_text('{"status":"failed"}\n')
+            (runs / ".campaign.lock").write_text("not the producer's lock\n")
+            return SimpleNamespace(returncode=1, stdout="", stderr="")
+
+        window.harvest(seams=desk_seams(runner), prepare_desk=True, run_g3=False)
+        flag = next(flag for flag in window.flags() if flag["code"] == "records.source_changed_during_harvest")
+        self.assertEqual(flag["observed"]["changed"], [".campaign.lock"])
+
+
+class FixtureCatalogTests(WindowTestCase):
+    """N5 (sweep V4): whole_window.not_passed is disclosed, as in the draft catalog (revision 3)."""
+
+    def test_the_fixture_effect_equals_the_draft(self):
+        from joulewise.flags.catalog import DRAFT_CODES
+        fixture = json.loads((FIXTURES / "flag_catalog.json").read_bytes())["codes"]
+        self.assertEqual(fixture["whole_window.not_passed"]["effect"], DRAFT_CODES["whole_window.not_passed"]["effect"])
+        self.assertEqual(fixture["whole_window.not_passed"]["effect"], "DISCLOSE")
+
+    def test_a_failed_aggregate_verdict_does_not_remove_the_window_by_itself(self):
+        window = self.window()  # the fixture catalog as committed (no override of this code)
+        write_verdict(window, status="failed", decision="passed", member_conditions=["member_failed"])
+        window.harvest()
+        self.assertIn("whole_window.not_passed", window.codes())
+        self.assertNotIn("whole_window.not_passed", window.exclusions()["reasons"])
+
+
+class CaptureBatteryTests(WindowTestCase):
+    """N7: the calibration captures' battery, from the continuous journal and the raw-file custody."""
+
+    T = REGISTERED_HARVEST_THRESHOLDS
+
+    def join(self, assessments, readings, thresholds=None):
+        emitted, errors = [], []
+        fake = SimpleNamespace(capture_assessments=assessments,
+                               emit=lambda code, **kwargs: emitted.append((code, kwargs)),
+                               _record_error=lambda name, exc, elapsed, fault: errors.append((name, fault)))
+        h._Harvest._capture_battery_joins(fake, readings, thresholds or self.T)
+        return emitted, errors
+
+    @staticmethod
+    def capture(pair, span):
+        return {"pre-attempt": {"slot": "pre", "battery_pair": pair, "span": span}}
+
+    def test_out_of_float_over_the_capture_removes_the_window(self):
+        readings = battery_journal([(0, {}), (60, {"instant_amperage_ma": -447}), (120, {}), (180, {})])
+        span = [publication_ns(70), publication_ns(100)]
+        for pair in ("pass", "battery_float_evidence_missing"):
+            with self.subTest(pair=pair):
+                emitted, errors = self.join(self.capture(pair, span), readings)
+                self.assertEqual([code for code, _ in emitted], ["calibration.capture_battery_span"])
+                (code, kwargs), = emitted
+                self.assertEqual((kwargs["level"], kwargs["observed"]["capture"], kwargs["interval"]),
+                                 ("window", "pre-attempt", {"monotonic_ns": span}))
+                self.assertIn("battery.member_span", kwargs["observed"]["codes"])
+                self.assertEqual(errors, [])
+
+    def test_a_pair_that_did_not_pass_without_journal_coverage_removes_the_window(self):
+        gap = battery_journal([(0, {}), (200, {}), (260, {})], end_s=300)
+        covered = battery_journal([(0, {}), (60, {}), (120, {}), (180, {})])
+        span = [publication_ns(100), publication_ns(110)]
+        cases = {"journal_gap": (gap, span), "capture_span_unknown": (covered, None),
+                 "battery_journal_absent": (None, span)}
+        for reason, (readings, capture_span) in cases.items():
+            with self.subTest(reason):
+                emitted, _errors = self.join(self.capture("battery_float_evidence_missing", capture_span), readings)
+                self.assertEqual([code for code, _ in emitted], ["calibration.capture_battery_unmeasured"])
+                self.assertEqual(emitted[0][1]["observed"]["reason"], reason)
+        # The same holes with a verified pair: the pair measured the capture, nothing is emitted.
+        for reason, (readings, capture_span) in cases.items():
+            with self.subTest(pair="pass", case=reason):
+                self.assertEqual(self.join(self.capture("pass", capture_span), readings)[0], [])
+
+    def test_a_covering_journal_in_float_needs_no_pair(self):
+        readings = battery_journal([(0, {}), (60, {}), (120, {}), (180, {})])
+        for pair in ("battery_float_evidence_missing", "error:ValueError", None):
+            with self.subTest(pair=pair):
+                self.assertEqual(self.join(self.capture(pair, [publication_ns(70), publication_ns(100)]),
+                                           readings), ([], []))
+
+    def test_a_join_that_cannot_run_is_a_fault_and_leaves_the_capture_unmeasured(self):
+        readings = battery_journal([(0, {}), (60, {}), (120, {})])
+        thresholds = {key: value for key, value in self.T.items() if key != "battery_limit_ma"}
+        emitted, errors = self.join(self.capture("battery_float_evidence_missing",
+                                                 [publication_ns(70), publication_ns(100)]), readings, thresholds)
+        self.assertEqual(errors, [("monitor.capture_battery", True)])
+        self.assertEqual([(code, kwargs["observed"]["reason"]) for code, kwargs in emitted],
+                         [("calibration.capture_battery_unmeasured", "join_failed")])
+
+    def test_a_window_whose_captures_carry_no_span_and_no_pair_is_removed(self):
+        # The synthetic captures record neither a clock anchor nor a battery pair.
+        window = self.window()
+        window.harvest()
+        flags = [flag for flag in window.flags() if flag["code"] == "calibration.capture_battery_unmeasured"]
+        self.assertEqual(sorted(flag["observed"]["slot"] for flag in flags), ["post", "pre"])
+        self.assertEqual({flag["observed"]["reason"] for flag in flags}, {"capture_span_unknown"})
+        self.assertIn("calibration.capture_battery_unmeasured", window.exclusions()["reasons"])
+
+    def test_a_battery_raw_file_that_changed_is_capture_invalid(self):
+        window = self.window(prefix_ledger=True)
+        capture = window.claim / "instrument_validation" / f"{SESSION_ID}-pre"
+        (capture / "raw" / "battery_float.pre.ioreg").write_bytes(b"changed after finalization")
+        put(capture / "instrument_evidence.json", {"slot": "pre", "validation_id": f"{SESSION_ID}-pre",
+                                                   "battery_float": {"pre": {
+                                                       "phase": "slot_pre", "raw_path": "raw/battery_float.pre.ioreg",
+                                                       "raw_stdout_sha256": hashlib.sha256(b"recorded").hexdigest(),
+                                                       "wall_time_s": 1786206000.0}}})
+        window.harvest()
+        custody = [flag for flag in window.flags() if flag["code"] == "calibration.capture_invalid"
+                   and flag["observed"].get("reason") == "battery_raw_custody_failed"]
+        self.assertEqual([flag["observed"]["slot"] for flag in custody], ["pre"])
+        self.assertIn("calibration.capture_invalid", window.exclusions()["reasons"])
+
+
+class UnwrittenCoreFlagTests(WindowTestCase):
+    """N8: a core flag whose write failed is printed behind the marker; the harvest recovers it."""
+
+    @staticmethod
+    def unwritten_line(code: str, **kwargs) -> str:
+        from joulewise.flags import core as flags_core
+        context = flags_core.HazardFlagContext(writer="core-controller", custody_root=None, plan_id=PLAN_ID,
+                                               attempt=1, scope_resolved=True)
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr):
+            assert not flags_core.emit(context, code, **kwargs)
+        (line,) = stderr.getvalue().splitlines()
+        return line
+
+    def test_marker_lines_in_stage_logs_reach_the_exclusions(self):
+        window = self.window()
+        run_id = MEMBERS[0][0]
+        line = self.unwritten_line("instrument.binary_identity_unmeasured", level="member", run_id=run_id,
+                                   observed={"device_metadata": "no executable_sha256"})
+        torn = self.unwritten_line("teardown.survivors", level="member", run_id=MEMBERS[1][0], observed={"n": 1})
+        logs = window.custody / "operator-logs"
+        logs.mkdir(exist_ok=True)
+        (logs / "07-b5t-science.log").write_text(
+            f"stage output\n{line}\n{torn[:80]}\nnot {h.UNWRITTEN_MARKER}at line start\n")
+        window.harvest()
+        recovered = [flag for flag in window.flags() if flag["code"] == "instrument.binary_identity_unmeasured"]
+        self.assertEqual([flag["scope"]["run_id"] for flag in recovered], [run_id])
+        excluded = {row["run_id"]: row["codes"] for row in window.exclusions()["members_excluded"]}
+        self.assertIn("instrument.binary_identity_unmeasured", excluded[run_id])
+        malformed = [flag["observed"] for flag in window.flags() if flag["code"] == "records.malformed_flag"]
+        self.assertEqual([(item["file"], item["line"]) for item in malformed],
+                         [("operator-logs/07-b5t-science.log", 3)])
+        self.assertIn("records.malformed_flag", window.window_flags()["flags"]["unclassified"])
+
+    def test_a_marker_line_in_the_desk_transcript_is_recovered(self):
+        window = self.window(prefix_ledger=True)
+        line = self.unwritten_line("campaign.runner_record_flagged", level="window",
+                                   observed={"kind": "stale_lock_cleared"})
+
+        def runner(argv, **kwargs):
+            runs = Path(argv[argv.index("--runs-dir") + 1])
+            (runs / "whole-window-verdict.json").write_text('{"status":"failed"}\n')
+            return SimpleNamespace(returncode=1, stdout="verdict written\n", stderr=line + "\n")
+
+        window.harvest(seams=desk_seams(runner), prepare_desk=True, run_g3=False)
+        flag = next(flag for flag in window.flags() if flag["code"] == "campaign.runner_record_flagged")
+        self.assertEqual(flag["observed"], {"kind": "stale_lock_cleared"})
+        self.assertNotIn("records.malformed_flag", window.codes())
+
+
+ABSENT = object()  # the core provides no neg8_corpus_mint_drops (as before the b1 lane lands)
+
+
+def hazard_member_gates(omitted: str | None = None):
+    """``neg8_member_gates`` for either mint (the HAZARD mint reads ``neg8_freshness_binding_fields``);
+    ``omitted`` is not a current strict mint."""
+    stack = contextlib.ExitStack()
+    stack.enter_context(neg8_member_gates())
+    stack.enter_context(mock.patch.object(whole_window, "neg8_freshness_binding_fields",
+                                          return_value=dict(NEG8_FRESHNESS), create=True))
+    if omitted is not None:
+        stack.enter_context(mock.patch.object(
+            whole_window, "_current_strict_summary",
+            side_effect=lambda summary, path=None: path is None or Path(path).name != omitted))
+    return stack
+
+
+def mint_drops_patch(drops: object, asked: list | None = None):
+    """The core's ``neg8_corpus_mint_drops`` replaced: ``drops`` (rows, an exception to raise, or ABSENT)."""
+    def function(runs_root, manifest_path):
+        if asked is not None:
+            listed = json.loads(Path(manifest_path).read_bytes())["members"]
+            asked.append((Path(runs_root), [member["bundle_id"] for member in listed]))
+        if isinstance(drops, Exception):
+            raise drops
+        return drops
+    return mock.patch.object(whole_window, "neg8_corpus_mint_drops", None if drops is ABSENT else function,
+                             create=True)
+
+
+def neg8_corpus_in_process(window: "Window", failed=()) -> dict:
+    """``neg8_corpus`` with the chain's prune helper and the core's mint run in this process.
+
+    So the caller's patches (the member gates, the mint's drop rule) reach the helper as they reach the
+    mint.  Returns the helper's summary; the bound and the driver's locator are written as the chain and
+    the driver write them.
+    """
+    for bundle_id in CORPUS_IDS:
+        put(window.bound / bundle_id / "config.json", {"run_id": bundle_id})
+        put(window.bound / bundle_id / "metadata.json", {"run_id": bundle_id})
+        put(window.bound / bundle_id / "summary_metrics.json",
+            {"status": "failed" if bundle_id in failed else "succeeded"})
+    night = window.custody / "night"
+    collected = night / "transcript" / b5_chain.NEG8_COLLECTED_MANIFEST
+    summary = night / "transcript" / b5_chain.NEG8_COLLECTED_SUMMARY
+    collected.parent.mkdir(parents=True, exist_ok=True)
+    argv = ["-c", str(window.measurement / CORPUS_RELATIVE), str(window.bound), str(collected), str(summary)]
+    with mock.patch.object(sys, "argv", argv), contextlib.redirect_stdout(io.StringIO()):
+        exec(compile(b5_chain.PRUNE_HELPER, "<b5-prune-helper>", "exec"), {"__name__": "__main__"})
+    artifact = whole_window.mint_neg8_drift_bound_artifact(window.bound, collected)
+    # The mint bound its bound to exactly the bytes the helper wrote.
+    assert artifact["reference_corpus"]["manifest_sha256"] == sha(collected)
+    put(window.bound / "neg8-drift-bound.json", artifact)
+    put(night / "hazard_result.json", {"schema": "joulewise.b5_hazard_night.v1",
+                                       "neg8_corpus": b5_chain.neg8_corpus_record(night)})
+    return json.loads(summary.read_bytes())
+
+
+class Neg8MintDropTests(WindowTestCase):
+    """N2 (harvest half of A3): a succeeded corpus member may be left out only when the core's HAZARD
+    mint drops it, evaluated on the same bound root; and (b1 lane item F2) a HAZARD bound counts as
+    derived only when every member it names re-derives from its bundle in the bound root."""
+
+    OMITTED = CORPUS_IDS[6]
+    FAILED = CORPUS_IDS[0]
+    DROP = [{"bundle_id": CORPUS_IDS[6], "reason": "energy_evidence_invalid"}]
+
+    def corpus_window(self, name: str, *, hazard: bool = True, omit: bool = True) -> "Window":
+        """A window whose collected manifest left out FAILED and OMITTED, or, with ``omit=False``, all 12.
+
+        On a HAZARD root the chain's helper drops OMITTED because the (injected) mint drop rule names
+        it; on any other root the helper never consults that rule, so the collected manifest is a
+        corpus no rule selected (written as the selected input to the helper)."""
+        window = Window(self.tmp / name, catalog_overrides=self.ISOLATE)
+        if hazard:
+            LineageFindingTests.publish(self, window)
+            self.assertTrue((window.bound / LineageFindingTests.LOCATOR).is_file())
+            with hazard_member_gates(), mint_drops_patch(self.DROP if omit else []):
+                summary = neg8_corpus_in_process(window, [self.FAILED] if omit else [])
+            self.assertEqual(summary["members_kept"], 10 if omit else 12)
+        elif omit:
+            members = [member for member in COMMITTED_CORPUS["members"] if member["bundle_id"] != self.OMITTED]
+            self.assertIsNone(neg8_corpus(window, [self.FAILED], manifest_members=members))
+        else:
+            self.assertIsNone(neg8_corpus(window))
+        return window
+
+    def harvest(self, window: "Window", drops: object, *extra) -> tuple[dict, list]:
+        asked: list = []
+        with contextlib.ExitStack() as stack:
+            stack.enter_context(hazard_member_gates())
+            stack.enter_context(mint_drops_patch(drops, asked))
+            for patch in extra:
+                stack.enter_context(patch)
+            window.harvest()
+        return json.loads((window.archive / "derived" / "neg8-bound.json").read_bytes()), asked
+
+    def test_a_member_the_hazard_mint_drops_keeps_the_collected_subset(self):
+        """Before: dropped_member_succeeded, neg8.bound_not_derived (EXCLUDE_WINDOW)."""
+        window = self.corpus_window("dropped")
+        check, asked = self.harvest(window, self.DROP)
+        self.assertEqual((check["derived_from"], check["problems"], check["mint_rule"], check["members_rederived"]),
+                         ("collected_subset", [], "joulewise.whole_window.neg8_corpus_mint_drops", True))
+        self.assertEqual(check["dropped_bundle_ids"], [self.FAILED, self.OMITTED])
+        # Asked once, on the bound root, over the committed members that succeeded (as the chain asks).
+        self.assertEqual(asked, [(window.bound, [bundle for bundle in CORPUS_IDS if bundle != self.FAILED])])
+        self.assertNotIn("neg8.bound_not_derived", window.codes())
+        dropped = [flag for flag in window.flags() if flag["code"] == "neg8.corpus_member_dropped"]
+        self.assertEqual([(flag["scope"]["level"], flag["scope"]["run_id"], flag["observed"]) for flag in dropped],
+                         [("member", self.OMITTED, {"bundle_id": self.OMITTED, "reason": "energy_evidence_invalid"})])
+
+    def test_any_other_drop_is_still_a_selected_corpus(self):
+        """Keeper: a succeeded member the mint keeps, or a mint that cannot say, selects the corpus."""
+        cases = {"mint_keeps_it": ([], True),
+                 "mint_drops_another": ([{"bundle_id": CORPUS_IDS[3], "reason": "condition_differs"}], True),
+                 "mint_raises": (ValueError("split evenly"), True), "core_without_the_function": (ABSENT, True),
+                 "root_not_hazard": (self.DROP, False)}
+        for name, (drops, hazard) in cases.items():
+            with self.subTest(name):
+                window = self.corpus_window(name, hazard=hazard)
+                check, asked = self.harvest(window, drops)
+                self.assertIsNone(check["derived_from"])
+                self.assertIn(f"dropped_member_succeeded:{self.OMITTED}", check["problems"])
+                self.assertIn("neg8.bound_not_derived", window.exclusions()["reasons"])
+                self.assertNotIn("neg8.corpus_member_dropped", window.codes())
+                self.assertEqual(asked != [], hazard and drops is not ABSENT)  # not HAZARD: never asked
+
+    def test_a_hazard_bound_whose_members_do_not_rederive_is_not_derived(self):
+        """F2.  Before: the bound validated (arithmetic and manifest identity) and was derived."""
+        shifted = CORPUS_IDS[2]
+
+        def energy_differs(path):
+            gross, idle, problem = corpus_point(path)
+            return ({**gross, "point_j": gross["point_j"] + 0.5} if path.name == shifted else gross), idle, problem
+
+        energy = mock.patch.object(whole_window, "_reference_energy_evidence", side_effect=energy_differs)
+        for omit, derived in ((True, "collected_subset"), (False, "registered_corpus")):
+            drops = self.DROP if omit else []
+            with self.subTest(derived, tamper="energy"):
+                window = self.corpus_window(f"energy-{derived}", omit=omit)
+                check, _asked = self.harvest(window, drops, energy)
+                self.assertEqual((check["derived_from"], check["members_rederived"]), (None, False))
+                self.assertEqual(check["problems"], [f"bound_member_energy_differs:{shifted}"])
+                self.assertIn("neg8.bound_not_derived", window.exclusions()["reasons"])
+            with self.subTest(derived, tamper="bytes"):
+                window = self.corpus_window(f"bytes-{derived}", omit=omit)
+                put(window.bound / shifted / "metadata.json", {"run_id": shifted, "edited": True})
+                check, _asked = self.harvest(window, drops)
+                self.assertEqual(check["problems"], [f"bound_member_bytes_differ:{shifted}"])
+                self.assertIn("neg8.bound_not_derived", window.codes())
+            with self.subTest(derived, tamper="none"):
+                window = self.corpus_window(f"clean-{derived}", omit=omit)
+                check, _asked = self.harvest(window, drops)
+                self.assertEqual((check["derived_from"], check["members_rederived"], check["problems"]),
+                                 (derived, True, []))
+        # The check is the HAZARD bound's (it has no lineage stamp); a non-HAZARD root is unchanged.
+        window = self.corpus_window("energy-not-hazard", hazard=False, omit=False)
+        check, _asked = self.harvest(window, [], energy)
+        self.assertEqual((check["derived_from"], check.get("members_rederived")), ("registered_corpus", None))
+
+
+@unittest.skipUnless(hasattr(whole_window, "neg8_corpus_mint_drops"),
+                     "the core's HAZARD NEG-8 mint (b1 lane, A3 core) is not in this tree")
+class Neg8MintIntegrationTests(WindowTestCase):
+    """The chain's prune helper, the core's HAZARD mint and the harvest agree on one corpus (A3, N2).
+
+    One succeeded corpus member fails a mint predicate (not a current strict mint).  The helper drops it,
+    the real mint binds its bound to exactly the helper's bytes, and the harvest derives the bound from
+    them with one neg8.corpus_member_dropped.  Only the per-member gates are stubbed (as for the mint
+    elsewhere in this file); the drop rule, the rendering and the binding are the core's own.
+    """
+
+    OMITTED = CORPUS_IDS[6]
+
+    def test_the_helper_the_mint_and_the_harvest_drop_the_same_member(self):
+        window = Window(self.tmp / "integrated", catalog_overrides=self.ISOLATE)
+        LineageFindingTests.publish(self, window)
+        with hazard_member_gates(self.OMITTED):
+            summary = neg8_corpus_in_process(window)
+        self.assertEqual(summary["dropped"], [{"bundle_id": self.OMITTED, "status": "succeeded",
+                                               "mint_drop": "not_current_strict_mint"}])
+        self.assertEqual(summary["members_kept"], 11)
+        with hazard_member_gates(self.OMITTED):
+            window.harvest()
+        check = json.loads((window.archive / "derived" / "neg8-bound.json").read_bytes())
+        self.assertEqual((check["derived_from"], check["problems"], check["members_rederived"], check["mint_rule"]),
+                         ("collected_subset", [], True, "joulewise.whole_window.neg8_corpus_mint_drops"))
+        dropped = [flag["observed"] for flag in window.flags() if flag["code"] == "neg8.corpus_member_dropped"]
+        self.assertEqual(dropped, [{"bundle_id": self.OMITTED, "reason": "not_current_strict_mint"}])
+        self.assertNotIn("neg8.bound_not_derived", window.codes())
+
+
 class RealB3w1BytesTests(unittest.TestCase):
     """On real b3w1 bytes: re-reduction is byte-identical and anchors recompute.
 

@@ -278,7 +278,45 @@ CODES: dict[str, CodeSpec] = {
                     "lineage.arm_decision_unrecorded")},
     "lineage.plan_tree_digest_differs": _spec("PACK_IDENTITY", "NUMBER",
                                               legacy="joulewise/window_lineage.py:audit_window_lineage"),
+    # Gate-prune core prune (DESIGN.md section 5).  The capture battery from
+    # the continuous journal (N7) and the NEG-8 corpus drop rule (N2):
+    "calibration.capture_battery_span": _spec("CALIBRATION", "PHYSICS"),
+    "calibration.capture_battery_unmeasured": _spec("CALIBRATION", "PHYSICS"),
+    "neg8.corpus_member_dropped": _spec("NEG8", "REPRESENTATION"),
+    # Written by protected-core code on the HAZARD_PACK path into
+    # <custody>/flags/core-*.jsonl, or printed behind UNWRITTEN_MARKER when
+    # that write failed (N8); the harvest folds them, it never emits them.
+    # Family and klass as joulewise.flags.core.CORE_FLAG_CODES gives them.
+    **{code: _spec(family, klass) for code, (family, klass) in (
+        ("calibration.capture_battery_pair_unverified", ("CALIBRATION", "PHYSICS")),
+        ("records.pin_ledger", ("RECORDS", "REPRESENTATION")),
+        ("calibration.power_policy_unverified", ("CALIBRATION", "REPRESENTATION")),
+        ("instrument.binary_identity_unmeasured", ("INSTRUMENT", "NUMBER")),
+        ("env.member_quiet_state_violated", ("MEMBER_VALIDITY", "PHYSICS")),
+        ("env.member_guard_flagged", ("DIAGNOSTIC", "REPRESENTATION")),
+        ("member.idle_admission_telemetry_missing", ("MEMBER_VALIDITY", "PHYSICS")),
+        ("teardown.survivors", ("DIAGNOSTIC", "PHYSICS")),
+        ("cooldown.result_unknown", ("DIAGNOSTIC", "PHYSICS")),
+        ("env.stage_preflight_not_admitted", ("DIAGNOSTIC", "REPRESENTATION")),
+        ("campaign.runner_record_flagged", ("RECORDS", "REPRESENTATION")),
+        ("calibration.writer_record_flagged", ("CALIBRATION", "REPRESENTATION")),
+    )},
 }
+# The codes above that only protected-core writers emit (the harvest folds them).
+CORE_WRITER_CODES = frozenset({
+    "calibration.capture_battery_pair_unverified", "records.pin_ledger", "calibration.power_policy_unverified",
+    "instrument.binary_identity_unmeasured", "env.member_quiet_state_violated", "env.member_guard_flagged",
+    "member.idle_admission_telemetry_missing", "teardown.survivors", "cooldown.result_unknown",
+    "env.stage_preflight_not_admitted", "campaign.runner_record_flagged", "calibration.writer_record_flagged",
+})
+# joulewise.flags.core.UNWRITTEN_MARKER, read and never imported: a core flag
+# whose write failed is printed whole to the stage's stderr behind it (N8).
+UNWRITTEN_MARKER = "JOULEWISE_UNWRITTEN_FLAG "
+# The producer's own lock (scripts/run_campaign.py acquire_campaign_lock), which
+# it creates and removes inside the runs root: no dot before it (sweep V3; it
+# was listed as ".campaign.lock").  Spelled in two parts so the emitted-code
+# scan of this file does not read a file name as a flag code.
+CAMPAIGN_LOCK_NAME = "campaign" ".lock"
 LINEAGE_CODES = frozenset(code for code in CODES if code.startswith("lineage."))
 NEVER_CLASSIFIED_CODES = frozenset({"records.malformed_flag"})
 # Codes L4's draft catalog does not name (handed to L4 and L6 for the draft
@@ -288,7 +326,8 @@ L5_ONLY_CODES = frozenset({
     "model.identity_inconsistent_in_window", "model.identity_underivable",
     "calibration.binding_failed", "calibration.ledger_snapshot_refused", "calibration.acceptance_mismatch",
     "calibration.capture_battery_pair_failed",
-    "whole_window.not_passed", "whole_window.verdict_absent", "whole_window.verdict_unauthenticated",
+    # whole_window.not_passed is in L4's draft since the core prune (DISCLOSE, revision 3).
+    "whole_window.verdict_absent", "whole_window.verdict_unauthenticated",
     "whole_window.producer_failed",
     "member.unreadable", "member.reduction_mismatch", "member.anchor_recompute_mismatch", "member.span_unknown",
     # battery.accumulator_activity and battery.accumulator_unavailable are in
@@ -364,6 +403,110 @@ def _corpus_member_status(runs_root: Path | None, member: Any) -> str | None:
     except (OSError, ValueError, AttributeError):
         return None
     return status if isinstance(status, str) else None
+
+
+def neg8_mint_drops(runs_root: Path | None, committed: Mapping[str, Any],
+                    succeeded: Sequence[Any]) -> tuple[dict[str, str], str]:
+    """What the core's HAZARD NEG-8 mint drops from the corpus members that succeeded.
+
+    Returns ``({bundle_id: reason}, rule)``, mirroring the chain's
+    ``PRUNE_HELPER``: on a HAZARD bound root (the mint's own dispatch,
+    ``window_lineage.is_hazard_runs_root``) the core's
+    ``whole_window.neg8_corpus_mint_drops`` names, with the predicate each
+    failed, the members the mint leaves out of the manifest it binds its bound
+    to (core-prune A3).  It is evaluated here on the same bound root over the
+    same members (the committed members whose status is ``succeeded``), so the
+    harvest accepts exactly the chain's drops.  No drop is authorized (an empty
+    map) when the root is not HAZARD (the mint there is all-or-nothing), when
+    the core lacks the function, or when it raises; ``rule`` says which.
+    """
+    try:
+        from joulewise import whole_window as ww
+        from joulewise import window_lineage
+        hazard = runs_root is not None and window_lineage.is_hazard_runs_root(runs_root)
+        function = getattr(ww, "neg8_corpus_mint_drops", None)
+    except Exception as exc:  # an unusable core authorizes nothing
+        return {}, f"unavailable: {type(exc).__name__}"
+    if not hazard:
+        return {}, "not_hazard"
+    if function is None:
+        return {}, "unavailable: whole_window.neg8_corpus_mint_drops"
+    try:
+        with tempfile.TemporaryDirectory() as scratch:
+            staged = Path(scratch) / "succeeded-members.json"
+            staged.write_bytes((json.dumps({**committed, "members": list(succeeded)}, indent=2, sort_keys=True)
+                                + "\n").encode("utf-8"))
+            rows = function(Path(runs_root), staged)
+        reasons = {row["bundle_id"]: row["reason"] for row in rows}
+    except Exception as exc:  # unknown evidence never authorizes an omission
+        return {}, f"raised: {type(exc).__name__}"
+    if not all(isinstance(key, str) and isinstance(value, str) for key, value in reasons.items()):
+        return {}, "raised: malformed drops"
+    return reasons, "joulewise.whole_window.neg8_corpus_mint_drops"
+
+
+def neg8_bound_member_problems(bound: Mapping[str, Any], runs_root: Path) -> list[str]:
+    """Each corpus member a NEG-8 bound names, re-checked against its bundle in the bound root.
+
+    The bound's arithmetic and its manifest identity are validated by the
+    core; this ties its numbers to the bytes.  For each member: exactly one
+    ordinary bundle in ``runs_root`` (``whole_window.ordinary_present_bundle_paths``,
+    not a symlink) whose complete file inventory hashes to the recorded
+    ``bundle_evidence_sha256``; the mint's per-member predicates hold (custody
+    triangle, current strict mint, the bound's canonical condition); and both
+    claim-family points re-derive from the bundle by the core's own path
+    (``whole_window._reference_energy_evidence``) to the recorded values, to
+    the core's tolerance.  Problems name the member, never a number.
+    """
+    from joulewise import whole_window as ww
+    corpus = bound.get("reference_corpus") if isinstance(bound, Mapping) else None
+    members = corpus.get("members") if isinstance(corpus, Mapping) else None
+    if not isinstance(members, list) or not members:
+        return ["bound_names_no_members"]
+    problems: list[str] = []
+    for member in members:
+        bundle_id = member.get("bundle_id") if isinstance(member, Mapping) else None
+        paths = ww.ordinary_present_bundle_paths(runs_root, bundle_id) \
+            if isinstance(bundle_id, str) and bundle_id else []
+        if len(paths) != 1 or paths[0].is_symlink():
+            problems.append(f"bound_member_not_one_bundle:{bundle_id}")
+            continue
+        path = paths[0]
+        try:
+            digest = ww._bundle_evidence_sha256(path)
+        except (OSError, ValueError):
+            digest = None
+        if digest is None or digest != member.get("bundle_evidence_sha256"):
+            problems.append(f"bound_member_bytes_differ:{bundle_id}")
+            continue
+        try:
+            summary = ww._read_json_object(path / "summary_metrics.json")
+            metadata = ww._read_json_object(path / "metadata.json")
+            identity, canonical = ww._scientific_config_identity(path)
+            strict = (not ww._custody_strict_invalid(path, summary, metadata)
+                      and ww._current_strict_summary(summary, path))
+            gross, idle, problem = ww._reference_energy_evidence(path)
+        except Exception:  # a member that cannot be re-derived does not support the bound
+            problems.append(f"bound_member_not_rederived:{bundle_id}")
+            continue
+        if not strict:
+            problems.append(f"bound_member_not_strict:{bundle_id}")
+        elif identity is None or not canonical or identity != corpus.get("scientific_config_sha256"):
+            problems.append(f"bound_member_condition_differs:{bundle_id}")
+        elif problem is not None or not isinstance(gross, Mapping) or not _close(
+                gross.get("point_j"), member.get("point_gross_j")) \
+                or not _close(idle, member.get("point_idle_subtracted_j")):
+            problems.append(f"bound_member_energy_differs:{bundle_id}")
+    return problems
+
+
+def _close(fresh: Any, recorded: Any) -> bool:
+    """Equal to the tolerance whole_window uses for a stored and a fresh reduction."""
+    numbers = (fresh, recorded)
+    if any(isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value)
+           for value in numbers):
+        return False
+    return math.isclose(float(fresh), float(recorded), rel_tol=1e-9, abs_tol=1e-9)
 
 
 # Fields of one NEG-8 claim-family record that depend on the bound (or, for
@@ -2604,6 +2747,13 @@ class _Harvest:
                 if verdict.status == "battery_float_confounded":
                     self.emit("calibration.capture_battery_pair_failed", level="window", collector="calibration",
                               observed={"slot": slot, "reasons": list(verdict.reasons)[:8]})
+            except battery_float.CustodyFailure:
+                # A battery raw file whose recorded digest no longer matches its
+                # bytes.  Battery raw files are not governed ledger artifacts,
+                # so nothing else checks them (core-prune N7.1).
+                assessment["battery_pair"] = "error:CustodyFailure"
+                self.emit("calibration.capture_invalid", level="window", collector="calibration",
+                          observed={"slot": slot, "reason": "battery_raw_custody_failed"})
             except Exception as exc:
                 assessment["battery_pair"] = f"error:{type(exc).__name__}"
             self.capture_assessments[observation.attempt_id] = assessment
@@ -2653,8 +2803,17 @@ class _Harvest:
           bytes hash to the recorded SHA-256, whose header equals the committed
           manifest's, whose members are committed members in committed order
           (at least ``NEG8_DRIFT_MINIMUM_N``), and which left out only members
-          that did not succeed.  Validation then takes those custodied bytes
-          as ``reference_corpus_bytes`` with ``require_corpus_identity=True``.
+          that did not succeed, or, on a HAZARD bound root, that succeeded but
+          the core's mint drops (``neg8_mint_drops``; each such drop is
+          ``neg8.corpus_member_dropped``).  Validation then takes those
+          custodied bytes as ``reference_corpus_bytes`` with
+          ``require_corpus_identity=True``.
+
+        On a HAZARD bound root the bound carries no launch-lineage stamp, so
+        either way it counts as derived only when every member it names is one
+        bundle in the bound root whose bytes, mint predicates and both
+        claim-family points re-derive to what the bound recorded
+        (``neg8_bound_member_problems``).
 
         The committed manifest is the archived repo copy the pack's
         bound-derivation stage names, checked against the plan tree's pin.
@@ -2665,7 +2824,8 @@ class _Harvest:
         check: dict[str, Any] = {
             "schema": NEG8_CHECK_SCHEMA, "artifact": None, "derived_from": None,
             "minimum_n": ww.NEG8_DRIFT_MINIMUM_N, "committed_manifest": None, "collected_manifest": None,
-            "members_committed": None, "members_collected": None, "dropped_bundle_ids": None, "problems": []}
+            "members_committed": None, "members_collected": None, "dropped_bundle_ids": None, "mint_rule": None,
+            "problems": []}
         self.neg8 = check
         problems: list[str] = check["problems"]
         bound_root = self.inputs.bound_runs_root
@@ -2690,9 +2850,8 @@ class _Harvest:
                 registered = ww.load_neg8_drift_bound_artifact(bound_path) is not None
             except Exception:  # the core reader failing verifies nothing
                 registered = False
-            if registered:
-                check["derived_from"] = "registered_corpus"
-            else:
+            derived_from = "registered_corpus" if registered else None
+            if not registered:
                 collected = self._collected_corpus_bytes(check)
                 valid = False
                 if collected is not None:
@@ -2703,9 +2862,23 @@ class _Harvest:
                         valid = False
                     if not valid:
                         problems.append("bound_does_not_validate_against_collected_corpus")
-                if valid:
-                    check["derived_from"] = "collected_subset"
-                    self.neg8_collected_bound = value
+                derived_from = "collected_subset" if valid else None
+            if derived_from is not None and self._bound_root_is_hazard():
+                # The HAZARD bound carries no launch-lineage stamp: tie its
+                # numbers to the bundles in this bound root (core-prune N2, F2).
+                check["members_rederived"] = False
+                try:
+                    member_problems = neg8_bound_member_problems(value, bound_root)
+                except Exception as exc:
+                    member_problems = [f"bound_member_check_failed:{type(exc).__name__}"]
+                if member_problems:
+                    problems.extend(member_problems[:8])
+                    derived_from = None
+                else:
+                    check["members_rederived"] = True
+            check["derived_from"] = derived_from
+            if derived_from == "collected_subset":
+                self.neg8_collected_bound = value
         elif value is not None:
             problems.append("bound_artifact_not_an_object")
         self.outputs["derived/neg8-bound.json"] = write_json_once(self.derived / "neg8-bound.json", check)
@@ -2714,6 +2887,12 @@ class _Harvest:
                       observed={"artifact": raw is not None, "problems": problems[:8],
                                 "members_collected": check["members_collected"],
                                 "minimum_n": check["minimum_n"]})
+
+    def _bound_root_is_hazard(self) -> bool:
+        """The core mint's own dispatch: the bound runs root carries the hazard lineage locator."""
+        from joulewise import window_lineage
+        root = self.inputs.bound_runs_root
+        return root is not None and window_lineage.is_hazard_runs_root(root)
 
     def _committed_corpus_bytes(self, check: dict[str, Any]) -> bytes | None:
         """The committed settled-corpus manifest the pack's bound derivation names, from preserved bytes."""
@@ -2819,12 +2998,26 @@ class _Harvest:
             problems.append("collected_members_below_minimum")
             return None
         # The registered rule (5.3) keeps every corpus member that was collected
-        # and succeeded; a dropped member that succeeded is a selected corpus.
-        succeeded = [member.get("bundle_id") for member in dropped
-                     if _corpus_member_status(self.inputs.bound_runs_root, member) == "succeeded"]
-        if succeeded:
-            problems.append("dropped_member_succeeded:" + ",".join(map(str, succeeded[:4])))
+        # and succeeded; a dropped member that succeeded is a selected corpus,
+        # unless the core's HAZARD mint, evaluated here on the same bound root
+        # over the same succeeded members, drops it (core-prune N2, A3).
+        root = self.inputs.bound_runs_root
+        dropped_succeeded = [member for member in dropped if _corpus_member_status(root, member) == "succeeded"]
+        reasons: dict[str, str] = {}
+        if dropped_succeeded:
+            reasons, check["mint_rule"] = neg8_mint_drops(
+                root, committed, [member for member in listed if _corpus_member_status(root, member) == "succeeded"])
+        omitted = [(member.get("bundle_id"), reasons[member.get("bundle_id")]) for member in dropped_succeeded
+                   if member.get("bundle_id") in reasons]
+        selected = [member.get("bundle_id") for member in dropped_succeeded if member.get("bundle_id") not in reasons]
+        if selected:
+            problems.append("dropped_member_succeeded:" + ",".join(map(str, selected[:4])))
             return None
+        for bundle_id, reason in omitted:
+            placed = isinstance(bundle_id, str) and bool(bundle_id)
+            self.emit("neg8.corpus_member_dropped", level="member" if placed else "window",
+                      run_id=bundle_id if placed else None, collector="neg8",
+                      observed={"bundle_id": bundle_id, "reason": reason})
         return raw
 
     # -- whole-window verdict and the NEG-8 screen ----------------------------
@@ -3056,7 +3249,7 @@ class _Harvest:
             self.emit("whole_window.producer_failed", level="window", collector="desk",
                       observed={"step": "whole_window_verdict", "returncode": result.returncode})
         after = tree_inventory(runs)
-        allowed = {"campaign_log.jsonl", "bracket-binding.json", "whole-window-verdict.json", ".campaign.lock"}
+        allowed = {"campaign_log.jsonl", "bracket-binding.json", "whole-window-verdict.json", CAMPAIGN_LOCK_NAME}
         changed = sorted(name for name in set(before) | set(after)
                          if name not in allowed and before.get(name) != after.get(name))
         appended_ok = (log.read_bytes().startswith(old_log) if log.is_file() else not old_log)
@@ -3445,6 +3638,7 @@ class _Harvest:
             code = "battery.capture_pair_missing_covered" if run_id in battery_covered else "battery.capture_pair_missing"
             self.emit(code, level="member", run_id=run_id, stage_id=roster.get(run_id, {}).get("stage_id"),
                       collector="battery_pair", observed={"status": status})
+        self._capture_battery_joins(journals.get("battery"), thresholds)
         steps, changes = clock_steps(journals.get("clock", []), thresholds)
         if changes:
             self.emit("clock.frequency_changed", level="window", collector="monitor",
@@ -3473,6 +3667,41 @@ class _Harvest:
                       observed={"readings_below": len(low), "paths": paths[:8]},
                       interval={"monotonic_ns": [low[0].monotonic_ns, low[-1].monotonic_ns]})
         self._kernel_task_share(journals.get("contention", []))
+
+    def _capture_battery_joins(self, readings: Sequence[Reading] | None, thresholds: Mapping[str, Any]) -> None:
+        """Each calibration capture's battery physics from the continuous journal (core-prune N7.2).
+
+        The controller no longer refuses a window whose pre-slot battery pair
+        did not pass (core-prune A1), so the capture's battery is measured here
+        as members have it: the member join over the capture's span.  An
+        on-battery or accumulator excursion in the span removes the window;
+        a pair that did not pass with no journal coverage (no span, no
+        journal, a hole, or a join that could not run) removes it too.
+        """
+        for attempt, capture in sorted(self.capture_assessments.items()):
+            span, pair = capture.get("span"), capture.get("battery_pair")
+            codes: list[str] = []
+            reason = None
+            if not span:
+                reason = "capture_span_unknown"
+            elif readings is None:
+                reason = "battery_journal_absent"
+            else:
+                try:
+                    codes = sorted({code for code, *_rest in battery_member_flags(span, readings, thresholds)})
+                except Exception as exc:  # a missing threshold: also a recorded fault
+                    self._record_error("monitor.capture_battery", exc, 0.0, fault=True)
+                    reason = "join_failed"
+                if "battery.unmeasured" in codes:
+                    reason = "journal_gap"
+            observed = {"capture": attempt, "slot": capture.get("slot"), "pair": pair, "codes": codes}
+            interval = {"monotonic_ns": list(span)} if span else None
+            if {"battery.member_span", "battery.accumulator_excursion"} & set(codes):
+                self.emit("calibration.capture_battery_span", level="window", collector="monitor",
+                          observed=observed, interval=interval)
+            if pair != "pass" and reason is not None:
+                self.emit("calibration.capture_battery_unmeasured", level="window", collector="monitor",
+                          observed={**observed, "reason": reason}, interval=interval)
 
     def _kernel_task_share(self, readings: Sequence[Reading]) -> None:
         """kernel_task's CPU-seconds during requests (excluded in window, disclosed)."""
@@ -3526,12 +3755,66 @@ class _Harvest:
                         continue
                     problems = self.flags.absorb(value)
                 if problems:
-                    salvaged = value.get("code") if isinstance(value, Mapping) else None
-                    self.emit("records.malformed_flag", level="window", collector="flags",
-                              observed={"file": flag_file.name, "line": number, "line_sha256": sha256_bytes(line),
-                                        "salvaged_code": salvaged if isinstance(salvaged, str) else None,
-                                        "problems": problems[:5]})
+                    self._malformed_flag_line(flag_file.name, number, line, value, problems)
+        self._unwritten_core_flags()
         self._arm_collector_records(arm_value)
+
+    def _malformed_flag_line(self, file: str, number: int | None, line: bytes, value: Any,
+                             problems: Sequence[str]) -> None:
+        salvaged = value.get("code") if isinstance(value, Mapping) else None
+        self.emit("records.malformed_flag", level="window", collector="flags",
+                  observed={"file": file, "line": number, "line_sha256": sha256_bytes(line),
+                            "salvaged_code": salvaged if isinstance(salvaged, str) else None,
+                            "problems": list(problems)[:5]})
+
+    def _unwritten_core_flags(self) -> None:
+        """Core flags whose flag-file write failed, recovered from stderr (core-prune N8).
+
+        ``joulewise.flags.core.emit`` prints such a flag whole, behind
+        ``UNWRITTEN_MARKER``, to its process's stderr.  The chain sends stage
+        stderr to ``<custody>/operator-logs/*.log``; the desk verdict's stderr
+        is this harvest's desk transcript.  Each marked line goes through the
+        flag-file path: a valid flag is absorbed (it is the flag, nothing more
+        is emitted), anything else is ``records.malformed_flag``, which is never
+        classified and so blocks release.  A log that cannot be read may hold
+        such a line, so it is recorded the same way.
+        """
+        marker = UNWRITTEN_MARKER.encode("utf-8")
+        directories = [self.inputs.custody_root / "operator-logs"]
+        planned = _plan_value(self.inputs.plan, "operator_log_root")
+        if isinstance(planned, str) and os.path.isabs(planned) \
+                and all(not _same_path(Path(planned), known) for known in directories):
+            directories.append(Path(planned))
+        sources: list[tuple[str, bytes | None]] = []
+        for directory in directories:
+            label = "operator-logs" if directory == directories[0] else str(directory)
+            for path in sorted(directory.glob("*.log")) if directory.is_dir() else []:
+                try:
+                    sources.append((f"{label}/{path.name}", path.read_bytes()))
+                except OSError:
+                    sources.append((f"{label}/{path.name}", None))
+        transcript = getattr(self, "_desk_transcript", None)
+        if isinstance(transcript, str):
+            sources.append(("desk-transcript", transcript.encode("utf-8", "replace")))
+        for source, raw in sources:
+            if raw is None:
+                self._malformed_flag_line(source, None, b"", None, ["operator log unreadable"])
+                continue
+            if marker not in raw:
+                continue
+            for number, line in enumerate(raw.split(b"\n"), start=1):
+                if not line.startswith(marker):
+                    continue
+                remainder = line[len(marker):].rstrip(b"\r")
+                value: Any = None
+                try:
+                    value = json.loads(remainder)
+                except ValueError as exc:
+                    problems = [f"not JSON: {type(exc).__name__}"]
+                else:
+                    problems = self.flags.absorb(value)
+                if problems:
+                    self._malformed_flag_line(source, number, remainder, value, problems)
 
     def _prior_collector_error(self, *, stage: str, collector: str, status: str, error: Any, elapsed_s: Any,
                                source: str) -> None:
