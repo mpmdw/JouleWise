@@ -441,6 +441,9 @@ class MemberEvaluation:
     sentinel_position: str | None = None
     scientific_config_sha256: str | None = None
     canonical_neg8_workload: bool = False
+    # HAZARD (P2-RC M3): "deferred_to_harvest" when only the structural check
+    # ran in the window; ``strict_valid`` is then that check's boolean.
+    strict_validation: str | None = None
 
     def failure_classes(self) -> tuple[str, ...]:
         classes: list[str] = []
@@ -517,6 +520,8 @@ class MemberEvaluation:
             ),
             "rerun_required": self.rerun_required,
         }
+        if self.strict_validation is not None:
+            row["strict_validation"] = self.strict_validation
         if self.waiver is not None:
             row["waiver"] = {
                 "target_kind": self.waiver.target_kind,
@@ -2855,13 +2860,19 @@ def evaluate_member(
             sentinel_position=info.sentinel_position,
             scientific_config_sha256=info.scientific_config_sha256,
             canonical_neg8_workload=info.canonical_neg8_workload,
+            strict_validation=HAZARD_STRICT_VALIDATION_DEFERRED,
         )
+    # HAZARD (P2-RC M3): the window runs the structural check only; the fresh
+    # re-reduction, uncertainty, rich-telemetry and raw-to-trace checks run at
+    # the desk verdict and the harvest.  The custody triangle, prompt-hash,
+    # config-binding and anchor-fallback checks below run on both paths.
+    strict_deferred = hazard is not None
     status, malformed = summary_status(bundle_dir / "summary_metrics.json")
     problems: list[str] = []
     strict_valid = False
     if bundle_dir.exists():
         try:
-            problems = validate_bundle(bundle_dir, strict=True)
+            problems = validate_bundle(bundle_dir, strict=not strict_deferred)
         except Exception as exc:
             problems = [f"strict validation raised {type(exc).__name__}: {exc}"]
         strict_valid = not problems
@@ -2961,6 +2972,9 @@ def evaluate_member(
         sentinel_position=info.sentinel_position,
         scientific_config_sha256=info.scientific_config_sha256,
         canonical_neg8_workload=info.canonical_neg8_workload,
+        strict_validation=(
+            HAZARD_STRICT_VALIDATION_DEFERRED if strict_deferred else None
+        ),
     )
 
 
@@ -3732,6 +3746,65 @@ def _hazard_stage_preflight_not_admitted(
         legacy_code=("environment preflight failed before member 1" if errored
                      else "environment preflight rejected before member 1"),
     )
+
+
+# --- HAZARD_PACK gate-prune round 2 (lane P2-RC) -----------------------------
+# night-archive gate-prune/prune2/PLAN2.md: M3 (strict validation deferred to the
+# harvest) and S4 (minimal stage verdict).  Everything here runs only when
+# ``hazard`` is a HAZARD context; the legacy path never reaches it.
+
+HAZARD_STRICT_VALIDATION_DEFERRED = "deferred_to_harvest"
+HAZARD_IDLE_ADMISSION_CORE_DEFERRED = MappingProxyType({"status": "deferred_to_desk"})
+
+
+def _hazard_minimal_verdict_row(
+    *,
+    collection_verdict: str,
+    collection_reasons: list[str],
+    categories: dict[str, list[str]],
+    counts: Mapping[str, int],
+    analysis_manifest: AnalysisManifestState | None,
+    prospective_analysis_manifest: ProspectiveManifestIdentity | None,
+    campaign_provenance_path: Path | None,
+    warning: str | None,
+) -> dict[str, Any]:
+    """S4: the stage verdict under HAZARD, without the idle-admission core.
+
+    Nothing in block 5 reads the stage verdict; the desk whole-window verdict
+    and the harvest evaluate admission and strict validity from the bundles.
+    The row is labelled provisional.
+    """
+
+    row: dict[str, Any] = {
+        "schema_version": CAMPAIGN_VERDICT_SCHEMA,
+        "timestamp": utc_timestamp(),
+        "record_type": "campaign_verdict",
+        "status": "verdict",
+        "provisional": True,
+        "analysis_manifest": (
+            prospective_analysis_manifest.to_log()
+            if prospective_analysis_manifest is not None
+            else analysis_manifest.to_log()
+            if analysis_manifest is not None
+            else None
+        ),
+        "collection": {
+            "verdict": collection_verdict,
+            "reasons": collection_reasons,
+            "categories": categories,
+        },
+        "counts": {key: int(value) for key, value in sorted(counts.items()) if value},
+        "strict_validation": HAZARD_STRICT_VALIDATION_DEFERRED,
+        "idle_admission_core": dict(HAZARD_IDLE_ADMISSION_CORE_DEFERRED),
+        "campaign_provenance": (
+            {"manifest_path": str(campaign_provenance_path)}
+            if campaign_provenance_path is not None
+            else None
+        ),
+    }
+    if warning is not None:
+        row["block_order_warning"] = warning
+    return row
 
 
 def _parse_campaign_lock_text(text: str) -> tuple[int, str | None] | None:
@@ -10166,6 +10239,41 @@ def run_campaign(args: argparse.Namespace) -> int:
             return 0
         categories = classify_campaign_members(all_evaluations, missing_members)
         collection_verdict, collection_reasons = collection_verdict_for(categories)
+        if hazard is not None:
+            # S4 (closes A20): no sampling audit, idle-admission core, claim
+            # readiness or claim barrier in the window; one provisional row.
+            print("COLLECTION VERDICT (provisional):")
+            print(f"  verdict: {collection_verdict}")
+            for reason in collection_reasons:
+                print(f"  reason: {reason}")
+            for key in ("usable", "waived", "failed", "missing"):
+                print(f"  {key}: {len(categories[key])}")
+            print("IDLE-ADMISSION CORE: deferred_to_desk")
+            assert lock_path is not None
+            appended = _hazard_call(
+                hazard, "append_minimal_verdict", None,
+                lambda: append_log(
+                    log_path,
+                    _hazard_minimal_verdict_row(
+                        collection_verdict=collection_verdict,
+                        collection_reasons=collection_reasons,
+                        categories=categories,
+                        counts=counts,
+                        analysis_manifest=analysis_manifest,
+                        prospective_analysis_manifest=prospective_analysis_manifest,
+                        campaign_provenance_path=campaign_provenance_path,
+                        warning=order_warning,
+                    ),
+                    lock_token=lock_path,
+                ),
+                kind="stage_verdict_degraded",
+            )
+            campaign_failed = bool(
+                failures
+                or collection_verdict in {"blocked", "invalid"}
+                or appended is _HAZARD_FAILED
+            )
+            return 1 if campaign_failed else 0
         sampling_audit = sampling_audit_for(analysis_manifest)
         stage_verdict_degraded = False
         idle_admission_core = _hazard_call(

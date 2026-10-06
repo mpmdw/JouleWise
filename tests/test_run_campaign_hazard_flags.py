@@ -1044,30 +1044,29 @@ class RecordWriteTests(_Stage):
         self.assertEqual(self.invoked(runs), ["hz-rec-1"])
         self.assertEqual(self.flags(), [])
 
+    # PLAN2 S4 (lane P2-RC) closes A20 differently: the HAZARD stage never
+    # evaluates the idle-admission core, so a raising core cannot degrade the
+    # verdict; the stage writes one provisional minimal row instead.
     def test_a20_core_verdict_failure_writes_a_fallback_verdict(self) -> None:
         runs = self.hazard_root()
         with patch.object(run_campaign, "idle_admission_core_verdict",
-                          side_effect=ValueError("core evaluation broke")):
+                          side_effect=ValueError("core evaluation broke")) as core:
             result = self.run_stage(self.configs("hz-ver-1"), runs)
-        self.assertEqual(result.code, 1, result.err)
+        self.assertEqual(result.code, 0, result.err)
+        core.assert_not_called()
         verdicts = self.verdicts(runs)
         self.assertEqual(len(verdicts), 1)
-        self.assertEqual(verdicts[0]["idle_admission_core"]["conditions"],
-                         ["idle_admission_core_evaluation_error"])
-        self.assertEqual(verdicts[0]["idle_admission_core"]["members"], [])
-        flags = [row for row in self.flags() if row["code"] == "campaign.runner_record_flagged"]
-        self.assertEqual([(row["observed"]["kind"], row["observed"]["phase"]) for row in flags],
-                         [("stage_verdict_degraded", "idle_admission_core_verdict")])
+        self.assertEqual(verdicts[0]["idle_admission_core"], {"status": "deferred_to_desk"})
+        self.assertIs(verdicts[0]["provisional"], True)
+        self.assertEqual(self.kinds(), [])
 
     def test_a20_verdict_append_failure_retries_minimal(self) -> None:
+        # The minimal row failing to append is flagged; the stage still ends with rc 1.
         runs = self.hazard_root()
-        with self._raise_once("append_verdict", OSError("short write")):
+        with self._raise_once("_hazard_minimal_verdict_row", OSError("short write")):
             result = self.run_stage(self.configs("hz-ver-1"), runs)
         self.assertEqual(result.code, 1, result.err)
-        verdicts = self.verdicts(runs)
-        self.assertEqual(len(verdicts), 1)
-        self.assertEqual(verdicts[0]["members"], [])
-        self.assertNotIn("idle_admission_core", verdicts[0])
+        self.assertEqual(self.verdicts(runs), [])
         self.assertEqual(self.kinds(), ["stage_verdict_degraded"])
 
     def test_a20_legacy_root_still_loses_the_verdict(self) -> None:
