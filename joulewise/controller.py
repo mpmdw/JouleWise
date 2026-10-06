@@ -56,6 +56,9 @@ import hashlib
 import json
 import math
 import os
+import stat
+import sys
+import threading
 import traceback
 from collections.abc import Callable
 from copy import deepcopy
@@ -363,51 +366,238 @@ def run_benchmark(
             "for powermetrics collection"
         )
     writer = RunBundleWriter.create(runs_root, config, clock)
-    if binary_identity_unmeasured is not None:
-        flags_core.emit(
-            hazard, "instrument.binary_identity_unmeasured", level="member",
-            run_id=writer.run_id,
-            observed={"runtime_powermetrics_sha256": None},
-            detail=binary_identity_unmeasured,
-            legacy_site="joulewise/controller.py:795@e6b6a0ce",
-            legacy_code="runtime_powermetrics_digest_unavailable",
+
+    def make_execution() -> _Execution:
+        return _Execution(
+            config,
+            writer,
+            clock,
+            registry,
+            reducer,
+            extra_metadata,
+            environment_snapshot,
+            suite_preparation,
+            suite_preparation_failure,
+            campaign_policy,
+            campaign_policy_binding,
+            campaign_environment_preflight,
+            attachment.metadata if attachment is not None else None,
+            pre_resolved_telemetry,
+            float(post_window_sampling_dwell_s),
+            battery_runner,
+            battery_clock,
+            hazard=hazard,
+            calibration_physics_seed=(
+                attachment.physics_seed if attachment is not None else None
+            ),
         )
-    if attachment is not None:
-        attachment.install(writer.path)
-    return _Execution(
-        config,
-        writer,
-        clock,
-        registry,
-        reducer,
-        extra_metadata,
-        environment_snapshot,
-        suite_preparation,
-        suite_preparation_failure,
-        campaign_policy,
-        campaign_policy_binding,
-        campaign_environment_preflight,
-        attachment.metadata if attachment is not None else None,
-        pre_resolved_telemetry,
-        float(post_window_sampling_dwell_s),
-        battery_runner,
-        battery_clock,
-        hazard=hazard,
-    ).execute()
+
+    if hazard is None:
+        if attachment is not None:
+            attachment.install(writer.path)
+        return make_execution().execute()
+    # HAZARD (review F3 of PLAN2 row 8): the bundle exists from here on, so an
+    # interrupt (SIGTERM becomes SystemExit) during the flag records or the
+    # attachment install is salvaged and finalized like one in the lifecycle.
+    # The constructor only stores state; a custody ValueError from install
+    # still propagates unchanged.
+    execution = make_execution()
+    try:
+        if binary_identity_unmeasured is not None:
+            flags_core.emit(
+                hazard, "instrument.binary_identity_unmeasured", level="member",
+                run_id=writer.run_id,
+                observed={"runtime_powermetrics_sha256": None},
+                detail=binary_identity_unmeasured,
+                legacy_site="joulewise/controller.py:795@e6b6a0ce",
+                legacy_code="runtime_powermetrics_digest_unavailable",
+            )
+        if attachment is not None and attachment.refit_cache_miss is not None:
+            # M1: the member refit the calibration itself (no usable window
+            # verdict).  A record of time spent, not of the bound: the refit
+            # verified the physics exactly as before.
+            flags_core.emit(
+                hazard, "calibration.refit_cache_miss", level="member",
+                run_id=writer.run_id, observed=attachment.refit_cache_miss,
+                legacy_site="joulewise/controller.py:575@89571045b",
+                legacy_code="verify_stored_evidence_physics",
+            )
+        if attachment is not None:
+            attachment.install(writer.path)
+    except (KeyboardInterrupt, SystemExit) as interrupt:
+        execution._finalize_interrupted_run(interrupt)
+        raise
+    return execution.execute()
 
 
 @dataclass(frozen=True)
 class _InstrumentCalibrationAttachment:
     files: dict[str, bytes]
     metadata: dict[str, Any]
+    # HAZARD only (PLAN2 P2-CTL; None on the legacy path).  ``sources`` maps
+    # each installed relative path to the verified file it was read from, so
+    # the install can clone it (t1-06); ``physics_seed`` is the reduce-cache
+    # seed {evidence sha256: verified effective bound} (M2);
+    # ``refit_cache_miss`` says why the window verdict (J1) was not used (M1).
+    sources: dict[str, Path] | None = None
+    physics_seed: dict[str, float] | None = None
+    refit_cache_miss: dict[str, Any] | None = None
 
     def install(self, bundle_path: Path) -> None:
         root = bundle_path / "instrument_calibration"
+        if self.sources is None:
+            for relative, raw in sorted(self.files.items()):
+                path = root / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                with path.open("xb") as handle:
+                    handle.write(raw)
+            return
+        # HAZARD (t1-06): clone each verified source file (APFS clonefile, no
+        # data copy), else write the verified bytes.  Either way the installed
+        # copy is re-hashed against the bytes this attachment verified; a
+        # clone that does not match is replaced by the byte copy, and a byte
+        # copy that does not match refuses (custody keeper).
         for relative, raw in sorted(self.files.items()):
             path = root / relative
             path.parent.mkdir(parents=True, exist_ok=True)
+            expected = hashlib.sha256(raw).hexdigest()
+            source = self.sources.get(relative)
+            if source is not None and _clone_file(source, path):
+                if _installed_copy_sha256(path) == expected:
+                    continue
+                path.unlink(missing_ok=True)
             with path.open("xb") as handle:
                 handle.write(raw)
+            if _installed_copy_sha256(path) != expected:
+                raise ValueError(
+                    "instrument calibration installed copy does not match its "
+                    f"verified bytes: {relative}"
+                )
+
+
+def _clone_file(source: Path, destination: Path) -> bool:
+    """APFS ``clonefile(2)`` without following a symlink; False when unavailable.
+
+    Never raises: any failure (another volume, another OS, a symlink or a
+    non-regular source) leaves no file behind and the caller writes bytes.
+    """
+
+    if sys.platform != "darwin":
+        return False
+    try:
+        import ctypes  # noqa: PLC0415
+
+        libc = ctypes.CDLL(None, use_errno=True)
+        clonefile = libc.clonefile
+        clonefile.argtypes = (ctypes.c_char_p, ctypes.c_char_p, ctypes.c_uint32)
+        clonefile.restype = ctypes.c_int
+        clone_nofollow = 0x0001
+        if clonefile(os.fsencode(source), os.fsencode(destination), clone_nofollow) != 0:
+            return False
+        if not stat.S_ISREG(os.lstat(destination).st_mode):
+            destination.unlink(missing_ok=True)
+            return False
+        return True
+    except Exception:  # noqa: BLE001 - the byte copy is the fallback
+        try:
+            if destination.is_symlink() or destination.exists():
+                destination.unlink()
+        except OSError:
+            pass
+        return False
+
+
+def _installed_copy_sha256(path: Path) -> str | None:
+    try:
+        if not stat.S_ISREG(os.lstat(path).st_mode):
+            return None
+        digest = hashlib.sha256()
+        with path.open("rb") as handle:
+            for block in iter(lambda: handle.read(1 << 20), b""):
+                digest.update(block)
+        return digest.hexdigest()
+    except OSError:
+        return None
+
+
+# J1 (PLAN2 section 3.2): the window calibration verdict, written once by the
+# chain (P2-CHAIN) right after the pre-slot screen, next to the pre-slot
+# capture directory.  A member that matches every digest skips the refit;
+# anything else is a cache miss: the member refits and flags, never refuses.
+WINDOW_CALIBRATION_VERDICT_BASENAME = "window_calibration_verdict.json"
+WINDOW_CALIBRATION_VERDICT_SCHEMA = "joulewise.window_calibration_verdict.v1"
+
+
+def window_calibration_estimator_files_sha256() -> dict[str, str] | None:
+    """The J1 ``estimator_files_sha256`` value: {repo path: sha256} of the
+    estimator code that runs the refit (``ESTIMATOR_CODE_PATHS``), as this
+    process loads it; None when a file is unreadable."""
+
+    from joulewise.calibration_bracketing import (  # noqa: PLC0415
+        _current_estimator_code_sha256,
+    )
+
+    return _current_estimator_code_sha256()
+
+
+def _window_calibration_verdict_bound(
+    capture_directory: Path,
+    files: dict[str, bytes],
+    *,
+    stored_bound: float,
+) -> tuple[float | None, dict[str, Any] | None]:
+    """Read J1; return ``(effective bound, None)`` only on a full match.
+
+    The digests compared are those of the bytes this attachment verified
+    against the capture manifest and installs (evidence, plist, events,
+    manifest), plus the estimator code now loaded.  Otherwise
+    ``(None, miss)``, where ``miss`` names the reason.  Never raises.
+    """
+
+    path = capture_directory.parent / WINDOW_CALIBRATION_VERDICT_BASENAME
+    try:
+        raw = path.read_bytes()
+    except FileNotFoundError:
+        return None, {"reason": "verdict_absent"}
+    except OSError as exc:
+        return None, {"reason": "verdict_unreadable", "error": type(exc).__name__}
+    try:
+        verdict = json.loads(raw)
+    except (UnicodeDecodeError, ValueError):
+        return None, {"reason": "verdict_malformed"}
+    if not isinstance(verdict, dict) or not isinstance(verdict.get("flags"), list):
+        return None, {"reason": "verdict_malformed"}
+    if verdict.get("schema") != WINDOW_CALIBRATION_VERDICT_SCHEMA:
+        return None, {"reason": "verdict_schema_mismatch"}
+    try:
+        expected = {
+            "evidence_sha256": hashlib.sha256(files["instrument_evidence.json"]).hexdigest(),
+            "manifest_sha256": hashlib.sha256(files["manifest.json"]).hexdigest(),
+            "raw_plist_sha256": hashlib.sha256(files["raw/powermetrics.plist"]).hexdigest(),
+            "events_sha256": hashlib.sha256(files["events.jsonl"]).hexdigest(),
+        }
+    except KeyError as exc:
+        return None, {"reason": "capture_file_absent", "file": str(exc.args[0])}
+    mismatched = sorted(name for name, digest in expected.items() if verdict.get(name) != digest)
+    try:
+        estimator = window_calibration_estimator_files_sha256()
+    except Exception:  # noqa: BLE001 - an unreadable estimator is a miss
+        estimator = None
+    if estimator is None or verdict.get("estimator_files_sha256") != estimator:
+        mismatched.append("estimator_files_sha256")
+    if mismatched:
+        return None, {"reason": "digest_mismatch", "fields": mismatched}
+    bound = verdict.get("effective_b_fiducial_s")
+    if isinstance(bound, bool) or not isinstance(bound, int | float):
+        return None, {"reason": "verdict_bound_invalid"}
+    try:
+        value = float(bound)
+    except OverflowError:  # review F6: an integer beyond float range
+        return None, {"reason": "verdict_bound_invalid"}
+    # widen-only, as verify_stored_evidence_physics returns it
+    if not math.isfinite(value) or value < float(stored_bound):
+        return None, {"reason": "verdict_bound_invalid"}
+    return value, None
 
 
 def _load_instrument_calibration_attachment(
@@ -497,10 +687,12 @@ def _load_instrument_calibration_attachment(
 
     bracket_provenance = None
     g2b_provenance = None
+    auxiliary_errors: list[str] | None = [] if hazard is not None else None
     locator = Path(runs_root) / LAUNCH_LINEAGE_LOCATOR_BASENAME if runs_root is not None else None
     if locator is not None and (locator.exists() or locator.is_symlink()):
         g2b_provenance = _authenticate_g2b_pre_slot_attachment(
-            resolved_root, files, evidence, Path(runs_root), config, hazard=hazard
+            resolved_root, files, evidence, Path(runs_root), config, hazard=hazard,
+            **({"auxiliary_errors": auxiliary_errors} if auxiliary_errors is not None else {}),
         )
     elif g2a_context is not None:
         bracket_provenance = _authenticate_g2a_pre_bracket_attachment(
@@ -514,6 +706,12 @@ def _load_instrument_calibration_attachment(
             for epoch in (evidence.get("identity_epoch"), evidence.get("bindings"))
         )
     ) and bracket_provenance is None and g2b_provenance is None:
+        if auxiliary_errors:
+            # HAZARD (PLAN2 row 5): name the cause in the refusal itself.
+            raise ValueError(
+                "revision_five evidence cannot be attached as instrument calibration "
+                f"(auxiliary member match raised {auxiliary_errors[0]})"
+            )
         raise ValueError("revision_five evidence cannot be attached as instrument calibration")
     bindings = evidence.get("bindings") if isinstance(evidence, dict) else None
     bound = evidence.get("b_fiducial_s") if isinstance(evidence, dict) else None
@@ -571,17 +769,37 @@ def _load_instrument_calibration_attachment(
         verify_stored_evidence_physics,
     )
 
-    try:
-        effective_bound = verify_stored_evidence_physics(
-            evidence,
-            files["raw/powermetrics.plist"],
-            files["events.jsonl"],
+    effective_bound: float | None = None
+    refit_cache_miss: dict[str, Any] | None = None
+    if hazard is not None:
+        # M1: the window verdict (J1) carries the refit of exactly these
+        # bytes under exactly this estimator; any miss refits below.
+        effective_bound, refit_cache_miss = _window_calibration_verdict_bound(
+            resolved_root, files, stored_bound=float(bound)
         )
-    except (KeyError, TypeError, ValueError) as exc:
-        raise ValueError(
-            "instrument calibration evidence does not reproduce the raw physics"
-        ) from exc
+    if effective_bound is None:
+        try:
+            effective_bound = verify_stored_evidence_physics(
+                evidence,
+                files["raw/powermetrics.plist"],
+                files["events.jsonl"],
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError(
+                "instrument calibration evidence does not reproduce the raw physics"
+            ) from exc
+    hazard_fields: dict[str, Any] = {}
+    if hazard is not None:
+        hazard_fields = {
+            "sources": {relative: resolved_root / relative for relative in files},
+            # M2: the child reduce reads this instead of a third refit.  The
+            # reducer consults it only after its own manifest, evidence, plist
+            # and events hash checks of the installed copy.
+            "physics_seed": {hashlib.sha256(evidence_raw).hexdigest(): float(effective_bound)},
+            "refit_cache_miss": refit_cache_miss,
+        }
     return _InstrumentCalibrationAttachment(
+        **hazard_fields,
         files=files,
         metadata={
             "artifact_path": "instrument_calibration/instrument_evidence.json",
@@ -603,19 +821,25 @@ def _load_instrument_calibration_attachment(
 
 def _g2b_auxiliary_config_matches(
     config: BenchmarkConfig, context: dict[str, Any], tree: dict[str, Any], repo: Path,
+    *, errors: list[str] | None = None,
 ) -> bool:
     """Match a pinned external campaign member and its stage's runs-root binding.
 
     GAMMA uses input IDs; ALPHA/BETA embed the manifest descriptor directly.
     Neither directory names nor external artifacts alone confer eligibility.
     The caller has already authenticated the launch and its committed pack.
+
+    ``errors`` (HAZARD, PLAN2 row 5): when given, an exception that makes the
+    match False is recorded there as ``"<type>: <text>"`` instead of vanishing.
     """
     from joulewise.arm_readiness import LaunchLineageError  # noqa: PLC0415
 
     try:
         source, raw = _cli_config_source(config)
         relative = source.relative_to(repo.resolve(strict=True)).as_posix()
-    except (LaunchLineageError, OSError, ValueError):
+    except (LaunchLineageError, OSError, ValueError) as exc:
+        if errors is not None:
+            errors.append(f"{type(exc).__name__}: {exc}"[:300])
         return False
     digest = hashlib.sha256(raw).hexdigest()
     inputs = tree.get("external_inputs", [])
@@ -654,6 +878,7 @@ def _g2b_auxiliary_config_matches(
 def _authenticate_g2b_pre_slot_attachment(
     directory: Path, files: dict[str, bytes], evidence: Any, runs_root: Path,
     config: BenchmarkConfig | None, *, hazard: Any = None,
+    auxiliary_errors: list[str] | None = None,
 ) -> dict[str, Any] | None:
     """Authenticate the launch lineage and its ordinary finalized pre slot.
 
@@ -699,7 +924,19 @@ def _authenticate_g2b_pre_slot_attachment(
             "G2-b attachment pack root is not <repo>/configs/campaigns/<pack>"
         )
     tree, _ = _plan_tree(pack_root)
-    if member_lineage is None and not _g2b_auxiliary_config_matches(config, context, tree, repo):
+    if member_lineage is None and not _g2b_auxiliary_config_matches(
+            config, context, tree, repo,
+            **({"errors": auxiliary_errors} if auxiliary_errors is not None else {})):
+        if hazard is not None and auxiliary_errors:
+            from joulewise.flags import core as flags_core  # noqa: PLC0415
+
+            # The refusal that follows stays; its cause is now on record.
+            flags_core.emit(
+                hazard, "records.auxiliary_match_raised", level="member",
+                run_id=config.run_id, observed={"errors": list(auxiliary_errors)},
+                legacy_site="joulewise/controller.py:618@89571045b",
+                legacy_code="_g2b_auxiliary_config_matches",
+            )
         return None
     plan = tree["plan"]
     plan_path = pack_root / plan["path"]
@@ -1164,6 +1401,40 @@ def _clock_stamp(clock: Clock) -> ClockStamp:
     return ClockStamp(epoch_s, epoch_s, epoch_s, 0.0, 0.0)
 
 
+class _GuardProbe:
+    """One guard observation collected on a helper thread (M4, HAZARD only).
+
+    The probe is pure collection (subprocesses and their parsing); the
+    observation is recorded on the controller thread after :meth:`join`, so
+    the admission record keeps one writer and its phase order.  The sampler
+    spawn seam adopts only the thread that entered it
+    (``SamplerTeardown.intercept_popen``), so a probe subprocess can never be
+    taken for the sampler.
+    """
+
+    def __init__(self, collect: Callable[[], dict[str, Any]]) -> None:
+        self._result: dict[str, Any] | None = None
+        self._error: BaseException | None = None
+        self._thread = threading.Thread(
+            target=self._run, args=(collect,), name="joulewise-guard-probe", daemon=True
+        )
+        self._thread.start()
+
+    def _run(self, collect: Callable[[], dict[str, Any]]) -> None:
+        try:
+            self._result = collect()
+        except BaseException as exc:  # noqa: BLE001 - re-raised on the controller thread
+            self._error = exc
+
+    def join(self) -> dict[str, Any] | None:
+        self._thread.join()
+        return self._result
+
+    def raise_error(self) -> None:
+        if self._error is not None:
+            raise self._error
+
+
 class _Execution:
     """One run's lifecycle state: buffered events/logs and collected evidence."""
 
@@ -1188,10 +1459,16 @@ class _Execution:
         battery_clock: Clock | None = None,
         *,
         hazard: Any = None,
+        calibration_physics_seed: dict[str, float] | None = None,
     ) -> None:
         self._config = config
         # HAZARD_PACK flag context (joulewise.flags.core); None = legacy path.
         self._hazard = hazard
+        # M2 (HAZARD only): the attachment's verified calibration bound,
+        # seeded into the default reducer's physics cache.
+        self._calibration_physics_seed = (
+            dict(calibration_physics_seed) if calibration_physics_seed else None
+        )
         # A11: environment-guard reasons that no longer stop a HAZARD member,
         # by flag code; emitted once per code at the end of the lifecycle.
         self._hazard_environment: dict[str, list[dict[str, Any]]] = {}
@@ -1535,18 +1812,35 @@ class _Execution:
                     "claim_bearing": extension.claim_bearing,
                     "sha256": extension.sha256(),
                 }
-            observation = self._admission_guard_observation("before_attempt_1")
-            environment_reason = self._admission_environment_failure(observation)
-            if environment_reason is not None:
-                if self._hazard is not None:
-                    self._record_hazard_guard_observation(observation, environment_reason)
-                else:
-                    self._environment_admission.update(
-                        {"decision": "abort", "failure": environment_reason}
-                    )
-                    raise _StageFailure(
-                        "idle_baseline", FailureReason.UNKNOWN_ERROR, environment_reason
-                    )
+            # M4 (HAZARD, PLAN2 t1-07 safe variant): when the admission sampler
+            # is started below, the before_attempt_1 guard probes run during
+            # its start instead of before it.  The idle slice begins only at
+            # the first frame completed after measure_idle is called, so the
+            # probes still never overlap an idle capture.  On the legacy path
+            # (and without an admission sampler) they run here, as before.
+            probe_during_sampler_start = (
+                self._hazard is not None
+                and callable(
+                    getattr(self._telemetry, "begin_admission_window_sampling", None)
+                )
+            )
+            if not probe_during_sampler_start:
+                observation = self._admission_guard_observation("before_attempt_1")
+                environment_reason = self._admission_environment_failure(observation)
+                if environment_reason is not None:
+                    if self._hazard is not None:
+                        self._record_hazard_guard_observation(
+                            observation, environment_reason
+                        )
+                    else:
+                        self._environment_admission.update(
+                            {"decision": "abort", "failure": environment_reason}
+                        )
+                        raise _StageFailure(
+                            "idle_baseline",
+                            FailureReason.UNKNOWN_ERROR,
+                            environment_reason,
+                        )
             if per_run_evaluation.get("eligible") is not True and override is None:
                 reason = "critical per-run environment policy did not pass"
                 if self._hazard is not None:
@@ -1564,8 +1858,34 @@ class _Execution:
                 self._telemetry, "begin_admission_window_sampling", None
             )
             if callable(begin_sampling):
+                probe = (
+                    _GuardProbe(self._guard_observation_payload)
+                    if self._hazard is not None
+                    else None
+                )
                 self._sampling_start_in_progress = True
-                result = self._start_telemetry_with_parent_adoption(begin_sampling)
+                try:
+                    result = self._start_telemetry_with_parent_adoption(begin_sampling)
+                except BaseException:
+                    # Review F2: the probe's own work (subprocesses with
+                    # command timeouts, then parsing) must end before this
+                    # member's failure path returns, so it can never run on
+                    # into a later capture.  Its observation is not recorded;
+                    # the start's exception stays authoritative.
+                    if probe is not None:
+                        probe.join()
+                    raise
+                if probe is not None:
+                    observation = probe.join()
+                    probe.raise_error()
+                    observation = self._admission_guard_observation(
+                        "before_attempt_1", collected=observation
+                    )
+                    environment_reason = self._admission_environment_failure(observation)
+                    if environment_reason is not None:
+                        self._record_hazard_guard_observation(
+                            observation, environment_reason
+                        )
                 self._check(
                     result,
                     "idle_baseline",
@@ -1767,7 +2087,22 @@ class _Execution:
             legacy_code="idle environment admission failed after one retry",
         )
 
-    def _admission_guard_observation(self, phase: str) -> dict[str, Any]:
+    def _admission_guard_observation(
+        self, phase: str, *, collected: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        observation = (
+            collected if collected is not None else self._guard_observation_payload()
+        )
+        observation["phase"] = phase
+        if self._environment_admission is not None:
+            self._environment_admission.setdefault("guard_observations", []).append(
+                observation
+            )
+        return observation
+
+    def _guard_observation_payload(self) -> dict[str, Any]:
+        """Collect one guard observation; no state is touched (thread-safe)."""
+
         if isinstance(self._clock, FakeClock):
             source = self._environment if isinstance(self._environment, dict) else {}
             observation = {
@@ -1785,11 +2120,6 @@ class _Execution:
                 include_adapter_power=True
             )
             observation["capture_skipped"] = False
-        observation["phase"] = phase
-        if self._environment_admission is not None:
-            self._environment_admission.setdefault("guard_observations", []).append(
-                observation
-            )
         return observation
 
     def _enforce_post_capture_admission_guard(self, attempt: int) -> None:
@@ -2187,8 +2517,21 @@ class _Execution:
         # window and the token events) BEFORE it runs. _flush_events writes
         # them now; only run_finalized is still appended later by finalize().
         self._flush_events()
-        reducer = self._reducer if self._reducer is not None else reduce_module.reduce_bundle
-        summary = reducer(self._writer.path)
+        if self._reducer is None and self._calibration_physics_seed:
+            # M2: the reducer runs every hash check of the installed copy, then
+            # takes the bound this member already verified instead of a refit.
+            summary = reduce_module.reduce_bundle(
+                self._writer.path,
+                _instrument_calibration_physics_cache=dict(
+                    self._calibration_physics_seed
+                ),
+            )
+        else:
+            reducer = (
+                self._reducer if self._reducer is not None
+                else reduce_module.reduce_bundle
+            )
+            summary = reducer(self._writer.path)
         self._writer.write_summary(summary)
         self._log(self._controller_log, f"run {self._writer.run_id} succeeded")
         self._complete_stage("reduce")
@@ -2442,7 +2785,12 @@ class _Execution:
         assert self._telemetry is not None
         if self._telemetry.name != "powermetrics":
             return start(self._config, self._context)
-        with self._sampler_teardown.intercept_popen():
+        if self._hazard is None:
+            with self._sampler_teardown.intercept_popen():
+                return start(self._config, self._context)
+        # HAZARD (M4): the guard probe may spawn concurrently on its helper
+        # thread; only this (the start call's) thread can be adopted.
+        with self._sampler_teardown.intercept_popen(owner_thread_only=True):
             return start(self._config, self._context)
 
     def _emit_hazard_teardown_survivors(
