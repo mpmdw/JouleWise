@@ -92,7 +92,13 @@ from joulewise.environment import (
     evaluate_environment_policy,
 )
 from joulewise.environment_admission import environment_observation_failure
-from joulewise.idle_admission import evaluate_cpu_idle_admission
+from joulewise.idle_admission import (
+    CONDITION_CPU_SAMPLES_INSUFFICIENT,
+    CONDITION_CPU_TELEMETRY_MALFORMED,
+    CONDITION_CPU_TELEMETRY_MISSING,
+    CONDITION_GPU_ADMISSION_UNKNOWN,
+    evaluate_cpu_idle_admission,
+)
 from joulewise.interfaces import (
     AttemptIdentity,
     AdapterFailure,
@@ -276,8 +282,14 @@ def run_benchmark(
     config.validate()
     if registry is None:
         registry = joulewise.adapters
+    # HAZARD_PACK dispatch (gate-prune core lane CTL): a context only when the
+    # runs root carries the hazard lineage locator; None keeps the legacy path.
+    from joulewise.flags import core as flags_core  # noqa: PLC0415
+
+    hazard = flags_core.hazard_flag_context(runs_root, writer="core-controller")
     pre_resolved_telemetry: TelemetryAdapter | None = None
     runtime_powermetrics_sha256: str | None = None
+    binary_identity_unmeasured: str | None = None
     if instrument_calibration_dir is not None:
         pre_resolved_telemetry, failure = registry.resolve_telemetry(config, clock)
         if pre_resolved_telemetry is None:
@@ -286,9 +298,19 @@ def run_benchmark(
                 "instrument calibration attachment cannot observe the selected "
                 f"telemetry executable: {detail}"
             )
-        runtime_powermetrics_sha256 = _runtime_powermetrics_digest(
-            pre_resolved_telemetry.device_metadata(config)
-        )
+        try:
+            runtime_powermetrics_sha256 = _runtime_powermetrics_digest(
+                pre_resolved_telemetry.device_metadata(config)
+            )
+        except ValueError as exc:
+            if hazard is None:
+                raise
+            # The binary digest is observed per invocation: an unobserved
+            # digest is this member's fact, flagged once its bundle exists.
+            # A present digest that differs from the calibrated one still
+            # refuses in the attachment.
+            runtime_powermetrics_sha256 = None
+            binary_identity_unmeasured = str(exc)[:300]
     if campaign_policy is None:
         (
             campaign_policy,
@@ -307,6 +329,7 @@ def run_benchmark(
         config=config,
         g2a_context=(config, runs_root, Path(os.environ["JOULEWISE_G2A_PRE_BRACKET_PLAN"]))
         if "JOULEWISE_G2A_PRE_BRACKET_PLAN" in os.environ else None,
+        hazard=hazard,
     )
     config, suite_preparation, suite_preparation_failure = (
         _prepare_suite_manifest_for_new_bundle(config)
@@ -340,6 +363,15 @@ def run_benchmark(
             "for powermetrics collection"
         )
     writer = RunBundleWriter.create(runs_root, config, clock)
+    if binary_identity_unmeasured is not None:
+        flags_core.emit(
+            hazard, "instrument.binary_identity_unmeasured", level="member",
+            run_id=writer.run_id,
+            observed={"runtime_powermetrics_sha256": None},
+            detail=binary_identity_unmeasured,
+            legacy_site="joulewise/controller.py:795@e6b6a0ce",
+            legacy_code="runtime_powermetrics_digest_unavailable",
+        )
     if attachment is not None:
         attachment.install(writer.path)
     return _Execution(
@@ -360,6 +392,7 @@ def run_benchmark(
         float(post_window_sampling_dwell_s),
         battery_runner,
         battery_clock,
+        hazard=hazard,
     ).execute()
 
 
@@ -386,8 +419,16 @@ def _load_instrument_calibration_attachment(
     g2a_context: tuple[BenchmarkConfig, Path, Path] | None = None,
     runs_root: Path | None = None,
     config: BenchmarkConfig | None = None,
+    hazard: Any = None,
 ) -> _InstrumentCalibrationAttachment | None:
-    """Authenticate a validation directory before a bundle is created."""
+    """Authenticate a validation directory before a bundle is created.
+
+    ``hazard`` is the HAZARD_PACK flag context (``joulewise.flags.core``);
+    ``None`` is the legacy path.  On HAZARD the power-policy label terms and
+    an unobserved runtime binary digest become flags, while evidence status,
+    the fiducial bound, a present-but-different binary digest and the raw
+    physics reproduction stay refusals.
+    """
 
     if directory is None:
         if power_policy is not None:
@@ -459,7 +500,7 @@ def _load_instrument_calibration_attachment(
     locator = Path(runs_root) / LAUNCH_LINEAGE_LOCATOR_BASENAME if runs_root is not None else None
     if locator is not None and (locator.exists() or locator.is_symlink()):
         g2b_provenance = _authenticate_g2b_pre_slot_attachment(
-            resolved_root, files, evidence, Path(runs_root), config
+            resolved_root, files, evidence, Path(runs_root), config, hazard=hazard
         )
     elif g2a_context is not None:
         bracket_provenance = _authenticate_g2a_pre_bracket_attachment(
@@ -480,7 +521,8 @@ def _load_instrument_calibration_attachment(
         not isinstance(evidence, dict)
         or evidence.get("status") != "valid"
         or not isinstance(bindings, dict)
-        or bindings.get("power_policy") != power_policy
+        # HAZARD: the label term is a flag below; the other terms are keepers.
+        or (hazard is None and bindings.get("power_policy") != power_policy)
         or isinstance(bound, bool)
         or not isinstance(bound, int | float)
         or not math.isfinite(float(bound))
@@ -488,7 +530,9 @@ def _load_instrument_calibration_attachment(
     ):
         raise ValueError("instrument calibration evidence/power-policy binding is invalid")
     bound_powermetrics_sha256 = bindings.get("powermetrics_sha256")
-    if (
+    # HAZARD: an unobserved digest (None, flagged per member in run_benchmark)
+    # skips the comparison; a present digest that differs still refuses.
+    if not (hazard is not None and runtime_powermetrics_sha256 is None) and (
         not isinstance(runtime_powermetrics_sha256, str)
         or runtime_powermetrics_sha256 != bound_powermetrics_sha256
     ):
@@ -496,11 +540,29 @@ def _load_instrument_calibration_attachment(
             "instrument calibration powermetrics binding does not match the "
             "runtime-observed executable digest"
         )
-    if (
+    runtime_policy_unverified = (
         not isinstance(runtime_power_policy, str)
         or runtime_power_policy != power_policy
         or runtime_power_policy != bindings.get("power_policy")
+    )
+    if hazard is not None and (
+        runtime_policy_unverified or bindings.get("power_policy") != power_policy
     ):
+        from joulewise.flags import core as flags_core  # noqa: PLC0415
+
+        # The reducer re-checks the recorded observation against the bindings
+        # and leaves the member's clock anchor unresolved on a mismatch.
+        flags_core.emit(
+            hazard, "calibration.power_policy_unverified", level="window",
+            observed={
+                "cli_label": power_policy,
+                "recorded_label": bindings.get("power_policy"),
+                "runtime_observation": runtime_power_policy,
+            },
+            legacy_site="joulewise/controller.py:479-507@e6b6a0ce",
+            legacy_code="instrument_calibration_power_policy_binding",
+        )
+    elif runtime_policy_unverified:
         raise ValueError(
             "instrument calibration power-policy binding does not match a "
             "runtime-observed power policy"
@@ -591,13 +653,20 @@ def _g2b_auxiliary_config_matches(
 
 def _authenticate_g2b_pre_slot_attachment(
     directory: Path, files: dict[str, bytes], evidence: Any, runs_root: Path,
-    config: BenchmarkConfig | None,
+    config: BenchmarkConfig | None, *, hazard: Any = None,
 ) -> dict[str, Any] | None:
     """Authenticate the launch lineage and its ordinary finalized pre slot.
 
     The root-local locator selects this route; it is never an authorization
     by itself. Both claim and bound members use the session named by the
     authenticated consumption/start/settle chain, with completion absent.
+
+    HAZARD (``hazard`` not None): no Git per member (the repository is the
+    pack's ``<repo>/configs/campaigns/<pack>`` ancestor, the ledger pin is not
+    compared with HEAD), the ledger's governed-extension shape and a
+    non-passing pre-slot battery verdict become window flags.  Every
+    session/slot/plan/custody/digest/T1 term stays a refusal, and a battery
+    phase whose record names a raw digest must still carry those bytes.
     """
     from joulewise.arm_readiness import (  # noqa: PLC0415
         authenticate_campaign_launch_lineage, _plan_tree, _repo_for_pack,
@@ -620,7 +689,15 @@ def _authenticate_g2b_pre_slot_attachment(
         member_lineage = None
     lineage = context["launch_lineage"]
     pack_root = Path(context["pack_root"])
-    repo = _repo_for_pack(pack_root)
+    if hazard is None:
+        repo = _repo_for_pack(pack_root)
+    elif (pack_root.parent.name == "campaigns"
+            and pack_root.parent.parent.name == "configs"):
+        repo = pack_root.parents[2]
+    else:
+        raise ValueError(
+            "G2-b attachment pack root is not <repo>/configs/campaigns/<pack>"
+        )
     tree, _ = _plan_tree(pack_root)
     if member_lineage is None and not _g2b_auxiliary_config_matches(config, context, tree, repo):
         return None
@@ -631,6 +708,7 @@ def _authenticate_g2b_pre_slot_attachment(
     status = calibration_session_status(
         ledger_path, pin_path, session_id=lineage["bracket_session_id"],
         plan_path=plan_path, repo_root=repo, custody_mode="issuing",
+        require_committed_pin=hazard is None,
     )
     pre_status = status["slots"].get("pre")
     if (status["session_id"] != lineage["bracket_session_id"]
@@ -649,10 +727,12 @@ def _authenticate_g2b_pre_slot_attachment(
     # manifest alone cannot bind these bytes to this session.
     snapshot = load_calibration_ledger_snapshot(
         ledger_path, pin_path, repo_root=repo, verify_custody=False, mode="issuing",
+        require_committed_pin=hazard is None,
     )
     session = snapshot.bracket_session_by_id[lineage["bracket_session_id"]]
     pre = session.finalized_slots.get("pre")
-    if (not snapshot.is_governed_open_bracket_extension
+    governed_extension = snapshot.is_governed_open_bracket_extension
+    if ((hazard is None and not governed_extension)
             or session.session_kind != SESSION_KIND_BRACKET or session.state != "open"
             or session.window_id != lineage["window_id"]
             or session.plan_id != status["plan_id"]
@@ -665,19 +745,66 @@ def _authenticate_g2b_pre_slot_attachment(
             or any(evidence.get("bindings", {}).get(key) != value
                    for key, value in pre.t1_bindings.items())):
         raise ValueError("G2-b attachment does not match the authenticated finalized pre slot")
+    if hazard is not None and not governed_extension:
+        from joulewise.flags import core as flags_core  # noqa: PLC0415
+
+        # Ledger integrity is re-checked at harvest; the session/slot/digest
+        # binding above stays a refusal.
+        flags_core.emit(
+            hazard, "records.pin_ledger", level="window",
+            observed={"refusal_reasons": sorted(snapshot.refusal_reasons)},
+            legacy_site="joulewise/controller.py:655@e6b6a0ce",
+            legacy_code="is_governed_open_bracket_extension",
+        )
     verdict = battery_float.authenticate_capture(directory, expected={
         "session_id": session.session_id, "slot": "pre", "attempt_id": pre.attempt_id,
     })
-    if verdict.status != "pass":
-        raise ValueError(f"G2-b pre slot battery {verdict.status}: {'; '.join(verdict.reasons)}")
-    # Live capture manifests predate battery artifact entries. Carry the raw
-    # pair too, so the installed Revision-5 capture remains independently readable.
-    for phase in ("pre", "post"):
-        relative = f"raw/battery_float.{phase}.ioreg"
-        raw = (directory / relative).read_bytes()
-        if hashlib.sha256(raw).hexdigest() != evidence["battery_float"][phase]["raw_stdout_sha256"]:
-            raise ValueError("G2-b pre slot battery custody changed during attachment")
-        files[relative] = raw
+    if hazard is None:
+        if verdict.status != "pass":
+            raise ValueError(f"G2-b pre slot battery {verdict.status}: {'; '.join(verdict.reasons)}")
+        # Live capture manifests predate battery artifact entries. Carry the raw
+        # pair too, so the installed Revision-5 capture remains independently readable.
+        for phase in ("pre", "post"):
+            relative = f"raw/battery_float.{phase}.ioreg"
+            raw = (directory / relative).read_bytes()
+            if hashlib.sha256(raw).hexdigest() != evidence["battery_float"][phase]["raw_stdout_sha256"]:
+                raise ValueError("G2-b pre slot battery custody changed during attachment")
+            files[relative] = raw
+    else:
+        if verdict.status != "pass":
+            from joulewise.flags import core as flags_core  # noqa: PLC0415
+
+            # The harvest re-derives the pair from the same bytes (confounded:
+            # calibration.capture_battery_pair_failed) and joins the continuous
+            # battery journal over the capture span.  Members measure their own
+            # battery float; this is a fact about the calibration capture.
+            flags_core.emit(
+                hazard, "calibration.capture_battery_pair_unverified", level="window",
+                observed={"slot": "pre", "status": verdict.status,
+                          "reasons": list(verdict.reasons[:8])},
+                legacy_site="joulewise/controller.py:671-672@e6b6a0ce",
+                legacy_code=f"G2-b pre slot battery {verdict.status}",
+            )
+        # Carry every phase whose record names a raw digest; its bytes must be
+        # present and unchanged (custody keeper).  A phase with no record, or
+        # a capture with no battery_float block, has nothing to carry.
+        block = evidence.get("battery_float") if isinstance(evidence, dict) else None
+        for phase in ("pre", "post"):
+            record = block.get(phase) if isinstance(block, dict) else None
+            expected_raw_sha256 = (
+                record.get("raw_stdout_sha256") if isinstance(record, dict) else None
+            )
+            if not (
+                isinstance(expected_raw_sha256, str)
+                and len(expected_raw_sha256) == 64
+                and all(character in "0123456789abcdef" for character in expected_raw_sha256)
+            ):
+                continue
+            relative = f"raw/battery_float.{phase}.ioreg"
+            raw = (directory / relative).read_bytes()
+            if hashlib.sha256(raw).hexdigest() != expected_raw_sha256:
+                raise ValueError("G2-b pre slot battery custody changed during attachment")
+            files[relative] = raw
     return {"session_id": session.session_id, "slot": "pre",
             "plan_id": session.plan_id, "plan_sha256": session.plan_sha256,
             "receipt_digest": pre.receipt_digest,
@@ -858,6 +985,84 @@ def _campaign_policy_from_environment() -> tuple[
     return policy, binding, preflight
 
 
+# A18 (HAZARD only): idle-admission conditions that say evidence is missing,
+# as opposed to the threshold conditions that measure a busy host.
+_IDLE_ADMISSION_EVIDENCE_CONDITIONS = frozenset({
+    CONDITION_CPU_TELEMETRY_MISSING,
+    CONDITION_CPU_TELEMETRY_MALFORMED,
+    CONDITION_CPU_SAMPLES_INSUFFICIENT,
+    CONDITION_GPU_ADMISSION_UNKNOWN,
+})
+# A11 (HAZARD only): per-run policy findings that measure the quiet state
+# itself.  Every other failed or unknown finding is a guard flag: the battery
+# and thermal hazard journals measure power source and thermal directly.
+_QUIET_STATE_FINDING_CODES = frozenset({
+    "display_not_all_asleep",
+    "screensaver_engaged",
+    "low_power_mode_enabled",
+})
+
+
+# HAZARD (s2-02): the doctrine's contending-process threshold, used only to
+# label an earlier member's live sampler survivor in this member's record.
+SURVIVOR_CONTENTION_CPU_PERCENT = 5.0
+_SURVIVOR_PS_TIMEOUT_S = 5.0
+
+
+def _survivor_pids(group_survivors: Any, escaped_candidates: Any) -> list[dict[str, Any]]:
+    """Pids (and exact argv where the census recorded one) of census survivors."""
+
+    rows: dict[int, dict[str, Any]] = {}
+    for source in (group_survivors, escaped_candidates):
+        for entry in source if isinstance(source, list) else []:
+            pid = entry.get("pid") if isinstance(entry, dict) else None
+            if not isinstance(pid, int) or isinstance(pid, bool) or pid <= 1:
+                continue
+            row: dict[str, Any] = {"pid": pid}
+            argv = entry.get("argv")
+            if isinstance(argv, list) and argv and all(isinstance(part, str) for part in argv):
+                row["argv"] = [part[:200] for part in argv[:16]]
+            rows.setdefault(pid, {}).update(row)
+    return [rows[pid] for pid in sorted(rows)][:32]
+
+
+def _measure_survivor_processes(pids: list[int]) -> dict[int, dict[str, Any]]:
+    """Live pids among ``pids`` with their CPU percent and command (``ps``).
+
+    A pid that ``ps`` does not list is gone.  When ``ps`` itself cannot run,
+    every pid is reported live with unknown CPU, which records a flag and
+    does not refuse.
+    """
+
+    import subprocess  # noqa: PLC0415
+
+    try:
+        completed = subprocess.run(
+            ["/bin/ps", "-o", "pid=,%cpu=,command=", "-p", ",".join(str(pid) for pid in pids)],
+            check=False, capture_output=True, text=True, timeout=_SURVIVOR_PS_TIMEOUT_S,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return {pid: {"cpu_percent": None, "command": None} for pid in pids}
+    if completed.returncode not in (0, 1):
+        return {pid: {"cpu_percent": None, "command": None} for pid in pids}
+    live: dict[int, dict[str, Any]] = {}
+    for line in completed.stdout.splitlines():
+        parts = line.strip().split(None, 2)
+        if len(parts) < 2:
+            continue
+        try:
+            pid = int(parts[0])
+            cpu = float(parts[1])
+        except ValueError:
+            continue
+        if pid in pids:
+            live[pid] = {
+                "cpu_percent": cpu if math.isfinite(cpu) else None,
+                "command": parts[2] if len(parts) > 2 else None,
+            }
+    return live
+
+
 class _StageFailure(Exception):
     """Internal control flow: a lifecycle stage failed with a structured reason."""
 
@@ -981,8 +1186,17 @@ class _Execution:
         post_window_sampling_dwell_s: float = 0.0,
         battery_runner: Callable | None = None,
         battery_clock: Clock | None = None,
+        *,
+        hazard: Any = None,
     ) -> None:
         self._config = config
+        # HAZARD_PACK flag context (joulewise.flags.core); None = legacy path.
+        self._hazard = hazard
+        # A11: environment-guard reasons that no longer stop a HAZARD member,
+        # by flag code; emitted once per code at the end of the lifecycle.
+        self._hazard_environment: dict[str, list[dict[str, Any]]] = {}
+        # The true sampling_stopped stamp once its event is recorded.
+        self._sampling_stopped_stamp: ClockStamp | None = None
         self._writer = writer
         self._clock = clock
         self._registry = registry
@@ -1095,6 +1309,8 @@ class _Execution:
                         traceback_text=traceback.format_exc(),
                     )
                 )
+            if self._hazard is not None:
+                self._emit_hazard_environment_flags()
             self._finish()
         except (KeyboardInterrupt, SystemExit) as interrupt:
             self._finalize_interrupted_run(interrupt)
@@ -1241,6 +1457,10 @@ class _Execution:
     def _stage_idle_baseline(self) -> None:
         self._begin_stage("idle_baseline")
         assert self._telemetry is not None
+        if self._hazard is not None:
+            # s2-02: earlier members' sampler survivors, measured before the
+            # settle so the ps probe never overlaps an idle capture.
+            self._check_carried_sampler_survivors()
         self._settle_before_idle()
         idle_start_s = self._clock.now()
         self._stamp_preceding_gap(idle_start_s)
@@ -1279,6 +1499,23 @@ class _Execution:
                 and preflight_evaluation.get("eligible") is True
                 and override is None
             )
+            reference_provenance_present = bool(
+                self._campaign_policy_binding
+                and per_run_evaluation.get("snapshot_sha256")
+                and isinstance(preflight_evaluation, dict)
+                and preflight_evaluation.get("snapshot_sha256")
+            )
+            if self._hazard is not None:
+                # HAZARD (PLAN2 s2-01): one stage-start reading must not decide
+                # every member.  The member's own per-run evaluation (same
+                # evaluator and guard policy, taken just before its idle
+                # admission) decides.  The stage preflight stays recorded as
+                # data in metadata.extra.campaign_environment_preflight.
+                critical_environment_passed = per_run_evaluation.get("eligible") is True
+                reference_provenance_present = bool(
+                    self._campaign_policy_binding
+                    and per_run_evaluation.get("snapshot_sha256")
+                )
             self._environment_admission = {
                 "schema_version": "joulewise.environment_admission.v1",
                 "policy_version": self._campaign_policy.policy_version,
@@ -1286,12 +1523,7 @@ class _Execution:
                 "attempts": attempts,
                 "per_run_environment_evaluation": per_run_evaluation,
                 "critical_environment_passed": critical_environment_passed,
-                "reference_provenance_present": bool(
-                    self._campaign_policy_binding
-                    and per_run_evaluation.get("snapshot_sha256")
-                    and isinstance(preflight_evaluation, dict)
-                    and preflight_evaluation.get("snapshot_sha256")
-                ),
+                "reference_provenance_present": reference_provenance_present,
                 "decision": None,
                 "claim_reason": None,
             }
@@ -1306,20 +1538,26 @@ class _Execution:
             observation = self._admission_guard_observation("before_attempt_1")
             environment_reason = self._admission_environment_failure(observation)
             if environment_reason is not None:
-                self._environment_admission.update(
-                    {"decision": "abort", "failure": environment_reason}
-                )
-                raise _StageFailure(
-                    "idle_baseline", FailureReason.UNKNOWN_ERROR, environment_reason
-                )
+                if self._hazard is not None:
+                    self._record_hazard_guard_observation(observation, environment_reason)
+                else:
+                    self._environment_admission.update(
+                        {"decision": "abort", "failure": environment_reason}
+                    )
+                    raise _StageFailure(
+                        "idle_baseline", FailureReason.UNKNOWN_ERROR, environment_reason
+                    )
             if per_run_evaluation.get("eligible") is not True and override is None:
                 reason = "critical per-run environment policy did not pass"
-                self._environment_admission.update(
-                    {"decision": "abort", "failure": reason}
-                )
-                raise _StageFailure(
-                    "idle_baseline", FailureReason.UNKNOWN_ERROR, reason
-                )
+                if self._hazard is not None:
+                    self._record_hazard_environment_evaluation(per_run_evaluation, reason)
+                else:
+                    self._environment_admission.update(
+                        {"decision": "abort", "failure": reason}
+                    )
+                    raise _StageFailure(
+                        "idle_baseline", FailureReason.UNKNOWN_ERROR, reason
+                    )
 
         if admission is not None and admission.enabled:
             begin_sampling = getattr(
@@ -1349,7 +1587,9 @@ class _Execution:
                     }
                 observation = self._admission_guard_observation("before_attempt_2")
                 environment_reason = self._admission_environment_failure(observation)
-                if environment_reason is not None:
+                if environment_reason is not None and self._hazard is not None:
+                    self._record_hazard_guard_observation(observation, environment_reason)
+                elif environment_reason is not None:
                     assert self._environment_admission is not None
                     self._environment_admission.update(
                         {"decision": "abort", "failure": environment_reason}
@@ -1436,13 +1676,21 @@ class _Execution:
         self._capture_adapter_alignments()
         self._capture_adapter_metadata()
         if self._campaign_policy is not None:
-            gpu_admitted = baseline.idle_window_suspect is False
+            gpu_admitted: bool | None = baseline.idle_window_suspect is False
+            if (
+                self._hazard is not None
+                and self._environment_admission is not None
+                and baseline.idle_window_suspect is None
+            ):
+                # HAZARD keeps GPU admission tri-state: an unknown GPU idle
+                # window is missing evidence, not the threshold condition.
+                gpu_admitted = None
             row: dict[str, Any] = {
                 "attempt": attempt,
                 "start_s": attempt_start_s,
                 "end_s": attempt_end_s,
                 "baseline": _jsonable(asdict(baseline)),
-                "admitted": gpu_admitted,
+                "admitted": gpu_admitted is True,
             }
             extension = self._campaign_policy.idle_admission_extension
             if extension is not None:
@@ -1467,12 +1715,57 @@ class _Execution:
                         "admitted": (
                             cpu_admission["admitted"]
                             if cpu_enforced
-                            else gpu_admitted
+                            else gpu_admitted is True
                         ),
                     }
                 )
+                if (
+                    self._hazard is not None
+                    and self._environment_admission is not None
+                    and cpu_enforced
+                ):
+                    self._hazard_admit_on_missing_evidence(row, cpu_admission)
             attempts.append(row)
         return baseline
+
+    def _hazard_admit_on_missing_evidence(
+        self, row: dict[str, Any], cpu_admission: dict[str, Any]
+    ) -> None:
+        """A18: admit when only evidence conditions failed; flag the member.
+
+        The recorded ``cpu_admission`` stays the evaluator's own output (it
+        says the admission did not pass); only the controller's decision to
+        proceed changes.  Any threshold condition keeps the row not admitted,
+        so retry and abort stay.  A baseline whose CPU quietness is
+        unmeasured never serves as a cooldown reference: its
+        ``reference_provenance_present`` is recorded false, which every
+        reference-eligibility reader already refuses.
+        """
+
+        conditions = cpu_admission.get("conditions")
+        if (
+            row.get("admitted") is True
+            or not isinstance(conditions, list)
+            or not conditions
+            or not set(conditions) <= _IDLE_ADMISSION_EVIDENCE_CONDITIONS
+        ):
+            return
+        row["admitted"] = True
+        if self._environment_admission is not None:
+            self._environment_admission["reference_provenance_present"] = False
+        from joulewise.flags import core as flags_core  # noqa: PLC0415
+
+        flags_core.emit(
+            self._hazard, "member.idle_admission_telemetry_missing", level="member",
+            run_id=self._writer.run_id,
+            observed={
+                "attempt": row.get("attempt"),
+                "conditions": sorted(str(condition) for condition in conditions),
+                "sample_count": cpu_admission.get("sample_count"),
+            },
+            legacy_site="joulewise/controller.py:1381-1392@e6b6a0ce",
+            legacy_code="idle environment admission failed after one retry",
+        )
 
     def _admission_guard_observation(self, phase: str) -> dict[str, Any]:
         if isinstance(self._clock, FakeClock):
@@ -1504,6 +1797,9 @@ class _Execution:
         environment_reason = self._admission_environment_failure(observation)
         if environment_reason is None:
             return
+        if self._hazard is not None:
+            self._record_hazard_guard_observation(observation, environment_reason)
+            return
         assert self._environment_admission is not None
         self._environment_admission.update(
             {"decision": "abort", "failure": environment_reason}
@@ -1517,6 +1813,95 @@ class _Execution:
         observation: dict[str, Any],
     ) -> str | None:
         return environment_observation_failure(observation)
+
+    # A11 (HAZARD only): an environment-guard reason is recorded, not a stop.
+    # The admission record and its guard observations are written as on the
+    # legacy path; the reducer's claim barrier still reads them.  ``decision``
+    # keeps its meaning (admitted iff the final attempt was admitted).  A
+    # measured quiet-state violation also records
+    # ``critical_environment_passed`` false, so that baseline never becomes a
+    # cooldown reference; an unknown guard state alone does not (PLAN2 s2-01:
+    # one DISCLOSE guard flag must not exclude the next member).
+
+    def _record_hazard_quiet_state_violation(self) -> None:
+        if self._environment_admission is not None:
+            self._environment_admission["critical_environment_passed"] = False
+
+    def _record_hazard_guard_observation(
+        self, observation: Any, reason: str
+    ) -> None:
+        source = observation if isinstance(observation, dict) else {}
+        phase = source.get("phase")
+        display = source.get("display_power_state")
+        screensaver = source.get("screensaver_engaged")
+        errors = source.get("errors")
+        error_fields = sorted(str(key) for key in errors) if isinstance(errors, dict) else []
+        quiet: list[dict[str, Any]] = []
+        guard: list[dict[str, Any]] = []
+        if display == "any_awake":
+            quiet.append({"phase": phase, "field": "display_power_state", "value": display})
+        elif display != "all_asleep":
+            guard.append({"phase": phase, "field": "display_power_state", "status": "unknown"})
+        if screensaver is True:
+            quiet.append({"phase": phase, "field": "screensaver_engaged", "value": True})
+        elif screensaver is not False:
+            guard.append({"phase": phase, "field": "screensaver_engaged", "status": "unknown"})
+        if not isinstance(observation, dict):
+            guard.append({"phase": phase, "field": "observation", "status": "missing"})
+        if error_fields:
+            guard.append({"phase": phase, "field": "errors", "keys": error_fields})
+        if not quiet and not guard:
+            guard.append({"phase": phase, "field": "observation", "reason": reason[:200]})
+        if quiet:
+            self._record_hazard_quiet_state_violation()
+            self._hazard_environment.setdefault(
+                "env.member_quiet_state_violated", []).extend(quiet)
+        if guard:
+            self._hazard_environment.setdefault(
+                "env.member_guard_flagged", []).extend(guard)
+
+    def _record_hazard_environment_evaluation(
+        self, evaluation: Any, reason: str
+    ) -> None:
+        findings = evaluation.get("findings") if isinstance(evaluation, dict) else None
+        quiet: list[dict[str, Any]] = []
+        guard: list[dict[str, Any]] = []
+        for finding in findings if isinstance(findings, list) else []:
+            if not isinstance(finding, dict):
+                continue
+            status = finding.get("status")
+            if status not in {"fail", "unknown"}:
+                continue
+            entry = {"phase": "per_run_evaluation", "field": finding.get("field"),
+                     "code": finding.get("code"), "status": status}
+            if status == "fail" and finding.get("code") in _QUIET_STATE_FINDING_CODES:
+                quiet.append(entry)
+            else:
+                guard.append(entry)
+        if not quiet and not guard:
+            guard.append({"phase": "per_run_evaluation", "field": None,
+                          "reason": reason[:200]})
+        if quiet:
+            self._record_hazard_quiet_state_violation()
+            self._hazard_environment.setdefault(
+                "env.member_quiet_state_violated", []).extend(quiet)
+        if guard:
+            self._hazard_environment.setdefault(
+                "env.member_guard_flagged", []).extend(guard)
+
+    def _emit_hazard_environment_flags(self) -> None:
+        if not self._hazard_environment:
+            return
+        from joulewise.flags import core as flags_core  # noqa: PLC0415
+
+        for code in sorted(self._hazard_environment):
+            flags_core.emit(
+                self._hazard, code, level="member", run_id=self._writer.run_id,
+                observed={"findings": self._hazard_environment[code]},
+                legacy_site="joulewise/controller.py:1306-1322,1350-1361,1502-1513@e6b6a0ce",
+                legacy_code="environment_admission_abort",
+            )
+        self._hazard_environment = {}
 
     def _stage_warmup(self) -> None:
         self._begin_stage("warmup")
@@ -1603,8 +1988,30 @@ class _Execution:
         sampling_stopped_stamp = _clock_stamp(self._clock)
         if self._post_window_sampling_dwell_s > 0.0:
             self._clock.sleep(self._post_window_sampling_dwell_s)
+        if self._hazard is not None:
+            # HAZARD (PLAN2 s2-02): after the dwell and before the stop, keep
+            # the completed run's result and record its events and the true
+            # stop marker, so a raising stop or census cannot lose the token
+            # timeline, the outputs or the window bound.  The window and its
+            # post-window tail are untouched; the stable flush-sort still
+            # brackets the runtime events.
+            self._runtime_result = runtime_result
+            try:
+                if not self._is_axi_run():
+                    self._events.extend(runtime_result.events)
+                elif runtime_result.axi_result is not None:
+                    self._events.extend(
+                        self._axi_request_events(runtime_result.axi_result)
+                    )
+            finally:
+                # Even if the request events cannot be built, the failure
+                # path then stops the sampler with this true stamp.
+                self._append_sampling_stopped(sampling_stopped_stamp)
         self._capture_adapter_alignments()
         self._stop_sampling_once(sampling_stopped_stamp)
+        if self._hazard is not None:
+            # The stop returned: it stays claimed whatever the census said.
+            self._sampling_active = False
         self._record_trace_window_margins(
             sampling_started_stamp, sampling_stopped_stamp
         )
@@ -1620,18 +2027,12 @@ class _Execution:
                     FailureReason.UNKNOWN_ERROR,
                     "AXI config requires request-scoped runtime result evidence",
                 )
-            self._events.extend(self._axi_request_events(runtime_result.axi_result))
-        else:
+            if self._hazard is None:
+                self._events.extend(self._axi_request_events(runtime_result.axi_result))
+        elif self._hazard is None:
             self._events.extend(runtime_result.events)
-        self._events.append(
-            RuntimeEvent(
-                timestamp_s=sampling_stopped_stamp.epoch_s,
-                event_type="sampling_stopped",
-                phase="measured_run",
-                message="measured window stopped; telemetry tail retained outside window",
-                metadata={},
-            )
-        )
+        if self._hazard is None:
+            self._append_sampling_stopped(sampling_stopped_stamp)
         self._write_outputs()
         self._write_trace()
         if self._is_axi_run() and runtime_result.axi_result is not None:
@@ -1658,6 +2059,19 @@ class _Execution:
                 "runtime_event_count": len(runtime_result.events),
             },
         )
+
+    def _append_sampling_stopped(self, stamp: ClockStamp) -> None:
+        self._events.append(
+            RuntimeEvent(
+                timestamp_s=stamp.epoch_s,
+                event_type="sampling_stopped",
+                phase="measured_run",
+                message="measured window stopped; telemetry tail retained outside window",
+                metadata={},
+            )
+        )
+        # HAZARD: the true stop marker is recorded; no second one is written.
+        self._sampling_stopped_stamp = stamp
 
     def _stage_idle_drift_sentinel(self) -> None:
         """Collect the short post-run idle sentinel outside the measured window."""
@@ -1733,10 +2147,21 @@ class _Execution:
                 self._runtime_cleanup_metadata = dict(result.metadata)
             if not result.ok:
                 if result.failure_reason == FailureReason.CLEANUP_FAILED:
-                    raise _StageFailure(
-                        "cleanup",
-                        FailureReason.CLEANUP_FAILED,
-                        result.message or "worker-started runtime process survived cleanup",
+                    if self._hazard is None:
+                        raise _StageFailure(
+                            "cleanup",
+                            FailureReason.CLEANUP_FAILED,
+                            result.message or "worker-started runtime process survived cleanup",
+                        )
+                    # A17 (HAZARD): the measured window is complete.  Record
+                    # it; no extra signals (the adapter owns its process
+                    # identity check).  The next member's contention is
+                    # measured by the monitor journal and its idle admission.
+                    self._emit_hazard_teardown_survivors(
+                        kind="runtime", status="cleanup_failed",
+                        group_survivors=None, escaped_candidates=None,
+                        message=result.message,
+                        legacy_site="joulewise/controller.py:1734-1740@e6b6a0ce",
                     )
                 metadata = {
                     "cleanup_ok": False,
@@ -1868,6 +2293,8 @@ class _Execution:
                 "interrupt summary staging raised %s: %s"
                 % (type(cleanup_error).__name__, cleanup_error),
             )
+        if self._hazard is not None:
+            self._emit_hazard_environment_flags()  # never raises (flags.core.emit)
         try:
             self._finish()
         except BaseException:
@@ -1898,6 +2325,21 @@ class _Execution:
             not self._sampling_active
             and not self._sampling_start_in_progress
         ) or self._telemetry is None or self._sampling_stop_claimed:
+            return
+        if self._hazard is not None and self._sampling_stopped_stamp is not None:
+            # HAZARD (s2-02): the true marker is already recorded; retry the
+            # stop with that stamp and write no second sampling_stopped.
+            try:
+                self._stop_sampling_once(self._sampling_stopped_stamp)
+                self._capture_adapter_alignments()
+                self._sampling_active = False
+                self._sampling_start_in_progress = False
+            except Exception:  # noqa: BLE001 - evidence salvage must not mask the failure
+                self._log(
+                    self._controller_log,
+                    "best-effort stop_sampling raised after failure:",
+                )
+                self._log(self._controller_log, traceback.format_exc())
             return
         # D-026: even on the failure path the sampling window gets its closing
         # marker, stamped before the stop call, so post-hoc re-reduction sees
@@ -1943,12 +2385,17 @@ class _Execution:
                     sampling_stopped=sampling_stopped_stamp,
                     required_post_window_tail_s=self._post_window_sampling_dwell_s,
                 )
-                self._samples = result.samples
-                self._uncertainty_evidence = dict(result.uncertainty_evidence)
+                if self._hazard is not None and self._hazard_keeps_stop_evidence(
+                    result.samples, result.uncertainty_evidence
+                ):
+                    pass
+                else:
+                    self._samples = result.samples
+                    self._uncertainty_evidence = dict(result.uncertainty_evidence)
             else:
-                self._samples = self._telemetry.stop_sampling(
-                    self._config, self._context
-                )
+                samples = self._telemetry.stop_sampling(self._config, self._context)
+                if self._hazard is None or samples or not self._samples:
+                    self._samples = samples
         except BaseException:
             self._attach_sampler_teardown_custody()
             # Ordinary failures remain retryable by the failure-salvage path.
@@ -1960,6 +2407,26 @@ class _Execution:
             if self._sampler_teardown.spawned and (
                 not isinstance(teardown, dict) or teardown.get("status") != "clean"
             ):
+                if self._hazard is not None:
+                    # A17 (HAZARD): custody is attached above; the window is
+                    # complete.  No further signals: the teardown already
+                    # escalated while the leader was unreaped and refuses group
+                    # signals after reaping.
+                    # The survivor pids ride in the flag, so the next member's
+                    # contention check can measure them (s2-02).
+                    report = teardown if isinstance(teardown, dict) else {}
+                    survivors = report.get("group_survivors")
+                    escaped = report.get("escaped_candidates")
+                    self._emit_hazard_teardown_survivors(
+                        kind="sampler",
+                        status=report.get("status") if report else "report_missing",
+                        group_survivors=len(survivors) if isinstance(survivors, list) else None,
+                        escaped_candidates=len(escaped) if isinstance(escaped, list) else None,
+                        message=None,
+                        legacy_site="joulewise/controller.py:1957-1968@e6b6a0ce",
+                        pids=_survivor_pids(survivors, escaped),
+                    )
+                    return True
                 self._sampling_stop_claimed = False
                 raise _StageFailure(
                     "measured_run",
@@ -1979,6 +2446,129 @@ class _Execution:
             return start(self._config, self._context)
         with self._sampler_teardown.intercept_popen():
             return start(self._config, self._context)
+
+    def _emit_hazard_teardown_survivors(
+        self,
+        *,
+        kind: str,
+        status: Any,
+        group_survivors: int | None,
+        escaped_candidates: int | None,
+        message: str | None,
+        legacy_site: str,
+        pids: list[dict[str, Any]] | None = None,
+    ) -> None:
+        from joulewise.flags import core as flags_core  # noqa: PLC0415
+
+        observed: dict[str, Any] = {
+            "kind": kind,
+            "status": status,
+            "group_survivors": group_survivors,
+            "escaped_candidates": escaped_candidates,
+        }
+        if pids:
+            observed["pids"] = pids
+        if message:
+            observed["message"] = str(message)[:200]
+        flags_core.emit(
+            self._hazard, "teardown.survivors", level="member",
+            run_id=self._writer.run_id, observed=observed,
+            legacy_site=legacy_site,
+            legacy_code=(
+                "powermetrics process-group teardown census reported contamination"
+                if kind == "sampler" else FailureReason.CLEANUP_FAILED.value
+            ),
+        )
+
+    def _hazard_keeps_stop_evidence(
+        self, samples: list[PowerSample], evidence: Any
+    ) -> bool:
+        """HAZARD (s2-02): a later stop never overwrites recorded evidence.
+
+        True when the new result is empty while samples or a clock-anchor
+        derivation are already held; the held evidence is then kept.
+        """
+
+        if samples:
+            return False
+        held_anchor = (
+            isinstance(self._uncertainty_evidence, dict)
+            and bool(self._uncertainty_evidence.get("clock_anchor"))
+        )
+        if not self._samples and not held_anchor:
+            return False
+        self._log(
+            self._controller_log,
+            "repeated stop returned no samples; recorded samples and anchor evidence kept",
+        )
+        return True
+
+    def _check_carried_sampler_survivors(self) -> None:
+        """HAZARD (s2-02): measure earlier members' sampler survivors; record only.
+
+        Earlier members of this window record census survivors in their
+        ``teardown.survivors`` flags.  Before this member's settle and idle
+        admission, each carried pid is measured with ``ps``.  A survivor that
+        is still alive (same pid and, when recorded, the same command) is
+        recorded on this member as ``teardown.survivors`` (kind
+        ``carried_over``) with its CPU percent, ``contending`` above the
+        doctrine's 5 % threshold.  It never refuses and sends no signal: the
+        monitor's contention journal (``contention.request_overlap``,
+        EXCLUDE_MEMBER) and this member's idle admission measure the
+        contention itself.  Never raises.
+        """
+
+        try:
+            self._measure_carried_sampler_survivors()
+        except Exception:  # noqa: BLE001 - a diagnostic never stops collection
+            self._log(self._controller_log, "carried sampler survivor check raised:")
+            self._log(self._controller_log, traceback.format_exc())
+
+    def _measure_carried_sampler_survivors(self) -> None:
+        path = getattr(self._hazard, "path", None)
+        carried: dict[int, dict[str, Any]] = {}
+        try:
+            lines = path.read_bytes().splitlines() if path is not None else []
+        except OSError:
+            lines = []
+        for line in lines:
+            try:
+                flag = json.loads(line)
+            except ValueError:
+                continue
+            if not isinstance(flag, dict) or flag.get("code") != "teardown.survivors":
+                continue
+            scope = flag.get("scope")
+            if isinstance(scope, dict) and scope.get("run_id") == self._writer.run_id:
+                continue
+            observed = flag.get("observed")
+            value = observed.get("value", observed) if isinstance(observed, dict) else None
+            for entry in value.get("pids", []) if isinstance(value, dict) else []:
+                pid = entry.get("pid") if isinstance(entry, dict) else None
+                if isinstance(pid, int) and not isinstance(pid, bool) and pid > 1:
+                    carried[pid] = entry
+        if not carried:
+            return
+        live = _measure_survivor_processes(sorted(carried))
+        alive: list[dict[str, Any]] = []
+        contending: list[dict[str, Any]] = []
+        for pid, row in sorted(live.items()):
+            argv = carried[pid].get("argv")
+            if isinstance(argv, list) and argv and row.get("command") is not None:
+                if not str(row["command"]).startswith(str(argv[0])):
+                    continue  # the pid now names another process
+            entry = {"pid": pid, "cpu_percent": row.get("cpu_percent")}
+            alive.append(entry)
+            cpu = row.get("cpu_percent")
+            if isinstance(cpu, float) and cpu > SURVIVOR_CONTENTION_CPU_PERCENT:
+                contending.append(entry)
+        if alive:
+            self._emit_hazard_teardown_survivors(
+                kind="carried_over", status="alive" if not contending else "contending",
+                group_survivors=None, escaped_candidates=None, message=None,
+                legacy_site="joulewise/controller.py:1957-1968@e6b6a0ce",
+                pids=alive,
+            )
 
     def _attach_sampler_teardown_custody(self) -> None:
         """Persist sampler custody evidence for every powermetrics-shaped run.
