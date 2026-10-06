@@ -39,13 +39,24 @@ def run_main(*argv: str) -> tuple[int, dict]:
     return code, json.loads(stdout.getvalue())
 
 
+# GAMMA launches its midpoint reference from three stages into one runs root
+# (lane GAMMA-INTERIOR-REFERENCES-01, L10): the lint fails it until L10 lands
+# (gate-prune 2 row 14). When it does, this map empties and GAMMA must check clean.
+KNOWN_PACK_FINDINGS = {
+    "d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5": [("duplicate_dispatch", "gamma-reference-arm-boundary")],
+}
+
+
 class CommittedPackTests(unittest.TestCase):
     def test_every_committed_v5_pack_checks_clean(self):
         self.assertGreaterEqual(len(PACKS), 3)
         for pack in PACKS:
             with self.subTest(pack=pack.name):
                 code, report = run_main("--pack-root", str(pack), "--no-live-identity")
-                self.assertEqual((code, report["findings"]), (0, []))
+                known = KNOWN_PACK_FINDINGS.get(pack.name, [])
+                self.assertEqual((code, [(item["check"], item["stage_id"]) for item in report["findings"]]),
+                                 (1 if known else 0, known))
+                self.assertIn("duplicate_dispatch", report["checks"])
                 self.assertEqual(report["mode"], "pack")
                 self.assertIn("doctor_config_gate", report["checks"])
                 self.assertIn("acceptance_code_identity", report["checks"])
@@ -93,6 +104,8 @@ class SyntheticDefectTests(unittest.TestCase):
         configs.mkdir()
         for path in REFERENCE_DIR.glob("neg8-window-start-r*.json"):
             shutil.copyfile(path, configs / path.name)
+        # The order manifest too, so the stage resolves (interface J3) and only the config collision is found.
+        shutil.copyfile(REFERENCE_DIR / "order_manifest.json", configs / "order_manifest.json")
         second = json.loads((configs / "neg8-window-start-r2.json").read_bytes())
         second["run_id"] = "neg8-window-start-r1"
         (configs / "neg8-window-start-r2.json").write_text(json.dumps(second, indent=2))

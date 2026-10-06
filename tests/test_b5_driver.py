@@ -663,7 +663,9 @@ class MockRuntimeDryRenderTests(unittest.TestCase):
         return harness, hazard
 
     def test_alpha_beta_and_gamma_run_end_to_end(self):
-        for pack in ("alpha", "beta", "gamma"):
+        # GAMMA's plan is refused at the desk until lane L10 removes its duplicate
+        # midpoint dispatch (gate-prune 2 row 14, tests/test_b5_chain_prune2.py).
+        for pack in ("alpha", "beta"):
             with self.subTest(pack=pack):
                 harness, hazard = self.run_pack(pack)
                 self.assertTrue(all(row["rc"] == 0 for row in hazard["chain"]["stages"]))

@@ -50,7 +50,9 @@ class WindowPlanFixture(unittest.TestCase):
 
 class WindowPlanTests(WindowPlanFixture):
     def test_each_pack_yields_a_parseable_hazard_plan_with_all_fourteen_bindings(self):
-        for pack, members in (("alpha", 119), ("beta", 119), ("gamma", 101)):
+        # GAMMA is refused at the desk until lane L10 removes its duplicate midpoint
+        # dispatch (gate-prune 2 row 14; tests/test_b5_chain_prune2.py).
+        for pack, members in (("alpha", 119), ("beta", 119)):
             with self.subTest(pack=pack):
                 root = self.root / pack
                 root.mkdir()

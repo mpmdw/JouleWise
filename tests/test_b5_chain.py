@@ -104,6 +104,9 @@ class ChainRunTests(RenderedChainFixture):
             expected.append(stage.stage_id)
             if stage.slot == "pre":
                 expected.append(stage.stage_id + ".screen")
+                expected.append(stage.stage_id + ".window-calibration-verdict")  # J1 (gate-prune 2)
+            if stage.stage_id == "alpha-bound-collection":
+                expected.append(stage.stage_id + ".retry-decision")  # row 13: 12 of 12, no retry
             if stage.kind == "bound_derivation":
                 expected.insert(len(expected) - 1, stage.stage_id + ".corpus")
             if stage.slot == "post":
@@ -117,14 +120,15 @@ class ChainRunTests(RenderedChainFixture):
             self.assertEqual(run_ids, present)
         self.assertTrue((Path(roots["bound"]) / "neg8-drift-bound.json").is_file())
         self.assertTrue((self.night / "transcript/post-bracket-terminal-boundary.json").is_file())
-        # The calibration captures run the runbook protocol; collections pass
+        # The calibration captures run the runbook protocol (countdown 0 s on the
+        # pre slot and 20 s on the post slot, gate-prune 2 S3); collections pass
         # their stage size as --max-failures.
         calls = fake_window.calls(self.measurement)
         captures = [call for call in calls if call["tool"] == "fiducial"]
         self.assertEqual(["pre", "post"], [call["slot"] for call in captures])
-        for call in captures:
+        for call, countdown in zip(captures, ("0", "20")):
             self.assertIn("--sleep-display-before-capture", call["argv"])
-            self.assertEqual("20", call["argv"][call["argv"].index("--arm-countdown-s") + 1])
+            self.assertEqual(countdown, call["argv"][call["argv"].index("--arm-countdown-s") + 1])
         sizes = {stage.stage_id: stage.expected_count for stage in b5_chain.stage_plan(tree("alpha"))}
         collects = [call for call in calls if call["tool"] == "collect"]
         self.assertEqual(10, len(collects))
@@ -320,22 +324,39 @@ class StopTests(RenderedChainFixture):
         self.assertEqual(3, rows["alpha-post-calibration"])
 
 
-class GammaRenderTests(RenderedChainFixture):
-    pack = "gamma"
-
-    def test_gamma_renders_every_graph_stage_and_exposes_the_interior_reference_collision(self):
-        completed = self.run_chain()
-        self.assertEqual(0, completed.returncode, completed.stderr)
-        calls = [call for call in fake_window.calls(self.measurement) if call["tool"] == "collect"]
-        midpoint = [call for call in calls if call["config_dir"].endswith("window_references_v5/midpoint")]
+class GammaRenderTests(unittest.TestCase):
+    def test_gamma_is_refused_at_the_desk_for_its_interior_reference_collision(self):
         # GAMMA-INTERIOR-REFERENCES-01 (lane L10): three graph stages share one
-        # midpoint config, so the second and third collect nothing new.
-        self.assertEqual(3, len(midpoint))
-        self.assertEqual([1, 0, 0], [len(call["attempted"]) for call in midpoint])
-        bundles = fake_window.expected_bundles(self.plan)
-        for name, run_ids in bundles.items():
-            root = Path(self.plan.hazard_window["runs_roots"][name])
-            self.assertEqual(run_ids, {path.name for path in root.iterdir() if (path / "summary_metrics.json").is_file()})
+        # midpoint config, so the second and third would collect nothing new and
+        # the harvest would exclude the window (roster.duplicate_run_id). The
+        # desk refuses the plan (gate-prune 2 row 14, interface J3) until L10.
+        with tempfile.TemporaryDirectory(prefix="b5-chain-gamma-") as directory:
+            root = Path(directory).resolve()
+            measurement = fake_window.build_checkout(root)
+            with self.assertRaises(b5_plan.WindowPlanError) as raised:
+                b5_plan.write_window_plan(
+                    fake_window.inputs(root, measurement, "gamma", plan_id="b5-gamma-1",
+                                       t0_epoch_s=(int(time.time()) // 60) * 60),
+                    settle_s=0, pack_digest=lambda _root: "e" * 64, threshold_defaults=fake_window.threshold_defaults)
+            self.assertIn("neg8-window-midpoint into claim_runs_root", str(raised.exception))
+            self.assertFalse((root / "custody").exists())
+
+    def test_gamma_still_renders_every_graph_stage(self):
+        stages = b5_chain.stage_plan(tree("gamma"))
+        pack = REPO_ROOT / "configs/campaigns" / fake_window.PACKS["gamma"]
+        from scripts.check_b5_chain import synthetic_bindings
+        raw = b5_chain.render_chain(tree=tree("gamma"), tree_sha256="c" * 64, stages=stages,
+                                    bindings=synthetic_bindings(REPO_ROOT, pack), measurement_root=REPO_ROOT,
+                                    pack_root=pack, plan_id="b5-gamma-1",
+                                    runbook_text=(REPO_ROOT / b5_chain.RUNBOOK_RELATIVE).read_text())
+        with tempfile.NamedTemporaryFile(suffix=".zsh") as handle:
+            handle.write(raw)
+            handle.flush()
+            subprocess.run(["/bin/zsh", "-n", handle.name], check=True)
+        text = raw.decode()
+        for stage in stages:
+            if stage.in_chain:
+                self.assertIn(stage.stage_id, text)
 
 
 class HelperTests(unittest.TestCase):

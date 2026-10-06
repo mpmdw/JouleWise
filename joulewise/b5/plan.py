@@ -36,6 +36,7 @@ the first write.
 
 from __future__ import annotations
 
+import dataclasses
 import hashlib
 import json
 import math
@@ -44,7 +45,7 @@ import re
 import shlex
 import time
 from pathlib import Path
-from typing import Any, Callable, Mapping
+from typing import Any, Callable, Mapping, Sequence
 
 from joulewise import night_gate
 from joulewise.b5 import chain as b5_chain
@@ -117,6 +118,140 @@ class WindowPlanError(ValueError):
 def _require(condition: bool, detail: str) -> None:
     if not condition:
         raise WindowPlanError(detail)
+
+
+# ---------------------------------------------------------------------------
+# Interface J3 (gate-prune 2, PLAN2 3.2 and section 2.1 row 14): the stage
+# dispatch resolver. What a collection stage launches is decided by its own
+# argv, not by the plan tree's ``input_ref`` (null on the floor packs): the
+# campaign runner's first argument is a config directory whose
+# ``order_manifest.json`` lists the members in order, and ``--runs-dir`` names
+# the runs root. One run id names one bundle directory per runs root, and the
+# runner skips a run id whose complete bundle already exists, so a (runs root,
+# run id) pair two stages launch is measured once and its later planned
+# positions never are. The desk refuses such a plan (WindowPlanError), the CI
+# lint (scripts/check_b5_chain.py) reports it for every committed pack, and the
+# harvest and driver read the same resolver.
+# ---------------------------------------------------------------------------
+
+DISPATCH_SCHEMA = "joulewise.b5_stage_dispatch.v1"
+
+
+@dataclasses.dataclass(frozen=True)
+class StageDispatch:
+    """One collection stage: its runs root and the bundle directories it launches, in order."""
+
+    stage_id: str
+    ordinal: int | None
+    runs_root_binding: str | None
+    runs_root: str | None  # the bound path when bindings were given
+    config_dir: str | None  # repository-relative
+    order_manifest_sha256: str | None
+    run_ids: tuple[str, ...] | None  # sanitized as the runner names bundle directories
+    error: str | None
+
+    def record(self) -> dict[str, Any]:
+        return {"stage_id": self.stage_id, "ordinal": self.ordinal, "runs_root_binding": self.runs_root_binding,
+                "runs_root": self.runs_root, "config_dir": self.config_dir,
+                "order_manifest_sha256": self.order_manifest_sha256,
+                "run_ids": list(self.run_ids) if self.run_ids is not None else None, "error": self.error}
+
+
+def _dispatch_of(row: Any, repo_root: Path, bindings: Mapping[str, str] | None) -> StageDispatch:
+    stage_id = str(row.get("stage_id")) if isinstance(row, Mapping) else "?"
+    ordinal = row.get("ordinal") if isinstance(row, Mapping) and type(row.get("ordinal")) is int else None
+    binding: str | None = None
+    config: str | None = None
+
+    def failed(detail: str, digest: str | None = None) -> StageDispatch:
+        bound = bindings.get(binding) if bindings is not None and binding is not None else None
+        return StageDispatch(stage_id, ordinal, binding, bound, config, digest, None, detail)
+
+    try:
+        commands = row["launch"]["commands"]
+        arguments = commands[0]["argv_template"]["arguments"]
+        _require(isinstance(commands, list) and len(commands) == 1 and isinstance(arguments, list),
+                 "launch has not exactly one command")
+    except (KeyError, IndexError, TypeError, WindowPlanError):
+        return failed("the collection stage has no single campaign command")
+    for flag, value in zip(arguments, arguments[1:]):
+        if isinstance(flag, Mapping) and flag.get("kind") == "literal" and flag.get("value") == "--runs-dir" \
+                and isinstance(value, Mapping) and value.get("kind") == "binding" \
+                and isinstance(value.get("value"), str):
+            if binding is not None:
+                return failed("--runs-dir appears more than once")
+            binding = value["value"]
+    first = arguments[0] if arguments else None
+    if not (isinstance(first, Mapping) and first.get("kind") == "repo_path" and isinstance(first.get("value"), str)
+            and first["value"] and not Path(first["value"]).is_absolute() and ".." not in Path(first["value"]).parts):
+        return failed("the campaign command's first argument is not a repository-relative config directory")
+    config = first["value"]
+    if binding is None:
+        return failed("the campaign command names no --runs-dir binding")
+    if bindings is not None and not isinstance(bindings.get(binding), str):
+        return failed(f"--runs-dir binding {binding} is not bound")
+    path = Path(repo_root) / config / "order_manifest.json"
+    try:
+        raw = path.read_bytes()
+        manifest = json.loads(raw)
+    except (OSError, ValueError) as exc:
+        return failed(f"order manifest {config}/order_manifest.json is unreadable: {type(exc).__name__}")
+    order = manifest.get("executed_order") if isinstance(manifest, Mapping) else None
+    if not isinstance(order, list) or not all(isinstance(entry, Mapping) and isinstance(entry.get("run_id"), str)
+                                              and entry["run_id"] for entry in order):
+        return failed("order manifest executed_order does not list a run_id for every member", _sha256(raw))
+    from joulewise.bundle import BundleError, sanitize_id_component  # the runner's bundle-directory rule
+
+    try:
+        run_ids = tuple(sanitize_id_component(entry["run_id"]) for entry in order)
+    except BundleError as exc:
+        return failed(f"a run id sanitizes to nothing: {exc}", _sha256(raw))
+    return StageDispatch(stage_id, ordinal, binding, bindings.get(binding) if bindings is not None else None,
+                         config, _sha256(raw), run_ids, None)
+
+
+def resolve_stage_dispatches(tree: Mapping[str, Any], repo_root: Path | str, *,
+                             bindings: Mapping[str, str] | None = None) -> list[StageDispatch]:
+    """Every ``campaign_collection`` stage of the plan tree, in ordinal order, resolved from its own argv.
+
+    ``repo_root`` is the checkout the stage's config directory is relative to
+    (the measurement checkout, or the harvest's preserved copy). With
+    ``bindings`` each runs root is also given as a path. Never raises on a
+    malformed stage: its ``error`` says what could not be read and its
+    ``run_ids`` is None (unresolved).
+    """
+
+    graph = tree.get("stage_graph") if isinstance(tree, Mapping) else None
+    rows = [row for row in graph if isinstance(row, Mapping) and row.get("kind") == "campaign_collection"] \
+        if isinstance(graph, list) else []
+    rows.sort(key=lambda row: row.get("ordinal") if type(row.get("ordinal")) is int else 1 << 30)
+    return [_dispatch_of(row, Path(repo_root), bindings) for row in rows]
+
+
+def duplicate_dispatches(dispatches: Sequence[StageDispatch]) -> list[dict[str, Any]]:
+    """Each (runs root, run id) pair launched more than once, with the stages that launch it, in order."""
+
+    seen: dict[tuple[str | None, str], list[str]] = {}
+    for dispatch in dispatches:
+        for run_id in dispatch.run_ids or ():
+            seen.setdefault((dispatch.runs_root_binding, run_id), []).append(dispatch.stage_id)
+    return [{"runs_root_binding": root, "run_id": run_id, "stages": stages}
+            for (root, run_id), stages in seen.items() if len(stages) > 1]
+
+
+def dispatch_refusal(dispatches: Sequence[StageDispatch]) -> str | None:
+    """The desk refusal for a stage graph the chain cannot collect as planned, or None."""
+
+    unresolved = [f"{dispatch.stage_id} ({dispatch.error})" for dispatch in dispatches if dispatch.run_ids is None]
+    if unresolved:
+        return "collection stages whose members cannot be resolved from their own argv: " + "; ".join(unresolved)
+    duplicates = duplicate_dispatches(dispatches)
+    if duplicates:
+        return ("run ids launched more than once into one runs root (the runner measures each once, so every later "
+                "planned position is never measured and the harvest excludes the window as roster.duplicate_run_id): "
+                + "; ".join(f"{row['run_id']} into {row['runs_root_binding']} by {', '.join(row['stages'])}"
+                            for row in duplicates))
+    return None
 
 
 def _sha256(raw: bytes) -> str:
@@ -542,13 +677,18 @@ def advance_ledger_pin(measurement: Path | str, *, session_id: str, operator_ide
 def write_window_plan(inputs: Mapping[str, Any], *, settle_s: int | float = b5_chain.SETTLE_S,
                       now: Callable[[], float] = time.time,
                       pack_digest: Callable[[Path], str] | None = None,
-                      threshold_defaults: Callable[[], Mapping[str, Any]] | None = None) -> dict[str, Any]:
+                      threshold_defaults: Callable[[], Mapping[str, Any]] | None = None,
+                      horizon_s: int = b5_chain.CALIBRATION_HORIZON_S) -> dict[str, Any]:
     """Validate everything, then create the window's custody once; return the record.
 
-    ``settle_s`` is a keyword for the mock-runtime render only; the command
-    line always renders the registered 60 s (``chain.SETTLE_S``). ``threshold_defaults`` returns
-    the hazard modules' threshold contract (default:
-    :func:`hazard_threshold_defaults`).
+    ``settle_s`` and ``horizon_s`` are keywords for the mock-runtime render
+    only; the command line always renders the registered 60 s
+    (``chain.SETTLE_S``) and the 24 h calibration horizon
+    (``chain.CALIBRATION_HORIZON_S``). ``threshold_defaults`` returns the
+    hazard modules' threshold contract (default:
+    :func:`hazard_threshold_defaults`). A stage graph whose collection stages
+    launch a (runs root, run id) pair twice, or whose members cannot be
+    resolved from a stage's own argv (interface J3), is refused here.
     """
 
     _validate_inputs(inputs)
@@ -573,6 +713,9 @@ def write_window_plan(inputs: Mapping[str, Any], *, settle_s: int | float = b5_c
         raise WindowPlanError(f"stage graph: {exc}") from exc
     members = sum(stage.expected_count for stage in stages
                   if stage.in_chain and stage.kind == "campaign_collection")
+    dispatches = resolve_stage_dispatches(tree, measurement)
+    refusal = dispatch_refusal(dispatches)
+    _require(refusal is None, f"stage dispatch: {refusal}")
     planned_bytes = inputs["bytes_per_member"] * members
     span_seconds, span_allowance = read_allowance(inputs["programmed_span_s"], "programmed_span_s",
                                                   measurement=measurement)
@@ -657,7 +800,7 @@ def write_window_plan(inputs: Mapping[str, Any], *, settle_s: int | float = b5_c
         chain_raw = b5_chain.render_chain(
             tree=tree, tree_sha256=tree_sha256, stages=stages, bindings=bindings,
             measurement_root=measurement, pack_root=pack_root, plan_id=inputs["plan_id"],
-            runbook_text=runbook_text, settle_s=settle_s)
+            runbook_text=runbook_text, settle_s=settle_s, horizon_s=horizon_s)
     except b5_chain.ChainRenderError as exc:
         raise WindowPlanError(f"chain: {exc}") from exc
     env_values = {
@@ -756,6 +899,21 @@ def write_window_plan(inputs: Mapping[str, Any], *, settle_s: int | float = b5_c
         "thresholds_audit": thresholds_audit,
         "chain_deviations": list(b5_chain.DEVIATIONS),
         "ledger_head": ledger_status,
+        # J3: what each collection stage launches, resolved from its own argv
+        # (outside hazard_window, whose key set night_gate checks exactly).
+        "stage_dispatches": [dispatch.record() for dispatch in dispatches],
+        # Row 17: the collection deadline the chain applies, and the margin the
+        # programmed span leaves before it (negative: a window that ran its
+        # whole allowance would be truncated at the deadline, never lose its
+        # post capture to the horizon).
+        "collection_deadline": {
+            "horizon_s": horizon_s, "post_reserve_s": b5_chain.HORIZON_POST_RESERVE_S,
+            "member_allowance_s": b5_chain.HORIZON_MEMBER_ALLOWANCE_S,
+            "stage_overhead_s": b5_chain.HORIZON_STAGE_OVERHEAD_S,
+            "programmed_span_s": programmed_span_s,
+            "margin_s": horizon_s - b5_chain.HORIZON_POST_RESERVE_S - programmed_span_s,
+            "record": "$NIGHT_DIR/transcript/" + b5_chain.COLLECTION_DEADLINE_RECORD,
+        },
         "driver_argv": ["<python>", "<repo>/scripts/run_night.py", "run", "--plan", plan["path"]],
     }
     _create_once(custody / RECORD_BASENAME, (json.dumps(record, indent=2, sort_keys=True) + "\n").encode())

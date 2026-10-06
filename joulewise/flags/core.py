@@ -47,6 +47,10 @@ CORE_FLAG_CODES: Mapping[str, tuple[str, str]] = {
     "campaign.runner_record_flagged": ("RECORDS", "REPRESENTATION"),
     "calibration.writer_record_flagged": ("CALIBRATION", "REPRESENTATION"),
     "code.executed_differs_from_sealed": ("CODE_IDENTITY", "NUMBER"),
+    # Gate-prune 2, lane P2-CHAIN: written by the rendered block-5 chain (joulewise/b5/chain.py,
+    # writer "b5-chain") through this module. Effects live in the catalog (lane P2-HARV, REG).
+    "roster.horizon_truncated": ("ROSTER", "REPRESENTATION"),  # row 17: collection deadline reached
+    "member.retried": ("ROSTER", "REPRESENTATION"),  # row 13: measured by the one NEG-8 corpus retry
 }
 
 
