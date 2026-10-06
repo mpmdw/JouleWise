@@ -2385,16 +2385,14 @@ class _Execution:
                     sampling_stopped=sampling_stopped_stamp,
                     required_post_window_tail_s=self._post_window_sampling_dwell_s,
                 )
-                if self._hazard is not None and self._hazard_keeps_stop_evidence(
-                    result.samples, result.uncertainty_evidence
-                ):
+                if self._hazard is not None and self._hazard_keeps_stop_evidence():
                     pass
                 else:
                     self._samples = result.samples
                     self._uncertainty_evidence = dict(result.uncertainty_evidence)
             else:
                 samples = self._telemetry.stop_sampling(self._config, self._context)
-                if self._hazard is None or samples or not self._samples:
+                if self._hazard is None or not self._hazard_keeps_stop_evidence():
                     self._samples = samples
         except BaseException:
             self._attach_sampler_teardown_custody()
@@ -2480,17 +2478,14 @@ class _Execution:
             ),
         )
 
-    def _hazard_keeps_stop_evidence(
-        self, samples: list[PowerSample], evidence: Any
-    ) -> bool:
+    def _hazard_keeps_stop_evidence(self) -> bool:
         """HAZARD (s2-02): a later stop never overwrites recorded evidence.
 
-        True when the new result is empty while samples or a clock-anchor
-        derivation are already held; the held evidence is then kept.
+        True when samples or a clock-anchor derivation are already held,
+        whatever the new result holds; the first recorded stop evidence is
+        then kept whole and the new result is discarded.
         """
 
-        if samples:
-            return False
         held_anchor = (
             isinstance(self._uncertainty_evidence, dict)
             and bool(self._uncertainty_evidence.get("clock_anchor"))
@@ -2499,7 +2494,7 @@ class _Execution:
             return False
         self._log(
             self._controller_log,
-            "repeated stop returned no samples; recorded samples and anchor evidence kept",
+            "repeated stop result discarded; recorded samples and anchor evidence kept",
         )
         return True
 

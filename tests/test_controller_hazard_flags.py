@@ -514,6 +514,47 @@ class EnvironmentGuardTests(_LifecycleBase):
         eligibility = controller._experiment_cooldown_reference_eligibility(bundle, summary)
         self.assertTrue(eligibility["eligible"], eligibility)
 
+    def test_s2_01_stage_preflight_without_evaluation_does_not_decide_the_member(self) -> None:
+        # The shape of a stage preflight whose probe raised (A10): no evaluation.
+        policy, binding, preflight, snapshot = campaign_policy_fixture(exploratory=False)
+        preflight = {**preflight, "evaluation": None, "admitted": False,
+                     "error": "injected preflight probe failure"}
+        with self.hazard(), patch("joulewise.controller.collect_environment_guard_observation",
+                                  side_effect=lambda **_kwargs: _guard()):
+            bundle, summary = controller.run_benchmark(
+                make_config("hazard-s201-noeval"), self.runs_root, DeterministicClock(),
+                registry=AdmissionIdleRegistry([False]), environment_snapshot=snapshot,
+                campaign_policy=policy, campaign_policy_binding=binding,
+                campaign_environment_preflight=preflight)
+        self.assertEqual(summary.status, RunStatus.SUCCEEDED, summary.failure_message)
+        admission = json.loads((bundle / "metadata.json").read_bytes())["environment_admission"]
+        self.assertIs(admission["critical_environment_passed"], True)
+        self.assertIs(admission["reference_provenance_present"], True)
+        eligibility = controller._experiment_cooldown_reference_eligibility(bundle, summary)
+        self.assertTrue(eligibility["eligible"], eligibility)
+
+    def test_a11_second_attempt_guard_failure_collects_with_flag(self) -> None:
+        awake = _guard(display_power_state="any_awake")
+        with self.hazard():
+            bundle, summary = self.run_live_guard(
+                "hazard-a11-attempt2", [_guard(), _guard(), awake, _guard()],
+                registry=AdmissionIdleRegistry([False, False], cpu_busy_sequence=[0.9, 0.1]))
+        self.assertEqual(summary.status, RunStatus.SUCCEEDED, summary.failure_message)
+        admission = json.loads((bundle / "metadata.json").read_bytes())["environment_admission"]
+        self.assertEqual([row["admitted"] for row in admission["attempts"]], [False, True])
+        self.assertIs(admission["critical_environment_passed"], False)
+        flags = self.member_flags("env.member_quiet_state_violated")
+        self.assertEqual(len(flags), 1)
+        self.assertEqual([row["phase"] for row in observed(flags[0])["findings"]], ["before_attempt_2"])
+
+    def test_a11_legacy_second_attempt_guard_failure_still_aborts(self) -> None:
+        awake = _guard(display_power_state="any_awake")
+        _bundle, summary = self.run_live_guard(
+            "legacy-a11-attempt2", [_guard(), _guard(), awake, _guard()],
+            registry=AdmissionIdleRegistry([False, False], cpu_busy_sequence=[0.9, 0.1]))
+        self.assertEqual(summary.status, RunStatus.FAILED)
+        self.assertIn("display became or remained awake", summary.failure_message)
+
     def test_s2_01_legacy_stage_preflight_still_decides_the_member(self) -> None:
         policy, _binding, _preflight, snapshot = campaign_policy_fixture(exploratory=False)
         awake_stage = {**snapshot, "display_power_state": "any_awake"}
@@ -804,6 +845,59 @@ class TeardownTests(_LifecycleBase):
         self.assertEqual(len(carried), 1)
         self.assertEqual(carried[0]["scope"]["run_id"], bundle.name)
         self.assertEqual([row["pid"] for row in observed(carried[0])["pids"]], [survivor.pid])
+
+
+class HeldStopEvidenceTests(unittest.TestCase):
+    """s2-02: a retried stop never replaces the first recorded stop evidence."""
+
+    @staticmethod
+    def execution(hazard: Any, telemetry: Any) -> Any:
+        from joulewise.clock import ClockStamp
+
+        execution = object.__new__(controller._Execution)
+        execution._hazard = hazard
+        execution._clock = FakeClock(start=1_700_000_000.0)
+        execution._controller_log = []
+        execution._sampling_stop_claimed = False
+        execution._sampling_started_stamp = ClockStamp(1.0, 1.0, 1.0, 0.001, 0.001)
+        execution._post_window_sampling_dwell_s = 0.0
+        execution._config = execution._context = None
+        execution._samples = ["held"]
+        execution._uncertainty_evidence = {"clock_anchor": {"identity": "held"}}
+        execution._telemetry = telemetry
+        return execution
+
+    @staticmethod
+    def telemetry(samples: list[Any]) -> Any:
+        from joulewise.interfaces import TelemetryStopResult
+
+        class Telemetry:
+            name = "mock"
+
+            def stop_sampling_with_evidence(self, *args, **kwargs):
+                return TelemetryStopResult(list(samples), {})
+
+        return Telemetry()
+
+    def stop_again(self, hazard: Any, samples: list[Any]) -> Any:
+        from joulewise.clock import ClockStamp
+
+        execution = self.execution(hazard, self.telemetry(samples))
+        execution._stop_sampling_once(ClockStamp(2.0, 2.0, 2.0, 0.001, 0.001))
+        return execution
+
+    def test_hazard_keeps_held_samples_and_anchor_whatever_the_retry_returns(self) -> None:
+        hazard = flags_core.HazardFlagContext(
+            writer=WRITER, custody_root=None, plan_id=None, attempt=None, scope_resolved=False)
+        for retry in ([], ["retry"]):
+            execution = self.stop_again(hazard, retry)
+            self.assertEqual(execution._samples, ["held"])
+            self.assertEqual(execution._uncertainty_evidence, {"clock_anchor": {"identity": "held"}})
+
+    def test_legacy_retry_still_replaces_the_stop_evidence(self) -> None:
+        execution = self.stop_again(None, ["retry"])
+        self.assertEqual(execution._samples, ["retry"])
+        self.assertEqual(execution._uncertainty_evidence, {})
 
 
 class DispatchTests(unittest.TestCase):
