@@ -558,6 +558,67 @@ class PrepareTests(unittest.TestCase):
             else:
                 path.unlink()
 
+    def _installer_battery_fixture(self, name):
+        """Point the child installer's battery probe at fixture capture `name`."""
+        home = Path(os.environ["HOME"])
+        self.assertTrue(battery_float_fixture.install_user_site_runner(home))
+        site = Path(subprocess.check_output(
+            [sys.executable, "-c", "import site; print(site.getusersitepackages())"],
+            env={**os.environ, "HOME": str(home)}, text=True).strip())
+        custom = site / "usercustomize.py"
+        text = custom.read_text(encoding="utf-8")
+        self.assertIn("_fixture.runner()", text)
+        custom.write_text(text.replace("_fixture.runner()", f"_fixture.runner({name!r})"), encoding="utf-8")
+
+    def test_render_seals_the_installers_battery_records(self):
+        """The real installer (block-4 X4) retains its battery reading next to
+        the plan it validates; under --render-only that is the staging
+        directory. Render seals exactly those records, so a completed
+        preparation resumes, drift in them refuses, and an unsealed one refuses."""
+        first = entry.prepare(**self.kw)
+        stage = Path(first["staging"])
+        records = sorted(stage.glob("battery-float-install-check-*"))
+        self.assertEqual(sorted(p.suffix for p in records), [".ioreg", ".json"])
+        self.assertEqual(records[0].stem, records[1].stem)
+        for path in records:
+            self.assertEqual(first["digests"][str(path)], entry.digest(path))
+        reading = json.loads(next(p for p in records if p.suffix == ".json").read_bytes())
+        self.assertEqual(reading["phase"], "validate_install")
+        self.assertEqual(reading["plan_id"], first["plan_id"])
+        self.assertEqual(entry.prepare(**self.kw), first)
+        for path in records:
+            raw = path.read_bytes()
+            path.write_bytes(raw + b" ")
+            with self.subTest(drift=path.name), self.assertRaisesRegex(entry.Refused, "sealed-byte drift"):
+                entry.prepare(**self.kw)
+            path.write_bytes(raw)
+        stray = stage / "battery-float-install-check-1.json"
+        stray.write_bytes(records[1].read_bytes())
+        with self.assertRaisesRegex(entry.Refused, "^unknown or uncheckpointed staging output$"):
+            entry.prepare(**self.kw)
+        stray.unlink()
+        self.assertEqual(entry.prepare(**self.kw), first)
+
+    def test_a_render_refused_on_battery_is_retried_and_seals_the_refused_reading(self):
+        """The installer refuses a battery not at float after retaining the
+        reading in the staging directory, before any render output. A later
+        prepare retries the render and seals the refused reading with its own."""
+        self._installer_battery_fixture("charging-synthetic-from-real.ioreg")
+        with self.assertRaisesRegex(entry.Refused, "install_night_agent.sh failed.*battery not at float"):
+            entry.prepare(**self.kw)
+        stage = next((self.base_dir / "staging").glob("*/prepare.json")).parent
+        refused = sorted(stage.glob("battery-float-install-check-*"))
+        self.assertEqual(sorted(p.suffix for p in refused), [".ioreg", ".json"])
+        self.assertFalse((stage / "render").exists())
+        self._installer_battery_fixture("float.ioreg")
+        state = entry.prepare(**self.kw)
+        records = sorted(stage.glob("battery-float-install-check-*"))
+        self.assertEqual(len(records), 4)
+        self.assertTrue(set(refused) < set(records))
+        for path in records:
+            self.assertEqual(state["digests"][str(path)], entry.digest(path))
+        self.assertEqual(entry.prepare(**self.kw), state)
+
     def test_cross_device_refused_before_clone(self):
         original = Path.stat
         custody_parent = Path(self.kw["roots_under"]) / "night-custody"
