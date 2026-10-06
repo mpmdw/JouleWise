@@ -280,6 +280,11 @@ CODES: dict[str, CodeSpec] = {
     "g3.assertion_failed": _spec("RECORDS", "REPRESENTATION", legacy="scripts/check_window_provenance.py"),
     "g3.recompute_failed": _spec("NEG8", "NUMBER", legacy="scripts/check_window_provenance.py:837"),
     "g3.not_applicable": _spec("DIAGNOSTIC", "REPRESENTATION"),
+    # G10, the clock-anchor positive control run inside the window (registration
+    # 3): scripts/g10_clock_step_control.py writes its result's code into
+    # night/g10.json flag_code; the harvest carries it to the window's flags.
+    **{code: _spec("DIAGNOSTIC", "PHYSICS", legacy="scripts/g10_clock_step_control.py")
+       for code in ("g10.discharged", "g10.not_discharged", "g10.unmeasured", "g10.interrupted", "g10.error")},
     # The s1-structural diagnostics (plan section 4), read on the first real
     # window; ``observed.check`` names which one.
     "diagnostic.s1_structural": _spec("DIAGNOSTIC", "REPRESENTATION"),
@@ -411,7 +416,26 @@ L5_ONLY_CODES = frozenset({
     "records.terminal_record_absent", "records.source_changed_during_harvest", "records.collector_failed",
     "records.malformed_flag",
     "g3.assertion_failed", "g3.recompute_failed", "g3.not_applicable",
+    # L4's draft names g10.discharged and g10.not_discharged; the block-5
+    # catalog draft classifies all five (DIAGNOSTIC, PHYSICS, DISCLOSE).
+    "g10.unmeasured", "g10.interrupted", "g10.error",
 })
+# G10's result -> its code (scripts/g10_clock_step_control.py FLAG_CODES).
+G10_RESULT_CODES = {"DISCHARGED": "g10.discharged", "NOT_DISCHARGED": "g10.not_discharged",
+                    "UNMEASURED": "g10.unmeasured", "INTERRUPTED": "g10.interrupted", "ERROR": "g10.error"}
+# Spelled in two parts, like CAMPAIGN_LOCK_NAME, so the emitted-code scan of
+# this file does not read a file name as a flag code.
+G10_RECORD_NAME = "g10" ".json"                # scripts/g10_clock_step_control.py RECORD_BASENAME, night/
+G10_DRIVER_RECORD_NAME = "g10" ".driver.json"  # joulewise.b5.driver G10_DRIVER_RECORD, night/
+# The whole-window membership binding the desk writes beside the bracket
+# binding when the verdict writer's membership resolver needs one (R2-2a).
+MEMBERSHIP_BINDING_NAME = "window-membership-binding.json"
+MEMBERSHIP_BINDING_SCHEMA = "joulewise.whole_window_membership_binding.v1"  # joulewise.salvage_dangler
+# Ledger refusal reasons that mean the committed pin is not the head the
+# verdict writer must read (calibration_ledger.load_calibration_ledger_snapshot).
+PIN_REFUSAL_REASONS = frozenset({"calibration_ledger_head_mismatch", "calibration_ledger_rollback",
+                                 "calibration_ledger_head_uncommitted", "calibration_ledger_missing",
+                                 "calibration_ledger_malformed"})
 
 
 def restricted_reason(code: str) -> bool:
@@ -3292,6 +3316,10 @@ class _Harvest:
             repo_root=inputs.measurement_root, baseline_sequence=cutoff.get("sequence"),
             baseline_digest=cutoff.get("head_digest")) if committed_pin.is_file() else None
         committed_value = read_json(committed_pin) if committed_pin.is_file() else {}
+        # Block 5's desk order advances the pin before the harvest (registration
+        # 11), so a window harvested in order records "equal"; G3 requires it
+        # (--expected-pin-relation equal) and the desk verdict is not written
+        # otherwise (prepare_desk_verdict).
         relation = "equal" if committed_value.get("sequence") == candidate.get("sequence") else (
             "physical_ahead" if isinstance(committed_value.get("sequence"), int)
             and committed_value["sequence"] < candidate.get("sequence", -1) else "other")
@@ -3831,12 +3859,34 @@ class _Harvest:
         Runs before the archive, in its own session (``DeskVerdictChild``),
         with a wall budget of max(1,800 s, 90 s per claim-root bundle);
         :meth:`assess_early` runs while it does.  Only the bracket binding,
-        the verdict file, one appended campaign-log row and the producer's own
-        lock may change; anything else is a flag (:meth:`finish_desk_verdict`).
+        the membership binding, the verdict file, one appended campaign-log
+        row and the producer's own lock may change; anything else is a flag
+        (:meth:`finish_desk_verdict`).
+
+        The desk order is chain exit, pin advance
+        (``scripts/advance_b5_ledger_pin.py``), harvest (registration 11).  The
+        writer reads the ledger through the committed pin, and the window's own
+        post-calibration has moved the ledger past the pin the window armed at,
+        so a verdict written before the advance fails its calibration bracket on
+        ``calibration_ledger_head_mismatch`` and never reaches the lineage
+        check.  Its row would stay in the append-only campaign log, where a
+        re-run cannot replace it.  So unless the committed pin is this bracket
+        session's terminal head, nothing is written:
+        ``whole_window.producer_failed`` (``step`` ``head_pin``) records why,
+        the verdict is absent, and the cure is the advance and a re-harvest.
+
+        Each producer's output goes to ``withheld/transcripts/`` (the verdict
+        writer's to ``desk-verdict.txt``); a failed producer's first error line,
+        numbers masked, goes into its flag.
         """
         inputs = self.inputs
         runs = inputs.claim_runs_root
         if (runs / "whole-window-verdict.json").exists() or inputs.bracket_session_id is None:
+            return False
+        pin_problem = self._desk_pin_problem()
+        if pin_problem is not None:
+            self.emit("whole_window.producer_failed", level="window", collector="desk",
+                      observed={"step": "head_pin", **pin_problem})
             return False
         binding_target = runs / "bracket-binding.json"
         before = tree_inventory(runs)
@@ -3853,12 +3903,15 @@ class _Harvest:
         if inputs.bound_runs_root is not None:
             argv += ["--neg8-drift-bound", str(inputs.bound_runs_root / "neg8-drift-bound.json")]
         if not binding_target.exists():
-            binding = self._desk_binding()
+            binding, error = self._desk_binding()
             if binding is None:
                 self.emit("whole_window.producer_failed", level="window", collector="desk",
-                          observed={"step": "bracket_binding"})
+                          observed={"step": "bracket_binding", **self._desk_failure("desk-binding.txt", error)})
                 return False
             write_once(binding_target, canonical_json_bytes(binding) + b"\n")
+        membership = self._desk_membership_binding(policy, log)
+        if membership is not None:
+            argv += ["--window-membership-binding", str(membership)]
         calibration = {name for name in (inputs.pre_attempt_id, inputs.post_attempt_id) if name}
         bundles = claim_bundle_count(runs, exclude=calibration)
         timeout_s = float(self.seams.desk_timeout_s(bundles))
@@ -3886,7 +3939,9 @@ class _Harvest:
             return
         self._desk_child = None
         record = child.finish()
-        self._desk_transcript = (child.stdout or "") + (child.stderr or "")
+        transcript = (child.stdout or "") + (child.stderr or "")
+        self._desk_transcript = transcript
+        write_once(self.withheld / "transcripts" / "desk-verdict.txt", transcript.encode("utf-8", "replace"))
         self.desk_run = record
         write_json_once(self.withheld / "desk-verdict-run.json", record)
         if record["timed_out"] or record["error"] is not None or record["survivors_after_exit"]:
@@ -3898,7 +3953,8 @@ class _Harvest:
                                 "error": record["error"] is not None})
         elif record["returncode"] not in (0, 1):
             self.emit("whole_window.producer_failed", level="window", collector="desk",
-                      observed={"step": "whole_window_verdict", "returncode": record["returncode"]})
+                      observed={"step": "whole_window_verdict", "returncode": record["returncode"],
+                                **_first_error(transcript)})
         if record["group_gone"] is not True:
             # Something of the writer's process group may still be writing the
             # runs root: the archived bytes are not proven to be final.
@@ -3907,7 +3963,8 @@ class _Harvest:
         runs, log, before, old_log = desk["runs"], desk["log"], desk["before"], desk["old_log"]
         after = tree_inventory(runs)
         self._desk["after"] = after
-        allowed = {"campaign_log.jsonl", "bracket-binding.json", "whole-window-verdict.json", CAMPAIGN_LOCK_NAME}
+        allowed = {"campaign_log.jsonl", "bracket-binding.json", "whole-window-verdict.json", CAMPAIGN_LOCK_NAME,
+                   MEMBERSHIP_BINDING_NAME}
         changed = sorted(name for name in set(before) | set(after)
                          if name not in allowed and before.get(name) != after.get(name))
         appended_ok = (log.read_bytes().startswith(old_log) if log.is_file() else not old_log)
@@ -3976,7 +4033,58 @@ class _Harvest:
         prefix = relative + "/"
         return {key[len(prefix):]: value for key, value in inventory.items() if key.startswith(prefix)}
 
-    def _desk_binding(self) -> dict[str, Any] | None:
+    def _desk_failure(self, name: str, error: str | None) -> dict[str, Any]:
+        """Write a desk producer's error to ``withheld/transcripts/<name>``; its masked first line for the flag."""
+        if not error:
+            return {}
+        write_once(self.withheld / "transcripts" / name, error.encode("utf-8", "replace"))
+        return _first_error(error)
+
+    def _desk_pin_problem(self) -> dict[str, Any] | None:
+        """``None`` when the committed pin is this bracket session's terminal head, as the verdict writer reads it.
+
+        The same snapshot the writer loads (``run_campaign`` with
+        ``--calibration-ledger`` and ``--head-pin``: the pin must be committed at
+        the measurement checkout's HEAD), compared with
+        ``calibration_ledger.terminal_head_pin_for_session``.  Otherwise the
+        reason: ``session_not_terminal`` (no post slot and no abort),
+        ``pin_unreadable``, ``pin_behind`` (the advance has not run),
+        ``pin_not_terminal`` (the pin names another head), ``pin_uncommitted``
+        (advanced without the pin-only commit) or ``ledger_ahead_of_pin`` (a
+        later session after this one).  Sequences are ledger positions, not
+        energies.
+        """
+        from joulewise.calibration_ledger import load_calibration_ledger_snapshot, terminal_head_pin_for_session
+        inputs = self.inputs
+        try:
+            terminal = terminal_head_pin_for_session(inputs.ledger_path, session_id=inputs.bracket_session_id)
+        except Exception as exc:  # an open or absent session has no terminal head
+            code = getattr(getattr(exc, "code", None), "value", None)
+            return {"reason": "session_not_terminal", "error_type": type(exc).__name__,
+                    "error_code": code if isinstance(code, str) else None}
+        try:
+            snapshot = load_calibration_ledger_snapshot(
+                inputs.ledger_path, inputs.head_pin_path, require_committed_pin=True, verify_custody=False,
+                mode="read_replay", repo_root=inputs.measurement_root)
+        except Exception as exc:
+            return {"reason": "pin_unreadable", "error_type": type(exc).__name__,
+                    "terminal_sequence": terminal.get("sequence")}
+        reasons = sorted({str(getattr(reason, "value", reason)) for reason in snapshot.refusal_reasons}
+                         & PIN_REFUSAL_REASONS)
+        committed = (snapshot.committed_head_sequence, snapshot.committed_head_digest)
+        observed = {"committed_sequence": snapshot.committed_head_sequence,
+                    "terminal_sequence": terminal.get("sequence"), "ledger_reasons": reasons}
+        if committed != (terminal.get("sequence"), terminal.get("head_digest")):
+            behind = isinstance(committed[0], int) and isinstance(terminal.get("sequence"), int) \
+                and committed[0] < terminal["sequence"]
+            return {"reason": "pin_behind" if behind else "pin_not_terminal", **observed}
+        if "calibration_ledger_head_uncommitted" in reasons:
+            return {"reason": "pin_uncommitted", **observed}
+        if reasons:
+            return {"reason": "ledger_ahead_of_pin", **observed}
+        return None
+
+    def _desk_binding(self) -> tuple[dict[str, Any] | None, str | None]:
         from joulewise import calibration_bracketing as brackets
         from joulewise.calibration_ledger import load_calibration_ledger_snapshot, terminal_head_pin_for_session
         inputs = self.inputs
@@ -3996,8 +4104,90 @@ class _Harvest:
                 return brackets.build_calibration_bracket_binding(
                     snapshot, session_id=inputs.bracket_session_id, window_id=tree["window_identity"]["window_id"],
                     plan_id=tree["plan"]["plan_id"], plan_sha256=sha256_file(frozen),
-                    evidence_root_id=tree["window_identity"]["evidence_root_id"], runs_root=inputs.claim_runs_root)
-        except Exception:
+                    evidence_root_id=tree["window_identity"]["evidence_root_id"],
+                    runs_root=inputs.claim_runs_root), None
+        except Exception as exc:
+            return None, _exception_text(exc)
+
+    def _desk_membership_binding(self, policy: Path | None, log: Path) -> Path | None:
+        """The window membership binding for the verdict writer, when its resolver needs one (R2-2a).
+
+        ``run_campaign._whole_window_campaign_membership`` groups the policy's
+        campaign manifests by analysis-manifest identity, and a floor pack's
+        manifests carry none: their group (``<none>``) is eligible only with a
+        ``joulewise.whole_window_membership_binding.v1`` naming exactly those
+        manifests.  Without it the verdict's membership is unresolved and its
+        NEG-8 bracket never forms.
+
+        Asked of the resolver itself, in order:
+
+        1. Membership resolves without a binding: none is written (a resolver
+           that groups the window by other means records no binding).
+        2. A policy-matching manifest carries an analysis-manifest identity:
+           a binding names only the null-identity manifests, so it would bind a
+           part of the window; none is written and
+           ``whole_window.producer_failed`` (``membership_binding``,
+           ``mixed_analysis_identity``) records it.
+        3. Otherwise the binding is built from the runs root's manifests
+           (path, SHA-256, size, ``run_campaign.whole_window_membership_id``)
+           and is used only if the resolver, authenticating it against the
+           campaign catalog, then resolves the window; it is written once,
+           beside the bracket binding, and G3 reads it there.
+        """
+        inputs = self.inputs
+        runs = inputs.claim_runs_root
+        target = runs / MEMBERSHIP_BINDING_NAME
+
+        def failed(reason: str, **observed: Any) -> None:
+            self.emit("whole_window.producer_failed", level="window", collector="desk",
+                      observed={"step": "membership_binding", "reason": reason, **observed})
+
+        if policy is None or not policy.is_file():
+            return None
+        try:
+            from scripts import run_campaign
+            policy_sha = sha256_file(policy)
+            unbound = run_campaign._whole_window_campaign_membership(runs, policy_sha, log)
+            if not unbound.conditions:
+                return None
+            matching = []
+            for path in sorted((runs / "campaign_manifests").glob("*.json")):
+                raw = path.read_bytes()
+                value = json.loads(raw)
+                bound_policy = value.get("campaign_policy") if isinstance(value, Mapping) else None
+                if isinstance(bound_policy, Mapping) and bound_policy.get("sha256") == policy_sha:
+                    matching.append((path, raw, value.get("analysis_manifest_id")))
+            if not matching:
+                return None
+            identities = sorted({str(identity) for _path, _raw, identity in matching if identity is not None})
+            if identities:
+                failed("mixed_analysis_identity", identities=identities[:4],
+                       null_identity_manifests=sum(identity is None for _path, _raw, identity in matching))
+                return None
+            descriptors = sorted(({"path": path.resolve().relative_to(runs.resolve()).as_posix(),
+                                   "sha256": sha256_bytes(raw), "size": len(raw)} for path, raw, _ in matching),
+                                 key=lambda row: row["path"])
+            raw_binding = canonical_json_bytes({
+                "schema_version": MEMBERSHIP_BINDING_SCHEMA, "campaign_policy_sha256": policy_sha,
+                "source_campaign_manifests": descriptors,
+                "membership_id": run_campaign.whole_window_membership_id(descriptors)}) + b"\n"
+            if target.exists():
+                if target.read_bytes() != raw_binding:
+                    failed("existing_binding_differs")
+                    return None
+                return target
+            with tempfile.TemporaryDirectory(prefix="b5-desk-membership-") as scratch:
+                probe = Path(scratch) / MEMBERSHIP_BINDING_NAME
+                probe.write_bytes(raw_binding)
+                bound = run_campaign._whole_window_campaign_membership(runs, policy_sha, log,
+                                                                       membership_binding_path=probe)
+            if bound.conditions:
+                failed("binding_does_not_resolve", conditions=sorted(map(str, bound.conditions))[:8])
+                return None
+            write_once(target, raw_binding)
+            return target
+        except Exception as exc:  # the verdict is still written; its membership is then unresolved
+            failed("probe_raised", **self._desk_failure("desk-membership.txt", _exception_text(exc)))
             return None
 
     # -- clock systematic -----------------------------------------------------
@@ -4810,8 +5000,14 @@ class _Harvest:
         if self.inputs.plan.get("receipt_class") == HAZARD_PACK_CLASS:
             # A claim window holds every member of the pack, not one block:
             # G3's full-window roster (root order plus the claim-root references).
+            # Its desk order advances the pin before the harvest (registration
+            # 11), so the terminal boundary must show the committed pin equal
+            # to the session's terminal head, never the block-2 physical-ahead
+            # stop.
             argv += ["--full-window", "--plan-tree", str(pack / "plan_tree.json"),
-                     "--repo-root", str(inputs.measurement_root)]
+                     "--repo-root", str(inputs.measurement_root), "--expected-pin-relation", "equal"]
+        if (runs / MEMBERSHIP_BINDING_NAME).is_file():  # the desk's binding: F5-4 resolves membership with it
+            argv += ["--window-membership-binding", str(runs / MEMBERSHIP_BINDING_NAME)]
         started = time.monotonic()
         try:
             result = self.seams.runner(argv, capture_output=True, text=True, check=False, timeout=3600)
@@ -4836,6 +5032,64 @@ class _Harvest:
         if rows is None or returncode not in (0, 1) or f52 != ["PASS"]:
             recompute_failed(reason="report_absent" if rows is None else "f5_2_not_passed",
                              returncode=returncode if _is_int(returncode) else None, f5_2=f52)
+
+    # -- G10 positive control (registration 3) --------------------------------
+    def g10_result(self) -> None:
+        """G10's result as its catalog code, at window level (R2-3).
+
+        ``scripts/g10_clock_step_control.py`` writes ``night/g10.json`` with
+        ``result`` and its code in ``flag_code``; the driver writes its own view
+        of the run to ``night/g10.driver.json`` (return code, timeout) and, when
+        it did not run G10, says why in ``night/hazard_result.json`` ``g10``.
+        The record's code is emitted when it is the code of its result;
+        ``g10.error`` when G10 was requested and no readable, consistent record
+        exists.  ``observed`` is structure only: result, whether OFF succeeded,
+        the return code and timeout, and where the record stood.
+        """
+        night = self.inputs.night_dir
+        requested = _plan_value(self.inputs.plan, "g10") is True
+        record_path, driver_path = night / G10_RECORD_NAME, night / G10_DRIVER_RECORD_NAME
+        if not requested and not record_path.exists() and not driver_path.exists():
+            return
+
+        def load(path: Path) -> tuple[Any, str]:
+            if not path.exists():
+                return None, "absent"
+            try:
+                value = read_json(path)
+            except (OSError, ValueError):
+                return None, "malformed"
+            return (value, "present") if isinstance(value, Mapping) else (None, "malformed")
+
+        record, record_state = load(record_path)
+        driver, _driver_state = load(driver_path)
+        driver = driver or {}
+        if not driver:
+            try:
+                hazard = read_json(night / HAZARD_RESULT_NAME)
+                entry = hazard.get("g10") if isinstance(hazard, Mapping) else None
+                driver = dict(entry) if isinstance(entry, Mapping) else {}
+            except (OSError, ValueError):
+                driver = {}
+        result = record.get("result") if record is not None else None
+        result = result if isinstance(result, str) else None
+        flag_code = record.get("flag_code") if record is not None else None
+        code = G10_RESULT_CODES.get(result or "")
+        if code is None or flag_code != code:
+            if record_state == "present":
+                record_state = "inconsistent"
+            code = "g10.error"
+        off_ok = record.get("off_ok") if record is not None else None
+        returncode = driver.get("returncode")
+        observed = {"result": result, "off_ok": off_ok if isinstance(off_ok, bool) else None,
+                    "returncode": returncode if _is_int(returncode) else None,
+                    "timed_out": driver.get("timed_out") is True, "record": record_state,
+                    "requested": requested}
+        if record_state != "present":
+            reason = driver.get("reason")
+            observed["ran"] = driver.get("ran") if isinstance(driver.get("ran"), bool) else None
+            observed["driver_reason"] = reason if isinstance(reason, str) else None
+        self.emit(code, level="window", collector="g10", observed=observed)
 
     # -- diagnostics -----------------------------------------------------------
     def diagnostics(self) -> None:
@@ -5394,6 +5648,39 @@ def _inventory_map(value: Any) -> tuple[dict[str, str] | None, str | None]:
     return result, head if isinstance(head, str) else None
 
 
+_ERROR_CODE_RE = re.compile(r"^([a-z][a-z0-9_]*(?:\.[a-z0-9_]+)*):")
+# A number standing alone, not a digit inside an identifier (b5t, neg8_bound, r01).
+_NUMBER_RE = re.compile(r"(?<![A-Za-z0-9_.])[-+]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?(?![0-9_])")
+
+
+def _first_error(transcript: str) -> dict[str, Any]:
+    """A producer's first error line, structure only, for its flag's ``observed``.
+
+    The first ``error:`` line (``run_campaign``'s refusal line), else the last
+    line of a traceback, else the last non-empty line.  ``error_code`` is its
+    leading ``code:`` token when it has one (``launch_lineage_conflict``).
+    ``error_line`` masks every number as ``#``: a message can quote a value,
+    and flags carry structure only; the whole text stays in
+    ``withheld/transcripts/``.
+    """
+    lines = [line.strip() for line in (transcript or "").splitlines() if line.strip()]
+    if not lines:
+        return {"error_code": None, "error_line": None}
+    errors = [line[len("error:"):].strip() for line in lines if line.lower().startswith("error:")]
+    text = errors[0] if errors else lines[-1]
+    match = _ERROR_CODE_RE.match(text)
+    return {"error_code": match.group(1) if match else None, "error_line": _NUMBER_RE.sub("#", text)[:200]}
+
+
+def _exception_text(exc: BaseException) -> str:
+    """``Type: message`` plus the traceback, for a desk transcript in withheld/."""
+    import traceback
+    code = getattr(getattr(exc, "code", None), "value", None)
+    head = f"error: {code}: {type(exc).__name__}: {exc}" if isinstance(code, str) \
+        else f"error: {type(exc).__name__}: {exc}"
+    return head + "\n" + "".join(traceback.format_exception(exc))
+
+
 def _g3_lines(stdout: str) -> list[dict[str, str]]:
     rows = []
     for line in (stdout or "").splitlines():
@@ -5494,6 +5781,7 @@ def harvest(inputs: WindowInputs, archive_root: Path | str, *, seams: Seams | No
     run.step("identity_supersession", run.supersede_identity_unmeasured)
     run.step("lineage", run.lineage_audit)
     run.step("monitor", run.monitor_joins)
+    run.step("g10", run.g10_result, fault=False)
     run.step("exclusion_inputs", run.exclusion_inputs)
     run.step("g3", lambda: run.g3(skipped=not run_g3), fault=False)
     run.step("diagnostics", run.diagnostics, fault=False)

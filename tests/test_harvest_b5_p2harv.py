@@ -90,6 +90,7 @@ class DeskVerdictBudgetTests(base.WindowTestCase):
 
     def test_the_writer_gets_the_budget_of_the_bundles_it_validates(self):
         window = self.window(prefix_ledger=True)
+        base.advance_pin(window)  # int3: the desk order is chain exit, pin advance, harvest (R2-1)
         asked = []
 
         def runner(argv, **kwargs):
@@ -116,6 +117,7 @@ class DeskVerdictTeardownTests(base.WindowTestCase):
 
     def test_a_writer_over_budget_is_killed_with_its_group_and_its_own_lock_is_removed(self):
         window = self.window(prefix_ledger=True)
+        base.advance_pin(window)  # int3: the desk order is chain exit, pin advance, harvest (R2-1)
         scratch = Path(tempfile.mkdtemp(prefix="b5-desk-hung-", dir=base.REAL_TMP))
         self.addCleanup(lambda: __import__("shutil").rmtree(scratch, ignore_errors=True))
         script, pidfile = scratch / "writer.py", scratch / "pids.json"
@@ -206,6 +208,7 @@ class DeskConcurrencyTests(base.WindowTestCase):
 
     def concurrent_harvest(self, *, touch: str | None = None):
         window = self.window(prefix_ledger=True)
+        base.advance_pin(window)  # int3: the desk order is chain exit, pin advance, harvest (R2-1)
         assessed = threading.Event()
         seen: list[bool] = []
         calls: list[str] = []
@@ -814,6 +817,7 @@ class DeskChildSupervisionTests(unittest.TestCase):
                                          pre_attempt_id=None, post_attempt_id=None, bound_runs_root=None,
                                          ledger_path=runs / "ledger", head_pin_path=runs / "pin")
             run._policy_path = lambda: runs / "policy.json"
+            run._desk_pin_problem = lambda: None  # int3: the pin is at the session's terminal head (R2-1)
             (runs / "bracket-binding.json").write_text("{}")
             started = run.start_desk_verdict()
         self.assertFalse(started)

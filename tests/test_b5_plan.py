@@ -441,6 +441,49 @@ class LedgerHeadTests(WindowPlanFixture):
         self.assertEqual("ADVANCED", json.loads(output.getvalue())["status"])
         self.write()
 
+    def test_a_chain_stopped_before_its_post_calibration_is_cured_by_abort_then_advance(self):
+        """Rehearsal round 2, R2-5: the chain never aborts an open session, and its harvest has no terminal pin.
+
+        A stop before the post-calibration (pre-calibration screen, disk.low,
+        deadline, census) leaves the bracket session open, so the next plan
+        refuses. The cure the refusal names is the abort, then the advance;
+        the stopped window's harvest wrote no derived/terminal-pin.json, so
+        the advance reads the aborted session's terminal head from the ledger
+        and says so.
+        """
+        from joulewise.calibration_ledger import abort_bracket_session
+        self.reserve("alpha-1-calibration")
+        with self.assertRaises(b5_plan.WindowPlanError) as refused:
+            self.write()
+        self.assertIn("abort-session", str(refused.exception))
+        self.assertIn(b5_plan.PIN_ADVANCE_SCRIPT, str(refused.exception))
+        self.assertNotIn("--harvest-archive", str(refused.exception))
+        self.assert_nothing_written()
+        abort_bracket_session(self.ledger, session_id="alpha-1-calibration",
+                              reason="chain stopped before its post-calibration")
+        archive = self.root / "alpha-1-harvest"
+        (archive / "derived").mkdir(parents=True)  # the harvest of an unfinalized session: no terminal pin
+        plan = self.root / "previous-plan.json"
+        plan.write_text(json.dumps({"measurement_root": str(self.measurement),
+                                    "hazard_window": {"bracket_session_id": "alpha-1-calibration"}}))
+        main = __import__("scripts.advance_b5_ledger_pin", fromlist=["main"]).main
+        output = io.StringIO()
+        with redirect_stdout(output):
+            code = main(["--plan", str(plan), "--harvest-archive", str(archive), "--operator-identity", "test"])
+        self.assertEqual(0, code, output.getvalue())
+        record = json.loads(output.getvalue())
+        self.assertEqual(("ADVANCED", "ledger_harvest_archive_has_no_terminal_pin"),
+                         (record["status"], record["terminal_pin_source"]))
+        self.assertEqual([b5_plan.HEAD_PIN_RELATIVE], record["commit"]["changed_paths"])
+        self.write()  # the next window plans
+        # An archive root that does not exist is an operator error, never a silent fallback.
+        output = io.StringIO()
+        with redirect_stdout(output):
+            code = main(["--plan", str(plan), "--harvest-archive", str(self.root / "no-such-archive"),
+                         "--operator-identity", "test"])
+        self.assertEqual(2, code)
+        self.assertEqual("REFUSED", json.loads(output.getvalue())["status"])
+
 
 class HazardWindowValidationTests(unittest.TestCase):
     def setUp(self):

@@ -422,11 +422,30 @@ def _acceptance_replay_snapshot(args: argparse.Namespace) -> Any:
     )
 
 
+PIN_RELATION_PHYSICAL_AHEAD = "physical_ahead"
+PIN_RELATION_EQUAL = "equal"
+# The terminal boundary each desk order leaves (--expected-pin-relation):
+# block 2's R-6 stop checks before the pin advance, so the committed pin is
+# behind the session's terminal head (calibration_ledger_head_mismatch); block
+# 5 advances the pin between chain exit and harvest, so the committed pin is
+# the terminal head and the committed snapshot refuses nothing.
+BOUNDARY_SHAPES = {
+    PIN_RELATION_PHYSICAL_AHEAD: "calibration_ledger_head_mismatch",
+    PIN_RELATION_EQUAL: None,
+}
+
+
 def _ratified_g2_boundary_snapshot(
     args: argparse.Namespace,
     binding: Mapping[str, Any],
 ) -> tuple[Any, Mapping[str, Any]]:
-    """Authenticate the R-6 physical-ahead stop without advancing its pin."""
+    """Authenticate the terminal boundary of the expected desk order.
+
+    Default: the R-6 physical-ahead stop, checked without advancing its pin.
+    ``--expected-pin-relation equal`` (block 5): the pin was advanced to the
+    session's terminal head before the harvest.  Either way the candidate must
+    be the physical head of an exact ledger snapshot.
+    """
 
     record = _read_object(
         args.terminal_boundary_record, "post-bracket terminal boundary record"
@@ -441,15 +460,20 @@ def _ratified_g2_boundary_snapshot(
     if not isinstance(session_id, str) or not session_id:
         raise AssertionFailure("bracket binding session_id is absent or malformed")
     candidate = record.get("terminal_head_pin_candidate")
+    relation = getattr(args, "expected_pin_relation", None) or PIN_RELATION_PHYSICAL_AHEAD
+    refusal_code = BOUNDARY_SHAPES[relation]
+    committed_reasons = record.get("committed_pin_refusal_reasons")
     if (
         record.get("session_id") != session_id
         or record.get("session_state") != "finalized"
-        or record.get("pin_relation") != "physical_ahead"
-        or record.get("refusal_code") != "calibration_ledger_head_mismatch"
+        or record.get("pin_relation") != relation
+        or record.get("refusal_code") != refusal_code
+        or (refusal_code is None and committed_reasons not in (None, []))
         or not isinstance(candidate, Mapping)
     ):
+        shape = "mismatch" if relation == PIN_RELATION_PHYSICAL_AHEAD else "advanced-pin"
         raise AssertionFailure(
-            "ratified post-bracket boundary record is not the expected mismatch shape "
+            f"ratified post-bracket boundary record is not the expected {shape} shape "
             f"session_state={record.get('session_state')} "
             f"pin_relation={record.get('pin_relation')} "
             f"refusal_code={record.get('refusal_code')} candidate={candidate}"
@@ -538,6 +562,25 @@ def build_parser() -> argparse.ArgumentParser:
         "--repo-root",
         type=Path,
         help="measurement checkout for --full-window reference manifests (default <pack-root>/../../..)",
+    )
+    parser.add_argument(
+        "--expected-pin-relation",
+        choices=sorted(BOUNDARY_SHAPES),
+        default=PIN_RELATION_PHYSICAL_AHEAD,
+        help=(
+            "the terminal boundary F5-2/F5-3 require: physical_ahead (default; the "
+            "R-6 stop checked before the pin advance, refusal "
+            "calibration_ledger_head_mismatch) or equal (block 5: the pin advanced "
+            "to the session's terminal head before the harvest, no refusal)"
+        ),
+    )
+    parser.add_argument(
+        "--window-membership-binding",
+        type=Path,
+        help=(
+            "joulewise.whole_window_membership_binding.v1 the whole-window verdict "
+            "was written with; F5-4 resolves membership with it"
+        ),
     )
     parser.add_argument(
         "--null-bound-stage",
@@ -747,6 +790,7 @@ def _run_assertions(args: argparse.Namespace, reporter: Reporter | None = None) 
     cooldowns: dict[str, Mapping[str, Any]] = {}
     f5_membership_probe_ready = False
     full_window = bool(getattr(args, "full_window", False))
+    boundary_relation = getattr(args, "expected_pin_relation", None) or PIN_RELATION_PHYSICAL_AHEAD
 
     def check_nr14_layout() -> str:
         # Preserve the caller's lexical spelling just as the finalizer does at
@@ -1027,7 +1071,7 @@ def _run_assertions(args: argparse.Namespace, reporter: Reporter | None = None) 
                 f"status={status} reasons={list(reasons)}"
             )
         boundary = (
-            f" boundary=physical_ahead candidate_sequence={candidate['sequence']}"
+            f" boundary={boundary_relation} candidate_sequence={candidate['sequence']}"
             if candidate is not None
             else ""
         )
@@ -1071,7 +1115,7 @@ def _run_assertions(args: argparse.Namespace, reporter: Reporter | None = None) 
             )
         return (
             f"runs_root={identity['runs_root']} binding_digest={binding['binding_digest']} "
-            f"boundary=physical_ahead candidate_sequence={candidate['sequence']}"
+            f"boundary={boundary_relation} candidate_sequence={candidate['sequence']}"
         )
 
     if a2_passed or f5_membership_probe_ready:
@@ -1107,7 +1151,11 @@ def _run_assertions(args: argparse.Namespace, reporter: Reporter | None = None) 
             raise AssertionFailure("whole-window policy sha256 missing")
         from scripts.run_campaign import _whole_window_campaign_membership
 
-        membership = _whole_window_campaign_membership(runs_root, policy_sha)
+        membership = _whole_window_campaign_membership(
+            runs_root,
+            policy_sha,
+            membership_binding_path=getattr(args, "window_membership_binding", None),
+        )
         if membership.conditions:
             raise AssertionFailure(
                 f"whole-window membership refused: {list(membership.conditions)}"
