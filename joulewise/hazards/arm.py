@@ -6,7 +6,11 @@ Runs inside the launchd job after t0, in this fixed order:
    empty output, or the arm refuses before any action (kept by doctrine:
    never start [QUIET-MAC] work while an agent session is alive).
 2. **Instant reads**: battery, thermal (with ``pmset -g therm`` kept as a
-   diagnostic), disk, and the clock's frequency gate.
+   diagnostic), disk, and the clock's frequency gate.  When the config names
+   the acceptance's judged epochs (``expected_epochs``), ``kern.osversion`` and
+   ``hw.model`` are read too: an epoch no acceptance judges refuses here,
+   before the dwell, instead of at the pre-slot writer's epoch check after it.
+   A failed read is recorded and never refuses.
 3. **Network time OFF, run as an action**: ``sudo -n systemsetup
    -setusingnetworktime off``.  It removes the hazard, so it runs whatever the
    current state is; its output is recorded only, with no wording check.
@@ -51,6 +55,10 @@ ARM_SCHEMA = "joulewise.hazard_arm.v1"
 AGENT_CENSUS_ARGV = ("/usr/bin/pgrep", "-lf", "[c]odex|[c]laude|[t]3")
 NETWORK_TIME_OFF_ARGV = ("/usr/bin/sudo", "-n", "/usr/sbin/systemsetup",
                          "-setusingnetworktime", "off")
+# The writer's own identity reads (validate_powermetrics_fiducial._sysctl_identity).
+OS_BUILD_ARGV = ("/usr/sbin/sysctl", "-n", "kern.osversion")
+HARDWARE_MODEL_ARGV = ("/usr/sbin/sysctl", "-n", "hw.model")
+IDENTITY_FIELDS = ("os_build", "hardware_model")
 # Recorded with the instant reads, never judged: the power mode is not one of
 # the six hazards (doctrine), but a changed mode changes performance, so the
 # raw settings are kept beside the numbers.
@@ -84,6 +92,9 @@ class ArmConfig:
     privilege_prefix: Sequence[str] = instrument.PRIVILEGE_PREFIX
     network_time_off_argv: Sequence[str] = NETWORK_TIME_OFF_ARGV
     dwell_tick_s: float = 1.0
+    # The acceptance's judged identity epochs (calibration_epoch_continuation.
+    # acceptance_judged_epochs); None skips the identity read entirely.
+    expected_epochs: Sequence[Mapping[str, Any]] | None = None
 
 
 @dataclasses.dataclass
@@ -197,6 +208,12 @@ def run(config: ArmConfig, seams: Seams | None = None) -> ArmResult:
     refused = _refusals(verdicts)
     if refused:
         return finish(NULL, "instant", refused)
+    if config.expected_epochs is not None:
+        identity = identity_read(ctx, config.expected_epochs)
+        record["identity"] = identity
+        recorder.step("identity", measured=identity["measured"], judged=identity["judged"])
+        if identity["judged"] is False:
+            return finish(NULL, "identity", [identity["detail"]])
 
     # 3. Network time OFF: an action whose output is recorded only.
     off = ctx.run(tuple(config.network_time_off_argv), NETWORK_TIME_OFF_TIMEOUT_S)
@@ -282,6 +299,39 @@ def agent_census(ctx: Context) -> dict[str, Any]:
             "stdout": stdout, "stderr": completed.stderr.decode("utf-8", errors="replace"),
             "timed_out": completed.timed_out, "error": completed.error, "clean": clean,
             "detail": detail, "stamp": ctx.stamp().to_json()}
+
+
+def identity_read(ctx: Context, expected_epochs: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    """Read ``kern.osversion`` and ``hw.model``; judge them only when both reads succeed.
+
+    ``judged`` is True when ``{os_build, hardware_model}`` is one of the
+    expected epochs (projected to those two fields), False when it is not, and
+    None when a read failed: an unread identity is recorded and never refuses.
+    """
+
+    measured: dict[str, str | None] = {}
+    reads: list[dict[str, Any]] = []
+    for field, argv in zip(IDENTITY_FIELDS, (OS_BUILD_ARGV, HARDWARE_MODEL_ARGV)):
+        completed = ctx.run(argv, CENSUS_TIMEOUT_S)
+        reads.append(_completed_json(completed))
+        value = completed.stdout.decode("utf-8", errors="replace").strip()
+        ok = (completed.error is None and not completed.timed_out
+              and completed.returncode == 0 and bool(value))
+        measured[field] = value if ok else None
+    expected = [{field: epoch.get(field) for field in IDENTITY_FIELDS}
+                for epoch in expected_epochs if isinstance(epoch, Mapping)]
+    judged: bool | None = None
+    detail = "identity read failed; recorded only"
+    if not expected:
+        detail = "no judged epoch to compare; recorded only"
+    elif all(measured[field] is not None for field in IDENTITY_FIELDS):
+        judged = measured in expected
+        detail = ("identity epoch judged by the acceptance" if judged else
+                  f"identity os_build={measured['os_build']} hardware_model="
+                  f"{measured['hardware_model']} is not an epoch the acceptance judges "
+                  f"({expected})")
+    return {"measured": measured, "expected": expected, "judged": judged, "detail": detail,
+            "reads": reads}
 
 
 def _module(name: str):

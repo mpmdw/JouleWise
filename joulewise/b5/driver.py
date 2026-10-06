@@ -415,12 +415,39 @@ def _production_arm(context: ArmContext) -> dict[str, Any]:
     """``joulewise.hazards.arm.run`` (lane L1), read back into the driver's decision shape."""
 
     from joulewise.hazards import arm as hazard_arm
+    # ARM-OS (gate-prune core lane VPF): the epochs the pre-slot writer's kept
+    # epoch check judges against, so an OS or machine no acceptance judges
+    # refuses at arm instead of after the dwell.  The writer runs from the
+    # measurement checkout with its default acceptance, ledger and head pin
+    # (the chain passes none of them), so the same files are read here.  Any
+    # failure to load them passes None, and the arm then reads no identity.
+    expected_epochs: list[dict[str, Any]] | None = None
+    try:
+        from joulewise.calibration_bracketing import (
+            DEFAULT_ACCEPTANCE_BOUND_PATH, load_calibration_acceptance_bound)
+        from joulewise.calibration_epoch_continuation import acceptance_judged_epochs
+        from joulewise.calibration_ledger import (
+            DEFAULT_HEAD_PIN_PATH, DEFAULT_LEDGER_PATH, load_calibration_ledger_snapshot)
+        code_root = Path(__file__).resolve().parents[2]
+        measurement = getattr(context.plan, "measurement_root", None)
+        root = Path(measurement) if measurement else code_root
+        artifact = load_calibration_acceptance_bound(
+            root / DEFAULT_ACCEPTANCE_BOUND_PATH.relative_to(code_root))
+        if artifact is not None:
+            snapshot = load_calibration_ledger_snapshot(
+                root / DEFAULT_LEDGER_PATH.relative_to(code_root),
+                root / DEFAULT_HEAD_PIN_PATH.relative_to(code_root), require_committed_pin=False,
+                verify_custody=False, mode="read_replay", repo_root=root)
+            expected_epochs = [dict(epoch) for epoch in acceptance_judged_epochs(artifact, snapshot)]
+    except Exception:  # noqa: BLE001 - an unloadable epoch list adds no refusal
+        expected_epochs = None
     config = hazard_arm.ArmConfig(
         custody_dir=context.record_root.parent, thresholds=_arm_thresholds(context),
         disk_targets=[dict(item) for item in context.disk_targets],
         tree_roots=tuple(context.measurement_tree_pids),
         record_only=[{"name": "flags.arm", "argv": list(context.record_only_argv),
-                      "timeout_s": COLLECTOR_TIMEOUT_S}] if context.record_only_argv else [])
+                      "timeout_s": COLLECTOR_TIMEOUT_S}] if context.record_only_argv else [],
+        expected_epochs=expected_epochs)
     result = hazard_arm.run(config)
     document = result.document if isinstance(result.document, Mapping) else {}
     verdicts: dict[str, str] = {}
