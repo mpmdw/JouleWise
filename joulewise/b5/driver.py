@@ -418,27 +418,25 @@ def _production_arm(context: ArmContext) -> dict[str, Any]:
     # ARM-OS (gate-prune core lane VPF): the epochs the pre-slot writer's kept
     # epoch check judges against, so an OS or machine no acceptance judges
     # refuses at arm instead of after the dwell.  The writer runs from the
-    # measurement checkout with its default acceptance, ledger and head pin
-    # (the chain passes none of them), so the same files are read here.  Any
-    # failure to load them passes None, and the arm then reads no identity.
+    # measurement checkout with its default acceptance (the chain passes
+    # none), so that file is read here.  Continuations are authenticated
+    # WITHOUT the ledger session cross-check (snapshot None): that can only add
+    # epochs, never remove one, so the arm never refuses a window the writer
+    # would accept (for example when a stale head pin makes the cross-check
+    # fail; review F2).  Any failure to load passes None, and the arm then
+    # reads no identity.
     expected_epochs: list[dict[str, Any]] | None = None
     try:
         from joulewise.calibration_bracketing import (
             DEFAULT_ACCEPTANCE_BOUND_PATH, load_calibration_acceptance_bound)
         from joulewise.calibration_epoch_continuation import acceptance_judged_epochs
-        from joulewise.calibration_ledger import (
-            DEFAULT_HEAD_PIN_PATH, DEFAULT_LEDGER_PATH, load_calibration_ledger_snapshot)
         code_root = Path(__file__).resolve().parents[2]
         measurement = getattr(context.plan, "measurement_root", None)
         root = Path(measurement) if measurement else code_root
         artifact = load_calibration_acceptance_bound(
             root / DEFAULT_ACCEPTANCE_BOUND_PATH.relative_to(code_root))
         if artifact is not None:
-            snapshot = load_calibration_ledger_snapshot(
-                root / DEFAULT_LEDGER_PATH.relative_to(code_root),
-                root / DEFAULT_HEAD_PIN_PATH.relative_to(code_root), require_committed_pin=False,
-                verify_custody=False, mode="read_replay", repo_root=root)
-            expected_epochs = [dict(epoch) for epoch in acceptance_judged_epochs(artifact, snapshot)]
+            expected_epochs = [dict(epoch) for epoch in acceptance_judged_epochs(artifact, None)]
     except Exception:  # noqa: BLE001 - an unloadable epoch list adds no refusal
         expected_epochs = None
     config = hazard_arm.ArmConfig(

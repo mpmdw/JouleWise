@@ -275,6 +275,34 @@ class StalePinAppendTests(unittest.TestCase):
         self.assertEqual(caught.exception.code, RefusalCode.RESERVATION_HEAD_MISMATCH)
         self.assertEqual(record, {})
 
+    def test_past_stale_pin_shape_keeps_its_integrity_terms(self) -> None:
+        import dataclasses
+
+        make_pin_stale(self.fixture)
+        record: dict = {}
+        self.append("session-window", pin_relation_record=record)
+        self.assertEqual(record["relation"], "physical_ahead")
+        snapshot = ledger.load_calibration_ledger_snapshot(
+            self.fixture.ledger, self.fixture.pin, require_committed_pin=False,
+            verify_custody=False, repo_root=self.fixture.repo)
+        self.assertFalse(snapshot.is_governed_open_bracket_extension)
+        self.assertTrue(snapshot.is_open_bracket_extension_past_stale_pin)
+        # Any other ledger reason (malformed, broken chain, rollback, custody)
+        # still fails the shape.
+        for reason in ("calibration_ledger_malformed", "calibration_ledger_rollback"):
+            with self.subTest(reason):
+                tainted = dataclasses.replace(
+                    snapshot, refusal_reasons=tuple(snapshot.refusal_reasons) + (reason,))
+                self.assertFalse(tainted.is_open_bracket_extension_past_stale_pin)
+        # A pin the chain does not contain fails it.
+        divergent = dataclasses.replace(snapshot, committed_head_digest="e" * 64)
+        self.assertFalse(divergent.is_open_bracket_extension_past_stale_pin)
+        # A second open session fails it.
+        open_session = next(item for item in snapshot.bracket_sessions if item.state == "open")
+        two_open = dataclasses.replace(snapshot, bracket_sessions=tuple(snapshot.bracket_sessions) + (
+            dataclasses.replace(open_session, session_id="session-second-open"),))
+        self.assertFalse(two_open.is_open_bracket_extension_past_stale_pin)
+
     def test_stale_pin_without_a_relation_record_refuses_as_before(self) -> None:
         make_pin_stale(self.fixture)
         with self.assertRaises(ledger.CalibrationLedgerError) as caught:
