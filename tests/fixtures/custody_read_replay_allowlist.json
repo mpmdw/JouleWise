@@ -219,5 +219,12 @@
     "ordinal": 1,
     "line": 297,
     "reason": "load_calibration_ledger_snapshot replays the archived ledger at the issued acceptance cutoff after a separate seed authentication; produces diagnostic bracket assessment without changing custody."
+  },
+  {
+    "file": "joulewise/b5/plan.py",
+    "function": "ledger_head_status",
+    "ordinal": 1,
+    "line": 424,
+    "reason": "Desk pre-check of the measurement ledger head against its committed pin (write_window_plan refusal; advance_ledger_pin before/after status); verify_custody=False and the result only names blocking reasons, while the pin advance itself runs the guarded advance_calibration_head_pin path."
   }
 ]
