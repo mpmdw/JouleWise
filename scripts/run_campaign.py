@@ -3785,7 +3785,9 @@ BATTERY_TEMPERATURE_TIMEOUT_S = 5.0
 BATTERY_TEMPERATURE_SCHEMA = "joulewise.battery_thermistor_reading.v1"
 BATTERY_TEMPERATURE_MANIFEST_KEY = "battery_temperature_readings"
 _BATTERY_TEMPERATURE_PATTERN = re.compile(rb'^\s*"Temperature"\s*=\s*(-?\d+)\s*$', re.MULTILINE)
-_PROCESS_TABLE_COMMAND = ("/bin/ps", "-A", "-o", "pid=,ppid=,pgid=,uid=,args=")
+# ``lstart`` (five words under LC_ALL=C) is the start time: with the argv it is the
+# process identity, so a reused pid running the same program is never signalled.
+_PROCESS_TABLE_COMMAND = ("/bin/ps", "-A", "-o", "pid=,ppid=,pgid=,uid=,stat=,lstart=,args=")
 
 
 class _HazardInterrupted(BaseException):
@@ -3794,7 +3796,11 @@ class _HazardInterrupted(BaseException):
 
 # The one HAZARD stage running in this process: its member child (for SIGTERM
 # forwarding) and whether the first SIGTERM was already turned into an unwind.
-_HAZARD_SIGNAL_STATE: dict[str, Any] = {"child": None, "run_id": None, "raised": False}
+# ``defer``: a member child is being spawned or finished; a SIGTERM then only
+# sets ``pending`` and the runner raises it once the child is under the watch
+# (or its cleanup is done).  ``teardown``: the interrupted member's teardown proof.
+_HAZARD_SIGNAL_STATE: dict[str, Any] = {"child": None, "run_id": None, "raised": False,
+                                        "defer": False, "pending": False, "teardown": None}
 
 
 def _hazard_sigterm_handler(signum: int, frame: Any) -> None:  # noqa: ARG001
@@ -3807,6 +3813,9 @@ def _hazard_sigterm_handler(signum: int, frame: Any) -> None:  # noqa: ARG001
     that unwind runs, is forwarded to the child directly.
     """
 
+    if _HAZARD_SIGNAL_STATE.get("defer") and not _HAZARD_SIGNAL_STATE.get("raised"):
+        _HAZARD_SIGNAL_STATE["pending"] = True
+        return
     if not _HAZARD_SIGNAL_STATE.get("raised"):
         _HAZARD_SIGNAL_STATE["raised"] = True
         raise _HazardInterrupted(signum)
@@ -3821,7 +3830,8 @@ def _hazard_sigterm_handler(signum: int, frame: Any) -> None:  # noqa: ARG001
 def _hazard_install_sigterm_handler() -> Any:
     """Install the HAZARD SIGTERM handler (main thread only); return the previous one."""
 
-    _HAZARD_SIGNAL_STATE.update({"child": None, "run_id": None, "raised": False})
+    _HAZARD_SIGNAL_STATE.update({"child": None, "run_id": None, "raised": False,
+                                 "defer": False, "pending": False, "teardown": None})
     if threading.current_thread() is not threading.main_thread():
         return None
     try:
@@ -3845,7 +3855,7 @@ def _hazard_process_table() -> list[dict[str, Any]] | None:
     try:
         completed = subprocess.run(
             list(_PROCESS_TABLE_COMMAND), capture_output=True, text=True,
-            timeout=10, check=False,
+            timeout=10, check=False, env={**os.environ, "LC_ALL": "C"},
         )
     except (OSError, subprocess.SubprocessError):
         return None
@@ -3853,15 +3863,16 @@ def _hazard_process_table() -> list[dict[str, Any]] | None:
         return None
     rows: list[dict[str, Any]] = []
     for line in completed.stdout.splitlines():
-        parts = line.split(None, 4)
-        if len(parts) < 4:
+        parts = line.split(None, 10)
+        if len(parts) < 10:
             continue
         try:
             pid, ppid, pgid, uid = (int(part) for part in parts[:4])
         except ValueError:
             continue
-        rows.append({"pid": pid, "ppid": ppid, "pgid": pgid, "uid": uid,
-                     "args": parts[4] if len(parts) > 4 else ""})
+        rows.append({"pid": pid, "ppid": ppid, "pgid": pgid, "uid": uid, "stat": parts[4],
+                     "started": " ".join(parts[5:10]),
+                     "args": parts[10] if len(parts) > 10 else ""})
     return rows
 
 
@@ -3884,6 +3895,17 @@ def _hazard_descendants(root_pid: int, table: Sequence[Mapping[str, Any]]) -> li
 def _hazard_program(args: str) -> str:
     first = args.split(None, 1)[0] if args.strip() else ""
     return os.path.basename(first)
+
+
+def _hazard_same_process(live: Mapping[str, Any] | None, tracked: Mapping[str, Any]) -> bool:
+    """Same pid, argv and start time: the tracked process itself, not a reused pid."""
+
+    return (
+        live is not None
+        and tracked.get("started") is not None
+        and live.get("started") == tracked.get("started")
+        and live.get("args") == tracked.get("args")
+    )
 
 
 def _hazard_is_sampler_wrapper(row: Mapping[str, Any]) -> bool:
@@ -3914,6 +3936,12 @@ class _HazardMemberWatch:
         self.tracked: dict[int, dict[str, Any]] = {}
         self.signals: list[dict[str, Any]] = []
         self.census_failures = 0
+        # Whether the first snapshot found the child still running.  If it had
+        # already exited, its descendants may have been reparented out of
+        # reach: the census then cannot prove the tree gone.
+        self.ownership_established: bool | None = None
+        self.term_sent_at: float | None = None
+        self.teardown_escalated = False
         self._lock = threading.Lock()
         self._thread = threading.Thread(target=self._run, name="joulewise-member-cap", daemon=True)
 
@@ -3925,23 +3953,28 @@ class _HazardMemberWatch:
         """The child, its current descendants, and every earlier-tracked process still running.
 
         A tracked process counts only while its pid still runs the same argv
-        (a reused pid is never signalled).  Tracked processes matter once the
-        child has exited: its descendants are then reparented and no longer
-        reachable through the child's pid.
+        with the same start time (a reused pid is never signalled).  Tracked
+        processes matter once the child has exited: its descendants are then
+        reparented and no longer reachable through the child's pid.
         """
 
         table = _hazard_process_table()
         if table is None:
             self.census_failures += 1
             rows = [{"pid": int(self.process.pid), "ppid": os.getpid(), "pgid": None,
-                     "uid": os.getuid(), "args": ""}]
+                     "uid": os.getuid(), "stat": None, "started": None, "args": ""}]
         else:
             own = [dict(row) for row in table if row["pid"] == self.process.pid]
+            if self.ownership_established is None:
+                self.ownership_established = bool(
+                    own and self.process.returncode is None
+                    and not str(own[0].get("stat") or "").startswith("Z")
+                )
             rows = own + _hazard_descendants(int(self.process.pid), table)
             live = {row["pid"]: row for row in table}
             current = {int(row["pid"]) for row in rows}
             rows += [dict(row) for pid, row in self.tracked.items()
-                     if pid not in current and pid in live and live[pid]["args"] == row["args"]
+                     if pid not in current and _hazard_same_process(live.get(pid), row)
                      and pid != os.getpid()]
         for row in rows:
             self.tracked.setdefault(int(row["pid"]), row)
@@ -3966,7 +3999,10 @@ class _HazardMemberWatch:
 
     def _terminate(self, exited: Any) -> None:
         with self._lock:
-            self._send(self._snapshot(), signal.SIGTERM)
+            rows = self._snapshot()
+            if self.term_sent_at is None:
+                self.term_sent_at = time.monotonic()
+            self._send(rows, signal.SIGTERM)
         if exited(self.grace_s):
             return
         with self._lock:
@@ -4008,8 +4044,12 @@ class _HazardMemberWatch:
         """Prove no tracked process of this member survives; TERM/KILL a survivor once more.
 
         A tracked pid counts as surviving only while it still runs the same argv
-        (pid reuse is not a survivor).  A root-owned sampler orphan cannot be
-        signalled from here (no privilege); it is reported, never hidden.
+        with the same start time (pid reuse is not a survivor).  A descendant
+        still running when the child exited keeps the rest of its grace from
+        the first TERM before it is killed.  A root-owned sampler orphan cannot
+        be signalled from here (no privilege); it is reported, never hidden.
+        The census is complete only when every ``ps`` read succeeded and the
+        first snapshot found the child still running.
         """
 
         def survivors() -> list[dict[str, Any]] | None:
@@ -4018,20 +4058,33 @@ class _HazardMemberWatch:
                 return None
             live = {row["pid"]: row for row in table}
             return [dict(row) for pid, row in self.tracked.items()
-                    if pid in live and live[pid]["args"] == row["args"]
+                    if _hazard_same_process(live.get(pid), row)
                     and pid != os.getpid()]
 
         remaining = survivors()
+        if remaining and self.term_sent_at is not None:
+            grace_end = self.term_sent_at + self.grace_s
+            while remaining and time.monotonic() < grace_end:
+                time.sleep(min(0.5, max(0.0, grace_end - time.monotonic())))
+                remaining = survivors()
         if remaining:
             self._send([row for row in remaining if _hazard_is_sampler_wrapper(row)], signal.SIGTERM)
-            self._send([row for row in remaining if not _hazard_is_sampler_wrapper(row)],
-                       signal.SIGKILL)
+            killed = [row for row in remaining if not _hazard_is_sampler_wrapper(row)]
+            self._send(killed, signal.SIGKILL)
+            if killed:
+                self.teardown_escalated = True
+                self.kill_escalated = True
             deadline = time.monotonic() + HAZARD_TEARDOWN_PROOF_WAIT_S
             while remaining and time.monotonic() < deadline:
                 time.sleep(0.1)
                 remaining = survivors()
         return {
-            "census_completed": remaining is not None and self.census_failures == 0,
+            "census_completed": (
+                remaining is not None and self.census_failures == 0
+                and self.ownership_established is True
+            ),
+            "ownership_established": self.ownership_established,
+            "teardown_escalated": self.teardown_escalated,
             "tracked": len(self.tracked),
             "sampler_tracked": sum(1 for row in self.tracked.values()
                                    if "powermetrics" in str(row.get("args", ""))),
@@ -4113,24 +4166,83 @@ def _hazard_child_refusal(raw: bytes) -> str | None:
     return re.sub(r"\d", "#", lines[-1])[:HAZARD_CHILD_REFUSAL_MAX_CHARS]
 
 
-def _hazard_copy_member_stderr(path: Path | None, run_id: str) -> bytes:
-    """Copy the member's stderr file into this stage's stderr (the stage log)."""
+def _hazard_copy_member_stderr(
+    path: Path | None, run_id: str
+) -> tuple[bytes, dict[str, str] | None]:
+    """Copy the member's stderr file into this stage's stderr (the stage log).
+
+    Returns the bytes read and, when the copy failed, what failed.  The child's
+    stderr can carry ``JOULEWISE_UNWRITTEN_FLAG`` lines (a flag whose file write
+    failed), which the harvest recovers from the stage log only; a failed copy
+    is therefore flagged by the caller, never dropped.
+    """
 
     if path is None:
-        return b""
+        return b"", None
     try:
         raw = path.read_bytes()
     except OSError as exc:
         print(f"warning: member stderr {path} unreadable: {type(exc).__name__}: {exc}",
               file=sys.stderr)
-        return b""
+        return b"", {"phase": "read", "error_type": type(exc).__name__}
     if raw:
         text = raw.decode("utf-8", "replace")
-        sys.stderr.write(f"--- child stderr {run_id} ({path.name}) ---\n")
-        sys.stderr.write(text if text.endswith("\n") else text + "\n")
-        sys.stderr.write(f"--- end child stderr {run_id} ---\n")
-        sys.stderr.flush()
-    return raw
+        try:
+            sys.stderr.write(f"--- child stderr {run_id} ({path.name}) ---\n")
+            sys.stderr.write(text if text.endswith("\n") else text + "\n")
+            sys.stderr.write(f"--- end child stderr {run_id} ---\n")
+            sys.stderr.flush()
+        except (OSError, ValueError) as exc:
+            return raw, {"phase": "write", "error_type": type(exc).__name__}
+    return raw, None
+
+
+def _hazard_flag_member_stderr_uncopied(
+    hazard: Any, bundle_ids: Sequence[str], path: Path | None, failure: Mapping[str, str]
+) -> None:
+    """The member's stderr did not reach the stage log: any unwritten flag in it is unseen."""
+
+    from joulewise.flags import core as flags_core
+
+    for bundle_id in bundle_ids or [None]:
+        flags_core.emit(
+            hazard, "member.stderr_uncopied", level="member", run_id=bundle_id,
+            observed={**dict(failure), "file": path.name if path is not None else None},
+            detail="member stderr not copied into the stage log; "
+                   "an unwritten flag in it would be unseen by the harvest",
+        )
+
+
+def _hazard_flag_interrupted_teardown(
+    hazard: Any, bundle_ids: Sequence[str], teardown: Mapping[str, Any] | None
+) -> None:
+    """SIGTERM path: a member tree not proven gone is flagged, as on the timeout path."""
+
+    from joulewise.flags import core as flags_core
+
+    teardown = teardown or {}
+    survivors = list(teardown.get("survivors") or [])
+    if not survivors and teardown.get("census_completed") is True:
+        return
+    for bundle_id in bundle_ids or [None]:
+        flags_core.emit(
+            hazard, "teardown.survivors", level="member", run_id=bundle_id,
+            observed={"phase": "sigterm",
+                      "census_completed": teardown.get("census_completed"),
+                      "ownership_established": teardown.get("ownership_established"),
+                      "survivors": survivors[:16]},
+        )
+
+
+def _hazard_raise_pending_interrupt() -> None:
+    """End a deferral; a SIGTERM that arrived during it unwinds now."""
+
+    state = _HAZARD_SIGNAL_STATE
+    state["defer"] = False
+    if state.get("pending") and not state.get("raised"):
+        state["pending"] = False
+        state["raised"] = True
+        raise _HazardInterrupted(signal.SIGTERM)
 
 
 @dataclass
@@ -4169,6 +4281,8 @@ def _hazard_run_authenticated_campaign_child(
     """
 
     run = _HazardMemberRun(stderr_path=_hazard_member_stderr_path(hazard, run_id))
+    bundle_ids = [Path(path).name for path in bundle_paths]
+    state = _HAZARD_SIGNAL_STATE
     stderr_handle = None
     if run.stderr_path is not None:
         try:
@@ -4178,32 +4292,55 @@ def _hazard_run_authenticated_campaign_child(
             print(f"warning: member stderr file unavailable ({exc}); child stderr is inherited",
                   file=sys.stderr)
             run.stderr_path = None
+    # A SIGTERM between the spawn and the watch only sets ``pending``; it is
+    # raised once the child is under the watch, which then terminates it.
+    state["pending"] = False
+    state["defer"] = True
     try:
-        process = subprocess.Popen(list(command), env=env, stderr=stderr_handle)
-    finally:
-        if stderr_handle is not None:
-            stderr_handle.close()
-    _HAZARD_SIGNAL_STATE["child"] = process
-    _HAZARD_SIGNAL_STATE["run_id"] = run_id
-    watch = _HazardMemberWatch(
-        process, cap_s=HAZARD_MEMBER_CAP_S, grace_s=HAZARD_MEMBER_TERM_GRACE_S
-    ).start()
+        try:
+            process = subprocess.Popen(list(command), env=env, stderr=stderr_handle)
+        finally:
+            if stderr_handle is not None:
+                stderr_handle.close()
+        state["child"] = process
+        state["run_id"] = run_id
+        watch = _HazardMemberWatch(
+            process, cap_s=HAZARD_MEMBER_CAP_S, grace_s=HAZARD_MEMBER_TERM_GRACE_S
+        ).start()
+    except BaseException:
+        state["child"] = None
+        _hazard_raise_pending_interrupt()
+        raise
     run.watch = watch
     try:
         try:
-            returncode = process.wait()
-        except _HazardInterrupted:
-            watch.interrupt()
-            raise
-        else:
-            _HAZARD_SIGNAL_STATE["run_id"] = None
+            try:
+                _hazard_raise_pending_interrupt()
+                returncode = process.wait()
+                # The child is done: a SIGTERM now waits until its cleanup is recorded.
+                state["defer"] = True
+            except _HazardInterrupted:
+                watch.interrupt()
+                raise
+            finally:
+                watch.finish()
+                state["child"] = None
+                if watch.timed_out or watch.interrupted:
+                    run.teardown = watch.teardown_proof()
+                if watch.interrupted:
+                    state["teardown"] = run.teardown
+                    _hazard_flag_interrupted_teardown(hazard, bundle_ids, run.teardown)
         finally:
-            watch.finish()
-            _HAZARD_SIGNAL_STATE["child"] = None
-            if watch.timed_out or watch.interrupted:
-                run.teardown = watch.teardown_proof()
-    finally:
-        run.stderr_raw = _hazard_copy_member_stderr(run.stderr_path, run_id)
+            run.stderr_raw, copy_failure = _hazard_copy_member_stderr(run.stderr_path, run_id)
+            if copy_failure is not None:
+                _hazard_flag_member_stderr_uncopied(
+                    hazard, bundle_ids, run.stderr_path, copy_failure
+                )
+    except BaseException:
+        state["defer"] = False
+        raise
+    _hazard_raise_pending_interrupt()
+    state["run_id"] = None
     authenticate_campaign_child_launch_lineage(
         outer_authentication,
         bundle_paths,
@@ -4290,6 +4427,35 @@ def _hazard_drain_requested(hazard: Any) -> Path | None:
     paths = _hazard_member_timeout_paths(hazard)
     if paths is not None and paths[1].exists():
         return paths[1]
+    if paths is not None:
+        # A stage that died after persisting the count but before writing the
+        # marker: the persisted count still decides, and the marker is written now.
+        try:
+            persisted = json.loads(paths[0].read_bytes()).get("consecutive")
+        except (OSError, ValueError, AttributeError):
+            persisted = None
+        if (isinstance(persisted, int) and not isinstance(persisted, bool)
+                and persisted >= HAZARD_MEMBER_TIMEOUT_DRAIN_AFTER):
+            try:
+                descriptor = os.open(paths[1], os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+            except FileExistsError:
+                descriptor = None
+            except OSError as exc:
+                print(f"warning: member timeout drain marker unwritten: {exc}", file=sys.stderr)
+                descriptor = None
+            if descriptor is not None:
+                with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+                    handle.write(json.dumps({
+                        "schema_version": HAZARD_MEMBER_TIMEOUT_SCHEMA,
+                        "reason": "consecutive_member_timeouts",
+                        "consecutive": persisted,
+                        "trigger_bundle_ids": [],
+                        "recovered_from_state": True,
+                        "created_at": utc_timestamp(),
+                    }, sort_keys=True) + "\n")
+                    handle.flush()
+                    os.fsync(handle.fileno())
+            return paths[1]
     if _HAZARD_TIMEOUT_MEMORY["consecutive"] >= HAZARD_MEMBER_TIMEOUT_DRAIN_AFTER:
         return paths[1] if paths is not None else Path(HAZARD_MEMBER_TIMEOUT_DRAIN)
     return None
@@ -4461,6 +4627,7 @@ def _hazard_interrupted_row(
         "stop_reason": "sigterm",
         "exit_code": HAZARD_INTERRUPTED_RC,
         "interrupted_run_id": run_id,
+        "teardown": _HAZARD_SIGNAL_STATE.get("teardown"),
         "campaign_provenance_manifest": (
             str(campaign_provenance_path) if campaign_provenance_path is not None else None
         ),

@@ -554,5 +554,299 @@ class BatteryThermistorTests(_P2Stage):
             self.assertNotIn("battery_temperature_readings", manifest)
 
 
+# --- Independent review (Sol 6.1) findings F1-F8 ---------------------------------
+
+class _FakeChild:
+    """A Popen stand-in for the watch: a pid that is never a real process here."""
+
+    def __init__(self, pid: int = 990001, returncode: int | None = None) -> None:
+        self.pid = pid
+        self.returncode = returncode
+
+    def wait(self, timeout: float | None = None) -> int:
+        raise subprocess.TimeoutExpired("fake", timeout or 0)
+
+
+def _row(pid: int, ppid: int, args: str, *, started: str = "Tue Oct  6 10:00:00 2026",
+         stat: str = "S", uid: int = 501) -> dict:
+    return {"pid": pid, "ppid": ppid, "pgid": 1, "uid": uid, "stat": stat,
+            "started": started, "args": args}
+
+
+class _Kills:
+    def __init__(self) -> None:
+        self.sent: list[tuple[int, int]] = []
+
+    def __call__(self, pid: int, signum: int) -> None:
+        self.sent.append((pid, signum))
+
+    def to(self, pid: int) -> list[int]:
+        return [signum for target, signum in self.sent if target == pid]
+
+
+class ReviewTeardownTests(unittest.TestCase):
+    """F3, F4, F7, F8: the watch's process identity, ownership, wrapper rule and grace."""
+
+    def watch(self, child: _FakeChild, grace: float = 1.0):
+        return run_campaign._HazardMemberWatch(child, cap_s=60, grace_s=grace)
+
+    def test_f7_sampler_wrapper_gets_term_only_and_descendants_get_kill(self) -> None:
+        child = _FakeChild()
+        table = [_row(child.pid, os.getpid(), "python3 member.py"),
+                 _row(990002, child.pid, "sudo -n /usr/bin/powermetrics -i 100"),
+                 _row(990003, 990002, "/usr/bin/powermetrics -i 100", uid=0),
+                 _row(990004, child.pid, "python3 helper.py")]
+        kills = _Kills()
+        watch = self.watch(child)
+        with patch.object(run_campaign, "_hazard_process_table", return_value=table), \
+                patch.object(run_campaign.os, "kill", side_effect=kills):
+            watch._terminate(lambda timeout: False)
+            self.assertEqual(kills.to(990002), [signal.SIGTERM, signal.SIGTERM])
+            self.assertEqual(kills.to(990004), [signal.SIGTERM, signal.SIGKILL])
+            self.assertEqual(kills.to(child.pid), [signal.SIGTERM, signal.SIGKILL])
+            # The teardown proof keeps the rule for a surviving wrapper.
+            kills.sent.clear()
+            proof = watch.teardown_proof()
+        self.assertNotIn(signal.SIGKILL, kills.to(990002))
+        self.assertIn(signal.SIGTERM, kills.to(990002))
+        self.assertTrue(any(s["sampler"] for s in proof["survivors"]))
+
+    def test_f4_a_reused_pid_with_the_same_argv_is_not_signalled(self) -> None:
+        child = _FakeChild()
+        watch = self.watch(child)
+        watch.tracked[990005] = _row(990005, 1, "python3 sampler.py", started="Tue Oct  6 10:00:00 2026")
+        table = [_row(child.pid, os.getpid(), "python3 member.py"),
+                 _row(990005, 1, "python3 sampler.py", started="Tue Oct  6 10:31:07 2026")]
+        kills = _Kills()
+        with patch.object(run_campaign, "_hazard_process_table", return_value=table), \
+                patch.object(run_campaign.os, "kill", side_effect=kills):
+            pids = {row["pid"] for row in watch._snapshot()}
+            proof = watch.teardown_proof()
+        self.assertNotIn(990005, pids)
+        self.assertNotIn(990005, {row["pid"] for row in proof["survivors"]})
+        self.assertEqual(kills.to(990005), [])
+        # The same process (same start time) is still tracked and counted.
+        table[1] = _row(990005, 1, "python3 sampler.py", started="Tue Oct  6 10:00:00 2026")
+        with patch.object(run_campaign, "_hazard_process_table", return_value=table):
+            self.assertIn(990005, {row["pid"] for row in watch._snapshot()})
+
+    def test_f3_a_child_gone_before_the_first_snapshot_leaves_the_census_unproven(self) -> None:
+        child = _FakeChild()
+        kills = _Kills()
+        watch = self.watch(child)
+        table = [_row(990006, 1, "/usr/bin/powermetrics -i 100", uid=0)]  # reparented orphan
+        with patch.object(run_campaign, "_hazard_process_table", return_value=table), \
+                patch.object(run_campaign.os, "kill", side_effect=kills):
+            watch._terminate(lambda timeout: True)
+            proof = watch.teardown_proof()
+        self.assertIs(proof["ownership_established"], False)
+        self.assertIs(proof["census_completed"], False)
+        # A zombie child is gone too: its descendants may already be reparented.
+        zombie = _FakeChild(990007)
+        watch = self.watch(zombie)
+        with patch.object(run_campaign, "_hazard_process_table",
+                          return_value=[_row(990007, os.getpid(), "python3 m.py", stat="Z")]), \
+                patch.object(run_campaign.os, "kill", side_effect=kills):
+            watch._terminate(lambda timeout: True)
+            self.assertIs(watch.teardown_proof()["census_completed"], False)
+        # A live child: ownership established, census complete.
+        live = _FakeChild(990008)
+        watch = self.watch(live)
+        with patch.object(run_campaign, "_hazard_process_table",
+                          side_effect=[[_row(990008, os.getpid(), "python3 m.py")], []]), \
+                patch.object(run_campaign.os, "kill", side_effect=kills):
+            watch._terminate(lambda timeout: True)
+            proof = watch.teardown_proof()
+        self.assertIs(proof["ownership_established"], True)
+        self.assertIs(proof["census_completed"], True)
+
+    def test_f8_a_descendant_keeps_its_grace_after_the_child_exits(self) -> None:
+        child = _FakeChild()
+        kills = _Kills()
+        tree = [_row(child.pid, os.getpid(), "python3 member.py"),
+                _row(990009, child.pid, "python3 writer.py")]
+        gone_at = time.monotonic() + 0.4
+        def table():
+            return [tree[1]] if time.monotonic() < gone_at else []
+        watch = self.watch(child, grace=1.5)
+        with patch.object(run_campaign, "_hazard_process_table", return_value=tree), \
+                patch.object(run_campaign.os, "kill", side_effect=kills):
+            watch._terminate(lambda timeout: True)  # the child exited within its grace
+        child.returncode = 0
+        with patch.object(run_campaign, "_hazard_process_table", side_effect=table), \
+                patch.object(run_campaign.os, "kill", side_effect=kills):
+            proof = watch.teardown_proof()
+        self.assertEqual(kills.to(990009), [signal.SIGTERM])
+        self.assertEqual(proof["survivors"], [])
+        self.assertIs(proof["teardown_escalated"], False)
+
+    def test_f8_a_descendant_past_its_grace_is_killed_and_recorded(self) -> None:
+        child = _FakeChild()
+        kills = _Kills()
+        tree = [_row(child.pid, os.getpid(), "python3 member.py"),
+                _row(990010, child.pid, "python3 writer.py")]
+        watch = self.watch(child, grace=0.6)
+        with patch.object(run_campaign, "_hazard_process_table", return_value=tree), \
+                patch.object(run_campaign.os, "kill", side_effect=kills):
+            watch._terminate(lambda timeout: True)
+            child.returncode = 0
+            started = time.monotonic()
+            watch.teardown_proof()
+        self.assertGreaterEqual(time.monotonic() - started, 0.4)
+        self.assertEqual(kills.to(990010), [signal.SIGTERM, signal.SIGKILL])
+        self.assertIs(watch.teardown_escalated, True)
+        self.assertIs(watch.kill_escalated, True)
+
+
+class ReviewRunnerTests(unittest.TestCase):
+    """F1, F2, F5: the member runner's spawn window, interrupted teardown and stderr copy."""
+
+    def setUp(self) -> None:
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.base = Path(temporary.name)
+        state = patch.dict(run_campaign._HAZARD_SIGNAL_STATE,
+                           {"child": None, "run_id": None, "raised": False,
+                            "defer": False, "pending": False, "teardown": None})
+        state.start()
+        self.addCleanup(state.stop)
+        for name, value in (("HAZARD_MEMBER_CAP_S", 60.0), ("HAZARD_MEMBER_TERM_GRACE_S", 1.0)):
+            patcher = patch.object(run_campaign, name, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        stderr_path = patch.object(run_campaign, "_hazard_member_stderr_path",
+                                   return_value=self.base / "member-stderr" / "s--m.stderr")
+        stderr_path.start()
+        self.addCleanup(stderr_path.stop)
+        self.emitted: list[tuple[str, dict]] = []
+        from joulewise.flags import core as flags_core
+        emit = patch.object(flags_core, "emit",
+                            side_effect=lambda ctx, code, **kw: self.emitted.append((code, kw)) or True)
+        emit.start()
+        self.addCleanup(emit.stop)
+
+    def run_child(self, code: str):
+        return run_campaign._hazard_run_authenticated_campaign_child(
+            [sys.executable, "-c", code], env=None, outer_authentication=None,
+            bundle_paths=[self.base / "runs" / "m-1"], hazard=object(), absent=[], run_id="m-1")
+
+    def test_f2_sigterm_during_the_spawn_window_still_terminates_the_child(self) -> None:
+        real_start = run_campaign._HazardMemberWatch.start
+        seen: list = []
+
+        def start(watch):
+            seen.append(watch)
+            run_campaign._hazard_sigterm_handler(signal.SIGTERM, None)  # arrives mid-setup
+            return real_start(watch)
+
+        with patch.object(run_campaign._HazardMemberWatch, "start", start):
+            with self.assertRaises(run_campaign._HazardInterrupted):
+                self.run_child("import time; time.sleep(30)")
+        process = seen[0].process
+        self.assertIsNotNone(process.poll(), "child survived a SIGTERM sent during setup")
+        self.assertIs(seen[0].interrupted, True)
+        self.assertIs(run_campaign._HAZARD_SIGNAL_STATE["defer"], False)
+        self.assertEqual(run_campaign._HAZARD_SIGNAL_STATE["run_id"], "m-1")
+
+    def test_f2_sigterm_during_cleanup_unwinds_after_the_cleanup(self) -> None:
+        real_finish = run_campaign._HazardMemberWatch.finish
+
+        def finish(watch):
+            run_campaign._hazard_sigterm_handler(signal.SIGTERM, None)  # arrives mid-cleanup
+            return real_finish(watch)
+
+        with patch.object(run_campaign._HazardMemberWatch, "finish", finish), \
+                patch.object(run_campaign, "authenticate_campaign_child_launch_lineage") as auth:
+            with self.assertRaises(run_campaign._HazardInterrupted):
+                self.run_child("import sys; print('done', file=sys.stderr)")
+        auth.assert_not_called()
+        self.assertEqual(run_campaign._HAZARD_SIGNAL_STATE["run_id"], "m-1")
+        self.assertIs(run_campaign._HAZARD_SIGNAL_STATE["defer"], False)
+
+    def test_f2_no_deferral_outlives_a_normal_member(self) -> None:
+        with patch.object(run_campaign, "authenticate_campaign_child_launch_lineage"):
+            result, run = self.run_child("pass")
+        self.assertEqual(result.returncode, 0)
+        self.assertIs(run_campaign._HAZARD_SIGNAL_STATE["defer"], False)
+        self.assertIs(run_campaign._HAZARD_SIGNAL_STATE["pending"], False)
+        with self.assertRaises(run_campaign._HazardInterrupted):
+            run_campaign._hazard_sigterm_handler(signal.SIGTERM, None)
+
+    def test_f5_an_interrupted_member_with_survivors_is_flagged_and_recorded(self) -> None:
+        proof = {"census_completed": False, "ownership_established": False,
+                 "survivors": [{"pid": 1234, "uid": 0, "program": "powermetrics", "sampler": True}]}
+        real_start = run_campaign._HazardMemberWatch.start
+
+        def start(watch):
+            run_campaign._hazard_sigterm_handler(signal.SIGTERM, None)
+            return real_start(watch)
+
+        with patch.object(run_campaign._HazardMemberWatch, "start", start), \
+                patch.object(run_campaign._HazardMemberWatch, "teardown_proof", return_value=proof):
+            with self.assertRaises(run_campaign._HazardInterrupted):
+                self.run_child("import time; time.sleep(30)")
+        teardown = [kw for code, kw in self.emitted if code == "teardown.survivors"]
+        self.assertEqual(len(teardown), 1, self.emitted)
+        self.assertEqual(teardown[0]["run_id"], "m-1")
+        self.assertEqual(teardown[0]["observed"]["phase"], "sigterm")
+        self.assertIs(teardown[0]["observed"]["census_completed"], False)
+        row = run_campaign._hazard_interrupted_row(run_id="m-1", campaign_provenance_path=None)
+        self.assertEqual(row["teardown"], proof)
+
+    def test_f1_an_uncopied_member_stderr_is_flagged(self) -> None:
+        def unreadable(path, run_id):
+            return b"", {"phase": "read", "error_type": "PermissionError"}
+
+        with patch.object(run_campaign, "_hazard_copy_member_stderr", side_effect=unreadable), \
+                patch.object(run_campaign, "authenticate_campaign_child_launch_lineage"):
+            result, run = self.run_child("import sys; print('JOULEWISE_UNWRITTEN_FLAG {}', file=sys.stderr)")
+        flagged = [kw for code, kw in self.emitted if code == "member.stderr_uncopied"]
+        self.assertEqual([kw["run_id"] for kw in flagged], ["m-1"])
+        self.assertEqual(flagged[0]["observed"]["phase"], "read")
+        self.assertEqual(run.stderr_raw, b"")
+
+    def test_f1_the_copy_reports_read_and_write_failures(self) -> None:
+        raw, failure = run_campaign._hazard_copy_member_stderr(self.base / "absent.stderr", "m-1")
+        self.assertEqual((raw, failure), (b"", {"phase": "read", "error_type": "FileNotFoundError"}))
+        present = self.base / "present.stderr"
+        present.write_bytes(b"line\n")
+
+        class Closed:
+            def write(self, text):
+                raise ValueError("I/O operation on closed file")
+
+            def flush(self):
+                raise ValueError("I/O operation on closed file")
+
+        with patch.object(run_campaign.sys, "stderr", Closed()):
+            raw, failure = run_campaign._hazard_copy_member_stderr(present, "m-1")
+        self.assertEqual(raw, b"line\n")
+        self.assertEqual(failure, {"phase": "write", "error_type": "ValueError"})
+
+
+class ReviewDrainRecoveryTests(unittest.TestCase):
+    """F6: a stage that died between the count and the marker still drains the window."""
+
+    def test_persisted_threshold_count_recovers_the_drain_marker(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            custody = Path(directory)
+            hazard = type("Hazard", (), {"custody_root": custody})()
+            state = custody / "member-timeouts" / "state.json"
+            state.parent.mkdir(parents=True)
+            state.write_text(json.dumps({"consecutive": 2}))
+            with patch.dict(run_campaign._HAZARD_TIMEOUT_MEMORY, {"consecutive": 0}):
+                marker = run_campaign._hazard_drain_requested(hazard)
+                self.assertEqual(marker, custody / "member-timeouts" / "drain.json")
+                self.assertTrue(marker.is_file())
+                self.assertIs(json.loads(marker.read_text())["recovered_from_state"], True)
+                # The marker persists once an end reference resets the count.
+                run_campaign._hazard_note_member_outcome(hazard, timed_out=False, bundle_ids=["end"])
+                self.assertEqual(run_campaign._hazard_drain_requested(hazard), marker)
+            state.write_text(json.dumps({"consecutive": 1}))
+            marker.unlink()
+            with patch.dict(run_campaign._HAZARD_TIMEOUT_MEMORY, {"consecutive": 0}):
+                self.assertIsNone(run_campaign._hazard_drain_requested(hazard))
+
+
 if __name__ == "__main__":
     unittest.main()
