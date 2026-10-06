@@ -367,9 +367,11 @@ class YieldTests(unittest.TestCase):
         harness = Harness(self, "alpha", g10=False)
         self.assertEqual(harness.driver.EXIT_GO, harness.run())
         record = harness.hazard()["yield"]
-        self.assertEqual(("FULL", 119, 119, 119, 119, 0),
+        # The fake checkout writes bundles but no campaign_log.jsonl, so 0 rows
+        # are logged here; SolReviewFixTests covers the logged counts.
+        self.assertEqual(("FULL", 119, 119, 119, 0, 0),
                          (record["yield_status"], record["planned"], record["bundles_present"],
-                          record["succeeded"], record["logged"] or 119, record["failed"]))
+                          record["succeeded"], record["logged"], record["failed"]))
         rows = stage_yield(harness)
         self.assertEqual(10, len(rows))
         self.assertTrue(all(row["status"] == "OK" for row in rows))
@@ -499,6 +501,189 @@ class YieldTests(unittest.TestCase):
         driver = Harness(self, g10=False).driver
         self.assertIn("stage_yield.jsonl", driver.HAZARD_ARTIFACTS)
         self.assertNotIn("yield_plan.json", driver.HAZARD_ARTIFACTS)
+
+
+# --------------------------------------------------------------------------
+# Sol 6.1 review of P2-DRV (findings F1-F7)
+
+
+class _RecordingWindow:
+    def __init__(self):
+        self.flagged = []
+        self.plan = mock.Mock(plan_id="plan-test")
+
+    def flag(self, code, *args, **keywords):
+        self.flagged.append(code)
+
+
+class SolReviewFixTests(unittest.TestCase):
+    # F1: a failed physics evaluation is never "no outage".
+    def test_a_malformed_liveness_line_is_not_a_reading_and_runs_into_the_outage_bound(self):
+        patch(self, b5_driver, "MONITOR_OUTAGE_S", 5.0)
+        patch(self, b5_driver, "MONITOR_LIVENESS_CHECK_S", 0.0)
+        now = {"t": 100.0}
+        with tempfile.TemporaryDirectory() as directory:
+            directory = Path(directory)
+            liveness = b5_driver.MonitorLiveness(directory, clock=lambda: now["t"])
+            for name in ("battery", "contention"):
+                with (directory / f"{name}.jsonl").open("a") as handle:
+                    handle.write(json.dumps({"kind": [], "error": None}) + "\n")
+                    handle.write(json.dumps({"kind": {"reading": 1}, "error": None}) + "\n")
+            now["t"] = 103.0
+            self.assertIsNone(liveness.check())
+            now["t"] = 106.0
+            self.assertEqual({"battery": 6.0, "contention": 6.0}, liveness.check()["silent_s"])
+
+    def test_an_unreadable_liveness_journal_runs_into_the_outage_bound(self):
+        patch(self, b5_driver, "MONITOR_OUTAGE_S", 5.0)
+        patch(self, b5_driver, "MONITOR_LIVENESS_CHECK_S", 0.0)
+        now = {"t": 100.0}
+        with tempfile.TemporaryDirectory() as directory:
+            directory = Path(directory)
+            for name in ("battery", "contention"):
+                (directory / f"{name}.jsonl").write_text(json.dumps({"kind": "reading"}) + "\n")
+            liveness = b5_driver.MonitorLiveness(directory, clock=lambda: now["t"])
+            patch(self, b5_driver.MonitorLiveness, "_read", mock.Mock(side_effect=RuntimeError("EIO")))
+            now["t"] = 106.0
+            self.assertEqual({"battery", "contention"}, set(liveness.check()["silent_s"]))
+            self.assertTrue(liveness.errors)
+
+    def test_a_raising_liveness_evaluation_stops_the_chain_at_the_outage_bound(self):
+        harness = Harness(self, g10=False)
+        harness.replace_chain("#!/bin/zsh -f\n/bin/sleep 8\nexit 0\n")
+        patch(self, b5_driver, "MONITOR_OUTAGE_S", 1.0)
+        patch(self, b5_driver.MonitorLiveness, "check", mock.Mock(side_effect=TypeError("unhashable")))
+        self.assertEqual(harness.driver.EXIT_ABORTED, harness.run())
+        result = harness.result()
+        self.assertEqual(("ABORTED", b5_driver.STOPPED_MONITOR_OUTAGE), (result["verdict"], result["aborted_reason"]))
+        outage = flags(harness, "monitor.outage")
+        self.assertEqual(1, len(outage))
+        self.assertTrue(outage[0]["observed"]["unmeasured"])
+        self.assertEqual(["monitor_liveness"], [item["observed"]["step"]
+                                                for item in flags(harness, "supervision.pass_failed")])
+        self.assertIn("supervision_failed:monitor_liveness", facts(harness)["fault_reasons"])
+
+    def test_a_raising_physics_step_makes_the_window_a_fault(self):
+        harness = Harness(self, g10=False)
+        harness.replace_chain("#!/bin/zsh -f\n/bin/sleep 3\nexit 0\n")
+        patch(self, b5_driver.DiskFloor, "check", mock.Mock(side_effect=RuntimeError("statvfs exploded")))
+        self.assertEqual(harness.driver.EXIT_GO, harness.run())
+        report = facts(harness)
+        self.assertTrue(report["fault"])
+        self.assertIn("supervision_failed:disk", report["fault_reasons"])
+        self.assertIn("supervision_failed:disk", harness.hazard()["faults"]["reasons"])
+
+    # F2: a locator the members' own authenticator rejects is not valid.
+    def lineage_request(self, w, plan_id):
+        return b5_driver.LineageRequest(mock.Mock(plan_id=plan_id), Path(w.base), w.custody, w.night, {},
+                                        w.claim, w.bound, None, None, None)
+
+    def test_a_stale_locator_from_an_ended_window_is_not_valid(self):
+        from tests import test_window_lineage as lineage_fixture
+        with tempfile.TemporaryDirectory() as directory:
+            w = lineage_fixture.build_window(Path(directory))
+            request = self.lineage_request(w, lineage_fixture.PLAN_ID)
+            fresh = b5_driver._production_lineage_check(request)
+            self.assertEqual((True, True), (fresh["claim"]["valid"], fresh["bound"]["valid"]))
+            lineage_fixture.write_night_records(w)
+            stale = b5_driver._production_lineage_check(request)
+            self.assertEqual((False, False), (stale["claim"]["valid"], stale["bound"]["valid"]))
+            self.assertIn("already ended", stale["claim"]["error"])
+
+    def test_a_locator_naming_another_plan_is_not_valid(self):
+        from tests import test_window_lineage as lineage_fixture
+        with tempfile.TemporaryDirectory() as directory:
+            w = lineage_fixture.build_window(Path(directory))
+            checks = b5_driver._production_lineage_check(self.lineage_request(w, "plan-some-later-window"))
+            self.assertEqual((False, False), (checks["claim"]["valid"], checks["bound"]["valid"]))
+            self.assertIn("plan-some-later-window", checks["bound"]["error"])
+
+    # F3: counting only in the settle after a stage, never into a capture.
+    def test_the_last_collection_stage_counts_only_at_the_terminal_record(self):
+        harness = Harness(self, "alpha", g10=False)
+        rows = b5_driver.yield_plan(harness.plan)["stages"]
+        self.assertFalse(rows[-1]["count_in_window"])          # runs into the post-calibration capture
+        self.assertTrue(all(row["count_in_window"] for row in rows[:-1]))
+
+    def tripwire(self, night, rows, wall):
+        window = _RecordingWindow()
+        return window, b5_driver.YieldTripwire(window, night, rows, wall=lambda: wall["t"])
+
+    def test_a_stage_is_counted_in_the_window_only_inside_the_following_settle(self):
+        with tempfile.TemporaryDirectory() as directory:
+            night, runs = Path(directory, "night"), Path(directory, "runs")
+            night.mkdir()
+            runs.mkdir()
+            rows = [{"stage_id": f"s{index}", "ordinal": index, "role": "science", "runs_root": str(runs),
+                     "run_ids": [], "planned": 0, "min_valid": 0, "count_in_window": index != 3}
+                    for index in (1, 2, 3)]
+            wall = {"t": 10_000.0}
+            _window, tripwire = self.tripwire(night, rows, wall)
+
+            def journal(stage_id, ended):
+                with (night / "chain-stages.jsonl").open("a") as handle:
+                    handle.write(json.dumps({"stage_id": stage_id, "kind": "campaign_collection", "rc": 0,
+                                             "started_epoch_s": ended, "ended_epoch_s": ended}) + "\n")
+            journal("s1", 9_995)                                     # fresh: inside the settle
+            journal("s2", 9_900)                                     # 100 s old: a capture may be running
+            journal("s3", 9_999)                                     # fresh, but a capture follows it
+            tripwire.poll()
+            self.assertEqual(["s1"], sorted(tripwire.counted))
+            self.assertEqual(["s1"], [line["stage_id"] for line in stage_yield_lines(night)])
+            tripwire.final()
+            lines = stage_yield_lines(night)
+            self.assertEqual([("s1", "settle"), ("s2", "terminal"), ("s3", "terminal")],
+                             [(line["stage_id"], line["counted_at"]) for line in lines])
+
+    def test_the_member_log_is_not_tailed_between_stage_boundaries(self):
+        with tempfile.TemporaryDirectory() as directory:
+            night, runs = Path(directory, "night"), Path(directory, "runs")
+            night.mkdir()
+            runs.mkdir()
+            rows = [{"stage_id": "s1", "ordinal": 1, "role": "science", "runs_root": str(runs),
+                     "run_ids": ["m1", "m2", "m3"], "planned": 3, "min_valid": 3, "count_in_window": True}]
+            window, tripwire = self.tripwire(night, rows, {"t": 10_000.0})
+            with (runs / "campaign_log.jsonl").open("a") as handle:
+                for run_id in ("m1", "m2", "m3"):
+                    handle.write(json.dumps({"run_id": run_id, "status": "failed", "exit_code": 3}) + "\n")
+            tripwire.poll()
+            self.assertEqual((0, []), (tripwire.attempted, window.flagged))
+            tripwire.final()
+            self.assertEqual(3, tripwire.attempted)
+            self.assertIn("stage.members_refused_pre_bundle_identical", window.flagged)
+
+    # F6: the instrument-not-sampling refusal is a fault.
+    def test_an_instrument_not_sampling_refusal_carries_the_fault_facts(self):
+        harness = Harness(self, g10=False)
+        harness.replace_chain("#!/bin/zsh -f\nexit 0\n")
+        harness.monitor_argv = [sys.executable, "-c", "import time; time.sleep(600)"]
+        patch(self, b5_driver, "MONITOR_READY_TIMEOUT_S", 0.3)
+        self.assertEqual(harness.driver.EXIT_REFUSED, harness.run())
+        report = facts(harness)
+        self.assertEqual((True, ["instrument_not_sampling"]), (report["fault"], report["fault_reasons"]))
+        self.assertEqual(["instrument_not_sampling"], harness.hazard()["faults"]["reasons"])
+
+    # F7: the terminal record's logged, ok and failed counts.
+    def test_the_terminal_yield_counts_the_campaign_log(self):
+        with tempfile.TemporaryDirectory() as directory:
+            night, runs = Path(directory, "night"), Path(directory, "runs")
+            night.mkdir()
+            (runs / "m1").mkdir(parents=True)
+            (runs / "m1" / "summary_metrics.json").write_text(json.dumps({"status": "succeeded"}))
+            with (runs / "campaign_log.jsonl").open("w") as handle:
+                handle.write(json.dumps({"run_id": "m1", "status": "succeeded"}) + "\n")
+                handle.write(json.dumps({"run_id": "m2", "status": "failed"}) + "\n")
+                handle.write(json.dumps({"run_id": "other", "status": "failed"}) + "\n")
+            rows = [{"stage_id": "s1", "ordinal": 1, "role": "science", "runs_root": str(runs),
+                     "run_ids": ["m1", "m2", "m3"], "planned": 3, "min_valid": 3}]
+            record = b5_driver.terminal_yield(night, rows)
+            self.assertEqual((3, 2, 1, 1, 1, 1, "LOW"),
+                             tuple(record[key] for key in ("planned", "logged", "ok", "failed", "bundles_present",
+                                                           "succeeded", "yield_status")))
+
+
+def stage_yield_lines(night: Path) -> list[dict]:
+    return [json.loads(line) for line in (night / b5_driver.STAGE_YIELD).read_text().splitlines()]
 
 
 if __name__ == "__main__":

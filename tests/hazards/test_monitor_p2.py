@@ -75,6 +75,22 @@ class JournalFsyncTests(unittest.TestCase):
         self.assertEqual((0, 1), self.count_fsyncs(5.0, 10))
         self.assertEqual((10, 10), self.count_fsyncs(0.0, 10))
 
+    def test_a_dirty_journal_is_fsynced_once_the_interval_has_passed(self):
+        clock = {"t": 1000.0}
+        with tempfile.TemporaryDirectory() as directory, \
+                mock.patch.object(monitor.time, "monotonic", lambda: clock["t"]), \
+                mock.patch.object(monitor.os, "fsync") as fsync:
+            journal = monitor.Journal(Path(directory) / "battery.jsonl", fsync_interval_s=5.0)
+            journal.write({"seq": 0})
+            clock["t"] += 4.9
+            journal.write({"seq": 1})
+            self.assertEqual(0, fsync.call_count)
+            clock["t"] += 0.2
+            journal.write({"seq": 2})
+            self.assertEqual(1, fsync.call_count)
+            journal.close()
+            self.assertEqual(1, fsync.call_count)   # nothing dirty after the timed fsync
+
     def test_the_monitor_batches_its_journals(self):
         self.assertGreaterEqual(monitor.FSYNC_INTERVAL_S, 5.0)
         with tempfile.TemporaryDirectory() as directory:

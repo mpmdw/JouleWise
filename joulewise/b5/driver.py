@@ -108,8 +108,12 @@ MONITOR_JOURNAL_DIR = ("hazards", "monitor")
 LINEAGE_RETRY_S = 5.0
 # PLAN2 yield tripwire (section 2.2).
 YIELD_STALL_S = 3600.0
-YIELD_SLOW_CHECK_S = 10.0
 YIELD_STALL_CHECK_S = 60.0
+# Sol review F3: a stage is counted in the window only inside the settle that
+# follows it (registered 60 s): its journal line must be at most this old, and
+# the next in-chain stage must not be a capture. Otherwise it is counted at the
+# terminal record, after the chain group is gone.
+YIELD_COUNT_FRESH_S = 30.0
 YIELD_PRE_BUNDLE_RUN = 3
 CORPUS_MIN_VALID = 10
 # A science stage's share of the analysis plan's 8-of-10 cell minimum.
@@ -395,20 +399,29 @@ class CollectorRequest:
 def _production_lineage_check(request: LineageRequest) -> dict[str, Any]:
     """Re-read both runs roots' lineage locators (PLAN2 row 9, interim).
 
-    A member can be collected only when its runs root carries a structurally
-    valid HAZARD locator (``window_lineage.read_locator``); without one every
-    member refuses before its bundle. Returns ``{"claim": {...}, "bound":
-    {...}}``, each with ``valid`` and, when invalid, the reader's error.
+    A member can be collected only when its runs root carries a HAZARD
+    locator that the member's own window-level authenticator accepts
+    (``window_lineage.authenticate_campaign``: structure, this boot, the chain
+    not yet ended, the pack's config inventory) and that names this plan;
+    otherwise every member refuses before its bundle. A structurally valid
+    locator left by an earlier window is therefore not valid here (Sol review
+    F2). Returns ``{"claim": {...}, "bound": {...}}``, each with ``valid`` and,
+    when invalid, the reader's error.
     """
 
     from joulewise import window_lineage
+    plan_id = getattr(request.plan, "plan_id", None)
+    boot = request.boot_session_uuid
     checks: dict[str, Any] = {}
     for role, root in (("claim", request.claim_runs_root), ("bound", request.bound_runs_root)):
         entry: dict[str, Any] = {"root": str(root), "valid": False}
         try:
-            _locator, digest = window_lineage.read_locator(Path(root) / window_lineage.LOCATOR_BASENAME)
-            entry.update(valid=True, sha256=digest)
-        except Exception as error:  # noqa: BLE001 - an unreadable locator is not valid
+            context = window_lineage.authenticate_campaign(Path(root), boot_reader=lambda: boot)
+            named = context["launch_lineage"].get("plan_id")
+            if plan_id is not None and named != plan_id:
+                raise ValueError(f"the locator names plan {named!r}, not this window's plan {plan_id!r}")
+            entry.update(valid=True, sha256=context["locator_sha256"])
+        except Exception as error:  # noqa: BLE001 - an unusable locator is not valid
             entry["error"] = _error_text(error)
         checks[role] = entry
     return checks
@@ -932,7 +945,7 @@ def monitor_readiness(directory: Path, pid: int) -> dict[str, Any]:
                 continue
             if line.get("kind") == "session_start":
                 status["session_start"] = True
-            elif line.get("kind") in kinds and line.get("error") is None:
+            elif isinstance(line.get("kind"), str) and line["kind"] in kinds and line.get("error") is None:
                 status[name] = True
     status["ready"] = all(status.values())
     return status
@@ -998,32 +1011,43 @@ class MonitorLiveness:
             return None
         self.next_check = now + MONITOR_LIVENESS_CHECK_S
         for name, kinds in _GOOD_MONITOR_KINDS.items():
-            path = self.directory / f"{name}.jsonl"
+            # Sol review F1: a journal that cannot be read or parsed is not a
+            # good reading. The fault stays inside this journal's read, never
+            # skips the silence computation below, so an unreadable journal
+            # runs into the outage bound like a silent one.
             try:
-                size = path.stat().st_size
-                if size < self.offsets[name]:
-                    self.offsets[name], self.partial[name] = 0, b""
-                if size == self.offsets[name]:
-                    continue
-                with path.open("rb") as handle:
-                    handle.seek(self.offsets[name])
-                    data = handle.read(size - self.offsets[name])
-            except OSError as error:
-                self.errors.append(f"{name}: {_error_text(error)}")
-                continue
-            self.offsets[name] += len(data)
-            lines = (self.partial[name] + data).split(b"\n")
-            self.partial[name] = lines.pop()
-            for raw in lines:
-                try:
-                    line = json.loads(raw)
-                except ValueError:
-                    continue
-                if isinstance(line, dict) and line.get("kind") in kinds and line.get("error") is None:
-                    self.last_good[name] = now
+                self._read(name, kinds, now)
+            except Exception as error:  # noqa: BLE001 - unreadable is not sampling
+                if len(self.errors) < 20:
+                    self.errors.append(f"{name}: {_error_text(error)}")
+        return self.silent(now)
+
+    def silent(self, now: float) -> dict[str, Any] | None:
         silent = {name: round(now - seen, 1) for name, seen in self.last_good.items()
                   if now - seen >= MONITOR_OUTAGE_S}
         return {"silent_s": silent, "outage_s": MONITOR_OUTAGE_S} if silent else None
+
+    def _read(self, name: str, kinds: frozenset[str], now: float) -> None:
+        path = self.directory / f"{name}.jsonl"
+        size = path.stat().st_size
+        if size < self.offsets[name]:
+            self.offsets[name], self.partial[name] = 0, b""
+        if size == self.offsets[name]:
+            return
+        with path.open("rb") as handle:
+            handle.seek(self.offsets[name])
+            data = handle.read(size - self.offsets[name])
+        self.offsets[name] += len(data)
+        lines = (self.partial[name] + data).split(b"\n")
+        self.partial[name] = lines.pop()
+        for raw in lines:
+            try:
+                line = json.loads(raw)
+            except ValueError:
+                continue
+            if (isinstance(line, dict) and isinstance(line.get("kind"), str) and line["kind"] in kinds
+                    and line.get("error") is None):
+                self.last_good[name] = now
 
 
 # --------------------------------------------------------------------------
@@ -1189,9 +1213,17 @@ def yield_plan(plan: Any) -> dict[str, Any]:
     resolver = getattr(b5_plan, "resolve_stage_dispatch", None)
     launched: dict[str, set[str]] = {}
     stages, sources = [], set()
-    for stage in b5_chain.stage_plan(tree):
-        if stage.kind != "campaign_collection" or not stage.in_chain:
+    chain_stages = [stage for stage in b5_chain.stage_plan(tree) if stage.in_chain]
+    for position, stage in enumerate(chain_stages):
+        if stage.kind != "campaign_collection":
             continue
+        # Sol review F3: counting in the window is allowed only when the next
+        # in-chain stage begins with a settle (a collection) or captures
+        # nothing (the bound derivation); the last collection stage runs
+        # straight into the post-calibration capture, so it counts at the end.
+        following = chain_stages[position + 1] if position + 1 < len(chain_stages) else None
+        count_in_window = following is not None and following.kind in {"campaign_collection",
+                                                                          "bound_derivation"}
         runs_root = run_ids = None
         roles: list[Any] = []
         if callable(resolver):
@@ -1219,7 +1251,8 @@ def yield_plan(plan: Any) -> dict[str, Any]:
         stages.append({"stage_id": stage.stage_id, "ordinal": stage.ordinal, "role": role,
                        "root": "bound" if str(runs_root) == bound_root else "claim",
                        "runs_root": str(runs_root), "run_ids": fresh, "planned": len(fresh),
-                       "listed": len(run_ids), "min_valid": _min_valid(role, len(fresh))})
+                       "listed": len(run_ids), "min_valid": _min_valid(role, len(fresh)),
+                       "count_in_window": count_in_window})
     return {"schema": YIELD_PLAN_SCHEMA, "plan_id": plan.plan_id, "source": sorted(sources),
             "stages": stages, "planned": sum(row["planned"] for row in stages)}
 
@@ -1276,11 +1309,19 @@ class YieldTripwire:
     Never stops anything and runs no subprocess. Its output is
     ``night/stage_yield.jsonl``, ``night/yield_alert-<ordinal>.json`` and
     window flags. Structure only: counts, statuses, return codes.
+
+    Each supervision pass only stats the stage journal (and, once a minute,
+    lists the runs roots for the stall check). Bundle counting and the member
+    log tail run only in the settle right after a stage's journal line (Sol
+    review F3); a stage whose line is stale, or that runs straight into a
+    capture, is counted by :meth:`final` after the chain group is gone.
     """
 
     def __init__(self, window: "_Window", night: Path, plan_rows: Sequence[Mapping[str, Any]], *,
-                 clock: Callable[[], float] = time.monotonic) -> None:
+                 clock: Callable[[], float] = time.monotonic, wall: Callable[[], float] = time.time) -> None:
         self.window = window
+        self.wall = wall
+        self.deferred: dict[str, Any] = {}
         self.night = Path(night)
         self.rows = {row["stage_id"]: dict(row) for row in plan_rows}
         self.clock = clock
@@ -1298,7 +1339,6 @@ class YieldTripwire:
         self.flagged_causes: set[str] = set()
         self.attempted = 0
         now = clock()
-        self.next_slow = now
         self.next_stall = now + YIELD_STALL_CHECK_S
         self.last_progress = now
         self.entries = {root: self._entries(root) for root in self.roots}
@@ -1323,18 +1363,33 @@ class YieldTripwire:
     def poll(self) -> None:
         self._guard("journal", self._journal)
         now = self.clock()
-        if now >= self.next_slow:
-            self.next_slow = now + YIELD_SLOW_CHECK_S
-            self._guard("campaign_log", self._campaign_logs)
         if now >= self.next_stall:
             self.next_stall = now + YIELD_STALL_CHECK_S
             self._guard("stall", lambda: self._stall(now))
 
     def final(self) -> None:
-        self._guard("journal", self._journal)
+        """After the chain group is gone: count every journaled stage not yet counted."""
+
+        self._guard("journal", lambda: self._journal(terminal=True))
+        for stage_id in sorted(self.deferred, key=lambda item: self.rows[item]["ordinal"]):
+            rc = self.deferred[stage_id]
+            if stage_id not in self.counted:
+                self._guard("count", lambda stage_id=stage_id, rc=rc: self._count(
+                    self.rows[stage_id], rc, counted_at="terminal"))
         self._guard("campaign_log", self._campaign_logs)
 
-    def _journal(self) -> None:
+    def _in_settle(self, stage_id: str, row: Mapping[str, Any]) -> bool:
+        """Is it now the settle right after this stage (Sol review F3)?"""
+
+        if not self.rows[stage_id].get("count_in_window", True):
+            return False
+        ended = row.get("ended_epoch_s")
+        if isinstance(ended, bool) or not isinstance(ended, (int, float)):
+            return False
+        age = self.wall() - float(ended)
+        return -2.0 <= age <= YIELD_COUNT_FRESH_S
+
+    def _journal(self, terminal: bool = False) -> None:
         path = self.night / b5_chain.STAGE_JOURNAL
         try:
             size = path.stat().st_size
@@ -1356,11 +1411,18 @@ class YieldTripwire:
                 continue
             if (isinstance(row, dict) and row.get("kind") == "campaign_collection"
                     and row.get("stage_id") in self.rows and row["stage_id"] not in self.counted):
-                self._count(self.rows[row["stage_id"]], row.get("rc"))
+                if not terminal and self._in_settle(row["stage_id"], row):
+                    self._count(self.rows[row["stage_id"]], row.get("rc"), counted_at="settle")
+                    # The member log is tailed at the same boundary, never
+                    # during a capture.
+                    self._guard("campaign_log", self._campaign_logs)
+                else:
+                    self.deferred[row["stage_id"]] = row.get("rc")
 
-    def _count(self, row: Mapping[str, Any], rc: Any) -> None:
+    def _count(self, row: Mapping[str, Any], rc: Any, *, counted_at: str = "settle") -> None:
+        self.deferred.pop(row["stage_id"], None)
         counted = count_stage(row)
-        counted.update(schema=STAGE_YIELD_SCHEMA, rc=rc, at=stamp())
+        counted.update(schema=STAGE_YIELD_SCHEMA, rc=rc, at=stamp(), counted_at=counted_at)
         self.counted[row["stage_id"]] = counted
         _append_line(self.night / STAGE_YIELD, counted)
         if counted["status"] == "OK":
@@ -1445,6 +1507,7 @@ class YieldTripwire:
 
     def summary(self) -> dict[str, Any]:
         return {"stages_counted": len(self.counted), "attempted_seen": self.attempted,
+                "counted_in_settle": sum(1 for item in self.counted.values() if item.get("counted_at") == "settle"),
                 "stalled": self.stalled, "pre_bundle_runs_flagged": len(self.flagged_causes),
                 "errors": list(self.errors)}
 
@@ -1786,9 +1849,12 @@ def run_hazard_night(rt: Any, plan_path: Path, plan: Any, probes: Any, initial_c
                               "receipt_class": plan.receipt_class, "attempt": plan.hazard_window["attempt"],
                               "pack_id": plan.hazard_window["pack"]["pack_id"], "started": stamp()}
 
-    def refuse(stage: str, reason: str, detail: str, evidence: Any) -> int:
+    def refuse(stage: str, reason: str, detail: str, evidence: Any, *,
+               fault_reasons: Sequence[str] = ()) -> int:
         hazard.update(verdict="REFUSED", stage_reached=stage, refusal={"reason": reason, "detail": detail},
                       flags_emitted=list(window.flags), diagnostics=list(window.diagnostics), ended=stamp())
+        if fault_reasons:
+            hazard["faults"] = {"reasons": list(fault_reasons)}
         try:
             _create_once(night / HAZARD_RESULT, hazard)
         except OSError as error:
@@ -1800,7 +1866,9 @@ def run_hazard_night(rt: Any, plan_path: Path, plan: Any, probes: Any, initial_c
                                                  "refusal_reason": reason, "detail": detail,
                                                  "arm_verdicts": hazard.get("arm", {}).get("verdicts"),
                                                  "yield_line": "collected 0 members: the window was refused "
-                                                               "before the chain launched"},
+                                                               "before the chain launched",
+                                                 **({"fault": True, "fault_reasons": list(fault_reasons)}
+                                                    if fault_reasons else {})},
                          window.diagnostics)
         return rt._finish_reporting(custody, night, plan, rt.EXIT_REFUSED, courier,
                                     courier_error=courier_error, deadman_epoch_s=deadman,
@@ -1968,7 +2036,7 @@ def run_hazard_night(rt: Any, plan_path: Path, plan: Any, probes: Any, initial_c
                       f"the hazard monitor did not journal a session start, a battery reading and a "
                       f"contention snapshot within {MONITOR_READY_TIMEOUT_S:g} s on any of "
                       f"{MONITOR_READY_TRIES} starts; the instrument is not sampling",
-                      {"attempts": readiness})
+                      {"attempts": readiness}, fault_reasons=("instrument_not_sampling",))
     liveness = MonitorLiveness(journal_dir)
     thresholds = plan.hazard_window["thresholds"].get("disk", {})
     low = thresholds.get("low_bytes", DISK_LOW_BYTES_DEFAULT) if isinstance(thresholds, Mapping) else DISK_LOW_BYTES_DEFAULT
@@ -1994,16 +2062,20 @@ def run_hazard_night(rt: Any, plan_path: Path, plan: Any, probes: Any, initial_c
     # PLAN2 row 10: every supervision step is guarded; a fault in a record
     # never ends the chain, it is flagged once per step and the pass goes on.
     supervision_faults: dict[str, int] = {}
+    liveness_failing_since: list[float | None] = [None]
+
+    def supervision_fault(label: str, error: BaseException) -> None:
+        supervision_faults[label] = supervision_faults.get(label, 0) + 1
+        if supervision_faults[label] == 1:
+            window.flag("supervision.pass_failed", "RECORDS", "REPRESENTATION", stage="window",
+                        observed={"step": label, "error": _error_text(error)},
+                        detail="a supervision step raised; the pass went on and collection continued")
 
     def guarded(label: str, operation: Callable[[], Any]) -> Any:
         try:
             return operation()
         except Exception as error:  # noqa: BLE001
-            supervision_faults[label] = supervision_faults.get(label, 0) + 1
-            if supervision_faults[label] == 1:
-                window.flag("supervision.pass_failed", "RECORDS", "REPRESENTATION", stage="window",
-                            observed={"step": label, "error": _error_text(error)},
-                            detail="a supervision step raised; the pass went on and collection continued")
+            supervision_fault(label, error)
             return None
 
     def supervise() -> dict[str, Any] | None:
@@ -2018,7 +2090,20 @@ def run_hazard_night(rt: Any, plan_path: Path, plan: Any, probes: Any, initial_c
                 STOPPED_DISK_LOW,
                 f"free space {reading['free_bytes']} B on {reading['volume']} is under the "
                 f"{reading['low_bytes']} B in-window floor; the driver stopped the chain", reading)
-        outage = guarded("monitor_liveness", liveness.check)
+        # Sol review F1: the liveness evaluation is a physics check. If it
+        # raises, the instrument's sampling is unmeasured; that counts toward
+        # the outage bound exactly like silence, never as "no outage".
+        try:
+            outage = liveness.check()
+            liveness_failing_since[0] = None
+        except Exception as error:  # noqa: BLE001
+            supervision_fault("monitor_liveness", error)
+            now = time.monotonic()
+            if liveness_failing_since[0] is None:
+                liveness_failing_since[0] = now
+            failing = now - liveness_failing_since[0]
+            outage = ({"silent_s": {"liveness_check": round(failing, 1)}, "outage_s": MONITOR_OUTAGE_S,
+                       "unmeasured": True} if failing >= MONITOR_OUTAGE_S else None)
         if outage is not None:
             window.flag("monitor.outage", "DIAGNOSTIC", "PHYSICS", stage="window", observed=outage,
                         expected={"outage_s": MONITOR_OUTAGE_S},
@@ -2137,6 +2222,11 @@ def run_hazard_night(rt: Any, plan_path: Path, plan: Any, probes: Any, initial_c
         fault_reasons.append(f"chain_stopped:{chain_stop.get('kind')}")
     if monitor.crash_loop:
         fault_reasons.append("monitor_crash_loop")
+    # Sol review F1: a physics supervision step (monitor respawn, disk floor,
+    # instrument liveness) that raised left that hazard unwatched for a while.
+    for step in ("monitor", "disk", "monitor_liveness"):
+        if supervision_faults.get(step):
+            fault_reasons.append(f"supervision_failed:{step}")
     if post_bracket_failed is True:
         fault_reasons.append("post_bracket_failed")
     if bound_derivation_failed is True:
