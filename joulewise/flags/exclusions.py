@@ -38,11 +38,19 @@ Input shapes for :func:`compute`
         ...                                           # in plan order
       ],
       "cells": [{"cell_id": str, "target": bool,      # default True
-                 "minimum": {stratum: int}}, ...],    # default: catalog rule (8)
+                 "strata": [str, ...],                # declared strata; default ["quad"]
+                 "minimum": {stratum: int}}, ...],    # may only raise the catalog rule (8)
       "bundles": [{"bundle_id": str, "run_id": str,   # optional; when present,
                    "attempt": str | int | None,       # a roster member without an
                    "created_monotonic_ns": int | None}]  # admissible bundle is
     }                                                 # excluded (member.bytes_missing)
+
+A cell's strata are the declared ``strata`` (floors ``["repeat", "quad"]``,
+contrasts ``["quad"]``; ``["quad"]`` when not declared) plus any stratum its
+units carry. A declared stratum with no units has zero kept units, so a roster
+that lost a stratum is below the minimum, not resolvable.
+
+A member with two admissible bundles is excluded (``member.bytes_ambiguous``).
 
 A unit is the set of members sharing ``(cell_id, stratum, unit_id)``. A
 repeat is a one-member unit; a quad is a four-member unit. Any excluded member
@@ -83,6 +91,9 @@ THERMAL_MAX_GAP_S = 15.0
 CONTENTION_LIMIT_CPU_S_PER_S = 0.05
 CONTENTION_EXCLUDED_IN_WINDOW = ("kernel_task",)
 CLOCK_SYSTEMATIC_MINIMUM_N = 5
+# Every target cell has a quad stratum (floors: repeats and quads; GAMMA
+# contrasts: quads only). A roster cell may declare its full set in "strata".
+REQUIRED_STRATA = ("quad",)
 _NS = 1_000_000_000
 
 
@@ -193,17 +204,22 @@ def compute(
         if effect != EXCLUDE_MEMBER:  # pragma: no cover - catalog validation forbids it
             unclassified.add(code)
             continue
-        if level in ("member", "quad"):
+        if level == "member" or (level == "quad" and scope["run_id"] is not None):
             run_id = scope["run_id"]
             if run_id in member_index:
                 excluded[run_id].add(code)
             else:
                 unmatched.add(flag_id)
             continue
-        if level == "stage":
-            candidates = list(stage_members.get(scope["stage_id"], ()))
-        else:
-            candidates = list(member_index)
+        candidates = list(member_index)
+        if level == "stage" and stage_members.get(scope["stage_id"]):
+            candidates = list(stage_members[scope["stage_id"]])
+        elif level in ("stage", "quad"):
+            # A stage that names no roster stage, or a quad flag without a
+            # run_id, cannot be placed. It is recorded as unmatched and applied
+            # to every member its interval overlaps (all members when it has
+            # no interval): conservative, like a span that cannot be placed.
+            unmatched.add(flag_id)
         interval = _pair(flag["interval"]["monotonic_ns"])
         for run_id in candidates:
             if interval is None:
@@ -243,7 +259,10 @@ def compute(
             if not admitted.get(run_id):
                 excluded[run_id].add("member.bytes_missing")
             elif len(admitted[run_id]) > 1:
+                # Two admissible bundles for one member: which bytes are the
+                # member is ambiguous, so neither is used (no silent pick).
                 duplicate_bundles.append(run_id)
+                excluded[run_id].add("member.bytes_ambiguous")
 
     # Cells and the unit minimum.
     units: dict[tuple[str, str, str], list[str]] = defaultdict(list)
@@ -262,7 +281,9 @@ def compute(
         spec = cell_specs.get(cell_id, {})
         target = bool(spec["target"]) if "target" in spec else True
         minimum_spec = spec["minimum"] if "minimum" in spec else {}
-        strata = sorted({key[1] for key in units if key[0] == cell_id})
+        declared = spec["strata"] if "strata" in spec else None
+        required = set(declared) if declared is not None else set(REQUIRED_STRATA)
+        strata = sorted({key[1] for key in units if key[0] == cell_id} | required)
         planned: dict[str, int] = {}
         kept: dict[str, list[str]] = {}
         dropped: list[dict[str, Any]] = []
@@ -270,7 +291,13 @@ def compute(
         for stratum in strata:
             unit_keys = sorted(key for key in units if key[0] == cell_id and key[1] == stratum)
             planned[stratum] = len(unit_keys)
-            minimum[stratum] = int(minimum_spec[stratum]) if stratum in minimum_spec else default_minimum
+            # A roster may raise a stratum's minimum, never lower it below
+            # the sealed catalog rule (review 2026-10-05).
+            minimum[stratum] = (
+                max(int(minimum_spec[stratum]), default_minimum)
+                if stratum in minimum_spec
+                else default_minimum
+            )
             kept[stratum] = []
             for key in unit_keys:
                 run_ids = units[key]
@@ -358,11 +385,23 @@ def render(result: Mapping[str, Any]) -> bytes:
 
 
 def first_claim_usable(attempts: Sequence[Mapping[str, Any]]) -> Any:
-    """The first attempt, in order, whose exclusions say ``claim_usable``; else ``None``."""
+    """The first attempt, in order, whose exclusions say ``claim_usable``; else ``None``.
+
+    An attempt that is claim-usable but ``release_blocked`` (an unclassified
+    code) is undecided: classifying the code may exclude it, and skipping to
+    a later attempt would pick the analysed window before that is known. So
+    the answer is ``None`` until it is classified. A missing
+    ``release_blocked`` counts as blocked. An attempt that is not claim-usable
+    stays so whatever the classification (classifying can only add
+    exclusions), so it is passed over.
+    """
 
     for attempt in attempts:
-        if attempt["claim_usable"] is True:
-            return attempt["attempt"]
+        if attempt["claim_usable"] is not True:
+            continue
+        if attempt.get("release_blocked", True) is not False:
+            return None
+        return attempt["attempt"]
     return None
 
 

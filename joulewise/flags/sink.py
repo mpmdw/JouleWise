@@ -5,18 +5,28 @@ A :class:`FlagSink` never rewrites or truncates its file. It deduplicates by
 reads any bytes other writers appended since its last look, and skips the
 append when the id is already present. A torn last line (a crash mid-write) is
 left in place; the next append first writes a newline so the torn bytes stay a
-line of their own, which :func:`read_flags` reports as a problem and skips.
+line of their own, which :func:`read_flags` reports as a problem and replaces
+with an unclassified ``records.malformed_flag`` record.
 """
 
 from __future__ import annotations
 
 import fcntl
+import hashlib
 import json
 import os
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
-from joulewise.flags.schema import render_line, require_flag, validate_flag
+from joulewise.flags.schema import (
+    SCOPE_KEYS,
+    make_flag,
+    make_scope,
+    make_source,
+    render_line,
+    require_flag,
+    validate_flag,
+)
 
 
 def _fsync_directory(path: Path) -> None:
@@ -135,11 +145,78 @@ def append_json_line(path: Path | str, record: Mapping[str, Any]) -> None:
         _fsync_directory(target.parent)
 
 
-def read_flags(path: Path | str) -> tuple[list[dict[str, Any]], list[str]]:
+MALFORMED_FLAG_CODE = "records.malformed_flag"
+
+
+def _salvaged_scope(value: Any) -> dict[str, Any]:
+    """The record's scope when it is well formed enough to bind; else a window scope.
+
+    A scope that cannot be trusted becomes a window scope with null bindings,
+    which matches every plan and attempt, so the malformed record still
+    reaches the exclusion function of the window it may belong to.
+    """
+
+    scope = value.get("scope") if isinstance(value, Mapping) else None
+    if isinstance(scope, Mapping) and set(scope) == set(SCOPE_KEYS):
+        candidate = {key: scope[key] for key in SCOPE_KEYS}
+        plan_ok = candidate["plan_id"] is None or isinstance(candidate["plan_id"], str)
+        attempt = candidate["attempt"]
+        attempt_ok = attempt is None or (
+            isinstance(attempt, (str, int)) and not isinstance(attempt, bool)
+        )
+        if plan_ok and attempt_ok:
+            return make_scope("window", plan_id=candidate["plan_id"], attempt=attempt)
+    return make_scope("window")
+
+
+def malformed_flag(
+    path: Path | str, number: int, line: bytes, issues: list[str], value: Any = None
+) -> dict[str, Any]:
+    """A ``records.malformed_flag`` record standing for one line that failed validation.
+
+    The code is never classified (``catalog.NEVER_CLASSIFIED_CODES``), so the
+    exclusion function reports it ``UNCLASSIFIED`` and the release event is
+    blocked until a person reads the line: a malformed record may have been
+    an exclusion (review 2026-10-05).
+    """
+
+    salvaged_code = value.get("code") if isinstance(value, Mapping) else None
+    observed = {
+        "file": Path(path).name,
+        "line": number,
+        "line_sha256": hashlib.sha256(line).hexdigest(),
+        "salvaged_code": salvaged_code if isinstance(salvaged_code, str) else None,
+        "salvaged_scope": value.get("scope") if isinstance(value, Mapping)
+        and isinstance(value.get("scope"), Mapping) else None,
+        "problems": issues[:5],
+    }
+    try:
+        json.dumps(observed, allow_nan=False)
+    except (TypeError, ValueError):
+        observed["salvaged_scope"] = None
+    return make_flag(
+        code=MALFORMED_FLAG_CODE,
+        family="RECORDS",
+        klass="REPRESENTATION",
+        scope=_salvaged_scope(value),
+        source=make_source("harvest", "joulewise.flags.sink.read_flags"),
+        observed=observed,
+        expected={"schema_version": "joulewise.flag.v1"},
+        detail=f"line {number} of {Path(path).name} is not a valid flag: {'; '.join(issues)[:300]}",
+    )
+
+
+def read_flags(
+    path: Path | str, *, salvage: bool = True
+) -> tuple[list[dict[str, Any]], list[str]]:
     """Every conforming flag (first occurrence per id) plus a problem per bad line.
 
     Reading never raises on content: a malformed record is a problem string,
-    because a malformed record must never stop anything downstream.
+    because a malformed record must never stop anything downstream. With
+    ``salvage`` (the default) each malformed line also yields a
+    ``records.malformed_flag`` record in the returned flags; that code is
+    never classified, so a lost exclusion blocks the release event instead of
+    disappearing.
     """
 
     target = Path(path)
@@ -151,18 +228,27 @@ def read_flags(path: Path | str) -> tuple[list[dict[str, Any]], list[str]]:
     except FileNotFoundError:
         return flags, problems
     except OSError as exc:
-        return flags, [f"{target}: unreadable: {exc}"]
+        problems.append(f"{target}: unreadable: {exc}")
+        if salvage:
+            flags.append(malformed_flag(target, 0, b"", [f"unreadable: {exc}"]))
+        return flags, problems
     for number, line in enumerate(raw.split(b"\n"), start=1):
         if not line.strip():
             continue
+        value: Any = None
         try:
             value = json.loads(line)
         except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-            problems.append(f"{target}:{number}: not JSON: {exc}")
-            continue
-        issues = validate_flag(value)
+            issues = [f"not JSON: {exc}"]
+        else:
+            issues = validate_flag(value)
         if issues:
             problems.append(f"{target}:{number}: " + "; ".join(issues))
+            if salvage:
+                record = malformed_flag(target, number, line, issues, value)
+                if record["flag_id"] not in seen:
+                    seen.add(record["flag_id"])
+                    flags.append(record)
             continue
         if value["flag_id"] in seen:
             continue

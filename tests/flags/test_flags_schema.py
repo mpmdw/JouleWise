@@ -56,13 +56,13 @@ class FlagSchemaTests(unittest.TestCase):
     def test_flag_id_is_sha256_prefix_of_code_scope_observed_source(self) -> None:
         flag = sample_flag()
         payload = {"code": flag["code"], "scope": flag["scope"], "observed": flag["observed"],
-                   "source": flag["source"]}
+                   "source": flag["source"], "interval": flag["interval"]}
         import hashlib
 
         expected = hashlib.sha256(canonical_json_bytes(payload)).hexdigest()[:20]
         self.assertEqual(flag["flag_id"], expected)
         self.assertEqual(flag["flag_id"], compute_flag_id(flag["code"], flag["scope"], flag["observed"],
-                                                          flag["source"]))
+                                                          flag["source"], flag["interval"]))
 
     def test_same_fact_same_id_regardless_of_emission_time_or_detail(self) -> None:
         first = sample_flag()
@@ -74,7 +74,7 @@ class FlagSchemaTests(unittest.TestCase):
     def test_tampered_flag_id_is_refused(self) -> None:
         flag = sample_flag()
         flag["observed"] = {"violations": []}
-        self.assertIn("flag_id does not match canonical(code, scope, observed, source)",
+        self.assertIn("flag_id does not match canonical(code, scope, observed, source, interval)",
                       "; ".join(validate_flag(flag)))
 
     def test_malformed_records_are_reported_not_raised_by_validate(self) -> None:

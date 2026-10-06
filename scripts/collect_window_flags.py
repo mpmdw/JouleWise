@@ -55,6 +55,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--session-id")
     parser.add_argument("--expected-model-artifact", action="append", default=[],
                         metavar="UNIT=SHA256", help="model artifact pin for an identity unit")
+    parser.add_argument("--expected-runtime-versions-sha256",
+                        help="sealed digest of the measurement interpreter's runtime package versions")
+    parser.add_argument("--runtime-python", type=Path,
+                        help="measurement interpreter (default <repo>/.venv/bin/python)")
     parser.add_argument("--verify-frozen-projection", action="store_true",
                         help="also run identity_pins.verify_frozen_projection when frozen (loads the runtime)")
     parser.add_argument("--catalog", type=Path, help="sealed flag catalog; its sha256 is stamped on each flag")
@@ -86,6 +90,8 @@ def build_specs(args: argparse.Namespace, catalog_sha256: str | None) -> list[tu
                           "chain_sidecar": str(args.chain_sidecar) if args.chain_sidecar else None},
         "model_identity": {"pack_root": str(args.pack) if args.pack else None,
                            "expected_model_artifact_sha256": expected_models,
+                           "expected_runtime_versions_sha256": args.expected_runtime_versions_sha256,
+                           "runtime_python": str(args.runtime_python) if args.runtime_python else None,
                            "verify_frozen_projection": bool(args.verify_frozen_projection),
                            "bracket_session_id": args.session_id},
         "ledger_readiness": {"ledger_path": str(args.ledger) if args.ledger else None,
@@ -93,10 +99,11 @@ def build_specs(args: argparse.Namespace, catalog_sha256: str | None) -> list[tu
                              "calibration_plan": str(args.calibration_plan) if args.calibration_plan else None,
                              "session_id": args.session_id},
     }
+    # The identity collectors always run: one whose input is missing records
+    # an "*.identity_unmeasured" flag instead of being skipped silently.
     names = args.collector or [
         name for name in DEFAULT_COLLECTORS
-        if not (name in {"pack_identity", "model_identity"} and args.pack is None)
-        and not (name == "ledger_readiness" and (args.calibration_plan is None or args.session_id is None))
+        if not (name == "ledger_readiness" and (args.calibration_plan is None or args.session_id is None))
     ]
     return [(name, {**common, **params[name]}) for name in names]
 

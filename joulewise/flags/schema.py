@@ -3,8 +3,10 @@
 Fields (plan section 3.1):
 
 ``flag_id``
-    ``sha256(canonical({code, scope, observed, source}))[:20]``. Two emissions
-    of the same fact from the same source share an id, so sinks deduplicate.
+    ``sha256(canonical({code, scope, observed, source, interval}))[:20]``. Two
+    emissions of the same fact from the same source share an id, so sinks
+    deduplicate. The interval is included (plan 3.1 listed four parts; review
+    2026-10-05 added the fifth so that two intervals are two facts).
 ``code``
     The catalog key, dotted lower-case, for example ``battery.member_span``.
 ``family`` / ``klass``
@@ -114,10 +116,32 @@ def sha256_hex(raw: bytes) -> str:
 
 
 def compute_flag_id(
-    code: str, scope: Mapping[str, Any], observed: Any, source: Mapping[str, Any]
+    code: str,
+    scope: Mapping[str, Any],
+    observed: Any,
+    source: Mapping[str, Any],
+    interval: Mapping[str, Any] | None = None,
 ) -> str:
-    payload = {"code": code, "scope": dict(scope), "observed": observed, "source": dict(source)}
+    """``sha256(canonical({code, scope, observed, source, interval}))[:20]``.
+
+    The interval is part of the identity: two window-level flags that differ
+    only in their interval are two facts, and each must reach the exclusion
+    function (review 2026-10-05). ``None`` stands for the all-null interval.
+    """
+
+    interval_value = dict(interval) if interval is not None else _null_interval()
+    payload = {
+        "code": code,
+        "scope": dict(scope),
+        "observed": observed,
+        "source": dict(source),
+        "interval": interval_value,
+    }
     return sha256_hex(canonical_json_bytes(payload))[:20]
+
+
+def _null_interval() -> dict[str, Any]:
+    return {"monotonic_ns": None, "monotonic_raw_ns": None, "wall_s": None}
 
 
 _BOOT_SESSION_UUID: str | None = None
@@ -239,14 +263,15 @@ def make_flag(
 
     scope_value = {key: scope.get(key) for key in SCOPE_KEYS}
     source_value = {key: source.get(key) for key in SOURCE_KEYS}
+    interval_value = dict(interval) if interval is not None else make_interval()
     flag = {
         "schema_version": FLAG_SCHEMA,
-        "flag_id": compute_flag_id(code, scope_value, observed, source_value),
+        "flag_id": compute_flag_id(code, scope_value, observed, source_value, interval_value),
         "code": code,
         "family": family,
         "klass": klass,
         "scope": scope_value,
-        "interval": dict(interval) if interval is not None else make_interval(),
+        "interval": interval_value,
         "source": source_value,
         "observed": observed,
         "expected": expected,
@@ -400,9 +425,11 @@ def validate_flag(value: Any) -> list[str]:
     if not isinstance(flag_id, str) or FLAG_ID_RE.fullmatch(flag_id) is None:
         problems.append("flag_id must be 20 lower-case hex characters")
     elif not problems:
-        expected_id = compute_flag_id(code, scope, value["observed"], source)
+        expected_id = compute_flag_id(code, scope, value["observed"], source, interval)
         if flag_id != expected_id:
-            problems.append("flag_id does not match canonical(code, scope, observed, source)")
+            problems.append(
+                "flag_id does not match canonical(code, scope, observed, source, interval)"
+            )
     return problems
 
 

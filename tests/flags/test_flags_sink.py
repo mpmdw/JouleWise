@@ -74,7 +74,9 @@ class FlagSinkTests(unittest.TestCase):
         target = FlagSink(self.path)
         self.assertTrue(target.append(flag("r02")))
         flags, problems = read_flags(self.path)
-        self.assertEqual([f["scope"]["run_id"] for f in flags], ["r01", "r02"])
+        self.assertEqual([f["scope"]["run_id"] for f in flags if f["code"] != "records.malformed_flag"],
+                         ["r01", "r02"])
+        self.assertEqual([f["code"] for f in flags].count("records.malformed_flag"), 1)
         self.assertEqual(len(problems), 1)
 
     def test_truncation_is_detected(self) -> None:
@@ -113,8 +115,9 @@ class FlagSinkTests(unittest.TestCase):
         good = json.dumps(flag("r01")).encode()
         self.path.write_bytes(good + b"\nnot json\n" + good + b"\n" + b'{"code": "x"}\n')
         flags, problems = read_flags(self.path)
-        self.assertEqual(len(flags), 1)
+        self.assertEqual(len([f for f in flags if f["code"] != "records.malformed_flag"]), 1)
         self.assertEqual(len(problems), 2)
+        self.assertEqual(len(read_flags(self.path, salvage=False)[0]), 1)
         self.assertEqual(read_flags(self.path.parent / "absent.jsonl"), ([], []))
 
     def test_append_json_line_appends_with_newline(self) -> None:

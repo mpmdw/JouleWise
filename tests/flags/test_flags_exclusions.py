@@ -195,7 +195,7 @@ class CellMinimumTests(unittest.TestCase):
                         CATALOG)
         self.assertFalse(three["claim_usable"])
 
-    def test_catalog_rule_and_cell_minimum_override_the_default(self) -> None:
+    def test_catalog_rule_holds_and_a_roster_minimum_can_only_raise_it(self) -> None:
         document = draft_catalog_document()
         document["rules"]["cell_unit_minimum"] = 10
         import json
@@ -204,9 +204,16 @@ class CellMinimumTests(unittest.TestCase):
         roster = floor_roster()
         result = compute([member_flag("member.anchor_not_bounded", "a-r03")], roster, spans_for(roster), strict)
         self.assertFalse(result["claim_usable"])
+        # A roster cannot lower the sealed rule (review 2026-10-05).
         roster["cells"] = [{"cell_id": "cell-decode", "minimum": {"repeat": 9, "quad": 10}}]
         result = compute([member_flag("member.anchor_not_bounded", "a-r03")], roster, spans_for(roster), strict)
-        self.assertTrue(result["claim_usable"])
+        self.assertFalse(result["claim_usable"])
+        self.assertEqual(cell(result)["minimum"], {"repeat": 10, "quad": 10})
+        # It can raise it.
+        roster["cells"] = [{"cell_id": "cell-decode", "minimum": {"repeat": 10}}]
+        result = compute([member_flag("member.anchor_not_bounded", "a-r03")], roster, spans_for(roster), CATALOG)
+        self.assertFalse(result["claim_usable"])
+        self.assertEqual(cell(result)["minimum"], {"repeat": 10, "quad": 8})
 
     def test_non_target_cell_does_not_block_the_window(self) -> None:
         roster = floor_roster()
@@ -368,8 +375,9 @@ class DeterminismTests(unittest.TestCase):
 
 class FirstClaimUsableTests(unittest.TestCase):
     def test_first_claim_usable_attempt_is_analysed(self) -> None:
-        attempts = [{"attempt": 1, "claim_usable": False}, {"attempt": 2, "claim_usable": True},
-                    {"attempt": 3, "claim_usable": True}]
+        attempts = [{"attempt": 1, "claim_usable": False, "release_blocked": False},
+                    {"attempt": 2, "claim_usable": True, "release_blocked": False},
+                    {"attempt": 3, "claim_usable": True, "release_blocked": False}]
         self.assertEqual(first_claim_usable(attempts), 2)
         self.assertIsNone(first_claim_usable([{"attempt": 1, "claim_usable": False}]))
 

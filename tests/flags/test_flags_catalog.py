@@ -14,6 +14,7 @@ from joulewise.flags.catalog import (
     DRAFT_CODES,
     EXCLUDE_MEMBER,
     EXCLUDE_WINDOW,
+    NEVER_CLASSIFIED_CODES,
     SEALED_CATALOG_RELATIVE_PATH,
     UNCLASSIFIED,
     CatalogError,
@@ -96,6 +97,8 @@ class CatalogTests(unittest.TestCase):
 
     def test_draft_classifies_every_code_this_lane_emits(self) -> None:
         self.assertEqual(missing_codes(draft_catalog(), EMITTED_BY_THIS_LANE), [])
+        # These two stay unclassified on purpose: they always block release.
+        self.assertEqual(missing_codes(draft_catalog(), NEVER_CLASSIFIED_CODES), sorted(NEVER_CLASSIFIED_CODES))
 
 
 # Codes that joulewise.flags.collect and joulewise.flags.exclusions can emit.
@@ -105,7 +108,8 @@ EMITTED_BY_THIS_LANE = (
     "battery.unmeasured", "battery.accumulator_excursion", "thermal.os_level_nonzero",
     "thermal.unmeasured", "contention.request_overlap", "contention.unmeasured",
     "contention.kernel_task_share", "clock.step_overlap", "clock.step_overlap_calibration",
-    "clock.systematic", *DERIVED_CODES,
+    "clock.systematic", "pack.identity_unmeasured", "code.identity_unmeasured", "model.identity_unmeasured",
+    "calibration.ledger_readiness_unmeasured", "records.checkout_untracked", *DERIVED_CODES,
 )
 
 

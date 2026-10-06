@@ -18,6 +18,9 @@ File format, schema ``joulewise.flag_catalog.v1``::
       "rules": {"cell_unit_minimum": 8}                    (optional)
     }
 
+``NEVER_CLASSIFIED_CODES`` must not appear in any catalog; the loader refuses
+one that lists them, so they always block release.
+
 ``DRAFT_CODES`` below is this lane's proposal, transcribed from plan sections
 3.4 and 3.5. It exists so that L6 can seal from it and so that the tests and
 the NUMBER coverage map have a fixed vocabulary before the seal. It is not a
@@ -45,6 +48,12 @@ EFFECTS = (EXCLUDE_WINDOW, EXCLUDE_MEMBER, DISCLOSE)
 
 DEFAULT_CELL_UNIT_MINIMUM = 8
 
+# Codes this package emits that must never be classified, so that they always
+# block the release event until a person looks: a flag record that failed
+# validation (its exclusion may be lost) and a collector the package does not
+# know how to class.
+NEVER_CLASSIFIED_CODES = ("records.malformed_flag", "collector.unmeasured")
+
 
 class CatalogError(ValueError):
     """The catalog file is unreadable or malformed."""
@@ -69,6 +78,16 @@ _WINDOW_CODES = {
     "clock.step_overlap_calibration": _code("CLOCK_SYSTEMATIC", "PHYSICS", EXCLUDE_WINDOW),
     "clock.systematic": _code("CLOCK_SYSTEMATIC", "NUMBER", EXCLUDE_WINDOW),
     "cell.below_minimum": _code("ROSTER", "NUMBER", EXCLUDE_WINDOW),
+    # A NUMBER identity check that could not run (collector error or timeout,
+    # or a missing input such as H_claim or the sealed inventory) leaves the
+    # identity unverified, so the window is not claim-usable (review 2026-10-05).
+    "pack.identity_unmeasured": _code("PACK_IDENTITY", "NUMBER", EXCLUDE_WINDOW),
+    "code.identity_unmeasured": _code("CODE_IDENTITY", "NUMBER", EXCLUDE_WINDOW),
+    "model.identity_unmeasured": _code("MODEL_IDENTITY", "NUMBER", EXCLUDE_WINDOW),
+    # No frozen pin for the model artifact or the runtime versions: a changed
+    # weight file or MLX version would otherwise reach a claim with only a
+    # disclosure. Excluding until L6 seals the pins (review 2026-10-05).
+    "model.identity_unpinned": _code("MODEL_IDENTITY", "NUMBER", EXCLUDE_WINDOW),
 }
 
 # Plan section 3.5, EXCLUDE_MEMBER: validity, physics in span, roster.
@@ -87,6 +106,7 @@ _MEMBER_CODES = {
     "member.admission_aborted": _code("MEMBER_VALIDITY", "NUMBER", EXCLUDE_MEMBER),
     "member.config_not_in_inventory": _code("MEMBER_VALIDITY", "NUMBER", EXCLUDE_MEMBER),
     "member.bytes_missing": _code("MEMBER_VALIDITY", "NUMBER", EXCLUDE_MEMBER),
+    "member.bytes_ambiguous": _code("MEMBER_VALIDITY", "NUMBER", EXCLUDE_MEMBER),
     "battery.capture_pair_failed": _code("MEMBER_VALIDITY", "PHYSICS", EXCLUDE_MEMBER),
     "battery.member_span": _code("PHYSICS_IN_SPAN", "PHYSICS", EXCLUDE_MEMBER),
     "battery.accumulator_excursion": _code("PHYSICS_IN_SPAN", "PHYSICS", EXCLUDE_MEMBER),
@@ -127,7 +147,8 @@ _DISCLOSE_CODES = {
     "g10.not_discharged": _code("DIAGNOSTIC", "PHYSICS", DISCLOSE),
     "diagnostic.s1_structural": _code("DIAGNOSTIC", "REPRESENTATION", DISCLOSE),
     "calibration.ledger_not_ready": _code("CALIBRATION", "REPRESENTATION", DISCLOSE),
-    "model.identity_unpinned": _code("MODEL_IDENTITY", "REPRESENTATION", DISCLOSE),
+    "calibration.ledger_readiness_unmeasured": _code("CALIBRATION", "REPRESENTATION", DISCLOSE),
+    "records.checkout_untracked": _code("RECORDS", "REPRESENTATION", DISCLOSE),
 }
 
 DRAFT_CODES: Mapping[str, Mapping[str, str]] = {
@@ -144,6 +165,7 @@ DERIVED_CODES = (
     "roster.foreign_attempt",
     "roster.before_chain_started",
     "member.bytes_missing",
+    "member.bytes_ambiguous",
 )
 
 
@@ -187,6 +209,9 @@ def validate_catalog(value: Any) -> list[str]:
     for code, entry in codes.items():
         if not isinstance(code, str) or CODE_RE.fullmatch(code) is None:
             problems.append(f"bad code {code!r}")
+            continue
+        if code in NEVER_CLASSIFIED_CODES:
+            problems.append(f"{code} must stay unclassified (it always blocks release)")
             continue
         if not isinstance(entry, Mapping):
             problems.append(f"{code}: entry must be an object")

@@ -18,22 +18,32 @@ Collectors (``COLLECTORS``):
     inside each science config. Any difference is ``pack.identity_mismatch``.
 ``checkout_identity``
     The measurement checkout's HEAD is H_claim, or H_claim plus commits that
-    change only pin paths, and has no tracked edits or untracked files.
-    Otherwise ``code.executed_differs_from_sealed``.
+    change only pin paths; it has no tracked edits, and no untracked files
+    under the executed roots. Otherwise ``code.executed_differs_from_sealed``.
+    Untracked files elsewhere are disclosed (``records.checkout_untracked``).
 ``executed_code``
     SHA-256 of tracked files under ``joulewise/``, ``scripts/`` and the pack,
     plus the chain bytes; written create-once to custody and compared with the
     sealed inventory and the chain sidecar. Any difference is
     ``code.executed_differs_from_sealed``.
 ``model_identity``
-    The model artifact digest (``provenance.model_artifact_identity``) and the
-    tokenizer bytes of each identity unit against their pins, and, when the
-    projection is frozen and asked for, ``identity_pins.verify_frozen_projection``.
-    A difference is ``model.identity_mismatch``; no pin is ``model.identity_unpinned``.
+    The model artifact digest (``provenance.model_artifact_identity``), the
+    declared revision and the tokenizer bytes of each identity unit, and the
+    runtime package versions of the measurement interpreter, against their
+    pins; when the projection is frozen and asked for, also
+    ``identity_pins.verify_frozen_projection``. A difference is
+    ``model.identity_mismatch``; no pin is ``model.identity_unpinned``, which
+    excludes the window until L6 seals the pins.
 ``ledger_readiness``
     ``scripts/recover_calibration_ledger.py readiness`` (read-only). A refusal
     is ``calibration.ledger_not_ready`` (disclosed: the chain's own
     reservation is what binds the window).
+
+A NUMBER check that does not run is never silent. A missing input (no
+H_claim, no sealed inventory, no registered pack-tree digest) makes the
+collector emit ``<family>.identity_unmeasured``; a collector that errs or
+times out makes :func:`run_collectors` emit the same code for it. Those codes
+exclude the window.
 """
 
 from __future__ import annotations
@@ -155,6 +165,34 @@ def _flag(
         interval=make_interval(),
         catalog_sha256=params.get("catalog_sha256"),
     )
+
+
+def _unmeasured(
+    params: Mapping[str, Any],
+    collector: str,
+    *,
+    code: str,
+    family: str,
+    check: str,
+    detail: str,
+    missing_input: str | None = None,
+    klass: str = "NUMBER",
+    **observed: Any,
+) -> dict[str, Any]:
+    """A NUMBER check that did not run; the window is not claim-usable without it."""
+
+    return _flag(
+        params, collector, code=code, family=family, klass=klass,
+        observed={"check": check, "missing_input": missing_input, **observed},
+        expected={"check_ran": True}, detail=detail, legacy_site=None,
+    )
+
+
+def _require(params: Mapping[str, Any], key: str) -> Any:
+    value = params.get(key)
+    if not value:
+        raise CollectorError(f"input {key} was not given")
+    return value
 
 
 def _repo_root_of(path: Path) -> Path:
@@ -324,7 +362,7 @@ def _resolve_pin_path(raw: str, pack_root: Path, repo_root: Path) -> Path:
 
 
 def collect_pack_identity(params: Mapping[str, Any]) -> dict[str, Any]:
-    pack_root = Path(params["pack_root"])
+    pack_root = Path(_require(params, "pack_root"))
     repo_root = Path(params["repo_root"]) if params.get("repo_root") else _repo_root_of(pack_root)
     name = "pack_identity"
     flags: list[dict[str, Any]] = []
@@ -344,7 +382,18 @@ def collect_pack_identity(params: Mapping[str, Any]) -> dict[str, Any]:
         digest = committed_pack_tree_sha256(pack_root)
         observed["committed_pack_tree_sha256"] = digest
         expected_digest = params.get("expected_pack_tree_sha256")
-        if expected_digest and digest != expected_digest:
+        if not expected_digest:
+            # The file pins below do not cover plan_tree.json itself, so
+            # without the registered digest the pack is not verified.
+            flags.append(
+                _unmeasured(
+                    params, name, code="pack.identity_unmeasured", family="PACK_IDENTITY",
+                    check="pack_tree_digest", missing_input="expected_pack_tree_sha256",
+                    detail="no registered pack-tree digest given; the committed tree was not compared",
+                    pack_tree_sha256=digest,
+                )
+            )
+        elif digest != expected_digest:
             mismatch(
                 "pack_tree_digest", {"pack_tree_sha256": digest},
                 {"pack_tree_sha256": expected_digest},
@@ -435,28 +484,98 @@ def collect_pack_identity(params: Mapping[str, Any]) -> dict[str, Any]:
 # --------------------------------------------------------------------------
 
 
+def _executed_roots(params: Mapping[str, Any], repo: Path) -> list[str]:
+    """``joulewise``, ``scripts`` (or ``params["roots"]``) and the pack, repo-relative."""
+
+    roots = list(params.get("roots") or ["joulewise", "scripts"])
+    if params.get("pack_root"):
+        try:
+            pack = Path(params["pack_root"]).resolve()
+            roots.append(pack.relative_to(repo.resolve()).as_posix())
+        except (OSError, ValueError):
+            pass
+    return roots
+
+
+def _under(path: str, roots: Sequence[str]) -> bool:
+    return any(path == root or path.startswith(root.rstrip("/") + "/") for root in roots)
+
+
 def collect_checkout_identity(params: Mapping[str, Any]) -> dict[str, Any]:
+    """HEAD is H_claim (plus pin-only commits); no tracked edits; no importable strays.
+
+    Tracked edits anywhere, and untracked files under the executed roots
+    (``joulewise/``, ``scripts/``, the pack: Python can import them), are
+    ``code.executed_differs_from_sealed``. Other untracked files (notes,
+    backups) cannot change what runs; they are disclosed as
+    ``records.checkout_untracked`` (plan 3.5 "has tracked edits"; inventory
+    row night_gate.py:1503).
+    """
+
     repo = Path(params["repo_root"])
     h_claim = params.get("h_claim")
     pin_only = tuple(params.get("pin_only_paths") or DEFAULT_PIN_ONLY_PATHS)
     name = "checkout_identity"
+    roots = _executed_roots(params, repo)
     head = _git(repo, "rev-parse", "HEAD").decode("ascii").strip()
-    status = _git(repo, "status", "--porcelain", "--untracked-files=all").decode("utf-8", "replace")
-    dirty = [line for line in status.splitlines() if line.strip()]
-    observed: dict[str, Any] = {"head": head, "dirty_entries": len(dirty)}
+    tracked = [
+        line for line in _git(repo, "status", "--porcelain", "--untracked-files=no")
+        .decode("utf-8", "replace").splitlines() if line.strip()
+    ]
+    untracked = sorted(
+        item.decode("utf-8", "replace")
+        for item in _git(repo, "ls-files", "-z", "--others", "--exclude-standard").split(b"\0")
+        if item
+    )
+    importable = [path for path in untracked if _under(path, roots)]
+    elsewhere = [path for path in untracked if not _under(path, roots)]
+    observed: dict[str, Any] = {
+        "head": head, "tracked_edits": len(tracked), "untracked_in_executed_roots": len(importable),
+        "untracked_elsewhere": len(elsewhere), "executed_roots": roots,
+    }
     flags = []
-    if dirty:
+    if tracked:
         flags.append(
             _flag(
                 params, name, code="code.executed_differs_from_sealed", family="CODE_IDENTITY",
                 klass="NUMBER", observed={"check": "checkout_clean", "head": head,
-                                          "status": dirty[:_MAX_LISTED]},
+                                          "status": tracked[:_MAX_LISTED]},
                 expected={"status": []},
-                detail=f"measurement checkout has {len(dirty)} tracked edit(s) or untracked file(s)",
+                detail=f"measurement checkout has {len(tracked)} tracked edit(s)",
                 legacy_site="joulewise/night_gate.py:1503", legacy_code="night_plan_stale",
             )
         )
-    if h_claim:
+    if importable:
+        flags.append(
+            _flag(
+                params, name, code="code.executed_differs_from_sealed", family="CODE_IDENTITY",
+                klass="NUMBER", observed={"check": "untracked_in_executed_roots", "head": head,
+                                          "untracked": importable[:_MAX_LISTED]},
+                expected={"untracked": [], "roots": roots},
+                detail=f"{len(importable)} untracked file(s) under the executed roots",
+                legacy_site="joulewise/night_gate.py:1503", legacy_code="night_plan_stale",
+            )
+        )
+    if elsewhere:
+        flags.append(
+            _flag(
+                params, name, code="records.checkout_untracked", family="RECORDS",
+                klass="REPRESENTATION", observed={"check": "untracked_elsewhere", "head": head,
+                                                  "untracked": elsewhere[:_MAX_LISTED]},
+                expected=None,
+                detail=f"{len(elsewhere)} untracked file(s) outside the executed roots (disclosed)",
+                legacy_site="joulewise/night_gate.py:1503", legacy_code="night_plan_stale",
+            )
+        )
+    if not h_claim:
+        flags.append(
+            _unmeasured(
+                params, name, code="code.identity_unmeasured", family="CODE_IDENTITY",
+                check="head_is_h_claim", missing_input="h_claim", head=head,
+                detail="no H_claim given; the checkout HEAD was not compared with the sealed commit",
+            )
+        )
+    else:
         changed: list[str] = []
         ancestor = True
         if head != h_claim:
@@ -529,13 +648,7 @@ def _sealed_files(document: Any) -> tuple[dict[str, str], list[str] | None]:
 def collect_executed_code(params: Mapping[str, Any]) -> dict[str, Any]:
     repo = Path(params["repo_root"])
     name = "executed_code"
-    roots = list(params.get("roots") or ["joulewise", "scripts"])
-    if params.get("pack_root"):
-        pack = Path(params["pack_root"]).resolve()
-        try:
-            roots.append(pack.relative_to(repo.resolve()).as_posix())
-        except ValueError:
-            pass
+    roots = _executed_roots(params, repo)
     extra = [Path(params["chain_path"])] if params.get("chain_path") else []
     inventory = executed_inventory(repo, roots, extra)
     head = _git(repo, "rev-parse", "HEAD").decode("ascii").strip()
@@ -568,7 +681,16 @@ def collect_executed_code(params: Mapping[str, Any]) -> dict[str, Any]:
     observed: dict[str, Any] = {"head": head, "files": len(inventory), "inventory_sha256": inventory_sha}
     flags = []
     sealed_path = params.get("sealed_inventory")
-    if sealed_path:
+    if not sealed_path:
+        flags.append(
+            _unmeasured(
+                params, name, code="code.identity_unmeasured", family="CODE_IDENTITY",
+                check="executed_inventory", missing_input="sealed_inventory",
+                inventory_sha256=inventory_sha,
+                detail="no sealed inventory given; the executed files were not compared",
+            )
+        )
+    else:
         sealed, sealed_roots = _sealed_files(json.loads(Path(sealed_path).read_bytes()))
         changed = sorted(p for p, sha in sealed.items() if p in inventory and inventory[p] != sha)
         missing = sorted(p for p in sealed if p not in inventory)
@@ -595,6 +717,15 @@ def collect_executed_code(params: Mapping[str, Any]) -> dict[str, Any]:
                 )
             )
     sidecar = params.get("chain_sidecar")
+    if bool(params.get("chain_path")) != bool(sidecar):
+        flags.append(
+            _unmeasured(
+                params, name, code="code.identity_unmeasured", family="CODE_IDENTITY",
+                check="chain_sidecar",
+                missing_input="chain_sidecar" if params.get("chain_path") else "chain_path",
+                detail="only one of the chain and its sidecar was given; the chain digest was not compared",
+            )
+        )
     if params.get("chain_path") and sidecar:
         chain_sha = _sha256_file(Path(params["chain_path"]))
         sidecar_text = Path(sidecar).read_text(encoding="utf-8", errors="replace").strip()
@@ -620,10 +751,87 @@ def collect_executed_code(params: Mapping[str, Any]) -> dict[str, Any]:
 # --------------------------------------------------------------------------
 
 
+RUNTIME_PACKAGES = (
+    "mlx", "mlx-lm", "mlx-metal", "transformers", "tokenizers", "safetensors", "numpy",
+)
+RUNTIME_PROBE_TIMEOUT_S = 60.0
+_RUNTIME_PROBE = (
+    "import importlib.metadata as m, json, platform, sys\n"
+    "out = {}\n"
+    "for name in json.loads(sys.argv[1]):\n"
+    "    try:\n"
+    "        out[name] = m.version(name)\n"
+    "    except m.PackageNotFoundError:\n"
+    "        out[name] = None\n"
+    "print(json.dumps({'python': platform.python_version(), 'packages': out}, sort_keys=True))\n"
+)
+
+
 def _artifact_digest(identity: Mapping[str, Any]) -> str | None:
     if identity.get("status") != "ok":
         return None
     return identity.get("sha256") or identity.get("folded_sha256")
+
+
+def runtime_versions(python: str, packages: Sequence[str] = RUNTIME_PACKAGES,
+                     timeout_s: float = RUNTIME_PROBE_TIMEOUT_S) -> dict[str, Any]:
+    """Installed versions of the runtime packages, read from package metadata.
+
+    Runs the measurement interpreter (``<repo>/.venv/bin/python`` by default)
+    with ``importlib.metadata`` only: nothing is imported from MLX, no model
+    is loaded and no machine state changes. Raises :class:`CollectorError`
+    when the interpreter cannot answer.
+    """
+
+    try:
+        completed = subprocess.run(
+            [python, "-B", "-c", _RUNTIME_PROBE, json.dumps(list(packages))],
+            capture_output=True, timeout=timeout_s, check=False,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise CollectorError(f"runtime probe with {python} could not run: {exc}") from exc
+    if completed.returncode != 0:
+        raise CollectorError(
+            f"runtime probe with {python} exited {completed.returncode}: "
+            + completed.stderr.decode("utf-8", "replace").strip()[-300:]
+        )
+    try:
+        value = json.loads(completed.stdout.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise CollectorError(f"runtime probe with {python} printed no JSON: {exc}") from exc
+    return value
+
+
+def runtime_versions_sha256(versions: Mapping[str, Any]) -> str:
+    """The pin L6 seals: SHA-256 of the canonical JSON of :func:`runtime_versions`."""
+
+    return hashlib.sha256(canonical_json_bytes(dict(versions))).hexdigest()
+
+
+def recorded_download_revisions(source: str | None) -> list[str]:
+    """Commit hashes the Hugging Face download recorded for a local model directory.
+
+    ``huggingface_hub`` writes ``.cache/huggingface/download/<file>.metadata``
+    whose first line is the commit the file was fetched at. An empty list
+    means nothing was recorded (the artifact digest pin still governs).
+    """
+
+    if not source:
+        return []
+    directory = Path(source) / ".cache" / "huggingface" / "download"
+    revisions: set[str] = set()
+    try:
+        entries = sorted(directory.rglob("*.metadata"))
+    except OSError:
+        return []
+    for entry in entries:
+        try:
+            first = entry.read_text(encoding="utf-8", errors="replace").splitlines()[:1]
+        except OSError:
+            continue
+        if first and first[0].strip():
+            revisions.add(first[0].strip())
+    return sorted(revisions)
 
 
 def collect_model_identity(
@@ -631,18 +839,32 @@ def collect_model_identity(
     *,
     artifact_identity: Callable[[str], Mapping[str, Any]] | None = None,
     verify_frozen: Callable[..., Mapping[str, Any]] | None = None,
+    probe_runtime: Callable[[str, Sequence[str]], Mapping[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """Model artifact and tokenizer bytes per identity unit, against their pins.
+    """Model artifact, revision, tokenizer and runtime versions against their pins.
 
-    ``artifact_identity`` and ``verify_frozen`` default to the production
-    ``provenance.model_artifact_identity`` and
-    ``identity_pins.verify_frozen_projection``; tests inject only the latter,
-    which loads the runtime.
+    Per identity unit: the model artifact digest
+    (``provenance.model_artifact_identity``) against the frozen pin or
+    ``expected_model_artifact_sha256[unit]``; the declared ``model_revision``
+    against each config's ``model.revision`` and the revision the download
+    recorded; the tokenizer bytes against the configs' pins. Once per run:
+    the runtime package versions of the measurement interpreter
+    (``runtime_python``, default ``<repo>/.venv/bin/python``) against
+    ``expected_runtime_versions_sha256``. A difference is
+    ``model.identity_mismatch``; a missing pin is ``model.identity_unpinned``
+    (excluding until L6 seals the pins); a check that could not run is
+    ``model.identity_unmeasured``. When the projection is frozen and asked
+    for, ``identity_pins.verify_frozen_projection`` also runs.
+
+    ``artifact_identity``, ``verify_frozen`` and ``probe_runtime`` default to
+    production code; tests inject fakes.
     """
 
     if artifact_identity is None:
         from joulewise.provenance import model_artifact_identity as artifact_identity
-    pack_root = Path(params["pack_root"])
+    if probe_runtime is None:
+        probe_runtime = runtime_versions
+    pack_root = Path(_require(params, "pack_root"))
     repo_root = Path(params["repo_root"]) if params.get("repo_root") else _repo_root_of(pack_root)
     name = "model_identity"
     tree = json.loads((pack_root / "plan_tree.json").read_bytes())
@@ -651,15 +873,25 @@ def collect_model_identity(
     expected_overrides = params.get("expected_model_artifact_sha256") or {}
     flags: list[dict[str, Any]] = []
     observed_units = []
+    if not units:
+        flags.append(
+            _unmeasured(
+                params, name, code="model.identity_unmeasured", family="MODEL_IDENTITY",
+                check="identity_units", missing_input="identity_pin_projection.identity_units",
+                detail="the plan tree lists no identity units; no model was checked",
+            )
+        )
     for unit in units:
         unit_id = unit.get("identity_unit_id")
         declared = unit.get("declared_identity") or {}
         source = declared.get("model_source")
+        declared_revision = declared.get("model_revision")
         identity = artifact_identity(source)
         digest = _artifact_digest(identity)
         pinned = (unit.get("model_runtime_config") or {}).get("model_artifact_sha256") or expected_overrides.get(unit_id)
         unit_observed = {"identity_unit_id": unit_id, "model_source": source,
-                         "model_artifact_sha256": digest, "pinned": pinned}
+                         "model_artifact_sha256": digest, "pinned": pinned,
+                         "declared_model_revision": declared_revision}
         if digest is None:
             flags.append(
                 _flag(
@@ -676,9 +908,9 @@ def collect_model_identity(
             flags.append(
                 _flag(
                     params, name, code="model.identity_unpinned", family="MODEL_IDENTITY",
-                    klass="REPRESENTATION",
+                    klass="NUMBER",
                     observed={"check": "model_artifact", "unit": unit_id, "model_artifact_sha256": digest},
-                    expected=None,
+                    expected={"model_artifact_sha256": "a sealed pin"},
                     detail=f"no frozen model artifact pin for unit {unit_id}; digest recorded",
                     legacy_site="joulewise/identity_pins.py:verify_frozen_projection",
                     legacy_code="readiness_identity_pinset_frozen_mismatch",
@@ -695,17 +927,48 @@ def collect_model_identity(
                     legacy_code="readiness_identity_environment_dirty",
                 )
             )
-        # Tokenizer bytes against the configs' pins.
+        # Declared revision against the recorded download commit.
+        recorded = recorded_download_revisions(source)
+        unit_observed["recorded_download_revisions"] = recorded
+        if declared_revision and recorded and recorded != [declared_revision]:
+            flags.append(
+                _flag(
+                    params, name, code="model.identity_mismatch", family="MODEL_IDENTITY", klass="NUMBER",
+                    observed={"check": "model_revision_download", "unit": unit_id,
+                              "recorded_download_revisions": recorded},
+                    expected={"model_revision": declared_revision},
+                    detail=f"model files for unit {unit_id} were downloaded at another revision",
+                    legacy_site="joulewise/identity_pins.py:verify_frozen_projection",
+                    legacy_code="readiness_identity_environment_dirty",
+                )
+            )
+        # Tokenizer bytes and revision against the configs' pins.
         tokenizer_pins = set()
+        config_revisions = set()
         for row in unit.get("config_inventory") or []:
             target = _resolve_pin_path(row["path"], pack_root, repo_root)
             try:
                 config = json.loads(target.read_bytes())
             except (OSError, UnicodeDecodeError, json.JSONDecodeError):
                 continue  # pack_identity reports unreadable configs
-            pin = ((config.get("model") or {}) if isinstance(config, Mapping) else {}).get("tokenizer_json_sha256")
+            model = (config.get("model") or {}) if isinstance(config, Mapping) else {}
+            pin = model.get("tokenizer_json_sha256")
             if pin:
                 tokenizer_pins.add(pin)
+            if "revision" in model:
+                config_revisions.add(model.get("revision"))
+        if declared_revision and config_revisions and config_revisions != {declared_revision}:
+            flags.append(
+                _flag(
+                    params, name, code="model.identity_mismatch", family="MODEL_IDENTITY", klass="NUMBER",
+                    observed={"check": "model_revision_config", "unit": unit_id,
+                              "config_revisions": sorted(str(r) for r in config_revisions)},
+                    expected={"model_revision": declared_revision},
+                    detail=f"configs of unit {unit_id} name another model revision than declared",
+                    legacy_site="joulewise/identity_pins.py:_derive_projection_units",
+                    legacy_code="readiness_identity_environment_dirty",
+                )
+            )
         if tokenizer_pins and source:
             tokenizer_path = Path(source) / "tokenizer.json"
             try:
@@ -728,6 +991,51 @@ def collect_model_identity(
                 )
         observed_units.append(unit_observed)
     observed: dict[str, Any] = {"units": observed_units, "projection_state": projection.get("state")}
+
+    # Runtime versions of the measurement interpreter, recorded even when the
+    # projection is unprojected (review 2026-10-05).
+    python = params.get("runtime_python") or str(repo_root / ".venv" / "bin" / "python")
+    packages = list(params.get("runtime_packages") or RUNTIME_PACKAGES)
+    expected_runtime = params.get("expected_runtime_versions_sha256")
+    try:
+        versions = dict(probe_runtime(python, packages))
+    except CollectorError as exc:
+        observed["runtime"] = {"python": python, "error": str(exc)}
+        flags.append(
+            _unmeasured(
+                params, name, code="model.identity_unmeasured", family="MODEL_IDENTITY",
+                check="runtime_versions", missing_input=None, python=python, error=str(exc)[:500],
+                detail="the measurement interpreter's runtime versions could not be read",
+            )
+        )
+    else:
+        versions_sha = runtime_versions_sha256(versions)
+        observed["runtime"] = {"python": python, "versions": versions, "versions_sha256": versions_sha}
+        if not expected_runtime:
+            flags.append(
+                _flag(
+                    params, name, code="model.identity_unpinned", family="MODEL_IDENTITY", klass="NUMBER",
+                    observed={"check": "runtime_versions", "versions": versions,
+                              "versions_sha256": versions_sha},
+                    expected={"runtime_versions_sha256": "a sealed pin"},
+                    detail="no sealed runtime-versions pin; versions recorded",
+                    legacy_site="joulewise/identity_pins.py:verify_frozen_projection",
+                    legacy_code="readiness_identity_pinset_frozen_mismatch",
+                )
+            )
+        elif versions_sha != expected_runtime:
+            flags.append(
+                _flag(
+                    params, name, code="model.identity_mismatch", family="MODEL_IDENTITY", klass="NUMBER",
+                    observed={"check": "runtime_versions", "versions": versions,
+                              "versions_sha256": versions_sha},
+                    expected={"runtime_versions_sha256": expected_runtime},
+                    detail="runtime package versions differ from the sealed pin",
+                    legacy_site="joulewise/identity_pins.py:verify_frozen_projection",
+                    legacy_code="readiness_identity_environment_dirty",
+                )
+            )
+
     if params.get("verify_frozen_projection"):
         if projection.get("state") != "frozen":
             observed["frozen_projection"] = "not_frozen"
@@ -925,6 +1233,39 @@ def run_collector(
     return CollectorOutcome(name, "ok", elapsed, flags=flags, observed=result.get("observed"))
 
 
+# The flag a collector that did not finish leaves behind. The identity
+# collectors' checks are NUMBER: unverified identity excludes the window.
+# Ledger readiness is disclosed anyway. A collector this table does not know
+# gets "collector.unmeasured", which is never classified and blocks release.
+UNMEASURED_BY_COLLECTOR: Mapping[str, tuple[str, str, str]] = {
+    "pack_identity": ("pack.identity_unmeasured", "PACK_IDENTITY", "NUMBER"),
+    "checkout_identity": ("code.identity_unmeasured", "CODE_IDENTITY", "NUMBER"),
+    "executed_code": ("code.identity_unmeasured", "CODE_IDENTITY", "NUMBER"),
+    "model_identity": ("model.identity_unmeasured", "MODEL_IDENTITY", "NUMBER"),
+    "ledger_readiness": ("calibration.ledger_readiness_unmeasured", "CALIBRATION", "REPRESENTATION"),
+}
+UNKNOWN_COLLECTOR_UNMEASURED = ("collector.unmeasured", "DIAGNOSTIC", "REPRESENTATION")
+
+
+def collector_unmeasured_flag(outcome: "CollectorOutcome", params: Mapping[str, Any]) -> dict[str, Any]:
+    """The flag recording that ``outcome``'s checks did not (all) run."""
+
+    code, family, klass = UNMEASURED_BY_COLLECTOR.get(outcome.name, UNKNOWN_COLLECTOR_UNMEASURED)
+    return make_flag(
+        code=code,
+        family=family,
+        klass=klass,
+        scope=_context_scope(params),
+        source=make_source(params.get("stage", "desk"), "joulewise.flags.collect.run_collectors"),
+        observed={"check": "collector_run", "collector": outcome.name, "status": outcome.status,
+                  "error": (outcome.error or "")[:500]},
+        expected={"status": "ok"},
+        detail=f"collector {outcome.name} did not finish ({outcome.status}): {outcome.error}",
+        interval=make_interval(),
+        catalog_sha256=params.get("catalog_sha256"),
+    )
+
+
 def run_collectors(
     specs: Sequence[tuple[str, Mapping[str, Any]]],
     *,
@@ -935,7 +1276,13 @@ def run_collectors(
     python: str | None = None,
     module: str = "joulewise.flags.collect",
 ) -> list[CollectorOutcome]:
-    """Run each collector; write its flags to ``sink``; log one run record. Never raises."""
+    """Run each collector; write its flags to ``sink``; log one run record. Never raises.
+
+    A collector that errs or times out (or whose flags could not all be
+    written) also leaves a flag (:func:`collector_unmeasured_flag`), so an
+    unverified identity reaches the exclusion function instead of only the
+    run log.
+    """
 
     from joulewise.flags.sink import append_json_line
 
@@ -955,6 +1302,13 @@ def run_collectors(
                 outcome.status = "error"
                 outcome.error = f"sink write failed: {exc}"
                 break
+        if outcome.status != "ok":
+            try:
+                unmeasured = collector_unmeasured_flag(outcome, merged)
+                outcome.flags.append(unmeasured)
+                written += 1 if sink.append(unmeasured) else 0
+            except (OSError, FlagSchemaError, TypeError, ValueError):
+                pass  # the run record below still carries the error
         outcomes.append(outcome)
         records.append(outcome.as_record(written))
     if runs_log is not None:
