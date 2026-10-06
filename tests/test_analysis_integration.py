@@ -6242,14 +6242,18 @@ class SupersessionAwareCooldownJoinTests(unittest.TestCase):
                     if "load_authenticated_campaign_manifest" in imported:
                         dereference_importers.add(relative)
 
+        # whole_window.py: the HAZARD_PACK verdict validator replays the
+        # window's complete catalog against the row's membership_id
+        # (_hazard_membership_replay_reasons).
         self.assertEqual(
             catalog_calls,
             {
                 "joulewise/analysis_engine/inputs.py": 2,
+                "joulewise/whole_window.py": 1,
                 "scripts/run_campaign.py": 4,
             },
         )
-        self.assertEqual(sum(catalog_calls.values()), 6)
+        self.assertEqual(sum(catalog_calls.values()), 7)
         self.assertEqual(catalog_importers, set(catalog_calls))
         # Pointwise dereference of pinned descriptors: the whole-window
         # verdict validator, and the block-5 harvest's NEG-8 re-screen
