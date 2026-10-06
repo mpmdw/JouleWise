@@ -13,9 +13,12 @@ bundle - a reducer bug never re-runs hardware, D-002/D-028).
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import shlex
+import signal
 import sys
+import threading
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
@@ -269,7 +272,53 @@ def _bundle_line(bundle_path: Path, summary: SummaryMetrics) -> str:
     return line
 
 
+# Exit status of a ``joulewise run`` ended by SIGTERM after its salvage ran
+# (the shell convention 128 + signal number).
+SIGTERM_EXIT_STATUS = 128 + int(signal.SIGTERM)
+
+
+@contextlib.contextmanager
+def _hazard_sigterm_salvage(runs_dir: Path) -> Any:
+    """PLAN2 row 8: on a HAZARD runs root, SIGTERM becomes ``SystemExit``.
+
+    The controller already salvages and finalizes a bundle on
+    ``KeyboardInterrupt``/``SystemExit`` (``_finalize_interrupted_run``);
+    without a handler SIGTERM kills the process before any of that runs.  The
+    first SIGTERM raises; later ones are ignored so the salvage completes (a
+    parent that must stop the member escalates to SIGKILL).  The legacy path
+    keeps the default disposition.
+    """
+
+    from joulewise.flags import core as flags_core  # noqa: PLC0415
+
+    if (
+        threading.current_thread() is not threading.main_thread()
+        or flags_core.hazard_flag_context(runs_dir, writer="core-controller") is None
+    ):
+        yield
+        return
+    received = False
+
+    def handler(signum: int, _frame: Any) -> None:
+        nonlocal received
+        if received:
+            return
+        received = True
+        raise SystemExit(SIGTERM_EXIT_STATUS)
+
+    previous = signal.signal(signal.SIGTERM, handler)
+    try:
+        yield
+    finally:
+        signal.signal(signal.SIGTERM, previous)
+
+
 def _cmd_run(args: argparse.Namespace) -> int:
+    with _hazard_sigterm_salvage(Path(args.runs_dir)):
+        return _cmd_run_body(args)
+
+
+def _cmd_run_body(args: argparse.Namespace) -> int:
     """Execute the benchmark and print the machine-greppable result line(s).
 
     ``repetitions > 1`` dispatches to the experiment runner (Slice 2F): one
@@ -389,7 +438,12 @@ def _cmd_run(args: argparse.Namespace) -> int:
 # Phase 5 dataset publication later reuse it without the CLI shell.
 
 
-def validate_bundle(path: Path, strict: bool = False) -> list[str]:
+def validate_bundle(
+    path: Path,
+    strict: bool = False,
+    *,
+    physics_cache: dict[str, float] | None = None,
+) -> list[str]:
     """Return a list of problems with the bundle at ``path``.
 
     An empty list means the bundle is valid. Performs every check (no
@@ -404,30 +458,49 @@ def validate_bundle(path: Path, strict: bool = False) -> list[str]:
     follows from its evidence cannot be blessed into a dataset. Strict mode
     lives here (not in the reader) because it composes the reader with the
     reducer, which itself consumes the reader.
+
+    ``physics_cache`` (J2, PLAN2 section 3.2) is a plain, caller-owned dict
+    {calibration evidence sha256: verified effective bound} that the strict
+    re-reduction passes to the reducer, so many bundles sharing one
+    calibration refit it once per process.  The reducer reads it only after
+    its own manifest, evidence, plist and events hash checks.  ``None`` keeps
+    today's behaviour (the active V2 authentication session's cache, if any).
     """
     reader = BundleReader(Path(path))
     problems = reader.problems()
     if strict:
-        problems.extend(_strict_problems(reader))
+        problems.extend(
+            _strict_problems(reader)
+            if physics_cache is None
+            else _strict_problems(reader, physics_cache=physics_cache)
+        )
     return problems
 
 
-def _strict_problems(reader: BundleReader) -> list[str]:
+def _strict_problems(
+    reader: BundleReader,
+    *,
+    physics_cache: dict[str, float] | None = None,
+) -> list[str]:
     """The D-030 analysis-grade checks; applies only to succeeded bundles.
 
     Failed/unsupported summaries are controller-written from partial
     evidence, and incomplete bundles already fail structurally, so a fresh
     reduction is only comparable when the summary claims success.
+
+    ``physics_cache``: see :func:`validate_bundle` (J2).  An explicit dict is
+    used as given and never replaced by a V2 authentication session's cache.
     """
     raw_config = reader.raw_config()
     metadata = reader.raw_metadata()
     summary = reader.raw_summary()
-    authentication_session = active_v2_authentication_session()
-    physics_cache = (
-        authentication_session.instrument_calibration_physics_cache
-        if authentication_session is not None
-        else None
-    )
+    if physics_cache is None:
+        authentication_session = active_v2_authentication_session()
+        physics_cache = (
+            authentication_session.instrument_calibration_physics_cache
+            if authentication_session is not None
+            else None
+        )
     axi_selected = (
         isinstance(raw_config, dict)
         and raw_config.get("schema_extensions")
