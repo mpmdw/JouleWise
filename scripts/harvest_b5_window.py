@@ -3,13 +3,19 @@
 
 Nothing here refuses on data.  Exit status:
 
-* 0  COLLECTED or NULL (read ``claim_usable`` in harvest.json / window_flags.json)
-* 2  HARVEST_FAULT (the program failed on present bytes; outputs are written,
-     claim_usable is false; fix by R3 and re-run on the archived bytes)
+* 0  COLLECTED, NO_COLLECTION or NULL (read ``claim_usable`` in harvest.json /
+     window_flags.json)
+* 2  HARVEST_FAULT (the program failed on present bytes, or a runs root is
+     absent; outputs are written, claim_usable is false; fix by R3 and re-run
+     on the archived bytes)
 * 3  inputs could not be resolved or the archive root is unusable
 * 4  not ready: the chain's process group is alive or the terminal record is absent
+* 6  COLLECTED or NO_COLLECTION with members planned and none present: nothing
+     was harvested.  Any offload or cleanup step requires present == planned.
 
-stdout carries structure only: the verdict, counts and output digests.
+stdout carries structure only: the verdict, the member counts
+(``members=<raw-valid>/<planned>``), the reasons the window is excluded, any
+runs-root override, and output digests.
 """
 from __future__ import annotations
 
@@ -80,13 +86,23 @@ def main(argv: list[str] | None = None) -> int:
     except (h.HarvestFault, OSError, ValueError) as exc:
         print(f"verdict=HARVEST_FAULT reason={type(exc).__name__}:{str(exc)[:200]}")
         return 3
+    counts = record.get("yield") or {}
     print(f"verdict={record['verdict']} claim_usable={str(record['claim_usable']).lower()} "
-          f"flags={record['flags']} members={record['members_assessed']}")
+          f"flags={record['flags']} members={counts.get('raw_valid', 0)}/{counts.get('planned', 0)} "
+          f"present={counts.get('present', 0)} succeeded={counts.get('succeeded', 0)} "
+          f"assessed={record['members_assessed']}")
+    print("exclude_window=" + (",".join(record.get("exclude_window_reasons") or []) or "none"))
+    for override in record.get("runs_root_overrides") or []:
+        print(f"runs_root_override={override['root']}:{override['used']} planned={override['planned']}")
     harvest_json = Path(record["archive_root"]) / "harvest.json"
     print(f"harvest={harvest_json} sha256={h.sha256_file(harvest_json)}")
     for name, digest in record["outputs"].items():
         print(f"path={Path(record['archive_root']) / name} sha256={digest}")
-    return 2 if record["verdict"] == h.HARVEST_FAULT else 0
+    if record["verdict"] == h.HARVEST_FAULT:
+        return 2
+    if record["verdict"] in (h.COLLECTED, h.NO_COLLECTION) and counts.get("planned") and not counts.get("present"):
+        return 6
+    return 0
 
 
 if __name__ == "__main__":

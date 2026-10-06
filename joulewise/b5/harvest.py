@@ -87,6 +87,22 @@ HAZARD_PACK_CLASS = "HAZARD_PACK"              # night_gate.HAZARD_PACK, the blo
 COLLECTOR_RUN_SCHEMA = "joulewise.flag_collector_run.v1"
 
 COLLECTED, NULL, HARVEST_FAULT = "COLLECTED", "NULL", "HARVEST_FAULT"
+# The chain started but journaled no campaign_collection stage (PLAN2 2.2 F):
+# every collector still runs; nothing is claim-usable.
+NO_COLLECTION = "NO_COLLECTION"
+YIELD_SCHEMA = "joulewise.b5_harvest_yield.v1"
+FAILURE_TEXTS_SCHEMA = "joulewise.b5_failure_texts.v1"
+STAGE_JOURNAL_NAME = "chain-stages.jsonl"      # joulewise.b5.chain.STAGE_JOURNAL, night/
+STAGE_YIELD_NAME = "stage_yield.jsonl"         # the driver's in-window yield lines (PLAN2 2.2 B), night/
+STRICT_DEFERRED = "deferred_to_harvest"        # run_campaign M3: only the structural check ran in the window
+RAW_VALID_MIN_STREAM_BYTES = 1 << 20           # PLAN2 2.2 F: a stream of at least 1 MiB
+# Battery thermistor diagnostic (timing ruling 2026-10-06): run_campaign records
+# one ioreg reading per cooldown release in each stage's campaign manifest.
+BATTERY_TEMPERATURE_MANIFEST_KEY = "battery_temperature_readings"
+BATTERY_RISE_LIMIT_K = 3.0
+BATTERY_PLATEAU_SPREAD_K = 0.5
+BATTERY_PLATEAU_READINGS = 3
+_DIGITS_RE = re.compile(r"[0-9]")
 FAMILIES = (
     "PACK_IDENTITY", "CODE_IDENTITY", "MODEL_IDENTITY", "CALIBRATION", "NEG8",
     "INSTRUMENT", "MEMBER_VALIDITY", "PHYSICS_IN_SPAN", "CLOCK_SYSTEMATIC",
@@ -1406,16 +1422,54 @@ def _stage_runs_root_binding(stage: Mapping[str, Any]) -> str | None:
     return None
 
 
-def stage_dispatches(tree: Mapping[str, Any], pack_root: Path) -> tuple[dict[str, list[dict[str, Any]]], list[str]]:
+# J3 (PLAN2 3.2): the chain lane's stage dispatch resolver in joulewise.b5.plan,
+# stage -> (runs root, sanitized run ids) from the stage argv's config-dir order
+# manifest and --runs-dir.  Read through getattr: until it lands, the plan
+# tree's input_ref is the only source here.
+J3_RESOLVER_NAME = "resolve_stage_dispatch"
+
+
+def _j3_resolver() -> Callable[..., Any] | None:
+    try:
+        from joulewise.b5 import plan as b5_plan
+    except Exception:  # an unimportable plan module resolves nothing
+        return None
+    resolver = getattr(b5_plan, J3_RESOLVER_NAME, None)
+    return resolver if callable(resolver) else None
+
+
+def _j3_dispatch(resolver: Callable[..., Any], stage: Mapping[str, Any], pack_root: Path,
+                 repo_root: Path | None) -> tuple[str | None, list[str]] | None:
+    """(runs root, run ids) from J3, or None when it cannot resolve the stage."""
+    try:
+        value = resolver(stage, pack_root=pack_root, repo_root=repo_root)
+    except Exception:  # unresolvable: the input_ref fallback decides
+        return None
+    if isinstance(value, Mapping):
+        root, run_ids = value.get("runs_root"), value.get("run_ids")
+    elif isinstance(value, (tuple, list)) and len(value) == 2:
+        root, run_ids = value
+    else:
+        return None
+    if not isinstance(run_ids, (list, tuple)) or not all(isinstance(run_id, str) and run_id for run_id in run_ids):
+        return None
+    return (str(root) if root is not None else None), list(run_ids)
+
+
+def stage_dispatches(tree: Mapping[str, Any], pack_root: Path, repo_root: Path | None = None
+                     ) -> tuple[dict[str, list[dict[str, Any]]], list[str]]:
     """Every run id the plan tree's collection stages launch, stage by stage, with the runs root.
 
-    A stage's members are its ``input_ref``'s: an external input's member
-    rows, or a pack manifest's ``executed_order``.  run_campaign skips a run
-    id whose complete bundle already exists in its runs root, so a run id two
-    stages launch into one root is measured once and its later planned
-    positions are never measured (rehearsal round 1, B3).  Returns
-    ``({run_id: [{stage_id, ordinal, runs_root}]}, [stages whose members could not be read])``.
+    A stage's members come from the J3 resolver when the chain lane provides
+    it (the stage argv's order manifest and ``--runs-dir``), else from its
+    ``input_ref``: an external input's member rows, or a pack manifest's
+    ``executed_order``.  run_campaign skips a run id whose complete bundle
+    already exists in its runs root, so a run id two stages launch into one
+    root is measured once and its later planned positions are never measured
+    (rehearsal round 1, B3).  Returns ``({run_id: [{stage_id, ordinal,
+    runs_root}]}, [stages whose members could not be read])``.
     """
+    resolver = _j3_resolver()
     external = tree.get("external_inputs")
     manifests = external.get("manifests", []) if isinstance(external, Mapping) else (external or [])
     inputs = {str(row.get("input_id") or row.get("external_input_id")): row
@@ -1427,7 +1481,11 @@ def stage_dispatches(tree: Mapping[str, Any], pack_root: Path) -> tuple[dict[str
             continue
         reference = stage.get("input_ref") if isinstance(stage.get("input_ref"), Mapping) else {}
         run_ids: list[Any] | None = None
-        if reference.get("kind") == "external_input":
+        runs_root = _stage_runs_root_binding(stage)
+        resolved = _j3_dispatch(resolver, stage, pack_root, repo_root) if resolver is not None else None
+        if resolved is not None:
+            runs_root, run_ids = resolved[0] or runs_root, resolved[1]
+        elif reference.get("kind") == "external_input":
             members = (inputs.get(str(reference.get("input_id"))) or {}).get("members")
             if isinstance(members, list):
                 run_ids = [row.get("run_id") for row in members if isinstance(row, Mapping)]
@@ -1444,7 +1502,7 @@ def stage_dispatches(tree: Mapping[str, Any], pack_root: Path) -> tuple[dict[str
         for run_id in run_ids:
             dispatches.setdefault(run_id, []).append({"stage_id": stage.get("stage_id"),
                                                       "ordinal": stage.get("ordinal"),
-                                                      "runs_root": _stage_runs_root_binding(stage)})
+                                                      "runs_root": runs_root})
     return dispatches, unresolved
 
 
@@ -2768,7 +2826,13 @@ class _Harvest:
         plan tree; the sealed catalog decides the effect.
         """
         tree = read_json(self.pack_copy / "plan_tree.json")
-        dispatches, _unresolved = stage_dispatches(tree, self.pack_copy)
+        dispatches, unresolved = stage_dispatches(tree, self.pack_copy, self.repo_root_copy)
+        self.dispatches, self.dispatch_unresolved = dispatches, list(unresolved)
+        if unresolved:
+            # Their run ids are in no duplicate check and no per-stage yield count.
+            self.emit("roster.dispatch_unresolved", level="window", collector="roster",
+                      observed={"stages": sorted(unresolved)[:32], "count": len(unresolved),
+                                "resolver": "j3" if _j3_resolver() is not None else "input_ref"})
         listings = self.roster.get("duplicate_listings") or {}
         for run_id in sorted(set(listings) | {key for key, rows in dispatches.items() if len(rows) > 1}):
             rows = dispatches.get(run_id, [])
@@ -2800,7 +2864,7 @@ class _Harvest:
             path = self.locate(member["run_id"])
             if path is None:
                 self.emit("member.bytes_missing", level="member", run_id=member["run_id"], collector="members",
-                          stage_id=member.get("stage_id"), observed={"bundle": "absent"})
+                          stage_id=member.get("stage_id"), observed=self._bytes_missing_observed(member["run_id"]))
                 continue
             reused, changed = self._early_result(member["run_id"], path)
             if reused is not None:
@@ -4597,6 +4661,270 @@ class _Harvest:
         return {label: Path(value) for label, value in roots.items()
                 if label in ("claim", "bound") and isinstance(value, str) and os.path.isabs(value)}
 
+    # -- runs roots, yield and collection causes (PLAN2 2.1 row 18, 2.2 F) -----
+    def check_runs_roots(self) -> None:
+        """An absent runs root is a harvest fault; a root other than the plan's is a recorded override."""
+        inputs = self.inputs
+        hazard = inputs.plan.get("hazard_window") if isinstance(inputs.plan.get("hazard_window"), Mapping) else {}
+        fresh = hazard.get("runs_roots") if isinstance(hazard.get("runs_roots"), Mapping) else {}
+        self.runs_root_overrides: list[dict[str, Any]] = []
+        for label, used, key in (("claim", inputs.claim_runs_root, "claim_runs_root"),
+                                 ("bound", inputs.bound_runs_root, "bound_runs_root")):
+            if used is None:
+                continue
+            if not used.is_dir():
+                self.fault("runs_roots", f"runs_root_absent:{label}")
+            planned = [value for value in (fresh.get(label), _plan_value(inputs.plan, key))
+                       if isinstance(value, str) and value]
+            differing = [value for value in planned if not _same_path(Path(value), used)]
+            if differing:
+                entry = {"root": label, "planned": differing[0], "used": str(used)}
+                self.runs_root_overrides.append(entry)
+                self.emit("records.runs_root_override", level="window", collector="runs_roots", observed=entry)
+
+    def _campaign_join(self) -> dict[str, dict[str, Any]]:
+        """run_id -> the last campaign-log row naming it, across the runs roots (structure only)."""
+        cached = getattr(self, "_campaign_rows", None)
+        if cached is not None:
+            return cached
+        rows: dict[str, dict[str, Any]] = {}
+        for root in self._runs_roots():
+            log = root / "campaign_log.jsonl"
+            try:
+                lines = log.read_bytes().splitlines() if log.is_file() else []
+            except OSError:
+                lines = []
+            for line in lines:
+                try:
+                    row = json.loads(line)
+                except ValueError:
+                    continue
+                if not isinstance(row, Mapping):
+                    continue
+                cooldown = row.get("preceding_campaign_cooldown")
+                cooldown = cooldown if isinstance(cooldown, Mapping) else {}
+                entry = {"status": row.get("status") if isinstance(row.get("status"), str) else None,
+                         "exit_code": row.get("exit_code") if _is_int(row.get("exit_code")) else None,
+                         "blocked_before_invoke": row.get("blocked_before_invoke") is True,
+                         "cooldown_result": cooldown.get("result") if isinstance(cooldown.get("result"), str)
+                         else None,
+                         "cooldown_reason": cooldown.get("reason") if isinstance(cooldown.get("reason"), str)
+                         else None}
+                run_id = row.get("run_id")
+                members = row.get("members") if isinstance(row.get("members"), list) else []
+                strict = {member.get("bundle_id"): member.get("strict_validation") for member in members
+                          if isinstance(member, Mapping) and isinstance(member.get("bundle_id"), str)}
+                if isinstance(run_id, str) and run_id:
+                    rows[run_id] = {**entry, "strict_validation": strict.get(run_id)}
+                for bundle_id, value in strict.items():
+                    if bundle_id != run_id:
+                        rows.setdefault(bundle_id, dict(entry))["strict_validation"] = value
+        self._campaign_rows = rows
+        return rows
+
+    def _bytes_missing_observed(self, run_id: str) -> dict[str, Any]:
+        """``member.bytes_missing`` for an absent bundle, with the exact campaign-log fields that name why."""
+        observed: dict[str, Any] = {"bundle": "absent"}
+        row = self._campaign_join().get(run_id)
+        if row is not None:
+            observed.update({"campaign_status": row["status"], "exit_code": row["exit_code"]})
+            if row["blocked_before_invoke"]:
+                reason = row["cooldown_reason"]
+                observed["cooldown"] = {"result": row["cooldown_result"],
+                                        "reason": _DIGITS_RE.sub("#", reason)[:200] if reason else None}
+        return observed
+
+    def _raw_valid(self, result: Mapping[str, Any]) -> bool:
+        stream = result.get("stream_bytes")
+        return bool(result.get("present")) and not result.get("files_missing") \
+            and _is_int(stream) and stream >= RAW_VALID_MIN_STREAM_BYTES
+
+    def _counts(self, run_ids: Sequence[str]) -> dict[str, int]:
+        joined = self._campaign_join()
+        counts = {"planned": len(run_ids), "present": 0, "raw_valid": 0, "succeeded": 0, "strict_deferred": 0}
+        for run_id in run_ids:
+            result = self.members.get(run_id)
+            if result is not None and result.get("present"):
+                counts["present"] += 1
+                counts["raw_valid"] += self._raw_valid(result)
+                counts["succeeded"] += result.get("status") == "succeeded"
+            counts["strict_deferred"] += (joined.get(run_id) or {}).get("strict_validation") == STRICT_DEFERRED
+        return counts
+
+    def _collection_stages(self) -> list[tuple[str, list[str]]]:
+        """(stage_id, run ids it first launches), in plan-tree order, from the dispatch map."""
+        stages: dict[str, list[str]] = {}
+        order: list[tuple[Any, str]] = []
+        for run_id, rows in (getattr(self, "dispatches", None) or {}).items():
+            if not rows:
+                continue
+            stage_id = str(rows[0]["stage_id"])
+            if stage_id not in stages:
+                stages[stage_id] = []
+                order.append((rows[0].get("ordinal") if _is_int(rows[0].get("ordinal")) else 0, stage_id))
+            stages[stage_id].append(run_id)
+        return [(stage_id, stages[stage_id]) for _ordinal, stage_id in sorted(order)]
+
+    def stage_journal(self) -> list[dict[str, Any]] | None:
+        """``night/chain-stages.jsonl`` rows; None when the chain wrote no journal."""
+        path = self.inputs.night_dir / STAGE_JOURNAL_NAME
+        if not path.is_file():
+            return None
+        rows = []
+        for line in path.read_bytes().splitlines():
+            try:
+                value = json.loads(line)
+            except ValueError:
+                continue
+            if isinstance(value, Mapping) and isinstance(value.get("stage_id"), str):
+                rows.append(dict(value))
+        return rows
+
+    def collection_presence(self) -> bool:
+        """False when the chain journaled stages but never a campaign_collection stage."""
+        journal = self.stage_journal()
+        if journal is None or any(row.get("kind") == "campaign_collection" for row in journal):
+            return True
+        last = journal[-1] if journal else {}
+        self.emit("chain.stopped_before_collection", level="window", collector="yield",
+                  observed={"stages_journaled": len(journal), "last_stage": last.get("stage_id"),
+                            "last_kind": last.get("kind"), "last_rc": last.get("rc") if _is_int(last.get("rc"))
+                            else None})
+        return False
+
+    def yield_summary(self) -> None:
+        """Counts only (PLAN2 2.2 F): planned, present, raw_valid, succeeded; overall and per stage."""
+        roster = self.roster.get("members", [])
+        per_roster: dict[str, list[str]] = {}
+        for member in roster:
+            per_roster.setdefault(str(member.get("stage_id")), []).append(member["run_id"])
+        overall = self._counts([member["run_id"] for member in roster])
+        per_collection = [{"stage_id": stage_id, **self._counts(run_ids)}
+                          for stage_id, run_ids in self._collection_stages()]
+        journal = self.stage_journal()
+        block = {"schema": YIELD_SCHEMA, **overall,
+                 "per_roster_stage": [{"stage_id": stage_id, **self._counts(run_ids)}
+                                      for stage_id, run_ids in sorted(per_roster.items())],
+                 "per_collection_stage": per_collection,
+                 "unresolved_collection_stages": sorted(getattr(self, "dispatch_unresolved", []) or []),
+                 "stage_journal": None if journal is None else {
+                     "stages": len(journal),
+                     "campaign_collection": sum(row.get("kind") == "campaign_collection" for row in journal)}}
+        window = self._window_stage_yield()
+        block["window_stage_yield"] = None if window is None else {"stages": len(window)}
+        self.yield_block = block
+        self.outputs["derived/yield.json"] = write_json_once(self.derived / "yield.json", block)
+        if overall["planned"] and not overall["present"]:
+            self.emit("collection.zero_yield", level="window", collector="yield",
+                      observed={"planned": overall["planned"], "present": 0})
+        if window is not None:
+            harvested = {row["stage_id"]: row for row in per_collection}
+            for stage_id, line in sorted(window.items()):
+                mine = harvested.get(stage_id)
+                fields = ("planned", "present", "succeeded")
+                theirs = {field: line.get(field) for field in fields}
+                ours = {field: mine[field] for field in fields} if mine is not None else None
+                if ours != theirs:
+                    self.emit("yield.harvest_disagrees_with_window", level="window", collector="yield",
+                              observed={"stage_id": stage_id, "window": theirs, "harvest": ours})
+
+    def _window_stage_yield(self) -> dict[str, dict[str, Any]] | None:
+        """The driver's in-window counts, last line per stage; None when the window wrote none."""
+        path = self.inputs.night_dir / STAGE_YIELD_NAME
+        if not path.is_file():
+            return None
+        lines: dict[str, dict[str, Any]] = {}
+        for raw in path.read_bytes().splitlines():
+            try:
+                value = json.loads(raw)
+            except ValueError:
+                continue
+            if isinstance(value, Mapping) and isinstance(value.get("stage_id"), str):
+                lines[value["stage_id"]] = {field: value.get(field) for field in ("planned", "present", "succeeded")}
+        return lines
+
+    def failure_histogram(self) -> None:
+        """``collection.failure_histogram``: every ``error:`` line of the operator logs, grouped.
+
+        Grouped by the digit-redacted text (digits become ``#``), with a cause
+        class (the leading identifier, as ``LaunchLineageError``), a count and
+        the stages whose logs hold it.  The full texts go to ``withheld/``.
+        """
+        directory = self.inputs.custody_root / "operator-logs"
+        groups: dict[str, dict[str, Any]] = {}
+        texts: list[dict[str, str]] = []
+        for path in sorted(directory.glob("*.log")) if directory.is_dir() else []:
+            try:
+                raw = path.read_bytes()
+            except OSError:
+                continue
+            for line in raw.decode("utf-8", "replace").splitlines():
+                if not line.startswith("error:"):
+                    continue
+                message = line[len("error:"):].strip()
+                texts.append({"log": path.name, "text": line})
+                redacted = _DIGITS_RE.sub("#", message)[:300]
+                match = re.match(r"([A-Za-z_][A-Za-z0-9_.]*)\s*:", redacted)
+                group = groups.setdefault(redacted, {
+                    "cause_class": match.group(1) if match else "unclassified", "text": redacted,
+                    "sha256": sha256_bytes(redacted.encode("utf-8")), "count": 0, "stages": []})
+                group["count"] += 1
+                if path.stem not in group["stages"]:
+                    group["stages"].append(path.stem)
+        if not texts:
+            return
+        write_json_once(self.withheld / "failure-texts.json", {"schema": FAILURE_TEXTS_SCHEMA, "lines": texts})
+        causes = sorted(groups.values(), key=lambda group: (-group["count"], group["text"]))
+        self.emit("collection.failure_histogram", level="window", collector="yield",
+                  observed={"lines": len(texts), "distinct": len(causes), "causes": causes[:32]})
+
+    def battery_thermistor(self) -> None:
+        """The battery-thermistor diagnostic of the timing ruling (2026-10-06), per stage.
+
+        run_campaign reads ``ioreg -rn AppleSmartBattery`` key ``Temperature``
+        (hundredths of a degree C) at each cooldown release into the stage's
+        campaign manifest.  A stage whose first-to-last rise exceeds 3 K with
+        no plateau (its last three readings not within 0.5 K) is
+        ``thermal.stage_battery_rise``; a stage whose readings are absent or
+        failed is ``thermal.battery_temperature_unmeasured``.  Both are
+        disclosed beside the NEG-8 result; neither excludes anything.
+        """
+        for root in self._runs_roots():
+            directory = root / "campaign_manifests"
+            for path in sorted(directory.glob("*.json")) if directory.is_dir() else []:
+                try:
+                    manifest = read_json(path)
+                except (OSError, ValueError):
+                    continue
+                if not isinstance(manifest, Mapping) or not isinstance(manifest.get("members"), list):
+                    continue
+                stage = {"manifest": path.name, "runs_root": root.name,
+                         "config_dir": Path(str(manifest.get("config_dir") or "")).name or None}
+                readings = manifest.get(BATTERY_TEMPERATURE_MANIFEST_KEY)
+                if not isinstance(readings, list):
+                    self.emit("thermal.battery_temperature_unmeasured", level="window", collector="thermistor",
+                              observed={**stage, "reason": "no_readings_recorded"})
+                    continue
+                values = [reading.get("temperature_centi_c") if isinstance(reading, Mapping) else None
+                          for reading in readings]
+                valid = [value for value in values if _is_int(value)]
+                if len(valid) != len(values) or not values:
+                    self.emit("thermal.battery_temperature_unmeasured", level="window", collector="thermistor",
+                              observed={**stage, "reason": "readings_failed" if values else "no_readings",
+                                        "readings": len(values), "failed": len(values) - len(valid)})
+                if len(valid) < 2:
+                    continue
+                rise_k = (valid[-1] - valid[0]) / 100.0
+                tail = valid[-BATTERY_PLATEAU_READINGS:]
+                spread_k = (max(tail) - min(tail)) / 100.0
+                plateau = len(tail) == BATTERY_PLATEAU_READINGS and spread_k <= BATTERY_PLATEAU_SPREAD_K
+                if rise_k > BATTERY_RISE_LIMIT_K and not plateau:
+                    self.emit("thermal.stage_battery_rise", level="window", collector="thermistor",
+                              observed={**stage, "readings": len(valid), "rise_k": round(rise_k, 2),
+                                        "last_three_spread_k": round(spread_k, 2), "plateau": False},
+                              expected={"rise_k_at_most": BATTERY_RISE_LIMIT_K,
+                                        "or_plateau_within_k": BATTERY_PLATEAU_SPREAD_K})
+
     # -- outputs ---------------------------------------------------------------
     def sources_unchanged(self) -> None:
         changed = [name for name, path in self.sources.items() if tree_inventory(path) != self.original.get(name)]
@@ -4667,6 +4995,7 @@ class _Harvest:
                            "unclassified": exclusions.get("unclassified", []),
                            "reasons": list(exclusions.get("reasons", []))
                            + (["harvest.fault"] if verdict == HARVEST_FAULT else [])},
+            "yield": getattr(self, "yield_block", None),
         }
         self.outputs["derived/window_flags.json"] = write_json_once(self.derived / "window_flags.json", summary)
         record = {"schema": SCHEMA, "verdict": verdict, "plan_id": self.inputs.plan_id,
@@ -4674,6 +5003,9 @@ class _Harvest:
                   "archive_root": str(self.archive), "claim_usable": claim_usable,
                   "flags": len(flags), "members_assessed": len(self.members),
                   "faults": [{"collector": item["collector"]} for item in self.faults],
+                  "yield": getattr(self, "yield_block", None),
+                  "exclude_window_reasons": sorted(map(str, summary["exclusions"]["reasons"])),
+                  "runs_root_overrides": list(getattr(self, "runs_root_overrides", [])),
                   "outputs": dict(sorted(self.outputs.items()))}
         write_json_once(self.archive / "harvest.json", record)
         return record
@@ -4792,6 +5124,7 @@ def harvest(inputs: WindowInputs, archive_root: Path | str, *, seams: Seams | No
         run.step("arm_records", run.arm_and_desk_records)
         return run.finish(NULL)
     run.step("thresholds", run.record_thresholds)
+    run.step("runs_roots", run.check_runs_roots)
     if prepare_desk:
         # The verdict writer and the member assessment run concurrently
         # (PLAN2 2.1 row 1); the archive follows both, so it holds the verdict.
@@ -4803,8 +5136,12 @@ def harvest(inputs: WindowInputs, archive_root: Path | str, *, seams: Seams | No
     if run.step("roster", run.build_roster) is None and not run.roster:
         return run.finish(HARVEST_FAULT)
     run.step("roster_dispatch", run.roster_dispatch)
+    collected = run.step("collection", run.collection_presence, fault=False) is not False
     run.step("members", run.assess)
     run.step("member_flags", run.member_flags)
+    run.step("yield", run.yield_summary, fault=False)
+    run.step("failure_histogram", run.failure_histogram, fault=False)
+    run.step("thermistor", run.battery_thermistor, fault=False)
     run.step("roster_checks", run.roster_checks)
     run.step("cooldown", run.cooldown)
     run.step("calibration", run.calibration)
@@ -4820,4 +5157,4 @@ def harvest(inputs: WindowInputs, archive_root: Path | str, *, seams: Seams | No
     run.step("g3", lambda: run.g3(skipped=not run_g3), fault=False)
     run.step("diagnostics", run.diagnostics, fault=False)
     run.step("sources_unchanged", run.sources_unchanged)
-    return run.finish(COLLECTED)
+    return run.finish(COLLECTED if collected else NO_COLLECTION)

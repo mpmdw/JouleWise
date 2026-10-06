@@ -357,3 +357,215 @@ class Prune2CodeRegistrationTests(unittest.TestCase):
                 self.assertEqual((fixture[code]["family"], fixture[code]["klass"], fixture[code]["effect"]),
                                  expected)
                 self.assertEqual((h.CODES[code].family, h.CODES[code].klass), expected[:2])
+
+
+def run_cli(window, *extra, overrides=()):
+    """The harvest CLI on a synthetic window (its seams as CliTests sets them)."""
+    from scripts import harvest_b5_window as cli
+
+    def seams(**kwargs):
+        return base._REAL_SEAMS(group_alive=lambda pgid: False, exclusions_compute=EXCLUSIONS,
+                                boot_session_uuid=lambda: "B5-CLI", **kwargs)
+
+    stdout = io.StringIO()
+    with mock.patch.object(h, "Seams", seams), contextlib.redirect_stdout(stdout):
+        code = cli.main(["--plan", str(window.plan_path), "--archive-root", str(window.archive), "--workers", "1",
+                         *extra])
+    return code, stdout.getvalue()
+
+
+def harvest_record(window) -> dict:
+    return json.loads((window.archive / "harvest.json").read_bytes())
+
+
+class YieldSummaryTests(base.WindowTestCase):
+    """PLAN2 2.2 F: counts only, overall and per stage, in harvest.json and window_flags.json."""
+
+    def test_the_yield_block_and_the_cli_counts(self):
+        window = self.window()
+        __import__("shutil").rmtree(window.claim / "b5t-abs-r02")
+        (window.claim / "campaign_log.jsonl").write_text("".join(json.dumps(row) + "\n" for row in (
+            {"run_id": "b5t-abs-r01", "status": "ok", "exit_code": 0,
+             "members": [{"bundle_id": "b5t-abs-r01", "strict_valid": True, "strict_validation": "deferred_to_harvest"}]},
+            {"run_id": "b5t-abs-r02", "status": "failed", "exit_code": None, "blocked_before_invoke": True,
+             "preceding_campaign_cooldown": {"result": "unknown", "reason": "rolling mean 0.123 W over 30 s"}},
+        )))
+        code, output = run_cli(window)
+        self.assertEqual(code, 0, output)
+        record = harvest_record(window)
+        planned = len(base.MEMBERS)
+        expected = {"planned": planned, "present": planned - 1, "raw_valid": planned - 1,
+                    "succeeded": planned - 1, "strict_deferred": 1}
+        self.assertEqual({key: record["yield"][key] for key in expected}, expected)
+        self.assertEqual(window.window_flags()["yield"], record["yield"])
+        per_stage = {row["stage_id"]: row for row in record["yield"]["per_roster_stage"]}
+        self.assertEqual((per_stage["01_abs"]["planned"], per_stage["01_abs"]["present"]), (2, 1))
+        self.assertIn(f"members={planned - 1}/{planned} ", output.splitlines()[0])
+        self.assertTrue(any(line.startswith("exclude_window=") for line in output.splitlines()))
+        missing = next(flag["observed"] for flag in window.flags() if flag["code"] == "member.bytes_missing")
+        self.assertEqual(missing, {"bundle": "absent", "campaign_status": "failed", "exit_code": None,
+                                   "cooldown": {"result": "unknown", "reason": "rolling mean #.### W over ## s"}})
+
+    def test_a_collected_window_with_nothing_present_exits_6(self):
+        window = self.window()
+        for run_id, *_rest in base.MEMBERS:
+            __import__("shutil").rmtree(window.claim / run_id)
+        code, output = run_cli(window)
+        self.assertEqual(code, 6, output)
+        self.assertIn("collection.zero_yield", window.codes())
+        self.assertIn(f"members=0/{len(base.MEMBERS)} ", output.splitlines()[0])
+
+    def test_the_window_counts_are_cross_checked(self):
+        window = self.window()
+        (window.custody / "night" / "stage_yield.jsonl").write_text(json.dumps(
+            {"stage_id": "b5t-unknown-stage", "planned": 6, "present": 6, "succeeded": 6, "rc": 0}) + "\n")
+        window.harvest()
+        flag = next(flag["observed"] for flag in window.flags()
+                    if flag["code"] == "yield.harvest_disagrees_with_window")
+        self.assertEqual(flag, {"stage_id": "b5t-unknown-stage", "window": {"planned": 6, "present": 6,
+                                                                            "succeeded": 6}, "harvest": None})
+
+
+class RunsRootTests(base.WindowTestCase):
+    """PLAN2 2.1 row 18: a missing runs root is a fault; an override is recorded and printed."""
+
+    def test_an_absent_runs_root_is_a_harvest_fault(self):
+        window = self.window()
+        __import__("shutil").rmtree(window.bound)
+        code, output = run_cli(window)
+        self.assertEqual(code, 2, output)
+        record = harvest_record(window)
+        self.assertEqual(record["verdict"], "HARVEST_FAULT")
+        self.assertIn("runs_roots", [fault["collector"] for fault in record["faults"]])
+        errors = json.loads((window.archive / "withheld" / "collector-errors.json").read_bytes())["errors"]
+        self.assertIn("runs_root_absent:bound", [error["detail"] for error in errors])
+
+    def test_a_runs_root_override_is_recorded_and_printed(self):
+        window = self.window()
+        other = window.root / "elsewhere" / "runs_bound"
+        other.mkdir(parents=True)
+        code, output = run_cli(window, "--bound-runs-root", str(other))
+        flag = next(flag["observed"] for flag in window.flags() if flag["code"] == "records.runs_root_override")
+        self.assertEqual(flag, {"root": "bound", "planned": str(window.bound), "used": str(other)})
+        self.assertIn(f"runs_root_override=bound:{other} planned={window.bound}", output)
+
+
+class CollectionCauseTests(base.WindowTestCase):
+    """PLAN2 2.2 F: the operator-log error lines, grouped; and a chain that never collected."""
+
+    def test_error_lines_are_grouped_by_their_redacted_text(self):
+        window = self.window()
+        logs = window.custody / "operator-logs"
+        logs.mkdir(parents=True, exist_ok=True)
+        (logs / "07-b5t-science.log").write_text(
+            "note\nerror: LaunchLineageError: member 3 refused after 12 s\n"
+            "error: LaunchLineageError: member 4 refused after 12 s\n")
+        (logs / "08-b5t-science.log").write_text("error: something else broke\n")
+        window.harvest()
+        observed = next(flag["observed"] for flag in window.flags() if flag["code"] == "collection.failure_histogram")
+        self.assertEqual((observed["lines"], observed["distinct"]), (3, 2))
+        first = observed["causes"][0]
+        self.assertEqual({key: first[key] for key in ("cause_class", "text", "count", "stages")},
+                         {"cause_class": "LaunchLineageError", "text": "LaunchLineageError: member # refused after ## s",
+                          "count": 2, "stages": ["07-b5t-science"]})
+        self.assertEqual(observed["causes"][1]["cause_class"], "unclassified")
+        texts = json.loads((window.archive / "withheld" / "failure-texts.json").read_bytes())["lines"]
+        self.assertEqual(len(texts), 3)
+
+    def test_a_chain_that_journaled_no_collection_stage_is_no_collection(self):
+        window = self.window()
+        (window.custody / "night" / "chain-stages.jsonl").write_text(json.dumps(
+            {"stage_id": "b5t-bracket-reservation", "kind": "bracket_reservation", "rc": 10,
+             "started_epoch_s": 1, "ended_epoch_s": 2}) + "\n")
+        code, output = run_cli(window)
+        record = harvest_record(window)
+        self.assertEqual(record["verdict"], "NO_COLLECTION")
+        self.assertFalse(record["claim_usable"])
+        self.assertEqual(record["members_assessed"], len(base.MEMBERS))  # every collector still ran
+        observed = next(flag["observed"] for flag in window.flags()
+                        if flag["code"] == "chain.stopped_before_collection")
+        self.assertEqual(observed, {"stages_journaled": 1, "last_stage": "b5t-bracket-reservation",
+                                    "last_kind": "bracket_reservation", "last_rc": 10})
+        self.assertEqual(code, 0, output)
+
+    def test_a_journaled_collection_stage_keeps_the_window_collected(self):
+        window = self.window()
+        (window.custody / "night" / "chain-stages.jsonl").write_text(json.dumps(
+            {"stage_id": "b5t-science", "kind": "campaign_collection", "rc": 0}) + "\n")
+        record = window.harvest()
+        self.assertEqual(record["verdict"], "COLLECTED")
+        self.assertNotIn("chain.stopped_before_collection", window.codes())
+
+
+class StageDispatchResolverTests(base.WindowTestCase):
+    """Row 14 / J3: stage_dispatches reads the chain lane's resolver; unresolved stages are flagged."""
+
+    def add_collection_stage(self, window):
+        tree_path = window.pack / "plan_tree.json"
+        tree = json.loads(tree_path.read_bytes())
+        tree["stage_graph"].append({
+            "stage_id": "b5t-science", "kind": "campaign_collection", "ordinal": 2, "input_ref": None,
+            "launch": {"commands": [{"argv_template": {"arguments": [
+                {"kind": "repo_path", "value": f"configs/campaigns/{base.PACK_ID}"},
+                {"kind": "literal", "value": "--runs-dir"}, {"kind": "binding", "value": "claim_runs_root"}]}}]}})
+        base.put(tree_path, tree)
+
+    def test_without_the_resolver_the_stage_is_flagged_unresolved(self):
+        window = self.window()
+        self.add_collection_stage(window)
+        window.harvest()
+        observed = next(flag["observed"] for flag in window.flags() if flag["code"] == "roster.dispatch_unresolved")
+        self.assertEqual(observed["stages"], ["b5t-science"])
+        self.assertEqual(harvest_record(window)["yield"]["unresolved_collection_stages"], ["b5t-science"])
+
+    def test_the_resolver_supplies_the_stage_members_for_dispatch_and_yield(self):
+        from joulewise.b5 import plan as b5_plan
+        window = self.window()
+        self.add_collection_stage(window)
+        run_ids = [run_id for run_id, *_rest in base.MEMBERS]
+        asked = []
+
+        def resolve(stage, *, pack_root, repo_root=None):
+            asked.append(stage["stage_id"])
+            return "claim_runs_root", list(run_ids)
+
+        (window.custody / "night" / "stage_yield.jsonl").write_text(json.dumps(
+            {"stage_id": "b5t-science", "planned": 6, "present": 6, "succeeded": 6}) + "\n")
+        with mock.patch.object(b5_plan, h.J3_RESOLVER_NAME, resolve, create=True):
+            window.harvest()
+        self.assertIn("b5t-science", asked)
+        self.assertNotIn("roster.dispatch_unresolved", window.codes())
+        stage = harvest_record(window)["yield"]["per_collection_stage"]
+        self.assertEqual(stage, [{"stage_id": "b5t-science", "planned": 6, "present": 6, "raw_valid": 6,
+                                  "succeeded": 6, "strict_deferred": 0}])
+        self.assertNotIn("yield.harvest_disagrees_with_window", window.codes())
+
+
+class BatteryThermistorTests(base.WindowTestCase):
+    """Timing ruling 2026-10-06: the per-stage battery-thermistor diagnostic, disclosed only."""
+
+    def manifest(self, window, name, readings):
+        directory = window.claim / "campaign_manifests"
+        directory.mkdir(exist_ok=True)
+        document = {"members": [], "config_dir": f"/x/{name}"}
+        if readings is not None:
+            document["battery_temperature_readings"] = [
+                {"temperature_centi_c": value, "error": None if value is not None else "exit 1"} for value in readings]
+        base.put(directory / f"{name}.json", document)
+
+    def test_rise_without_plateau_and_unmeasured_stages(self):
+        window = self.window()
+        self.manifest(window, "rising", [3000, 3200, 3400, 3600])      # +6 K, last three spread 4 K
+        self.manifest(window, "plateau", [3000, 3350, 3380, 3390])     # +3.9 K, last three within 0.4 K
+        self.manifest(window, "small", [3000, 3100, 3250])             # +2.5 K
+        self.manifest(window, "failed", [3000, None, 3050])
+        self.manifest(window, "absent", None)
+        window.harvest()
+        rises = [flag["observed"] for flag in window.flags() if flag["code"] == "thermal.stage_battery_rise"]
+        self.assertEqual([(item["config_dir"], item["rise_k"], item["last_three_spread_k"]) for item in rises],
+                         [("rising", 6.0, 4.0)])
+        unmeasured = sorted((flag["observed"]["config_dir"], flag["observed"]["reason"]) for flag in window.flags()
+                            if flag["code"] == "thermal.battery_temperature_unmeasured")
+        self.assertEqual(unmeasured, [("absent", "no_readings_recorded"), ("failed", "readings_failed")])
+        excluded = window.exclusions()["reasons"]
+        self.assertNotIn("thermal.stage_battery_rise", excluded)

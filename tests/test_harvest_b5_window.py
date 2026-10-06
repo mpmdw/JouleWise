@@ -822,7 +822,7 @@ class CollectedWindowTests(WindowTestCase):
         summary = window.window_flags()
         self.assertEqual(summary["schema"], "joulewise.window_flags.v1")
         self.assertEqual(set(summary), {"schema", "window", "catalog", "hazards", "flags", "collector_errors",
-                                        "exclusions"})
+                                        "exclusions", "yield"})
         self.assertEqual([phase["verdict"] for phase in summary["hazards"]["battery"]["arm"]], ["PASS"])
         self.assertEqual(summary["hazards"]["battery"]["continuous"]["journal"]["malformed"], 0)
         self.assertEqual(summary["flags"]["unclassified"], [])
@@ -2166,7 +2166,8 @@ class EmittedCodeTests(unittest.TestCase):
         built = {f"{module}.unmeasured" for module in ("battery", "thermal", "contention", "clock")} \
             | {f"instrument.{reason}" for reason in h.INSTRUMENT_REASONS}
         not_codes = {"g3.txt", "roster.json",  # file names
-                     "chain.started", "monitor.capture_battery"}  # a night record and a collector name
+                     "chain.started", "monitor.capture_battery",  # a night record and a collector name
+                     "yield.json"}  # a file name
         self.assertEqual((literals | built) - not_codes - set(h.CODES), set())
 
     def test_every_lineage_finding_code_is_listed_with_l3s_family(self):
