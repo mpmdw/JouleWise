@@ -404,6 +404,36 @@ class SigtermTests(_P2Stage):
         """
     ).lstrip()
 
+    def test_first_sigterm_unwinds_before_any_signal_reaches_the_child(self) -> None:
+        # The unwind snapshots the child's tree before signalling it; a TERM
+        # sent from the handler first could let a grandchild be reparented
+        # out of reach.  A later SIGTERM is forwarded directly.
+        child = type("Child", (), {"pid": 424242, "returncode": None})()
+        sent: list = []
+        with patch.dict(run_campaign._HAZARD_SIGNAL_STATE,
+                        {"child": child, "run_id": "x", "raised": False}), \
+                patch.object(run_campaign.os, "kill", side_effect=lambda *a: sent.append(a)):
+            with self.assertRaises(run_campaign._HazardInterrupted):
+                run_campaign._hazard_sigterm_handler(signal.SIGTERM, None)
+            self.assertEqual(sent, [])
+            run_campaign._hazard_sigterm_handler(signal.SIGTERM, None)
+            self.assertEqual(sent, [(424242, signal.SIGTERM)])
+
+    def test_a_reparented_descendant_stays_in_the_signalling_set(self) -> None:
+        child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
+        orphan = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(31)"])
+        self.addCleanup(lambda: [p.kill() or p.wait() for p in (child, orphan)])
+        watch = run_campaign._HazardMemberWatch(child, cap_s=60, grace_s=1)
+        table = run_campaign._hazard_process_table()
+        self.assertIsNotNone(table)
+        row = next(row for row in table if row["pid"] == orphan.pid)
+        watch.tracked[orphan.pid] = dict(row)  # tracked earlier, no longer under the child
+        pids = {row["pid"] for row in watch._snapshot()}
+        self.assertIn(orphan.pid, pids)
+        self.assertIn(child.pid, pids)
+        watch.tracked[orphan.pid] = {**row, "args": "a different program"}  # pid reuse
+        self.assertNotIn(orphan.pid, {row["pid"] for row in watch._snapshot()})
+
     def test_sigterm_forwards_records_interrupted_and_releases_the_lock(self) -> None:
         runs = self.hazard_root()
         configs = self.configs("hz-hang-term", "hz-never")

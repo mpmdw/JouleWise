@@ -3798,18 +3798,24 @@ _HAZARD_SIGNAL_STATE: dict[str, Any] = {"child": None, "run_id": None, "raised":
 
 
 def _hazard_sigterm_handler(signum: int, frame: Any) -> None:  # noqa: ARG001
-    """Forward TERM to the running member child, then unwind once."""
+    """Unwind once; the unwind forwards TERM to the member child's whole tree.
 
+    The first SIGTERM raises in the main thread, which is blocked in the
+    member child's ``wait()``; ``_HazardMemberWatch.interrupt`` then snapshots
+    the child's tree before signalling it (a TERM sent first could let a
+    grandchild be reparented out of reach).  A later SIGTERM, arriving while
+    that unwind runs, is forwarded to the child directly.
+    """
+
+    if not _HAZARD_SIGNAL_STATE.get("raised"):
+        _HAZARD_SIGNAL_STATE["raised"] = True
+        raise _HazardInterrupted(signum)
     child = _HAZARD_SIGNAL_STATE.get("child")
     if child is not None and getattr(child, "returncode", None) is None:
         try:
             os.kill(child.pid, signal.SIGTERM)
         except OSError:
             pass
-    if _HAZARD_SIGNAL_STATE.get("raised"):
-        return
-    _HAZARD_SIGNAL_STATE["raised"] = True
-    raise _HazardInterrupted(signum)
 
 
 def _hazard_install_sigterm_handler() -> Any:
@@ -3916,6 +3922,14 @@ class _HazardMemberWatch:
         return self
 
     def _snapshot(self) -> list[dict[str, Any]]:
+        """The child, its current descendants, and every earlier-tracked process still running.
+
+        A tracked process counts only while its pid still runs the same argv
+        (a reused pid is never signalled).  Tracked processes matter once the
+        child has exited: its descendants are then reparented and no longer
+        reachable through the child's pid.
+        """
+
         table = _hazard_process_table()
         if table is None:
             self.census_failures += 1
@@ -3924,6 +3938,11 @@ class _HazardMemberWatch:
         else:
             own = [dict(row) for row in table if row["pid"] == self.process.pid]
             rows = own + _hazard_descendants(int(self.process.pid), table)
+            live = {row["pid"]: row for row in table}
+            current = {int(row["pid"]) for row in rows}
+            rows += [dict(row) for pid, row in self.tracked.items()
+                     if pid not in current and pid in live and live[pid]["args"] == row["args"]
+                     and pid != os.getpid()]
         for row in rows:
             self.tracked.setdefault(int(row["pid"]), row)
         return rows
