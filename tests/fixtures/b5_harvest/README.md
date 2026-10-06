@@ -21,7 +21,18 @@ line blocks the release event (L4's `NEVER_CLASSIFIED_CODES`).
   - `EXCLUDE_MEMBER`: `model.identity_underivable`, `member.unreadable`,
     `member.reduction_mismatch`, `member.anchor_recompute_mismatch`,
     `member.span_unknown`;
-  - `DISCLOSE`: the other records, G3 and roster codes.
+  - `DISCLOSE`: the other records, G3 and roster codes, and
+    `battery.accumulator_activity` and `battery.accumulator_unavailable`.
+  - The 17 `lineage.*` codes of lane L3's records audit
+    (`joulewise.window_lineage.FINDING_CODES`) carry the block-5 draft
+    catalog's classification (revision 3): `DISCLOSE`, except
+    `lineage.plan_tree_digest_differs` (`PACK_IDENTITY`, `NUMBER`,
+    `EXCLUDE_WINDOW`).
+
+  Revision 3 of the block-5 draft catalog makes `whole_window.not_passed` and
+  `g3.recompute_failed` `DISCLOSE` (registration 6.5); this fixture keeps the
+  earlier draft effect, and the tests that need the registered one
+  (`Neg8ScreenTests`) override it in their window's copy.
 
   L4 (draft) and L6 (sealed catalog) classify these; until then the sealed
   catalog leaves them `UNCLASSIFIED`, which blocks release, never collection.
@@ -53,4 +64,12 @@ strict-valid seed bundle `tests/fixtures/d117_v2_production/strict_seed_bundle`
 376-row acceptance-prefix ledger in `tests/fixtures/v5_qualification_harvest`,
 journals written line for line in L1's format (pinned to `l1_monitor/` by
 `L1JournalFormatTests`), an arm record in L1's `joulewise.hazard_arm.v1`
-shape, and an executed inventory and plan in L2's shapes.
+shape, and an executed inventory and plan in L2's shapes. The plan names a
+registration copy whose section 6.9 carries the registered harvest-threshold
+block (`RegisteredThresholdTests` pins that block to the design branch's text
+when the branch is in the clone), and the pack's plan tree pins the committed
+12-member NEG-8 settled corpus through a bound-derivation stage. The NEG-8
+tests run the chain's own prune helper (`joulewise.b5.chain.PRUNE_HELPER`),
+the core's `whole_window.mint_neg8_drift_bound_artifact` (only the members'
+energy and strictness gates stubbed, as `tests/test_whole_window.py` does) and
+the driver's `neg8_corpus_record` locator.

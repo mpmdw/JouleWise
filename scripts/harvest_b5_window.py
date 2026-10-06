@@ -31,7 +31,7 @@ OVERRIDES = (
     "chain_path", "chain_sha256_path", "ledger_path", "head_pin_path", "acceptance_path",
     "bracket_session_id", "pre_attempt_id", "post_attempt_id", "h_claim", "sealed_inventory_path",
     "executed_inventory_path", "catalog_path", "identity_pins_path", "monitor_dir", "arm_record_path",
-    "flags_dir", "plan_id", "attempt",
+    "flags_dir", "plan_id", "attempt", "registration_path",
 )
 
 
@@ -42,7 +42,11 @@ def build_parser() -> argparse.ArgumentParser:
     for name in OVERRIDES:
         parser.add_argument("--" + name.replace("_", "-"), dest=name,
                             help="override the value the plan gives (or omits)")
-    parser.add_argument("--thresholds", type=Path, help="JSON object of threshold overrides")
+    parser.add_argument("--thresholds", type=Path,
+                        help="JSON object of harvest-threshold values; one that differs from the registered "
+                             "block (registration 6.9) or supplies a key it lacks is a recorded harvest fault, "
+                             "and a registered value is never replaced (use --registration-path to name the "
+                             "registration when the plan does not)")
     parser.add_argument("--workers", type=int, default=max(1, min(6, (os.cpu_count() or 2) // 2)),
                         help="member-assessment worker processes")
     parser.add_argument("--prepare-desk", action="store_true",

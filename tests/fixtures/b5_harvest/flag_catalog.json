@@ -1,6 +1,6 @@
 {
   "codes": {
-    "battery.accumulator_diagnostic": {
+    "battery.accumulator_activity": {
       "blinding": "STRUCTURE",
       "effect": "DISCLOSE",
       "family": "DIAGNOSTIC",
@@ -10,6 +10,12 @@
       "blinding": "STRUCTURE",
       "effect": "EXCLUDE_MEMBER",
       "family": "PHYSICS_IN_SPAN",
+      "klass": "PHYSICS"
+    },
+    "battery.accumulator_unavailable": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
       "klass": "PHYSICS"
     },
     "battery.capture_pair_failed": {
@@ -198,6 +204,108 @@
       "family": "PHYSICS_IN_SPAN",
       "klass": "PHYSICS"
     },
+    "lineage.arm_decision_digest_differs": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "RECORDS",
+      "klass": "REPRESENTATION"
+    },
+    "lineage.arm_decision_unrecorded": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "RECORDS",
+      "klass": "REPRESENTATION"
+    },
+    "lineage.bundle_locator_digest_differs": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "RECORDS",
+      "klass": "REPRESENTATION"
+    },
+    "lineage.bundle_stamp_absent": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "RECORDS",
+      "klass": "REPRESENTATION"
+    },
+    "lineage.bundle_stamp_differs": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "RECORDS",
+      "klass": "REPRESENTATION"
+    },
+    "lineage.collection_boot_unrecorded": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "RECORDS",
+      "klass": "REPRESENTATION"
+    },
+    "lineage.completion_records_absent": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "RECORDS",
+      "klass": "REPRESENTATION"
+    },
+    "lineage.context_root_differs": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "RECORDS",
+      "klass": "REPRESENTATION"
+    },
+    "lineage.locator_noncanonical": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "RECORDS",
+      "klass": "REPRESENTATION"
+    },
+    "lineage.locator_role_differs": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "RECORDS",
+      "klass": "REPRESENTATION"
+    },
+    "lineage.locator_root_path_differs": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "RECORDS",
+      "klass": "REPRESENTATION"
+    },
+    "lineage.locator_sidecar_mismatch": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "RECORDS",
+      "klass": "REPRESENTATION"
+    },
+    "lineage.locator_unreadable": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "RECORDS",
+      "klass": "REPRESENTATION"
+    },
+    "lineage.pack_digest_unrecorded": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "RECORDS",
+      "klass": "REPRESENTATION"
+    },
+    "lineage.plan_tree_digest_differs": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_WINDOW",
+      "family": "PACK_IDENTITY",
+      "klass": "NUMBER"
+    },
+    "lineage.record_chain_unverified": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "RECORDS",
+      "klass": "REPRESENTATION"
+    },
+    "lineage.sibling_lineage_differs": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "RECORDS",
+      "klass": "REPRESENTATION"
+    },
     "member.admission_aborted": {
       "blinding": "STRUCTURE",
       "effect": "EXCLUDE_MEMBER",
@@ -325,6 +433,12 @@
       "klass": "NUMBER"
     },
     "neg8.bound_not_derived": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_WINDOW",
+      "family": "NEG8",
+      "klass": "NUMBER"
+    },
+    "neg8.screen_failed": {
       "blinding": "STRUCTURE",
       "effect": "EXCLUDE_WINDOW",
       "family": "NEG8",
