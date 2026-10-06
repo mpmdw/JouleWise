@@ -106,7 +106,12 @@ class Rig:
         return SimpleNamespace(st_dev=1 if "runs" in str(path) else 2)
 
     def config(self, **overrides) -> arm.ArmConfig:
-        values = dict(custody_dir=self.custody, thresholds=arm.default_thresholds(),
+        # These scenarios place their events inside a 600 s dwell (the clean run the
+        # registration carried before gate prune 2); the 180 s default has its own
+        # tests (tests/hazards/test_arm_dwell_clean_run.py).
+        thresholds = arm.default_thresholds()
+        thresholds["contention"]["clean_s"] = 600
+        values = dict(custody_dir=self.custody, thresholds=thresholds,
                       disk_targets=[{"path": "/Volumes/x/runs", "copies": 1},
                                     {"path": "/Volumes/backup", "copies": 1}],
                       tree_roots=(DRIVER,), powermetrics_executable=str(FAKE_POWERMETRICS),

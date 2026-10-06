@@ -9,8 +9,8 @@ powermetrics, caffeinate, the monitor and the probes themselves.
 
 Arm, the dwell (plan §2.3): 30 s intervals; an interval is clean when no
 process outside the tree exceeds 0.05 CPU-s/s (5 % of one core).  READY after
-600 s of consecutive clean intervals; if none appears within 2700 s, REFUSE
-(the window is NULL).  ``kernel_task`` is included at the dwell, where the Mac
+180 s of consecutive clean intervals (``HAZARD_ARM_CLEAN_S``; gate prune 2,
+A1); if none appears within 2700 s, REFUSE (the window is NULL).  ``kernel_task`` is included at the dwell, where the Mac
 should be idle.  An interval whose snapshot failed is UNMEASURED and breaks
 the clean run.
 
@@ -24,9 +24,20 @@ workload's own driver and I/O work); its share is journaled and disclosed.
 Reused (verified at a0a4f5a7): ``quiet_admission.parse_ps`` (the lstart/TIME
 grammar) and the interval accounting of ``quiet_admission.interval_metrics``
 (ported here so every outside consumer is kept, not only the top ten);
-``prewindow.CPU_LIMIT_PERCENT`` = 5.0 and the 600 s / 30 s / 2700 s dwell of
+``prewindow.CPU_LIMIT_PERCENT`` = 5.0 and the 30 s interval and 2700 s cap of
 ``prewindow.t0_wait``.  The direct-CPU precedent is ``night_gate.py:1836``,
 built after the 09-22 fseventsd contamination.
+
+The clean run is the one value not taken from ``prewindow``: the legacy
+``prewindow.t0_wait`` keeps its 600 s (``prewindow.MIN_CLEAN_DWELL_S``), and
+the hazard arm needs 180 s.  The numbers do not depend on the dwell: each
+member's idle admission screens its own baseline, the in-window monitor
+checks contention every 10 s, and the 0.05 limit still refuses a persistent
+contender.  Over 180 s the clock linearity test still sees a step or a
+timed-style slew (500 ppm over 180 s moves 90 ms); its rate threshold rises
+from 1.67 to 5.6 ppm, both far coarser than the arm's frequency gate
+(gate prune 2, finding t2-08 and its verifier).  ``kernel_task`` needs no
+change: unprivileged ``ps`` never lists pid 0.
 
 ``PS_ARGV`` asks for ``ucomm`` (the 16-character accounting name) instead of
 ``comm``: on this Mac ``ps -Ao pid,ppid,lstart,time,comm`` costs 20 ms of CPU
@@ -88,10 +99,14 @@ PROBE_TIMEOUT_S = 10.0
 KERNEL_TASK = "kernel_task"
 REPORT_FLOOR_CPU_S_PER_S = 0.005  # outside consumers below this are counted, not listed
 
+# The hazard arm's clean run (gate prune 2, A1).  Not prewindow.MIN_CLEAN_DWELL_S,
+# which stays 600 s for the legacy prewindow dwell.
+HAZARD_ARM_CLEAN_S = 180
+
 DEFAULT_THRESHOLDS: dict[str, Any] = {
     "cpu_limit_s_per_s": prewindow.CPU_LIMIT_PERCENT / 100.0,   # 0.05
     "interval_s": prewindow.INTERVAL_S,                         # 30
-    "clean_s": prewindow.MIN_CLEAN_DWELL_S,                     # 600
+    "clean_s": HAZARD_ARM_CLEAN_S,                              # 180
     "cap_s": prewindow.DEFAULT_TIMEOUT_S,                       # 2700
     "window_interval_s": 10,
     # None: the host aggregate is journaled at the dwell, not judged (module

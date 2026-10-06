@@ -10,7 +10,10 @@ from joulewise import prewindow, quiet_admission
 from joulewise.hazards import base, contention
 from tests.hazards.fakes import FakeClocks, FakeProcessTable, Process, Runner, completed
 
-LIMITS = dict(contention.DEFAULT_THRESHOLDS)
+# The dwell-mechanism tests below run at a 600 s clean run (the value the
+# registration carried before gate prune 2); the hazard arm's own default is
+# 180 s (contention.HAZARD_ARM_CLEAN_S, tests/hazards/test_arm_dwell_clean_run.py).
+LIMITS = {**contention.DEFAULT_THRESHOLDS, "clean_s": 600}
 DRIVER = 4000
 
 
@@ -61,8 +64,10 @@ class DwellTests(unittest.TestCase):
         self.assertGreater(measurement.values["elapsed_s"], 630)
 
     def test_five_percent_is_the_limit_and_comes_from_prewindow(self):
-        self.assertEqual(LIMITS["cpu_limit_s_per_s"], prewindow.CPU_LIMIT_PERCENT / 100)
-        self.assertEqual((LIMITS["interval_s"], LIMITS["clean_s"], LIMITS["cap_s"]), (30, 600, 2700))
+        defaults = contention.DEFAULT_THRESHOLDS
+        self.assertEqual(defaults["cpu_limit_s_per_s"], prewindow.CPU_LIMIT_PERCENT / 100)
+        self.assertEqual((defaults["interval_s"], defaults["clean_s"], defaults["cap_s"]),
+                         (30, 180, 2700))
         clocks, table, ctx = machine()
         table.processes[320].cpu_per_s = 0.045
         self.assertEqual(contention.judge(run_dwell(ctx), LIMITS).status, base.PASS)
