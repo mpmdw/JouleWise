@@ -27,6 +27,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from tests.git_fixture import init_git_fixture
+
 REPO_ROOT = Path(__file__).resolve().parents[3]
 PACKS = {
     "alpha": "d117_floor_qwen3-1p7b_v5",
@@ -203,7 +205,8 @@ def build_checkout(root: Path, *, behavior: dict[str, Any] | None = None, git: b
     if git:
         environment = dict(os.environ, GIT_AUTHOR_NAME="fixture", GIT_AUTHOR_EMAIL="fixture@example.invalid",
                            GIT_COMMITTER_NAME="fixture", GIT_COMMITTER_EMAIL="fixture@example.invalid")
-        for command in (["init", "-q"], ["add", "-A", "scripts", "joulewise", "configs", "docs"],
+        init_git_fixture(measurement, "-q")  # the shared helper (tests/test_git_fixture_maintenance.py)
+        for command in (["add", "-A", "scripts", "joulewise", "configs", "docs"],
                         ["-c", "commit.gpgsign=false", "commit", "-qm", "fixture"]):
             subprocess.run(["/usr/bin/git", "-C", str(measurement), *command], check=True,
                            capture_output=True, env=environment)
