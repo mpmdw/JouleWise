@@ -191,11 +191,37 @@ _CORE_PRUNE_CODES = {
     "whole_window.not_passed": _code("NEG8", "NUMBER", DISCLOSE),
 }
 
+# Gate-prune round 2 (night-archive gate-prune/prune2/PLAN2.md sections 2.2 G and 3.1;
+# lane P2-HARV registers them).  Every one changes no number except
+# member.timeout: a member killed at its wall cap is not measured.
+_PRUNE2_CODES = {
+    "member.timeout": _code("MEMBER_VALIDITY", "NUMBER", EXCLUDE_MEMBER),
+    "census.unmeasured": _code("DIAGNOSTIC", "PHYSICS", DISCLOSE),
+    "monitor.crash_loop": _code("DIAGNOSTIC", "PHYSICS", DISCLOSE),
+    "calibration.refit_cache_miss": _code("CALIBRATION", "REPRESENTATION", DISCLOSE),
+    "roster.horizon_truncated": _code("ROSTER", "REPRESENTATION", DISCLOSE),
+    "member.retried": _code("ROSTER", "REPRESENTATION", DISCLOSE),
+    "yield.stage_zero": _code("DIAGNOSTIC", "REPRESENTATION", DISCLOSE),
+    "yield.stage_low": _code("DIAGNOSTIC", "REPRESENTATION", DISCLOSE),
+    "yield.stage_stalled": _code("DIAGNOSTIC", "REPRESENTATION", DISCLOSE),
+    "stage.members_refused_pre_bundle_identical": _code("DIAGNOSTIC", "REPRESENTATION", DISCLOSE),
+    "records.runs_root_override": _code("RECORDS", "REPRESENTATION", DISCLOSE),
+    "yield.harvest_disagrees_with_window": _code("RECORDS", "REPRESENTATION", DISCLOSE),
+    "collection.zero_yield": _code("ROSTER", "REPRESENTATION", DISCLOSE),
+    "collection.failure_histogram": _code("DIAGNOSTIC", "REPRESENTATION", DISCLOSE),
+    "chain.stopped_before_collection": _code("RECORDS", "REPRESENTATION", DISCLOSE),
+    "roster.dispatch_unresolved": _code("ROSTER", "REPRESENTATION", DISCLOSE),
+    "records.identity_unmeasured_superseded": _code("RECORDS", "REPRESENTATION", DISCLOSE),
+    "thermal.stage_battery_rise": _code("DIAGNOSTIC", "PHYSICS", DISCLOSE),
+    "thermal.battery_temperature_unmeasured": _code("DIAGNOSTIC", "PHYSICS", DISCLOSE),
+}
+
 DRAFT_CODES: Mapping[str, Mapping[str, str]] = {
     **_WINDOW_CODES,
     **_MEMBER_CODES,
     **_DISCLOSE_CODES,
     **_CORE_PRUNE_CODES,
+    **_PRUNE2_CODES,
 }
 
 # Codes the cell rule and the roster rule of exclusions.compute derive

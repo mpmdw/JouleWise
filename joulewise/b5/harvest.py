@@ -87,6 +87,22 @@ HAZARD_PACK_CLASS = "HAZARD_PACK"              # night_gate.HAZARD_PACK, the blo
 COLLECTOR_RUN_SCHEMA = "joulewise.flag_collector_run.v1"
 
 COLLECTED, NULL, HARVEST_FAULT = "COLLECTED", "NULL", "HARVEST_FAULT"
+# The chain started but journaled no campaign_collection stage (PLAN2 2.2 F):
+# every collector still runs; nothing is claim-usable.
+NO_COLLECTION = "NO_COLLECTION"
+YIELD_SCHEMA = "joulewise.b5_harvest_yield.v1"
+FAILURE_TEXTS_SCHEMA = "joulewise.b5_failure_texts.v1"
+STAGE_JOURNAL_NAME = "chain-stages.jsonl"      # joulewise.b5.chain.STAGE_JOURNAL, night/
+STAGE_YIELD_NAME = "stage_yield.jsonl"         # the driver's in-window yield lines (PLAN2 2.2 B), night/
+STRICT_DEFERRED = "deferred_to_harvest"        # run_campaign M3: only the structural check ran in the window
+RAW_VALID_MIN_STREAM_BYTES = 1 << 20           # PLAN2 2.2 F: a stream of at least 1 MiB
+# Battery thermistor diagnostic (timing ruling 2026-10-06): run_campaign records
+# one ioreg reading per cooldown release in each stage's campaign manifest.
+BATTERY_TEMPERATURE_MANIFEST_KEY = "battery_temperature_readings"
+BATTERY_RISE_LIMIT_K = 3.0
+BATTERY_PLATEAU_SPREAD_K = 0.5
+BATTERY_PLATEAU_READINGS = 3
+_DIGITS_RE = re.compile(r"[0-9]")
 FAMILIES = (
     "PACK_IDENTITY", "CODE_IDENTITY", "MODEL_IDENTITY", "CALIBRATION", "NEG8",
     "INSTRUMENT", "MEMBER_VALIDITY", "PHYSICS_IN_SPAN", "CLOCK_SYSTEMATIC",
@@ -174,6 +190,8 @@ CODES: dict[str, CodeSpec] = {
     "model.identity_inconsistent_in_window": _spec("MODEL_IDENTITY", "NUMBER"),
     "model.identity_underivable": _spec("MODEL_IDENTITY", "NUMBER", legacy="joulewise/identity_pins.py:405"),
     "model.identity_unpinned": _spec("MODEL_IDENTITY", "NUMBER"),
+    # An arm collector call that failed as a whole (PLAN2 row 12, fail closed).
+    "model.identity_unmeasured": _spec("MODEL_IDENTITY", "NUMBER"),
     # Calibration bracket and ledger.
     "calibration.capture_invalid": _spec("CALIBRATION", "NUMBER"),
     "calibration.bracket_acceptance_failed": _spec("CALIBRATION", "NUMBER",
@@ -304,6 +322,30 @@ CODES: dict[str, CodeSpec] = {
         ("member.timeout", ("MEMBER_VALIDITY", "NUMBER")),
         ("member.stderr_uncopied", ("MEMBER_VALIDITY", "NUMBER")),
     )},
+    # Gate-prune round 2 (PLAN2 sections 2.2 G and 3.1).  Written by other
+    # lanes' code and folded here (P2-RC member.timeout, P2-CTL
+    # calibration.refit_cache_miss, P2-DRV census, monitor and in-window
+    # yield codes, P2-CHAIN roster.horizon_truncated and member.retried):
+    "member.timeout": _spec("MEMBER_VALIDITY", "NUMBER"),
+    "census.unmeasured": _spec("DIAGNOSTIC", "PHYSICS"),
+    "monitor.crash_loop": _spec("DIAGNOSTIC", "PHYSICS"),
+    "calibration.refit_cache_miss": _spec("CALIBRATION", "REPRESENTATION"),
+    "roster.horizon_truncated": _spec("ROSTER", "REPRESENTATION"),
+    "member.retried": _spec("ROSTER", "REPRESENTATION"),
+    "yield.stage_zero": _spec("DIAGNOSTIC", "REPRESENTATION"),
+    "yield.stage_low": _spec("DIAGNOSTIC", "REPRESENTATION"),
+    "yield.stage_stalled": _spec("DIAGNOSTIC", "REPRESENTATION"),
+    "stage.members_refused_pre_bundle_identical": _spec("DIAGNOSTIC", "REPRESENTATION"),
+    # Emitted by this harvest:
+    "records.runs_root_override": _spec("RECORDS", "REPRESENTATION"),
+    "yield.harvest_disagrees_with_window": _spec("RECORDS", "REPRESENTATION"),
+    "collection.zero_yield": _spec("ROSTER", "REPRESENTATION"),
+    "collection.failure_histogram": _spec("DIAGNOSTIC", "REPRESENTATION"),
+    "chain.stopped_before_collection": _spec("RECORDS", "REPRESENTATION"),
+    "roster.dispatch_unresolved": _spec("ROSTER", "REPRESENTATION"),
+    "records.identity_unmeasured_superseded": _spec("RECORDS", "REPRESENTATION"),
+    "thermal.stage_battery_rise": _spec("DIAGNOSTIC", "PHYSICS"),
+    "thermal.battery_temperature_unmeasured": _spec("DIAGNOSTIC", "PHYSICS"),
 }
 # The codes above that only protected-core writers emit (the harvest folds them).
 CORE_WRITER_CODES = frozenset({
@@ -322,6 +364,31 @@ UNWRITTEN_MARKER = "JOULEWISE_UNWRITTEN_FLAG "
 # was listed as ".campaign.lock").  Spelled in two parts so the emitted-code
 # scan of this file does not read a file name as a flag code.
 CAMPAIGN_LOCK_NAME = "campaign" ".lock"
+# The gate-prune round-2 codes (lane P2-HARV): the draft sealed catalog in the
+# design branch gains them through the registration row (REG) before the seal.
+PRUNE2_CODES = frozenset({
+    "member.timeout", "census.unmeasured", "monitor.crash_loop", "calibration.refit_cache_miss",
+    "roster.horizon_truncated", "member.retried", "yield.stage_zero", "yield.stage_low", "yield.stage_stalled",
+    "stage.members_refused_pre_bundle_identical", "records.runs_root_override",
+    "yield.harvest_disagrees_with_window", "collection.zero_yield", "collection.failure_histogram",
+    "chain.stopped_before_collection", "roster.dispatch_unresolved", "records.identity_unmeasured_superseded",
+    "thermal.stage_battery_rise", "thermal.battery_temperature_unmeasured",
+})
+# joulewise.flags.collect.UNMEASURED_BY_COLLECTOR, read and never imported: the
+# flag each arm collector leaves when its checks did not (all) run.
+ARM_COLLECTOR_UNMEASURED = {
+    "pack_identity": "pack.identity_unmeasured", "checkout_identity": "code.identity_unmeasured",
+    "executed_code": "code.identity_unmeasured", "model_identity": "model.identity_unmeasured",
+}
+COLLECTOR_SOURCE_PREFIX = "joulewise.flags.collect."
+# Every check the harvest must have run before it supersedes an arm
+# collector's unmeasured flag (PLAN2 row 12).  Explicit, so a check the
+# harvest stopped recording cannot pass by its absence.
+IDENTITY_SUPERSESSION_CHECKS = {
+    "pack_identity": frozenset({"pins", "config_run_id", "registered_digests"}),
+    "checkout_identity": frozenset({"head", "tracked_edits", "untracked_in_executed_roots"}),
+    "executed_code": frozenset({"executed_inventory", "chain_sidecar"}),
+}
 LINEAGE_CODES = frozenset(code for code in CODES if code.startswith("lineage."))
 NEVER_CLASSIFIED_CODES = frozenset({"records.malformed_flag"})
 # Codes L4's draft catalog does not name (handed to L4 and L6 for the draft
@@ -919,6 +986,10 @@ class FlagLedger:
             self._records.setdefault(record["flag_id"], dict(record))
         return problems
 
+    def remove(self, flag_id: str) -> dict[str, Any] | None:
+        """Drop one record (a superseded flag, PLAN2 row 12); its supersession is itself a flag."""
+        return self._records.pop(flag_id, None)
+
     @property
     def records(self) -> list[dict[str, Any]]:
         return list(self._records.values())
@@ -1377,16 +1448,74 @@ def _stage_runs_root_binding(stage: Mapping[str, Any]) -> str | None:
     return None
 
 
-def stage_dispatches(tree: Mapping[str, Any], pack_root: Path) -> tuple[dict[str, list[dict[str, Any]]], list[str]]:
+# J3 (PLAN2 3.2): the chain lane's stage dispatch resolver in joulewise.b5.plan,
+# stage -> (runs root, sanitized run ids) from the stage argv's config-dir order
+# manifest and --runs-dir.  Read through getattr: until it lands, the plan
+# tree's input_ref is the only source here.
+J3_RESOLVER_NAME = "resolve_stage_dispatch"
+
+
+def _j3_resolver() -> Callable[..., Any] | None:
+    try:
+        from joulewise.b5 import plan as b5_plan
+    except Exception:  # an unimportable plan module resolves nothing
+        return None
+    resolver = getattr(b5_plan, J3_RESOLVER_NAME, None)
+    return resolver if callable(resolver) else None
+
+
+class J3DispatchError(Exception):
+    """The J3 resolver exists but raised, or returned something that is not (runs root, run ids)."""
+
+
+def _j3_dispatch(resolver: Callable[..., Any], stage: Mapping[str, Any], pack_root: Path,
+                 repo_root: Path | None) -> tuple[str | None, list[str]] | None:
+    """(runs root, run ids) from J3; None when J3 declines the stage (returns None).
+
+    A resolver that raises, or returns a malformed value, is a J3 failure
+    (``J3DispatchError``): the caller still falls back to ``input_ref`` for
+    the counts, but lists the stage as unresolved so the substitution is
+    flagged, never silent.
+    """
+    try:
+        value = resolver(stage, pack_root=pack_root, repo_root=repo_root)
+    except Exception as exc:
+        raise J3DispatchError(f"{type(exc).__name__}: {exc}"[:200]) from exc
+    if value is None:
+        return None
+    if isinstance(value, Mapping):
+        root, run_ids = value.get("runs_root"), value.get("run_ids")
+    elif isinstance(value, (tuple, list)) and len(value) == 2:
+        root, run_ids = value
+    else:
+        raise J3DispatchError(f"unexpected value {type(value).__name__}")
+    if not isinstance(run_ids, (list, tuple)) or not all(isinstance(run_id, str) and run_id for run_id in run_ids):
+        raise J3DispatchError("run_ids not a list of non-empty strings")
+    return (str(root) if root is not None else None), list(run_ids)
+
+
+def stage_dispatches(tree: Mapping[str, Any], pack_root: Path, repo_root: Path | None = None, *,
+                     report: dict[str, Any] | None = None
+                     ) -> tuple[dict[str, list[dict[str, Any]]], list[str]]:
     """Every run id the plan tree's collection stages launch, stage by stage, with the runs root.
 
-    A stage's members are its ``input_ref``'s: an external input's member
-    rows, or a pack manifest's ``executed_order``.  run_campaign skips a run
-    id whose complete bundle already exists in its runs root, so a run id two
-    stages launch into one root is measured once and its later planned
-    positions are never measured (rehearsal round 1, B3).  Returns
-    ``({run_id: [{stage_id, ordinal, runs_root}]}, [stages whose members could not be read])``.
+    A stage's members come from the J3 resolver when the chain lane provides
+    it (the stage argv's order manifest and ``--runs-dir``), else from its
+    ``input_ref``: an external input's member rows, or a pack manifest's
+    ``executed_order``.  run_campaign skips a run id whose complete bundle
+    already exists in its runs root, so a run id two stages launch into one
+    root is measured once and its later planned positions are never measured
+    (rehearsal round 1, B3).  Returns ``({run_id: [{stage_id, ordinal,
+    runs_root}]}, [stages whose members could not be read])``.  A stage
+    whose J3 resolution failed is in the second list too, although its
+    members then come from ``input_ref``.  ``report``, when given, receives
+    ``stages`` (every collection stage read, as (ordinal, stage_id), so a
+    stage launching no run id still appears in the yield) and
+    ``j3_failures`` ({stage_id: error}).
     """
+    resolver = _j3_resolver()
+    stages_read: list[tuple[Any, str]] = []
+    j3_failures: dict[str, str] = {}
     external = tree.get("external_inputs")
     manifests = external.get("manifests", []) if isinstance(external, Mapping) else (external or [])
     inputs = {str(row.get("input_id") or row.get("external_input_id")): row
@@ -1398,7 +1527,16 @@ def stage_dispatches(tree: Mapping[str, Any], pack_root: Path) -> tuple[dict[str
             continue
         reference = stage.get("input_ref") if isinstance(stage.get("input_ref"), Mapping) else {}
         run_ids: list[Any] | None = None
-        if reference.get("kind") == "external_input":
+        runs_root = _stage_runs_root_binding(stage)
+        resolved = None
+        if resolver is not None:
+            try:
+                resolved = _j3_dispatch(resolver, stage, pack_root, repo_root)
+            except J3DispatchError as exc:
+                j3_failures[str(stage.get("stage_id"))] = str(exc)
+        if resolved is not None:
+            runs_root, run_ids = resolved[0] or runs_root, resolved[1]
+        elif reference.get("kind") == "external_input":
             members = (inputs.get(str(reference.get("input_id"))) or {}).get("members")
             if isinstance(members, list):
                 run_ids = [row.get("run_id") for row in members if isinstance(row, Mapping)]
@@ -1412,10 +1550,16 @@ def stage_dispatches(tree: Mapping[str, Any], pack_root: Path) -> tuple[dict[str
         if run_ids is None or not all(isinstance(run_id, str) and run_id for run_id in run_ids):
             unresolved.append(str(stage.get("stage_id")))
             continue
+        if str(stage.get("stage_id")) in j3_failures:
+            unresolved.append(str(stage.get("stage_id")))
+        stages_read.append((stage.get("ordinal"), str(stage.get("stage_id"))))
         for run_id in run_ids:
             dispatches.setdefault(run_id, []).append({"stage_id": stage.get("stage_id"),
                                                       "ordinal": stage.get("ordinal"),
-                                                      "runs_root": _stage_runs_root_binding(stage)})
+                                                      "runs_root": runs_root})
+    if report is not None:
+        report["stages"] = stages_read
+        report["j3_failures"] = j3_failures
     return dispatches, unresolved
 
 
@@ -1608,6 +1752,31 @@ def _precheck_structure(summary: Mapping[str, Any]) -> dict[str, Any]:
     return result
 
 
+# X3 (PLAN2 t3-9): one calibration physics cache per worker process, keyed by
+# the calibration evidence's artifact SHA-256.  The reducer consults it only
+# after every hash check of the bundle's calibration copy has run, so a hit
+# skips only the refit of bytes already proven identical.  It starts empty in
+# each process: every worker's first refit is cold, from the raw plist.  The
+# window calibration verdict (J1) is never read here.
+_WORKER_PHYSICS_CACHE: dict[str, float] = {}
+
+
+def _accepts_keyword(function: Callable[..., Any], name: str) -> bool:
+    import inspect
+    try:
+        return name in inspect.signature(function).parameters
+    except (TypeError, ValueError):
+        return False
+
+
+def strict_problems(bundle: Path, cache: dict[str, float]) -> list[str]:
+    """``validate_bundle(strict=True)``, with the worker's cache once the CLI takes it (J2)."""
+    from joulewise.cli import validate_bundle
+    if _accepts_keyword(validate_bundle, "physics_cache"):
+        return list(validate_bundle(bundle, strict=True, physics_cache=cache))
+    return list(validate_bundle(bundle, strict=True))
+
+
 def assess_member(task: Mapping[str, Any]) -> dict[str, Any]:
     """Strict validation, re-reduction, anchor recompute and identity for one bundle."""
     from joulewise import battery_float
@@ -1644,7 +1813,9 @@ def assess_member(task: Mapping[str, Any]) -> dict[str, Any]:
     result["metadata_run_id"] = metadata.get("run_id") if isinstance(metadata, Mapping) else None
     result["config_sha256"] = sha256_bytes(config_raw) if config_raw is not None else None
     result["stored_summary_sha256"] = sha256_bytes(summary_raw) if summary_raw is not None else None
-    problems = guarded("strict", lambda: list(validate_bundle(bundle, strict=True)))
+    cache = _WORKER_PHYSICS_CACHE
+    result["calibration_cache"] = {"strict_uses_cache": _accepts_keyword(validate_bundle, "physics_cache")}
+    problems = guarded("strict", lambda: strict_problems(bundle, cache))
     result["strict_problems"] = problems
     result["strict_valid"] = problems == []
     anchor = metadata.get("uncertainty_evidence", {}).get("clock_anchor") \
@@ -1657,7 +1828,8 @@ def assess_member(task: Mapping[str, Any]) -> dict[str, Any]:
     provenance = summary.get("summary_provenance") if isinstance(summary.get("summary_provenance"), Mapping) else {}
 
     def rereduce() -> dict[str, Any]:
-        payload = reduce_bundle(bundle, reducer_version=provenance.get("reducer_version")).to_dict()
+        payload = reduce_bundle(bundle, reducer_version=provenance.get("reducer_version"),
+                                _instrument_calibration_physics_cache=cache).to_dict()
         raw = (json.dumps(payload, indent=2, sort_keys=True) + "\n").encode()
         target = Path(task["withheld_dir"]) / "reductions" / f"{run_id}.summary_metrics.rereduced.json"
         digest = write_once(target, raw)
@@ -2196,6 +2368,341 @@ def boot_session_uuid() -> str | None:
     return result.stdout.strip() or None
 
 
+# ---------------------------------------------------------------------------
+# The desk whole-window verdict child (PLAN2 section 2.1 row 1, harvest side).
+#
+# ``run_campaign --whole-window-verdict`` strict-validates every claim-root
+# bundle serially, about 34.5 s each: about 3,700 s for ALPHA's 107.  A fixed
+# 1,800 s kill lost every block-5 verdict (whole_window.verdict_absent), and the
+# SIGKILL left campaign.lock behind, so a re-run refused.  The child now gets
+# max(1,800 s, 90 s per bundle), a heartbeat on stderr while it runs, its own
+# session (so a timeout kills its whole process group, proven gone), and the
+# lock is removed only when its recorded pid and start time are the dead
+# child's.  It runs concurrently with the member assessment.
+# ---------------------------------------------------------------------------
+
+DESK_TIMEOUT_FLOOR_S = 1800.0
+DESK_TIMEOUT_PER_BUNDLE_S = 90.0
+DESK_HEARTBEAT_S = 60.0
+DESK_TERM_GRACE_S = 30.0
+DESK_GONE_WAIT_S = 30.0
+DESK_RUN_SCHEMA = "joulewise.b5_desk_verdict_run.v1"
+
+
+def desk_verdict_timeout_s(bundles: int) -> float:
+    """The desk verdict child's wall budget: max(1,800 s, 90 s per claim-root bundle)."""
+    return max(DESK_TIMEOUT_FLOOR_S, max(0, int(bundles)) * DESK_TIMEOUT_PER_BUNDLE_S)
+
+
+def claim_bundle_count(runs_root: Path, *, exclude: Iterable[str] = ()) -> int:
+    """Bundle directories (``metadata.json`` present) the desk verdict will validate."""
+    skipped = {"campaign_manifests", "instrument_validation", *exclude}
+    try:
+        return sum(1 for path in runs_root.iterdir()
+                   if path.is_dir() and path.name not in skipped and (path / "metadata.json").is_file())
+    except OSError:
+        return 0
+
+
+def parse_campaign_lock(text: str) -> tuple[int, str | None] | None:
+    """``pid=<int> nonce=... created_at=... start_time=<json>`` -> (pid, start_time), else None.
+
+    The shape ``scripts/run_campaign.py acquire_campaign_lock`` writes (read
+    here, not imported: the harvest never imports the campaign runner).
+    """
+    line = text.strip()
+    if not line.startswith("pid=") or "\n" in line:
+        return None
+    head, separator, start_text = line.rpartition(" start_time=")
+    if not separator:
+        return None
+    pid_text = head.split(" ", 1)[0][len("pid="):]
+    if not (pid_text.isascii() and pid_text.isdigit()) or int(pid_text) <= 0:
+        return None
+    try:
+        start_time = json.loads(start_text)
+    except ValueError:
+        return None
+    if start_time is not None and not isinstance(start_time, str):
+        return None
+    return int(pid_text), start_time
+
+
+def _observe_identity(pid: int) -> Any:
+    from joulewise.measurement_liveness import observe_identity
+    return observe_identity(pid)
+
+
+def remove_dead_child_lock(runs_root: Path, *, child_pid: int | None, child_start_time: str | None,
+                           observe_identity: Callable[[int], Any]) -> str:
+    """Remove ``campaign.lock`` only when it is the dead desk child's own lock.
+
+    The lock's recorded pid must be the child's, its recorded start time the
+    one observed for the child at spawn, and that pid must now be DEAD.
+    Serialized with the campaign runner's stale-lock reclaimers by the same
+    exclusive flock of the runs-root directory, and only the inode that was
+    read is unlinked.  Returns ``removed``, ``absent`` or ``kept:<reason>``.
+    """
+    import fcntl
+
+    lock = runs_root / CAMPAIGN_LOCK_NAME
+    if not os.path.lexists(lock):
+        return "absent"
+    if not isinstance(child_pid, int) or child_pid <= 0 or not isinstance(child_start_time, str):
+        return "kept:child_start_unobserved"
+    try:
+        directory_fd = os.open(runs_root, os.O_RDONLY)
+    except OSError:
+        return "kept:runs_root_unopenable"
+    try:
+        fcntl.flock(directory_fd, fcntl.LOCK_EX)
+        try:
+            try:
+                lock_fd = os.open(lock, os.O_RDONLY | os.O_NOFOLLOW)
+            except FileNotFoundError:
+                return "absent"
+            except OSError:
+                return "kept:unreadable"
+            try:
+                read_stat = os.fstat(lock_fd)
+                raw = b""
+                while True:
+                    part = os.read(lock_fd, 65536)
+                    if not part:
+                        break
+                    raw += part
+            finally:
+                os.close(lock_fd)
+            try:
+                parsed = parse_campaign_lock(raw.decode("utf-8"))
+            except UnicodeError:
+                parsed = None
+            if parsed is None:
+                return "kept:unparseable"
+            pid, start_time = parsed
+            if pid != child_pid:
+                return "kept:other_pid"
+            if start_time != child_start_time:
+                return "kept:other_start_time"
+            if getattr(observe_identity(pid), "state", None) != "DEAD":
+                return "kept:pid_not_dead"
+            try:
+                current = os.stat(lock, follow_symlinks=False)
+            except OSError:
+                return "kept:unreadable"
+            if (current.st_dev, current.st_ino) != (read_stat.st_dev, read_stat.st_ino):
+                return "kept:replaced"
+            os.unlink(lock)
+            return "removed"
+        finally:
+            fcntl.flock(directory_fd, fcntl.LOCK_UN)
+    finally:
+        os.close(directory_fd)
+
+
+class DeskChildInitError(RuntimeError):
+    """The writer started but its supervision could not; ``group_gone`` says whether teardown was proven."""
+
+    def __init__(self, message: str, *, group_gone: bool):
+        super().__init__(message)
+        self.group_gone = group_gone
+
+
+class DeskVerdictChild:
+    """The desk verdict subprocess: own session, heartbeat, wall budget, proven teardown.
+
+    ``start`` spawns it and a supervising thread; ``finish`` joins the thread
+    and returns the run record.  On the wall budget the whole process group
+    gets SIGTERM, then SIGKILL after a grace, and is then probed until no
+    process of it remains (``group_gone``).  A group still alive after the
+    leader exited normally is torn down the same way.
+    """
+
+    def __init__(self, argv: Sequence[str], *, cwd: str, timeout_s: float, bundles: int, seams: "Seams",
+                 runs_root: Path):
+        import threading
+
+        self.argv, self.cwd, self.timeout_s, self.bundles = list(argv), cwd, float(timeout_s), int(bundles)
+        self.seams, self.runs_root = seams, runs_root
+        self.timed_out = False
+        self.group_gone: bool | None = None
+        self.survivors_after_exit = False
+        self.heartbeats = 0
+        self.lock = "not_checked"
+        self.error: str | None = None
+        self.start_time: str | None = None
+        self.pid_recycled = False          # the leader's pid now names another process
+        self.generation_unverified = False  # a signal was withheld: the group's identity could not be checked
+        self._reaped = False
+        self._stdout = tempfile.TemporaryFile()
+        self._stderr = tempfile.TemporaryFile()
+        self._started = time.monotonic()
+        try:
+            self.process = seams.desk_popen(self.argv, cwd=cwd, stdin=subprocess.DEVNULL, stdout=self._stdout,
+                                            stderr=self._stderr, start_new_session=True)
+        except BaseException:
+            self._close_handles()
+            raise
+        self.pid = getattr(self.process, "pid", None)
+        try:
+            identity = seams.observe_identity(self.pid) if isinstance(self.pid, int) and self.pid > 0 else None
+            self.start_time = getattr(identity, "start_time", None) \
+                if getattr(identity, "state", None) == "LIVE" else None
+            self._thread = threading.Thread(target=self._supervise, name="desk-verdict-supervisor", daemon=True)
+            self._thread.start()
+        except BaseException as exc:
+            # The writer is running but unsupervised: tear its group down before
+            # anything else reads the runs root, and say whether that was proven.
+            self.error = f"{type(exc).__name__}: {exc}"[:500]
+            try:
+                self._teardown()
+            except BaseException:
+                self.group_gone = False
+            self._close_handles()
+            raise DeskChildInitError(self.error, group_gone=self.group_gone is True) from exc
+
+    def _heartbeat(self) -> None:
+        self.heartbeats += 1
+        elapsed = time.monotonic() - self._started
+        print(f"harvest: whole-window verdict running, {elapsed:.0f} s of {self.timeout_s:.0f} s "
+              f"({self.bundles} claim-root bundles; pid {self.pid})", file=sys.stderr, flush=True)
+
+    def _close_handles(self) -> None:
+        for handle in (self._stdout, self._stderr):
+            try:
+                handle.close()
+            except Exception:
+                pass
+
+    def _generation(self) -> str:
+        """``ours``, ``recycled`` or ``unverified``: may the group id still be signalled?
+
+        Before the leader is reaped its pid, and so the group id, cannot be
+        reused.  After, a LIVE process with that pid and another start time
+        means the id was reused, and the kernel never reuses a pid while a
+        process group of that id exists, so the writer's group is gone.  No
+        process with that pid (DEAD) leaves the id to the writer's group.  A
+        LIVE pid without the start time observed at spawn, or a failed
+        observation, cannot be told apart: no signal is sent, and a group
+        still alive then is not proven gone (a harvest fault).
+        """
+        if not self._reaped:
+            return "ours"
+        try:
+            identity = self.seams.observe_identity(self.pid)
+        except Exception:
+            return "unverified"
+        state = getattr(identity, "state", None)
+        if state == "DEAD":
+            return "ours"  # no process holds the id: only the writer's own group can
+        if state == "LIVE" and isinstance(self.start_time, str):
+            return "ours" if getattr(identity, "start_time", None) == self.start_time else "recycled"
+        return "unverified"
+
+    def _group_alive(self) -> bool:
+        """Whether a process of the writer's group may remain (a recycled id means none does)."""
+        if not (isinstance(self.pid, int) and self.pid > 0):
+            return False
+        if not self.seams.group_alive(self.pid):
+            return False
+        if self._generation() == "recycled":
+            self.pid_recycled = True
+            return False
+        return True
+
+    def _wait(self, timeout: float) -> bool:
+        """Wait for the leader; True once it is reaped."""
+        try:
+            self.process.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            return False
+        self._reaped = True
+        return True
+
+    def _supervise(self) -> None:
+        try:
+            deadline = self._started + self.timeout_s
+            while True:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    self.timed_out = True
+                    break
+                if self._wait(max(0.01, min(self.seams.desk_heartbeat_s, remaining))):
+                    break
+                self._heartbeat()
+            if self.timed_out:
+                self._teardown()
+            elif self._group_alive():
+                # The leader exited but something it started is still in its group.
+                self.survivors_after_exit = True
+                self._teardown()
+            else:
+                self.group_gone = True
+        except BaseException as exc:  # recorded; finish() reports it
+            self.error = f"{type(exc).__name__}: {exc}"[:500]
+            try:
+                self._teardown()
+            except BaseException:
+                pass
+
+    def _signal_group(self, signum: int) -> None:
+        """Signal the writer's group, never a reused group id (``_generation``)."""
+        if not (isinstance(self.pid, int) and self.pid > 0):
+            return
+        generation = self._generation()
+        if generation == "recycled":
+            self.pid_recycled = True
+            return
+        if generation == "unverified":
+            self.generation_unverified = True
+            return
+        try:
+            self.seams.killpg(self.pid, signum)
+        except (ProcessLookupError, PermissionError):
+            pass
+
+    def _teardown(self) -> None:
+        import signal
+
+        self._signal_group(signal.SIGTERM)
+        self._wait(self.seams.desk_term_grace_s)
+        self._signal_group(signal.SIGKILL)  # the leader and anything it left in the group
+        self._wait(self.seams.desk_term_grace_s)
+        deadline = time.monotonic() + self.seams.desk_gone_wait_s
+        gone = not self._group_alive()
+        while not gone and time.monotonic() < deadline:
+            time.sleep(0.05)
+            self._signal_group(signal.SIGKILL)
+            gone = not self._group_alive()
+        self.group_gone = gone
+
+    def finish(self) -> dict[str, Any]:
+        self._thread.join()
+        returncode = self.process.poll() if hasattr(self.process, "poll") else getattr(self.process, "returncode", None)
+        if self.group_gone:
+            # A writer that finished released its own lock ("absent"); one that
+            # was killed, or died, may have left it.
+            self.lock = remove_dead_child_lock(self.runs_root, child_pid=self.pid, child_start_time=self.start_time,
+                                               observe_identity=self.seams.observe_identity)
+        else:
+            self.lock = "kept:group_not_proven_gone"
+        outputs = []
+        for handle in (self._stdout, self._stderr):
+            try:
+                handle.seek(0)
+                outputs.append(handle.read().decode("utf-8", "replace"))
+            finally:
+                handle.close()
+        self.stdout, self.stderr = outputs
+        return {"schema": DESK_RUN_SCHEMA, "bundles": self.bundles, "timeout_s": self.timeout_s,
+                "returncode": returncode if _is_int(returncode) else None, "timed_out": self.timed_out,
+                "heartbeats": self.heartbeats, "group_gone": self.group_gone,
+                "survivors_after_exit": self.survivors_after_exit, "lock": self.lock,
+                "child_start_time_observed": self.start_time is not None, "error": self.error,
+                "pid_recycled": self.pid_recycled, "generation_unverified": self.generation_unverified,
+                "elapsed_s": round(time.monotonic() - self._started, 3)}
+
+
 STRATUM_OF_CELL_KIND = {"absolute": "repeat", "comparative": "quad", "contrast": "quad"}
 
 
@@ -2276,6 +2783,15 @@ class Seams:
     boot_session_uuid: Callable[[], str | None] = boot_session_uuid
     workers: int = 1
     python: str = sys.executable
+    # The desk verdict child (DeskVerdictChild).  ``runner`` is not used for it:
+    # it runs concurrently with the member assessment, in its own session.
+    desk_popen: Callable[..., Any] = subprocess.Popen
+    desk_timeout_s: Callable[[int], float] = desk_verdict_timeout_s
+    desk_heartbeat_s: float = DESK_HEARTBEAT_S
+    desk_term_grace_s: float = DESK_TERM_GRACE_S
+    desk_gone_wait_s: float = DESK_GONE_WAIT_S
+    killpg: Callable[[int, int], None] = os.killpg
+    observe_identity: Callable[[int], Any] = _observe_identity
 
 
 def readiness(inputs: WindowInputs, seams: Seams, *, allow_missing_terminal: bool = False) -> dict[str, Any]:
@@ -2329,6 +2845,14 @@ class _Harvest:
         # The bound neg8_bound validated against the collected 10/11-member
         # manifest (an energy: it never leaves this object or withheld/).
         self.neg8_collected_bound: Mapping[str, Any] | None = None
+        # Which arm-collector checks this harvest re-derived (PLAN2 row 12):
+        # collector -> {check: ran}.  Filled by pack_identity and code_identity.
+        self.identity_checks: dict[str, dict[str, bool]] = {}
+        # Arm collectors whose run ended with status ok, by stage.
+        self.collector_ok: set[tuple[str, str]] = set()
+        # Each collector run record: its stage, ok collectors and start wall
+        # time, so an ok row binds only to calls it could have come from.
+        self.collector_ok_runs: list[dict[str, Any]] = []
 
     # -- step wrappers ------------------------------------------------------
     def step(self, name: str, function: Callable[[], Any], *, fault: bool = True) -> Any:
@@ -2447,7 +2971,21 @@ class _Harvest:
         plan tree; the sealed catalog decides the effect.
         """
         tree = read_json(self.pack_copy / "plan_tree.json")
-        dispatches, _unresolved = stage_dispatches(tree, self.pack_copy)
+        report: dict[str, Any] = {}
+        dispatches, unresolved = stage_dispatches(tree, self.pack_copy, self.repo_root_copy, report=report)
+        self.dispatches, self.dispatch_unresolved = dispatches, list(unresolved)
+        self.dispatch_stages = list(report.get("stages") or [])
+        self.dispatch_j3_failures = dict(report.get("j3_failures") or {})
+        if unresolved:
+            # Their run ids are in no duplicate check and no per-stage yield
+            # count, except a J3 failure's, whose members came from input_ref.
+            self.emit("roster.dispatch_unresolved", level="window", collector="roster",
+                      observed={"stages": sorted(unresolved)[:32], "count": len(unresolved),
+                                "resolver": "j3" if _j3_resolver() is not None else "input_ref",
+                                "j3_failures": dict(sorted(self.dispatch_j3_failures.items())[:32]),
+                                "fell_back_to_input_ref": sorted(
+                                    stage for stage in self.dispatch_j3_failures
+                                    if stage in {stage_id for _ordinal, stage_id in self.dispatch_stages})[:32]})
         listings = self.roster.get("duplicate_listings") or {}
         for run_id in sorted(set(listings) | {key for key, rows in dispatches.items() if len(rows) > 1}):
             rows = dispatches.get(run_id, [])
@@ -2473,15 +3011,29 @@ class _Harvest:
 
     def assess(self) -> None:
         tasks = []
+        early: list[dict[str, Any]] = []
+        discarded: list[str] = []
         for member in self.roster["members"]:
             path = self.locate(member["run_id"])
             if path is None:
                 self.emit("member.bytes_missing", level="member", run_id=member["run_id"], collector="members",
-                          stage_id=member.get("stage_id"), observed={"bundle": "absent"})
+                          stage_id=member.get("stage_id"), observed=self._bytes_missing_observed(member["run_id"]))
                 continue
-            tasks.append({"run_id": member["run_id"], "bundle_path": str(path),
-                          "withheld_dir": str(self.withheld)})
-        for result in assess_members(tasks, workers=self.seams.workers):
+            reused, changed = self._early_result(member["run_id"], path)
+            if reused is not None:
+                early.append(reused)
+                continue
+            if changed:
+                discarded.append(member["run_id"])
+            # A discarded early result already wrote its re-reduction under withheld/.
+            withheld = self.withheld / "reassessed" if member["run_id"] in (getattr(self, "_early", None) or {}) \
+                else self.withheld
+            tasks.append({"run_id": member["run_id"], "bundle_path": str(path), "withheld_dir": str(withheld)})
+        if discarded:
+            self.emit("records.source_changed_during_harvest", level="window", collector="members",
+                      observed={"early_assessments_discarded": sorted(discarded)[:16],
+                                "count": len(discarded)})
+        for result in early + assess_members(tasks, workers=self.seams.workers):
             self.members[result["run_id"]] = result
             self.spans[result["run_id"]] = result.get("spans") or {"member": None, "request": None}
         self.assessments_evidence = [{"path": "withheld/member-assessments.json", "sha256": write_json_once(
@@ -3269,15 +3821,23 @@ class _Harvest:
         return result
 
     def prepare_desk_verdict(self) -> None:
-        """Produce the whole-window verdict with the production writer, if absent.
+        """Produce the whole-window verdict with the production writer, if absent (start, then finish)."""
+        if self.start_desk_verdict():
+            self.finish_desk_verdict()
 
-        Runs before the archive.  Only the bracket binding, the verdict file and
-        one appended campaign-log row may change; anything else is a flag.
+    def start_desk_verdict(self) -> bool:
+        """Start the production verdict writer, if the verdict is absent; True once it runs.
+
+        Runs before the archive, in its own session (``DeskVerdictChild``),
+        with a wall budget of max(1,800 s, 90 s per claim-root bundle);
+        :meth:`assess_early` runs while it does.  Only the bracket binding,
+        the verdict file, one appended campaign-log row and the producer's own
+        lock may change; anything else is a flag (:meth:`finish_desk_verdict`).
         """
         inputs = self.inputs
         runs = inputs.claim_runs_root
         if (runs / "whole-window-verdict.json").exists() or inputs.bracket_session_id is None:
-            return
+            return False
         binding_target = runs / "bracket-binding.json"
         before = tree_inventory(runs)
         log = runs / "campaign_log.jsonl"
@@ -3297,16 +3857,56 @@ class _Harvest:
             if binding is None:
                 self.emit("whole_window.producer_failed", level="window", collector="desk",
                           observed={"step": "bracket_binding"})
-                return
+                return False
             write_once(binding_target, canonical_json_bytes(binding) + b"\n")
-        result = self.seams.runner(argv, capture_output=True, text=True, check=False, timeout=1800,
-                                   cwd=str(inputs.measurement_root))
-        transcript = (getattr(result, "stdout", "") or "") + (getattr(result, "stderr", "") or "")
-        self._desk_transcript = transcript
-        if result.returncode not in (0, 1):
+        calibration = {name for name in (inputs.pre_attempt_id, inputs.post_attempt_id) if name}
+        bundles = claim_bundle_count(runs, exclude=calibration)
+        timeout_s = float(self.seams.desk_timeout_s(bundles))
+        self._desk = {"before": before, "old_log": old_log, "log": log, "runs": runs}
+        try:
+            self._desk_child = DeskVerdictChild(argv, cwd=str(inputs.measurement_root), timeout_s=timeout_s,
+                                                bundles=bundles, seams=self.seams, runs_root=runs)
+        except Exception as exc:  # the writer never started, or was torn down: recorded, the verdict stays absent
+            started = isinstance(exc, DeskChildInitError)
             self.emit("whole_window.producer_failed", level="window", collector="desk",
-                      observed={"step": "whole_window_verdict", "returncode": result.returncode})
+                      observed={"step": "whole_window_verdict", "spawn_error": type(exc).__name__,
+                                "started_then_torn_down": started,
+                                "group_gone": exc.group_gone if started else None})
+            if started and not exc.group_gone:
+                # Something of the writer's group may still be writing the runs
+                # root: the archived bytes are not proven to be final.
+                self.fault("desk", "desk_verdict_group_not_proven_gone")
+            return False
+        return True
+
+    def finish_desk_verdict(self) -> None:
+        """Wait for the verdict writer; record its run, its outcome and what it changed."""
+        child = getattr(self, "_desk_child", None)
+        if child is None:
+            return
+        self._desk_child = None
+        record = child.finish()
+        self._desk_transcript = (child.stdout or "") + (child.stderr or "")
+        self.desk_run = record
+        write_json_once(self.withheld / "desk-verdict-run.json", record)
+        if record["timed_out"] or record["error"] is not None or record["survivors_after_exit"]:
+            self.emit("whole_window.producer_failed", level="window", collector="desk",
+                      observed={"step": "whole_window_verdict", "timed_out": record["timed_out"],
+                                "timeout_s": record["timeout_s"], "bundles": record["bundles"],
+                                "returncode": record["returncode"], "group_gone": record["group_gone"],
+                                "survivors_after_exit": record["survivors_after_exit"], "lock": record["lock"],
+                                "error": record["error"] is not None})
+        elif record["returncode"] not in (0, 1):
+            self.emit("whole_window.producer_failed", level="window", collector="desk",
+                      observed={"step": "whole_window_verdict", "returncode": record["returncode"]})
+        if record["group_gone"] is not True:
+            # Something of the writer's process group may still be writing the
+            # runs root: the archived bytes are not proven to be final.
+            self.fault("desk", "desk_verdict_group_not_proven_gone")
+        desk = self._desk
+        runs, log, before, old_log = desk["runs"], desk["log"], desk["before"], desk["old_log"]
         after = tree_inventory(runs)
+        self._desk["after"] = after
         allowed = {"campaign_log.jsonl", "bracket-binding.json", "whole-window-verdict.json", CAMPAIGN_LOCK_NAME}
         changed = sorted(name for name in set(before) | set(after)
                          if name not in allowed and before.get(name) != after.get(name))
@@ -3314,6 +3914,67 @@ class _Harvest:
         if changed or not appended_ok:
             self.emit("records.source_changed_during_harvest", level="window", collector="desk",
                       observed={"changed": changed[:16], "log_prefix_preserved": appended_ok})
+
+    def assess_early(self) -> None:
+        """Assess the claim-root members while the desk verdict writer runs.
+
+        Reads the live claim runs root, as :meth:`assess` does.  The bundle
+        bytes are bound twice: the desk inventories taken before the writer
+        started and after both it and this step finished must agree on every
+        file of the bundle, and so must the archive's own inventory
+        (:meth:`assess`).  Otherwise the early result is discarded and the
+        member is assessed again from the archived state.  Nothing is emitted
+        here; :meth:`assess` emits for the roster it builds from the archive.
+        """
+        runs = self.inputs.claim_runs_root
+        roster = build_roster(self.inputs.pack_root, self.inputs.measurement_root)
+        tasks = []
+        for member in roster.get("members", []):
+            found = [root / member["run_id"] for root in self._runs_roots() if (root / member["run_id"]).is_dir()]
+            if len(found) == 1 and _same_path(found[0].parent, runs):
+                tasks.append({"run_id": member["run_id"], "bundle_path": str(found[0]),
+                              "withheld_dir": str(self.withheld)})
+        results = assess_members(tasks, workers=self.seams.workers)
+        self._early = {result["run_id"]: result for result in results}
+
+    def _early_result(self, run_id: str, path: Path) -> tuple[dict[str, Any] | None, bool]:
+        """(An early assessment of ``path`` bound to the archive or None, whether its bytes changed)."""
+        result = (getattr(self, "_early", None) or {}).get(run_id)
+        desk = getattr(self, "_desk", None) or {}
+        if result is None or result.get("bundle_path") != str(path) or "after" not in desk:
+            return None, False
+        prefix = f"{run_id}/"
+
+        def rows(inventory: Mapping[str, Any] | None) -> dict[str, Any] | None:
+            if inventory is None:
+                return None
+            return {key: value for key, value in inventory.items() if key.startswith(prefix)}
+
+        archived = rows(self._archived_inventory(desk["runs"]))
+        before, after = rows(desk["before"]), rows(desk["after"])
+        if not before or archived is None:
+            return None, False
+        if before != after or after != archived:
+            return None, True
+        return result, False
+
+    def _archived_inventory(self, root: Path) -> dict[str, Any] | None:
+        """The archive's inventory of ``root``, relative to it (from the source holding it)."""
+        best: tuple[int, str, str] | None = None
+        for name, source in getattr(self, "sources", {}).items():
+            relative = _relative_to(root, source)
+            if relative is not None and (best is None or len(str(source)) > best[0]):
+                best = (len(str(source)), name, relative)
+        if best is None:
+            return None
+        _length, name, relative = best
+        inventory = getattr(self, "original", {}).get(name)
+        if inventory is None:
+            return None
+        if relative == ".":
+            return dict(inventory)
+        prefix = relative + "/"
+        return {key[len(prefix):]: value for key, value in inventory.items() if key.startswith(prefix)}
 
     def _desk_binding(self) -> dict[str, Any] | None:
         from joulewise import calibration_bracketing as brackets
@@ -3386,6 +4047,21 @@ class _Harvest:
                 observed = sha256_file(target) if target.is_file() else "absent"
                 if observed != digest:
                     mismatches.append({"path": relative, "expected": digest, "observed": observed, "pin": "sealed"})
+        # The run id inside each science config is the roster's (the arm
+        # collector's config_run_id check, replayed from the preserved bytes).
+        for row in tree.get("science", []) if isinstance(tree.get("science"), list) else []:
+            if not isinstance(row, Mapping) or not isinstance(row.get("config_path"), str):
+                continue
+            try:
+                config = read_json(_resolve_repo_path(row["config_path"], pack, repo))
+            except (OSError, ValueError):
+                continue  # a missing or unreadable config is already a pin mismatch
+            if isinstance(config, Mapping) and config.get("run_id") != row.get("run_id"):
+                mismatches.append({"path": row["config_path"], "check": "config_run_id",
+                                   "expected": row.get("run_id"), "observed": config.get("run_id")})
+        self.identity_checks["pack_identity"] = {
+            "pins": True, "config_run_id": True,
+            "registered_digests": sealed is not None and tree_relative in sealed}
         if mismatches:
             self.emit("pack.identity_mismatch", level="window", collector="pack_identity",
                       observed={"mismatches": mismatches[:32], "mismatch_count": len(mismatches)},
@@ -3492,8 +4168,24 @@ class _Harvest:
             tracked = [line for line in porcelain.splitlines() if line.strip() and not line.startswith("??")]
             if tracked:
                 differences.append({"check": "tracked_edits", "observed": tracked[:16]})
+            # Untracked files under the executed roots can be imported, so they
+            # change what ran (the arm's checkout_identity check, replayed from
+            # the porcelain the driver preserved at arm; PLAN2 row 12).
+            pack_relative = _relative_to(inputs.pack_root, inputs.measurement_root)
+            roots = CODE_PREFIXES + ((pack_relative + "/",) if pack_relative else ())
+            untracked = [path for path in (_porcelain_path(line[3:]) for line in porcelain.splitlines()
+                                           if line.startswith("?? ")) if path.startswith(roots)]
+            if untracked:
+                differences.append({"check": "untracked_in_executed_roots", "observed": sorted(untracked)[:16]})
         elif executed is not None:
             unmeasured.append({"check": "tracked_edits", "missing_input": "status_porcelain"})
+        missing = {item["check"] for item in unmeasured}
+        self.identity_checks["checkout_identity"] = {
+            "head": "head" not in missing and h_claim is not None and executed_head is not None,
+            "tracked_edits": isinstance(porcelain, str), "untracked_in_executed_roots": isinstance(porcelain, str)}
+        self.identity_checks["executed_code"] = {
+            "executed_inventory": "executed_inventory" not in missing and sealed is not None and bool(executed),
+            "chain_sidecar": "chain_sidecar" not in missing}
         if differences:
             self.emit("code.executed_differs_from_sealed", level="window", collector="code_identity",
                       observed={"differences": differences[:32], "difference_count": len(differences)})
@@ -3777,6 +4469,62 @@ class _Harvest:
             self.emit("contention.kernel_task_share", level="window", collector="monitor",
                       observed={"kernel_task_cpu_s_in_requests": round(total, 6)})
 
+    # -- arm-collector unmeasured flags the harvest re-derived (PLAN2 row 12) ---
+    def supersede_identity_unmeasured(self) -> None:
+        """Lift a desk or arm ``*.identity_unmeasured`` only where this harvest re-derived every check.
+
+        A collector that erred or timed out at the arm leaves an
+        EXCLUDE_WINDOW ``*.identity_unmeasured`` flag, and a re-harvest
+        re-reads it, so a deterministic collector failure excluded every
+        re-armed window.  The harvest replays the same identity checks from
+        the preserved bytes.  A flag is superseded, check by check, only
+        when the collector it names is one whose every check this harvest
+        ran (``identity_checks``): checkout_identity (head, tracked edits,
+        untracked files under the executed roots), executed_code (executed
+        inventory against the sealed one, chain sidecar) and pack_identity
+        (plan-tree pins, the registered plan-tree digest, config run ids;
+        run-id uniqueness is ``roster.duplicate_run_id``, so every collection
+        stage must have resolved).  The checks required are
+        ``IDENTITY_SUPERSESSION_CHECKS``, named explicitly.  The harvest's
+        own result, mismatch or clean, then stands.  model_identity is never
+        superseded: the harvest does not re-hash the model artifact,
+        tokenizer or runtime packages.  The removed flag is recorded whole in
+        ``records.identity_unmeasured_superseded``.
+        """
+        for record in list(self.flags.records):
+            code = record.get("code")
+            if code not in set(ARM_COLLECTOR_UNMEASURED.values()):
+                continue
+            source = record.get("source") if isinstance(record.get("source"), Mapping) else {}
+            observed = record.get("observed") if isinstance(record.get("observed"), Mapping) else {}
+            stage, writer = source.get("stage"), str(source.get("collector") or "")
+            if observed.get("check") == "collector_run":
+                collector = observed.get("collector")
+            elif writer.startswith(COLLECTOR_SOURCE_PREFIX):
+                collector = writer[len(COLLECTOR_SOURCE_PREFIX):]
+            else:
+                continue
+            if not (stage in ("desk", "arm") or (stage == "harvest" and writer == "arm_collectors")):
+                continue
+            if collector not in ARM_COLLECTOR_UNMEASURED or ARM_COLLECTOR_UNMEASURED[collector] != code:
+                continue
+            checks = self.identity_checks.get(collector) or {}
+            required = IDENTITY_SUPERSESSION_CHECKS.get(collector)
+            if not required or not all(checks.get(name) is True for name in required):
+                continue
+            if collector == "pack_identity":
+                code_checks = self.identity_checks.get("checkout_identity") or {}
+                if not (code_checks.get("tracked_edits") is True
+                        and code_checks.get("untracked_in_executed_roots") is True
+                        and getattr(self, "dispatches", None) is not None
+                        and not getattr(self, "dispatch_unresolved", None)):
+                    continue  # the committed-pack and run-id checks ride on these
+            self.flags.remove(record["flag_id"])
+            self.emit("records.identity_unmeasured_superseded", level="window", collector="identity",
+                      observed={"superseded_flag_id": record["flag_id"], "code": code, "collector": collector,
+                                "stage": stage, "check": observed.get("check"),
+                                "harvest_checks": sorted(required), "superseded_flag": dict(record)})
+
     # -- arm record and earlier flag files -------------------------------------
     def arm_and_desk_records(self) -> None:
         path = self.inputs.arm_record_path
@@ -3906,6 +4654,12 @@ class _Harvest:
         """A ``joulewise.flag_collector_run.v1`` record: every collector whose status is not ``ok``."""
         stage = record.get("stage") if isinstance(record.get("stage"), str) else "unknown"
         rows = record.get("collectors") if isinstance(record.get("collectors"), list) else []
+        ok = {str(row.get("collector")) for row in rows if isinstance(row, Mapping) and row.get("status") == "ok"}
+        self.collector_ok |= {(stage, name) for name in ok}
+        if not hasattr(self, "collector_ok_runs"):
+            self.collector_ok_runs = []
+        self.collector_ok_runs.append({"stage": stage, "ok": frozenset(ok),
+                                       "started_wall_s": _stamp_wall_s(record.get("started"))})
         listed = record.get("collector_errors") if isinstance(record.get("collector_errors"), list) else []
         failed = [row for row in rows if isinstance(row, Mapping) and row.get("status") != "ok"]
         named = {row.get("collector") for row in failed}
@@ -3944,6 +4698,9 @@ class _Harvest:
         """
         night = self.inputs.night_dir
         records = []
+        # (source, start wall seconds or None) of every call that failed as a
+        # whole or whose receipt cannot be read (fail closed, PLAN2 row 12).
+        failed_calls: list[tuple[str, float | None]] = []
         for path in sorted(night.glob("arm_collectors*.json")) if night.is_dir() else []:
             try:
                 records.append((path, read_json(path)))
@@ -3951,9 +4708,11 @@ class _Harvest:
                 self._prior_collector_error(stage="arm", collector=path.name, status="malformed",
                                             error="unreadable driver collector record", elapsed_s=None,
                                             source=f"night/{path.name}")
+                failed_calls.append((f"night/{path.name}", None))
         results: list[tuple[str, Mapping[str, Any]]] = []
         for path, record in records:
             if not isinstance(record, Mapping):
+                failed_calls.append((f"night/{path.name}", None))
                 continue
             source = f"night/{path.name}"
             items = [item for item in record.get("results") or [] if isinstance(item, Mapping)] \
@@ -3967,16 +4726,45 @@ class _Harvest:
         if not records and isinstance(arm_value, Mapping):
             results = [("hazards/arm.json", item) for item in arm_value.get("record_only") or []
                        if isinstance(item, Mapping)]
+        failed_calls += [(f"night/{path.name}", _stamp_wall_s(record.get("started")) or _stamp_wall_s(record.get("at")))
+                         for path, record in records
+                         if isinstance(record, Mapping) and not record.get("results") and record.get("collector_error")]
         for source, item in results:
             failed = item.get("error") or item.get("timed_out") or (
                 _is_int(item.get("returncode")) and item.get("returncode") != 0)
             if failed:
+                failed_calls.append((source, _stamp_wall_s(item.get("started"))))
                 status = "timeout" if item.get("timed_out") else "error"
                 error = item.get("error") or ("timed out" if item.get("timed_out")
                                               else f"exit {item.get('returncode')}")
                 self._prior_collector_error(stage="arm", collector=str(item.get("name") or "collector"),
                                             status=status, error=error, elapsed_s=item.get("elapsed_s"),
                                             source=source)
+        if failed_calls:
+            # The arm's collector call was killed or failed as a whole, so a
+            # collector it never finished wrote neither its flags nor its run
+            # row.  Fail closed: each collector without an ok arm row from a
+            # run that started no earlier than the latest failed call is
+            # unmeasured (PLAN2 row 12); an ok row from an earlier call does
+            # not speak for a later one, and a failed call whose start is
+            # unknown (an unreadable receipt) lets no ok row through.
+            # supersede_identity_unmeasured then lifts the ones this harvest
+            # re-derived.
+            starts = [start for _source, start in failed_calls]
+            latest = max(starts) if starts and all(start is not None for start in starts) else None
+            bound = set()
+            if latest is not None:
+                for run in getattr(self, "collector_ok_runs", None) or []:
+                    started = run.get("started_wall_s")
+                    if run.get("stage") == "arm" and started is not None and started >= latest:
+                        bound |= set(run.get("ok") or ())
+            for name, code in ARM_COLLECTOR_UNMEASURED.items():
+                if name not in bound:
+                    self.emit(code, level="window", collector="arm_collectors",
+                              observed={"check": "collector_run", "collector": name, "status": "call_failed",
+                                        "source": failed_calls[-1][0],
+                                        "failed_calls": [source for source, _start in failed_calls][:8]},
+                              expected={"status": "ok"})
 
     # -- G3 provenance checker -------------------------------------------------
     def g3(self, *, skipped: bool = False) -> None:
@@ -4160,6 +4948,301 @@ class _Harvest:
         return {label: Path(value) for label, value in roots.items()
                 if label in ("claim", "bound") and isinstance(value, str) and os.path.isabs(value)}
 
+    # -- runs roots, yield and collection causes (PLAN2 2.1 row 18, 2.2 F) -----
+    def check_runs_roots(self) -> None:
+        """An absent runs root is a harvest fault; a root other than the plan's is a recorded override."""
+        inputs = self.inputs
+        hazard = inputs.plan.get("hazard_window") if isinstance(inputs.plan.get("hazard_window"), Mapping) else {}
+        fresh = hazard.get("runs_roots") if isinstance(hazard.get("runs_roots"), Mapping) else {}
+        self.runs_root_overrides: list[dict[str, Any]] = []
+        for label, used, key in (("claim", inputs.claim_runs_root, "claim_runs_root"),
+                                 ("bound", inputs.bound_runs_root, "bound_runs_root")):
+            if used is None:
+                continue
+            if not used.is_dir():
+                self.fault("runs_roots", f"runs_root_absent:{label}")
+            planned = [value for value in (fresh.get(label), _plan_value(inputs.plan, key))
+                       if isinstance(value, str) and value]
+            differing = [value for value in planned if not _same_path(Path(value), used)]
+            if differing:
+                entry = {"root": label, "planned": differing[0], "used": str(used)}
+                self.runs_root_overrides.append(entry)
+                self.emit("records.runs_root_override", level="window", collector="runs_roots", observed=entry)
+
+    def _campaign_join(self) -> dict[str, dict[str, Any]]:
+        """run_id -> the last campaign-log row naming it, across the runs roots (structure only)."""
+        cached = getattr(self, "_campaign_rows", None)
+        if cached is not None:
+            return cached
+        rows: dict[str, dict[str, Any]] = {}
+        for root in self._runs_roots():
+            log = root / "campaign_log.jsonl"
+            try:
+                lines = log.read_bytes().splitlines() if log.is_file() else []
+            except OSError:
+                lines = []
+            for line in lines:
+                try:
+                    row = json.loads(line)
+                except ValueError:
+                    continue
+                if not isinstance(row, Mapping):
+                    continue
+                cooldown = row.get("preceding_campaign_cooldown")
+                cooldown = cooldown if isinstance(cooldown, Mapping) else {}
+                entry = {"status": row.get("status") if isinstance(row.get("status"), str) else None,
+                         "exit_code": row.get("exit_code") if _is_int(row.get("exit_code")) else None,
+                         "blocked_before_invoke": row.get("blocked_before_invoke") is True,
+                         "cooldown_result": cooldown.get("result") if isinstance(cooldown.get("result"), str)
+                         else None,
+                         "cooldown_reason": cooldown.get("reason") if isinstance(cooldown.get("reason"), str)
+                         else None}
+                run_id = row.get("run_id")
+                members = row.get("members") if isinstance(row.get("members"), list) else []
+                strict = {member.get("bundle_id"): member.get("strict_validation") for member in members
+                          if isinstance(member, Mapping) and isinstance(member.get("bundle_id"), str)}
+                if isinstance(run_id, str) and run_id:
+                    rows[run_id] = {**entry, "strict_validation": strict.get(run_id)}
+                for bundle_id, value in strict.items():
+                    if bundle_id != run_id:
+                        rows.setdefault(bundle_id, dict(entry))["strict_validation"] = value
+        self._campaign_rows = rows
+        return rows
+
+    def _bytes_missing_observed(self, run_id: str) -> dict[str, Any]:
+        """``member.bytes_missing`` for an absent bundle, with the exact campaign-log fields that name why."""
+        observed: dict[str, Any] = {"bundle": "absent"}
+        row = self._campaign_join().get(run_id)
+        if row is not None:
+            observed.update({"campaign_status": row["status"], "exit_code": row["exit_code"]})
+            if row["blocked_before_invoke"]:
+                reason = row["cooldown_reason"]
+                observed["cooldown"] = {"result": row["cooldown_result"],
+                                        "reason": _DIGITS_RE.sub("#", reason)[:200] if reason else None}
+        return observed
+
+    def _bundle_on_disk(self, run_id: str) -> bool:
+        """A bundle directory for ``run_id`` in a runs root (no flag; :meth:`locate` emits)."""
+        try:
+            return any((root / run_id).is_dir() for root in self._runs_roots())
+        except OSError:
+            return False
+
+    def _raw_valid(self, result: Mapping[str, Any]) -> bool:
+        stream = result.get("stream_bytes")
+        return bool(result.get("present")) and not result.get("files_missing") \
+            and _is_int(stream) and stream >= RAW_VALID_MIN_STREAM_BYTES
+
+    def _counts(self, run_ids: Sequence[str]) -> dict[str, int]:
+        joined = self._campaign_join()
+        counts = {"planned": len(run_ids), "present": 0, "raw_valid": 0, "succeeded": 0, "strict_deferred": 0}
+        for run_id in run_ids:
+            result = self.members.get(run_id)
+            if result is not None and result.get("present"):
+                counts["present"] += 1
+                counts["raw_valid"] += self._raw_valid(result)
+                counts["succeeded"] += result.get("status") == "succeeded"
+            elif result is None and self._bundle_on_disk(run_id):
+                # Bytes are present though no assessment of them is: present,
+                # never raw_valid or succeeded (an assessment that failed or
+                # never ran proves neither).
+                counts["present"] += 1
+            counts["strict_deferred"] += (joined.get(run_id) or {}).get("strict_validation") == STRICT_DEFERRED
+        return counts
+
+    def _collection_stages(self) -> list[tuple[str, list[str]]]:
+        """(stage_id, run ids it first launches), in plan-tree order, from the dispatch map.
+
+        A collection stage that was read but launches no run id (or only run
+        ids an earlier stage launched) is listed with no run ids, so the yield
+        shows it as planned 0 instead of dropping it.
+        """
+        stages: dict[str, list[str]] = {}
+        order: list[tuple[Any, str]] = []
+        for run_id, rows in (getattr(self, "dispatches", None) or {}).items():
+            if not rows:
+                continue
+            stage_id = str(rows[0]["stage_id"])
+            if stage_id not in stages:
+                stages[stage_id] = []
+                order.append((rows[0].get("ordinal") if _is_int(rows[0].get("ordinal")) else 0, stage_id))
+            stages[stage_id].append(run_id)
+        for ordinal, stage_id in getattr(self, "dispatch_stages", None) or []:
+            if stage_id not in stages:
+                stages[stage_id] = []
+                order.append((ordinal if _is_int(ordinal) else 0, stage_id))
+        return [(stage_id, stages[stage_id]) for _ordinal, stage_id in sorted(order)]
+
+    def stage_journal(self) -> list[dict[str, Any]] | None:
+        """``night/chain-stages.jsonl`` rows; None when the chain wrote no journal."""
+        path = self.inputs.night_dir / STAGE_JOURNAL_NAME
+        if not path.is_file():
+            return None
+        rows = []
+        for line in path.read_bytes().splitlines():
+            try:
+                value = json.loads(line)
+            except ValueError:
+                continue
+            if isinstance(value, Mapping) and isinstance(value.get("stage_id"), str):
+                rows.append(dict(value))
+        return rows
+
+    def collection_presence(self) -> bool:
+        """False when the chain journaled stages but never a campaign_collection stage."""
+        journal = self.stage_journal()
+        if journal is None or any(row.get("kind") == "campaign_collection" for row in journal):
+            return True
+        last = journal[-1] if journal else {}
+        self.emit("chain.stopped_before_collection", level="window", collector="yield",
+                  observed={"stages_journaled": len(journal), "last_stage": last.get("stage_id"),
+                            "last_kind": last.get("kind"), "last_rc": last.get("rc") if _is_int(last.get("rc"))
+                            else None})
+        return False
+
+    def yield_summary(self) -> None:
+        """Counts only (PLAN2 2.2 F): planned, present, raw_valid, succeeded; overall and per stage."""
+        roster = self.roster.get("members", [])
+        per_roster: dict[str, list[str]] = {}
+        for member in roster:
+            per_roster.setdefault(str(member.get("stage_id")), []).append(member["run_id"])
+        overall = self._counts([member["run_id"] for member in roster])
+        per_collection = [{"stage_id": stage_id, **self._counts(run_ids)}
+                          for stage_id, run_ids in self._collection_stages()]
+        journal = self.stage_journal()
+        block = {"schema": YIELD_SCHEMA, **overall,
+                 "per_roster_stage": [{"stage_id": stage_id, **self._counts(run_ids)}
+                                      for stage_id, run_ids in sorted(per_roster.items())],
+                 "per_collection_stage": per_collection,
+                 "unresolved_collection_stages": sorted(getattr(self, "dispatch_unresolved", []) or []),
+                 "j3_failed_stages": sorted(getattr(self, "dispatch_j3_failures", None) or {}),
+                 "stage_journal": None if journal is None else {
+                     "stages": len(journal),
+                     "campaign_collection": sum(row.get("kind") == "campaign_collection" for row in journal)}}
+        window = self._window_stage_yield()
+        block["window_stage_yield"] = None if window is None else {"stages": len(window)}
+        self.yield_block = block
+        self.outputs["derived/yield.json"] = write_json_once(self.derived / "yield.json", block)
+        if overall["planned"] and not overall["present"]:
+            self.emit("collection.zero_yield", level="window", collector="yield",
+                      observed={"planned": overall["planned"], "present": 0})
+        if window is not None:
+            harvested = {row["stage_id"]: row for row in per_collection}
+            for stage_id, line in sorted(window.items()):
+                mine = harvested.get(stage_id)
+                fields = ("planned", "present", "succeeded")
+                theirs = {field: line.get(field) for field in fields}
+                ours = {field: mine[field] for field in fields} if mine is not None else None
+                if ours != theirs:
+                    self.emit("yield.harvest_disagrees_with_window", level="window", collector="yield",
+                              observed={"stage_id": stage_id, "window": theirs, "harvest": ours})
+
+    def _window_stage_yield(self) -> dict[str, dict[str, Any]] | None:
+        """The driver's in-window counts, last line per stage; None when the window wrote none."""
+        path = self.inputs.night_dir / STAGE_YIELD_NAME
+        if not path.is_file():
+            return None
+        lines: dict[str, dict[str, Any]] = {}
+        for raw in path.read_bytes().splitlines():
+            try:
+                value = json.loads(raw)
+            except ValueError:
+                continue
+            if isinstance(value, Mapping) and isinstance(value.get("stage_id"), str):
+                lines[value["stage_id"]] = {field: value.get(field) for field in ("planned", "present", "succeeded")}
+        return lines
+
+    def failure_histogram(self) -> None:
+        """``collection.failure_histogram``: every ``error:`` line of the operator logs, grouped.
+
+        Grouped by the digit-redacted text (digits become ``#``), with a cause
+        class (the leading identifier, as ``LaunchLineageError``), a count and
+        the stages whose logs hold it.  The full texts go to ``withheld/``.
+        """
+        directory = self.inputs.custody_root / "operator-logs"
+        groups: dict[str, dict[str, Any]] = {}
+        texts: list[dict[str, str]] = []
+        for path in sorted(directory.glob("*.log")) if directory.is_dir() else []:
+            try:
+                raw = path.read_bytes()
+            except OSError:
+                continue
+            for line in raw.decode("utf-8", "replace").splitlines():
+                if not line.startswith("error:"):
+                    continue
+                message = line[len("error:"):].strip()
+                texts.append({"log": path.name, "text": line})
+                redacted = _DIGITS_RE.sub("#", message)[:300]
+                match = re.match(r"([A-Za-z_][A-Za-z0-9_.]*)\s*:", redacted)
+                group = groups.setdefault(redacted, {
+                    "cause_class": match.group(1) if match else "unclassified", "text": redacted,
+                    "sha256": sha256_bytes(redacted.encode("utf-8")), "count": 0, "stages": []})
+                group["count"] += 1
+                if path.stem not in group["stages"]:
+                    group["stages"].append(path.stem)
+        if not texts:
+            return
+        write_json_once(self.withheld / "failure-texts.json", {"schema": FAILURE_TEXTS_SCHEMA, "lines": texts})
+        causes = sorted(groups.values(), key=lambda group: (-group["count"], group["text"]))
+        self.emit("collection.failure_histogram", level="window", collector="yield",
+                  observed={"lines": len(texts), "distinct": len(causes), "causes": causes[:32]})
+
+    def battery_thermistor(self) -> None:
+        """The battery-thermistor diagnostic of the timing ruling (2026-10-06), per stage.
+
+        run_campaign reads ``ioreg -rn AppleSmartBattery`` key ``Temperature``
+        (hundredths of a degree C) at each cooldown release into the stage's
+        campaign manifest.  A stage whose first-to-last rise exceeds 3 K with
+        no plateau (its last three readings not within 0.5 K) is
+        ``thermal.stage_battery_rise``; a stage whose readings are absent or
+        failed is ``thermal.battery_temperature_unmeasured``.  Both are
+        disclosed beside the NEG-8 result; neither excludes anything.
+        """
+        for root in self._runs_roots():
+            directory = root / "campaign_manifests"
+            for path in sorted(directory.glob("*.json")) if directory.is_dir() else []:
+                try:
+                    manifest = read_json(path)
+                except (OSError, ValueError) as exc:
+                    # The stage's readings are not readable: disclosed, never skipped.
+                    self.emit("thermal.battery_temperature_unmeasured", level="window", collector="thermistor",
+                              observed={"manifest": path.name, "runs_root": root.name, "config_dir": None,
+                                        "reason": "manifest_unreadable", "error": type(exc).__name__})
+                    continue
+                if not isinstance(manifest, Mapping):
+                    self.emit("thermal.battery_temperature_unmeasured", level="window", collector="thermistor",
+                              observed={"manifest": path.name, "runs_root": root.name, "config_dir": None,
+                                        "reason": "manifest_malformed"})
+                    continue
+                if not isinstance(manifest.get("members"), list):
+                    continue  # not a stage's campaign manifest (run_campaign writes members on every one)
+                stage = {"manifest": path.name, "runs_root": root.name,
+                         "config_dir": Path(str(manifest.get("config_dir") or "")).name or None}
+                readings = manifest.get(BATTERY_TEMPERATURE_MANIFEST_KEY)
+                if not isinstance(readings, list):
+                    self.emit("thermal.battery_temperature_unmeasured", level="window", collector="thermistor",
+                              observed={**stage, "reason": "no_readings_recorded"})
+                    continue
+                values = [reading.get("temperature_centi_c") if isinstance(reading, Mapping) else None
+                          for reading in readings]
+                valid = [value for value in values if _is_int(value)]
+                if len(valid) != len(values) or not values:
+                    self.emit("thermal.battery_temperature_unmeasured", level="window", collector="thermistor",
+                              observed={**stage, "reason": "readings_failed" if values else "no_readings",
+                                        "readings": len(values), "failed": len(values) - len(valid)})
+                if len(valid) < 2:
+                    continue
+                rise_k = (valid[-1] - valid[0]) / 100.0
+                tail = valid[-BATTERY_PLATEAU_READINGS:]
+                spread_k = (max(tail) - min(tail)) / 100.0
+                plateau = len(tail) == BATTERY_PLATEAU_READINGS and spread_k <= BATTERY_PLATEAU_SPREAD_K
+                if rise_k > BATTERY_RISE_LIMIT_K and not plateau:
+                    self.emit("thermal.stage_battery_rise", level="window", collector="thermistor",
+                              observed={**stage, "readings": len(valid), "rise_k": round(rise_k, 2),
+                                        "last_three_spread_k": round(spread_k, 2), "plateau": False},
+                              expected={"rise_k_at_most": BATTERY_RISE_LIMIT_K,
+                                        "or_plateau_within_k": BATTERY_PLATEAU_SPREAD_K})
+
     # -- outputs ---------------------------------------------------------------
     def sources_unchanged(self) -> None:
         changed = [name for name, path in self.sources.items() if tree_inventory(path) != self.original.get(name)]
@@ -4230,6 +5313,7 @@ class _Harvest:
                            "unclassified": exclusions.get("unclassified", []),
                            "reasons": list(exclusions.get("reasons", []))
                            + (["harvest.fault"] if verdict == HARVEST_FAULT else [])},
+            "yield": getattr(self, "yield_block", None),
         }
         self.outputs["derived/window_flags.json"] = write_json_once(self.derived / "window_flags.json", summary)
         record = {"schema": SCHEMA, "verdict": verdict, "plan_id": self.inputs.plan_id,
@@ -4237,6 +5321,9 @@ class _Harvest:
                   "archive_root": str(self.archive), "claim_usable": claim_usable,
                   "flags": len(flags), "members_assessed": len(self.members),
                   "faults": [{"collector": item["collector"]} for item in self.faults],
+                  "yield": getattr(self, "yield_block", None),
+                  "exclude_window_reasons": sorted(map(str, summary["exclusions"]["reasons"])),
+                  "runs_root_overrides": list(getattr(self, "runs_root_overrides", [])),
                   "outputs": dict(sorted(self.outputs.items()))}
         write_json_once(self.archive / "harvest.json", record)
         return record
@@ -4316,6 +5403,28 @@ def _g3_lines(stdout: str) -> list[dict[str, str]]:
     return rows
 
 
+def _stamp_wall_s(value: Any) -> float | None:
+    """Wall seconds from a stamp: ``wall_s`` (driver, flags) or ``wall_ns`` (hazards); else None."""
+    if not isinstance(value, Mapping):
+        return None
+    if _is_number(value.get("wall_s")):
+        return float(value["wall_s"])
+    if _is_int(value.get("wall_ns")):
+        return value["wall_ns"] / 1e9
+    return None
+
+
+def _porcelain_path(text: str) -> str:
+    """A ``git status --porcelain=v1`` path: unquoted when git quoted it."""
+    text = text.strip()
+    if len(text) >= 2 and text[0] == text[-1] == '"':
+        try:
+            return json.loads(text)
+        except ValueError:
+            return text[1:-1]
+    return text
+
+
 def _under(path: Path, root: Path) -> bool:
     try:
         Path(os.path.abspath(path)).relative_to(os.path.abspath(root))
@@ -4355,15 +5464,24 @@ def harvest(inputs: WindowInputs, archive_root: Path | str, *, seams: Seams | No
         run.step("arm_records", run.arm_and_desk_records)
         return run.finish(NULL)
     run.step("thresholds", run.record_thresholds)
+    run.step("runs_roots", run.check_runs_roots)
     if prepare_desk:
-        run.step("desk", run.prepare_desk_verdict, fault=False)
+        # The verdict writer and the member assessment run concurrently
+        # (PLAN2 2.1 row 1); the archive follows both, so it holds the verdict.
+        if run.step("desk", run.start_desk_verdict, fault=False):
+            run.step("members_early", run.assess_early, fault=False)
+        run.step("desk", run.finish_desk_verdict, fault=False)
     run.step("archive", run.archive_inputs)
     run.step("arm_records", run.arm_and_desk_records)
     if run.step("roster", run.build_roster) is None and not run.roster:
         return run.finish(HARVEST_FAULT)
     run.step("roster_dispatch", run.roster_dispatch)
+    collected = run.step("collection", run.collection_presence, fault=False) is not False
     run.step("members", run.assess)
     run.step("member_flags", run.member_flags)
+    run.step("yield", run.yield_summary, fault=False)
+    run.step("failure_histogram", run.failure_histogram, fault=False)
+    run.step("thermistor", run.battery_thermistor, fault=False)
     run.step("roster_checks", run.roster_checks)
     run.step("cooldown", run.cooldown)
     run.step("calibration", run.calibration)
@@ -4373,10 +5491,11 @@ def harvest(inputs: WindowInputs, archive_root: Path | str, *, seams: Seams | No
     run.step("pack_identity", run.pack_identity)
     run.step("code_identity", run.code_identity)
     run.step("model_identity", run.model_identity)
+    run.step("identity_supersession", run.supersede_identity_unmeasured)
     run.step("lineage", run.lineage_audit)
     run.step("monitor", run.monitor_joins)
     run.step("exclusion_inputs", run.exclusion_inputs)
     run.step("g3", lambda: run.g3(skipped=not run_g3), fault=False)
     run.step("diagnostics", run.diagnostics, fault=False)
     run.step("sources_unchanged", run.sources_unchanged)
-    return run.finish(COLLECTED)
+    return run.finish(COLLECTED if collected else NO_COLLECTION)

@@ -822,7 +822,7 @@ class CollectedWindowTests(WindowTestCase):
         summary = window.window_flags()
         self.assertEqual(summary["schema"], "joulewise.window_flags.v1")
         self.assertEqual(set(summary), {"schema", "window", "catalog", "hazards", "flags", "collector_errors",
-                                        "exclusions"})
+                                        "exclusions", "yield"})
         self.assertEqual([phase["verdict"] for phase in summary["hazards"]["battery"]["arm"]], ["PASS"])
         self.assertEqual(summary["hazards"]["battery"]["continuous"]["journal"]["malformed"], 0)
         self.assertEqual(summary["flags"]["unclassified"], [])
@@ -1257,14 +1257,16 @@ class DeskAndG3Tests(WindowTestCase):
             (runs / "b5t-abs-r01" / "logs" / "controller.log").write_text("tampered\n")
             return SimpleNamespace(returncode=1, stdout="", stderr="")
 
-        window.harvest(seams=h.Seams(group_alive=lambda pgid: False, exclusions_compute=EXCLUSIONS,
-                                     runner=runner), prepare_desk=True, run_g3=False)
+        window.harvest(seams=desk_seams(runner), prepare_desk=True, run_g3=False)
         self.assertEqual(len(calls), 1)
         argv = calls[0]
         self.assertIn("--whole-window-verdict", argv)
         self.assertEqual(argv[argv.index("--bracket-binding") + 1], str(window.claim / "bracket-binding.json"))
         self.assertTrue((window.claim / "bracket-binding.json").is_file())
-        flag = next(flag for flag in window.flags() if flag["code"] == "records.source_changed_during_harvest")
+        # The desk's own inventory check names the file (the member assessed
+        # while the writer ran is assessed again: P2-HARV row 1).
+        flag = next(flag for flag in window.flags() if flag["code"] == "records.source_changed_during_harvest"
+                    and "changed" in flag["observed"])
         self.assertEqual(flag["observed"]["changed"], ["b5t-abs-r01/logs/controller.log"])
         self.assertIn("whole_window.verdict_unauthenticated", window.codes())
 
@@ -2163,7 +2165,9 @@ class EmittedCodeTests(unittest.TestCase):
                     if match.split(".", 1)[0] in families and h.CODE_RE.fullmatch(match)}
         built = {f"{module}.unmeasured" for module in ("battery", "thermal", "contention", "clock")} \
             | {f"instrument.{reason}" for reason in h.INSTRUMENT_REASONS}
-        not_codes = {"g3.txt", "roster.json"}  # file names
+        not_codes = {"g3.txt", "roster.json",  # file names
+                     "chain.started", "monitor.capture_battery",  # a night record and a collector name
+                     "yield.json"}  # a file name
         self.assertEqual((literals | built) - not_codes - set(h.CODES), set())
 
     def test_every_lineage_finding_code_is_listed_with_l3s_family(self):
@@ -2178,7 +2182,10 @@ class EmittedCodeTests(unittest.TestCase):
         if raw is None:
             self.skipTest("neither the sealed catalog nor the block-5 design branch is in this clone")
         codes = json.loads(raw)["codes"]
-        self.assertEqual(set(h.CODES) - set(codes), set(h.NEVER_CLASSIFIED_CODES))
+        # The gate-prune round-2 codes reach the draft through the registration
+        # row (REG) before the seal; any other unclassified code fails here.
+        missing = set(h.CODES) - set(codes)
+        self.assertEqual(missing - h.PRUNE2_CODES, set(h.NEVER_CLASSIFIED_CODES))
         self.assertTrue(h.NEVER_CLASSIFIED_CODES.isdisjoint(codes))
 
 
@@ -2948,11 +2955,16 @@ class RehearsalRound1Tests(WindowTestCase):
                 self.assertTrue(row["source"].startswith(("flags/collector_runs.jsonl:", "night/arm_collectors")))
         # Not harvest faults: the collectors are records.
         self.assertEqual(record["faults"], [])
-        # Every flag the collectors wrote reached the window's flags, with its writer's id.
+        # Every flag the collectors wrote reached the window's flags, with its writer's id,
+        # or was superseded by the harvest's own complete re-derivation (PLAN2 row 12),
+        # which records the superseded flag's id.
         written = [json.loads(line) for name in ("desk.jsonl", "arm.jsonl")
                    for line in (window.custody / "flags" / name).read_text().splitlines() if line.strip()]
         self.assertTrue(written)
-        self.assertTrue({flag["flag_id"] for flag in written} <= {flag["flag_id"] for flag in window.flags()})
+        superseded = {flag["observed"]["superseded_flag_id"] for flag in window.flags()
+                      if flag["code"] == "records.identity_unmeasured_superseded"}
+        self.assertTrue({flag["flag_id"] for flag in written}
+                        <= {flag["flag_id"] for flag in window.flags()} | superseded)
         failed = {(flag["observed"]["stage"], flag["observed"]["collector"]) for flag in window.flags()
                   if flag["code"] == "records.collector_failed" and "stage" in flag["observed"]}
         self.assertEqual({f"{stage}.{name}" for stage, name in failed}, {name for _stage, name in folded})
@@ -3149,8 +3161,38 @@ class RehearsalRound1Tests(WindowTestCase):
 # Gate-prune core prune, lane NONCORE (night-archive core-prune DESIGN.md 3.4).
 # ---------------------------------------------------------------------------
 
-def desk_seams(runner):
-    return h.Seams(group_alive=lambda pgid: False, exclusions_compute=EXCLUSIONS, runner=runner)
+class RunnerPopen:
+    """A desk verdict child that has already finished: ``runner`` runs at spawn.
+
+    The harvest spawns the desk writer with ``Seams.desk_popen`` in its own
+    session and supervises it (``DeskVerdictChild``); this stands in for a
+    writer that exits at once, writing ``runner``'s output to the harvest's
+    capture files.
+    """
+
+    def __init__(self, runner, argv, **kwargs):
+        assert kwargs.get("start_new_session") is True, kwargs
+        result = runner(argv, **kwargs)
+        for name in ("stdout", "stderr"):
+            handle, text = kwargs.get(name), getattr(result, name, "") or ""
+            if hasattr(handle, "write"):
+                handle.write(text.encode("utf-8"))
+        self.returncode, self.pid = result.returncode, -1
+
+    def wait(self, timeout=None):
+        return self.returncode
+
+    def poll(self):
+        return self.returncode
+
+
+def desk_popen(runner):
+    return lambda argv, **kwargs: RunnerPopen(runner, argv, **kwargs)
+
+
+def desk_seams(desk_runner, **extra):
+    return h.Seams(group_alive=lambda pgid: False, exclusions_compute=EXCLUSIONS,
+                   desk_popen=desk_popen(desk_runner), **extra)
 
 
 class CampaignLockAllowlistTests(WindowTestCase):
