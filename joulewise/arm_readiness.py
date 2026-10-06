@@ -11097,6 +11097,22 @@ def authenticate_launch_lineage(
 ) -> dict[str, Any]:
     """Authenticate one immutable consumption→start→settle→completion chain."""
 
+    from joulewise import window_lineage as _window_lineage  # noqa: PLC0415
+
+    if _window_lineage.is_hazard_lineage(value):
+        # HAZARD_PACK schema dispatch: no ARM receipt exists, so the chain
+        # below (and its _replay_consumed_arm) is never entered.
+        try:
+            return _window_lineage.authenticate_lineage(
+                value,
+                require_completion=require_completion,
+                expected_pack_root=expected_pack_root,
+                require_current_boot=require_current_boot,
+                require_completion_absent=require_completion_absent,
+            )
+        except _window_lineage.HazardLineageError as exc:
+            raise LaunchLineageError(exc.reason_code, str(exc)) from exc
+
     launch_binding_cache: dict[Path, bytes] = {}
     if require_completion and require_completion_absent:
         raise ValueError(
@@ -11393,6 +11409,16 @@ def _read_launch_lineage_locator(
     expected_root: Path,
     expected_role: str | None = None,
 ) -> tuple[Mapping[str, Any], str]:
+    from joulewise import window_lineage as _window_lineage  # noqa: PLC0415
+
+    if _window_lineage.is_hazard_locator(path):
+        # HAZARD_PACK schema dispatch; ARM locators fall through unchanged.
+        try:
+            return _window_lineage.read_locator(
+                path, expected_root=expected_root, expected_role=expected_role
+            )
+        except _window_lineage.HazardLineageError as exc:
+            raise LaunchLineageError(exc.reason_code, str(exc)) from exc
     if path.name != LAUNCH_LINEAGE_LOCATOR_BASENAME:
         raise LaunchLineageError(
             "launch_binding_mismatch",
@@ -11507,6 +11533,17 @@ def authenticate_campaign_launch_lineage(
     config_paths: Sequence[Path | str] = (),
 ) -> dict[str, Any]:
     """Derive and authenticate the campaign writer's fixed root-local locator."""
+
+    from joulewise import window_lineage as _window_lineage  # noqa: PLC0415
+
+    if _window_lineage.is_hazard_runs_root(runs_root):
+        # HAZARD_PACK schema dispatch: same return shape, config-bytes check kept.
+        try:
+            return _window_lineage.authenticate_campaign(
+                runs_root, config_paths=config_paths
+            )
+        except _window_lineage.HazardLineageError as exc:
+            raise LaunchLineageError(exc.reason_code, str(exc)) from exc
 
     try:
         selected_root = Path(runs_root).resolve(strict=True)
@@ -11644,6 +11681,19 @@ def authenticate_bundle_launch_lineage(
             "launch_consumption_missing",
             "bundle launch-lineage stamp is absent",
         )
+    from joulewise import window_lineage as _window_lineage  # noqa: PLC0415
+
+    if _window_lineage.is_hazard_lineage(lineage):
+        # HAZARD_PACK schema dispatch on the bundle's own stamp.
+        try:
+            return _window_lineage.authenticate_bundle(
+                path,
+                lineage=lineage,
+                locator_sha256=extra.get("launch_lineage_locator_sha256"),
+                require_completion=require_completion,
+            )
+        except _window_lineage.HazardLineageError as exc:
+            raise LaunchLineageError(exc.reason_code, str(exc)) from exc
     locator_digest = (
         extra.get("launch_lineage_locator_sha256")
         if isinstance(extra, Mapping)
