@@ -21,7 +21,7 @@ from joulewise.flags.catalog import (
     draft_catalog,
     draft_catalog_document,
 )
-from joulewise.flags.exclusions import compute, contention_span_flags, first_claim_usable
+from joulewise.flags.exclusions import compute, first_claim_usable
 from joulewise.flags.schema import make_flag, make_interval, make_scope, make_source, validate_flag
 from joulewise.flags.sink import FlagSink, read_flags
 
@@ -203,18 +203,14 @@ class AttemptChoiceTests(unittest.TestCase):
 
 
 class MutationSurvivorTests(unittest.TestCase):
-    """Finding 10: the contention limit and the overlap boundary were not pinned."""
+    """Finding 10: the overlap boundary was not pinned.
 
-    def test_contention_limit_boundary(self) -> None:
-        span = {"m1": {"monotonic_ns": [10 * S, 60 * S], "request_monotonic_ns": [15 * S, 55 * S]}}
-
-        def run(cpu: float):
-            intervals = [{"monotonic_ns": [t * S, (t + 10) * S], "processes": []} for t in range(0, 100, 10)]
-            intervals[3]["processes"] = [{"pid": 99, "comm": "fseventsd", "cpu_s_per_s": cpu}]
-            return [f["code"] for f in contention_span_flags(intervals, span)]
-
-        self.assertEqual(run(0.06), ["contention.request_overlap"])
-        self.assertEqual(run(0.04), [])
+    The contention-limit boundary half of this finding pinned L4's own
+    contention join, which was removed (fx-flags, 2026-10-06); the harvest's
+    join, the only one, pins it in ``tests/test_harvest_b5_window.py``
+    (``JoinTests.test_contention_counts_only_outside_processes_above_five_percent``:
+    exactly 0.05 CPU-s/s passes).
+    """
 
     def test_interval_touching_a_span_endpoint_overlaps(self) -> None:
         start, stop = SPANS["r3"]["monotonic_ns"]

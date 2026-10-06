@@ -350,8 +350,9 @@ class ExecutedCodeTests(FixtureCase):
     def sealed(self, fixture: PackFixture, *, roots=None) -> Path:
         result = collect_executed_code(fixture.params())
         self.assertEqual(checks(result, "code.identity_unmeasured"), ["executed_inventory"])
+        # Every tracked file under the window's roots, as the real seal lists them.
         files = {}
-        for relative in ("joulewise/core.py", "scripts/tool.py"):
+        for relative in git(fixture.repo, "ls-files", "--", "joulewise", "scripts", PACK_REL).splitlines():
             files[relative] = sha((fixture.repo / relative).read_bytes())
         document = {"files": files}
         if roots is not None:
@@ -392,6 +393,55 @@ class ExecutedCodeTests(FixtureCase):
         result = collect_executed_code(fixture.params(sealed_inventory=str(sealed)))
         self.assertEqual(of(result, "code.executed_differs_from_sealed")[0]["observed"]["added"],
                          ["joulewise/new.py"])
+
+    def three_pack_sealed(self, fixture: PackFixture) -> Path:
+        """The block's real seal shape: code, all three packs and the catalog, no roots key."""
+
+        for name in ("other_floor_v5", "other_contrast_v5"):
+            other = fixture.repo / "configs" / "campaigns" / name
+            (other / "01_stage").mkdir(parents=True)
+            (other / "plan_tree.json").write_text(json.dumps({"pack": name}) + "\n")
+            (other / "01_stage" / "r01.json").write_text(json.dumps({"run_id": f"{name}-r01"}) + "\n")
+        catalog = fixture.repo / "configs" / "campaigns" / "v5_claim" / "flag_catalog.json"
+        catalog.parent.mkdir(parents=True)
+        catalog.write_text('{"codes": {}}\n')
+        fixture.commit("other packs and the catalog")
+        listed = git(fixture.repo, "ls-files", "--", "joulewise", "scripts", "configs/campaigns").splitlines()
+        self.assertTrue(any(path.startswith("configs/campaigns/other_floor_v5/") for path in listed))
+        path = self.root / "sealed_three_packs.json"
+        path.write_text(json.dumps({"files": {p: sha((fixture.repo / p).read_bytes()) for p in listed}}))
+        return path
+
+    def test_three_pack_sealed_inventory_does_not_flag_a_clean_window(self) -> None:
+        # fx-flags (1): a window inventories only its own pack. Before the fix
+        # every other pack's file and the catalog counted as missing, so every
+        # window was code.executed_differs_from_sealed (EXCLUDE_WINDOW).
+        fixture = PackFixture(self.root)
+        sealed = self.three_pack_sealed(fixture)
+        result = collect_executed_code(fixture.params(sealed_inventory=str(sealed)))
+        self.assertEqual(checks(result, "code.executed_differs_from_sealed"), [])
+        self.assertEqual(result["observed"]["missing"], 0)
+        self.assertLess(result["observed"]["sealed_files_in_window_roots"], result["observed"]["sealed_files"])
+        # Another pack's bytes are not this window's code.
+        (fixture.repo / "configs" / "campaigns" / "other_floor_v5" / "plan_tree.json").write_text("{}\n")
+        fixture.commit("edit another pack")
+        self.assertEqual(checks(collect_executed_code(fixture.params(sealed_inventory=str(sealed))),
+                                "code.executed_differs_from_sealed"), [])
+
+    def test_three_pack_sealed_inventory_stays_strict_within_the_window_roots(self) -> None:
+        fixture = PackFixture(self.root)
+        sealed = self.three_pack_sealed(fixture)
+        own_config = next((fixture.pack / "01_stage").glob("*.json"))
+        own_config.unlink()
+        (fixture.pack / "added_stage.json").write_text("{}\n")
+        (fixture.repo / "scripts" / "tool.py").write_text("print('changed')\n")
+        fixture.commit("drop, add and change files under the window's roots")
+        result = collect_executed_code(fixture.params(sealed_inventory=str(sealed)))
+        self.assertEqual(checks(result, "code.executed_differs_from_sealed"), ["executed_inventory"])
+        observed = of(result, "code.executed_differs_from_sealed")[0]["observed"]
+        self.assertEqual(observed["missing"], [own_config.relative_to(fixture.repo).as_posix()])
+        self.assertEqual(observed["added"], [f"{PACK_REL}/added_stage.json"])
+        self.assertEqual(observed["changed"], ["scripts/tool.py"])
 
     def test_chain_sidecar_mismatch_flags_code_identity(self) -> None:
         fixture = PackFixture(self.root)

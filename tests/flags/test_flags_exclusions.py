@@ -1,4 +1,4 @@
-"""The blind exclusion function, the physics-in-span joins and the cell minimum."""
+"""The blind exclusion function and the cell minimum."""
 
 from __future__ import annotations
 
@@ -7,18 +7,9 @@ import unittest
 from collections.abc import Mapping
 from typing import Any, Iterator
 
-from joulewise.flags.catalog import DISCLOSE, EXCLUDE_MEMBER, draft_catalog, draft_catalog_document, catalog_from_bytes
-from joulewise.flags.exclusions import (
-    battery_span_flags,
-    clock_span_flags,
-    clock_systematic_flags,
-    compute,
-    contention_span_flags,
-    first_claim_usable,
-    render,
-    thermal_span_flags,
-)
-from joulewise.flags.schema import make_flag, make_interval, make_scope, make_source, validate_flag
+from joulewise.flags.catalog import DISCLOSE, draft_catalog, draft_catalog_document, catalog_from_bytes
+from joulewise.flags.exclusions import compute, first_claim_usable, render
+from joulewise.flags.schema import make_flag, make_interval, make_scope, make_source
 
 S = 1_000_000_000
 EMITTED = {"wall_s": 1.0, "monotonic_ns": 1, "boot_session_uuid": None}
@@ -380,169 +371,6 @@ class FirstClaimUsableTests(unittest.TestCase):
                     {"attempt": 3, "claim_usable": True, "release_blocked": False}]
         self.assertEqual(first_claim_usable(attempts), 2)
         self.assertIsNone(first_claim_usable([{"attempt": 1, "claim_usable": False}]))
-
-
-# ------------------------------------------------------------------ physics in span
-
-
-def one_span(start_s: float, stop_s: float, request=None) -> dict[str, Any]:
-    entry = {"monotonic_ns": [int(start_s * S), int(stop_s * S)], "stage_id": "s02"}
-    if request:
-        entry["request_monotonic_ns"] = [int(request[0] * S), int(request[1] * S)]
-    return {"m1": entry}
-
-
-def publication(t_s: float, inst: int = 0, avg: int = 0, charging: bool = False, external: bool = True, **extra):
-    return {"monotonic_ns": int(t_s * S), "instant_amperage_ma": inst, "amperage_ma": avg,
-            "is_charging": charging, "external_connected": external, **extra}
-
-
-def codes(flags) -> list[str]:
-    for flag in flags:
-        assert validate_flag(flag) == [], validate_flag(flag)
-    return sorted(flag["code"] for flag in flags)
-
-
-class BatterySpanTests(unittest.TestCase):
-    def test_float_publications_pass(self) -> None:
-        pubs = [publication(t) for t in (0, 60, 120, 180)]
-        self.assertEqual(battery_span_flags(pubs, one_span(70, 130)), [])
-
-    def test_in_force_publication_out_of_float_flags_member(self) -> None:
-        # The 09-30 0555Z reading: AC attached, -447 mA. It publishes before
-        # the span starts and is still in force at the start.
-        pubs = [publication(0), publication(60, inst=-447, avg=-120), publication(120), publication(180)]
-        flags = battery_span_flags(pubs, one_span(70, 130))
-        self.assertEqual(codes(flags), ["battery.member_span"])
-        self.assertEqual(flags[0]["scope"]["run_id"], "m1")
-        self.assertEqual(flags[0]["interval"]["monotonic_ns"], [70 * S, 130 * S])
-        self.assertEqual(flags[0]["observed"]["violations"][0]["reasons"], ["instant_amperage"])
-
-    def test_publication_after_the_end_is_in_force_too(self) -> None:
-        pubs = [publication(0), publication(60), publication(131, avg=250)]
-        self.assertEqual(codes(battery_span_flags(pubs, one_span(70, 130))), ["battery.member_span"])
-
-    def test_charging_or_disconnected_flags_member(self) -> None:
-        for kwargs in ({"charging": True}, {"external": False}):
-            pubs = [publication(0), publication(60, **kwargs), publication(120)]
-            with self.subTest(**kwargs):
-                self.assertEqual(codes(battery_span_flags(pubs, one_span(70, 110))), ["battery.member_span"])
-
-    def test_publication_gap_over_120_s_flags_unmeasured(self) -> None:
-        pubs = [publication(0), publication(130), publication(190)]
-        self.assertEqual(codes(battery_span_flags(pubs, one_span(70, 140))), ["battery.unmeasured"])
-        self.assertEqual(codes(battery_span_flags([publication(0)], one_span(10, 20))), ["battery.unmeasured"])
-        missing = [publication(0), dict(publication(60), instant_amperage_ma=None), publication(120)]
-        self.assertEqual(codes(battery_span_flags(missing, one_span(70, 110))), ["battery.unmeasured"])
-
-    def test_accumulator_rule_only_when_units_confirmed(self) -> None:
-        pubs = [publication(0, accumulated_battery_power=0, battery_power_accumulator_count=100, voltage_mv=12180),
-                publication(60, accumulated_battery_power=300, battery_power_accumulator_count=110, voltage_mv=12180),
-                publication(120, accumulated_battery_power=300, battery_power_accumulator_count=110, voltage_mv=12180)]
-        self.assertEqual(battery_span_flags(pubs, one_span(10, 50)), [])
-        flags = battery_span_flags(pubs, one_span(10, 50), accumulator={"scale_w_per_unit": 1.0, "voltage_v": 12.18})
-        self.assertEqual(codes(flags), ["battery.accumulator_excursion"])
-        self.assertAlmostEqual(flags[0]["observed"]["excursions"][0]["mean_w"], 30.0)
-        low = battery_span_flags(pubs, one_span(10, 50), accumulator={"scale_w_per_unit": 0.01, "voltage_v": 12.18})
-        self.assertEqual(low, [])
-
-
-class ThermalSpanTests(unittest.TestCase):
-    def samples(self, levels):
-        return [{"monotonic_ns": int(i * 5 * S), "level": level} for i, level in enumerate(levels)]
-
-    def test_nominal_level_passes(self) -> None:
-        self.assertEqual(thermal_span_flags(self.samples([0] * 20), one_span(12, 60)), [])
-
-    def test_nonzero_level_in_span_flags_member(self) -> None:
-        levels = [0] * 20
-        levels[5] = 1
-        flags = thermal_span_flags(self.samples(levels), one_span(12, 60))
-        self.assertEqual(codes(flags), ["thermal.os_level_nonzero"])
-        self.assertEqual(thermal_span_flags(self.samples(levels), one_span(40, 60)), [])
-
-    def test_failed_probe_or_gap_flags_unmeasured(self) -> None:
-        levels = [0] * 20
-        levels[4] = None
-        self.assertEqual(codes(thermal_span_flags(self.samples(levels), one_span(12, 60))), ["thermal.unmeasured"])
-        sparse = [{"monotonic_ns": 0, "level": 0}, {"monotonic_ns": 40 * S, "level": 0}]
-        self.assertEqual(codes(thermal_span_flags(sparse, one_span(10, 30))), ["thermal.unmeasured"])
-
-
-class ContentionSpanTests(unittest.TestCase):
-    def interval(self, a, b, *processes):
-        return {"monotonic_ns": [int(a * S), int(b * S)], "processes": list(processes)}
-
-    def test_quiet_intervals_pass(self) -> None:
-        intervals = [self.interval(t, t + 10, {"pid": 1, "comm": "launchd", "cpu_s_per_s": 0.001})
-                     for t in range(0, 100, 10)]
-        self.assertEqual(contention_span_flags(intervals, one_span(10, 60, request=(15, 55))), [])
-
-    def test_outside_process_over_limit_flags_member(self) -> None:
-        intervals = [self.interval(t, t + 10) for t in range(0, 100, 10)]
-        intervals[3] = self.interval(30, 40, {"pid": 99, "comm": "fseventsd", "cpu_s_per_s": 1.84})
-        flags = contention_span_flags(intervals, one_span(10, 60, request=(15, 55)))
-        self.assertEqual(codes(flags), ["contention.request_overlap"])
-        self.assertEqual(flags[0]["observed"]["offenders"][0]["comm"], "fseventsd")
-        self.assertEqual(flags[0]["interval"]["monotonic_ns"], [15 * S, 55 * S])
-
-    def test_interval_outside_the_request_does_not_flag(self) -> None:
-        intervals = [self.interval(t, t + 10) for t in range(0, 100, 10)]
-        intervals[0] = self.interval(0, 10, {"pid": 99, "comm": "mediaanalysisd", "cpu_s_per_s": 1.14})
-        self.assertEqual(contention_span_flags(intervals, one_span(10, 60, request=(15, 55))), [])
-
-    def test_kernel_task_and_measurement_tree_are_not_contention(self) -> None:
-        intervals = [self.interval(t, t + 10, {"pid": 0, "comm": "kernel_task", "cpu_s_per_s": 0.4},
-                                   {"pid": 7, "comm": "powermetrics", "cpu_s_per_s": 0.3, "outside": False})
-                     for t in range(0, 100, 10)]
-        flags = contention_span_flags(intervals, one_span(10, 60, request=(15, 55)))
-        self.assertEqual(codes(flags), ["contention.kernel_task_share"])
-        self.assertEqual(CATALOG.effect("contention.kernel_task_share"), DISCLOSE)
-
-    def test_uncovered_request_flags_unmeasured(self) -> None:
-        intervals = [self.interval(0, 10), self.interval(10, 20), self.interval(40, 60)]
-        self.assertEqual(codes(contention_span_flags(intervals, one_span(10, 60, request=(15, 55)))),
-                         ["contention.unmeasured"])
-        self.assertEqual(CATALOG.effect("contention.unmeasured"), EXCLUDE_MEMBER)
-
-
-class ClockSpanTests(unittest.TestCase):
-    def test_step_inside_span_flags_member(self) -> None:
-        flags = clock_span_flags([{"monotonic_ns": [30 * S, 31 * S]}], one_span(10, 60))
-        self.assertEqual(codes(flags), ["clock.step_overlap"])
-        self.assertEqual(clock_span_flags([{"monotonic_ns": [70 * S, 71 * S]}], one_span(10, 60)), [])
-
-    def test_step_in_calibration_capture_flags_window(self) -> None:
-        flags = clock_span_flags([{"monotonic_ns": 5 * S}], {}, calibration_spans={"pre": [0, 10 * S]})
-        self.assertEqual(codes(flags), ["clock.step_overlap_calibration"])
-        self.assertEqual(flags[0]["scope"]["level"], "window")
-
-    def test_clock_systematic_needs_majority_of_five(self) -> None:
-        self.assertEqual(clock_systematic_flags({"a": "bounded", "b": "unknown", "c": "unknown", "d": "unknown"}), [])
-        statuses = {"a": "bounded", "b": "bounded", "c": "unknown", "d": "unknown", "e": "exceeded"}
-        self.assertEqual(codes(clock_systematic_flags(statuses)), ["clock.systematic"])
-        statuses["f"] = "bounded"
-        self.assertEqual(clock_systematic_flags(statuses), [])
-
-
-class EndToEndTests(unittest.TestCase):
-    def test_physics_flags_feed_compute_and_drop_the_quad(self) -> None:
-        roster = floor_roster()
-        spans = spans_for(roster)
-        a, b = spans["a-q06-B2"]["monotonic_ns"]
-        last = max(entry["monotonic_ns"][1] for entry in spans.values())
-        pubs = [publication(t / S) for t in range(0, last + 120 * S, 60 * S)]
-        for pub in pubs:
-            if a <= pub["monotonic_ns"] <= b:
-                pub["instant_amperage_ma"] = -447
-        flags = battery_span_flags(pubs, spans, context={"plan_id": PLAN, "attempt": 1})
-        excluded = {f["scope"]["run_id"] for f in flags if f["code"] == "battery.member_span"}
-        self.assertIn("a-q06-B2", excluded)
-        self.assertTrue(excluded <= {f"a-q06-{p}" for p in ("A1", "B1", "B2", "A2")} | {"a-q05-A2", "a-q07-A1"})
-        self.assertEqual([f for f in flags if f["code"] == "battery.unmeasured"], [])
-        result = compute(flags, roster, spans, CATALOG)
-        self.assertNotIn("q06", cell(result)["kept_units"]["quad"])
-        self.assertTrue(result["claim_usable"])
 
 
 if __name__ == "__main__":

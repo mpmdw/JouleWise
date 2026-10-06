@@ -143,6 +143,13 @@ _DISCLOSE_CODES = {
     "monitor.probe_in_phase": _code("DIAGNOSTIC", "PHYSICS", DISCLOSE),
     "battery.capture_pair_missing_covered": _code("DIAGNOSTIC", "PHYSICS", DISCLOSE),
     "battery.accumulator_diagnostic": _code("DIAGNOSTIC", "PHYSICS", DISCLOSE),
+    # Lane L1's monitor join (joulewise.hazards.battery.span_findings) emits
+    # these two; the block-5 catalog (revision 3) classifies them so. Brief
+    # battery assist below 200 mA x V is disclosed; an interval whose
+    # accumulator rule could not run is disclosed (the publication rule still
+    # applies to it).
+    "battery.accumulator_activity": _code("DIAGNOSTIC", "PHYSICS", DISCLOSE),
+    "battery.accumulator_unavailable": _code("DIAGNOSTIC", "PHYSICS", DISCLOSE),
     "g10.discharged": _code("DIAGNOSTIC", "PHYSICS", DISCLOSE),
     "g10.not_discharged": _code("DIAGNOSTIC", "PHYSICS", DISCLOSE),
     "diagnostic.s1_structural": _code("DIAGNOSTIC", "REPRESENTATION", DISCLOSE),

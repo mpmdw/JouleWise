@@ -24,8 +24,9 @@ Collectors (``COLLECTORS``):
 ``executed_code``
     SHA-256 of tracked files under ``joulewise/``, ``scripts/`` and the pack,
     plus the chain bytes; written create-once to custody and compared with the
-    sealed inventory and the chain sidecar. Any difference is
-    ``code.executed_differs_from_sealed``.
+    sealed inventory and the chain sidecar. The sealed inventory lists every
+    pack of the block; only its entries under this window's roots are
+    compared, strictly. Any difference is ``code.executed_differs_from_sealed``.
 ``model_identity``
     The model artifact digest (``provenance.model_artifact_identity``), the
     declared revision and the tokenizer bytes of each identity unit, and the
@@ -645,7 +646,40 @@ def _sealed_files(document: Any) -> tuple[dict[str, str], list[str] | None]:
     return mapping, (list(roots) if isinstance(roots, list) else None)
 
 
+def _window_scope(
+    roots: Sequence[str], sealed_roots: Sequence[str] | None, params: Mapping[str, Any]
+) -> Callable[[str], bool]:
+    """Which repo-relative paths this window's inventory is compared on.
+
+    A window inventories only its own roots (``joulewise/``, ``scripts/`` and
+    its own pack), while the sealed inventory lists every pack of the block
+    and the flag catalog. A sealed entry outside the window's roots is not
+    code this window executes, so it is neither missing nor added here
+    (registration 14 Q2). Within the window's roots the comparison stays
+    strict: every sealed file must be present with its digest and every
+    inventoried file must be sealed. When the sealed inventory declares
+    ``roots``, a path must lie under those too. Pin-only paths are data.
+    """
+
+    pin_only = set(params.get("pin_only_paths") or DEFAULT_PIN_ONLY_PATHS)
+
+    def in_scope(path: str) -> bool:
+        if path in pin_only or not _under(path, roots):
+            return False
+        return sealed_roots is None or _under(path, sealed_roots)
+
+    return in_scope
+
+
 def collect_executed_code(params: Mapping[str, Any]) -> dict[str, Any]:
+    """Executed files against the sealed inventory, within this window's roots.
+
+    ``changed`` is every path both list with different digests; ``missing``
+    and ``added`` are counted only under the window's own roots
+    (:func:`_window_scope`), so a sealed inventory that lists all three packs
+    does not make every window differ.
+    """
+
     repo = Path(params["repo_root"])
     name = "executed_code"
     roots = _executed_roots(params, repo)
@@ -692,16 +726,13 @@ def collect_executed_code(params: Mapping[str, Any]) -> dict[str, Any]:
         )
     else:
         sealed, sealed_roots = _sealed_files(json.loads(Path(sealed_path).read_bytes()))
+        in_scope = _window_scope(roots, sealed_roots, params)
         changed = sorted(p for p, sha in sealed.items() if p in inventory and inventory[p] != sha)
-        missing = sorted(p for p in sealed if p not in inventory)
-        added: list[str] = []
-        if sealed_roots is not None:
-            added = sorted(
-                p for p in inventory
-                if p not in sealed and any(p == r or p.startswith(r.rstrip("/") + "/") for r in sealed_roots)
-            )
-        observed.update({"sealed_files": len(sealed), "changed": len(changed),
-                         "missing": len(missing), "added": len(added)})
+        missing = sorted(p for p in sealed if p not in inventory and in_scope(p))
+        added = sorted(p for p in inventory if p not in sealed and in_scope(p))
+        observed.update({"sealed_files": len(sealed),
+                         "sealed_files_in_window_roots": sum(1 for p in sealed if in_scope(p)),
+                         "changed": len(changed), "missing": len(missing), "added": len(added)})
         if changed or missing or added:
             flags.append(
                 _flag(

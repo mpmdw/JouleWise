@@ -24550,10 +24550,10 @@
    "code": "systematic_clock_majority (RECOVER; also line 745)",
    "disposition": "retired_path",
    "equivalent": {
-    "evaluation_site": "joulewise/flags/exclusions.py:clock_systematic_flags",
+    "evaluation_site": "joulewise/b5/harvest.py:_Harvest.clock_systematic",
     "flag_code": "clock.systematic",
     "stage": "harvest",
-    "test_id": "tests/flags/test_flags_exclusions.py::ClockSpanTests::test_clock_systematic_needs_majority_of_five"
+    "test_id": "tests/test_harvest_b5_window.py::CollectedWindowTests::test_clock_systematic_fires_when_most_recorded_anchors_are_not_bounded"
    },
    "evaluation_site": null,
    "file": "scripts/harvest_v5_g2b_window.py",
@@ -25785,10 +25785,10 @@
    "code": "FAIL: display verification still reports Graphics capability",
    "disposition": "retired_path",
    "equivalent": {
-    "evaluation_site": "joulewise/flags/exclusions.py:contention_span_flags",
+    "evaluation_site": "joulewise/b5/harvest.py:contention_member_flags",
     "flag_code": "contention.request_overlap",
     "stage": "harvest",
-    "test_id": "tests/flags/test_flags_exclusions.py::ContentionSpanTests::test_outside_process_over_limit_flags_member"
+    "test_id": "tests/test_harvest_b5_window.py::JoinTests::test_contention_counts_only_outside_processes_above_five_percent"
    },
    "evaluation_site": null,
    "file": "scripts/quiet_mac_prep.sh",
@@ -25808,10 +25808,10 @@
    "code": "FAIL: post-arm HID idle has reached the screensaver delay",
    "disposition": "retired_path",
    "equivalent": {
-    "evaluation_site": "joulewise/flags/exclusions.py:contention_span_flags",
+    "evaluation_site": "joulewise/b5/harvest.py:contention_member_flags",
     "flag_code": "contention.request_overlap",
     "stage": "harvest",
-    "test_id": "tests/flags/test_flags_exclusions.py::ContentionSpanTests::test_outside_process_over_limit_flags_member"
+    "test_id": "tests/test_harvest_b5_window.py::JoinTests::test_contention_counts_only_outside_processes_above_five_percent"
    },
    "evaluation_site": null,
    "file": "scripts/quiet_mac_prep.sh",
@@ -25831,10 +25831,10 @@
    "code": "FAIL: pmset displaysleepnow failed",
    "disposition": "retired_path",
    "equivalent": {
-    "evaluation_site": "joulewise/flags/exclusions.py:contention_span_flags",
+    "evaluation_site": "joulewise/b5/harvest.py:contention_member_flags",
     "flag_code": "contention.request_overlap",
     "stage": "harvest",
-    "test_id": "tests/flags/test_flags_exclusions.py::ContentionSpanTests::test_outside_process_over_limit_flags_member"
+    "test_id": "tests/test_harvest_b5_window.py::JoinTests::test_contention_counts_only_outside_processes_above_five_percent"
    },
    "evaluation_site": null,
    "file": "scripts/quiet_mac_prep.sh",
