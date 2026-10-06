@@ -15,6 +15,9 @@ Each fake reads ``fake-behavior.json`` in the checkout:
 ``b_fiducial_s``        the pre-calibration fiducial bound written (0.03)
 ``fail_run_ids``        members the campaign runner fails
 ``neg8_minimum_n``      the derivation's minimum (whole_window.NEG8_DRIFT_MINIMUM_N)
+``refuse_once_run_ids`` members the campaign runner refuses before their
+                        bundle exists, on their first attempt only (gate-prune 2 row 13)
+``verdict_rc``          exit code of the window calibration verdict writer (0)
 """
 
 from __future__ import annotations
@@ -142,11 +145,20 @@ config_dir, runs = Path(argv[0]), Path(value("--runs-dir"))
 maximum = int(value("--max-failures"))
 order = json.loads((config_dir / "order_manifest.json").read_text())["executed_order"]
 fail = set(behavior().get("fail_run_ids", []))
-attempted, failures = [], 0
+refuse_once = set(behavior().get("refuse_once_run_ids", []))
+attempted, refused, failures = [], [], 0
 for entry in order:
     bundle = runs / entry["run_id"]
     if (bundle / "summary_metrics.json").is_file():
         continue  # run_campaign's "skip complete"
+    marker = Path(__file__).resolve().parents[1] / ("refused-once-" + entry["run_id"])
+    if entry["run_id"] in refuse_once and not marker.exists():
+        marker.write_text("refused before its bundle\\n")  # a pre-bundle refusal: no bundle directory
+        refused.append(entry["run_id"])
+        failures += 1
+        if failures >= maximum:
+            break
+        continue
     attempted.append(entry["run_id"])
     bundle.mkdir(parents=True)
     status = "failed" if entry["run_id"] in fail else "succeeded"
@@ -156,8 +168,23 @@ for entry in order:
     if failures >= maximum:  # run_campaign: "if failures >= args.max_failures ... break"
         break
 record({"tool": "collect", "config_dir": str(config_dir), "max_failures": maximum,
-        "attempted": attempted, "failures": failures})
+        "arm_countdown_s": value("--arm-countdown-s") if "--arm-countdown-s" in argv else None,
+        "attempted": attempted, "refused_before_bundle": refused, "failures": failures})
 sys.exit(1 if failures else 0)
+'''
+
+FAKE_VERDICT = _CALLS + '''
+import json, sys
+from pathlib import Path
+argv = sys.argv[1:]
+directory = Path(argv[argv.index("--pre-calibration-dir") + 1])
+record({"tool": "verdict", "argv": argv, "pre_dir_exists": directory.is_dir()})
+rc = int(behavior().get("verdict_rc", 0))
+output = directory.parent / "window_calibration_verdict.json"
+with open(output, "x") as handle:
+    handle.write(json.dumps({"schema": "fixture.window_calibration_verdict", "status":
+                             "verified" if rc == 0 else "not_verified"}))
+sys.exit(rc)
 '''
 
 FAKE_RECOVER = _CALLS + '''
@@ -208,7 +235,8 @@ def build_checkout(root: Path, *, behavior: dict[str, Any] | None = None, git: b
     for name, source in (("reserve_calibration_window_bracket.py", FAKE_RESERVE),
                          ("validate_powermetrics_fiducial.py", FAKE_FIDUCIAL),
                          ("run_campaign.py", FAKE_RUN_CAMPAIGN),
-                         ("recover_calibration_ledger.py", FAKE_RECOVER)):
+                         ("recover_calibration_ledger.py", FAKE_RECOVER),
+                         ("b5_window_calibration_verdict.py", FAKE_VERDICT)):
         (scripts / name).write_text(source)
     (measurement / "joulewise").mkdir()
     (measurement / "joulewise/__init__.py").write_text("# fake measurement package\n")

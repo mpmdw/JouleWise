@@ -18,6 +18,13 @@ the rendered chain's own argv, without running any stage:
   ``config_selection`` (the analysis manifest and order manifest resolve),
   ``lineage_tags_all_or_none`` (``authenticate_campaign_writer_preflight``),
   ``doctor_config_gate`` (``config_warning_gate``) and ``duplicate_run_id``;
+* ``duplicate_dispatch`` (gate-prune 2 row 14, interface J3): across stages, no
+  (runs root, run id) pair is launched twice. The runner skips a run id whose
+  bundle exists, so every later planned position would never be measured and
+  the harvest would exclude the window (``roster.duplicate_run_id``). Each
+  stage is resolved from its own argv (``joulewise.b5.plan.
+  resolve_stage_dispatches``), the resolver the desk plan writer refuses with;
+  a stage it cannot resolve is a finding too;
 * ``acceptance_code_identity``: the issued acceptance's
   ``prospective_rederivation`` digests equal this checkout's protocol and
   estimator code (core-prune A15);
@@ -297,6 +304,21 @@ def check(tree: Mapping[str, Any], *, pack_root: Path, measurement_root: Path, b
                         stage_id=stage.stage_id)
         elif stage.kind == "campaign_collection":
             findings.extend(collection_findings(stage, namespace))
+
+    checks.append("duplicate_dispatch")
+    if stages:
+        from joulewise.b5 import plan as b5_plan
+
+        dispatches = b5_plan.resolve_stage_dispatches(tree, measurement_root)
+        for dispatch in dispatches:
+            if dispatch.run_ids is None:
+                finding("duplicate_dispatch", f"members cannot be resolved: {dispatch.error}",
+                        stage_id=dispatch.stage_id)
+        for row in b5_plan.duplicate_dispatches(dispatches):
+            finding("duplicate_dispatch",
+                    f"{row['run_id']} is launched into {row['runs_root_binding']} by {len(row['stages'])} stages "
+                    f"({', '.join(row['stages'])}); the runner measures it once and skips the later positions",
+                    stage_id=row["stages"][1])
 
     identity_path = identity_epoch_path
     if identity_path is None and plan_mode and isinstance(bindings.get("identity_epoch_json"), str):

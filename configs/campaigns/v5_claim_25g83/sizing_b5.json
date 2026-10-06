@@ -62,7 +62,10 @@
     "stream_limit_s": 337.6623376623377
   },
   "conventions": [
-    "programmed span = (1 + collection stages) * settle + stage arm countdowns + pre/post calibration pair + bound derivation + member allowances + stage custody + terminal shutdown",
+    "programmed span = (1 + collection stages) * settle + stage arm countdowns + pre/post calibration pair + bound derivation + corpus prune + window calibration verdict + member allowances + stage custody + terminal shutdown + corpus retry",
+    "stage arm countdowns are the chain's (0 s per collection stage, gate-prune 2 S3), not the pack's literal",
+    "corpus retry = settle + stage overhead + corpus members * (member allowance + reduction + native sampler start and wind-down): the one NEG-8 corpus retry (gate-prune 2 row 13), sized as one more corpus stage",
+    "bound derivation, corpus prune and window calibration verdict are block 5's own estimates (B5_BOUND_DERIVATION_S, B5_CORPUS_PRUNE_S, B5_WINDOW_CALIBRATION_VERDICT_S); block 4 sized the derivation at 60 s",
     "member allowance = load + warmup + prefill + forced_decode + cooldown (300 s cap) + idle_admission (both attempts), per class from block 4's source",
     "stage custody = stages * stage overhead + members * reduction + calibration captures * bracket writer custody + reservation + terminal custody + members * (native sampler start + wind-down)",
     "auxiliary NEG-8 and reference members use the small-model allowance (block 4, ruling 76 A.3)",
@@ -76,15 +79,18 @@
       "T_stream_max_s": 335,
       "auxiliary_members": 19,
       "breakdown": {
-        "arm_countdowns_s": 200,
-        "bound_derivation_s": 60,
+        "arm_countdowns_s": 0,
+        "bound_derivation_s": 320,
+        "corpus_prune_s": 320,
+        "corpus_retry_s": 8304,
         "members_s": 70805,
         "pack_t0_s": 0,
         "pre_post_calibration_s": 770,
-        "programmed_span_s": 84658,
+        "programmed_span_s": 93402,
         "settles_s": 660,
         "stage_custody_s": 11863,
-        "terminal_shutdown_s": 300
+        "terminal_shutdown_s": 300,
+        "window_calibration_verdict_s": 60
       },
       "clock_gate": {
         "at_T_stream_max": {
@@ -116,7 +122,7 @@
         "path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/plan_tree.json",
         "sha256": "5218c2709274765c706f38766ae68cce30892a673e9ae5cc290701362f615eb1"
       },
-      "programmed_span_s": 84658,
+      "programmed_span_s": 93402,
       "science_members": 100,
       "stages": [
         {
@@ -130,17 +136,20 @@
           "stage_id": "alpha-pre-calibration"
         },
         {
-          "arm_countdown_s": 20,
+          "arm_countdown_s": 0,
           "classes": {
             "small": 12
           },
           "kind": "campaign_collection",
           "members": 12,
+          "neg8_corpus": true,
           "order_manifest": {
             "path": "configs/campaigns/neg8_reference_corpus_v5/order_manifest.json",
             "sha256": "0ec9d68aa4265cc9378bb682091a973fc92879b76506fa25af828050a608509f"
           },
           "ordinal": 3,
+          "pack_arm_countdown_s": 20,
+          "runs_dir_binding": "bound_runs_root",
           "science": false,
           "stage_id": "alpha-bound-collection"
         },
@@ -150,7 +159,7 @@
           "stage_id": "alpha-bound-derivation"
         },
         {
-          "arm_countdown_s": 20,
+          "arm_countdown_s": 0,
           "classes": {
             "small": 3
           },
@@ -161,11 +170,13 @@
             "sha256": "9cac197255bdc9a0a1a0b8ee8ceb587ba3c8cabc20b976b2543dc3a400d37cb0"
           },
           "ordinal": 5,
+          "pack_arm_countdown_s": 20,
+          "runs_dir_binding": "claim_runs_root",
           "science": false,
           "stage_id": "alpha-reference-start"
         },
         {
-          "arm_countdown_s": 20,
+          "arm_countdown_s": 0,
           "classes": {
             "small": 10
           },
@@ -176,11 +187,13 @@
             "sha256": "41a4318a336a5488a4260a067d4ea0a4f7a49c3732e006e3bdb2bd01ce94c75f"
           },
           "ordinal": 6,
+          "pack_arm_countdown_s": 20,
+          "runs_dir_binding": "claim_runs_root",
           "science": true,
           "stage_id": "alpha-science-absolute"
         },
         {
-          "arm_countdown_s": 20,
+          "arm_countdown_s": 0,
           "classes": {
             "small": 20
           },
@@ -191,11 +204,13 @@
             "sha256": "a13572ede9627d6563db3e7acb0e245cee11c39408ded4af3db948c37b6e36d4"
           },
           "ordinal": 7,
+          "pack_arm_countdown_s": 20,
+          "runs_dir_binding": "claim_runs_root",
           "science": true,
           "stage_id": "alpha-science-abba-01-05"
         },
         {
-          "arm_countdown_s": 20,
+          "arm_countdown_s": 0,
           "classes": {
             "small": 20
           },
@@ -206,11 +221,13 @@
             "sha256": "4d21fec58aa98823f7089405ec2558a6ab50fb70992dac124d2d8748a5d07c07"
           },
           "ordinal": 8,
+          "pack_arm_countdown_s": 20,
+          "runs_dir_binding": "claim_runs_root",
           "science": true,
           "stage_id": "alpha-science-abba-06-10"
         },
         {
-          "arm_countdown_s": 20,
+          "arm_countdown_s": 0,
           "classes": {
             "small": 1
           },
@@ -221,11 +238,13 @@
             "sha256": "9ccedd91307985ba5641e791f4ac89f4e250fca414a4ba713cc7977ced6abb21"
           },
           "ordinal": 9,
+          "pack_arm_countdown_s": 20,
+          "runs_dir_binding": "claim_runs_root",
           "science": false,
           "stage_id": "alpha-reference-midpoint"
         },
         {
-          "arm_countdown_s": 20,
+          "arm_countdown_s": 0,
           "classes": {
             "small": 10
           },
@@ -236,11 +255,13 @@
             "sha256": "d85cd70fda1fedf4d0c75844f45e92ec9f874db6d338c49a684572fbc925c8ec"
           },
           "ordinal": 10,
+          "pack_arm_countdown_s": 20,
+          "runs_dir_binding": "claim_runs_root",
           "science": true,
           "stage_id": "alpha-science-prefill-p2048-absolute"
         },
         {
-          "arm_countdown_s": 20,
+          "arm_countdown_s": 0,
           "classes": {
             "small": 20
           },
@@ -251,11 +272,13 @@
             "sha256": "1184c6d7f52ef35dc6e25b27b243dd61d8d0d0d8e32f65d26fa4256795ae6f15"
           },
           "ordinal": 11,
+          "pack_arm_countdown_s": 20,
+          "runs_dir_binding": "claim_runs_root",
           "science": true,
           "stage_id": "alpha-science-prefill-p2048-abba-01-05"
         },
         {
-          "arm_countdown_s": 20,
+          "arm_countdown_s": 0,
           "classes": {
             "small": 20
           },
@@ -266,11 +289,13 @@
             "sha256": "aaa061cd882e73f2a831c0912800af1604032ce599bcc9404937cedd96da6539"
           },
           "ordinal": 12,
+          "pack_arm_countdown_s": 20,
+          "runs_dir_binding": "claim_runs_root",
           "science": true,
           "stage_id": "alpha-science-prefill-p2048-abba-06-10"
         },
         {
-          "arm_countdown_s": 20,
+          "arm_countdown_s": 0,
           "classes": {
             "small": 3
           },
@@ -281,6 +306,8 @@
             "sha256": "8e65a4347aafa0722a60a2bd58c7e8061b860db66fa06f6acec24d1a1ade5c67"
           },
           "ordinal": 13,
+          "pack_arm_countdown_s": 20,
+          "runs_dir_binding": "claim_runs_root",
           "science": false,
           "stage_id": "alpha-reference-end"
         },
@@ -290,21 +317,24 @@
           "stage_id": "alpha-post-calibration"
         }
       ],
-      "window_max_s": 87960
+      "window_max_s": 96720
     },
     "BETA": {
       "T_stream_max_s": 335,
       "auxiliary_members": 19,
       "breakdown": {
-        "arm_countdowns_s": 200,
-        "bound_derivation_s": 60,
+        "arm_countdowns_s": 0,
+        "bound_derivation_s": 320,
+        "corpus_prune_s": 320,
+        "corpus_retry_s": 8304,
         "members_s": 73205,
         "pack_t0_s": 0,
         "pre_post_calibration_s": 770,
-        "programmed_span_s": 87058,
+        "programmed_span_s": 95802,
         "settles_s": 660,
         "stage_custody_s": 11863,
-        "terminal_shutdown_s": 300
+        "terminal_shutdown_s": 300,
+        "window_calibration_verdict_s": 60
       },
       "clock_gate": {
         "at_T_stream_max": {
@@ -337,7 +367,7 @@
         "path": "configs/campaigns/d117_floor_qwen3-8b_v5/plan_tree.json",
         "sha256": "5bab773a481e4a06fae564217b178d8e1d76a5334f99a3b264c1174db692a6e4"
       },
-      "programmed_span_s": 87058,
+      "programmed_span_s": 95802,
       "science_members": 100,
       "stages": [
         {
@@ -351,17 +381,20 @@
           "stage_id": "beta-pre-calibration"
         },
         {
-          "arm_countdown_s": 20,
+          "arm_countdown_s": 0,
           "classes": {
             "small": 12
           },
           "kind": "campaign_collection",
           "members": 12,
+          "neg8_corpus": true,
           "order_manifest": {
             "path": "configs/campaigns/neg8_reference_corpus_v5/order_manifest.json",
             "sha256": "0ec9d68aa4265cc9378bb682091a973fc92879b76506fa25af828050a608509f"
           },
           "ordinal": 3,
+          "pack_arm_countdown_s": 20,
+          "runs_dir_binding": "bound_runs_root",
           "science": false,
           "stage_id": "beta-bound-collection"
         },
@@ -371,7 +404,7 @@
           "stage_id": "beta-bound-derivation"
         },
         {
-          "arm_countdown_s": 20,
+          "arm_countdown_s": 0,
           "classes": {
             "small": 3
           },
@@ -382,11 +415,13 @@
             "sha256": "9cac197255bdc9a0a1a0b8ee8ceb587ba3c8cabc20b976b2543dc3a400d37cb0"
           },
           "ordinal": 5,
+          "pack_arm_countdown_s": 20,
+          "runs_dir_binding": "claim_runs_root",
           "science": false,
           "stage_id": "beta-reference-start"
         },
         {
-          "arm_countdown_s": 20,
+          "arm_countdown_s": 0,
           "classes": {
             "large": 10
           },
@@ -397,11 +432,13 @@
             "sha256": "b6e0ed47f8b2eb41dba44b1a00e48d375725cb7ffa61c5efeb9b2c4c75239c72"
           },
           "ordinal": 6,
+          "pack_arm_countdown_s": 20,
+          "runs_dir_binding": "claim_runs_root",
           "science": true,
           "stage_id": "beta-science-absolute"
         },
         {
-          "arm_countdown_s": 20,
+          "arm_countdown_s": 0,
           "classes": {
             "large": 20
           },
@@ -412,11 +449,13 @@
             "sha256": "ac48f550b5646975300d1e1c97afdc7c88c640a3ead5a239ddb7a19a7932cff5"
           },
           "ordinal": 7,
+          "pack_arm_countdown_s": 20,
+          "runs_dir_binding": "claim_runs_root",
           "science": true,
           "stage_id": "beta-science-abba-01-05"
         },
         {
-          "arm_countdown_s": 20,
+          "arm_countdown_s": 0,
           "classes": {
             "large": 20
           },
@@ -427,11 +466,13 @@
             "sha256": "20e820ecae1e5f0a479ebd36f1a4940b5e7b9be2ff73a9ad3e44f8c58204a68e"
           },
           "ordinal": 8,
+          "pack_arm_countdown_s": 20,
+          "runs_dir_binding": "claim_runs_root",
           "science": true,
           "stage_id": "beta-science-abba-06-10"
         },
         {
-          "arm_countdown_s": 20,
+          "arm_countdown_s": 0,
           "classes": {
             "small": 1
           },
@@ -442,11 +483,13 @@
             "sha256": "9ccedd91307985ba5641e791f4ac89f4e250fca414a4ba713cc7977ced6abb21"
           },
           "ordinal": 9,
+          "pack_arm_countdown_s": 20,
+          "runs_dir_binding": "claim_runs_root",
           "science": false,
           "stage_id": "beta-reference-midpoint"
         },
         {
-          "arm_countdown_s": 20,
+          "arm_countdown_s": 0,
           "classes": {
             "large": 10
           },
@@ -457,11 +500,13 @@
             "sha256": "78d06c46e2b519765eadd3362589610f0e2bcbe0824031d56857df4439ea53e3"
           },
           "ordinal": 10,
+          "pack_arm_countdown_s": 20,
+          "runs_dir_binding": "claim_runs_root",
           "science": true,
           "stage_id": "beta-science-prefill-p2048-absolute"
         },
         {
-          "arm_countdown_s": 20,
+          "arm_countdown_s": 0,
           "classes": {
             "large": 20
           },
@@ -472,11 +517,13 @@
             "sha256": "ef7f61e05358ebc0f53aea507810567cdce89d78939a1ba403e3a4ef76b8ba02"
           },
           "ordinal": 11,
+          "pack_arm_countdown_s": 20,
+          "runs_dir_binding": "claim_runs_root",
           "science": true,
           "stage_id": "beta-science-prefill-p2048-abba-01-05"
         },
         {
-          "arm_countdown_s": 20,
+          "arm_countdown_s": 0,
           "classes": {
             "large": 20
           },
@@ -487,11 +534,13 @@
             "sha256": "b23d5bc16147681dc8d4c6b49695b5d35bf281a5641931ab3f67d4fba7fcf42e"
           },
           "ordinal": 12,
+          "pack_arm_countdown_s": 20,
+          "runs_dir_binding": "claim_runs_root",
           "science": true,
           "stage_id": "beta-science-prefill-p2048-abba-06-10"
         },
         {
-          "arm_countdown_s": 20,
+          "arm_countdown_s": 0,
           "classes": {
             "small": 3
           },
@@ -502,6 +551,8 @@
             "sha256": "8e65a4347aafa0722a60a2bd58c7e8061b860db66fa06f6acec24d1a1ade5c67"
           },
           "ordinal": 13,
+          "pack_arm_countdown_s": 20,
+          "runs_dir_binding": "claim_runs_root",
           "science": false,
           "stage_id": "beta-reference-end"
         },
@@ -511,21 +562,24 @@
           "stage_id": "beta-post-calibration"
         }
       ],
-      "window_max_s": 90360
+      "window_max_s": 99120
     },
     "GAMMA": {
       "T_stream_max_s": 335,
       "auxiliary_members": 21,
       "breakdown": {
-        "arm_countdowns_s": 200,
-        "bound_derivation_s": 60,
+        "arm_countdowns_s": 0,
+        "bound_derivation_s": 320,
+        "corpus_prune_s": 320,
+        "corpus_retry_s": 8304,
         "members_s": 61055,
         "pack_t0_s": 0,
         "pre_post_calibration_s": 770,
-        "programmed_span_s": 73522,
+        "programmed_span_s": 82266,
         "settles_s": 660,
         "stage_custody_s": 10477,
-        "terminal_shutdown_s": 300
+        "terminal_shutdown_s": 300,
+        "window_calibration_verdict_s": 60
       },
       "clock_gate": {
         "at_T_stream_max": {
@@ -558,7 +612,7 @@
         "path": "configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5/plan_tree.json",
         "sha256": "523864e25be4e94424dcc366b4e8ae2719f41d6c222d36679588a0c6aa087ab6"
       },
-      "programmed_span_s": 73522,
+      "programmed_span_s": 82266,
       "science_members": 80,
       "stages": [
         {
@@ -572,17 +626,20 @@
           "stage_id": "gamma-calibration-pre"
         },
         {
-          "arm_countdown_s": 20,
+          "arm_countdown_s": 0,
           "classes": {
             "small": 12
           },
           "kind": "campaign_collection",
           "members": 12,
+          "neg8_corpus": true,
           "order_manifest": {
             "path": "configs/campaigns/neg8_reference_corpus_v5/order_manifest.json",
             "sha256": "0ec9d68aa4265cc9378bb682091a973fc92879b76506fa25af828050a608509f"
           },
           "ordinal": 3,
+          "pack_arm_countdown_s": 20,
+          "runs_dir_binding": "bound_runs_root",
           "science": false,
           "stage_id": "gamma-bound-collection"
         },
@@ -592,7 +649,7 @@
           "stage_id": "gamma-bound-derivation"
         },
         {
-          "arm_countdown_s": 20,
+          "arm_countdown_s": 0,
           "classes": {
             "small": 3
           },
@@ -603,11 +660,13 @@
             "sha256": "9cac197255bdc9a0a1a0b8ee8ceb587ba3c8cabc20b976b2543dc3a400d37cb0"
           },
           "ordinal": 5,
+          "pack_arm_countdown_s": 20,
+          "runs_dir_binding": "claim_runs_root",
           "science": false,
           "stage_id": "gamma-reference-start"
         },
         {
-          "arm_countdown_s": 20,
+          "arm_countdown_s": 0,
           "classes": {
             "large": 10,
             "small": 10
@@ -619,11 +678,13 @@
             "sha256": "8f7aec4ee14dc3da04304bac4279a969f80538ecee63ab5fd0683395ff1d4807"
           },
           "ordinal": 6,
+          "pack_arm_countdown_s": 20,
+          "runs_dir_binding": "claim_runs_root",
           "science": true,
           "stage_id": "gamma-science-01-decode-contrast-blocks-01-05"
         },
         {
-          "arm_countdown_s": 20,
+          "arm_countdown_s": 0,
           "classes": {
             "small": 1
           },
@@ -634,11 +695,13 @@
             "sha256": "9ccedd91307985ba5641e791f4ac89f4e250fca414a4ba713cc7977ced6abb21"
           },
           "ordinal": 7,
+          "pack_arm_countdown_s": 20,
+          "runs_dir_binding": "claim_runs_root",
           "science": false,
           "stage_id": "gamma-reference-decode-midpoint"
         },
         {
-          "arm_countdown_s": 20,
+          "arm_countdown_s": 0,
           "classes": {
             "large": 10,
             "small": 10
@@ -650,11 +713,13 @@
             "sha256": "43ea7a08d02fbf32905e4bd517495314a565f6734ee68a8e35f9641a78eb196a"
           },
           "ordinal": 8,
+          "pack_arm_countdown_s": 20,
+          "runs_dir_binding": "claim_runs_root",
           "science": true,
           "stage_id": "gamma-science-02-decode-contrast-blocks-06-10"
         },
         {
-          "arm_countdown_s": 20,
+          "arm_countdown_s": 0,
           "classes": {
             "small": 1
           },
@@ -665,11 +730,13 @@
             "sha256": "9ccedd91307985ba5641e791f4ac89f4e250fca414a4ba713cc7977ced6abb21"
           },
           "ordinal": 9,
+          "pack_arm_countdown_s": 20,
+          "runs_dir_binding": "claim_runs_root",
           "science": false,
           "stage_id": "gamma-reference-arm-boundary"
         },
         {
-          "arm_countdown_s": 20,
+          "arm_countdown_s": 0,
           "classes": {
             "large": 10,
             "small": 10
@@ -681,11 +748,13 @@
             "sha256": "62d9dcaa0012eab48083c75040c1191c9331474831ee95f7bcd09bd0e6115767"
           },
           "ordinal": 10,
+          "pack_arm_countdown_s": 20,
+          "runs_dir_binding": "claim_runs_root",
           "science": true,
           "stage_id": "gamma-science-03-prefill-p2048-contrast-blocks-01-05"
         },
         {
-          "arm_countdown_s": 20,
+          "arm_countdown_s": 0,
           "classes": {
             "small": 1
           },
@@ -696,11 +765,13 @@
             "sha256": "9ccedd91307985ba5641e791f4ac89f4e250fca414a4ba713cc7977ced6abb21"
           },
           "ordinal": 11,
+          "pack_arm_countdown_s": 20,
+          "runs_dir_binding": "claim_runs_root",
           "science": false,
           "stage_id": "gamma-reference-prefill-midpoint"
         },
         {
-          "arm_countdown_s": 20,
+          "arm_countdown_s": 0,
           "classes": {
             "large": 10,
             "small": 10
@@ -712,11 +783,13 @@
             "sha256": "ab9c9c248f02239f405b71c9a17dec92b3f5d93427a2849ef0c81ee02100133f"
           },
           "ordinal": 12,
+          "pack_arm_countdown_s": 20,
+          "runs_dir_binding": "claim_runs_root",
           "science": true,
           "stage_id": "gamma-science-04-prefill-p2048-contrast-blocks-06-10"
         },
         {
-          "arm_countdown_s": 20,
+          "arm_countdown_s": 0,
           "classes": {
             "small": 3
           },
@@ -727,6 +800,8 @@
             "sha256": "8e65a4347aafa0722a60a2bd58c7e8061b860db66fa06f6acec24d1a1ade5c67"
           },
           "ordinal": 13,
+          "pack_arm_countdown_s": 20,
+          "runs_dir_binding": "claim_runs_root",
           "science": false,
           "stage_id": "gamma-reference-end"
         },
@@ -736,7 +811,7 @@
           "stage_id": "gamma-calibration-post"
         }
       ],
-      "window_max_s": 76860
+      "window_max_s": 85620
     }
   },
   "schema_version": "joulewise.b5_sizing.v1",
@@ -748,12 +823,16 @@
   "status": "UNSEALED_DRAFT",
   "terms": {
     "bound_derivation": {
-      "seconds": 60,
-      "source": {
-        "path": "configs/campaigns/v5_qualification_25g83/sizing_sources/sizing_source_v2.json",
-        "sha256": "f414301cd0328236f9309962b60ff4635026dac973ca3b0ce564b677c47baa81"
+      "block4": {
+        "seconds": 60,
+        "source": {
+          "path": "configs/campaigns/v5_qualification_25g83/sizing_sources/sizing_source_v2.json",
+          "sha256": "f414301cd0328236f9309962b60ff4635026dac973ca3b0ce564b677c47baa81"
+        },
+        "source_pointer": "/auxiliary/gamma-bound-derivation"
       },
-      "source_pointer": "/auxiliary/gamma-bound-derivation"
+      "seconds": 320,
+      "source": "scripts/size_b5_window.py B5_BOUND_DERIVATION_S (PLAN2 1.4 item 6: a real derivation re-reduces 12 bundles, about 270-320 s, never measured live)"
     },
     "clean_dwell_cap": {
       "seconds": 2700,
@@ -762,6 +841,14 @@
         "sha256": "f414301cd0328236f9309962b60ff4635026dac973ca3b0ce564b677c47baa81"
       },
       "source_pointer": "/derivations/t0_stage_cap/clean_dwell_cap_s"
+    },
+    "collection_arm_countdown_s": {
+      "seconds": 0,
+      "source": "joulewise/b5/chain.py COLLECTION_ARM_COUNTDOWN_S"
+    },
+    "corpus_prune": {
+      "seconds": 320,
+      "source": "scripts/size_b5_window.py B5_CORPUS_PRUNE_S (the chain's corpus prune asks the core mint for its drops over the same 12 bundles)"
     },
     "member_allowance_s": {
       "large": 619,
@@ -952,6 +1039,10 @@
         "sha256": "f414301cd0328236f9309962b60ff4635026dac973ca3b0ce564b677c47baa81"
       },
       "source_pointer": "/fixed/terminal_shutdown"
+    },
+    "window_calibration_verdict": {
+      "seconds": 60,
+      "source": "scripts/size_b5_window.py B5_WINDOW_CALIBRATION_VERDICT_S (one refit of the pre slot, about 13.5-15 s; interface J1)"
     }
   }
 }

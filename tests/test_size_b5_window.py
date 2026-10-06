@@ -49,13 +49,14 @@ def hand_span(source: dict[str, Any], small: int, large: int, stages: int = 10) 
 
     member = {klass: sum(source["members"][klass].values()) for klass in ("small", "large")}
     members = small + large
-    return ((1 + stages) * 60 + stages * 20                       # chain settles (60 s), campaign arm countdowns
+    return ((1 + stages) * 60 + stages * 0                        # chain settles (60 s); countdowns 0 s (S3)
             + source["fixed"]["pre_post_calibration"]             # 770
-            + source["auxiliary"]["gamma-bound-derivation"]       # 60
+            + 320 + 320 + 60                                      # block 5: derivation, corpus prune, J1 verdict
             + small * member["small"] + large * member["large"]   # 595, 619 per member
             + stages * 180 + members * 45 + 2 * 240 + 300 + 120   # stage custody (block 4's labelled terms)
             + members * (15 + 17)                                 # native sampler start and wind-down
-            + source["fixed"]["terminal_shutdown"])               # 300
+            + source["fixed"]["terminal_shutdown"]                # 300
+            + 60 + 180 + 12 * (member["small"] + 45 + 15 + 17))   # one corpus retry: 12 small-proxy members
 
 
 class SizesOfTheCommittedPacks(unittest.TestCase):
@@ -85,11 +86,21 @@ class SizesOfTheCommittedPacks(unittest.TestCase):
                 self.assertEqual(60 * math.ceil((pack["programmed_span_s"] + 3300) / 60), pack["window_max_s"])
                 self.assertEqual(longest, pack["pack_longest_stream_s"])
                 self.assertEqual(335, pack["T_stream_max_s"])
-        self.assertEqual((84658, 87058, 73522), tuple(self.document["packs"][label]["programmed_span_s"]
+        # Gate-prune 2 (lane P2-CHAIN): countdowns 0 s (-200 s), derivation 60 -> 320 s, corpus prune
+        # 320 s, J1 verdict 60 s and one corpus retry 8304 s; before: 84658, 87058, 73522 s.
+        self.assertEqual((93402, 95802, 82266), tuple(self.document["packs"][label]["programmed_span_s"]
                                                       for label in ("ALPHA", "BETA", "GAMMA")))
-        self.assertEqual((87960, 90360, 76860), tuple(self.document["packs"][label]["window_max_s"]
+        self.assertEqual((96720, 99120, 85620), tuple(self.document["packs"][label]["window_max_s"]
                                                       for label in ("ALPHA", "BETA", "GAMMA")))
         self.assertEqual(60, self.document["terms"]["settle_s"]["seconds"])
+        for label in ("ALPHA", "BETA", "GAMMA"):
+            pack = self.document["packs"][label]
+            corpus = [stage for stage in pack["stages"] if stage.get("neg8_corpus")]
+            self.assertEqual([12], [stage["members"] for stage in corpus])
+            self.assertEqual(8304, pack["breakdown"]["corpus_retry_s"])
+            collections = [stage for stage in pack["stages"] if stage["kind"] == "campaign_collection"]
+            self.assertEqual(({0}, {20}), ({stage["arm_countdown_s"] for stage in collections},
+                                           {stage["pack_arm_countdown_s"] for stage in collections}))
 
     def test_block4_configs_superseded_by_the_timing_regeneration_are_listed(self) -> None:
         # The 2026-10-06 timing ruling regenerated the _v5 packs (idle_seconds 57.6), so the

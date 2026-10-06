@@ -29,15 +29,25 @@ Inputs, all committed:
   recorded SHA-256), which give the roster: members per stage and per class,
   and each stage's ``--arm-countdown-s``;
 * the chain's settle, ``joulewise.b5.chain.SETTLE_S`` (60 s, before the pre
-  slot and before every collection stage).
+  slot and before every collection stage), and the countdown the chain
+  actually passes each collection stage (``chain.COLLECTION_ARM_COUNTDOWN_S``,
+  0 s since gate-prune 2 S3; the pack's literal is recorded beside it);
+* block 5's own terms, which block 4's source does not carry (gate-prune 2):
+  the bound derivation (``B5_BOUND_DERIVATION_S``), the chain's NEG-8 corpus
+  prune (``B5_CORPUS_PRUNE_S``), the window calibration verdict
+  (``B5_WINDOW_CALIBRATION_VERDICT_S``, interface J1) and the one NEG-8 corpus
+  retry (row 13), sized as one more corpus stage.
 
 Programmed span (block 4's conventions with block 5's chain)::
 
     (1 + stages) * settle + sum(stage countdowns) + calibration pair
-    + bound derivation + sum(member allowances)
+    + bound derivation + corpus prune + window calibration verdict
+    + sum(member allowances)
     + stages * stage overhead + members * (reduction + native sampler start + wind-down)
     + calibration captures * bracket writer custody + reservation + terminal custody
     + terminal shutdown
+    + corpus retry (settle + stage overhead + corpus members * (member allowance
+      + reduction + native sampler start + wind-down))
 
 Block 4's 360 s pack launch allowance is not in the chain any more (the arm's
 3300 s holds the launch; registration 5.5). The same arithmetic with block 4's
@@ -90,6 +100,13 @@ DEFAULT_PACKS = (
 MEMBER_TERMS = ("load", "warmup", "prefill", "forced_decode", "cooldown", "idle_admission")
 REQUIRED_ABS_F_PPM = Fraction(36, 10)
 COUNTDOWN_FLAG = "--arm-countdown-s"
+# Block 5's own terms (gate-prune 2, PLAN2 1.4 item 6 and lane P2-CHAIN). Block 4's source sizes
+# the derivation at 60 s; a real block-5 derivation re-reduces the 12 corpus bundles, about
+# 270-320 s (never measured live), and the chain's corpus prune asks the core mint for its drops
+# over the same bundles first. The verdict is one refit of the pre slot (about 13.5-15 s).
+B5_BOUND_DERIVATION_S = 320
+B5_CORPUS_PRUNE_S = 320
+B5_WINDOW_CALIBRATION_VERDICT_S = 60
 
 # Block 4's labelled stage-custody allocations, read from the source's formula string.
 CUSTODY_FORMULA_POINTER = "/derivations/stage_custody/formula"
@@ -385,20 +402,44 @@ def pack_roster(pack: Path, repo: Path, classes: Mapping[str, str], auxiliary_cl
                          f"{stage.stage_id}: {COUNTDOWN_FLAG} has no whole-second value")
                 countdown = int(literals[position + 1])
             entry.update({"science": science, "members": stage.expected_count, "classes": dict(sorted(counts.items())),
-                          "arm_countdown_s": countdown,
+                          # The chain passes its own countdown in place of the pack's literal (S3).
+                          "arm_countdown_s": b5_chain.COLLECTION_ARM_COUNTDOWN_S,
+                          "pack_arm_countdown_s": countdown,
+                          "runs_dir_binding": _runs_dir_binding(stage),
                           "order_manifest": {"path": manifest_path.resolve().relative_to(repo.resolve()).as_posix(),
                                              "sha256": sha256_bytes(manifest_raw)}})
         rows.append(entry)
+    # The NEG-8 corpus stage (the chain's row-13 retry repeats it): the last collection before the
+    # bound derivation that collects into the derivation's --runs-dir, as the chain renderer finds it.
+    derivations = [row for row in rows if row["kind"] == "bound_derivation"]
+    if derivations:
+        derivation = next(stage for stage in stages if stage.stage_id == derivations[0]["stage_id"])
+        binding = _runs_dir_binding(derivation)
+        corpus = [row for row in rows[:rows.index(derivations[0])]
+                  if row["kind"] == "campaign_collection" and binding is not None and row["runs_dir_binding"] == binding]
+        if corpus:
+            corpus[-1]["neg8_corpus"] = True
     return {"plan_tree": {"path": (pack / "plan_tree.json").resolve().relative_to(repo.resolve()).as_posix(),
                           "sha256": sha256_bytes(raw)},
             "stages": rows}
 
 
+def _runs_dir_binding(stage: b5_chain.Stage) -> str | None:
+    arguments = stage.commands[0].arguments if stage.commands else ()
+    for flag, value in zip(arguments, arguments[1:]):
+        if flag.get("kind") == "literal" and flag.get("value") == "--runs-dir" and value.get("kind") == "binding":
+            return value.get("value")
+    return None
+
+
 def span_breakdown(*, settle_s: int, stages: int, countdowns_s: int, calibrations: int, reservations: int,
                    derivations: int, members_by_class: Mapping[str, int], member_s: Mapping[str, int],
                    calibration_pair_s: int, derivation_s: int, terminal_shutdown_s: int, custody: Custody,
-                   pack_t0_s: int = 0) -> dict[str, int]:
-    """Block 4's programmed-span arithmetic, with the chain's own counts."""
+                   pack_t0_s: int = 0, extra: Mapping[str, int] | None = None) -> dict[str, int]:
+    """Block 4's programmed-span arithmetic, with the chain's own counts.
+
+    ``extra`` adds block 5's own labelled terms (block 4's reproduction passes none).
+    """
 
     _require(calibrations == 2, "a window has exactly one pre and one post calibration capture")
     members = sum(members_by_class.values())
@@ -413,6 +454,10 @@ def span_breakdown(*, settle_s: int, stages: int, countdowns_s: int, calibration
                                          reservations=reservations),
         "terminal_shutdown_s": terminal_shutdown_s,
     }
+    for name, seconds in (extra or {}).items():
+        _require(name.endswith("_s") and name not in parts and isinstance(seconds, int) and seconds >= 0,
+                 f"span term {name} is not a new whole-second term")
+        parts[name] = seconds
     parts["programmed_span_s"] = sum(parts.values())
     return parts
 
@@ -510,14 +555,24 @@ def derive_document(repo: Path, packs: Sequence[tuple[str, str]], adapter: str =
             for klass, count in stage["classes"].items():
                 by_class[klass] = by_class.get(klass, 0) + count
         kinds = [stage["kind"] for stage in roster["stages"]]
+        corpus = [stage for stage in collections if stage.get("neg8_corpus")]
+        _require(len(corpus) == (1 if "bound_derivation" in kinds else 0),
+                 f"{label}: cannot find the one NEG-8 corpus stage the bound derivation reads")
+        per_member_custody = custody.reduction_s + custody.sampler_start_s + custody.sampler_winddown_s
+        retry_s = sum(b5_chain.SETTLE_S + custody.stage_overhead_s
+                      + sum(count * (member_s[klass] + per_member_custody) for klass, count in stage["classes"].items())
+                      for stage in corpus)
         parts = span_breakdown(
             settle_s=b5_chain.SETTLE_S, stages=len(collections),
             countdowns_s=sum(stage["arm_countdown_s"] for stage in collections),
             calibrations=kinds.count("calibration_capture"), reservations=kinds.count("bracket_reservation"),
             derivations=kinds.count("bound_derivation"), members_by_class=by_class, member_s=member_s,
             calibration_pair_s=source.seconds("/fixed/pre_post_calibration"),
-            derivation_s=source.seconds("/auxiliary/gamma-bound-derivation"),
-            terminal_shutdown_s=source.seconds("/fixed/terminal_shutdown"), custody=custody)
+            derivation_s=B5_BOUND_DERIVATION_S,
+            terminal_shutdown_s=source.seconds("/fixed/terminal_shutdown"), custody=custody,
+            extra={"corpus_prune_s": kinds.count("bound_derivation") * B5_CORPUS_PRUNE_S,
+                   "window_calibration_verdict_s": B5_WINDOW_CALIBRATION_VERDICT_S,
+                   "corpus_retry_s": retry_s})
         longest = max([stream_s[klass] for klass in by_class] + [bracket_stream_s])
         packs_out[label] = {
             "pack_id": pack.name,
@@ -551,7 +606,14 @@ def derive_document(repo: Path, packs: Sequence[tuple[str, str]], adapter: str =
         "adapter": {"path": source.adapter_path, "sha256": source.adapter_sha256},
         "conventions": [
             "programmed span = (1 + collection stages) * settle + stage arm countdowns + pre/post calibration pair "
-            "+ bound derivation + member allowances + stage custody + terminal shutdown",
+            "+ bound derivation + corpus prune + window calibration verdict + member allowances + stage custody "
+            "+ terminal shutdown + corpus retry",
+            "stage arm countdowns are the chain's (0 s per collection stage, gate-prune 2 S3), not the pack's literal",
+            "corpus retry = settle + stage overhead + corpus members * (member allowance + reduction + native sampler "
+            "start and wind-down): the one NEG-8 corpus retry (gate-prune 2 row 13), sized as one more corpus stage",
+            "bound derivation, corpus prune and window calibration verdict are block 5's own estimates "
+            "(B5_BOUND_DERIVATION_S, B5_CORPUS_PRUNE_S, B5_WINDOW_CALIBRATION_VERDICT_S); block 4 sized the "
+            "derivation at 60 s",
             "member allowance = load + warmup + prefill + forced_decode + cooldown (300 s cap) + idle_admission "
             "(both attempts), per class from block 4's source",
             "stage custody = stages * stage overhead + members * reduction + calibration captures * bracket writer "
@@ -568,7 +630,18 @@ def derive_document(repo: Path, packs: Sequence[tuple[str, str]], adapter: str =
             "member_allowance_s": member_s,
             "streams": {name: source.allowance(f"/streams/{name}") for name in member_classes + ["bracket"]},
             "pre_post_calibration": source.allowance("/fixed/pre_post_calibration"),
-            "bound_derivation": source.allowance("/auxiliary/gamma-bound-derivation"),
+            "bound_derivation": {"seconds": B5_BOUND_DERIVATION_S,
+                                 "source": "scripts/size_b5_window.py B5_BOUND_DERIVATION_S (PLAN2 1.4 item 6: a real "
+                                           "derivation re-reduces 12 bundles, about 270-320 s, never measured live)",
+                                 "block4": source.allowance("/auxiliary/gamma-bound-derivation")},
+            "corpus_prune": {"seconds": B5_CORPUS_PRUNE_S,
+                             "source": "scripts/size_b5_window.py B5_CORPUS_PRUNE_S (the chain's corpus prune asks "
+                                       "the core mint for its drops over the same 12 bundles)"},
+            "window_calibration_verdict": {"seconds": B5_WINDOW_CALIBRATION_VERDICT_S,
+                                           "source": "scripts/size_b5_window.py B5_WINDOW_CALIBRATION_VERDICT_S (one "
+                                                     "refit of the pre slot, about 13.5-15 s; interface J1)"},
+            "collection_arm_countdown_s": {"seconds": b5_chain.COLLECTION_ARM_COUNTDOWN_S,
+                                           "source": "joulewise/b5/chain.py COLLECTION_ARM_COUNTDOWN_S"},
             "terminal_shutdown": source.allowance("/fixed/terminal_shutdown"),
             "t0_stage_cap": source.allowance("/fixed/t0_stage_cap"),
             "clean_dwell_cap": source.allowance("/derivations/t0_stage_cap/clean_dwell_cap_s"),
