@@ -163,6 +163,8 @@ from joulewise.whole_window import (  # noqa: E402
     SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID,
     build_neg8_freshness_observation,
     hazard_window_membership_id,
+    strict_validate_bundles,
+    whole_window_strict_workers,
     build_evaluation_basis,
     build_neg8_drift_bound_artifact,
     build_row_provenance,
@@ -6385,10 +6387,18 @@ def idle_admission_core_verdict(
 
 
 def _whole_window_member(
-    source: WholeWindowMemberSource, waivers: WaiverMap
+    source: WholeWindowMemberSource,
+    waivers: WaiverMap,
+    *,
+    strict_problems: Sequence[str] | None = None,
 ) -> MemberEvaluation:
     bundle_path = source.path
-    """Strictly validate an existing bundle before whole-window admission."""
+    """Strictly validate an existing bundle before whole-window admission.
+
+    ``strict_problems``: the member's ``validate_bundle(strict=True)`` result
+    when the caller already ran it (the HAZARD_PACK parallel path); otherwise
+    it runs here.
+    """
 
     summary, _summary_problem = _load_json_object(
         bundle_path / "summary_metrics.json", "summary_metrics.json"
@@ -6397,10 +6407,13 @@ def _whole_window_member(
         bundle_path / "metadata.json", "metadata.json"
     )
     status = summary.get("status") if isinstance(summary, dict) else None
-    try:
-        problems = validate_bundle(bundle_path, strict=True)
-    except Exception as exc:  # noqa: BLE001 - validator failure is invalid
-        problems = [f"strict validation raised {type(exc).__name__}: {exc}"]
+    if strict_problems is not None:
+        problems = list(strict_problems)
+    else:
+        try:
+            problems = validate_bundle(bundle_path, strict=True)
+        except Exception as exc:  # noqa: BLE001 - validator failure is invalid
+            problems = [f"strict validation raised {type(exc).__name__}: {exc}"]
     collection_flags = _prompt_realization_collection_flags(problems)
     telemetry_identity = custody_telemetry_identity(
         bundle_path,
@@ -6441,6 +6454,32 @@ def _whole_window_member(
         scientific_config_sha256=source.scientific_config_sha256,
         canonical_neg8_workload=source.canonical_neg8_workload,
     )
+
+
+def _whole_window_member_evaluations(
+    sources: Sequence[WholeWindowMemberSource],
+    waivers: WaiverMap,
+    *,
+    runs_dir: Path,
+) -> list[MemberEvaluation]:
+    """Every member's whole-window evaluation, in membership order.
+
+    A HAZARD_PACK runs root (PLAN2 row 1) validates its members strictly in a
+    process pool (``whole_window.strict_validate_bundles``); the validation
+    itself is unchanged.  Every other root keeps the serial loop.
+    """
+
+    if len(sources) < 2 or not _window_lineage.is_hazard_runs_root(runs_dir):
+        return [_whole_window_member(source, waivers) for source in sources]
+    problems = strict_validate_bundles(
+        [source.path for source in sources],
+        workers=whole_window_strict_workers(len(sources)),
+        validator=validate_bundle,
+    )
+    return [
+        _whole_window_member(source, waivers, strict_problems=member_problems)
+        for source, member_problems in zip(sources, problems)
+    ]
 
 
 def _valid_supersession_entries(
@@ -7311,9 +7350,9 @@ def _run_whole_window_verdict_locked(
     source_manifests = list(membership.source_manifests)
     selection_conditions = list(membership.conditions)
     occurrence_supersessions = list(membership.occurrence_supersessions)
-    evaluations = [
-        _whole_window_member(source, waivers) for source in bundle_sources
-    ]
+    evaluations = _whole_window_member_evaluations(
+        bundle_sources, waivers, runs_dir=runs_dir
+    )
     included = [evaluation for evaluation in evaluations if evaluation.usable]
     waived = [evaluation for evaluation in evaluations if evaluation.waived]
     excluded = [evaluation for evaluation in evaluations if evaluation.failed]

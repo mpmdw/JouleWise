@@ -5902,6 +5902,135 @@ def validate_whole_window_verdict_row(
     )
 
 
+# ---------------------------------------------------------------------------
+# Member strict validation for a HAZARD_PACK whole-window verdict, in parallel
+# (PLAN2 row 1).  Every member still gets the full strict validation
+# (``cli.validate_bundle(path, strict=True)``: structure, a fresh reduction
+# compared with the stored summary, uncertainty and raw-to-trace checks); only
+# the wall clock changes.  Serially an ALPHA window's 107 claim-root bundles
+# take about 3,700 s (34.5 s each), past the harvest's 1,800 s budget.
+#
+# Each worker process keeps one plain physics cache across the bundles it
+# validates and passes it to ``validate_bundle(..., physics_cache=...)`` once
+# that keyword exists (interface J2, owned by P2-CTL; a hit happens only after
+# every hash check has run).  Until then the validator is called exactly as
+# before.  The pool is spawned (no forked state) and lives in the verdict
+# process's process group, so a harvest that kills the group kills it too.
+
+WHOLE_WINDOW_WORKERS_ENV = "JOULEWISE_WHOLE_WINDOW_WORKERS"
+WHOLE_WINDOW_DEFAULT_MAX_WORKERS = 8
+_STRICT_WORKER_PHYSICS_CACHE: dict[Any, Any] | None = None
+
+
+def whole_window_strict_workers(member_count: int) -> int:
+    """Worker processes for ``member_count`` strict validations.
+
+    ``JOULEWISE_WHOLE_WINDOW_WORKERS`` (a positive integer) overrides the
+    default of ``min(8, cpu_count - 2)``; the result is at least 1 and never
+    more than the members.  1 means in-process, serially.
+    """
+
+    import os  # noqa: PLC0415
+
+    requested = os.environ.get(WHOLE_WINDOW_WORKERS_ENV)
+    workers: int | None = None
+    if requested is not None:
+        try:
+            workers = int(requested.strip())
+        except ValueError:
+            workers = None
+        if workers is not None and workers < 1:
+            workers = None
+    if workers is None:
+        workers = min(
+            WHOLE_WINDOW_DEFAULT_MAX_WORKERS, max(1, (os.cpu_count() or 1) - 2)
+        )
+    return max(1, min(workers, member_count))
+
+
+def _accepts_physics_cache(validator: Any) -> bool:
+    import inspect  # noqa: PLC0415
+
+    try:
+        return "physics_cache" in inspect.signature(validator).parameters
+    except (TypeError, ValueError):
+        return False
+
+
+def _strict_validation_problems(
+    path: Path, validator: Any, physics_cache: dict[Any, Any] | None
+) -> list[str]:
+    """One member's strict-validation problems, as the verdict writer records them."""
+
+    try:
+        if physics_cache is not None and _accepts_physics_cache(validator):
+            return list(validator(path, strict=True, physics_cache=physics_cache))
+        return list(validator(path, strict=True))
+    except Exception as exc:  # noqa: BLE001 - validator failure is invalid
+        return [f"strict validation raised {type(exc).__name__}: {exc}"]
+
+
+def _strict_validation_worker(path_text: str) -> list[str]:
+    """Process-pool entry point: the real validator and this worker's cache."""
+
+    global _STRICT_WORKER_PHYSICS_CACHE
+    from joulewise.cli import validate_bundle  # noqa: PLC0415
+
+    if _STRICT_WORKER_PHYSICS_CACHE is None:
+        _STRICT_WORKER_PHYSICS_CACHE = {}
+    return _strict_validation_problems(
+        Path(path_text), validate_bundle, _STRICT_WORKER_PHYSICS_CACHE
+    )
+
+
+def strict_validate_bundles(
+    paths: Sequence[Path],
+    *,
+    workers: int,
+    validator: Any = None,
+) -> list[list[str]]:
+    """Strict-validation problems for each path, in input order.
+
+    ``validator`` defaults to ``cli.validate_bundle``.  With ``workers`` > 1
+    and the real validator the paths are validated in a spawned process pool;
+    a substituted validator (a test double) cannot cross a process boundary,
+    so it runs in process.  A worker that dies leaves its paths to be
+    validated in process, so every path gets a result.
+    """
+
+    from joulewise.cli import validate_bundle as real_validator  # noqa: PLC0415
+
+    validator = real_validator if validator is None else validator
+    results: list[list[str] | None] = [None] * len(paths)
+    if workers > 1 and len(paths) > 1 and validator is real_validator:
+        import multiprocessing  # noqa: PLC0415
+        from concurrent.futures import ProcessPoolExecutor  # noqa: PLC0415
+
+        try:
+            with ProcessPoolExecutor(
+                max_workers=min(workers, len(paths)),
+                mp_context=multiprocessing.get_context("spawn"),
+            ) as pool:
+                futures = [
+                    pool.submit(_strict_validation_worker, str(path))
+                    for path in paths
+                ]
+                for index, future in enumerate(futures):
+                    try:
+                        results[index] = list(future.result())
+                    except Exception:  # noqa: BLE001 - redo it in process
+                        results[index] = None
+        except Exception:  # noqa: BLE001 - a pool that cannot start: in process
+            pass
+    cache: dict[Any, Any] = {}
+    return [
+        result
+        if result is not None
+        else _strict_validation_problems(Path(path), validator, cache)
+        for path, result in zip(paths, results)
+    ]
+
+
 def hazard_window_membership_id(runs_root: Path, records: Sequence[Any]) -> str:
     """Membership id of a HAZARD_PACK window: its whole manifest catalog.
 
