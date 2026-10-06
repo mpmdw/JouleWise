@@ -49,6 +49,83 @@ from joulewise.calibration_ledger import (  # noqa: E402
 
 
 OUTPUT_SCHEMA = "joulewise.calibration_window_bracket_reservation.v1"
+# HAZARD_PACK only: the sampler whose digest the writer binds (its default
+# ``--sampler-binary``).  A module constant so tests can point it at a fixture.
+HAZARD_SAMPLER_BINARY: Path | None = None
+
+
+# --- HAZARD_PACK flag path (gate-prune core lane VPF, A6-R1) ------------------
+def _hazard_measured_identity(
+    desk_epoch: Mapping[str, Any], desk_t1: Mapping[str, Any]
+) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any] | None]:
+    """Measure the identity vectors with the writer's own functions.
+
+    The desk JSON is a hand-prepared prediction; the reservation records the
+    measured values instead, so the writer's kept R1 comparison compares two
+    measurements taken in one boot minutes apart.  A field whose read raises
+    keeps the desk value.  The power policy is a label and stays the desk's.
+    Returns ``(epoch, t1, observed)``; ``observed`` is None when the measured
+    vectors equal the desk JSON and every read succeeded.
+    """
+
+    from joulewise.calibration_ledger import (  # noqa: PLC0415
+        IDENTITY_EPOCH_FIELDS,
+        T1_FIELDS,
+    )
+    from scripts import validate_powermetrics_fiducial as writer  # noqa: PLC0415
+
+    unreadable: list[str] = []
+
+    def read(field: str, reader: Any, fallback: Any) -> Any:
+        try:
+            return reader()
+        except Exception:  # noqa: BLE001 - an unreadable field keeps the desk value
+            unreadable.append(field)
+            return fallback
+
+    def mlx_version() -> Any:
+        import mlx.core as mx  # noqa: PLC0415
+
+        return getattr(mx, "__version__", None)
+
+    sampler = Path(
+        writer.POWER_METRICS if HAZARD_SAMPLER_BINARY is None else HAZARD_SAMPLER_BINARY
+    )
+    epoch = {
+        "os_build": read("os_build", lambda: writer._sysctl_identity("kern.osversion"),
+                         desk_epoch.get("os_build")),
+        "hardware_model": read("hardware_model", lambda: writer._sysctl_identity("hw.model"),
+                               desk_epoch.get("hardware_model")),
+        "power_policy": desk_epoch.get("power_policy"),
+        "sampling_interval_ms": writer.SAMPLING_INTERVAL_MS,
+        "estimator_revision": writer.RESIDUAL_REGION_METHOD,
+        "pulse_protocol_id": writer.PROTOCOL_ID,
+    }
+    t1 = {
+        **epoch,
+        "powermetrics_sha256": read("powermetrics_sha256", lambda: writer.sha256_path(sampler),
+                                    desk_t1.get("powermetrics_sha256")),
+        "anchor_method_version": writer.ACTIVE_CAPTURE_ANCHOR_METHOD,
+        "mlx_version": read("mlx_version", mlx_version, desk_t1.get("mlx_version")),
+        "protocol_sha256": read("protocol_sha256",
+                                lambda: writer.sha256_path(writer.PROTOCOL_PATH),
+                                desk_t1.get("protocol_sha256")),
+    }
+    differing = sorted(
+        {field for field in IDENTITY_EPOCH_FIELDS if epoch.get(field) != desk_epoch.get(field)}
+        | {field for field in T1_FIELDS if t1.get(field) != desk_t1.get(field)}
+    )
+    observed = None
+    if differing or unreadable:
+        observed = {
+            "kind": "desk_identity_differs",
+            "fields": differing,
+            "desk": {field: str(desk_t1.get(field, desk_epoch.get(field)))
+                     for field in differing},
+            "measured": {field: str(t1.get(field)) for field in differing},
+            "unreadable": sorted(unreadable),
+        }
+    return epoch, t1, observed
 
 
 def _json_object(path: Path) -> Mapping[str, Any]:
@@ -209,6 +286,13 @@ def main(argv: list[str] | None = None) -> int:
         entry_point=Path(__file__),
     )
     custody_deadline = None
+    # ``hazard`` is None on the legacy path, whose behavior is unchanged.
+    from joulewise.flags import core as flags_core  # noqa: PLC0415
+
+    hazard = flags_core.hazard_flag_context(args.runs_root, writer="core-reservation")
+    require_committed_pin = (
+        not args.allow_uncommitted_pin_for_test if hazard is None else False
+    )
 
     def emit_refusal(code, *, context=None, stream):
         return emit_calibration_refusal(
@@ -218,10 +302,38 @@ def main(argv: list[str] | None = None) -> int:
         )
 
     try:
+        hazard_identity = None
+        if hazard is not None:
+            # Measured before the CustodyDeadline exists, so the live reads are
+            # never charged to the custody allowance.
+            hazard_identity = _hazard_measured_identity(
+                _json_object(args.identity_epoch_json), _json_object(args.t1_bindings_json)
+            )
         if args.execute or args.verify_only:
             custody_deadline = CustodyDeadline(args.custody_budget_s, args.custody_deadline_epoch_s)
         epoch = _json_object(args.identity_epoch_json)
         t1 = _json_object(args.t1_bindings_json)
+        if hazard_identity is not None:
+            epoch, t1, identity_observed = hazard_identity
+            if identity_observed is not None:
+                flags_core.emit(
+                    hazard, "calibration.writer_record_flagged", level="window",
+                    observed=identity_observed,
+                    legacy_site="scripts/validate_powermetrics_fiducial.py:1389@e6b6a0ce",
+                    legacy_code=RefusalCode.RESERVED_SLOT_MISMATCH.value,
+                    detail="the reservation recorded measured identity vectors in place of the "
+                           "desk-prepared JSON",
+                )
+            flags_core.emit(
+                hazard, "calibration.writer_record_flagged", level="window",
+                observed={"kind": "historical_custody_unverified", "slot": None,
+                          "writer": "reservation"},
+                legacy_site="scripts/reserve_calibration_window_bracket.py:281@e6b6a0ce",
+                legacy_code="calibration_ledger_head_uncommitted|calibration_ledger_custody_invalid"
+                            "|calibration_ledger_custody_timeout",
+                detail="HAZARD reservation skipped the committed-pin check and the historical "
+                       "custody pass",
+            )
         if args.plan is not None:
             try:
                 plan_raw = args.plan.read_bytes()
@@ -283,9 +395,14 @@ def main(argv: list[str] | None = None) -> int:
                     args.head_pin,
                     phase="pre-reserve",
                     enforcing_under_lease=True,
-                    require_committed_pin=not args.allow_uncommitted_pin_for_test,
+                    require_committed_pin=require_committed_pin,
                     repo_root=REPO_ROOT,
                     custody_deadline=custody_deadline,
+                    **(
+                        {}
+                        if hazard is None
+                        else {"verify_custody": False, "allow_stale_pin": True}
+                    ),
                 )
                 if readiness.refusal_code is RefusalCode.LEDGER_CUSTODY_TIMEOUT:
                     custody_deadline.refuse()
@@ -303,7 +420,7 @@ def main(argv: list[str] | None = None) -> int:
                             args.head_pin,
                             session_id=args.session_id,
                             plan_path=args.plan,
-                            require_committed_pin=not args.allow_uncommitted_pin_for_test,
+                            require_committed_pin=require_committed_pin,
                             repo_root=REPO_ROOT,
                             custody_deadline=custody_deadline,
                         )
@@ -359,6 +476,7 @@ def main(argv: list[str] | None = None) -> int:
                     custody_deadline.check()
                     print(json.dumps(output, sort_keys=True))
                     return 0
+                pin_relation: dict[str, Any] | None = None if hazard is None else {}
                 receipt = append_bracket_session_receipt(
                     args.ledger,
                     session_id=args.session_id,
@@ -371,9 +489,10 @@ def main(argv: list[str] | None = None) -> int:
                     session_kind=args.session_kind,
                     declared_slots=declared,
                     head_pin_path=args.head_pin,
-                    require_committed_pin=not args.allow_uncommitted_pin_for_test,
+                    require_committed_pin=require_committed_pin,
                     repo_root=REPO_ROOT,
                     custody_deadline=custody_deadline,
+                    **({} if pin_relation is None else {"pin_relation_record": pin_relation}),
                     _stage_boundary=lambda boundary: _writer_stage(
                         {
                             "intent-write": WriterStage.RESERVATION_INTENT_WRITE,
@@ -384,6 +503,16 @@ def main(argv: list[str] | None = None) -> int:
                     ),
                 )
                 _writer_stage(WriterStage.RESERVATION_RETURNED)
+                if pin_relation and pin_relation.get("relation") != "exact":
+                    flags_core.emit(
+                        hazard, "calibration.writer_record_flagged", level="window",
+                        observed={"kind": "head_pin_stale", "writer": "reservation",
+                                  **pin_relation},
+                        legacy_site="joulewise/calibration_ledger.py:4855@e6b6a0ce",
+                        legacy_code=RefusalCode.RESERVATION_HEAD_MISMATCH.value,
+                        detail="the head pin lags the physical ledger head; the session was "
+                               "appended to the physical tail",
+                    )
             output = {
                 "schema_version": OUTPUT_SCHEMA,
                 "status": "reserved",
