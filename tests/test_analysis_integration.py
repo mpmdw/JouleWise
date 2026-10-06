@@ -6251,13 +6251,17 @@ class SupersessionAwareCooldownJoinTests(unittest.TestCase):
         )
         self.assertEqual(sum(catalog_calls.values()), 6)
         self.assertEqual(catalog_importers, set(catalog_calls))
+        # Pointwise dereference of pinned descriptors: the whole-window
+        # verdict validator, and the block-5 harvest's NEG-8 re-screen
+        # (joulewise.b5.harvest.verdict_neg8_sources), which mirrors that
+        # validator's source selection at each recorded SHA-256.
         self.assertEqual(
             dereference_calls,
-            {"joulewise/whole_window.py": 1},
+            {"joulewise/whole_window.py": 1, "joulewise/b5/harvest.py": 1},
         )
         self.assertEqual(
             dereference_importers,
-            {"joulewise/whole_window.py"},
+            {"joulewise/whole_window.py", "joulewise/b5/harvest.py"},
         )
 
     def test_b2_wrong_schema_duplicate_or_unreadable_catalog_refuses_join(self):
