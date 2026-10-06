@@ -26182,7 +26182,7 @@
    "note": "analysis refuses to issue the number; collection is not involved",
    "ordinal": 0,
    "stage": "analysis",
-   "test_id": "tests/test_render_results_fills.py::DerivationTests::test_registry_named_derivations_match_hand_computation"
+   "test_id": "tests/test_render_results_fills.py::DerivationTests::test_remaining_registered_derivations_match_exact_arithmetic"
   },
   {
    "caught_real_defect": false,
@@ -26199,7 +26199,7 @@
    "note": "analysis refuses to issue the number; collection is not involved",
    "ordinal": 0,
    "stage": "analysis",
-   "test_id": "tests/test_render_results_fills.py::DerivationTests::test_registry_named_derivations_match_hand_computation"
+   "test_id": "tests/test_render_results_fills.py::DerivationTests::test_remaining_registered_derivations_match_exact_arithmetic"
   },
   {
    "caught_real_defect": false,
@@ -26216,7 +26216,7 @@
    "note": "analysis refuses to issue the number; collection is not involved",
    "ordinal": 0,
    "stage": "analysis",
-   "test_id": "tests/test_render_results_fills.py::DerivationTests::test_registry_named_derivations_match_hand_computation"
+   "test_id": "tests/test_render_results_fills.py::DerivationTests::test_remaining_registered_derivations_match_exact_arithmetic"
   },
   {
    "caught_real_defect": false,
@@ -26233,7 +26233,7 @@
    "note": "analysis refuses to issue the number; collection is not involved",
    "ordinal": 0,
    "stage": "analysis",
-   "test_id": "tests/test_render_results_fills.py::DerivationTests::test_registry_named_derivations_match_hand_computation"
+   "test_id": "tests/test_render_results_fills.py::DerivationTests::test_remaining_registered_derivations_match_exact_arithmetic"
   },
   {
    "caught_real_defect": false,
@@ -26250,7 +26250,7 @@
    "note": "analysis refuses to issue the number; collection is not involved",
    "ordinal": 0,
    "stage": "analysis",
-   "test_id": "tests/test_render_results_fills.py::DerivationTests::test_registry_named_derivations_match_hand_computation"
+   "test_id": "tests/test_render_results_fills.py::DerivationTests::test_remaining_registered_derivations_match_exact_arithmetic"
   },
   {
    "caught_real_defect": false,
@@ -26267,7 +26267,7 @@
    "note": "analysis refuses to issue the number; collection is not involved",
    "ordinal": 0,
    "stage": "analysis",
-   "test_id": "tests/test_render_results_fills.py::DerivationTests::test_registry_named_derivations_match_hand_computation"
+   "test_id": "tests/test_render_results_fills.py::DerivationTests::test_remaining_registered_derivations_match_exact_arithmetic"
   },
   {
    "caught_real_defect": false,
@@ -26284,7 +26284,7 @@
    "note": "analysis refuses to issue the number; collection is not involved",
    "ordinal": 0,
    "stage": "analysis",
-   "test_id": "tests/test_render_results_fills.py::DerivationTests::test_registry_named_derivations_match_hand_computation"
+   "test_id": "tests/test_render_results_fills.py::DerivationTests::test_remaining_registered_derivations_match_exact_arithmetic"
   },
   {
    "caught_real_defect": false,
@@ -26301,7 +26301,7 @@
    "note": "analysis refuses to issue the number; collection is not involved",
    "ordinal": 0,
    "stage": "analysis",
-   "test_id": "tests/test_render_results_fills.py::DerivationTests::test_registry_named_derivations_match_hand_computation"
+   "test_id": "tests/test_render_results_fills.py::DerivationTests::test_remaining_registered_derivations_match_exact_arithmetic"
   },
   {
    "caught_real_defect": false,
@@ -26318,7 +26318,7 @@
    "note": "analysis refuses to issue the number; collection is not involved",
    "ordinal": 0,
    "stage": "analysis",
-   "test_id": "tests/test_render_results_fills.py::DerivationTests::test_registry_named_derivations_match_hand_computation"
+   "test_id": "tests/test_render_results_fills.py::DerivationTests::test_remaining_registered_derivations_match_exact_arithmetic"
   },
   {
    "caught_real_defect": false,
@@ -26335,7 +26335,7 @@
    "note": "analysis refuses to issue the number; collection is not involved",
    "ordinal": 0,
    "stage": "analysis",
-   "test_id": "tests/test_render_results_fills.py::DerivationTests::test_registry_named_derivations_match_hand_computation"
+   "test_id": "tests/test_render_results_fills.py::DerivationTests::test_remaining_registered_derivations_match_exact_arithmetic"
   },
   {
    "caught_real_defect": false,
@@ -26352,7 +26352,7 @@
    "note": "analysis refuses to issue the number; collection is not involved",
    "ordinal": 0,
    "stage": "analysis",
-   "test_id": "tests/test_render_results_fills.py::DerivationTests::test_registry_named_derivations_match_hand_computation"
+   "test_id": "tests/test_render_results_fills.py::DerivationTests::test_remaining_registered_derivations_match_exact_arithmetic"
   },
   {
    "caught_real_defect": false,
@@ -26369,7 +26369,7 @@
    "note": "analysis refuses to issue the number; collection is not involved",
    "ordinal": 0,
    "stage": "analysis",
-   "test_id": "tests/test_render_results_fills.py::DerivationTests::test_registry_named_derivations_match_hand_computation"
+   "test_id": "tests/test_render_results_fills.py::DerivationTests::test_remaining_registered_derivations_match_exact_arithmetic"
   },
   {
    "caught_real_defect": false,
@@ -26386,7 +26386,7 @@
    "note": "analysis refuses to issue the number; collection is not involved",
    "ordinal": 0,
    "stage": "analysis",
-   "test_id": "tests/test_render_results_fills.py::DerivationTests::test_registry_named_derivations_match_hand_computation"
+   "test_id": "tests/test_render_results_fills.py::DerivationTests::test_remaining_registered_derivations_match_exact_arithmetic"
   },
   {
    "caught_real_defect": false,
@@ -26607,7 +26607,7 @@
    "note": "analysis refuses to issue the number; collection is not involved",
    "ordinal": 0,
    "stage": "analysis",
-   "test_id": "tests/test_render_results_fills.py::RendererHappyPathTests::test_variant_d_and_section6_zero_render_and_validate"
+   "test_id": "tests/test_render_results_fills.py::RendererHappyPathTests::test_variant_c3_copies_both_refusal_verdicts"
   },
   {
    "caught_real_defect": false,
@@ -26624,7 +26624,7 @@
    "note": "analysis refuses to issue the number; collection is not involved",
    "ordinal": 0,
    "stage": "analysis",
-   "test_id": "tests/test_render_results_fills.py::RendererHappyPathTests::test_variant_d_and_section6_zero_render_and_validate"
+   "test_id": "tests/test_render_results_fills.py::RendererHappyPathTests::test_variant_c3_copies_both_refusal_verdicts"
   },
   {
    "caught_real_defect": false,

@@ -114,7 +114,7 @@
       }
     },
     "modelRuntimeConfig": {
-      "description": "Evidence-bound inventory: model_artifact_sha256 is read from authenticated stack identity, runtime_identity_sha256 is its authenticated stack-identity digest, and config_set_sha256 is the authenticated scientific-config identity digest.",
+      "description": "Evidence-bound inventory: model_artifact_sha256 is read from authenticated stack identity and runtime_identity_sha256 is its authenticated stack-identity digest. With per-cell scientific_config_identity_sha256 pins, config_set_sha256 is SHA-256 of the canonical JSON array of sorted distinct per-cell scientific config hashes (including singleton sets). Legacy v2 producers without per-cell pins retain their single authenticated scientific-config identity digest.",
       "type": "object",
       "additionalProperties": false,
       "required": [
@@ -406,6 +406,10 @@
           "items": {
             "$ref": "#/$defs/consumerFamily"
           }
+        },
+        "scientific_config_identity_sha256": {
+          "description": "Scientific identity of the registered workload for this cell; both authenticated absolute and comparative components must equal this pin. All cells of a producer carry this field together, or all omit it for legacy single-config v2 compatibility.",
+          "$ref": "#/$defs/sha256"
         }
       }
     },
@@ -570,7 +574,8 @@
             },
             "postcollection": {
               "$ref": "#/$defs/deskPostcollection"
-            }
+            },
+            "scientific_config_identity_sha256": true
           }
         }
       ]
@@ -615,7 +620,8 @@
             },
             "postcollection": {
               "$ref": "#/$defs/finalPostcollection"
-            }
+            },
+            "scientific_config_identity_sha256": true
           }
         }
       ]
@@ -657,7 +663,25 @@
           "maxItems": 2,
           "items": {
             "$ref": "#/$defs/deskCell"
-          }
+          },
+          "allOf": [
+            {
+              "if": {
+                "contains": {
+                  "required": [
+                    "scientific_config_identity_sha256"
+                  ]
+                }
+              },
+              "then": {
+                "items": {
+                  "required": [
+                    "scientific_config_identity_sha256"
+                  ]
+                }
+              }
+            }
+          ]
         }
       }
     },
@@ -711,7 +735,25 @@
           "maxItems": 2,
           "items": {
             "$ref": "#/$defs/finalCell"
-          }
+          },
+          "allOf": [
+            {
+              "if": {
+                "contains": {
+                  "required": [
+                    "scientific_config_identity_sha256"
+                  ]
+                }
+              },
+              "then": {
+                "items": {
+                  "required": [
+                    "scientific_config_identity_sha256"
+                  ]
+                }
+              }
+            }
+          ]
         }
       },
       "allOf": [

@@ -134,19 +134,20 @@ jobs:
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     env:
-      # CI-TRIM-02: refreshed hosted weights balance six ordinary shards at
-      # ~14 min, below the ~19 min calibration-exit floor. Eight shards add
-      # queue pressure without lowering that floor (20 executing jobs were
-      # observed across concurrent main runs). Each selected interpreter
-      # runs the full suite across ordinary and exclusive jobs.
-      SHARD_COUNT: "6"
+      # CI-12 (2026-10-05): hosted runners are free for this public repo, so
+      # the ordinary suite is packed into twelve shards from hosted
+      # per-module medians (scripts/test_timings.json _provenance). The
+      # wall-time floor is then the calibration-exits exclusive job, not an
+      # ordinary shard. Each selected interpreter runs the full suite across
+      # ordinary and exclusive jobs.
+      SHARD_COUNT: "12"
     strategy:
       matrix:
         # 3.13: production nights (the measurement venv).
         # PRs and main pushes use production 3.13 only. 3.14 is
         # local dev and is exercised by every seat's local module runs, not CI.
         python-version: ${{ fromJSON(needs.changes.outputs.pythons) }}
-        shard: [1, 2, 3, 4, 5, 6]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
     steps:
       - uses: actions/checkout@v5
         with:
@@ -170,10 +171,12 @@ jobs:
       - name: Unit tests (stdlib core only, per D-009/D-017)
         # test_calibration_exits AND test_calibration_writer_crash_matrix
         # are intentionally absent here (both carry exclusive_modules
-        # declarations): their evidence makes fallback-weight shard
-        # placement unsound; each runs once in its exclusive job below,
-        # while the remaining six shards retain deterministic LPT balance
-        # from the ordinary timing map.
+        # declarations); each runs once in its exclusive job below, while
+        # the twelve ordinary shards keep deterministic LPT balance from the
+        # ordinary timing map. Timing weights are scheduling hints only, so
+        # no step asserts their values; the guards kept here are coverage
+        # guards (every exclusive module is still discovered, and every
+        # declared split test id still exists).
         env:
           SHARD_INDEX: ${{ matrix.shard }}
         run: |
@@ -187,22 +190,16 @@ jobs:
           import shard_tests
 
           overlay = json.loads(Path("scripts/test_timings.json").read_text())
-          declarations = overlay["exclusive_modules"]
-          exclusive = frozenset(declarations)
+          exclusive = frozenset(overlay["exclusive_modules"])
           discovered = shard_tests.discover_test_modules()
           assert exclusive <= set(discovered), (exclusive, discovered)
           timings = shard_tests.load_timing_map()
-          for module, declaration in declarations.items():
-              seconds = float(declaration["seconds"])
-              threshold = float(declaration["fallback_rejection_threshold_seconds"])
-              assert seconds >= threshold, (module, seconds, threshold)
-              timings[module] = seconds
           ordinary = tuple(module for module in discovered if module not in exclusive)
 
-          # UNIT-atomic, not module-atomic. The original test_reduce module
-          # dominated the four-way partition; retain its audited split and
-          # refresh the weights from hosted evidence. Modules in split_modules
-          # are spread across shards at test granularity. This edits no test file and
+          # UNIT-atomic, not module-atomic. Modules in split_modules (today
+          # test_reduce and test_controller_g2b_attachment, each audited for
+          # per-test independence) are spread across shards at test
+          # granularity, so no single module floors the shard time. This edits no test file and
           # skips nothing: expand_units emits one unit per declared heavy
           # test plus ONE remainder unit holding every other test in that
           # module, and verify_split_declaration fails the build closed if
@@ -247,18 +244,6 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Validate exclusive timing declaration
-        run: |
-          python - <<'PY'
-          import json
-          from pathlib import Path
-          payload = json.loads(Path("scripts/test_timings.json").read_text())
-          row = payload["exclusive_modules"]["tests.test_calibration_exits"]
-          assert row["evidence_range_seconds"] == [648.0, 2036.0]
-          assert row["seconds"] == 1117.310
-          assert payload["seconds_by_module"]["tests.test_calibration_exits"] == row["seconds"]
-          assert row["seconds"] >= row["fallback_rejection_threshold_seconds"]
-          PY
       - name: Compile calibration-exit sources
         run: python -m compileall -q joulewise tests scripts/validate_powermetrics_fiducial.py
       - name: Exclusive calibration-exit module
@@ -274,32 +259,16 @@ jobs:
     # WO-CRASHMATRIX-RELIABILITY. Exclusivity buys FASTER ordinary-shard
     # signal; it does not shorten this module's own job.
     #
-    # TEST-SPEED-01 (2026-08-23) changed two things here.
-    #
-    # 1. THE EVIDENCE PIN WAS STALE BY 2.7x. This job used to assert the
-    #    module costs 5317.216 s, and its comment cited "~89 minutes". That
-    #    figure was a 2026-08-11 observation of the module running inside a
-    #    SHARED shard, taken BEFORE it was made exclusive; exclusivity is
-    #    exactly what cured it. Measured today in its own job: 2005 s on
-    #    3.11 and 1370 s on 3.14 (run 32621080380). The declaration now
-    #    carries the current figure, and the 120-minute ceiling stands
-    #    unchanged as headroom.
-    #
-    # 2. THE JOB IS NOW SPLIT IN TWO. Two of the 15 tests are 95.5% of the
-    #    cost, so max-job time is floored at ~1385 s for EVERY split count
-    #    >= 2 — K=3 and beyond buy literally zero wall clock and only burn
-    #    concurrent-job budget. K=2 it was: ~33 min
-    #    becomes ~23 min. The split is runner-side only, edits no test file,
-    #    and skips nothing (see split_modules in scripts/test_timings.json:
-    #    one declared heavy test, plus a remainder unit computed at run time
-    #    that holds every other test in the module). Independence was
-    #    audited AND the K=2 split was executed with both shards running
-    #    concurrently on one machine — harsher than CI — with both passing.
-    #
-    # CI-TRIM-02 (2026-09-15) refreshes those historical weights: current
-    # heavy/remainder maxima are 679.554/331.860 s (20 tests total). The
-    # ~11.3 min heavy method is still indivisible by this runner; K>2 buys
-    # nothing. Preserve both units, exclusivity, and the existing ceiling.
+    # The job is split in two (TEST-SPEED-01, 2026-08-23): one declared heavy
+    # test plus a remainder unit computed at run time that holds every other
+    # test in the module (split_modules in scripts/test_timings.json). The
+    # split is runner-side only, edits no test file, and skips nothing;
+    # independence was audited and the K=2 split was executed concurrently
+    # on one machine with both shards passing. The heavy method is
+    # indivisible by this runner, so K>2 buys nothing. Timing weights are
+    # scheduling hints and are no longer asserted here (CI-12, 2026-10-05);
+    # verify_split_declaration below still fails closed if the declared
+    # heavy test id disappears. The 120-minute ceiling stays as headroom.
     # See docs/process_traces/2026-08-23-speed/.
     runs-on: ubuntu-latest
     timeout-minutes: 120
@@ -315,24 +284,6 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Validate exclusive timing declaration
-        run: |
-          python - <<'PY'
-          import json
-          from pathlib import Path
-          payload = json.loads(Path("scripts/test_timings.json").read_text())
-          module = "tests.test_calibration_writer_crash_matrix"
-          row = payload["exclusive_modules"][module]
-          assert row["evidence_range_seconds"] == [145.911, 2005.0]
-          assert row["seconds"] == 1011.414
-          assert payload["seconds_by_module"][module] == row["seconds"]
-          assert row["seconds"] >= row["fallback_rejection_threshold_seconds"]
-          # The split must account for the whole module: one declared heavy
-          # test plus a remainder, summing to the declared cost.
-          split = payload["split_modules"][module]
-          declared = sum(float(value) for value in split["declared"].values())
-          assert abs(declared + float(split["remainder_weight_seconds"]) - row["seconds"]) < 0.01
-          PY
       - name: Compile calibration sources
         run: python -m compileall -q joulewise tests scripts/validate_powermetrics_fiducial.py
       - name: Exclusive calibration-writer crash-matrix module (shard ${{ matrix.shard }} of 2)

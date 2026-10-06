@@ -1175,7 +1175,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     except StopFill as exc:
         print(str(exc), file=sys.stderr)
         return 2
-    except (OSError, UnicodeError, RenderedValidationError, RuntimeError) as exc:
+    except (OSError, UnicodeError, ValueError, RuntimeError) as exc:
         print(f"results prose rendered lint: REFUSED: {exc}", file=sys.stderr)
         return 2
     return 0

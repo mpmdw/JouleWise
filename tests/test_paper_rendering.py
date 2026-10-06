@@ -16,7 +16,7 @@ class PaperRenderingTests(unittest.TestCase):
 
     def test_d165_issued_control_and_subject_grants(self):
         value = _issued_control(self.fixture, payload={"d165_closeout": {"branch": "B"}})
-        self.assertEqual(rendering.render_d165(value), "B")
+        self.assertIn("D-165 branch B", rendering.render_d165(value))
         for kind in ("dominance_sentence", "subtitle"):
             body = mock.Mock(return_value="must not render")
             guarded = rendering._issued_renderer(custody.VerifiedD165Closeout, kind)(body)
@@ -26,7 +26,7 @@ class PaperRenderingTests(unittest.TestCase):
             body.assert_not_called()
         grants = tuple(custody._RenderGrant(kind, self.fixture.role) for kind in ("outcome", "dominance_sentence", "subtitle"))
         positive = _issued_control(self.fixture, grants=grants, payload={"d165_closeout": {"branch": "A"}})
-        self.assertEqual(rendering.render_d165(positive), "A")
+        self.assertIn("D-165 branch A", rendering.render_d165(positive))
 
     def test_tokenless_wrong_family_and_mixed_subjects_cannot_render(self):
         for value in ({}, object.__new__(custody.VerifiedD165Closeout),
@@ -52,7 +52,7 @@ class PaperRenderingTests(unittest.TestCase):
         subject = projection["cells"][0]["cell_id"]
         value = _issued_control(fixture, subjects=(subject,), projection=projection,
                                 payload={"extraction_report": "deliberately unusable"})
-        self.assertEqual(rendering.render_reported_energy(value), f"{subject}: 42.5")
+        self.assertIn(f"{subject}: estimate = 42.500 J", rendering.render_reported_energy(value))
         self.assertIsInstance(value.reported_energy_projection, custody._FrozenObject)
         # This is a private synthetic issuing control, never production admission.
         with self.assertRaises(custody.PaperCustodyRefusal):
