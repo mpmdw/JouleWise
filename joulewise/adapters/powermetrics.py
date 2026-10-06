@@ -297,8 +297,12 @@ class PowermetricsTelemetryAdapter:
         if context is not None:
             self._persist_capture(context, artifact_name, data)
         self._release_capture(artifact_name)
+        # The idle slice's plist frames are decoded once; the baseline
+        # records and the rich rows are both built from that one decode
+        # (gate-prune 2, M4), exactly as the two separate decodes built them.
+        parsed_documents = _powermetrics_documents(data)
         records, diagnostic = _parse_powermetrics_records(
-            data, timestamp_anchor_s=capture_start_s
+            data, timestamp_anchor_s=capture_start_s, _parsed=parsed_documents
         )
         self._record_parse_diagnostic(
             diagnostic,
@@ -311,7 +315,9 @@ class PowermetricsTelemetryAdapter:
         # them here would contradict the stage ledger even when the capture
         # itself occurred wholly inside the attempt.
         rich_records = decode_rich_telemetry(
-            data, timestamp_anchor_s=capture_start_s
+            data,
+            timestamp_anchor_s=capture_start_s,
+            _documents=parsed_documents[0],
         )
         if context is not None:
             self._idle_admission_records_by_run.setdefault(context.run_id, {})[
@@ -1755,11 +1761,18 @@ def _parse_powermetrics_records(
     *,
     timestamp_anchor_s: float | None = None,
     first_record_endpoint_s: float | None = None,
+    _parsed: tuple[list[dict[str, Any]], _DroppedFrameDiagnostic | None] | None = None,
 ) -> tuple[list[PowermetricsRecord], _DroppedFrameDiagnostic | None]:
-    """Parse records and return any final-frame drop diagnostic."""
+    """Parse records and return any final-frame drop diagnostic.
+
+    ``_parsed`` is ``_powermetrics_documents(data)`` already computed by the
+    caller for these same bytes; it only avoids decoding the frames twice.
+    """
     if timestamp_anchor_s is not None and first_record_endpoint_s is not None:
         raise ValueError("powermetrics timestamp anchor modes are mutually exclusive")
-    documents, diagnostic = _powermetrics_documents(data)
+    documents, diagnostic = (
+        _powermetrics_documents(data) if _parsed is None else _parsed
+    )
     if not documents:
         raise ValueError("powermetrics stream contains no complete plist documents")
 
@@ -1865,11 +1878,19 @@ def decode_rich_telemetry(
     *,
     timestamp_anchor_s: float | None = None,
     first_record_endpoint_s: float | None = None,
+    _documents: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
-    """Decode additive per-sample powermetrics fields from a plist stream."""
+    """Decode additive per-sample powermetrics fields from a plist stream.
+
+    ``_documents`` is the document list ``_powermetrics_documents(data)``
+    already returned for these same bytes; it only avoids a second decode.
+    """
     if timestamp_anchor_s is not None and first_record_endpoint_s is not None:
         raise ValueError("rich telemetry timestamp anchor modes are mutually exclusive")
-    documents, _diagnostic = _powermetrics_documents(data)
+    if _documents is None:
+        documents, _diagnostic = _powermetrics_documents(data)
+    else:
+        documents = _documents
     if not documents:
         return []
 
