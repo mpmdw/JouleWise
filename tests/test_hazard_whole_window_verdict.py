@@ -439,7 +439,8 @@ class HazardNeg8MintTests(_SentinelMixin, unittest.TestCase):
             bundle.mkdir()
             (bundle / "config.json").write_text(json.dumps({"run_id": bundle.name}) + "\n")
             (bundle / "metadata.json").write_text("{}\n")
-            (bundle / "summary_metrics.json").write_text(json.dumps({"index": index}) + "\n")
+            (bundle / "summary_metrics.json").write_text(
+                json.dumps({"index": index, "status": "succeeded"}) + "\n")
             self.members.append({"bundle_id": bundle.name, "bundle_path": bundle.name})
         self.manifest = self.w.bound / "neg8-corpus.collected.json"
         self.manifest.write_text(json.dumps({
@@ -454,9 +455,12 @@ class HazardNeg8MintTests(_SentinelMixin, unittest.TestCase):
         def strict(summary, _path):
             return summary.get("index") is not None and f"r{summary['index']:02d}" not in self.not_strict
 
-        def energy(path: Path):
+        def energy(path: Path, **_kwargs):
             value = 10.0 + float(path.name.rsplit("r", 1)[1])
-            return {"point_j": value, "lower_j": value, "upper_j": value}, value - 1.0, None
+            return {"point_j": value, "lower_j": value, "upper_j": value}, value - 1.0, None, None
+
+        def span_end(path: Path):
+            return 1_800_000_000.0 + float(path.name.rsplit("r", 1)[1])
 
         def fields(metadata):
             name = metadata.get("_name") if isinstance(metadata, dict) else None
@@ -477,7 +481,9 @@ class HazardNeg8MintTests(_SentinelMixin, unittest.TestCase):
             ("_custody_strict_invalid", {"return_value": False}),
             ("_current_strict_summary", {"side_effect": strict}),
             ("_scientific_config_identity", {"return_value": ("d" * 64, True)}),
-            ("_reference_energy_evidence", {"side_effect": energy}),
+            ("_reference_energy_evidence", {"side_effect": lambda path, **kw: energy(path)[:3]}),
+            ("_reference_energy_evidence_detail", {"side_effect": energy}),
+            ("_measured_window_end_s", {"side_effect": span_end}),
             ("neg8_freshness_binding_fields", {"side_effect": fields}),
             ("_read_json_object", {"side_effect": read}),
         ):
