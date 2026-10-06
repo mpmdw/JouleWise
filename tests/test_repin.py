@@ -3,16 +3,18 @@
 from __future__ import annotations
 
 import io
+import json
 from pathlib import Path
 import subprocess
 import sys
 import tempfile
 import unittest
 from contextlib import redirect_stdout
+from unittest.mock import patch
 
 from scripts import digest_pin_census as census
 from scripts import repin
-from tests.test_digest_pin_census import build_tree, sha
+from tests.test_digest_pin_census import REDUCE_SOURCE, build_tree, rows_by_path, sha
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -202,6 +204,82 @@ class CommandFamilyTests(unittest.TestCase):
         self.assertIn("unknown pin family 'nope'", out.getvalue())
         with redirect_stdout(io.StringIO()):
             self.assertEqual(repin.write("nope"), 2)
+
+
+ERA_PATH = "configs/campaigns/packy/sizing_source.json"
+ERA_SPEC = {"commit_pointer": "/head", "scope_pointer": r"^/provenance/production/[0-9]+/source/sha256$"}
+
+
+def _git(root: Path, *argv: str) -> str:
+    return subprocess.run(["git", "-C", str(root), "-c", "user.name=t", "-c", "user.email=t@t",
+                           "-c", "commit.gpgsign=false", *argv],
+                          check=True, capture_output=True, text=True).stdout.strip()
+
+
+class EraRecordTests(unittest.TestCase):
+    """A document that declares its era commit is verified at that commit, not today's tree."""
+
+    def setUp(self) -> None:
+        patcher = patch.dict(census.ERA_RECORDS, {ERA_PATH: ERA_SPEC})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.tree = MiniatureTree()
+        self.addCleanup(self.tree.close)
+        root = self.tree.root
+        _git(root, "commit", "-qm", "era")
+        self.era = _git(root, "rev-parse", "HEAD")
+        record = {"head": self.era, "provenance": {"production": [
+            {"source": {"path": "joulewise/reduce.py", "sha256": sha(REDUCE_SOURCE)}}]}}
+        self.tree.path(ERA_PATH).parent.mkdir(parents=True)
+        self.tree.path(ERA_PATH).write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
+        # The recorded core file changes after the era, as the core-prune lanes did.
+        self.tree.edit("joulewise/reduce.py", "sum(samples)", "sum(samples) * 1.0")
+        _git(root, "add", ".")
+        _git(root, "commit", "-qm", "after the era")
+        with redirect_stdout(io.StringIO()):
+            census.main(["--write", "--root", str(root)])
+
+    def rows(self) -> list:
+        registry = census.load_registry(self.tree.root)
+        return rows_by_path(registry)[ERA_PATH]
+
+    def test_era_row_resolves_at_its_declared_commit_and_passes(self) -> None:
+        self.assertEqual(self.rows(), [("/provenance/production/0/source/sha256", "estimator_code",
+                                        f"file@{self.era}:joulewise/reduce.py")])
+        self.assertEqual(self.tree.check(), (0, "PASS 1 pin families current\n"))
+
+    def test_tampered_era_literal_fails_and_write_refuses(self) -> None:
+        self.tree.edit(ERA_PATH, sha(REDUCE_SOURCE), sha(REDUCE_SOURCE + "#"))
+        code, out = self.tree.check()
+        self.assertEqual(code, 1)
+        self.assertIn("no longer carries the target's digest at its recorded commit "
+                      f"[file@{self.era}:joulewise/reduce.py]: {repin.ERA_REMEDY}", out)
+        before = self.tree.path(ERA_PATH).read_bytes()
+        out = io.StringIO()
+        with redirect_stdout(out):
+            self.assertEqual(repin.write_registry_family("estimator_code", self.tree.root), 1)
+        self.assertIn("era record of", out.getvalue())
+        self.assertEqual(self.tree.path(ERA_PATH).read_bytes(), before)
+
+    def test_moving_the_declared_commit_fails(self) -> None:
+        later = _git(self.tree.root, "rev-parse", "HEAD")
+        self.tree.edit(ERA_PATH, self.era, later)
+        code, out = self.tree.check()
+        self.assertEqual(code, 1)
+        self.assertIn(f"declares era commit {later}, not the recorded one", out)
+        # A regenerated registry shows the move in its diff: at the later commit
+        # the recorded digest names no bytes, so the row becomes unresolved.
+        with redirect_stdout(io.StringIO()):
+            census.main(["--write", "--root", str(self.tree.root)])
+        self.assertEqual(self.rows(), [("/provenance/production/0/source/sha256", "pack_config_bytes", None)])
+
+    def test_declared_commit_outside_history_fails_check_and_refuses_the_census(self) -> None:
+        self.tree.edit(ERA_PATH, self.era, "0" * 40)
+        code, out = self.tree.check()
+        self.assertEqual(code, 1)
+        self.assertIn("declares era commit unreadable", out)
+        with self.assertRaises(census.EraRecordError):
+            census.census(self.tree.root)
 
 
 class RealTreeTests(unittest.TestCase):

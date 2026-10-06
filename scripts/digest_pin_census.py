@@ -33,6 +33,11 @@ the target's digest by the recorded method and requires the pinning file to
 still carry it. Unresolved literals (raw data never committed, historical
 digests) are recorded but cannot be recomputed from the tree.
 
+Era records (``ERA_RECORDS``) are documents that record bytes as they were at
+a commit they declare. Literals in a record's declared scope resolve against
+the files at that commit instead of today's tree; their target key carries
+``@<commit>`` and ``repin.py --check`` re-reads the bytes with ``git show``.
+
 Usage::
 
     python scripts/digest_pin_census.py            # print a summary
@@ -182,6 +187,96 @@ class Literal:
 class Target:
     path: str
     method: str
+    # None: today's tree. A commit: the bytes at that commit (an era record).
+    commit: str | None = None
+
+    @property
+    def key(self) -> str:
+        method = self.method if self.commit is None else f"{self.method}@{self.commit}"
+        return f"{method}:{self.path}"
+
+
+def parse_target_key(key: str) -> Target:
+    """Invert ``Target.key``: ``<method>[@<commit>]:<path>[::<definition>]``."""
+
+    method, _, path = key.partition(":")
+    method, _, commit = method.partition("@")
+    return Target(path, method, commit or None)
+
+
+# Era records (orchestrator ruling 2026-10-06; CLAUDE.local.md "Physics refuses;
+# everything else is a flag", item 2: provenance digests are records). A
+# document that records the bytes of its own era declares the commit it
+# recorded them at. A literal inside its declared scope resolves against the
+# tree at that commit (``git show``), not today's, so a later edit to the
+# recorded file leaves the record true while a tampered literal or a moved
+# declared commit still fails ``repin.py --check``.
+#   commit_pointer / commit_line  where the document declares its commit: a
+#                                 JSON pointer, or a regex whose group 1 is the
+#                                 commit on exactly one line
+#   scope_pointer / scope_line    which literals are era records: a regex on
+#                                 the JSON pointer, or on the literal's line
+ERA_RECORDS: dict[str, dict[str, str]] = {
+    # Block 4's sizing source records the production code at sizing time; its
+    # top-level "head" is the commit it sized from.
+    "configs/campaigns/v5_qualification_25g83/sizing_sources/sizing_source_v2.json": {
+        "commit_pointer": "/head",
+        "scope_pointer": r"^/provenance/production/[0-9]+/source/sha256$",
+    },
+    # Revision 6's pins.validator_sha256 records the validator that produced
+    # block 1's derivation captures, sealed at the commit its heading names.
+    # Its estimator_code_sha256 pins stay live: acceptance re-derives them.
+    "configs/calibration/preregistration_d079_epoch_25g83_rev1.md": {
+        "commit_line": r"^# Revision 6 \(sealed [0-9]{4}-[0-9]{2}-[0-9]{2} at ([0-9a-f]{7,40})\)$",
+        "scope_line": r'^\s*"validator_sha256": "[0-9a-f]{64}",?$',
+    },
+}
+
+
+class EraRecordError(ValueError):
+    """An era record's declared commit is missing, ambiguous or not in history."""
+
+
+def era_commit(root: Path, path: str, text: str) -> str:
+    """The full commit an era record declares, verified to exist in history."""
+
+    spec = ERA_RECORDS[path]
+    if "commit_pointer" in spec:
+        try:
+            declared = _pointer(json.loads(text), spec["commit_pointer"])
+        except (ValueError, KeyError, IndexError, TypeError) as error:
+            raise EraRecordError(f"{path}: no declared commit at {spec['commit_pointer']}") from error
+    else:
+        found = re.findall(spec["commit_line"], text, flags=re.MULTILINE)
+        if len(found) != 1:
+            raise EraRecordError(f"{path}: {len(found)} commit declarations, expected 1")
+        declared = found[0]
+    if not isinstance(declared, str) or not re.fullmatch(r"[0-9a-f]{7,40}", declared):
+        raise EraRecordError(f"{path}: declared commit {declared!r} is not a hex commit id")
+    out = subprocess.run(["git", "-C", str(root), "rev-parse", "--verify", "--quiet", f"{declared}^{{commit}}"],
+                         stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+    if out.returncode != 0:
+        raise EraRecordError(f"{path}: declared commit {declared} is not in this repository's history")
+    return out.stdout.strip()
+
+
+def in_era_scope(path: str, literal: "Literal", text: str) -> bool:
+    spec = ERA_RECORDS.get(path)
+    if spec is None:
+        return False
+    if "scope_pointer" in spec:
+        return re.search(spec["scope_pointer"], literal.pointer) is not None
+    lines = text.splitlines()
+    line = lines[literal.line - 1] if 0 < literal.line <= len(lines) else ""
+    return re.search(spec["scope_line"], line) is not None
+
+
+def _pointer(document: object, pointer: str) -> object:
+    value = document
+    for token in pointer.split("/")[1:]:
+        token = token.replace("~1", "/").replace("~0", "~")
+        value = value[int(token)] if isinstance(value, list) else value[token]
+    return value
 
 
 # --------------------------------------------------------------------------
@@ -329,17 +424,45 @@ def python_definitions(text: str) -> Iterator[tuple[str, str, str]]:
     yield from visit(tree, "", True)
 
 
-def build_index(root: Path, files: Iterable[str]) -> dict[str, list[Target]]:
+def _read_at(root: Path, path: str, commit: str | None) -> bytes | None:
+    """A file's bytes in today's tree, or at ``commit``; None when absent."""
+
+    if commit is None:
+        try:
+            return (root / path).read_bytes()
+        except OSError:
+            return None
+    out = subprocess.run(["git", "-C", str(root), "show", f"{commit}:{path}"],
+                         stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    return out.stdout if out.returncode == 0 else None
+
+
+def files_at(root: Path, commit: str) -> list[str]:
+    out = subprocess.run(["git", "-C", str(root), "ls-tree", "-r", "-z", "--name-only", commit],
+                         check=True, stdout=subprocess.PIPE).stdout
+    return sorted(item.decode("utf-8") for item in out.split(b"\0") if item)
+
+
+def era_index(root: Path, commit: str, document_text: str) -> dict[str, list[Target]]:
+    """Digests of the files an era record names, as they were at its commit.
+
+    An era record names each file it records by path, so only files at the
+    commit whose path appears in the record's text are candidates.
+    """
+
+    named = [path for path in files_at(root, commit) if path in document_text]
+    return build_index(root, named, commit)
+
+
+def build_index(root: Path, files: Iterable[str], commit: str | None = None) -> dict[str, list[Target]]:
     index: dict[str, list[Target]] = {}
 
     def add(digest: str, path: str, method: str) -> None:
-        index.setdefault(digest, []).append(Target(path, method))
+        index.setdefault(digest, []).append(Target(path, method, commit))
 
     for path in files:
-        full = root / path
-        try:
-            raw = full.read_bytes()
-        except OSError:
+        raw = _read_at(root, path, commit)
+        if raw is None:
             continue
         if len(raw) <= _TRIVIAL_TARGET_BYTES:
             continue
@@ -366,10 +489,8 @@ def target_digest(root: Path, target: Target) -> str | None:
     """Recompute a target's digest by its method; None when the target is gone."""
 
     path, _, name = target.path.partition("::")
-    full = root / path
-    try:
-        raw = full.read_bytes()
-    except OSError:
+    raw = _read_at(root, path, target.commit)
+    if raw is None:
         return None
     if target.method == "file":
         return _sha(raw)
@@ -532,8 +653,13 @@ def census(root: Path = REPO_ROOT) -> dict[str, object]:
             raw = (root / path).read_bytes()
         except OSError:
             continue
+        era: dict[str, list[Target]] | None = None
+        if path in ERA_RECORDS:
+            text = raw.decode("utf-8")
+            era = era_index(root, era_commit(root, path, text), text)
         for literal in literals_in(path, raw):
-            target = _best_target(index.get(literal.value, []), path)
+            in_scope = era is not None and in_era_scope(path, literal, text)
+            target = _best_target((era if in_scope else index).get(literal.value, []), path)
             family = classify(literal, target)
             kind = FAMILIES[family]["kind"]
             summary[(kind, family)] += 1
@@ -542,7 +668,7 @@ def census(root: Path = REPO_ROOT) -> dict[str, object]:
                 followups[(lane, path, family)] += 1
             index_id = None
             if target is not None:
-                key = f"{target.method}:{target.path}"
+                key = target.key
                 if key not in target_ids:
                     target_ids[key] = len(target_keys)
                     target_keys.append(key)
@@ -575,7 +701,8 @@ def census(root: Path = REPO_ROOT) -> dict[str, object]:
         "generated_by": "python scripts/digest_pin_census.py --write",
         "scope": list(SCOPE),
         "row_format": ["json_pointer", "family", "target"],
-        "target_format": "<method>:<path>[::<definition>], indexed by a row's target",
+        "target_format": "<method>[@<commit>]:<path>[::<definition>], indexed by a row's target; "
+                         "@<commit> marks an era record, verified at that commit",
         "kinds": {
             "P": "protects a number: kept hard-coded, checked by scripts/repin.py --check, never auto-repinned",
             "B": "busywork: cannot go stale from a code edit, or is computed at test time",

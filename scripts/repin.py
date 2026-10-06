@@ -23,7 +23,9 @@ Families:
   recomputes the pinned target's digest by the recorded method and requires
   the pinning file to still carry it. A tampered pack config, prompt pin or
   acceptance artifact therefore fails here. ``--write registry`` re-runs the
-  census (new or moved literals); it never changes a pin.
+  census (new or moved literals); it never changes a pin. An era record's
+  row (target ``<method>@<commit>:<path>``) is verified against the target's
+  bytes at that commit, read with ``git show``, not against today's tree.
 - A registry family name (``pinned_config_copy``, ``estimator_code``, ...)
   given to ``--write`` rewrites stale literal copies held in test files. It
   refuses for issued artifacts (re-issue them with their issuer) and for
@@ -131,6 +133,10 @@ def command_families(root: Path = REPO_ROOT, runner: Runner = _run) -> dict[str,
 # The pin registry
 
 
+ERA_REMEDY = ("an era record is checked against its declared commit, whose bytes cannot change; the record's "
+              "literal or its declared commit was edited: restore it from history (nothing here rewrites it)")
+
+
 @dataclass(frozen=True)
 class StaleRow:
     path: str
@@ -224,12 +230,30 @@ def registry_stale(root: Path = REPO_ROOT, registry: dict | None = None) -> tupl
             key = None if target_index is None else targets[target_index]
             if not census.is_checked(path, family, None if key is None else key.partition(":")[2]):
                 continue
+            target = census.parse_target_key(key)
             if key not in digests:
-                method, _, target_path = key.partition(":")
-                digests[key] = census.target_digest(root, census.Target(target_path, method))
+                digests[key] = census.target_digest(root, target)
             digest = digests[key]
             remedy = census.regenerator(family, path, root) or family
-            if digest is None:
+            if target.commit is not None:
+                # An era record: the bytes at its declared commit are history and
+                # cannot change, so a mismatch means the record itself was edited.
+                try:
+                    declared = census.era_commit(root, path, files.text(path) or "")
+                except (KeyError, census.EraRecordError) as error:
+                    declared = f"unreadable ({error})"
+                if declared != target.commit:
+                    stale.append(StaleRow(path, pointer, family, key,
+                                          f"declares era commit {declared}, not the recorded one",
+                                          digest, remedy))
+                elif digest is None:
+                    stale.append(StaleRow(path, pointer, family, key,
+                                          "era target is missing at its recorded commit", None, remedy))
+                elif not _carries(files, path, pointer, digest):
+                    stale.append(StaleRow(path, pointer, family, key,
+                                          "no longer carries the target's digest at its recorded commit",
+                                          digest, remedy))
+            elif digest is None:
                 stale.append(StaleRow(path, pointer, family, key, "pinned target is missing", None, remedy))
             elif not _carries(files, path, pointer, digest):
                 stale.append(StaleRow(path, pointer, family, key,
@@ -268,7 +292,9 @@ def write_registry_family(family: str, root: Path = REPO_ROOT) -> int:
     edits: dict[str, list[tuple[str, str, StaleRow]]] = {}
     for row in rows:
         pack = census.pack_dir(row.path)
-        if row.expected is None:
+        if census.parse_target_key(row.target).commit is not None:
+            print(f"REFUSED {row.path} {row.pointer}: era record of {row.target}: {ERA_REMEDY}")
+        elif row.expected is None:
             print(f"REFUSED {row.path} {row.pointer}: pinned target {row.target} is missing; restore it or "
                   "remove the pin, then python scripts/repin.py --write registry")
         elif pack and row.remedy.startswith("pack:"):
@@ -327,8 +353,10 @@ def check(names: list[str] | None = None, root: Path = REPO_ROOT, runner: Runner
                 if name != "registry" and row.family != name:
                     continue
                 failures += 1
+                remedy = (ERA_REMEDY if census.parse_target_key(row.target).commit is not None
+                          else f"run python scripts/repin.py --write {row.remedy}")
                 print(f"pin {row.remedy} stale: {row.path} {row.pointer} ({row.family}) {row.reason} "
-                      f"[{row.target}]: run python scripts/repin.py --write {row.remedy}", file=out)
+                      f"[{row.target}]: {remedy}", file=out)
             continue
         family = commands.get(name)
         if family is None:
