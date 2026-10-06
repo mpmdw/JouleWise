@@ -3,7 +3,9 @@ run under zsh against a fake measurement checkout (fakes only at the tools)."""
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
+import io
 import json
 import os
 import subprocess
@@ -12,8 +14,9 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
+from unittest import mock
 
-from joulewise import whole_window
+from joulewise import whole_window, window_lineage
 from joulewise.b5 import chain as b5_chain
 from joulewise.b5 import plan as b5_plan
 from joulewise.night_gate import NightPlan
@@ -399,6 +402,121 @@ class HelperTests(unittest.TestCase):
             self.assertNotEqual(0, self.run_helper(b5_chain.PRUNE_HELPER, root / "manifest.json", runs,
                                                    root / "out.json", root / "summary-2.json").returncode)
             self.assertFalse((root / "summary-2.json").exists())
+
+
+class CorePruneNeg8Tests(RenderedChainFixture):
+    """Core prune N2 (the chain half of A3) and N3: on a HAZARD bound root the corpus prune drops what
+    the core's HAZARD mint drops, and the chain no longer says a 10/11-member window still ends
+    neg8.bound_not_derived (the harvest validates it against the custodied subset)."""
+
+    def test_the_deviation_and_the_rendered_chain_no_longer_say_such_a_window_is_excluded(self):
+        deviation = next(item for item in b5_chain.DEVIATIONS if item.startswith("bound_derivation"))
+        chain_text = Path(self.plan.chain_path).read_text()
+        for text in (deviation, chain_text, b5_chain.__doc__):
+            self.assertNotIn("still ends neg8.bound_not_derived", text)
+            self.assertNotIn("still ends\n``neg8.bound_not_derived``", text)
+            self.assertNotIn("until an erratum", text)
+            self.assertNotIn("until a prospective erratum", text)
+        self.assertIn("not excluded for that reason alone", deviation)
+        self.assertIn("neg8_corpus_mint_drops", deviation)
+        self.assertIn("a selected corpus", deviation)
+        self.assertIn(deviation, chain_text)
+        self.assertIn(deviation, self.plan.hazard_window["chain_deviations"])
+        self.assertIn("# core's HAZARD mint does not drop. A pruned copy (10 or 11 of 12) derives; the", chain_text)
+
+    @staticmethod
+    def corpus(root: Path, statuses: dict, *, hazard: bool = True) -> Path:
+        manifest = {"schema_version": "joulewise.neg8_reference_corpus.v1", "corpus_id": "c",
+                    "freeze_status": "settled_reference", "condition_id": "x",
+                    "members": [{"bundle_id": name, "bundle_path": name} for name in statuses]}
+        (root / "manifest.json").write_text(json.dumps(manifest))
+        for name, status in statuses.items():
+            (root / "runs" / name).mkdir(parents=True)
+            (root / "runs" / name / "summary_metrics.json").write_text(json.dumps({"status": status}))
+        if hazard:
+            (root / "runs" / window_lineage.LOCATOR_BASENAME).write_text(
+                json.dumps({"schema_version": window_lineage.HAZARD_LOCATOR_SCHEMA}))
+        return root / "manifest.json"
+
+    @staticmethod
+    def prune_in_process(root: Path, manifest: Path, *patches) -> dict:
+        """Run the helper's own bytes in this process, so the core function can be injected."""
+        stdout = io.StringIO()
+        argv = ["-c", str(manifest), str(root / "runs"), str(root / "out.json"), str(root / "summary.json")]
+        with contextlib.ExitStack() as stack:
+            stack.enter_context(mock.patch.object(sys, "argv", argv))
+            for patch in patches:
+                stack.enter_context(patch)
+            stack.enter_context(contextlib.redirect_stdout(stdout))
+            exec(compile(b5_chain.PRUNE_HELPER, "<b5-prune-helper>", "exec"), {"__name__": "__main__"})
+        summary = json.loads((root / "summary.json").read_text())
+        assert summary == json.loads(stdout.getvalue())
+        return summary
+
+    def mint_drops(self, drops, asked):
+        def function(runs_root, manifest_path):
+            listed = json.loads(Path(manifest_path).read_bytes())["members"]
+            asked.append((Path(runs_root), [member["bundle_id"] for member in listed]))
+            if isinstance(drops, Exception):
+                raise drops
+            return drops
+        return mock.patch.object(whole_window, "neg8_corpus_mint_drops", function, create=True)
+
+    def test_on_a_hazard_root_the_members_the_mint_drops_are_left_out(self):
+        """Before: the helper kept every member that succeeded, so the mint bound its bound to a
+        manifest the helper never wrote and the harvest saw a selected corpus."""
+        root = self.root / "drops"
+        root.mkdir()
+        statuses = {"a": "succeeded", "b": "succeeded", "c": "failed", "d": "succeeded"}
+        manifest = self.corpus(root, statuses)
+        asked: list = []
+        summary = self.prune_in_process(
+            root, manifest, self.mint_drops([{"bundle_id": "b", "reason": "not_current_strict_mint"}], asked))
+        self.assertEqual(summary["mint_rule"], "joulewise.whole_window.neg8_corpus_mint_drops")
+        # Asked once, on the bound root, over the members that succeeded (the manifest the mint will read).
+        self.assertEqual(asked, [(root / "runs", ["a", "b", "d"])])
+        self.assertEqual(summary["kept_bundle_ids"], ["a", "d"])
+        self.assertEqual(summary["dropped"], [{"bundle_id": "b", "status": "succeeded",
+                                               "mint_drop": "not_current_strict_mint"},
+                                              {"bundle_id": "c", "status": "failed"}])
+        # The bytes are the HAZARD mint's rendering of the manifest without the dropped members.
+        value = json.loads(manifest.read_bytes())
+        value["members"] = [member for member in value["members"] if member["bundle_id"] in ("a", "d")]
+        self.assertEqual((root / "out.json").read_bytes(),
+                         (json.dumps(value, indent=2, sort_keys=True) + "\n").encode("utf-8"))
+
+    def test_all_succeeded_the_mint_reads_the_committed_manifest(self):
+        root = self.root / "all"
+        root.mkdir()
+        manifest = self.corpus(root, {"a": "succeeded", "b": "succeeded"})
+        asked: list = []
+        summary = self.prune_in_process(root, manifest, self.mint_drops([], asked))
+        self.assertEqual(asked, [(root / "runs", ["a", "b"])])
+        self.assertTrue(summary["identical_to_committed"])
+        self.assertEqual((root / "out.json").read_bytes(), manifest.read_bytes())
+
+    def test_otherwise_the_rule_is_status_only(self):
+        """Keeper: a raising mint, a core without the function, or a root that is not HAZARD drops nothing more."""
+        drop_b = [{"bundle_id": "b", "reason": "not_current_strict_mint"}]
+        for name, hazard, patch, rule in (
+                ("raises", True, lambda asked: self.mint_drops(ValueError("split evenly"), asked), "raised: ValueError"),
+                ("absent", True,
+                 lambda asked: mock.patch.object(whole_window, "neg8_corpus_mint_drops", None, create=True),
+                 "unavailable: whole_window.neg8_corpus_mint_drops"),
+                ("not_hazard", False, lambda asked: self.mint_drops(drop_b, asked), "not_hazard"),
+                ("no_core", True, lambda asked: mock.patch.dict(sys.modules, {"joulewise.whole_window": None}),
+                 "unavailable: ModuleNotFoundError")):
+            with self.subTest(name):
+                root = self.root / name
+                root.mkdir()
+                manifest = self.corpus(root, {"a": "succeeded", "b": "succeeded", "c": "failed"}, hazard=hazard)
+                asked: list = []
+                summary = self.prune_in_process(root, manifest, patch(asked))
+                self.assertEqual(summary["mint_rule"], rule)
+                self.assertEqual((summary["kept_bundle_ids"], summary["dropped"]),
+                                 (["a", "b"], [{"bundle_id": "c", "status": "failed"}]))
+                if name == "not_hazard":
+                    self.assertEqual(asked, [])
 
 
 if __name__ == "__main__":

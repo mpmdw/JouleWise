@@ -72,6 +72,24 @@
       "family": "CALIBRATION",
       "klass": "PHYSICS"
     },
+    "calibration.capture_battery_pair_unverified": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "CALIBRATION",
+      "klass": "PHYSICS"
+    },
+    "calibration.capture_battery_span": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_WINDOW",
+      "family": "CALIBRATION",
+      "klass": "PHYSICS"
+    },
+    "calibration.capture_battery_unmeasured": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_WINDOW",
+      "family": "CALIBRATION",
+      "klass": "PHYSICS"
+    },
     "calibration.capture_invalid": {
       "blinding": "STRUCTURE",
       "effect": "EXCLUDE_WINDOW",
@@ -90,11 +108,29 @@
       "family": "CALIBRATION",
       "klass": "NUMBER"
     },
+    "calibration.power_policy_unverified": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "CALIBRATION",
+      "klass": "REPRESENTATION"
+    },
     "calibration.session_not_bound": {
       "blinding": "STRUCTURE",
       "effect": "EXCLUDE_WINDOW",
       "family": "CALIBRATION",
       "klass": "NUMBER"
+    },
+    "calibration.writer_record_flagged": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "CALIBRATION",
+      "klass": "REPRESENTATION"
+    },
+    "campaign.runner_record_flagged": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "RECORDS",
+      "klass": "REPRESENTATION"
     },
     "clock.frequency_changed": {
       "blinding": "STRUCTURE",
@@ -162,6 +198,12 @@
       "family": "PHYSICS_IN_SPAN",
       "klass": "PHYSICS"
     },
+    "cooldown.result_unknown": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "PHYSICS"
+    },
     "diagnostic.s1_structural": {
       "blinding": "STRUCTURE",
       "effect": "DISCLOSE",
@@ -173,6 +215,24 @@
       "effect": "DISCLOSE",
       "family": "DIAGNOSTIC",
       "klass": "PHYSICS"
+    },
+    "env.member_guard_flagged": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "REPRESENTATION"
+    },
+    "env.member_quiet_state_violated": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_MEMBER",
+      "family": "MEMBER_VALIDITY",
+      "klass": "PHYSICS"
+    },
+    "env.stage_preflight_not_admitted": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "REPRESENTATION"
     },
     "g3.assertion_failed": {
       "blinding": "STRUCTURE",
@@ -190,6 +250,12 @@
       "blinding": "STRUCTURE",
       "effect": "EXCLUDE_WINDOW",
       "family": "NEG8",
+      "klass": "NUMBER"
+    },
+    "instrument.binary_identity_unmeasured": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_MEMBER",
+      "family": "INSTRUMENT",
       "klass": "NUMBER"
     },
     "instrument.cadence_ratio_below_threshold": {
@@ -360,6 +426,12 @@
       "family": "MEMBER_VALIDITY",
       "klass": "NUMBER"
     },
+    "member.idle_admission_telemetry_missing": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_MEMBER",
+      "family": "MEMBER_VALIDITY",
+      "klass": "PHYSICS"
+    },
     "member.idle_window_suspect": {
       "blinding": "STRUCTURE",
       "effect": "EXCLUDE_MEMBER",
@@ -438,6 +510,12 @@
       "family": "NEG8",
       "klass": "NUMBER"
     },
+    "neg8.corpus_member_dropped": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "NEG8",
+      "klass": "REPRESENTATION"
+    },
     "neg8.screen_failed": {
       "blinding": "STRUCTURE",
       "effect": "EXCLUDE_WINDOW",
@@ -475,6 +553,12 @@
       "klass": "REPRESENTATION"
     },
     "records.monitor_line_malformed": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "RECORDS",
+      "klass": "REPRESENTATION"
+    },
+    "records.pin_ledger": {
       "blinding": "STRUCTURE",
       "effect": "DISCLOSE",
       "family": "RECORDS",
@@ -522,6 +606,12 @@
       "family": "ROSTER",
       "klass": "REPRESENTATION"
     },
+    "teardown.survivors": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "PHYSICS"
+    },
     "thermal.os_level_nonzero": {
       "blinding": "STRUCTURE",
       "effect": "EXCLUDE_MEMBER",
@@ -542,7 +632,7 @@
     },
     "whole_window.not_passed": {
       "blinding": "STRUCTURE",
-      "effect": "EXCLUDE_WINDOW",
+      "effect": "DISCLOSE",
       "family": "NEG8",
       "klass": "NUMBER"
     },
@@ -565,7 +655,7 @@
       "klass": "REPRESENTATION"
     }
   },
-  "notes": "TEST catalog for tests/test_harvest_b5_window.py, not the sealed one (lane L6 seals configs/campaigns/v5_claim_25g83/flag_catalog.json). Codes L4's draft names carry L4's draft effect; the codes in harvest.L5_ONLY_CODES carry an effect drafted from gate-prune plan section 3.5. records.malformed_flag is deliberately absent: it must stay UNCLASSIFIED.",
+  "notes": "TEST catalog for tests/test_harvest_b5_window.py, not the sealed one (lane L6 seals configs/campaigns/v5_claim_25g83/flag_catalog.json). Codes L4's draft names carry L4's draft effect; the codes in harvest.L5_ONLY_CODES carry an effect drafted from gate-prune plan section 3.5. records.malformed_flag is deliberately absent: it must stay UNCLASSIFIED. whole_window.not_passed is DISCLOSE, as in L4's draft and the block-5 draft catalog (revision 3): one member's failure fails the aggregate verdict (core-prune N5). The gate-prune core-prune codes (joulewise.flags.core.CORE_FLAG_CODES and the harvest's N2 and N7 codes) carry L4's draft classification.",
   "rules": {
     "cell_unit_minimum": 8
   },
