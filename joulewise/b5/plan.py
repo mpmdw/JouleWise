@@ -21,8 +21,9 @@ from a committed sizing output in the measurement checkout. The writer:
    ledger whose physical head is not the committed pin (or whose pin is not
    committed, or that holds an open bracket session), because the chain's
    reservation would refuse it at exit 10 after the whole arm. The cure is
-   the desk pin advance after each harvest (:func:`advance_ledger_pin`,
-   ``scripts/advance_b5_ledger_pin.py``);
+   the desk pin advance after each window's chain exits, before its harvest
+   (:func:`advance_ledger_pin`, ``scripts/advance_b5_ledger_pin.py``;
+   registration 11: chain exit, pin advance, harvest);
 3. creates the claim and bound runs roots with an exclusive mkdir, so a
    leftover root from an earlier attempt can never be reused (memo 1.17);
 4. writes ``window.env`` from the 25-key allowlist, the chain and its GNU
@@ -443,14 +444,19 @@ def ledger_head_refusal(status: Mapping[str, Any], measurement: Path) -> str:
     """The desk refusal for a ledger the reservation would refuse, naming the step that cures it."""
 
     physical, pinned = status.get("physical") or {}, status.get("pinned") or {}
-    cure = (f"run the desk pin advance for the last harvested window: python {PIN_ADVANCE_SCRIPT} --plan "
-            "<that window's night_plan.json> --harvest-archive <its harvest archive> --operator-identity <id> "
-            "(recover_calibration_ledger.py advance-head-pin --session-id <its bracket session> "
-            "--expected-sequence/--expected-digest <terminal pin> --execute, then a pin-only commit of "
-            f"{HEAD_PIN_RELATIVE}, registration section 11 item 1(i))")
+    # The desk order is chain exit, pin advance, harvest (registration 11), so
+    # the advance reads the session's terminal head from the ledger and needs
+    # no harvest archive; a window that stopped before its post-calibration
+    # has none to offer either (its harvest writes no derived/terminal-pin.json).
+    cure = (f"run the desk pin advance for the last window that ran: python {PIN_ADVANCE_SCRIPT} --plan "
+            "<that window's night_plan.json> --operator-identity <id>, which reads its bracket session's "
+            "terminal head from the ledger (recover_calibration_ledger.py advance-head-pin --session-id "
+            "<its bracket session> --expected-sequence/--expected-digest <terminal pin> --execute, then a "
+            f"pin-only commit of {HEAD_PIN_RELATIVE}, registration section 11 item 1(i)), before that "
+            "window's harvest")
     if "calibration_ledger_bracket_session_open" in status.get("blocking", ()):
-        cure = ("abort or finalize the open bracket session first (recover_calibration_ledger.py abort-session), "
-                "then " + cure)
+        cure = ("abort the open bracket session first (recover_calibration_ledger.py abort-session; a chain "
+                "that stopped before its post-calibration leaves it open), then " + cure)
     return (f"the measurement checkout's calibration ledger cannot be reserved: {', '.join(status['blocking'])} "
             f"(physical head sequence {physical.get('sequence')}, committed pin sequence "
             f"{pinned.get('sequence')}, checkout {measurement}); the chain's reservation would refuse it at "
@@ -460,14 +466,19 @@ def ledger_head_refusal(status: Mapping[str, Any], measurement: Path) -> str:
 def advance_ledger_pin(measurement: Path | str, *, session_id: str, operator_identity: str,
                        attestation_reason: str, expected_pin: Mapping[str, Any] | None = None,
                        commit: bool = True, git: str = "git") -> dict[str, Any]:
-    """The desk step between a window's harvest and the next plan: advance and commit the ledger pin.
+    """The desk step between a window's chain exit and its harvest: advance and commit the ledger pin.
 
-    1. The terminal head of ``session_id`` (the harvested window's bracket
-       session) is read from the measurement checkout's ledger
-       (``calibration_ledger.terminal_head_pin_for_session``); when the
-       harvest's ``derived/terminal-pin.json`` is given as ``expected_pin``,
-       the two must agree, so the pin advances only to the head the harvest
-       archived.
+    The window's post-calibration (or an abort of its bracket session) moved
+    the ledger past the committed pin.  The harvest's desk verdict reads the
+    ledger through the committed pin, and so does the next window's
+    reservation, so the advance comes first (registration 11: chain exit, pin
+    advance, harvest).
+
+    1. The terminal head of ``session_id`` (the window's bracket session) is
+       read from the measurement checkout's ledger
+       (``calibration_ledger.terminal_head_pin_for_session``); when an
+       ``expected_pin`` is given (an earlier harvest's
+       ``derived/terminal-pin.json``), the two must agree.
     2. ``calibration_ledger.advance_calibration_head_pin`` (the guarded
        ``recover_calibration_ledger.py advance-head-pin`` path) writes the pin.
     3. A pin-only commit of ``configs/calibration/calibration_ledger_head.json``

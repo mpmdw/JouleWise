@@ -940,6 +940,68 @@ class CheckWindowProvenanceTests(unittest.TestCase):
             self.assertEqual(self._fail_ids(output), ["F5-2", "F5-3"], output)
             self.assertIn("not the expected mismatch shape", output)
 
+    def test_block5_desk_order_advanced_pin_passes_with_expected_pin_relation_equal(self) -> None:
+        """Rehearsal round 2, R2-1: block 5 advances the pin before the harvest (registration 11).
+
+        Its terminal boundary records the committed pin equal to the session's
+        terminal head and no refusal.  With --expected-pin-relation equal that
+        shape passes and the R-6 physical-ahead shape is refused; without the
+        option the R-6 shape alone is accepted, as before.
+        """
+        with tempfile.TemporaryDirectory(dir=_REAL_TMP) as tmp:
+            fixture = _install_s11_checker_fixture(Path(tmp))
+            record = json.loads(fixture["terminal_boundary_record"].read_text())
+            r6 = dict(record)
+            record.update(pin_relation="equal", refusal_code=None, committed_pin_refusal_reasons=[])
+            _write_json(fixture["terminal_boundary_record"], record)
+            code, output = _run([*_normal_argv(fixture), "--expected-pin-relation", "equal"])
+            self.assertEqual(code, 0, output)
+            self.assertIn("boundary=equal", output)
+            self.assertEqual(self._fail_ids(output), [], output)
+            # The same record under the default (R-6) expectation is a premature advance.
+            code, output = _run(_normal_argv(fixture))
+            self.assertEqual(self._fail_ids(output), ["F5-2", "F5-3"], output)
+            # A committed snapshot that refused something is not the advanced-pin shape.
+            record["committed_pin_refusal_reasons"] = ["calibration_ledger_head_uncommitted"]
+            _write_json(fixture["terminal_boundary_record"], record)
+            code, output = _run([*_normal_argv(fixture), "--expected-pin-relation", "equal"])
+            self.assertEqual(self._fail_ids(output), ["F5-2", "F5-3"], output)
+            # The R-6 shape is refused when the block-5 order is expected.
+            _write_json(fixture["terminal_boundary_record"], r6)
+            code, output = _run([*_normal_argv(fixture), "--expected-pin-relation", "equal"])
+            self.assertEqual(self._fail_ids(output), ["F5-2", "F5-3"], output)
+            self.assertIn("not the expected advanced-pin shape", output)
+
+    def test_f5_4_resolves_membership_with_the_desk_membership_binding(self) -> None:
+        """Rehearsal round 2, R2-2a: F5-4 resolves membership as the verdict writer did, with its binding."""
+        with tempfile.TemporaryDirectory(dir=_REAL_TMP) as tmp:
+            fixture = _install_s11_checker_fixture(Path(tmp))
+            policy = (Path(__file__).resolve().parents[1] / "configs" / "campaign_policies"
+                      / "quiet_mac_p2_production.json")
+            policy_sha = hashlib.sha256(policy.read_bytes()).hexdigest()
+            binding = fixture["root"] / "window-membership-binding.json"
+            # No manifest in this window lacks an analysis-manifest identity: the exhaustive binding is empty.
+            _write_json(binding, {"schema_version": "joulewise.whole_window_membership_binding.v1",
+                                  "campaign_policy_sha256": policy_sha, "source_campaign_manifests": [],
+                                  "membership_id": run_campaign_module.whole_window_membership_id([])})
+            import scripts.run_campaign as checker_run_campaign  # the module F5-4 imports from
+
+            real = checker_run_campaign._whole_window_campaign_membership
+            with mock.patch.object(checker_run_campaign, "_whole_window_campaign_membership",
+                                   side_effect=real) as resolver:
+                code, output = _run([*_normal_argv(fixture), "--window-membership-binding", str(binding)])
+            self.assertEqual(code, 0, output)
+            self.assertIn("PASS F5-4 ", output)
+            self.assertEqual(resolver.call_args.kwargs["membership_binding_path"], binding)
+            # A binding that is not exhaustive refuses the catalog, so F5-4 fails: the binding is read.
+            _write_json(binding, {"schema_version": "joulewise.whole_window_membership_binding.v1",
+                                  "campaign_policy_sha256": policy_sha,
+                                  "source_campaign_manifests": [{"path": "x.json", "sha256": "0" * 64, "size": 1}],
+                                  "membership_id": "0" * 64})
+            code, output = _run([*_normal_argv(fixture), "--window-membership-binding", str(binding)])
+            self.assertEqual(self._fail_ids(output), ["F5-4"], output)
+            self.assertIn("whole-window membership refused", output)
+
     def test_missing_terminal_candidate_fails_f5_2_and_f5_3(self) -> None:
         with tempfile.TemporaryDirectory(dir=_REAL_TMP) as tmp:
             fixture = _install_s11_checker_fixture(Path(tmp))

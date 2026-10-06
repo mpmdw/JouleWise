@@ -1247,6 +1247,7 @@ class ReadinessAndNullTests(WindowTestCase):
 class DeskAndG3Tests(WindowTestCase):
     def test_prepare_desk_runs_the_production_writer_and_guards_sources(self):
         window = self.window(prefix_ledger=True)
+        advance_pin(window)  # the desk order: chain exit, pin advance, harvest (registration 11)
         calls = []
 
         def runner(argv, **kwargs):
@@ -3153,11 +3154,33 @@ def desk_seams(runner):
     return h.Seams(group_alive=lambda pgid: False, exclusions_compute=EXCLUSIONS, runner=runner)
 
 
+def commit_checkout(window: "Window") -> None:
+    """Make the fixture's measurement checkout a git checkout with its pin committed (as H_claim has it)."""
+    git = ["git", "-C", str(window.measurement)]
+    if (window.measurement / ".git").exists():
+        return
+    subprocess.run([*git, "init", "-q"], check=True)
+    for key, value in (("user.name", "fixture"), ("user.email", "fixture@example.invalid"),
+                       ("commit.gpgsign", "false")):
+        subprocess.run([*git, "config", "--local", key, value], check=True)
+    subprocess.run([*git, "add", "-A"], check=True)
+    subprocess.run([*git, "commit", "-q", "-m", "fixture measurement checkout"], check=True)
+
+
+def advance_pin(window: "Window", *, commit: bool = True) -> dict:
+    """The real desk pin advance between chain exit and harvest (registration 11), on the fixture checkout."""
+    from joulewise.b5 import plan as b5_plan
+    commit_checkout(window)
+    return b5_plan.advance_ledger_pin(window.measurement, session_id=SESSION_ID, operator_identity="test",
+                                      attestation_reason="test", commit=commit)
+
+
 class CampaignLockAllowlistTests(WindowTestCase):
     """N4 (sweep V3, harvest half): the producer's own lock is campaign.lock, not .campaign.lock."""
 
     def test_a_stale_lock_the_producer_clears_is_not_a_source_change(self):
         window = self.window(prefix_ledger=True)
+        advance_pin(window)
         (window.claim / "campaign.lock").write_text('pid=999999 start_time="stale"\n')
 
         def runner(argv, **kwargs):
@@ -3173,6 +3196,7 @@ class CampaignLockAllowlistTests(WindowTestCase):
 
     def test_any_other_change_is_still_a_source_change(self):
         window = self.window(prefix_ledger=True)
+        advance_pin(window)
 
         def runner(argv, **kwargs):
             runs = Path(argv[argv.index("--runs-dir") + 1])
@@ -3347,6 +3371,7 @@ class UnwrittenCoreFlagTests(WindowTestCase):
 
     def test_a_marker_line_in_the_desk_transcript_is_recovered(self):
         window = self.window(prefix_ledger=True)
+        advance_pin(window)
         line = self.unwritten_line("campaign.runner_record_flagged", level="window",
                                    observed={"kind": "stale_lock_cleared"})
 
@@ -3591,6 +3616,304 @@ class Neg8MintIntegrationTests(WindowTestCase):
         dropped = [flag["observed"] for flag in window.flags() if flag["code"] == "neg8.corpus_member_dropped"]
         self.assertEqual(dropped, [{"bundle_id": self.OMITTED, "reason": "not_current_strict_mint"}])
         self.assertNotIn("neg8.bound_not_derived", window.codes())
+
+
+# ---------------------------------------------------------------------------
+# Rehearsal round 2 (night-archive gate-prune/rehearsal-r2): the desk order
+# (R2-1), the window membership binding (R2-2a), G10's result (R2-3) and the
+# desk producers' diagnostics (R2-4).
+# ---------------------------------------------------------------------------
+
+def verdict_runner(calls: list, *, returncode=1, stdout="", stderr="", probe=None):
+    """The desk verdict writer's seam: records its argv and writes a verdict file and one log row."""
+    def runner(argv, **kwargs):
+        calls.append(list(argv))
+        if "--whole-window-verdict" in argv:
+            if probe is not None:
+                probe(argv)
+            runs = Path(argv[argv.index("--runs-dir") + 1])
+            (runs / "whole-window-verdict.json").write_text('{"status":"failed"}\n')
+            with (runs / "campaign_log.jsonl").open("a") as log:
+                log.write('{"status":"failed"}\n')
+        return SimpleNamespace(returncode=returncode, stdout=stdout, stderr=stderr)
+    return runner
+
+
+def desk_flags(window: "Window", step: str) -> list[dict]:
+    return [flag["observed"] for flag in window.flags()
+            if flag["code"] == "whole_window.producer_failed" and flag["observed"].get("step") == step]
+
+
+class DeskOrderTests(WindowTestCase):
+    """R2-1: the desk order is chain exit, pin advance, harvest; the desk verdict needs the advanced pin.
+
+    The window's post-calibration moved the ledger past the committed pin.  A
+    verdict written then fails its bracket on calibration_ledger_head_mismatch
+    (and never reaches the lineage check), and its row stays in the append-only
+    campaign log.  The real ledger, the real snapshot and the real desk pin
+    advance (git commit included) run here; only the writer is the seam.
+    """
+
+    def test_a_pin_behind_the_terminal_head_writes_no_verdict_and_the_advance_cures_it(self):
+        window = self.window(prefix_ledger=True)
+        commit_checkout(window)  # the pin committed where the window armed: behind its post-calibration
+        calls: list = []
+        window.harvest(seams=desk_seams(verdict_runner(calls)), prepare_desk=True, run_g3=False)
+        self.assertEqual([argv for argv in calls if "--whole-window-verdict" in argv], [])
+        (problem,) = desk_flags(window, "head_pin")
+        self.assertEqual(problem["reason"], "pin_behind")
+        self.assertLess(problem["committed_sequence"], problem["terminal_sequence"])
+        self.assertIn("calibration_ledger_head_mismatch", problem["ledger_reasons"])
+        # Nothing the writer owns was written, so a re-harvest after the advance starts clean.
+        for name in ("bracket-binding.json", "campaign_log.jsonl", "whole-window-verdict.json"):
+            self.assertFalse((window.claim / name).exists(), name)
+        self.assertIn("whole_window.verdict_absent", window.exclusions()["reasons"])
+        # The cure: the desk pin advance, then the harvest again.
+        self.assertEqual(advance_pin(window)["status"], "ADVANCED")
+        window.archive = window.root / "archive-after-advance"
+        window.harvest(seams=desk_seams(verdict_runner(calls)), prepare_desk=True, run_g3=False)
+        (argv,) = [argv for argv in calls if "--whole-window-verdict" in argv]
+        self.assertEqual(argv[argv.index("--head-pin") + 1], str(window.pin))
+        self.assertEqual(desk_flags(window, "head_pin"), [])
+        boundary = json.loads((window.archive / "derived" / "terminal-boundary.json").read_bytes())
+        self.assertEqual((boundary["pin_relation"], boundary["refusal_code"], boundary["committed_pin_refusal_reasons"]),
+                         ("equal", None, []))
+        self.assertEqual(json.loads(window.pin.read_bytes())["sequence"],
+                         boundary["terminal_head_pin_candidate"]["sequence"])
+
+    def test_an_advance_without_its_pin_only_commit_writes_no_verdict(self):
+        window = self.window(prefix_ledger=True)
+        self.assertEqual(advance_pin(window, commit=False)["status"], "ADVANCED_UNCOMMITTED")
+        calls: list = []
+        window.harvest(seams=desk_seams(verdict_runner(calls)), prepare_desk=True, run_g3=False)
+        self.assertEqual([argv for argv in calls if "--whole-window-verdict" in argv], [])
+        (problem,) = desk_flags(window, "head_pin")
+        self.assertEqual((problem["reason"], problem["ledger_reasons"]),
+                         ("pin_uncommitted", ["calibration_ledger_head_uncommitted"]))
+
+    def test_a_hazard_window_asks_g3_for_the_advanced_pin_boundary_and_the_desk_binding(self):
+        window = Window(self.tmp / "g3-r2", prefix_ledger=True, catalog_overrides=self.ISOLATE)
+        (window.pack / "analysis_manifest_v3.json").write_text("{}\n")
+        (window.claim / "whole-window-verdict.json").write_text("{}\n")
+        (window.claim / "bracket-binding.json").write_text("{}\n")
+        (window.claim / h.MEMBERSHIP_BINDING_NAME).write_text("{}\n")
+        calls: list = []
+
+        def runner(argv, **kwargs):
+            calls.append(list(argv))
+            Path(argv[argv.index("--report-json") + 1]).write_text(json.dumps({"assertions": []}))
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+        window.harvest(seams=desk_seams(runner))
+        (argv,) = [argv for argv in calls if "--report-json" in argv]
+        self.assertEqual(argv[argv.index("--expected-pin-relation") + 1], "equal")
+        self.assertEqual(argv[argv.index("--window-membership-binding") + 1],
+                         str(window.claim / h.MEMBERSHIP_BINDING_NAME))
+        from scripts import check_window_provenance as checker
+        parsed_args = checker.build_parser().parse_args(argv[3:])  # [python, -B, script, ...]
+        self.assertEqual(parsed_args.expected_pin_relation, "equal")
+
+
+class MembershipBindingTests(WindowTestCase):
+    """R2-2a: a floor pack's manifests carry no analysis-manifest identity; the verdict writer needs a binding.
+
+    The probe is the production resolver (run_campaign._whole_window_campaign_membership), called the way the
+    verdict writer calls it, with the argv the harvest gave the writer.
+    """
+
+    REFERENCES = ("neg8-window-start-r1", "neg8-window-end-r1")
+
+    def manifests(self, window: "Window", identities: dict[str, str | None]) -> str:
+        """Campaign manifests in the claim root, one per name: members plus a start and an end reference."""
+        from scripts import run_campaign
+        policy_sha = sha(window.measurement / POLICY)
+        for bundle_id in self.REFERENCES:
+            put(window.claim / bundle_id / "config.json", {"run_id": bundle_id})
+            put(window.claim / bundle_id / "summary_metrics.json", {"status": "succeeded"})
+        science = [{"config": f"{row[0]}.json", "run_id": row[0], "execution": "invoked", "bundle_ids": [row[0]],
+                    "role": row[1], "sentinel_position": None, "canonical_neg8_workload": False} for row in MEMBERS]
+        references = [{"config": f"{bundle_id}.json", "run_id": bundle_id, "execution": "invoked",
+                       "bundle_ids": [bundle_id], "role": run_campaign.NEG8_REFERENCE_ROLE,
+                       "sentinel_position": position, "canonical_neg8_workload": True}
+                      for bundle_id, position in zip(self.REFERENCES, ("start", "end"))]
+        members = {"science": science, "references": references}
+        for name, identity in identities.items():
+            put(window.claim / "campaign_manifests" / f"{name}.json",
+                {"schema_version": "joulewise.campaign_provenance.v1", "analysis_manifest_id": identity,
+                 "campaign_policy": {"sha256": policy_sha}, "members": members[name]})
+        return policy_sha
+
+    def harvest_with_probe(self, window: "Window", policy_sha: str) -> tuple[list, list]:
+        from scripts import run_campaign
+        calls, resolved = [], []
+
+        def probe(argv):
+            runs = Path(argv[argv.index("--runs-dir") + 1])
+            binding = argv[argv.index("--window-membership-binding") + 1] \
+                if "--window-membership-binding" in argv else None
+            resolution = run_campaign._whole_window_campaign_membership(
+                runs, policy_sha, Path(argv[argv.index("--log") + 1]), membership_binding_path=binding)
+            resolved.append((binding, tuple(resolution.conditions),
+                             sorted(source.run_id or source.path.name for source in resolution.sources)))
+
+        advance_pin(window)
+        window.harvest(seams=desk_seams(verdict_runner(calls, probe=probe)), prepare_desk=True, run_g3=False)
+        return calls, resolved
+
+    def test_the_desk_binds_a_null_identity_window_and_the_writer_resolves_it(self):
+        window = self.window(prefix_ledger=True)
+        policy_sha = self.manifests(window, {"science": None, "references": None})
+        _calls, resolved = self.harvest_with_probe(window, policy_sha)
+        ((binding, conditions, members),) = resolved
+        self.assertEqual(conditions, ())  # without a binding: whole_window_campaign_membership_unresolved
+        self.assertEqual(members, sorted([row[0] for row in MEMBERS] + list(self.REFERENCES)))
+        target = window.claim / h.MEMBERSHIP_BINDING_NAME
+        self.assertEqual(binding, str(target))
+        value = json.loads(target.read_bytes())
+        self.assertEqual((value["schema_version"], value["campaign_policy_sha256"]),
+                         ("joulewise.whole_window_membership_binding.v1", policy_sha))
+        self.assertEqual([row["path"] for row in value["source_campaign_manifests"]],
+                         ["campaign_manifests/references.json", "campaign_manifests/science.json"])
+        # Archived with the claim root; the writer's own changes are not source changes.
+        archived = window.archive / "sources" / "night-custody" / window.claim.relative_to(window.custody)
+        self.assertEqual((archived / h.MEMBERSHIP_BINDING_NAME).read_bytes(), target.read_bytes())
+        self.assertNotIn("records.source_changed_during_harvest", window.codes())
+        self.assertEqual(desk_flags(window, "membership_binding"), [])
+
+    def test_a_window_the_resolver_groups_by_its_analysis_manifest_gets_no_binding(self):
+        window = self.window(prefix_ledger=True)
+        policy_sha = self.manifests(window, {"references": "am-window"})
+        _calls, resolved = self.harvest_with_probe(window, policy_sha)
+        ((binding, conditions, _members),) = resolved
+        self.assertEqual((binding, conditions), (None, ()))
+        self.assertFalse((window.claim / h.MEMBERSHIP_BINDING_NAME).exists())
+        self.assertEqual(desk_flags(window, "membership_binding"), [])
+
+    def test_a_mixed_identity_window_is_not_bound_to_its_references_alone(self):
+        """GAMMA's shape (R2-2b, a core or pack decision): a binding would make the verdict cover the references only."""
+        window = self.window(prefix_ledger=True)
+        policy_sha = self.manifests(window, {"science": "am-gamma", "references": None})
+        _calls, resolved = self.harvest_with_probe(window, policy_sha)
+        ((binding, conditions, _members),) = resolved
+        self.assertIsNone(binding)
+        self.assertIn("whole_window_campaign_membership_unresolved", conditions)
+        self.assertFalse((window.claim / h.MEMBERSHIP_BINDING_NAME).exists())
+        (problem,) = desk_flags(window, "membership_binding")
+        self.assertEqual((problem["reason"], problem["identities"], problem["null_identity_manifests"]),
+                         ("mixed_analysis_identity", ["am-gamma"], 1))
+
+
+class G10ResultTests(WindowTestCase):
+    """R2-3: G10's result reaches the window's flags (the catalog's g10.* codes, disclosed)."""
+
+    def request_g10(self, window: "Window") -> Path:
+        plan = json.loads(window.plan_path.read_bytes())
+        plan["hazard_window"]["g10"] = True
+        put(window.plan_path, plan)
+        return window.custody / "night"
+
+    def run_g10(self, night: Path, result: str | None, *, off_ok=True, returncode=0, flag_code=None) -> None:
+        """The driver's real _run_g10 around a G10 process that writes its record as the script renders it."""
+        from joulewise.b5 import driver as b5_driver
+        from scripts import g10_clock_step_control as g10
+
+        def popen(argv, **kwargs):
+            if result is not None:
+                record = {"schema": g10.SCHEMA, "result": result, "off_ok": off_ok, "verdict": None,
+                          "flag_code": flag_code or g10.FLAG_CODES[result]}
+                (night / g10.RECORD_BASENAME).write_bytes(g10.render(record))
+            return SimpleNamespace(pid=999_999, wait=lambda timeout=None: returncode)
+
+        notes: list = []
+        window = SimpleNamespace(seams=SimpleNamespace(g10_argv=lambda night_dir, t: ["g10"], popen=popen),
+                                 note=notes.append)
+        b5_driver._run_g10(window, night, 335.0)
+        self.assertEqual(notes, [])
+
+    def g10_flags(self, window: "Window") -> list[tuple[str, dict]]:
+        return [(flag["code"], flag["observed"]) for flag in window.flags() if flag["code"].startswith("g10.")]
+
+    def test_the_result_codes_are_the_scripts(self):
+        from scripts import g10_clock_step_control as g10
+        self.assertEqual(h.G10_RESULT_CODES, g10.FLAG_CODES)
+        self.assertEqual((h.G10_RECORD_NAME, h.G10_DRIVER_RECORD_NAME), (g10.RECORD_BASENAME, "g10.driver.json"))
+
+    def test_each_result_is_emitted_with_its_code(self):
+        for result in ("DISCHARGED", "NOT_DISCHARGED", "UNMEASURED", "INTERRUPTED", "ERROR"):
+            with self.subTest(result):
+                window = Window(self.tmp / f"g10-{result}", catalog_overrides=self.ISOLATE)
+                self.run_g10(self.request_g10(window), result, returncode=0 if result != "INTERRUPTED" else 143)
+                window.harvest()
+                ((code, observed),) = self.g10_flags(window)
+                self.assertEqual(code, h.G10_RESULT_CODES[result])
+                self.assertEqual(observed, {"result": result, "off_ok": True,
+                                            "returncode": 0 if result != "INTERRUPTED" else 143,
+                                            "timed_out": False, "record": "present", "requested": True})
+                self.assertNotIn(code, window.exclusions()["reasons"])  # disclosed
+
+    def test_a_requested_g10_without_a_consistent_record_is_g10_error(self):
+        window = Window(self.tmp / "g10-skipped", catalog_overrides=self.ISOLATE)
+        night = self.request_g10(window)
+        # The driver did not run G10 (joulewise.b5.driver, step 7): its reason is in hazard_result.json.
+        put(night / "hazard_result.json", {"schema": "joulewise.b5_hazard_night.v1",
+                                           "g10": {"ran": False, "requested": True,
+                                                   "reason": "chain stopped by the driver"}})
+        window.harvest()
+        ((code, observed),) = self.g10_flags(window)
+        self.assertEqual(code, "g10.error")
+        self.assertEqual((observed["record"], observed["ran"], observed["driver_reason"], observed["result"]),
+                         ("absent", False, "chain stopped by the driver", None))
+        # A record whose code is not its result's code is not trusted either.
+        window = Window(self.tmp / "g10-inconsistent", catalog_overrides=self.ISOLATE)
+        self.run_g10(self.request_g10(window), "NOT_DISCHARGED", flag_code="g10.discharged")
+        window.harvest()
+        ((code, observed),) = self.g10_flags(window)
+        self.assertEqual((code, observed["record"], observed["result"]), ("g10.error", "inconsistent", "NOT_DISCHARGED"))
+
+    def test_an_unrequested_g10_emits_nothing(self):
+        window = self.window()
+        window.harvest()
+        self.assertEqual(self.g10_flags(window), [])
+
+
+class DeskDiagnosticsTests(WindowTestCase):
+    """R2-4: a failed desk producer is diagnosable from the archive alone."""
+
+    LINEAGE = "error: launch_lineage_conflict: window members do not carry one identical authenticated lineage\n"
+
+    def test_the_verdict_writers_refusal_is_kept_and_named(self):
+        window = self.window(prefix_ledger=True)
+        advance_pin(window)
+        calls: list = []
+        window.harvest(seams=desk_seams(verdict_runner(calls, returncode=2, stdout="", stderr=self.LINEAGE)),
+                       prepare_desk=True, run_g3=False)
+        self.assertEqual((window.archive / "withheld" / "transcripts" / "desk-verdict.txt").read_text(), self.LINEAGE)
+        (problem,) = desk_flags(window, "whole_window_verdict")
+        self.assertEqual(problem, {"step": "whole_window_verdict", "returncode": 2,
+                                   "error_code": "launch_lineage_conflict",
+                                   "error_line": "launch_lineage_conflict: window members do not carry one "
+                                                 "identical authenticated lineage"})
+
+    def test_numbers_stay_in_the_withheld_transcript(self):
+        self.assertEqual(h._first_error("progress 3/4\nerror: neg8_bound_invalid: bound 12.5 J above 1e-3 J\n"),
+                         {"error_code": "neg8_bound_invalid", "error_line": "neg8_bound_invalid: bound # J above # J"})
+        self.assertEqual(h._first_error("Traceback (most recent call last):\n  x\nValueError: drift 0.25\n"),
+                         {"error_code": None, "error_line": "ValueError: drift #"})
+        self.assertEqual(h._first_error(""), {"error_code": None, "error_line": None})
+
+    def test_the_bracket_binding_producers_error_is_kept(self):
+        from joulewise import calibration_bracketing as brackets
+        window = self.window(prefix_ledger=True)
+        advance_pin(window)
+        calls: list = []
+        refusal = ValueError("bracket session b5t-session names runs root 2 of 3")
+        with mock.patch.object(brackets, "build_calibration_bracket_binding", side_effect=refusal):
+            window.harvest(seams=desk_seams(verdict_runner(calls)), prepare_desk=True, run_g3=False)
+        self.assertEqual([argv for argv in calls if "--whole-window-verdict" in argv], [])
+        transcript = (window.archive / "withheld" / "transcripts" / "desk-binding.txt").read_text()
+        self.assertIn("bracket session b5t-session names runs root 2 of 3", transcript)
+        (problem,) = desk_flags(window, "bracket_binding")
+        self.assertEqual(problem["error_line"], "ValueError: bracket session b5t-session names runs root # of #")
 
 
 class RealB3w1BytesTests(unittest.TestCase):
