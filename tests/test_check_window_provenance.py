@@ -12,6 +12,7 @@ import tempfile
 import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 
 from joulewise.analysis_manifest_v3 import (
@@ -1195,6 +1196,135 @@ class CheckWindowProvenanceTests(unittest.TestCase):
             code, output = _run(argv)
             self.assertNotEqual(code, 0, output)
             self.assertEqual(self._fail_ids(output), ["NR14-LAYOUT"], output)
+
+
+_ACCEPTANCE_R2 = (
+    Path(__file__).resolve().parents[1]
+    / "configs/calibration/calibration_acceptance_d079_v2_n24_25g83_r2.json"
+)
+_PREFIX_376 = (
+    Path(__file__).resolve().parent
+    / "fixtures/v5_qualification_harvest/acceptance-prefix-376.jsonl.zlib.b85"
+)
+
+
+class AcceptanceCutoffReplayTests(unittest.TestCase):
+    """Memo 3.3: every F5-2 ledger replay carries the acceptance's cutoff.
+
+    Without ``baseline_sequence``/``baseline_digest`` the bracket refuses
+    ``calibration_ledger_baseline_missing`` on good bytes, so the desk check
+    would FAIL a sound window.  The block-5 harvest relies on this checker
+    for G3, and the block-4 test file that also covers it is retired later.
+    """
+
+    def _args(self, root: Path) -> tuple[SimpleNamespace, dict]:
+        import base64
+        import zlib
+        from joulewise import calibration_bracketing as brackets
+        from joulewise import calibration_ledger as ledger
+
+        cutoff = brackets.load_calibration_acceptance_bound(_ACCEPTANCE_R2)["ledger_cutoff"]
+        ledger_path = root / "ledger.jsonl"
+        ledger_path.write_bytes(zlib.decompress(base64.b85decode(_PREFIX_376.read_bytes())))
+        pin = root / "pin.json"
+        pin_value = {"sequence": cutoff["sequence"], "head_digest": cutoff["head_digest"],
+                     "ledger_schema": ledger.LEDGER_SCHEMA}
+        _write_json(pin, pin_value)
+        boundary = root / "terminal-boundary.json"
+        _write_json(boundary, {"session_id": "cutoff-probe", "session_state": "finalized",
+                               "pin_relation": "physical_ahead",
+                               "refusal_code": "calibration_ledger_head_mismatch",
+                               "terminal_head_pin_candidate": pin_value})
+        args = SimpleNamespace(calibration_ledger=ledger_path, head_pin=pin, acceptance=_ACCEPTANCE_R2,
+                               terminal_boundary_record=boundary)
+        return args, cutoff
+
+    def test_both_f52_snapshot_sites_replay_with_the_acceptance_cutoff(self) -> None:
+        from joulewise import calibration_bracketing as brackets
+        from joulewise.schemas import CalibrationBracketingPolicy
+        from scripts import check_window_provenance as checker
+
+        with tempfile.TemporaryDirectory(dir=_REAL_TMP) as tmp:
+            args, cutoff = self._args(Path(tmp))
+            calls = []
+            real = checker.load_calibration_ledger_snapshot
+
+            def spy(*positional, **keywords):
+                calls.append(keywords)
+                return real(*positional, **keywords)
+
+            with mock.patch.object(checker, "load_calibration_ledger_snapshot", side_effect=spy):
+                finalized_site = checker._acceptance_replay_snapshot(args)
+                g2_site, _candidate = checker._ratified_g2_boundary_snapshot(
+                    args, {"session_id": "cutoff-probe"})
+            self.assertEqual(len(calls), 2)
+            for keywords in calls:
+                self.assertEqual(keywords["mode"], "read_replay")
+                self.assertEqual((keywords["baseline_sequence"], keywords["baseline_digest"]),
+                                 (cutoff["sequence"], cutoff["head_digest"]))
+            policy = CalibrationBracketingPolicy(require_bracket=True, calibration_bracket_max_drift_s=0.05)
+
+            def reasons(snapshot):
+                return brackets.evaluate_calibration_bracket(
+                    [], window_start_s=1.0, window_end_s=2.0, bindings={}, policy=policy,
+                    ledger_snapshot=snapshot)[1]
+
+            for snapshot in (finalized_site, g2_site):
+                self.assertEqual(snapshot.baseline_sequence, cutoff["sequence"])
+                self.assertNotIn("calibration_ledger_baseline_missing", reasons(snapshot))
+            # The same replay without the cutoff is exactly the memo-3.3 refusal.
+            without = real(args.calibration_ledger, args.head_pin, require_committed_pin=False,
+                           verify_custody=False, mode="read_replay")
+            self.assertIn("calibration_ledger_baseline_missing", reasons(without))
+
+    def test_acceptance_without_a_cutoff_fails_the_assertion_not_the_process(self) -> None:
+        from scripts import check_window_provenance as checker
+
+        with tempfile.TemporaryDirectory(dir=_REAL_TMP) as tmp:
+            args, _cutoff = self._args(Path(tmp))
+            with mock.patch.object(checker, "load_calibration_acceptance_bound", return_value=None):
+                with self.assertRaisesRegex(checker.AssertionFailure, "acceptance artifact is absent"):
+                    checker._acceptance_replay_snapshot(args)
+
+
+class ReportJsonTests(unittest.TestCase):
+    """--report-json mirrors the printed assertion lines for machine consumers."""
+
+    def test_report_rows_match_printed_lines_and_file_is_created_once(self) -> None:
+        with tempfile.TemporaryDirectory(dir=_REAL_TMP) as tmp:
+            fixture = _install_s11_checker_fixture(Path(tmp))
+            report = Path(tmp) / "report.json"
+            code, output = _run([*_normal_argv(fixture), "--report-json", str(report)])
+            value = json.loads(report.read_text())
+            self.assertEqual(value["schema"], "joulewise.window_provenance_report.v1")
+            self.assertEqual(value["exit_code"], code)
+            printed = [line.split(" ", 2)[:2] for line in output.splitlines()
+                       if line.split(" ", 1)[0] in {"PASS", "FAIL", "SKIP"}]
+            self.assertEqual([[row["status"], row["id"]] for row in value["assertions"]], printed)
+            self.assertEqual(code, 0, output)
+            with self.assertRaises(FileExistsError):
+                _run([*_normal_argv(fixture), "--report-json", str(report)])
+
+    def test_report_records_cli_failures(self) -> None:
+        with tempfile.TemporaryDirectory(dir=_REAL_TMP) as tmp:
+            root = Path(tmp)
+            report = root / "report.json"
+            code, _output = _run(["--runs-root", str(root), "--custody-root", str(root),
+                                  "--bracket-binding", str(root / "b.json"),
+                                  "--whole-window-verdict", str(root / "v.json"),
+                                  "--calibration-ledger", str(root / "l.jsonl"),
+                                  "--report-json", str(report)])
+            self.assertEqual(code, 2)
+            self.assertEqual(json.loads(report.read_text())["assertions"],
+                             [{"id": "CLI", "status": "FAIL", "detail": "exit_code=2"}])
+            refusal = root / "refusal-report.json"
+            code, _output = _run(["--expect-finalize-refusal", "--runs-root", str(root), "--custody-root",
+                                  str(root), "--bracket-binding", str(root / "b.json"),
+                                  "--whole-window-verdict", str(root / "v.json"),
+                                  "--calibration-ledger", str(root / "l.jsonl"),
+                                  "--report-json", str(refusal)])
+            self.assertEqual(code, 2)
+            self.assertEqual(json.loads(refusal.read_text())["assertions"][0]["id"], "FINALIZE-REFUSAL")
 
 
 if __name__ == "__main__":

@@ -85,27 +85,37 @@ class AssertionFailure(RuntimeError):
     """A governed assertion failed without escaping as a traceback."""
 
 
+REPORT_SCHEMA = "joulewise.window_provenance_report.v1"
+
+
 class Reporter:
     def __init__(self) -> None:
         self.passed = 0
         self.skipped = 0
         self.failed = 0
+        # One row per printed assertion line, for --report-json consumers
+        # (the block-5 harvest turns FAIL rows into recorded flags).
+        self.rows: list[dict[str, str]] = []
 
     def assertion(self, assertion_id: str, check: Callable[[], str]) -> bool:
         try:
             evidence = check()
         except Exception as exc:  # Every exception belongs to its assertion.
             self.failed += 1
-            print(f"FAIL {assertion_id} {type(exc).__name__}: {exc}")
+            detail = f"{type(exc).__name__}: {exc}"
+            print(f"FAIL {assertion_id} {detail}")
+            self.rows.append({"id": assertion_id, "status": "FAIL", "detail": detail})
             return False
         else:
             self.passed += 1
             print(f"PASS {assertion_id} {evidence}")
+            self.rows.append({"id": assertion_id, "status": "PASS", "detail": str(evidence)})
             return True
 
     def skip(self, assertion_id: str, evidence: str) -> None:
         self.skipped += 1
         print(f"SKIP {assertion_id} {evidence}")
+        self.rows.append({"id": assertion_id, "status": "SKIP", "detail": evidence})
 
     def summary(self) -> int:
         print(
@@ -457,6 +467,14 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         help="required for refusal mode; receives an automatically removed custody copy",
     )
+    parser.add_argument(
+        "--report-json",
+        type=Path,
+        help=(
+            "also write every assertion's id, status and detail as JSON to this "
+            "new file (created once; never overwritten); stdout is unchanged"
+        ),
+    )
     # Mirror scripts/finalize_analysis_manifest.py exactly.
     parser.add_argument("--prospective-manifest", type=Path)
     parser.add_argument("--plan-tree", type=Path)
@@ -566,7 +584,7 @@ def _run_expect_refusal(args: argparse.Namespace) -> int:
         return 1
 
 
-def _run_assertions(args: argparse.Namespace) -> int:
+def _run_assertions(args: argparse.Namespace, reporter: Reporter | None = None) -> int:
     required = (
         "runs_root",
         "pack_root",
@@ -582,7 +600,7 @@ def _run_assertions(args: argparse.Namespace) -> int:
         args, ("terminal_boundary_record",)
     ):
         return 2
-    reporter = Reporter()
+    reporter = reporter if reporter is not None else Reporter()
     # A relative --runs-root is anchored under --custody-root, exactly as the
     # finalizer anchors relative paths under its custody root
     # (analysis_manifest_v3.py:1428-1436, :1482-1490), never under the CWD.
@@ -1013,11 +1031,25 @@ def _run_assertions(args: argparse.Namespace) -> int:
     return reporter.summary()
 
 
+def _write_report(path: Path, exit_code: int, rows: Sequence[Mapping[str, str]]) -> None:
+    payload = {"schema": REPORT_SCHEMA, "exit_code": exit_code, "assertions": list(rows)}
+    with path.open("x", encoding="utf-8") as handle:
+        handle.write(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.expect_finalize_refusal:
-        return _run_expect_refusal(args)
-    return _run_assertions(args)
+        code = _run_expect_refusal(args)
+        rows = [{"id": "FINALIZE-REFUSAL", "status": "PASS" if code == 0 else "FAIL",
+                 "detail": f"exit_code={code}"}]
+    else:
+        reporter = Reporter()
+        code = _run_assertions(args, reporter)
+        rows = reporter.rows or [{"id": "CLI", "status": "FAIL", "detail": f"exit_code={code}"}]
+    if args.report_json is not None:
+        _write_report(args.report_json, code, rows)
+    return code
 
 
 if __name__ == "__main__":
