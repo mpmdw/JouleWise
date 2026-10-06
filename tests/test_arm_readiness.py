@@ -278,11 +278,18 @@ class LaunchConsumptionV2Tests(unittest.TestCase):
             "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
         }
 
-    def _install_attested_launch_recipe(self) -> None:
-        import re
+    def _arm_context_pin(self) -> bytes:
+        """The chain line pinning this fixture's arm-context.json (block-4 X8)."""
         context_digest = readiness.sha256_bytes(readiness.render_json(self.arm["arm_context"]))
-        chain = re.sub(r"(?m)^export NIGHT_ARM_CONTEXT_SHA256=.*\n", "", self.chain_path.read_text())
-        self.chain_path.write_text(f'export NIGHT_ARM_CONTEXT_SHA256="{context_digest}"\n' + chain)
+        return f'export NIGHT_ARM_CONTEXT_SHA256="{context_digest}"\n'.encode()
+
+    def _pin_chain_to_arm_context(self, chain_path: Path) -> None:
+        import re
+        chain = re.sub(rb"(?m)^export NIGHT_ARM_CONTEXT_SHA256=.*\n", b"", chain_path.read_bytes())
+        chain_path.write_bytes(self._arm_context_pin() + chain)
+
+    def _install_attested_launch_recipe(self, extra_inputs: tuple[Path, ...] = ()) -> None:
+        self._pin_chain_to_arm_context(self.chain_path)
         custody_pack_root = self.custody / self.pack.name
         source_relative = (
             "arm_readiness.t0.sources/t0-single-launch-capability.json"
@@ -303,6 +310,7 @@ class LaunchConsumptionV2Tests(unittest.TestCase):
                     self._artifact(self.manifest_path),
                     self._artifact(self.window_root / "window.env"),
                     self._artifact(self.chain_path),
+                    *(self._artifact(path) for path in extra_inputs),
                 ),
                 key=lambda item: item["path"],
             ),
@@ -894,7 +902,15 @@ class LaunchConsumptionV2Tests(unittest.TestCase):
             )
         )
 
-    def _install_foreign_pack_session_context(self) -> None:
+    def _install_foreign_pack_session_context(self, *, repin: bool = True) -> None:
+        """Point the manifest at another pack session's window.
+
+        The foreign chain carries the other session's arm-context pin, which
+        the driver refuses before any GO exists. ``repin`` (the default)
+        re-pins the foreign chain to this fixture's context so the attack
+        reaches the consumer's arm-attested identity binding, the guard under
+        test; the chain bytes stay foreign (its PACK_ROOT names the other pack).
+        """
         beta = LaunchConsumptionV2Tests(
             methodName="test_v2_claim_is_fsynced_and_replays_from_consumption"
         )
@@ -916,6 +932,8 @@ class LaunchConsumptionV2Tests(unittest.TestCase):
             staged_chain.write_bytes(
                 (beta_window / "window-chain.zsh").read_bytes()
             )
+            if repin:
+                self._pin_chain_to_arm_context(staged_chain)
             beta_manifest["window_plan_root"] = str(staged_window)
             beta_manifest["launch_command"] = [
                 "/usr/bin/caffeinate",
@@ -954,6 +972,28 @@ class LaunchConsumptionV2Tests(unittest.TestCase):
         self._assert_current_context_binding_refusal()
         self.manifest_path.write_bytes(honest_manifest)
         self.assertEqual(self._consume()["status"], "CONSUMED")
+
+    def test_foreign_session_chain_keeps_its_own_context_pin_and_refuses_before_go(self) -> None:
+        honest_manifest = self.manifest_path.read_bytes()
+        self._install_foreign_pack_session_context(repin=False)
+        staged_chain = self.custody / "beta-pack-session" / "window-chain.zsh"
+        self.assertIn(b"export NIGHT_ARM_CONTEXT_SHA256=", staged_chain.read_bytes())
+        self.assertNotIn(self._arm_context_pin(), staged_chain.read_bytes())
+        self.assertNotIn(str(self.pack).encode(), staged_chain.read_bytes())
+        from joulewise import night_gate
+        with self.assertRaisesRegex(night_gate.PackNightRefusal, "^arm_context: sha256 mismatch$"):
+            self._consumer_inputs()
+        self.assertFalse((self.custody / self.pack.name / "arm_readiness.consumptions").exists())
+        self.manifest_path.write_bytes(honest_manifest)
+        self.assertEqual(self._consume()["status"], "CONSUMED")
+
+    def test_repinned_foreign_chain_is_still_foreign_bytes(self) -> None:
+        self._install_foreign_pack_session_context()
+        staged_chain = self.custody / "beta-pack-session" / "window-chain.zsh"
+        raw = staged_chain.read_bytes()
+        self.assertTrue(raw.startswith(self._arm_context_pin()))
+        self.assertNotIn(str(self.pack).encode(), raw)
+        self.assertNotEqual(raw, self.chain_path.read_bytes())
 
     def test_self_authored_context_refuses_without_burning_honest_arm(self) -> None:
         honest_manifest = self.manifest_path.read_bytes()
@@ -1128,6 +1168,53 @@ class LaunchConsumptionV2Tests(unittest.TestCase):
             },
         )
 
+    def test_stage_list_is_authenticated_from_the_single_chain_read(self) -> None:
+        """A chain that pins a dispatch stage list (block-4 X6) is still read
+        once per reconciliation: the stage-list digest is taken from the cached,
+        size-capped chain bytes whose digest is reconciled, not a second read."""
+        stage_list = self.window_root / "before_midpoint_stages.txt"
+        stage_list.write_bytes(b"configs/campaigns/fixture/stage-a.json\n")
+        stage_digest = hashlib.sha256(stage_list.read_bytes()).hexdigest()
+        with self.chain_path.open("ab") as handle:
+            handle.write(
+                f'test "$(shasum -a 256 "$1/before_midpoint_stages.txt" | cut -d" " -f1)" = "{stage_digest}"\n'.encode()
+            )
+        self._install_attested_launch_recipe(extra_inputs=(stage_list,))
+        paths = self._launch_recipe_artifact_paths()
+        paths["stage_list"] = stage_list
+        targets = {path.resolve(): name for name, path in paths.items()}
+        read_counts = {name: 0 for name in targets.values()}
+        real_open = Path.open
+
+        def tracking_open(path: Path, *args: object, **kwargs: object):
+            resolved = path.resolve(strict=False)
+            if resolved in targets:
+                read_counts[targets[resolved]] += 1
+            return real_open(path, *args, **kwargs)
+
+        inputs = self._consumer_inputs()
+        with mock.patch.object(Path, "open", new=tracking_open):
+            result = self._invoke_consumer(inputs)
+        self.assertEqual(result["status"], "CONSUMED")
+        self.assertEqual(read_counts["chain"], 1)
+        self.assertGreaterEqual(read_counts["stage_list"], 1)
+
+    def test_stage_list_differing_from_its_chain_digest_refuses_without_burning(self) -> None:
+        stage_list = self.window_root / "before_midpoint_stages.txt"
+        stage_list.write_bytes(b"configs/campaigns/fixture/stage-a.json\n")
+        stage_digest = hashlib.sha256(stage_list.read_bytes()).hexdigest()
+        with self.chain_path.open("ab") as handle:
+            handle.write(
+                f'test "$(shasum -a 256 "$1/before_midpoint_stages.txt" | cut -d" " -f1)" = "{stage_digest}"\n'.encode()
+            )
+        self._install_attested_launch_recipe(extra_inputs=(stage_list,))
+        inputs = self._consumer_inputs()
+        stage_list.write_bytes(b"configs/campaigns/fixture/stage-b.json\n")
+        with self.assertRaises(readiness.LaunchLineageError) as caught:
+            self._invoke_consumer(inputs)
+        self.assertEqual(caught.exception.reason_code, "launch_binding_mismatch")
+        self.assertFalse((self.custody / self.pack.name / "arm_readiness.consumptions").exists())
+
     def test_verify_consumed_launch_reads_each_artifact_once(self) -> None:
         result = self._consume()
         consumption_path = Path(str(result["consumption_path"]))
@@ -1223,10 +1310,16 @@ class LaunchConsumptionV2Tests(unittest.TestCase):
                 fixture.doCleanups()
 
     def test_exactly_capped_chain_authenticates_at_consume_and_verify(self) -> None:
+        # The attested recipe pins the arm context in the chain's first line;
+        # the padding fills the rest so the installed chain is exactly capped.
+        pin = self._arm_context_pin()
         self.chain_path.write_bytes(
-            b"#" * readiness._LAUNCH_BINDING_CHAIN_MAX_BYTES
+            pin + b"#" * (readiness._LAUNCH_BINDING_CHAIN_MAX_BYTES - len(pin))
         )
         self._install_attested_launch_recipe()
+        self.assertEqual(
+            self.chain_path.stat().st_size, readiness._LAUNCH_BINDING_CHAIN_MAX_BYTES
+        )
         result = self._consume()
         self.assertEqual(result["status"], "CONSUMED")
         verified = self._verify_with_launch_recipe_replay(

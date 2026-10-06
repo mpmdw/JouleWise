@@ -9702,8 +9702,17 @@ def _attested_launch_artifact_references(
         }
         chain_reference = selections["window_chain"]
         if len(chain_reference) == 1:
+            # The chain bytes come from the reconciliation cache, so the stage
+            # list is authenticated against the same bytes whose digest is
+            # reconciled, and the chain is read once (frozen byte limit).
             chain_path = Path(chain_reference[0]["path"])
-            stage = authenticated_stage_list(chain_path.parent, chain_path.read_bytes())
+            chain_raw = _read_launch_binding_artifact(
+                chain_path.resolve(strict=True),
+                max_bytes=_LAUNCH_BINDING_CHAIN_MAX_BYTES,
+                label="window chain",
+                cache=launch_binding_cache,
+            )
+            stage = authenticated_stage_list(chain_path.parent, chain_raw)
             if stage is not None:
                 selections["stage_list"] = [item for item in artifacts if item == stage]
         if any(len(items) != 1 for items in selections.values()):
@@ -9757,7 +9766,13 @@ def _reconcile_launch_binding(
     # The author also attests these bytes, so a deleted/changed list cannot
     # spend launch authority merely by deferring refusal to the shell chain.
     try:
-        stage = authenticated_stage_list(window_plan_root, Path(window_chain_reference["path"]).read_bytes())
+        chain_raw = _read_launch_binding_artifact(
+            Path(str(window_chain_reference["path"])).resolve(strict=True),
+            max_bytes=_LAUNCH_BINDING_CHAIN_MAX_BYTES,
+            label="window chain",
+            cache=launch_binding_cache,
+        )
+        stage = authenticated_stage_list(window_plan_root, chain_raw)
         if stage is not None and attested.get("stage_list") != stage:
             raise ValueError("dispatch stage list differs from launch attestation")
     except (OSError, ValueError) as exc:
