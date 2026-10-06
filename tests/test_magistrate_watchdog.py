@@ -2790,5 +2790,59 @@ class ContractTests(WatchdogTestCase):
         self.assertNotEqual(0, failed.returncode)
 
 
+
+class HazardPackFenceTests(WatchdogTestCase):
+    """Gate-prune lane L2: the watchdog fences a HAZARD_PACK plan span like any other."""
+
+    def write_hazard_plan(self, *, t0: float, name: str = "b5-alpha-1") -> Path:
+        from tests.fixtures.b5_plan import fake_window
+        custody = self.temp / name
+        custody.mkdir(parents=True)
+        mapping = fake_window.hazard_plan_mapping(
+            custody, plan_id=name, t0_epoch_s=t0, window_max_s=3900,
+            authored_epoch_s=self.base.timestamp() - 60, custody_root=custody,
+            measurement_root=self.temp / "measurement")
+        path = custody / "night_plan.json"
+        path.write_text(json.dumps(mapping, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        return path
+
+    def test_hazard_plan_is_loaded_and_its_span_fenced(self) -> None:
+        t0 = self.base.timestamp() + wd.PLAN_LEAD_S
+        self.write_hazard_plan(t0=t0)
+        snapshot = wd.load_plans(self.harness.storage, now_epoch_s=self.base.timestamp())
+        self.assertEqual((), snapshot.errors)
+        self.assertEqual(["b5-alpha-1"], [plan.plan_id for plan in snapshot.plans])
+        plan = snapshot.plans[0]
+        self.assertEqual("HAZARD_PACK", plan.receipt_class)
+        self.assertTrue(wd.plan_span_active(plan, self.base.timestamp(), self.harness.storage))
+        self.assertFalse(wd.plan_span_active(plan, t0 - wd.PLAN_LEAD_S - 1, self.harness.storage))
+        self.assertEqual("FENCED", wd.decide(self.harness.storage, self.harness.deps, wd.initial_state()).state)
+        self.assertEqual("REQUEST", wd.standdown_phase(plan, t0 - wd.REQUEST_LEAD_S))
+        self.assertEqual("KILL", wd.standdown_phase(plan, t0 - wd.KILL_LEAD_S))
+        self.assertIs(plan, wd.relevant_standdown_plan([plan], t0 - wd.REQUEST_LEAD_S, self.harness.storage))
+
+    def test_hazard_chain_holds_the_fence_until_it_exits(self) -> None:
+        t0 = self.base.timestamp() - 60
+        path = self.write_hazard_plan(t0=t0)
+        night = path.parent / "night"
+        night.mkdir()
+        (night / "chain.started").write_text("{}", encoding="utf-8")
+        plan = wd.load_plans(self.harness.storage, now_epoch_s=self.base.timestamp()).plans[0]
+        late = wd.deadman_epoch(plan) + wd.COURIER_LOCK_FRESH_S + 3600
+        self.assertTrue(wd.plan_span_active(plan, late, self.harness.storage))
+        (night / "chain.exited").write_text("{}", encoding="utf-8")
+        (night / "courier.sent").write_text("sent\n", encoding="utf-8")
+        self.assertFalse(wd.plan_span_active(plan, late, self.harness.storage))
+
+    def test_installed_hazard_agent_is_fenced(self) -> None:
+        t0 = self.base.timestamp() + wd.PLAN_LEAD_S
+        path = self.write_hazard_plan(t0=t0)
+        directory = wd.Path.home() / "Library/LaunchAgents"
+        directory.mkdir(parents=True)
+        (directory / "com.joulewise.night.plist").write_bytes(plistlib.dumps({
+            "ProgramArguments": [sys.executable, "run_night.py", "run", "--plan", str(path)]}))
+        self.assertEqual("installed_plan:b5-alpha-1", wd.installed_agent_fence(self.base, self.harness.storage))
+
+
 if __name__ == "__main__":
     unittest.main()

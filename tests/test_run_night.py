@@ -6847,3 +6847,137 @@ class QualificationT0StageCapTests(unittest.TestCase):
             self.capture(sources, timeout)
         self.assertEqual((self.night / 't0-capture.stdout.json').read_bytes(), b'partial')
         self.assertEqual((self.night / 't0-capture.stderr.txt').read_bytes(), b'timed out')
+
+
+class HazardPackPrimitiveTests(unittest.TestCase):
+    """Gate-prune lane L2: the shared driver primitives the HAZARD_PACK branch adds.
+
+    The branch itself is driven end to end in tests/test_b5_driver.py.
+    """
+
+    def setUp(self):
+        from tests.fixtures.b5_plan import fake_window
+        self.driver = _load_driver()
+        self.temporary = tempfile.TemporaryDirectory(prefix="run-night-hazard-")
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name).resolve()
+        now = time.time()
+        mapping = fake_window.hazard_plan_mapping(self.root, plan_id="b5-alpha-1", t0_epoch_s=float(int(now)),
+                                                  window_max_s=3600, authored_epoch_s=now - 60)
+        self.plan = night_gate.NightPlan.from_mapping(mapping)
+        self.night = Path(self.plan.custody_root) / "night"
+        self.night.mkdir(parents=True)
+        self.chain = Path(self.plan.chain_path)
+
+    def probes(self):
+        return night_gate.Probes(
+            run=lambda argv: _probe(tuple(argv), exit_code=1),
+            now_epoch_s=time.time, monotonic_ns=time.monotonic_ns,
+            read_text=lambda path: Path(path).read_text(), checkout_head=lambda: HEAD,
+            measurement_head=lambda _root: HEAD)
+
+    def run_chain(self, text, **keywords):
+        self.chain.write_text(text)
+        claim = self.driver._claim_chain_start(self.night)
+        return self.driver._run_chain_once(self.chain, self.plan, self.probes(), self.night, claim,
+                                           command=["/bin/zsh", "-f", str(self.chain)], **keywords)
+
+    def test_hazard_refusal_codes_validate_only_for_the_hazard_class(self):
+        for reason in sorted(night_gate.HAZARD_DRIVER_REASON_CODES):
+            with self.subTest(reason=reason):
+                document = {"schema": self.driver.REFUSAL_SCHEMA, "receipt_class": "HAZARD_PACK",
+                            "plan_id": "b5-alpha-1", "verdict": "REFUSED",
+                            "refusal": {"reason": reason, "detail": "d", "evidence": None}}
+                self.assertEqual([], self.driver.validate_refusal(document))
+                document["receipt_class"] = "DIAGNOSTIC_NO_PACK"
+                self.assertIn("refusal.reason: is not registered", self.driver.validate_refusal(document))
+        self.assertTrue(set(self.driver._CODES.values())
+                        <= night_gate.NIGHT_GATE_REASON_CODES | night_gate.NIGHT_DRIVER_REASON_CODES)
+
+    def test_hazard_chain_environment_imports_nothing_from_the_qualification_path(self):
+        with mock.patch.dict(sys.modules, {"joulewise.v5_qualification": None}):
+            environment = self.driver._chain_environment(self.plan, self.night)
+        self.assertEqual(str(self.night), environment["NIGHT_DIR"])
+        self.assertEqual(str(self.night / "network_time_off.json"), environment["JOULEWISE_NETWORK_TIME_OFF_RECEIPT"])
+        self.assertNotIn("NIGHT_VERIFY_ONLY", environment)
+
+    def test_supervision_stop_terminates_the_group_and_returns_its_refusal(self):
+        calls = []
+
+        def supervise():
+            calls.append(time.monotonic())
+            if len(calls) < 2:
+                return None
+            return {"reason": "night_stopped_disk_low", "detail": "fixture floor", "evidence": {"free_bytes": 1}}
+
+        started = time.monotonic()
+        exit_code, abort, _count, _hits, proven = self.run_chain("/bin/sleep 120\n", supervise=supervise)
+        self.assertLess(time.monotonic() - started, 60)
+        self.assertTrue(proven)
+        self.assertEqual("night_stopped_disk_low", abort["reason"])
+        self.assertEqual(1, abort["evidence"]["free_bytes"])
+        self.assertIn("group_census", abort["evidence"])
+        self.assertTrue((self.night / "chain.exited").exists())
+
+    def test_supervision_that_raises_never_ends_the_chain(self):
+        def supervise():
+            raise RuntimeError("fixture supervision fault")
+
+        exit_code, abort, *_rest, proven = self.run_chain("/bin/sleep 1\nexit 7\n", supervise=supervise)
+        self.assertEqual((7, None, True), (exit_code, abort, proven))
+        self.assertIn("fixture supervision fault", (Path(self.plan.custody_root) / "night.log").read_text())
+
+    def test_natural_exit_census_proves_survivors_gone_before_recording_the_exit(self):
+        exit_code, abort, *_rest, proven = self.run_chain("/bin/sleep 120 &\nexit 0\n", census_group_on_exit=True)
+        self.assertEqual((0, None, True), (exit_code, abort, proven))
+        census = json.loads((self.night / "chain.exit-census.json").read_text())
+        self.assertFalse(census["absent"])
+        self.assertTrue(census["proven"])
+        exited = json.loads((self.night / "chain.exited").read_text())
+        self.assertEqual(0, exited["exit_code"])
+
+    def test_natural_exit_census_is_off_for_other_callers(self):
+        exit_code, abort, *_rest, proven = self.run_chain("exit 0\n")
+        self.assertEqual((0, None, True), (exit_code, abort, proven))
+        self.assertFalse((self.night / "chain.exit-census.json").exists())
+
+    def test_hazard_rerun_is_refused_once_an_arm_has_run(self):
+        (self.night / "arm_decision.json").write_text("{}")
+        self.assertEqual(self.night / "arm_decision.json", self.driver._existing_record(self.night, self.plan))
+        other = replace(self.plan, receipt_class="DIAGNOSTIC_NO_PACK")
+        self.assertIsNone(self.driver._existing_record(self.night, other))
+
+    def test_run_accepts_dry_arm_only_as_a_run_flag(self):
+        parser = self.driver.build_parser()
+        self.assertTrue(parser.parse_args(["run", "--plan", "p.json", "--dry-arm"]).dry_arm)
+        with self.assertRaises(SystemExit), redirect_stdout(io.StringIO()), \
+                mock.patch("sys.stderr", io.StringIO()):
+            parser.parse_args(["dead-man", "--plan", "p.json", "--dry-arm"])
+
+    def test_dead_man_stops_the_hazard_monitor_a_dead_driver_left_running(self):
+        from tests.fixtures.b5_plan import fake_window
+        from joulewise.b5 import driver as hazard_driver
+        now = time.time()
+        mapping = fake_window.hazard_plan_mapping(self.root / "late", plan_id="b5-alpha-1",
+                                                  t0_epoch_s=float(int(now) - 7200), window_max_s=600,
+                                                  authored_epoch_s=now - 8000)
+        plan_path = self.root / "late-plan.json"
+        plan_path.write_text(json.dumps(mapping))
+        night = Path(mapping["custody_root"]) / "night"
+        night.mkdir(parents=True)
+        for name in ("chain.started", "chain.exited"):
+            (night / name).write_text(json.dumps({"pid": None, "pgid": None, "exit_code": 0,
+                                                  "epoch_s": now, "monotonic_ns": 1}))
+        monitor = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"], start_new_session=True)
+        self.addCleanup(lambda: monitor.poll() is None and monitor.kill())
+        identity = self.driver.observe_identity(monitor.pid)
+        (night / hazard_driver.MONITOR_JOURNAL).write_text(json.dumps(
+            {"event": "start", "pid": monitor.pid, "pgid": monitor.pid, "start_time": identity.start_time}) + "\n")
+        self.driver.make_probes = self.probes
+        self.driver._resolve_courier_bin = lambda _bin: (Path("/fixture/courier"), None, None)
+        self.driver._durable_record = mock.Mock(return_value=None)
+        self.driver.run_courier = mock.Mock(return_value={"attempted": 1, "sent": True, "heartbeat_seen": True,
+                                                          "last_error": None})
+        self.assertEqual(self.driver.EXIT_GO, self.driver.dead_man(plan_path))
+        self.assertEqual(-signal.SIGTERM, monitor.wait(timeout=10))
+        self.assertIn("dead-man hazard monitor cleanup", (Path(mapping["custody_root"]) / "night.log").read_text())

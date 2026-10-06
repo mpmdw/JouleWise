@@ -42,6 +42,29 @@ RECEIPT_CLASSES = (
     "REHEARSAL_STUB",
     "TRANSACTION_PACK",
 )
+# Block 5's hazard path (gate-prune plan, lane L2; Ed's ruling "Physics
+# refuses; everything else is a flag", 2026-10-05). A HAZARD_PACK window is
+# armed inside the launchd job by the hazard modules (joulewise.hazards) and
+# driven by joulewise/b5/driver.py. It never reaches evaluate_night or the
+# C1-C5 gate receipt, so RECEIPT_CLASSES -- the gate-evaluated classes every
+# receipt validator and class table iterate -- is unchanged, and the plan
+# parser accepts the union below.
+HAZARD_PACK = "HAZARD_PACK"
+PLAN_RECEIPT_CLASSES = RECEIPT_CLASSES + (HAZARD_PACK,)
+HAZARD_PLAN_SCHEMA = "joulewise.night_plan.v5"
+HAZARD_PLAN_SCHEMA_VERSION = 5
+HAZARD_WINDOW_SCHEMA = "joulewise.hazard_window.v1"
+# The six physical hazards that alone may refuse an arm (doctrine item 1).
+HAZARD_MODULES = ("clock", "battery", "thermal", "contention", "disk", "instrument")
+# Refusal codes only a HAZARD_PACK driver writes. They live in their own
+# registry: the gate and driver registries above are pinned exactly by the
+# retired path's tests and by arm_retry's cold-gate table.
+HAZARD_DRIVER_REASON_CODES = frozenset(
+    {
+        "night_refused_hazard",    # a hazard module refused, or was UNMEASURED, at arm (NULL window)
+        "night_stopped_disk_low",  # free space fell under the in-window floor; the driver stopped the chain
+    }
+)
 # 2026-09-05: D-165 v2 relabel supersedes the v1 registration digest
 # 1c0a4a119fa06984ff38082781e06bc9bd90f07eae7165359718dfb063783a2b (bytes retained in Git history).
 D166_REGISTRATION_SHA256 = (
@@ -257,6 +280,8 @@ NIGHT_DRIVER_REASON_CODES = frozenset(
 )
 if NIGHT_GATE_REASON_CODES & NIGHT_DRIVER_REASON_CODES != {"night_refused_bind_expired"}:
     raise RuntimeError("night gate and driver reason-code registries overlap")
+if HAZARD_DRIVER_REASON_CODES & (NIGHT_GATE_REASON_CODES | NIGHT_DRIVER_REASON_CODES):
+    raise RuntimeError("hazard driver reason codes overlap the gate or driver registries")
 
 # First-refusal precedence.  Probe failures use ``night_probe_error`` at the
 # position of the probe that failed rather than forming a separate phase.
@@ -399,8 +424,11 @@ class NightPlan:
             raise PlanError("night_plan_malformed", "plan must be an object")
         keys = set(value)
         is_pack = value.get("receipt_class") == "TRANSACTION_PACK"
-        is_quiet = value.get("schema") == QUIET_PLAN_SCHEMA and not is_pack
+        is_hazard = value.get("receipt_class") == HAZARD_PACK
+        is_quiet = value.get("schema") == QUIET_PLAN_SCHEMA and not is_pack and not is_hazard
         expected_keys = _PLAN_KEYS | {"pack_night"} if is_pack else _PLAN_KEYS
+        if is_hazard:
+            expected_keys = _PLAN_KEYS | {"hazard_window"}
         history_keys = {"previous_attempt", "block_archive_root"}
         if keys & history_keys:
             expected_keys |= history_keys
@@ -414,6 +442,8 @@ class NightPlan:
         expected_version = PACK_PLAN_SCHEMA_VERSION if is_pack else PLAN_SCHEMA_VERSION
         if is_quiet:
             expected_schema, expected_version = QUIET_PLAN_SCHEMA, QUIET_PLAN_SCHEMA_VERSION
+        if is_hazard:
+            expected_schema, expected_version = HAZARD_PLAN_SCHEMA, HAZARD_PLAN_SCHEMA_VERSION
         if keys != expected_keys:
             missing = sorted(repr(item) for item in expected_keys - keys)
             extra = sorted(repr(item) for item in keys - expected_keys)
@@ -460,7 +490,7 @@ class NightPlan:
 
         plan_id = require_text("plan_id")
         receipt_class = require_text("receipt_class")
-        if receipt_class not in RECEIPT_CLASSES:
+        if receipt_class not in PLAN_RECEIPT_CLASSES:
             raise PlanError("night_plan_malformed", "receipt_class is not registered")
         t0_epoch_s = require_number("t0_epoch_s")
         authored_epoch_s = require_number("authored_epoch_s")
@@ -556,6 +586,30 @@ class NightPlan:
                 quiet_admission = validate_policy(value["quiet_admission"], window_max_s=window_max_s)
             except (ValueError, OverflowError) as exc:
                 raise PlanError("night_plan_malformed", str(exc)) from exc
+        if is_hazard:
+            for name, text in (("custody_root", custody_root), ("chain_path", chain_path),
+                               ("chain_sha256_path", chain_sha256_path)):
+                if not os.path.isabs(text):
+                    raise PlanError("night_plan_malformed", f"HAZARD_PACK {name} must be an absolute path")
+            try:
+                hazard_window = validate_hazard_window(value.get("hazard_window"))
+            except ValueError as exc:
+                raise PlanError("night_plan_malformed", f"hazard_window: {exc}") from exc
+            return HazardNightPlan(
+                plan_id=plan_id,
+                receipt_class=receipt_class,
+                t0_epoch_s=t0_epoch_s,
+                window_max_s=window_max_s,
+                authored_epoch_s=authored_epoch_s,
+                repo_head=repo_head,
+                measurement_root=measurement_root,
+                measurement_head=measurement_head,
+                chain_path=chain_path,
+                chain_sha256_path=chain_sha256_path,
+                custody_root=custody_root,
+                registration_path=registration,
+                hazard_window=hazard_window,
+            )
         return NightPlan(
             plan_id=plan_id,
             receipt_class=receipt_class,
@@ -591,6 +645,155 @@ def validate_attempt_bindings(previous, archive_root, restore=None):
         raise ValueError("block_archive_root_required_or_invalid")
     if restore is not None and not locator(restore):
         raise ValueError("null_reservation_restore_invalid")
+
+
+@dataclass(frozen=True)
+class HazardNightPlan(NightPlan):
+    """A block-5 HAZARD_PACK plan: the v2 fields plus the window's hazard record.
+
+    ``hazard_window`` is written by ``scripts/write_b5_window_plan.py`` and is
+    the only place the driver, the hazard modules and the lineage writer read
+    the window's pack, launch bindings, thresholds and G10 request from.
+    """
+
+    hazard_window: dict[str, object] = field(default_factory=dict)
+
+
+_HAZARD_WINDOW_KEYS = {
+    "schema", "attempt", "pack", "bracket_session_id", "bindings", "runs_roots",
+    "T_stream_max_s", "planned_bytes", "member_count", "thresholds", "g10",
+    "programmed_span_s", "t0_stage_cap_s", "settle_s", "window_env", "registration",
+    "chain_deviations", "disk_volumes", "stages",
+}
+_HAZARD_PACK_KEYS = {
+    "pack_id", "pack_root", "pack_sha256", "plan_tree_sha256", "pack_plan_id",
+    "window_id", "evidence_root_id",
+}
+# The fourteen launch bindings every v5 pack declares in
+# arm_attachments.launch.bindings; the window plan writer binds all of them.
+HAZARD_LAUNCH_BINDINGS = (
+    "repo_root", "ledger_path", "claim_runs_root", "bound_runs_root",
+    "operator_log_root", "pre_calibration_dir", "post_calibration_dir",
+    "claim_backup_destination", "bound_backup_destination", "bracket_session_id",
+    "pre_attempt_id", "post_attempt_id", "identity_epoch_json", "t1_bindings_json",
+)
+
+
+def validate_hazard_window(value: object) -> dict[str, object]:
+    """Structural check of a HAZARD_PACK plan's ``hazard_window``.
+
+    Only shape and type: the values that the driver needs in order to run at
+    all. Identity and provenance are recorded and judged at harvest, never here.
+    """
+
+    def text(item: object, where: str) -> str:
+        if not isinstance(item, str) or not item or any(c in item for c in "\0\n\r"):
+            raise ValueError(f"{where} must be a non-empty single-line string")
+        return item
+
+    def absolute(item: object, where: str) -> str:
+        item = text(item, where)
+        if not os.path.isabs(item):
+            raise ValueError(f"{where} must be an absolute path")
+        return item
+
+    def digest(item: object, where: str, *, nullable: bool = False) -> str | None:
+        if item is None and nullable:
+            return None
+        if not isinstance(item, str) or _SHA256_RE.fullmatch(item) is None:
+            raise ValueError(f"{where} must be a SHA-256 hex digest")
+        return item
+
+    def finite(item: object, where: str, *, positive: bool = True) -> float:
+        if isinstance(item, bool) or not isinstance(item, (int, float)) or not math.isfinite(item):
+            raise ValueError(f"{where} must be a finite number")
+        if item < 0 or (positive and item <= 0):
+            raise ValueError(f"{where} must be {'positive' if positive else 'non-negative'}")
+        return item
+
+    def integer(item: object, where: str, minimum: int) -> int:
+        if type(item) is not int or item < minimum:
+            raise ValueError(f"{where} must be an integer >= {minimum}")
+        return item
+
+    if not isinstance(value, Mapping) or set(value) != _HAZARD_WINDOW_KEYS:
+        missing = sorted(_HAZARD_WINDOW_KEYS - set(value)) if isinstance(value, Mapping) else []
+        extra = sorted(set(value) - _HAZARD_WINDOW_KEYS) if isinstance(value, Mapping) else []
+        raise ValueError(f"keys are not exact (missing={missing}, extra={extra})")
+    if value["schema"] != HAZARD_WINDOW_SCHEMA:
+        raise ValueError(f"schema must be {HAZARD_WINDOW_SCHEMA}")
+    integer(value["attempt"], "attempt", 1)
+    pack = value["pack"]
+    if not isinstance(pack, Mapping) or set(pack) != _HAZARD_PACK_KEYS:
+        raise ValueError("pack keys are not exact")
+    for name in ("pack_id", "pack_plan_id", "window_id", "evidence_root_id"):
+        text(pack[name], "pack." + name)
+    if Path(absolute(pack["pack_root"], "pack.pack_root")).name != pack["pack_id"]:
+        raise ValueError("pack.pack_root basename must equal pack.pack_id")
+    digest(pack["pack_sha256"], "pack.pack_sha256", nullable=True)
+    digest(pack["plan_tree_sha256"], "pack.plan_tree_sha256")
+    text(value["bracket_session_id"], "bracket_session_id")
+    bindings = value["bindings"]
+    if not isinstance(bindings, Mapping) or set(bindings) != set(HAZARD_LAUNCH_BINDINGS):
+        raise ValueError("bindings must name exactly the fourteen launch bindings")
+    for name in HAZARD_LAUNCH_BINDINGS:
+        text(bindings[name], "bindings." + name)
+    if bindings["bracket_session_id"] != value["bracket_session_id"]:
+        raise ValueError("bindings.bracket_session_id must equal bracket_session_id")
+    roots = value["runs_roots"]
+    if not isinstance(roots, Mapping) or set(roots) != {"claim", "bound"}:
+        raise ValueError("runs_roots must name claim and bound")
+    for name in ("claim", "bound"):
+        if absolute(roots[name], "runs_roots." + name) != bindings[name + "_runs_root"]:
+            raise ValueError(f"runs_roots.{name} must equal bindings.{name}_runs_root")
+    finite(value["T_stream_max_s"], "T_stream_max_s")
+    integer(value["planned_bytes"], "planned_bytes", 0)
+    integer(value["member_count"], "member_count", 0)
+    thresholds = value["thresholds"]
+    if not isinstance(thresholds, Mapping) or set(thresholds) != set(HAZARD_MODULES):
+        raise ValueError("thresholds must name exactly the six hazard modules")
+    for name in HAZARD_MODULES:
+        if not isinstance(thresholds[name], Mapping):
+            raise ValueError(f"thresholds.{name} must be an object")
+    if type(value["g10"]) is not bool:
+        raise ValueError("g10 must be a boolean")
+    integer(value["programmed_span_s"], "programmed_span_s", 1)
+    finite(value["t0_stage_cap_s"], "t0_stage_cap_s")
+    finite(value["settle_s"], "settle_s", positive=False)
+    window_env = value["window_env"]
+    if not isinstance(window_env, Mapping) or set(window_env) != {"path", "sha256"}:
+        raise ValueError("window_env must be a {path, sha256} locator")
+    absolute(window_env["path"], "window_env.path")
+    digest(window_env["sha256"], "window_env.sha256")
+    registration = value["registration"]
+    if registration is not None:
+        if not isinstance(registration, Mapping) or set(registration) != {"path", "sha256"}:
+            raise ValueError("registration must be null or a {path, sha256} locator")
+        text(registration["path"], "registration.path")
+        digest(registration["sha256"], "registration.sha256")
+    deviations = value["chain_deviations"]
+    if not isinstance(deviations, list) or not all(isinstance(item, str) and item for item in deviations):
+        raise ValueError("chain_deviations must be a list of non-empty strings")
+    volumes = value["disk_volumes"]
+    if not isinstance(volumes, list) or not volumes:
+        raise ValueError("disk_volumes must be a non-empty list")
+    for index, item in enumerate(volumes):
+        absolute(item, f"disk_volumes[{index}]")
+    stages = value["stages"]
+    if not isinstance(stages, list) or not stages:
+        raise ValueError("stages must be a non-empty list")
+    for index, stage in enumerate(stages):
+        where = f"stages[{index}]"
+        if not isinstance(stage, Mapping) or set(stage) != {
+                "stage_id", "kind", "ordinal", "expected_count", "in_chain"}:
+            raise ValueError(f"{where} keys are not exact")
+        text(stage["stage_id"], where + ".stage_id")
+        text(stage["kind"], where + ".kind")
+        integer(stage["ordinal"], where + ".ordinal", 1)
+        integer(stage["expected_count"], where + ".expected_count", 0)
+        if type(stage["in_chain"]) is not bool:
+            raise ValueError(f"{where}.in_chain must be a boolean")
+    return json.loads(json.dumps(value))
 
 
 @dataclass(frozen=True)
@@ -2016,6 +2219,9 @@ def evaluate_night(plan: NightPlan, probes: Probes, *, pack_arm_receipt=None, pa
     authorize an interval plan.
     """
     del pack_conditions
+    if plan.receipt_class == HAZARD_PACK:
+        raise PlanError("night_receipt_class_invalid",
+                        "HAZARD_PACK windows are armed by joulewise.hazards in the driver, never by evaluate_night")
     rows = _initial_conditions(plan.receipt_class)
     evidence = []
     pack_arm = None
