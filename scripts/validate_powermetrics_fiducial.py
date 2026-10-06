@@ -375,8 +375,16 @@ def _derive_preflight_systematic_screen_s(
     acceptance_path: Path | None = None,
     preflight_record: dict[str, Any] | None = None,
     ledger_snapshot: CalibrationLedgerSnapshot | None = None,
+    allow_stale_code: bool = False,
 ) -> Decimal:
-    """Authenticate the active acceptance and derive its level comparator."""
+    """Authenticate the active acceptance and derive its level comparator.
+
+    ``allow_stale_code`` is the HAZARD_PACK path only (gate-prune core lane
+    VPF, A15): an executed protocol or estimator digest that differs from the
+    acceptance's ``prospective_rederivation`` is recorded in
+    ``preflight_record["stale_code"]`` instead of refused, and the caller flags
+    it ``code.executed_differs_from_sealed``.  Every other check stays.
+    """
 
     path = (
         DEFAULT_ACCEPTANCE_BOUND_PATH
@@ -394,12 +402,31 @@ def _derive_preflight_systematic_screen_s(
     prospective = artifact.get("prospective_rederivation")
     if not isinstance(prospective, Mapping):
         raise _AcceptancePreflightError("acceptance_artifact_derivation_invalid")
-    if (
-        protocol_sha256(PROTOCOL_ID) != prospective.get("protocol_sha256")
-        or _current_estimator_code_sha256()
-        != prospective.get("estimator_code_sha256")
-    ):
-        raise _AcceptancePreflightError("acceptance_artifact_stale")
+    executed_protocol_sha256 = protocol_sha256(PROTOCOL_ID)
+    stale = executed_protocol_sha256 != prospective.get("protocol_sha256")
+    executed_estimator_code_sha256 = None
+    # Legacy keeps the short circuit: a stale protocol refuses without reading
+    # the estimator files.
+    if not stale or allow_stale_code:
+        executed_estimator_code_sha256 = _current_estimator_code_sha256()
+        stale = stale or (
+            executed_estimator_code_sha256
+            != prospective.get("estimator_code_sha256")
+        )
+    stale_code: dict[str, Any] | None = None
+    if stale:
+        if not allow_stale_code:
+            raise _AcceptancePreflightError("acceptance_artifact_stale")
+        stale_code = {
+            "recorded": {
+                "protocol_sha256": prospective.get("protocol_sha256"),
+                "estimator_code_sha256": prospective.get("estimator_code_sha256"),
+            },
+            "executed": {
+                "protocol_sha256": executed_protocol_sha256,
+                "estimator_code_sha256": executed_estimator_code_sha256,
+            },
+        }
 
     expected_epoch = artifact.get("identity_epoch")
     acceptance_id = artifact.get("acceptance_id")
@@ -423,6 +450,8 @@ def _derive_preflight_systematic_screen_s(
     }
     if preflight_record is not None:
         preflight_record.update(record)
+        if stale_code is not None:
+            preflight_record["stale_code"] = stale_code
     if identity_epoch is not None and identity_epoch not in judged_epochs:
         stale_fields = sorted(
             field
@@ -1344,14 +1373,25 @@ def _validate_reserved_bracket_slot(
     require_committed_pin: bool = True,
     ledger_snapshot: CalibrationLedgerSnapshot | None = None,
     custody_deadline: CustodyDeadline | None = None,
+    verify_custody: bool = True,
+    allow_stale_pin: bool = False,
 ) -> None:
-    """Authenticate the exact predeclared slot before capture state exists."""
+    """Authenticate the exact predeclared slot before capture state exists.
+
+    ``verify_custody=False`` is the HAZARD_PACK path only (A6-R2/R3): the
+    historical custody pass is skipped.  The governed-extension shape check
+    below stays: it still requires the pin, exactly one open session, and a
+    ledger tail after the pin made of that session's rows.  With
+    ``allow_stale_pin`` (same path, erratum s3-reservation-stop) the tail is
+    taken from the reservation instead of the pin, and the pin must still be
+    inside the physical chain.
+    """
 
     snapshot = ledger_snapshot if ledger_snapshot is not None else load_calibration_ledger_snapshot(
         ledger_path,
         head_pin_path,
         require_committed_pin=require_committed_pin,
-        verify_custody=True, mode="issuing", custody_deadline=custody_deadline,
+        verify_custody=verify_custody, mode="issuing", custody_deadline=custody_deadline,
     )
     session = snapshot.bracket_session_by_id.get(session_id)
     # The session's own open receipt declares the ordered slot list; the next
@@ -1374,7 +1414,11 @@ def _validate_reserved_bracket_slot(
         else None
     )
     if (
-        not snapshot.is_governed_open_bracket_extension
+        not (
+            snapshot.is_open_bracket_extension_past_stale_pin
+            if allow_stale_pin
+            else snapshot.is_governed_open_bracket_extension
+        )
         or session is None
         or session.state != "open"
         or slot not in session.declared_slots
@@ -1407,9 +1451,15 @@ class _CaptureLedgerLifecycle:
         require_committed_pin: bool = True,
         preflight_snapshot: CalibrationLedgerSnapshot | None = None,
         custody_deadline: CustodyDeadline | None = None,
+        verify_historical_custody: bool = True,
     ) -> None:
         if (session_id is None) != (slot is None):
             raise CalibrationLedgerError(RefusalCode.WRITER_BRACKET_ARGUMENTS)
+        # False only on the HAZARD_PACK path (A6-R2/R3): every ledger read
+        # before the capture skips the historical custody pass, and a head pin
+        # that lags the reservation is accepted (erratum s3-reservation-stop).
+        # This capture's own custody verification at finalization is unchanged.
+        self.verify_historical_custody = verify_historical_custody
         self.ledger_path = Path(ledger_path)
         self.head_pin_path = Path(head_pin_path)
         self.attempt_id = attempt_id
@@ -1551,13 +1601,14 @@ class _CaptureLedgerLifecycle:
             # the custody verification is wanted here; the slot binding keeps
             # its pinned two checks (before the lease, and after recovery in
             # _begin_once), so the snapshot itself is deliberately unused.
-            load_calibration_ledger_snapshot(
-                self.ledger_path, self.head_pin_path,
-                require_committed_pin=self.require_committed_pin,
-                verify_custody=True, mode="issuing",
-                custody_deadline=self.custody_deadline,
-            )
-            self.custody_deadline.check()
+            if self.verify_historical_custody:
+                load_calibration_ledger_snapshot(
+                    self.ledger_path, self.head_pin_path,
+                    require_committed_pin=self.require_committed_pin,
+                    verify_custody=True, mode="issuing",
+                    custody_deadline=self.custody_deadline,
+                )
+                self.custody_deadline.check()
             repair_calibration_ledger(
                 self.ledger_path,
                 engine_identity="validate_powermetrics_fiducial",
@@ -1586,6 +1637,11 @@ class _CaptureLedgerLifecycle:
             require_committed_pin=self.require_committed_pin,
             ledger_snapshot=ledger_snapshot,
             custody_deadline=self.custody_deadline,
+            **(
+                {}
+                if self.verify_historical_custody
+                else {"verify_custody": False, "allow_stale_pin": True}
+            ),
         )
 
     def _begin_once(self) -> None:
@@ -1603,6 +1659,11 @@ class _CaptureLedgerLifecycle:
                 enforcing_under_lease=True,
                 custody_deadline=self.custody_deadline,
                 require_committed_pin=self.require_committed_pin,
+                **(
+                    {}
+                    if self.verify_historical_custody
+                    else {"verify_custody": False, "allow_stale_pin": True}
+                ),
             )
             if readiness.status != "ready":
                 assert readiness.refusal_code is not None
@@ -2069,17 +2130,56 @@ def main(argv: list[str] | None = None) -> int:
     preflight_systematic_screen_s: Decimal | None
     acceptance_preflight: dict[str, Any] = {}
     screen_basis: dict[str, Any] | None = None
+    # --- HAZARD_PACK flag path (gate-prune core lane VPF) ---------------------
+    # ``hazard`` is None on the legacy path, whose behavior is unchanged.  On a
+    # HAZARD window (the runs root carries the hazard lineage locator) the
+    # representation checks below are recorded as flags instead of refusals:
+    # the committed-pin and historical-custody passes (A6-R2/R3), a failed
+    # display-sleep action (A7), binding strings missing from the sampler
+    # header (A8) and executed code that differs from the acceptance's (A15).
+    from joulewise.flags import core as flags_core  # noqa: PLC0415
+
+    hazard = flags_core.hazard_flag_context(
+        Path(args.output_root).parent, writer="core-fiducial"
+    )
+    if hazard is not None:
+        flags_core.emit(
+            hazard, "calibration.writer_record_flagged", level="window",
+            observed={"kind": "historical_custody_unverified", "slot": args.slot,
+                      "writer": "fiducial"},
+            legacy_site="scripts/validate_powermetrics_fiducial.py:2075@e6b6a0ce",
+            legacy_code="calibration_ledger_head_uncommitted|calibration_ledger_custody_invalid"
+                        "|calibration_ledger_custody_timeout",
+            detail="HAZARD writer skipped the committed-pin check and the historical custody "
+                   "pass; this window's capture bytes are re-verified at harvest",
+        )
     # Authenticate continued epochs before any capture state exists. Reuse this
     # snapshot for the early slot check; the under-lease check still reloads it.
     try:
         preflight_snapshot = load_calibration_ledger_snapshot(
-            args.ledger, args.head_pin, require_committed_pin=True,
-            verify_custody=True, mode="issuing", custody_deadline=custody_deadline,
+            args.ledger, args.head_pin, require_committed_pin=hazard is None,
+            verify_custody=hazard is None, mode="issuing", custody_deadline=custody_deadline,
         )
     except CalibrationLedgerError as exc:
         return emit_refusal(exc.code or RefusalCode.LEDGER_MALFORMED,
                             context=dict(exc.context) | {"detail": str(exc)},
                             stream=sys.stderr)
+    if (
+        hazard is not None
+        and bracket_mode
+        and not preflight_snapshot.is_governed_open_bracket_extension
+        and preflight_snapshot.is_open_bracket_extension_past_stale_pin
+    ):
+        flags_core.emit(
+            hazard, "calibration.writer_record_flagged", level="window",
+            observed={"kind": "head_pin_stale", "writer": "fiducial", "slot": args.slot,
+                      "pin_sequence": preflight_snapshot.committed_head_sequence,
+                      "physical_sequence": preflight_snapshot.head_sequence},
+            legacy_site="scripts/validate_powermetrics_fiducial.py:1389@e6b6a0ce",
+            legacy_code=RefusalCode.RESERVED_SLOT_MISMATCH.value,
+            detail="the head pin lags the bracket session's reservation; the extension "
+                   "shape was judged from the reservation",
+        )
     if args.derivation_only:
         try:
             _level_screen_s, basis = _derivation_only_screen_basis(
@@ -2136,12 +2236,23 @@ def main(argv: list[str] | None = None) -> int:
             preflight_systematic_screen_s = _derive_preflight_systematic_screen_s(
                 planned_epoch, preflight_record=acceptance_preflight,
                 ledger_snapshot=preflight_snapshot,
+                **({} if hazard is None else {"allow_stale_code": True}),
             )
         except _AcceptancePreflightError as exc:
             return emit_refusal(
                 RefusalCode.FROZEN_PROTOCOL_INVALID,
                 context={"reason": exc.reason, **exc.context},
                 stream=sys.stderr,
+            )
+        if hazard is not None and "stale_code" in acceptance_preflight:
+            flags_core.emit(
+                hazard, "code.executed_differs_from_sealed", level="window",
+                observed={"component": "fiducial_estimator_and_protocol",
+                          **acceptance_preflight["stale_code"]},
+                legacy_site="scripts/validate_powermetrics_fiducial.py:402@e6b6a0ce",
+                legacy_code="acceptance_artifact_stale",
+                detail="executed fiducial estimator or protocol bytes differ from the "
+                       "acceptance's prospective_rederivation digests",
             )
 
     import mlx.core as mx  # noqa: PLC0415
@@ -2208,6 +2319,11 @@ def main(argv: list[str] | None = None) -> int:
         derivation_only=args.derivation_only,
         preflight_snapshot=preflight_snapshot,
         custody_deadline=custody_deadline,
+        **(
+            {}
+            if hazard is None
+            else {"require_committed_pin": False, "verify_historical_custody": False}
+        ),
     )
     try:
         if bracket_mode and args.slot == "post":
@@ -2235,12 +2351,33 @@ def main(argv: list[str] | None = None) -> int:
             )
             time.sleep(args.arm_countdown_s)
         if args.sleep_display_before_capture:
-            subprocess.run(
-                [str(args.display_arm_binary), "displaysleepnow"],
-                check=True,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.PIPE,
-            )
+            try:
+                subprocess.run(
+                    [str(args.display_arm_binary), "displaysleepnow"],
+                    check=True,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.PIPE,
+                )
+            except (OSError, subprocess.CalledProcessError) as display_exc:
+                if hazard is None:
+                    raise
+                # A7: the display-sleep ACTION failed; whether the display
+                # affected the capture is judged by the fit and the screen.
+                stderr_raw = getattr(display_exc, "stderr", None)
+                stderr_tail = (
+                    stderr_raw.decode("utf-8", errors="replace")
+                    if isinstance(stderr_raw, bytes)
+                    else str(display_exc)
+                )[-200:]
+                flags_core.emit(
+                    hazard, "calibration.writer_record_flagged", level="window",
+                    observed={"kind": "display_sleep_action_failed", "slot": args.slot,
+                              "returncode": getattr(display_exc, "returncode", None),
+                              "stderr_tail": stderr_tail},
+                    legacy_site="scripts/validate_powermetrics_fiducial.py:2245@e6b6a0ce",
+                    legacy_code=RefusalCode.DISPLAY_ARM_FAILED.value,
+                    detail="pmset displaysleepnow failed; the capture continued",
+                )
             time.sleep(5 * args.time_scale_for_test)
     except (OSError, subprocess.CalledProcessError, ValueError) as exc:
         ledger_lifecycle.abandon("display_arm_failed")
@@ -2598,6 +2735,27 @@ def main(argv: list[str] | None = None) -> int:
         "estimator_revision": RESIDUAL_REGION_METHOD,
         "protocol_sha256": sha256_path(PROTOCOL_PATH),
     }
+    if hazard is not None:
+        # A8: a header string the sampler did not print is filled from the
+        # sysctl value this writer read at start (and the reservation
+        # recorded).  A present value that differs is never replaced.
+        substituted = [
+            field for field in ("hardware_model", "os_build")
+            if bindings.get(field) in (None, "")
+            and planned_epoch.get(field) not in (None, "")
+        ]
+        for field in substituted:
+            bindings[field] = planned_epoch[field]
+        if substituted:
+            flags_core.emit(
+                hazard, "calibration.writer_record_flagged", level="window",
+                observed={"kind": "binding_read_substituted", "slot": args.slot,
+                          "fields": substituted},
+                legacy_site="joulewise/powermetrics_fiducial.py:1414@e6b6a0ce",
+                legacy_code="binding_fields_missing",
+                detail="binding strings missing from the powermetrics header were filled "
+                       "from the writer's sysctl reads",
+            )
     ledger_lifecycle.identity_epoch = {
         field: bindings.get(field)
         for field in (
