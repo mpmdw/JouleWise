@@ -540,6 +540,12 @@
       "family": "MODEL_IDENTITY",
       "klass": "NUMBER"
     },
+    "model.identity_unmeasured": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_WINDOW",
+      "family": "MODEL_IDENTITY",
+      "klass": "NUMBER"
+    },
     "model.identity_unpinned": {
       "blinding": "STRUCTURE",
       "effect": "EXCLUDE_WINDOW",

@@ -190,6 +190,8 @@ CODES: dict[str, CodeSpec] = {
     "model.identity_inconsistent_in_window": _spec("MODEL_IDENTITY", "NUMBER"),
     "model.identity_underivable": _spec("MODEL_IDENTITY", "NUMBER", legacy="joulewise/identity_pins.py:405"),
     "model.identity_unpinned": _spec("MODEL_IDENTITY", "NUMBER"),
+    # An arm collector call that failed as a whole (PLAN2 row 12, fail closed).
+    "model.identity_unmeasured": _spec("MODEL_IDENTITY", "NUMBER"),
     # Calibration bracket and ledger.
     "calibration.capture_invalid": _spec("CALIBRATION", "NUMBER"),
     "calibration.bracket_acceptance_failed": _spec("CALIBRATION", "NUMBER",
@@ -367,6 +369,13 @@ PRUNE2_CODES = frozenset({
     "chain.stopped_before_collection", "roster.dispatch_unresolved", "records.identity_unmeasured_superseded",
     "thermal.stage_battery_rise", "thermal.battery_temperature_unmeasured",
 })
+# joulewise.flags.collect.UNMEASURED_BY_COLLECTOR, read and never imported: the
+# flag each arm collector leaves when its checks did not (all) run.
+ARM_COLLECTOR_UNMEASURED = {
+    "pack_identity": "pack.identity_unmeasured", "checkout_identity": "code.identity_unmeasured",
+    "executed_code": "code.identity_unmeasured", "model_identity": "model.identity_unmeasured",
+}
+COLLECTOR_SOURCE_PREFIX = "joulewise.flags.collect."
 LINEAGE_CODES = frozenset(code for code in CODES if code.startswith("lineage."))
 NEVER_CLASSIFIED_CODES = frozenset({"records.malformed_flag"})
 # Codes L4's draft catalog does not name (handed to L4 and L6 for the draft
@@ -963,6 +972,10 @@ class FlagLedger:
         if not problems:
             self._records.setdefault(record["flag_id"], dict(record))
         return problems
+
+    def remove(self, flag_id: str) -> dict[str, Any] | None:
+        """Drop one record (a superseded flag, PLAN2 row 12); its supersession is itself a flag."""
+        return self._records.pop(flag_id, None)
 
     @property
     def records(self) -> list[dict[str, Any]]:
@@ -2707,6 +2720,11 @@ class _Harvest:
         # The bound neg8_bound validated against the collected 10/11-member
         # manifest (an energy: it never leaves this object or withheld/).
         self.neg8_collected_bound: Mapping[str, Any] | None = None
+        # Which arm-collector checks this harvest re-derived (PLAN2 row 12):
+        # collector -> {check: ran}.  Filled by pack_identity and code_identity.
+        self.identity_checks: dict[str, dict[str, bool]] = {}
+        # Arm collectors whose run ended with status ok, by stage.
+        self.collector_ok: set[tuple[str, str]] = set()
 
     # -- step wrappers ------------------------------------------------------
     def step(self, name: str, function: Callable[[], Any], *, fault: bool = True) -> Any:
@@ -3886,6 +3904,21 @@ class _Harvest:
                 observed = sha256_file(target) if target.is_file() else "absent"
                 if observed != digest:
                     mismatches.append({"path": relative, "expected": digest, "observed": observed, "pin": "sealed"})
+        # The run id inside each science config is the roster's (the arm
+        # collector's config_run_id check, replayed from the preserved bytes).
+        for row in tree.get("science", []) if isinstance(tree.get("science"), list) else []:
+            if not isinstance(row, Mapping) or not isinstance(row.get("config_path"), str):
+                continue
+            try:
+                config = read_json(_resolve_repo_path(row["config_path"], pack, repo))
+            except (OSError, ValueError):
+                continue  # a missing or unreadable config is already a pin mismatch
+            if isinstance(config, Mapping) and config.get("run_id") != row.get("run_id"):
+                mismatches.append({"path": row["config_path"], "check": "config_run_id",
+                                   "expected": row.get("run_id"), "observed": config.get("run_id")})
+        self.identity_checks["pack_identity"] = {
+            "pins": True, "config_run_id": True,
+            "registered_digests": sealed is not None and tree_relative in sealed}
         if mismatches:
             self.emit("pack.identity_mismatch", level="window", collector="pack_identity",
                       observed={"mismatches": mismatches[:32], "mismatch_count": len(mismatches)},
@@ -3992,8 +4025,24 @@ class _Harvest:
             tracked = [line for line in porcelain.splitlines() if line.strip() and not line.startswith("??")]
             if tracked:
                 differences.append({"check": "tracked_edits", "observed": tracked[:16]})
+            # Untracked files under the executed roots can be imported, so they
+            # change what ran (the arm's checkout_identity check, replayed from
+            # the porcelain the driver preserved at arm; PLAN2 row 12).
+            pack_relative = _relative_to(inputs.pack_root, inputs.measurement_root)
+            roots = CODE_PREFIXES + ((pack_relative + "/",) if pack_relative else ())
+            untracked = [path for path in (_porcelain_path(line[3:]) for line in porcelain.splitlines()
+                                           if line.startswith("?? ")) if path.startswith(roots)]
+            if untracked:
+                differences.append({"check": "untracked_in_executed_roots", "observed": sorted(untracked)[:16]})
         elif executed is not None:
             unmeasured.append({"check": "tracked_edits", "missing_input": "status_porcelain"})
+        missing = {item["check"] for item in unmeasured}
+        self.identity_checks["checkout_identity"] = {
+            "head": "head" not in missing and h_claim is not None and executed_head is not None,
+            "tracked_edits": isinstance(porcelain, str), "untracked_in_executed_roots": isinstance(porcelain, str)}
+        self.identity_checks["executed_code"] = {
+            "executed_inventory": "executed_inventory" not in missing and sealed is not None and bool(executed),
+            "chain_sidecar": "chain_sidecar" not in missing}
         if differences:
             self.emit("code.executed_differs_from_sealed", level="window", collector="code_identity",
                       observed={"differences": differences[:32], "difference_count": len(differences)})
@@ -4277,6 +4326,57 @@ class _Harvest:
             self.emit("contention.kernel_task_share", level="window", collector="monitor",
                       observed={"kernel_task_cpu_s_in_requests": round(total, 6)})
 
+    # -- arm-collector unmeasured flags the harvest re-derived (PLAN2 row 12) ---
+    def supersede_identity_unmeasured(self) -> None:
+        """Lift a desk or arm ``*.identity_unmeasured`` only where this harvest re-derived every check.
+
+        A collector that erred or timed out at the arm leaves an
+        EXCLUDE_WINDOW ``*.identity_unmeasured`` flag, and a re-harvest
+        re-reads it, so a deterministic collector failure excluded every
+        re-armed window.  The harvest replays the same identity checks from
+        the preserved bytes.  A flag is superseded, check by check, only
+        when the collector it names is one whose every check this harvest
+        ran (``identity_checks``): checkout_identity (head, tracked edits,
+        untracked files under the executed roots), executed_code (executed
+        inventory against the sealed one, chain sidecar) and pack_identity
+        (plan-tree pins, the registered plan-tree digest, config run ids;
+        run-id uniqueness is ``roster.duplicate_run_id``).  The harvest's
+        own result, mismatch or clean, then stands.  model_identity is never
+        superseded: the harvest does not re-hash the model artifact,
+        tokenizer or runtime packages.  The removed flag is recorded whole in
+        ``records.identity_unmeasured_superseded``.
+        """
+        for record in list(self.flags.records):
+            code = record.get("code")
+            if code not in set(ARM_COLLECTOR_UNMEASURED.values()):
+                continue
+            source = record.get("source") if isinstance(record.get("source"), Mapping) else {}
+            observed = record.get("observed") if isinstance(record.get("observed"), Mapping) else {}
+            stage, writer = source.get("stage"), str(source.get("collector") or "")
+            if observed.get("check") == "collector_run":
+                collector = observed.get("collector")
+            elif writer.startswith(COLLECTOR_SOURCE_PREFIX):
+                collector = writer[len(COLLECTOR_SOURCE_PREFIX):]
+            else:
+                continue
+            if not (stage in ("desk", "arm") or (stage == "harvest" and writer == "arm_collectors")):
+                continue
+            if collector not in ARM_COLLECTOR_UNMEASURED or ARM_COLLECTOR_UNMEASURED[collector] != code:
+                continue
+            checks = self.identity_checks.get(collector)
+            if not checks or not all(checks.values()):
+                continue
+            if collector == "pack_identity":
+                code_checks = self.identity_checks.get("checkout_identity") or {}
+                if not (code_checks.get("tracked_edits") and code_checks.get("untracked_in_executed_roots")
+                        and getattr(self, "dispatches", None) is not None):
+                    continue  # the committed-pack and run-id checks ride on these
+            self.flags.remove(record["flag_id"])
+            self.emit("records.identity_unmeasured_superseded", level="window", collector="identity",
+                      observed={"superseded_flag_id": record["flag_id"], "code": code, "collector": collector,
+                                "stage": stage, "check": observed.get("check"),
+                                "harvest_checks": sorted(checks)})
+
     # -- arm record and earlier flag files -------------------------------------
     def arm_and_desk_records(self) -> None:
         path = self.inputs.arm_record_path
@@ -4406,6 +4506,8 @@ class _Harvest:
         """A ``joulewise.flag_collector_run.v1`` record: every collector whose status is not ``ok``."""
         stage = record.get("stage") if isinstance(record.get("stage"), str) else "unknown"
         rows = record.get("collectors") if isinstance(record.get("collectors"), list) else []
+        self.collector_ok |= {(stage, str(row.get("collector"))) for row in rows
+                              if isinstance(row, Mapping) and row.get("status") == "ok"}
         listed = record.get("collector_errors") if isinstance(record.get("collector_errors"), list) else []
         failed = [row for row in rows if isinstance(row, Mapping) and row.get("status") != "ok"]
         named = {row.get("collector") for row in failed}
@@ -4467,9 +4569,13 @@ class _Harvest:
         if not records and isinstance(arm_value, Mapping):
             results = [("hazards/arm.json", item) for item in arm_value.get("record_only") or []
                        if isinstance(item, Mapping)]
+        call_failed = [source for source, record in ((f"night/{path.name}", record) for path, record in records)
+                       if isinstance(record, Mapping) and not record.get("results") and record.get("collector_error")]
         for source, item in results:
             failed = item.get("error") or item.get("timed_out") or (
                 _is_int(item.get("returncode")) and item.get("returncode") != 0)
+            if failed:
+                call_failed.append(source)
             if failed:
                 status = "timeout" if item.get("timed_out") else "error"
                 error = item.get("error") or ("timed out" if item.get("timed_out")
@@ -4477,6 +4583,18 @@ class _Harvest:
                 self._prior_collector_error(stage="arm", collector=str(item.get("name") or "collector"),
                                             status=status, error=error, elapsed_s=item.get("elapsed_s"),
                                             source=source)
+        if call_failed:
+            # The arm's collector call was killed or failed as a whole, so a
+            # collector it never finished wrote neither its flags nor its run
+            # row.  Fail closed: each collector without an ok arm row is
+            # unmeasured (PLAN2 row 12); supersede_identity_unmeasured then
+            # lifts the ones this harvest re-derived.
+            for name, code in ARM_COLLECTOR_UNMEASURED.items():
+                if ("arm", name) not in self.collector_ok:
+                    self.emit(code, level="window", collector="arm_collectors",
+                              observed={"check": "collector_run", "collector": name, "status": "call_failed",
+                                        "source": call_failed[0]},
+                              expected={"status": "ok"})
 
     # -- G3 provenance checker -------------------------------------------------
     def g3(self, *, skipped: bool = False) -> None:
@@ -5084,6 +5202,17 @@ def _g3_lines(stdout: str) -> list[dict[str, str]]:
     return rows
 
 
+def _porcelain_path(text: str) -> str:
+    """A ``git status --porcelain=v1`` path: unquoted when git quoted it."""
+    text = text.strip()
+    if len(text) >= 2 and text[0] == text[-1] == '"':
+        try:
+            return json.loads(text)
+        except ValueError:
+            return text[1:-1]
+    return text
+
+
 def _under(path: Path, root: Path) -> bool:
     try:
         Path(os.path.abspath(path)).relative_to(os.path.abspath(root))
@@ -5150,6 +5279,7 @@ def harvest(inputs: WindowInputs, archive_root: Path | str, *, seams: Seams | No
     run.step("pack_identity", run.pack_identity)
     run.step("code_identity", run.code_identity)
     run.step("model_identity", run.model_identity)
+    run.step("identity_supersession", run.supersede_identity_unmeasured)
     run.step("lineage", run.lineage_audit)
     run.step("monitor", run.monitor_joins)
     run.step("exclusion_inputs", run.exclusion_inputs)

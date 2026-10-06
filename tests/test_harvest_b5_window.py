@@ -2955,11 +2955,16 @@ class RehearsalRound1Tests(WindowTestCase):
                 self.assertTrue(row["source"].startswith(("flags/collector_runs.jsonl:", "night/arm_collectors")))
         # Not harvest faults: the collectors are records.
         self.assertEqual(record["faults"], [])
-        # Every flag the collectors wrote reached the window's flags, with its writer's id.
+        # Every flag the collectors wrote reached the window's flags, with its writer's id,
+        # or was superseded by the harvest's own complete re-derivation (PLAN2 row 12),
+        # which records the superseded flag's id.
         written = [json.loads(line) for name in ("desk.jsonl", "arm.jsonl")
                    for line in (window.custody / "flags" / name).read_text().splitlines() if line.strip()]
         self.assertTrue(written)
-        self.assertTrue({flag["flag_id"] for flag in written} <= {flag["flag_id"] for flag in window.flags()})
+        superseded = {flag["observed"]["superseded_flag_id"] for flag in window.flags()
+                      if flag["code"] == "records.identity_unmeasured_superseded"}
+        self.assertTrue({flag["flag_id"] for flag in written}
+                        <= {flag["flag_id"] for flag in window.flags()} | superseded)
         failed = {(flag["observed"]["stage"], flag["observed"]["collector"]) for flag in window.flags()
                   if flag["code"] == "records.collector_failed" and "stage" in flag["observed"]}
         self.assertEqual({f"{stage}.{name}" for stage, name in failed}, {name for _stage, name in folded})

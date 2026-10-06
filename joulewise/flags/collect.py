@@ -84,6 +84,20 @@ DEFAULT_TIMEOUTS_S = {
     "model_identity": 900.0,
     "ledger_readiness": 120.0,
 }
+# At the arm the driver kills the whole collector call after 120 s
+# (joulewise.b5.driver.COLLECTOR_TIMEOUT_S), so the per-collector budgets must
+# fit inside it with room for process start-up: a slow collector then times
+# out on its own and leaves its own unmeasured flag and run row, instead of
+# the outer kill losing every collector's record (PLAN2 row 12).  The real
+# block-5 rehearsals took at most 14.5 s (model_identity, two models).
+ARM_TIMEOUTS_S = {
+    "pack_identity": 15.0,
+    "checkout_identity": 10.0,
+    "executed_code": 15.0,
+    "model_identity": 55.0,
+    "ledger_readiness": 15.0,
+}
+ARM_OUTER_TIMEOUT_S = 120.0
 DEFAULT_PIN_ONLY_PATHS = ("configs/calibration/calibration_ledger_head.json",)
 GIT_TIMEOUT_S = 30.0
 _SHA_KEYS = ("sha256", "byte_sha256", "actual_sha256", "artifact_sha256")
@@ -1371,9 +1385,10 @@ def run_collectors(
     records = []
     for name, params in specs:
         merged = {**dict(params), "stage": stage}
-        outcome = run_collector(
-            name, merged, timeout_s=(timeout_s or {}).get(name), python=python, module=module
-        )
+        budget = (timeout_s or {}).get(name)
+        if budget is None and stage == "arm":
+            budget = ARM_TIMEOUTS_S.get(name)
+        outcome = run_collector(name, merged, timeout_s=budget, python=python, module=module)
         written = 0
         for flag in outcome.flags:
             try:

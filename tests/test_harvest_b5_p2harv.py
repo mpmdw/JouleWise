@@ -569,3 +569,89 @@ class BatteryThermistorTests(base.WindowTestCase):
         self.assertEqual(unmeasured, [("absent", "no_readings_recorded"), ("failed", "readings_failed")])
         excluded = window.exclusions()["reasons"]
         self.assertNotIn("thermal.stage_battery_rise", excluded)
+
+
+def arm_unmeasured(collector: str) -> dict:
+    """The flag run_collectors leaves at the arm for a collector that timed out."""
+    from joulewise.flags.collect import CollectorOutcome, collector_unmeasured_flag
+    return collector_unmeasured_flag(CollectorOutcome(collector, "timeout", 60.0, error="timed out after 60.0 s"),
+                                     {"stage": "arm", "plan_id": base.PLAN_ID, "attempt": 1})
+
+
+class ArmIdentitySupersessionTests(base.WindowTestCase):
+    """PLAN2 row 12: an arm *.identity_unmeasured yields to the harvest's own complete re-derivation."""
+
+    def write_arm_flags(self, window, *collectors):
+        flags = window.custody / "flags"
+        flags.mkdir(parents=True, exist_ok=True)
+        (flags / "arm.jsonl").write_text("".join(json.dumps(arm_unmeasured(name)) + "\n" for name in collectors))
+
+    def test_untracked_files_under_the_executed_roots_differ_from_sealed(self):
+        window = self.window(executed_overrides={"status_porcelain": "?? joulewise/stray.py\n?? notes/todo.txt\n"})
+        window.harvest()
+        observed = next(flag["observed"] for flag in window.flags()
+                        if flag["code"] == "code.executed_differs_from_sealed")
+        self.assertIn({"check": "untracked_in_executed_roots", "observed": ["joulewise/stray.py"]},
+                      observed["differences"])
+
+    def test_a_collector_the_harvest_fully_rederived_is_superseded(self):
+        window = self.window()
+        self.write_arm_flags(window, "checkout_identity", "executed_code", "pack_identity", "model_identity")
+        window.harvest()
+        codes = [flag["code"] for flag in window.flags()]
+        self.assertNotIn("code.identity_unmeasured", codes)
+        self.assertNotIn("pack.identity_unmeasured", codes)
+        self.assertIn("model.identity_unmeasured", codes)  # the harvest does not re-hash the model
+        superseded = sorted(flag["observed"]["collector"] for flag in window.flags()
+                            if flag["code"] == "records.identity_unmeasured_superseded")
+        self.assertEqual(superseded, ["checkout_identity", "executed_code", "pack_identity"])
+        reasons = window.exclusions()["reasons"]
+        self.assertIn("model.identity_unmeasured", reasons)
+        self.assertNotIn("code.identity_unmeasured", reasons)
+
+    def test_a_check_the_harvest_could_not_run_keeps_the_arm_flag(self):
+        window = self.window(executed_overrides={"status_porcelain": None})
+        self.write_arm_flags(window, "checkout_identity")
+        window.harvest()
+        self.assertIn("code.identity_unmeasured", window.codes())
+        self.assertNotIn("records.identity_unmeasured_superseded", window.codes())
+
+    def test_a_killed_collector_call_fails_closed_then_supersedes(self):
+        window = self.window()
+        base.put(window.custody / "night" / "arm_collectors.json",
+                 {"schema": "joulewise.b5_arm_collectors.v1", "call": 1, "ran_by": "driver",
+                  "collector_error": "timed out", "timed_out": True, "returncode": None})
+        window.harvest()
+        unmeasured = sorted((flag["code"], flag["observed"]["collector"]) for flag in window.flags()
+                            if flag["code"].endswith(".identity_unmeasured"))
+        self.assertEqual(unmeasured, [("model.identity_unmeasured", "model_identity")])
+        self.assertIn("model.identity_unmeasured", window.exclusions()["reasons"])
+        superseded = sorted(flag["observed"]["collector"] for flag in window.flags()
+                            if flag["code"] == "records.identity_unmeasured_superseded")
+        self.assertEqual(superseded, ["checkout_identity", "executed_code", "pack_identity"])
+
+
+class ArmCollectorBudgetTests(unittest.TestCase):
+    """PLAN2 row 12: the arm's per-collector budgets fit inside the driver's 120 s kill."""
+
+    def test_the_arm_budgets_fit_inside_the_outer_kill(self):
+        from joulewise.b5 import driver
+        from joulewise.flags import collect
+        self.assertEqual(collect.ARM_OUTER_TIMEOUT_S, driver.COLLECTOR_TIMEOUT_S)
+        self.assertEqual(set(collect.ARM_TIMEOUTS_S), set(collect.DEFAULT_TIMEOUTS_S))
+        self.assertLessEqual(sum(collect.ARM_TIMEOUTS_S.values()) + 10.0, driver.COLLECTOR_TIMEOUT_S)
+
+    def test_run_collectors_uses_them_at_the_arm_only(self):
+        from joulewise.flags import collect
+        asked = {}
+
+        def fake(name, params, *, timeout_s=None, python=None, module=None):
+            asked.setdefault(params["stage"], {})[name] = timeout_s
+            return collect.CollectorOutcome(name, "ok", 0.0)
+
+        sink = SimpleNamespace(append=lambda flag: True)
+        with mock.patch.object(collect, "run_collector", fake):
+            for stage in ("arm", "desk"):
+                collect.run_collectors([(name, {}) for name in collect.ARM_TIMEOUTS_S], stage=stage, sink=sink)
+        self.assertEqual(asked["arm"], collect.ARM_TIMEOUTS_S)
+        self.assertEqual(set(asked["desk"].values()), {None})  # the desk keeps DEFAULT_TIMEOUTS_S
