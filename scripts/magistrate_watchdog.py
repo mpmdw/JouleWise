@@ -926,6 +926,38 @@ def _night_records(plan: NightPlan, storage: Storage) -> list[str] | None:
     return sorted(entry.name for entry in entries if entry.name != LAUNCH_ABANDONED_NAME)
 
 
+def _launch_marker_honored(
+    plan: NightPlan, storage: Storage, *, launch_agents_dir: Path | None = None
+) -> bool:
+    """J4 gate: a late driver for this plan must refuse on launch_abandoned.json.
+
+    The driver lane (P2-DRV) makes run_night's ``_existing_record`` treat the
+    marker as a night record. Until the driver this plan would run carries
+    that reader, a late launchd fire could pass its existing-record check and
+    measure under a released span, so the liveness release stays off (Sol
+    review R2). The driver is the run_night.py named by an installed
+    com.joulewise.night plist for this plan, else this checkout's own copy.
+    """
+
+    plan_path = (Path(plan.custody_root) / "night_plan.json").resolve(strict=False)
+    directory = launch_agents_dir or Path.home() / "Library" / "LaunchAgents"
+    plist = directory / "com.joulewise.night.plist"
+    drivers: list[Path] = []
+    try:
+        if storage.exists(plist):
+            argv = plistlib.loads(storage.read_bytes(plist))["ProgramArguments"]
+            if (isinstance(argv, list) and argv.count("--plan") == 1
+                    and Path(argv[argv.index("--plan") + 1]).resolve(strict=False) == plan_path):
+                drivers.append(Path(argv[1]))
+        if not drivers:
+            drivers.append(REPO_ROOT / "scripts" / "run_night.py")
+        return all(f'"{LAUNCH_ABANDONED_NAME}"'.encode("utf-8") in storage.read_bytes(path)
+                   for path in drivers)
+    except (OSError, ValueError, TypeError, KeyError, IndexError,
+            plistlib.InvalidFileException, ExpatError):
+        return False
+
+
 def _launch_liveness_candidate(
     plan: NightPlan, now_epoch_s: float, storage: Storage
 ) -> bool:
@@ -936,7 +968,7 @@ def _launch_liveness_candidate(
     if not (plan.t0_epoch_s + LAUNCH_LIVENESS_S < now_epoch_s
             <= deadman_epoch(plan) + COURIER_LOCK_FRESH_S):
         return False
-    return _night_records(plan, storage) == []
+    return _night_records(plan, storage) == [] and _launch_marker_honored(plan, storage)
 
 
 def _launch_abandoned_key(plan: NightPlan, storage: Storage) -> str | None:
@@ -976,8 +1008,12 @@ def _terminal_release_observed(
         key = _release_key(plan, storage)
         if key is not None and key in released:
             return True
+    # Launch liveness: valid only while night/ still holds no driver record. A
+    # late driver that slipped past the marker re-fences the span with its
+    # first record, before its arm (Sol review R3); the census latch itself
+    # stays one way.
     key = _launch_abandoned_key(plan, storage)
-    return key is not None and key in released
+    return key is not None and key in released and _night_records(plan, storage) == []
 
 
 def _window_processes(plan: NightPlan, snapshot: Sequence[ProcessInfo]) -> list[ProcessInfo]:
@@ -989,12 +1025,16 @@ def _window_processes(plan: NightPlan, snapshot: Sequence[ProcessInfo]) -> list[
     complement of the global driver probe.
     """
 
-    roots = {str(Path(plan.custody_root)),
-             str(Path(plan.custody_root).expanduser().resolve(strict=False))}
-    needles = tuple(root.rstrip("/") + "/" for root in roots)
+    roots = {str(Path(plan.custody_root)).rstrip("/"),
+             str(Path(plan.custody_root).expanduser().resolve(strict=False)).rstrip("/")}
+    # The root as a whole argument (--custody <root>, --custody=<root>,
+    # quoted) or as a path prefix (<root>/...), never a sibling sharing a
+    # prefix (<root>0/...) (Sol review R4).
+    pattern = re.compile(r"(?:^|[\s=\"'])(?:" + "|".join(map(re.escape, sorted(roots)))
+                         + r")(?=$|[/\s\"'])")
     return [row for row in snapshot
             if "<defunct>" not in row.command.casefold()
-            and any(needle in row.command for needle in needles)]
+            and pattern.search(row.command) is not None]
 
 
 def _write_launch_abandoned(
@@ -1017,10 +1057,15 @@ def _write_launch_abandoned(
             "writer": "scripts/magistrate_watchdog.py",
             "detail": ("no night/ record from the driver after t0 + liveness_s; agent census, "
                        "driver probe and plan-scoped process table were empty on one tick. "
-                       "A driver that starts after this marker must treat it as an existing "
-                       "night record and measure nothing."),
+                       "Contract (J4): a driver treats this marker as an existing night "
+                       "record and measures nothing; after writing its first night record it "
+                       "re-checks for this marker and refuses before the arm if present. The "
+                       "watchdog writes this marker first and then re-checks for driver "
+                       "records, and the release lapses once any driver record appears."),
         })
-    except FileExistsError:
+    except (OSError, RuntimeError):
+        # FileExistsError: another tick wrote it. Anything else: no marker,
+        # so no key and no release on this tick.
         return
 
 

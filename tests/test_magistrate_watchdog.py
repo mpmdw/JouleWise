@@ -627,11 +627,12 @@ class FenceTests(WatchdogTestCase):
         self.assertFalse(wd.plan_span_active(plan, now, self.harness.storage))
 
     def test_started_chain_refusal_keeps_full_span(self) -> None:
-        # PLAN2 X1 amendment (t2-01): a started-then-refused chain is a
-        # terminal window. Its files alone still hold the full span; the span
-        # ends early only after decide() observes an empty agent census, an
-        # empty driver probe and no plan process on one tick, and it keeps the
-        # full span plus the dead-man tail whenever the courier was not sent.
+        # PLAN2 X1 amendment (t2-01; Sol review R1): the early terminal-window
+        # release is HAZARD_PACK only, because only that driver censuses the
+        # chain's process group at a natural exit before writing chain.exited.
+        # For this class chain.exited proves only the direct child gone, so a
+        # started chain keeps the full span even after an empty census tick.
+        # The HAZARD_PACK shape is released in TerminalWindowReleaseTests.
         plan = self.make_plan(t0=self.base.timestamp() - 60,
                               authored_epoch_s=self.base.timestamp() - 3600)
         night = self.write_terminal_refusal(plan, started=True)
@@ -642,20 +643,17 @@ class FenceTests(WatchdogTestCase):
         self.assertTrue(wd.plan_is_armed(plan, wd.plan_completion_epoch(plan), self.harness.storage))
         self.assertFalse(wd.plan_span_active(plan, wd.plan_completion_epoch(plan) + 1,
                                              self.harness.storage))
-        self.harness.driver = wd.CensusObservation(False, 0, "123 run_night.py run", "")
         state = wd.initial_state()
-        self.assertEqual("HOLD_CENSUS", wd.decide(self.harness.storage, self.harness.deps, state).state)
+        self.assertEqual("FENCED", wd.decide(self.harness.storage, self.harness.deps, state).state)
         self.assertEqual([], state["released_terminal_windows"])
-        self.harness.driver = wd.CensusObservation(True, 1, "", "")
+        self.harness.storage.atomic_json(self.harness.storage.root / "state.json", state)
+        self.assertTrue(wd.plan_span_active(plan, now, self.harness.storage))
+        (night / "chain.started").unlink()
+        self.assertTrue(wd.plan_span_active(plan, now, self.harness.storage))
         state = wd.initial_state()
         self.assertEqual("LAUNCHING", wd.decide(self.harness.storage, self.harness.deps, state).state)
         self.harness.storage.atomic_json(self.harness.storage.root / "state.json", state)
         self.assertFalse(wd.plan_span_active(plan, now, self.harness.storage))
-        self.assertFalse(wd.plan_is_armed(plan, now, self.harness.storage))
-        (night / "courier.sent").unlink()
-        self.assertTrue(wd.plan_span_active(plan, now, self.harness.storage))
-        self.assertTrue(wd.plan_span_active(plan, wd.deadman_epoch(plan) + wd.COURIER_LOCK_FRESH_S,
-                                            self.harness.storage))
 
     def test_registration_refusal_and_receipt_capture_keep_hold(self) -> None:
         plan = self.make_plan(t0=self.base.timestamp() - 60,
@@ -2988,7 +2986,14 @@ class TerminalWindowReleaseTests(WatchdogTestCase):
         self.assertEqual("null_window", self.events("terminal_release")[0]["release_kind"])
         self.assertEqual([], state["released_zero_capture_refusals"])
 
+    def honor_marker(self) -> None:
+        # The J4 reader lands with the driver lane (P2-DRV); simulate it.
+        patch = mock.patch.object(wd, "_launch_marker_honored", return_value=True, create=True)
+        patch.start()
+        self.addCleanup(patch.stop)
+
     def test_launch_liveness_writes_the_marker_once_and_releases(self) -> None:
+        self.honor_marker()
         t0 = self.base.timestamp() - (wd.LAUNCH_LIVENESS_S + 60 if hasattr(wd, "LAUNCH_LIVENESS_S") else 960)
         plan = self.write_hazard_plan(t0=t0)
         night = Path(plan.custody_root) / "night"
@@ -3011,8 +3016,13 @@ class TerminalWindowReleaseTests(WatchdogTestCase):
         self.assertNotIn(later.state, {"FENCED", "HOLD_CENSUS"})
         self.assertEqual(before, marker_path.read_bytes())
         self.assertEqual(1, len(self.events("terminal_release")))
-        # A late driver that still starts a chain re-fences: an open chain always holds.
-        (night / "chain.started").write_text("{}", encoding="utf-8")
+        # A late driver re-fences with its first record, before its arm (Sol review R3) ...
+        (night / "censuses.jsonl").write_text("{}\n", encoding="utf-8")
+        self.assertTrue(wd.plan_span_active(plan, self.base.timestamp() + 600, self.harness.storage))
+        self.assertTrue(wd.plan_is_armed(plan, self.base.timestamp() + 600, self.harness.storage))
+        # ... and stays fenced through a closed chain with no courier: the old marker never re-releases it.
+        for name in ("chain.started", "chain.exited", "result.json"):
+            (night / name).write_text("{}", encoding="utf-8")
         self.assertTrue(wd.plan_span_active(plan, self.base.timestamp() + 600, self.harness.storage))
         self.assertTrue(wd.plan_is_armed(plan, self.base.timestamp() + 600, self.harness.storage))
 
@@ -3031,6 +3041,12 @@ class TerminalWindowReleaseTests(WatchdogTestCase):
                                                f"{plan.custody_root}/hazards/monitor/config.json")
         self.harness.processes.rows = [monitor]
         self.assert_held(plan, "HOLD_CENSUS")
+        for command in (f"python -B scripts/collect_window_flags.py --stage arm --custody {plan.custody_root}",
+                        f"python x --custody={plan.custody_root} --y",
+                        f"python x --custody '{plan.custody_root}'"):
+            with self.subTest(command=command):
+                self.harness.processes.rows = [wd.ProcessInfo(79, 1, "tok", command)]
+                self.assert_held(plan, "HOLD_CENSUS")
         # A process naming a sibling custody root that only shares a prefix does not hold.
         self.harness.processes.rows = [wd.ProcessInfo(78, 1, "tok", f"python x --plan {plan.custody_root}0/night_plan.json")]
         decision, _state = self.decide()
@@ -3106,6 +3122,7 @@ class TerminalWindowReleaseTests(WatchdogTestCase):
         self.assert_held(plan)
 
     def test_launch_liveness_needs_the_full_delay_an_empty_night_and_no_driver(self) -> None:
+        self.honor_marker()
         plan = self.write_hazard_plan(t0=self.base.timestamp() - 899)
         night = Path(plan.custody_root) / "night"
         self.assert_held(plan)
@@ -3121,13 +3138,55 @@ class TerminalWindowReleaseTests(WatchdogTestCase):
         self.assert_held(plan, "HOLD_CENSUS")
         self.assertFalse((night / "launch_abandoned.json").exists())
 
+    def test_launch_liveness_waits_for_a_driver_that_honors_the_marker(self) -> None:
+        # Sol review R2: until the driver this plan would run treats the marker
+        # as an existing record (P2-DRV), a late fire could measure after release.
+        plan = self.write_hazard_plan(t0=self.base.timestamp() - 3600)
+        night = Path(plan.custody_root) / "night"
+        self.assertNotIn(b'"launch_abandoned.json"',
+                         (wd.REPO_ROOT / "scripts/run_night.py").read_bytes())
+        self.assert_held(plan)
+        self.assertFalse((night / "launch_abandoned.json").exists())
+        agents = wd.Path.home() / "Library/LaunchAgents"
+        agents.mkdir(parents=True)
+        driver = self.temp / "driver" / "run_night.py"
+        driver.parent.mkdir()
+        plist = agents / "com.joulewise.night.plist"
+        plist.write_bytes(plistlib.dumps({"ProgramArguments": [
+            sys.executable, str(driver), "run", "--plan", str(Path(plan.custody_root) / "night_plan.json")]}))
+        driver.write_text("_HAZARD_WRITE_ONCE_RECORDS = ()\n", encoding="utf-8")
+        self.assertFalse(wd._launch_marker_honored(plan, self.harness.storage))
+        driver.write_text('_HAZARD_WRITE_ONCE_RECORDS = ("launch_abandoned.json",)\n', encoding="utf-8")
+        self.assertTrue(wd._launch_marker_honored(plan, self.harness.storage))
+        plist.write_bytes(b"not a plist")
+        self.assertFalse(wd._launch_marker_honored(plan, self.harness.storage))
+
+    def test_unwritable_marker_never_raises_or_releases(self) -> None:
+        self.honor_marker()
+        plan = self.write_hazard_plan(t0=self.base.timestamp() - 3600)
+        with mock.patch.object(wd.Storage, "exclusive_json", side_effect=PermissionError("denied")):
+            decision, state = self.decide()
+        self.assertEqual("FENCED", decision.state)
+        self.assertEqual([], state[RELEASED_TERMINAL])
+        self.assertTrue(wd.plan_span_active(plan, self.base.timestamp(), self.harness.storage))
+
+    def test_non_hazard_started_chain_is_never_released(self) -> None:
+        # Sol review R1: another class's chain.exited does not prove its group gone.
+        plan = self.make_plan(t0=self.base.timestamp() - 60,
+                              authored_epoch_s=self.base.timestamp() - 3600, name="legacy")
+        (Path(plan.custody_root) / "night").mkdir()
+        self.write_terminal(plan, verdict="GO")
+        self.assert_held(plan)
+
     def test_launch_liveness_is_hazard_pack_only(self) -> None:
+        self.honor_marker()
         plan = self.make_plan(t0=self.base.timestamp() - 3600,
                               authored_epoch_s=self.base.timestamp() - 7200)
         (Path(plan.custody_root) / "night").mkdir()
         self.assert_held(plan)
 
     def test_dry_run_writes_no_marker_and_latches_nothing(self) -> None:
+        self.honor_marker()
         plan = self.write_hazard_plan(t0=self.base.timestamp() - 3600)
         dry = wd.Storage(self.harness.storage.root, dry_run=True)
         state = wd.initial_state()
@@ -3163,7 +3222,7 @@ class TerminalWindowReleasePredicateTests(unittest.TestCase):
         null = dict(self.result, verdict="REFUSED", chain_exit_code=None, chain_sha256=None)
         self.assertEqual("null_window", self.decide(null, chain_started=False, chain_exited=False).reason)
         legacy = dict(self.result, receipt_class="REHEARSAL_STUB", verdict="REFUSED")
-        self.assertTrue(self.decide(legacy, receipt_class="REHEARSAL_STUB").allowed)
+        self.assertEqual("not_hazard_pack", self.decide(legacy, receipt_class="REHEARSAL_STUB").reason)
 
     def test_refused_shapes(self) -> None:
         null = dict(self.result, verdict="REFUSED", chain_exit_code=None, chain_sha256=None)
