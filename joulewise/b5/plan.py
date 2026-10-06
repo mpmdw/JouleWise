@@ -341,10 +341,14 @@ def write_window_plan(inputs: Mapping[str, Any], *, settle_s: int | float = b5_c
     }
     chain_path = custody / CHAIN_BASENAME
     try:
+        runbook_text = (measurement / b5_chain.RUNBOOK_RELATIVE).read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as exc:
+        raise WindowPlanError(f"the measurement checkout's runbook is unreadable: {exc}") from exc
+    try:
         chain_raw = b5_chain.render_chain(
             tree=tree, tree_sha256=tree_sha256, stages=stages, bindings=bindings,
             measurement_root=measurement, pack_root=pack_root, plan_id=inputs["plan_id"],
-            settle_s=settle_s)
+            runbook_text=runbook_text, settle_s=settle_s)
     except b5_chain.ChainRenderError as exc:
         raise WindowPlanError(f"chain: {exc}") from exc
     env_values = {

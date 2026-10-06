@@ -46,9 +46,13 @@ from typing import Any, Mapping, Sequence
 CHAIN_SCHEMA = "joulewise.b5_chain.v1"
 CHAIN_INTERFACE = "b5-hazard-chain-v1"
 SETTLE_S = 600
-# D-079 clause 3 screen, from the issued acceptance d079_calibration_acceptance_v2_n24_25g83_r2
-# (the block-3 runbook literal). Kept as text so the bytes never round.
-PRE_CAL_FIDUCIAL_MAX_S = "0.036462861644980"
+# The pre-calibration screen is not re-implemented here: the chain embeds the
+# runbook's own D-079 clause 3 block (the literal bound and the
+# screen_pre_calibration function every live window since block 3 ran),
+# read from the measurement checkout's pinned runbook at render time.
+RUNBOOK_RELATIVE = "docs/phase_2/window_runbook.md"
+RUNBOOK_SCREEN_START = "# D-079 clause 3: pre-flight calibration screen."
+RUNBOOK_SCREEN_FUNCTION = "screen_pre_calibration() {"
 
 EXIT_COMPLETED = 0
 EXIT_RESERVATION_FAILED = 10
@@ -330,21 +334,6 @@ def _argv_text(argv: Sequence[str]) -> str:
 
 # Stdlib-only helpers the chain runs with the measurement interpreter. They
 # travel inside the chain bytes, so the chain's digest pins them.
-SCREEN_HELPER = r"""
-import json, math, sys
-path, limit = sys.argv[1], float(sys.argv[2])
-try:
-    with open(path, "rb") as handle:
-        value = json.loads(handle.read()).get("b_fiducial_s")
-except (OSError, ValueError, AttributeError) as error:
-    print(json.dumps({"passed": False, "error": "%s: %s" % (type(error).__name__, error)}))
-    sys.exit(1)
-passed = (isinstance(value, (int, float)) and not isinstance(value, bool)
-          and math.isfinite(value) and value <= limit)
-print(json.dumps({"b_fiducial_s": value, "max_s": limit, "passed": passed}, sort_keys=True))
-sys.exit(0 if passed else 1)
-"""
-
 PRUNE_HELPER = r"""
 import json, os, sys
 manifest_path, runs_root, output = sys.argv[1:4]
@@ -380,7 +369,33 @@ print(json.dumps({"members_listed": len(manifest["members"]), "members_kept": le
                   "dropped": dropped, "identical_to_committed": not dropped}, sort_keys=True))
 """
 
+def runbook_screen(runbook_text: str) -> str:
+    """The runbook's D-079 pre-calibration screen block, verbatim.
+
+    From the clause-3 comment through the closing brace of
+    ``screen_pre_calibration``: the literal bound assignment and the function
+    that reads the pre slot's ``instrument_evidence.json`` and fails above the
+    bound. It needs ``timestamp`` and ``OPERATOR_LOG_ROOT``, which the chain
+    defines.
+    """
+
+    _require(isinstance(runbook_text, str), "runbook text is required")
+    _require(runbook_text.count(RUNBOOK_SCREEN_START) == 1 and runbook_text.count(RUNBOOK_SCREEN_FUNCTION) == 1,
+             "the runbook must carry exactly one D-079 clause 3 screen block")
+    block = runbook_text[runbook_text.index(RUNBOOK_SCREEN_START):]
+    function = block.index(RUNBOOK_SCREEN_FUNCTION)
+    closing = block.find("\n}\n", function)
+    _require(closing > function, "the runbook screen function is not closed")
+    block = block[:closing + 2]
+    _require(re.search(r"(?m)^PRE_CAL_FIDUCIAL_MAX_S=[0-9]+\.[0-9]+$", block) is not None,
+             "the runbook screen block must assign a literal PRE_CAL_FIDUCIAL_MAX_S")
+    _require("$(" in block and "`" not in block and "<<" not in block,
+             "the runbook screen block has an unexpected shape")
+    return block
+
+
 _PRELUDE_FUNCTIONS = r"""stamp() { TZ=UTC /bin/date '+%Y-%m-%dT%H:%M:%SZ'; }
+timestamp() { stamp; }
 note() { print -r -- "$(stamp) $*" >> "$CHAIN_LOG"; }
 settle() { /bin/sleep "$SETTLE_S"; }
 # journal STAGE_ID KIND RC STARTED: one JSON line per stage (identifiers are [A-Za-z0-9._-]).
@@ -410,17 +425,19 @@ stop_chain() {
 
 def render_chain(*, tree: Mapping[str, Any], tree_sha256: str, stages: Sequence[Stage],
                  bindings: Mapping[str, str], measurement_root: Path, pack_root: Path,
-                 plan_id: str, settle_s: int | float = SETTLE_S,
-                 pre_cal_fiducial_max_s: str = PRE_CAL_FIDUCIAL_MAX_S) -> bytes:
-    """Return the chain bytes. Every value is a literal; nothing is written."""
+                 plan_id: str, runbook_text: str, settle_s: int | float = SETTLE_S) -> bytes:
+    """Return the chain bytes. Every value is a literal; nothing is written.
+
+    ``runbook_text`` is the measurement checkout's ``docs/phase_2/window_runbook.md``;
+    its D-079 screen block is embedded verbatim.
+    """
 
     _require(_SHA256_RE.fullmatch(tree_sha256 or "") is not None, "tree_sha256 must be a SHA-256 digest")
     _identifier(plan_id, "plan_id")
     _require(isinstance(settle_s, (int, float)) and not isinstance(settle_s, bool) and settle_s >= 0,
              "settle_s must be a non-negative number")
     settle_text = str(int(settle_s)) if float(settle_s).is_integer() else repr(float(settle_s))
-    _require(re.fullmatch(r"[0-9]+\.[0-9]+", pre_cal_fiducial_max_s) is not None,
-             "pre_cal_fiducial_max_s must be a decimal literal")
+    screen = runbook_screen(runbook_text)
     for name in ("operator_log_root", "claim_runs_root", "bound_runs_root", "pre_calibration_dir",
                  "bracket_session_id", "ledger_path"):
         _require(isinstance(bindings.get(name), str) and bool(bindings[name]), f"binding {name} is required")
@@ -472,23 +489,20 @@ def render_chain(*, tree: Mapping[str, Any], tree_sha256: str, stages: Sequence[
         'export PYTHONPATH="$REPO"',
         "export PYTHONDONTWRITEBYTECODE=1 GIT_OPTIONAL_LOCKS=0",
         f"export SETTLE_S={settle_text}",
-        f"export PRE_CAL_FIDUCIAL_MAX_S={pre_cal_fiducial_max_s}",
         f"OPERATOR_LOG_ROOT={_literal(bindings['operator_log_root'])}",
         f"CLAIM_RUNS_ROOT={_literal(bindings['claim_runs_root'])}",
         f"BOUND_RUNS_ROOT={_literal(bindings['bound_runs_root'])}",
         'CHAIN_LOG="$OPERATOR_LOG_ROOT/window-chain.log"',
         f'STAGE_JOURNAL="$NIGHT_DIR/{STAGE_JOURNAL}"',
         'TRANSCRIPT_ROOT="$NIGHT_DIR/transcript"',
-        "B5_SCREEN_PY=\"$(/bin/cat <<'B5_PY'",
-        SCREEN_HELPER.strip("\n"),
-        "B5_PY",
-        ')"',
         "B5_PRUNE_PY=\"$(/bin/cat <<'B5_PY'",
         PRUNE_HELPER.strip("\n"),
         "B5_PY",
         ')"',
         '/bin/mkdir -p "$OPERATOR_LOG_ROOT" "$TRANSCRIPT_ROOT" "$CLAIM_RUNS_ROOT/instrument_validation" "$BOUND_RUNS_ROOT"',
         _PRELUDE_FUNCTIONS,
+        "# The runbook's D-079 clause 3 screen, embedded verbatim from " + RUNBOOK_RELATIVE + ".",
+        screen.rstrip("\n"),
         'cd "$REPO" || note "chdir_failed=$REPO"',
         'note "chain_start plan=$B5_PLAN_ID pack=$B5_PACK_ID"',
     ]
@@ -514,9 +528,7 @@ def render_chain(*, tree: Mapping[str, Any], tree_sha256: str, stages: Sequence[
             lines.append("# 3. The pre-calibration capture and its D-079 screen; either failure stops the chain.")
             lines.append(run(stage, argv))
             lines.append(f"(( $? == 0 )) || stop_chain pre_calibration_capture_failed {EXIT_PRE_CAPTURE_FAILED}")
-            evidence = str(Path(bindings["pre_calibration_dir"]) / "instrument_evidence.json")
-            lines.append(run(stage, [python, "-B", "-c", Shell('"$B5_SCREEN_PY"'), evidence,
-                                     Shell('"$PRE_CAL_FIDUCIAL_MAX_S"')],
+            lines.append(run(stage, ["screen_pre_calibration", bindings["pre_calibration_dir"]],
                              label=stage.stage_id + ".screen", kind="pre_calibration_screen", suffix=".screen"))
             lines.append(f"(( $? == 0 )) || stop_chain pre_calibration_screen_failed {EXIT_PRE_SCREEN_FAILED}")
         elif stage is post:
@@ -579,7 +591,7 @@ def stage_journal(night_dir: Path) -> list[dict[str, Any]]:
 
 
 __all__ = [
-    "CHAIN_SCHEMA", "CHAIN_INTERFACE", "SETTLE_S", "PRE_CAL_FIDUCIAL_MAX_S", "STOP_EXITS",
+    "CHAIN_SCHEMA", "CHAIN_INTERFACE", "SETTLE_S", "RUNBOOK_RELATIVE", "STOP_EXITS", "runbook_screen",
     "DEVIATIONS", "TOOLS", "ChainRenderError", "Stage", "Command", "stage_plan", "bind_argument",
     "stage_argv", "render_chain", "sha256_bytes", "sidecar_bytes", "stage_journal",
     "NEG8_COLLECTED_MANIFEST", "STAGE_JOURNAL", "TERMINAL_BOUNDARY",

@@ -144,6 +144,8 @@ def build_checkout(root: Path, *, behavior: dict[str, Any] | None = None, git: b
     (measurement / "configs/campaign_policies").mkdir()
     (measurement / "configs/campaign_policies/quiet_mac_p2_production.json").symlink_to(
         REPO_ROOT / "configs/campaign_policies/quiet_mac_p2_production.json")
+    (measurement / "docs/phase_2").mkdir(parents=True)
+    (measurement / "docs/phase_2/window_runbook.md").symlink_to(REPO_ROOT / "docs/phase_2/window_runbook.md")
     (measurement / "configs/calibration").mkdir()
     (measurement / "configs/calibration/calibration_ledger_head.json").write_text('{"head_digest": "fixture"}\n')
     (measurement / "runs").mkdir()
@@ -163,7 +165,7 @@ def build_checkout(root: Path, *, behavior: dict[str, Any] | None = None, git: b
     if git:
         environment = dict(os.environ, GIT_AUTHOR_NAME="fixture", GIT_AUTHOR_EMAIL="fixture@example.invalid",
                            GIT_COMMITTER_NAME="fixture", GIT_COMMITTER_EMAIL="fixture@example.invalid")
-        for command in (["init", "-q"], ["add", "-A", "scripts", "joulewise", "configs"],
+        for command in (["init", "-q"], ["add", "-A", "scripts", "joulewise", "configs", "docs"],
                         ["-c", "commit.gpgsign=false", "commit", "-qm", "fixture"]):
             subprocess.run(["/usr/bin/git", "-C", str(measurement), *command], check=True,
                            capture_output=True, env=environment)

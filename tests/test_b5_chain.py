@@ -143,7 +143,7 @@ class ChainRunTests(RenderedChainFixture):
         self.assertNotIn("MEASUREMENT_ROOT", text)
         self.assertNotIn("MEASUREMENT_HEAD", text)
         self.assertNotIn("launch_window", text)
-        self.assertNotIn("jq", text)
+        self.assertNotIn("jq -e", text)
         completed = self.run_chain(env={"PY": "/nonexistent/python", "REPO": "/nonexistent"})
         self.assertEqual(0, completed.returncode, completed.stderr)
 
@@ -292,16 +292,30 @@ class HelperTests(unittest.TestCase):
         return subprocess.run([sys.executable, "-B", "-c", source, *map(str, args)],
                               capture_output=True, text=True, check=False)
 
-    def test_screen_passes_at_the_limit_and_refuses_above_it_or_when_missing(self):
+    def test_the_screen_is_the_runbooks_own_block_and_fails_above_the_bound(self):
+        runbook = (REPO_ROOT / b5_chain.RUNBOOK_RELATIVE).read_text()
+        block = b5_chain.runbook_screen(runbook)
+        self.assertIn(block, runbook)
+        self.assertIn("PRE_CAL_FIDUCIAL_MAX_S=0.036462861644980\n", block)
+        self.assertTrue(block.rstrip().endswith("}"))
         with tempfile.TemporaryDirectory() as directory:
-            evidence = Path(directory) / "instrument_evidence.json"
-            for value, code in ((0.036462861644980, 0), (0.0364628616449801, 1), (None, 1), ("0.01", 1), (True, 1)):
+            root = Path(directory)
+            evidence = root / "instrument_evidence.json"
+            script = root / "screen.zsh"
+            script.write_text("set -u\ntimestamp() { echo T; }\nOPERATOR_LOG_ROOT=" + str(root) + "\n"
+                              + block + "\nscreen_pre_calibration " + str(root) + "\n")
+            cases = ((0.036462861644980, 0), (0.0364628616449801, 1), (0.02, 0), (None, 1), (0.05, 1))
+            for value, code in cases:
                 with self.subTest(value=value):
-                    evidence.write_text(json.dumps({"b_fiducial_s": value}))
-                    result = self.run_helper(b5_chain.SCREEN_HELPER, evidence, b5_chain.PRE_CAL_FIDUCIAL_MAX_S)
-                    self.assertEqual(code, result.returncode, result.stdout + result.stderr)
+                    evidence.write_text(json.dumps({} if value is None else {"b_fiducial_s": value}))
+                    result = subprocess.run(["/bin/zsh", "-f", str(script)], capture_output=True, text=True)
+                    self.assertEqual(code, result.returncode, result.stderr)
             evidence.unlink()
-            self.assertEqual(1, self.run_helper(b5_chain.SCREEN_HELPER, evidence, "0.03").returncode)
+            self.assertNotEqual(0, subprocess.run(["/bin/zsh", "-f", str(script)], capture_output=True).returncode)
+        for broken in (runbook.replace(b5_chain.RUNBOOK_SCREEN_START, "# moved"),
+                       runbook + "\n" + block):
+            with self.assertRaises(b5_chain.ChainRenderError):
+                b5_chain.runbook_screen(broken)
 
     def test_prune_keeps_succeeded_members_and_never_follows_unsafe_paths(self):
         with tempfile.TemporaryDirectory() as directory:
