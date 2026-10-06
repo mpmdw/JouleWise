@@ -21,10 +21,12 @@ Layout under the archive root (created once; a re-harvest uses a new root):
 * ``sources/``: a clone of every input byte, with ``SHA256SUMS``.
 * ``derived/``: structure only (flags, window summary, exclusions, roster,
   terminal ledger-head candidate, bracket binding, the registered harvest
-  thresholds with their provenance, the NEG-8 bound check).  These files may
-  leave custody.
+  thresholds with their provenance, the NEG-8 bound check, the NEG-8 screen's
+  re-evaluation against a collected-subset bound).  These files may leave
+  custody.
 * ``withheld/``: the numbers (re-reduced summaries), member spans, bracket
-  evaluation, member assessments and transcripts.  Restricted custody.
+  evaluation, the re-evaluated NEG-8 bracket, member assessments and
+  transcripts.  Restricted custody.
 * ``harvest.json``: the verdict and the digests of every output.
 
 Other-lane seams.  The harvest reads files written by lanes that land in the
@@ -62,6 +64,7 @@ import tempfile
 import time
 from collections import Counter
 from collections.abc import Callable, Iterable, Mapping, Sequence
+from datetime import datetime
 from fractions import Fraction
 from pathlib import Path
 from typing import Any
@@ -72,6 +75,7 @@ WINDOW_FLAGS_SCHEMA = "joulewise.window_flags.v1"
 ROSTER_SCHEMA = "joulewise.b5_harvest_roster.v1"
 TERMINAL_BOUNDARY_SCHEMA = "joulewise.b5_terminal_boundary.v1"
 NEG8_CHECK_SCHEMA = "joulewise.b5_neg8_bound_check.v1"
+NEG8_SCREEN_SCHEMA = "joulewise.b5_neg8_screen.v1"
 NEG8_BOUND_NAME = "neg8-drift-bound.json"      # in the bound runs root (the pack's bound-derivation output)
 HAZARD_RESULT_NAME = "hazard_result.json"      # L2's driver terminal record, night/
 
@@ -348,6 +352,107 @@ def _corpus_member_status(runs_root: Path | None, member: Any) -> str | None:
     except (OSError, ValueError, AttributeError):
         return None
     return status if isinstance(status, str) else None
+
+
+# Fields of one NEG-8 claim-family record that depend on the bound (or, for
+# window_duration_s, on the writer's own reference spans, which the replay
+# evaluator does not receive); every other field is fixed by the reference
+# bundles alone.
+_NEG8_BOUND_DEPENDENT_FIELDS = frozenset({
+    "derived_repeatability_bound_j", "screen_passed", "drift_allowance_j", "provenance", "window_duration_s"})
+
+
+def _neg8_endpoints(bracket: Any) -> dict[str, Any] | None:
+    """A NEG-8 bracket's claim families without their bound-dependent fields (None if malformed)."""
+    families = bracket.get("claim_families") if isinstance(bracket, Mapping) else None
+    if not isinstance(families, Mapping) or not families:
+        return None
+    endpoints: dict[str, Any] = {}
+    for family, record in families.items():
+        if not isinstance(record, Mapping):
+            return None
+        endpoints[family] = {key: value for key, value in record.items() if key not in _NEG8_BOUND_DEPENDENT_FIELDS}
+    return endpoints
+
+
+def _epoch_s(text: Any) -> float | None:
+    """An ISO-8601 instant with a zone (the verdict writer's ``utc_timestamp``) as epoch seconds."""
+    if not isinstance(text, str) or not text:
+        return None
+    try:
+        moment = datetime.fromisoformat(text[:-1] + "+00:00" if text.endswith("Z") else text)
+    except ValueError:
+        return None
+    return moment.timestamp() if moment.tzinfo is not None else None
+
+
+def verdict_neg8_sources(row: Mapping[str, Any], runs_root: Path) \
+        -> tuple[list[Mapping[str, Any]], bool, Mapping[str, Any]] | str:
+    """The inputs from which ``validate_whole_window_verdict_row`` re-derives a row's NEG-8 bracket.
+
+    The same selection as the row validator (``whole_window._validate_row_uncached``):
+    the row's source campaign manifests, each authenticated by
+    ``campaign_provenance.load_authenticated_campaign_manifest`` at its
+    recorded SHA-256 and carrying the row's campaign policy; projected by
+    ``whole_window._basis_source_manifests`` onto the evaluation basis's
+    occurrences when the row has a basis; the current-strict evidence path;
+    and the repo-registered bracket policy for the row's policy digest.
+    Returns ``(manifests, current, policy)``, or a problem name.
+    """
+    from joulewise import whole_window as ww
+    from joulewise.campaign_provenance import load_authenticated_campaign_manifest
+    root = Path(runs_root)
+    policy = row.get("campaign_policy")
+    policy_sha = policy.get("sha256") if isinstance(policy, Mapping) else None
+    registered = ww._registered_bracket_policy(policy_sha)
+    if registered is None:
+        return "policy_unregistered"
+    basis = ww._validated_evaluation_basis(row, root)
+    if "evaluation_basis" in row and basis is None:
+        return "evaluation_basis_invalid"
+    provenance = row.get("row_provenance")
+    descriptors = provenance.get("source_campaign_manifests") if isinstance(provenance, Mapping) else None
+    if not isinstance(descriptors, list) or not descriptors:
+        return "source_manifests_unrecorded"
+    verified: list[tuple[Mapping[str, Any], Mapping[str, Any]]] = []
+    manifests: list[Mapping[str, Any]] = []
+    seen: set[str] = set()
+    for descriptor in descriptors:
+        text = descriptor.get("path") if isinstance(descriptor, Mapping) else None
+        path = ww._safe_source_path(root, text)
+        if path is None or text in seen:
+            return "source_manifest_path_invalid"
+        seen.add(text)
+        record = load_authenticated_campaign_manifest(root, path, root / "campaign_log.jsonl")
+        if record is None or sha256_bytes(record.raw_bytes) != descriptor.get("sha256"):
+            return "source_manifest_unauthenticated"
+        manifest_policy = record.value.get("campaign_policy")
+        if not isinstance(manifest_policy, Mapping) or manifest_policy.get("sha256") != policy_sha:
+            return "source_manifest_policy_differs"
+        verified.append((descriptor, record.value))
+        if basis is None:
+            if ww._manifest_members(record.value, root) is None:
+                return "source_manifest_members_invalid"
+            manifests.append(record.value)
+    if basis is not None:
+        projected = ww._basis_source_manifests(basis=basis, verified_sources=verified, row=row, runs_root=root)
+        if projected is None:
+            return "evaluation_basis_projection_failed"
+        current = False
+        for occurrence in basis.get("member_occurrences", []):
+            path = ww._safe_source_path(root, occurrence.get("bundle_path")) \
+                if isinstance(occurrence, Mapping) else None
+            if path is not None and ww._current_strict_summary(ww._read_json_object(path / "summary_metrics.json"),
+                                                                path):
+                current = True
+                break
+        return projected, current, registered
+    bundle_ids = row.get("bundle_ids")
+    referenced = {item for item in bundle_ids if isinstance(item, str)} if isinstance(bundle_ids, list) else set()
+    current = ww._row_references_current_strict_member(row, root, referenced)
+    if not current:  # the row validator replays such a row on the frozen gross-only bracket, which has no bound
+        return "not_point_drift"
+    return manifests, current, registered
 
 
 def _fsync_dir(path: Path) -> None:
@@ -1868,6 +1973,9 @@ class _Harvest:
         self.exclusion_spans: dict[str, Any] | None = None
         self.h_claim = inputs.h_claim
         self.neg8: dict[str, Any] | None = None  # the NEG-8 bound check (neg8_bound)
+        # The bound neg8_bound validated against the collected 10/11-member
+        # manifest (an energy: it never leaves this object or withheld/).
+        self.neg8_collected_bound: Mapping[str, Any] | None = None
 
     # -- step wrappers ------------------------------------------------------
     def step(self, name: str, function: Callable[[], Any], *, fault: bool = True) -> Any:
@@ -2406,6 +2514,7 @@ class _Harvest:
                         problems.append("bound_does_not_validate_against_collected_corpus")
                 if valid:
                     check["derived_from"] = "collected_subset"
+                    self.neg8_collected_bound = value
         elif value is not None:
             problems.append("bound_artifact_not_an_object")
         self.outputs["derived/neg8-bound.json"] = write_json_once(self.derived / "neg8-bound.json", check)
@@ -2568,9 +2677,9 @@ class _Harvest:
                 if isinstance(row.get("idle_admission_core"), Mapping) else None
             self.emit("whole_window.not_passed", level="window", collector="whole_window",
                       observed={"status": status, "conditions": sorted(map(str, conditions or []))})
-        self.neg8_screen(row)
+        self.neg8_screen(row, authentic=authentic)
 
-    def neg8_screen(self, row: Mapping[str, Any]) -> None:
+    def neg8_screen(self, row: Mapping[str, Any], *, authentic: bool = False) -> None:
         """``neg8.screen_failed`` from the verdict's NEG-8 result (registration 6.5).
 
         ``whole_window.not_passed`` is disclosed only, because any one member's
@@ -2579,10 +2688,19 @@ class _Harvest:
         verdict's core, a bracket decision other than ``passed``, or any
         ``neg8_*`` condition in the core or the bracket (the registered ones,
         ``whole_window.NEG8_POINT_DRIFT_CONDITION_CODES``, and the bracket's
-        shape conditions).  A bound derived from the collected 10 or 11 member
-        corpus does not cure it: the verdict writer reads only the committed
-        12-member corpus, so its screen was never evaluated against that bound
-        (``observed.screen_not_evaluated_against_collected_bound``).
+        shape conditions).
+
+        One case is evaluated again.  The verdict writer
+        (``run_campaign --whole-window-verdict``) authenticates a bound only
+        against the committed 12-member corpus, so a bound derived from the
+        collected 10 or 11 members (``neg8_bound``: ``collected_subset``)
+        always reaches its screen as no bound, and the stored bracket carries
+        the two ``*_UNDERIVED`` conditions.  When those are the verdict's only
+        NEG-8 conditions, ``_neg8_rescreen`` evaluates the screen with the
+        core's own evaluator against the validated collected bound, and that
+        result alone decides ``neg8.screen_failed``
+        (``observed.collected_bound_rescreen``).  A re-evaluation that cannot
+        run leaves the screen failed.
         """
         from joulewise import whole_window as ww
         core = row.get("idle_admission_core") if isinstance(row.get("idle_admission_core"), Mapping) else None
@@ -2609,8 +2727,104 @@ class _Harvest:
             "registered_conditions": sorted(conditions & ww.NEG8_POINT_DRIFT_CONDITION_CODES)}
         underived = {ww.CONDITION_NEG8_DRIFT_BOUND_UNDERIVED, ww.CONDITION_NEG8_IDLE_SUB_DRIFT_BOUND_UNDERIVED}
         if (self.neg8 or {}).get("derived_from") == "collected_subset" and conditions & underived:
-            observed["screen_not_evaluated_against_collected_bound"] = True
+            rescreen = self._neg8_rescreen(row, bracket, conditions - underived, authentic=authentic)
+            observed["collected_bound_rescreen"] = rescreen
+            if rescreen["evaluated"] and rescreen["decision"] == "passed" and not rescreen["conditions"]:
+                return  # the screen passed against the window's own validated bound
         self.emit("neg8.screen_failed", level="window", collector="whole_window", observed=observed)
+
+    def _neg8_rescreen(self, row: Mapping[str, Any], bracket: Mapping[str, Any] | None, other_conditions: set[str],
+                       *, authentic: bool) -> dict[str, Any]:
+        """The verdict's NEG-8 screen evaluated against the validated collected bound.
+
+        Runs only when the stored screen failed for want of a bound alone: a
+        bracket whose NEG-8 conditions (with the core's) are the two
+        ``*_UNDERIVED`` ones and nothing else.  The bracket is re-derived from
+        primary evidence by ``whole_window._derived_neg8_decision``, the
+        evaluator ``validate_whole_window_verdict_row`` replays, over the
+        inputs that validator selects (``verdict_neg8_sources``: source
+        manifests authenticated at their recorded digests, projected onto the
+        evaluation basis), with the collected bound in place of the absent one
+        and the bound's freshness evaluated at the verdict's completion time.
+        Each family's bound-independent fields (endpoints, protocol, point
+        delta) must then equal the stored bracket's: otherwise these are not
+        the reference bundles the verdict was written from, and nothing is
+        evaluated.
+
+        Row authenticity is recorded (``verdict_authenticated``), not
+        required: the harvest validates rows without a consumption session,
+        which the row validator requires under every consumption semantics, so
+        no row is authentic here (``whole_window.verdict_unauthenticated`` is
+        disclosed), and the screen is re-derived rather than read from the row.
+
+        The re-derived bracket (energies) goes to
+        ``withheld/neg8-rescreen-bracket.json``; its decision, conditions and
+        freshness verdict go to ``derived/neg8-screen.json``.
+        """
+        from joulewise import whole_window as ww
+        result: dict[str, Any] = {"evaluated": False, "decision": None, "conditions": [], "freshness": None,
+                                  "evaluated_at_source": None, "verdict_authenticated": bool(authentic),
+                                  "problems": []}
+        problems: list[str] = result["problems"]
+        if bracket is None:
+            problems.append("bracket_absent")
+        if other_conditions:
+            problems.append("conditions_beyond_bound_underived")
+        bound = getattr(self, "neg8_collected_bound", None)
+        if bound is None:
+            problems.append("collected_bound_unavailable")
+        evaluated_at = None
+        scope = row.get("evaluation_scope")
+        for source, text in (("evaluation_scope.completed_at", scope.get("completed_at")
+                               if isinstance(scope, Mapping) else None), ("timestamp", row.get("timestamp"))):
+            evaluated_at = _epoch_s(text)
+            if evaluated_at is not None:
+                result["evaluated_at_source"] = source
+                break
+        if evaluated_at is None:
+            problems.append("evaluation_time_unrecorded")
+        derived: Any = None
+        if not problems:
+            runs = self.inputs.claim_runs_root
+            try:
+                sources = verdict_neg8_sources(row, runs)
+                if isinstance(sources, str):
+                    problems.append(sources)
+                else:
+                    manifests, current, policy = sources
+                    derived, problem = ww._derived_neg8_decision(
+                        manifests, runs, policy, current=current, point_drift=True,
+                        drift_bound_artifact=bound, return_bracket=True,
+                        freshness_evaluated_at_s=evaluated_at)
+                    if problem is not None:
+                        problems.append(f"rederivation_failed:{problem}")
+                    elif not isinstance(derived, Mapping):
+                        problems.append("rederivation_invalid")
+                    elif _neg8_endpoints(derived) is None or _neg8_endpoints(derived) != _neg8_endpoints(bracket) \
+                            or derived.get("estimand") != (bracket or {}).get("estimand"):
+                        problems.append("rederivation_differs_from_stored_bracket")
+            except Exception as exc:  # the core failing evaluates nothing
+                problems.append(f"rederivation_raised:{type(exc).__name__}")
+        if isinstance(derived, Mapping):
+            write_json_once(self.withheld / "neg8-rescreen-bracket.json",
+                            {"schema": NEG8_SCREEN_SCHEMA, "bracket": derived})
+            if not problems:
+                freshness = derived.get("bound_freshness") if isinstance(derived.get("bound_freshness"), Mapping) \
+                    else {}
+                listed = derived.get("conditions") if isinstance(derived.get("conditions"), list) else ["unreadable"]
+                result.update({
+                    "evaluated": True,
+                    "decision": derived.get("decision") if isinstance(derived.get("decision"), str) else None,
+                    "conditions": sorted(map(str, listed)),
+                    "freshness": {"decision": freshness.get("decision"),
+                                  "triggers": list(freshness.get("triggered_rederivation_reasons") or [])}})
+        decision = bracket.get("decision") if bracket is not None else None
+        self.outputs["derived/neg8-screen.json"] = write_json_once(self.derived / "neg8-screen.json", {
+            "schema": NEG8_SCREEN_SCHEMA, "bound_derived_from": (self.neg8 or {}).get("derived_from"),
+            "stored": {"decision": decision if isinstance(decision, str) else None,
+                       "conditions_beyond_bound_underived": sorted(other_conditions)},
+            "rescreen": result})
+        return result
 
     def prepare_desk_verdict(self) -> None:
         """Produce the whole-window verdict with the production writer, if absent.
@@ -2904,6 +3118,12 @@ class _Harvest:
         audit reads the live roots, where the locators record their own
         paths; ``sources_unchanged`` proves they matched the archive.  A
         finding about a member's bundle is a member-level flag.
+
+        The audit never raises for a records problem, so an exception here
+        (or no bound runs root to audit) is this program failing, and the
+        step is a harvest fault: recorded only as ``records.collector_failed``
+        (disclosed), it would drop the plan-tree comparison, whose finding
+        excludes the window, without anything excluding it.
         """
         from joulewise import window_lineage
         inputs = self.inputs
@@ -3457,7 +3677,7 @@ def harvest(inputs: WindowInputs, archive_root: Path | str, *, seams: Seams | No
     run.step("pack_identity", run.pack_identity)
     run.step("code_identity", run.code_identity)
     run.step("model_identity", run.model_identity)
-    run.step("lineage", run.lineage_audit, fault=False)
+    run.step("lineage", run.lineage_audit)
     run.step("monitor", run.monitor_joins)
     run.step("exclusion_inputs", run.exclusion_inputs)
     run.step("g3", lambda: run.g3(skipped=not run_g3), fault=False)

@@ -41,6 +41,7 @@ import tempfile
 import unittest
 import uuid
 import zlib
+from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
@@ -1486,7 +1487,26 @@ class Neg8BoundTests(WindowTestCase):
             path = window.measurement / CORPUS_RELATIVE
             path.write_bytes(path.read_bytes() + b"\n")
 
+        def relabel(field):
+            def tamper(window):
+                """The collected manifest relabelled over the same member rows, a bound minted on it, its digest recorded."""
+                night = window.custody / "night"
+                path = window.custody / collected
+                value = json.loads(path.read_bytes())
+                value[field] = f"{value[field]}-relabelled"
+                put(path, value)
+                with neg8_member_gates():
+                    put(window.bound / "neg8-drift-bound.json",
+                        whole_window.mint_neg8_drift_bound_artifact(window.bound, path))
+                put(night / "hazard_result.json", {"schema": "joulewise.b5_hazard_night.v1",
+                                                   "neg8_corpus": b5_chain.neg8_corpus_record(night)})
+            return tamper
+
         cases = {
+            "corpus_id_relabelled": ({"failed": [CORPUS_IDS[4]]}, relabel("corpus_id"),
+                                     "collected_manifest_header_differs"),
+            "condition_id_relabelled": ({"failed": [CORPUS_IDS[4]]}, relabel("condition_id"),
+                                        "collected_manifest_header_differs"),
             "manifest_edited": ({"failed": [CORPUS_IDS[4]]}, edit_manifest,
                                 "collected_manifest_differs_from_recorded_sha256"),
             "foreign_member": ({"manifest_members": foreign}, None, "collected_manifest_not_a_member_subset"),
@@ -1508,6 +1528,30 @@ class Neg8BoundTests(WindowTestCase):
                 self.assertIsNone(check["derived_from"])
                 self.assertIn(problem, check["problems"])
                 self.assertIn("neg8.bound_not_derived", window.exclusions()["reasons"])
+
+    def test_bound_minted_from_another_manifest_is_not_derived(self):
+        """The bound must bind to the window's own collected manifest, not just to some valid subset.
+
+        The window collected 11 members; the bound beside it was minted from a
+        10-member manifest that also leaves out a member that succeeded (a
+        selected, tighter corpus).  Its arithmetic validates; only the corpus
+        identity check against the custodied collected bytes refuses it.
+        """
+        window = Window(self.tmp / "other-manifest", catalog_overrides=self.ISOLATE)
+        self.assertIsNone(neg8_corpus(window, [CORPUS_IDS[4]]))
+        ten = window.root / "ten.json"
+        put(ten, {**COMMITTED_CORPUS, "members": [member for member in COMMITTED_CORPUS["members"]
+                                                  if member["bundle_id"] not in (CORPUS_IDS[4], CORPUS_IDS[7])]})
+        with neg8_member_gates():
+            artifact = whole_window.mint_neg8_drift_bound_artifact(window.bound, ten)
+        self.assertTrue(whole_window.validate_neg8_drift_bound_artifact(artifact))  # structurally a valid bound
+        put(window.bound / "neg8-drift-bound.json", artifact)
+        window.harvest()
+        check = json.loads((window.archive / "derived" / "neg8-bound.json").read_bytes())
+        self.assertIsNone(check["derived_from"])
+        self.assertEqual(check["members_collected"], 11)
+        self.assertIn("bound_does_not_validate_against_collected_corpus", check["problems"])
+        self.assertIn("neg8.bound_not_derived", window.exclusions()["reasons"])
 
     def test_derived_outputs_carry_no_bound_energy(self):
         window, _check, _refusal = self.harvest_neg8("blind", [CORPUS_IDS[4]])
@@ -1593,8 +1637,13 @@ class Neg8ScreenTests(WindowTestCase):
         self.assertNotIn("neg8.screen_failed", window.codes())
         self.assertNotIn("neg8.bound_not_derived", window.codes())
 
-    def test_collected_corpus_bound_with_a_verdict_that_could_not_read_it(self):
-        """The verdict writer reads only the committed 12: its screen never ran against the 11-member bound."""
+    def test_collected_corpus_bound_with_a_verdict_whose_screen_cannot_be_rederived(self):
+        """The writer read no bound; a re-evaluation that cannot run leaves the screen failed.
+
+        This stored row names no source manifests and no evaluation time, so
+        the screen cannot be re-derived against the 11-member bound
+        (Neg8RescreenTests covers rows it can).
+        """
         window = self.window()
         neg8_corpus(window, [CORPUS_IDS[4]])
         write_verdict(window, status="failed", decision="failed",
@@ -1603,8 +1652,19 @@ class Neg8ScreenTests(WindowTestCase):
         window.harvest()
         self.assertNotIn("neg8.bound_not_derived", window.codes())
         (flag,) = [flag for flag in window.flags() if flag["code"] == "neg8.screen_failed"]
-        self.assertTrue(flag["observed"]["screen_not_evaluated_against_collected_bound"])
+        rescreen = flag["observed"]["collected_bound_rescreen"]
+        self.assertEqual((rescreen["evaluated"], rescreen["problems"]), (False, ["evaluation_time_unrecorded"]))
         self.assertIn("neg8.screen_failed", window.exclusions()["reasons"])
+        # A screen the writer failed against the committed 12-member bound is never re-evaluated.
+        twelve = Window(self.tmp / "twelve", catalog_overrides=self.ISOLATE)
+        neg8_corpus(twelve)
+        write_verdict(twelve, status="failed", decision="failed",
+                      conditions=[whole_window.CONDITION_NEG8_DRIFT_BOUND_UNDERIVED,
+                                  whole_window.CONDITION_NEG8_IDLE_SUB_DRIFT_BOUND_UNDERIVED])
+        twelve.harvest()
+        (flag,) = [flag for flag in twelve.flags() if flag["code"] == "neg8.screen_failed"]
+        self.assertNotIn("collected_bound_rescreen", flag["observed"])
+        self.assertFalse((twelve.archive / "derived" / "neg8-screen.json").exists())
 
     def test_unreadable_verdict_fails_the_screen(self):
         window = self.window()
@@ -1614,6 +1674,214 @@ class Neg8ScreenTests(WindowTestCase):
         (flag,) = [flag for flag in window.flags() if flag["code"] == "neg8.screen_failed"]
         self.assertEqual(flag["observed"]["reasons"], ["verdict_unreadable"])
         self.assertIn("whole_window.verdict_unauthenticated", window.codes())
+
+
+# The window's own NEG-8 references (3 start, 1 midpoint, 3 end), as the
+# governed campaign manifest roles name them.
+NEG8_REFERENCES = (
+    *((f"b5t-neg8-start-{index}", "neg8_daily_reference_start") for index in (1, 2, 3)),
+    ("b5t-neg8-midpoint", "neg8_daily_reference_midpoint"),
+    *((f"b5t-neg8-end-{index}", "neg8_daily_reference_end") for index in (1, 2, 3)),
+)
+NEG8_REFERENCE_MANIFEST = "campaign_manifests/b5t-neg8-references.json"
+
+
+def neg8_trajectory(drift_j: float) -> dict[str, float]:
+    """Gross points of the window's references: the end endpoint sits ``drift_j`` above the start."""
+    start = (30.30, 30.32, 30.34)
+    points = {f"b5t-neg8-start-{index}": value for index, value in enumerate(start, 1)}
+    points["b5t-neg8-midpoint"] = 30.32 + drift_j / 2
+    points.update({f"b5t-neg8-end-{index}": value + drift_j for index, value in enumerate(start, 1)})
+    return points
+
+
+@contextlib.contextmanager
+def neg8_reference_gates(points: dict[str, float]):
+    """Stub the core's per-bundle NEG-8 gates for the synthetic reference bundles in ``points`` only.
+
+    As ``neg8_member_gates`` does for the corpus: these bundles carry no
+    energies, so their strictness, scientific identity, energy evidence and
+    freshness bindings are stubbed (idle-subtracted = gross - 20 J).  Every
+    other bundle reaches the real functions; the manifest resolution, the
+    trajectory shape, the screen and the freshness rule are the core's own.
+    """
+    real = {name: getattr(whole_window, name) for name in (
+        "_custody_strict_invalid", "_current_strict_summary", "_scientific_config_identity",
+        "_reference_energy_evidence", "neg8_freshness_bindings_from_metadata")}
+
+    def ours(path) -> bool:
+        return path is not None and Path(path).name in points
+
+    def strict_invalid(path, *args, **kwargs):
+        return False if ours(path) else real["_custody_strict_invalid"](path, *args, **kwargs)
+
+    def current(summary, bundle_path=None):
+        return True if ours(bundle_path) else real["_current_strict_summary"](summary, bundle_path)
+
+    def identity(path):
+        return ("d" * 64, True) if ours(path) else real["_scientific_config_identity"](path)
+
+    def energy(path, *args, **kwargs):
+        if not ours(path):
+            return real["_reference_energy_evidence"](path, *args, **kwargs)
+        value = points[Path(path).name]
+        return {"point_j": value, "lower_j": value - 0.01, "upper_j": value + 0.01}, value - 20.0, None
+
+    def bindings(metadata):
+        if isinstance(metadata, dict) and metadata.get("run_id") in points:
+            return dict(NEG8_FRESHNESS)
+        return real["neg8_freshness_bindings_from_metadata"](metadata)
+
+    with contextlib.ExitStack() as stack:
+        for name, stub in (("_custody_strict_invalid", strict_invalid), ("_current_strict_summary", current),
+                           ("_scientific_config_identity", identity), ("_reference_energy_evidence", energy),
+                           ("neg8_freshness_bindings_from_metadata", bindings)):
+            stack.enter_context(mock.patch.object(whole_window, name, stub))
+        yield
+
+
+def write_neg8_reference_verdict(window: "Window", points: dict[str, float], *, completed_at: str | None = None,
+                                 extra_conditions=()) -> dict:
+    """The window's NEG-8 references, their campaign manifest, and the verdict a writer with no bound stores.
+
+    The stored bracket is the core's own (``whole_window._derived_neg8_decision``
+    with no bound, as ``validate_whole_window_verdict_row`` replays it) over
+    ``points``: what ``run_campaign --whole-window-verdict`` writes when the
+    bound it was given authenticates only against the 10 or 11 collected
+    members.  Returns the bracket.
+    """
+    members = []
+    for bundle_id, role in NEG8_REFERENCES:
+        bundle = window.claim / bundle_id
+        put(bundle / "config.json", {"run_id": bundle_id})
+        put(bundle / "metadata.json", {"run_id": bundle_id})
+        put(bundle / "summary_metrics.json", {"status": "succeeded"})
+        members.append({"execution": "invoked", "run_id": bundle_id, "bundle_ids": [bundle_id], "role": role,
+                        "canonical_neg8_workload": True, "scientific_config_sha256": "d" * 64})
+    policy_sha = sha(ROOT / POLICY)
+    raw = put(window.claim / NEG8_REFERENCE_MANIFEST, {"schema_version": "joulewise.campaign_provenance.v1",
+                                                       "campaign_policy": {"sha256": policy_sha},
+                                                       "members": members})
+    with neg8_reference_gates(points):
+        bracket, problem = whole_window._derived_neg8_decision(
+            [json.loads(raw)], window.claim, whole_window._registered_bracket_policy(policy_sha), current=True,
+            point_drift=True, drift_bound_artifact=None, return_bracket=True)
+    assert problem is None, problem
+    # The writer's utc_timestamp() form, taken after the bound was derived.
+    completed_at = completed_at or datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    put(window.claim / "whole-window-verdict.json", {
+        "record_type": "idle_admission_whole_window_verdict", "status": "failed", "timestamp": completed_at,
+        "evaluation_scope": {"runs_root": str(window.claim.resolve()), "completed_at": completed_at},
+        "campaign_policy": {"sha256": policy_sha},
+        "row_provenance": {"source_campaign_manifests": [{"path": NEG8_REFERENCE_MANIFEST,
+                                                          "sha256": hashlib.sha256(raw).hexdigest()}]},
+        "bundle_ids": [bundle_id for bundle_id, _role in NEG8_REFERENCES],
+        "idle_admission_core": {"conditions": sorted({*bracket["conditions"], *extra_conditions}),
+                                "neg8_bracket": bracket}})
+    return bracket
+
+
+class Neg8RescreenTests(WindowTestCase):
+    """Registration 5.3 with 6.5: a 10/11-member bound that validates decides the screen.
+
+    The verdict writer authenticates a bound only against the committed 12, so
+    with a collected-subset bound its screen always carries the two
+    ``*_UNDERIVED`` conditions.  The harvest re-derives the screen with the
+    core's evaluator against the validated collected bound; that result alone
+    decides ``neg8.screen_failed``.
+    """
+
+    ISOLATE = Neg8ScreenTests.ISOLATE
+
+    def harvest(self, name, failed, drift=0.0, *, stored_drift=None, **verdict):
+        """Harvest a window whose end references sit ``drift`` collected bounds above its start references.
+
+        ``stored_drift``: the verdict was written from references at another drift.
+        """
+        window = Window(self.tmp / name, catalog_overrides=self.ISOLATE)
+        self.assertIsNone(neg8_corpus(window, failed))
+        artifact = json.loads((window.bound / "neg8-drift-bound.json").read_bytes())
+        bound = max(record["estimator"]["replicated_endpoint_bound_j"]
+                    for record in artifact["claim_family_bounds"].values())
+        points = neg8_trajectory(drift * bound)
+        stored = write_neg8_reference_verdict(
+            window, neg8_trajectory((drift if stored_drift is None else stored_drift) * bound), **verdict)
+        self.assertEqual(set(stored["conditions"]), {whole_window.CONDITION_NEG8_DRIFT_BOUND_UNDERIVED,
+                                                     whole_window.CONDITION_NEG8_IDLE_SUB_DRIFT_BOUND_UNDERIVED})
+        with neg8_reference_gates(points):
+            window.harvest()
+        check = json.loads((window.archive / "derived" / "neg8-bound.json").read_bytes())
+        self.assertEqual(check["derived_from"], "collected_subset", check["problems"])
+        screen = json.loads((window.archive / "derived" / "neg8-screen.json").read_bytes())
+        return window, screen["rescreen"]
+
+    def test_a_screen_that_passes_against_the_collected_bound_keeps_the_window(self):
+        """Before the fix both windows were removed by neg8.screen_failed, whatever their drift."""
+        for failed in ([CORPUS_IDS[4]], [CORPUS_IDS[0], CORPUS_IDS[11]]):
+            with self.subTest(kept=12 - len(failed)):
+                window, rescreen = self.harvest(f"pass{12 - len(failed)}", failed, drift=0.5)
+                self.assertEqual((rescreen["evaluated"], rescreen["decision"], rescreen["conditions"],
+                                  rescreen["problems"], rescreen["freshness"]["decision"]),
+                                 (True, "passed", [], [], "fresh"))
+                self.assertEqual(rescreen["evaluated_at_source"], "evaluation_scope.completed_at")
+                self.assertFalse(rescreen["verdict_authenticated"])  # recorded, not required
+                self.assertNotIn("neg8.screen_failed", window.codes())
+                self.assertNotIn("neg8.bound_not_derived", window.codes())
+                self.assertFalse({"neg8.screen_failed", "neg8.bound_not_derived"} & set(window.exclusions()["reasons"]))
+
+    def test_drift_or_a_stale_bound_against_the_collected_bound_removes_the_window(self):
+        cases = {
+            "drift": ({"drift": 3.0}, {whole_window.CONDITION_NEG8_GROSS_POINT_DRIFT_EXCEEDED,
+                                       whole_window.CONDITION_NEG8_IDLE_SUB_POINT_DRIFT_EXCEEDED}),
+            # The verdict was written before the bound was derived: the core's freshness rule fails it.
+            "stale": ({"completed_at": "2020-01-01T00:00:00.000000Z"}, {whole_window.CONDITION_NEG8_DRIFT_BOUND_STALE}),
+        }
+        for name, (kwargs, expected) in cases.items():
+            with self.subTest(name):
+                window, rescreen = self.harvest(name, [CORPUS_IDS[4]], **kwargs)
+                self.assertEqual((rescreen["evaluated"], rescreen["decision"], set(rescreen["conditions"])),
+                                 (True, "failed", expected))
+                (flag,) = [flag for flag in window.flags() if flag["code"] == "neg8.screen_failed"]
+                self.assertEqual(flag["observed"]["collected_bound_rescreen"], rescreen)
+                self.assertIn("neg8.screen_failed", window.exclusions()["reasons"])
+
+    def test_a_rederivation_that_does_not_reproduce_the_stored_bracket_evaluates_nothing(self):
+        """Reference bundles other than the verdict's (here: other energies) never decide the screen."""
+        window, rescreen = self.harvest("other-references", [CORPUS_IDS[4]], drift=0.0, stored_drift=0.5)
+        self.assertEqual((rescreen["evaluated"], rescreen["problems"]),
+                         (False, ["rederivation_differs_from_stored_bracket"]))
+        self.assertIn("neg8.screen_failed", window.exclusions()["reasons"])
+
+    def test_any_other_neg8_condition_is_not_re_evaluated(self):
+        window, rescreen = self.harvest("other-condition", [CORPUS_IDS[4]],
+                                        extra_conditions=["neg8_bracket_reference_invalid"])
+        self.assertEqual((rescreen["evaluated"], rescreen["problems"]),
+                         (False, ["conditions_beyond_bound_underived"]))
+        self.assertIn("neg8.screen_failed", window.exclusions()["reasons"])
+
+    def test_a_source_manifest_that_changed_after_the_verdict_evaluates_nothing(self):
+        window = Window(self.tmp / "manifest-changed", catalog_overrides=self.ISOLATE)
+        neg8_corpus(window, [CORPUS_IDS[4]])
+        write_neg8_reference_verdict(window, neg8_trajectory(0.0))
+        path = window.claim / NEG8_REFERENCE_MANIFEST
+        path.write_bytes(path.read_bytes() + b"\n")
+        with neg8_reference_gates(neg8_trajectory(0.0)):
+            window.harvest()
+        rescreen = json.loads((window.archive / "derived" / "neg8-screen.json").read_bytes())["rescreen"]
+        self.assertEqual((rescreen["evaluated"], rescreen["problems"]), (False, ["source_manifest_unauthenticated"]))
+        self.assertIn("neg8.screen_failed", window.exclusions()["reasons"])
+
+    def test_the_rederived_bracket_is_withheld_and_derived_outputs_carry_no_energy(self):
+        window, _rescreen = self.harvest("blind", [CORPUS_IDS[4]], drift=3.0)
+        withheld = json.loads((window.archive / "withheld" / "neg8-rescreen-bracket.json").read_bytes())
+        family = withheld["bracket"]["claim_families"][whole_window.NEG8_CLAIM_FAMILY_GROSS]
+        screen = (window.archive / "derived" / "neg8-screen.json").read_text()
+        derived = screen + (window.archive / "derived" / "flags.jsonl").read_text()
+        for value in (family["derived_repeatability_bound_j"], family["point_delta_j"], family["start"]["mean_j"],
+                      family["end"]["mean_j"]):
+            self.assertNotIn(repr(value), derived)
+        self.assertNotIn('_j"', screen)
+        self.assertNotIn("_s\"", screen)  # nor the verdict's evaluation time
 
 
 class RegisteredThresholdTests(unittest.TestCase):
@@ -1842,6 +2110,23 @@ class LineageFindingTests(WindowTestCase):
                              for row in window.exclusions()["members_excluded"]))
         for flag in flags:
             self.assertEqual(h.flag_problems(flag), [], flag["code"])
+
+    def test_an_audit_that_raises_is_a_harvest_fault(self):
+        """The plan-tree comparison (a window exclusion) never drops out behind a disclosed collector failure.
+
+        Before the fix the step recorded only records.collector_failed
+        (DISCLOSE) and the window stayed claim-usable unaudited.
+        """
+        from joulewise import window_lineage
+        window = self.window()
+        self.publish(window)
+        with mock.patch.object(window_lineage, "audit_window_lineage", side_effect=RuntimeError("audit bug")):
+            record = window.harvest()
+        self.assertEqual(record["verdict"], "HARVEST_FAULT")
+        self.assertIn("lineage", [fault["collector"] for fault in record["faults"]])
+        self.assertFalse(record["claim_usable"])
+        self.assertEqual(self.lineage_flags(window), [])
+        self.assertTrue((window.archive / "derived" / "flags.jsonl").is_file())  # numbers and flags still written
 
 
 class EmittedCodeTests(unittest.TestCase):
