@@ -259,6 +259,11 @@ def _bootstrap_producer(pack: Path, runs: Path, report_path: Path, bracket_path:
     order, order_hash = _read(order_path)
     _equal(spec_hash, contract["extraction_spec"]["sha256"], "extraction spec")
     _equal(order_hash, contract["order_manifest"]["sha256"], "order manifest")
+    prefill = _one(contract["roles"], "role", prefill_role)
+    _equal(prefill["metric"], "phase_energy_j.prefill", "prefill role")
+    _equal(bool(prefill["allowed_consumer_families"]) and all(
+        name in consumer_bindings for name in prefill["allowed_consumer_families"]
+    ), True, "prefill role")
     report, report_hash = _read(report_path)
     binding, binding_hash = _read(bracket_path)
     pre, post = mint.validate_calibration_bracket_binding(

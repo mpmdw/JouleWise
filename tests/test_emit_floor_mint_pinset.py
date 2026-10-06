@@ -148,6 +148,42 @@ class FloorMintEmitterTests(unittest.TestCase):
                                     {}, {}, "0" * 64, None, "alpha/calibration_plan.json", "prefill_p2048")
             self.assertFalse((root / "issued.json").exists())
 
+    def test_bootstrap_refuses_one_byte_spec_and_order_drift_from_real_v5_pack(self) -> None:
+        from scripts.emit_floor_mint_pinset import _bootstrap_producer
+        for filename, label in (("extraction_spec.json", "extraction spec"),
+                                ("order_manifest.json", "order manifest")):
+            with self.subTest(filename=filename), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                pack = root / "pack"
+                shutil.copytree(ROOT / "configs/campaigns/d117_floor_qwen3-1p7b_v5", pack)
+                source = pack / filename
+                original = source.read_bytes()
+                source.write_bytes(original + b" ")  # Valid JSON, one changed byte; pins stay frozen.
+                self.assertEqual(json.loads(source.read_bytes()), json.loads(original))
+                with self.assertRaisesRegex(mint.MintError, f"{label}: source pin mismatch"):
+                    _bootstrap_producer(pack, root / "runs", root / "report.json", root / "bracket.json",
+                                        {}, {}, "0" * 64, None, "alpha/calibration_plan.json", "prefill_p2048")
+                self.assertFalse((root / "issued.json").exists())
+
+    def test_bootstrap_refuses_wrong_prefill_role_for_real_v5_consumer(self) -> None:
+        from scripts.emit_floor_mint_pinset import _bootstrap_producer
+        consumer = ROOT / "configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5"
+        prospective = json.loads((consumer / "analysis_manifest_v3.json").read_bytes())
+        bindings = {row["condition_family_id"]: {
+            "condition_family_id": row["condition_family_id"],
+            "condition_family_sha256": row["canonical_domain_sha256"],
+            "condition_family_definition": json.loads((consumer / row["path"]).read_bytes()),
+        } for row in prospective["condition_families"]}
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            pack = root / "pack"
+            shutil.copytree(ROOT / "configs/campaigns/d117_floor_qwen3-1p7b_v5", pack)
+            # "prefill" is the real p42 cell, rather than the consumer's p2048 cell.
+            with self.assertRaisesRegex(mint.MintError, "prefill role: source pin mismatch"):
+                _bootstrap_producer(pack, root / "runs", root / "report.json", root / "bracket.json",
+                                    bindings, {}, "0" * 64, None, "alpha/calibration_plan.json", "prefill")
+            self.assertFalse((root / "issued.json").exists())
+
     def test_v5_decode_and_p2048_inventory_mints_under_the_lead_ruling(self) -> None:
         from scripts.emit_floor_mint_pinset import build_pinset
         from joulewise.identity_pins import scientific_config_identity_sha256
