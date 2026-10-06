@@ -301,6 +301,30 @@ CODES: dict[str, CodeSpec] = {
         ("campaign.runner_record_flagged", ("RECORDS", "REPRESENTATION")),
         ("calibration.writer_record_flagged", ("CALIBRATION", "REPRESENTATION")),
     )},
+    # Gate-prune round 2 (PLAN2 sections 2.2 G and 3.1).  Written by other
+    # lanes' code and folded here (P2-RC member.timeout, P2-CTL
+    # calibration.refit_cache_miss, P2-DRV census, monitor and in-window
+    # yield codes, P2-CHAIN roster.horizon_truncated and member.retried):
+    "member.timeout": _spec("MEMBER_VALIDITY", "NUMBER"),
+    "census.unmeasured": _spec("DIAGNOSTIC", "PHYSICS"),
+    "monitor.crash_loop": _spec("DIAGNOSTIC", "PHYSICS"),
+    "calibration.refit_cache_miss": _spec("CALIBRATION", "REPRESENTATION"),
+    "roster.horizon_truncated": _spec("ROSTER", "REPRESENTATION"),
+    "member.retried": _spec("ROSTER", "REPRESENTATION"),
+    "yield.stage_zero": _spec("DIAGNOSTIC", "REPRESENTATION"),
+    "yield.stage_low": _spec("DIAGNOSTIC", "REPRESENTATION"),
+    "yield.stage_stalled": _spec("DIAGNOSTIC", "REPRESENTATION"),
+    "stage.members_refused_pre_bundle_identical": _spec("DIAGNOSTIC", "REPRESENTATION"),
+    # Emitted by this harvest:
+    "records.runs_root_override": _spec("RECORDS", "REPRESENTATION"),
+    "yield.harvest_disagrees_with_window": _spec("RECORDS", "REPRESENTATION"),
+    "collection.zero_yield": _spec("ROSTER", "REPRESENTATION"),
+    "collection.failure_histogram": _spec("DIAGNOSTIC", "REPRESENTATION"),
+    "chain.stopped_before_collection": _spec("RECORDS", "REPRESENTATION"),
+    "roster.dispatch_unresolved": _spec("ROSTER", "REPRESENTATION"),
+    "records.identity_unmeasured_superseded": _spec("RECORDS", "REPRESENTATION"),
+    "thermal.stage_battery_rise": _spec("DIAGNOSTIC", "PHYSICS"),
+    "thermal.battery_temperature_unmeasured": _spec("DIAGNOSTIC", "PHYSICS"),
 }
 # The codes above that only protected-core writers emit (the harvest folds them).
 CORE_WRITER_CODES = frozenset({
@@ -317,6 +341,16 @@ UNWRITTEN_MARKER = "JOULEWISE_UNWRITTEN_FLAG "
 # was listed as ".campaign.lock").  Spelled in two parts so the emitted-code
 # scan of this file does not read a file name as a flag code.
 CAMPAIGN_LOCK_NAME = "campaign" ".lock"
+# The gate-prune round-2 codes (lane P2-HARV): the draft sealed catalog in the
+# design branch gains them through the registration row (REG) before the seal.
+PRUNE2_CODES = frozenset({
+    "member.timeout", "census.unmeasured", "monitor.crash_loop", "calibration.refit_cache_miss",
+    "roster.horizon_truncated", "member.retried", "yield.stage_zero", "yield.stage_low", "yield.stage_stalled",
+    "stage.members_refused_pre_bundle_identical", "records.runs_root_override",
+    "yield.harvest_disagrees_with_window", "collection.zero_yield", "collection.failure_histogram",
+    "chain.stopped_before_collection", "roster.dispatch_unresolved", "records.identity_unmeasured_superseded",
+    "thermal.stage_battery_rise", "thermal.battery_temperature_unmeasured",
+})
 LINEAGE_CODES = frozenset(code for code in CODES if code.startswith("lineage."))
 NEVER_CLASSIFIED_CODES = frozenset({"records.malformed_flag"})
 # Codes L4's draft catalog does not name (handed to L4 and L6 for the draft

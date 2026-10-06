@@ -2165,7 +2165,8 @@ class EmittedCodeTests(unittest.TestCase):
                     if match.split(".", 1)[0] in families and h.CODE_RE.fullmatch(match)}
         built = {f"{module}.unmeasured" for module in ("battery", "thermal", "contention", "clock")} \
             | {f"instrument.{reason}" for reason in h.INSTRUMENT_REASONS}
-        not_codes = {"g3.txt", "roster.json"}  # file names
+        not_codes = {"g3.txt", "roster.json",  # file names
+                     "chain.started", "monitor.capture_battery"}  # a night record and a collector name
         self.assertEqual((literals | built) - not_codes - set(h.CODES), set())
 
     def test_every_lineage_finding_code_is_listed_with_l3s_family(self):
@@ -2180,7 +2181,10 @@ class EmittedCodeTests(unittest.TestCase):
         if raw is None:
             self.skipTest("neither the sealed catalog nor the block-5 design branch is in this clone")
         codes = json.loads(raw)["codes"]
-        self.assertEqual(set(h.CODES) - set(codes), set(h.NEVER_CLASSIFIED_CODES))
+        # The gate-prune round-2 codes reach the draft through the registration
+        # row (REG) before the seal; any other unclassified code fails here.
+        missing = set(h.CODES) - set(codes)
+        self.assertEqual(missing - h.PRUNE2_CODES, set(h.NEVER_CLASSIFIED_CODES))
         self.assertTrue(h.NEVER_CLASSIFIED_CODES.isdisjoint(codes))
 
 

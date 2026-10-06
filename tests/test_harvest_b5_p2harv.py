@@ -319,3 +319,41 @@ class WorkerCalibrationCacheTests(base.WindowTestCase):
         self.assertEqual(len(seen["strict"]), 2)
         self.assertTrue(all(cache is h._WORKER_PHYSICS_CACHE for cache in seen["strict"]))
         self.assertTrue(all(result["calibration_cache"]["strict_uses_cache"] for result in results))
+
+
+class Prune2CodeRegistrationTests(unittest.TestCase):
+    """PLAN2 3.1 (P2-HARV) and 2.2 G: every round-2 code is classified in the draft, the fixture and the harvest."""
+
+    EXPECTED = {
+        "member.timeout": ("MEMBER_VALIDITY", "NUMBER", "EXCLUDE_MEMBER"),
+        "census.unmeasured": ("DIAGNOSTIC", "PHYSICS", "DISCLOSE"),
+        "monitor.crash_loop": ("DIAGNOSTIC", "PHYSICS", "DISCLOSE"),
+        "calibration.refit_cache_miss": ("CALIBRATION", "REPRESENTATION", "DISCLOSE"),
+        "roster.horizon_truncated": ("ROSTER", "REPRESENTATION", "DISCLOSE"),
+        "member.retried": ("ROSTER", "REPRESENTATION", "DISCLOSE"),
+        "yield.stage_zero": ("DIAGNOSTIC", "REPRESENTATION", "DISCLOSE"),
+        "yield.stage_low": ("DIAGNOSTIC", "REPRESENTATION", "DISCLOSE"),
+        "yield.stage_stalled": ("DIAGNOSTIC", "REPRESENTATION", "DISCLOSE"),
+        "stage.members_refused_pre_bundle_identical": ("DIAGNOSTIC", "REPRESENTATION", "DISCLOSE"),
+        "records.runs_root_override": ("RECORDS", "REPRESENTATION", "DISCLOSE"),
+        "yield.harvest_disagrees_with_window": ("RECORDS", "REPRESENTATION", "DISCLOSE"),
+        "collection.zero_yield": ("ROSTER", "REPRESENTATION", "DISCLOSE"),
+        "collection.failure_histogram": ("DIAGNOSTIC", "REPRESENTATION", "DISCLOSE"),
+        "chain.stopped_before_collection": ("RECORDS", "REPRESENTATION", "DISCLOSE"),
+        "roster.dispatch_unresolved": ("ROSTER", "REPRESENTATION", "DISCLOSE"),
+        "records.identity_unmeasured_superseded": ("RECORDS", "REPRESENTATION", "DISCLOSE"),
+        "thermal.stage_battery_rise": ("DIAGNOSTIC", "PHYSICS", "DISCLOSE"),
+        "thermal.battery_temperature_unmeasured": ("DIAGNOSTIC", "PHYSICS", "DISCLOSE"),
+    }
+
+    def test_every_round_two_code_is_classified_everywhere(self):
+        from joulewise.flags.catalog import DRAFT_CODES
+        fixture = json.loads((base.FIXTURES / "flag_catalog.json").read_bytes())["codes"]
+        self.assertEqual(set(self.EXPECTED), set(h.PRUNE2_CODES))
+        for code, expected in self.EXPECTED.items():
+            with self.subTest(code):
+                self.assertEqual((DRAFT_CODES[code]["family"], DRAFT_CODES[code]["klass"],
+                                  DRAFT_CODES[code]["effect"]), expected)
+                self.assertEqual((fixture[code]["family"], fixture[code]["klass"], fixture[code]["effect"]),
+                                 expected)
+                self.assertEqual((h.CODES[code].family, h.CODES[code].klass), expected[:2])
