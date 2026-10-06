@@ -669,5 +669,21 @@ class CorpusRetryTests(ChainFixture):
         self.assertEqual(0, rows["alpha-post-calibration"])
 
 
+class SizingCrossCheckTests(unittest.TestCase):
+    """The chain's deadline and budgets against the committed block-5 sizing they must cover."""
+
+    def test_the_chain_allowances_cover_the_sizing_terms(self):
+        sizing = json.loads((REPO_ROOT / "configs/campaigns/v5_claim_25g83/sizing_b5.json").read_text())
+        terms = sizing["terms"]
+        self.assertGreaterEqual(b5_chain.HORIZON_MEMBER_ALLOWANCE_S, max(terms["member_allowance_s"].values()))
+        self.assertEqual(b5_chain.SETTLE_S + terms["pre_post_calibration"]["seconds"] + 600,
+                         b5_chain.HORIZON_POST_RESERVE_S)
+        self.assertEqual(terms["stage_custody_formula"]["stage_overhead_s"], b5_chain.HORIZON_STAGE_OVERHEAD_S)
+        for budget, term in (("bound_derivation", "bound_derivation"), ("neg8_corpus_collected", "corpus_prune"),
+                             ("window_calibration_verdict", "window_calibration_verdict")):
+            self.assertGreaterEqual(b5_chain.STAGE_WALL_BUDGET_S[budget], terms[term]["seconds"])
+        self.assertEqual(b5_chain.COLLECTION_ARM_COUNTDOWN_S, terms["collection_arm_countdown_s"]["seconds"])
+
+
 if __name__ == "__main__":
     unittest.main()
