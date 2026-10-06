@@ -41,6 +41,7 @@ import resource
 import signal
 import subprocess
 import sys
+import threading
 import time
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
@@ -64,6 +65,9 @@ DEFAULT_CADENCE: dict[str, float] = {"clock_s": 1.0, "frequency_s": 5.0, "batter
                                      "battery_max_s": 30.0, "battery_publication_s": 60.0,
                                      "thermal_s": 5.0, "contention_s": 10.0, "disk_s": 60.0,
                                      "self_s": 30.0}
+# In production the in-process samplers run on their own thread (Monitor.run).
+FAST_TASKS = ("clock", "thermal")
+SLOW_TASKS = ("battery", "contention", "disk", "self")
 
 
 def build_config(*, custody_dir: Path | str, tree_roots: Sequence[int],
@@ -189,20 +193,22 @@ class Monitor:
         self.disk_low_written = (self.directory / DISK_LOW_MARKER).exists()
         self.started = first
         self._raw_index = 0
+        self._write_lock = threading.Lock()
 
     # -- lines --------------------------------------------------------------
 
     def _write(self, name: str, kind: str, *, started: Stamp | Mapping[str, Any] | None = None,
                finished: Stamp | Mapping[str, Any] | None = None, values: Any = None,
                error: str | None = None, raw: Sequence[Mapping[str, Any]] = ()) -> None:
-        self.seq[name] += 1
-        stamp = self.ctx.stamp()
-        self.journals[name].write({
-            "schema": JOURNAL_SCHEMA, "module": name, "session": self.session,
-            "seq": self.seq[name], "kind": kind,
-            "started": _stamp_json(started) or stamp.to_json(),
-            "finished": _stamp_json(finished) or stamp.to_json(),
-            "values": values, "error": error, "raw": list(raw)})
+        with self._write_lock:  # both sampler threads may write the ``monitor`` journal
+            self.seq[name] += 1
+            stamp = self.ctx.stamp()
+            self.journals[name].write({
+                "schema": JOURNAL_SCHEMA, "module": name, "session": self.session,
+                "seq": self.seq[name], "kind": kind,
+                "started": _stamp_json(started) or stamp.to_json(),
+                "finished": _stamp_json(finished) or stamp.to_json(),
+                "values": values, "error": error, "raw": list(raw)})
 
     def _raw_context(self, module: str) -> Context:
         self._raw_index += 1
@@ -226,28 +232,57 @@ class Monitor:
         for journal in self.journals.values():
             journal.close()
 
-    def run(self, *, max_seconds: float | None = None) -> None:
-        """Loop until ``stopping`` (set by a signal) or ``max_seconds`` elapse."""
+    def run(self, *, max_seconds: float | None = None, fast_thread: bool = False) -> None:
+        """Loop until ``stopping`` (set by a signal) or ``max_seconds`` elapse.
+
+        ``fast_thread`` (production, :func:`run_forever`): the clock (1 s) and
+        thermal (5 s) samplers, which read in process, run on their own thread,
+        so a slow subprocess probe (``ioreg`` for the battery, ``ps`` for
+        contention, each bounded only by its own timeout) can no longer hole
+        their journals. The real-model rehearsal of 2026-10-06 saw a ``ps``
+        timeout (10 s) followed by a 16 s ``ioreg`` stall the single loop for
+        35 s, which the harvest disclosed as ``clock.unmeasured`` and
+        ``thermal.unmeasured`` on a member. Tests on a simulated timeline keep
+        the single loop (the default).
+        """
 
         deadline = None if max_seconds is None else self.started.monotonic_ns + int(max_seconds * 1e9)
+        if not fast_thread:
+            self._loop(None, deadline)
+            return
+        fast = threading.Thread(target=self._loop, args=(FAST_TASKS, deadline),
+                                name="hazard-monitor-fast", daemon=True)
+        fast.start()
+        try:
+            self._loop(SLOW_TASKS, deadline)
+        finally:
+            self.stopping = True
+            fast.join()
+
+    def _loop(self, names: Sequence[str] | None, deadline: int | None) -> None:
+        keys = list(self.due) if names is None else list(names)
         while not self.stopping:
             now = self.ctx.clocks.monotonic_ns()
             if deadline is not None and now >= deadline:
                 break
-            self.tick(now)
-            next_due = min(self.due.values())
+            self.tick(now, names)
+            next_due = min(self.due[name] for name in keys)
             pause = (next_due - self.ctx.clocks.monotonic_ns()) / 1e9
             if deadline is not None:
                 pause = min(pause, (deadline - self.ctx.clocks.monotonic_ns()) / 1e9)
             if pause > 0 and not self.stopping:
-                self.ctx.clocks.sleep(pause)
+                # A signal sets ``stopping`` on the main thread; sleep in short
+                # steps so the other loop notices within a quarter second.
+                self.ctx.clocks.sleep(min(pause, 0.25) if names is not None else pause)
 
-    def tick(self, now_ns: int) -> None:
+    def tick(self, now_ns: int, names: Sequence[str] | None = None) -> None:
         for name, task in (("clock", self._clock), ("battery", self._battery),
                            ("thermal", self._thermal), ("contention", self._contention),
                            ("disk", self._disk), ("self", self._self_cost)):
             if self.stopping:
                 return
+            if names is not None and name not in names:
+                continue
             if now_ns >= self.due[name]:
                 period_ns = int(self.cadence[f"{name}_s"] * 1e9)  # battery re-plans itself
                 # Fixed-rate schedule; after a stall longer than a period, resume from now.
@@ -415,7 +450,7 @@ def run_forever(config_path: Path, argv: Sequence[str] = ()) -> int:
         signal.signal(sig, stop)
     monitor.open_session(argv)
     try:
-        monitor.run()
+        monitor.run(fast_thread=True)
     finally:
         monitor.close_session(f"signal {getattr(monitor, 'stop_signal', None)}")
     return 0

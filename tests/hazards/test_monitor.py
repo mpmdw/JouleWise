@@ -15,7 +15,7 @@ from types import SimpleNamespace
 
 from joulewise.hazards import base, battery, contention, monitor, thermal
 from tests.hazards.fakes import (
-    FakeClocks, FakeProcessTable, FrequencyReader, Runner, battery_bytes, completed,
+    FakeClocks, FakeProcessTable, FrequencyReader, Runner, battery_bytes, completed, frequency_probe,
 )
 
 GIB = 1024 ** 3
@@ -341,6 +341,60 @@ class SupervisorTests(unittest.TestCase):
             self.assertTrue(all(line["error"] is None for line in monitor.readings(journals["thermal"])))
         self.assertLessEqual(shares["plain"], 0.005)
         self.assertLessEqual(shares["background"], 0.010)
+
+
+class SlowProbeIsolationTests(unittest.TestCase):
+    """Real-model rehearsal 2026-10-06: a ``ps`` timeout and a slow ``ioreg`` held the
+    single sampling loop for 35 s, holing the 1 Hz clock and 5 s thermal journals
+    (``clock.unmeasured`` / ``thermal.unmeasured`` on a member). In production the
+    in-process samplers run on their own thread, so slow subprocess probes cannot
+    stall them. Real time, real threads; the probes are slow fakes at the seam."""
+
+    STALL_S = 2.0
+    RUN_S = 5.0
+
+    def run_with_slow_probes(self, *, fast_thread: bool) -> dict:
+        tmp = tempfile.TemporaryDirectory(dir=os.environ.get("TMPDIR"))
+        self.addCleanup(tmp.cleanup)
+        custody = Path(tmp.name)
+
+        def slow_ioreg(argv):
+            time.sleep(self.STALL_S)
+            return completed(argv, battery_bytes("float-20261005-desk.ioreg"))
+
+        def slow_ps(argv):
+            time.sleep(self.STALL_S)
+            return completed(argv, returncode=1, error="ps timed out (simulated)")
+
+        runner = Runner({battery.IOREG_BATTERY_ARGV: slow_ioreg, contention.PS_ARGV: slow_ps})
+        config = monitor.build_config(custody_dir=custody, tree_roots=[DRIVER],
+                                      disk_targets=[{"path": str(custody), "copies": 1}],
+                                      cadence={"thermal_s": 1.0})
+        instance = monitor.Monitor(config, ctx=base.Context(run=runner),
+                                   frequency_reader=lambda: frequency_probe(0),
+                                   notify_reader=SimpleNamespace(read=lambda: 0), host_reader=None)
+        instance.open_session(["test"])
+        instance.run(max_seconds=self.RUN_S, fast_thread=fast_thread)
+        instance.close_session("test end")
+        self.assertFalse(any(thread.name == "hazard-monitor-fast" and thread.is_alive()
+                             for thread in __import__("threading").enumerate()))
+        return monitor.load_journals(custody)
+
+    @staticmethod
+    def max_gap_s(lines) -> float:
+        starts = [line["started"]["monotonic_ns"] for line in monitor.readings(lines)]
+        return max(b - a for a, b in zip(starts, starts[1:])) / 1e9
+
+    def test_slow_subprocess_probes_do_not_hole_the_clock_and_thermal_journals(self):
+        journals = self.run_with_slow_probes(fast_thread=True)
+        self.assertLess(self.max_gap_s(journals["clock"]), 1.6)
+        self.assertLess(self.max_gap_s(journals["thermal"]), 1.6)
+        self.assertGreaterEqual(len(monitor.readings(journals["battery"])), 1)
+        self.assertGreaterEqual(len(monitor.readings(journals["clock"])), int(self.RUN_S) - 1)
+
+    def test_counterfactual_single_loop_holes_the_clock_journal(self):
+        journals = self.run_with_slow_probes(fast_thread=False)
+        self.assertGreater(self.max_gap_s(journals["clock"]), self.STALL_S)
 
 
 def _kill_quietly(supervisor: monitor.Supervisor) -> None:
