@@ -27,16 +27,25 @@ returned. Collection stages pass ``--max-failures <expected_count>`` in place
 of the pack's literal ``1``, so a failed member costs only itself.
 
 The NEG-8 bound derivation reads a window-local copy of the settled-corpus
-manifest that lists only the collected, succeeded members. With all 12 that
-copy is byte-identical to the committed manifest. With 10 or 11 the derivation
-runs, but its bound artifact names the pruned copy's SHA-256, and the core's
-bound consumers (``whole_window.load_neg8_drift_bound_artifact``: the
-whole-window verdict and the harvest) authenticate the corpus only against the
-committed 12-member bytes. Such a window therefore still ends
-``neg8.bound_not_derived`` (EXCLUDE_WINDOW) until a prospective erratum lets a
-consumer authenticate against the custodied pruned bytes. The chain keeps those
-bytes and a create-once summary (both paths and SHA-256) under
-``$NIGHT_DIR/transcript/``; the driver copies the locator into
+manifest that lists only the collected members that succeeded and, on a HAZARD
+bound root, that the core's NEG-8 mint would not drop
+(``whole_window.neg8_corpus_mint_drops``, when the core provides it: a member
+failing one of the mint's per-member predicates, or outside the majority
+condition). The copy is then exactly the manifest the HAZARD mint binds its
+bound to. With all 12 kept that copy is byte-identical to the committed
+manifest. With 10 or 11 the derivation runs on the custodied copy, and its
+bound artifact names that copy's SHA-256. The core reader
+(``whole_window.load_neg8_drift_bound_artifact``) still authenticates the corpus
+only against the committed 12-member bytes, but the harvest validates the bound
+against the custodied collected subset (registration 5.3,
+``harvest._collected_corpus_bytes``), so such a window is not excluded for that
+reason alone. ``neg8.bound_not_derived`` (EXCLUDE_WINDOW) follows when fewer
+than 10 are kept, when the custodied bytes or the bound do not validate, or
+when a member that succeeded was left out for any reason other than a mint
+drop for a registered member-validity reason (a selected corpus; the harvest's
+``NEG8_ACCEPTED_DROP_REASONS``). The chain keeps those bytes and a
+create-once summary (both paths and SHA-256, and each dropped member with its
+reason) under ``$NIGHT_DIR/transcript/``; the driver copies the locator into
 ``night/hazard_result.json`` (``neg8_corpus``).
 
 The rendered bytes carry every value as a literal. They read nothing from the
@@ -115,12 +124,18 @@ DEVIATIONS = (
     "calibration_capture stages add --arm-countdown-s 20 --sleep-display-before-capture, the "
     "block-3 runbook calibrate_slot protocol every live window has used",
     "bound_derivation reads a window-local copy of the settled-corpus manifest listing only the "
-    "collected, succeeded corpus members (byte-identical when all 12 succeeded). With 10 or 11 of 12 "
-    "the derivation runs (whole_window.NEG8_DRIFT_MINIMUM_N = 10), but the bound names the pruned "
-    "copy's SHA-256 and the core consumers (whole_window.load_neg8_drift_bound_artifact: the "
-    "whole-window verdict, the harvest) authenticate only the committed 12-member bytes, so the "
-    "window still ends neg8.bound_not_derived (EXCLUDE_WINDOW) until a prospective erratum lets a "
-    "consumer authenticate the custodied pruned bytes (locator: night/hazard_result.json neg8_corpus)",
+    "collected corpus members that succeeded and, on a HAZARD bound root, that the core's NEG-8 "
+    "mint would not drop (whole_window.neg8_corpus_mint_drops, when present), so the copy is the "
+    "manifest the mint binds its bound to (byte-identical when all 12 are kept). With 10 or 11 of 12 the "
+    "derivation runs on that custodied copy (whole_window.NEG8_DRIFT_MINIMUM_N = 10). The core "
+    "reader (whole_window.load_neg8_drift_bound_artifact) authenticates only the committed "
+    "12-member bytes, but the harvest validates the bound against the custodied collected subset "
+    "(registration 5.3), so such a window is not excluded for that reason alone: "
+    "neg8.bound_not_derived (EXCLUDE_WINDOW) follows only when fewer than 10 are kept, when the "
+    "custodied bytes or the bound do not validate, or when a member that succeeded was left out "
+    "for any reason but a mint drop for a registered member-validity reason, a selected corpus "
+    "(locator: "
+    "night/hazard_result.json neg8_corpus)",
     "whole_window_verdict and backup stages are desk steps and are not in the chain",
 )
 
@@ -353,16 +368,19 @@ def _argv_text(argv: Sequence[str]) -> str:
     return " \\\n    ".join(" ".join(words) for words in lines)
 
 
-# Stdlib-only helpers the chain runs with the measurement interpreter. They
-# travel inside the chain bytes, so the chain's digest pins them.
+# Helpers the chain runs with the measurement interpreter. They travel inside
+# the chain bytes, so the chain's digest pins them.
 PRUNE_HELPER = r"""
-import hashlib, json, os, sys
+import hashlib, json, os, pathlib, sys, tempfile
 manifest_path, runs_root, output, summary_path = sys.argv[1:5]
+def render(value):
+    # The rendering the HAZARD NEG-8 mint gives a pruned manifest (whole_window).
+    return (json.dumps(value, indent=2, sort_keys=True) + "\n").encode("utf-8")
 with open(manifest_path, "rb") as handle:
     raw = handle.read()
 committed_sha256 = hashlib.sha256(raw).hexdigest()
 manifest = json.loads(raw)
-kept, dropped = [], []
+statuses = []
 for member in manifest["members"]:
     relative = member.get("bundle_path") if isinstance(member, dict) else None
     status = None
@@ -373,15 +391,53 @@ for member in manifest["members"]:
                 status = json.loads(handle.read()).get("status")
         except (OSError, ValueError, AttributeError):
             status = None
-    if status == "succeeded":
-        kept.append(member)
+    statuses.append(status)
+succeeded = [member for member, status in zip(manifest["members"], statuses) if status == "succeeded"]
+# On a HAZARD bound root the core's NEG-8 mint drops a member that fails one of
+# its per-member predicates (or sits outside the majority condition) and binds
+# the bound to the manifest without it, rendered as render() renders it
+# (core-prune A3).  This helper drops the same members, named by the core's own
+# whole_window.neg8_corpus_mint_drops over the members that succeeded, so the
+# copy it writes is the manifest the mint binds to; the harvest accepts exactly
+# these drops (N2).  It is therefore not stdlib-only: the chain exports
+# PYTHONPATH=$REPO and the executed-file inventory pins whole_window.py.  A
+# root that is not HAZARD (the mint is then all-or-nothing), a core without
+# the function, or a call that raises leaves the registered status-only rule,
+# and the mint decides as it does.
+mint_reasons, mint_rule = {}, "not_hazard"
+try:
+    import joulewise.window_lineage as window_lineage
+    import joulewise.whole_window as whole_window
+    hazard = window_lineage.is_hazard_runs_root(runs_root)
+    mint_drops = getattr(whole_window, "neg8_corpus_mint_drops", None)
+except Exception as error:
+    hazard, mint_drops, mint_rule = False, None, "unavailable: " + type(error).__name__
+if hazard and mint_drops is None:
+    mint_rule = "unavailable: whole_window.neg8_corpus_mint_drops"
+elif hazard:
+    try:
+        if len(succeeded) == len(manifest["members"]):
+            rows = mint_drops(pathlib.Path(runs_root), pathlib.Path(manifest_path))
+        else:
+            with tempfile.TemporaryDirectory() as scratch:
+                staged = pathlib.Path(scratch) / "succeeded-members.json"
+                staged.write_bytes(render(dict(manifest, members=succeeded)))
+                rows = mint_drops(pathlib.Path(runs_root), staged)
+        mint_reasons = {row["bundle_id"]: row["reason"] for row in rows}
+        mint_rule = "joulewise.whole_window.neg8_corpus_mint_drops"
+    except Exception as error:
+        mint_reasons, mint_rule = {}, "raised: " + type(error).__name__
+kept, dropped = [], []
+for member, status in zip(manifest["members"], statuses):
+    bundle_id = member.get("bundle_id") if isinstance(member, dict) else None
+    if status != "succeeded":
+        dropped.append({"bundle_id": bundle_id, "status": status})
+    elif bundle_id in mint_reasons:
+        dropped.append({"bundle_id": bundle_id, "status": status, "mint_drop": mint_reasons[bundle_id]})
     else:
-        dropped.append({"bundle_id": member.get("bundle_id") if isinstance(member, dict) else None,
-                        "status": status})
+        kept.append(member)
 if dropped:
-    pruned = dict(manifest)
-    pruned["members"] = kept
-    raw = (json.dumps(pruned, indent=2, sort_keys=True) + "\n").encode("utf-8")
+    raw = render(dict(manifest, members=kept))
 def create_once(path, data):
     descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
     with os.fdopen(descriptor, "wb") as handle:
@@ -394,7 +450,7 @@ summary = {"schema": "joulewise.b5_neg8_corpus_collected.v1",
            "collected_manifest": {"path": os.path.abspath(output), "sha256": hashlib.sha256(raw).hexdigest()},
            "members_listed": len(manifest["members"]), "members_kept": len(kept),
            "kept_bundle_ids": [member.get("bundle_id") for member in kept],
-           "dropped": dropped, "identical_to_committed": not dropped}
+           "dropped": dropped, "identical_to_committed": not dropped, "mint_rule": mint_rule}
 create_once(summary_path, (json.dumps(summary, indent=2, sort_keys=True) + "\n").encode("utf-8"))
 print(json.dumps(summary, sort_keys=True))
 """
@@ -581,9 +637,9 @@ def render_chain(*, tree: Mapping[str, Any], tree_sha256: str, stages: Sequence[
             runs_dir = value_after(argv, "--runs-dir")
             _require(argv.count("--derive-neg8-drift-bound") == 1 and manifest is not None and runs_dir is not None,
                      f"{stage.stage_id}: bound derivation names one manifest and --runs-dir")
-            lines.append("# 4b. The NEG-8 bound, from the collected and succeeded corpus members. A pruned")
-            lines.append("# copy (10 or 11 of 12) derives, but the core consumers authenticate only the committed")
-            lines.append("# 12-member bytes: such a window ends neg8.bound_not_derived until an erratum.")
+            lines.append("# 4b. The NEG-8 bound, from the collected corpus members that succeeded and that the")
+            lines.append("# core's HAZARD mint does not drop. A pruned copy (10 or 11 of 12) derives; the")
+            lines.append("# harvest validates the bound against these custodied bytes (registration 5.3).")
             lines.append(run(stage, [python, "-B", "-c", Shell('"$B5_PRUNE_PY"'), manifest, runs_dir, collected,
                                      collected_summary],
                              label=stage.stage_id + ".corpus", kind="neg8_corpus_collected", suffix=".corpus"))
