@@ -114,10 +114,10 @@
     },
     "calibration.ledger_snapshot_refused": {
       "blinding": "STRUCTURE",
-      "effect": "DISCLOSE",
+      "effect": "EXCLUDE_WINDOW",
       "family": "CALIBRATION",
-      "klass": "REPRESENTATION",
-      "note": "The ledger snapshot reports record-keeping refusals. The window's own captures are checked byte for byte (calibration.capture_invalid) and the bracket decision is calibration.bracket_acceptance_failed. Emitter class NUMBER, restated REPRESENTATION here."
+      "klass": "NUMBER",
+      "note": "The calibration ledger, read up to this window's terminal entry, fails its own integrity checks (missing, malformed, broken digest chain, or the acceptance's cutoff entry, sequence 376, not found). The bracket's captures and the acceptance's screens are authenticated through this ledger, and the bracket evaluation reads the same snapshot and refuses with the same reasons, so calibration.bracket_acceptance_failed fires too. Window-removing costs no extra window and does not depend on that propagation (registration 6.5)."
     },
     "calibration.no_bracket": {
       "blinding": "STRUCTURE",
@@ -292,7 +292,7 @@
       "effect": "DISCLOSE",
       "family": "NEG8",
       "klass": "NUMBER",
-      "note": "Aggregate: G3's F5-2 recompute did not find a clean pass. It requires every member admitted, so it is not window-removing; window-level parts are neg8.screen_failed and calibration.bracket_acceptance_failed (registration 6.5)."
+      "note": "Aggregate: G3's F5-2 independent recompute of the whole-window verdict did not find a clean pass. Not window-removing for the same reason as whole_window.not_passed; its parts act through neg8.screen_failed, calibration.bracket_acceptance_failed and member.whole_window_member_failure (registration 6.5)."
     },
     "instrument.cadence_ratio_below_threshold": {
       "blinding": "STRUCTURE",
@@ -553,6 +553,13 @@
       "klass": "NUMBER",
       "note": "A required bundle file is unreadable."
     },
+    "member.whole_window_member_failure": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_MEMBER",
+      "family": "MEMBER_VALIDITY",
+      "klass": "NUMBER",
+      "note": "The whole-window verdict lists this member among its per-member failures (member_failures) for a reason no other member code carries: environment evidence missing or failed (including the post-run display-asleep and screensaver-off observation of D-078 item 4), CPU-idle criteria or GPU idle admission that do not replay, or an idle-admission attempt that cannot be paired with its telemetry. In-window thermal pressure and an invalid bundle keep their own codes. Emitter pending in the harvest (registration 2, 6.3)."
+    },
     "model.identity_inconsistent_in_window": {
       "blinding": "STRUCTURE",
       "effect": "EXCLUDE_WINDOW",
@@ -586,7 +593,7 @@
       "effect": "EXCLUDE_WINDOW",
       "family": "MODEL_IDENTITY",
       "klass": "NUMBER",
-      "note": "No frozen model or runtime pin to compare against. The three packs carry frozen pins in identity_pin_projection, so this should not fire."
+      "note": "No pin to compare against. The pins are configs/campaigns/v5_claim_25g83/identity_pins.json (schema joulewise.b5_identity_pins.v1), sealed with this catalog; the plan trees' identity_pin_projection is unprojected and carries none. Fires when the measurement checkout lacks the file (arm collector) or its archived copy has no unit pin (harvest) (registration 4.6 item 3)."
     },
     "monitor.probe_in_phase": {
       "blinding": "STRUCTURE",
@@ -607,14 +614,14 @@
       "effect": "EXCLUDE_WINDOW",
       "family": "NEG8",
       "klass": "NUMBER",
-      "note": "The NEG-8 bound was not derived inside the window (fewer than 10 of 12 corpus members, or the bound reader refused; registration 5.3)."
+      "note": "The NEG-8 bound was not derived: neither the core reader (all 12 corpus members) nor the harvest's collected-subset validation (at least 10 of 12, committed order, only unsucceeded members left out, bound arithmetic and corpus identity checked against the custodied manifest) accepts it (registration 5.3)."
     },
     "neg8.screen_failed": {
       "blinding": "STRUCTURE",
       "effect": "EXCLUDE_WINDOW",
       "family": "NEG8",
       "klass": "NUMBER",
-      "note": "The NEG-8 screen failed. The harvest emits it from the whole-window verdict's NEG-8 conditions (neg8_gross_point_drift_exceeded, neg8_idle_sub_point_drift_exceeded, neg8_bracket_missing, neg8_bracket_reference_invalid, neg8_drift_bound_stale, the bound-underived conditions)."
+      "note": "The NEG-8 screen failed: the verdict's NEG-8 bracket is absent or not passed, or lists a NEG-8 condition (neg8_gross_point_drift_exceeded, neg8_idle_sub_point_drift_exceeded, neg8_bracket_missing, neg8_bracket_reference_invalid, neg8_drift_bound_stale, the bound-underived conditions). When the only conditions are the bound-underived ones and the bound was derived from the collected subset, the harvest's re-screen against that bound decides alone (registration 5.3)."
     },
     "network_time.off_output": {
       "blinding": "STRUCTURE",
@@ -768,7 +775,7 @@
       "effect": "EXCLUDE_MEMBER",
       "family": "ROSTER",
       "klass": "NUMBER",
-      "note": "The bundle's recorded run_id differs from its directory, so which planned member its bytes are is ambiguous. Emitter class REPRESENTATION, restated NUMBER here."
+      "note": "The bundle's metadata.json run_id differs from its directory. A misfiled bundle already fails the per-member config check; this covers a bundle whose own records disagree about which member it is. A kept member needs one identity in every record a later program may key on, or one energy could count under two units or the wrong quad position. Emitter class REPRESENTATION, restated NUMBER here (registration 6.7)."
     },
     "thermal.os_level_nonzero": {
       "blinding": "STRUCTURE",
@@ -796,7 +803,7 @@
       "effect": "DISCLOSE",
       "family": "NEG8",
       "klass": "NUMBER",
-      "note": "Aggregate: the stored whole-window verdict did not pass. It fails on any one member's admission or environment refusal, so it is not window-removing; its NEG-8 conditions are neg8.screen_failed and its bracket is calibration.bracket_acceptance_failed (registration 6.5)."
+      "note": "Aggregate: the stored whole-window verdict did not pass. It fails on any one member's failure, so it is not window-removing. Its parts act through their own codes: neg8.screen_failed and calibration.bracket_acceptance_failed (window), member.whole_window_member_failure (member); adapter wattage continuity is disclosed (registration 6.5)."
     },
     "whole_window.producer_failed": {
       "blinding": "STRUCTURE",
@@ -821,10 +828,10 @@
     }
   },
   "notes": {
-    "aggregate_disclosures": "whole_window.not_passed and g3.recompute_failed are DISCLOSE because they fail on any single member's refusal; the harvest must emit neg8.screen_failed from the verdict's NEG-8 conditions.",
+    "aggregate_disclosures": "whole_window.not_passed and g3.recompute_failed are DISCLOSE because they fail on any single member's failure. Their window-level parts are neg8.screen_failed (emitted by the harvest, with the collected-subset re-screen) and calibration.bracket_acceptance_failed; their member-level part is member.whole_window_member_failure.",
     "authority": "registration_block5.md section 6 states these rules in words; this file is normative for each code's effect.",
-    "restated_classes": "roster.run_id_mismatch (REPRESENTATION to NUMBER) and calibration.ledger_snapshot_refused (NUMBER to REPRESENTATION) restate their emitter's class; each note says why.",
-    "status": "DRAFT, NOT SEALED. Revision 3, 2026-10-05, lane L6. Sealed with registration_block5.md, analysis_plan_block5.md and sealed_inventory.json by one cold gate (registration 12).",
+    "restated_classes": "roster.run_id_mismatch (emitter REPRESENTATION, restated NUMBER here) is the one restatement; its note says why. calibration.ledger_snapshot_refused now keeps its emitter's class, NUMBER.",
+    "status": "DRAFT, NOT SEALED. Revision 4, 2026-10-06 (registration-sync side lane; revision 3 is commit 71c91d74). Sealed with registration_block5.md, analysis_plan_block5.md and sealed_inventory.json by one cold gate (registration 12).",
     "unclassified": "A code not listed here is UNCLASSIFIED: it blocks only the release event until classified blind by a cold erratum (registration 7.2). records.malformed_flag and collector.unmeasured are deliberately absent so that they always block release until read."
   },
   "rules": {

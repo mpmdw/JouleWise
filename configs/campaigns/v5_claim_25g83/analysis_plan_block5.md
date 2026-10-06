@@ -1,6 +1,7 @@
 # Analysis plan V5-CLAIM-25G83-B5: what is computed from the claim windows, and how
 
-Status: **DRAFT, NOT SEALED. Revision 3, 2026-10-05.** Companion to `registration_block5.md` (the **registration**)
+Status: **DRAFT, NOT SEALED. Revision 4, 2026-10-06** (revision 3 is commit `71c91d74`; revision 4 changes are
+listed in §14). Companion to `registration_block5.md` (the **registration**)
 and `flag_catalog.json` (the **flag catalog**) in the same directory; they are sealed together and none binds alone.
 Terms are those built in registration §0; terms that first appear here are built where they first appear. Every rule
 is fixed before any claim byte exists. Most estimators below are already frozen in committed bytes (the D-179
@@ -154,8 +155,18 @@ The issuer, pinset, input manifest, adapters, the exclusions consumer and the di
 
 **What it is.** For each model and each of decode, prefill-p42 and prefill-p2048, one gross phase energy averaged
 over the cell's kept units, with an interval that respects the units. Normative home:
-`docs/contracts/paper_reported_energy.md`; registration digests in each floor pack's `extraction_spec.json`
-(`reported_energy_registration.registration_sha256`), `FILL[REPORTED-ENERGY-REGISTRATION-DIGESTS]`.
+`docs/contracts/paper_reported_energy.md`. **Registration digests** (`REPORTED-ENERGY-REGISTRATION-DIGESTS`, filled
+from committed bytes at `f8164893`, re-tied at seal): each floor pack's `extraction_spec.json` names the reported-energy
+registration it implements in `reported_energy_registration.registration_sha256`:
+
+- ALPHA: `5560857668f053c99d0369161d4735015f4678a160b7a8423c7a7f357a50f5ea`, in
+  `configs/campaigns/d117_floor_qwen3-1p7b_v5/extraction_spec.json` (file SHA-256
+  `8b7969851c576032a89ebd00c5d3a4396e1eba264d4d1e6a4603420fecd15c5c`);
+- BETA: `04657a74de839a48ebf6bf55fe66f299fdd2e6401353c76d87d4d6ae843dae79`, in
+  `configs/campaigns/d117_floor_qwen3-8b_v5/extraction_spec.json` (file SHA-256
+  `53e71b38ab9c9851744ee84e792263e081c78156f941e9ab782f924a132809c7`).
+
+Both specs are `procedure_only` and carry no post-collection numeric value.
 
 **Members.** Ordinals 1–10 are the absolute repeats; 11–50 are the ten null quads in A1, B1, B2, A2 order. Decode and
 prefill-p42 read the decode stages' 50 bundles; prefill-p2048 reads the p2048 stages' 50.
@@ -433,7 +444,9 @@ line (which use the released energies by rules fixed here), and printed with the
 - **Battery, thermal, contention, clock:** per window, the hazard measurements at arm, the counts of each
   physics-in-span code, the count of members with anchor status `bounded` and the largest effective bound, and
   `kernel_task`'s largest CPU share during a request.
-- **Reference drift:** each window's NEG-8 screen result, allowance and corpus size (10, 11 or 12).
+- **Reference drift:** each window's NEG-8 screen result, allowance and corpus size (10, 11 or 12). For a corpus of 10
+  or 11, also disclose that the bound was validated against the collected members and that the harvest's re-screen,
+  not the stored verdict, decided the screen (registration §5.3; `derived/neg8-bound.json`, `derived/neg8-screen.json`).
 - **G10:** its result and the redraw cycles that followed (registration §3).
 - **p42:** "The 42-token prefill of the decode workload is shorter than one power record and could not be resolved;
   as registered, no p42 value is reported."
@@ -523,15 +536,18 @@ record, and exercised by the blind dry run (§3.2) before the release.
 
 ## 13. FILLs specific to this plan
 
-`B5-ANALYSIS-CUSTODY-ROOT`, `B5-BLIND-DRY-RUN-RECORD`, `REPORTED-ENERGY-REGISTRATION-DIGESTS`, `EXCLUSIONS-CONSUMER`,
-`REPORTED-ENERGY-ISSUER`, `FLOOR-EXTRACTION-KEPT-UNITS`, `GAMMA-MANIFEST-EXCLUSIONS-BINDING`, `V5-FINAL-PINSET`,
-`V5-V2-INPUT-MANIFEST`, `MINT-TO-CLOSEOUT-ADAPTER`, `CLAIM-VERDICT-TO-FILL-ADAPTER`, `DISCLOSURE-PRODUCER`,
-`DISCLOSURE-SITES`, and, shared with the registration, `ATTRIBUTION-FLOOR-BINDING`. Revision 2's `ED-PREDICATE`
+Still open: `B5-ANALYSIS-CUSTODY-ROOT`, `B5-BLIND-DRY-RUN-RECORD`, `EXCLUSIONS-CONSUMER`, `REPORTED-ENERGY-ISSUER`,
+`FLOOR-EXTRACTION-KEPT-UNITS`, `GAMMA-MANIFEST-EXCLUSIONS-BINDING`, `V5-FINAL-PINSET`, `V5-V2-INPUT-MANIFEST`,
+`MINT-TO-CLOSEOUT-ADAPTER`, `CLAIM-VERDICT-TO-FILL-ADAPTER`, `DISCLOSURE-PRODUCER`, `DISCLOSURE-SITES`, and, shared
+with the registration, `ATTRIBUTION-FLOOR-BINDING`. Each names code, a record or a ruling that does not exist yet.
+`REPORTED-ENERGY-REGISTRATION-DIGESTS` was filled in revision 4 (§4). Revision 2's `ED-PREDICATE`
 (replaced by the contention member rule) and `P42-S1-STRUCTURAL-CHECK` (now the s1-structural diagnostic at ALPHA-1's
 harvest) are withdrawn. The open questions are registration §14; Q4 (placement), Q5 (attribution floor) and Q6 (the
 sensitivity line) bear directly on this plan.
 
-## 14. Changes from revision 2
+## 14. Changes from earlier revisions
+
+**Revision 3 (2026-10-05), from revision 2.**
 
 - §1 item 2: "the attempt whose verdict is PASS" became "the first claim-usable attempt".
 - §2.2: "no member is excluded after collection" became the exclusion function's output, the unit rule and the
@@ -546,3 +562,13 @@ sensitivity line) bear directly on this plan.
   measurements; the environmental-diagnostic counts and waiver wording of revision 2 are replaced by the contention
   member rule and its counts.
 - §11: the L9 code list, written blind, with the dry run before release.
+
+**Revision 4 (2026-10-06), synchronizing with the integrated code at `f8164893`.** No estimator, threshold or effect
+used by this plan changed.
+
+- §4: the two reported-energy registration digests are filled in from the floor packs' extraction specs.
+- §8: for a NEG-8 corpus of 10 or 11 members, the reference-drift disclosure says the harvest's re-screen against the
+  collected-subset bound decided the screen (registration §5.3).
+- The registration now removes, through the exclusion function, each member the whole-window verdict fails
+  (`member.whole_window_member_failure`, registration §6.3). This plan reads exclusions only from `exclusions.json`
+  (§2.2), so it needs no other change.

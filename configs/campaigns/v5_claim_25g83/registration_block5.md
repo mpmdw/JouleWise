@@ -1,7 +1,8 @@
 # Registration V5-CLAIM-25G83-B5: the first claim-bearing `_v5` windows (measurement block 5)
 
-Status: **DRAFT, NOT SEALED. Revision 3, 2026-10-05.** Written by Opus 5.5 as lane L6 of the gate-prune workflow, on
-branch `design/2026-10-05-v5-claim-block-draft` (revision 2 is commit `bfd1ee8c`). This file authorizes no arm, no
+Status: **DRAFT, NOT SEALED. Revision 4, 2026-10-06.** Written by Opus 5.5, as lane L6 of the gate-prune workflow
+(revision 3, commit `71c91d74`) and then as the registration-sync side lane (revision 4), on branch
+`design/2026-10-05-v5-claim-block-draft` (revision 2 is commit `bfd1ee8c`). This file authorizes no arm, no
 launch and no analysis. It binds only when one cold gate (§0.1, §12) seals it together with three companions in the
 same directory:
 
@@ -33,6 +34,26 @@ after a chain of receipts verified, and discarded a whole window when one member
 
 §15 maps each item of the approved implementation plan (`/Users/edr/night-archive/gate-prune/PLAN.md` §6, items
 1–15) to the section that carries it.
+
+**What changed in revision 4.** This revision brings the text into line with the integrated code (branch
+`feat/2026-10-05-gate-prune`, commit `f8164893`). No threshold changed.
+
+1. §5.3: each window starts with 12 reference runs, the NEG-8 corpus, from which a drift bound is derived (§0.12). A
+   window in which only 10 or 11 of them succeeded no longer loses that bound: the harvest validates the bound
+   against the members actually collected and re-screens the window against it (§14 Q1 closed).
+2. §4.6 item 3: the pins that fix which model files and runtime versions may be measured live in
+   `identity_pins.json` in this directory, not in the packs' plan trees.
+3. §6.3, §6.5: the whole-window verdict (one pass/fail record over the whole window, §0.17) stays disclosed rather
+   than window-removing, but each member it fails is now removed by a new member code,
+   `member.whole_window_member_failure`. Without that code, revision 3 had dropped the check that the displays stayed
+   asleep and the screensaver off through each request, which decision D-078 (item 4) installed after a screensaver
+   contaminated captures in July 2026. Also, `calibration.ledger_snapshot_refused` now removes the window: the
+   calibration bracket is judged from that same ledger, so the bracket check already fails with the same reasons.
+4. §5.5: the sizing output is filled in, and revision 3's claim that a generous window deadline costs nothing is
+   withdrawn. The supervising watchdog treats a window as running until its scheduled start plus that deadline, which
+   is about 15 h after a normal chain ends (§14 Q8).
+5. §1, §4.2, §5.6: the boundary label and the backup destinations are filled in. The backups sit on the same disk
+   volume as the collected data, so the disk check at arm counts three copies of the window's bytes there, not one.
 
 ## 0. Terms, built in the order they are used
 
@@ -138,7 +159,8 @@ A **member** is one run of one inference request in its own process. Its steps, 
   `configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5` (both models). Their plan-tree SHA-256s at the
   integration head `a0a4f5a7` are ALPHA `a0076ae7ed8dc89b81a5138ce35d38171946e5e8a30599202f7845e7bcb70938`, BETA
   `ebd8c160feda7698698eb28b48e18f9f3b3b7df9dacd1d4b7d70a09e49f73d6a`, GAMMA
-  `7cdf1891ab8ddde7b2fcd882c211599bbf2205aeb08b30c9a9da92d749bf5b1e`; the values in force are those in the sealed
+  `7cdf1891ab8ddde7b2fcd882c211599bbf2205aeb08b30c9a9da92d749bf5b1e` (unchanged at the gate-prune integration head
+  `f8164893`); the values in force are those in the sealed
   inventory at H_claim (§11), and GAMMA's changes once more before GAMMA-1 (§2, "Before GAMMA-1 arms").
 - **Attempt.** One arm-to-harvest occurrence of one pack, labelled `ALPHA-n`, `BETA-n` or `GAMMA-n`, n = 1, 2, …
 - **Window.** The stretch of machine time an attempt occupies, from its scheduled start t0 (§0.17) to its chain's
@@ -331,8 +353,9 @@ that member's unit (§6.3).
 - **Whole-window verdict.** One row, produced by the harvest with the production writer
   (`run_campaign.py --whole-window-verdict`), stating whether the window as a whole passed: every member admitted,
   the AC adapter's wattage unchanged, the CPU criteria held, the NEG-8 screen passed, and the bracket, read through
-  its bracket binding, passed the acceptance (`joulewise/whole_window.py`). Revision 3 no longer uses its overall
-  pass or fail; it reads the NEG-8 screen from it (§6.5).
+  its bracket binding, passed the acceptance (`joulewise/whole_window.py`). Its overall pass or fail removes nothing.
+  Each of its parts acts through its own code: the NEG-8 screen and the bracket at window level, and each member's
+  own failures at member level (§6.5).
 
 ### 0.18 Commits and the seal
 
@@ -372,10 +395,17 @@ subtitle D-165 licenses only when every required ratio is at least 2.
 | Floors and GAMMA | Dominance ratios; the dominance sentence and the contingent subtitle only if every required ratio is at least 2 | Disclosure | D-165 addendum |
 
 Every phase-energy sentence carries the D-177 limitation (phase attribution was not characterized by a measured
-instrument check). Nothing here supports a prompt-population claim (one fixed decode prompt), a claim outside
-`M3 Max / MLX / powermetrics` (boundary label `FILL[BOUNDARY-LABEL]`), or a claim about prompt lengths other than
-2048. What the paper prints, and from which artifact, is fixed in analysis plan §9; printing anything needs the
-placement ruling of §14 Q4.
+instrument check). Nothing here supports a prompt-population claim (one fixed decode prompt), a claim about prompt
+lengths other than 2048, or a claim outside one measurement boundary. **Boundary label** (`BOUNDARY-LABEL`, filled
+from committed bytes): `M3 Max / MLX / powermetrics SoC rails`, the claims ladder's form (§0.19). Every bundle records
+the same boundary as `"boundary": "Apple SoC CPU + GPU + ANE package power"` with rails `cpu_power`, `gpu_power` and
+`ane_power` (`joulewise/adapters/powermetrics.py`, `_base_device_metadata` and `RAIL_MANIFEST`). The identity pins
+record it for each identity unit, that is, each model running one workload in one pack
+(`stack_identity.measurement_boundary_label` in `identity_pins.json`, §4.6). The energy reported is therefore that
+of the processor package rails, never wall power or the whole machine.
+
+What the paper prints, and from which artifact, is fixed in analysis plan §9; printing anything needs the placement
+ruling of §14 Q4.
 
 ## 2. Preconditions
 
@@ -395,8 +425,9 @@ Each is evidenced by a path and SHA-256 before the point named.
    bundle present, return code 0, only physical seams stubbed), and a desk dry arm with agents alive has refused at
    the census before any action. `FILL[B5-DRY-RENDER-RECORD]`, `FILL[B5-DRY-ARM-RECORD]`.
 
-**Before ALPHA-1's harvest:** the harvest program (lane L5) has passed its Fable final pass and is pinned by an
-addendum to the seal record (§11 item 4).
+**Before ALPHA-1's harvest:** the harvest program (lane L5) emits `member.whole_window_member_failure` for every member
+the whole-window verdict fails (§6.3, §6.5; the integration head `f8164893` does not emit it yet), has passed its
+Fable final pass, and is pinned by an addendum to the seal record (§11 item 4).
 
 **Before GAMMA-1 arms:** GAMMA's three interior reference stages launch three distinct `run_id`s (lane L10). In the
 current pack all three launch the same one-member input, and `run_campaign.py` skips a `run_id` whose complete bundle
@@ -529,8 +560,13 @@ to the model; idle admission screens only the idle baseline before the request. 
 - *Measurement:* `statvfs` free bytes on the runs-root volume and each backup destination.
 - *Arm:* on every volume, free ≥ planned bytes × the copies planned on that volume + 20 GiB. Planned bytes are
   182 MiB per member (block 3 measured) × the window's members: 21.2 GiB for ALPHA and BETA (119 members), 17.9 GiB
-  for GAMMA (101). With the harvest archive as an APFS clone and backups off the volume, one copy is on the volume:
-  about 41 GiB required against 264 GiB free on 2026-10-05.
+  for GAMMA (101). The driver plans one copy in the claim runs root and one in each of the two backup destinations
+  (§5.6); the bound runs root and the custody root need only the headroom (`joulewise/b5/driver.py`, disk targets).
+  The harvest archive is an APFS clone (a copy that shares storage with its source until either is modified), so it
+  adds no copy. Targets on one volume add their copies. The backup destinations are in iCloud Drive, whose local
+  folder is on the same volume as the runs roots (one device number, read with `stat` on 2026-10-06). So three copies
+  land on that volume: 3 × 21.15 + 20 = 83.5 GiB required for ALPHA and BETA, and 3 × 17.95 + 20 = 73.9 GiB for
+  GAMMA, against 264 GiB free on 2026-10-05.
 - *In window:* every 60 s; below 10 GiB the monitor journals `disk.low` and the driver stops the chain.
 
 **Instrument.** *Forcing problem:* a sampler running slower than its cadence (as the launchd context did on
@@ -587,9 +623,30 @@ Load average, process-name lists and the `corecaptured` spawn count, which revis
    `/dev/null`.
 2. **Acceptance:** §0.11, ledger cutoff 376, one acceptance for all three windows. If a prospective re-derivation
    trigger of the acceptance fires during the block, no further window arms; the question goes to a cold gate.
-3. **Models:** `mlx-community/Qwen3-1.7B-4bit` and `mlx-community/Qwen3-8B-4bit` at the revisions, tokenizer bytes and
-   file hashes of `configs/model_panels/qwen3_4bit.json` at H_claim, as frozen in each plan tree's
-   `identity_pin_projection` (model artifact, runtime identity and configuration-set digests per identity unit).
+3. **Models:** `mlx-community/Qwen3-1.7B-4bit` at revision `3b1b1768f8f8cf8351c712464f906e86c2b8269e` and
+   `mlx-community/Qwen3-8B-4bit` at revision `545dc4251c05440727734bcd94334791f6ab0192`, with the tokenizer bytes the
+   pack configs pin (panel `configs/model_panels/qwen3_4bit.json` at H_claim).
+   **The identity pins are a file in this directory, not part of the plan trees.** Each pack's
+   `identity_pin_projection` is `unprojected` and carries no pin. The pins are
+   `configs/campaigns/v5_claim_25g83/identity_pins.json`, schema `joulewise.b5_identity_pins.v1`, sealed with this
+   file (§12). An **identity unit** is one model running one workload in one pack. There are eight: `alpha` and
+   `alpha/prefill_p2048` (ALPHA), `beta` and `beta/prefill_p2048` (BETA), and GAMMA's `A/decode`, `A/prefill_p2048`,
+   `B/decode` and `B/prefill_p2048`. For each unit the file gives three digests:
+   - the model artifact SHA-256 (Qwen3-1.7B `e1a4505d32a97bb080eac1d2046b6c99ef46f4483a4323484aaf9b4c546b7f4a`,
+     Qwen3-8B `3e0fb77e7ce1ecb7ec844be3ef8856a23643e05317a55054a63d6af62252be31`);
+   - the runtime identity SHA-256: the digest of the recorded stack (runtime and version, quantization, tokenizer,
+     sampler and output policy, boundary), in the form the harvest recomputes from each bundle;
+   - the configuration-set SHA-256: a digest over the scientific content of the unit's member configs.
+
+   Once for the whole block, the file also gives the SHA-256 of the measurement interpreter's package versions,
+   `9033a69906aab1f0ff5724b5a6c2f3efd623512ee49a7048713e2410e701c794`. That digest covers Python 3.13.1, mlx 0.31.2,
+   mlx-lm 0.31.3, mlx-metal 0.31.2, numpy 2.5.1, safetensors 0.8.0, tokenizers 0.22.2 and transformers 5.12.1.
+   `scripts/write_b5_identity_pins.py` generated the file from the packs' identity units and 24 block-3 reference
+   bundles of the same two models, without loading a model. Its draft SHA-256 at `f8164893` is
+   `039d3e3c79d75a8bbf935d73bab3f94b0bf0ccf9ca3df5f199848f849dda9160`; the seal binds the bytes at H_claim.
+   Two programs compare against these pins. At the arm, the driver passes the file to the model-identity collector
+   (`--identity-pins`) when the measurement checkout holds it. At harvest, the harvest reads its archived copy. If
+   either finds no pin to compare against, it records `model.identity_unpinned`, which removes the window (§6.5).
 4. **Packs:** the three packs at H_claim (§0.7), with the pin bundle of the packs: prompt pin
    `d1209f6d5998e4a48ac0dae7ed04a8f6a2c5ec9950d768f0df9ef8839a32dccb`, selection
    `c694c4884ff7f31b677b5ade1ab9710a4797c4529eaad61fba85fea080a88222`, ladder
@@ -619,7 +676,9 @@ session's status. Every collection stage starts with its own 180 s settle.
   and at the window deadline (§5.5).
 - Every other stage records its return code and the chain continues. A chain that reaches its end exits 0 whatever
   its stages returned; the flags, not the return code, decide claim use.
-- The bracket binding, the whole-window verdict and the backups are desk steps run by the harvest, not chain stages.
+- The bracket binding and the whole-window verdict are not chain stages. The harvest produces them at the desk with
+  the production writers (`prepare_desk_verdict`). The backups are not chain stages either: they are a desk step after
+  the harvest (§5.6).
 
 ### 5.2 A failed member costs only itself
 
@@ -637,29 +696,114 @@ from the corpus members that were collected and succeeded, provided there are at
 (`whole_window.NEG8_DRIFT_MINIMUM_N` = 10); t uses n − 1 degrees of freedom. With fewer than 10,
 `neg8.bound_not_derived` removes the window.
 
-*Implementation status at this writing:* the chain derives the bound from a window-local copy of the corpus manifest
-listing only the collected members, but the core's bound reader (`whole_window.load_neg8_drift_bound_artifact`, a
-protected file) authenticates the corpus only against the committed 12-member manifest. Until a reader that accepts a
-subset of the committed 12 lands, a window with 10 or 11 corpus members ends `neg8.bound_not_derived`, which is
-conservative: it costs a window, never a number. At 1 abort in 37 members (block 2 and 3 record) the chance that all
-12 succeed is (36/37)¹² ≈ 0.72, so this matters (§14 Q1).
+*Why it matters.* At 1 abort in 37 members (the block 2 and 3 record), the chance that all 12 corpus members succeed
+is (36/37)¹² ≈ 0.72. A rule that needed all 12 would lose about 28% of windows to the corpus alone.
+
+*Implementation at `f8164893` (fix lane fx-harvest), with the protected core unchanged.* Three programs touch the
+bound, in this order:
+
+1. **The chain** derives the bound from a window-local copy of the corpus manifest that lists only the collected
+   members that succeeded. It records that copy's path and SHA-256 in the driver's terminal record
+   (`night/hazard_result.json`, `neg8_corpus.collected_manifest`).
+2. **The production verdict writer**, which the harvest runs, reads the bound through the core's reader
+   (`whole_window.load_neg8_drift_bound_artifact`, protected). That reader authenticates a bound only against the
+   committed 12-member manifest. It therefore treats a 10- or 11-member bound as absent, and the stored NEG-8 screen
+   fails with exactly two conditions, `neg8_drift_bound_underived` and its idle-subtracted twin.
+3. **The harvest** decides both questions itself:
+   - *Was the bound derived?* (`neg8_bound`) If the core reader accepts the bound, yes. Otherwise the harvest reads
+     the custodied collected manifest and requires all of the following: its bytes hash to the recorded SHA-256; its
+     header equals the committed manifest's; its members are committed members, each once, in committed order; there
+     are at least 10 of them; and every member it leaves out did not succeed (a succeeded member left out would be a
+     selected corpus). Then `whole_window.validate_neg8_drift_bound_artifact` checks the bound's arithmetic and corpus
+     identity against those bytes. If both checks pass, the bound counts as derived from the collected subset.
+     Otherwise `neg8.bound_not_derived` removes the window.
+   - *Did the screen pass?* When the stored screen's only NEG-8 conditions are the two bound-underived ones and the
+     bound was derived from the collected subset, the harvest re-screens the window (`_neg8_rescreen`). It
+     re-derives the NEG-8 bracket with the core's own evaluator (`whole_window._derived_neg8_decision`), over the
+     reference bundles the verdict names, with the validated bound in place of the absent one, and with the bound's
+     freshness judged at the verdict's completion time. The re-derived bracket must have the stored bracket's
+     endpoints and estimand; if it does not, these are not the bundles the verdict was written from, and nothing is
+     evaluated. The re-screen alone then decides: `neg8.screen_failed` is emitted unless the re-screen ran, passed
+     and listed no condition. Any other NEG-8 condition, or a re-screen that cannot run, leaves the screen failed.
+
+Structure (decisions, conditions, member counts, digests) goes to `derived/neg8-bound.json` and
+`derived/neg8-screen.json`. The re-derived bracket holds reference-workload energies, so it goes to restricted custody
+(`withheld/neg8-rescreen-bracket.json`). The stored verdict of such a window still reads "failed", which is
+`whole_window.not_passed`, disclosed only (§6.5).
 
 ### 5.4 The window's tail
 
 After the post calibration: the chain exits; the driver proves the chain's process group gone (a census of the
 group with no signal, then the existing termination proof); the monitor stops; G10 runs if the plan asks (§3); the
 driver writes its terminal record. The harvest may open as soon as that terminal record exists (§7.1), because the
-driver holds nothing after it.
+driver holds nothing after it. The supervising watchdog does not yet release the window at that point (§5.5,
+§14 Q8).
 
 ### 5.5 Sizing
 
-- **T_stream_max** = 335 s for every window (§0.14).
-- **Programmed span and `WINDOW_MAX_S`.** The window plan takes the chain's programmed span from a committed sizing
-  output for the pack at H_claim, built with block 4's sizing conventions (per-member allowances with the cooldown at
-  its 300 s cap and both idle-admission attempts; 180 s settle per stage), and `WINDOW_MAX_S` = the arm's 3300 s
-  allowance (dwell cap 2700 s plus census, reads, OFF, collectors and the cadence probe) + that span, rounded up to a
-  whole minute. `FILL[B5-SIZING-OUTPUTS]` names the three outputs. A large `WINDOW_MAX_S` costs nothing, because the
-  harvest opens at chain exit.
+- **T_stream_max** = 335 s for every window (§0.14). The sizing output records each pack's own longest stream:
+  ALPHA's is 314 s (its members are all 1.7B-class), and BETA's and GAMMA's are 335 s (their 8B members). It sets
+  every pack's `T_stream_max_s` to the block's longest, 335 s, at which the frequency gate passes for
+  |f| ≤ 3.6306 ppm.
+- **Programmed span.** The programmed span is the chain's length if every member takes its longest allowed path.
+  The rule keeps block 4's conventions and uses block 5's chain:
+  - span = (1 + collection stages) × 180 s settle + the stages' 20 s arm countdowns + the pre and post calibration
+    pair (770 s) + the bound derivation (60 s) + the sum of member allowances + stage custody + the terminal shutdown
+    (300 s);
+  - a **member allowance** is load + warm-up + prefill + forced decode + the cooldown at its 300 s cap + both
+    idle-admission attempts (275 s: two attempts of 110 s each plus guards, against an observed attempt maximum of
+    103.6 s at 75 s idle). That is 595 s for a 1.7B member and 619 s for an 8B member. NEG-8 and reference members
+    are charged as 1.7B members;
+  - **stage custody** (the bookkeeping time around members) is 180 s per collection stage, plus 77 s per member
+    (45 s reduction, 32 s sampler start and wind-down), plus 2 × 240 s bracket-writer custody, 300 s reservation and
+    120 s terminal custody.
+- **`WINDOW_MAX_S`**, the window's deadline measured from t0, = 60 × ceil((span + 3300 s) / 60). The 3300 s is the
+  arm's allowance: the dwell cap of 2700 s plus the census, reads, network-time OFF, collectors and cadence probe.
+- **`B5-SIZING-OUTPUTS`** (filled; draft values, re-derived and sealed at H_claim):
+  `configs/campaigns/v5_claim_25g83/sizing_b5.json`, schema `joulewise.b5_sizing.v1`, SHA-256
+  `9d16edfe6c7f508f5908d1222326df5acadf1610ac2a472cb069db33652bee1f` at `f8164893` (status `UNSEALED_DRAFT`).
+  `scripts/size_b5_window.py` writes it from block 4's committed sizing source
+  (`configs/campaigns/v5_qualification_25g83/sizing_sources/sizing_source_v2.json`, SHA-256
+  `f414301cd0328236f9309962b60ff4635026dac973ca3b0ce564b677c47baa81`) and from the packs' stage graphs, order
+  manifests and configs. `--check` reproduces the file byte for byte. The program also refuses unless its
+  arithmetic reproduces block 4's committed 22,494 s span and 25,800 s window. Each window plan reads
+  `/packs/<label>/programmed_span_s` and `/packs/<label>/T_stream_max_s` from it. GAMMA's pack changes before GAMMA-1
+  (§2), so GAMMA's row is re-derived then.
+
+  | Pack | Members, 1.7B-class / 8B | Programmed span | `WINDOW_MAX_S` | Expected chain (below) |
+  |---|---|---|---|---|
+  | ALPHA | 119 / 0 | 85,978 s (23.9 h) | 89,280 s (24.8 h) | 32,264 s (9.0 h) |
+  | BETA | 19 / 100 | 88,378 s (24.5 h) | 91,680 s (25.5 h) | 33,314 s (9.3 h) |
+  | GAMMA | 61 / 40 | 74,842 s (20.8 h) | 78,180 s (21.7 h) | 28,427 s (7.9 h) |
+
+- **Why the deadline is about 2.7 times the expected chain.** The rule charges every member, at once, both worst
+  cases: the cooldown runs to its cap and idle admission needs its second attempt. *Worked decomposition, ALPHA:*
+  119 members × 595 s = 70,805 s. Of that, 35,700 s is every member's cooldown at its 300 s cap and 32,725 s is
+  every member's two admission attempts. Per-member custody adds 119 × 77 = 9,163 s. Settles, countdowns,
+  calibration, derivation, stage custody and shutdown add the other 6,010 s, for a span of 85,978 s. Block 3 measured
+  a start-to-start member cycle, which already includes cooldown and custody, with a median of 236.5 s and a maximum
+  of 274.9 s. Each member here is charged 672 s (595 + 77).
+- **Is that right? As a deadline, yes.** A chain stopped at its deadline loses its post calibration, and so the
+  whole window. The deadline must therefore never cut a slow window that could still be claim-usable. A chain
+  anywhere near this bound would have most members at the cooldown cap, and `member.cooldown_cap_hit` removes such
+  members, so that window would fail the 8-of-10 minimum anyway. The generous size cannot cut a usable window and
+  touches no number.
+- **What it costs: withdrawn claim.** Revision 3 said a large `WINDOW_MAX_S` costs nothing because the harvest opens
+  at chain exit. The code says otherwise. The supervising watchdog (`scripts/magistrate_watchdog.py`,
+  `plan_span_active`) treats a window's plan as active until t0 + `WINDOW_MAX_S` + 300 s, even after `chain.exited`
+  exists. While any plan is active it launches no **headless agent session**, meaning a model session that the
+  watchdog starts with no person present, which is how unattended work resumes after a window. The watchdog records
+  this hold as `FENCED`. The dead-man job, the second scheduled job that cleans up if the driver dies, is timed from
+  the same instant. ALPHA's chain normally ends 9.2–9.8 h after t0 (an 11–47 min arm plus a 9.0 h chain), but the
+  fence holds until 24.9 h after t0. That leaves about 15 h in which the machine is idle and no headless session may
+  run the harvest or arm BETA. Across the three windows, that is about 44 h.
+- **Fix (code, before ALPHA-1; §14 Q8).** End a collected window's span at the driver's terminal evidence:
+  `chain.exited`, the driver's terminal `result.json`, `courier.sent` (the marker that the driver's structure-only
+  notice went out), and no driver process alive. The watchdog already releases a delivered refusal that captured
+  nothing on the same kind of evidence: the terminal `result.json`, `courier.sent`, and an empty census and driver
+  probe. After the fix, `WINDOW_MAX_S` bounds only a hung chain or a dead driver, and the size
+  above costs only the time to notice one. Shrinking the size is not proposed: it would save hang-detection time
+  only, and every cut would risk stopping a usable window.
 - **Expected chain time** (planning only; it gates nothing). From block 3 at 75 s idle: median start-to-start member
   cycle 236.5 s, plus 10.5 s for an 8B member; per collection stage 180 s settle + 39 s head + 62 s tail; fixed
   180 s settle + 770 s calibration pair + 60 s bound derivation + 300 s terminal (scratch `sizing_v2.json`, SHA-256
@@ -674,14 +818,31 @@ driver holds nothing after it.
   becomes the larger of the sizing output's and the stopped attempt's largest observed member cycle, plus the sizing
   margin, and `WINDOW_MAX_S` is re-derived by the rule above without an erratum (member cycles are structural timing,
   releasable under §8).
-- **Block duration.** With the harvest opening at chain exit and every window claim-usable on its first attempt,
-  about 35–45 h including desk gaps and any frequency redraw before BETA.
+- **Block duration.** Assume every window is claim-usable on its first attempt. If the watchdog releases each window
+  at its chain's exit (the fix above), the block takes about 35–45 h, including desk gaps and any frequency redraw
+  before BETA. With the watchdog as it is at `f8164893`, each window holds headless work off until
+  t0 + `WINDOW_MAX_S` + 300 s. That is 89,580 + 91,980 + 78,480 s ≈ 72 h for the three windows, before desk gaps.
 
 ### 5.6 Disk between windows
 
 The harvest archive is an APFS clone of the collected roots where the tool allows (it shares storage until
-modified). Backup destinations `FILL[BACKUP-DESTINATIONS]` are off this volume. The disk hazard re-measures free space
-at every arm, so no separate disk ledger is kept.
+modified).
+
+**`BACKUP-DESTINATIONS`** (filled from committed code and the runbook):
+
+- *Where they are named.* Each attempt's window plan names two destinations, `claim_backup_destination` and
+  `bound_backup_destination`, as absolute paths (`joulewise/b5/plan.py`).
+- *What is checked.* At the arm, the disk hazard requires room for one planned copy on each destination's volume
+  (`joulewise/b5/driver.py`, disk targets). In the window only the volumes the chain writes to are watched, so a full
+  backup volume never stops a chain.
+- *Where they point.* By the window runbook's convention (`docs/phase_2/window_runbook.md`, `CLAIM_BACKUP_DEST` and
+  `BOUND_BACKUP_DEST`) they are `~/Library/Mobile Documents/com~apple~CloudDocs/JouleWise-backup/<window>/claim` and
+  `…/bound` in iCloud Drive. iCloud Drive's local folder is on the runs volume, which is why the arm counts three
+  copies there (§4.2).
+- *Who copies.* The copy itself is a desk step after the harvest (`scripts/backup_runs.sh`, the packs' `backup`
+  stages, which the chain does not render). No block-5 program runs it at this writing; the lead runs it.
+
+The disk hazard re-measures free space at every arm, so no separate disk ledger is kept.
 
 ## 6. Flags and exclusions
 
@@ -706,7 +867,7 @@ are always UNCLASSIFIED, so they always block the release event until a person r
 | Family | What it covers | Effect |
 |---|---|---|
 | PACK_IDENTITY, CODE_IDENTITY, MODEL_IDENTITY | the pack, the executed code or the model differs from what was sealed, or could not be compared | EXCLUDE_WINDOW (one member whose model identity cannot be derived from its own metadata: EXCLUDE_MEMBER) |
-| CALIBRATION | the bracket is missing, invalid, unbound or fails the acceptance | EXCLUDE_WINDOW (ledger record-keeping refusals and desk readiness: DISCLOSE) |
+| CALIBRATION | the bracket is missing, invalid, unbound or fails the acceptance, or the ledger it is judged from fails its own integrity checks | EXCLUDE_WINDOW (the desk's ledger-readiness checks before an arm: DISCLOSE) |
 | NEG8 | the bound was not derived, the screen failed, or the verdict holding the screen is absent | EXCLUDE_WINDOW (aggregate verdict codes: DISCLOSE, §6.5) |
 | INSTRUMENT | the pre-calibration screen failed | EXCLUDE_WINDOW |
 | CLOCK_SYSTEMATIC | a step during a calibration capture; most recorded anchors not `bounded` | EXCLUDE_WINDOW |
@@ -738,7 +899,24 @@ A member is removed from every cell it feeds when any of these is flagged:
 - its configuration bytes are not in the pack's committed inventory (`member.config_not_in_inventory`; the lineage
   check refuses such a member at write time, so normally its bundle is simply absent);
 - its model identity cannot be derived from its metadata (`model.identity_underivable`);
-- its #421 per-capture battery pair is present and fails (`battery.capture_pair_failed`).
+- its #421 per-capture battery pair is present and fails (`battery.capture_pair_failed`);
+- the whole-window verdict lists it among its per-member failures (`member_failures` in the verdict row) for a reason
+  that no other member code carries (`member.whole_window_member_failure`). Those reasons are:
+  - its environment evidence is missing or failed (`environment_admission_missing`, `environment_admission_failed`);
+  - its CPU-idle criteria do not replay from its own telemetry (the `cpu_*` reasons and
+    `processor_combined_power_w_p95_exceeded`), or its GPU idle admission does not (`gpu_idle_admission_*`);
+  - its idle-admission attempt cannot be paired with the telemetry it was judged on
+    (`idle_admission_attempt_ledger_invalid`).
+
+  The verdict's other two per-member reasons already have their own codes. In-window thermal pressure is
+  `thermal.powermetrics_pressure_elevated` (§6.4), and an invalid bundle is `member.strict_validation_failed` and its
+  kin. Leaving those two out keeps each exclusion in one family, which the sensitivity line of analysis plan §8
+  relies on.
+
+  *Why this rule is needed.* Its environment evidence includes the post-run observation that the displays stayed
+  asleep and the screensaver stayed off through the request. That observation is how decision D-078 (item 4) closed
+  the screensaver contamination class of July 2026, and no other code measures it. The verdict as a whole is only
+  disclosed (§6.5), so without this member rule a member whose display woke during its request would be kept.
 
 ### 6.4 Member exclusions: physics in the member's span
 
@@ -796,8 +974,9 @@ The window is not claim-usable when any of these fired:
   bytes differ from their sidecar; or the measurement checkout's HEAD is neither H_claim nor H_claim plus pin-only
   commits; or it has tracked edits, or untracked files under the executed roots (Python could import them).
 - `model.identity_mismatch` (the model, tokenizer or runtime realized at the arm or recorded in any bundle differs
-  from the frozen pins), `model.identity_inconsistent_in_window` (two identities within one identity unit), and
-  `model.identity_unpinned` (no frozen pin to compare against).
+  from the pins of `identity_pins.json`, §4.6 item 3), `model.identity_inconsistent_in_window` (two identities within
+  one identity unit), and `model.identity_unpinned` (no pin to compare against, which happens when the measurement
+  checkout lacks `identity_pins.json`).
 - `*.identity_unmeasured` for pack, code or model: a number-protecting identity check could not run. This is a
   harvest problem first (§7.2).
 - `calibration.capture_invalid`, `calibration.capture_battery_pair_failed` (a calibration captured while the
@@ -806,6 +985,12 @@ The window is not claim-usable when any of these fired:
   `calibration.session_not_bound` (the bracket session names another plan, window or runs root),
   `calibration.binding_failed`, and `calibration.no_bracket` (including a chain stopped before its post calibration
   by `disk.low`, the census or the deadline).
+- `calibration.ledger_snapshot_refused`: the calibration ledger, read up to this window's terminal entry, fails its
+  own integrity checks. That means a missing or malformed ledger, a broken digest chain, or the acceptance's cutoff
+  entry (sequence 376 with its recorded head digest) not found in the chain. The bracket's captures and the
+  acceptance's screens are authenticated through this ledger. The bracket evaluation reads the same snapshot and
+  refuses with the same reasons, so `calibration.bracket_acceptance_failed` fires as well. Classing this code as
+  window-removing therefore costs no extra window, and it keeps the window removed even if that propagation changed.
 - `clock.step_overlap_calibration`: a clock step inside a calibration capture.
 - `neg8.bound_not_derived` (§5.3) and `neg8.screen_failed`; also `whole_window.verdict_absent`, because the NEG-8
   screen's result is held in the whole-window verdict.
@@ -817,15 +1002,23 @@ The window is not claim-usable when any of these fired:
 
 **Two aggregate codes are disclosed, not window-removing:** `whole_window.not_passed` (the stored whole-window verdict
 did not pass) and `g3.recompute_failed` (check F5-2 of G3, the desk provenance checker
-`scripts/check_window_provenance.py`, which independently recomputes that verdict, did not find a clean pass). Both
-fail when any single member failed admission or its environment guard, because the verdict requires every member
-admitted. Making them window-removing would restore "one aborted member voids the window".
-Their window-level contents are carried by their own codes: the NEG-8 screen by `neg8.screen_failed`, which the
-harvest must emit from the verdict's NEG-8 conditions (`neg8_gross_point_drift_exceeded`,
-`neg8_idle_sub_point_drift_exceeded`, `neg8_bracket_missing`, `neg8_bracket_reference_invalid`,
-`neg8_drift_bound_stale`, and the bound-underived conditions), and the bracket by `calibration.bracket_acceptance_failed`,
-which the harvest evaluates itself. The AC adapter's wattage continuity, also inside the verdict, is disclosed; the
-battery rule measures the power path directly.
+`scripts/check_window_provenance.py`, which independently recomputes that verdict, did not find a clean pass). The
+verdict passes only if every member passed, so both codes fire when a single member failed admission or its
+environment guard. Making them window-removing would restore "one aborted member voids the window", which Ed's
+2026-10-05 ruling removed. The verdict's checks are not lost: each part acts at its own level through its own code.
+
+- *The NEG-8 screen* (window level): `neg8.screen_failed`. The harvest emits it from the verdict's NEG-8 bracket:
+  a decision other than passed, or any NEG-8 condition (`neg8_gross_point_drift_exceeded`,
+  `neg8_idle_sub_point_drift_exceeded`, `neg8_bracket_missing`, `neg8_bracket_reference_invalid`,
+  `neg8_drift_bound_stale`, the bound-underived conditions). The one exception is the collected-subset re-screen of
+  §5.3, which decides when the bound's absence was the only problem.
+- *The calibration bracket* (window level): `calibration.bracket_acceptance_failed`, which the harvest evaluates
+  itself.
+- *Each member's own failures* (member level): `member.whole_window_member_failure` (§6.3), which removes only the
+  members the verdict names. In-window thermal pressure and an invalid bundle are carried by their existing member
+  codes.
+- *The AC adapter's wattage continuity* is disclosed only. The battery rule (§6.4) measures directly whether the
+  battery supplied any of the load, which is the way a weaker or reconnected adapter could change a measurement.
 
 ### 6.6 Cells, units and the minimum
 
@@ -854,8 +1047,15 @@ This amends D-179 ruling 1 and D-078's no-reduced-mean text, as Ed's 2026-10-05 
 
 A bundle that is not in the plan's roster (`roster.not_in_plan`), not bound to this attempt (`roster.foreign_attempt`),
 or created before `chain.started` (`roster.before_chain_started`) is ignored, not used; a roster member left without
-an admissible bundle is `member.bytes_missing`. A bundle whose recorded `run_id` differs from its directory
-(`roster.run_id_mismatch`) is removed, because which planned member its bytes are is ambiguous.
+an admissible bundle is `member.bytes_missing`.
+
+A bundle whose recorded `run_id` (in `metadata.json`) differs from its directory (`roster.run_id_mismatch`) is
+removed. The harvest places a bundle in a cell, a unit and a quad position by its directory name. Each planned member
+has its own config, which carries its `run_id`, so a bundle filed under another member's directory already fails the
+config check (`member.config_not_in_inventory`). This code covers the remaining case: a bundle whose own records
+disagree about which member it is. A kept member must have one identity in every record a later program may key on,
+or the same energy could be counted under two units or in the wrong quad position. The emitter classes this code
+REPRESENTATION; the catalog restates it as NUMBER for that reason. It costs one unit and should never fire.
 
 ### 6.8 Disclosed only
 
@@ -866,8 +1066,9 @@ offset; `kernel_task`'s CPU share and monitor probes falling inside phases; a mi
 (`battery.capture_pair_missing_covered` when the continuous journal covers the span; `battery.capture_pair_missing`
 otherwise, beside the `battery.unmeasured` that then removes the member); `battery.accumulator_unavailable` (the
 accumulator rule could not run on an interval; the publication rule still applies); clock steps and frequency
-changes outside any span; `disk.low` (its effect arrives through `calibration.no_bracket`); ledger record-keeping
-refusals (`calibration.ledger_snapshot_refused`) and desk readiness; the G10 result; the s1-structural diagnostics.
+changes outside any span; `disk.low` (its effect arrives through `calibration.no_bracket`); the desk's ledger
+readiness checks before an arm (`calibration.ledger_not_ready`, `calibration.ledger_readiness_unmeasured`); the G10
+result; the s1-structural diagnostics.
 
 ### 6.9 Harvest thresholds
 
@@ -1026,7 +1227,8 @@ schema formality) is dispositioned "flag, not refuse" and never sent to a fix ro
    ledger pin (data). It covers the hazard path: `joulewise/hazards/*`, `joulewise/b5/{driver,plan,chain}.py`,
    `joulewise/window_lineage.py`, `joulewise/flags/*`, `scripts/run_night.py`, `scripts/hazard_monitor.py`,
    `scripts/write_b5_window_plan.py`, `scripts/run_campaign.py` and the measurement core, and this directory's
-   `flag_catalog.json`. A window's executed-file inventory covers `joulewise/`, `scripts/` and only its own pack, so
+   `flag_catalog.json`. This directory's `identity_pins.json` and `sizing_b5.json` are pinned by the seal record
+   (§12). A window's executed-file inventory covers `joulewise/`, `scripts/` and only its own pack, so
    the comparison is made over the sealed entries under those roots (§14 Q2).
 3. **Retired, not deleted.** The `TRANSACTION_PACK` route (ARM, GO, consumption and lifecycle in
    `joulewise/arm_readiness.py`, except the lineage helpers the hazard lineage dispatches through;
@@ -1044,7 +1246,8 @@ schema formality) is dispositioned "flag, not refuse" and never sent to a fix ro
 One cold gate seals this file, the analysis plan, the flag catalog and the sealed inventory together: a Fable 5.1
 judge and one Opus 5.5 refuter (`FILL[B5-SEAL-SEATS]` records the seats used). The seal record `FILL[B5-SEAL-RECORD]`
 pins, with SHA-256s at H_claim: the four documents; H_claim; the three packs' plan trees; the panel, policy,
-acceptance, pin bundle and the three sizing outputs (§5.5); and the chain-source document
+acceptance and pin bundle; the sizing output `sizing_b5.json` (§5.5) and the identity pins `identity_pins.json`
+(§4.6 item 3); and the chain-source document
 `docs/phase_2/window_runbook.md` (the chain embeds its pre-calibration screen). The gate rules in particular on the
 cell rule of §6.6, the catalog's effects (especially the two disclosed aggregate codes of §6.5), and the proposed
 sensitivity line of analysis plan §8.
@@ -1057,11 +1260,18 @@ sensitivity line of analysis plan §8.
 | Sealed inventory | `sealed_inventory.json` filled at H_claim | Seal |
 | Dry render, dry arm | `B5-DRY-RENDER-RECORD`, `B5-DRY-ARM-RECORD` | Before ALPHA-1 arms |
 | Audit, seats | `416-AUDIT-RECORD`, `416-SEATS`, `B5-SEAL-SEATS` | Seats at seal; audit before ALPHA-1 |
-| Sizing | `B5-SIZING-OUTPUTS` | Seal |
-| Disk | `BACKUP-DESTINATIONS` | Seal |
+| Sizing | `B5-SIZING-OUTPUTS`: filled in revision 4 with draft values (§5.5); re-derived and pinned at H_claim | Seal |
+| Disk | `BACKUP-DESTINATIONS`: filled in revision 4 (§5.6) | Seal |
+| Identity pins | `identity_pins.json` (§4.6 item 3): draft at `f8164893`; pinned at H_claim | Seal |
 | Blinding | `B5-BLIND-CUSTODY-MAP`, `B5-RELEASE-EVENT` | Map at seal; release after the block closes |
-| Boundary, attribution floor | `BOUNDARY-LABEL`, `ATTRIBUTION-FLOOR-BINDING` | Seal |
+| Boundary | `BOUNDARY-LABEL`: filled in revision 4 (§1) | Seal |
+| Attribution floor | `ATTRIBUTION-FLOOR-BINDING` | Seal |
 | Seal | `B5-SEAL-RECORD` | Seal |
+
+Still open after revision 4: `H-CLAIM`, `416-AUDIT-RECORD`, `416-SEATS`, `B5-SEAL-SEATS`, `B5-SEAL-RECORD`,
+`B5-DRY-RENDER-RECORD`, `B5-DRY-ARM-RECORD`, `B5-BLIND-CUSTODY-MAP`, `B5-RELEASE-EVENT` and
+`ATTRIBUTION-FLOOR-BINDING`. None can be filled from committed bytes: each names a commit, a record or a ruling that
+does not exist yet.
 
 Removed from revision 2 because the mechanism they bound is retired or now measured: `V5-PACK-REGEN-RECORD` and
 `V5-IDLE-SECONDS` (done, PR #481), `B4-*`, `L10-A-RATIFICATION-RECORD`, `Q110-CLOSURE`, `A6-AT-H-CLAIM`,
@@ -1076,13 +1286,11 @@ battery evidence map (§9.2).
 
 ## 14. Open questions (each names where it goes)
 
-- **Q1. NEG-8 corpus of 10 or 11 (lead; code lane before ALPHA-1 if possible).** §5.3 registers the rule, but the
-  protected core's bound reader accepts only all 12. Until a subset-accepting reader lands, about 28% of windows
-  would be lost to one aborted corpus member alone. Choose: a reader change in the core (needs the core's merge
-  gates and a #416 delta audit), or a harvest-side derivation from custodied bytes with the core untouched.
-- **Q2. Sealed-inventory comparison scope (lead, before seal).** The sealed inventory lists all three packs, while a
-  window's executed inventory covers only its own pack. The executed-code collector must compare only the sealed
-  entries under the window's roots, or the other two packs' files read as missing and every window is removed.
+- **Q1. NEG-8 corpus of 10 or 11. Closed in revision 4.** It was settled by the harvest-side derivation from
+  custodied bytes, with the core untouched (fix lane fx-harvest, §5.3).
+- **Q2. Sealed-inventory comparison scope. Closed in revision 4.** At `f8164893` the arm's executed-code collector
+  (`joulewise/flags/collect.py`, `_window_scope`) and the harvest (`code_identity`) count missing and added files only
+  under the window's own roots, so the other two packs' sealed files are not read as missing.
 - **Q3. Contention false flags (after ALPHA-1; cold erratum if needed).** "Any outside process above 5% of one core"
   has never been applied to every process on this Mac during a window. If ALPHA-1's flag rate costs cells, a
   prospective erratum retunes the predicate from flag rates, which are structure, not energies. A repeat goes to a
@@ -1096,6 +1304,13 @@ battery evidence map (§9.2).
   and contention plausibly correlate with load, most of all on 8B prefill-p2048 members). Adopt or strike.
 - **Q7. Ed's hardware setting (optional).** A fixed 80% charge limit with Optimized Battery Charging off avoids arms
   refused because the OS chose to charge.
+- **Q8. The watchdog holds each window open until its deadline (lead; code lane before ALPHA-1).** §5.5 gives the
+  arithmetic. `plan_span_active` in `scripts/magistrate_watchdog.py` keeps a collected window's plan active until
+  t0 + `WINDOW_MAX_S` + 300 s even after `chain.exited`, so about 15 h of each window passes with no headless session
+  able to harvest or arm. Fix: release a collected window's span on the driver's terminal evidence (`chain.exited`,
+  the terminal `result.json`, `courier.sent`, and no driver process alive). The watchdog already releases a delivered
+  refusal that captured nothing on the same kind of evidence. The change touches no number. It should land before
+  the seal, so that H_claim carries it.
 
 ## 15. Where each gate-prune change lives
 
@@ -1129,3 +1344,19 @@ the floor functions and the t table (to compute the synthetic worked examples of
 pre-mortem memo `/Users/edr/night-archive/ia-0a40/MEMO.md`. No energy or power value of any block was read, and no
 `_v5` claim byte exists. Revision 2's reading record and its disposition of three blind critiques are in commit
 `bfd1ee8c` (this file's §16 and the analysis plan's §14 there).
+
+For revision 4, the author read the code at the gate-prune integration head `f8164893`
+(`/Users/edr/code/JouleWise-wt-gp-int`):
+- the harvest's code table, NEG-8 bound check, re-screen, calibration, roster, member and model-identity steps;
+- the flag catalog loader and the harvest's test catalog;
+- the battery, thermal, clock and contention span joins, and the disk targets;
+- the model-identity collector and `identity_pins.json`;
+- `scripts/size_b5_window.py`, `sizing_b5.json` (re-derived with `--check`) and block 4's sizing source;
+- the plan writer's inputs, the driver's deadline, and the watchdog's plan-span rule;
+- the whole-window verdict writer's per-member failure reasons and `joulewise/environment_admission.py`;
+- the ledger snapshot loader and the bracket evaluation's use of it;
+- the boundary fields of the powermetrics adapter, the floor packs' extraction specs, decision D-078 item 4, and
+  the backup convention of `docs/phase_2/window_runbook.md`.
+
+The author also read the block-3 timing summary that §5.5 cites (scratch `sizing_v2.json`, member-cycle timing
+only). The catalog was validated with `joulewise.flags.catalog.load_catalog`. No energy or power value was read.
