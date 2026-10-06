@@ -47,6 +47,10 @@ CORE_FLAG_CODES: Mapping[str, tuple[str, str]] = {
     "campaign.runner_record_flagged": ("RECORDS", "REPRESENTATION"),
     "calibration.writer_record_flagged": ("CALIBRATION", "REPRESENTATION"),
     "code.executed_differs_from_sealed": ("CODE_IDENTITY", "NUMBER"),
+    # --- P2-CTL (gate-prune round 2, PLAN2 section 3.1; append-only) ---
+    # M1: a member refit its calibration because the window verdict (J1) was
+    # absent or did not match; time only, the refit still verifies the physics.
+    "calibration.refit_cache_miss": ("CALIBRATION", "REPRESENTATION"),
 }
 
 

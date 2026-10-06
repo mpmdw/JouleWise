@@ -56,6 +56,8 @@ import hashlib
 import json
 import math
 import os
+import stat
+import sys
 import traceback
 from collections.abc import Callable
 from copy import deepcopy
@@ -372,6 +374,16 @@ def run_benchmark(
             legacy_site="joulewise/controller.py:795@e6b6a0ce",
             legacy_code="runtime_powermetrics_digest_unavailable",
         )
+    if attachment is not None and attachment.refit_cache_miss is not None:
+        # M1: the member refit the calibration itself (no usable window
+        # verdict).  A record of time spent, not of the bound: the refit
+        # above verified the physics exactly as before.
+        flags_core.emit(
+            hazard, "calibration.refit_cache_miss", level="member",
+            run_id=writer.run_id, observed=attachment.refit_cache_miss,
+            legacy_site="joulewise/controller.py:575@89571045b",
+            legacy_code="verify_stored_evidence_physics",
+        )
     if attachment is not None:
         attachment.install(writer.path)
     return _Execution(
@@ -393,6 +405,9 @@ def run_benchmark(
         battery_runner,
         battery_clock,
         hazard=hazard,
+        calibration_physics_seed=(
+            attachment.physics_seed if attachment is not None else None
+        ),
     ).execute()
 
 
@@ -400,14 +415,169 @@ def run_benchmark(
 class _InstrumentCalibrationAttachment:
     files: dict[str, bytes]
     metadata: dict[str, Any]
+    # HAZARD only (PLAN2 P2-CTL; None on the legacy path).  ``sources`` maps
+    # each installed relative path to the verified file it was read from, so
+    # the install can clone it (t1-06); ``physics_seed`` is the reduce-cache
+    # seed {evidence sha256: verified effective bound} (M2);
+    # ``refit_cache_miss`` says why the window verdict (J1) was not used (M1).
+    sources: dict[str, Path] | None = None
+    physics_seed: dict[str, float] | None = None
+    refit_cache_miss: dict[str, Any] | None = None
 
     def install(self, bundle_path: Path) -> None:
         root = bundle_path / "instrument_calibration"
+        if self.sources is None:
+            for relative, raw in sorted(self.files.items()):
+                path = root / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                with path.open("xb") as handle:
+                    handle.write(raw)
+            return
+        # HAZARD (t1-06): clone each verified source file (APFS clonefile, no
+        # data copy), else write the verified bytes.  Either way the installed
+        # copy is re-hashed against the bytes this attachment verified; a
+        # clone that does not match is replaced by the byte copy, and a byte
+        # copy that does not match refuses (custody keeper).
         for relative, raw in sorted(self.files.items()):
             path = root / relative
             path.parent.mkdir(parents=True, exist_ok=True)
+            expected = hashlib.sha256(raw).hexdigest()
+            source = self.sources.get(relative)
+            if source is not None and _clone_file(source, path):
+                if _installed_copy_sha256(path) == expected:
+                    continue
+                path.unlink(missing_ok=True)
             with path.open("xb") as handle:
                 handle.write(raw)
+            if _installed_copy_sha256(path) != expected:
+                raise ValueError(
+                    "instrument calibration installed copy does not match its "
+                    f"verified bytes: {relative}"
+                )
+
+
+def _clone_file(source: Path, destination: Path) -> bool:
+    """APFS ``clonefile(2)`` without following a symlink; False when unavailable.
+
+    Never raises: any failure (another volume, another OS, a symlink or a
+    non-regular source) leaves no file behind and the caller writes bytes.
+    """
+
+    if sys.platform != "darwin":
+        return False
+    try:
+        import ctypes  # noqa: PLC0415
+
+        libc = ctypes.CDLL(None, use_errno=True)
+        clonefile = libc.clonefile
+        clonefile.argtypes = (ctypes.c_char_p, ctypes.c_char_p, ctypes.c_uint32)
+        clonefile.restype = ctypes.c_int
+        clone_nofollow = 0x0001
+        if clonefile(os.fsencode(source), os.fsencode(destination), clone_nofollow) != 0:
+            return False
+        if not stat.S_ISREG(os.lstat(destination).st_mode):
+            destination.unlink(missing_ok=True)
+            return False
+        return True
+    except Exception:  # noqa: BLE001 - the byte copy is the fallback
+        try:
+            if destination.is_symlink() or destination.exists():
+                destination.unlink()
+        except OSError:
+            pass
+        return False
+
+
+def _installed_copy_sha256(path: Path) -> str | None:
+    try:
+        if not stat.S_ISREG(os.lstat(path).st_mode):
+            return None
+        digest = hashlib.sha256()
+        with path.open("rb") as handle:
+            for block in iter(lambda: handle.read(1 << 20), b""):
+                digest.update(block)
+        return digest.hexdigest()
+    except OSError:
+        return None
+
+
+# J1 (PLAN2 section 3.2): the window calibration verdict, written once by the
+# chain (P2-CHAIN) right after the pre-slot screen, next to the pre-slot
+# capture directory.  A member that matches every digest skips the refit;
+# anything else is a cache miss: the member refits and flags, never refuses.
+WINDOW_CALIBRATION_VERDICT_BASENAME = "window_calibration_verdict.json"
+WINDOW_CALIBRATION_VERDICT_SCHEMA = "joulewise.window_calibration_verdict.v1"
+
+
+def window_calibration_estimator_files_sha256() -> dict[str, str] | None:
+    """The J1 ``estimator_files_sha256`` value: {repo path: sha256} of the
+    estimator code that runs the refit (``ESTIMATOR_CODE_PATHS``), as this
+    process loads it; None when a file is unreadable."""
+
+    from joulewise.calibration_bracketing import (  # noqa: PLC0415
+        _current_estimator_code_sha256,
+    )
+
+    return _current_estimator_code_sha256()
+
+
+def _window_calibration_verdict_bound(
+    capture_directory: Path,
+    files: dict[str, bytes],
+    *,
+    stored_bound: float,
+) -> tuple[float | None, dict[str, Any] | None]:
+    """Read J1; return ``(effective bound, None)`` only on a full match.
+
+    The digests compared are those of the bytes this attachment verified
+    against the capture manifest and installs (evidence, plist, events,
+    manifest), plus the estimator code now loaded.  Otherwise
+    ``(None, miss)``, where ``miss`` names the reason.  Never raises.
+    """
+
+    path = capture_directory.parent / WINDOW_CALIBRATION_VERDICT_BASENAME
+    try:
+        raw = path.read_bytes()
+    except FileNotFoundError:
+        return None, {"reason": "verdict_absent"}
+    except OSError as exc:
+        return None, {"reason": "verdict_unreadable", "error": type(exc).__name__}
+    try:
+        verdict = json.loads(raw)
+    except (UnicodeDecodeError, ValueError):
+        return None, {"reason": "verdict_malformed"}
+    if not isinstance(verdict, dict) or not isinstance(verdict.get("flags"), list):
+        return None, {"reason": "verdict_malformed"}
+    if verdict.get("schema") != WINDOW_CALIBRATION_VERDICT_SCHEMA:
+        return None, {"reason": "verdict_schema_mismatch"}
+    try:
+        expected = {
+            "evidence_sha256": hashlib.sha256(files["instrument_evidence.json"]).hexdigest(),
+            "manifest_sha256": hashlib.sha256(files["manifest.json"]).hexdigest(),
+            "raw_plist_sha256": hashlib.sha256(files["raw/powermetrics.plist"]).hexdigest(),
+            "events_sha256": hashlib.sha256(files["events.jsonl"]).hexdigest(),
+        }
+    except KeyError as exc:
+        return None, {"reason": "capture_file_absent", "file": str(exc.args[0])}
+    mismatched = sorted(name for name, digest in expected.items() if verdict.get(name) != digest)
+    try:
+        estimator = window_calibration_estimator_files_sha256()
+    except Exception:  # noqa: BLE001 - an unreadable estimator is a miss
+        estimator = None
+    if estimator is None or verdict.get("estimator_files_sha256") != estimator:
+        mismatched.append("estimator_files_sha256")
+    if mismatched:
+        return None, {"reason": "digest_mismatch", "fields": mismatched}
+    bound = verdict.get("effective_b_fiducial_s")
+    if (
+        isinstance(bound, bool)
+        or not isinstance(bound, int | float)
+        or not math.isfinite(float(bound))
+        # widen-only, as verify_stored_evidence_physics returns it
+        or float(bound) < float(stored_bound)
+    ):
+        return None, {"reason": "verdict_bound_invalid"}
+    return float(bound), None
 
 
 def _load_instrument_calibration_attachment(
@@ -571,17 +741,37 @@ def _load_instrument_calibration_attachment(
         verify_stored_evidence_physics,
     )
 
-    try:
-        effective_bound = verify_stored_evidence_physics(
-            evidence,
-            files["raw/powermetrics.plist"],
-            files["events.jsonl"],
+    effective_bound: float | None = None
+    refit_cache_miss: dict[str, Any] | None = None
+    if hazard is not None:
+        # M1: the window verdict (J1) carries the refit of exactly these
+        # bytes under exactly this estimator; any miss refits below.
+        effective_bound, refit_cache_miss = _window_calibration_verdict_bound(
+            resolved_root, files, stored_bound=float(bound)
         )
-    except (KeyError, TypeError, ValueError) as exc:
-        raise ValueError(
-            "instrument calibration evidence does not reproduce the raw physics"
-        ) from exc
+    if effective_bound is None:
+        try:
+            effective_bound = verify_stored_evidence_physics(
+                evidence,
+                files["raw/powermetrics.plist"],
+                files["events.jsonl"],
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError(
+                "instrument calibration evidence does not reproduce the raw physics"
+            ) from exc
+    hazard_fields: dict[str, Any] = {}
+    if hazard is not None:
+        hazard_fields = {
+            "sources": {relative: resolved_root / relative for relative in files},
+            # M2: the child reduce reads this instead of a third refit.  The
+            # reducer consults it only after its own manifest, evidence, plist
+            # and events hash checks of the installed copy.
+            "physics_seed": {hashlib.sha256(evidence_raw).hexdigest(): float(effective_bound)},
+            "refit_cache_miss": refit_cache_miss,
+        }
     return _InstrumentCalibrationAttachment(
+        **hazard_fields,
         files=files,
         metadata={
             "artifact_path": "instrument_calibration/instrument_evidence.json",
@@ -1188,10 +1378,16 @@ class _Execution:
         battery_clock: Clock | None = None,
         *,
         hazard: Any = None,
+        calibration_physics_seed: dict[str, float] | None = None,
     ) -> None:
         self._config = config
         # HAZARD_PACK flag context (joulewise.flags.core); None = legacy path.
         self._hazard = hazard
+        # M2 (HAZARD only): the attachment's verified calibration bound,
+        # seeded into the default reducer's physics cache.
+        self._calibration_physics_seed = (
+            dict(calibration_physics_seed) if calibration_physics_seed else None
+        )
         # A11: environment-guard reasons that no longer stop a HAZARD member,
         # by flag code; emitted once per code at the end of the lifecycle.
         self._hazard_environment: dict[str, list[dict[str, Any]]] = {}
@@ -2187,8 +2383,21 @@ class _Execution:
         # window and the token events) BEFORE it runs. _flush_events writes
         # them now; only run_finalized is still appended later by finalize().
         self._flush_events()
-        reducer = self._reducer if self._reducer is not None else reduce_module.reduce_bundle
-        summary = reducer(self._writer.path)
+        if self._reducer is None and self._calibration_physics_seed:
+            # M2: the reducer runs every hash check of the installed copy, then
+            # takes the bound this member already verified instead of a refit.
+            summary = reduce_module.reduce_bundle(
+                self._writer.path,
+                _instrument_calibration_physics_cache=dict(
+                    self._calibration_physics_seed
+                ),
+            )
+        else:
+            reducer = (
+                self._reducer if self._reducer is not None
+                else reduce_module.reduce_bundle
+            )
+            summary = reducer(self._writer.path)
         self._writer.write_summary(summary)
         self._log(self._controller_log, f"run {self._writer.run_id} succeeded")
         self._complete_stage("reduce")
