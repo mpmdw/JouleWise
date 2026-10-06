@@ -2960,6 +2960,20 @@ def authenticate_window_launch_lineage(
             "launch_consumption_missing",
             "whole-window evaluation basis carrying launch lineage is absent",
         )
+    # Partial replay by design (b1 F1, P2-B1).  On a HAZARD window an
+    # unstamped capture is bound by the bracket descriptor's session and
+    # attempt ids; those ids are ledger-authenticated only by the full row
+    # replay (_validate_row_uncached -> _current_core_rederivation_reasons,
+    # which re-derives the bracket from the ledger before this check runs).
+    # This reader cannot run that replay itself: a minted-semantics row
+    # replays only inside a ready AuthenticatedConsumptionSession, which needs
+    # the caller's ledger snapshot and bracket binding.  Its floor-mint
+    # callers supply one: bind_v2_floor_artifact_evidence passes every artifact
+    # through the pinned binder (scripts/mint_floor_artifact.py
+    # _authenticated_consumption_summaries -> whole_window_refusal_reasons with
+    # a session), the common-mode recomputation runs the same replay, and the
+    # generalized mint binds every artifact it builds that way.  So no artifact
+    # rests on this partial replay alone.
     for row in candidates:
         reasons = _whole_window_row_launch_refusal_reasons(row, root)
         if reasons:
