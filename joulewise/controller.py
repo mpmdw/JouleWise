@@ -667,10 +667,12 @@ def _load_instrument_calibration_attachment(
 
     bracket_provenance = None
     g2b_provenance = None
+    auxiliary_errors: list[str] | None = [] if hazard is not None else None
     locator = Path(runs_root) / LAUNCH_LINEAGE_LOCATOR_BASENAME if runs_root is not None else None
     if locator is not None and (locator.exists() or locator.is_symlink()):
         g2b_provenance = _authenticate_g2b_pre_slot_attachment(
-            resolved_root, files, evidence, Path(runs_root), config, hazard=hazard
+            resolved_root, files, evidence, Path(runs_root), config, hazard=hazard,
+            **({"auxiliary_errors": auxiliary_errors} if auxiliary_errors is not None else {}),
         )
     elif g2a_context is not None:
         bracket_provenance = _authenticate_g2a_pre_bracket_attachment(
@@ -684,6 +686,12 @@ def _load_instrument_calibration_attachment(
             for epoch in (evidence.get("identity_epoch"), evidence.get("bindings"))
         )
     ) and bracket_provenance is None and g2b_provenance is None:
+        if auxiliary_errors:
+            # HAZARD (PLAN2 row 5): name the cause in the refusal itself.
+            raise ValueError(
+                "revision_five evidence cannot be attached as instrument calibration "
+                f"(auxiliary member match raised {auxiliary_errors[0]})"
+            )
         raise ValueError("revision_five evidence cannot be attached as instrument calibration")
     bindings = evidence.get("bindings") if isinstance(evidence, dict) else None
     bound = evidence.get("b_fiducial_s") if isinstance(evidence, dict) else None
@@ -793,19 +801,25 @@ def _load_instrument_calibration_attachment(
 
 def _g2b_auxiliary_config_matches(
     config: BenchmarkConfig, context: dict[str, Any], tree: dict[str, Any], repo: Path,
+    *, errors: list[str] | None = None,
 ) -> bool:
     """Match a pinned external campaign member and its stage's runs-root binding.
 
     GAMMA uses input IDs; ALPHA/BETA embed the manifest descriptor directly.
     Neither directory names nor external artifacts alone confer eligibility.
     The caller has already authenticated the launch and its committed pack.
+
+    ``errors`` (HAZARD, PLAN2 row 5): when given, an exception that makes the
+    match False is recorded there as ``"<type>: <text>"`` instead of vanishing.
     """
     from joulewise.arm_readiness import LaunchLineageError  # noqa: PLC0415
 
     try:
         source, raw = _cli_config_source(config)
         relative = source.relative_to(repo.resolve(strict=True)).as_posix()
-    except (LaunchLineageError, OSError, ValueError):
+    except (LaunchLineageError, OSError, ValueError) as exc:
+        if errors is not None:
+            errors.append(f"{type(exc).__name__}: {exc}"[:300])
         return False
     digest = hashlib.sha256(raw).hexdigest()
     inputs = tree.get("external_inputs", [])
@@ -844,6 +858,7 @@ def _g2b_auxiliary_config_matches(
 def _authenticate_g2b_pre_slot_attachment(
     directory: Path, files: dict[str, bytes], evidence: Any, runs_root: Path,
     config: BenchmarkConfig | None, *, hazard: Any = None,
+    auxiliary_errors: list[str] | None = None,
 ) -> dict[str, Any] | None:
     """Authenticate the launch lineage and its ordinary finalized pre slot.
 
@@ -889,7 +904,19 @@ def _authenticate_g2b_pre_slot_attachment(
             "G2-b attachment pack root is not <repo>/configs/campaigns/<pack>"
         )
     tree, _ = _plan_tree(pack_root)
-    if member_lineage is None and not _g2b_auxiliary_config_matches(config, context, tree, repo):
+    if member_lineage is None and not _g2b_auxiliary_config_matches(
+            config, context, tree, repo,
+            **({"errors": auxiliary_errors} if auxiliary_errors is not None else {})):
+        if hazard is not None and auxiliary_errors:
+            from joulewise.flags import core as flags_core  # noqa: PLC0415
+
+            # The refusal that follows stays; its cause is now on record.
+            flags_core.emit(
+                hazard, "records.auxiliary_match_raised", level="member",
+                run_id=config.run_id, observed={"errors": list(auxiliary_errors)},
+                legacy_site="joulewise/controller.py:618@89571045b",
+                legacy_code="_g2b_auxiliary_config_matches",
+            )
         return None
     plan = tree["plan"]
     plan_path = pack_root / plan["path"]

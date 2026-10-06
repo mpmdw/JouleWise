@@ -51,6 +51,9 @@ CORE_FLAG_CODES: Mapping[str, tuple[str, str]] = {
     # M1: a member refit its calibration because the window verdict (J1) was
     # absent or did not match; time only, the refit still verifies the physics.
     "calibration.refit_cache_miss": ("CALIBRATION", "REPRESENTATION"),
+    # Row 5: the external-member match raised; the refusal stays, its cause
+    # is recorded.
+    "records.auxiliary_match_raised": ("RECORDS", "REPRESENTATION"),
 }
 
 
