@@ -247,6 +247,65 @@ def terminal_zero_capture_refusal(result, receipt) -> Decision:
         return Decision(False, "missing_zero_capture_evidence")
 
 
+HAZARD_PACK_CLASS = "HAZARD_PACK"
+# Terminal verdicts the night driver writes once the chain has started and its
+# process group has been proven gone (chain.exited). CHAIN_STOPPED is the
+# HAZARD_PACK label for a chain stop at exit 10/11/12 (PLAN2 yield D).
+TERMINAL_WINDOW_VERDICTS = frozenset({"GO", "REFUSED", "ABORTED", "CHAIN_STOPPED"})
+
+
+def terminal_window_release(result, *, plan_id, receipt_class, now_epoch_s,
+                            chain_started, chain_exited, courier_sent) -> Decision:
+    """Custody-file half of the watchdog's terminal-window early release (PLAN2 X1).
+
+    Pure: the caller reads the files; the watchdog adds the process-table half
+    (empty agent census, no driver, no process naming the plan's custody) and
+    latches the release one way. Allowed shapes, all with ``courier.sent``,
+    ``result.json`` for this plan and receipt class, and a finite
+    ``ended_epoch_s`` no later than now:
+
+    - ``collected_window`` / ``chain_stopped``: ``chain.started`` and
+      ``chain.exited`` both present (the driver writes ``chain.exited`` only
+      after the chain's process group is proven gone; an unproven group writes
+      ``chain.unkilled`` instead) and a known terminal verdict.
+    - ``null_window``: a HAZARD_PACK refusal before the chain claim: no
+      ``chain.started``, no ``chain.exited``, verdict REFUSED, no chain exit
+      code and no chain digest. HAZARD refusals write no ``receipt.json``, so
+      the receipt-based zero-capture route above cannot see them; other
+      classes keep that route.
+
+    A missing courier (failed delivery) is never released here: the caller
+    keeps the dead-man tail.
+    """
+    try:
+        if courier_sent is not True:
+            return Decision(False, "courier_not_sent")
+        if chain_started is True and chain_exited is not True:
+            return Decision(False, "chain_open")
+        if (not isinstance(result, Mapping) or not isinstance(plan_id, str) or not plan_id
+                or result["plan_id"] != plan_id):
+            return Decision(False, "result_plan_mismatch")
+        if result["receipt_class"] != receipt_class:
+            return Decision(False, "result_class_mismatch")
+        if _number(result["ended_epoch_s"]) > _number(now_epoch_s):
+            return Decision(False, "result_not_terminal")
+        verdict = result["verdict"]
+        if chain_started is True:
+            if verdict not in TERMINAL_WINDOW_VERDICTS:
+                return Decision(False, "unknown_verdict")
+            return Decision(True, "chain_stopped" if verdict == "CHAIN_STOPPED" else "collected_window")
+        if receipt_class != HAZARD_PACK_CLASS:
+            return Decision(False, "not_hazard_pack")
+        if chain_exited is not False:
+            return Decision(False, "chain_exited_without_start")
+        if (verdict != "REFUSED" or result["chain_exit_code"] is not None
+                or result["chain_sha256"] is not None):
+            return Decision(False, "chain_may_have_started")
+        return Decision(True, "null_window")
+    except (KeyError, TypeError, ValueError, OverflowError):
+        return Decision(False, "malformed_result")
+
+
 def successor_license(result, receipt, facts, delivery, claims, now_epoch_s) -> Decision:
     """Pure D-182 door 1 plus the shared one-use, delivery and spacing tail.
 
