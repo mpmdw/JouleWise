@@ -58,7 +58,15 @@ SECTION_5 = {
     "neg8.corpus_member_dropped": ("NEG8", "REPRESENTATION", DISCLOSE),
     "calibration.capture_battery_span": ("CALIBRATION", "PHYSICS", EXCLUDE_WINDOW),
     "calibration.capture_battery_unmeasured": ("CALIBRATION", "PHYSICS", EXCLUDE_WINDOW),
+    # Gate-prune round 2, lane P2-CHAIN (the block-5 chain, writer b5-chain).
+    "roster.horizon_truncated": ("ROSTER", "REPRESENTATION", DISCLOSE),
+    "member.retried": ("ROSTER", "REPRESENTATION", DISCLOSE),
 }
+# Core codes whose consumer tables (DRAFT_CODES, the harvest's CODES and
+# CORE_WRITER_CODES, the fixture catalog) lane P2-HARV fills: until that lane
+# is merged only the core table is checked for them; once a table carries one,
+# the full cross-check applies to it.
+PRUNE2_CONSUMER_PENDING = frozenset({"roster.horizon_truncated", "member.retried"})
 HARVEST_NONCORE_CODES = ("neg8.corpus_member_dropped", "calibration.capture_battery_span",
                          "calibration.capture_battery_unmeasured", "calibration.capture_invalid")
 # The protected-core files whose literal codes must be in CORE_FLAG_CODES.
@@ -319,12 +327,15 @@ class VocabularyTests(unittest.TestCase):
             with self.subTest(code):
                 expected = SECTION_5[code]
                 self.assertEqual((family, klass), expected[:2])
+                if code in PRUNE2_CONSUMER_PENDING and code not in DRAFT_CODES:
+                    continue
                 self.assertEqual((DRAFT_CODES[code]["family"], DRAFT_CODES[code]["klass"],
                                   DRAFT_CODES[code]["effect"]), expected)
                 self.assertEqual((fixture[code]["family"], fixture[code]["klass"], fixture[code]["effect"]),
                                  expected)
                 self.assertEqual((h.CODES[code].family, h.CODES[code].klass), expected[:2])
-        self.assertEqual(set(flags_core.CORE_FLAG_CODES) - {"code.executed_differs_from_sealed"},
+        pending = {code for code in PRUNE2_CONSUMER_PENDING if code not in h.CORE_WRITER_CODES}
+        self.assertEqual(set(flags_core.CORE_FLAG_CODES) - {"code.executed_differs_from_sealed"} - pending,
                          set(h.CORE_WRITER_CODES))
         self.assertEqual(set(flags_core.WRITERS),
                          {"core-controller", "core-run_campaign", "core-fiducial", "core-reservation"})

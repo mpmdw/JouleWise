@@ -22,6 +22,7 @@ import importlib.util
 import io
 import json
 import os
+import shlex
 import signal
 import subprocess
 import sys
@@ -255,6 +256,13 @@ class VerdictWriterTests(unittest.TestCase):
         self.assertIn("never overwritten", stderr)
         self.assertEqual(before, self.output().read_bytes())
 
+    def test_the_write_itself_is_exclusive(self):
+        """Review E2: a verdict that appears between the existence check and the write is never replaced."""
+        self.output().write_bytes(b"first\n")
+        with self.assertRaises(FileExistsError):
+            verdict_script.write_create_once(self.output(), {"status": "verified"})
+        self.assertEqual(b"first\n", self.output().read_bytes())
+
     def test_bytes_that_differ_from_the_manifest_are_not_refit(self):
         (self.directory / "raw/powermetrics.plist").write_bytes(b"<plist>changed</plist>\n")
         code, _, _ = self.run_main()
@@ -469,6 +477,89 @@ class BudgetHelperTests(unittest.TestCase):
     def test_a_missing_program_is_127(self):
         self.assertEqual(127, self.run_helper(5, "/nonexistent/program").returncode)
 
+    def test_the_helper_never_wakes_while_the_stage_runs(self):
+        """Review F1: Popen.wait(timeout=...) polls waitpid every 50 ms on Python 3.13, so the helper woke 20
+        times a second through the pre-calibration capture it wraps. Now: one blocking waitpid, no sleeps."""
+        counting = (
+            "import atexit, os, sys, time\n"
+            "calls = {'sleep': 0, 'waitpid': 0}\n"
+            "_sleep, _waitpid = time.sleep, os.waitpid\n"
+            "def sleep(seconds):\n"
+            "    calls['sleep'] += 1\n"
+            "    return _sleep(seconds)\n"
+            "def waitpid(*args):\n"
+            "    calls['waitpid'] += 1\n"
+            "    return _waitpid(*args)\n"
+            "time.sleep, os.waitpid = sleep, waitpid\n"
+            "atexit.register(lambda: print('CALLS %d %d' % (calls['sleep'], calls['waitpid']), file=sys.stderr))\n"
+            "exec(compile(sys.argv.pop(1), '<budget>', 'exec'))\n")
+        completed = subprocess.run([sys.executable, "-B", "-c", counting, b5_chain.BUDGET_HELPER, "60", "1",
+                                    str(b5_chain.BUDGET_EXPIRED_RC), "--", "/bin/sleep", "2"],
+                                   capture_output=True, text=True, timeout=120, check=False)
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        sleeps, waits = map(int, completed.stderr.split("CALLS ")[1].split())
+        self.assertEqual((0, 1), (sleeps, waits))
+
+    @staticmethod
+    def _reap(path):
+        for pid in map(int, path.read_text().split()) if path.exists() else ():
+            try:
+                os.kill(pid, signal.SIGKILL)
+            except OSError:
+                pass
+
+    def test_a_descendant_started_after_expiry_is_stopped_too(self):
+        """Review F2: one census at expiry missed a descendant started after it (here by the leader's TERM
+        handler), which outlived the stage; the census is now re-read through the grace."""
+        with tempfile.TemporaryDirectory() as directory:
+            late = Path(directory) / "late"
+            script = (f"trap '/bin/sleep 300 & echo $! > {late}' TERM; "
+                      "while :; do /bin/sleep 0.1; done")
+            try:
+                completed = self.run_helper(1, "/bin/sh", "-c", script, grace=3)
+                self.assertEqual(b5_chain.BUDGET_EXPIRED_RC, completed.returncode, completed.stderr)
+                self.assertTrue(late.exists(), completed.stderr)
+                time.sleep(0.3)
+                with self.assertRaises(ProcessLookupError):
+                    os.kill(int(late.read_text()), 0)
+                self.assertIn("survivors none", completed.stderr)
+            finally:
+                self._reap(late)
+
+    def test_an_unreadable_census_never_reports_no_survivors(self):
+        """Review F2: when the process census failed the helper still printed "survivors none"."""
+        helper = b5_chain.BUDGET_HELPER.replace('"/bin/ps"', '"/usr/bin/false"')
+        self.assertNotEqual(helper, b5_chain.BUDGET_HELPER)
+        with tempfile.TemporaryDirectory() as directory:
+            pids = Path(directory) / "pids"
+            try:
+                completed = subprocess.run(
+                    [sys.executable, "-B", "-c", helper, "1", "1", str(b5_chain.BUDGET_EXPIRED_RC), "--",
+                     "/bin/sh", "-c", f"/bin/sleep 300 >/dev/null 2>&1 & echo $! > {pids}; wait"],
+                    capture_output=True, text=True, timeout=120, check=False)
+                self.assertEqual(b5_chain.BUDGET_EXPIRED_RC, completed.returncode, completed.stderr)
+                self.assertNotIn("survivors none", completed.stderr)
+                self.assertIn("survivors unknown (process census unavailable)", completed.stderr)
+            finally:
+                self._reap(pids)
+
+    def test_descendants_keep_the_whole_grace_after_the_leader_exits(self):
+        """Review F3: the grace ended as soon as the leader exited, so a worker still saving state on SIGTERM
+        was killed at once; now the grace runs until every known process is gone or it has elapsed."""
+        with tempfile.TemporaryDirectory() as directory:
+            saved, pids = Path(directory) / "saved", Path(directory) / "pids"
+            worker = (f"trap '/bin/sleep 1; echo saved > {saved}; exit 0' TERM; "
+                      "while :; do /bin/sleep 0.1; done")
+            script = (f"/bin/sh -c {shlex.quote(worker)} & echo $! > {pids}; "
+                      "trap 'exit 0' TERM; while :; do /bin/sleep 0.1; done")
+            try:
+                completed = self.run_helper(1, "/bin/sh", "-c", script, grace=10)
+                self.assertEqual(b5_chain.BUDGET_EXPIRED_RC, completed.returncode, completed.stderr)
+                self.assertEqual("saved\n", saved.read_text() if saved.exists() else None, completed.stderr)
+                self.assertIn("survivors none", completed.stderr)
+            finally:
+                self._reap(pids)
+
 
 class BudgetRenderTests(ChainFixture):
     def test_every_non_member_stage_but_the_post_capture_and_the_in_shell_screen_is_budgeted(self):
@@ -566,11 +657,18 @@ class FlagHelperTests(unittest.TestCase):
         stderr = io.StringIO()
         argv = ["-c", str(runs_root), b5_chain.CHAIN_FLAG_WRITER, code, level, run_id, observed, "detail"]
         exit_code = 0
-        with mock.patch.object(sys, "argv", argv), contextlib.redirect_stderr(stderr):
-            try:
-                exec(compile(b5_chain.FLAG_HELPER, "<b5-flag-helper>", "exec"), {"__name__": "__main__"})
-            except SystemExit as exc:
-                exit_code = exc.code
+        handler = signal.getsignal(signal.SIGALRM)
+        try:
+            with mock.patch.object(sys, "argv", argv), contextlib.redirect_stderr(stderr):
+                try:
+                    exec(compile(b5_chain.FLAG_HELPER, "<b5-flag-helper>", "exec"), {"__name__": "__main__"})
+                except SystemExit as exc:
+                    exit_code = exc.code
+            # The helper disarms its own deadline on every exit (it runs in-process here).
+            self.assertEqual((0.0, 0.0), signal.getitimer(signal.ITIMER_REAL))
+        finally:
+            signal.setitimer(signal.ITIMER_REAL, 0)
+            signal.signal(signal.SIGALRM, handler)
         return exit_code, stderr.getvalue()
 
     def test_a_chain_flag_lands_in_the_custody_flag_file_with_the_window_plans_scope(self):
@@ -602,12 +700,85 @@ class FlagHelperTests(unittest.TestCase):
         for code in ("roster.horizon_truncated", "member.retried"):
             self.assertEqual(("ROSTER", "REPRESENTATION"), flags_core.CORE_FLAG_CODES[code])
 
+    def test_a_write_blocked_past_its_deadline_prints_the_flag_behind_the_marker(self):
+        """Review F4: a writer blocked on the flag-file lock was killed by its wall budget before core.emit
+        could print the marker, so the flag vanished. The writer now has its own deadline inside the budget."""
+        self.assertLess(b5_chain.FLAG_WRITE_DEADLINE_S + b5_chain.BUDGET_GRACE_S,
+                        b5_chain.STAGE_WALL_BUDGET_S["flag_record"])
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            custody = base / "custody"
+            runs = hazard_root(base, custody, plan={"plan_id": "b5-alpha-1", "hazard_window": {"attempt": 2}})
+            path = custody / "flags" / f"{b5_chain.CHAIN_FLAG_WRITER}.jsonl"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            import fcntl
+
+            with open(path, "ab") as held:
+                fcntl.flock(held.fileno(), fcntl.LOCK_EX)
+                try:
+                    completed = subprocess.run(
+                        [sys.executable, "-B", "-c", b5_chain.FLAG_HELPER, str(runs), b5_chain.CHAIN_FLAG_WRITER,
+                         "member.retried", "member", "neg8-refcorpus-r03", '{"attempt": 2}', "detail", "1"],
+                        capture_output=True, text=True, timeout=60, check=False, cwd=REPO_ROOT,
+                        env={**os.environ, "PYTHONPATH": str(REPO_ROOT)})
+                finally:
+                    fcntl.flock(held.fileno(), fcntl.LOCK_UN)
+        self.assertEqual(1, completed.returncode, completed.stderr)
+        self.assertTrue(completed.stderr.startswith(flags_core.UNWRITTEN_MARKER), completed.stderr)
+        value = json.loads(completed.stderr[len(flags_core.UNWRITTEN_MARKER):].splitlines()[0])
+        self.assertEqual(("member.retried", "member", "neg8-refcorpus-r03", {"attempt": 2}),
+                         (value["code"], value["level"], value["run_id"], value["observed"]))
+
+    def test_a_writer_the_budget_kills_still_leaves_the_marker_in_the_chain_log(self):
+        """Review F4: when the wall budget stops the writer, the chain prints the marker itself."""
+        prelude = (b5_chain._PRELUDE_GATE_PRUNE_2.replace("@FLAG_BUDGET@", "1").replace("@GRACE@", "1")
+                   .replace("@EXPIRED@", str(b5_chain.BUDGET_EXPIRED_RC)).replace("@WRITER@", "b5-chain")
+                   .replace("@HORIZON@", "86400").replace("@RESERVE@", "1430").replace("@SKIPPED@", "75"))
+        with tempfile.TemporaryDirectory() as directory:
+            log = Path(directory) / "chain.log"
+            script = "\n".join([
+                f"PY={shlex.quote(sys.executable)}", f"CHAIN_LOG={shlex.quote(str(log))}",
+                f"B5_BUDGET_PY={shlex.quote(b5_chain.BUDGET_HELPER)}",
+                "B5_FLAG_PY='import time; time.sleep(60)'",  # a writer that never reaches its marker
+                prelude,
+                'flag member.retried member neg8-refcorpus-r03 \'{"attempt":2}\' /nonexistent "detail"',
+                "print -r -- rc=$?"])
+            completed = subprocess.run(["/bin/zsh", "-f", "-c", script], capture_output=True, text=True,
+                                       timeout=60, check=False)
+            self.assertIn(f"rc={b5_chain.BUDGET_EXPIRED_RC}", completed.stdout, completed.stderr)
+            lines = [line for line in log.read_text().splitlines() if line.startswith(flags_core.UNWRITTEN_MARKER)]
+        self.assertEqual(1, len(lines), log)
+        value = json.loads(lines[0][len(flags_core.UNWRITTEN_MARKER):])
+        self.assertEqual(("member.retried", "member", "neg8-refcorpus-r03", {"attempt": 2}),
+                         (value["code"], value["level"], value["run_id"], value["observed"]))
+
 
 # ---------------------------------------------------------------------------
 # Row 13: one corpus retry (no drain)
 # ---------------------------------------------------------------------------
 
 CORPUS = [f"neg8-refcorpus-r{index:02d}" for index in range(1, 13)]
+
+
+class CorpusRetrySnapshotTests(unittest.TestCase):
+    def test_the_snapshot_before_the_retry_is_written_once(self):
+        """Review E2: a second count never replaces the snapshot that says which members the retry measured."""
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            manifest = base / "manifest.json"
+            manifest.write_text(json.dumps({"members": [{"bundle_id": "m1", "bundle_path": "m1"}]}))
+            snapshot = base / "snapshot.json"
+            argv = [sys.executable, "-B", "-c", b5_chain.CORPUS_RETRY_HELPER, "count", str(manifest), str(base),
+                    str(snapshot), "10"]
+            first = subprocess.run(argv, capture_output=True, text=True, timeout=60, check=False)
+            self.assertEqual((0, "retry\n"), (first.returncode, first.stdout), first.stderr)
+            before = snapshot.read_bytes()
+            (base / "m1").mkdir()
+            (base / "m1/summary_metrics.json").write_text(json.dumps({"status": "succeeded"}))
+            second = subprocess.run(argv, capture_output=True, text=True, timeout=60, check=False)
+            self.assertNotEqual(0, second.returncode)
+            self.assertIn("FileExistsError", second.stderr)
+            self.assertEqual(before, snapshot.read_bytes())
 
 
 class CorpusRetryTests(ChainFixture):

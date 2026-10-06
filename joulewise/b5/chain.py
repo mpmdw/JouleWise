@@ -177,6 +177,9 @@ STAGE_WALL_BUDGET_S = {
     "session_status_record": 600,
     "flag_record": 120,
 }
+# Row 8 / review F4: the flag writer's own deadline, inside its wall budget's
+# grace, so the writer reports an unwritten flag before the budget kills it.
+FLAG_WRITE_DEADLINE_S = STAGE_WALL_BUDGET_S["flag_record"] - BUDGET_GRACE_S - 30
 
 # Interface J1 (PLAN2 3.2): the window calibration verdict. One synchronous
 # refit of the pre slot, right after its screen and before the first settle;
@@ -590,11 +593,17 @@ print(json.dumps(summary, sort_keys=True))
 
 # Row 8: run argv under a wall budget (stdlib only). The child stays in the
 # chain's process group, so the driver's group stop and census still reach it.
-# On expiry the tree (the child and every descendant, listed before any
-# signal, since descendants are re-parented once the child exits) gets
-# SIGTERM, then SIGKILL after the grace; a process the chain may not signal
-# (a root-owned sampler) is named on stderr. Exit: the child's code (128+N for
-# signal N), or BUDGET_EXPIRED_RC.
+# While the stage runs the helper sits in one blocking waitpid, interrupted
+# only by an interval timer at the budget: it never polls, so it adds no
+# wakeups to a capture it wraps (review F1). On expiry the tree (the child and
+# every descendant) gets SIGTERM; the tree is re-read from the process census
+# through the whole grace, so a descendant started after the first read is
+# found too (F2), and the grace runs until every known process is gone or
+# BUDGET_GRACE_S has passed, never ending merely because the child exited (F3).
+# What is left then gets SIGKILL. A process the chain may not signal (a
+# root-owned sampler) is named on stderr; when the census could not be read the
+# survivors are reported as unknown, never as "none" (F2). Exit: the child's
+# code (128+N for signal N), or BUDGET_EXPIRED_RC.
 BUDGET_HELPER = r"""
 import os, signal, subprocess, sys, time
 budget, grace, expired_rc = float(sys.argv[1]), float(sys.argv[2]), int(sys.argv[3])
@@ -609,29 +618,50 @@ try:
 except OSError as error:
     print("b5 chain budget: cannot start " + argv[0] + ": " + type(error).__name__, file=sys.stderr)
     sys.exit(127)
-try:
-    sys.exit(code(child.wait(timeout=budget)))
-except subprocess.TimeoutExpired:
+class Expired(Exception):
     pass
-def tree(root):
+def expire(signum, frame):
+    raise Expired()
+signal.signal(signal.SIGALRM, expire)
+try:
+    signal.setitimer(signal.ITIMER_REAL, max(budget, 0.001))
+    rc = child.wait()
+    signal.setitimer(signal.ITIMER_REAL, 0)
+    sys.exit(code(rc))
+except Expired:
+    if child.poll() is not None:  # the timer fired as the child ended
+        sys.exit(code(child.returncode))
+known = [child.pid]
+census_failed = False
+def extend():
+    # Add every live descendant of a known process; True when the census was read.
+    global census_failed
     try:
-        text = subprocess.run(["/bin/ps", "-A", "-o", "pid=,ppid="], capture_output=True, text=True,
-                              timeout=10).stdout
+        done = subprocess.run(["/bin/ps", "-A", "-o", "pid=,ppid="], capture_output=True, text=True, timeout=10)
     except Exception:
-        return [root]
+        done = None
+    if done is None or done.returncode != 0:
+        census_failed = True
+        return []
     children = {}
-    for line in text.splitlines():
+    for line in done.stdout.splitlines():
         parts = line.split()
         if len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
             children.setdefault(int(parts[1]), []).append(int(parts[0]))
-    found, stack = [root], [root]
+    if not children:
+        census_failed = True
+        return []
+    added, stack = [], list(known)
     while stack:
         for pid in children.get(stack.pop(), []):
-            if pid not in found and pid != os.getpid():
-                found.append(pid)
+            if pid not in known and pid != os.getpid():
+                known.append(pid)
+                added.append(pid)
                 stack.append(pid)
-    return found
+    return added
 def alive(pid):
+    if pid == child.pid:
+        return child.poll() is None
     try:
         os.kill(pid, 0)
         return True
@@ -639,49 +669,71 @@ def alive(pid):
         return False
     except PermissionError:
         return True
-members = tree(child.pid)
-print("b5 chain budget: wall budget %g s expired; SIGTERM to %d process(es)" % (budget, len(members)),
+def send(pids, signum):
+    for pid in pids:
+        if not alive(pid):
+            continue
+        try:
+            os.kill(pid, signum)
+        except OSError:
+            pass
+extend()
+print("b5 chain budget: wall budget %g s expired; SIGTERM to %d process(es)" % (budget, len(known)),
       file=sys.stderr, flush=True)
-for pid in members:
-    try:
-        os.kill(pid, signal.SIGTERM)
-    except OSError:
-        pass
+send(list(known), signal.SIGTERM)
 deadline = time.monotonic() + grace
-while time.monotonic() < deadline and child.poll() is None:
-    time.sleep(0.2)
-for pid in members:
-    if pid == child.pid and child.poll() is not None:
-        continue
-    try:
-        os.kill(pid, signal.SIGKILL)
-    except OSError:
-        pass
+while time.monotonic() < deadline:
+    send(extend(), signal.SIGTERM)
+    if not any(alive(pid) for pid in known):
+        break
+    time.sleep(min(0.5, max(deadline - time.monotonic(), 0)))
+for attempt in range(3):
+    send(list(known), signal.SIGKILL)
+    if not extend():
+        break
 try:
     child.wait(timeout=10)
 except subprocess.TimeoutExpired:
     pass
 time.sleep(0.2)
-left = [pid for pid in members if pid != child.pid and alive(pid)]
-if child.poll() is None:
-    left.insert(0, child.pid)
-print("b5 chain budget: stopped; survivors " + (",".join(map(str, left)) or "none"), file=sys.stderr, flush=True)
+extend()
+left = [pid for pid in known if alive(pid)]
+if census_failed:
+    text = "unknown (process census unavailable); known still alive: " + (",".join(map(str, left)) or "none")
+else:
+    text = ",".join(map(str, left)) or "none"
+print("b5 chain budget: stopped; survivors " + text, file=sys.stderr, flush=True)
 sys.exit(expired_rc)
 """
 
 # The chain's flags (rows 13 and 17): joulewise.flags.core from the measurement
 # checkout, writer CHAIN_FLAG_WRITER, the window plan's scope bindings. A flag
 # that cannot be written is printed behind the core's marker to stderr, which
-# the chain sends to its operator log (core-prune N8 recovers it).
+# the chain sends to its operator log (core-prune N8 recovers it). The helper
+# gives itself a deadline (argv 8, default FLAG_WRITE_DEADLINE_S) below its wall
+# budget: a write still blocked then (a held flag-file lock) prints the marker
+# and exits, so the budget's kill never loses the flag silently (review F4).
 FLAG_HELPER = r"""
-import json, sys
+import json, os, signal, sys
 runs_root, writer, code, level, run_id, observed, detail = sys.argv[1:8]
+deadline = float(sys.argv[8]) if len(sys.argv) > 8 else @DEADLINE@
 marker = "JOULEWISE_UNWRITTEN_FLAG "
+def line(reason):
+    try:
+        value = json.loads(observed)
+    except ValueError:
+        value = {"unparsed": observed[:300]}
+    return marker + json.dumps({"code": code, "level": level, "run_id": run_id or None,
+                                "observed": value, "unbuilt": reason}, sort_keys=True)
 def unwritten(reason):
-    print(marker + json.dumps({"code": code, "level": level, "run_id": run_id or None,
-                               "observed": json.loads(observed), "unbuilt": reason}, sort_keys=True),
-          file=sys.stderr, flush=True)
+    signal.setitimer(signal.ITIMER_REAL, 0)
+    print(line(reason), file=sys.stderr, flush=True)
     sys.exit(1)
+def late(signum, frame):
+    os.write(2, (line("flag write exceeded its %g s deadline" % deadline) + "\n").encode("utf-8"))
+    os._exit(1)
+signal.signal(signal.SIGALRM, late)
+signal.setitimer(signal.ITIMER_REAL, max(deadline, 0.001))
 try:
     from joulewise.flags import core as flags_core
 except Exception as error:
@@ -691,8 +743,9 @@ if context is None:
     unwritten("runs root carries no HAZARD locator: " + runs_root)
 written = flags_core.emit(context, code, level=level, run_id=run_id or None, observed=json.loads(observed),
                           detail=detail)
+signal.setitimer(signal.ITIMER_REAL, 0)
 sys.exit(0 if written else 1)
-"""
+""".replace("@DEADLINE@", str(FLAG_WRITE_DEADLINE_S))
 
 # Row 13: the NEG-8 corpus retry (stdlib only). "count" writes a create-once
 # snapshot of each listed member's summary and prints "retry" when fewer than
@@ -806,9 +859,18 @@ stop_chain() {
 # collection stage can be reached (stage_plan puts the pre slot first).
 _PRELUDE_GATE_PRUNE_2 = r"""# flag CODE LEVEL RUN_ID OBSERVED_JSON RUNS_ROOT DETAIL: one chain flag
 # (joulewise.flags.core); stdout and stderr go to the chain log.
+# A writer stopped by its wall budget could not print its own marker: the
+# chain prints it (review F4), so the flag is never lost silently.
 flag() {
+  local rc run_id_json=null
   "$PY" -B -c "$B5_BUDGET_PY" @FLAG_BUDGET@ @GRACE@ @EXPIRED@ -- \
     "$PY" -B -c "$B5_FLAG_PY" "$5" @WRITER@ "$1" "$2" "$3" "$4" "$6" >> "$CHAIN_LOG" 2>&1
+  rc=$?
+  if (( rc == @EXPIRED@ )); then
+    [[ -n "$3" ]] && run_id_json="\"$3\""
+    print -r -- "JOULEWISE_UNWRITTEN_FLAG {\"code\":\"$1\",\"level\":\"$2\",\"observed\":$4,\"run_id\":$run_id_json,\"unbuilt\":\"flag writer exceeded its wall budget\"}" >> "$CHAIN_LOG"
+  fi
+  return $rc
 }
 HORIZON_TRUNCATED=0
 HORIZON_DEADLINE=0
