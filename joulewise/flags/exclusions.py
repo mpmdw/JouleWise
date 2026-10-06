@@ -236,7 +236,11 @@ def compute(
                 reason = "roster.not_in_plan"
             elif not _same(attempt, bundle_attempt):
                 reason = "roster.foreign_attempt"
-            elif chain_started is not None and (created is None or created < chain_started):
+            elif chain_started is not None and created is None:
+                # No stamp places the bundle after the chain started, so it is
+                # not used; the label says why (it was not shown to be early).
+                reason = "roster.creation_unplaced"
+            elif chain_started is not None and created < chain_started:
                 reason = "roster.before_chain_started"
             if reason is not None:
                 bundles_ignored.append({"bundle_id": bundle_id, "run_id": run_id, "code": reason})

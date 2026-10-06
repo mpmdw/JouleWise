@@ -30,7 +30,7 @@ class WindowPlanFixture(unittest.TestCase):
         self.temporary = tempfile.TemporaryDirectory(prefix="b5-plan-")
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name).resolve()
-        self.measurement = fake_window.build_checkout(self.root, git=False)
+        self.measurement = fake_window.build_checkout(self.root)
         self.t0 = (int(time.time()) // 60 + 60) * 60
 
     def inputs(self, pack="alpha", **changes):
@@ -311,6 +311,128 @@ class ThresholdAndSizingTests(WindowPlanFixture):
             self.skipTest("lane L1's joulewise.hazards lands at integration")
         self.assertEqual({module: set(keys) for module, keys in fake_window.L1_DEFAULT_THRESHOLDS.items()},
                          {module: set(keys) for module, keys in real.items()})
+
+
+class LedgerHeadTests(WindowPlanFixture):
+    """Rehearsal round 1, B5: after a window's post slot the ledger is ahead of the committed pin.
+
+    The next window's reservation then refuses (calibration_reservation_head_mismatch)
+    and its chain stops at exit 10 after the whole arm. The plan writer refuses
+    that at the desk, and the desk pin advance (advance-head-pin plus a
+    pin-only commit) cures it.
+    """
+
+    def setUp(self):
+        super().setUp()
+        for key, value in (("user.name", "fixture"), ("user.email", "fixture@example.invalid"),
+                           ("commit.gpgsign", "false")):
+            subprocess.run(["git", "-C", str(self.measurement), "config", "--local", key, value], check=True)
+        self.ledger = self.measurement / b5_plan.DEFAULT_LEDGER_RELATIVE
+        self.pin = self.measurement / b5_plan.HEAD_PIN_RELATIVE
+
+    def reserve(self, session_id: str):
+        from joulewise.calibration_ledger import IDENTITY_EPOCH_FIELDS, append_bracket_session_receipt
+        from joulewise.powermetrics_fiducial import V2_BINDING_FIELDS
+        epoch = dict(zip(IDENTITY_EPOCH_FIELDS, ("25F84", "Mac15,9", "ac_high_power", 100, "estimator-v1",
+                                                 "pulse-v3"), strict=True))
+        t1 = {field: f"value-{field}" for field in V2_BINDING_FIELDS}
+        t1.update(epoch)
+        runs_root = self.root / "runs-of" / session_id
+        captures = runs_root / "instrument_validation"
+        slots = {slot: {"attempt_id": f"{session_id}-{slot}", "custody_locator": str(captures / f"{session_id}-{slot}"),
+                        "identity_epoch": epoch, "t1_bindings": t1} for slot in ("pre", "post")}
+        append_bracket_session_receipt(
+            self.ledger, session_id=session_id, window_id=session_id, plan_id=session_id, plan_sha256="1" * 64,
+            evidence_root_id=f"evidence-{session_id}", runs_root=runs_root, slots=slots,
+            head_pin_path=self.pin, require_committed_pin=True, repo_root=self.measurement)
+        return slots, epoch, t1
+
+    def finalize(self, session_id: str, slots, epoch, t1) -> None:
+        from joulewise.calibration_ledger import artifact_hashes, finalize_bracket_session_slot
+        for slot in ("pre", "post"):
+            capture = Path(slots[slot]["custody_locator"])
+            (capture / "raw").mkdir(parents=True)
+            (capture / "raw" / "powermetrics.plist").write_bytes(f"raw-{slot}".encode())
+            (capture / "events.jsonl").write_text('{"timestamp_s":99.0}\n')
+            (capture / "instrument_evidence.json").write_text(json.dumps({"slot": slot}))
+            (capture / "manifest.json").write_text(json.dumps({"slot": slot}))
+            finalize_bracket_session_slot(
+                self.ledger, session_id=session_id, slot=slot, disposition="valid", custody_locator=str(capture),
+                artifact_sha256=artifact_hashes(capture), identity_epoch=epoch, t1_bindings=t1,
+                capture_wall_time_s="99.0" if slot == "pre" else "111.0", exact_bound_lexeme_s="0.025")
+
+    def test_a_ledger_ahead_of_its_committed_pin_is_refused_at_the_desk_and_cured_by_the_pin_advance(self):
+        from joulewise.calibration_exits import RefusalCode
+        from joulewise.calibration_ledger import CalibrationLedgerError, terminal_head_pin_for_session
+        # ALPHA: its bracket session reserves at the committed pin and finalizes both slots.
+        self.finalize("alpha-1-calibration", *self.reserve("alpha-1-calibration"))
+        status = b5_plan.ledger_head_status(self.measurement)
+        self.assertEqual(["calibration_ledger_head_mismatch"], status["blocking"])
+        self.assertEqual(0, status["pinned"]["sequence"])
+        self.assertGreater(status["physical"]["sequence"], 0)
+        # BETA's reservation against it refuses, as in the rehearsal.
+        with self.assertRaises(CalibrationLedgerError) as refused:
+            self.reserve("beta-1-calibration")
+        self.assertEqual(RefusalCode.RESERVATION_HEAD_MISMATCH, refused.exception.code)
+        # The plan writer refuses at the desk, names the cure, and writes nothing.
+        with self.assertRaisesRegex(b5_plan.WindowPlanError, "calibration_ledger_head_mismatch.*advance_b5_ledger_pin"):
+            self.write()
+        self.assert_nothing_written()
+        # The desk pin advance, against the harvest's terminal pin.
+        terminal = terminal_head_pin_for_session(self.ledger, session_id="alpha-1-calibration")
+        wrong = dict(terminal, sequence=terminal["sequence"] - 1)
+        with self.assertRaisesRegex(b5_plan.PinAdvanceError, "not the harvested terminal pin"):
+            b5_plan.advance_ledger_pin(self.measurement, session_id="alpha-1-calibration", operator_identity="test",
+                                       attestation_reason="test", expected_pin=wrong)
+        record = b5_plan.advance_ledger_pin(self.measurement, session_id="alpha-1-calibration",
+                                            operator_identity="test", attestation_reason="test", expected_pin=terminal)
+        self.assertEqual("ADVANCED", record["status"])
+        self.assertEqual([b5_plan.HEAD_PIN_RELATIVE], record["commit"]["changed_paths"])
+        self.assertEqual([], record["after"]["blocking"])
+        changed = subprocess.run(["git", "-C", str(self.measurement), "show", "--name-only", "--format=", "HEAD"],
+                                 capture_output=True, text=True, check=True).stdout.split()
+        self.assertEqual([b5_plan.HEAD_PIN_RELATIVE], changed)
+        self.assertEqual(terminal["sequence"], json.loads(self.pin.read_text())["sequence"])
+        # Now the next window plans, and its reservation opens.
+        record = self.write()
+        self.assertEqual([], record["ledger_head"]["blocking"])
+        beta = self.reserve("beta-1-calibration")
+        # The next harvest's advance, then one with nothing to do, which changes nothing.
+        self.finalize("beta-1-calibration", *beta)
+        again = b5_plan.advance_ledger_pin(self.measurement, session_id="beta-1-calibration",
+                                           operator_identity="test", attestation_reason="test")
+        self.assertEqual("ADVANCED", again["status"])
+        self.assertEqual("NOT_NEEDED", b5_plan.advance_ledger_pin(
+            self.measurement, session_id="beta-1-calibration", operator_identity="test",
+            attestation_reason="test")["status"])
+
+    def test_an_uncommitted_pin_and_an_open_session_are_refused_at_the_desk(self):
+        slots = self.reserve("alpha-1-calibration")
+        with self.assertRaisesRegex(b5_plan.WindowPlanError, "calibration_ledger_bracket_session_open.*abort-session"):
+            self.write()
+        self.assert_nothing_written()
+        with self.assertRaisesRegex(b5_plan.PinAdvanceError, "not in a pin-advance state"):
+            b5_plan.advance_ledger_pin(self.measurement, session_id="alpha-1-calibration", operator_identity="test",
+                                       attestation_reason="test")
+        self.finalize("alpha-1-calibration", *slots)
+        record = b5_plan.advance_ledger_pin(self.measurement, session_id="alpha-1-calibration",
+                                            operator_identity="test", attestation_reason="test", commit=False)
+        self.assertEqual("ADVANCED_UNCOMMITTED", record["status"])
+        self.assertEqual(["calibration_ledger_head_uncommitted"], record["after"]["blocking"])
+        with self.assertRaisesRegex(b5_plan.WindowPlanError, "calibration_ledger_head_uncommitted"):
+            self.write()
+        self.assert_nothing_written()
+        # The CLI commits it.
+        plan = self.root / "previous-plan.json"
+        plan.write_text(json.dumps({"measurement_root": str(self.measurement),
+                                    "hazard_window": {"bracket_session_id": "alpha-1-calibration"}}))
+        output = io.StringIO()
+        with redirect_stdout(output):
+            code = __import__("scripts.advance_b5_ledger_pin", fromlist=["main"]).main(
+                ["--plan", str(plan), "--operator-identity", "test"])
+        self.assertEqual(0, code, output.getvalue())
+        self.assertEqual("ADVANCED", json.loads(output.getvalue())["status"])
+        self.write()
 
 
 class HazardWindowValidationTests(unittest.TestCase):

@@ -87,6 +87,7 @@ PLAN_ID = "plan-b5test-floor-v5"
 EVIDENCE_ROOT_ID = "evidence-b5test-floor-v5"
 SESSION_ID = "b5t-session"
 FAMILY = "df-b5t-family"
+P42_FAMILY = "df-b5t-p42"  # read from FAMILY's members, as p42 reads the decode members; no member's own tag
 H_CLAIM = "a" * 40
 MEMBERS = (
     # run_id, role, block, position, arm, config subdirectory
@@ -464,8 +465,13 @@ def l4_flag_line(code: str, **fields) -> dict:
 class Window:
     def __init__(self, root: Path, *, prefix_ledger=False, target_precheck=None, catalog_overrides=None,
                  journals=None, executed_overrides=None, frozen_pins=True, register_prompt_tokens=32,
-                 acceptance_policy=None, sealed_inventory=True, registration=True, registration_block=None):
+                 acceptance_policy=None, sealed_inventory=True, registration=True, registration_block=None,
+                 p42_precheck=None):
         self.root = root
+        # p42_precheck: also register a second, non-target condition family
+        # read from the same members (the floor packs' p42 cells: the decode
+        # members' prefill, registration 0.5 and 6.6) with this precheck path.
+        self.p42_precheck = p42_precheck
         self.registration = (root / "measurement" / REGISTRATION_RELATIVE) if registration else None
         self.registration_block = registration_block
         self.measurement = root / "measurement"
@@ -525,6 +531,19 @@ class Window:
              "target_precheck_path": target_precheck, "condition_family_id": FAMILY, "expected_n": 1,
              "condition_family_definitions": family,
              "blocks": [{"block_id": "b5t-b01", "members": {row[3]: row[0] for row in MEMBERS if row[2]}}]}]}
+        if self.p42_precheck is not None:
+            p42 = {"all": {"condition_family_definition": {
+                "condition_family_id": P42_FAMILY,
+                "workload_profile": {"prompt_tokens": register_prompt_tokens, "output_tokens": 8}}}}
+            spec["cells"] += [
+                {"cell_id": "b5t-p42-abs", "kind": "absolute", "metric": "phase_energy_j.prefill",
+                 "target_precheck_path": self.p42_precheck, "condition_family_id": P42_FAMILY, "expected_n": 2,
+                 "condition_family_definitions": p42,
+                 "members": [{"slot": row[0], "bundle_id": row[0]} for row in MEMBERS if row[2] is None]},
+                {"cell_id": "b5t-p42-cmp", "kind": "comparative", "metric": "phase_energy_j.prefill",
+                 "target_precheck_path": self.p42_precheck, "condition_family_id": P42_FAMILY, "expected_n": 1,
+                 "condition_family_definitions": p42,
+                 "blocks": [{"block_id": "b5t-b01", "members": {row[3]: row[0] for row in MEMBERS if row[2]}}]}]
         put(self.pack / "extraction_spec.json", spec)
         identity = derive_model_runtime_config_from_metadata(
             json.loads((template() / MEMBERS[0][0] / "config.json").read_bytes()),
@@ -2073,6 +2092,11 @@ class LineageFindingTests(WindowTestCase):
     def test_published_lineage_findings_become_flags_with_archived_evidence(self):
         window = self.window()
         published = self.publish(window)
+        # One marker-bearing member without a stamp; the untagged seed members
+        # carry none by design and are not findings (rehearsal round 1, B6).
+        config = json.loads((window.claim / "b5t-abs-r01" / "config.json").read_bytes())
+        config["run_metadata"]["tags"].append("launch_lineage_required")
+        (window.claim / "b5t-abs-r01" / "config.json").write_bytes(normalized_config(config))
         sidecar = window.claim / f"{self.LOCATOR}.sha256"
         sidecar.write_text(f"{'0' * 64}  {self.LOCATOR}\n")
         tree = json.loads((window.pack / "plan_tree.json").read_bytes())
@@ -2100,9 +2124,9 @@ class LineageFindingTests(WindowTestCase):
         self.assertEqual(digest["expected"], published["launch_lineage"]["plan_tree_sha256"])
         self.assertEqual([item["path"] for item in digest["evidence"]],
                          [f"sources/repo/configs/campaigns/{PACK_ID}/plan_tree.json"])
-        # The seed bundles carry no lineage stamp: one member-level record each, disclosed.
+        # The tagged member carries no lineage stamp: one member-level record, disclosed.
         self.assertEqual({flag["scope"]["run_id"] for flag in by_code["lineage.bundle_stamp_absent"]},
-                         {row[0] for row in MEMBERS})
+                         {"b5t-abs-r01"})
         reasons = window.exclusions()["reasons"]
         self.assertIn("lineage.plan_tree_digest_differs", reasons)
         self.assertNotIn("lineage.locator_sidecar_mismatch", reasons)
@@ -2715,8 +2739,10 @@ class ExclusionSeamTests(unittest.TestCase):
     def test_floor_cells_are_condition_families_with_repeat_and_quad_strata(self):
         _roster, document, spans = self.inputs(self.ALPHA)
         families = ["df-ph-decode-qwen3-1p7b", "df-ph-prefill-p2048-qwen3-1p7b", "df-ph-prefill-p42-qwen3-1p7b"]
-        self.assertEqual(document["cells"], [{"cell_id": family, "target": True, "strata": ["quad", "repeat"]}
-                                             for family in families])
+        # The p42 cells are not target cells (registration 6.6): they read the
+        # decode members' prefill, which is no member's target phase.
+        self.assertEqual(document["cells"], [{"cell_id": family, "target": "p42" not in family,
+                                              "strata": ["quad", "repeat"]} for family in families])
         units: dict[tuple, list] = {}
         for member in document["members"]:
             self.assertEqual(set(member), {"run_id", "stage_id", "kind", "units"})
@@ -2872,6 +2898,253 @@ class IdentityReplayTests(WindowTestCase):
 
 
 @unittest.skipUnless((B3W1 / "harvest.json").is_file(), "block-3 b3w1 archive is local to the measurement Mac")
+class RehearsalRound1Tests(WindowTestCase):
+    """The breaks the block-5 end-to-end rehearsal (round 1, 2026-10-06) found, each through the real harvest."""
+
+    GAMMA = ROOT / "configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5"
+
+    def collect(self, window, stage, *extra):
+        """L4's record-only collectors, run for real by scripts/collect_window_flags.py into the custody."""
+        completed = subprocess.run(
+            [sys.executable, "-B", str(ROOT / "scripts/collect_window_flags.py"), "--stage", stage,
+             "--custody", str(window.custody), "--repo", str(window.measurement), "--pack", str(window.pack),
+             "--plan-id", PLAN_ID, "--attempt", "1", "--h-claim", H_CLAIM,
+             "--catalog", str(window.measurement / SEALED_DIR / "flag_catalog.json"), *extra],
+            capture_output=True, text=True, check=False, timeout=900)
+        self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
+        return json.loads(completed.stdout.splitlines()[-1])
+
+    def test_b2_collector_run_records_are_folded_not_malformed_flags(self):
+        """B2: collector_runs.jsonl is a run log, not a flag file.
+
+        Before the fix every one of its lines became records.malformed_flag
+        (never classified, so release_blocked on every window) and the
+        collectors' own errors never reached window_flags.json.
+        """
+        window = self.window()
+        self.collect(window, "desk")
+        arm = self.collect(window, "arm", "--timeout-s", "0.001")  # every arm collector times out
+        self.assertTrue(arm["collectors"])
+        self.assertEqual({row["status"] for row in arm["collectors"].values()}, {"timeout"})
+        runs = [json.loads(line) for line in
+                (window.custody / "flags" / "collector_runs.jsonl").read_text().splitlines() if line.strip()]
+        self.assertEqual([row["stage"] for row in runs], ["desk", "arm"])
+        not_ok = {(row["stage"], f"{row['stage']}.{item['collector']}") for row in runs
+                  for item in row["collectors"] if item["status"] != "ok"}
+        self.assertTrue({stage for stage, _name in not_ok} >= {"arm"})
+        # The driver's own record of the arm call: the subprocess as a whole.
+        put(window.custody / "night" / "arm_collectors.json",
+            {"schema": "joulewise.b5_arm_collectors.v1", "call": 1, "ran_by": "driver",
+             "collector_error": "timed out", "argv": ["collect_window_flags.py"]})
+        record = window.harvest()
+        self.assertEqual(record["verdict"], "COLLECTED", record["faults"])
+        self.assertNotIn("records.malformed_flag", window.codes())
+        summary = window.window_flags()
+        self.assertNotIn("records.malformed_flag", summary["flags"]["unclassified"])
+        folded = {(row["stage"], row["collector"]) for row in summary["collector_errors"] if "stage" in row}
+        self.assertEqual(folded, not_ok | {("arm", "arm.flags.arm")})
+        for row in summary["collector_errors"]:
+            if "stage" in row:
+                self.assertTrue(row["source"].startswith(("flags/collector_runs.jsonl:", "night/arm_collectors")))
+        # Not harvest faults: the collectors are records.
+        self.assertEqual(record["faults"], [])
+        # Every flag the collectors wrote reached the window's flags, with its writer's id.
+        written = [json.loads(line) for name in ("desk.jsonl", "arm.jsonl")
+                   for line in (window.custody / "flags" / name).read_text().splitlines() if line.strip()]
+        self.assertTrue(written)
+        self.assertTrue({flag["flag_id"] for flag in written} <= {flag["flag_id"] for flag in window.flags()})
+        failed = {(flag["observed"]["stage"], flag["observed"]["collector"]) for flag in window.flags()
+                  if flag["code"] == "records.collector_failed" and "stage" in flag["observed"]}
+        self.assertEqual({f"{stage}.{name}" for stage, name in failed}, {name for _stage, name in folded})
+
+    def test_b2_an_arm_run_collector_call_is_folded_once(self):
+        """The arm ran the collectors (ran_by arm): its results fold once, not again as the joined error."""
+        window = self.window()
+        put(window.custody / "night" / "arm_collectors.json",
+            {"schema": "joulewise.b5_arm_collectors.v1", "call": 1, "ran_by": "arm", "collector_error": "timed out",
+             "results": [{"name": "flags.arm", "timed_out": True, "returncode": None, "error": None,
+                          "elapsed_s": 120.0}]})
+        window.harvest()
+        folded = [row for row in window.window_flags()["collector_errors"] if "stage" in row]
+        self.assertEqual([(row["collector"], row["status"], row["error"], row["source"]) for row in folded],
+                         [("arm.flags.arm", "timeout", "timed out", "night/arm_collectors.json")])
+
+    def add_duplicate_dispatch(self, window):
+        """GAMMA's shape: one external input (one run id) launched by two stages into the claim root."""
+        tree = json.loads((window.pack / "plan_tree.json").read_bytes())
+        member = {"path": f"configs/campaigns/{PACK_ID}/01_abs/b5t-abs-r01.json", "run_id": "b5t-ref-midpoint",
+                  "sha256": "1" * 64}
+        tree["external_inputs"]["manifests"] = [{"input_id": "midpoint_reference", "members": [member]}]
+
+        def stage(stage_id, ordinal):
+            return {"stage_id": stage_id, "ordinal": ordinal, "kind": "campaign_collection", "expected_count": 1,
+                    "input_ref": {"kind": "external_input", "input_id": "midpoint_reference"},
+                    "launch": {"schema_version": "joulewise.stage_launch.v1", "commands": [{
+                        "command_id": f"{stage_id}.collect", "command_kind": "campaign_collection",
+                        "argv_template": {"tool_id": "campaign_runner",
+                                          "interface_id": "joulewise.run_campaign.cli.v1",
+                                          "arguments": [{"kind": "repo_path", "value": "configs/x/midpoint"},
+                                                        {"kind": "literal", "value": "--runs-dir"},
+                                                        {"kind": "binding", "value": "claim_runs_root"}]}}]}}
+        tree["stage_graph"] += [stage("b5t-reference-decode-midpoint", 2), stage("b5t-reference-arm-boundary", 3)]
+        put(window.pack / "plan_tree.json", tree)
+        (window.pack / "plan_tree.sha256").write_text(f"{sha(window.pack / 'plan_tree.json')}  plan_tree.json\n")
+
+    def test_b3_a_run_id_launched_twice_is_recorded_not_silently_collapsed(self):
+        """B3: GAMMA's interior references are one run id launched by three stages.
+
+        Before the fix the roster collapsed them into one member and the
+        harvest said nothing about the two positions never measured.
+        """
+        window = self.window()
+        self.add_duplicate_dispatch(window)
+        record = window.harvest()
+        self.assertEqual(record["verdict"], "COLLECTED", record["faults"])
+        (flag,) = [flag for flag in window.flags() if flag["code"] == "roster.duplicate_run_id"]
+        self.assertEqual(flag["scope"]["level"], "window")
+        self.assertEqual(flag["observed"]["run_id"], "b5t-ref-midpoint")
+        self.assertEqual(flag["observed"]["dispatch_count"], 2)
+        self.assertEqual(flag["observed"]["stages"], ["b5t-reference-decode-midpoint", "b5t-reference-arm-boundary"])
+        self.assertEqual(flag["observed"]["runs_roots"], ["claim_runs_root"])
+        self.assertIn("roster.duplicate_run_id", window.exclusions()["reasons"])  # the test catalog's draft effect
+        self.assertEqual(h.flag_problems(flag), [])
+
+    def test_b3_the_committed_gamma_pack_launches_its_midpoint_reference_three_times(self):
+        tree = json.loads((self.GAMMA / "plan_tree.json").read_bytes())
+        dispatches, unresolved = h.stage_dispatches(tree, self.GAMMA)
+        self.assertEqual(unresolved, [])
+        duplicated = {run_id: [row["stage_id"] for row in rows] for run_id, rows in dispatches.items() if len(rows) > 1}
+        # Lane L10 gives the three interior references distinct run ids before GAMMA-1; until then the
+        # harvest records this one.
+        self.assertEqual(duplicated, {"neg8-window-midpoint": ["gamma-reference-decode-midpoint",
+                                                               "gamma-reference-arm-boundary",
+                                                               "gamma-reference-prefill-midpoint"]})
+        self.assertEqual(sum(len(rows) for rows in dispatches.values()), 101)
+        roster = h.build_roster(self.GAMMA, ROOT)
+        self.assertEqual(len(roster["members"]), 99)
+
+    def test_b6_untagged_auxiliary_bundles_are_not_lineage_findings(self):
+        """B6: only marker-bearing members carry a lineage stamp.
+
+        Before the fix every untagged member (NEG-8 corpus, window references;
+        here the untagged seed members) gave lineage.bundle_stamp_absent.
+        """
+        window = self.window()
+        published = LineageFindingTests.publish(None, window)
+        tagged = ("b5t-cmp-b01-a1", "b5t-cmp-b01-b1")
+        for run_id in tagged:
+            bundle = window.claim / run_id
+            config = json.loads((bundle / "config.json").read_bytes())
+            config["run_metadata"]["tags"].append("launch_lineage_required")
+            (bundle / "config.json").write_bytes(normalized_config(config))
+        stamped = window.claim / tagged[0]
+        metadata = json.loads((stamped / "metadata.json").read_bytes())
+        metadata.setdefault("extra", {})["launch_lineage"] = published["launch_lineage"]
+        metadata["extra"]["launch_lineage_locator_sha256"] = published["locators"]["claim_runs_root"]["sha256"]
+        put(stamped / "metadata.json", metadata)
+        record = window.harvest()
+        self.assertEqual(record["verdict"], "COLLECTED", record["faults"])
+        absent = {flag["scope"]["run_id"] for flag in window.flags() if flag["code"] == "lineage.bundle_stamp_absent"}
+        self.assertEqual(absent, {tagged[1]})
+        self.assertFalse({flag["code"] for flag in window.flags()
+                          if flag["scope"].get("run_id") == tagged[0] and flag["code"].startswith("lineage.")})
+
+    def test_b7_a_member_that_never_reached_the_sampler_is_placed_by_its_own_stamps(self):
+        """B7: an admission-aborted member has no sampler stamps.
+
+        Before the fix its creation stamp was None, L4 labelled it
+        roster.before_chain_started (it was not early) and counted
+        member.bytes_missing; every bundle also went to L4 with attempt None.
+        """
+        window = self.window()
+        plan = json.loads(window.plan_path.read_bytes())
+        plan["hazard_window"]["runs_roots"] = {"claim": str(window.claim), "bound": str(window.bound)}
+        put(window.plan_path, plan)
+        aborted, bare = window.claim / "b5t-abs-r01", window.claim / "b5t-abs-r02"
+        for bundle in (aborted, bare):
+            metadata = json.loads((bundle / "metadata.json").read_bytes())
+            del metadata["uncertainty_evidence"]["clock_anchor"]["clock_stamps"]
+            metadata["environment_admission"] = {"decision": "abort", "failure": "admission"}
+            put(bundle / "metadata.json", metadata)
+        lines = (bare / "events.jsonl").read_text().splitlines()
+        (bare / "events.jsonl").write_text("".join(line + "\n" for line in lines
+                                                   if json.loads(line)["event_type"] != "run_started"))
+        record = window.harvest()
+        self.assertEqual(record["verdict"], "COLLECTED", record["faults"])
+        exclusions = window.exclusions()
+        ignored = {(row["run_id"], row["code"]) for row in exclusions.get("bundles_ignored", [])}
+        self.assertNotIn(("b5t-abs-r01", "roster.before_chain_started"), ignored)
+        inputs = json.loads((window.archive / "withheld" / "exclusion-inputs.json").read_bytes())
+        bundles = {row["run_id"]: row for row in inputs["roster"]["bundles"]}
+        self.assertEqual(bundles["b5t-abs-r01"]["created_source"], "run_started_wall_via_chain_started")
+        self.assertGreater(bundles["b5t-abs-r01"]["created_monotonic_ns"], CHAIN_STARTED_NS)
+        self.assertEqual(bundles["b5t-abs-r02"]["created_monotonic_ns"], None)
+        self.assertEqual({row["attempt"] for row in bundles.values()}, {1})
+        if L4_AVAILABLE:
+            self.assertIn(("b5t-abs-r02", "roster.creation_unplaced"), ignored)
+            excluded = {row["run_id"]: row["codes"] for row in exclusions["members_excluded"]}
+            self.assertNotIn("member.bytes_missing", excluded.get("b5t-abs-r01", []))
+            self.assertIn("member.bytes_missing", excluded["b5t-abs-r02"])
+
+    def test_b8_a_non_target_phase_precheck_excludes_nothing(self):
+        """B8: the p42 cells read the decode members' prefill, which is no member's target phase.
+
+        Before the fix the p42 precheck failure (insufficient_in_window_samples,
+        expected on every member, registration 0.5) removed each decode member
+        from its decode cell too, and the p42 cells counted toward the minimum.
+        """
+        overrides = {**self.ISOLATE, "instrument.cadence_ratio_below_threshold": "DISCLOSE",
+                     "member.target_phase_precheck_failed": "DISCLOSE"}
+        window = self.window(target_precheck=["phase", "decode"], p42_precheck=["phase", "prefill"],
+                             catalog_overrides=overrides)
+        record = window.harvest()
+        self.assertEqual(record["verdict"], "COLLECTED", record["faults"])
+        targets = {flag["observed"].get("target") for flag in window.flags()
+                   if flag["code"].startswith("instrument.") or flag["code"] == "member.target_phase_precheck_failed"}
+        self.assertEqual(targets, {"phase/decode"})
+        self.assertNotIn("instrument.insufficient_in_window_samples", window.codes())  # only the prefill fails it
+        exclusions = window.exclusions()
+        self.assertEqual(exclusions["members_excluded"], [])
+        roster = json.loads((window.archive / "derived" / "roster.json").read_bytes())
+        self.assertEqual([(cell["cell_id"], cell["target"]) for cell in roster["cells"]],
+                         [(FAMILY, True), (P42_FAMILY, False)])
+        self.assertNotIn("cell.below_minimum", exclusions["reasons"])
+        cells = {cell["cell_id"]: cell for cell in exclusions["cells"]}
+        self.assertEqual((cells[FAMILY]["n_repeats"], cells[FAMILY]["n_quads"]), (2, 1))
+        # The p42 precheck outcome is still disclosed, in the s1-structural precheck counts.
+        counts = next(flag for flag in window.flags() if flag["code"] == "diagnostic.s1_structural"
+                      and flag["observed"]["check"] == "precheck_counts")
+        self.assertEqual(counts["observed"]["b5t-p42-abs:ineligible"], 2)
+
+    def test_b8_the_real_floor_packs_mark_only_p42_cells_non_target(self):
+        for pack, model in (("d117_floor_qwen3-1p7b_v5", "qwen3-1p7b"), ("d117_floor_qwen3-8b_v5", "qwen3-8b")):
+            roster = h.build_roster(ROOT / "configs/campaigns" / pack, ROOT)
+            targets = {cell["condition_family_id"]: cell["target"] for cell in roster["cells"]}
+            self.assertEqual(targets, {f"df-ph-decode-{model}": True, f"df-ph-prefill-p2048-{model}": True,
+                                       f"df-ph-prefill-p42-{model}": False}, pack)
+        gamma = h.build_roster(self.GAMMA, ROOT)
+        self.assertTrue(all(cell["target"] for cell in gamma["cells"]))
+
+    def test_b4_g3_runs_in_full_window_mode_for_a_hazard_pack_window(self):
+        """B4: G3's default roster is G2-b's one shakedown block; a claim window holds the whole pack."""
+        window = Window(self.tmp / "g3", prefix_ledger=True, catalog_overrides=self.ISOLATE)
+        (window.pack / "analysis_manifest_v3.json").write_text("{}\n")
+        (window.claim / "whole-window-verdict.json").write_text("{}\n")
+        (window.claim / "bracket-binding.json").write_text("{}\n")
+        calls = []
+
+        def runner(argv, **kwargs):
+            calls.append(list(argv))
+            Path(argv[argv.index("--report-json") + 1]).write_text(json.dumps({"assertions": []}))
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+        window.harvest(seams=h.Seams(group_alive=lambda pgid: False, exclusions_compute=EXCLUSIONS, runner=runner))
+        (argv,) = [argv for argv in calls if "--report-json" in argv]
+        self.assertIn("--full-window", argv)
+        self.assertEqual(argv[argv.index("--plan-tree") + 1], str(window.pack / "plan_tree.json"))
+        self.assertEqual(argv[argv.index("--repo-root") + 1], str(window.measurement))
+
+
 class RealB3w1BytesTests(unittest.TestCase):
     """On real b3w1 bytes: re-reduction is byte-identical and anchors recompute.
 

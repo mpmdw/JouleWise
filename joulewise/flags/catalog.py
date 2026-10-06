@@ -121,6 +121,9 @@ _MEMBER_CODES = {
     "roster.not_in_plan": _code("ROSTER", "NUMBER", EXCLUDE_MEMBER),
     "roster.foreign_attempt": _code("ROSTER", "NUMBER", EXCLUDE_MEMBER),
     "roster.before_chain_started": _code("ROSTER", "NUMBER", EXCLUDE_MEMBER),
+    # A bundle with no stamp that places it after chain.started (gate-prune
+    # rehearsal round 1, B7): not used, like an early one, but named apart.
+    "roster.creation_unplaced": _code("ROSTER", "NUMBER", EXCLUDE_MEMBER),
 }
 
 # Plan section 3.5, DISCLOSE only.
@@ -171,6 +174,7 @@ DERIVED_CODES = (
     "roster.not_in_plan",
     "roster.foreign_attempt",
     "roster.before_chain_started",
+    "roster.creation_unplaced",
     "member.bytes_missing",
     "member.bytes_ambiguous",
 )

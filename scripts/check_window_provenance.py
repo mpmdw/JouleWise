@@ -269,6 +269,94 @@ def _frozen_expected_roster(
     return roster, source, digest
 
 
+def _stage_runs_root_binding(stage: Mapping[str, Any]) -> str | None:
+    """The launch binding a plan-tree collection stage passes to ``--runs-dir``."""
+
+    launch = stage.get("launch")
+    commands = launch.get("commands") if isinstance(launch, Mapping) else None
+    for command in commands if isinstance(commands, list) else []:
+        template = command.get("argv_template") if isinstance(command, Mapping) else None
+        arguments = template.get("arguments") if isinstance(template, Mapping) else None
+        arguments = arguments if isinstance(arguments, list) else []
+        for flag, value in zip(arguments, arguments[1:]):
+            if (
+                isinstance(flag, Mapping)
+                and flag.get("kind") == "literal"
+                and flag.get("value") == "--runs-dir"
+                and isinstance(value, Mapping)
+                and value.get("kind") == "binding"
+            ):
+                return value.get("value")
+    return None
+
+
+def _window_reference_roster(
+    plan_tree_path: Path,
+    repo_root: Path,
+) -> tuple[list[str], str]:
+    """The pinned reference members a full window launches into its claim runs root.
+
+    Every ``campaign_collection`` stage of the plan tree whose ``input_ref`` is
+    an external input and whose ``--runs-dir`` is ``claim_runs_root`` (the
+    window references; the NEG-8 corpus goes to the bound root).  Each input's
+    order manifest is read at ``repo_root / manifest_path``, its bytes must
+    hash to the pinned ``manifest_sha256``, and its ``executed_order`` run ids
+    must equal the plan tree's member rows.
+    """
+
+    tree = _read_object(plan_tree_path, "plan tree")
+    external = tree.get("external_inputs")
+    rows = external.get("manifests") if isinstance(external, Mapping) else external
+    inputs = {
+        str(row.get("input_id") or row.get("external_input_id")): row
+        for row in rows or []
+        if isinstance(row, Mapping)
+    }
+    graph = tree.get("stage_graph")
+    if not isinstance(graph, list):
+        raise AssertionFailure("plan tree stage_graph is absent or malformed")
+    claim_inputs: list[str] = []
+    for stage in graph:
+        if not isinstance(stage, Mapping) or stage.get("kind") != "campaign_collection":
+            continue
+        reference = stage.get("input_ref")
+        if not isinstance(reference, Mapping) or reference.get("kind") != "external_input":
+            continue
+        if _stage_runs_root_binding(stage) != "claim_runs_root":
+            continue
+        input_id = str(reference.get("input_id"))
+        if input_id not in claim_inputs:
+            claim_inputs.append(input_id)
+    run_ids: list[str] = []
+    digests: list[str] = []
+    for input_id in claim_inputs:
+        row = inputs.get(input_id)
+        if not isinstance(row, Mapping):
+            raise AssertionFailure(f"plan tree external input {input_id} is absent")
+        relative = row.get("manifest_path")
+        expected_sha = row.get("manifest_sha256")
+        if not isinstance(relative, str) or not relative or Path(relative).is_absolute() or ".." in Path(relative).parts:
+            raise AssertionFailure(f"external input {input_id} manifest_path is absent or unsafe")
+        raw = (repo_root / relative).read_bytes()
+        observed_sha = hashlib.sha256(raw).hexdigest()
+        if observed_sha != expected_sha:
+            raise AssertionFailure(
+                f"external input {input_id} manifest sha256 mismatch observed={observed_sha} "
+                f"expected={expected_sha}"
+            )
+        order = _read_object(repo_root / relative, f"external input {input_id} order manifest")
+        executed = order.get("executed_order")
+        if not isinstance(executed, list):
+            raise AssertionFailure(f"external input {input_id} executed_order is absent or malformed")
+        ordered = [entry.get("run_id") for entry in executed if isinstance(entry, Mapping)]
+        listed = [member.get("run_id") for member in row.get("members") or [] if isinstance(member, Mapping)]
+        if ordered != listed or any(not isinstance(item, str) or not item for item in ordered):
+            raise AssertionFailure(f"external input {input_id} members disagree with its order manifest")
+        run_ids.extend(item for item in ordered if item not in run_ids)
+        digests.append(f"{input_id}:{observed_sha}")
+    return run_ids, ",".join(digests)
+
+
 def _science_records(
     records: Sequence[tuple[Path, Mapping[str, Any]]],
     prospective: Mapping[str, Any],
@@ -433,6 +521,23 @@ def build_parser() -> argparse.ArgumentParser:
             "lineage.collection_manifest_id, otherwise it uses the prospective "
             "pack manifest_id"
         ),
+    )
+    parser.add_argument(
+        "--full-window",
+        action="store_true",
+        help=(
+            "a whole collected window (block-5 HAZARD_PACK), not a one-block "
+            "shakedown: S11-A2/A3, F5-1 and F5-3 expect every science member of "
+            "the pack's root_order_manifest; F5-2 and F5-4 expect those plus the "
+            "pinned window-reference members the plan tree launches into the claim "
+            "runs root (--plan-tree, default <pack-root>/plan_tree.json; manifests "
+            "read under --repo-root, default the checkout that holds the pack)"
+        ),
+    )
+    parser.add_argument(
+        "--repo-root",
+        type=Path,
+        help="measurement checkout for --full-window reference manifests (default <pack-root>/../../..)",
     )
     parser.add_argument(
         "--null-bound-stage",
@@ -634,9 +739,14 @@ def _run_assertions(args: argparse.Namespace, reporter: Reporter | None = None) 
         return reporter.summary()
 
     science = _science_records(records, prospective)
+    # selected_ids: the science members (S11-A2/A3, F5-1, F5-3).
+    # window_ids: every member the whole-window verdict covers (F5-2, F5-4):
+    # the science members, plus in --full-window the claim-root references.
     selected_ids: set[str] = set()
+    window_ids: set[str] = set()
     cooldowns: dict[str, Mapping[str, Any]] = {}
     f5_membership_probe_ready = False
+    full_window = bool(getattr(args, "full_window", False))
 
     def check_nr14_layout() -> str:
         # Preserve the caller's lexical spelling just as the finalizer does at
@@ -703,7 +813,7 @@ def _run_assertions(args: argparse.Namespace, reporter: Reporter | None = None) 
     reporter.assertion("S11-A1", check_a1)
 
     def check_a2() -> str:
-        nonlocal selected_ids, cooldowns, f5_membership_probe_ready
+        nonlocal selected_ids, window_ids, cooldowns, f5_membership_probe_ready
         pack_sha = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
         if not any(
             manifest.get("analysis_manifest_sha256") == pack_sha
@@ -715,7 +825,7 @@ def _run_assertions(args: argparse.Namespace, reporter: Reporter | None = None) 
         roster, roster_source, roster_sha = _frozen_expected_roster(
             args.pack_root,
             prospective,
-            one_block=finalized is None,
+            one_block=finalized is None and not full_window,
         )
         expected_ids = set(roster)
         # Preserve the authenticated frozen roster as the downstream comparison
@@ -723,6 +833,16 @@ def _run_assertions(args: argparse.Namespace, reporter: Reporter | None = None) 
         # F5-1..4 are independent exact-set assertions, not aliases that may be
         # skipped after S11-A2 finds the first mismatch.
         selected_ids = expected_ids
+        window_ids = set(expected_ids)
+        if full_window:
+            plan_tree = args.plan_tree or args.pack_root / "plan_tree.json"
+            repo_root = args.repo_root or args.pack_root.resolve().parents[2]
+            references, reference_sha = _window_reference_roster(plan_tree, repo_root)
+            overlap = sorted(set(references) & expected_ids)
+            if overlap:
+                raise AssertionFailure(f"reference run ids are also science run ids={overlap}")
+            window_ids = expected_ids | set(references)
+            roster_source += f" window_mode=full references={len(references)} reference_manifests={reference_sha}"
         missing_bundles = sorted(
             run_id
             for run_id in expected_ids
@@ -858,7 +978,7 @@ def _run_assertions(args: argparse.Namespace, reporter: Reporter | None = None) 
         verdict_ids = {
             item for item in verdict.get("bundle_ids", []) if isinstance(item, str)
         }
-        _assert_exact_member_set("F5-2 verdict", selected_ids, verdict_ids)
+        _assert_exact_member_set("F5-2 verdict", window_ids, verdict_ids)
         basis = verdict.get("evaluation_basis")
         basis_sha = basis.get("sha256") if isinstance(basis, Mapping) else None
         semantics_id = (
@@ -883,19 +1003,19 @@ def _run_assertions(args: argparse.Namespace, reporter: Reporter | None = None) 
             snapshot = _acceptance_replay_snapshot(args)
         session = AuthenticatedConsumptionSession(
             runs_root,
-            selected_ids,
+            window_ids,
             evaluation_basis_sha256=basis_sha if isinstance(basis_sha, str) else None,
             mode="read_replay",
             consumption_semantics_id=str(semantics_id),
             calibration_ledger_snapshot=snapshot,
         )
         session._prepare(
-            bundle_paths={bundle_id: runs_root / bundle_id for bundle_id in selected_ids},
+            bundle_paths={bundle_id: runs_root / bundle_id for bundle_id in window_ids},
             policy=CampaignPolicy.from_mapping(dict(registered_policy)),
         )
         reasons = whole_window_refusal_reasons(
             runs_root,
-            selected_ids,
+            window_ids,
             evaluation_basis_sha256=basis_sha if isinstance(basis_sha, str) else None,
             consumption_session=session,
             consumption_semantics_id=str(semantics_id),
@@ -999,7 +1119,7 @@ def _run_assertions(args: argparse.Namespace, reporter: Reporter | None = None) 
             for source in membership.sources
         }
         _assert_exact_member_set(
-            "F5-4 whole-window membership", selected_ids, set(selected_by_id)
+            "F5-4 whole-window membership", window_ids, set(selected_by_id)
         )
         excluded: list[str] = []
         survivors: list[str] = []

@@ -118,7 +118,8 @@ def _run(argv: list[str]) -> tuple[int, str]:
     return code, stdout.getvalue()
 
 
-def _install_s11_checker_fixture(root: Path) -> dict:
+def _install_s11_checker_fixture(root: Path, *, full_window: bool = False) -> dict:
+    """The G2-b one-block shakedown window (default), or with ``full_window`` every stage's members."""
     from tests.test_calibration_bracketing import _unissued_acceptance_fixture_bytes
     fixture = install_synthetic_finalization_fixture(root)
     (root / "genesis-acceptance.json").write_bytes(_unissued_acceptance_fixture_bytes())
@@ -137,9 +138,10 @@ def _install_s11_checker_fixture(root: Path) -> dict:
     expected_ids = {
         row["run_id"] for row in order["executed_order"] if row["block_index"] == 1
     }
-    manifest["members"] = [
-        member for member in manifest["members"] if member["run_id"] in expected_ids
-    ]
+    if not full_window:
+        manifest["members"] = [
+            member for member in manifest["members"] if member["run_id"] in expected_ids
+        ]
     for index, member in enumerate(manifest["members"]):
         member["role"] = (
             run_campaign_module.NEG8_REFERENCE_ROLE
@@ -1206,6 +1208,79 @@ _PREFIX_376 = (
     Path(__file__).resolve().parent
     / "fixtures/v5_qualification_harvest/acceptance-prefix-376.jsonl.zlib.b85"
 )
+
+
+class FullWindowRosterTests(unittest.TestCase):
+    """Rehearsal round 1, B4: a block-5 claim window holds every stage of the pack.
+
+    G3's default roster is G2-b's shakedown (stage 1, block 1). On a whole
+    multi-stage window it reported every later member as extra, so S11-A2,
+    F5-1 and F5-3 failed and F5-2 (the one independent recompute of the
+    whole-window verdict) could never pass.
+    """
+
+    GAMMA_V5 = Path(__file__).resolve().parents[1] / "configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5"
+    REPO = Path(__file__).resolve().parents[1]
+
+    @staticmethod
+    def _plan_tree_without_claim_references(fixture: dict) -> Path:
+        """A plan tree whose stage graph launches no reference input into the claim root.
+
+        The synthetic window's NEG-8 references are science members tagged as
+        such (install_synthetic_finalization_fixture), so its whole-window
+        roster is its root order alone.
+        """
+        path = fixture["root"] / "plan_tree.full_window_test.json"
+        _write_json(path, {"stage_graph": [], "external_inputs": []})
+        return path
+
+    def test_a_whole_multi_stage_window_passes_in_full_window_mode(self) -> None:
+        with tempfile.TemporaryDirectory(dir=_REAL_TMP) as tmp:
+            fixture = _install_s11_checker_fixture(Path(tmp), full_window=True)
+            prospective = fixture["prospective"]
+            root_order = json.loads(
+                (fixture["prospective_path"].parent / prospective["root_order_manifest"]["path"]).read_text())
+            members = {row["run_id"] for row in root_order["executed_order"]}
+            self.assertGreater(len(prospective["stage_manifests"]), 1)
+            verdict = json.loads(fixture["verdict_path"].read_text())
+            self.assertEqual(set(verdict["bundle_ids"]), members)
+            # The break: one-block semantics on the whole window.
+            code, output = _run(_normal_argv(fixture))
+            self.assertEqual(code, 1, output)
+            self.assertRegex(output, r"FAIL S11-A2 .*member set mismatch missing=\[\] extra=\[")
+            # The fix: the full-window roster.
+            plan_tree = self._plan_tree_without_claim_references(fixture)
+            code, output = _run(_normal_argv(fixture) + ["--full-window", "--plan-tree", str(plan_tree)])
+            self.assertEqual(code, 0, output)
+            for assertion_id in ("NR14-LAYOUT", "S11-A1", "S11-A2", "S11-A3", "S11-A5",
+                                 "F5-1", "F5-2", "F5-3", "F5-4"):
+                self.assertIn(f"PASS {assertion_id} ", output)
+            self.assertIn(f"expected={len(members)} ", output)
+            self.assertIn("window_mode=full references=0", output)
+
+    def test_the_v5_gamma_whole_window_roster_adds_the_seven_claim_root_references(self) -> None:
+        from scripts.check_window_provenance import _window_reference_roster
+        references, digests = _window_reference_roster(self.GAMMA_V5 / "plan_tree.json", self.REPO)
+        self.assertEqual(references, ["neg8-window-start-r1", "neg8-window-start-r2", "neg8-window-start-r3",
+                                      "neg8-window-midpoint", "neg8-window-end-r1", "neg8-window-end-r2",
+                                      "neg8-window-end-r3"])
+        self.assertEqual([item.split(":")[0] for item in digests.split(",")],
+                         ["start_references", "midpoint_reference", "end_references"])
+        # The NEG-8 corpus is collected into the bound root and is not a claim-root member.
+        self.assertFalse(any(item.startswith("neg8-refcorpus") for item in references))
+        # A reference manifest whose bytes differ from the plan tree's pin is refused.
+        with tempfile.TemporaryDirectory(dir=_REAL_TMP) as tmp:
+            repo = Path(tmp)
+            relative = "configs/campaigns/window_references_v5/midpoint/order_manifest.json"
+            for name in ("start_triplet", "midpoint", "end_triplet"):
+                source = self.REPO / f"configs/campaigns/window_references_v5/{name}/order_manifest.json"
+                target = repo / f"configs/campaigns/window_references_v5/{name}/order_manifest.json"
+                target.parent.mkdir(parents=True)
+                target.write_bytes(source.read_bytes())
+            (repo / relative).write_bytes((repo / relative).read_bytes() + b"\n")
+            from scripts.check_window_provenance import AssertionFailure
+            with self.assertRaisesRegex(AssertionFailure, "midpoint_reference manifest sha256 mismatch"):
+                _window_reference_roster(self.GAMMA_V5 / "plan_tree.json", repo)
 
 
 class AcceptanceCutoffReplayTests(unittest.TestCase):

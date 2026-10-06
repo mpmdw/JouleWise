@@ -249,6 +249,29 @@ def _is_sha256(value: object) -> bool:
     return isinstance(value, str) and len(value) == 64 and set(value) <= _SHA256_HEX
 
 
+# The run-metadata tag of every marker-bearing (``_v5`` science) config; the
+# same predicate as ``arm_readiness.launch_lineage_required``, which the bundle
+# writer asks before stamping a lineage (not imported: arm_readiness dispatches
+# into this module).
+LINEAGE_REQUIRED_TAG = "launch_lineage_required"
+
+
+def _bundle_config_untagged(bundle: Path) -> bool:
+    """True only when the bundle's config.json reads and carries no lineage marker.
+
+    An unreadable or malformed config proves nothing, so it is not "untagged":
+    the audit then still reports a missing stamp.
+    """
+
+    try:
+        config = _parse_object((Path(bundle) / "config.json").read_bytes())
+    except (OSError, ValueError, RecursionError, UnicodeDecodeError):
+        return False
+    metadata = config.get("run_metadata")
+    tags = metadata.get("tags") if isinstance(metadata, Mapping) else None
+    return not (isinstance(tags, list) and LINEAGE_REQUIRED_TAG in tags)
+
+
 def _is_canonical_uuid(value: object) -> bool:
     if not isinstance(value, str):
         return False
@@ -1131,6 +1154,11 @@ def audit_window_lineage(
     ``{code, family, klass, scope, detail, evidence}``; the harvest wraps it
     into a ``joulewise.flag.v1`` record and the sealed catalog decides its
     effect.  An empty list means the records are exactly as published.
+
+    Of ``bundle_paths``, a bundle whose ``config.json`` reads and carries no
+    ``launch_lineage_required`` marker (a NEG-8 corpus or window-reference
+    member) is unstamped by design, so its missing stamp is not a finding; a
+    stamp it does carry is still compared.
     """
 
     findings: list[dict[str, Any]] = []
@@ -1262,6 +1290,11 @@ def audit_window_lineage(
             metadata = {}
         extra = metadata.get("extra") if isinstance(metadata.get("extra"), Mapping) else {}
         stamp = extra.get("launch_lineage")
+        if not isinstance(stamp, Mapping) and _bundle_config_untagged(bundle):
+            # The bundle writer stamps only marker-bearing configs
+            # (bundle._writer_launch_lineage): an untagged member -- a NEG-8
+            # corpus or window-reference bundle -- carries no stamp by design.
+            continue
         if not isinstance(stamp, Mapping):
             findings.append(
                 _finding(

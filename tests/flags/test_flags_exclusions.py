@@ -296,6 +296,19 @@ class RosterRuleTests(unittest.TestCase):
         self.assertTrue(result["claim_usable"])
         self.assertEqual(result["members_excluded"], [])
 
+    def test_a_bundle_no_stamp_places_is_unplaced_not_early(self) -> None:
+        """Rehearsal round 1, B7: a None creation stamp is not evidence the bundle predates the chain."""
+        roster = floor_roster()
+        bundles = [b for b in self.bundles(roster) if b["run_id"] != "a-r02"]
+        bundles.append({"bundle_id": "unplaced", "run_id": "a-r02", "attempt": 1, "created_monotonic_ns": None})
+        roster["bundles"] = bundles
+        result = compute([], roster, spans_for(roster), CATALOG)
+        self.assertEqual(result["bundles_ignored"], [{"bundle_id": "unplaced", "run_id": "a-r02",
+                                                      "code": "roster.creation_unplaced"}])
+        # Still not used: the member has no admissible bundle.
+        self.assertEqual(result["members_excluded"][0]["run_id"], "a-r02")
+        self.assertEqual(result["members_excluded"][0]["codes"], ["member.bytes_missing"])
+
     def test_bundle_from_before_chain_start_cannot_stand_in_for_a_member(self) -> None:
         roster = floor_roster()
         bundles = [b for b in self.bundles(roster) if b["run_id"] != "a-r02"]

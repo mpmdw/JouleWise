@@ -17,7 +17,12 @@ from a committed sizing output in the measurement checkout. The writer:
    with ``ledger_path`` fixed to the measurement checkout's default ledger --
    the controller's pre-slot route reads
    ``<repo>/runs/calibration_observation_ledger.jsonl`` (controller.py:629), so
-   a different ledger is refused here, at the desk (memo 1.18);
+   a different ledger is refused here, at the desk (memo 1.18); and refuses a
+   ledger whose physical head is not the committed pin (or whose pin is not
+   committed, or that holds an open bracket session), because the chain's
+   reservation would refuse it at exit 10 after the whole arm. The cure is
+   the desk pin advance after each harvest (:func:`advance_ledger_pin`,
+   ``scripts/advance_b5_ledger_pin.py``);
 3. creates the claim and bound runs roots with an exclusive mkdir, so a
    leftover root from an earlier attempt can never be reused (memo 1.17);
 4. writes ``window.env`` from the 25-key allowlist, the chain and its GNU
@@ -381,6 +386,159 @@ def _validate_inputs(inputs: Mapping[str, Any]) -> None:
              "thresholds must give an object for each of the six hazard modules (copied from the registration)")
 
 
+# Ledger states the chain's bracket reservation refuses at open
+# (calibration_ledger.append_bracket_session_receipt and the reservation
+# script's pre-reserve readiness): the physical head is not the committed pin,
+# the pin is not committed, the ledger or pin is unreadable, or an earlier
+# bracket session is still open.
+LEDGER_HEAD_BLOCKING_REASONS = frozenset({
+    "calibration_ledger_head_mismatch", "calibration_ledger_rollback", "calibration_ledger_head_uncommitted",
+    "calibration_ledger_malformed", "calibration_ledger_missing", "calibration_ledger_bracket_session_open",
+})
+PIN_ADVANCE_SCRIPT = "scripts/advance_b5_ledger_pin.py"
+PIN_ADVANCE_SCHEMA = "joulewise.b5_ledger_pin_advance.v1"
+
+
+class PinAdvanceError(ValueError):
+    """The desk pin advance could not run; the pin and the checkout are unchanged unless stated."""
+
+
+def _refusal_text(exc: Exception) -> str:
+    code = getattr(exc, "code", None)
+    return str(getattr(code, "value", None) or exc)
+
+
+def ledger_head_status(measurement: Path) -> dict[str, Any]:
+    """Read-only: the measurement checkout's calibration ledger head against its committed pin.
+
+    The same snapshot the reservation authenticates
+    (``calibration_ledger.load_calibration_ledger_snapshot`` with the pin
+    required to be committed at the checkout's HEAD); custody is not read.
+    ``blocking`` lists the reasons the chain's reservation would refuse.
+    """
+
+    from joulewise.calibration_ledger import load_calibration_ledger_snapshot
+
+    ledger, pin = Path(measurement) / DEFAULT_LEDGER_RELATIVE, Path(measurement) / HEAD_PIN_RELATIVE
+    try:
+        snapshot = load_calibration_ledger_snapshot(
+            ledger, pin, require_committed_pin=True, verify_custody=False, mode="read_replay",
+            repo_root=Path(measurement))
+    except Exception as exc:  # noqa: BLE001 - a ledger the snapshot cannot read is not reservable
+        return {"physical": None, "pinned": None, "open_sessions": [],
+                "reasons": [f"snapshot_failed:{type(exc).__name__}"],
+                "blocking": [f"snapshot_failed:{type(exc).__name__}"]}
+    reasons = sorted({str(getattr(reason, "value", reason)) for reason in snapshot.refusal_reasons})
+    return {
+        "physical": {"sequence": snapshot.head_sequence, "head_digest": snapshot.head_digest},
+        "pinned": {"sequence": snapshot.committed_head_sequence, "head_digest": snapshot.committed_head_digest},
+        "open_sessions": sorted(session.session_id for session in snapshot.bracket_sessions
+                                if session.state == "open"),
+        "reasons": reasons,
+        "blocking": sorted(set(reasons) & LEDGER_HEAD_BLOCKING_REASONS),
+    }
+
+
+def ledger_head_refusal(status: Mapping[str, Any], measurement: Path) -> str:
+    """The desk refusal for a ledger the reservation would refuse, naming the step that cures it."""
+
+    physical, pinned = status.get("physical") or {}, status.get("pinned") or {}
+    cure = (f"run the desk pin advance for the last harvested window: python {PIN_ADVANCE_SCRIPT} --plan "
+            "<that window's night_plan.json> --harvest-archive <its harvest archive> --operator-identity <id> "
+            "(recover_calibration_ledger.py advance-head-pin --session-id <its bracket session> "
+            "--expected-sequence/--expected-digest <terminal pin> --execute, then a pin-only commit of "
+            f"{HEAD_PIN_RELATIVE}, registration section 11 item 1(i))")
+    if "calibration_ledger_bracket_session_open" in status.get("blocking", ()):
+        cure = ("abort or finalize the open bracket session first (recover_calibration_ledger.py abort-session), "
+                "then " + cure)
+    return (f"the measurement checkout's calibration ledger cannot be reserved: {', '.join(status['blocking'])} "
+            f"(physical head sequence {physical.get('sequence')}, committed pin sequence "
+            f"{pinned.get('sequence')}, checkout {measurement}); the chain's reservation would refuse it at "
+            f"exit 10 after the arm. To cure it, {cure}")
+
+
+def advance_ledger_pin(measurement: Path | str, *, session_id: str, operator_identity: str,
+                       attestation_reason: str, expected_pin: Mapping[str, Any] | None = None,
+                       commit: bool = True, git: str = "git") -> dict[str, Any]:
+    """The desk step between a window's harvest and the next plan: advance and commit the ledger pin.
+
+    1. The terminal head of ``session_id`` (the harvested window's bracket
+       session) is read from the measurement checkout's ledger
+       (``calibration_ledger.terminal_head_pin_for_session``); when the
+       harvest's ``derived/terminal-pin.json`` is given as ``expected_pin``,
+       the two must agree, so the pin advances only to the head the harvest
+       archived.
+    2. ``calibration_ledger.advance_calibration_head_pin`` (the guarded
+       ``recover_calibration_ledger.py advance-head-pin`` path) writes the pin.
+    3. A pin-only commit of ``configs/calibration/calibration_ledger_head.json``
+       in the measurement checkout (registration 11 item 1(i)); the commit is
+       checked to change that path alone.
+
+    Already exact and committed: nothing changes (``status`` ``NOT_NEEDED``).
+    Raises :class:`PinAdvanceError` on any refusal.
+    """
+
+    import subprocess
+
+    from joulewise.calibration_exits import RefusalCode
+    from joulewise.calibration_ledger import (
+        CalibrationLedgerError, advance_calibration_head_pin, terminal_head_pin_for_session)
+
+    measurement = Path(measurement)
+    ledger, pin = measurement / DEFAULT_LEDGER_RELATIVE, measurement / HEAD_PIN_RELATIVE
+    before = ledger_head_status(measurement)
+    record: dict[str, Any] = {"schema": PIN_ADVANCE_SCHEMA, "measurement_root": str(measurement),
+                              "session_id": session_id, "before": before, "advanced": None, "commit": None}
+    if not before["blocking"]:
+        return {**record, "status": "NOT_NEEDED", "after": before}
+    if set(before["blocking"]) - {"calibration_ledger_head_mismatch", "calibration_ledger_head_uncommitted"}:
+        raise PinAdvanceError(f"the ledger is not in a pin-advance state: {', '.join(before['blocking'])}")
+
+    def run_git(*arguments: str) -> str:
+        completed = subprocess.run([git, "-C", str(measurement), *arguments], capture_output=True, text=True,
+                                   check=False, timeout=60)
+        if completed.returncode != 0:
+            raise PinAdvanceError(f"git {' '.join(arguments[:2])} failed: {completed.stderr.strip()[:300]}")
+        return completed.stdout
+
+    try:
+        candidate = terminal_head_pin_for_session(ledger, session_id=session_id)
+    except CalibrationLedgerError as exc:
+        raise PinAdvanceError(f"no terminal head for session {session_id}: {_refusal_text(exc)}") from exc
+    if expected_pin is not None and (candidate.get("sequence"), candidate.get("head_digest")) != (
+            expected_pin.get("sequence"), expected_pin.get("head_digest")):
+        raise PinAdvanceError(f"the ledger's terminal head for {session_id} (sequence {candidate.get('sequence')}) "
+                              f"is not the harvested terminal pin (sequence {expected_pin.get('sequence')})")
+    if "calibration_ledger_head_mismatch" in before["blocking"]:
+        try:
+            advanced = advance_calibration_head_pin(
+                ledger, pin, session_id=session_id, expected_sequence=int(candidate["sequence"]),
+                expected_digest=str(candidate["head_digest"]), operator_identity=operator_identity,
+                attestation_reason=attestation_reason, execute=True, require_committed_pin=True,
+                repo_root=measurement)
+        except CalibrationLedgerError as exc:
+            if exc.code != RefusalCode.PIN_ADVANCEMENT_NOT_NEEDED:
+                raise PinAdvanceError(f"advance-head-pin refused: {_refusal_text(exc)}") from exc
+            advanced = None
+        record["advanced"] = dict(advanced) if advanced is not None else None
+    if commit:
+        if run_git("status", "--porcelain", "--", HEAD_PIN_RELATIVE).strip():
+            message = (f"Pin-only: calibration ledger head at sequence {candidate['sequence']} "
+                       f"(bracket session {session_id})\n\nRegistration section 11 item 1(i): this commit "
+                       f"changes only {HEAD_PIN_RELATIVE}.\n")
+            run_git("commit", "--only", "-m", message, "--", HEAD_PIN_RELATIVE)
+            changed = [line for line in run_git("diff-tree", "--no-commit-id", "--name-only", "-r", "HEAD")
+                       .splitlines() if line.strip()]
+            if changed != [HEAD_PIN_RELATIVE]:
+                raise PinAdvanceError(f"the pin commit is not pin-only: {changed}")
+            record["commit"] = {"head": run_git("rev-parse", "HEAD").strip(), "changed_paths": changed}
+    after = ledger_head_status(measurement)
+    record["after"] = after
+    if commit and after["blocking"]:
+        raise PinAdvanceError(f"the ledger still cannot be reserved after the advance: {', '.join(after['blocking'])}")
+    return {**record, "status": "ADVANCED" if commit else "ADVANCED_UNCOMMITTED"}
+
+
 def write_window_plan(inputs: Mapping[str, Any], *, settle_s: int | float = b5_chain.SETTLE_S,
                       now: Callable[[], float] = time.time,
                       pack_digest: Callable[[Path], str] | None = None,
@@ -448,6 +606,12 @@ def write_window_plan(inputs: Mapping[str, Any], *, settle_s: int | float = b5_c
     _require(default_ledger.is_file(), f"the default ledger {default_ledger} must exist")
     head_pin = measurement / HEAD_PIN_RELATIVE
     _require(head_pin.is_file(), f"the ledger head pin {head_pin} must exist")
+    # The chain's first stage reserves the bracket session, and the
+    # reservation refuses unless the ledger's physical head equals the
+    # committed pin (calibration_ledger.append_bracket_session_receipt): a
+    # stale pin would stop the chain at exit 10 after the whole arm.
+    ledger_status = ledger_head_status(measurement)
+    _require(not ledger_status["blocking"], ledger_head_refusal(ledger_status, measurement))
     identity_path, _ = _locator(inputs["identity_epoch_json"], "identity_epoch_json")
     t1_path, _ = _locator(inputs["t1_bindings_json"], "t1_bindings_json")
     registration = None
@@ -591,6 +755,7 @@ def write_window_plan(inputs: Mapping[str, Any], *, settle_s: int | float = b5_c
         "sizing": {"programmed_span_s": span_allowance, "T_stream_max_s": stream_allowance},
         "thresholds_audit": thresholds_audit,
         "chain_deviations": list(b5_chain.DEVIATIONS),
+        "ledger_head": ledger_status,
         "driver_argv": ["<python>", "<repo>/scripts/run_night.py", "run", "--plan", plan["path"]],
     }
     _create_once(custody / RECORD_BASENAME, (json.dumps(record, indent=2, sort_keys=True) + "\n").encode())

@@ -882,8 +882,13 @@ class UnitTests(unittest.TestCase):
         import types
         seen = {}
         fake = types.SimpleNamespace(publish_window_lineage=lambda **kw: seen.update(kw) or {"ok": True})
+        import joulewise
+        # ``from joulewise import window_lineage`` reads the package attribute
+        # first, which any earlier import of the real module (another test file
+        # in the same run) has set; patch both so the fake is what is called.
         with tempfile.TemporaryDirectory() as directory, mock.patch.dict(
-                sys.modules, {"joulewise.window_lineage": fake}):
+                sys.modules, {"joulewise.window_lineage": fake}), mock.patch.object(
+                joulewise, "window_lineage", fake, create=True):
             root = Path(directory).resolve()
             plan = self.hazard_plan(root)
             window = plan.hazard_window

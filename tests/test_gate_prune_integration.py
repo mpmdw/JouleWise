@@ -61,7 +61,7 @@ class WrittenPlans(unittest.TestCase):
         directory = tempfile.TemporaryDirectory(prefix="gp-int-")
         cls.addClassCleanup(directory.cleanup)
         cls.root = Path(directory.name).resolve()
-        cls.measurement = fake_window.build_checkout(cls.root, git=False)
+        cls.measurement = fake_window.build_checkout(cls.root)
         t0 = (int(time.time()) // 60 + 60) * 60
         cls.records, cls.plans = {}, {}
         for pack in ("alpha", "beta", "gamma"):

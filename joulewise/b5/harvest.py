@@ -35,12 +35,14 @@ L1's accumulator reader (``hazards.battery.accumulator_interval``), the window
 plan, the arm-time executed-file inventory and the driver's
 ``night/hazard_result.json`` NEG-8 corpus locator (L2), the launch-lineage
 audit (L3, ``window_lineage.audit_window_lineage``), the desk, arm and driver
-flag files and the exclusion function (L4), the registration's harvest
+flag files, the collectors' run log and the driver's record of the arm-time
+collector call, and the exclusion function (L4), the registration's harvest
 thresholds (section 6.9), the sealed inventory and flag catalog (L6).  Each
 format is read in exactly one function here (``_plan_value``,
 ``resolve_thresholds``, ``parse_monitor_line``, ``accumulator_member_flags``,
 ``_arm_modules``, ``_inventory_map``, ``_collected_corpus_bytes``,
-``lineage_audit``, ``flag_problems``, ``Catalog.load``,
+``lineage_audit``, ``flag_problems``, ``_fold_collector_run``,
+``_arm_collector_records``, ``Catalog.load``,
 ``l4_exclusion_inputs``/``_l4_exclusions``), so an integration fix touches
 one place.  The formats are the ones those lanes write, not shapes invented
 here: ``tests/fixtures/b5_harvest/l1_monitor`` holds journals written by L1's
@@ -78,6 +80,11 @@ NEG8_CHECK_SCHEMA = "joulewise.b5_neg8_bound_check.v1"
 NEG8_SCREEN_SCHEMA = "joulewise.b5_neg8_screen.v1"
 NEG8_BOUND_NAME = "neg8-drift-bound.json"      # in the bound runs root (the pack's bound-derivation output)
 HAZARD_RESULT_NAME = "hazard_result.json"      # L2's driver terminal record, night/
+# L4's collector run log beside the flag files (scripts/collect_window_flags.py);
+# its rows are joulewise.flags.collect.COLLECTOR_RUN_SCHEMA records, not flags.
+COLLECTOR_RUNS_NAME = "collector_runs.jsonl"
+HAZARD_PACK_CLASS = "HAZARD_PACK"              # night_gate.HAZARD_PACK, the block-5 plan's receipt class
+COLLECTOR_RUN_SCHEMA = "joulewise.flag_collector_run.v1"
 
 COLLECTED, NULL, HARVEST_FAULT = "COLLECTED", "NULL", "HARVEST_FAULT"
 FAMILIES = (
@@ -238,6 +245,9 @@ CODES: dict[str, CodeSpec] = {
     "roster.before_chain_started": _spec("ROSTER", "NUMBER"),
     "roster.run_id_mismatch": _spec("ROSTER", "REPRESENTATION"),
     "roster.no_science_bundles": _spec("ROSTER", "NUMBER"),
+    # A run id the plan tree launches (or lists) more than once: its later
+    # planned positions can never be measured (rehearsal round 1, B3).
+    "roster.duplicate_run_id": _spec("ROSTER", "NUMBER"),
     # Records.
     "records.monitor_journal_absent": _spec("RECORDS", "REPRESENTATION"),
     "records.monitor_line_malformed": _spec("RECORDS", "REPRESENTATION"),
@@ -285,7 +295,7 @@ L5_ONLY_CODES = frozenset({
     # L4's draft since fix lane fx-flags (2026-10-06), with this family and klass.
     "battery.capture_pair_missing",
     *LINEAGE_CODES,
-    "roster.run_id_mismatch", "roster.no_science_bundles",
+    "roster.run_id_mismatch", "roster.no_science_bundles", "roster.duplicate_run_id",
     "records.monitor_journal_absent", "records.monitor_line_malformed", "records.arm_record_absent",
     "records.terminal_record_absent", "records.source_changed_during_harvest", "records.collector_failed",
     "records.malformed_flag",
@@ -1058,11 +1068,18 @@ def build_roster(pack_root: Path, repo_root: Path) -> dict[str, Any]:
             "config_path": row.get("config_path"), "config_sha256": row.get("config_sha256"),
             "cells": [],
         }
+    # A run id listed twice (two science rows, two external inputs, or both)
+    # is one roster member; every listing is kept here for the
+    # roster.duplicate_run_id flag (rehearsal round 1, B3).
+    listings: dict[str, list[str]] = {}
+    for row in tree.get("science", []):
+        listings.setdefault(row["run_id"], []).append(f"science:{row.get('stage_id')}")
     external = tree.get("external_inputs")
     manifests = external.get("manifests", []) if isinstance(external, Mapping) else (external or [])
     for manifest in manifests:
         input_id = manifest.get("external_input_id") or manifest.get("input_id")
         for row in manifest.get("members", []):
+            listings.setdefault(row["run_id"], []).append(f"external_input:{input_id}")
             members.setdefault(row["run_id"], {
                 "run_id": row["run_id"], "kind": "auxiliary", "ordinal": row.get("ordinal"),
                 "stage_id": input_id, "role": input_id, "block_id": None, "position": None, "arm": None,
@@ -1121,12 +1138,89 @@ def build_roster(pack_root: Path, repo_root: Path) -> dict[str, Any]:
                 member["condition_family_id"] = _condition_tag(read_json(config_path))
             except (OSError, ValueError):
                 member["condition_family_id"] = None
+    # Target cells (registration 0.9 and 6.6): a floor member's target phase
+    # is the phase of its own condition family, the ``df-condition`` tag of its
+    # config (decode members: phase.decode; p2048 members: phase.prefill).  A
+    # floor cell whose family is no feeding member's own -- the p42 cells,
+    # read from the decode members' prefill -- is not a target cell: its
+    # precheck is no member's target-phase precheck and its unit count is not
+    # under the minimum.  A member whose own family cannot be read keeps every
+    # cell it feeds as a target (the stricter reading).  Contrast cells and
+    # fallback cells are target cells.
+    for cell in cells:
+        target = True
+        if cell.get("kind") in ("absolute", "comparative") and isinstance(cell.get("condition_family_id"), str):
+            own = [member.get("condition_family_id") for member in members.values()
+                   if any(item["cell_id"] == cell["cell_id"] for item in member["cells"])]
+            target = (not own) or any(tag is None for tag in own) or cell["condition_family_id"] in own
+        cell["target"] = target
+    target_of = {cell["cell_id"]: cell["target"] for cell in cells}
+    for member in members.values():
+        for item in member["cells"]:
+            item["target"] = target_of.get(item["cell_id"], True)
     return {"schema": ROSTER_SCHEMA, "pack_id": pack_root.name,
             "plan_tree_sha256": sha256_file(pack_root / "plan_tree.json"),
             "window_identity": tree.get("window_identity"), "plan": tree.get("plan"),
             "campaign_policy": tree.get("campaign_policy"), "acceptance_policy": tree.get("acceptance_policy"),
+            "duplicate_listings": {run_id: places for run_id, places in sorted(listings.items()) if len(places) > 1},
             "cells": cells, "members": sorted(members.values(), key=lambda m: (m["kind"] != "science",
                                                                               m.get("ordinal") or 0, m["run_id"]))}
+
+
+def _stage_runs_root_binding(stage: Mapping[str, Any]) -> str | None:
+    """The binding a collection stage passes to ``--runs-dir`` (claim_runs_root or bound_runs_root)."""
+    commands = (stage.get("launch") or {}).get("commands") if isinstance(stage.get("launch"), Mapping) else None
+    for command in commands if isinstance(commands, list) else []:
+        template = command.get("argv_template") if isinstance(command, Mapping) else None
+        arguments = template.get("arguments") if isinstance(template, Mapping) else None
+        arguments = arguments if isinstance(arguments, list) else []
+        for flag, value in zip(arguments, arguments[1:]):
+            if isinstance(flag, Mapping) and flag.get("kind") == "literal" and flag.get("value") == "--runs-dir" \
+                    and isinstance(value, Mapping) and value.get("kind") == "binding":
+                return value.get("value") if isinstance(value.get("value"), str) else None
+    return None
+
+
+def stage_dispatches(tree: Mapping[str, Any], pack_root: Path) -> tuple[dict[str, list[dict[str, Any]]], list[str]]:
+    """Every run id the plan tree's collection stages launch, stage by stage, with the runs root.
+
+    A stage's members are its ``input_ref``'s: an external input's member
+    rows, or a pack manifest's ``executed_order``.  run_campaign skips a run
+    id whose complete bundle already exists in its runs root, so a run id two
+    stages launch into one root is measured once and its later planned
+    positions are never measured (rehearsal round 1, B3).  Returns
+    ``({run_id: [{stage_id, ordinal, runs_root}]}, [stages whose members could not be read])``.
+    """
+    external = tree.get("external_inputs")
+    manifests = external.get("manifests", []) if isinstance(external, Mapping) else (external or [])
+    inputs = {str(row.get("input_id") or row.get("external_input_id")): row
+              for row in manifests if isinstance(row, Mapping)}
+    dispatches: dict[str, list[dict[str, Any]]] = {}
+    unresolved: list[str] = []
+    for stage in tree.get("stage_graph") or []:
+        if not isinstance(stage, Mapping) or stage.get("kind") != "campaign_collection":
+            continue
+        reference = stage.get("input_ref") if isinstance(stage.get("input_ref"), Mapping) else {}
+        run_ids: list[Any] | None = None
+        if reference.get("kind") == "external_input":
+            members = (inputs.get(str(reference.get("input_id"))) or {}).get("members")
+            if isinstance(members, list):
+                run_ids = [row.get("run_id") for row in members if isinstance(row, Mapping)]
+        elif reference.get("kind") == "pack_manifest" and isinstance(reference.get("path"), str):
+            try:
+                rows = read_json(pack_root / reference["path"]).get("executed_order")
+                run_ids = [row.get("run_id") for row in rows if isinstance(row, Mapping)] \
+                    if isinstance(rows, list) else None
+            except (OSError, ValueError, AttributeError):
+                run_ids = None
+        if run_ids is None or not all(isinstance(run_id, str) and run_id for run_id in run_ids):
+            unresolved.append(str(stage.get("stage_id")))
+            continue
+        for run_id in run_ids:
+            dispatches.setdefault(run_id, []).append({"stage_id": stage.get("stage_id"),
+                                                      "ordinal": stage.get("ordinal"),
+                                                      "runs_root": _stage_runs_root_binding(stage)})
+    return dispatches, unresolved
 
 
 def pinned_files(tree: Any, *, pack_root: Path, repo_root: Path) -> list[dict[str, str]]:
@@ -1208,6 +1302,59 @@ def member_spans(metadata: Mapping[str, Any], events: Sequence[Mapping[str, Any]
     request = [request_start, request_end] if request_start is not None and request_end is not None \
         and request_start <= request_end else None
     return {"member": member, "request": request}
+
+
+def bundle_creation_ns(metadata: Mapping[str, Any], events: Sequence[Mapping[str, Any]], *,
+                       spans: Mapping[str, Any] | None = None,
+                       chain_started: Mapping[str, Any] | None = None) -> tuple[int | None, str | None]:
+    """When a bundle was created, in the controller's ``monotonic_ns`` domain, and from which stamp.
+
+    In order: the start of the member span (``member_spans``); the earliest
+    controller monotonic stamp the bundle recorded (any clock-anchor stamp,
+    any event's ``metadata.monotonic_ns``: the battery span's idle_baseline
+    start is written before idle admission, so an aborted member has it);
+    the ``run_started`` event's wall time, mapped through ``chain.started``'s
+    stamps taken at one instant (``monotonic_ns + (wall - epoch_s)``).  The
+    result only places the bundle before or after the chain started.
+    ``(None, None)`` when the bundle recorded no usable stamp.
+    """
+    member = spans.get("member") if isinstance(spans, Mapping) else None
+    if member is None:
+        try:
+            member = member_spans(metadata, events)["member"]
+        except Exception:  # unreadable stamps place nothing
+            member = None
+    if member:
+        return int(member[0]), "member_span"
+    stamps: list[int] = []
+    anchor = metadata.get("uncertainty_evidence", {}).get("clock_anchor", {}) \
+        if isinstance(metadata.get("uncertainty_evidence"), Mapping) else {}
+    clock_stamps = anchor.get("clock_stamps") if isinstance(anchor, Mapping) else None
+    for stamp in (clock_stamps.values() if isinstance(clock_stamps, Mapping) else ()):
+        for field in ("monotonic_before_s", "monotonic_after_s"):
+            value = _stamp_ns(stamp, field)
+            if value is not None:
+                stamps.append(value)
+    for event in events:
+        meta = event.get("metadata") if isinstance(event, Mapping) and isinstance(event.get("metadata"), Mapping) \
+            else {}
+        value = meta.get("monotonic_ns")
+        if type(value) is int and value >= 0:
+            stamps.append(value)
+    if stamps:
+        return min(stamps), "controller_monotonic_stamp"
+    started = next((event for event in events if isinstance(event, Mapping)
+                    and event.get("event_type") == "run_started"), None)
+    wall = _num(started.get("timestamp_s")) if isinstance(started, Mapping) else None
+    epoch = _num(chain_started.get("epoch_s")) if isinstance(chain_started, Mapping) else None
+    anchor_ns = chain_started.get("monotonic_ns") if isinstance(chain_started, Mapping) else None
+    if wall is not None and epoch is not None and _is_int(anchor_ns):
+        return anchor_ns + round((wall - epoch) * 1_000_000_000), "run_started_wall_via_chain_started"
+    return None, None
+
+
+def _same_path(first: Path, second: Path) -> bool:
+    return os.path.abspath(first) == os.path.abspath(second)
 
 
 def recompute_anchor_status(bundle: Path, clock_anchor: Mapping[str, Any]) -> str:
@@ -1877,6 +2024,7 @@ def l4_exclusion_inputs(roster: Mapping[str, Any], spans: Mapping[str, Mapping[s
     """
     target_of: dict[str, str] = {}
     strata: dict[str, set[str]] = {}
+    is_target: dict[str, bool] = {}
     for cell in roster.get("cells", []):
         family, kind = cell.get("condition_family_id"), cell.get("kind")
         target = family if kind in ("absolute", "comparative") and isinstance(family, str) and family \
@@ -1885,6 +2033,9 @@ def l4_exclusion_inputs(roster: Mapping[str, Any], spans: Mapping[str, Mapping[s
         declared = strata.setdefault(target, set())
         if kind in STRATUM_OF_CELL_KIND:
             declared.add(STRATUM_OF_CELL_KIND[kind])
+        # A reported quantity is a target cell when any of its extraction
+        # cells is (build_roster: the p42 floor cells are not; registration 6.6).
+        is_target[target] = is_target.get(target, False) or cell.get("target", True) is not False
     members, stage_of = [], {}
     for member in roster.get("members", []):
         stage_of[member["run_id"]] = member.get("stage_id")
@@ -1895,7 +2046,7 @@ def l4_exclusion_inputs(roster: Mapping[str, Any], spans: Mapping[str, Mapping[s
     document: dict[str, Any] = {
         "schema": ROSTER_SCHEMA, "pack_id": roster.get("pack_id"), "plan_id": plan_id, "attempt": attempt,
         "chain_started_monotonic_ns": chain_started_monotonic_ns, "members": members,
-        "cells": [{"cell_id": cell_id, "target": True, "strata": sorted(declared)}
+        "cells": [{"cell_id": cell_id, "target": is_target.get(cell_id, True), "strata": sorted(declared)}
                   for cell_id, declared in sorted(strata.items())]}
     if bundles is not None:
         document["bundles"] = [dict(bundle) for bundle in bundles]
@@ -1961,6 +2112,10 @@ class _Harvest:
                                 boot_session_uuid=seams.boot_session_uuid(), now=seams.now,
                                 monotonic_ns=seams.monotonic_ns)
         self.collector_errors: list[dict[str, Any]] = []
+        # Desk and arm collectors that did not finish (plan 3.2): folded from
+        # their own run records into window_flags.json collector_errors.
+        self.prior_collector_errors: list[dict[str, Any]] = []
+        self._prior_error_keys: set[tuple[Any, ...]] = set()
         self.error_details: list[dict[str, Any]] = []
         self.faults: list[dict[str, Any]] = []
         self.roster: dict[str, Any] = {}
@@ -2086,6 +2241,30 @@ class _Harvest:
         self.pack_copy, self.repo_root_copy = pack, repo
         self.roster = build_roster(pack, repo)
 
+    def roster_dispatch(self) -> None:
+        """``roster.duplicate_run_id`` for a run id the plan launches or lists more than once.
+
+        One run id names one bundle directory per runs root, and the campaign
+        runner skips a run id whose complete bundle already exists, so every
+        launch after the first is never measured and the roster (keyed by run
+        id) cannot show the missing positions.  Recorded from the preserved
+        plan tree; the sealed catalog decides the effect.
+        """
+        tree = read_json(self.pack_copy / "plan_tree.json")
+        dispatches, _unresolved = stage_dispatches(tree, self.pack_copy)
+        listings = self.roster.get("duplicate_listings") or {}
+        for run_id in sorted(set(listings) | {key for key, rows in dispatches.items() if len(rows) > 1}):
+            rows = dispatches.get(run_id, [])
+            stages = [row["stage_id"] for row in rows]
+            self.emit("roster.duplicate_run_id", level="window", collector="roster",
+                      observed={"run_id": run_id, "dispatch_count": len(rows), "stages": stages,
+                                "runs_roots": sorted({str(row["runs_root"]) for row in rows}),
+                                "listings": list(listings.get(run_id, []))},
+                      expected={"dispatch_count": 1},
+                      detail=f"{run_id} is launched by {len(rows)} stages"
+                             + (f" and listed by {len(listings[run_id])} plan-tree inputs" if run_id in listings else "")
+                             + "; one bundle per run id, so later planned positions are never measured")
+
     def locate(self, run_id: str) -> Path | None:
         found = [root / run_id for root in self._runs_roots() if (root / run_id).is_dir()]
         if len(found) > 1:  # which bytes are the member is ambiguous; neither is used (L4's rule)
@@ -2177,8 +2356,18 @@ class _Harvest:
                 self.emit("member.span_unknown", observed={"member_span": None}, **kwargs)
 
     def _precheck_flags(self, member: Mapping[str, Any], result: Mapping[str, Any], kwargs: Mapping[str, Any]) -> None:
+        """The member's target-phase precheck, one flag per failing reason.
+
+        Only target cells are read (``build_roster``): a non-target cell's
+        precheck -- p42 on a decode member, which the registration expects to
+        fail on every member (0.5) -- is no target-phase precheck, so it is
+        disclosed through the s1-structural precheck counts and excludes
+        nothing.
+        """
         precheck = result.get("precheck") or {}
         for cell in member.get("cells", []):
+            if cell.get("target") is False:
+                continue
             path = cell.get("target_precheck_path")
             if not isinstance(path, list) or not path:
                 continue
@@ -3304,17 +3493,25 @@ class _Harvest:
     # -- arm record and earlier flag files -------------------------------------
     def arm_and_desk_records(self) -> None:
         path = self.inputs.arm_record_path
+        arm_value: Any = None
         if path.is_file():
-            value = read_json(path)
-            for module, phases in _arm_modules(value).items():
+            arm_value = read_json(path)
+            for module, phases in _arm_modules(arm_value).items():
                 self.hazards.setdefault(module, {})["arm"] = phases
         elif (self.inputs.night_dir / "chain.started").is_file():
             self.emit("records.arm_record_absent", level="window", collector="arm", observed={"arm_record": None})
         # Every flag file written before harvest: L4's desk and arm collectors,
         # L2's driver.jsonl.  A line that is not a valid flag may have been an
         # exclusion, so it becomes records.malformed_flag, never classified.
+        # The collectors' run log (collector_runs.jsonl, written beside the
+        # flag files by scripts/collect_window_flags.py) holds run records, not
+        # flags: it is read by _collector_run_records, and so is a run record
+        # found in any other file of the directory.
         directory = self.inputs.flags_dir
         for flag_file in sorted(directory.glob("*.jsonl")) if directory.is_dir() else []:
+            if flag_file.name == COLLECTOR_RUNS_NAME:
+                self._collector_run_records(flag_file)
+                continue
             for number, line in enumerate(flag_file.read_bytes().split(b"\n"), start=1):
                 if not line.strip():
                     continue
@@ -3324,6 +3521,9 @@ class _Harvest:
                 except ValueError as exc:
                     problems = [f"not JSON: {type(exc).__name__}"]
                 else:
+                    if isinstance(value, Mapping) and value.get("schema_version") == COLLECTOR_RUN_SCHEMA:
+                        self._fold_collector_run(value, source=f"flags/{flag_file.name}:{number}")
+                        continue
                     problems = self.flags.absorb(value)
                 if problems:
                     salvaged = value.get("code") if isinstance(value, Mapping) else None
@@ -3331,6 +3531,104 @@ class _Harvest:
                               observed={"file": flag_file.name, "line": number, "line_sha256": sha256_bytes(line),
                                         "salvaged_code": salvaged if isinstance(salvaged, str) else None,
                                         "problems": problems[:5]})
+        self._arm_collector_records(arm_value)
+
+    def _prior_collector_error(self, *, stage: str, collector: str, status: str, error: Any, elapsed_s: Any,
+                               source: str) -> None:
+        """One desk/arm collector that did not finish: a window_flags collector_errors entry and a flag.
+
+        Never a harvest fault: these collectors are records.  A collector that
+        did not finish has also left its own ``*_unmeasured`` flag where its
+        writer could write one (``joulewise.flags.collect.run_collectors``).
+        """
+        text = " ".join(str(error if error is not None else status).split())
+        entry = {"collector": f"{stage}.{collector}", "error": text[:200],
+                 "elapsed_s": elapsed_s if _is_number(elapsed_s) else None,
+                 "stage": stage, "status": status, "source": source}
+        key = (entry["collector"], entry["status"], entry["error"], source)
+        if key in self._prior_error_keys:
+            return
+        self._prior_error_keys.add(key)
+        self.prior_collector_errors.append(entry)
+        self.error_details.append({**entry, "detail": text[:2000]})
+        self.emit("records.collector_failed", level="window", collector="flags",
+                  observed={"collector": collector, "stage": stage, "status": status, "source": source})
+
+    def _fold_collector_run(self, record: Mapping[str, Any], *, source: str) -> None:
+        """A ``joulewise.flag_collector_run.v1`` record: every collector whose status is not ``ok``."""
+        stage = record.get("stage") if isinstance(record.get("stage"), str) else "unknown"
+        rows = record.get("collectors") if isinstance(record.get("collectors"), list) else []
+        listed = record.get("collector_errors") if isinstance(record.get("collector_errors"), list) else []
+        failed = [row for row in rows if isinstance(row, Mapping) and row.get("status") != "ok"]
+        named = {row.get("collector") for row in failed}
+        failed += [{"collector": row.get("collector"), "status": "error", "error": row.get("error"),
+                    "elapsed_s": row.get("elapsed_s")}
+                   for row in listed if isinstance(row, Mapping) and row.get("collector") not in named]
+        for row in failed:
+            self._prior_collector_error(stage=stage, collector=str(row.get("collector") or "unknown"),
+                                        status=str(row.get("status") or "error"), error=row.get("error"),
+                                        elapsed_s=row.get("elapsed_s"), source=source)
+
+    def _collector_run_records(self, path: Path) -> None:
+        for number, line in enumerate(path.read_bytes().split(b"\n"), start=1):
+            if not line.strip():
+                continue
+            try:
+                value = json.loads(line)
+            except ValueError:
+                value = None
+            source = f"flags/{path.name}:{number}"
+            if isinstance(value, Mapping) and value.get("schema_version") == COLLECTOR_RUN_SCHEMA:
+                self._fold_collector_run(value, source=source)
+            else:
+                self._prior_collector_error(stage="unknown", collector="collector_runs", status="malformed",
+                                            error="not a joulewise.flag_collector_run.v1 record",
+                                            elapsed_s=None, source=source)
+
+    def _arm_collector_records(self, arm_value: Any) -> None:
+        """The arm-time collector subprocess as a whole: the driver's records, else L1's arm record.
+
+        ``night/arm_collectors*.json`` (``joulewise.b5.driver``) record the
+        call of ``scripts/collect_window_flags.py --stage arm``; a call that
+        timed out, failed to spawn or exited nonzero wrote no run record of its
+        own, so it is folded here.  Without a driver record, the arm record's
+        ``record_only`` entries are read the same way.
+        """
+        night = self.inputs.night_dir
+        records = []
+        for path in sorted(night.glob("arm_collectors*.json")) if night.is_dir() else []:
+            try:
+                records.append((path, read_json(path)))
+            except (OSError, ValueError):
+                self._prior_collector_error(stage="arm", collector=path.name, status="malformed",
+                                            error="unreadable driver collector record", elapsed_s=None,
+                                            source=f"night/{path.name}")
+        results: list[tuple[str, Mapping[str, Any]]] = []
+        for path, record in records:
+            if not isinstance(record, Mapping):
+                continue
+            source = f"night/{path.name}"
+            items = [item for item in record.get("results") or [] if isinstance(item, Mapping)] \
+                if isinstance(record.get("results"), list) else []
+            if items:  # the arm ran them; its collector_error only joins these results' errors
+                results += [(source, item) for item in items]
+            elif record.get("collector_error"):  # the driver ran the subprocess itself
+                self._prior_collector_error(stage="arm", collector="flags.arm", status="error",
+                                            error=record.get("collector_error"), elapsed_s=record.get("elapsed_s"),
+                                            source=source)
+        if not records and isinstance(arm_value, Mapping):
+            results = [("hazards/arm.json", item) for item in arm_value.get("record_only") or []
+                       if isinstance(item, Mapping)]
+        for source, item in results:
+            failed = item.get("error") or item.get("timed_out") or (
+                _is_int(item.get("returncode")) and item.get("returncode") != 0)
+            if failed:
+                status = "timeout" if item.get("timed_out") else "error"
+                error = item.get("error") or ("timed out" if item.get("timed_out")
+                                              else f"exit {item.get('returncode')}")
+                self._prior_collector_error(stage="arm", collector=str(item.get("name") or "collector"),
+                                            status=status, error=error, elapsed_s=item.get("elapsed_s"),
+                                            source=source)
 
     # -- G3 provenance checker -------------------------------------------------
     def g3(self, *, skipped: bool = False) -> None:
@@ -3373,6 +3671,11 @@ class _Harvest:
                 "--calibration-ledger", str(inputs.ledger_path), "--head-pin", str(self.derived / "terminal-pin.json"),
                 "--terminal-boundary-record", str(self.derived / "terminal-boundary.json"),
                 "--acceptance", str(self._acceptance_path()), "--report-json", str(report)]
+        if self.inputs.plan.get("receipt_class") == HAZARD_PACK_CLASS:
+            # A claim window holds every member of the pack, not one block:
+            # G3's full-window roster (root order plus the claim-root references).
+            argv += ["--full-window", "--plan-tree", str(pack / "plan_tree.json"),
+                     "--repo-root", str(inputs.measurement_root)]
         started = time.monotonic()
         try:
             result = self.seams.runner(argv, capture_output=True, text=True, check=False, timeout=3600)
@@ -3453,30 +3756,61 @@ class _Harvest:
     def bundle_records(self) -> list[dict[str, Any]]:
         """Every bundle directory in the runs roots, for L4's roster rule.
 
-        ``created_monotonic_ns`` is the earliest stamp of the bundle's own
-        stream (``member_spans``); unreadable stamps give ``None``, which L4
-        treats as created before the chain started.
+        ``created_monotonic_ns`` places the bundle against ``chain.started``
+        (:func:`bundle_creation_ns`): the earliest stamp of its own stream,
+        else any controller monotonic stamp it recorded, else its
+        ``run_started`` wall time mapped through ``chain.started``'s paired
+        (wall, monotonic) stamps.  A member that never reached the sampler
+        (aborted at idle admission) is placed by the last two.  With no stamp
+        at all it stays ``None``, which L4 records as
+        ``roster.creation_unplaced``; ``created_source`` says which was used.
+
+        ``attempt``: the plan writer creates the claim and bound runs roots
+        with an exclusive mkdir for one attempt (``hazard_window.runs_roots``),
+        so a bundle in those roots is bound to the plan's attempt.  A root the
+        plan does not name as its own (an override) gives ``None``.
         """
         calibration = {name for name in (self.inputs.pre_attempt_id, self.inputs.post_attempt_id) if name}
-        assessed = {result["bundle_path"]: result.get("spans") for result in self.members.values()}
+        assessed = {result["bundle_path"]: result for result in self.members.values()}
+        chain = None
+        try:
+            chain = read_json(self.inputs.night_dir / "chain.started")
+        except (OSError, ValueError):
+            chain = None
+        fresh = self._fresh_runs_roots()
         rows = []
         for label, root in (("claim", self.inputs.claim_runs_root), ("bound", self.inputs.bound_runs_root)):
             if root is None or not root.is_dir():
                 continue
+            attempt = self.inputs.attempt if label in fresh and _same_path(root, fresh[label]) else None
             for path in sorted(root.iterdir()):
                 if not path.is_dir() or path.name in {"campaign_manifests", "instrument_validation"} | calibration \
                         or not (path / "metadata.json").is_file():
                     continue
-                span = assessed.get(str(path))
-                if span is None:
-                    try:
-                        span = member_spans(read_json(path / "metadata.json"), _events(path))
-                    except Exception:  # unreadable stamps: L4 cannot place the bundle after chain start
-                        span = None
-                member = span.get("member") if isinstance(span, Mapping) else None
-                rows.append({"bundle_id": f"{label}/{path.name}", "run_id": path.name, "attempt": None,
-                             "created_monotonic_ns": member[0] if member else None})
+                result = assessed.get(str(path))
+                try:
+                    metadata = read_json(path / "metadata.json")
+                except (OSError, ValueError):
+                    metadata = None
+                try:
+                    events = _events(path)
+                except (OSError, ValueError):
+                    events = []
+                spans = result.get("spans") if isinstance(result, Mapping) else None
+                created, source = bundle_creation_ns(metadata if isinstance(metadata, Mapping) else {}, events,
+                                                     spans=spans, chain_started=chain)
+                rows.append({"bundle_id": f"{label}/{path.name}", "run_id": path.name, "attempt": attempt,
+                             "created_monotonic_ns": created, "created_source": source})
         return rows
+
+    def _fresh_runs_roots(self) -> dict[str, Path]:
+        """The runs roots the plan writer created for this plan's attempt (``hazard_window.runs_roots``)."""
+        hazard = self.inputs.plan.get("hazard_window") if isinstance(self.inputs.plan, Mapping) else None
+        roots = hazard.get("runs_roots") if isinstance(hazard, Mapping) else None
+        if not isinstance(roots, Mapping):
+            return {}
+        return {label: Path(value) for label, value in roots.items()
+                if label in ("claim", "bound") and isinstance(value, str) and os.path.isabs(value)}
 
     # -- outputs ---------------------------------------------------------------
     def sources_unchanged(self) -> None:
@@ -3540,7 +3874,7 @@ class _Harvest:
                       "by_effect": dict(sorted(effects.items())),
                       "unclassified": sorted({row["code"] for row in flags
                                               if self.catalog.effect(row["code"]) == UNCLASSIFIED})},
-            "collector_errors": self.collector_errors,
+            "collector_errors": self.collector_errors + self.prior_collector_errors,
             "exclusions": {"members_excluded": exclusions.get("members_excluded", []),
                            "cells": exclusions.get("cells", []),
                            "claim_usable": claim_usable,
@@ -3679,6 +4013,7 @@ def harvest(inputs: WindowInputs, archive_root: Path | str, *, seams: Seams | No
     run.step("arm_records", run.arm_and_desk_records)
     if run.step("roster", run.build_roster) is None and not run.roster:
         return run.finish(HARVEST_FAULT)
+    run.step("roster_dispatch", run.roster_dispatch)
     run.step("members", run.assess)
     run.step("member_flags", run.member_flags)
     run.step("roster_checks", run.roster_checks)

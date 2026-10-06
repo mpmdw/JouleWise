@@ -70,7 +70,7 @@ class RenderedChainFixture(unittest.TestCase):
         self.temporary = tempfile.TemporaryDirectory(prefix="b5-chain-")
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name).resolve()
-        self.measurement = fake_window.build_checkout(self.root, behavior=dict(self.behavior), git=False)
+        self.measurement = fake_window.build_checkout(self.root, behavior=dict(self.behavior))
         t0 = (int(time.time()) // 60) * 60
         self.record = b5_plan.write_window_plan(
             fake_window.inputs(self.root, self.measurement, self.pack, plan_id=f"b5-{self.pack}-1", t0_epoch_s=t0),

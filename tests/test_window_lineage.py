@@ -889,6 +889,43 @@ class PublicationAndAuditTests(unittest.TestCase):
         context = arm_readiness.authenticate_bundle_launch_lineage(archived, require_completion=True)
         self.assertEqual(context["launch_lineage"], w.lineage)
 
+    def test_an_untagged_bundle_without_a_stamp_is_not_a_finding(self) -> None:
+        """Rehearsal round 1, B6: the writer stamps only marker-bearing configs.
+
+        Before the fix every NEG-8 corpus and window-reference bundle (19 per
+        window) was a lineage.bundle_stamp_absent finding.
+        """
+        w = self.w
+        write_night_records(w)
+
+        def bundle(name: str, config: object | None, metadata: dict) -> Path:
+            path = w.base / "bundles" / name
+            path.mkdir(parents=True)
+            if config is not None:
+                (path / "config.json").write_text(config if isinstance(config, str) else json.dumps(config))
+            (path / "metadata.json").write_text(json.dumps(metadata))
+            return path
+
+        stamp = copy.deepcopy(w.lineage)
+        stamp["window_id"] = "another-window"
+        cases = {
+            "tagged_unstamped": ({"run_metadata": {"tags": [TAG]}}, {}, ["lineage.bundle_stamp_absent"]),
+            "untagged_unstamped": ({"run_metadata": {"tags": ["mock"]}}, {}, []),
+            "no_tags_unstamped": ({"run_metadata": {}}, {}, []),
+            "unreadable_config_unstamped": ("{not json", {}, ["lineage.bundle_stamp_absent"]),
+            "absent_config_unstamped": (None, {}, ["lineage.bundle_stamp_absent"]),
+            "untagged_with_a_differing_stamp": ({"run_metadata": {"tags": []}}, {"extra": {
+                "launch_lineage": stamp, "launch_lineage_locator_sha256": "0" * 64}},
+                ["lineage.bundle_locator_digest_differs", "lineage.bundle_stamp_differs"]),
+        }
+        for name, (config, metadata, expected) in cases.items():
+            with self.subTest(case=name):
+                path = bundle(name, config, metadata)
+                self.assertEqual(self.audit(bundle_paths=[path]), expected)
+                if isinstance(config, dict):  # the writer's own predicate agrees
+                    self.assertEqual(window_lineage._bundle_config_untagged(path),
+                                     not arm_readiness.launch_lineage_required(config))
+
     def test_plan_tree_change_is_a_pack_identity_finding(self) -> None:
         tree = self.w.pack / "plan_tree.json"
         tree.write_bytes(tree.read_bytes() + b"\n")

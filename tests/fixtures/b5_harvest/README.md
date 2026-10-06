@@ -17,7 +17,7 @@ line blocks the release event (L4's `NEVER_CLASSIFIED_CODES`).
     `calibration.capture_battery_pair_failed`, `whole_window.not_passed`,
     `whole_window.verdict_absent`, `model.identity_inconsistent_in_window`,
     `roster.no_science_bundles`, `records.source_changed_during_harvest`,
-    `g3.recompute_failed`;
+    `g3.recompute_failed`, `roster.duplicate_run_id` (rehearsal round 1, B3);
   - `EXCLUDE_MEMBER`: `model.identity_underivable`, `member.unreadable`,
     `member.reduction_mismatch`, `member.anchor_recompute_mismatch`,
     `member.span_unknown`;

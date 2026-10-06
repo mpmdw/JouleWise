@@ -167,6 +167,14 @@ print(json.dumps({"session_state": "finalized"}))
 '''
 
 
+def _genesis_pin() -> dict[str, Any]:
+    from joulewise.calibration_ledger import GENESIS_DIGEST, LEDGER_SCHEMA
+    return {"sequence": 0, "head_digest": GENESIS_DIGEST, "ledger_schema": LEDGER_SCHEMA}
+
+
+GENESIS_PIN = _genesis_pin()
+
+
 def sha256(path: Path) -> str:
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
@@ -187,9 +195,12 @@ def build_checkout(root: Path, *, behavior: dict[str, Any] | None = None, git: b
     (measurement / "docs/phase_2").mkdir(parents=True)
     (measurement / "docs/phase_2/window_runbook.md").symlink_to(REPO_ROOT / "docs/phase_2/window_runbook.md")
     (measurement / "configs/calibration").mkdir()
-    (measurement / "configs/calibration/calibration_ledger_head.json").write_text('{"head_digest": "fixture"}\n')
+    # An empty ledger and its genesis pin: physical head == committed pin, the
+    # state the plan writer's ledger-head check and the reservation require.
+    (measurement / "configs/calibration/calibration_ledger_head.json").write_text(
+        json.dumps(GENESIS_PIN, indent=2) + "\n")
     (measurement / "runs").mkdir()
-    (measurement / "runs/calibration_observation_ledger.jsonl").write_text('{"fixture": "ledger"}\n')
+    (measurement / "runs/calibration_observation_ledger.jsonl").write_bytes(b"")
     (measurement / ".venv/bin").mkdir(parents=True)
     (measurement / ".venv/bin/python").symlink_to(sys.executable)
     scripts = measurement / "scripts"

@@ -498,6 +498,12 @@
       "family": "ROSTER",
       "klass": "NUMBER"
     },
+    "roster.duplicate_run_id": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_WINDOW",
+      "family": "ROSTER",
+      "klass": "NUMBER"
+    },
     "roster.no_science_bundles": {
       "blinding": "STRUCTURE",
       "effect": "EXCLUDE_WINDOW",
