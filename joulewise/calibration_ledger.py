@@ -6586,6 +6586,103 @@ def head_pin_for_receipt(receipt: Mapping[str, Any]) -> dict[str, Any]:
     return _head_pin_for_valid_receipt(receipt)
 
 
+HISTORICAL_CUSTODY_REPORT_SCHEMA = "joulewise.calibration_historical_custody_report.v1"
+
+
+def historical_custody_report(
+    ledger_path: Path,
+    *,
+    repo_root: Path = REPO_ROOT,
+    mode: Literal["read_replay", "issuing"] = "issuing",
+    exclude_session_id: str | None = None,
+) -> dict[str, Any]:
+    """One full historical custody pass, observation by observation; never raises.
+
+    Gate prune 2, P2-VPF S5 (finding t3-10 and its verifier): on a HAZARD
+    window no slot and no reservation re-hashes the historical observations
+    (A6-R2/R3, erratum s3-reservation-stop), so the harvest runs this one full
+    pass and flags any observation that does not verify.  The historical
+    observations matter to a window's numbers: the writer's screen basis and
+    acceptance preflight read them.
+
+    The pass reads the physical ledger itself (no head pin, no lease, no
+    deadline), re-derives every governed (locator, artifact hash) pair from
+    the authenticated rows, and re-hashes the bytes through the same probe
+    the writer's unbounded pass uses (``_custody_reasons``).  Each observation
+    is judged separately, so one evicted or changed capture names itself and
+    does not hide the others.  ``exclude_session_id`` leaves out one bracket
+    session's rows (the harvested window's own captures, which the harvest
+    already checks byte for byte).
+
+    ``status`` is ``verified`` when every observation verified, ``mismatch``
+    when any did not, and ``unmeasured`` when none failed but the ledger or an
+    observation could not be read.  This function is a desk reader: under the
+    night's custody budget marker the unbounded probe refuses, and those rows
+    are reported ``unmeasured``.
+    """
+
+    report: dict[str, Any] = {
+        "schema_version": HISTORICAL_CUSTODY_REPORT_SCHEMA,
+        "ledger_path": str(ledger_path),
+        "mode": mode,
+        "excluded_session_id": exclude_session_id,
+        "status": "unmeasured",
+        "head_sequence": None,
+        "head_digest": None,
+        "ledger_reasons": [],
+        "observations": 0,
+        "verified": 0,
+        "mismatched": [],
+        "unmeasured": [],
+    }
+    try:
+        raw = read_authentication_input(
+            Path(ledger_path), grammar="jsonl",
+            label="physical calibration observation ledger (historical custody report)",
+        )
+        receipts, parse_reasons = _parse_ledger(raw)
+        observations, sessions, state_reasons = _attempts_and_observations(receipts)
+        report["head_sequence"] = len(receipts)
+        report["head_digest"] = (
+            str(receipts[-1]["receipt_digest"]) if receipts else GENESIS_DIGEST
+        )
+        report["ledger_reasons"] = sorted(set(parse_reasons) | set(state_reasons))
+        rows = [
+            observation
+            for observation in _custody_observations(observations, sessions)
+            if exclude_session_id is None
+            or observation.bracket_session_id != exclude_session_id
+        ]
+    except Exception as exc:  # noqa: BLE001 - a report never raises
+        report["error"] = f"{type(exc).__name__}: {exc}"[:300]
+        return report
+    report["observations"] = len(rows)
+    for observation in rows:
+        entry = {
+            "attempt_id": observation.attempt_id,
+            "custody_locator": observation.custody_locator,
+            "bracket_session_id": observation.bracket_session_id,
+        }
+        try:
+            reasons = _custody_reasons([observation], Path(repo_root), mode=mode)
+        except Exception as exc:  # noqa: BLE001 - this row is unmeasured
+            report["unmeasured"].append({**entry, "error": f"{type(exc).__name__}: {exc}"[:300]})
+            continue
+        if reasons:
+            report["mismatched"].append({**entry, "reasons": sorted(reasons)})
+        else:
+            report["verified"] += 1
+    if report["mismatched"]:
+        report["status"] = "mismatch"
+    elif report["unmeasured"] or set(report["ledger_reasons"]) - {
+        RefusalCode.LEDGER_BRACKET_SESSION_OPEN.value,
+    }:
+        report["status"] = "unmeasured"
+    else:
+        report["status"] = "verified"
+    return report
+
+
 __all__ = [
     "CustodyDeadline",
     "bounded_custody_reasons",
@@ -6661,6 +6758,7 @@ __all__ = [
     "finalize_bracket_session_slot",
     "generate_historical_custody_manifest",
     "head_pin_for_receipt",
+    "historical_custody_report",
     "inspect_calibration_ledger",
     "load_calibration_ledger_snapshot",
     "normalize_calibration_custody_path",

@@ -1370,6 +1370,87 @@ def rederive_artifact(source_dir: Path, output: Path) -> dict[str, object]:
     return payload
 
 
+def _anchored_from_native_records(
+    native_records: list[Any], first_record_endpoint_s: float
+) -> list[Any]:
+    """Re-anchor already parsed records instead of parsing the plist a second time.
+
+    HAZARD_PACK path only (gate prune 2, P2-VPF S5, finding t3-10: each slot
+    parsed its 90 MB plist twice, about 4 s per slot).  The result equals
+    ``parse_powermetrics_records(data, first_record_endpoint_s=...)`` record
+    for record: that parse differs from the native one only in
+    ``timestamp_s``, which it sets to the endpoint plus the running sum of
+    ``elapsed_ns / 1e9`` over records 1..i, accumulated in the same order and
+    float arithmetic as here (``joulewise/adapters/powermetrics.py``
+    ``_parse_powermetrics_records``).  Every other field is copied.
+    """
+
+    from joulewise.validation import finite_float  # noqa: PLC0415
+
+    anchor_s = finite_float(first_record_endpoint_s, "first_record_endpoint_s")
+    cumulative_elapsed_s = 0.0
+    anchored = []
+    for index, record in enumerate(native_records):
+        if index > 0:
+            cumulative_elapsed_s += record.elapsed_ns / 1_000_000_000.0
+        anchored.append(replace(
+            record,
+            timestamp_s=anchor_s + cumulative_elapsed_s,
+            rail_power_w=dict(record.rail_power_w),
+            rail_energy_mj=dict(record.rail_energy_mj),
+            metadata=dict(record.metadata),
+        ))
+    return anchored
+
+
+def _session_custody_check(
+    ledger_path: Path,
+    head_pin_path: Path,
+    *,
+    session_id: str,
+    budget_s: float,
+) -> dict[str, Any]:
+    """Verify custody of this session's own finalized rows only; never raises.
+
+    HAZARD_PACK path only (gate prune 2, P2-VPF S5).  The historical custody
+    pass is skipped there (A6-R2/R3) and the harvest runs the one full pass;
+    in the window a slot re-hashes only the rows its own session already
+    finalized (the post slot: the pre capture).  The result is a record: the
+    caller flags anything but ``verified``, and the harvest's byte-for-byte
+    check of this window's captures (``calibration.capture_invalid``) is the
+    check that excludes.  Reads go through the bounded custody worker on a
+    separate allowance, so a slow or hung file times out as ``unmeasured``
+    and never spends the preparation allowance.
+    """
+
+    from joulewise.calibration_ledger import bounded_custody_reasons  # noqa: PLC0415
+
+    result: dict[str, Any] = {"session_id": session_id, "status": "unmeasured",
+                              "attempt_ids": [], "reasons": []}
+    try:
+        snapshot = load_calibration_ledger_snapshot(
+            ledger_path, head_pin_path, require_committed_pin=False,
+            verify_custody=False, mode="issuing",
+        )
+        session = snapshot.bracket_session_by_id.get(session_id)
+        rows = [] if session is None else [
+            row for row in session.finalized_slots.values()
+            if row.bracket_session_id == session_id
+        ]
+        result["attempt_ids"] = sorted(row.attempt_id for row in rows)
+        if not rows:
+            result["status"] = "no_rows"
+            return result
+        deadline = CustodyDeadline(budget_s, telemetry_stream=None)
+        deadline.ledger_head_sha256 = snapshot.head_digest
+        reasons = bounded_custody_reasons(rows, REPO_ROOT, deadline)
+        result["reasons"] = sorted(reasons)
+        result["status"] = "mismatch" if reasons else "verified"
+    except Exception as exc:  # noqa: BLE001 - a record never stops the capture
+        result["error"] = f"{type(exc).__name__}: {exc}"[:300]
+    return result
+
+
 def _validate_reserved_bracket_slot(
     ledger_path: Path,
     head_pin_path: Path,
@@ -1470,6 +1551,9 @@ class _CaptureLedgerLifecycle:
         # that lags the reservation is accepted (erratum s3-reservation-stop).
         # This capture's own custody verification at finalization is unchanged.
         self.verify_historical_custody = verify_historical_custody
+        # HAZARD only: the result of the session-scoped custody check
+        # (_session_custody_check), or None when it did not run.
+        self.session_custody: dict[str, Any] | None = None
         self.ledger_path = Path(ledger_path)
         self.head_pin_path = Path(head_pin_path)
         self.attempt_id = attempt_id
@@ -1625,6 +1709,14 @@ class _CaptureLedgerLifecycle:
                 attestation_reason="automatic pre-capture ledger recovery",
             )
             _writer_stage(WriterStage.AFTER_REPAIR)
+            if not self.verify_historical_custody and self.is_bracket_session:
+                # HAZARD (gate prune 2, S5): this session's own rows only,
+                # after recovery so a row it finalized is included.
+                assert self.session_id is not None
+                self.session_custody = _session_custody_check(
+                    self.ledger_path, self.head_pin_path, session_id=self.session_id,
+                    budget_s=self.custody_deadline.configured_budget_s,
+                )
             self._begin_once()
             _writer_stage(WriterStage.CLAIM_RETURNED_BEFORE_BEGUN)
             self.begun = True
@@ -2346,6 +2438,21 @@ def main(argv: list[str] | None = None) -> int:
             context=dict(exc.context) | {"detail": str(exc)},
             stream=sys.stderr,
         )
+    session_custody = ledger_lifecycle.session_custody
+    if (
+        hazard is not None
+        and session_custody is not None
+        and session_custody.get("status") not in ("verified", "no_rows")
+    ):
+        flags_core.emit(
+            hazard, "calibration.writer_record_flagged", level="window",
+            observed={"kind": "session_custody_unverified", "slot": args.slot,
+                      **session_custody},
+            legacy_site="scripts/validate_powermetrics_fiducial.py:1554@e6b6a0ce",
+            legacy_code="calibration_ledger_custody_invalid",
+            detail="this bracket session's own finalized rows did not verify before the "
+                   "capture; the harvest re-verifies them byte for byte",
+        )
     try:
         if args.arm_countdown_s < 0:
             raise ValueError("arm countdown must be nonnegative")
@@ -2673,6 +2780,9 @@ def main(argv: list[str] | None = None) -> int:
         # remain in custody, but the expensive full-resolution projection is
         # skipped and the explicit causal linkage is serialized below.
         anchored = native_records
+    elif hazard is not None:
+        # Gate prune 2 (S5): one parse per slot; the same records, re-anchored.
+        anchored = _anchored_from_native_records(native_records, point_anchor_s)
     else:
         anchored = parse_powermetrics_records(
             data, first_record_endpoint_s=point_anchor_s
