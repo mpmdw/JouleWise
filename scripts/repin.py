@@ -221,9 +221,9 @@ def registry_stale(root: Path = REPO_ROOT, registry: dict | None = None) -> tupl
             if family not in census.FAMILIES:
                 warnings.append(f"{path} {pointer}: unknown family {family}")
                 continue
-            if not census.is_checked(path, family, target_index):
+            key = None if target_index is None else targets[target_index]
+            if not census.is_checked(path, family, None if key is None else key.partition(":")[2]):
                 continue
-            key = targets[target_index]
             if key not in digests:
                 method, _, target_path = key.partition(":")
                 digests[key] = census.target_digest(root, census.Target(target_path, method))

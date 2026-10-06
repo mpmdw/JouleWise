@@ -180,10 +180,16 @@ class ClassificationTests(unittest.TestCase):
         self.assertEqual(census.classify(literal, None), "estimator_code")
 
     def test_only_resolved_kind_p_outside_fixtures_is_checked(self) -> None:
-        self.assertTrue(census.is_checked("configs/campaigns/p/plan_tree.json", "pack_config_bytes", 3))
-        self.assertFalse(census.is_checked("configs/campaigns/p/plan_tree.json", "pack_config_bytes", None))
-        self.assertFalse(census.is_checked("tests/fixtures/x.json", "recorded_evidence", 3))
-        self.assertFalse(census.is_checked("tests/test_x.py", "synthetic_literal", 3))
+        plan = "configs/campaigns/p/plan_tree.json"
+        self.assertTrue(census.is_checked(plan, "pack_config_bytes", "configs/campaigns/p/run.json"))
+        self.assertTrue(census.is_checked("configs/calibration/a.json", "estimator_code", "joulewise/reduce.py"))
+        self.assertTrue(census.is_checked("tests/test_x.py", "recorded_evidence", "docs/process_traces/x.txt"))
+        self.assertFalse(census.is_checked(plan, "pack_config_bytes", None))
+        self.assertFalse(census.is_checked("tests/fixtures/x.json", "recorded_evidence", "docs/x.txt"))
+        self.assertFalse(census.is_checked("tests/test_x.py", "synthetic_literal", "tests/x.json"))
+        # A config's record of non-core code or archived documents is provenance of its era.
+        self.assertFalse(census.is_checked(plan, "pack_config_bytes", "joulewise/__init__.py::x"))
+        self.assertFalse(census.is_checked(plan, "pack_config_bytes", "docs/process_traces/runsheet.md"))
 
 
 class CensusTests(unittest.TestCase):

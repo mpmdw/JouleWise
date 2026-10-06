@@ -166,7 +166,7 @@
     },
     "files": 2510,
     "literals": 25575,
-    "resolved_checked": 16297
+    "resolved_checked": 15313
   },
   "target_format": "<method>:<path>[::<definition>], indexed by a row's target",
   "targets": [

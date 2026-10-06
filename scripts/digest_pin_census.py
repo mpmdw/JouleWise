@@ -485,10 +485,23 @@ def classify(literal: Literal, target: Target | None) -> str:
     return "synthetic_literal"
 
 
-def is_checked(path: str, family: str, target: object) -> bool:
-    """A row ``repin.py --check`` re-verifies: Kind P, resolved, not fixture bytes."""
+def is_checked(path: str, family: str, target_path: str | None) -> bool:
+    """Whether ``repin.py --check`` re-verifies a row against today's tree.
 
-    return target is not None and FAMILIES[family]["kind"] == "P" and not path.startswith(FIXTURE_PREFIXES)
+    Checked: a resolved Kind-P row held in a test (the test asserts it anyway;
+    the check adds the repin command), or a config's pin of another config's
+    bytes or of measurement-core code. Not checked: fixture bytes, and a
+    config's record of non-core code or archived documents as they were when
+    it was issued. Those are provenance records of their era, and checking
+    them against today's tree would fail every ordinary edit.
+    """
+
+    if target_path is None or FAMILIES[family]["kind"] != "P" or path.startswith(FIXTURE_PREFIXES):
+        return False
+    if path.startswith("configs/"):
+        file_path = target_path.partition("::")[0]
+        return file_path.startswith("configs/") or file_path in MEASUREMENT_CORE
+    return True
 
 
 def regenerator(family: str, path: str, root: Path = REPO_ROOT) -> str | None:
@@ -534,7 +547,7 @@ def census(root: Path = REPO_ROOT) -> dict[str, object]:
                     target_ids[key] = len(target_keys)
                     target_keys.append(key)
                 index_id = target_ids[key]
-                checked += is_checked(path, family, target)
+                checked += is_checked(path, family, target.path)
             rows.setdefault(path, []).append([literal.pointer, family, index_id])
     by_family: dict[str, dict[str, object]] = {}
     for (kind, family), count in sorted(summary.items()):
