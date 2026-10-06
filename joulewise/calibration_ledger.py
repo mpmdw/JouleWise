@@ -258,6 +258,35 @@ def _is_sha256(value: object) -> bool:
     return isinstance(value, str) and _SHA256_RE.fullmatch(value) is not None
 
 
+def _tail_is_one_session_extension(
+    tail: Sequence[Mapping[str, Any]], session: "CalibrationBracketSession"
+) -> bool:
+    """Whether ``tail`` is exactly one session's open row and its own rows."""
+
+    business_tail = [
+        row for row in tail if row.get("schema_version") != CONTROL_SCHEMA
+    ]
+    return bool(
+        tail
+        and business_tail
+        and business_tail[0].get("event") == BRACKET_SESSION_OPEN_EVENT
+        and business_tail[0].get("sequence") == session.capability_sequence
+        and all(
+            (
+                row.get("schema_version") == CONTROL_SCHEMA
+                and (
+                    row.get("event") == ABANDONMENT_EVENT
+                    or row.get("event") == APPEND_INTENT_EVENT
+                    and row.get("target_core", {}).get("session_id")
+                    == session.session_id
+                )
+            )
+            or row.get("session_id") == session.session_id
+            for row in tail
+        )
+    )
+
+
 def _normalized_vector(
     value: Mapping[str, Any] | None,
     fields: Sequence[str],
@@ -426,27 +455,50 @@ class CalibrationLedgerSnapshot:
         if len(open_sessions) != 1:
             return False
         session = open_sessions[0]
-        tail = self.receipts[self.committed_head_sequence :]
-        business_tail = [
-            row for row in tail if row.get("schema_version") != CONTROL_SCHEMA
+        return _tail_is_one_session_extension(
+            self.receipts[self.committed_head_sequence :], session
+        )
+
+    @property
+    def is_open_bracket_extension_past_stale_pin(self) -> bool:
+        """The extension shape, anchored at the reservation instead of the pin.
+
+        HAZARD_PACK path only (gate-prune core lane VPF, erratum
+        s3-reservation-stop): a head pin that the physical chain still
+        contains but that lags the reservation is a record, not a refusal.
+        Everything else stays: the reasons are exactly the open-session and
+        head-mismatch pair (no rollback, no pending attempt, no malformed or
+        broken chain), the pin is inside the physical chain, exactly one
+        session is open, and every row after the reservation's anchor is that
+        session's.  Equal to :attr:`is_governed_open_bracket_extension` when
+        the pin is not stale.
+        """
+
+        allowed = {
+            "calibration_ledger_bracket_session_open",
+            "calibration_ledger_head_mismatch",
+        }
+        if (
+            set(self.refusal_reasons) != allowed
+            or self.committed_head_sequence is None
+            or self.committed_head_digest is None
+            or not _physical_chain_contains_pin(
+                self.receipts,
+                (int(self.committed_head_sequence), str(self.committed_head_digest)),
+            )
+        ):
+            return False
+        open_sessions = [
+            session for session in self.bracket_sessions if session.state == "open"
         ]
-        return bool(
-            tail
-            and business_tail
-            and business_tail[0].get("event") == BRACKET_SESSION_OPEN_EVENT
-            and business_tail[0].get("sequence") == session.capability_sequence
-            and all(
-                (
-                    row.get("schema_version") == CONTROL_SCHEMA
-                    and (
-                        row.get("event") == ABANDONMENT_EVENT
-                        or row.get("event") == APPEND_INTENT_EVENT
-                        and row.get("target_core", {}).get("session_id")
-                        == session.session_id
-                    )
-                )
-                or row.get("session_id") == session.session_id
-                for row in tail
+        if len(open_sessions) != 1:
+            return False
+        session = open_sessions[0]
+        return any(
+            _tail_is_one_session_extension(self.receipts[anchor:], session)
+            for anchor in range(
+                int(self.committed_head_sequence),
+                max(int(self.committed_head_sequence), session.capability_sequence - 1) + 1,
             )
         )
 
@@ -4815,6 +4867,7 @@ def append_bracket_session_receipt(
     repo_root: Path = REPO_ROOT,
     _stage_boundary: Any | None = None,
     custody_deadline: CustodyDeadline | None = None,
+    pin_relation_record: dict[str, Any] | None = None,
 ) -> Mapping[str, Any]:
     """Atomically reserve exactly one immutable ordered-slot capability.
 
@@ -4822,6 +4875,13 @@ def append_bracket_session_receipt(
     and deliberately not checked again while either already-reserved slot is
     finalized. Claim evaluation remains impossible until the terminal head
     pin is emitted, reviewed, and committed.
+
+    ``pin_relation_record`` (a dict, HAZARD_PACK path only; erratum
+    s3-reservation-stop) turns the equality into a record: a pin that the
+    physical chain contains (the physical head is ahead of it) is accepted,
+    the session is appended to the physical tail, and the relation is written
+    into the dict.  A pin the chain does not contain (rollback or a divergent
+    chain) still refuses ``RESERVATION_HEAD_MISMATCH``.
     """
 
     session_identity, normalized_slots = validate_bracket_session_reservation_inputs(
@@ -4852,7 +4912,25 @@ def append_bracket_session_receipt(
     def build(receipts: Sequence[Mapping[str, Any]]) -> Mapping[str, Any]:
         predecessor = receipts[-1]["receipt_digest"] if receipts else GENESIS_DIGEST
         if (len(receipts), predecessor) != pin:
-            raise CalibrationLedgerError(RefusalCode.RESERVATION_HEAD_MISMATCH)
+            if pin_relation_record is None or not _physical_chain_contains_pin(
+                receipts, pin
+            ):
+                raise CalibrationLedgerError(RefusalCode.RESERVATION_HEAD_MISMATCH)
+            pin_relation_record.update(
+                relation=PinRelation.PHYSICAL_AHEAD.value,
+                pin_sequence=pin[0],
+                pin_digest=pin[1],
+                physical_sequence=len(receipts),
+                physical_digest=str(predecessor),
+            )
+        elif pin_relation_record is not None:
+            pin_relation_record.update(
+                relation=PinRelation.EXACT.value,
+                pin_sequence=pin[0],
+                pin_digest=pin[1],
+                physical_sequence=len(receipts),
+                physical_digest=str(predecessor),
+            )
         observations, sessions, reasons = _attempts_and_observations(receipts)
         del observations
         if reasons:
@@ -5691,8 +5769,25 @@ def calibration_readiness(
     require_committed_pin: bool = True,
     repo_root: Path = REPO_ROOT,
     custody_deadline: CustodyDeadline | None = None,
+    verify_custody: bool | None = None,
+    allow_stale_pin: bool = False,
 ) -> CalibrationReadiness:
-    """Evaluate the D-117 composite readiness predicate for one exact phase."""
+    """Evaluate the D-117 composite readiness predicate for one exact phase.
+
+    ``verify_custody`` ``None`` (the default) verifies historical custody
+    exactly when ``enforcing_under_lease``.  ``False`` is the HAZARD_PACK
+    writer path only (gate-prune core lane VPF, A6-R2/R3): the window's own
+    capture bytes are re-verified at harvest, and the upcoming slot's custody
+    state below is still read.
+
+    ``allow_stale_pin`` is the same HAZARD path (erratum s3-reservation-stop):
+    a pin the physical chain contains but that lags the physical head
+    (``PHYSICAL_AHEAD``) does not block ``pre-reserve``, and ``pre-slot``
+    judges the extension shape from the reservation
+    (:attr:`CalibrationLedgerSnapshot.is_open_bracket_extension_past_stale_pin`).
+    Rollback, a divergent chain, an open session at ``pre-reserve``, recovery
+    and writer contention still refuse.
+    """
 
     if phase not in {"pre-reserve", "pre-slot", "terminal"}:
         raise CalibrationLedgerError(
@@ -5709,7 +5804,9 @@ def calibration_readiness(
         require_committed_pin=require_committed_pin,
         # The enforcing gate authenticates every finalized observation in the
         # snapshot, not merely the custody path for the upcoming slot.
-        verify_custody=enforcing_under_lease,
+        verify_custody=(
+            enforcing_under_lease if verify_custody is None else verify_custody
+        ),
         mode=mode,
         repo_root=repo_root,
         custody_deadline=custody_deadline,
@@ -5742,7 +5839,9 @@ def calibration_readiness(
             refusal = RefusalCode.LIVE_WRITER_CONTENTION
         elif open_sessions:
             refusal = RefusalCode.PRE_RESERVE_NOT_READY
-        elif relation is not PinRelation.EXACT:
+        elif relation is not PinRelation.EXACT and not (
+            allow_stale_pin and relation is PinRelation.PHYSICAL_AHEAD
+        ):
             refusal = RefusalCode.RESERVATION_HEAD_MISMATCH
     elif phase == "pre-slot":
         session = snapshot.bracket_session_by_id.get(str(session_id))
@@ -5812,7 +5911,11 @@ def calibration_readiness(
             or session.state != "open"
             or slot != next_slot
             or attempt_id != expected_attempt
-            or not snapshot.is_governed_open_bracket_extension
+            or not (
+                snapshot.is_open_bracket_extension_past_stale_pin
+                if allow_stale_pin
+                else snapshot.is_governed_open_bracket_extension
+            )
         ):
             refusal = RefusalCode.PRE_SLOT_NOT_READY
     else:
