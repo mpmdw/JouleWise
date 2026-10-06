@@ -194,6 +194,33 @@ def _valid_session_receipt(context: dict, plan_sha256: str, tree: dict) -> dict:
     )
 
 
+def _fixture_child_environment(repository: Path) -> dict[str, str]:
+    """Environment for the fixture's freeze and arm child processes.
+
+    The synthetic identity is frozen by one child process, re-derived in this
+    test process by the T-0 author, and re-derived again by the arm child.
+    The runtime identity includes installed distribution versions (the mlx
+    adapter reads ``importlib.metadata.version("mlx")``), so all three must
+    see the same Python path. Putting only the fixture repository on a
+    child's PYTHONPATH dropped whatever this process was given there: with
+    the project venv's site-packages on PYTHONPATH, the author saw mlx 0.31.2
+    and the freeze child saw no mlx, and the author correctly refused
+    "live U11 input derivation differs from the frozen projection". The
+    fixture repository stays first, so its synthetic ``mlx_lm`` and its copy
+    of ``joulewise`` still shadow any installed ones.
+    """
+
+    inherited = os.environ.get("PYTHONPATH")
+    entries = [str(repository)]
+    if inherited:
+        entries.append(inherited)
+    return {
+        **os.environ,
+        "PYTHONPATH": os.pathsep.join(entries),
+        "PYTHONDONTWRITEBYTECODE": "1",
+    }
+
+
 def _install_synthetic_identity_inputs(
     repository: Path,
     pack: Path,
@@ -529,7 +556,7 @@ def make_t0_fixture(
                 str(pack),
             ],
             cwd=repository,
-            env={**os.environ, "PYTHONPATH": str(repository), "PYTHONDONTWRITEBYTECODE": "1"},
+            env=_fixture_child_environment(repository),
             text=True,
             capture_output=True,
         )
@@ -3589,7 +3616,7 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
             completed = subprocess.run(
                 command,
                 cwd=repository,
-                env={**os.environ, "PYTHONPATH": str(repository), "PYTHONDONTWRITEBYTECODE": "1"},
+                env=_fixture_child_environment(repository),
                 text=True,
                 capture_output=True,
             )
