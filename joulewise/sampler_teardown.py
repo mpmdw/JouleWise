@@ -22,6 +22,7 @@ import signal
 import struct
 import subprocess
 import sys
+import threading
 import time
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
@@ -120,12 +121,20 @@ class SamplerTeardown:
 
         original_popen = subprocess.Popen
         captured = False
+        # Only the thread that entered the seam (the adapter start call) can
+        # be adopted.  A concurrent helper thread (the controller's guard
+        # probe, M4) passes straight through to the original constructor.
+        owner = threading.get_ident()
 
         def parent_popen(*args: Any, **kwargs: Any) -> _CustodiedProcess:
             nonlocal captured
             command = args[0] if args else kwargs.get("args", [])
             command_argv = _argv(command)
-            capture_this = not captured and self._is_sampler_spawn(command_argv)
+            capture_this = (
+                not captured
+                and threading.get_ident() == owner
+                and self._is_sampler_spawn(command_argv)
+            )
             if capture_this:
                 captured = True
                 if subprocess.Popen is parent_popen:

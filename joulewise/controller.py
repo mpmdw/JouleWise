@@ -58,6 +58,7 @@ import math
 import os
 import stat
 import sys
+import threading
 import traceback
 from collections.abc import Callable
 from copy import deepcopy
@@ -1381,6 +1382,40 @@ def _clock_stamp(clock: Clock) -> ClockStamp:
     return ClockStamp(epoch_s, epoch_s, epoch_s, 0.0, 0.0)
 
 
+class _GuardProbe:
+    """One guard observation collected on a helper thread (M4, HAZARD only).
+
+    The probe is pure collection (subprocesses and their parsing); the
+    observation is recorded on the controller thread after :meth:`join`, so
+    the admission record keeps one writer and its phase order.  The sampler
+    spawn seam adopts only the thread that entered it
+    (``SamplerTeardown.intercept_popen``), so a probe subprocess can never be
+    taken for the sampler.
+    """
+
+    def __init__(self, collect: Callable[[], dict[str, Any]]) -> None:
+        self._result: dict[str, Any] | None = None
+        self._error: BaseException | None = None
+        self._thread = threading.Thread(
+            target=self._run, args=(collect,), name="joulewise-guard-probe", daemon=True
+        )
+        self._thread.start()
+
+    def _run(self, collect: Callable[[], dict[str, Any]]) -> None:
+        try:
+            self._result = collect()
+        except BaseException as exc:  # noqa: BLE001 - re-raised on the controller thread
+            self._error = exc
+
+    def join(self) -> dict[str, Any] | None:
+        self._thread.join()
+        return self._result
+
+    def raise_error(self) -> None:
+        if self._error is not None:
+            raise self._error
+
+
 class _Execution:
     """One run's lifecycle state: buffered events/logs and collected evidence."""
 
@@ -1758,18 +1793,35 @@ class _Execution:
                     "claim_bearing": extension.claim_bearing,
                     "sha256": extension.sha256(),
                 }
-            observation = self._admission_guard_observation("before_attempt_1")
-            environment_reason = self._admission_environment_failure(observation)
-            if environment_reason is not None:
-                if self._hazard is not None:
-                    self._record_hazard_guard_observation(observation, environment_reason)
-                else:
-                    self._environment_admission.update(
-                        {"decision": "abort", "failure": environment_reason}
-                    )
-                    raise _StageFailure(
-                        "idle_baseline", FailureReason.UNKNOWN_ERROR, environment_reason
-                    )
+            # M4 (HAZARD, PLAN2 t1-07 safe variant): when the admission sampler
+            # is started below, the before_attempt_1 guard probes run during
+            # its start instead of before it.  The idle slice begins only at
+            # the first frame completed after measure_idle is called, so the
+            # probes still never overlap an idle capture.  On the legacy path
+            # (and without an admission sampler) they run here, as before.
+            probe_during_sampler_start = (
+                self._hazard is not None
+                and callable(
+                    getattr(self._telemetry, "begin_admission_window_sampling", None)
+                )
+            )
+            if not probe_during_sampler_start:
+                observation = self._admission_guard_observation("before_attempt_1")
+                environment_reason = self._admission_environment_failure(observation)
+                if environment_reason is not None:
+                    if self._hazard is not None:
+                        self._record_hazard_guard_observation(
+                            observation, environment_reason
+                        )
+                    else:
+                        self._environment_admission.update(
+                            {"decision": "abort", "failure": environment_reason}
+                        )
+                        raise _StageFailure(
+                            "idle_baseline",
+                            FailureReason.UNKNOWN_ERROR,
+                            environment_reason,
+                        )
             if per_run_evaluation.get("eligible") is not True and override is None:
                 reason = "critical per-run environment policy did not pass"
                 if self._hazard is not None:
@@ -1787,8 +1839,27 @@ class _Execution:
                 self._telemetry, "begin_admission_window_sampling", None
             )
             if callable(begin_sampling):
+                probe = (
+                    _GuardProbe(self._guard_observation_payload)
+                    if self._hazard is not None
+                    else None
+                )
                 self._sampling_start_in_progress = True
+                # If the start raises (an interrupt included), the probe is a
+                # daemon thread and is not waited for: the failure path owns
+                # the sampler, and an unrecorded observation stops nothing.
                 result = self._start_telemetry_with_parent_adoption(begin_sampling)
+                if probe is not None:
+                    observation = probe.join()
+                    probe.raise_error()
+                    observation = self._admission_guard_observation(
+                        "before_attempt_1", collected=observation
+                    )
+                    environment_reason = self._admission_environment_failure(observation)
+                    if environment_reason is not None:
+                        self._record_hazard_guard_observation(
+                            observation, environment_reason
+                        )
                 self._check(
                     result,
                     "idle_baseline",
@@ -1990,7 +2061,22 @@ class _Execution:
             legacy_code="idle environment admission failed after one retry",
         )
 
-    def _admission_guard_observation(self, phase: str) -> dict[str, Any]:
+    def _admission_guard_observation(
+        self, phase: str, *, collected: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        observation = (
+            collected if collected is not None else self._guard_observation_payload()
+        )
+        observation["phase"] = phase
+        if self._environment_admission is not None:
+            self._environment_admission.setdefault("guard_observations", []).append(
+                observation
+            )
+        return observation
+
+    def _guard_observation_payload(self) -> dict[str, Any]:
+        """Collect one guard observation; no state is touched (thread-safe)."""
+
         if isinstance(self._clock, FakeClock):
             source = self._environment if isinstance(self._environment, dict) else {}
             observation = {
@@ -2008,11 +2094,6 @@ class _Execution:
                 include_adapter_power=True
             )
             observation["capture_skipped"] = False
-        observation["phase"] = phase
-        if self._environment_admission is not None:
-            self._environment_admission.setdefault("guard_observations", []).append(
-                observation
-            )
         return observation
 
     def _enforce_post_capture_admission_guard(self, attempt: int) -> None:
