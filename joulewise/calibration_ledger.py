@@ -6614,9 +6614,11 @@ def historical_custody_report(
     session's rows (the harvested window's own captures, which the harvest
     already checks byte for byte).
 
-    ``status`` is ``verified`` when every observation verified, ``mismatch``
-    when any did not, and ``unmeasured`` when none failed but the ledger or an
-    observation could not be read.  This function is a desk reader: under the
+    ``status`` is ``verified`` when every observation verified (at least one),
+    ``mismatch`` when any did not, and ``unmeasured`` when none failed but the
+    ledger or an observation could not be read, or when no observation was
+    checked at all (``unmeasured_reason`` ``no_observations_checked``; the
+    count left out by ``exclude_session_id`` is ``excluded_observations``).  This function is a desk reader: under the
     night's custody budget marker the unbounded probe refuses, and those rows
     are reported ``unmeasured``.
     """
@@ -6647,9 +6649,10 @@ def historical_custody_report(
             str(receipts[-1]["receipt_digest"]) if receipts else GENESIS_DIGEST
         )
         report["ledger_reasons"] = sorted(set(parse_reasons) | set(state_reasons))
+        governed = list(_custody_observations(observations, sessions))
         rows = [
             observation
-            for observation in _custody_observations(observations, sessions)
+            for observation in governed
             if exclude_session_id is None
             or observation.bracket_session_id != exclude_session_id
         ]
@@ -6657,6 +6660,7 @@ def historical_custody_report(
         report["error"] = f"{type(exc).__name__}: {exc}"[:300]
         return report
     report["observations"] = len(rows)
+    report["excluded_observations"] = len(governed) - len(rows)
     for observation in rows:
         entry = {
             "attempt_id": observation.attempt_id,
@@ -6678,6 +6682,12 @@ def historical_custody_report(
         RefusalCode.LEDGER_BRACKET_SESSION_OPEN.value,
     }:
         report["status"] = "unmeasured"
+    elif report["verified"] == 0:
+        # Nothing was re-hashed (an empty or truncated ledger, or every row
+        # excluded): no custody was measured, so none is reported verified
+        # (P2-VPF review R4).
+        report["status"] = "unmeasured"
+        report["unmeasured_reason"] = "no_observations_checked"
     else:
         report["status"] = "verified"
     return report

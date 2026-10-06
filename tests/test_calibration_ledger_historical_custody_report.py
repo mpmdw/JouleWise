@@ -69,14 +69,50 @@ class HistoricalCustodyReportTests(unittest.TestCase):
         self.assertEqual(len(report["unmeasured"]), 3)
         self.assertEqual(report["verified"], 0)
 
-    def test_one_session_can_be_left_out(self):
-        observation = ledger.load_calibration_ledger_snapshot(
+    def _two_sessions(self):
+        observations = ledger.load_calibration_ledger_snapshot(
             self.fixture.ledger, self.fixture.pin, repo_root=self.fixture.repo,
-            verify_custody=False).observations[0]
+            verify_custody=False).observations
+        return [replace_session(observations[0], "own-window"),
+                *(replace_session(row, "earlier-window") for row in observations[1:])]
+
+    def test_one_session_can_be_left_out_and_only_that_session(self):
+        # Review M8: excluding one session must keep every other session's rows.
         with mock.patch.object(ledger, "_custody_observations",
-                               return_value=[replace_session(observation, "own-window")]):
+                               return_value=self._two_sessions()):
             report = self.report(exclude_session_id="own-window")
-        self.assertEqual((report["status"], report["observations"]), ("verified", 0))
+        self.assertEqual(report["status"], "verified", report)
+        self.assertEqual((report["observations"], report["verified"]), (2, 2))
+        self.assertEqual(report["excluded_observations"], 1)
+
+    def test_a_left_out_session_mismatch_does_not_hide_another_sessions(self):
+        trace = self.fixture.custodies[2] / "power_trace.csv"
+        trace.write_bytes(trace.read_bytes() + b"\n")
+        with mock.patch.object(ledger, "_custody_observations",
+                               return_value=self._two_sessions()):
+            report = self.report(exclude_session_id="own-window")
+        self.assertEqual(report["status"], "mismatch", report)
+        self.assertEqual([item["bracket_session_id"] for item in report["mismatched"]],
+                         ["earlier-window"])
+
+    def test_every_row_left_out_is_unmeasured_not_verified(self):
+        # Review R4: nothing re-hashed is never "verified".
+        with mock.patch.object(ledger, "_custody_observations",
+                               return_value=[replace_session(row, "own-window")
+                                             for row in self._two_sessions()]):
+            report = self.report(exclude_session_id="own-window")
+        self.assertEqual((report["status"], report["observations"]), ("unmeasured", 0))
+        self.assertEqual(report["unmeasured_reason"], "no_observations_checked")
+        self.assertEqual(report["excluded_observations"], 3)
+
+    def test_an_empty_ledger_is_unmeasured_not_verified(self):
+        # Review R4: a zero-byte (fully truncated) ledger parses to no receipts.
+        empty = self.fixture.repo / "empty-ledger.jsonl"
+        empty.write_bytes(b"")
+        report = ledger.historical_custody_report(empty, repo_root=self.fixture.repo)
+        self.assertEqual(report["status"], "unmeasured", report)
+        self.assertEqual(report["unmeasured_reason"], "no_observations_checked")
+        self.assertEqual((report["observations"], report["verified"]), (0, 0))
 
 
 def replace_session(observation, session_id):

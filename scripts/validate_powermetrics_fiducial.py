@@ -1385,6 +1385,7 @@ def _anchored_from_native_records(
     ``_parse_powermetrics_records``).  Every other field is copied.
     """
 
+    from joulewise.adapters.powermetrics import PowermetricsRecord  # noqa: PLC0415
     from joulewise.validation import finite_float  # noqa: PLC0415
 
     anchor_s = finite_float(first_record_endpoint_s, "first_record_endpoint_s")
@@ -1393,14 +1394,23 @@ def _anchored_from_native_records(
     for index, record in enumerate(native_records):
         if index > 0:
             cumulative_elapsed_s += record.elapsed_ns / 1_000_000_000.0
-        anchored.append(replace(
-            record,
+        # Built field by field, not with dataclasses.replace: this module
+        # imports battery_float, whose consumer guard
+        # (tests/test_battery_float_consumers.py) admits no new replace site.
+        anchored.append(PowermetricsRecord(
             timestamp_s=anchor_s + cumulative_elapsed_s,
+            elapsed_ns=record.elapsed_ns,
             rail_power_w=dict(record.rail_power_w),
+            combined_power_w=record.combined_power_w,
             rail_energy_mj=dict(record.rail_energy_mj),
+            thermal_pressure=record.thermal_pressure,
             metadata=dict(record.metadata),
         ))
     return anchored
+
+
+class _SessionCustodyWorkerNotQuiescent(Exception):
+    """The session custody worker's teardown raised; it may still be running."""
 
 
 def _session_custody_check(
@@ -1409,8 +1419,9 @@ def _session_custody_check(
     *,
     session_id: str,
     budget_s: float,
+    deadline_epoch_s: float | None = None,
 ) -> dict[str, Any]:
-    """Verify custody of this session's own finalized rows only; never raises.
+    """Verify custody of this session's own finalized rows only.
 
     HAZARD_PACK path only (gate prune 2, P2-VPF S5).  The historical custody
     pass is skipped there (A6-R2/R3) and the harvest runs the one full pass;
@@ -1419,8 +1430,19 @@ def _session_custody_check(
     caller flags anything but ``verified``, and the harvest's byte-for-byte
     check of this window's captures (``calibration.capture_invalid``) is the
     check that excludes.  Reads go through the bounded custody worker on a
-    separate allowance, so a slow or hung file times out as ``unmeasured``
-    and never spends the preparation allowance.
+    separate allowance (``budget_s``, still inside the window's absolute
+    ``deadline_epoch_s``), so a slow or hung file times out as ``unmeasured``;
+    the caller credits the time spent back to the preparation allowance.
+
+    One outcome is not a record.  The bounded request reaps its worker in a
+    ``finally``; when that teardown itself raises (the worker could not be
+    killed and reaped inside its cleanup grace), the worker may still be
+    burning CPU, and our own CPU work must not run inside the capture.  That
+    raises ``CalibrationLedgerError(LEDGER_CUSTODY_INVALID)`` with reason
+    ``session_custody_worker_not_quiescent`` (P2-VPF review R2): a physical
+    hazard, so the slot refuses before the sampler starts.  Every
+    ``CalibrationLedgerError`` from the request is raised only after the
+    teardown in its ``finally`` returned, so those stay records.
     """
 
     from joulewise.calibration_ledger import bounded_custody_reasons  # noqa: PLC0415
@@ -1441,14 +1463,45 @@ def _session_custody_check(
         if not rows:
             result["status"] = "no_rows"
             return result
-        deadline = CustodyDeadline(budget_s, telemetry_stream=None)
+        deadline = CustodyDeadline(budget_s, deadline_epoch_s=deadline_epoch_s,
+                                   telemetry_stream=None)
         deadline.ledger_head_sha256 = snapshot.head_digest
-        reasons = bounded_custody_reasons(rows, REPO_ROOT, deadline)
+        try:
+            reasons = bounded_custody_reasons(rows, REPO_ROOT, deadline)
+        except CalibrationLedgerError:
+            raise
+        except Exception as exc:  # noqa: BLE001 - teardown state unknown
+            raise _SessionCustodyWorkerNotQuiescent(
+                f"{type(exc).__name__}: {exc}"[:300]) from exc
         result["reasons"] = sorted(reasons)
         result["status"] = "mismatch" if reasons else "verified"
+    except _SessionCustodyWorkerNotQuiescent as exc:
+        raise CalibrationLedgerError(
+            RefusalCode.LEDGER_CUSTODY_INVALID,
+            context={"reason": "session_custody_worker_not_quiescent",
+                     "session_id": session_id, "detail": str(exc)},
+        ) from exc
     except Exception as exc:  # noqa: BLE001 - a record never stops the capture
         result["error"] = f"{type(exc).__name__}: {exc}"[:300]
     return result
+
+
+def _credit_preparation_allowance(deadline: CustodyDeadline, spent_s: float) -> None:
+    """Give the preparation allowance back the time the session check spent.
+
+    The session custody check runs on its own allowance (P2-VPF review R1), so
+    its elapsed time must not shorten the preparation allowance that the slot
+    claim is judged against.  The absolute window deadline is never moved.
+    """
+
+    if not math.isfinite(spent_s) or spent_s <= 0:
+        return
+    extended = deadline.deadline + spent_s
+    if deadline.window_deadline is not None:
+        extended = min(extended, deadline.window_deadline)
+    if extended > deadline.deadline:
+        deadline.budget_s += extended - deadline.deadline
+        deadline.deadline = extended
 
 
 def _validate_reserved_bracket_slot(
@@ -1713,10 +1766,17 @@ class _CaptureLedgerLifecycle:
                 # HAZARD (gate prune 2, S5): this session's own rows only,
                 # after recovery so a row it finalized is included.
                 assert self.session_id is not None
-                self.session_custody = _session_custody_check(
-                    self.ledger_path, self.head_pin_path, session_id=self.session_id,
-                    budget_s=self.custody_deadline.configured_budget_s,
-                )
+                session_check_started = time.monotonic()
+                try:
+                    self.session_custody = _session_custody_check(
+                        self.ledger_path, self.head_pin_path, session_id=self.session_id,
+                        budget_s=self.custody_deadline.configured_budget_s,
+                        deadline_epoch_s=self.custody_deadline.deadline_epoch_s,
+                    )
+                finally:
+                    # Its own allowance: the time is not charged to preparation.
+                    _credit_preparation_allowance(
+                        self.custody_deadline, time.monotonic() - session_check_started)
             self._begin_once()
             _writer_stage(WriterStage.CLAIM_RETURNED_BEFORE_BEGUN)
             self.begun = True

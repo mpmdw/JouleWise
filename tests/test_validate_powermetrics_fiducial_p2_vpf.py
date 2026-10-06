@@ -73,6 +73,17 @@ class ParseOnceTests(unittest.TestCase):
                                      [record.timestamp_s.hex() for record in parsed])
                     self.assertEqual(_trace(reanchored), _trace(parsed))
 
+    def test_the_re_anchor_copies_every_record_field(self):
+        # The helper builds records field by field; a new PowermetricsRecord
+        # field must be added there too (this pins the field set it copies).
+        from dataclasses import fields
+
+        from joulewise.adapters.powermetrics import PowermetricsRecord
+
+        self.assertEqual([field.name for field in fields(PowermetricsRecord)], [
+            "timestamp_s", "elapsed_ns", "rail_power_w", "combined_power_w",
+            "rail_energy_mj", "thermal_pressure", "metadata"])
+
     def test_the_native_records_are_not_mutated(self):
         data = _plist(PLIST_FIXTURES[0])
         native = parse_powermetrics_records(data)
@@ -138,6 +149,185 @@ class SessionCustodyTests(hazard_tests._SandboxCase):
         completed = self.rig.run_writer(state, slot="post")
         self.assertEqual(completed.returncode, 2, completed.stdout + completed.stderr)
         self.assertEqual(self.rig.flags(state), [])
+
+
+_PARSE_COUNTER_SITECUSTOMIZE = """
+# P2-VPF test hook: log every parse of a powermetrics stream and its caller.
+# Installed through PYTHONPATH so no sandbox source byte changes.
+import importlib.abc
+import importlib.util
+import json
+import os
+import sys
+
+_TARGET = "joulewise.adapters.powermetrics"
+
+
+class _CountingFinder(importlib.abc.MetaPathFinder):
+    def find_spec(self, name, path, target=None):
+        if name != _TARGET:
+            return None
+        sys.meta_path.remove(self)
+        try:
+            spec = importlib.util.find_spec(name)
+        finally:
+            sys.meta_path.insert(0, self)
+        if spec is None or spec.loader is None:
+            return spec
+        exec_module = spec.loader.exec_module
+
+        def counted_exec(module):
+            exec_module(module)
+            original = module.parse_powermetrics_records
+
+            def parse_powermetrics_records(data, **kwargs):
+                caller = sys._getframe(1)
+                with open(os.environ["JW_P2_VPF_PARSE_LOG"], "a", encoding="utf-8") as log:
+                    log.write(json.dumps([caller.f_code.co_name,
+                                          os.path.basename(caller.f_code.co_filename),
+                                          sorted(kwargs)]) + "\\n")
+                return original(data, **kwargs)
+
+            module.parse_powermetrics_records = parse_powermetrics_records
+
+        spec.loader.exec_module = counted_exec
+        return spec
+
+
+if os.environ.get("JW_P2_VPF_PARSE_LOG"):
+    sys.meta_path.insert(0, _CountingFinder())
+"""
+
+
+class ParseCountTests(hazard_tests._SandboxCase):
+    """main() parses a slot's plist once on HAZARD and twice on legacy (review M6/M9)."""
+
+    def _main_parses(self, *, hazard: bool) -> list[list[str]]:
+        hook = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        (hook / "sitecustomize.py").write_text(_PARSE_COUNTER_SITECUSTOMIZE, encoding="utf-8")
+        log = hook / "parses.jsonl"
+        log.touch()
+        state = self.rig.real_writer_state("session-p2-parse")
+        if hazard:
+            self.rig.hazard(state)
+        completed = self.rig.run_writer(state, slot="pre", JW_P2_VPF_PARSE_LOG=str(log),
+                                        PYTHONPATH=str(hook))
+        self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
+        calls = [json.loads(line) for line in log.read_text(encoding="utf-8").splitlines()]
+        self.assertTrue(calls, "the parse hook did not load")
+        return [kwargs for function, filename, kwargs in calls
+                if (function, filename) == ("main", "validate_powermetrics_fiducial.py")]
+
+    # main() also parses the sampler's first frame once (readiness), so the
+    # whole plist is the second call; legacy adds the anchored re-parse.
+    def test_hazard_slot_parses_its_plist_once(self):
+        self.assertEqual(self._main_parses(hazard=True), [[], []])
+
+    def test_legacy_slot_still_parses_twice(self):
+        self.assertEqual(self._main_parses(hazard=False),
+                         [[], [], ["first_record_endpoint_s"]])
+
+
+class SessionCustodyAllowanceTests(unittest.TestCase):
+    """The session check's time and teardown (P2-VPF review R1, R2), in process."""
+
+    def setUp(self) -> None:
+        from dataclasses import replace
+        from types import SimpleNamespace
+
+        from joulewise import calibration_ledger as ledger
+        from tests.calibration_exits_fixtures.custody_hang import CustodyFixture
+
+        self.ledger = ledger
+        fixture = CustodyFixture().__enter__()
+        self.addCleanup(fixture.__exit__, None, None, None)
+        self.fixture = fixture
+        self.state = fixture.witness._state_real_writer("session-p2-allowance")
+        snapshot = ledger.load_calibration_ledger_snapshot(
+            fixture.ledger, fixture.pin, repo_root=fixture.repo, verify_custody=False)
+        row = replace(snapshot.observations[0], bracket_session_id=self.state["session_id"])
+        self.snapshot = SimpleNamespace(
+            bracket_session_by_id={self.state["session_id"]: SimpleNamespace(
+                finalized_slots={"pre": row})},
+            head_digest=snapshot.head_digest)
+
+    def _lifecycle(self, budget_s: float):
+        deadline = self.ledger.CustodyDeadline(budget_s, telemetry_stream=None)
+        state = self.state
+        lifecycle = writer._CaptureLedgerLifecycle(
+            ledger_path=self.fixture.ledger, head_pin_path=self.fixture.pin,
+            attempt_id=state["attempt_id"], custody_locator=state["custody_locator"],
+            identity_epoch=state["epoch"], t1_bindings=state["t1"],
+            session_id=state["session_id"], slot="pre", require_committed_pin=False,
+            verify_historical_custody=False, custody_deadline=deadline)
+        return lifecycle, deadline
+
+    def _begin(self, lifecycle, **ledger_patches):
+        original = writer._session_custody_check
+
+        def check(*args, **kwargs):
+            with mock.patch.object(writer, "load_calibration_ledger_snapshot",
+                                   return_value=self.snapshot), \
+                    contextlib.ExitStack() as stack:
+                for name, value in ledger_patches.items():
+                    stack.enter_context(mock.patch.object(self.ledger, name, value))
+                return original(*args, **kwargs)
+
+        with mock.patch.object(writer, "_session_custody_check", side_effect=check), \
+                contextlib.redirect_stderr(io.StringIO()):
+            lifecycle.begin()
+        self.addCleanup(lifecycle._release_writer_lease)
+
+    def test_a_slow_session_check_does_not_spend_the_preparation_allowance(self):
+        import time
+
+        def slow(_rows, _root, worker_deadline):
+            time.sleep(worker_deadline.remaining() + 0.05)
+            worker_deadline.check()
+
+        lifecycle, _deadline = self._lifecycle(0.4)
+        self._begin(lifecycle, bounded_custody_reasons=mock.Mock(side_effect=slow))
+        self.assertTrue(lifecycle.begun)
+        self.assertEqual(lifecycle.session_custody["status"], "unmeasured")
+        self.assertIn("calibration_ledger_custody_timeout", lifecycle.session_custody["error"])
+
+    def test_a_worker_whose_teardown_failed_refuses_before_the_capture(self):
+        import subprocess
+
+        def unreaped(*_args, **_kwargs):
+            raise subprocess.TimeoutExpired("worker reap", 2)
+
+        lifecycle, _deadline = self._lifecycle(30.0)
+        with self.assertRaises(self.ledger.CalibrationLedgerError) as caught:
+            self._begin(lifecycle, bounded_custody_reasons=mock.Mock(side_effect=unreaped))
+        self.assertFalse(lifecycle.begun)
+        self.assertEqual(caught.exception.code, RefusalCode.LEDGER_CUSTODY_INVALID)
+        self.assertEqual(caught.exception.context["reason"],
+                         "session_custody_worker_not_quiescent")
+
+    def test_a_verification_refusal_after_teardown_stays_a_record(self):
+        def invalid(*_args, **_kwargs):
+            raise self.ledger.CalibrationLedgerError(
+                RefusalCode.LEDGER_CUSTODY_INVALID, context={"reason": "custody_worker_protocol"})
+
+        lifecycle, _deadline = self._lifecycle(30.0)
+        self._begin(lifecycle, bounded_custody_reasons=mock.Mock(side_effect=invalid))
+        self.assertTrue(lifecycle.begun)
+        self.assertEqual(lifecycle.session_custody["status"], "unmeasured")
+
+    def test_the_credit_never_moves_the_window_deadline(self):
+        deadline = self.ledger.CustodyDeadline(10.0, telemetry_stream=None)
+        deadline.window_deadline = deadline.deadline + 1.0
+        before = deadline.deadline
+        writer._credit_preparation_allowance(deadline, 5.0)
+        self.assertEqual(deadline.deadline, before + 1.0)
+        writer._credit_preparation_allowance(deadline, 5.0)
+        self.assertEqual(deadline.deadline, before + 1.0)
+        unbounded = self.ledger.CustodyDeadline(10.0, telemetry_stream=None)
+        start = unbounded.deadline
+        writer._credit_preparation_allowance(unbounded, 2.5)
+        self.assertEqual(unbounded.deadline, start + 2.5)
+        self.assertAlmostEqual(unbounded.budget_s, 12.5)
 
 
 class StalePinWiringTests(unittest.TestCase):
