@@ -33,19 +33,24 @@ import io
 import json
 import math
 import os
+import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
+import uuid
 import zlib
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
-from joulewise import kernel_clock
+from joulewise import kernel_clock, whole_window
 from joulewise.adapters.powermetrics import (
     RAW_SAMPLES_NAME, anchor_records_from_powermetrics, parse_powermetrics_records)
+from joulewise.b5 import chain as b5_chain
 from joulewise.b5 import harvest as h
+from joulewise.idle_admission import NEG8_BRACKET_SCHEMA
 from joulewise.calibration_ledger import (
     GENESIS_DIGEST, IDENTITY_EPOCH_FIELDS, LEDGER_SCHEMA, append_bracket_session_receipt, artifact_hashes,
     finalize_bracket_session_slot, load_calibration_ledger_snapshot)
@@ -102,6 +107,48 @@ WALL_OFFSET_NS = round(WALL_OFFSET_S * 1e9)
 CHAIN_STARTED_NS = 1_487_000 * 10**9  # before every member's stream
 GIB = 2**30
 NS = 10**9
+
+# Registration 6.9, the flat harvest-threshold block (block-5 draft revision 3).
+# RegisteredThresholdTests pins this literal to the design branch's own text.
+REGISTERED_HARVEST_THRESHOLDS = {
+    "battery_limit_ma": 200, "battery_unmeasured_gap_s": 120.0, "battery_accumulator_watts_per_unit": 0.001,
+    "thermal_unmeasured_gap_s": 15.0, "contention_cpu_s_per_s": 0.05, "clock_step_ns": 1000000,
+    "clock_unmeasured_gap_s": 3.0, "disk_low_bytes": 10737418240, "clock_systematic_min_recorded": 5}
+DESIGN_BRANCH = "design/2026-10-05-v5-claim-block-draft"
+SEALED_DIR = "configs/campaigns/v5_claim_25g83"
+REGISTRATION_RELATIVE = f"{SEALED_DIR}/registration_block5.md"
+CORPUS_RELATIVE = "configs/campaigns/neg8_reference_corpus_v5/derivation/settled_corpus.json"
+# The registration 4.3 shape L2's plan writer copies into hazard_window.thresholds
+# (nested per hazard module); the harvest must not read it as its own block.
+L2_NESTED_THRESHOLDS = {"battery": {"limit_ma": 200, "max_update_age_s": 180, "max_unobserved_s": 120},
+                        "clock": {"step_ns": 1000000, "t_stream_max_s": 335},
+                        "contention": {"cpu_limit_s_per_s": 0.05}, "disk": {"low_bytes": 10737418240},
+                        "instrument": {"frames": 300}, "thermal": {"max_gap_s": 15, "max_level": 0}}
+# An idle float publication: no charge or discharge tick between publications
+# (BatteryPowerAccumulatorCount held at 4727 from 10-01 to 10-05, L1's units check).
+STEADY_TELEMETRY = {"AccumulatedBatteryPower": 1_000_000, "BatteryPowerAccumulatorCount": 4727,
+                    "AccumulatedBatteryDischarge": -2_000_000, "BatteryDischargeAccumulatorCount": 22670}
+
+
+def registration_text(block=None, heading="### 6.9 Harvest thresholds") -> str:
+    """A registration document whose 6.9 section carries ``block`` (default: the registered one).
+
+    A later section carries another JSON block, which the reader must not take.
+    """
+    body = json.dumps(REGISTERED_HARVEST_THRESHOLDS if block is None else block, indent=2)
+    return (f"# Registration (test copy)\n\n## 6. Flags and exclusions\n\n### 6.8 Disclosed only\n\nText.\n\n"
+            f"{heading}\n\nThe harvest reads its own copy of the in-window thresholds.\n\n```json\n{body}\n```\n\n"
+            "## 7. Verdicts\n\n```json\n{\"battery_limit_ma\": 1}\n```\n")
+
+
+def design_branch_file(relative: str) -> bytes | None:
+    """A file of the block-5 design branch, when this clone has the branch (else None)."""
+    try:
+        result = subprocess.run(["git", "-C", str(ROOT), "show", f"{DESIGN_BRANCH}:{relative}"],
+                                capture_output=True, check=False, timeout=60)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return result.stdout if result.returncode == 0 else None
 
 
 def member_span_ns(run_id: str) -> tuple[int, int]:
@@ -277,12 +324,15 @@ def disk_values(free_bytes: int, low_bytes: int = 10 * GIB) -> dict:
 
 
 def write_journals(directory: Path, *, extra_publications=(), thermal_levels=(), contention_extra=(),
-                   clock_steps=(), omit=(), battery_gap=None, contention_gap=None, disk_low=False) -> None:
+                   clock_steps=(), omit=(), battery_gap=None, contention_gap=None, disk_low=False,
+                   telemetry=None) -> None:
     """Every module from 300 s before the first member to 300 s after the last, in L1's format.
 
     ``extra_publications``: (monotonic_ns, battery-value overrides); each is a
     gauge publication taking effect at that instant (rounded to L1's whole-second
     UpdateTime).  ``contention_extra``: ((lo, hi), {pid, command, cpu_s_per_s}).
+    ``telemetry``: publication monotonic_ns -> its ``PowerTelemetryData``
+    accumulators (default: an idle float, no tick of either sign).
     """
     directory.mkdir(parents=True, exist_ok=True)
     spans = [member_span_ns(row[0]) for row in MEMBERS]
@@ -302,6 +352,7 @@ def write_journals(directory: Path, *, extra_publications=(), thermal_levels=(),
                         if not battery_gap[0] <= update * NS - WALL_OFFSET_NS <= battery_gap[1]]
     for update, values in sorted(publications, key=lambda item: item[0]):
         effect = update * NS - WALL_OFFSET_NS
+        values = {"power_telemetry": dict(STEADY_TELEMETRY if telemetry is None else telemetry(effect)), **values}
         journals["battery"].write("reading", effect + 2 * NS, effect + 2 * NS + 30_000_000,
                                   values=battery_values(update, **values))
     levels = dict(thermal_levels)
@@ -412,8 +463,10 @@ def l4_flag_line(code: str, **fields) -> dict:
 class Window:
     def __init__(self, root: Path, *, prefix_ledger=False, target_precheck=None, catalog_overrides=None,
                  journals=None, executed_overrides=None, frozen_pins=True, register_prompt_tokens=32,
-                 acceptance_policy=None, sealed_inventory=True):
+                 acceptance_policy=None, sealed_inventory=True, registration=True, registration_block=None):
         self.root = root
+        self.registration = (root / "measurement" / REGISTRATION_RELATIVE) if registration else None
+        self.registration_block = registration_block
         self.measurement = root / "measurement"
         self.pack = self.measurement / "configs" / "campaigns" / PACK_ID
         self.custody = root / "custody"
@@ -440,6 +493,12 @@ class Window:
             target = self.measurement / relative
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text(f"# {relative}\n")
+        # The committed 12-member NEG-8 settled corpus, exactly as the floor packs pin it.
+        (self.measurement / CORPUS_RELATIVE).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(ROOT / CORPUS_RELATIVE, self.measurement / CORPUS_RELATIVE)
+        if self.registration is not None:
+            self.registration.parent.mkdir(parents=True, exist_ok=True)
+            self.registration.write_text(registration_text(self.registration_block))
         plan = put(self.pack / "calibration_plan.json", {"plan_id": PLAN_ID, "kind": "b5-test-calibration-plan"})
         science, inventory = [], []
         for ordinal, (run_id, role, block, position, arm, subdir) in enumerate(MEMBERS, 1):
@@ -489,6 +548,21 @@ class Window:
             "downstream_contract": {"extraction_spec": {
                 "path": f"configs/campaigns/{PACK_ID}/extraction_spec.json",
                 "sha256": sha(self.pack / "extraction_spec.json")}},
+            # The floor packs' bound-derivation stage, as d117_floor_qwen3-1p7b_v5 writes it.
+            "stage_graph": [{
+                "stage_id": "b5t-bound-derivation", "kind": "bound_derivation", "expected_count": 1,
+                "input": {"kind": "external_artifact", "path": CORPUS_RELATIVE, "sha256": sha(ROOT / CORPUS_RELATIVE)},
+                "launch": {"schema_version": "joulewise.stage_launch.v1", "commands": [{
+                    "command_id": "b5t-bound-derivation.derive", "command_kind": "bound_derivation",
+                    "argv_template": {"tool_id": "campaign_runner", "interface_id": "joulewise.run_campaign.cli.v1",
+                                      "arguments": [
+                                          {"kind": "literal", "value": "--derive-neg8-drift-bound"},
+                                          {"kind": "repo_path", "value": CORPUS_RELATIVE},
+                                          {"kind": "literal", "value": "--neg8-drift-bound-output"},
+                                          {"kind": "binding_path", "value": "bound_runs_root",
+                                           "relative": "neg8-drift-bound.json"},
+                                          {"kind": "literal", "value": "--runs-dir"},
+                                          {"kind": "binding", "value": "bound_runs_root"}]}}]}}],
         }
         put(self.pack / "plan_tree.json", tree)
         (self.pack / "plan_tree.sha256").write_text(f"{sha(self.pack / 'plan_tree.json')}  plan_tree.json\n")
@@ -592,7 +666,10 @@ class Window:
                 "attempt": 1,
                 "pack": {"pack_id": PACK_ID, "pack_root": str(self.pack)},
                 "bracket_session_id": SESSION_ID,
-                "thresholds": {},
+                "thresholds": copy.deepcopy(L2_NESTED_THRESHOLDS),
+                # The plan writer's record of the registration it was written from.
+                "registration": {"path": str(self.registration), "sha256": sha(self.registration)}
+                if self.registration is not None else None,
                 "bindings": {"claim_runs_root": str(self.claim), "bound_runs_root": str(self.bound),
                              "ledger_path": str(self.ledger), "pre_attempt_id": f"{SESSION_ID}-pre",
                              "post_attempt_id": f"{SESSION_ID}-post"}},
@@ -1245,6 +1322,557 @@ class DeskAndG3Tests(WindowTestCase):
         self.assertIn("g3.assertion_failed", passed.codes())
 
 
+# ---------------------------------------------------------------------------
+# Fix lane fx-harvest: the NEG-8 bound and screen, the registered thresholds,
+# the battery accumulator rule, lineage findings and the emitted codes.
+# ---------------------------------------------------------------------------
+
+COMMITTED_CORPUS = json.loads((ROOT / CORPUS_RELATIVE).read_bytes())
+CORPUS_IDS = [member["bundle_id"] for member in COMMITTED_CORPUS["members"]]
+NEG8_FRESHNESS = {"os_build": "fixture-os", "power_supply_identity_sha256": "e" * 64,
+                  "calibration_identity_sha256": "f" * 64}
+
+
+def corpus_point(path: Path):
+    """A corpus member's two NEG-8 points (the synthetic bundles carry no energies)."""
+    value = 30.0 + 0.1 * int(path.name.rsplit("-r", 1)[1])
+    return {"point_j": value, "lower_j": value - 0.01, "upper_j": value + 0.01}, value - 20.0, None
+
+
+@contextlib.contextmanager
+def neg8_member_gates():
+    """Stub only the per-member energy and strictness gates of the core's NEG-8 mint.
+
+    The manifest grammar, the n >= 10 rule, the bound arithmetic and the
+    binding of the corpus identity to the manifest bytes are the core's own
+    (tests/test_whole_window.py stubs the same gates).
+    """
+    with contextlib.ExitStack() as stack:
+        for target, kwargs in (("authenticate_bundle_launch_lineage", {"return_value": None}),
+                               ("_custody_strict_invalid", {"return_value": False}),
+                               ("_current_strict_summary", {"return_value": True}),
+                               ("_scientific_config_identity", {"return_value": ("d" * 64, True)}),
+                               ("_reference_energy_evidence", {"side_effect": corpus_point}),
+                               ("neg8_freshness_bindings_from_metadata", {"return_value": NEG8_FRESHNESS})):
+            stack.enter_context(mock.patch.object(whole_window, target, **kwargs))
+        yield
+
+
+def neg8_corpus(window: "Window", failed=(), *, manifest_members=None, derive=True) -> str | None:
+    """Run the chain's NEG-8 corpus stage on ``window``; return the mint's refusal, if any.
+
+    The 12 committed corpus members become bundles in the bound runs root
+    (``failed`` did not succeed; a ``manifest_members`` id outside the
+    committed corpus gets a succeeded bundle too).  Then, as the chain and the
+    driver do: the chain's own prune helper (``b5.chain.PRUNE_HELPER``) writes
+    the collected manifest from the committed one (or from
+    ``manifest_members``, a corpus the prune helper never selected); the core's
+    ``mint_neg8_drift_bound_artifact`` derives the bound from it (refusing
+    under 10 members, as the chain's derivation stage would); the driver's
+    ``b5.chain.neg8_corpus_record`` locator goes into night/hazard_result.json.
+    """
+    ids = set(CORPUS_IDS) | {member["bundle_id"] for member in manifest_members or ()}
+    for bundle_id in sorted(ids):
+        bundle = window.bound / bundle_id
+        bundle.mkdir(parents=True, exist_ok=True)
+        for name in ("config.json", "metadata.json", "summary_metrics.json"):
+            (bundle / name).unlink(missing_ok=True)
+        put(bundle / "config.json", {"run_id": bundle_id})
+        put(bundle / "metadata.json", {"run_id": bundle_id})
+        put(bundle / "summary_metrics.json", {"status": "failed" if bundle_id in failed else "succeeded"})
+    night = window.custody / "night"
+    collected = night / "transcript" / b5_chain.NEG8_COLLECTED_MANIFEST
+    summary = night / "transcript" / b5_chain.NEG8_COLLECTED_SUMMARY
+    collected.parent.mkdir(parents=True, exist_ok=True)
+    for path in (collected, summary, night / "hazard_result.json"):
+        path.unlink(missing_ok=True)
+    source = window.measurement / CORPUS_RELATIVE
+    if manifest_members is not None:
+        source = window.root / "selected-corpus.json"
+        source.write_text(json.dumps({**COMMITTED_CORPUS, "members": manifest_members}, indent=2, sort_keys=True)
+                          + "\n")
+    subprocess.run([sys.executable, "-B", "-c", b5_chain.PRUNE_HELPER, str(source), str(window.bound),
+                    str(collected), str(summary)], check=True, capture_output=True)
+    refusal = None
+    if derive:
+        (window.bound / "neg8-drift-bound.json").unlink(missing_ok=True)
+        try:
+            with neg8_member_gates():
+                artifact = whole_window.mint_neg8_drift_bound_artifact(window.bound, collected)
+        except ValueError as exc:
+            refusal = str(exc)
+        else:
+            put(window.bound / "neg8-drift-bound.json", artifact)
+    put(night / "hazard_result.json", {"schema": "joulewise.b5_hazard_night.v1",
+                                       "neg8_corpus": b5_chain.neg8_corpus_record(night)})
+    return refusal
+
+
+def write_verdict(window: "Window", *, status: str, decision: str | None, conditions=(), member_conditions=()):
+    """A stored whole-window verdict row with a NEG-8 bracket (``decision`` None: no bracket)."""
+    core = {"conditions": sorted({*conditions, *member_conditions})}
+    if decision is not None:
+        core["neg8_bracket"] = {"schema_version": NEG8_BRACKET_SCHEMA, "decision": decision,
+                                "passed": decision == "passed", "conditions": sorted(conditions)}
+    put(window.claim / "whole-window-verdict.json", {"status": status, "bundle_ids": [],
+                                                     "idle_admission_core": core})
+
+
+class Neg8BoundTests(WindowTestCase):
+    """Registration 5.3: a bound derived from at least 10 of the 12 corpus members is valid."""
+
+    def harvest_neg8(self, name: str, failed=(), **kwargs):
+        window = Window(self.tmp / name, catalog_overrides=self.ISOLATE)
+        refusal = neg8_corpus(window, failed, **kwargs)
+        window.harvest()
+        return window, json.loads((window.archive / "derived" / "neg8-bound.json").read_bytes()), refusal
+
+    def test_twelve_members_derive_against_the_committed_corpus(self):
+        window, check, _refusal = self.harvest_neg8("kept12")
+        self.assertNotIn("neg8.bound_not_derived", window.codes())
+        self.assertEqual((check["derived_from"], check["problems"]), ("registered_corpus", []))
+
+    def test_eleven_and_ten_members_are_derived_from_the_custodied_collected_manifest(self):
+        """Before the fix both ended neg8.bound_not_derived: the core reader authenticates only the 12."""
+        for failed in ([CORPUS_IDS[4]], [CORPUS_IDS[0], CORPUS_IDS[11]]):
+            kept = 12 - len(failed)
+            with self.subTest(kept=kept):
+                window, check, refusal = self.harvest_neg8(f"kept{kept}", failed)
+                self.assertIsNone(refusal)
+                # The core's file reader still refuses the pruned corpus; the harvest does not.
+                self.assertIsNone(whole_window.load_neg8_drift_bound_artifact(window.bound / "neg8-drift-bound.json"))
+                self.assertEqual(check["derived_from"], "collected_subset", check["problems"])
+                self.assertEqual((check["members_committed"], check["members_collected"], check["dropped_bundle_ids"],
+                                  check["problems"]), (12, kept, failed, []))
+                self.assertNotIn("neg8.bound_not_derived", window.codes())
+                self.assertNotIn("neg8.bound_not_derived", window.exclusions()["reasons"])
+                self.assertEqual(check["collected_manifest"]["sha256"], sha(
+                    window.custody / "night" / "transcript" / b5_chain.NEG8_COLLECTED_MANIFEST))
+
+    def test_nine_members_are_not_derived(self):
+        window, check, refusal = self.harvest_neg8("kept9", CORPUS_IDS[:3])
+        self.assertIn("requires n >= 10", refusal)  # the chain's derivation stage writes no bound
+        flag = next(flag for flag in window.flags() if flag["code"] == "neg8.bound_not_derived")
+        self.assertEqual(flag["observed"]["problems"], ["bound_artifact_absent"])
+        self.assertIn("neg8.bound_not_derived", window.exclusions()["reasons"])
+        # A bound left from an earlier 10-member derivation does not cover a 9-member collection.
+        stale = Window(self.tmp / "stale", catalog_overrides=self.ISOLATE)
+        self.assertIsNone(neg8_corpus(stale, CORPUS_IDS[:2]))
+        neg8_corpus(stale, CORPUS_IDS[:3], derive=False)
+        stale.harvest()
+        check = json.loads((stale.archive / "derived" / "neg8-bound.json").read_bytes())
+        self.assertEqual((check["derived_from"], check["members_collected"]), (None, 9))
+        self.assertIn("collected_members_below_minimum", check["problems"])
+        self.assertIn("neg8.bound_not_derived", stale.codes())
+
+    def test_tampered_or_selected_corpus_is_not_derived(self):
+        collected = Path("night") / "transcript" / b5_chain.NEG8_COLLECTED_MANIFEST
+        foreign = [member if member["bundle_id"] != CORPUS_IDS[4] else
+                   {"bundle_id": "neg8-refcorpus-r99", "bundle_path": "neg8-refcorpus-r99"}
+                   for member in COMMITTED_CORPUS["members"]]
+        selected = [member for member in COMMITTED_CORPUS["members"] if member["bundle_id"] != CORPUS_IDS[4]]
+
+        def edit_manifest(window):  # bytes changed after the driver recorded their digest
+            path = window.custody / collected
+            path.write_bytes(path.read_bytes().replace(b"\n", b"\n ", 1))
+
+        def edit_bound(window):  # one member's point changed after derivation
+            path = window.bound / "neg8-drift-bound.json"
+            value = json.loads(path.read_bytes())
+            value["reference_corpus"]["members"][0]["point_gross_j"] += 0.5
+            put(path, value)
+
+        def edit_committed(window):  # the measurement checkout's manifest no longer has its pinned bytes
+            path = window.measurement / CORPUS_RELATIVE
+            path.write_bytes(path.read_bytes() + b"\n")
+
+        cases = {
+            "manifest_edited": ({"failed": [CORPUS_IDS[4]]}, edit_manifest,
+                                "collected_manifest_differs_from_recorded_sha256"),
+            "foreign_member": ({"manifest_members": foreign}, None, "collected_manifest_not_a_member_subset"),
+            "succeeded_member_left_out": ({"manifest_members": selected}, None,
+                                          f"dropped_member_succeeded:{CORPUS_IDS[4]}"),
+            "bound_edited": ({"failed": [CORPUS_IDS[4]]}, edit_bound,
+                             "bound_does_not_validate_against_collected_corpus"),
+            "committed_manifest_edited": ({"failed": [CORPUS_IDS[4]]}, edit_committed,
+                                          "committed_manifest_differs_from_pin"),
+        }
+        for name, (kwargs, tamper, problem) in cases.items():
+            with self.subTest(name):
+                window = Window(self.tmp / name, catalog_overrides=self.ISOLATE)
+                self.assertIsNone(neg8_corpus(window, **kwargs))  # the core minted a bound over these bytes
+                if tamper is not None:
+                    tamper(window)
+                window.harvest()
+                check = json.loads((window.archive / "derived" / "neg8-bound.json").read_bytes())
+                self.assertIsNone(check["derived_from"])
+                self.assertIn(problem, check["problems"])
+                self.assertIn("neg8.bound_not_derived", window.exclusions()["reasons"])
+
+    def test_derived_outputs_carry_no_bound_energy(self):
+        window, _check, _refusal = self.harvest_neg8("blind", [CORPUS_IDS[4]])
+        artifact = json.loads((window.bound / "neg8-drift-bound.json").read_bytes())
+        derived = (window.archive / "derived" / "neg8-bound.json").read_text()
+        self.assertNotIn(repr(artifact["bound_j"]), derived)
+        self.assertNotIn("point_gross_j", derived)
+
+
+class Neg8ScreenTests(WindowTestCase):
+    """Registration 6.5: the NEG-8 screen held in the whole-window verdict removes the window.
+
+    The aggregate verdict codes are disclosed only (the sealed draft, revision 3).
+    """
+
+    ISOLATE = {**WindowTestCase.ISOLATE, "whole_window.not_passed": "DISCLOSE", "g3.recompute_failed": "DISCLOSE"}
+
+    def screen(self, row, derived_from=None) -> list[dict]:
+        """The real ``_Harvest.neg8_screen`` on one stored row."""
+        run = h._Harvest.__new__(h._Harvest)
+        run.flags = h.FlagLedger(plan_id=PLAN_ID, attempt=1, catalog=h.Catalog.load(FIXTURES / "flag_catalog.json"),
+                                 boot_session_uuid=None)
+        run.neg8 = {"derived_from": derived_from}
+        run.neg8_screen(row)
+        return [flag for flag in run.flags.records if flag["code"] == "neg8.screen_failed"]
+
+    @staticmethod
+    def row(status, decision, conditions=(), member_conditions=()):
+        core = {"conditions": sorted({*conditions, *member_conditions})}
+        if decision is not None:
+            core["neg8_bracket"] = {"schema_version": NEG8_BRACKET_SCHEMA, "decision": decision,
+                                    "conditions": sorted(conditions)}
+        return {"status": status, "idle_admission_core": core}
+
+    def test_the_registered_conditions_are_the_cores_neg8_condition_codes(self):
+        self.assertEqual(whole_window.NEG8_POINT_DRIFT_CONDITION_CODES, {
+            whole_window.CONDITION_NEG8_GROSS_POINT_DRIFT_EXCEEDED,
+            whole_window.CONDITION_NEG8_IDLE_SUB_POINT_DRIFT_EXCEEDED, "neg8_bracket_missing",
+            "neg8_bracket_reference_invalid", whole_window.CONDITION_NEG8_DRIFT_BOUND_STALE,
+            whole_window.CONDITION_NEG8_DRIFT_BOUND_UNDERIVED, whole_window.CONDITION_NEG8_IDLE_SUB_DRIFT_BOUND_UNDERIVED})
+
+    def test_every_neg8_condition_fails_the_screen(self):
+        for condition in sorted(whole_window.NEG8_POINT_DRIFT_CONDITION_CODES
+                                | {"neg8_bracket_ambiguous_reference", "neg8_bracket_not_evaluated"}):
+            with self.subTest(condition):
+                (flag,) = self.screen(self.row("failed", "failed", [condition]))
+                self.assertEqual(flag["observed"]["conditions"], [condition])
+                self.assertEqual(flag["scope"]["level"], "window")
+                # Carried only in the core's list (run_campaign unions the bracket's into it): still failed.
+                core_only = self.row("failed", "passed", member_conditions=[condition])
+                self.assertEqual(len(self.screen(core_only)), 1)
+
+    def test_a_passed_screen_is_not_failed_by_member_failures(self):
+        self.assertEqual(self.screen(self.row("passed", "passed")), [])
+        # One member's admission failure fails the aggregate verdict, not the screen.
+        self.assertEqual(self.screen(self.row("failed", "passed", member_conditions=["cpu_admission_failed"])), [])
+        (flag,) = self.screen(self.row("passed", None))
+        self.assertEqual(flag["observed"]["reasons"], ["bracket_absent"])
+        (flag,) = self.screen(self.row("failed", "flagged"))
+        self.assertEqual(flag["observed"]["reasons"], ["bracket_not_passed"])
+
+    def test_failed_screen_in_the_verdict_removes_the_window(self):
+        """Before the fix nothing emitted neg8.screen_failed: a failed screen removed nothing."""
+        window = self.window()
+        neg8_corpus(window)
+        write_verdict(window, status="failed", decision="failed",
+                      conditions=[whole_window.CONDITION_NEG8_GROSS_POINT_DRIFT_EXCEEDED])
+        window.harvest()
+        (flag,) = [flag for flag in window.flags() if flag["code"] == "neg8.screen_failed"]
+        self.assertEqual(flag["observed"]["registered_conditions"],
+                         [whole_window.CONDITION_NEG8_GROSS_POINT_DRIFT_EXCEEDED])
+        reasons = window.exclusions()["reasons"]
+        self.assertIn("neg8.screen_failed", reasons)
+        self.assertNotIn("whole_window.not_passed", reasons)  # disclosed only
+        self.assertNotIn("neg8.bound_not_derived", window.codes())
+
+    def test_passed_verdict_with_a_derived_bound_keeps_the_screen(self):
+        window = self.window()
+        neg8_corpus(window)
+        write_verdict(window, status="failed", decision="passed", member_conditions=["cpu_admission_failed"])
+        window.harvest()
+        self.assertIn("whole_window.not_passed", window.codes())
+        self.assertNotIn("neg8.screen_failed", window.codes())
+        self.assertNotIn("neg8.bound_not_derived", window.codes())
+
+    def test_collected_corpus_bound_with_a_verdict_that_could_not_read_it(self):
+        """The verdict writer reads only the committed 12: its screen never ran against the 11-member bound."""
+        window = self.window()
+        neg8_corpus(window, [CORPUS_IDS[4]])
+        write_verdict(window, status="failed", decision="failed",
+                      conditions=[whole_window.CONDITION_NEG8_DRIFT_BOUND_UNDERIVED,
+                                  whole_window.CONDITION_NEG8_IDLE_SUB_DRIFT_BOUND_UNDERIVED])
+        window.harvest()
+        self.assertNotIn("neg8.bound_not_derived", window.codes())
+        (flag,) = [flag for flag in window.flags() if flag["code"] == "neg8.screen_failed"]
+        self.assertTrue(flag["observed"]["screen_not_evaluated_against_collected_bound"])
+        self.assertIn("neg8.screen_failed", window.exclusions()["reasons"])
+
+    def test_unreadable_verdict_fails_the_screen(self):
+        window = self.window()
+        neg8_corpus(window)
+        (window.claim / "whole-window-verdict.json").write_text("{not json\n")
+        window.harvest()
+        (flag,) = [flag for flag in window.flags() if flag["code"] == "neg8.screen_failed"]
+        self.assertEqual(flag["observed"]["reasons"], ["verdict_unreadable"])
+        self.assertIn("whole_window.verdict_unauthenticated", window.codes())
+
+
+class RegisteredThresholdTests(unittest.TestCase):
+    """Registration 6.9: the harvest reads the registered flat block, never a default."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory(prefix="b5-thresholds-", dir=REAL_TMP)
+        self.addCleanup(self._tmp.cleanup)
+        self.root = Path(self._tmp.name)
+
+    def registration(self, text=None) -> Path:
+        path = self.root / REGISTRATION_RELATIVE
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(registration_text() if text is None else text)
+        return path
+
+    def plan(self, registration=None, recorded_sha=True, **hazard):
+        window = {"thresholds": copy.deepcopy(L2_NESTED_THRESHOLDS), **hazard}
+        if registration is not None:
+            window["registration"] = {"path": str(registration),
+                                      "sha256": sha(registration) if recorded_sha is True else recorded_sha}
+        return {"plan_id": PLAN_ID, "hazard_window": window}
+
+    def test_l2_nested_thresholds_alone_are_unregistered_not_defaulted(self):
+        """Before the fix the nested block was ignored and the defaults applied without a trace."""
+        values, provenance = h.resolve_thresholds(self.plan(), self.root)
+        self.assertEqual(values, {})
+        self.assertEqual(provenance["problems"], ["harvest_thresholds_unregistered",
+                                                  *(f"missing:{key}" for key in h.HARVEST_THRESHOLD_KEYS)])
+
+    def test_the_named_registration_is_read(self):
+        path = self.registration()
+        values, provenance = h.resolve_thresholds(self.plan(path), self.root)
+        self.assertEqual(values, REGISTERED_HARVEST_THRESHOLDS)
+        self.assertEqual(provenance["problems"], [])
+        self.assertEqual(provenance["key_sources"], {key: ["registration"] for key in h.HARVEST_THRESHOLD_KEYS})
+        self.assertEqual(provenance["registration"], {"path": str(path), "sha256": sha(path),
+                                                      "recorded_sha256": sha(path)})
+        relative = self.plan(Path(REGISTRATION_RELATIVE), recorded_sha=sha(path))  # resolves in the checkout
+        self.assertEqual(h.resolve_thresholds(relative, self.root)[0], REGISTERED_HARVEST_THRESHOLDS)
+
+    def test_the_design_branch_registration_parses_to_the_registered_block(self):
+        raw = design_branch_file(REGISTRATION_RELATIVE)
+        if raw is None:
+            self.skipTest(f"{DESIGN_BRANCH} is not in this clone")
+        self.assertEqual(h.parse_registration_thresholds(raw), REGISTERED_HARVEST_THRESHOLDS)
+
+    def test_problems_are_recorded_and_registered_values_are_never_replaced(self):
+        path = self.registration()
+        partial = {key: value for key, value in REGISTERED_HARVEST_THRESHOLDS.items()
+                   if key != "battery_accumulator_watts_per_unit"}
+        cases = {
+            "digest_differs": (self.plan(path, recorded_sha="0" * 64), {}, None,
+                               "registration_digest_differs_from_plan"),
+            "plan_block_disagrees": (self.plan(path, harvest_thresholds=dict(REGISTERED_HARVEST_THRESHOLDS,
+                                                                             battery_limit_ma=400)), {}, None,
+                                     "sources_disagree:battery_limit_ma"),
+            "override_differs": (self.plan(path), {"battery_limit_ma": 400}, None,
+                                 "override_differs_from_registered:battery_limit_ma"),
+            "override_unknown": (self.plan(path), {"battery_limit": 400}, None, "override_unknown_key:battery_limit"),
+            "key_missing": (self.plan(path), {}, registration_text(partial),
+                            "missing:battery_accumulator_watts_per_unit"),
+            "scale_null": (self.plan(path), {}, registration_text(dict(REGISTERED_HARVEST_THRESHOLDS,
+                                                                       battery_accumulator_watts_per_unit=None)),
+                           "invalid:battery_accumulator_watts_per_unit:must be a finite number > 0"),
+            "unknown_key": (self.plan(path), {}, registration_text(dict(REGISTERED_HARVEST_THRESHOLDS, extra=1)),
+                            "unknown_keys:registration:extra"),
+            "two_headings": (self.plan(path), {}, registration_text() + "\n### 6.9 Harvest thresholds\n",
+                             "registration_block_unreadable:expected one 'Harvest thresholds' heading, found 2"),
+            "no_block": (self.plan(path), {}, "# R\n\n### 6.9 Harvest thresholds\n\nNone.\n\n## 7\n\n```json\n{}\n```\n",
+                         "registration_block_unreadable:no ```json block under the 'Harvest thresholds' heading"),
+        }
+        for name, (plan, overrides, text, problem) in cases.items():
+            with self.subTest(name):
+                self.registration(text)
+                if text is not None and name != "digest_differs":
+                    plan["hazard_window"]["registration"]["sha256"] = sha(path)
+                values, provenance = h.resolve_thresholds(plan, self.root, overrides=overrides)
+                self.assertIn(problem, provenance["problems"])
+                if name in ("plan_block_disagrees", "override_differs"):
+                    self.assertEqual(values["battery_limit_ma"], 200)  # the registration's value stands
+                if name in ("key_missing", "scale_null"):
+                    self.assertNotIn("battery_accumulator_watts_per_unit", values)
+                self.registration()
+
+    def test_the_plans_flat_copy_alone_is_a_registered_source(self):
+        values, provenance = h.resolve_thresholds(
+            self.plan(harvest_thresholds=dict(REGISTERED_HARVEST_THRESHOLDS)), self.root)
+        self.assertEqual((values, provenance["problems"], provenance["sources"]),
+                         (REGISTERED_HARVEST_THRESHOLDS, [], ["plan"]))
+        path = self.registration()
+        values, provenance = h.resolve_thresholds(
+            self.plan(path, harvest_thresholds=dict(REGISTERED_HARVEST_THRESHOLDS)), self.root)
+        self.assertEqual((provenance["problems"], provenance["sources"]), ([], ["plan", "registration"]))
+
+
+class ThresholdAndAccumulatorHarvestTests(WindowTestCase):
+    def thresholds(self, window) -> dict:
+        return json.loads((window.archive / "derived" / "harvest-thresholds.json").read_bytes())
+
+    def test_registered_block_is_used_and_recorded(self):
+        window = self.window()
+        record = window.harvest()
+        self.assertEqual(record["verdict"], "COLLECTED", record["faults"])
+        recorded = self.thresholds(window)
+        self.assertEqual((recorded["values"], recorded["problems"]), (REGISTERED_HARVEST_THRESHOLDS, []))
+        self.assertEqual(recorded["registration"]["sha256"], sha(window.registration))
+        self.assertEqual(sha(window.archive / "sources" / "inputs" / "registration.md"), sha(window.registration))
+        self.assertIn("derived/harvest-thresholds.json", record["outputs"])
+
+    def test_plan_without_the_registered_block_is_a_recorded_harvest_fault(self):
+        """Before the fix this window came out COLLECTED on the module's own defaults."""
+        window = self.window(registration=False)
+        record = window.harvest()
+        self.assertEqual(record["verdict"], "HARVEST_FAULT")
+        self.assertFalse(record["claim_usable"])
+        self.assertIn("thresholds", {fault["collector"] for fault in record["faults"]})
+        self.assertIn("harvest_thresholds_unregistered", self.thresholds(window)["problems"])
+        self.assertIn("harvest.fault", window.window_flags()["exclusions"]["reasons"])
+        self.assertTrue(window.flags())  # numbers and flags are still written
+        # The cure: name the registration and re-harvest the same bytes.
+        registration = window.root / "registration_block5.md"
+        registration.write_text(registration_text())
+        inputs = h.resolve_inputs(window.plan_path, {"registration_path": str(registration)})
+        cured = h.harvest(inputs, window.root / "archive-cured", seams=h.Seams(
+            group_alive=lambda pgid: False, exclusions_compute=EXCLUSIONS, boot_session_uuid=lambda: "B5"))
+        self.assertEqual(cured["verdict"], "COLLECTED", cured["faults"])
+
+    def test_registration_without_the_scale_faults_and_never_demotes_the_accumulator(self):
+        block = {key: value for key, value in REGISTERED_HARVEST_THRESHOLDS.items()
+                 if key != "battery_accumulator_watts_per_unit"}
+        window = self.window(registration_block=block)
+        record = window.harvest()
+        self.assertEqual(record["verdict"], "HARVEST_FAULT")
+        self.assertEqual({fault["collector"] for fault in record["faults"]}, {"thresholds", "monitor.battery"})
+        self.assertIn("missing:battery_accumulator_watts_per_unit", self.thresholds(window)["problems"])
+        self.assertEqual({code for code in window.codes() if code.startswith("battery.accumulator")}, set())
+        # The other modules' joins still ran.
+        self.assertNotIn("monitor", {fault["collector"] for fault in record["faults"]})
+
+    def test_accumulator_excursion_excludes_the_member_at_the_registered_scale(self):
+        """Before the fix the plan's nested block left the scale None: a disclosed diagnostic, no exclusion."""
+        target = "b5t-abs-r02"
+        lo, hi = member_span_ns(target)
+        start = lo - 10 * NS
+
+        def telemetry(effect_ns):  # discharging at -5,400 mW from 10 s before the target's stream to its end
+            ticks = max(0, min(effect_ns, hi) - start) // NS
+            return {**STEADY_TELEMETRY, "AccumulatedBatteryDischarge": -2_000_000 - 5_400 * ticks,
+                    "BatteryDischargeAccumulatorCount": 22670 + ticks}
+
+        window = self.window(journals={"telemetry": telemetry})
+        record = window.harvest()
+        self.assertEqual(record["verdict"], "COLLECTED", record["faults"])
+        flagged = {flag["scope"]["run_id"] for flag in window.flags() if flag["code"] == "battery.accumulator_excursion"}
+        self.assertEqual(flagged, {target})
+        self.assertNotIn("battery.member_span", window.codes(target))  # InstantAmperage read 0 throughout
+        self.assertIn(target, {row["run_id"] for row in window.exclusions()["members_excluded"]})
+
+
+class LineageFindingTests(WindowTestCase):
+    """L3's lineage audit reaches the flag record: every finding a flag, none a refusal."""
+
+    LOCATOR = ".joulewise-launch-lineage.json"
+
+    def publish(self, window):
+        from joulewise import window_lineage
+        return window_lineage.publish_window_lineage(
+            pack_root=window.pack, pack_id=PACK_ID, plan_id=PLAN_ID, window_id=PLAN_ID,
+            bracket_session_id=SESSION_ID, pre_attempt_id=f"{SESSION_ID}-pre", post_attempt_id=f"{SESSION_ID}-post",
+            claim_runs_root=window.claim, bound_runs_root=window.bound, custody_root=window.custody,
+            pack_sha256="c" * 64, boot_session_id=str(uuid.UUID(int=5)))
+
+    def lineage_flags(self, window) -> list[dict]:
+        return [flag for flag in window.flags() if flag["code"].startswith("lineage.")]
+
+    def test_an_unpublished_lineage_is_recorded_not_refused(self):
+        """Before the fix no lineage finding reached the record."""
+        window = self.window()
+        record = window.harvest()
+        self.assertEqual(record["verdict"], "COLLECTED")
+        flags = self.lineage_flags(window)
+        self.assertEqual(sorted((flag["code"], flag["scope"]["level"], flag["observed"]["root_role"]) for flag in flags),
+                         [("lineage.locator_unreadable", "window", "bound_runs_root"),
+                          ("lineage.locator_unreadable", "window", "claim_runs_root")])
+        self.assertFalse(any(code.startswith("lineage.") for code in window.exclusions()["reasons"]))
+        self.assertEqual(window.window_flags()["flags"]["unclassified"], [])
+
+    def test_published_lineage_findings_become_flags_with_archived_evidence(self):
+        window = self.window()
+        published = self.publish(window)
+        sidecar = window.claim / f"{self.LOCATOR}.sha256"
+        sidecar.write_text(f"{'0' * 64}  {self.LOCATOR}\n")
+        tree = json.loads((window.pack / "plan_tree.json").read_bytes())
+        tree["b5t_edited_after_publication"] = True
+        put(window.pack / "plan_tree.json", tree)
+        (window.pack / "plan_tree.sha256").write_text(f"{sha(window.pack / 'plan_tree.json')}  plan_tree.json\n")
+        record = window.harvest()
+        self.assertEqual(record["verdict"], "COLLECTED", record["faults"])
+        flags = self.lineage_flags(window)
+        by_code = {}
+        for flag in flags:
+            by_code.setdefault(flag["code"], []).append(flag)
+        self.assertEqual(set(by_code), {"lineage.locator_sidecar_mismatch", "lineage.plan_tree_digest_differs",
+                                        "lineage.bundle_stamp_absent"})
+        (mismatch,) = by_code["lineage.locator_sidecar_mismatch"]
+        self.assertEqual((mismatch["scope"]["level"], mismatch["observed"]["root_role"]), ("window", "claim_runs_root"))
+        self.assertEqual(sorted(item["path"] for item in mismatch["evidence"]),
+                         [f"sources/night-custody/runs_claim/{self.LOCATOR}",
+                          f"sources/night-custody/runs_claim/{self.LOCATOR}.sha256"])
+        for item in mismatch["evidence"]:
+            self.assertEqual(sha(window.archive / item["path"]), item["sha256"])
+        (digest,) = by_code["lineage.plan_tree_digest_differs"]
+        self.assertEqual((digest["family"], digest["klass"]), ("PACK_IDENTITY", "NUMBER"))
+        self.assertEqual(digest["observed"]["observed"], sha(window.pack / "plan_tree.json"))
+        self.assertEqual(digest["expected"], published["launch_lineage"]["plan_tree_sha256"])
+        self.assertEqual([item["path"] for item in digest["evidence"]],
+                         [f"sources/repo/configs/campaigns/{PACK_ID}/plan_tree.json"])
+        # The seed bundles carry no lineage stamp: one member-level record each, disclosed.
+        self.assertEqual({flag["scope"]["run_id"] for flag in by_code["lineage.bundle_stamp_absent"]},
+                         {row[0] for row in MEMBERS})
+        reasons = window.exclusions()["reasons"]
+        self.assertIn("lineage.plan_tree_digest_differs", reasons)
+        self.assertNotIn("lineage.locator_sidecar_mismatch", reasons)
+        self.assertFalse(any("lineage.bundle_stamp_absent" in row["codes"]
+                             for row in window.exclusions()["members_excluded"]))
+        for flag in flags:
+            self.assertEqual(h.flag_problems(flag), [], flag["code"])
+
+
+class EmittedCodeTests(unittest.TestCase):
+    """Fix lane fx-harvest (6): every code the harvest can emit, against the catalog."""
+
+    def test_every_code_literal_in_the_harvest_is_listed(self):
+        source = (ROOT / "joulewise/b5/harvest.py").read_text()
+        families = {code.split(".", 1)[0] for code in h.CODES}
+        literals = {match for match in re.findall(r'"([a-z0-9_]+\.[a-z0-9_.]+)"', source)
+                    if match.split(".", 1)[0] in families and h.CODE_RE.fullmatch(match)}
+        built = {f"{module}.unmeasured" for module in ("battery", "thermal", "contention", "clock")} \
+            | {f"instrument.{reason}" for reason in h.INSTRUMENT_REASONS}
+        not_codes = {"g3.txt", "roster.json"}  # file names
+        self.assertEqual((literals | built) - not_codes - set(h.CODES), set())
+
+    def test_every_lineage_finding_code_is_listed_with_l3s_family(self):
+        from joulewise import window_lineage
+        self.assertEqual(set(window_lineage.FINDING_CODES), set(h.LINEAGE_CODES))
+        self.assertEqual({code for code in h.LINEAGE_CODES if h.CODES[code].klass == "NUMBER"},
+                         {"lineage.plan_tree_digest_differs"})
+
+    def test_the_sealed_catalog_classifies_every_emitted_code(self):
+        raw = (ROOT / SEALED_DIR / "flag_catalog.json").read_bytes() \
+            if (ROOT / SEALED_DIR / "flag_catalog.json").is_file() else design_branch_file(f"{SEALED_DIR}/flag_catalog.json")
+        if raw is None:
+            self.skipTest("neither the sealed catalog nor the block-5 design branch is in this clone")
+        codes = json.loads(raw)["codes"]
+        self.assertEqual(set(h.CODES) - set(codes), set(h.NEVER_CLASSIFIED_CODES))
+        self.assertTrue(h.NEVER_CLASSIFIED_CODES.isdisjoint(codes))
+
+
 _REAL_SEAMS = h.Seams
 
 
@@ -1291,6 +1919,7 @@ def battery_journal(publications, start_s=0, end_s=600) -> list:
     """A gauge publishing at each (second, overrides); read 2 s after it appears and 30 s later."""
     journal = L1Journal("battery")
     for second, overrides in publications:
+        overrides = {"power_telemetry": dict(STEADY_TELEMETRY), **overrides}
         update = second + 10_000
         effect = update * NS - WALL_OFFSET_NS
         for delay in (2, 32):
@@ -1305,7 +1934,7 @@ def publication_ns(second: int) -> int:
 
 
 class JoinTests(unittest.TestCase):
-    T = h.DEFAULT_THRESHOLDS
+    T = REGISTERED_HARVEST_THRESHOLDS
 
     def test_in_force_publications(self):
         self.assertEqual(h.in_force([0, 60, 120, 180], 70, 100), [1, 2])
@@ -1359,18 +1988,69 @@ class JoinTests(unittest.TestCase):
         codes = [code for code, *_ in h.battery_member_flags([publication_ns(70), publication_ns(80)], readings, self.T)]
         self.assertEqual(codes, ["battery.unmeasured"])
 
-    def test_accumulator_is_diagnostic_until_units_are_confirmed(self):
-        telemetry = [{"AccumulatedBatteryPower": 100, "BatteryPowerAccumulatorCount": 10},
-                     {"AccumulatedBatteryPower": 1300, "BatteryPowerAccumulatorCount": 70}, {}]
-        readings = battery_journal([(second, {"power_telemetry": values})
-                                    for second, values in zip((0, 60, 120), telemetry)])
-        span = [publication_ns(10), publication_ns(20)]
-        unconfirmed = [code for code, *_ in h.battery_member_flags(span, readings, self.T)]
-        self.assertIn("battery.accumulator_diagnostic", unconfirmed)
-        self.assertNotIn("battery.accumulator_excursion", unconfirmed)
-        confirmed = dict(self.T, battery_accumulator_watts_per_unit=1.0)
-        codes = [code for code, *_ in h.battery_member_flags(span, readings, confirmed)]
-        self.assertIn("battery.accumulator_excursion", codes)  # 1200 W·count / 60 counts = 20 W > 0.2 A × 12.18 V
+    # Registration 6.4's worked example: between two publications the discharge
+    # accumulator gains 40 ticks totalling -216,000 (mW x tick): mean -5,400 mW,
+    # above 200 mA x 12.18 V = 2,436 mW.  The calibration-capture assist: 20
+    # ticks at -130 mW, below it.
+    EXCURSION = [STEADY_TELEMETRY, {**STEADY_TELEMETRY, "AccumulatedBatteryDischarge": -2_216_000,
+                                    "BatteryDischargeAccumulatorCount": 22710}]
+    ASSIST = [STEADY_TELEMETRY, {**STEADY_TELEMETRY, "AccumulatedBatteryDischarge": -2_002_600,
+                                 "BatteryDischargeAccumulatorCount": 22690}]
+    RESET = [STEADY_TELEMETRY, {**STEADY_TELEMETRY, "BatteryDischargeAccumulatorCount": 12}]
+
+    def accumulator_codes(self, telemetry, thresholds=None):
+        readings = battery_journal([(0, {"power_telemetry": telemetry[0]}), (60, {"power_telemetry": telemetry[1]})],
+                                   end_s=120)
+        return h.battery_member_flags([publication_ns(10), publication_ns(20)], readings, thresholds or self.T)
+
+    def test_accumulator_rule_runs_at_the_registered_scale(self):
+        """Fix lane fx-harvest (4): one rule with L1; the scale is registered (0.001 W per unit), never None."""
+        ((code, observed, interval),) = self.accumulator_codes(self.EXCURSION)
+        self.assertEqual(code, "battery.accumulator_excursion")
+        (row,) = observed["intervals"]
+        self.assertEqual((row["accumulator"], row["ticks"], row["mean_per_tick"]), ("discharge", 40, -5400.0))
+        self.assertAlmostEqual(row["mean_w"], 5.4)
+        self.assertAlmostEqual(row["limit_w"], 2.436)
+        self.assertEqual(interval, {"monotonic_ns": [publication_ns(0), publication_ns(60)]})
+        self.assertEqual([code for code, *_ in self.accumulator_codes(self.ASSIST)], ["battery.accumulator_activity"])
+        self.assertEqual([code for code, *_ in self.accumulator_codes([STEADY_TELEMETRY, STEADY_TELEMETRY])], [])
+        ((code, observed, _interval),) = self.accumulator_codes(self.RESET)
+        self.assertEqual(code, "battery.accumulator_unavailable")
+        self.assertIn("went backward", observed["intervals"][0]["unavailable"]["discharge"])
+        # Fields not read at a publication: the rule cannot run there, and says so.
+        self.assertEqual([code for code, *_ in self.accumulator_codes([{}, {}])], ["battery.accumulator_unavailable"])
+
+    def test_an_unregistered_scale_is_never_a_silent_diagnostic(self):
+        """Before the fix, ``battery_accumulator_watts_per_unit = None`` demoted the rule to a diagnostic."""
+        for unit in (None, 0, "0.001"):
+            with self.subTest(unit=unit), self.assertRaises(ValueError):
+                self.accumulator_codes(self.EXCURSION, dict(self.T, battery_accumulator_watts_per_unit=unit))
+        missing = {key: value for key, value in self.T.items() if key != "battery_accumulator_watts_per_unit"}
+        with self.assertRaises(KeyError):
+            self.accumulator_codes(self.EXCURSION, missing)
+        self.assertNotIn("battery.accumulator_diagnostic", h.CODES)
+
+    @unittest.skipUnless(L1_AVAILABLE, "lane L1's joulewise.hazards is not in this tree")
+    def test_accumulator_verdicts_equal_l1s_span_findings(self):
+        """The same intervals, signs and limit as L1's ``battery.span_findings`` (L1 names an excursion member_span)."""
+        from joulewise.hazards import battery as l1
+        l1_name = {"battery.member_span": "battery.accumulator_excursion"}
+        for name, telemetry in (("excursion", self.EXCURSION), ("assist", self.ASSIST), ("reset", self.RESET),
+                                ("steady", [STEADY_TELEMETRY, STEADY_TELEMETRY])):
+            with self.subTest(name):
+                journal = L1Journal("battery")
+                for second, values in ((0, telemetry[0]), (60, telemetry[1])):
+                    effect = publication_ns(second)
+                    journal.write("reading", effect + 2 * NS, effect + 2 * NS + 1_000,
+                                  values=battery_values(second + 10_000, power_telemetry=values))
+                span = {"monotonic_ns": [publication_ns(10), publication_ns(20)]}
+                limits = {"limit_ma": 200, "max_update_age_s": 180, "max_unobserved_s": 120}
+                ours = {code for code, *_ in h.battery_member_flags(span["monotonic_ns"], parsed(journal), self.T)
+                        if code.startswith("battery.accumulator")}
+                theirs = {l1_name.get(finding["code"], finding["code"])
+                          for finding in l1.span_findings(journal.lines, span, limits)
+                          if finding["code"] != "battery.unmeasured"}
+                self.assertEqual(ours, theirs)
 
     def test_thermal_nonzero_and_unmeasured(self):
         journal = L1Journal("thermal")
@@ -1492,7 +2172,7 @@ class L1JournalFormatTests(unittest.TestCase):
     every member came out battery/thermal/contention.unmeasured.
     """
 
-    T = h.DEFAULT_THRESHOLDS
+    T = REGISTERED_HARVEST_THRESHOLDS
 
     @classmethod
     def setUpClass(cls):

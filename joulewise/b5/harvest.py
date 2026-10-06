@@ -20,19 +20,25 @@ Layout under the archive root (created once; a re-harvest uses a new root):
 
 * ``sources/``: a clone of every input byte, with ``SHA256SUMS``.
 * ``derived/``: structure only (flags, window summary, exclusions, roster,
-  terminal ledger-head candidate, bracket binding).  These files may leave
-  custody.
+  terminal ledger-head candidate, bracket binding, the registered harvest
+  thresholds with their provenance, the NEG-8 bound check).  These files may
+  leave custody.
 * ``withheld/``: the numbers (re-reduced summaries), member spans, bracket
   evaluation, member assessments and transcripts.  Restricted custody.
 * ``harvest.json``: the verdict and the digests of every output.
 
 Other-lane seams.  The harvest reads files written by lanes that land in the
 same integration change: the hazard monitor journals and the arm record (L1),
-the window plan and the arm-time executed-file inventory (L2), the desk, arm
-and driver flag files and the exclusion function (L4), the sealed inventory
-and flag catalog (L6).  Each format is read in exactly one function here
-(``_plan_value``, ``parse_monitor_line``, ``_arm_modules``,
-``_inventory_map``, ``flag_problems``, ``Catalog.load``,
+L1's accumulator reader (``hazards.battery.accumulator_interval``), the window
+plan, the arm-time executed-file inventory and the driver's
+``night/hazard_result.json`` NEG-8 corpus locator (L2), the launch-lineage
+audit (L3, ``window_lineage.audit_window_lineage``), the desk, arm and driver
+flag files and the exclusion function (L4), the registration's harvest
+thresholds (section 6.9), the sealed inventory and flag catalog (L6).  Each
+format is read in exactly one function here (``_plan_value``,
+``resolve_thresholds``, ``parse_monitor_line``, ``accumulator_member_flags``,
+``_arm_modules``, ``_inventory_map``, ``_collected_corpus_bytes``,
+``lineage_audit``, ``flag_problems``, ``Catalog.load``,
 ``l4_exclusion_inputs``/``_l4_exclusions``), so an integration fix touches
 one place.  The formats are the ones those lanes write, not shapes invented
 here: ``tests/fixtures/b5_harvest/l1_monitor`` holds journals written by L1's
@@ -65,6 +71,9 @@ FLAG_SCHEMA = "joulewise.flag.v1"
 WINDOW_FLAGS_SCHEMA = "joulewise.window_flags.v1"
 ROSTER_SCHEMA = "joulewise.b5_harvest_roster.v1"
 TERMINAL_BOUNDARY_SCHEMA = "joulewise.b5_terminal_boundary.v1"
+NEG8_CHECK_SCHEMA = "joulewise.b5_neg8_bound_check.v1"
+NEG8_BOUND_NAME = "neg8-drift-bound.json"      # in the bound runs root (the pack's bound-derivation output)
+HAZARD_RESULT_NAME = "hazard_result.json"      # L2's driver terminal record, night/
 
 COLLECTED, NULL, HARVEST_FAULT = "COLLECTED", "NULL", "HARVEST_FAULT"
 FAMILIES = (
@@ -86,24 +95,35 @@ SEALED_DIRECTORY = "configs/campaigns/v5_claim_25g83"
 # map is read here as the per-unit pin override.
 IDENTITY_PINS_SCHEMA = "joulewise.b5_identity_pins.v1"
 
-# Thresholds.  The window plan copies the sealed registration's values into
-# ``hazard_window.thresholds``; these defaults are the registered values in
-# plan sections 2.3 and 3.4 and apply only when the plan omits one.
-DEFAULT_THRESHOLDS = {
-    "battery_limit_ma": 200,               # #421; battery_float.LIMIT_MA
-    "battery_unmeasured_gap_s": 120.0,     # no publication for > 120 s
-    # W per accumulator unit.  None keeps the accumulator a disclosed
-    # diagnostic (plan 3.4) until the registration confirms the units; L1
-    # reads AccumulatedBatteryPower / BatteryPowerAccumulatorCount as mW,
-    # which a registration would enter here as 0.001.
-    "battery_accumulator_watts_per_unit": None,
-    "thermal_unmeasured_gap_s": 15.0,      # 5 s poll; three missed polls
-    "contention_cpu_s_per_s": 0.05,        # 5 % of one core
-    "clock_step_ns": 1_000_000,            # 1 ms residual move between samples
-    "clock_unmeasured_gap_s": 3.0,         # 1 Hz journal; L1's clock.span_findings gap
-    "disk_low_bytes": 10 * 2**30,          # 10 GiB
-    "clock_systematic_min_recorded": 5,
-}
+# Thresholds.  The harvest reads the flat block of registration section 6.9
+# ("Harvest thresholds"), never a default: the registration the window plan
+# names (``hazard_window.registration`` {path, sha256}, the plan writer's
+# record) and, when the plan carries one, the plan's own flat copy
+# (``hazard_window.harvest_thresholds``).  A key no registered source gives,
+# two sources that disagree, an unreadable block or an invalid value is a
+# recorded harvest fault (HARVEST_FAULT, never claim-usable until a harvest
+# with the registered block is re-run on the same bytes).  The plan's
+# ``hazard_window.thresholds`` is the arm's nested per-module block
+# (registration 4.3) and is not read here.
+HARVEST_THRESHOLD_KEYS = (
+    "battery_limit_ma",                    # #421; 200 mA
+    "battery_unmeasured_gap_s",            # no publication for > 120 s
+    "battery_accumulator_watts_per_unit",  # 0.001: L1's confirmed mW per unit
+    "thermal_unmeasured_gap_s",            # 5 s poll; three missed polls
+    "contention_cpu_s_per_s",              # 5 % of one core
+    "clock_step_ns",                       # 1 ms residual move between samples
+    "clock_unmeasured_gap_s",              # 1 Hz journal
+    "disk_low_bytes",                      # 10 GiB
+    "clock_systematic_min_recorded",       # at least 5 recorded anchors
+)
+INTEGER_THRESHOLD_KEYS = frozenset({"clock_systematic_min_recorded"})
+PLAN_HARVEST_THRESHOLDS_KEY = "harvest_thresholds"
+THRESHOLDS_SCHEMA = "joulewise.b5_harvest_thresholds.v1"
+# The section heading of registration 6.9, numbered or not ("### 6.9 Harvest thresholds").
+_THRESHOLD_HEADING_RE = re.compile(r"^#{2,6}[ \t]+(?:[0-9]+(?:\.[0-9]+)*[ \t]+)?Harvest thresholds[ \t]*$",
+                                   re.MULTILINE | re.IGNORECASE)
+_ANY_HEADING_RE = re.compile(r"^#{1,6}[ \t]", re.MULTILINE)
+_JSON_FENCE_RE = re.compile(r"^```json[ \t]*\n(.*?)^```[ \t]*$", re.MULTILINE | re.DOTALL)
 CONTENTION_EXEMPT = frozenset({"kernel_task"})
 INSTRUMENT_REASONS = frozenset({"insufficient_in_window_samples", "cadence_ratio_below_threshold"})
 ENVELOPE_REASON = "anchor_energy_envelope_exceeds_quarter_metric"
@@ -156,6 +176,7 @@ CODES: dict[str, CodeSpec] = {
     "calibration.capture_battery_pair_failed": _spec("CALIBRATION", "PHYSICS", legacy="joulewise/battery_float.py:1092"),
     # NEG-8 bound and the whole-window verdict.
     "neg8.bound_not_derived": _spec("NEG8", "NUMBER"),
+    "neg8.screen_failed": _spec("NEG8", "NUMBER"),
     "whole_window.not_passed": _spec("NEG8", "NUMBER"),
     "whole_window.verdict_absent": _spec("NEG8", "NUMBER"),
     "whole_window.verdict_unauthenticated": _spec("NEG8", "REPRESENTATION"),
@@ -191,7 +212,8 @@ CODES: dict[str, CodeSpec] = {
     "battery.member_span": _spec("PHYSICS_IN_SPAN", "PHYSICS"),
     "battery.unmeasured": _spec("PHYSICS_IN_SPAN", "PHYSICS"),
     "battery.accumulator_excursion": _spec("PHYSICS_IN_SPAN", "PHYSICS"),
-    "battery.accumulator_diagnostic": _spec("DIAGNOSTIC", "PHYSICS"),
+    "battery.accumulator_activity": _spec("DIAGNOSTIC", "PHYSICS"),
+    "battery.accumulator_unavailable": _spec("DIAGNOSTIC", "PHYSICS"),
     "battery.capture_pair_failed": _spec("MEMBER_VALIDITY", "PHYSICS", legacy="joulewise/battery_float.py:1049"),
     "battery.capture_pair_missing_covered": _spec("DIAGNOSTIC", "PHYSICS"),
     "battery.capture_pair_missing": _spec("RECORDS", "REPRESENTATION"),
@@ -229,7 +251,21 @@ CODES: dict[str, CodeSpec] = {
     # The s1-structural diagnostics (plan section 4), read on the first real
     # window; ``observed.check`` names which one.
     "diagnostic.s1_structural": _spec("DIAGNOSTIC", "REPRESENTATION"),
+    # Lane L3's launch-lineage audit (joulewise.window_lineage.audit_window_lineage),
+    # one code per finding, with the family and klass L3 gives it.
+    **{code: _spec("RECORDS", "REPRESENTATION", legacy="joulewise/window_lineage.py:audit_window_lineage")
+       for code in ("lineage.locator_unreadable", "lineage.locator_sidecar_mismatch", "lineage.locator_noncanonical",
+                    "lineage.locator_root_path_differs", "lineage.locator_role_differs",
+                    "lineage.sibling_lineage_differs", "lineage.context_root_differs",
+                    "lineage.record_chain_unverified", "lineage.arm_decision_digest_differs",
+                    "lineage.completion_records_absent", "lineage.bundle_stamp_absent",
+                    "lineage.bundle_stamp_differs", "lineage.bundle_locator_digest_differs",
+                    "lineage.pack_digest_unrecorded", "lineage.collection_boot_unrecorded",
+                    "lineage.arm_decision_unrecorded")},
+    "lineage.plan_tree_digest_differs": _spec("PACK_IDENTITY", "NUMBER",
+                                              legacy="joulewise/window_lineage.py:audit_window_lineage"),
 }
+LINEAGE_CODES = frozenset(code for code in CODES if code.startswith("lineage."))
 NEVER_CLASSIFIED_CODES = frozenset({"records.malformed_flag"})
 # Codes L4's draft catalog does not name (handed to L4 and L6 for the draft
 # and the sealed catalog).  ``tests/test_harvest_b5_window.py`` keeps this
@@ -241,7 +277,8 @@ L5_ONLY_CODES = frozenset({
     "whole_window.not_passed", "whole_window.verdict_absent", "whole_window.verdict_unauthenticated",
     "whole_window.producer_failed",
     "member.unreadable", "member.reduction_mismatch", "member.anchor_recompute_mismatch", "member.span_unknown",
-    "battery.capture_pair_missing",
+    "battery.capture_pair_missing", "battery.accumulator_activity", "battery.accumulator_unavailable",
+    *LINEAGE_CODES,
     "roster.run_id_mismatch", "roster.no_science_bundles",
     "records.monitor_journal_absent", "records.monitor_line_malformed", "records.arm_record_absent",
     "records.terminal_record_absent", "records.source_changed_during_harvest", "records.collector_failed",
@@ -290,6 +327,27 @@ def read_json(path: Path | str) -> Any:
 
 def _is_sha256(value: Any) -> bool:
     return isinstance(value, str) and re.fullmatch(r"[0-9a-f]{64}", value) is not None
+
+
+def _unique_pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    """``json.loads`` hook: a duplicated key makes the bytes ambiguous, so refuse them."""
+    keys = [key for key, _value in pairs]
+    if len(keys) != len(set(keys)):
+        raise ValueError("duplicate JSON key")
+    return dict(pairs)
+
+
+def _corpus_member_status(runs_root: Path | None, member: Any) -> str | None:
+    """A NEG-8 corpus member's recorded status, read as the chain's prune step reads it."""
+    relative = member.get("bundle_path") if isinstance(member, Mapping) else None
+    if runs_root is None or not isinstance(relative, str) or not relative or relative.startswith("/") \
+            or ".." in relative.split("/"):
+        return None
+    try:
+        status = read_json(runs_root / relative / "summary_metrics.json").get("status")
+    except (OSError, ValueError, AttributeError):
+        return None
+    return status if isinstance(status, str) else None
 
 
 def _fsync_dir(path: Path) -> None:
@@ -510,8 +568,11 @@ class FlagLedger:
              stage_id: str | None = None, bundle_id: str | None = None, observed: Any = None,
              expected: Any = None, evidence: Sequence[Mapping[str, str]] = (), detail: str = "",
              interval: Mapping[str, Any] | None = None, stage: str = "harvest",
-             legacy_code: str | None = None, blinding: str | None = None) -> dict[str, Any]:
-        spec = CODES[code]
+             legacy_code: str | None = None, blinding: str | None = None,
+             spec: CodeSpec | None = None) -> dict[str, Any]:
+        # ``spec`` only for a code another lane's collector names that this
+        # harvest does not list yet; the catalog leaves it UNCLASSIFIED.
+        spec = spec if spec is not None and code not in CODES else CODES[code]
         catalog_entry = self.catalog.entries.get(code, {})
         family = catalog_entry.get("family") if catalog_entry.get("family") in FAMILIES else spec.family
         klass = catalog_entry.get("klass") if catalog_entry.get("klass") in KLASSES else spec.klass
@@ -604,6 +665,120 @@ class WindowInputs:
     arm_record_path: Path
     flags_dir: Path
     thresholds: dict[str, Any]
+    # Where each threshold came from, the registration read, and every
+    # problem; each problem is a recorded harvest fault.
+    thresholds_provenance: dict[str, Any] = dataclasses.field(default_factory=dict)
+    registration_path: Path | None = None
+
+
+def parse_registration_thresholds(raw: bytes) -> dict[str, Any]:
+    """The flat JSON block under the registration's "Harvest thresholds" heading (section 6.9).
+
+    Exactly one such heading; the first ```json fence after it and before
+    the next heading.  Raises ValueError naming what is wrong.
+    """
+    text = raw.decode("utf-8")
+    headings = list(_THRESHOLD_HEADING_RE.finditer(text))
+    if len(headings) != 1:
+        raise ValueError(f"expected one 'Harvest thresholds' heading, found {len(headings)}")
+    start = headings[0].end()
+    following = _ANY_HEADING_RE.search(text, start)
+    section = text[start:following.start() if following else len(text)]
+    fence = _JSON_FENCE_RE.search(section)
+    if fence is None:
+        raise ValueError("no ```json block under the 'Harvest thresholds' heading")
+    value = json.loads(fence.group(1), object_pairs_hook=_unique_pairs)
+    if not isinstance(value, dict):
+        raise ValueError("the harvest-threshold block is not a JSON object")
+    return value
+
+
+def _threshold_problem(key: str, value: Any) -> str | None:
+    if key in INTEGER_THRESHOLD_KEYS:
+        return None if _is_int(value) and value >= 1 else f"invalid:{key}:must be an integer >= 1"
+    return None if _is_number(value) and value > 0 else f"invalid:{key}:must be a finite number > 0"
+
+
+def resolve_thresholds(plan: Mapping[str, Any], measurement_root: Path, *,
+                       registration_override: Path | str | None = None,
+                       overrides: Mapping[str, Any] | None = None) -> tuple[dict[str, Any], dict[str, Any]]:
+    """The registered harvest thresholds and their provenance (registration 6.9).
+
+    Sources, both registered: the registration the plan names (its bytes must
+    hash to the digest the plan recorded) and the plan's flat copy.  An
+    explicit override (``--thresholds``) never replaces a registered value;
+    one that differs from it, or that supplies a key no registered source
+    gives, is a problem.  Every problem is a harvest fault; a missing or
+    invalid key is left out of the values, so the step that needs it faults.
+    """
+    hazard = plan.get("hazard_window") if isinstance(plan.get("hazard_window"), Mapping) else {}
+    problems: list[str] = []
+    sources: dict[str, Mapping[str, Any]] = {}
+    recorded = hazard.get("registration") if isinstance(hazard.get("registration"), Mapping) else {}
+    recorded_sha = recorded.get("sha256") if _is_sha256(recorded.get("sha256")) else None
+    named = registration_override or recorded.get("path") or plan.get("registration_path")
+    registration: dict[str, Any] = {"path": None, "sha256": None, "recorded_sha256": recorded_sha}
+    if isinstance(named, (str, Path)) and str(named):
+        path = Path(named)
+        path = path if path.is_absolute() else measurement_root / path
+        registration["path"] = str(path)
+        try:
+            raw = path.read_bytes()
+        except OSError as exc:
+            problems.append(f"registration_unreadable:{type(exc).__name__}")
+        else:
+            registration["sha256"] = sha256_bytes(raw)
+            if recorded_sha is not None and registration["sha256"] != recorded_sha:
+                # Not the bytes the plan was written from: not a registered source.
+                problems.append("registration_digest_differs_from_plan")
+            else:
+                try:
+                    sources["registration"] = parse_registration_thresholds(raw)
+                except (UnicodeDecodeError, ValueError) as exc:
+                    problems.append(f"registration_block_unreadable:{str(exc)[:120]}")
+    plan_block = hazard.get(PLAN_HARVEST_THRESHOLDS_KEY, plan.get(PLAN_HARVEST_THRESHOLDS_KEY))
+    if plan_block is not None:
+        if isinstance(plan_block, Mapping):
+            sources["plan"] = plan_block
+        else:
+            problems.append("plan_harvest_thresholds_not_an_object")
+    if not sources and not problems:
+        problems.append("harvest_thresholds_unregistered")
+    for name, block in sources.items():
+        unknown = sorted(set(block) - set(HARVEST_THRESHOLD_KEYS))
+        if unknown:
+            problems.append(f"unknown_keys:{name}:{','.join(unknown)}")
+    values: dict[str, Any] = {}
+    key_sources: dict[str, list[str]] = {}
+    for key in HARVEST_THRESHOLD_KEYS:
+        given = {name: block[key] for name, block in sources.items() if key in block}
+        if not given:
+            continue
+        if len({canonical_json_bytes(value) for value in given.values()}) > 1:
+            problems.append(f"sources_disagree:{key}")
+        values[key] = given.get("registration", next(iter(given.values())))
+        key_sources[key] = sorted(given)
+    for key, value in (overrides or {}).items():
+        if key not in HARVEST_THRESHOLD_KEYS:
+            problems.append(f"override_unknown_key:{key}")
+        elif key in values:
+            if canonical_json_bytes(value) != canonical_json_bytes(values[key]):
+                problems.append(f"override_differs_from_registered:{key}")  # the registered value stands
+        else:
+            values[key] = value
+            key_sources[key] = ["override"]
+            problems.append(f"override_supplies_unregistered:{key}")
+    for key in HARVEST_THRESHOLD_KEYS:
+        if key not in values:
+            problems.append(f"missing:{key}")
+            continue
+        problem = _threshold_problem(key, values[key])
+        if problem is not None:
+            problems.append(problem)
+            del values[key]
+    provenance = {"schema": THRESHOLDS_SCHEMA, "values": dict(values), "key_sources": key_sources,
+                  "sources": sorted(sources), "registration": registration, "problems": problems}
+    return values, provenance
 
 
 def resolve_inputs(plan_path: Path | str, overrides: Mapping[str, Any] | None = None) -> WindowInputs:
@@ -637,14 +812,10 @@ def resolve_inputs(plan_path: Path | str, overrides: Mapping[str, Any] | None = 
     claim = path("claim_runs_root")
     if claim is None:
         raise HarvestFault("input_unresolved:claim_runs_root")
-    thresholds = dict(DEFAULT_THRESHOLDS)
-    planned = pick("thresholds")
-    hazard = plan.get("hazard_window") if isinstance(plan.get("hazard_window"), Mapping) else {}
-    if isinstance(hazard.get("thresholds"), Mapping):
-        thresholds.update({k: v for k, v in hazard["thresholds"].items() if k in DEFAULT_THRESHOLDS})
-    if isinstance(planned, Mapping):
-        thresholds.update({k: v for k, v in planned.items() if k in DEFAULT_THRESHOLDS})
-    thresholds.update({k: v for k, v in (overrides.get("thresholds") or {}).items() if k in DEFAULT_THRESHOLDS})
+    thresholds, thresholds_provenance = resolve_thresholds(
+        plan, measurement, registration_override=overrides.get("registration_path"),
+        overrides=overrides.get("thresholds"))
+    registration = thresholds_provenance["registration"]["path"]
     session = pick("bracket_session_id", "bracket_session_id", "session_id")
     return WindowInputs(
         plan_path=plan_path, plan=plan, plan_id=pick("plan_id"), attempt=pick("attempt"),
@@ -674,6 +845,8 @@ def resolve_inputs(plan_path: Path | str, overrides: Mapping[str, Any] | None = 
         arm_record_path=path("arm_record_path") or custody / "hazards" / "arm.json",
         flags_dir=path("flags_dir") or custody / "flags",
         thresholds=thresholds,
+        thresholds_provenance=thresholds_provenance,
+        registration_path=Path(registration) if registration else None,
     )
 
 
@@ -1259,6 +1432,7 @@ class Publication:
     external_connected: bool | None
     voltage_mv: float | None
     accumulators: Mapping[str, tuple[float | None, float | None]]
+    values: Mapping[str, Any] = dataclasses.field(default_factory=dict)  # the reading's L1 values
 
 
 def _bool(value: Any) -> bool | None:
@@ -1286,7 +1460,8 @@ def battery_publications(readings: Sequence[Reading]) -> list[Publication]:
             amperage_ma=_num(values.get("amperage_ma")), is_charging=_bool(values.get("is_charging")),
             external_connected=_bool(values.get("external_connected")), voltage_mv=_num(values.get("voltage_mv")),
             accumulators={label: (_num(telemetry.get(total)), _num(telemetry.get(count)))
-                          for label, (total, count) in ACCUMULATOR_PAIRS.items()})
+                          for label, (total, count) in ACCUMULATOR_PAIRS.items()},
+            values=values)
     return sorted(seen.values(), key=lambda item: (item.monotonic_ns, item.update_time_s))
 
 
@@ -1336,34 +1511,65 @@ def battery_member_flags(span: Sequence[int], readings: Sequence[Reading], thres
         out.append(("battery.unmeasured", {"holes_monotonic_ns": holes[:8],
                                            "publications_missing_fields": missing_fields[:8]},
                     _hole_interval(holes[0]) if holes else {"monotonic_ns": [missing_fields[0]] * 2}))
-    unit = thresholds.get("battery_accumulator_watts_per_unit")
-    diagnostics, excursions = [], []
-    for left, right in zip(publications, publications[1:]):
-        if not _overlaps((left.monotonic_ns, right.monotonic_ns), span):
+    out.extend(accumulator_member_flags([publications[index] for index in in_force(times, span[0], span[1])],
+                                        thresholds))
+    return out
+
+
+def accumulator_member_flags(in_force_publications: Sequence[Publication], thresholds: Mapping[str, Any]
+                             ) -> list[tuple[str, dict[str, Any], dict[str, Any]]]:
+    """The accumulator rule of registration 6.4, on L1's own interval reader.
+
+    For each interval between consecutive in-force publications (the same
+    intervals as L1's ``battery.span_findings``), L1's
+    ``joulewise.hazards.battery.accumulator_interval`` gives, per sign, the
+    accumulated value per counted tick (mW on L1's units check) or why that
+    sign cannot be read.  With the registered scale (W per accumulator unit,
+    0.001) a sign whose mean battery power exceeds limit_ma x the
+    publication's voltage is ``battery.accumulator_excursion``; a nonzero
+    mean at or below it is ``battery.accumulator_activity``; a sign that
+    cannot be read, or an interval without a voltage, is
+    ``battery.accumulator_unavailable`` (the publication rule still applies).
+    There is no unscaled path: without a registered positive scale this
+    raises, and the harvest records the fault.
+    """
+    from joulewise.hazards.battery import ACCUMULATOR_SIGNS, accumulator_interval
+    unit = thresholds["battery_accumulator_watts_per_unit"]
+    if not _is_number(unit) or unit <= 0:
+        raise ValueError("battery_accumulator_watts_per_unit is not a registered positive scale")
+    limit_ma = float(thresholds["battery_limit_ma"])
+    signs = [label for label, _total, _count in ACCUMULATOR_SIGNS]
+    excursions, activity, unavailable_rows = [], [], []
+    for earlier, later in zip(in_force_publications, in_force_publications[1:]):
+        delta = accumulator_interval(earlier.values, later.values)
+        voltage = later.voltage_mv or earlier.voltage_mv
+        interval = [earlier.monotonic_ns, later.monotonic_ns]
+        unavailable = {label: delta[f"{label}_unavailable"] for label in signs if delta[f"{label}_unavailable"]}
+        if not voltage:
+            unavailable = {label: "Voltage not read at either publication" for label in signs}
+        if unavailable:
+            unavailable_rows.append({"interval_monotonic_ns": interval, "update_times_s": [earlier.update_time_s,
+                                                                                         later.update_time_s],
+                                     "unavailable": unavailable})
+        if not voltage:
             continue
-        volts = (right.voltage_mv or left.voltage_mv or 0) / 1000.0
-        for label in ACCUMULATOR_PAIRS:
-            (energy0, count0), (energy1, count1) = left.accumulators[label], right.accumulators[label]
-            if None in (energy0, count0, energy1, count1):
+        limit_w = limit_ma / 1000.0 * float(voltage) / 1000.0
+        for label in signs:
+            mean = delta[f"{label}_mean_mw"]
+            if label in unavailable or mean is None:
                 continue
-            ticks, delta = count1 - count0, energy1 - energy0
-            if ticks <= 0 or delta == 0:  # no nonzero second, or a counter reset
-                continue
-            entry = {"accumulator": label, "energy_delta": delta, "ticks": ticks,
-                     "interval_monotonic_ns": [left.monotonic_ns, right.monotonic_ns]}
-            if unit is None:
-                diagnostics.append(entry)
-                continue
-            mean_w, limit_w = abs(delta) * float(unit) / ticks, limit / 1000.0 * volts
-            if volts > 0 and mean_w > limit_w:
-                excursions.append({**entry, "mean_w": mean_w, "limit_w": limit_w})
-    if diagnostics:
-        out.append(("battery.accumulator_diagnostic", {"intervals": diagnostics[:8], "count": len(diagnostics)},
-                    {"monotonic_ns": diagnostics[0]["interval_monotonic_ns"]}))
-    if excursions:
-        out.append(("battery.accumulator_excursion", {"rule": "accumulator_mean_power", "excursions": excursions[:8],
-                                                      "count": len(excursions)},
-                    {"monotonic_ns": excursions[0]["interval_monotonic_ns"]}))
+            entry = {"accumulator": label, "ticks": delta[f"{label}_ticks"], "mean_per_tick": mean,
+                     "mean_w": abs(mean) * float(unit), "limit_w": limit_w, "voltage_mv": voltage,
+                     "interval_monotonic_ns": interval}
+            (excursions if entry["mean_w"] > limit_w else activity).append(entry)
+    out: list[tuple[str, dict[str, Any], dict[str, Any]]] = []
+    for code, rows, rule in (("battery.accumulator_excursion", excursions, "accumulator_mean_power"),
+                             ("battery.accumulator_activity", activity, "accumulator_mean_power_at_or_below_limit"),
+                             ("battery.accumulator_unavailable", unavailable_rows, "accumulator_not_evaluated")):
+        if rows:
+            out.append((code, {"rule": rule, "intervals": rows[:8], "count": len(rows),
+                               "watts_per_unit": unit},
+                        {"monotonic_ns": rows[0]["interval_monotonic_ns"]}))
     return out
 
 
@@ -1661,6 +1867,7 @@ class _Harvest:
         self.exclusion_roster: dict[str, Any] | None = None
         self.exclusion_spans: dict[str, Any] | None = None
         self.h_claim = inputs.h_claim
+        self.neg8: dict[str, Any] | None = None  # the NEG-8 bound check (neg8_bound)
 
     # -- step wrappers ------------------------------------------------------
     def step(self, name: str, function: Callable[[], Any], *, fault: bool = True) -> Any:
@@ -1683,8 +1890,25 @@ class _Harvest:
             self.flags.emit("records.collector_failed", level="window", collector=name,
                             observed={"collector": name, "error_type": type(exc).__name__})
 
+    def fault(self, collector: str, problem: str) -> None:
+        """A harvest fault found on present bytes that is not an exception (a threshold problem)."""
+        entry = {"collector": collector, "error": problem[:200], "elapsed_s": 0.0}
+        self.error_details.append({**entry, "detail": problem})
+        self.collector_errors.append(entry)
+        self.faults.append(entry)
+
     def emit(self, code: str, **kwargs: Any) -> dict[str, Any]:
         return self.flags.emit(code, **kwargs)
+
+    # -- 0. registered thresholds (registration 6.9) ----------------------------
+    def record_thresholds(self) -> None:
+        """Write where every threshold came from; each problem is a harvest fault, never a default."""
+        provenance = dict(self.inputs.thresholds_provenance) or {
+            "schema": THRESHOLDS_SCHEMA, "values": dict(self.inputs.thresholds), "problems": ["provenance_absent"]}
+        self.outputs["derived/harvest-thresholds.json"] = write_json_once(
+            self.derived / "harvest-thresholds.json", provenance)
+        for problem in provenance.get("problems") or []:
+            self.fault("thresholds", str(problem))
 
     # -- 1. archive -----------------------------------------------------------
     def archive_inputs(self) -> None:
@@ -1700,7 +1924,8 @@ class _Harvest:
         for name, path in (("acceptance.json", self._acceptance_path()),
                            ("sealed_inventory.json", inputs.sealed_inventory_path),
                            ("flag_catalog.json", inputs.catalog_path),
-                           ("identity_pins.json", inputs.identity_pins_path)):
+                           ("identity_pins.json", inputs.identity_pins_path),
+                           ("registration.md", inputs.registration_path)):
             if path is not None and path.is_file():
                 sources[f"inputs/{name}"] = path
         # The pack and every repo file the plan tree pins, at repo-relative paths.
@@ -2114,22 +2339,202 @@ class _Harvest:
             self.emit("calibration.bracket_acceptance_failed", level="window", collector="calibration",
                       observed={"status": assessment.get("status"), "reasons": sorted(map(str, reasons))})
 
-    # -- whole-window verdict and NEG-8 bound ---------------------------------
-    def whole_window(self) -> None:
-        from joulewise.whole_window import load_neg8_drift_bound_artifact, validate_whole_window_verdict_row
-        inputs = self.inputs
-        bound_root = inputs.bound_runs_root
-        bound_path = bound_root / "neg8-drift-bound.json" if bound_root is not None else None
-        try:
-            bound = load_neg8_drift_bound_artifact(bound_path) if bound_path and bound_path.is_file() else None
-        except Exception:
-            bound = None
-        if bound is None:
+    # -- NEG-8 bound (registration 5.3) ---------------------------------------
+    def neg8_bound(self) -> None:
+        """Is the window's NEG-8 bound derived?  ``neg8.bound_not_derived`` unless it is.
+
+        Derived means the bound artifact in the bound runs root validates
+        (``whole_window.validate_neg8_drift_bound_artifact``, arithmetic and
+        corpus identity) against either
+
+        * the committed 12-member corpus (``load_neg8_drift_bound_artifact``), or
+        * the window's collected corpus manifest (registration 5.3: at least
+          10 of the 12): the manifest the chain's prune step wrote, located by
+          ``night/hazard_result.json`` ``neg8_corpus.collected_manifest``, whose
+          bytes hash to the recorded SHA-256, whose header equals the committed
+          manifest's, whose members are committed members in committed order
+          (at least ``NEG8_DRIFT_MINIMUM_N``), and which left out only members
+          that did not succeed.  Validation then takes those custodied bytes
+          as ``reference_corpus_bytes`` with ``require_corpus_identity=True``.
+
+        The committed manifest is the archived repo copy the pack's
+        bound-derivation stage names, checked against the plan tree's pin.
+        Structure only goes to ``derived/neg8-bound.json``; the bound itself
+        (an energy) never leaves the bound runs root.
+        """
+        from joulewise import whole_window as ww
+        check: dict[str, Any] = {
+            "schema": NEG8_CHECK_SCHEMA, "artifact": None, "derived_from": None,
+            "minimum_n": ww.NEG8_DRIFT_MINIMUM_N, "committed_manifest": None, "collected_manifest": None,
+            "members_committed": None, "members_collected": None, "dropped_bundle_ids": None, "problems": []}
+        self.neg8 = check
+        problems: list[str] = check["problems"]
+        bound_root = self.inputs.bound_runs_root
+        bound_path = bound_root / NEG8_BOUND_NAME if bound_root is not None else None
+        raw: bytes | None = None
+        if bound_path is None:
+            problems.append("bound_runs_root_unresolved")
+        else:
+            try:
+                raw = bound_path.read_bytes()
+            except OSError:
+                problems.append("bound_artifact_absent")
+        value: Any = None
+        if raw is not None:
+            check["artifact"] = {"path": NEG8_BOUND_NAME, "sha256": sha256_bytes(raw)}
+            try:
+                value = json.loads(raw, object_pairs_hook=_unique_pairs)
+            except ValueError:
+                problems.append("bound_artifact_unreadable")
+        if isinstance(value, Mapping):
+            try:
+                registered = ww.load_neg8_drift_bound_artifact(bound_path) is not None
+            except Exception:  # the core reader failing verifies nothing
+                registered = False
+            if registered:
+                check["derived_from"] = "registered_corpus"
+            else:
+                collected = self._collected_corpus_bytes(check)
+                valid = False
+                if collected is not None:
+                    try:
+                        valid = ww.validate_neg8_drift_bound_artifact(
+                            value, reference_corpus_bytes=collected, require_corpus_identity=True)
+                    except Exception:
+                        valid = False
+                    if not valid:
+                        problems.append("bound_does_not_validate_against_collected_corpus")
+                if valid:
+                    check["derived_from"] = "collected_subset"
+        elif value is not None:
+            problems.append("bound_artifact_not_an_object")
+        self.outputs["derived/neg8-bound.json"] = write_json_once(self.derived / "neg8-bound.json", check)
+        if check["derived_from"] is None:
             self.emit("neg8.bound_not_derived", level="window", collector="neg8",
-                      observed={"artifact": bool(bound_path and bound_path.is_file())})
+                      observed={"artifact": raw is not None, "problems": problems[:8],
+                                "members_collected": check["members_collected"],
+                                "minimum_n": check["minimum_n"]})
+
+    def _committed_corpus_bytes(self, check: dict[str, Any]) -> bytes | None:
+        """The committed settled-corpus manifest the pack's bound derivation names, from preserved bytes."""
+        problems = check["problems"]
+        tree = read_json(self.pack_copy / "plan_tree.json")
+        named = set()
+        for stage in tree.get("stage_graph") or []:
+            if not isinstance(stage, Mapping) or stage.get("kind") != "bound_derivation":
+                continue
+            for command in ((stage.get("launch") or {}).get("commands") or []):
+                arguments = ((command or {}).get("argv_template") or {}).get("arguments") or []
+                for flag, argument in zip(arguments, arguments[1:]):
+                    if isinstance(flag, Mapping) and flag.get("value") == "--derive-neg8-drift-bound" \
+                            and isinstance(argument, Mapping) and argument.get("kind") == "repo_path" \
+                            and isinstance(argument.get("value"), str):
+                        named.add(argument["value"])
+        if len(named) != 1:
+            problems.append(f"committed_manifest_unnamed:{len(named)}")
+            return None
+        relative = named.pop()
+        pins = {row["sha256"] for row in pinned_files(tree, pack_root=self.pack_copy, repo_root=self.repo_root_copy)
+                if row["path"] == relative}
+        check["committed_manifest"] = {"path": relative, "pinned_sha256": sorted(pins)}
+        if len(pins) != 1:
+            problems.append("committed_manifest_unpinned")
+            return None
+        try:
+            raw = (self.repo_root_copy / relative).read_bytes()
+        except OSError:
+            problems.append("committed_manifest_absent")
+            return None
+        check["committed_manifest"]["sha256"] = sha256_bytes(raw)
+        if sha256_bytes(raw) not in pins:
+            problems.append("committed_manifest_differs_from_pin")
+            return None
+        return raw
+
+    def _collected_corpus_bytes(self, check: dict[str, Any]) -> bytes | None:
+        """The custodied collected manifest, if it is a valid subset of the committed one (else None)."""
+        problems = check["problems"]
+        try:
+            record = read_json(self.inputs.night_dir / HAZARD_RESULT_NAME)
+        except (OSError, ValueError):
+            problems.append("hazard_result_unreadable")
+            return None
+        corpus = record.get("neg8_corpus") if isinstance(record, Mapping) else None
+        locator = corpus.get("collected_manifest") if isinstance(corpus, Mapping) else None
+        if not isinstance(locator, Mapping) or not isinstance(locator.get("path"), str) \
+                or not _is_sha256(locator.get("sha256")):
+            problems.append("collected_manifest_unrecorded")
+            return None
+        recorded = Path(locator["path"])
+        raw = None
+        # The recorded absolute path, or the same file in this custody root if it moved.
+        for candidate in (recorded, self.inputs.night_dir / "transcript" / recorded.name):
+            try:
+                raw = candidate.read_bytes()
+                break
+            except OSError:
+                continue
+        if raw is None:
+            problems.append("collected_manifest_absent")
+            return None
+        check["collected_manifest"] = {"sha256": sha256_bytes(raw), "recorded_sha256": locator["sha256"]}
+        if sha256_bytes(raw) != locator["sha256"]:
+            problems.append("collected_manifest_differs_from_recorded_sha256")
+            return None
+        committed_raw = self._committed_corpus_bytes(check)
+        if committed_raw is None:
+            return None
+        try:
+            collected = json.loads(raw, object_pairs_hook=_unique_pairs)
+            committed = json.loads(committed_raw, object_pairs_hook=_unique_pairs)
+        except ValueError:
+            problems.append("corpus_manifest_unreadable")
+            return None
+        header = ("schema_version", "corpus_id", "freeze_status", "condition_id")
+        if not isinstance(collected, Mapping) or not isinstance(committed, Mapping) \
+                or set(collected) != set(committed) or any(collected.get(key) != committed.get(key) for key in header):
+            problems.append("collected_manifest_header_differs")
+            return None
+        kept, listed = collected.get("members"), committed.get("members")
+        if not isinstance(kept, list) or not isinstance(listed, list):
+            problems.append("corpus_members_unreadable")
+            return None
+        check["members_committed"], check["members_collected"] = len(listed), len(kept)
+        listed_rows = [canonical_json_bytes(member) for member in listed]
+        position = 0  # kept must be listed members, each once, in committed order
+        for member in kept:
+            row = canonical_json_bytes(member)
+            while position < len(listed_rows) and listed_rows[position] != row:
+                position += 1
+            if position == len(listed_rows):
+                problems.append("collected_manifest_not_a_member_subset")
+                return None
+            position += 1
+        kept_rows = {canonical_json_bytes(member) for member in kept}
+        dropped = [member for member in listed if canonical_json_bytes(member) not in kept_rows]
+        check["dropped_bundle_ids"] = [member.get("bundle_id") if isinstance(member, Mapping) else None
+                                       for member in dropped]
+        from joulewise.whole_window import NEG8_DRIFT_MINIMUM_N
+        if len(kept) < NEG8_DRIFT_MINIMUM_N:
+            problems.append("collected_members_below_minimum")
+            return None
+        # The registered rule (5.3) keeps every corpus member that was collected
+        # and succeeded; a dropped member that succeeded is a selected corpus.
+        succeeded = [member.get("bundle_id") for member in dropped
+                     if _corpus_member_status(self.inputs.bound_runs_root, member) == "succeeded"]
+        if succeeded:
+            problems.append("dropped_member_succeeded:" + ",".join(map(str, succeeded[:4])))
+            return None
+        return raw
+
+    # -- whole-window verdict and the NEG-8 screen ----------------------------
+    def whole_window(self) -> None:
+        from joulewise.whole_window import validate_whole_window_verdict_row
+        inputs = self.inputs
         runs = inputs.claim_runs_root
         verdict_path = runs / "whole-window-verdict.json"
         if not verdict_path.is_file():
+            # whole_window.verdict_absent removes the window; the screen it would hold is absent with it.
             self.emit("whole_window.verdict_absent", level="window", collector="whole_window",
                       observed={"verdict": "absent"})
             return
@@ -2144,6 +2549,9 @@ class _Harvest:
         if not isinstance(row, Mapping):
             self.emit("whole_window.verdict_unauthenticated", level="window", collector="whole_window",
                       observed={"verdict": "malformed"})
+            # The NEG-8 screen's result is held in the verdict; unreadable is not passed.
+            self.emit("neg8.screen_failed", level="window", collector="whole_window",
+                      observed={"reasons": ["verdict_unreadable"], "decision": None, "conditions": []})
             return
         authentic = False
         try:
@@ -2160,6 +2568,49 @@ class _Harvest:
                 if isinstance(row.get("idle_admission_core"), Mapping) else None
             self.emit("whole_window.not_passed", level="window", collector="whole_window",
                       observed={"status": status, "conditions": sorted(map(str, conditions or []))})
+        self.neg8_screen(row)
+
+    def neg8_screen(self, row: Mapping[str, Any]) -> None:
+        """``neg8.screen_failed`` from the verdict's NEG-8 result (registration 6.5).
+
+        ``whole_window.not_passed`` is disclosed only, because any one member's
+        admission failure fails it; the NEG-8 screen it holds is window-level
+        and carried here.  Not passed means any of: no NEG-8 bracket in the
+        verdict's core, a bracket decision other than ``passed``, or any
+        ``neg8_*`` condition in the core or the bracket (the registered ones,
+        ``whole_window.NEG8_POINT_DRIFT_CONDITION_CODES``, and the bracket's
+        shape conditions).  A bound derived from the collected 10 or 11 member
+        corpus does not cure it: the verdict writer reads only the committed
+        12-member corpus, so its screen was never evaluated against that bound
+        (``observed.screen_not_evaluated_against_collected_bound``).
+        """
+        from joulewise import whole_window as ww
+        core = row.get("idle_admission_core") if isinstance(row.get("idle_admission_core"), Mapping) else None
+        bracket = core.get("neg8_bracket") if core is not None else None
+        bracket = bracket if isinstance(bracket, Mapping) else None
+        listed = list(core.get("conditions") or []) if core is not None and isinstance(core.get("conditions"), list) \
+            else []
+        conditions = {item for item in listed if isinstance(item, str) and item.startswith("neg8_")}
+        if bracket is not None and isinstance(bracket.get("conditions"), list):
+            conditions |= {item for item in bracket["conditions"] if isinstance(item, str)}
+        decision = bracket.get("decision") if bracket is not None else None
+        reasons = []
+        if bracket is None:
+            reasons.append("bracket_absent")
+        elif decision != "passed":
+            reasons.append("bracket_not_passed")
+        if conditions:
+            reasons.append("neg8_conditions")
+        if not reasons:
+            return
+        observed: dict[str, Any] = {
+            "reasons": reasons, "decision": decision if isinstance(decision, str) else None,
+            "conditions": sorted(conditions)[:16],
+            "registered_conditions": sorted(conditions & ww.NEG8_POINT_DRIFT_CONDITION_CODES)}
+        underived = {ww.CONDITION_NEG8_DRIFT_BOUND_UNDERIVED, ww.CONDITION_NEG8_IDLE_SUB_DRIFT_BOUND_UNDERIVED}
+        if (self.neg8 or {}).get("derived_from") == "collected_subset" and conditions & underived:
+            observed["screen_not_evaluated_against_collected_bound"] = True
+        self.emit("neg8.screen_failed", level="window", collector="whole_window", observed=observed)
 
     def prepare_desk_verdict(self) -> None:
         """Produce the whole-window verdict with the production writer, if absent.
@@ -2443,6 +2894,78 @@ class _Harvest:
                 self.emit("model.identity_inconsistent_in_window", level="window", collector="model_identity",
                           observed={"identity_unit": unit_id, "distinct": sorted(map(list, identities))[:8]})
 
+    # -- launch lineage (lane L3's records audit) ------------------------------
+    def lineage_audit(self) -> None:
+        """Each finding of ``window_lineage.audit_window_lineage`` as a flag.
+
+        Records, never refusals (doctrine): the sealed catalog decides each
+        code's effect (all ``lineage.*`` codes are DISCLOSE except
+        ``lineage.plan_tree_digest_differs``, a pack-identity fact).  The
+        audit reads the live roots, where the locators record their own
+        paths; ``sources_unchanged`` proves they matched the archive.  A
+        finding about a member's bundle is a member-level flag.
+        """
+        from joulewise import window_lineage
+        inputs = self.inputs
+        if inputs.bound_runs_root is None:
+            raise HarvestFault("bound_runs_root_unresolved")
+        bundles = [Path(result["bundle_path"]) for _run_id, result in sorted(self.members.items())
+                   if result.get("present")]
+        findings = window_lineage.audit_window_lineage(
+            claim_runs_root=inputs.claim_runs_root, bound_runs_root=inputs.bound_runs_root, bundle_paths=bundles)
+        for finding in findings:
+            self._lineage_flag(finding)
+
+    def _lineage_flag(self, finding: Any) -> None:
+        code = finding.get("code") if isinstance(finding, Mapping) else None
+        if not isinstance(code, str) or CODE_RE.fullmatch(code) is None:
+            self.emit("records.collector_failed", level="window", collector="lineage",
+                      observed={"collector": "lineage", "error_type": "malformed_finding"})
+            return
+        scope = finding.get("scope") if isinstance(finding.get("scope"), Mapping) else {}
+        bundle = scope.get("bundle_path")
+        roster = {member["run_id"]: member for member in self.roster.get("members", [])}
+        run_id = Path(bundle).name if isinstance(bundle, str) and bundle else None
+        member = roster.get(run_id) if run_id is not None else None
+        observed: dict[str, Any] = {"root_role": scope.get("root_role"),
+                                    "bundle": run_id if member is None else None}
+        if "observed" in finding:
+            observed["observed"] = finding.get("observed")
+        evidence, outside = self._archive_evidence(finding.get("evidence") or [])
+        if outside:
+            observed["evidence_outside_archive"] = outside[:8]
+        spec = None
+        if code not in CODES:  # a code L3 added since: listed with L3's own family and klass, UNCLASSIFIED
+            spec = CodeSpec(finding.get("family") if finding.get("family") in FAMILIES else "RECORDS",
+                            finding.get("klass") if finding.get("klass") in KLASSES else "REPRESENTATION")
+        self.emit(code, level="member" if member is not None else "window",
+                  run_id=run_id if member is not None else None,
+                  stage_id=member.get("stage_id") if member is not None else None, collector="lineage",
+                  observed=observed, expected=finding.get("expected"), evidence=evidence,
+                  detail=str(finding.get("detail") or ""), spec=spec)
+
+    def _archive_evidence(self, items: Any) -> tuple[list[dict[str, str]], list[dict[str, Any]]]:
+        """Live evidence paths -> the same bytes' place in this archive, or listed as outside it."""
+        evidence: list[dict[str, str]] = []
+        outside: list[dict[str, Any]] = []
+        sources = sorted(getattr(self, "sources", {}).items(), key=lambda item: -len(str(item[1])))
+        for item in items if isinstance(items, list) else []:
+            path = item.get("path") if isinstance(item, Mapping) else None
+            digest = item.get("sha256") if isinstance(item, Mapping) else None
+            located = None
+            if isinstance(path, str) and _is_sha256(digest):
+                for name, source in sources:
+                    relative = _relative_to(Path(path), source)
+                    if relative is not None:
+                        located = f"sources/{name}" + ("" if relative == "." else f"/{relative}")
+                        break
+            if located is not None:
+                evidence.append({"path": located, "sha256": digest})
+            else:
+                outside.append({"path": path if isinstance(path, str) else None,
+                                "sha256": digest if _is_sha256(digest) else None})
+        return evidence, outside
+
     # -- 5. monitor joins ------------------------------------------------------
     def monitor_joins(self) -> None:
         directory = self.inputs.monitor_dir
@@ -2466,6 +2989,7 @@ class _Harvest:
                     "failed_probes": sum(reading.status == "error" for reading in readings), "malformed": malformed}}
         roster = {member["run_id"]: member for member in self.roster["members"]}
         battery_covered: set[str] = set()
+        failed: set[str] = set()  # a module whose join raised (a missing threshold): a fault, recorded once
         for run_id, spans in sorted(self.spans.items()):
             member_span, request = spans.get("member"), spans.get("request")
             kwargs = {"level": "member", "run_id": run_id, "stage_id": roster.get(run_id, {}).get("stage_id"),
@@ -2480,7 +3004,14 @@ class _Harvest:
                 if readings is None:
                     self.emit(f"{module}.unmeasured", observed={"journal": "absent"}, **kwargs)
                     continue
-                found = join(span, readings, thresholds)
+                if module in failed:
+                    continue
+                try:
+                    found = join(span, readings, thresholds)
+                except Exception as exc:  # the other modules' joins still run
+                    self._record_error(f"monitor.{module}", exc, 0.0, fault=True)
+                    failed.add(module)
+                    continue
                 if module == "battery" and not any(code == "battery.unmeasured" for code, *_rest in found):
                     battery_covered.add(run_id)
                 for code, observed, interval in found:
@@ -2908,6 +3439,7 @@ def harvest(inputs: WindowInputs, archive_root: Path | str, *, seams: Seams | No
         run.step("archive", run.archive_inputs)
         run.step("arm_records", run.arm_and_desk_records)
         return run.finish(NULL)
+    run.step("thresholds", run.record_thresholds)
     if prepare_desk:
         run.step("desk", run.prepare_desk_verdict, fault=False)
     run.step("archive", run.archive_inputs)
@@ -2919,11 +3451,13 @@ def harvest(inputs: WindowInputs, archive_root: Path | str, *, seams: Seams | No
     run.step("roster_checks", run.roster_checks)
     run.step("cooldown", run.cooldown)
     run.step("calibration", run.calibration)
+    run.step("neg8_bound", run.neg8_bound)
     run.step("whole_window", run.whole_window)
     run.step("clock_systematic", run.clock_systematic)
     run.step("pack_identity", run.pack_identity)
     run.step("code_identity", run.code_identity)
     run.step("model_identity", run.model_identity)
+    run.step("lineage", run.lineage_audit, fault=False)
     run.step("monitor", run.monitor_joins)
     run.step("exclusion_inputs", run.exclusion_inputs)
     run.step("g3", lambda: run.g3(skipped=not run_g3), fault=False)
