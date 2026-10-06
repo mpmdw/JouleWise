@@ -536,7 +536,8 @@ class HorizonPassedTests(ChainFixture):
 class HorizonMidChainTests(ChainFixture):
     # Room for the corpus (12 members), the derivation, the start references and the
     # 10-member absolute stage, but not for a 20-member stage.
-    horizon_s = b5_chain.HORIZON_POST_RESERVE_S + 12 * b5_chain.HORIZON_MEMBER_ALLOWANCE_S + 240 + 600
+    horizon_s = property(lambda self: b5_chain.HORIZON_POST_RESERVE_S
+                         + 12 * b5_chain.HORIZON_MEMBER_ALLOWANCE_S + 240 + 600)
 
     def test_the_first_stage_that_cannot_finish_ends_collection_even_for_later_small_stages(self):
         completed = self.run_chain()
