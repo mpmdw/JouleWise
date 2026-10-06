@@ -811,8 +811,18 @@ class PublicationAndAuditTests(unittest.TestCase):
         self.assertEqual(w.lineage["window_context"]["night_dir"], str(w.custody.resolve() / "night"))
         go = json.loads(Path(w.published["records"]["go"]["path"]).read_bytes())
         self.assertEqual(go["arm_decision"]["sha256"], hashlib.sha256(w.arm_decision.read_bytes()).hexdigest())
+        # Create-once, but idempotent (PLAN2 row 9): publishing the same
+        # lineage again finds identical bytes and succeeds; different content
+        # for an existing record still refuses, and nothing is replaced.
+        self.assertEqual(publish_lineage(w)["launch_lineage"], w.lineage)
         with self.assertRaises(window_lineage.LineagePublicationError):
-            publish_lineage(w)
+            window_lineage.publish_window_lineage(
+                pack_root=w.pack, pack_id=PACK_ID, plan_id=PLAN_ID, window_id="another-window",
+                bracket_session_id=SESSION_ID, pre_attempt_id=PRE_ATTEMPT,
+                post_attempt_id=POST_ATTEMPT, claim_runs_root=w.claim, bound_runs_root=w.bound,
+                custody_root=w.custody, arm_decision_path=w.arm_decision)
+        self.assertEqual(json.loads((w.claim / window_lineage.LOCATOR_BASENAME).read_bytes())[
+            "launch_lineage"], w.lineage)
         self.assertEqual(self.audit(), ["lineage.completion_records_absent"])
 
     def test_publication_refuses_shared_roots_and_unusable_inventory(self) -> None:

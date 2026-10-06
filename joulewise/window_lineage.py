@@ -83,6 +83,7 @@ import copy
 import hashlib
 import json
 import os
+import stat
 import subprocess
 import uuid
 from pathlib import Path, PurePosixPath
@@ -789,7 +790,32 @@ def authenticate_bundle(
 
 
 def _write_once(path: Path, raw: bytes) -> None:
-    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+    """Create ``path`` holding ``raw``, fsynced, or accept an identical copy.
+
+    Idempotent (PLAN2 row 9): when the file already exists and holds exactly
+    ``raw`` (an earlier publication attempt wrote it), it counts as written,
+    so a retried publication can complete.  Any other existing content raises
+    ``FileExistsError`` as before: a record is never replaced.
+    """
+
+    try:
+        descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+    except FileExistsError:
+        try:
+            existing = _read_regular_nofollow(path)
+        except OSError:
+            existing = None
+        if existing != raw:
+            raise
+        # The identical bytes may not have reached the disk before the earlier
+        # attempt failed; make them (and their directory entry) durable now.
+        handle_descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+        try:
+            os.fsync(handle_descriptor)
+        finally:
+            os.close(handle_descriptor)
+        _fsync_directory(path.parent)
+        return
     try:
         with os.fdopen(descriptor, "wb") as handle:
             handle.write(raw)
@@ -797,6 +823,24 @@ def _write_once(path: Path, raw: bytes) -> None:
             os.fsync(handle.fileno())
     finally:
         _fsync_directory(path.parent)
+
+
+def _read_regular_nofollow(path: Path) -> bytes:
+    """The bytes of a regular file, never through a symlink."""
+
+    descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+    try:
+        if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+            raise OSError(f"not a regular file: {path}")
+        chunks = []
+        while True:
+            chunk = os.read(descriptor, 1 << 20)
+            if not chunk:
+                break
+            chunks.append(chunk)
+        return b"".join(chunks)
+    finally:
+        os.close(descriptor)
 
 
 def _fsync_directory(path: Path) -> None:
