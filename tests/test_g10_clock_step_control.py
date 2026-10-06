@@ -55,7 +55,8 @@ class FakeMac:
 
     def __init__(self, *, word=WORD_TODAY, step_ns=STEP_NS, step_delay_s=4.0, steps=True,
                  f_after_on=None, on_result=None, on_raises=None, off_results=None,
-                 skew_ns=20_000, sleep_hook=None, run_hook=None, frequency_raises=None):
+                 skew_ns=20_000, sleep_hook=None, run_hook=None, frequency_raises=None,
+                 capture=()):
         self.raw = 5_000 * NS
         self.offset = Fraction(1_790_000_000 * NS)
         self.word = word
@@ -70,6 +71,7 @@ class FakeMac:
         self.sleep_hook = sleep_hook
         self.run_hook = run_hook
         self.frequency_raises = frequency_raises
+        self.capture = capture
         self.network_on = False
         self.on_raw = None
         self.stepped = False
@@ -139,7 +141,13 @@ class FakeMac:
                        monotonic_raw_ns=lambda: self.raw,
                        monotonic_ns=lambda: self.raw + 17,
                        wall_s=lambda: (self.raw + self.offset) / NS,
-                       boot_session_uuid=lambda: "0f1e2d3c-aaaa-bbbb-cccc-000000000001")
+                       boot_session_uuid=lambda: "0f1e2d3c-aaaa-bbbb-cccc-000000000001",
+                       capture_processes=self.capture_processes)
+
+    def capture_processes(self):
+        if isinstance(self.capture, BaseException):
+            raise self.capture
+        return list(self.capture)
 
     def commands(self):
         names = {g10.ON_ARGV: "on", g10.OFF_ARGV: "off"}
@@ -678,3 +686,267 @@ def test_real_readers_are_read_only_probes():
     assert frequency["modes"] == 0
     anchor = g10.real_read_anchor()
     assert set(anchor) == {"realtime_ns", "monotonic_raw_ns", "read_skew_ns"}
+
+
+# --------------------------------------------------------------------------
+# Review round 1: the clock module's verdict decides (finding 1)
+
+
+class _FakeStamp:
+    def __init__(self, wall_ns, monotonic_ns, monotonic_raw_ns):
+        self.values = (wall_ns, monotonic_ns, monotonic_raw_ns)
+
+
+class _FakeHazardBase:
+    PASS, REFUSE, UNMEASURED = "PASS", "REFUSE", "UNMEASURED"
+    Stamp = _FakeStamp
+
+
+class _FakeVerdict:
+    def __init__(self, status, reasons, observed):
+        self.status, self.reasons, self.observed = status, tuple(reasons), observed
+
+    def to_json(self):
+        return {"status": self.status, "reasons": list(self.reasons),
+                "observed": dict(self.observed)}
+
+
+class _FakeHazardClock:
+    """The hazards.clock interface (series, judge, DEFAULT_THRESHOLDS) with the
+    module's dwell arithmetic and free-text reasons, never the G10 reason codes."""
+
+    DEFAULT_THRESHOLDS = {"t_stream_max_s": 335, "h_ms": 3.7, "frequency_margin_ppm": 0.25,
+                          "limit_ms": 5.0, "skew_max_ns": 1_000_000,
+                          "residual_max_ns": 1_000_000, "step_ns": 1_000_000}
+
+    def __init__(self, override=None):
+        self.override = override
+        self.calls = []
+
+    def series(self, samples, *, boot_start, boot_end, started, finished):
+        self.calls.append(("series", samples, boot_start, boot_end))
+        return {"samples": samples}
+
+    def judge(self, measurement, thresholds):
+        self.calls.append(("judge", thresholds))
+        if self.override is not None:
+            return self.override
+        first, last = measurement["samples"][0], measurement["samples"][-1]
+        if first["frequency"] is None or last["frequency"] is None:
+            return _FakeVerdict("UNMEASURED", ["dwell series has no f at its end"], {})
+        word = first["frequency"]["raw_word"]
+        movement = last["anchor"]["anchor_ns"] - first["anchor"]["anchor_ns"]
+        elapsed = last["anchor"]["monotonic_raw_ns"] - first["anchor"]["monotonic_raw_ns"]
+        residual = Fraction(movement) - Fraction(word * elapsed,
+                                                 kernel_clock.FREQUENCY_SCALE * 10**6)
+        reasons = []
+        if last["frequency"]["raw_word"] != word:
+            reasons.append("frequency word changed during the dwell")
+        if abs(residual) > thresholds["residual_max_ns"]:
+            reasons.append(f"dwell residual {float(residual) / 1e6:+.4f} ms exceeds limit")
+        return _FakeVerdict("REFUSE" if reasons else "PASS", reasons,
+                            {"max_abs_residual_ns": float(abs(residual))})
+
+
+def _main_record(tmp_path, mac, *extra):
+    code = g10.main(["--night-dir", str(tmp_path), *extra], env=mac.env())
+    return json.loads((tmp_path / "g10.json").read_text()), code
+
+
+def test_main_decides_with_the_clock_module_verdict(tmp_path, monkeypatch):
+    fake = _FakeHazardClock()
+    monkeypatch.setattr(g10, "load_hazard_clock", lambda: (fake, _FakeHazardBase))
+    stepped, code = _main_record(tmp_path, FakeMac())
+    assert code == g10.EXIT_OK
+    assert stepped["verdict"]["evaluator"] == g10.EVALUATOR_HAZARD
+    assert stepped["verdict"]["verdict"] == g10.REFUSE
+    assert g10.REASON_RESIDUAL not in stepped["verdict"]["reasons"]  # free text only
+    assert stepped["verdict"]["step_seen"] is True
+    assert stepped["result"] == g10.DISCHARGED
+    assert stepped["verdict_cross_check"]["evaluator"] == g10.EVALUATOR
+    assert g10.result_from_verdict(stepped["verdict_cross_check"]) == g10.DISCHARGED
+    series_call = [c for c in fake.calls if c[0] == "series"][0]
+    assert series_call[2] == series_call[3] == g10.SAME_PROCESS_BOOT
+    judge_call = [c for c in fake.calls if c[0] == "judge"][0]
+    assert judge_call[1]["residual_max_ns"] == 1_000_000
+    assert judge_call[1]["t_stream_max_s"] == 335.0
+
+    flat_dir = tmp_path / "flat"
+    flat_dir.mkdir()
+    flat, _ = _main_record(flat_dir, FakeMac(steps=False))
+    assert flat["verdict"]["evaluator"] == g10.EVALUATOR_HAZARD
+    assert flat["verdict"]["verdict"] == g10.PASS
+    assert flat["result"] == g10.NOT_DISCHARGED
+
+
+def test_clock_module_verdict_is_read_on_the_number_not_the_reason_text():
+    params = g10.Params()
+    before, after = _pair(10, 0)
+
+    def decide(status, reasons, residual):
+        fake = _FakeHazardClock(_FakeVerdict(status, reasons, {"max_abs_residual_ns": residual}))
+        verdict = g10.make_hazard_evaluator(fake, _FakeHazardBase)(
+            before, after, probe(0), probe(0), params)
+        return g10.result_from_verdict(verdict)
+
+    assert decide("REFUSE", ["anything at all"], 1_300_000_000.0) == g10.DISCHARGED
+    assert decide("REFUSE", ["frequency word changed"], 500_000.0) == g10.NOT_DISCHARGED
+    assert decide("REFUSE", [g10.REASON_RESIDUAL], 1_000_000.0) == g10.NOT_DISCHARGED
+    assert decide("PASS", [], 0.0) == g10.NOT_DISCHARGED
+    assert decide("UNMEASURED", ["no f"], None) == g10.RESULT_UNMEASURED
+
+
+def test_main_without_the_hazard_package_falls_back_and_says_so(tmp_path, monkeypatch):
+    monkeypatch.setattr(g10, "load_hazard_clock", lambda: None)
+    record, code = _main_record(tmp_path, FakeMac())
+    assert code == g10.EXIT_OK and record["result"] == g10.DISCHARGED
+    assert record["verdict"]["evaluator"] == g10.EVALUATOR
+    assert record["verdict_cross_check"] is None
+    assert any("not importable" in note for note in record["notes"])
+
+
+def test_evaluator_disagreement_is_recorded_and_the_module_verdict_stands(tmp_path):
+    def evaluate(before, after, f_before, f_after, params):
+        return {"evaluator": "hazards.clock", "verdict": g10.PASS, "reasons": [],
+                "step_seen": False}
+
+    mac = FakeMac()  # a real 1.3 s step: G10's own copy refuses
+    record, code = g10.run_control(g10.Params(), mac.env(), tmp_path / "g10.json", ["x"],
+                                   evaluate=evaluate)
+    assert record["result"] == g10.NOT_DISCHARGED
+    assert g10.result_from_verdict(record["verdict_cross_check"]) == g10.DISCHARGED
+    assert any("evaluators disagree" in note for note in record["notes"])
+
+
+def test_real_clock_module_through_main(tmp_path):
+    pytest.importorskip("joulewise.hazards.clock")
+    assert g10.load_hazard_clock() is not None
+    stepped, code = _main_record(tmp_path, FakeMac())
+    assert code == g10.EXIT_OK
+    assert stepped["verdict"]["evaluator"] == g10.EVALUATOR_HAZARD
+    assert stepped["verdict"]["hazard_verdict"]["status"] == "REFUSE"
+    assert stepped["result"] == g10.DISCHARGED
+    assert g10.result_from_verdict(stepped["verdict_cross_check"]) == g10.DISCHARGED
+    flat_dir = tmp_path / "flat"
+    flat_dir.mkdir()
+    flat, _ = _main_record(flat_dir, FakeMac(steps=False))
+    assert flat["verdict"]["evaluator"] == g10.EVALUATOR_HAZARD
+    assert flat["verdict"]["hazard_verdict"]["status"] == "PASS"
+    assert flat["result"] == g10.NOT_DISCHARGED
+
+
+# --------------------------------------------------------------------------
+# Review round 1: guards that survived mutation (finding 2)
+
+
+def test_negative_step_is_detected(tmp_path):
+    mac = FakeMac(step_ns=-STEP_NS)
+    record, _, _ = run(mac, tmp_path)
+    assert record["step"]["detected"] is True
+    assert record["step"]["residual_ns"] < -STEP_NS + 2_000_000
+    assert record["result"] == g10.DISCHARGED
+    assert record["step"]["elapsed_since_on_s"] == pytest.approx(4.0, abs=1.01)
+
+
+def test_real_run_starts_commands_in_their_own_session(monkeypatch):
+    seen = []
+
+    def capture(argv, **kwargs):
+        seen.append((argv, kwargs))
+        return subprocess.CompletedProcess(argv, 0, b"ok\n", b"")
+
+    monkeypatch.setattr(subprocess, "run", capture)
+    result = g10.real_run(g10.OFF_ARGV, 60)
+    assert result == {"returncode": 0, "stdout": "ok\n", "stderr": ""}
+    assert seen[0][0] == list(g10.OFF_ARGV)
+    assert seen[0][1]["start_new_session"] is True
+    assert seen[0][1]["stdin"] is subprocess.DEVNULL
+
+
+def test_main_passes_t_stream_max_to_the_next_arm_gate(tmp_path, monkeypatch):
+    monkeypatch.setattr(g10, "load_hazard_clock", lambda: None)
+    record, _ = _main_record(tmp_path, FakeMac(), "--t-stream-max-s", "200")
+    assert record["next_arm_frequency_gate"]["t_stream_max_s"] == 200
+    expected = kernel_clock.frequency_gate(probe(WORD_TODAY), 200.0)
+    assert record["next_arm_frequency_gate"]["bound_ms"] == pytest.approx(expected["bound_ms"])
+
+
+def test_pair_residual_uses_the_frequency_at_the_start():
+    # f moves by -1 ppm over a 1000 s pair holding a 0.5 ms step: with f_before
+    # the residual is 0.5 ms (inside 1 ms), with f_after it would be 1.5 ms.
+    params = g10.Params()
+    before, after = _pair(1000, WORD_TODAY, step_ns=500_000)
+    f_after = probe(WORD_TODAY - kernel_clock.FREQUENCY_SCALE)
+    verdict = g10.evaluate_pair(before, after, probe(WORD_TODAY), f_after, params)
+    assert abs(verdict["residual_ns"] - 500_000) <= 1
+    assert verdict["reasons"] == [g10.REASON_FREQUENCY]
+    assert g10.result_from_verdict(verdict) == g10.NOT_DISCHARGED
+
+
+# --------------------------------------------------------------------------
+# Review round 1: no capture process alive before ON (finding 3)
+
+
+def test_live_capture_process_skips_on_and_runs_off(tmp_path):
+    alive = [{"pid": 4242, "ppid": 1, "match": "powermetrics",
+              "command": "/usr/bin/powermetrics -i 100"}]
+    mac = FakeMac(capture=alive)
+    record, code, _ = run(mac, tmp_path)
+    assert mac.commands() == ["off"]
+    assert record["capture_check"]["matches"] == alive
+    assert record["verdict"]["reasons"] == [g10.REASON_CAPTURE_ALIVE]
+    assert record["result"] == g10.RESULT_UNMEASURED
+    assert record["off_ok"] is True and code == g10.EXIT_OK
+
+
+def test_unreadable_capture_check_skips_on(tmp_path):
+    mac = FakeMac(capture=OSError("ps unavailable"))
+    record, code, _ = run(mac, tmp_path)
+    assert mac.commands() == ["off"]
+    assert "ps unavailable" in record["capture_check"]["error"]
+    assert record["verdict"]["reasons"] == [g10.REASON_CAPTURE_UNREAD]
+    assert record["result"] == g10.RESULT_UNMEASURED and code == g10.EXIT_OK
+
+
+def test_clear_capture_check_is_recorded(tmp_path):
+    record, _, _ = run(FakeMac(), tmp_path)
+    assert record["capture_check"] == {"argv": list(g10.PS_ARGV), "matches": [], "error": None}
+
+
+def test_capture_processes_leave_out_the_driver_ancestry():
+    ps = "\n".join([
+        "    1     0 /sbin/launchd",
+        "  100     1 /opt/homebrew/bin/python3.13 -B /repo/scripts/run_night.py --plan p",
+        "  200   100 /opt/homebrew/bin/python3.13 -B scripts/g10_clock_step_control.py --night-dir n",
+        "  300     1 /usr/bin/powermetrics --samplers cpu_power -i 100",
+        "  301     1 /usr/bin/sudo -n /usr/bin/powermetrics -i 100",
+        "  400     1 /opt/homebrew/bin/python3.13 -B /repo/scripts/run_campaign.py --plan x",
+        "  500     1 /bin/zsh /repo/scripts/night_chains/quiet_predicate_evidence.zsh",
+        "  600     1 /opt/homebrew/bin/python3.13 -m joulewise.hazards.monitor --night-dir /n",
+        "  700     1 /bin/zsh -l",
+        "garbage line",
+    ])
+    found = g10.find_capture_processes(ps, own_pid=200)
+    assert [(m["pid"], m["match"]) for m in found] == [
+        (300, "powermetrics"), (301, "powermetrics"), (400, "run_campaign"),
+        (500, "night_chains")]
+    # A run_night that is not this process's ancestor is a capture process.
+    found = g10.find_capture_processes(ps, own_pid=700)
+    assert (100, "run_night") in [(m["pid"], m["match"]) for m in found]
+    with pytest.raises(ValueError):
+        g10.find_capture_processes("", own_pid=1)
+
+
+def test_real_capture_check_runs_ps_read_only(monkeypatch):
+    seen = []
+    me = os.getpid()
+
+    def fake_ps(argv, **kwargs):
+        seen.append(argv)
+        out = f"1 0 /sbin/launchd\n{me} 1 python g10\n9 1 /usr/bin/powermetrics\n"
+        return subprocess.CompletedProcess(argv, 0, out.encode(), b"")
+
+    monkeypatch.setattr(subprocess, "run", fake_ps)
+    assert [m["pid"] for m in g10.real_capture_processes()] == [9]
+    assert seen == [list(g10.PS_ARGV)]
+    assert g10.Env().capture_processes is g10.real_capture_processes

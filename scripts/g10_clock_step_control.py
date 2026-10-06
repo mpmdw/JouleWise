@@ -12,13 +12,22 @@ f x elapsed RAW time; a wall-clock step shows up as a residual jump.
 
 Steps (gate-prune plan section 4, "G10"):
 
-1. Read f0 and the anchor before anything changes.
+1. Read f0 and the anchor before anything changes. Then check directly,
+   read-only (``ps``), that no capture process is alive: ``powermetrics``,
+   ``run_campaign``, ``run_night`` or a ``night_chains`` script, outside this
+   process's own ancestry. If one is (or the check cannot be read), ON is
+   skipped, OFF still runs, and the result is UNMEASURED.
 2. ``sudo -n systemsetup -setusingnetworktime on`` (the sudoers slice argv).
    Its return code and output are recorded only; nothing reads its wording.
 3. Poll the anchor at 1 Hz for up to 300 s from the ON, until the residual
    moves more than 5 ms.
-4. Evaluate the clock residual verdict on the before/after pair. A REFUSE
-   whose reasons include the residual is DISCHARGED.
+4. Evaluate the clock module's arm verdict (``hazards.clock.judge`` on a
+   two-sample ``hazards.clock.series``) on the before/after pair. A REFUSE
+   whose measured residual exceeds the 1 ms limit is DISCHARGED; the decision
+   reads the number (``observed["max_abs_residual_ns"]``), never the reason
+   text. G10's own copy of the arithmetic (``evaluate_pair``) runs beside it
+   as a recorded cross-check. Until ``joulewise.hazards`` is importable,
+   ``main()`` falls back to ``evaluate_pair`` and says so in the record.
 5. Keep network time ON while reading f once a minute; switch OFF as soon as
    |f| <= 3.0 ppm, or 15 min after the ON. OFF always runs in ``finally``;
    SIGTERM and SIGHUP raise into it, and signals arriving during OFF are
@@ -75,6 +84,11 @@ SYSTEMSETUP = "/usr/sbin/systemsetup"
 ON_ARGV = (SUDO, "-n", SYSTEMSETUP, "-setusingnetworktime", "on")
 OFF_ARGV = (SUDO, "-n", SYSTEMSETUP, "-setusingnetworktime", "off")
 BOOT_ARGV = ("/usr/sbin/sysctl", "-n", "kern.bootsessionuuid")
+PS_ARGV = ("/bin/ps", "-axww", "-o", "pid=,ppid=,command=")
+EVALUATOR_HAZARD = "hazards.clock.judge/series"
+# Both anchors of the pair are read by this one living process, so no reboot
+# can fall between them; the sysctl reading is recorded separately.
+SAME_PROCESS_BOOT = "g10-same-process"
 
 PASS = "PASS"
 REFUSE = "REFUSE"
@@ -91,6 +105,8 @@ REASON_FREQUENCY = "clock.frequency_changed"
 REASON_SKEW = "clock.read_skew_exceeds_limit"
 REASON_NO_ANCHOR = "clock.anchor_unread"
 REASON_NO_FREQUENCY = "clock.frequency_unread"
+REASON_CAPTURE_ALIVE = "capture process alive"
+REASON_CAPTURE_UNREAD = "capture process check unreadable"
 
 FLAG_CODES = {
     DISCHARGED: "g10.discharged",
@@ -171,6 +187,67 @@ def real_read_frequency() -> Mapping[str, Any]:
     return kernel_clock.validate_probe(kernel_clock.read_kernel_frequency())
 
 
+def _basename(token: str) -> str:
+    return token.rstrip("/").rsplit("/", 1)[-1]
+
+
+def capture_match(command: str) -> str | None:
+    """Why a ps command line is a capture process, or None."""
+    tokens = command.split()
+    if not tokens:
+        return None
+    for token in tokens:
+        name = _basename(token)
+        if name == "powermetrics":  # the sampler, or sudo running it
+            return "powermetrics"
+        if name.startswith("run_campaign"):
+            return "run_campaign"
+        if name.startswith("run_night"):
+            return "run_night"
+        if "/night_chains/" in token:
+            return "night_chains"
+    return None
+
+
+def find_capture_processes(ps_text: str, own_pid: int) -> list[dict[str, Any]]:
+    """Capture processes in ``ps -o pid=,ppid=,command=`` output, leaving out
+    this process and its ancestors (the driver that runs G10)."""
+    rows: dict[int, tuple[int, str]] = {}
+    for line in ps_text.splitlines():
+        parts = line.split(None, 2)
+        if len(parts) < 2:
+            continue
+        try:
+            pid, ppid = int(parts[0]), int(parts[1])
+        except ValueError:
+            continue
+        rows[pid] = (ppid, parts[2] if len(parts) > 2 else "")
+    if not rows:
+        raise ValueError("ps listed no processes")
+    excluded = set()
+    pid = own_pid
+    while pid not in excluded and pid > 0:
+        excluded.add(pid)
+        pid = rows[pid][0] if pid in rows else 0
+    found = []
+    for pid, (ppid, command) in sorted(rows.items()):
+        if pid in excluded:
+            continue
+        why = capture_match(command)
+        if why is not None:
+            found.append({"pid": pid, "ppid": ppid, "match": why, "command": command})
+    return found
+
+
+def real_capture_processes() -> list[dict[str, Any]]:
+    """Read-only process listing; raises when ps cannot be read."""
+    result = subprocess.run(list(PS_ARGV), capture_output=True, timeout=30, check=False,
+                            stdin=subprocess.DEVNULL)
+    if result.returncode != 0:
+        raise OSError(f"ps exited {result.returncode}: {_text(result.stderr).strip()}")
+    return find_capture_processes(_text(result.stdout), os.getpid())
+
+
 def real_boot_session_uuid() -> str | None:
     try:
         result = subprocess.run(list(BOOT_ARGV), capture_output=True, timeout=10, check=False,
@@ -192,6 +269,7 @@ class Env:
     monotonic_ns: Callable[[], int] = time.monotonic_ns
     wall_s: Callable[[], float] = time.time
     boot_session_uuid: Callable[[], str | None] = real_boot_session_uuid
+    capture_processes: Callable[[], Sequence[Mapping[str, Any]]] = real_capture_processes
 
 
 # --------------------------------------------------------------------------
@@ -248,12 +326,88 @@ def evaluate_pair(before: Mapping[str, int] | None, after: Mapping[str, int] | N
             "f_after_raw_word": int(f_after["raw_word"])}
 
 
+def load_hazard_clock() -> tuple[Any, Any] | None:
+    """(joulewise.hazards.clock, joulewise.hazards.base), or None while the
+    hazard package is not importable."""
+    try:
+        from joulewise.hazards import base as hazard_base
+        from joulewise.hazards import clock as hazard_clock
+    except ImportError:
+        return None
+    return hazard_clock, hazard_base
+
+
+def make_hazard_evaluator(hazard_clock: Any, hazard_base: Any) -> Callable[..., dict[str, Any]]:
+    """The clock module's arm verdict on the pair, as an ``evaluate`` callable.
+
+    The pair becomes a two-sample dwell series (f_before at the start,
+    f_after at the end) judged with the module's thresholds, the residual and
+    skew limits taken from ``Params``. ``step_seen`` is decided on the number:
+    REFUSE and ``observed["max_abs_residual_ns"]`` above the residual limit.
+    """
+
+    def evaluate(before, after, f_before, f_after, params: Params) -> dict[str, Any]:
+        if before is None or after is None:
+            return {"evaluator": EVALUATOR_HAZARD, "verdict": UNMEASURED,
+                    "reasons": [REASON_NO_ANCHOR], "residual_ns": None, "step_seen": False}
+        thresholds = {**hazard_clock.DEFAULT_THRESHOLDS,
+                      "t_stream_max_s": params.t_stream_max_s,
+                      "skew_max_ns": params.skew_limit_ns,
+                      "residual_max_ns": params.residual_limit_ns}
+
+        def sample(anchor, frequency):
+            return {"anchor": {"realtime_ns": int(anchor["realtime_ns"]),
+                               "monotonic_raw_ns": int(anchor["monotonic_raw_ns"]),
+                               "read_skew_ns": int(anchor["read_skew_ns"]),
+                               "anchor_ns": anchor_ns(anchor)},
+                    "frequency": None if frequency is None else dict(frequency),
+                    "error": None}
+
+        now = hazard_base.Stamp(time.time_ns(), time.monotonic_ns(),
+                                time.clock_gettime_ns(time.CLOCK_MONOTONIC_RAW))
+        measurement = hazard_clock.series(
+            [sample(before, f_before), sample(after, f_after)],
+            boot_start=SAME_PROCESS_BOOT, boot_end=SAME_PROCESS_BOOT,
+            started=now, finished=now)
+        verdict = hazard_clock.judge(measurement, thresholds)
+        observed = dict(verdict.observed)
+        residual = observed.get("max_abs_residual_ns")
+        step_seen = (verdict.status == hazard_base.REFUSE and residual is not None
+                     and residual > params.residual_limit_ns)
+        status = {hazard_base.PASS: PASS, hazard_base.REFUSE: REFUSE,
+                  hazard_base.UNMEASURED: UNMEASURED}[verdict.status]
+        return {"evaluator": EVALUATOR_HAZARD, "verdict": status,
+                "reasons": list(verdict.reasons), "residual_ns": residual,
+                "residual_limit_ns": params.residual_limit_ns, "step_seen": bool(step_seen),
+                "hazard_verdict": verdict.to_json()}
+
+    evaluate.evaluator_name = EVALUATOR_HAZARD  # type: ignore[attr-defined]
+    return evaluate
+
+
+def default_evaluator() -> tuple[Callable[..., Mapping[str, Any]], list[str]]:
+    """The clock module's verdict when importable, else G10's own copy."""
+    loaded = load_hazard_clock()
+    if loaded is None:
+        return evaluate_pair, [
+            "joulewise.hazards.clock not importable: the pair was decided by G10's own "
+            "copy of the residual check (evaluate_pair), pending the hazard module"]
+    return make_hazard_evaluator(*loaded), []
+
+
 def result_from_verdict(verdict: Mapping[str, Any]) -> str:
     """REFUSE because of the residual is DISCHARGED. A refusal only for a
-    changed frequency word does not show that a step was seen."""
+    changed frequency word does not show that a step was seen.
+
+    An evaluator that reports ``step_seen`` (the clock module adapter) is
+    decided on that number; G10's own copy is decided on its reason code."""
     if verdict.get("verdict") == UNMEASURED:
         return RESULT_UNMEASURED
-    if verdict.get("verdict") == REFUSE and REASON_RESIDUAL in verdict.get("reasons", ()):
+    if verdict.get("verdict") != REFUSE:
+        return NOT_DISCHARGED
+    if "step_seen" in verdict:
+        return DISCHARGED if verdict["step_seen"] is True else NOT_DISCHARGED
+    if REASON_RESIDUAL in verdict.get("reasons", ()):
         return DISCHARGED
     return NOT_DISCHARGED
 
@@ -324,7 +478,8 @@ def _signal_name(signum: int) -> str:
 
 class Control:
     def __init__(self, params: Params, env: Env, out_path: Path, argv: Sequence[str],
-                 evaluate: Callable[..., Mapping[str, Any]] = evaluate_pair):
+                 evaluate: Callable[..., Mapping[str, Any]] = evaluate_pair,
+                 notes: Sequence[str] = ()):
         self.params = params
         self.env = env
         self.out_path = out_path
@@ -343,11 +498,13 @@ class Control:
             "finished": None,
             "f0": None,
             "anchor_before": None,
+            "capture_check": None,
             "commands": [],
             "trace": [],
             "step": None,
             "f_after_step": None,
             "verdict": None,
+            "verdict_cross_check": None,
             "settling": {"reads": [], "stop_reason": None},
             "f1": None,
             "next_arm_frequency_gate": None,
@@ -357,7 +514,7 @@ class Control:
             "interrupted": None,
             "deferred_signals": [],
             "error": None,
-            "notes": [],
+            "notes": list(notes),
         }
 
     # -- small helpers -----------------------------------------------------
@@ -446,6 +603,20 @@ class Control:
                 + (f" ({f0_error})" if f0_error else ""))
             return
 
+        self.phase = "capture-check"
+        check: dict[str, Any] = {"argv": list(PS_ARGV), "matches": None, "error": None}
+        self.record["capture_check"] = check
+        try:
+            check["matches"] = [dict(m) for m in self.env.capture_processes()]
+        except Exception as exc:  # unreadable: never step the clock blind
+            check["error"] = repr(exc)
+        if check["error"] is not None or check["matches"]:
+            reason = REASON_CAPTURE_UNREAD if check["error"] is not None else REASON_CAPTURE_ALIVE
+            self.record["verdict"] = {"evaluator": "g10-capture-check", "verdict": UNMEASURED,
+                                      "reasons": [reason], "residual_ns": None}
+            self.record["notes"].append(f"network time ON not run: {reason}")
+            return
+
         self.phase = "on"
         self.on_raw_ns = self.env.monotonic_raw_ns()
         self.command("on", ON_ARGV)
@@ -493,6 +664,14 @@ class Control:
         if f_after_error:
             self.record["notes"].append(f"frequency after step unread: {f_after_error}")
         self.record["verdict"] = dict(self.evaluate(before, after_anchor, f0, f_after, params))
+        if self.evaluate is not evaluate_pair:
+            cross = evaluate_pair(before, after_anchor, f0, f_after, params)
+            self.record["verdict_cross_check"] = cross
+            if result_from_verdict(cross) != result_from_verdict(self.record["verdict"]):
+                self.record["notes"].append(
+                    "evaluators disagree: the clock module's verdict gives "
+                    f"{result_from_verdict(self.record['verdict'])}, G10's own copy gives "
+                    f"{result_from_verdict(cross)}; the clock module's verdict stands")
 
         self.phase = "settle"
         self.settle()
@@ -635,6 +814,7 @@ def write_create_once(path: Path, raw: bytes) -> None:
 
 def run_control(params: Params, env: Env, out_path: Path, argv: Sequence[str], *,
                 evaluate: Callable[..., Mapping[str, Any]] = evaluate_pair,
+                notes: Sequence[str] = (),
                 handle_signals: bool = True,
                 stderr=None) -> tuple[dict[str, Any] | None, int]:
     """Run G10 once. Returns (record, exit code). Nothing is run, not even
@@ -648,7 +828,7 @@ def run_control(params: Params, env: Env, out_path: Path, argv: Sequence[str], *
     if not out_path.parent.is_dir():
         print(f"g10: night directory {out_path.parent} does not exist", file=stderr)
         return None, EXIT_USAGE
-    control = Control(params, env, out_path, argv, evaluate=evaluate)
+    control = Control(params, env, out_path, argv, evaluate=evaluate, notes=notes)
     guard = SignalGuard(enabled=handle_signals)
     guard.install()
     try:
@@ -711,8 +891,9 @@ def main(argv: Sequence[str] | None = None, *, env: Env | None = None,
         print(f"g10: {exc}", file=stderr if stderr is not None else sys.stderr)
         return EXIT_USAGE
     out_path = Path(args.night_dir) / RECORD_BASENAME
+    evaluate, notes = default_evaluator()
     record, code = run_control(params, env if env is not None else Env(), out_path, full_argv,
-                               stderr=stderr)
+                               evaluate=evaluate, notes=notes, stderr=stderr)
     if record is not None:
         print(f"g10: {record['result']} off_ok={record['off_ok']} record={out_path}",
               file=stdout)
