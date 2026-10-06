@@ -70,6 +70,9 @@ MAX_POST_MARKER_ANCHOR_LAG_S = 5.0
 IDLE_GPU_IDLE_RATIO_THRESHOLD = 0.80
 IDLE_GPU_LOW_IDLE_FRACTION_THRESHOLD = 0.40
 IDLE_GPU_FREQ_MEAN_MHZ_THRESHOLD = 800.0
+# Gate-prune 2 (M4): on HAZARD_PACK runs the admission stream's readiness
+# document stands in for the separate one-frame capability probe.
+READINESS_CAPABILITY_METHOD = "admission_stream_readiness_document"
 TIMESTAMP_DERIVATION = (
     "current-era timestamp_s anchors record 0's window END to the midpoint of "
     "the admissible rate-aware set-membership interval formed from native "
@@ -462,11 +465,19 @@ class PowermetricsTelemetryAdapter:
 
         Admission baselines are logical, byte-verbatim slices of this stream;
         the same process remains live through measured-window handoff.
+
+        On a HAZARD_PACK runs root (gate-prune 2, M4) the separate
+        ``powermetrics -n 1`` capability probe is not run first: the stream's
+        own readiness document (the first parseable frame, with the same
+        samplers) proves sampling.  If the stream fails to start, the probe
+        runs then, so a missing sudoers line is still reported as before.
         """
 
-        capability = self._ensure_capability()
-        if not capability.ok:
-            return capability
+        probe_deferred = self._capability is None and _hazard_runs_context(context)
+        if not probe_deferred:
+            capability = self._ensure_capability()
+            if not capability.ok:
+                return capability
         if self._process is not None or self._admission_sampling_start_requested:
             return AdapterResult(
                 ok=False,
@@ -474,18 +485,58 @@ class PowermetricsTelemetryAdapter:
                 message="powermetrics admission-window sampling is already active",
             )
         self._admission_sampling_start_requested = True
+        if probe_deferred:
+            self._capability = AdapterResult(ok=True)
+        started = False
         try:
             result = self.start_sampling(config, context)
+            started = result.ok
         finally:
             # An interrupt can land after native process creation but before
             # ``start_sampling`` returns.  Controller finalization owns that
             # process; this transient guard must never leak into adapter reuse.
             self._admission_sampling_start_requested = False
+            if probe_deferred and not started:
+                self._capability = None
         if not result.ok:
             self._reset_admission_sampling_state()
+            if probe_deferred:
+                capability = self._ensure_capability()
+                if not capability.ok:
+                    return capability
             return result
+        if probe_deferred:
+            self._record_readiness_capability()
         self._admission_sampling_handoff_pending = True
         return result
+
+    def _record_readiness_capability(self) -> None:
+        """Record the stream's readiness document as the capability evidence.
+
+        Writes what the probe wrote on success: the requested sampler list
+        the running stream was started with, and the device identity fields
+        of its first frame.
+        """
+
+        self._capability = AdapterResult(
+            ok=True, metadata={"method": READINESS_CAPABILITY_METHOD}
+        )
+        capture_path = self._capture_path
+        if capture_path is not None:
+            try:
+                first_document = self._read_stream_frame_candidate(
+                    capture_path, index=0
+                )
+                records = parse_powermetrics_records(first_document)
+            except (OSError, ValueError):
+                records = []
+            self._remember_records(records)
+        self._device_metadata["capability_precheck"] = {"ok": True}
+        self._device_metadata["powermetrics"]["samplers_available"] = SAMPLERS.split(",")
+        self._device_metadata["powermetrics"]["samplers_probe"] = {
+            "ok": True,
+            "method": READINESS_CAPABILITY_METHOD,
+        }
 
     def stop_sampling(
         self, config: BenchmarkConfig, context: RunContext | None = None
@@ -1675,6 +1726,26 @@ class PowermetricsTelemetryAdapter:
         except subprocess.TimeoutExpired:
             process.kill()
             process.communicate()
+
+
+def _hazard_runs_context(context: RunContext | None) -> bool:
+    """True only for a run whose runs root carries the HAZARD lineage locator.
+
+    The same dispatch the core lanes use (``window_lineage.is_hazard_runs_root``
+    on the runs root, the bundle's parent).  Never raises: anything unreadable
+    is the legacy path.
+    """
+
+    if context is None:
+        return False
+    try:
+        from joulewise import window_lineage  # noqa: PLC0415
+
+        return bool(
+            window_lineage.is_hazard_runs_root(Path(context.bundle_path).parent)
+        )
+    except Exception:  # noqa: BLE001 - an unreadable root is the legacy path
+        return False
 
 
 def trace_fallback_endpoint(

@@ -1,11 +1,15 @@
 """Gate-prune 2, lane P2-ADAPT (M4): idle-stage software time in the adapter.
 
-The change, in the pinned ``joulewise/adapters/powermetrics.py``:
+Two changes, both in the pinned ``joulewise/adapters/powermetrics.py``:
 
-``measure_idle`` decodes the idle slice's plist frames once and builds the
+1. ``measure_idle`` decodes the idle slice's plist frames once and builds the
    baseline records and the rich rows from that one decode.  The outputs must
    stay byte-identical: the archived-bundle test re-derives real stored
    ``rich_telemetry_idle.jsonl`` files and ``idle_baseline`` numbers.
+2. On a HAZARD_PACK runs root, ``begin_admission_window_sampling`` no longer
+   runs the separate ``powermetrics -n 1`` capability probe; the admission
+   stream's readiness document is the capability evidence.  The legacy path
+   still probes first.
 """
 
 from __future__ import annotations
@@ -258,6 +262,176 @@ class ArchivedIdleByteIdentityTests(unittest.TestCase):
                     adapter._pre_idle_records,
                     parse_powermetrics_records(data, timestamp_anchor_s=anchor),
                 )
+
+
+class _ImmediateStreamPopen:
+    """A sampler whose stream holds the fixture (it has a native rollover)."""
+
+    instances: list["_ImmediateStreamPopen"] = []
+
+    def __init__(self, command, **_kwargs):
+        type(self).instances.append(self)
+        self.command = list(command)
+        Path(command[command.index("-o") + 1]).write_bytes(FIXTURE.read_bytes())
+        self.returncode = None
+
+    def poll(self):
+        return self.returncode
+
+    def terminate(self):
+        self.returncode = 0
+
+    def kill(self):
+        self.returncode = -9
+
+    def communicate(self, timeout=None):
+        self.returncode = 0
+        return b"", b""
+
+
+class _ExitingStreamPopen(_ImmediateStreamPopen):
+    """``sudo -n`` without a sudoers line: exits at once and writes nothing."""
+
+    def __init__(self, command, **_kwargs):
+        type(self).instances.append(self)
+        self.command = list(command)
+        self.returncode = 1
+
+
+class HazardCapabilityProbeTests(unittest.TestCase):
+    def setUp(self) -> None:
+        _ImmediateStreamPopen.instances = []
+        _ExitingStreamPopen.instances = []
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.tmp = Path(tmp.name)
+        self.config = make_config()
+        self.clock = FakeClock(start=1791124390.0)
+
+    def _begin(self, *, hazard: bool, popen, run_side_effect):
+        runs_root = self.tmp / "runs"
+        if hazard:
+            write_hazard_locator(runs_root)
+        context = make_context(runs_root / "member-1", self.config, self.clock)
+        adapter = PowermetricsTelemetryAdapter(self.clock)
+        calls: list[list[str]] = []
+
+        def fake_run(command, **kwargs):
+            calls.append(list(command))
+            return run_side_effect(command, **kwargs)
+
+        with (
+            patch("joulewise.adapters.powermetrics.subprocess.run", side_effect=fake_run),
+            patch("joulewise.adapters.powermetrics.subprocess.Popen", popen),
+            patch("joulewise.adapters.powermetrics.time.sleep"),
+        ):
+            result = adapter.begin_admission_window_sampling(self.config, context)
+        return adapter, result, calls, context
+
+    @staticmethod
+    def _probe_ok(command, **_kwargs):
+        Path(command[command.index("-o") + 1]).write_bytes(FIXTURE.read_bytes())
+        return completed(command)
+
+    @staticmethod
+    def _probe_denied(command, **_kwargs):
+        return completed(command, returncode=1, stderr=b"sudo: a password is required\n")
+
+    def test_hazard_admission_stream_runs_no_one_frame_probe(self) -> None:
+        adapter, result, calls, context = self._begin(
+            hazard=True, popen=_ImmediateStreamPopen, run_side_effect=self._probe_ok
+        )
+        self.assertTrue(result.ok, result.message)
+        self.assertEqual(calls, [])
+        self.assertEqual(len(_ImmediateStreamPopen.instances), 1)
+        self.assertNotIn("-n", _ImmediateStreamPopen.instances[0].command[2:])
+
+        metadata = adapter.device_metadata(self.config, context)
+        self.assertEqual(metadata["capability_precheck"], {"ok": True})
+        self.assertEqual(
+            metadata["powermetrics"]["samplers_available"], SAMPLERS.split(",")
+        )
+        self.assertEqual(
+            metadata["powermetrics"]["samplers_probe"],
+            {"ok": True, "method": READINESS_METHOD},
+        )
+        # The readiness frame supplies what the probe frame used to: device
+        # identity and a current thermal state before the idle capture.
+        first = parse_powermetrics_records(FIXTURE.read_bytes())[0]
+        for key in ("hw_model", "kern_osversion", "kern_bootargs", "kern_boottime"):
+            if key in first.metadata:
+                self.assertEqual(metadata[key], first.metadata[key], key)
+        self.assertEqual(
+            adapter.thermal_state(self.config, context).thermal_pressure,
+            first.thermal_pressure,
+        )
+
+        # Later capability checks (the idle capture, the measured handoff)
+        # reuse the readiness evidence and never spawn the probe.
+        with patch(
+            "joulewise.adapters.powermetrics.subprocess.run",
+            side_effect=AssertionError("capability probe must not run"),
+        ):
+            self.assertTrue(adapter._ensure_capability().ok)
+
+    def test_legacy_admission_stream_still_probes_first(self) -> None:
+        adapter, result, calls, context = self._begin(
+            hazard=False, popen=_ImmediateStreamPopen, run_side_effect=self._probe_ok
+        )
+        self.assertTrue(result.ok, result.message)
+        self.assertEqual(len(calls), 1)
+        sampler_argv = calls[0][2:]  # after the "sudo -n" privilege prefix
+        self.assertEqual(sampler_argv[sampler_argv.index("-n") + 1], "1")
+        metadata = adapter.device_metadata(self.config, context)
+        self.assertEqual(
+            metadata["powermetrics"]["samplers_probe"],
+            {"ok": True, "method": "requested_sampler_probe"},
+        )
+
+    def test_hazard_stream_failure_reports_the_probe_permission_failure(self) -> None:
+        adapter, result, calls, context = self._begin(
+            hazard=True, popen=_ExitingStreamPopen, run_side_effect=self._probe_denied
+        )
+        self.assertFalse(result.ok)
+        self.assertEqual(result.failure_reason, FailureReason.PERMISSION_DENIED)
+        self.assertIn(sudoers_line(), result.message)
+        self.assertEqual(len(calls), 1)
+        metadata = adapter.device_metadata(self.config, context)
+        self.assertEqual(
+            metadata["powermetrics"]["samplers_probe"],
+            {"ok": False, "reason": "returncode_1"},
+        )
+        self.assertFalse(adapter._capability.ok)
+
+    def test_hazard_stream_failure_with_working_probe_returns_stream_failure(self) -> None:
+        adapter, result, calls, _context = self._begin(
+            hazard=True, popen=_ExitingStreamPopen, run_side_effect=self._probe_ok
+        )
+        self.assertFalse(result.ok)
+        self.assertIn("exited before producing a parseable plist", result.message)
+        self.assertEqual(len(calls), 1)
+        self.assertTrue(adapter._capability.ok)
+        self.assertIsNone(adapter._process)
+
+    def test_hazard_interrupted_start_leaves_no_cached_capability(self) -> None:
+        def interrupted(command, **_kwargs):
+            raise KeyboardInterrupt
+
+        runs_root = self.tmp / "runs"
+        write_hazard_locator(runs_root)
+        context = make_context(runs_root / "member-1", self.config, self.clock)
+        adapter = PowermetricsTelemetryAdapter(self.clock)
+        with (
+            patch(
+                "joulewise.adapters.powermetrics.subprocess.run",
+                side_effect=self._probe_ok,
+            ),
+            patch("joulewise.adapters.powermetrics.subprocess.Popen", side_effect=interrupted),
+        ):
+            with self.assertRaises(KeyboardInterrupt):
+                adapter.begin_admission_window_sampling(self.config, context)
+        self.assertIsNone(adapter._capability)
+        self.assertFalse(adapter._admission_sampling_start_requested)
 
 
 if __name__ == "__main__":
