@@ -63,6 +63,12 @@ HAZARD_DRIVER_REASON_CODES = frozenset(
     {
         "night_refused_hazard",    # a hazard module refused, or was UNMEASURED, at arm (NULL window)
         "night_stopped_disk_low",  # free space fell under the in-window floor; the driver stopped the chain
+        # PLAN2 P2-DRV (gate prune round 2):
+        "night_stopped_census_unmeasured",       # 4 consecutive in-window agent censuses unmeasured (row 7)
+        "night_stopped_monitor_outage",          # no battery or contention reading for the outage bound (row 11)
+        "night_refused_instrument_not_sampling",  # the hazard monitor never journaled before launch (row 11)
+        "night_lineage_unpublished",             # a runs-root lineage locator is absent after one retry (row 9)
+        "night_refused_launch_abandoned",        # the watchdog released this launch (J4) before the arm
     }
 )
 # 2026-09-05: D-165 v2 relabel supersedes the v1 registration digest

@@ -38,6 +38,7 @@ import dataclasses
 import hashlib
 import json
 import os
+import re
 import signal
 import subprocess
 import sys
@@ -64,7 +65,15 @@ PASS, REFUSE, UNMEASURED = "PASS", "REFUSE", "UNMEASURED"
 HAZARD_MODULES = night_gate.HAZARD_MODULES
 REFUSED_HAZARD = "night_refused_hazard"
 STOPPED_DISK_LOW = "night_stopped_disk_low"
-if {REFUSED_HAZARD, STOPPED_DISK_LOW} != set(night_gate.HAZARD_DRIVER_REASON_CODES):
+# PLAN2 P2-DRV (gate prune round 2).
+STOPPED_CENSUS_UNMEASURED = "night_stopped_census_unmeasured"
+STOPPED_MONITOR_OUTAGE = "night_stopped_monitor_outage"
+REFUSED_INSTRUMENT_NOT_SAMPLING = "night_refused_instrument_not_sampling"
+LINEAGE_UNPUBLISHED = "night_lineage_unpublished"
+REFUSED_LAUNCH_ABANDONED = "night_refused_launch_abandoned"
+if {REFUSED_HAZARD, STOPPED_DISK_LOW, STOPPED_CENSUS_UNMEASURED, STOPPED_MONITOR_OUTAGE,
+        REFUSED_INSTRUMENT_NOT_SAMPLING, LINEAGE_UNPUBLISHED,
+        REFUSED_LAUNCH_ABANDONED} != set(night_gate.HAZARD_DRIVER_REASON_CODES):
     raise RuntimeError("hazard driver codes drifted from night_gate.HAZARD_DRIVER_REASON_CODES")
 
 NETWORK_TIME_OFF_ARGV = ("/usr/bin/sudo", "-n", "/usr/sbin/systemsetup", "-setusingnetworktime", "off")
@@ -81,6 +90,34 @@ DISK_LOW_BYTES_DEFAULT = 10 * 1024 ** 3
 G10_TIMEOUT_S = 300.0 + 900.0 + 300.0
 G10_TERM_GRACE_S = 120.0
 GIT_TIMEOUT_S = 60.0
+# PLAN2 row 7: the in-window census. A probe that is neither clean (exit 1,
+# empty stdout) nor a detection (any stdout) is unmeasured: retried, then a
+# flag; this many unmeasured censuses in a row (about 2 min) stop the chain.
+CENSUS_RETRIES = 3
+CENSUS_RETRY_S = 1.0
+CENSUS_UNMEASURED_STOP_AFTER = 4
+# PLAN2 row 11: the monitor must journal before launch, and keep journaling.
+MONITOR_READY_TRIES = 3
+MONITOR_READY_TIMEOUT_S = 20.0
+MONITOR_READY_POLL_S = 0.2
+MONITOR_RAPID_EXIT_S = 30.0
+MONITOR_OUTAGE_S = 600.0
+MONITOR_LIVENESS_CHECK_S = 10.0
+MONITOR_JOURNAL_DIR = ("hazards", "monitor")
+# PLAN2 row 9 (interim): one publication retry, then both locators re-read.
+LINEAGE_RETRY_S = 5.0
+# PLAN2 yield tripwire (section 2.2).
+YIELD_STALL_S = 3600.0
+YIELD_STALL_CHECK_S = 60.0
+# Sol review F3: a stage is counted in the window only inside the settle that
+# follows it (registered 60 s): its journal line must be at most this old, and
+# the next in-chain stage must not be a capture. Otherwise it is counted at the
+# terminal record, after the chain group is gone.
+YIELD_COUNT_FRESH_S = 30.0
+YIELD_PRE_BUNDLE_RUN = 3
+CORPUS_MIN_VALID = 10
+# A science stage's share of the analysis plan's 8-of-10 cell minimum.
+SCIENCE_MIN_NUMERATOR, SCIENCE_MIN_DENOMINATOR = 4, 5
 
 ARM_DECISION = "arm_decision.json"
 HAZARD_RESULT = "hazard_result.json"
@@ -92,6 +129,14 @@ MONITOR_JOURNAL = "monitor_supervision.jsonl"
 G10_RECORD = "g10.json"
 G10_DRIVER_RECORD = "g10.driver.json"
 DRIVER_FLAGS = "driver.jsonl"
+YIELD_PLAN = "yield_plan.json"
+STAGE_YIELD = "stage_yield.jsonl"
+YIELD_ALERT = "yield_alert-{ordinal}.json"
+LAUNCH_ABANDONED_MARKER = "launch_abandoned.json"
+YIELD_PLAN_SCHEMA = "joulewise.b5_yield_plan.v1"
+STAGE_YIELD_SCHEMA = "joulewise.b5_stage_yield.v1"
+YIELD_ALERT_SCHEMA = "joulewise.b5_yield_alert.v1"
+YIELD_SCHEMA = "joulewise.b5_window_yield.v1"
 
 
 # --------------------------------------------------------------------------
@@ -351,6 +396,37 @@ class CollectorRequest:
     stage: str  # "arm"
 
 
+def _production_lineage_check(request: LineageRequest) -> dict[str, Any]:
+    """Re-read both runs roots' lineage locators (PLAN2 row 9, interim).
+
+    A member can be collected only when its runs root carries a HAZARD
+    locator that the member's own window-level authenticator accepts
+    (``window_lineage.authenticate_campaign``: structure, this boot, the chain
+    not yet ended, the pack's config inventory) and that names this plan;
+    otherwise every member refuses before its bundle. A structurally valid
+    locator left by an earlier window is therefore not valid here (Sol review
+    F2). Returns ``{"claim": {...}, "bound": {...}}``, each with ``valid`` and,
+    when invalid, the reader's error.
+    """
+
+    from joulewise import window_lineage
+    plan_id = getattr(request.plan, "plan_id", None)
+    boot = request.boot_session_uuid
+    checks: dict[str, Any] = {}
+    for role, root in (("claim", request.claim_runs_root), ("bound", request.bound_runs_root)):
+        entry: dict[str, Any] = {"root": str(root), "valid": False}
+        try:
+            context = window_lineage.authenticate_campaign(Path(root), boot_reader=lambda: boot)
+            named = context["launch_lineage"].get("plan_id")
+            if plan_id is not None and named != plan_id:
+                raise ValueError(f"the locator names plan {named!r}, not this window's plan {plan_id!r}")
+            entry.update(valid=True, sha256=context["locator_sha256"])
+        except Exception as error:  # noqa: BLE001 - an unusable locator is not valid
+            entry["error"] = _error_text(error)
+        checks[role] = entry
+    return checks
+
+
 @dataclasses.dataclass
 class Seams:
     arm: Callable[[ArmContext], Any]
@@ -364,6 +440,7 @@ class Seams:
     git: Callable[[Path, Sequence[str]], bytes] = _git
     emit_flag: Callable[[Path, Mapping[str, Any]], None] = _emit_flag_production
     boot_session_uuid: Callable[[], str | None] = _boot_session_uuid
+    verify_lineage: Callable[[LineageRequest], Mapping[str, Any]] = _production_lineage_check
 
 
 _STATUS_ORDER = {PASS: 0, "NOT_EVALUATED": 1, UNMEASURED: 2, REFUSE: 3}
@@ -495,11 +572,15 @@ def production_seams(repo_root: Path) -> Seams:
         from joulewise.hazards import monitor as hazard_monitor
         window = request.plan.hazard_window
         thresholds = window["thresholds"]
+        # PLAN2 row 10: the chain's process-group leader (night/chain.started)
+        # is a tree root beside the driver, so the chain's own CPU stays inside
+        # the tree even if the driver dies and the chain is reparented.
         config = hazard_monitor.build_config(
             custody_dir=request.custody_root, tree_roots=(request.driver_pid,),
             disk_targets=disk_targets(window, arm=False),
             low_bytes=int(thresholds.get("disk", {}).get("low_bytes", DISK_LOW_BYTES_DEFAULT)),
-            cpu_limit_s_per_s=float(thresholds.get("contention", {}).get("cpu_limit_s_per_s", 0.05)))
+            cpu_limit_s_per_s=float(thresholds.get("contention", {}).get("cpu_limit_s_per_s", 0.05)),
+            tree_root_files=(str(Path(request.night_dir) / "chain.started"),))
         path = hazard_monitor.monitor_dir(request.custody_root) / "config.json"
         path.parent.mkdir(parents=True, exist_ok=True)
         if not path.exists():
@@ -619,6 +700,12 @@ class MonitorSupervisor:
         self.stopped = False
         self.stop_record: dict[str, Any] | None = None
         self.errors: list[str] = []
+        # PLAN2 row 11: an exit within MONITOR_RAPID_EXIT_S of its start counts
+        # as a failure for the backoff; a crash loop is flagged once, and the
+        # supervisor never stops respawning.
+        self.started_at: float | None = None
+        self.crash_loop = False
+        self.on_crash_loop: Callable[[dict[str, Any]], None] | None = None
 
     def _record(self, event: str, **fields: Any) -> None:
         try:
@@ -644,7 +731,7 @@ class MonitorSupervisor:
             return False
         self.process = process
         self.starts += 1
-        self.consecutive_failures = 0
+        self.started_at = time.monotonic()
         start_time = None
         if self.identity is not None:
             try:
@@ -669,16 +756,58 @@ class MonitorSupervisor:
             return
         if self.process is not None:
             code = self.process.poll()
+            lived = time.monotonic() - (self.started_at if self.started_at is not None else time.monotonic())
             if code is None:
+                if lived >= MONITOR_RAPID_EXIT_S:
+                    self.consecutive_failures = 0
                 return
-            self.exits.append({"pid": self.process.pid, "returncode": code, "at": stamp()})
-            self._record("exit", pid=self.process.pid, returncode=code)
+            self.exits.append({"pid": self.process.pid, "returncode": code, "at": stamp(),
+                               "lived_s": round(lived, 3)})
+            self._record("exit", pid=self.process.pid, returncode=code, lived_s=round(lived, 3))
+            self.consecutive_failures = self.consecutive_failures + 1 if lived < MONITOR_RAPID_EXIT_S else 0
             self.process = None
             self.down_since = stamp()
+        self._note_crash_loop()
         interval = (MONITOR_RESTART_BACKOFF_S if self.consecutive_failures >= MONITOR_BACKOFF_AFTER
                     else MONITOR_RESTART_INTERVAL_S)
         if time.monotonic() - self.last_attempt >= interval:
             self.start()
+
+    def _note_crash_loop(self) -> None:
+        if self.crash_loop or self.consecutive_failures < MONITOR_BACKOFF_AFTER:
+            return
+        self.crash_loop = True
+        details = {"consecutive_failures": self.consecutive_failures, "starts": self.starts,
+                   "start_failures": self.start_failures, "backoff_s": MONITOR_RESTART_BACKOFF_S}
+        self._record("crash_loop", **details)
+        if self.on_crash_loop is not None:
+            try:
+                self.on_crash_loop(details)
+            except Exception as error:  # noqa: BLE001 - a flag is a record
+                self.errors.append(_error_text(error))
+
+    def discard(self, reason: str) -> None:
+        """Stop the current process (readiness retry); the supervisor itself stays live."""
+
+        process, self.process = self.process, None
+        if process is None:
+            return
+        if process.poll() is None:
+            for number, grace in ((signal.SIGTERM, 2.0), (signal.SIGKILL, MONITOR_STOP_GRACE_S)):
+                try:
+                    os.killpg(process.pid, number)
+                except (ProcessLookupError, PermissionError):
+                    pass
+                try:
+                    process.wait(timeout=grace)
+                    break
+                except subprocess.TimeoutExpired:
+                    continue
+        self.exits.append({"pid": process.pid, "returncode": process.poll(), "at": stamp(),
+                           "discarded": reason})
+        self._record("discard", pid=process.pid, returncode=process.poll(), reason=reason)
+        if self.down_since is None:
+            self.down_since = stamp()
 
     def stop(self) -> dict[str, Any]:
         """TERM the group, KILL after a grace period, and census it; return the summary."""
@@ -729,7 +858,7 @@ class MonitorSupervisor:
         return {"schema": MONITOR_JOURNAL_SCHEMA, "argv": self.argv, "starts": self.starts,
                 "restarts": max(0, self.starts - 1), "start_failures": self.start_failures,
                 "exits": self.exits, "gaps": self.gaps, "stop": self.stop_record,
-                "journal": MONITOR_JOURNAL, "errors": self.errors}
+                "journal": MONITOR_JOURNAL, "errors": self.errors, "crash_loop": self.crash_loop}
 
 
 class DiskFloor:
@@ -774,6 +903,663 @@ class DiskFloor:
                 self.readings.append(reading)
                 return reading
         return None
+
+
+# --------------------------------------------------------------------------
+# PLAN2 rows 10 and 11: monitor readiness before launch and liveness in the window
+
+
+_GOOD_MONITOR_KINDS = {"battery": frozenset({"reading"}), "contention": frozenset({"snapshot", "interval"})}
+
+
+def _journal_lines(path: Path) -> list[dict[str, Any]]:
+    """Complete JSON lines of one monitor journal; a torn or foreign line is skipped."""
+
+    try:
+        data = Path(path).read_bytes()
+    except OSError:
+        return []
+    rows = []
+    for raw in data.split(b"\n")[:-1]:
+        try:
+            value = json.loads(raw)
+        except ValueError:
+            continue
+        if isinstance(value, dict):
+            rows.append(value)
+    return rows
+
+
+def _session_pid(line: Mapping[str, Any]) -> str:
+    return str(line.get("session", "")).split("-", 1)[0]
+
+
+def monitor_readiness(directory: Path, pid: int) -> dict[str, Any]:
+    """Has monitor process ``pid`` journaled a session start, one battery reading and one
+    contention snapshot, each without error? (Counts and booleans only.)"""
+
+    status = {"session_start": False, "battery": False, "contention": False}
+    for name, kinds in _GOOD_MONITOR_KINDS.items():
+        for line in _journal_lines(Path(directory) / f"{name}.jsonl"):
+            if _session_pid(line) != str(pid):
+                continue
+            if line.get("kind") == "session_start":
+                status["session_start"] = True
+            elif isinstance(line.get("kind"), str) and line["kind"] in kinds and line.get("error") is None:
+                status[name] = True
+    status["ready"] = all(status.values())
+    return status
+
+
+def await_monitor_ready(monitor: "MonitorSupervisor", directory: Path) -> tuple[bool, list[dict[str, Any]]]:
+    """Start the monitor and wait for it to journal; up to MONITOR_READY_TRIES starts.
+
+    The hazard "the instrument not sampling" measured directly: a monitor that
+    never writes a session start plus one battery and one contention line
+    without error leaves every member battery- and contention-unmeasured.
+    """
+
+    attempts: list[dict[str, Any]] = []
+    for attempt in range(MONITOR_READY_TRIES):
+        if attempt:
+            monitor.discard("not ready")
+        started = monitor.start()
+        entry: dict[str, Any] = {"attempt": attempt + 1, "started": started, "at": stamp()}
+        if not started:
+            attempts.append(entry)
+            continue
+        deadline = time.monotonic() + MONITOR_READY_TIMEOUT_S
+        status: dict[str, Any] = {}
+        while True:
+            process = monitor.process
+            status = monitor_readiness(directory, process.pid)
+            alive = process.poll() is None
+            if status["ready"] and alive:
+                entry.update(status=status, ready=True, waited_s=round(
+                    MONITOR_READY_TIMEOUT_S - (deadline - time.monotonic()), 3))
+                attempts.append(entry)
+                return True, attempts
+            if not alive or time.monotonic() >= deadline:
+                break
+            time.sleep(MONITOR_READY_POLL_S)
+        entry.update(status=status, ready=False, alive=monitor.process.poll() is None
+                     if monitor.process is not None else False)
+        attempts.append(entry)
+    return False, attempts
+
+
+class MonitorLiveness:
+    """Mid-window instrument outage: no error-free battery or contention line for MONITOR_OUTAGE_S.
+
+    Reads only the bytes each journal gained since the last check (every
+    MONITOR_LIVENESS_CHECK_S), so the cost does not grow with the window.
+    """
+
+    def __init__(self, directory: Path, *, clock: Callable[[], float] = time.monotonic) -> None:
+        self.directory = Path(directory)
+        self.clock = clock
+        now = clock()
+        self.offsets = {name: 0 for name in _GOOD_MONITOR_KINDS}
+        self.partial = {name: b"" for name in _GOOD_MONITOR_KINDS}
+        self.last_good = {name: now for name in _GOOD_MONITOR_KINDS}
+        self.next_check = now
+        self.errors: list[str] = []
+
+    def check(self) -> dict[str, Any] | None:
+        now = self.clock()
+        if now < self.next_check:
+            return None
+        self.next_check = now + MONITOR_LIVENESS_CHECK_S
+        for name, kinds in _GOOD_MONITOR_KINDS.items():
+            # Sol review F1: a journal that cannot be read or parsed is not a
+            # good reading. The fault stays inside this journal's read, never
+            # skips the silence computation below, so an unreadable journal
+            # runs into the outage bound like a silent one.
+            try:
+                self._read(name, kinds, now)
+            except Exception as error:  # noqa: BLE001 - unreadable is not sampling
+                if len(self.errors) < 20:
+                    self.errors.append(f"{name}: {_error_text(error)}")
+        return self.silent(now)
+
+    def silent(self, now: float) -> dict[str, Any] | None:
+        silent = {name: round(now - seen, 1) for name, seen in self.last_good.items()
+                  if now - seen >= MONITOR_OUTAGE_S}
+        return {"silent_s": silent, "outage_s": MONITOR_OUTAGE_S} if silent else None
+
+    def _read(self, name: str, kinds: frozenset[str], now: float) -> None:
+        path = self.directory / f"{name}.jsonl"
+        size = path.stat().st_size
+        if size < self.offsets[name]:
+            self.offsets[name], self.partial[name] = 0, b""
+        if size == self.offsets[name]:
+            return
+        with path.open("rb") as handle:
+            handle.seek(self.offsets[name])
+            data = handle.read(size - self.offsets[name])
+        self.offsets[name] += len(data)
+        lines = (self.partial[name] + data).split(b"\n")
+        self.partial[name] = lines.pop()
+        for raw in lines:
+            try:
+                line = json.loads(raw)
+            except ValueError:
+                continue
+            if (isinstance(line, dict) and isinstance(line.get("kind"), str) and line["kind"] in kinds
+                    and line.get("error") is None):
+                self.last_good[name] = now
+
+
+# --------------------------------------------------------------------------
+# PLAN2 row 7: the in-window agent census
+
+
+class HazardCensus:
+    """The HAZARD in-window census (PLAN2 row 7), classified on the raw probe.
+
+    POSITIVE (any stdout, whatever the exit code): the gate's own refusal, so
+    the chain stops as today. CLEAN (exit 1, empty stdout): nothing. Anything
+    else (a timeout 124 or spawn failure 127 with empty output, exit 0/2/3
+    with empty output, a probe error) is UNMEASURED: retried CENSUS_RETRIES
+    times CENSUS_RETRY_S apart, then flagged ``census.unmeasured`` and the
+    chain goes on. CENSUS_UNMEASURED_STOP_AFTER unmeasured censuses in a row
+    stop the chain under ``night_stopped_census_unmeasured``. The arm and
+    pre-GO censuses are not this class: they stay strict.
+    """
+
+    def __init__(self, window: "_Window", probes: Any, *, sleep: Callable[[float], None] = time.sleep) -> None:
+        self.window = window
+        self.probes = probes
+        self.sleep = sleep
+        self.consecutive_unmeasured = 0
+        self.unmeasured_censuses = 0
+        self.retried_probes = 0
+        self.journal_failures = 0
+        self.journal_flagged = False
+
+    @staticmethod
+    def classify(probe: Any) -> str:
+        stdout = str(getattr(probe, "stdout", "") or "")
+        if stdout.strip():
+            return "positive"
+        if getattr(probe, "exit_code", None) == 1:
+            return "clean"
+        return "unmeasured"
+
+    def _probe(self) -> tuple[Any, Any]:
+        try:
+            return self.window.rt.agent_census(self.probes)
+        except Exception as error:  # noqa: BLE001 - an unreadable census is unmeasured, never a crash
+            probe = night_gate.ProbeResult(tuple(night_gate.AGENT_CENSUS_ARGV), -1, "", _error_text(error),
+                                           time.monotonic_ns())
+            return probe, night_gate.Refusal("night_probe_error", _error_text(error), (probe,))
+
+    def __call__(self) -> tuple[Any, Any]:
+        first = stamp()
+        observed = []
+        probe = refusal = None
+        for attempt in range(1 + CENSUS_RETRIES):
+            if attempt:
+                self.retried_probes += 1
+                self.sleep(CENSUS_RETRY_S)
+            probe, refusal = self._probe()
+            kind = self.classify(probe)
+            if kind == "positive":
+                self.consecutive_unmeasured = 0
+                if refusal is None:  # a defensive case: the gate always refuses on output
+                    refusal = night_gate.Refusal("night_refused_agent_present",
+                                                 f"pgrep exit {probe.exit_code}; forbidden process output",
+                                                 (probe,))
+                return probe, refusal
+            if kind == "clean":
+                self.consecutive_unmeasured = 0
+                return probe, None
+            observed.append({"exit_code": getattr(probe, "exit_code", None),
+                             "refusal": getattr(refusal, "reason", None)})
+        last = stamp()
+        self.consecutive_unmeasured += 1
+        self.unmeasured_censuses += 1
+        self.window.flag(
+            "census.unmeasured", "DIAGNOSTIC", "PHYSICS", stage="window",
+            observed={"attempts": observed, "consecutive": self.consecutive_unmeasured,
+                      "stop_after": CENSUS_UNMEASURED_STOP_AFTER},
+            detail="the in-window agent census could not be read on any retry; collection continued",
+            legacy_site="scripts/run_night.py:_run_chain_once_impl", legacy_code="night_refused_agent_present",
+            interval={"monotonic_ns": [first["monotonic_ns"], last["monotonic_ns"]],
+                      "monotonic_raw_ns": ([first["monotonic_raw_ns"], last["monotonic_raw_ns"]]
+                                           if first["monotonic_raw_ns"] is not None
+                                           and last["monotonic_raw_ns"] is not None else None),
+                      "wall_s": [first["wall_s"], last["wall_s"]]})
+        if self.consecutive_unmeasured >= CENSUS_UNMEASURED_STOP_AFTER:
+            detail = (f"{self.consecutive_unmeasured} consecutive in-window agent censuses were unmeasured "
+                      f"(each after {CENSUS_RETRIES} retries); the driver stopped the chain")
+            return probe, night_gate.Refusal(STOPPED_CENSUS_UNMEASURED, detail, (probe,))
+        return probe, None
+
+    def append(self, path: Path, probe: Any, refusal: Any) -> None:
+        """The census journal append: a record, so a write fault is a flag, never a stop (row 10)."""
+
+        try:
+            self.window.rt._append_census(path, probe, refusal)
+        except Exception as error:  # noqa: BLE001
+            self.journal_failures += 1
+            if not self.journal_flagged:
+                self.journal_flagged = True
+                self.window.flag("census.journal_write_failed", "RECORDS", "REPRESENTATION", stage="window",
+                                 observed={"error": _error_text(error)},
+                                 detail="an in-window census line could not be journaled; the census "
+                                        "decision used the probe and collection continued")
+
+    def summary(self) -> dict[str, Any]:
+        return {"unmeasured_censuses": self.unmeasured_censuses, "retried_probes": self.retried_probes,
+                "consecutive_unmeasured": self.consecutive_unmeasured,
+                "journal_failures": self.journal_failures}
+
+
+# --------------------------------------------------------------------------
+# PLAN2 section 2.2: the yield plan, the in-window tripwire and the terminal count
+
+
+_RUN_ID_SAFE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
+
+
+def _stage_role(runs_root: str, bound_root: str, roles: Sequence[Any]) -> str:
+    if str(runs_root) == str(bound_root) or any(role == "neg8_reference_corpus_member" for role in roles):
+        return "corpus"
+    if roles and all(isinstance(role, str) and role.startswith("neg8_daily_reference") for role in roles):
+        return "reference"
+    return "science"
+
+
+def _min_valid(role: str, planned: int) -> int:
+    if role == "corpus":
+        return min(CORPUS_MIN_VALID, planned)
+    if role == "reference":
+        return planned
+    return -(-planned * SCIENCE_MIN_NUMERATOR // SCIENCE_MIN_DENOMINATOR)
+
+
+def _local_stage_dispatch(stage: Any, *, tree: Mapping[str, Any], bindings: Mapping[str, str],
+                          measurement_root: Path) -> tuple[str, list[str], list[Any]]:
+    """J3's contract, read the way the chain runs the stage: argv[0]'s order manifest and ``--runs-dir``."""
+
+    argv = b5_chain.stage_argv(stage, bindings, tree, Path(measurement_root))
+    arguments = argv[2:]
+    config_dir = Path(arguments[0])
+    runs_root = arguments[arguments.index("--runs-dir") + 1]
+    order = json.loads((config_dir / "order_manifest.json").read_bytes())["executed_order"]
+    run_ids = [row["run_id"] for row in order]
+    roles = [row.get("role") for row in order if isinstance(row, Mapping)]
+    return runs_root, run_ids, roles
+
+
+def yield_plan(plan: Any) -> dict[str, Any]:
+    """{stage_id, ordinal, root, run_ids, planned, min_valid} for each in-chain collection stage.
+
+    ``run_ids`` are net of run ids an earlier stage already launched into the
+    same root (run_campaign skips a complete bundle, so those positions are
+    never measured again). Uses the J3 resolver (``joulewise.b5.plan.
+    resolve_stage_dispatch``) when it is present and answers, else reads the
+    stage's own argv the same way.
+    """
+
+    from joulewise.b5 import plan as b5_plan
+    window = plan.hazard_window
+    pack_root = Path(window["pack"]["pack_root"])
+    tree = json.loads((pack_root / "plan_tree.json").read_bytes())
+    bindings = window["bindings"]
+    measurement = Path(plan.measurement_root)
+    bound_root = str(window["runs_roots"]["bound"])
+    resolver = getattr(b5_plan, "resolve_stage_dispatch", None)
+    launched: dict[str, set[str]] = {}
+    stages, sources = [], set()
+    chain_stages = [stage for stage in b5_chain.stage_plan(tree) if stage.in_chain]
+    for position, stage in enumerate(chain_stages):
+        if stage.kind != "campaign_collection":
+            continue
+        # Sol review F3: counting in the window is allowed only when the next
+        # in-chain stage begins with a settle (a collection) or captures
+        # nothing (the bound derivation); the last collection stage runs
+        # straight into the post-calibration capture, so it counts at the end.
+        following = chain_stages[position + 1] if position + 1 < len(chain_stages) else None
+        count_in_window = following is not None and following.kind in {"campaign_collection",
+                                                                          "bound_derivation"}
+        runs_root = run_ids = None
+        roles: list[Any] = []
+        if callable(resolver):
+            try:
+                resolved = resolver(stage, tree=tree, bindings=bindings, measurement_root=measurement)
+                runs_root, run_ids = str(resolved[0]), [str(item) for item in resolved[1]]
+                sources.add("J3")
+            except Exception:  # noqa: BLE001 - a resolver of another shape: read the argv
+                runs_root = run_ids = None
+        local_root, local_ids, roles = _local_stage_dispatch(stage, tree=tree, bindings=bindings,
+                                                             measurement_root=measurement)
+        if run_ids is None:
+            runs_root, run_ids = local_root, local_ids
+            sources.add("driver")
+        for run_id in run_ids:
+            if not isinstance(run_id, str) or _RUN_ID_SAFE.fullmatch(run_id) is None:
+                raise ValueError(f"{stage.stage_id}: run id {run_id!r} is not a bundle directory name")
+        seen = launched.setdefault(str(runs_root), set())
+        fresh = []
+        for run_id in run_ids:
+            if run_id not in seen and run_id not in fresh:
+                fresh.append(run_id)
+        seen.update(fresh)
+        role = _stage_role(str(runs_root), bound_root, roles)
+        stages.append({"stage_id": stage.stage_id, "ordinal": stage.ordinal, "role": role,
+                       "root": "bound" if str(runs_root) == bound_root else "claim",
+                       "runs_root": str(runs_root), "run_ids": fresh, "planned": len(fresh),
+                       "listed": len(run_ids), "min_valid": _min_valid(role, len(fresh)),
+                       "count_in_window": count_in_window})
+    return {"schema": YIELD_PLAN_SCHEMA, "plan_id": plan.plan_id, "source": sorted(sources),
+            "stages": stages, "planned": sum(row["planned"] for row in stages)}
+
+
+def _bundle_state(runs_root: Path, run_id: str) -> tuple[bool, bool]:
+    """(present, succeeded) from structure only: a bundle directory with metadata or a summary."""
+
+    bundle = Path(runs_root) / run_id
+    summary = bundle / "summary_metrics.json"
+    present = (bundle / "metadata.json").is_file() or summary.is_file()
+    succeeded = False
+    if summary.is_file():
+        try:
+            succeeded = json.loads(summary.read_bytes()).get("status") == "succeeded"
+        except (OSError, ValueError, AttributeError):
+            succeeded = False
+    return present, succeeded
+
+
+def count_stage(row: Mapping[str, Any]) -> dict[str, Any]:
+    present = succeeded = 0
+    for run_id in row["run_ids"]:
+        has, ok = _bundle_state(Path(row["runs_root"]), run_id)
+        present += has
+        succeeded += ok
+    planned = row["planned"]
+    status = ("ZERO" if planned > 0 and present == 0 else
+              "LOW" if succeeded < row["min_valid"] else "OK")
+    return {"stage_id": row["stage_id"], "ordinal": row["ordinal"], "role": row["role"],
+            "planned": planned, "present": present, "succeeded": succeeded,
+            "min_valid": row["min_valid"], "status": status}
+
+
+def _member_rows(raw: bytes) -> list[dict[str, Any]]:
+    rows = []
+    for line in raw.split(b"\n"):
+        try:
+            value = json.loads(line)
+        except ValueError:
+            continue
+        if (isinstance(value, dict) and isinstance(value.get("run_id"), str) and value["run_id"]
+                and isinstance(value.get("status"), str)):
+            rows.append(value)
+    return rows
+
+
+def _redact(text: str) -> str:
+    return "".join("#" if character.isdigit() else character for character in text)
+
+
+class YieldTripwire:
+    """PLAN2 yield B: counts at each stage boundary, a pre-bundle refusal run, a stall.
+
+    Never stops anything and runs no subprocess. Its output is
+    ``night/stage_yield.jsonl``, ``night/yield_alert-<ordinal>.json`` and
+    window flags. Structure only: counts, statuses, return codes.
+
+    Each supervision pass only stats the stage journal (and, once a minute,
+    lists the runs roots for the stall check). Bundle counting and the member
+    log tail run only in the settle right after a stage's journal line (Sol
+    review F3); a stage whose line is stale, or that runs straight into a
+    capture, is counted by :meth:`final` after the chain group is gone.
+    """
+
+    def __init__(self, window: "_Window", night: Path, plan_rows: Sequence[Mapping[str, Any]], *,
+                 clock: Callable[[], float] = time.monotonic, wall: Callable[[], float] = time.time) -> None:
+        self.window = window
+        self.wall = wall
+        self.deferred: dict[str, Any] = {}
+        self.night = Path(night)
+        self.rows = {row["stage_id"]: dict(row) for row in plan_rows}
+        self.clock = clock
+        self.journal_offset = 0
+        self.journal_partial = b""
+        self.counted: dict[str, dict[str, Any]] = {}
+        self.roots = sorted({row["runs_root"] for row in plan_rows})
+        self.planned_ids = {row["runs_root"]: set() for row in plan_rows}
+        for row in plan_rows:
+            self.planned_ids[row["runs_root"]].update(row["run_ids"])
+        self.log_offsets = {root: 0 for root in self.roots}
+        self.log_partial = {root: b"" for root in self.roots}
+        self.run_cause: str | None = None
+        self.run_length = 0
+        self.flagged_causes: set[str] = set()
+        self.attempted = 0
+        now = clock()
+        self.next_stall = now + YIELD_STALL_CHECK_S
+        self.last_progress = now
+        self.entries = {root: self._entries(root) for root in self.roots}
+        self.stalled = False
+        self.errors: list[str] = []
+
+    @staticmethod
+    def _entries(root: str) -> int:
+        try:
+            with os.scandir(root) as listing:
+                return sum(1 for item in listing if item.is_dir(follow_symlinks=False))
+        except OSError:
+            return -1
+
+    def _guard(self, label: str, operation: Callable[[], None]) -> None:
+        try:
+            operation()
+        except Exception as error:  # noqa: BLE001 - the tripwire is a record; it never stops collection
+            if len(self.errors) < 20:
+                self.errors.append(f"{label}: {_error_text(error)}")
+
+    def poll(self) -> None:
+        self._guard("journal", self._journal)
+        now = self.clock()
+        if now >= self.next_stall:
+            self.next_stall = now + YIELD_STALL_CHECK_S
+            self._guard("stall", lambda: self._stall(now))
+
+    def final(self) -> None:
+        """After the chain group is gone: count every journaled stage not yet counted."""
+
+        self._guard("journal", lambda: self._journal(terminal=True))
+        for stage_id in sorted(self.deferred, key=lambda item: self.rows[item]["ordinal"]):
+            rc = self.deferred[stage_id]
+            if stage_id not in self.counted:
+                self._guard("count", lambda stage_id=stage_id, rc=rc: self._count(
+                    self.rows[stage_id], rc, counted_at="terminal"))
+        self._guard("campaign_log", self._campaign_logs)
+
+    def _in_settle(self, stage_id: str, row: Mapping[str, Any]) -> bool:
+        """Is it now the settle right after this stage (Sol review F3)?"""
+
+        if not self.rows[stage_id].get("count_in_window", True):
+            return False
+        ended = row.get("ended_epoch_s")
+        if isinstance(ended, bool) or not isinstance(ended, (int, float)):
+            return False
+        age = self.wall() - float(ended)
+        return -2.0 <= age <= YIELD_COUNT_FRESH_S
+
+    def _journal(self, terminal: bool = False) -> None:
+        path = self.night / b5_chain.STAGE_JOURNAL
+        try:
+            size = path.stat().st_size
+        except FileNotFoundError:
+            return
+        if size <= self.journal_offset:
+            return
+        with path.open("rb") as handle:
+            handle.seek(self.journal_offset)
+            data = handle.read(size - self.journal_offset)
+        self.journal_offset += len(data)
+        self.last_progress = self.clock()
+        lines = (self.journal_partial + data).split(b"\n")
+        self.journal_partial = lines.pop()
+        for raw in lines:
+            try:
+                row = json.loads(raw)
+            except ValueError:
+                continue
+            if (isinstance(row, dict) and row.get("kind") == "campaign_collection"
+                    and row.get("stage_id") in self.rows and row["stage_id"] not in self.counted):
+                if not terminal and self._in_settle(row["stage_id"], row):
+                    self._count(self.rows[row["stage_id"]], row.get("rc"), counted_at="settle")
+                    # The member log is tailed at the same boundary, never
+                    # during a capture.
+                    self._guard("campaign_log", self._campaign_logs)
+                else:
+                    self.deferred[row["stage_id"]] = row.get("rc")
+
+    def _count(self, row: Mapping[str, Any], rc: Any, *, counted_at: str = "settle") -> None:
+        self.deferred.pop(row["stage_id"], None)
+        counted = count_stage(row)
+        counted.update(schema=STAGE_YIELD_SCHEMA, rc=rc, at=stamp(), counted_at=counted_at)
+        self.counted[row["stage_id"]] = counted
+        _append_line(self.night / STAGE_YIELD, counted)
+        if counted["status"] == "OK":
+            return
+        code = "yield.stage_zero" if counted["status"] == "ZERO" else "yield.stage_low"
+        facts = {key: counted[key] for key in ("stage_id", "ordinal", "role", "planned", "present",
+                                               "succeeded", "min_valid", "status", "rc")}
+        self.window.flag(code, "DIAGNOSTIC", "REPRESENTATION", stage="window", observed=facts,
+                         expected={"min_valid": counted["min_valid"]},
+                         detail=f"stage {row['stage_id']}: {counted['succeeded']} of {counted['planned']} "
+                                f"planned members succeeded ({counted['present']} bundles present); "
+                                "collection continues")
+        try:
+            _create_once(self.night / YIELD_ALERT.format(ordinal=counted["ordinal"]),
+                         {"schema": YIELD_ALERT_SCHEMA, "plan_id": self.window.plan.plan_id,
+                          "code": code, **facts, "at": counted["at"]})
+        except OSError as error:
+            self.errors.append(f"alert: {_error_text(error)}")
+
+    def _campaign_logs(self) -> None:
+        for root in self.roots:
+            path = Path(root) / "campaign_log.jsonl"
+            try:
+                size = path.stat().st_size
+            except FileNotFoundError:
+                continue
+            if size <= self.log_offsets[root]:
+                continue
+            with path.open("rb") as handle:
+                handle.seek(self.log_offsets[root])
+                data = handle.read(size - self.log_offsets[root])
+            self.log_offsets[root] += len(data)
+            lines = (self.log_partial[root] + data).split(b"\n")
+            self.log_partial[root] = lines.pop()
+            for member in _member_rows(b"\n".join(lines)):
+                self._member(root, member)
+
+    def _member(self, root: str, member: Mapping[str, Any]) -> None:
+        if member["run_id"] not in self.planned_ids.get(root, ()):
+            return
+        self.attempted += 1
+        present, _ok = _bundle_state(Path(root), member["run_id"])
+        if present:
+            self.run_cause, self.run_length = None, 0
+            return
+        refusal = member.get("child_refusal")
+        if isinstance(refusal, str) and refusal.strip():
+            cause, kind = _redact(refusal.strip()), "child_refusal"
+        else:
+            cause = (f"exit_code={member.get('exit_code')!r} "
+                     f"blocked_before_invoke={bool(member.get('blocked_before_invoke'))}")
+            kind = "exit_code"
+        if cause == self.run_cause:
+            self.run_length += 1
+        else:
+            self.run_cause, self.run_length = cause, 1
+        if self.run_length >= YIELD_PRE_BUNDLE_RUN and cause not in self.flagged_causes:
+            self.flagged_causes.add(cause)
+            observed = {"consecutive": self.run_length, "cause_kind": kind,
+                        "cause_sha256": hashlib.sha256(cause.encode("utf-8")).hexdigest(),
+                        "exit_code": member.get("exit_code"),
+                        "blocked_before_invoke": bool(member.get("blocked_before_invoke"))}
+            if kind == "exit_code":
+                observed["cause"] = cause
+            self.window.flag("stage.members_refused_pre_bundle_identical", "DIAGNOSTIC", "REPRESENTATION",
+                             stage="window", observed=observed,
+                             detail=f"{self.run_length} consecutive members ended without a bundle for one "
+                                    "shared cause; collection continues")
+
+    def _stall(self, now: float) -> None:
+        entries = {root: self._entries(root) for root in self.roots}
+        if entries != self.entries:
+            self.entries, self.last_progress = entries, now
+        if not self.stalled and now - self.last_progress >= YIELD_STALL_S:
+            self.stalled = True
+            self.window.flag("yield.stage_stalled", "DIAGNOSTIC", "REPRESENTATION", stage="window",
+                             observed={"silent_s": round(now - self.last_progress, 1),
+                                       "stall_s": YIELD_STALL_S,
+                                       "stages_counted": len(self.counted)},
+                             detail="no new bundle directory and no new stage journal line for the stall "
+                                    "bound; collection continues")
+
+    def summary(self) -> dict[str, Any]:
+        return {"stages_counted": len(self.counted), "attempted_seen": self.attempted,
+                "counted_in_settle": sum(1 for item in self.counted.values() if item.get("counted_at") == "settle"),
+                "stalled": self.stalled, "pre_bundle_runs_flagged": len(self.flagged_causes),
+                "errors": list(self.errors)}
+
+
+def terminal_yield(night: Path, rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    """PLAN2 yield D: the window's yield from the campaign logs and the bundles, counts only."""
+
+    journal = {row.get("stage_id"): row for row in b5_chain.stage_journal(night)}
+    logs: dict[str, dict[str, Mapping[str, Any]]] = {}
+    for root in sorted({row["runs_root"] for row in rows}):
+        try:
+            raw = (Path(root) / "campaign_log.jsonl").read_bytes()
+        except FileNotFoundError:
+            raw = b""
+        last: dict[str, Mapping[str, Any]] = {}
+        for member in _member_rows(raw):
+            last[member["run_id"]] = member
+        logs[root] = last
+    per_stage = []
+    for row in rows:
+        counted = count_stage(row)
+        members = [logs[row["runs_root"]].get(run_id) for run_id in row["run_ids"]]
+        counted.update(logged=sum(1 for item in members if item is not None),
+                       ok=sum(1 for item in members if item is not None and item.get("status") == "succeeded"),
+                       failed=sum(1 for item in members if item is not None and item.get("status") == "failed"),
+                       rc=(journal.get(row["stage_id"]) or {}).get("rc"),
+                       journaled=row["stage_id"] in journal)
+        per_stage.append(counted)
+    totals = {key: sum(item[key] for item in per_stage)
+              for key in ("planned", "logged", "ok", "failed", "present", "succeeded")}
+    if totals["planned"] == 0:
+        status = "UNKNOWN"
+    elif totals["present"] == 0:
+        status = "EMPTY"
+    elif any(item["planned"] > 0 and item["succeeded"] < item["min_valid"] for item in per_stage):
+        status = "LOW"
+    elif totals["succeeded"] == totals["planned"]:
+        status = "FULL"
+    else:
+        status = "PARTIAL"
+    return {"schema": YIELD_SCHEMA, "planned": totals["planned"], "logged": totals["logged"],
+            "ok": totals["ok"], "failed": totals["failed"], "bundles_present": totals["present"],
+            "succeeded": totals["succeeded"], "per_stage": per_stage, "yield_status": status}
+
+
+def _stage_fault(journal: Sequence[Mapping[str, Any]], stage_ids: Sequence[str]) -> bool | str:
+    """True when a journaled row of these stages failed; "not_run" when none ran; else False."""
+
+    rows = [row for row in journal if row.get("stage_id") in stage_ids]
+    if not rows:
+        return "not_run"
+    return any(row.get("rc") not in (0, None) for row in rows)
 
 
 # --------------------------------------------------------------------------
@@ -1063,9 +1849,12 @@ def run_hazard_night(rt: Any, plan_path: Path, plan: Any, probes: Any, initial_c
                               "receipt_class": plan.receipt_class, "attempt": plan.hazard_window["attempt"],
                               "pack_id": plan.hazard_window["pack"]["pack_id"], "started": stamp()}
 
-    def refuse(stage: str, reason: str, detail: str, evidence: Any) -> int:
+    def refuse(stage: str, reason: str, detail: str, evidence: Any, *,
+               fault_reasons: Sequence[str] = ()) -> int:
         hazard.update(verdict="REFUSED", stage_reached=stage, refusal={"reason": reason, "detail": detail},
                       flags_emitted=list(window.flags), diagnostics=list(window.diagnostics), ended=stamp())
+        if fault_reasons:
+            hazard["faults"] = {"reasons": list(fault_reasons)}
         try:
             _create_once(night / HAZARD_RESULT, hazard)
         except OSError as error:
@@ -1075,12 +1864,26 @@ def run_hazard_night(rt: Any, plan_path: Path, plan: Any, probes: Any, initial_c
         rt._append_log(custody, f"hazard window refused at {stage}: {reason}")
         report = _report(plan, rt.EXIT_REFUSED, {"verdict": "REFUSED", "stage_reached": stage,
                                                  "refusal_reason": reason, "detail": detail,
-                                                 "arm_verdicts": hazard.get("arm", {}).get("verdicts")},
+                                                 "arm_verdicts": hazard.get("arm", {}).get("verdicts"),
+                                                 "yield_line": "collected 0 members: the window was refused "
+                                                               "before the chain launched",
+                                                 **({"fault": True, "fault_reasons": list(fault_reasons)}
+                                                    if fault_reasons else {})},
                          window.diagnostics)
         return rt._finish_reporting(custody, night, plan, rt.EXIT_REFUSED, courier,
                                     courier_error=courier_error, deadman_epoch_s=deadman,
                                     courier_bin_substitution=substitution, report=report,
                                     allow_courier=courier is not None)
+
+    # J4 (PLAN2 X1, Sol review R3): run_night journaled this night's first
+    # record (censuses.jsonl) before calling here. The watchdog writes its
+    # launch-abandoned marker first and then re-checks for driver records, so
+    # re-checking the marker after our first record closes the race: a marker
+    # seen here means the span was released, and nothing is armed.
+    if (night / LAUNCH_ABANDONED_MARKER).exists():
+        return refuse("launch_liveness", REFUSED_LAUNCH_ABANDONED,
+                      "the watchdog marked this launch abandoned (night/launch_abandoned.json) before "
+                      "the arm; nothing was measured", {"marker": f"night/{LAUNCH_ABANDONED_MARKER}"})
 
     # 1. Agent census: the driver's first probe, taken before the plan was read.
     probe, census_refusal = initial_census
@@ -1141,31 +1944,64 @@ def run_hazard_night(rt: Any, plan_path: Path, plan: Any, probes: Any, initial_c
                     evidence=[{"path": os.path.relpath(chain_path, custody) if chain_path.is_relative_to(custody)
                                else str(chain_path), "sha256": chain_sha256}])
 
-    # 3. Launch lineage into both runs roots: a record; its failure is a flag.
+    # 3. Launch lineage into both runs roots. A publication failure is a flag;
+    # it is retried once (PLAN2 row 9, interim). Then both locators are re-read:
+    # without a valid locator in a runs root every member refuses before its
+    # bundle, so the window is refused before launch instead of run hollow.
     if window.boot is None:
         window.boot = seams.boot_session_uuid()
     roots = plan.hazard_window["runs_roots"]
-    lineage_record: dict[str, Any] = {"schema": LINEAGE_SCHEMA, "requested": stamp()}
-    try:
-        published = seams.publish_lineage(LineageRequest(
-            plan=plan, plan_path=Path(plan_path), custody_root=custody, night_dir=night,
-            hazard_window=plan.hazard_window, claim_runs_root=Path(roots["claim"]),
-            bound_runs_root=Path(roots["bound"]),
-            arm_record_path=Path(decision["record_path"]) if decision["record_path"] else None,
-            arm_decision_path=night / ARM_DECISION if (night / ARM_DECISION).exists() else None,
-            boot_session_uuid=window.boot))
-        lineage_record.update(published=True, result=json.loads(json.dumps(published, default=str)))
-    except Exception as error:  # noqa: BLE001
-        lineage_record.update(published=False, error=_error_text(error))
+    lineage_request = LineageRequest(
+        plan=plan, plan_path=Path(plan_path), custody_root=custody, night_dir=night,
+        hazard_window=plan.hazard_window, claim_runs_root=Path(roots["claim"]),
+        bound_runs_root=Path(roots["bound"]),
+        arm_record_path=Path(decision["record_path"]) if decision["record_path"] else None,
+        arm_decision_path=night / ARM_DECISION if (night / ARM_DECISION).exists() else None,
+        boot_session_uuid=window.boot)
+    lineage_record: dict[str, Any] = {"schema": LINEAGE_SCHEMA, "requested": stamp(), "attempts": []}
+    lineage_error: str | None = None
+    for attempt in (1, 2):
+        if attempt > 1:
+            time.sleep(LINEAGE_RETRY_S)
+        try:
+            published = seams.publish_lineage(lineage_request)
+            lineage_record.update(published=True, result=json.loads(json.dumps(published, default=str)))
+            lineage_record["attempts"].append({"attempt": attempt, "published": True})
+            lineage_error = None
+            break
+        except Exception as error:  # noqa: BLE001
+            lineage_error = _error_text(error)
+            lineage_record["attempts"].append({"attempt": attempt, "published": False, "error": lineage_error})
+    if lineage_error is not None:
+        lineage_record.update(published=False, error=lineage_error)
         window.flag("records.lineage_formality", "RECORDS", "REPRESENTATION",
-                    observed={"error": _error_text(error)},
-                    detail="the hazard-window lineage could not be published before launch; the chain ran anyway")
-    lineage_record["ended"] = stamp()
+                    observed={"error": lineage_error, "attempts": len(lineage_record["attempts"])},
+                    detail="the hazard-window lineage could not be published before launch")
+    try:
+        locators = seams.verify_lineage(lineage_request)
+    except Exception as error:  # noqa: BLE001 - an unreadable check is not a valid locator
+        locators = {"error": _error_text(error)}
+    locators_valid = isinstance(locators, Mapping) and all(
+        isinstance(locators.get(role), Mapping) and locators[role].get("valid") is True
+        for role in ("claim", "bound"))
+    lineage_record.update(locators=json.loads(json.dumps(locators, default=str)),
+                          locators_valid=locators_valid, ended=stamp())
     try:
         _create_once(night / LINEAGE_RECORD, lineage_record)
     except OSError as error:
         window.note(f"lineage record could not be written: {_error_text(error)}")
-    hazard["lineage"] = {"published": lineage_record["published"], "error": lineage_record.get("error")}
+    hazard["lineage"] = {"published": lineage_record["published"], "error": lineage_record.get("error"),
+                         "locators_valid": locators_valid}
+    if not locators_valid:
+        invalid = sorted(role for role in ("claim", "bound")
+                         if not (isinstance(locators, Mapping) and isinstance(locators.get(role), Mapping)
+                                 and locators[role].get("valid") is True))
+        return refuse("lineage", LINEAGE_UNPUBLISHED,
+                      "the launch lineage locator is absent or unreadable in the "
+                      + " and ".join(invalid) + " runs root after one retry; every member would refuse "
+                      "before its bundle, so the chain was not launched",
+                      {"roots": invalid, "publication_error": lineage_error,
+                       "lineage_record": f"night/{LINEAGE_RECORD}"})
 
     # 4. The executed-file inventory.
     try:
@@ -1181,32 +2017,108 @@ def run_hazard_night(rt: Any, plan_path: Path, plan: Any, probes: Any, initial_c
         window.note(f"executed-file inventory failed: {_error_text(error)}")
         hazard["inventory"] = {"error": _error_text(error)}
 
-    # 5. The monitor.
+    # 5. The monitor. It must journal before launch (PLAN2 row 11): without
+    # its battery and contention journals every member is unmeasured.
     monitor_request = MonitorRequest(plan, Path(plan_path), custody, night, os.getpid())
     monitor = MonitorSupervisor(
         lambda: seams.monitor_argv(monitor_request),
         night_dir=night, popen=seams.popen, group_census=getattr(rt, "_group_census", None),
         identity=getattr(rt, "observe_identity", None))
-    if not monitor.start():
-        window.note("the hazard monitor did not start; supervision keeps retrying while the chain runs")
+    monitor.on_crash_loop = lambda details: window.flag(
+        "monitor.crash_loop", "DIAGNOSTIC", "PHYSICS", stage="window", observed=details,
+        detail="the hazard monitor kept exiting within 30 s of its start; it is restarted with backoff")
+    journal_dir = custody.joinpath(*MONITOR_JOURNAL_DIR)
+    ready, readiness = await_monitor_ready(monitor, journal_dir)
+    hazard["monitor_readiness"] = {"ready": ready, "attempts": readiness}
+    if not ready:
+        hazard["monitor"] = monitor.stop()
+        return refuse("monitor", REFUSED_INSTRUMENT_NOT_SAMPLING,
+                      f"the hazard monitor did not journal a session start, a battery reading and a "
+                      f"contention snapshot within {MONITOR_READY_TIMEOUT_S:g} s on any of "
+                      f"{MONITOR_READY_TRIES} starts; the instrument is not sampling",
+                      {"attempts": readiness}, fault_reasons=("instrument_not_sampling",))
+    liveness = MonitorLiveness(journal_dir)
     thresholds = plan.hazard_window["thresholds"].get("disk", {})
     low = thresholds.get("low_bytes", DISK_LOW_BYTES_DEFAULT) if isinstance(thresholds, Mapping) else DISK_LOW_BYTES_DEFAULT
     disk = DiskFloor([Path(roots["claim"]), Path(roots["bound"]), custody], int(low), seams.disk_free_bytes,
                      marker=custody / "hazards" / "monitor" / "disk.low")
 
-    def supervise() -> dict[str, Any] | None:
-        monitor.poll()
-        reading = disk.check()
-        if reading is None:
+    # The yield plan and its tripwire (PLAN2 section 2.2): records, never stops.
+    yield_rows: list[dict[str, Any]] | None = None
+    try:
+        yield_record_plan = yield_plan(plan)
+        yield_rows = yield_record_plan["stages"]
+        hazard["yield_plan"] = {"planned": yield_record_plan["planned"], "stages": len(yield_rows),
+                                "source": yield_record_plan["source"]}
+        try:
+            _create_once(night / YIELD_PLAN, yield_record_plan)
+        except OSError as error:
+            window.note(f"yield plan could not be written: {_error_text(error)}")
+    except Exception as error:  # noqa: BLE001 - a record; never a refusal
+        hazard["yield_plan"] = {"error": _error_text(error)}
+        window.note(f"yield plan unavailable: {_error_text(error)}")
+    tripwire = YieldTripwire(window, night, yield_rows) if yield_rows is not None else None
+
+    # PLAN2 row 10: every supervision step is guarded; a fault in a record
+    # never ends the chain, it is flagged once per step and the pass goes on.
+    supervision_faults: dict[str, int] = {}
+    liveness_failing_since: list[float | None] = [None]
+
+    def supervision_fault(label: str, error: BaseException) -> None:
+        supervision_faults[label] = supervision_faults.get(label, 0) + 1
+        if supervision_faults[label] == 1:
+            window.flag("supervision.pass_failed", "RECORDS", "REPRESENTATION", stage="window",
+                        observed={"step": label, "error": _error_text(error)},
+                        detail="a supervision step raised; the pass went on and collection continued")
+
+    def guarded(label: str, operation: Callable[[], Any]) -> Any:
+        try:
+            return operation()
+        except Exception as error:  # noqa: BLE001
+            supervision_fault(label, error)
             return None
-        window.flag("disk.low", "DIAGNOSTIC", "PHYSICS", stage="window",
-                    observed={"volume": reading["volume"], "free_bytes": reading["free_bytes"]},
-                    expected={"low_bytes": reading["low_bytes"]},
-                    detail="free space fell under the in-window floor; the driver stopped the chain")
-        return rt._refusal_mapping(
-            STOPPED_DISK_LOW,
-            f"free space {reading['free_bytes']} B on {reading['volume']} is under the "
-            f"{reading['low_bytes']} B in-window floor; the driver stopped the chain", reading)
+
+    def supervise() -> dict[str, Any] | None:
+        guarded("monitor", monitor.poll)
+        reading = guarded("disk", disk.check)
+        if reading is not None:
+            window.flag("disk.low", "DIAGNOSTIC", "PHYSICS", stage="window",
+                        observed={"volume": reading["volume"], "free_bytes": reading["free_bytes"]},
+                        expected={"low_bytes": reading["low_bytes"]},
+                        detail="free space fell under the in-window floor; the driver stopped the chain")
+            return rt._refusal_mapping(
+                STOPPED_DISK_LOW,
+                f"free space {reading['free_bytes']} B on {reading['volume']} is under the "
+                f"{reading['low_bytes']} B in-window floor; the driver stopped the chain", reading)
+        # Sol review F1: the liveness evaluation is a physics check. If it
+        # raises, the instrument's sampling is unmeasured; that counts toward
+        # the outage bound exactly like silence, never as "no outage".
+        try:
+            outage = liveness.check()
+            liveness_failing_since[0] = None
+        except Exception as error:  # noqa: BLE001
+            supervision_fault("monitor_liveness", error)
+            now = time.monotonic()
+            if liveness_failing_since[0] is None:
+                liveness_failing_since[0] = now
+            failing = now - liveness_failing_since[0]
+            outage = ({"silent_s": {"liveness_check": round(failing, 1)}, "outage_s": MONITOR_OUTAGE_S,
+                       "unmeasured": True} if failing >= MONITOR_OUTAGE_S else None)
+        if outage is not None:
+            window.flag("monitor.outage", "DIAGNOSTIC", "PHYSICS", stage="window", observed=outage,
+                        expected={"outage_s": MONITOR_OUTAGE_S},
+                        detail="the hazard monitor wrote no battery or contention reading for the outage "
+                               "bound; the driver stopped the chain")
+            return rt._refusal_mapping(
+                STOPPED_MONITOR_OUTAGE,
+                "no error-free " + " or ".join(sorted(outage["silent_s"])) + " reading from the hazard "
+                f"monitor for {MONITOR_OUTAGE_S:g} s; the instrument is not sampling, so the driver "
+                "stopped the chain", outage)
+        if tripwire is not None:
+            guarded("yield", tripwire.poll)
+        return None
+
+    hazard_census = HazardCensus(window, probes)
 
     # 6. The chain, once.
     claim = rt._claim_chain_start(night)
@@ -1220,16 +2132,31 @@ def run_hazard_night(rt: Any, plan_path: Path, plan: Any, probes: Any, initial_c
     try:
         exit_code, abort, census_count, census_hits, proven = rt._run_chain_once(
             chain_path, plan, probes, night, claim, command=["/bin/zsh", "-f", str(chain_path)],
-            abort_on_census=True, supervise=supervise, census_group_on_exit=True)
+            abort_on_census=True, supervise=supervise, census_group_on_exit=True,
+            census=hazard_census, append_census=hazard_census.append)
     except Exception as error:  # noqa: BLE001 - recorded; the terminal record must still be written
         window.note(f"chain supervision raised {_error_text(error)}")
         abort = rt._refusal_mapping(rt._CODES["chain_alive"],
                                     f"the driver's chain supervision raised {_error_text(error)}", None)
         proven = False
     started = (night / "chain.started").exists()
+    journal = b5_chain.stage_journal(night)
     hazard["chain"].update(exit_code=exit_code, started=started, termination_proven=proven,
                            stages=[{"stage_id": row.get("stage_id"), "kind": row.get("kind"), "rc": row.get("rc")}
-                                   for row in b5_chain.stage_journal(night)])
+                                   for row in journal])
+    if tripwire is not None:
+        guarded("yield", tripwire.final)
+        hazard["yield_tripwire"] = tripwire.summary()
+    hazard["census_supervision"] = hazard_census.summary()
+    hazard["supervision_faults"] = dict(supervision_faults)
+    # PLAN2 yield D: counts only, after the chain group is proven gone or never started.
+    try:
+        yield_record = (terminal_yield(night, yield_rows) if yield_rows is not None else
+                        {"schema": YIELD_SCHEMA, "yield_status": "UNKNOWN",
+                         "error": hazard["yield_plan"].get("error")})
+    except Exception as error:  # noqa: BLE001 - a counting failure changes nothing else
+        yield_record = {"schema": YIELD_SCHEMA, "yield_status": "UNKNOWN", "error": _error_text(error)}
+    hazard["yield"] = yield_record
     # The NEG-8 manifest the derivation read: a locator for the harvest, which
     # needs the custodied bytes when the copy was pruned (chain DEVIATIONS).
     try:
@@ -1256,6 +2183,9 @@ def run_hazard_night(rt: Any, plan_path: Path, plan: Any, probes: Any, initial_c
         window.note("chain termination not proven: the hazard monitor is left running for the dead-man")
         hazard["monitor"] = {**monitor.summary(), "left_running": True}
     hazard["disk_floor"] = {"low_bytes": disk.low_bytes, "stops": disk.readings, "errors": disk.errors}
+    chain_stop = next((row for row in journal if row.get("stage_id") == "chain.stop"), None)
+    stage_reached = "chain"
+    yield_status = yield_record.get("yield_status")
     if abort is not None:
         reason = str(abort["reason"])
         if "document" not in abort:
@@ -1265,24 +2195,73 @@ def run_hazard_night(rt: Any, plan_path: Path, plan: Any, probes: Any, initial_c
         verdict = "REFUSED" if refused else "ABORTED"
         base_exit = rt.EXIT_REFUSED if refused else rt.EXIT_ABORTED
         aborted_reason: str | None = reason
-    else:
-        verdict = "GO"
-        base_exit = rt.EXIT_GO if exit_code == 0 else rt.EXIT_CHAIN_FAILED
+    elif chain_stop is not None:
+        # PLAN2 yield D: a stop at exit 10/11/12 collected nothing; it is not a
+        # GO (it hid an empty window) and not a REFUSED (that holds the fence).
+        verdict = "CHAIN_STOPPED"
+        base_exit = rt.EXIT_CHAIN_FAILED
         aborted_reason = None
+        stage_reached = f"chain:{chain_stop.get('kind')}"
+    else:
+        verdict = "GO"  # it describes the arm; the yield says what was collected
+        base_exit = rt.EXIT_GO if exit_code == 0 else rt.EXIT_CHAIN_FAILED
+        if yield_status == "EMPTY":
+            base_exit = rt.EXIT_CHAIN_FAILED
+        aborted_reason = None
+    summaries = [row for row in plan.hazard_window.get("stages") or [] if isinstance(row, Mapping)]
+    captures = sorted((row for row in summaries if row.get("kind") == "calibration_capture"),
+                      key=lambda row: row.get("ordinal") or 0)
+    derivations = [str(row.get("stage_id")) for row in summaries if row.get("kind") == "bound_derivation"]
+    post_bracket_failed = (_stage_fault(journal, [str(captures[-1].get("stage_id"))])
+                           if len(captures) >= 2 else "not_run")
+    bound_derivation_failed = _stage_fault(journal, [*derivations, *(item + ".corpus" for item in derivations)])
+    fault_reasons = []
+    if yield_status in {"EMPTY", "LOW"}:
+        fault_reasons.append(f"yield_{yield_status.lower()}")
+    if verdict == "CHAIN_STOPPED":
+        fault_reasons.append(f"chain_stopped:{chain_stop.get('kind')}")
+    if monitor.crash_loop:
+        fault_reasons.append("monitor_crash_loop")
+    # Sol review F1: a physics supervision step (monitor respawn, disk floor,
+    # instrument liveness) that raised left that hazard unwatched for a while.
+    for step in ("monitor", "disk", "monitor_liveness"):
+        if supervision_faults.get(step):
+            fault_reasons.append(f"supervision_failed:{step}")
+    if post_bracket_failed is True:
+        fault_reasons.append("post_bracket_failed")
+    if bound_derivation_failed is True:
+        fault_reasons.append("bound_derivation_failed")
+    hazard["faults"] = {"post_bracket_failed": post_bracket_failed,
+                        "bound_derivation_failed": bound_derivation_failed, "reasons": fault_reasons}
     stages = hazard["chain"]["stages"]
-    hazard.update(verdict=verdict, stage_reached="chain", aborted_reason=aborted_reason,
+    hazard.update(verdict=verdict, stage_reached=stage_reached, aborted_reason=aborted_reason,
                   flags_emitted=list(window.flags), diagnostics=list(window.diagnostics), ended=stamp())
     try:
         _create_once(night / HAZARD_RESULT, hazard)
     except OSError as error:
         window.note(f"hazard result could not be written: {_error_text(error)}")
+    if isinstance(yield_record.get("planned"), int):
+        yield_line = (f"collected {yield_record['bundles_present']} of {yield_record['planned']} planned members "
+                      f"({yield_record['succeeded']} succeeded; yield {yield_status})")
+    else:
+        yield_line = "collected an unknown number of the planned members (yield UNKNOWN)"
     report = _report(plan, base_exit, {
-        "verdict": verdict, "aborted_reason": aborted_reason, "chain_exit_code": exit_code,
+        "verdict": verdict, "stage_reached": stage_reached, "aborted_reason": aborted_reason,
+        "chain_exit_code": exit_code,
         "termination_proven": proven, "census_count": census_count, "arm_verdicts": decision["verdicts"],
         "stages_total": len(stages), "stages_nonzero": sum(1 for row in stages if row.get("rc") not in (0, None)),
         "chain_stop": next((row.get("kind") for row in stages if row.get("stage_id") == "chain.stop"), None),
         "g10_ran": hazard["g10"].get("ran"), "g10_returncode": hazard["g10"].get("returncode"),
-        "monitor_restarts": hazard["monitor"]["restarts"], "flags": sorted(set(window.flags))},
+        "monitor_restarts": hazard["monitor"]["restarts"], "flags": sorted(set(window.flags)),
+        "yield_line": yield_line, "yield_status": yield_status,
+        "yield": {key: yield_record.get(key) for key in ("planned", "logged", "ok", "failed",
+                                                          "bundles_present", "succeeded")}
+                 | {"per_stage": [{key: row.get(key) for key in ("stage_id", "role", "planned", "present",
+                                                                 "succeeded", "min_valid", "status", "rc")}
+                                  for row in yield_record.get("per_stage") or []]},
+        "fault": bool(fault_reasons), "fault_reasons": fault_reasons,
+        "post_bracket_failed": post_bracket_failed, "bound_derivation_failed": bound_derivation_failed,
+        "census_unmeasured": hazard_census.unmeasured_censuses},
         window.diagnostics)
     try:
         rt._write_result(custody, night, plan, verdict, exit_code, aborted_reason, started_epoch_s,

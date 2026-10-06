@@ -3140,13 +3140,14 @@ class TerminalWindowReleaseTests(WatchdogTestCase):
 
     def test_launch_liveness_waits_for_a_driver_that_honors_the_marker(self) -> None:
         # Sol review R2: until the driver this plan would run treats the marker
-        # as an existing record (P2-DRV), a late fire could measure after release.
+        # as an existing record, a late fire could measure after release. This
+        # checkout's run_night.py carries the J4 reader since P2-DRV; an
+        # installed plan whose driver does not is still held.
         plan = self.write_hazard_plan(t0=self.base.timestamp() - 3600)
         night = Path(plan.custody_root) / "night"
-        self.assertNotIn(b'"launch_abandoned.json"',
-                         (wd.REPO_ROOT / "scripts/run_night.py").read_bytes())
-        self.assert_held(plan)
-        self.assertFalse((night / "launch_abandoned.json").exists())
+        self.assertIn(b'"launch_abandoned.json"',
+                      (wd.REPO_ROOT / "scripts/run_night.py").read_bytes())
+        self.assertTrue(wd._launch_marker_honored(plan, self.harness.storage))
         agents = wd.Path.home() / "Library/LaunchAgents"
         agents.mkdir(parents=True)
         driver = self.temp / "driver" / "run_night.py"
@@ -3156,6 +3157,8 @@ class TerminalWindowReleaseTests(WatchdogTestCase):
             sys.executable, str(driver), "run", "--plan", str(Path(plan.custody_root) / "night_plan.json")]}))
         driver.write_text("_HAZARD_WRITE_ONCE_RECORDS = ()\n", encoding="utf-8")
         self.assertFalse(wd._launch_marker_honored(plan, self.harness.storage))
+        self.assertFalse(wd._launch_liveness_candidate(plan, self.base.timestamp(), self.harness.storage))
+        self.assertFalse((night / "launch_abandoned.json").exists())
         driver.write_text('_HAZARD_WRITE_ONCE_RECORDS = ("launch_abandoned.json",)\n', encoding="utf-8")
         self.assertTrue(wd._launch_marker_honored(plan, self.harness.storage))
         plist.write_bytes(b"not a plist")

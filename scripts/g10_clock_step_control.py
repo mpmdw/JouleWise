@@ -28,10 +28,15 @@ Steps (gate-prune plan section 4, "G10"):
    text. G10's own copy of the arithmetic (``evaluate_pair``) runs beside it
    as a recorded cross-check. Until ``joulewise.hazards`` is importable,
    ``main()`` falls back to ``evaluate_pair`` and says so in the record.
-5. Keep network time ON while reading f once a minute; switch OFF as soon as
-   |f| <= 3.0 ppm, or 15 min after the ON. OFF always runs in ``finally``;
-   SIGTERM and SIGHUP raise into it, and signals arriving during OFF are
-   deferred so OFF completes.
+5. Keep network time ON while reading f once a minute; switch OFF at the
+   first read, at least ``settle_min_s`` (60 s) after the ON, at which the next
+   arm's frequency gate (``kernel_clock.frequency_gate(f, T_stream_max_s)``)
+   passes, or 15 min after the ON (PLAN2 S7). The former |f| <= 3.0 ppm target
+   sat below this machine's own f (about -3.17 ppm), so it always ran the full
+   15 min; each read still records whether |f| is within it. The next arm
+   re-measures f and refuses on a real drift either way. OFF always runs in
+   ``finally``; SIGTERM and SIGHUP raise into it, and signals arriving during
+   OFF are deferred so OFF completes.
 6. Write ``<night-dir>/g10.json`` create-once (O_EXCL, fsync).
 
 The result never stops anything: it is a disclosed diagnostic
@@ -137,9 +142,10 @@ class Params:
     residual_limit_ns: int = 1_000_000
     skew_limit_ns: int = 1_000_000
     anchor_read_attempts: int = 3
-    settle_target_ppm: float = 3.0
+    settle_target_ppm: float = 3.0  # recorded per read (PLAN2 S7); no longer the stop rule
     settle_read_interval_s: float = 60.0
     settle_max_s: float = 900.0
+    settle_min_s: float = 60.0
     command_timeout_s: float = 60.0
     off_attempts: int = 3
     off_retry_delay_s: float = 5.0
@@ -156,6 +162,9 @@ class Params:
                 raise ValueError(f"{name} must be a positive integer")
         if not (math.isfinite(self.settle_target_ppm) and self.settle_target_ppm >= 0):
             raise ValueError("settle_target_ppm must be a non-negative finite number")
+        if not (isinstance(self.settle_min_s, (int, float)) and math.isfinite(self.settle_min_s)
+                and self.settle_min_s >= 0):
+            raise ValueError("settle_min_s must be a non-negative finite number")
         if not (math.isfinite(self.off_retry_delay_s) and self.off_retry_delay_s >= 0):
             raise ValueError("off_retry_delay_s must be non-negative")
 
@@ -684,15 +693,24 @@ class Control:
         step_ns = int(round(params.settle_read_interval_s * NS))
         limit_ns = int(round(params.settle_max_s * NS))
         k = max(1, -(-(self.env.monotonic_raw_ns() - on_ns) // step_ns))
+        min_ns = int(round(params.settle_min_s * NS))
         while True:
             offset = min(k * step_ns, limit_ns)
             self.sleep_until_raw(on_ns + offset)
             probe, error = self.read_frequency()
             now = self.env.monotonic_raw_ns()
+            gate_passes = None
+            if probe is not None:
+                try:
+                    gate_passes = bool(kernel_clock.frequency_gate(probe, params.t_stream_max_s)["passes"])
+                except Exception as exc:  # noqa: BLE001 - an uncomputable gate does not pass
+                    gate_passes, error = False, f"frequency gate not computed: {exc!r}"
             reads.append({"elapsed_since_on_s": (now - on_ns) / NS, "probe": probe,
-                          "error": error})
-            if probe is not None and frequency_within(probe, params.settle_target_ppm):
-                self.record["settling"]["stop_reason"] = "target"
+                          "error": error, "gate_passes": gate_passes,
+                          "within_target": (frequency_within(probe, params.settle_target_ppm)
+                                            if probe is not None else None)})
+            if gate_passes and now - on_ns >= min_ns:
+                self.record["settling"]["stop_reason"] = "frequency_gate"
                 return
             if offset >= limit_ns or now - on_ns >= limit_ns:
                 self.record["settling"]["stop_reason"] = "timeout"
@@ -869,6 +887,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--poll-timeout-s", type=float, default=defaults.poll_timeout_s)
     parser.add_argument("--settle-max-s", type=float, default=defaults.settle_max_s)
     parser.add_argument("--settle-target-ppm", type=float, default=defaults.settle_target_ppm)
+    parser.add_argument("--settle-min-s", type=float, default=defaults.settle_min_s)
     return parser
 
 
@@ -884,7 +903,8 @@ def main(argv: Sequence[str] | None = None, *, env: Env | None = None,
     except SystemExit as exc:
         return EXIT_USAGE if exc.code else EXIT_OK
     params = Params(t_stream_max_s=args.t_stream_max_s, poll_timeout_s=args.poll_timeout_s,
-                    settle_max_s=args.settle_max_s, settle_target_ppm=args.settle_target_ppm)
+                    settle_max_s=args.settle_max_s, settle_target_ppm=args.settle_target_ppm,
+                    settle_min_s=args.settle_min_s)
     try:
         params.validate()
     except ValueError as exc:

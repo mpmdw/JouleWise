@@ -148,7 +148,12 @@ _WRITE_ONCE_RECORDS = (
 )
 _QUIET_WRITE_ONCE_RECORDS = _WRITE_ONCE_RECORDS + ("quiet_samples.jsonl",)
 # HAZARD_PACK (joulewise/b5/driver.py): an arm already ran this night.
-_HAZARD_WRITE_ONCE_RECORDS = _WRITE_ONCE_RECORDS + ("arm_decision.json", "hazard_result.json")
+# "launch_abandoned.json" is the watchdog's J4 marker (PLAN2 X1 launch
+# liveness): the watchdog released this plan's span because no driver record
+# appeared by t0 + its liveness bound, so a late launchd fire measures nothing.
+LAUNCH_ABANDONED_MARKER = "launch_abandoned.json"
+_HAZARD_WRITE_ONCE_RECORDS = _WRITE_ONCE_RECORDS + ("arm_decision.json", "hazard_result.json",
+                                                    "launch_abandoned.json")
 # The HAZARD_PACK driver's structure-only records, published with the night.
 HAZARD_ARTIFACTS = (
     "hazard_result.json",
@@ -161,6 +166,8 @@ HAZARD_ARTIFACTS = (
     "chain.exit-census.json",
     "g10.json",
     "g10.driver.json",
+    # PLAN2 yield D: per-stage member counts (structure only, registration 8 item 2).
+    "stage_yield.jsonl",
 )
 
 
@@ -972,8 +979,16 @@ def _run_chain_once(
     extra_env: dict[str, str] | None = None,
     supervise: Any = None,
     census_group_on_exit: bool = False,
+    census: Any = None,
+    append_census: Any = None,
 ) -> tuple[int | None, dict[str, Any] | None, int, list[dict[str, Any]], bool]:
     """Run exactly one child session and continuously census it.
+
+    ``census`` and ``append_census`` (HAZARD_PACK only; PLAN2 rows 7 and 10)
+    replace ``agent_census(probes)`` and ``_append_census``. The HAZARD census
+    retries an unmeasured probe and returns a refusal only for a positive
+    detection or for a run of unmeasured censuses (its own hazard code, which
+    the abort keeps); its append never raises.
 
     ``supervise`` (HAZARD_PACK only) is called once per loop pass, about once a
     second. It keeps the hazard monitor alive and may return a refusal
@@ -1006,13 +1021,15 @@ def _run_chain_once(
             claim_descriptor, command=command, abort_on_census=abort_on_census,
             shutdown_monotonic=shutdown_monotonic, channel=channel,
             child_channel=child_channel, start_fd_env=start_fd_env, extra_env=extra_env,
-            supervise=supervise, census_group_on_exit=census_group_on_exit)
+            supervise=supervise, census_group_on_exit=census_group_on_exit,
+            census=census, append_census=append_census)
 
 
 def _run_chain_once_impl(chain_path, plan, probes, night_dir, claim_descriptor,
                          *, command, abort_on_census, shutdown_monotonic,
                          channel, child_channel, start_fd_env, extra_env=None,
-                         supervise=None, census_group_on_exit=False):
+                         supervise=None, census_group_on_exit=False, census=None,
+                         append_census=None):
 
     census_path = night_dir / "censuses.jsonl"
     stdout_path = night_dir / "chain.stdout.log"
@@ -1200,13 +1217,13 @@ def _run_chain_once_impl(chain_path, plan, probes, night_dir, claim_descriptor,
                 if fired is not None:
                     return exceeded(fired)
             if now >= next_census:
-                probe, refusal = agent_census(probes)
+                probe, refusal = census() if census is not None else agent_census(probes)
                 if deadline.expired():
                     fired = deadline.fire()
                     if fired is not None:
                         return exceeded(fired)
                 record = _census_record(probe, refusal)
-                _append_census(census_path, probe, refusal)
+                (append_census or _append_census)(census_path, probe, refusal)
                 census_count += 1
                 if deadline.expired():
                     fired = deadline.fire()
@@ -1242,13 +1259,18 @@ def _run_chain_once_impl(chain_path, plan, probes, night_dir, claim_descriptor,
                                 census_hits,
                                 False,
                             )
+                        # A HAZARD census stop that is not an agent (PLAN2 row
+                        # 7: censuses unmeasured) keeps its own code and detail.
+                        hazard_reason = getattr(refusal, "reason", None)
+                        if hazard_reason in night_gate.HAZARD_DRIVER_REASON_CODES:
+                            abort_reason = hazard_reason
+                            abort_detail = str(getattr(refusal, "detail", "") or hazard_reason)
+                        else:
+                            abort_reason = _CODES["aborted_agent_present"]
+                            abort_detail = "agent census refused while the chain was running"
                         return (
                             process.poll(),
-                            _refusal_mapping(
-                                _CODES["aborted_agent_present"],
-                                "agent census refused while the chain was running",
-                                record,
-                            ),
+                            _refusal_mapping(abort_reason, abort_detail, record),
                             census_count,
                             census_hits,
                             True,
@@ -1823,14 +1845,20 @@ def _courier_prelaunch(custody_root, plan, courier_bin, lock_descriptor, report)
     )
     if plan.receipt_class == night_gate.HAZARD_PACK:
         instructions += (
-            "This is a block-5 HAZARD_PACK window. Report structure only, from "
-            "night/result.json, night/hazard_result.json and the refusal documents: "
-            "the verdict, the per-hazard arm verdicts, the stage return codes, the flag "
-            "codes the driver raised, the G10 result and the monitor restarts. There is no "
-            "gate receipt.json. Never open, quote or summarize chain or campaign logs, "
-            "operator logs, runs roots, bundles, or anything under hazards/ or flags/, and "
-            "never state an energy, a power or a duration of a member or a phase "
-            "(registration section 9.2).\n"
+            "This is a block-5 HAZARD_PACK window. Open the email with the driver's "
+            "known_chain.yield_line (\"collected X of Y planned members\"). When "
+            "known_chain.fault is true (yield EMPTY or LOW, verdict CHAIN_STOPPED, a monitor "
+            "crash loop or an instrument not sampling, a failed supervision check, a failed "
+            "post-calibration or bound derivation), put FAULT and "
+            "known_chain.fault_reasons in the subject and the first line. Report structure "
+            "only, from the driver facts, night/result.json, night/hazard_result.json and the "
+            "refusal documents: the verdict, the yield counts per stage, the per-hazard arm "
+            "verdicts, the stage return codes, the flag codes the driver raised, the G10 "
+            "result and the monitor restarts. There is no gate receipt.json. Never open, "
+            "quote or summarize chain or campaign logs, operator logs, runs roots, bundles, "
+            "or anything under hazards/ or flags/; never name a member or quote a failure "
+            "text; and never state an energy, a power or a duration of a member or a phase. "
+            "Counts are releasable structure (registration section 8, item 2).\n"
         )
     if argv is None:
         instructions += (
@@ -3968,6 +3996,13 @@ def run_night(
     night_dir.mkdir(parents=True, exist_ok=True)
     existing = _existing_record(night_dir, plan)
     if existing is not None:
+        if existing.name == LAUNCH_ABANDONED_MARKER:
+            # J4: the watchdog released this launch. Write nothing under night/
+            # (any driver record there would re-fence the released span); the
+            # custody log keeps the trace.
+            _append_log(custody_root, "night driver refused: the watchdog marked this launch "
+                                      "abandoned (night/launch_abandoned.json); nothing measured")
+            return EXIT_REFUSED
         _write_rerun_refusal(night_dir, plan, existing)
         return EXIT_REFUSED
 

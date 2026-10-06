@@ -10,6 +10,7 @@ and the courier; the chain's tools are the fake measurement checkout's.
 from __future__ import annotations
 
 import contextlib
+import dataclasses
 import hashlib
 import importlib.util
 import json
@@ -34,6 +35,33 @@ from tests.fixtures.b5_plan import fake_window
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT_PATH = REPO_ROOT / "scripts/run_night.py"
 SIX = night_gate.HAZARD_MODULES
+
+
+# A stand-in hazard monitor: the session start, one battery reading and one
+# contention snapshot the driver's readiness check needs (PLAN2 row 11), then it
+# lives ``life`` seconds and exits with ``code``.
+FAKE_MONITOR = r"""
+import json, os, pathlib, sys, time
+custody, life, code = pathlib.Path(sys.argv[1]), float(sys.argv[2]), int(sys.argv[3])
+directory = custody / "hazards" / "monitor"
+directory.mkdir(parents=True, exist_ok=True)
+session = "%d-%d" % (os.getpid(), time.monotonic_ns())
+def line(name, kind):
+    with open(directory / (name + ".jsonl"), "a") as handle:
+        handle.write(json.dumps({"session": session, "module": name, "kind": kind, "error": None}) + "\n")
+for name in ("battery", "contention", "monitor"):
+    line(name, "session_start")
+line("battery", "reading")
+line("contention", "snapshot")
+for extra in sys.argv[4:]:
+    exec(extra)
+time.sleep(life)
+raise SystemExit(code)
+"""
+
+
+def fake_monitor_argv(custody, *, life=600.0, code=0, extra=()):
+    return [sys.executable, "-c", FAKE_MONITOR, str(custody), repr(float(life)), str(int(code)), *extra]
 
 
 def load_driver():
@@ -168,7 +196,9 @@ class Harness:
         self.courier.chmod(0o755)
         self.collector_argv = [sys.executable, "-c", "print('collected')"]
         self.collectors_factory = lambda request: list(self.collector_argv)
-        self.monitor_argv = [sys.executable, "-c", "import time; time.sleep(600)"]
+        # A callable gets the MonitorRequest; a list is used as it is.
+        self.monitor_argv = lambda request: fake_monitor_argv(request.custody_root)
+        self.lineage_valid = True
         self.g10_source = ("import json, pathlib, sys; night = pathlib.Path(sys.argv[1]); "
                            "journal = (night / 'monitor_supervision.jsonl').read_text(); "
                            "(night / 'g10.json').write_text(json.dumps({'result': 'DISCHARGED', "
@@ -204,14 +234,21 @@ class Harness:
         with path.open("a") as handle:
             handle.write(json.dumps(flag, sort_keys=True) + "\n")
 
+    def verify_lineage(self, request):
+        return {role: {"valid": self.lineage_valid} for role in ("claim", "bound")}
+
     def seams(self):
+        extra = {}
+        if "verify_lineage" in {field.name for field in dataclasses.fields(b5_driver.Seams)}:
+            extra["verify_lineage"] = self.verify_lineage
         return b5_driver.Seams(
             arm=self.arm, publish_lineage=self.publish_lineage,
-            monitor_argv=lambda request: list(self.monitor_argv),
+            monitor_argv=lambda request: (self.monitor_argv(request) if callable(self.monitor_argv)
+                                          else list(self.monitor_argv)),
             collectors_argv=lambda request: self.collectors_factory(request),
             g10_argv=lambda night, t: [sys.executable, "-c", self.g10_source, str(night)],
             run_command=self.run_command, disk_free_bytes=lambda path: self.free_bytes,
-            emit_flag=self.emit_flag, boot_session_uuid=lambda: "BOOT")
+            emit_flag=self.emit_flag, boot_session_uuid=lambda: "BOOT", **extra)
 
     def run(self, **keywords):
         return self.driver.run_night(self.plan_path, **keywords)
@@ -234,10 +271,18 @@ class Harness:
             "network_time": self.network.state.read_text(),
         }
 
-    def replace_chain(self, text):
+    def replace_chain(self, text, *, keep_yield_plan=False):
         chain = Path(self.plan.chain_path)
         chain.write_text(text)
         Path(self.plan.chain_sha256_path).write_bytes(b5_chain.sidecar_bytes(chain.read_bytes(), chain.name))
+        if not keep_yield_plan and hasattr(b5_driver, "yield_plan"):
+            # A stub chain runs none of the pack's stages, so the pack's yield
+            # plan (PLAN2 yield A) does not apply to it: plan nothing.
+            patcher = mock.patch.object(b5_driver, "yield_plan", lambda plan: {
+                "schema": b5_driver.YIELD_PLAN_SCHEMA, "plan_id": plan.plan_id, "source": ["stub"],
+                "stages": [], "planned": 0})
+            patcher.start()
+            self.test.addCleanup(patcher.stop)
 
 
 class HazardRefusalTests(unittest.TestCase):
@@ -398,16 +443,22 @@ class LaunchTests(unittest.TestCase):
         self.assertEqual(("CODE_IDENTITY", "NUMBER"), (flag["family"], flag["klass"]))
         self.assertFalse(harness.hazard()["chain"]["matches_sidecar"])
 
-    def test_lineage_failure_is_a_flag_and_the_chain_runs(self):
+    def test_lineage_failure_with_valid_locators_is_a_flag_and_the_chain_runs(self):
         harness = Harness(self, g10=False)
         harness.replace_chain("#!/bin/zsh -f\nexit 0\n")
+        retry = mock.patch.object(b5_driver, "LINEAGE_RETRY_S", 0.0)
+        retry.start()
+        self.addCleanup(retry.stop)
 
         def broken(request):
             raise RuntimeError("window_lineage unavailable")
         harness.publish_lineage = broken
         self.assertEqual(harness.driver.EXIT_GO, harness.run())
         self.assertIn("records.lineage_formality", [item["code"] for item in harness.flags])
-        self.assertFalse(json.loads((harness.night / b5_driver.LINEAGE_RECORD).read_text())["published"])
+        record = json.loads((harness.night / b5_driver.LINEAGE_RECORD).read_text())
+        self.assertFalse(record["published"])
+        self.assertEqual(2, len(record["attempts"]))
+        self.assertTrue(record["locators_valid"])
 
     def test_lineage_is_published_into_both_runs_roots_after_go_and_before_launch(self):
         harness = Harness(self, g10=False)
@@ -494,7 +545,7 @@ class LaunchTests(unittest.TestCase):
 
     def test_monitor_that_dies_is_restarted_and_the_gap_recorded(self):
         harness = Harness(self, g10=False)
-        harness.monitor_argv = [sys.executable, "-c", "raise SystemExit(3)"]
+        harness.monitor_argv = lambda request: fake_monitor_argv(request.custody_root, life=0.5, code=3)
         harness.replace_chain("#!/bin/zsh -f\n/bin/sleep 4\nexit 0\n")
         self.assertEqual(harness.driver.EXIT_GO, harness.run())
         monitor = harness.hazard()["monitor"]
@@ -924,7 +975,9 @@ class UnitTests(unittest.TestCase):
         self.assertEqual("arm", collectors["ran_by"])
         self.assertFalse((harness.night / "network_time_off.action-01.json").exists())
 
-    def test_a_monitor_command_that_cannot_be_built_is_retried_and_never_holds_the_chain(self):
+    def test_a_monitor_command_that_cannot_be_built_is_retried_then_refused_before_launch(self):
+        # PLAN2 row 11: a monitor that never journals is the instrument not
+        # sampling; the window is refused before launch (it used to run hollow).
         harness = Harness(self, g10=False)
 
         def unavailable(_request):
@@ -932,17 +985,19 @@ class UnitTests(unittest.TestCase):
         original = harness.seams
         harness.driver._hazard_seams = lambda: (lambda s: (setattr(s, "monitor_argv", unavailable), s)[1])(original())
         harness.replace_chain("#!/bin/zsh -f\n/bin/sleep 2\nexit 0\n")
-        self.assertEqual(harness.driver.EXIT_GO, harness.run())
+        self.assertEqual(harness.driver.EXIT_REFUSED, harness.run())
+        self.assertEqual(b5_driver.REFUSED_INSTRUMENT_NOT_SAMPLING, harness.result()["aborted_reason"])
+        self.assertFalse((harness.night / "chain.started").exists())
         monitor = harness.hazard()["monitor"]
         self.assertEqual(0, monitor["starts"])
-        self.assertGreaterEqual(monitor["start_failures"], 2)
+        self.assertEqual(b5_driver.MONITOR_READY_TRIES, monitor["start_failures"])
 
     def test_the_monitor_disk_low_marker_stops_the_chain(self):
         harness = Harness(self, g10=False)
         marker = harness.custody / "hazards/monitor/disk.low"
-        harness.monitor_argv = [sys.executable, "-c", (
-            "import json, pathlib, time; p = pathlib.Path(%r); p.parent.mkdir(parents=True, exist_ok=True); "
-            "p.write_text(json.dumps({'low': [{'path': '/runs', 'free_bytes': 5}]})); time.sleep(600)") % str(marker)]
+        harness.monitor_argv = lambda request: fake_monitor_argv(request.custody_root, extra=[(
+            "p = pathlib.Path(%r); p.parent.mkdir(parents=True, exist_ok=True); "
+            "p.write_text(json.dumps({'low': [{'path': '/runs', 'free_bytes': 5}]}))") % str(marker)])
         harness.replace_chain("#!/bin/zsh -f\n/bin/sleep 60\n")
         self.assertEqual(harness.driver.EXIT_ABORTED, harness.run())
         self.assertEqual(b5_driver.STOPPED_DISK_LOW, harness.result()["aborted_reason"])
