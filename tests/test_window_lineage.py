@@ -540,6 +540,24 @@ class HazardWindowCallSiteTests(_SentinelMixin, unittest.TestCase):
                 attempt_id=POST_ATTEMPT, source_config_path=self.w.calibration_config)
         self.assertEqual(caught.exception.reason_code, "launch_binding_mismatch")
 
+    def test_collection_is_refused_on_either_driver_record_alone(self) -> None:
+        # chain.exited lands before the G10 tail (network time ON, clock
+        # step); result.json only after it.  Each alone must stop collection.
+        for name in ("chain.exited", "result.json"):
+            with self.subTest(record=name):
+                remove_night_records(self.w)
+                self.w.night.mkdir()
+                (self.w.night / name).write_text("{}\n")
+                with self.assertRaises(arm_readiness.LaunchLineageError) as caught:
+                    arm_readiness.authenticate_campaign_launch_lineage(
+                        self.w.claim, config_paths=(self.w.member_path,))
+                self.assertEqual(caught.exception.reason_code, "launch_binding_mismatch")
+                self.assertIn(name, str(caught.exception))
+                config = BenchmarkConfig.from_mapping(json.loads(self.w.member_path.read_bytes()))
+                with patch.object(sys, "argv", ["joulewise", "run", str(self.w.member_path)]), \
+                        self.assertRaisesRegex(BundleError, "launch_binding_mismatch"):
+                    bundle_module._writer_launch_lineage(self.w.claim, config)
+
     # Analysis from a different checkout (memo 3.2, 3.6)
 
     def test_analysis_from_a_different_checkout_passes(self) -> None:
@@ -635,6 +653,35 @@ class HazardWindowRefusalTests(_SentinelMixin, unittest.TestCase):
         with self.assertRaises(ledger.CalibrationLedgerError):
             run_member(w, w.member_path)
         self.assertFalse((w.claim / "hazard-member").exists())
+
+    def test_config_symlink_is_refused_even_to_registered_bytes(self) -> None:
+        w = build_window(self.base)
+        for link in (w.pack / "members/link.json", self.base / "outside-link.json"):
+            with self.subTest(link=link.name):
+                link.symlink_to(w.member_path)
+                with self.assertRaises(arm_readiness.LaunchLineageError) as caught:
+                    arm_readiness.authenticate_campaign_launch_lineage(w.claim, config_paths=(link,))
+                self.assertEqual(caught.exception.reason_code, "launch_binding_mismatch")
+                self.assertIn("symlink", str(caught.exception))
+
+    def test_conflicting_duplicate_inventory_rows_are_refused(self) -> None:
+        pack = self.base / "pack"
+        pack.mkdir()
+        row = {"path": "members/a.json", "sha256": "a" * 64}
+
+        def tree_sha(units: list) -> str:
+            raw = window_lineage.render_json({"arm_attachments": {"identity_pin_projection": {
+                "identity_units": [{"config_inventory": rows} for rows in units]}}})
+            (pack / "plan_tree.json").write_bytes(raw)
+            return hashlib.sha256(raw).hexdigest()
+
+        agreeing = tree_sha([[row], [dict(row)]])
+        self.assertEqual(window_lineage.config_inventory(pack, agreeing), {"members/a.json": "a" * 64})
+        conflicting = tree_sha([[row], [{**row, "sha256": "b" * 64}]])
+        with self.assertRaises(window_lineage.HazardLineageError) as caught:
+            window_lineage.config_inventory(pack, conflicting)
+        self.assertEqual(caught.exception.reason_code, "launch_binding_mismatch")
+        self.assertIn("two digests", str(caught.exception))
 
     def test_collection_after_reboot_is_refused_but_unreadable_boot_is_not(self) -> None:
         w = build_window(self.base)
@@ -862,6 +909,230 @@ class PublicationAndAuditTests(unittest.TestCase):
                      self.w.bound / window_lineage.LOCATOR_BASENAME):
             path.unlink()
         self.assertEqual(self.audit(), ["lineage.locator_unreadable", "lineage.locator_unreadable"])
+
+
+class UnrecordableValuesTests(_SentinelMixin, unittest.TestCase):
+    """Publication-time reads that fail are records findings, never a lost window.
+
+    Review finding (L3 round 1, MAJOR): an untracked pack entry, a git failure
+    or an unreadable boot id used to refuse publication, so no chain ran.
+    """
+
+    OTHER_BOOT = "00000000-0000-4000-8000-000000000000"
+
+    def setUp(self) -> None:
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.w = build_window(Path(tmp.name), publish=False)
+        self.addCleanup(self._start_sentinels().close)
+
+    def tearDown(self) -> None:
+        self.assertEqual(type(self).sentinel_calls, [], "a hazard path reached the ARM replay")
+
+    def audit(self) -> list[dict]:
+        return window_lineage.audit_window_lineage(
+            claim_runs_root=self.w.claim, bound_runs_root=self.w.bound)
+
+    def assert_collection_proceeds(self, lineage: dict, **kwargs) -> None:
+        w = self.w
+        context = arm_readiness.authenticate_campaign_launch_lineage(
+            w.claim, config_paths=(w.member_path,), **kwargs)
+        self.assertEqual(context["launch_lineage"], lineage)
+        config = BenchmarkConfig.from_mapping(json.loads(w.member_path.read_bytes()))
+        with patch.object(sys, "argv", ["joulewise", "run", str(w.member_path)]):
+            stamped, _digest = bundle_module._writer_launch_lineage(w.claim, config)
+        self.assertEqual(stamped, lineage)
+        # The kept per-member check still refuses unregistered bytes.
+        with self.assertRaises(arm_readiness.LaunchLineageError):
+            arm_readiness.authenticate_campaign_launch_lineage(
+                w.claim, config_paths=(w.unregistered_path,))
+        write_night_records(w)
+        self.assertEqual(arm_readiness.authenticate_launch_lineage(
+            lineage, require_completion=True)["launch_lineage"], lineage)
+        remove_night_records(w)
+
+    def test_untracked_pack_entries_publish_with_the_digest_unrecorded(self) -> None:
+        w = self.w
+        (w.pack / ".DS_Store").write_bytes(b"\0\0\0\1Bud1")
+        (w.pack / "__pycache__").mkdir()
+        (w.pack / "__pycache__/generate_configs.cpython-313.pyc").write_bytes(b"\0")
+        with self.assertRaisesRegex(arm_readiness.ArmReadinessError, "untracked pack"):
+            arm_readiness.committed_pack_tree_sha256(w.pack)
+        published = publish_lineage(w)
+        lineage = published["launch_lineage"]
+        self.assertIsNone(lineage["pack_sha256"])
+        self.assertIsNotNone(lineage["collection_boot_session_id"])
+        self.assertEqual([item["field"] for item in published["unrecorded"]], ["pack_sha256"])
+        self.assertIn("untracked pack", published["unrecorded"][0]["error"])
+        self.assert_collection_proceeds(lineage)
+        write_night_records(w)
+        findings = self.audit()
+        self.assertEqual([finding["code"] for finding in findings], ["lineage.pack_digest_unrecorded"])
+        self.assertIn("untracked pack", findings[0]["detail"])
+
+    def test_git_failure_publishes_with_the_digest_unrecorded(self) -> None:
+        with patch.object(window_lineage, "committed_pack_sha256",
+                          side_effect=RuntimeError("git: command not found")):
+            published = publish_lineage(self.w)
+        self.assertIsNone(published["launch_lineage"]["pack_sha256"])
+        self.assert_collection_proceeds(published["launch_lineage"])
+        write_night_records(self.w)
+        [finding] = self.audit()
+        self.assertEqual(finding["code"], "lineage.pack_digest_unrecorded")
+        self.assertIn("git: command not found", finding["detail"])
+
+    def _publish_with_unreadable_boot(self, **failure) -> None:
+        with patch.object(window_lineage, "current_boot_session_id", **failure):
+            published = publish_lineage(self.w)
+        lineage = published["launch_lineage"]
+        self.assertIsNone(lineage["collection_boot_session_id"])
+        self.assertEqual([item["field"] for item in published["unrecorded"]], ["collection_boot_session_id"])
+        # Collection on whatever boot it runs in is admitted, through the
+        # dispatch (real boot reader) and with a foreign boot.
+        self.assert_collection_proceeds(lineage)
+        context = window_lineage.authenticate_campaign(
+            self.w.claim, config_paths=(self.w.member_path,), boot_reader=lambda: self.OTHER_BOOT)
+        self.assertIsNone(context["authentication"]["boot_session_id"])
+        write_night_records(self.w)
+        self.assertEqual([finding["code"] for finding in self.audit()], ["lineage.collection_boot_unrecorded"])
+
+    def test_unreadable_boot_publishes_and_skips_the_boot_comparison(self) -> None:
+        self._publish_with_unreadable_boot(return_value=None)
+
+    def test_raising_boot_reader_publishes_and_skips_the_boot_comparison(self) -> None:
+        self._publish_with_unreadable_boot(side_effect=OSError("sysctl unavailable"))
+
+    def test_malformed_supplied_values_are_recorded_null(self) -> None:
+        published = window_lineage.publish_window_lineage(
+            pack_root=self.w.pack, pack_id=PACK_ID, plan_id=PLAN_ID, window_id=WINDOW_ID,
+            bracket_session_id=SESSION_ID, pre_attempt_id=PRE_ATTEMPT, post_attempt_id=POST_ATTEMPT,
+            claim_runs_root=self.w.claim, bound_runs_root=self.w.bound, custody_root=self.w.custody,
+            pack_sha256="not-a-digest", boot_session_id="not-a-uuid")
+        lineage = published["launch_lineage"]
+        self.assertIsNone(lineage["pack_sha256"])
+        self.assertIsNone(lineage["collection_boot_session_id"])
+        self.assertEqual(sorted(item["field"] for item in published["unrecorded"]),
+                         ["collection_boot_session_id", "pack_sha256"])
+        self.assert_collection_proceeds(lineage)
+
+    def test_supplied_boot_is_recorded_in_canonical_form(self) -> None:
+        published = window_lineage.publish_window_lineage(
+            pack_root=self.w.pack, pack_id=PACK_ID, plan_id=PLAN_ID, window_id=WINDOW_ID,
+            bracket_session_id=SESSION_ID, pre_attempt_id=PRE_ATTEMPT, post_attempt_id=POST_ATTEMPT,
+            claim_runs_root=self.w.claim, bound_runs_root=self.w.bound, custody_root=self.w.custody,
+            boot_session_id="AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA")
+        self.assertEqual(published["launch_lineage"]["collection_boot_session_id"],
+                         "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
+        self.assertEqual(published["unrecorded"], [])
+
+    def test_unreadable_arm_decision_publishes_without_it(self) -> None:
+        self.w.arm_decision.unlink()
+        published = publish_lineage(self.w)
+        go = json.loads(Path(published["records"]["go"]["path"]).read_bytes())
+        self.assertIsNone(go["arm_decision"])
+        self.assertEqual([item["field"] for item in published["unrecorded"]], ["arm_decision"])
+        self.assert_collection_proceeds(published["launch_lineage"])
+        write_night_records(self.w)
+        self.assertEqual([finding["code"] for finding in self.audit()], ["lineage.arm_decision_unrecorded"])
+
+    def test_null_records_validate_but_malformed_strings_do_not(self) -> None:
+        lineage = publish_lineage(self.w)["launch_lineage"]
+        for name in ("pack_sha256", "collection_boot_session_id"):
+            with self.subTest(field=name):
+                nulled = {**lineage, name: None}
+                self.assertEqual(arm_readiness.authenticate_launch_lineage(
+                    nulled, require_completion=False, require_current_boot=True)["launch_lineage"], nulled)
+                with self.assertRaises(arm_readiness.LaunchLineageError) as caught:
+                    arm_readiness.authenticate_launch_lineage({**lineage, name: "x"}, require_completion=False)
+                self.assertEqual(caught.exception.reason_code, "launch_consumption_invalid")
+
+    def test_publication_still_refuses_unwritable_roots(self) -> None:
+        missing = self.w.base / "absent-root"
+        with self.assertRaisesRegex(window_lineage.LineagePublicationError, "unavailable"):
+            window_lineage.publish_window_lineage(
+                pack_root=self.w.pack, pack_id=PACK_ID, plan_id=PLAN_ID, window_id=WINDOW_ID,
+                bracket_session_id=SESSION_ID, pre_attempt_id=PRE_ATTEMPT, post_attempt_id=POST_ATTEMPT,
+                claim_runs_root=self.w.claim, bound_runs_root=missing, custody_root=self.w.custody)
+
+
+class CompletionTests(_SentinelMixin, unittest.TestCase):
+    """Analysis completion is chain.exited; moved custody is readable.
+
+    Review finding (L3 round 1, MINOR): result.json (written only after the
+    G10 tail) was required, and a moved custody root refused every member.
+    """
+
+    def setUp(self) -> None:
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.w = build_window(Path(tmp.name))
+        self.addCleanup(self._start_sentinels().close)
+        self.bundle = self.w.claim / "stamped"
+        self.bundle.mkdir()
+        (self.bundle / "config.json").write_text(json.dumps({"run_metadata": {"tags": [TAG]}}) + "\n")
+        (self.bundle / "metadata.json").write_text(json.dumps({"extra": {
+            "launch_lineage": self.w.lineage,
+            "launch_lineage_locator_sha256": self.w.published["locators"]["claim_runs_root"]["sha256"],
+        }}) + "\n")
+
+    def tearDown(self) -> None:
+        self.assertEqual(type(self).sentinel_calls, [], "a hazard path reached the ARM replay")
+
+    def audit_codes(self) -> list[str]:
+        return sorted(finding["code"] for finding in window_lineage.audit_window_lineage(
+            claim_runs_root=self.w.claim, bound_runs_root=self.w.bound))
+
+    def test_chain_exited_alone_completes_the_window(self) -> None:
+        self.w.night.mkdir()
+        exited = self.w.night / "chain.exited"
+        exited.write_text('{"exit_code": 0}\n')
+        context = arm_readiness.authenticate_launch_lineage(self.w.lineage, require_completion=True)
+        self.assertEqual(context["completion"]["chain_exited"]["path"], str(exited))
+        self.assertIsNone(context["completion"]["result"])
+        self.assertEqual(context["completion_sha256"], hashlib.sha256(exited.read_bytes()).hexdigest())
+        self.assertEqual(arm_readiness.authenticate_bundle_launch_lineage(
+            self.bundle, require_completion=True)["launch_lineage"], self.w.lineage)
+        # The absent result.json is a records finding.
+        self.assertEqual(self.audit_codes(), ["lineage.completion_records_absent"])
+        # The completion digest does not move when result.json lands.
+        (self.w.night / "result.json").write_text('{"verdict": "GO"}\n')
+        later = arm_readiness.authenticate_launch_lineage(self.w.lineage, require_completion=True)
+        self.assertEqual(later["completion_sha256"], context["completion_sha256"])
+        self.assertIsNotNone(later["completion"]["result"])
+
+    def test_result_alone_does_not_complete_the_window(self) -> None:
+        self.w.night.mkdir()
+        (self.w.night / "result.json").write_text('{"verdict": "GO"}\n')
+        with self.assertRaises(arm_readiness.LaunchLineageError) as caught:
+            arm_readiness.authenticate_launch_lineage(self.w.lineage, require_completion=True)
+        self.assertEqual(caught.exception.reason_code, "launch_lifecycle_incomplete")
+
+    def test_moved_custody_is_read_through_relocated_custody(self) -> None:
+        write_night_records(self.w)
+        recorded = self.w.lineage["window_context"]["custody_root"]
+        moved = self.w.base / "offloaded/custody"
+        moved.parent.mkdir()
+        shutil.move(self.w.custody, moved)
+        with self.assertRaises(arm_readiness.LaunchLineageError) as caught:
+            arm_readiness.authenticate_bundle_launch_lineage(self.bundle, require_completion=True)
+        self.assertEqual(caught.exception.reason_code, "launch_lifecycle_incomplete")
+        self.assertIn("relocated_custody", str(caught.exception))
+        # Without relocation the audit reports the moved records, never raises.
+        self.assertEqual(self.audit_codes(),
+                         ["lineage.completion_records_absent", "lineage.record_chain_unverified"])
+        with window_lineage.relocated_custody({recorded: moved}):
+            context = arm_readiness.authenticate_bundle_launch_lineage(self.bundle, require_completion=True)
+            self.assertEqual(context["completion"]["chain_exited"]["path"], str(moved / "night/chain.exited"))
+            self.assertEqual(context["launch_lineage"], self.w.lineage)
+            self.assertEqual(whole_window._authenticated_bundle_launch_lineage_set(
+                [self.bundle], require_completion=True), self.w.lineage)
+            self.assertEqual(self.audit_codes(), [])
+        # The relocation ends with its context.
+        with self.assertRaises(arm_readiness.LaunchLineageError):
+            arm_readiness.authenticate_launch_lineage(self.w.lineage, require_completion=True)
+        with self.assertRaises(ValueError):
+            with window_lineage.relocated_custody({"relative/custody": moved}):
+                pass
 
 
 if __name__ == "__main__":

@@ -35,18 +35,33 @@ authenticators here refuse only on:
 * **A different boot** than the one the lineage was published in (collection
   time).  Member spans are joined to the hazard monitor's journals by
   ``time.monotonic_ns()``, which restarts at boot, so a member collected after
-  a reboot cannot be joined.  An unreadable boot id does not refuse.
+  a reboot cannot be joined.  An unreadable boot id does not refuse: if it
+  cannot be read at collection the comparison is skipped, and if it could not
+  be read at publication the lineage records ``null`` and the comparison is
+  skipped for the whole window (a records finding).
 * **Collection after the chain exited**, i.e. ``chain.exited`` or
-  ``result.json`` already exists in the driver's night directory.
+  ``result.json`` already exists in the driver's night directory.  After the
+  chain exits, the driver's G10 tail may switch network time ON and step the
+  clock, so no member may start then.
 * **Completion required but absent** (analysis readers that ask for a
-  finished window): ``chain.exited`` and ``result.json`` must both exist.
+  finished window): ``chain.exited`` must exist.  It is the driver's record
+  that the chain's processes are gone, i.e. collection physically ended.
+  ``result.json`` is written only after the G10 tail and is not required; its
+  absence is a records finding.  When a window's custody root has moved
+  (archived, offloaded, read on another machine), readers name its new place
+  with :func:`relocated_custody`.
 * **A lineage too malformed to name its pack**, because then the config check
   above cannot run.
 
 Everything else about the records (sidecars, canonical bytes, root paths,
-sibling-locator agreement, the record chain) is reported by
+sibling-locator agreement, the record chain, a pack digest, boot id or arm
+decision that could not be recorded at publication) is reported by
 :func:`audit_window_lineage` as findings for the harvest to write as
 ``RECORDS`` flags.  None of it stops collection.
+
+Publication (:func:`publish_window_lineage`) refuses only when the pack's
+config inventory is unusable (every tagged member would then be refused) or
+the roots cannot be written.
 
 The three window records
 ------------------------
@@ -62,6 +77,8 @@ present only because that reader requires an integer of at least 1.
 
 from __future__ import annotations
 
+import contextlib
+import contextvars
 import copy
 import hashlib
 import json
@@ -69,7 +86,8 @@ import os
 import subprocess
 import uuid
 from pathlib import Path, PurePosixPath
-from typing import Any, Callable, Mapping, Sequence
+from types import MappingProxyType
+from typing import Any, Callable, Iterator, Mapping, Sequence
 
 HAZARD_LINEAGE_SCHEMA = "joulewise.hazard_window_lineage.v1"
 HAZARD_LOCATOR_SCHEMA = "joulewise.hazard_window_lineage_locator.v1"
@@ -154,8 +172,16 @@ FINDING_CODES = frozenset(
         "lineage.bundle_stamp_absent",
         "lineage.bundle_stamp_differs",
         "lineage.bundle_locator_digest_differs",
+        # Values publication could not read; the lineage records null for the
+        # first two and go.json records no arm decision for the third.
+        "lineage.pack_digest_unrecorded",
+        "lineage.collection_boot_unrecorded",
+        "lineage.arm_decision_unrecorded",
     }
 )
+
+# Publication fields that may be recorded as unavailable instead of refusing.
+UNRECORDABLE_FIELDS = frozenset({"pack_sha256", "collection_boot_session_id", "arm_decision"})
 
 _SHA256_HEX = frozenset("0123456789abcdef")
 
@@ -338,11 +364,15 @@ def validate_lineage(value: object) -> Mapping[str, Any]:
             raise _invalid(f"hazard lineage {name} must be a nonempty string")
     if not _is_path_component(value["bracket_session_id"]):
         raise _invalid("hazard lineage bracket_session_id must be one path-safe component")
-    if not _is_canonical_uuid(value["collection_boot_session_id"]):
-        raise _invalid("hazard lineage collection_boot_session_id must be a canonical UUID")
-    for name in ("pack_sha256", "plan_tree_sha256"):
-        if not _is_sha256(value[name]):
-            raise _invalid(f"hazard lineage {name} must be 64 lowercase hex characters")
+    # null: publication could not read the boot id or the committed pack
+    # digest.  That is a records finding (audit_window_lineage), not a refusal.
+    boot = value["collection_boot_session_id"]
+    if boot is not None and not _is_canonical_uuid(boot):
+        raise _invalid("hazard lineage collection_boot_session_id must be a canonical UUID or null")
+    if value["pack_sha256"] is not None and not _is_sha256(value["pack_sha256"]):
+        raise _invalid("hazard lineage pack_sha256 must be 64 lowercase hex characters or null")
+    if not _is_sha256(value["plan_tree_sha256"]):
+        raise _invalid("hazard lineage plan_tree_sha256 must be 64 lowercase hex characters")
     if not isinstance(value["pack_root"], str) or not Path(value["pack_root"]).is_absolute():
         raise _invalid("hazard lineage pack_root must be an absolute path")
     context = value["window_context"]
@@ -467,20 +497,76 @@ def _check_config_members(
 # Authentication (called through arm_readiness's schema dispatch)
 
 
-def _completion_records(night_dir: Path) -> dict[str, dict[str, str]]:
-    records: dict[str, dict[str, str]] = {}
-    for key, name in (("chain_exited", CHAIN_EXITED_NAME), ("result", RESULT_NAME)):
-        path = night_dir / name
-        try:
-            raw = path.read_bytes()
-            _parse_object(raw)
-        except (OSError, ValueError, RecursionError) as exc:
-            raise HazardLineageError(
-                "launch_lifecycle_incomplete",
-                f"driver {name} record is absent or unreadable: {path}: {exc}",
-            ) from exc
-        records[key] = _reference(path, raw)
-    return records
+_CUSTODY_RELOCATIONS: contextvars.ContextVar[Mapping[str, Path]] = contextvars.ContextVar(
+    "joulewise_hazard_custody_relocations", default=MappingProxyType({})
+)
+
+
+@contextlib.contextmanager
+def relocated_custody(relocations: Mapping[Path | str, Path | str]) -> Iterator[None]:
+    """Read windows whose custody root has moved since publication.
+
+    A lineage records absolute paths under its window's custody root: the
+    driver's night directory (``chain.exited``, ``result.json``) and the
+    launch -> go -> authorization records.  After the custody root is
+    archived, offloaded or copied to another machine those paths no longer
+    exist.  Inside this context, a recorded path under a recorded custody
+    root named in ``relocations`` ({recorded custody_root: where it is now})
+    is read from the same relative place under the new root.  Every other
+    path is read as recorded.  The lineage bytes themselves never change.
+    """
+
+    merged = dict(_CUSTODY_RELOCATIONS.get())
+    for recorded, actual in relocations.items():
+        recorded_path, actual_path = Path(recorded), Path(actual)
+        if not recorded_path.is_absolute() or not actual_path.is_absolute():
+            raise ValueError("custody relocations map absolute paths to absolute paths")
+        merged[recorded_path.as_posix()] = actual_path
+    token = _CUSTODY_RELOCATIONS.set(MappingProxyType(merged))
+    try:
+        yield
+    finally:
+        _CUSTODY_RELOCATIONS.reset(token)
+
+
+def _custody_path(recorded: str, custody_root: str) -> Path:
+    """Where a path the lineage recorded under ``custody_root`` lives now."""
+
+    path = Path(recorded)
+    actual_root = _CUSTODY_RELOCATIONS.get().get(Path(custody_root).as_posix())
+    if actual_root is None:
+        return path
+    try:
+        return actual_root / path.relative_to(custody_root)
+    except ValueError:
+        return path
+
+
+def _completion_records(night_dir: Path) -> dict[str, dict[str, str] | None]:
+    """The driver's completion records; only ``chain.exited`` is required.
+
+    ``chain.exited`` is written once the chain's processes are gone, so it is
+    the physical end of collection.  ``result.json`` follows only after the
+    G10 tail; it is referenced when present and its absence is a records
+    finding (``lineage.completion_records_absent``), not a refusal.
+    """
+
+    exited = night_dir / CHAIN_EXITED_NAME
+    try:
+        exited_raw = exited.read_bytes()
+    except OSError as exc:
+        raise HazardLineageError(
+            "launch_lifecycle_incomplete",
+            f"driver {CHAIN_EXITED_NAME} record is absent or unreadable: {exited}: {exc} "
+            "(if the window's custody root has moved, read it inside "
+            "window_lineage.relocated_custody)",
+        ) from exc
+    result_path = night_dir / RESULT_NAME
+    try:
+        result: dict[str, str] | None = _reference(result_path, result_path.read_bytes())
+    except OSError:
+        result = None
+    return {"chain_exited": _reference(exited, exited_raw), "result": result}
 
 
 def authenticate_lineage(
@@ -512,15 +598,16 @@ def authenticate_lineage(
                 "launch_binding_mismatch",
                 "hazard lineage names a different pack root than the caller authenticated",
             )
-    if require_current_boot:
+    recorded_boot = lineage["collection_boot_session_id"]
+    if require_current_boot and recorded_boot is not None:
         current = (boot_reader or current_boot_session_id)()
-        if current is not None and current != lineage["collection_boot_session_id"]:
+        if current is not None and current != recorded_boot:
             raise HazardLineageError(
                 "launch_binding_mismatch",
                 "collection boot differs from the window's boot; monotonic clocks "
                 "do not join across a reboot",
             )
-    night_dir = Path(context["night_dir"])
+    night_dir = _custody_path(context["night_dir"], context["custody_root"])
     if require_completion_absent:
         for name in (CHAIN_EXITED_NAME, RESULT_NAME):
             path = night_dir / name
@@ -551,7 +638,7 @@ def authenticate_lineage(
         "consumption_path": record["path"],
         "consumption_sha256": record["sha256"],
         "completion": completion,
-        "completion_sha256": completion["result"]["sha256"] if completion else None,
+        "completion_sha256": completion["chain_exited"]["sha256"] if completion else None,
     }
 
 
@@ -651,8 +738,10 @@ def authenticate_bundle(
 
     Nothing here depends on where the bundle, the runs root or the analysing
     checkout now live, so an archive copy or another checkout reads the same
-    result.  Whether the stamp matches its root's locator is a records
-    finding (:func:`audit_window_lineage`).
+    result.  With ``require_completion`` the driver's ``chain.exited`` is
+    read from the recorded custody root, or from where
+    :func:`relocated_custody` says it now lives.  Whether the stamp matches
+    its root's locator is a records finding (:func:`audit_window_lineage`).
     """
 
     del bundle_path, locator_sha256
@@ -683,11 +772,30 @@ def _fsync_directory(path: Path) -> None:
 
 
 def committed_pack_sha256(pack_root: Path | str) -> str:
-    """The D-134 committed pack-tree digest (``arm_readiness``'s function)."""
+    """The D-134 committed pack-tree digest (``arm_readiness``'s function).
+
+    It raises on any untracked entry under the pack (``.DS_Store``, an editor
+    swap file, ``__pycache__``) and on any git failure.  Publication then
+    records ``pack_sha256: null``; the pack's identity is decided by the L4/L5
+    pack-identity collector, which recomputes it from preserved bytes.
+    """
 
     from joulewise.arm_readiness import committed_pack_tree_sha256  # noqa: PLC0415
 
     return committed_pack_tree_sha256(Path(pack_root))
+
+
+def _describe(exc: BaseException) -> str:
+    return f"{type(exc).__name__}: {exc}"
+
+
+def _canonical_boot(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    try:
+        return str(uuid.UUID(value.strip()))
+    except ValueError:
+        return None
 
 
 def publish_window_lineage(
@@ -715,9 +823,16 @@ def publish_window_lineage(
     with O_EXCL and fsynced, then its directory is fsynced.  The roots must
     exist and be distinct; the driver creates them fresh for each attempt.
 
-    Raises :class:`LineagePublicationError` if anything cannot be written or
-    the pack's inventory is unusable (every tagged member would then be
-    refused, so the driver learns it before the chain starts).
+    Raises :class:`LineagePublicationError` only if a root or record cannot
+    be written or the pack's inventory is unusable (every tagged member would
+    then be refused, so the driver learns it before the chain starts).
+
+    Values that are records, not inputs to the config check, never stop
+    publication.  When the committed pack digest cannot be computed, the boot
+    id cannot be read, or the arm decision file cannot be read, the lineage
+    records ``null`` (go.json records no arm decision), ``launch.json`` lists
+    the field and the error under ``unrecorded``, and
+    :func:`audit_window_lineage` reports it.
     """
 
     try:
@@ -741,14 +856,50 @@ def publish_window_lineage(
         config_inventory(pack, plan_tree_sha256)
     except (OSError, HazardLineageError) as exc:
         raise LineagePublicationError(f"pack inventory is unusable: {exc}") from exc
+
+    # Records, not inputs to any collection-time check: an unavailable value
+    # is written as null and listed, never a reason to lose the window.
+    unrecorded: list[dict[str, str]] = []
     if pack_sha256 is None:
         try:
             pack_sha256 = committed_pack_sha256(pack)
-        except Exception as exc:  # noqa: BLE001 - any digest failure stops publication
-            raise LineagePublicationError(f"pack digest is unavailable: {exc}") from exc
-    boot = boot_session_id if boot_session_id is not None else current_boot_session_id()
-    if boot is None:
-        raise LineagePublicationError("kern.bootsessionuuid is unreadable")
+        except Exception as exc:  # noqa: BLE001 - any digest failure is a records fact
+            unrecorded.append({"field": "pack_sha256", "error": _describe(exc)})
+    if pack_sha256 is not None and not _is_sha256(pack_sha256):
+        unrecorded.append(
+            {"field": "pack_sha256", "error": f"value is not a SHA-256: {pack_sha256!r}"}
+        )
+        pack_sha256 = None
+    if boot_session_id is None:
+        try:
+            boot = current_boot_session_id()
+        except Exception as exc:  # noqa: BLE001 - an unreadable boot is a records fact
+            boot = None
+            unrecorded.append({"field": "collection_boot_session_id", "error": _describe(exc)})
+        else:
+            if boot is None:
+                unrecorded.append(
+                    {
+                        "field": "collection_boot_session_id",
+                        "error": "kern.bootsessionuuid is unreadable",
+                    }
+                )
+    else:
+        boot = _canonical_boot(boot_session_id)
+        if boot is None:
+            unrecorded.append(
+                {
+                    "field": "collection_boot_session_id",
+                    "error": f"value is not a UUID: {boot_session_id!r}",
+                }
+            )
+    arm_decision: dict[str, str] | None = None
+    if arm_decision_path is not None:
+        try:
+            decision_path = Path(arm_decision_path).resolve(strict=True)
+            arm_decision = _reference(decision_path, decision_path.read_bytes())
+        except OSError as exc:
+            unrecorded.append({"field": "arm_decision", "error": _describe(exc)})
 
     records = custody / RECORDS_DIRNAME
     try:
@@ -769,10 +920,6 @@ def publish_window_lineage(
             }
         )
         _write_once(authorization_path, authorization_raw)
-        arm_decision: dict[str, str] | None = None
-        if arm_decision_path is not None:
-            decision_path = Path(arm_decision_path).resolve(strict=True)
-            arm_decision = _reference(decision_path, decision_path.read_bytes())
         go_path = records / GO_RECORD_NAME
         go_raw = render_json(
             {
@@ -791,6 +938,7 @@ def publish_window_lineage(
                 "plan_id": plan_id,
                 "window_id": window_id,
                 "go_receipt": _reference(go_path, go_raw),
+                "unrecorded": unrecorded,
             }
         )
         _write_once(launch_path, launch_raw)
@@ -845,6 +993,7 @@ def publish_window_lineage(
     return {
         "launch_lineage": copy.deepcopy(lineage),
         "locators": locators,
+        "unrecorded": copy.deepcopy(unrecorded),
         "records": {
             "launch": lineage["launch_record"],
             "go": _reference(go_path, go_raw),
@@ -884,7 +1033,9 @@ def _evidence(path: Path) -> dict[str, Any]:
         return {"path": str(path), "sha256": None}
 
 
-def _read_reference(reference: object) -> dict[str, Any] | None:
+def _read_reference(
+    reference: object, locate: Callable[[str], Path] = Path
+) -> dict[str, Any] | None:
     """Return the referenced JSON object when its bytes match, else None."""
 
     if (
@@ -894,7 +1045,7 @@ def _read_reference(reference: object) -> dict[str, Any] | None:
     ):
         return None
     try:
-        raw = Path(reference["path"]).read_bytes()
+        raw = locate(reference["path"]).read_bytes()
         if sha256_bytes(raw) != reference["sha256"]:
             return None
         return _parse_object(raw)
@@ -1017,9 +1168,12 @@ def audit_window_lineage(
                     scope={"root_role": role},
                 )
             )
-    launch = _read_reference(lineage["launch_record"])
-    go = _read_reference(launch.get("go_receipt")) if launch else None
-    authorization = _read_reference(go.get("authorization")) if go else None
+    def locate(recorded: str) -> Path:
+        return _custody_path(recorded, context["custody_root"])
+
+    launch = _read_reference(lineage["launch_record"], locate)
+    go = _read_reference(launch.get("go_receipt"), locate) if launch else None
+    authorization = _read_reference(go.get("authorization"), locate) if go else None
     if (
         launch is None
         or go is None
@@ -1033,15 +1187,49 @@ def audit_window_lineage(
             _finding(
                 "lineage.record_chain_unverified",
                 "launch -> go -> authorization records are absent or do not hash-verify",
-                evidence=[_evidence(Path(lineage["launch_record"]["path"]))],
+                evidence=[_evidence(locate(lineage["launch_record"]["path"]))],
             )
         )
-    elif go.get("arm_decision") is not None and _read_reference(go["arm_decision"]) is None:
+    elif go.get("arm_decision") is not None and _read_reference(go["arm_decision"], locate) is None:
         findings.append(
             _finding(
                 "lineage.arm_decision_digest_differs",
                 "the go record's arm-decision reference does not hash-verify",
-                evidence=[_evidence(Path(str(go["arm_decision"].get("path"))))],
+                evidence=[_evidence(locate(str(go["arm_decision"].get("path"))))],
+            )
+        )
+    # Values publication could not read (recorded null, listed in launch.json).
+    notes: dict[str, str] = {}
+    listed = launch.get("unrecorded") if isinstance(launch, Mapping) else None
+    for item in listed if isinstance(listed, list) else ():
+        if isinstance(item, Mapping) and item.get("field") in UNRECORDABLE_FIELDS:
+            notes[str(item["field"])] = str(item.get("error"))
+    if lineage["pack_sha256"] is None:
+        findings.append(
+            _finding(
+                "lineage.pack_digest_unrecorded",
+                "publication could not compute the committed pack digest; the pack-identity "
+                "collector decides from preserved bytes: "
+                + notes.get("pack_sha256", "no reason recorded"),
+                evidence=[_evidence(locate(lineage["launch_record"]["path"]))],
+            )
+        )
+    if lineage["collection_boot_session_id"] is None:
+        findings.append(
+            _finding(
+                "lineage.collection_boot_unrecorded",
+                "publication could not read kern.bootsessionuuid, so collection never compared "
+                "boots; the harvest must establish the boot from the monitor journals: "
+                + notes.get("collection_boot_session_id", "no reason recorded"),
+                evidence=[_evidence(locate(lineage["launch_record"]["path"]))],
+            )
+        )
+    if "arm_decision" in notes:
+        findings.append(
+            _finding(
+                "lineage.arm_decision_unrecorded",
+                "publication could not read the arm decision file: " + notes["arm_decision"],
+                evidence=[_evidence(locate(lineage["launch_record"]["path"]))],
             )
         )
     plan_tree = Path(lineage["pack_root"]) / "plan_tree.json"
@@ -1056,7 +1244,7 @@ def audit_window_lineage(
         )
         finding.update(observed=observed, expected=lineage["plan_tree_sha256"])
         findings.append(finding)
-    night = Path(context["night_dir"])
+    night = locate(context["night_dir"])
     missing = [name for name in (CHAIN_EXITED_NAME, RESULT_NAME) if not (night / name).is_file()]
     if missing:
         findings.append(
@@ -1123,6 +1311,7 @@ __all__ = [
     "LineagePublicationError",
     "REASON_CODES",
     "ROOT_ROLES",
+    "UNRECORDABLE_FIELDS",
     "audit_window_lineage",
     "authenticate_bundle",
     "authenticate_campaign",
@@ -1135,5 +1324,6 @@ __all__ = [
     "is_hazard_runs_root",
     "publish_window_lineage",
     "read_locator",
+    "relocated_custody",
     "validate_lineage",
 ]
