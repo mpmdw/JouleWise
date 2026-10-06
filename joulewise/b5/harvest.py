@@ -2191,6 +2191,260 @@ def boot_session_uuid() -> str | None:
     return result.stdout.strip() or None
 
 
+# ---------------------------------------------------------------------------
+# The desk whole-window verdict child (PLAN2 section 2.1 row 1, harvest side).
+#
+# ``run_campaign --whole-window-verdict`` strict-validates every claim-root
+# bundle serially, about 34.5 s each: about 3,700 s for ALPHA's 107.  A fixed
+# 1,800 s kill lost every block-5 verdict (whole_window.verdict_absent), and the
+# SIGKILL left campaign.lock behind, so a re-run refused.  The child now gets
+# max(1,800 s, 90 s per bundle), a heartbeat on stderr while it runs, its own
+# session (so a timeout kills its whole process group, proven gone), and the
+# lock is removed only when its recorded pid and start time are the dead
+# child's.  It runs concurrently with the member assessment.
+# ---------------------------------------------------------------------------
+
+DESK_TIMEOUT_FLOOR_S = 1800.0
+DESK_TIMEOUT_PER_BUNDLE_S = 90.0
+DESK_HEARTBEAT_S = 60.0
+DESK_TERM_GRACE_S = 30.0
+DESK_GONE_WAIT_S = 30.0
+DESK_RUN_SCHEMA = "joulewise.b5_desk_verdict_run.v1"
+
+
+def desk_verdict_timeout_s(bundles: int) -> float:
+    """The desk verdict child's wall budget: max(1,800 s, 90 s per claim-root bundle)."""
+    return max(DESK_TIMEOUT_FLOOR_S, max(0, int(bundles)) * DESK_TIMEOUT_PER_BUNDLE_S)
+
+
+def claim_bundle_count(runs_root: Path, *, exclude: Iterable[str] = ()) -> int:
+    """Bundle directories (``metadata.json`` present) the desk verdict will validate."""
+    skipped = {"campaign_manifests", "instrument_validation", *exclude}
+    try:
+        return sum(1 for path in runs_root.iterdir()
+                   if path.is_dir() and path.name not in skipped and (path / "metadata.json").is_file())
+    except OSError:
+        return 0
+
+
+def parse_campaign_lock(text: str) -> tuple[int, str | None] | None:
+    """``pid=<int> nonce=... created_at=... start_time=<json>`` -> (pid, start_time), else None.
+
+    The shape ``scripts/run_campaign.py acquire_campaign_lock`` writes (read
+    here, not imported: the harvest never imports the campaign runner).
+    """
+    line = text.strip()
+    if not line.startswith("pid=") or "\n" in line:
+        return None
+    head, separator, start_text = line.rpartition(" start_time=")
+    if not separator:
+        return None
+    pid_text = head.split(" ", 1)[0][len("pid="):]
+    if not (pid_text.isascii() and pid_text.isdigit()) or int(pid_text) <= 0:
+        return None
+    try:
+        start_time = json.loads(start_text)
+    except ValueError:
+        return None
+    if start_time is not None and not isinstance(start_time, str):
+        return None
+    return int(pid_text), start_time
+
+
+def _observe_identity(pid: int) -> Any:
+    from joulewise.measurement_liveness import observe_identity
+    return observe_identity(pid)
+
+
+def remove_dead_child_lock(runs_root: Path, *, child_pid: int | None, child_start_time: str | None,
+                           observe_identity: Callable[[int], Any]) -> str:
+    """Remove ``campaign.lock`` only when it is the dead desk child's own lock.
+
+    The lock's recorded pid must be the child's, its recorded start time the
+    one observed for the child at spawn, and that pid must now be DEAD.
+    Serialized with the campaign runner's stale-lock reclaimers by the same
+    exclusive flock of the runs-root directory, and only the inode that was
+    read is unlinked.  Returns ``removed``, ``absent`` or ``kept:<reason>``.
+    """
+    import fcntl
+
+    lock = runs_root / CAMPAIGN_LOCK_NAME
+    if not os.path.lexists(lock):
+        return "absent"
+    if not isinstance(child_pid, int) or child_pid <= 0 or not isinstance(child_start_time, str):
+        return "kept:child_start_unobserved"
+    try:
+        directory_fd = os.open(runs_root, os.O_RDONLY)
+    except OSError:
+        return "kept:runs_root_unopenable"
+    try:
+        fcntl.flock(directory_fd, fcntl.LOCK_EX)
+        try:
+            try:
+                lock_fd = os.open(lock, os.O_RDONLY | os.O_NOFOLLOW)
+            except FileNotFoundError:
+                return "absent"
+            except OSError:
+                return "kept:unreadable"
+            try:
+                read_stat = os.fstat(lock_fd)
+                raw = b""
+                while True:
+                    part = os.read(lock_fd, 65536)
+                    if not part:
+                        break
+                    raw += part
+            finally:
+                os.close(lock_fd)
+            try:
+                parsed = parse_campaign_lock(raw.decode("utf-8"))
+            except UnicodeError:
+                parsed = None
+            if parsed is None:
+                return "kept:unparseable"
+            pid, start_time = parsed
+            if pid != child_pid:
+                return "kept:other_pid"
+            if start_time != child_start_time:
+                return "kept:other_start_time"
+            if getattr(observe_identity(pid), "state", None) != "DEAD":
+                return "kept:pid_not_dead"
+            try:
+                current = os.stat(lock, follow_symlinks=False)
+            except OSError:
+                return "kept:unreadable"
+            if (current.st_dev, current.st_ino) != (read_stat.st_dev, read_stat.st_ino):
+                return "kept:replaced"
+            os.unlink(lock)
+            return "removed"
+        finally:
+            fcntl.flock(directory_fd, fcntl.LOCK_UN)
+    finally:
+        os.close(directory_fd)
+
+
+class DeskVerdictChild:
+    """The desk verdict subprocess: own session, heartbeat, wall budget, proven teardown.
+
+    ``start`` spawns it and a supervising thread; ``finish`` joins the thread
+    and returns the run record.  On the wall budget the whole process group
+    gets SIGTERM, then SIGKILL after a grace, and is then probed until no
+    process of it remains (``group_gone``).  A group still alive after the
+    leader exited normally is torn down the same way.
+    """
+
+    def __init__(self, argv: Sequence[str], *, cwd: str, timeout_s: float, bundles: int, seams: "Seams",
+                 runs_root: Path):
+        import threading
+
+        self.argv, self.cwd, self.timeout_s, self.bundles = list(argv), cwd, float(timeout_s), int(bundles)
+        self.seams, self.runs_root = seams, runs_root
+        self.timed_out = False
+        self.group_gone: bool | None = None
+        self.survivors_after_exit = False
+        self.heartbeats = 0
+        self.lock = "not_checked"
+        self.error: str | None = None
+        self._stdout = tempfile.TemporaryFile()
+        self._stderr = tempfile.TemporaryFile()
+        self._started = time.monotonic()
+        self.process = seams.desk_popen(self.argv, cwd=cwd, stdin=subprocess.DEVNULL, stdout=self._stdout,
+                                        stderr=self._stderr, start_new_session=True)
+        self.pid = getattr(self.process, "pid", None)
+        identity = seams.observe_identity(self.pid) if isinstance(self.pid, int) and self.pid > 0 else None
+        self.start_time = getattr(identity, "start_time", None) if getattr(identity, "state", None) == "LIVE" \
+            else None
+        self._thread = threading.Thread(target=self._supervise, name="desk-verdict-supervisor", daemon=True)
+        self._thread.start()
+
+    def _heartbeat(self) -> None:
+        self.heartbeats += 1
+        elapsed = time.monotonic() - self._started
+        print(f"harvest: whole-window verdict running, {elapsed:.0f} s of {self.timeout_s:.0f} s "
+              f"({self.bundles} claim-root bundles; pid {self.pid})", file=sys.stderr, flush=True)
+
+    def _supervise(self) -> None:
+        try:
+            deadline = self._started + self.timeout_s
+            while True:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    self.timed_out = True
+                    break
+                try:
+                    self.process.wait(timeout=max(0.01, min(self.seams.desk_heartbeat_s, remaining)))
+                    break
+                except subprocess.TimeoutExpired:
+                    self._heartbeat()
+            if self.timed_out:
+                self._teardown()
+            elif isinstance(self.pid, int) and self.pid > 0 and self.seams.group_alive(self.pid):
+                # The leader exited but something it started is still in its group.
+                self.survivors_after_exit = True
+                self._teardown()
+            else:
+                self.group_gone = True
+        except BaseException as exc:  # recorded; finish() reports it
+            self.error = f"{type(exc).__name__}: {exc}"[:500]
+            try:
+                self._teardown()
+            except BaseException:
+                pass
+
+    def _signal_group(self, signum: int) -> None:
+        if isinstance(self.pid, int) and self.pid > 0:
+            try:
+                self.seams.killpg(self.pid, signum)
+            except (ProcessLookupError, PermissionError):
+                pass
+
+    def _teardown(self) -> None:
+        import signal
+
+        self._signal_group(signal.SIGTERM)
+        try:
+            self.process.wait(timeout=self.seams.desk_term_grace_s)
+        except subprocess.TimeoutExpired:
+            pass
+        self._signal_group(signal.SIGKILL)  # the leader and anything it left in the group
+        try:
+            self.process.wait(timeout=self.seams.desk_term_grace_s)
+        except subprocess.TimeoutExpired:
+            pass
+        deadline = time.monotonic() + self.seams.desk_gone_wait_s
+        gone = not (isinstance(self.pid, int) and self.pid > 0 and self.seams.group_alive(self.pid))
+        while not gone and time.monotonic() < deadline:
+            time.sleep(0.05)
+            self._signal_group(signal.SIGKILL)
+            gone = not self.seams.group_alive(self.pid)
+        self.group_gone = gone
+
+    def finish(self) -> dict[str, Any]:
+        self._thread.join()
+        returncode = self.process.poll() if hasattr(self.process, "poll") else getattr(self.process, "returncode", None)
+        if self.group_gone:
+            # A writer that finished released its own lock ("absent"); one that
+            # was killed, or died, may have left it.
+            self.lock = remove_dead_child_lock(self.runs_root, child_pid=self.pid, child_start_time=self.start_time,
+                                               observe_identity=self.seams.observe_identity)
+        else:
+            self.lock = "kept:group_not_proven_gone"
+        outputs = []
+        for handle in (self._stdout, self._stderr):
+            try:
+                handle.seek(0)
+                outputs.append(handle.read().decode("utf-8", "replace"))
+            finally:
+                handle.close()
+        self.stdout, self.stderr = outputs
+        return {"schema": DESK_RUN_SCHEMA, "bundles": self.bundles, "timeout_s": self.timeout_s,
+                "returncode": returncode if _is_int(returncode) else None, "timed_out": self.timed_out,
+                "heartbeats": self.heartbeats, "group_gone": self.group_gone,
+                "survivors_after_exit": self.survivors_after_exit, "lock": self.lock,
+                "child_start_time_observed": self.start_time is not None, "error": self.error,
+                "elapsed_s": round(time.monotonic() - self._started, 3)}
+
+
 STRATUM_OF_CELL_KIND = {"absolute": "repeat", "comparative": "quad", "contrast": "quad"}
 
 
@@ -2271,6 +2525,15 @@ class Seams:
     boot_session_uuid: Callable[[], str | None] = boot_session_uuid
     workers: int = 1
     python: str = sys.executable
+    # The desk verdict child (DeskVerdictChild).  ``runner`` is not used for it:
+    # it runs concurrently with the member assessment, in its own session.
+    desk_popen: Callable[..., Any] = subprocess.Popen
+    desk_timeout_s: Callable[[int], float] = desk_verdict_timeout_s
+    desk_heartbeat_s: float = DESK_HEARTBEAT_S
+    desk_term_grace_s: float = DESK_TERM_GRACE_S
+    desk_gone_wait_s: float = DESK_GONE_WAIT_S
+    killpg: Callable[[int, int], None] = os.killpg
+    observe_identity: Callable[[int], Any] = _observe_identity
 
 
 def readiness(inputs: WindowInputs, seams: Seams, *, allow_missing_terminal: bool = False) -> dict[str, Any]:
@@ -2468,15 +2731,29 @@ class _Harvest:
 
     def assess(self) -> None:
         tasks = []
+        early: list[dict[str, Any]] = []
+        discarded: list[str] = []
         for member in self.roster["members"]:
             path = self.locate(member["run_id"])
             if path is None:
                 self.emit("member.bytes_missing", level="member", run_id=member["run_id"], collector="members",
                           stage_id=member.get("stage_id"), observed={"bundle": "absent"})
                 continue
-            tasks.append({"run_id": member["run_id"], "bundle_path": str(path),
-                          "withheld_dir": str(self.withheld)})
-        for result in assess_members(tasks, workers=self.seams.workers):
+            reused, changed = self._early_result(member["run_id"], path)
+            if reused is not None:
+                early.append(reused)
+                continue
+            if changed:
+                discarded.append(member["run_id"])
+            # A discarded early result already wrote its re-reduction under withheld/.
+            withheld = self.withheld / "reassessed" if member["run_id"] in (getattr(self, "_early", None) or {}) \
+                else self.withheld
+            tasks.append({"run_id": member["run_id"], "bundle_path": str(path), "withheld_dir": str(withheld)})
+        if discarded:
+            self.emit("records.source_changed_during_harvest", level="window", collector="members",
+                      observed={"early_assessments_discarded": sorted(discarded)[:16],
+                                "count": len(discarded)})
+        for result in early + assess_members(tasks, workers=self.seams.workers):
             self.members[result["run_id"]] = result
             self.spans[result["run_id"]] = result.get("spans") or {"member": None, "request": None}
         self.assessments_evidence = [{"path": "withheld/member-assessments.json", "sha256": write_json_once(
@@ -3264,15 +3541,23 @@ class _Harvest:
         return result
 
     def prepare_desk_verdict(self) -> None:
-        """Produce the whole-window verdict with the production writer, if absent.
+        """Produce the whole-window verdict with the production writer, if absent (start, then finish)."""
+        if self.start_desk_verdict():
+            self.finish_desk_verdict()
 
-        Runs before the archive.  Only the bracket binding, the verdict file and
-        one appended campaign-log row may change; anything else is a flag.
+    def start_desk_verdict(self) -> bool:
+        """Start the production verdict writer, if the verdict is absent; True once it runs.
+
+        Runs before the archive, in its own session (``DeskVerdictChild``),
+        with a wall budget of max(1,800 s, 90 s per claim-root bundle);
+        :meth:`assess_early` runs while it does.  Only the bracket binding,
+        the verdict file, one appended campaign-log row and the producer's own
+        lock may change; anything else is a flag (:meth:`finish_desk_verdict`).
         """
         inputs = self.inputs
         runs = inputs.claim_runs_root
         if (runs / "whole-window-verdict.json").exists() or inputs.bracket_session_id is None:
-            return
+            return False
         binding_target = runs / "bracket-binding.json"
         before = tree_inventory(runs)
         log = runs / "campaign_log.jsonl"
@@ -3292,16 +3577,49 @@ class _Harvest:
             if binding is None:
                 self.emit("whole_window.producer_failed", level="window", collector="desk",
                           observed={"step": "bracket_binding"})
-                return
+                return False
             write_once(binding_target, canonical_json_bytes(binding) + b"\n")
-        result = self.seams.runner(argv, capture_output=True, text=True, check=False, timeout=1800,
-                                   cwd=str(inputs.measurement_root))
-        transcript = (getattr(result, "stdout", "") or "") + (getattr(result, "stderr", "") or "")
-        self._desk_transcript = transcript
-        if result.returncode not in (0, 1):
+        calibration = {name for name in (inputs.pre_attempt_id, inputs.post_attempt_id) if name}
+        bundles = claim_bundle_count(runs, exclude=calibration)
+        timeout_s = float(self.seams.desk_timeout_s(bundles))
+        self._desk = {"before": before, "old_log": old_log, "log": log, "runs": runs}
+        try:
+            self._desk_child = DeskVerdictChild(argv, cwd=str(inputs.measurement_root), timeout_s=timeout_s,
+                                                bundles=bundles, seams=self.seams, runs_root=runs)
+        except Exception as exc:  # the writer never started: recorded, the verdict stays absent
             self.emit("whole_window.producer_failed", level="window", collector="desk",
-                      observed={"step": "whole_window_verdict", "returncode": result.returncode})
+                      observed={"step": "whole_window_verdict", "spawn_error": type(exc).__name__})
+            return False
+        return True
+
+    def finish_desk_verdict(self) -> None:
+        """Wait for the verdict writer; record its run, its outcome and what it changed."""
+        child = getattr(self, "_desk_child", None)
+        if child is None:
+            return
+        self._desk_child = None
+        record = child.finish()
+        self._desk_transcript = (child.stdout or "") + (child.stderr or "")
+        self.desk_run = record
+        write_json_once(self.withheld / "desk-verdict-run.json", record)
+        if record["timed_out"] or record["error"] is not None or record["survivors_after_exit"]:
+            self.emit("whole_window.producer_failed", level="window", collector="desk",
+                      observed={"step": "whole_window_verdict", "timed_out": record["timed_out"],
+                                "timeout_s": record["timeout_s"], "bundles": record["bundles"],
+                                "returncode": record["returncode"], "group_gone": record["group_gone"],
+                                "survivors_after_exit": record["survivors_after_exit"], "lock": record["lock"],
+                                "error": record["error"] is not None})
+        elif record["returncode"] not in (0, 1):
+            self.emit("whole_window.producer_failed", level="window", collector="desk",
+                      observed={"step": "whole_window_verdict", "returncode": record["returncode"]})
+        if record["group_gone"] is not True:
+            # Something of the writer's process group may still be writing the
+            # runs root: the archived bytes are not proven to be final.
+            self.fault("desk", "desk_verdict_group_not_proven_gone")
+        desk = self._desk
+        runs, log, before, old_log = desk["runs"], desk["log"], desk["before"], desk["old_log"]
         after = tree_inventory(runs)
+        self._desk["after"] = after
         allowed = {"campaign_log.jsonl", "bracket-binding.json", "whole-window-verdict.json", CAMPAIGN_LOCK_NAME}
         changed = sorted(name for name in set(before) | set(after)
                          if name not in allowed and before.get(name) != after.get(name))
@@ -3309,6 +3627,67 @@ class _Harvest:
         if changed or not appended_ok:
             self.emit("records.source_changed_during_harvest", level="window", collector="desk",
                       observed={"changed": changed[:16], "log_prefix_preserved": appended_ok})
+
+    def assess_early(self) -> None:
+        """Assess the claim-root members while the desk verdict writer runs.
+
+        Reads the live claim runs root, as :meth:`assess` does.  The bundle
+        bytes are bound twice: the desk inventories taken before the writer
+        started and after both it and this step finished must agree on every
+        file of the bundle, and so must the archive's own inventory
+        (:meth:`assess`).  Otherwise the early result is discarded and the
+        member is assessed again from the archived state.  Nothing is emitted
+        here; :meth:`assess` emits for the roster it builds from the archive.
+        """
+        runs = self.inputs.claim_runs_root
+        roster = build_roster(self.inputs.pack_root, self.inputs.measurement_root)
+        tasks = []
+        for member in roster.get("members", []):
+            found = [root / member["run_id"] for root in self._runs_roots() if (root / member["run_id"]).is_dir()]
+            if len(found) == 1 and _same_path(found[0].parent, runs):
+                tasks.append({"run_id": member["run_id"], "bundle_path": str(found[0]),
+                              "withheld_dir": str(self.withheld)})
+        results = assess_members(tasks, workers=self.seams.workers)
+        self._early = {result["run_id"]: result for result in results}
+
+    def _early_result(self, run_id: str, path: Path) -> tuple[dict[str, Any] | None, bool]:
+        """(An early assessment of ``path`` bound to the archive or None, whether its bytes changed)."""
+        result = (getattr(self, "_early", None) or {}).get(run_id)
+        desk = getattr(self, "_desk", None) or {}
+        if result is None or result.get("bundle_path") != str(path) or "after" not in desk:
+            return None, False
+        prefix = f"{run_id}/"
+
+        def rows(inventory: Mapping[str, Any] | None) -> dict[str, Any] | None:
+            if inventory is None:
+                return None
+            return {key: value for key, value in inventory.items() if key.startswith(prefix)}
+
+        archived = rows(self._archived_inventory(desk["runs"]))
+        before, after = rows(desk["before"]), rows(desk["after"])
+        if not before or archived is None:
+            return None, False
+        if before != after or after != archived:
+            return None, True
+        return result, False
+
+    def _archived_inventory(self, root: Path) -> dict[str, Any] | None:
+        """The archive's inventory of ``root``, relative to it (from the source holding it)."""
+        best: tuple[int, str, str] | None = None
+        for name, source in getattr(self, "sources", {}).items():
+            relative = _relative_to(root, source)
+            if relative is not None and (best is None or len(str(source)) > best[0]):
+                best = (len(str(source)), name, relative)
+        if best is None:
+            return None
+        _length, name, relative = best
+        inventory = getattr(self, "original", {}).get(name)
+        if inventory is None:
+            return None
+        if relative == ".":
+            return dict(inventory)
+        prefix = relative + "/"
+        return {key[len(prefix):]: value for key, value in inventory.items() if key.startswith(prefix)}
 
     def _desk_binding(self) -> dict[str, Any] | None:
         from joulewise import calibration_bracketing as brackets
@@ -4351,7 +4730,11 @@ def harvest(inputs: WindowInputs, archive_root: Path | str, *, seams: Seams | No
         return run.finish(NULL)
     run.step("thresholds", run.record_thresholds)
     if prepare_desk:
-        run.step("desk", run.prepare_desk_verdict, fault=False)
+        # The verdict writer and the member assessment run concurrently
+        # (PLAN2 2.1 row 1); the archive follows both, so it holds the verdict.
+        if run.step("desk", run.start_desk_verdict, fault=False):
+            run.step("members_early", run.assess_early, fault=False)
+        run.step("desk", run.finish_desk_verdict, fault=False)
     run.step("archive", run.archive_inputs)
     run.step("arm_records", run.arm_and_desk_records)
     if run.step("roster", run.build_roster) is None and not run.roster:

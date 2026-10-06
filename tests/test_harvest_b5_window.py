@@ -1257,14 +1257,16 @@ class DeskAndG3Tests(WindowTestCase):
             (runs / "b5t-abs-r01" / "logs" / "controller.log").write_text("tampered\n")
             return SimpleNamespace(returncode=1, stdout="", stderr="")
 
-        window.harvest(seams=h.Seams(group_alive=lambda pgid: False, exclusions_compute=EXCLUSIONS,
-                                     runner=runner), prepare_desk=True, run_g3=False)
+        window.harvest(seams=desk_seams(runner), prepare_desk=True, run_g3=False)
         self.assertEqual(len(calls), 1)
         argv = calls[0]
         self.assertIn("--whole-window-verdict", argv)
         self.assertEqual(argv[argv.index("--bracket-binding") + 1], str(window.claim / "bracket-binding.json"))
         self.assertTrue((window.claim / "bracket-binding.json").is_file())
-        flag = next(flag for flag in window.flags() if flag["code"] == "records.source_changed_during_harvest")
+        # The desk's own inventory check names the file (the member assessed
+        # while the writer ran is assessed again: P2-HARV row 1).
+        flag = next(flag for flag in window.flags() if flag["code"] == "records.source_changed_during_harvest"
+                    and "changed" in flag["observed"])
         self.assertEqual(flag["observed"]["changed"], ["b5t-abs-r01/logs/controller.log"])
         self.assertIn("whole_window.verdict_unauthenticated", window.codes())
 
@@ -3149,8 +3151,38 @@ class RehearsalRound1Tests(WindowTestCase):
 # Gate-prune core prune, lane NONCORE (night-archive core-prune DESIGN.md 3.4).
 # ---------------------------------------------------------------------------
 
-def desk_seams(runner):
-    return h.Seams(group_alive=lambda pgid: False, exclusions_compute=EXCLUSIONS, runner=runner)
+class RunnerPopen:
+    """A desk verdict child that has already finished: ``runner`` runs at spawn.
+
+    The harvest spawns the desk writer with ``Seams.desk_popen`` in its own
+    session and supervises it (``DeskVerdictChild``); this stands in for a
+    writer that exits at once, writing ``runner``'s output to the harvest's
+    capture files.
+    """
+
+    def __init__(self, runner, argv, **kwargs):
+        assert kwargs.get("start_new_session") is True, kwargs
+        result = runner(argv, **kwargs)
+        for name in ("stdout", "stderr"):
+            handle, text = kwargs.get(name), getattr(result, name, "") or ""
+            if hasattr(handle, "write"):
+                handle.write(text.encode("utf-8"))
+        self.returncode, self.pid = result.returncode, -1
+
+    def wait(self, timeout=None):
+        return self.returncode
+
+    def poll(self):
+        return self.returncode
+
+
+def desk_popen(runner):
+    return lambda argv, **kwargs: RunnerPopen(runner, argv, **kwargs)
+
+
+def desk_seams(desk_runner, **extra):
+    return h.Seams(group_alive=lambda pgid: False, exclusions_compute=EXCLUSIONS,
+                   desk_popen=desk_popen(desk_runner), **extra)
 
 
 class CampaignLockAllowlistTests(WindowTestCase):
