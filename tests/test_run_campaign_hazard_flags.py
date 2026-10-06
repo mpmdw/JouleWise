@@ -809,6 +809,24 @@ class StaleLockTests(_Stage):
         self.assertIn(f"pid={os.getpid()} ", (runs / "campaign.lock").read_text())
         self.assertEqual(self.kinds(), ["stale_lock_cleared"])
 
+    def test_a9_keeper_a_lock_replaced_after_it_was_read_is_never_unlinked(self) -> None:
+        # The reclaimer read a stale lock, but the path now names another
+        # inode (another writer's lock): it refuses and leaves that lock alone.
+        runs = self.hazard_root()
+        self._lock(runs, self._reaped_pid(), "Mon Oct 5 00:00:00 2026")
+        context = run_campaign._hazard_flag_context(runs)
+        replacement = f"pid={os.getpid()} nonce={'cd' * 32} created_at=x start_time={json.dumps(START)}\n"
+
+        def seam(lock_path: Path) -> None:
+            lock_path.unlink()
+            lock_path.write_text(replacement)
+
+        with patch.object(run_campaign, "_HAZARD_LOCK_RECLAIM_SEAM", seam), \
+                self.assertRaises(run_campaign.CampaignLockOwnershipError):
+            run_campaign.acquire_campaign_lock(runs, hazard=context)
+        self.assertEqual((runs / "campaign.lock").read_text(), replacement)
+        self.assertEqual(self.kinds(), [])
+
     def _verdict(self, runs: Path) -> SimpleNamespace:
         out, err = io.StringIO(), io.StringIO()
         with redirect_stdout(out), redirect_stderr(err):
