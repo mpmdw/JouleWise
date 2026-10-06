@@ -2396,5 +2396,91 @@ class RenderedProcessTypeTests(unittest.TestCase):
                                     prepared.launch_context()
 
 
+
+class HazardPackInstallTests(unittest.TestCase):
+    """Gate-prune lane L2: the installer accepts HAZARD_PACK plans.
+
+    The install-time battery reading is recorded, never a refusal (the
+    arm-time battery module is the gate), the chain is never executed at
+    install, and there is no install-time launchd probe for this class.
+    """
+
+    def setUp(self):
+        from datetime import datetime
+        from tests.fixtures.b5_plan import fake_window
+        from joulewise import night_agent_install
+        self.engine = night_agent_install
+        self.repo = Path(__file__).resolve().parents[1]
+        self.temporary = tempfile.TemporaryDirectory(prefix="install-hazard-")
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name).resolve()
+        head = subprocess.check_output(["/usr/bin/git", "-C", str(self.repo), "rev-parse", "HEAD"], text=True).strip()
+        now = time.time()
+        t0 = (int(now) // 60 + 24 * 60) * 60
+        custody = self.root / "custody"
+        custody.mkdir()
+        mapping = fake_window.hazard_plan_mapping(
+            self.root, plan_id="b5-alpha-1", t0_epoch_s=float(t0), window_max_s=3900, authored_epoch_s=now - 60,
+            repo_head=head, measurement_head=head, measurement_root=self.repo, custody_root=custody)
+        self.chain = Path(mapping["chain_path"])
+        self.chain.write_text("#!/bin/zsh -f\ntouch " + str(self.root / "CHAIN-EXECUTED") + "\n")
+        Path(mapping["chain_sha256_path"]).write_text(
+            hashlib.sha256(self.chain.read_bytes()).hexdigest() + "  chain.zsh\n")
+        self.plan_path = custody / "night_plan.json"
+        self.plan_path.write_text(json.dumps(mapping, indent=2, sort_keys=True) + "\n")
+        bin_dir = self.root / "bin"
+        bin_dir.mkdir()
+        courier = bin_dir / "claude"
+        courier.write_text("#!/bin/sh\nexit 99\n")
+        courier.chmod(0o755)
+        self.path = str(bin_dir) + os.pathsep + os.environ.get("PATH", "")
+
+    def install(self, *arguments, capture="charging-synthetic-from-real.ioreg"):
+        import contextlib
+        import io
+        from unittest import mock
+        from tests import battery_float_fixture
+        calls = []
+        real_run = subprocess.run
+
+        def recorded(argv, *args, **kwargs):
+            calls.append([str(item) for item in argv])
+            return real_run(argv, *args, **kwargs)
+
+        out, err = io.StringIO(), io.StringIO()
+        saved = {number: signal.getsignal(number) for number in self.engine.SIGNALS}
+        try:
+            with mock.patch.dict(os.environ, {"PATH": self.path}), \
+                    mock.patch.object(self.engine, "BATTERY_PROBE_RUNNER", battery_float_fixture.runner(capture)), \
+                    mock.patch.object(subprocess, "run", side_effect=recorded), \
+                    contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                code = self.engine.main(["--plan", str(self.plan_path), "--python", sys.executable, *arguments])
+        finally:
+            for number, handler in saved.items():
+                signal.signal(number, handler)
+        return code, out.getvalue(), err.getvalue(), calls
+
+    def test_render_only_accepts_a_hazard_plan_and_only_records_a_charging_battery(self):
+        rendered = self.root / "rendered"
+        code, out, err, calls = self.install("--render-only", str(rendered))
+        self.assertEqual(0, code, err)
+        self.assertIn("recorded only", err)
+        observation = next(self.plan_path.parent.glob("battery-float-install-check-*.json"))
+        self.assertFalse(json.loads(observation.read_text())["passed"])
+        self.assertTrue(any(line.startswith("{") and '"hazard_pack"' in line for line in out.splitlines()))
+        self.assertTrue(all(str(self.chain) not in argv for argv in calls), "install executed the chain")
+        self.assertTrue(any("preflight" in argv for argv in calls), "the driver preflight still runs")
+        self.assertFalse((self.root / "CHAIN-EXECUTED").exists())
+        for label in LABELS:
+            self.assertTrue((rendered / (label + ".plist")).is_file())
+
+    def test_there_is_no_install_time_launchd_probe_for_this_class(self):
+        code, _out, err, calls = self.install("--launchd-probe")
+        self.assertEqual(2, code)
+        self.assertIn("no install-time launchd probe", err)
+        self.assertFalse(any(argv and argv[0].endswith("launchctl") for argv in calls))
+        self.assertFalse((self.root / "CHAIN-EXECUTED").exists())
+
+
 if __name__ == "__main__":
     unittest.main()

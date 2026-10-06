@@ -744,6 +744,13 @@ def _digest_bytes(value):
     return hashlib.sha256(value).hexdigest()
 
 
+def _digest_or_none(path):
+    try:
+        return _digest(path)
+    except OSError:
+        return None
+
+
 def interpreter_identity(python):
     """Identify the interpreter actually executed, including a venv's binary."""
     code = ("import hashlib,json,sys; from pathlib import Path; "
@@ -1266,10 +1273,16 @@ def validate_install(args, repo):
             stream.write(raw)
             stream.flush()
             os.fsync(stream.fileno())
+    hazard = plan.receipt_class == "HAZARD_PACK"
     try:
         battery_float.require_pass(battery_observation)
     except (battery_float.ProbeError, ValueError) as exc:
-        raise Refused(3, "battery not at float: {}".format(exc)) from exc
+        if not hazard:
+            raise Refused(3, "battery not at float: {}".format(exc)) from exc
+        # Block 5: the arm-time battery hazard module inside the launchd job
+        # is the gate. Install time only records this reading (written above).
+        print("battery not at float at install (recorded only; the arm-time battery module "
+              "is the gate): {}".format(exc), file=sys.stderr)
     prepared = Prepared(plan, args.plan, repo, python, template, str(Path(courier).resolve()),
                         courier_path, schedule, run_night.install_spans_for_day,
                         getattr(args, "probe_timeout_s", 600))
@@ -1292,6 +1305,17 @@ def validate_install(args, repo):
         supplied = getattr(args, field, None)
         if supplied is not None and supplied != schedule["night_calendar"][field.capitalize()]:
             raise Refused(2, "--{} must match the plan calendar".format(field))
+    if hazard:
+        # A HAZARD_PACK chain is never executed at install: it refuses both
+        # inspection modes, and the instrument cadence probe runs inside the
+        # launchd job at arm (the hazard instrument module), not here. The
+        # chain's bytes are recorded against their sidecar at launch.
+        if args.render_only is not None:
+            print(json.dumps({"payload_kind": "hazard_pack", "chain_sha256": _digest_or_none(plan.chain_path),
+                              "input_digests": None,
+                              "detail": "HAZARD_PACK: no reservation inspection; the arm runs in the launchd job"},
+                             sort_keys=True))
+        return prepared
     if args.render_only is not None:
         from joulewise import night_gate
         chain = Path(plan.chain_path)
@@ -1434,6 +1458,9 @@ def main(argv=None):
         repo = Path(__file__).resolve().parents[1]
         if args.launchd_probe:
             prepared = validate_install(args, repo)
+            if prepared.plan.receipt_class == "HAZARD_PACK":
+                raise Refused(2, "HAZARD_PACK windows have no install-time launchd probe: the instrument "
+                                 "cadence probe runs inside the launchd job at arm")
             launchd_probe(prepared, adapter.executable, shield, args.probe_timeout_s, args.probe_max_age_s)
             return 0
         def validate():
