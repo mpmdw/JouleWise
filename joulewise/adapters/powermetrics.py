@@ -146,6 +146,10 @@ class PowermetricsTelemetryAdapter:
         self._device_metadata = self._base_device_metadata(None)
         self._capability: AdapterResult | None = None
         self._last_records: list[PowermetricsRecord] = []
+        # Records of the readiness document the admission stream's readiness
+        # check parsed (gate-prune 2, M4); the HAZARD capability evidence
+        # falls back to them if the frame cannot be re-read.
+        self._readiness_records: list[PowermetricsRecord] = []
         self._pre_idle_records: list[PowermetricsRecord] = []
         self._pre_idle_quality: dict[str, float | bool | None] | None = None
         self._pending_captures: dict[str, Path] = {}
@@ -490,6 +494,10 @@ class PowermetricsTelemetryAdapter:
         started = False
         try:
             result = self.start_sampling(config, context)
+            if result.ok and probe_deferred:
+                # Inside the guarded block: an interrupt before the readiness
+                # evidence is recorded must not leave the placeholder cached.
+                self._record_readiness_capability()
             started = result.ok
         finally:
             # An interrupt can land after native process creation but before
@@ -505,8 +513,6 @@ class PowermetricsTelemetryAdapter:
                 if not capability.ok:
                     return capability
             return result
-        if probe_deferred:
-            self._record_readiness_capability()
         self._admission_sampling_handoff_pending = True
         return result
 
@@ -515,12 +521,16 @@ class PowermetricsTelemetryAdapter:
 
         Writes what the probe wrote on success: the requested sampler list
         the running stream was started with, and the device identity fields
-        of its first frame.
+        of its first frame.  If that frame cannot be re-read, the records the
+        readiness check already parsed from it are used and the re-read error
+        is disclosed in ``samplers_probe``.
         """
 
-        self._capability = AdapterResult(
-            ok=True, metadata={"method": READINESS_CAPABILITY_METHOD}
-        )
+        samplers_probe: dict[str, Any] = {
+            "ok": True,
+            "method": READINESS_CAPABILITY_METHOD,
+        }
+        records: list[PowermetricsRecord] = []
         capture_path = self._capture_path
         if capture_path is not None:
             try:
@@ -528,15 +538,19 @@ class PowermetricsTelemetryAdapter:
                     capture_path, index=0
                 )
                 records = parse_powermetrics_records(first_document)
-            except (OSError, ValueError):
-                records = []
+            except (OSError, ValueError) as exc:
+                samplers_probe["readiness_reread_error"] = _terse_error(exc)
+        if not records and self._readiness_records:
+            records = list(self._readiness_records)
+            samplers_probe["records_source"] = "readiness_check"
+        if capture_path is not None or records:
             self._remember_records(records)
         self._device_metadata["capability_precheck"] = {"ok": True}
         self._device_metadata["powermetrics"]["samplers_available"] = SAMPLERS.split(",")
-        self._device_metadata["powermetrics"]["samplers_probe"] = {
-            "ok": True,
-            "method": READINESS_CAPABILITY_METHOD,
-        }
+        self._device_metadata["powermetrics"]["samplers_probe"] = samplers_probe
+        self._capability = AdapterResult(
+            ok=True, metadata={"method": READINESS_CAPABILITY_METHOD}
+        )
 
     def stop_sampling(
         self, config: BenchmarkConfig, context: RunContext | None = None
@@ -1588,6 +1602,7 @@ class PowermetricsTelemetryAdapter:
     ) -> AdapterResult:
         deadline = time.monotonic() + READINESS_TIMEOUT_S
         last_parse_error: str | None = None
+        self._readiness_records = []
         while time.monotonic() < deadline:
             try:
                 completed_frames = self._advance_stream_cursor(capture_path)
@@ -1603,10 +1618,11 @@ class PowermetricsTelemetryAdapter:
                         capture_path,
                         index=0,
                     )
-                    parse_powermetrics_records(first_document)
+                    readiness_records = parse_powermetrics_records(first_document)
                 except (OSError, ValueError) as exc:
                     last_parse_error = str(exc)
                 else:
+                    self._readiness_records = readiness_records
                     self._first_parse_stamp = self._clock.stamp()
                     return AdapterResult(
                         ok=True,

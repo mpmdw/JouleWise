@@ -298,6 +298,45 @@ class _ExitingStreamPopen(_ImmediateStreamPopen):
         self.returncode = 1
 
 
+def _distinct_frames_stream() -> bytes:
+    """The fixture with frames after the first given a different identity.
+
+    Frame 0 keeps ``Mac15,9`` / ``Nominal``; every later frame says
+    ``Mac99,1`` / ``Serious``, so evidence taken from the wrong frame shows.
+    """
+
+    frames = FIXTURE.read_bytes().split(b"\x00")
+    rewritten = [frames[0]] + [
+        frame.replace(b"<string>Mac15,9</string>", b"<string>Mac99,1</string>").replace(
+            b"<string>Nominal</string>", b"<string>Serious</string>"
+        )
+        for frame in frames[1:]
+    ]
+    return b"\x00".join(rewritten)
+
+
+class _DistinctFramesStreamPopen(_ImmediateStreamPopen):
+    def __init__(self, command, **_kwargs):
+        type(self).instances.append(self)
+        self.command = list(command)
+        Path(command[command.index("-o") + 1]).write_bytes(_distinct_frames_stream())
+        self.returncode = None
+
+
+class _RereadFailsAdapter(PowermetricsTelemetryAdapter):
+    """Frame reads fail once the stream has started (readiness already passed)."""
+
+    def start_sampling(self, config, context=None):
+        result = super().start_sampling(config, context)
+        self._reread_fails = True
+        return result
+
+    def _read_stream_frame_candidate(self, capture_path, *, index):
+        if getattr(self, "_reread_fails", False):
+            raise OSError("capture file vanished")
+        return super()._read_stream_frame_candidate(capture_path, index=index)
+
+
 class HazardCapabilityProbeTests(unittest.TestCase):
     def setUp(self) -> None:
         _ImmediateStreamPopen.instances = []
@@ -308,12 +347,20 @@ class HazardCapabilityProbeTests(unittest.TestCase):
         self.config = make_config()
         self.clock = FakeClock(start=1791124390.0)
 
-    def _begin(self, *, hazard: bool, popen, run_side_effect):
+    def _begin(
+        self,
+        *,
+        hazard: bool,
+        popen,
+        run_side_effect,
+        adapter_cls=PowermetricsTelemetryAdapter,
+    ):
         runs_root = self.tmp / "runs"
         if hazard:
             write_hazard_locator(runs_root)
         context = make_context(runs_root / "member-1", self.config, self.clock)
-        adapter = PowermetricsTelemetryAdapter(self.clock)
+        adapter = adapter_cls(self.clock)
+        self._last_adapter = adapter
         calls: list[list[str]] = []
 
         def fake_run(command, **kwargs):
@@ -432,6 +479,87 @@ class HazardCapabilityProbeTests(unittest.TestCase):
                 adapter.begin_admission_window_sampling(self.config, context)
         self.assertIsNone(adapter._capability)
         self.assertFalse(adapter._admission_sampling_start_requested)
+
+    def test_hazard_interrupt_while_recording_readiness_leaves_no_cached_capability(
+        self,
+    ) -> None:
+        # Review R1: the stream started, then an interrupt lands while the
+        # readiness evidence is being recorded.  No capability may stay cached
+        # (a later start would otherwise skip both probe and readiness).
+        with patch.object(
+            PowermetricsTelemetryAdapter,
+            "_remember_records",
+            side_effect=KeyboardInterrupt,
+        ):
+            with self.assertRaises(KeyboardInterrupt):
+                self._begin(
+                    hazard=True,
+                    popen=_ImmediateStreamPopen,
+                    run_side_effect=self._probe_ok,
+                )
+        adapter = self._last_adapter
+        self.assertIsNone(adapter._capability)
+        self.assertFalse(adapter._admission_sampling_start_requested)
+
+    def test_hazard_readiness_reread_failure_keeps_the_readiness_records(self) -> None:
+        # Review R2: if frame 0 cannot be re-read after rollover, the records
+        # the readiness check parsed from it still supply device identity and
+        # thermal state, and the re-read error is disclosed.
+        adapter, result, calls, context = self._begin(
+            hazard=True,
+            popen=_ImmediateStreamPopen,
+            run_side_effect=self._probe_ok,
+            adapter_cls=_RereadFailsAdapter,
+        )
+        self.assertTrue(result.ok, result.message)
+        self.assertEqual(calls, [])
+        first = parse_powermetrics_records(FIXTURE.read_bytes())[0]
+        metadata = adapter.device_metadata(self.config, context)
+        self.assertEqual(metadata["hw_model"], first.metadata["hw_model"])
+        self.assertEqual(
+            adapter.thermal_state(self.config, context).thermal_pressure,
+            first.thermal_pressure,
+        )
+        probe = metadata["powermetrics"]["samplers_probe"]
+        self.assertEqual(probe["method"], READINESS_METHOD)
+        self.assertTrue(probe["ok"])
+        self.assertIn("capture file vanished", probe["readiness_reread_error"])
+        self.assertEqual(probe["records_source"], "readiness_check")
+
+    def test_hazard_capability_evidence_is_the_first_frame(self) -> None:
+        # Review R3: identity and thermal state come from frame 0 (the
+        # readiness document), not a later frame.
+        adapter, result, _calls, context = self._begin(
+            hazard=True,
+            popen=_DistinctFramesStreamPopen,
+            run_side_effect=self._probe_ok,
+        )
+        self.assertTrue(result.ok, result.message)
+        later = parse_powermetrics_records(_distinct_frames_stream())[1]
+        self.assertEqual(later.metadata["hw_model"], "Mac99,1")  # fixture sanity
+        metadata = adapter.device_metadata(self.config, context)
+        self.assertEqual(metadata["hw_model"], "Mac15,9")
+        self.assertEqual(
+            adapter.thermal_state(self.config, context).thermal_pressure, "Nominal"
+        )
+
+    def test_hazard_dispatch_error_falls_back_to_the_legacy_probe(self) -> None:
+        # Review R4: an unreadable runs root is the legacy path (probe first).
+        with patch(
+            "joulewise.window_lineage.is_hazard_runs_root",
+            side_effect=RuntimeError("locator unreadable"),
+        ):
+            adapter, result, calls, context = self._begin(
+                hazard=True, popen=_ImmediateStreamPopen, run_side_effect=self._probe_ok
+            )
+        self.assertTrue(result.ok, result.message)
+        self.assertEqual(len(calls), 1)
+        sampler_argv = calls[0][2:]
+        self.assertEqual(sampler_argv[sampler_argv.index("-n") + 1], "1")
+        self.assertEqual(
+            adapter.device_metadata(self.config, context)["powermetrics"]["samplers_probe"],
+            {"ok": True, "method": "requested_sampler_probe"},
+        )
 
 
 if __name__ == "__main__":
