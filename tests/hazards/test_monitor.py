@@ -15,7 +15,7 @@ from types import SimpleNamespace
 
 from joulewise.hazards import base, battery, contention, monitor, thermal
 from tests.hazards.fakes import (
-    FakeClocks, FakeProcessTable, FrequencyReader, Runner, battery_bytes, completed,
+    FakeClocks, FakeProcessTable, FakeRegistry, FrequencyReader, Runner, battery_bytes, completed,
 )
 
 GIB = 1024 ** 3
@@ -39,6 +39,10 @@ class FakeMac:
                 argv, f"com.apple.system.thermalpressurelevel {self.thermal_level}\n".encode()),
             contention.PS_ARGV: self.table.ps,
         })
+        # The in-process poll reads the same gauge as ioreg (whatever handler
+        # a test installs), without being a probe child.
+        self.registry = FakeRegistry(lambda: self.runner.handlers[battery.IOREG_BATTERY_ARGV](
+            battery.IOREG_BATTERY_ARGV).stdout)
 
     def publication_index(self) -> int:
         return int((self.clocks.wall_s - self.first_publication) // 60)
@@ -58,23 +62,36 @@ class FakeMac:
     def stat(self, path):
         return SimpleNamespace(st_dev=1)
 
-    def monitor(self, **cadence) -> monitor.Monitor:
+    def monitor(self, *, poll: bool = False, **cadence) -> monitor.Monitor:
+        """``poll``: the production battery path (in-process poll, ioreg on a
+        change); otherwise ioreg on the publication schedule."""
+
         config = monitor.build_config(custody_dir=self.custody, tree_roots=[DRIVER],
                                       disk_targets=[{"path": "/runs", "copies": 1}],
                                       cadence=cadence)
         return monitor.Monitor(config, ctx=base.Context(run=self.runner, clocks=self.clocks),
                                frequency_reader=FrequencyReader(self.clocks), statvfs=self.statvfs,
-                               stat=self.stat, host_reader=self.table.host_cpu)
+                               stat=self.stat, host_reader=self.table.host_cpu,
+                               battery_reader=self.registry if poll else None)
+
+    def ioreg_reads(self) -> int:
+        return sum(1 for argv in self.runner.calls if argv == battery.IOREG_BATTERY_ARGV)
 
 
 class MonitorJournalTests(unittest.TestCase):
+    """The journals with the battery read by ioreg on the publication schedule
+    (the path without the in-process reader); :class:`PollMonitorJournalTests`
+    runs every test again on the production path."""
+
+    poll = False
+
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory(dir=os.environ.get("TMPDIR"))
         self.addCleanup(self.tmp.cleanup)
         self.mac = FakeMac(Path(self.tmp.name))
 
     def run_monitor(self, seconds: float) -> dict:
-        instance = self.mac.monitor()
+        instance = self.mac.monitor(poll=self.poll)
         instance.open_session(["test"])
         instance.run(max_seconds=seconds)
         instance.close_session("test end")
@@ -178,7 +195,7 @@ class MonitorJournalTests(unittest.TestCase):
         self.assertIn("contention.request_overlap", [f["code"] for f in found])
 
     def test_disk_low_writes_the_marker_once(self):
-        instance = self.mac.monitor()
+        instance = self.mac.monitor(poll=self.poll)
         instance.open_session()
         instance.run(max_seconds=70)
         self.mac.free_bytes = 9 * GIB
@@ -213,7 +230,7 @@ class MonitorJournalTests(unittest.TestCase):
                 return 2
 
         reader = Reader()
-        instance = self.mac.monitor()
+        instance = self.mac.monitor(poll=self.poll)
         instance.notify_reader = reader
         instance.open_session()
         instance.run(max_seconds=30)
@@ -238,6 +255,198 @@ class MonitorJournalTests(unittest.TestCase):
         lines, note = monitor.read_journal(path)
         self.assertEqual(lines, [{"a": 1}])
         self.assertIn("truncated", note)
+
+
+class PollMonitorJournalTests(MonitorJournalTests):
+    """Every journal test again on the production battery path: the six fields
+    polled in process every 5 s, ``ioreg`` only when one of them changes.  The
+    two ioreg-schedule tests are replaced by their poll counterparts."""
+
+    poll = True
+
+    def at(self) -> float:
+        """Seconds since the monitor's first tick on the fake wall clock."""
+        return self.mac.clocks.wall_s - self.start_wall
+
+    def run_monitor(self, seconds: float) -> dict:
+        self.start_wall = self.mac.clocks.wall_s
+        return super().run_monitor(seconds)
+
+    def cost_lines(self) -> list[dict]:
+        return [line for line in monitor.load_journals(self.mac.custody)["monitor"]
+                if line["kind"] == "cost"]
+
+    def gauge(self, edit):
+        """Install ``edit(raw, t) -> raw`` over the fake gauge (ioreg and the poll alike)."""
+        original = self.mac.runner.handlers[battery.IOREG_BATTERY_ARGV]
+
+        def ioreg(argv):
+            result = original(argv)
+            return completed(argv, edit(result.stdout, self.mac.clocks.wall_s - self.start_wall))
+
+        self.start_wall = self.mac.clocks.wall_s
+        self.mac.runner.handlers[battery.IOREG_BATTERY_ARGV] = ioreg
+
+    def test_every_gauge_publication_is_read_within_7_s_and_reads_are_at_most_30_s_apart(self):
+        self.test_each_publication_is_read_once_by_ioreg_within_5_s_of_appearing()
+
+    def test_each_publication_is_read_once_by_ioreg_within_5_s_of_appearing(self):
+        self.mac.first_publication -= 4  # publications appear 4 s before a poll
+        journals = self.run_monitor(600)
+        lines = monitor.readings(journals["battery"])
+        publications = battery.publications(lines)
+        self.assertEqual(len(publications), 11)  # the one in force at t = 0, then one a minute
+        for pub in publications[1:]:
+            first_seen = pub["reading"]["started"]["wall_ns"] / 1e9
+            self.assertGreaterEqual(first_seen - pub["update_time_s"], 0.0)
+            self.assertLessEqual(first_seen - pub["update_time_s"], 5.01)
+        # ioreg read each publication once and nothing else; the poll ran every 5 s
+        self.assertEqual(len(lines), len(publications))
+        self.assertEqual(self.mac.ioreg_reads(), len(publications))
+        self.assertEqual(self.mac.registry.calls, 120)
+        self.assertTrue(all(line["raw"] for line in lines))
+        self.assertEqual([line["values"]["trigger"]["reason"] for line in lines],
+                         ["first read"] + ["changed: UpdateTime"] * 10)
+        cost = self.cost_lines()[-1]["values"]
+        self.assertEqual((cost["battery_reader"], cost["battery_polls"], cost["battery_ioreg_reads"],
+                          cost["battery_poll_failures"]), (True, 120, 11, 0))
+        self.assertEqual(battery.span_findings(lines, {"monotonic_ns": [
+            publications[2]["monotonic_ns"], publications[5]["monotonic_ns"]]}), [])
+
+    def test_late_publication_is_retried_every_5_s(self):
+        self.test_late_publication_is_read_when_the_poll_sees_it()
+
+    def test_late_publication_is_read_when_the_poll_sees_it(self):
+        def late(raw, t):
+            if 150 <= t < 164:  # publication 3 (t = 150) appears 14 s late
+                return re.sub(rb'^( {6}"UpdateTime" = )[0-9]+$',
+                              lambda m: m.group(1) + str(self.mac.first_publication + 120).encode(),
+                              raw, count=1, flags=re.M)
+            return raw
+
+        self.gauge(late)
+        journals = self.run_monitor(300)
+        lines = monitor.readings(journals["battery"])
+        publication_3 = [line for line in lines
+                         if line["values"]["update_time_s"] == self.mac.first_publication + 180]
+        self.assertEqual(len(publication_3), 1)
+        seen_at = publication_3[0]["started"]["wall_ns"] / 1e9 - self.start_wall
+        self.assertGreaterEqual(seen_at, 164)
+        self.assertLessEqual(seen_at, 169.01)
+        self.assertEqual(len(lines), len(battery.publications(lines)))  # no ioreg while waiting
+
+    def test_a_field_change_between_publications_is_read_within_5_s_and_kept(self):
+        def unplugged(raw, t):
+            if 182 <= t < 194:  # the adapter is out for 12 s between publications (150, 210)
+                return raw.replace(b'      "ExternalConnected" = Yes\n', b'      "ExternalConnected" = No\n')
+            return raw
+
+        self.gauge(unplugged)
+        journals = self.run_monitor(300)
+        lines = monitor.readings(journals["battery"])
+        off = [line for line in lines if line["values"]["external_connected"] is False]
+        self.assertEqual(len(off), 1)
+        seen_at = off[0]["started"]["wall_ns"] / 1e9 - self.start_wall
+        self.assertTrue(182 <= seen_at <= 187.01, seen_at)
+        self.assertEqual(off[0]["values"]["trigger"]["reason"], "changed: ExternalConnected")
+        self.assertIs(off[0]["values"]["trigger"]["poll"]["ExternalConnected"], False)
+        self.assertTrue(off[0]["raw"])  # the bytes that show it are kept
+        back = lines[lines.index(off[0]) + 1]
+        self.assertIs(back["values"]["external_connected"], True)
+        self.assertEqual(back["values"]["trigger"]["reason"], "changed: ExternalConnected")
+        self.assertEqual(back["values"]["update_time_s"], off[0]["values"]["update_time_s"])
+
+    def test_a_failed_poll_falls_back_to_the_publication_schedule_and_recovers(self):
+        registry = self.mac.registry
+
+        class Flaky:
+            def read(inner):
+                if 100 <= self.at() < 250:
+                    raise OSError("no AppleSmartBattery service in the IO registry")
+                return registry.read()
+
+        self.start_wall = self.mac.clocks.wall_s
+        instance = self.mac.monitor(poll=True)
+        instance.battery_reader = Flaky()
+        instance.open_session()
+        instance.run(max_seconds=420)
+        instance.close_session("test end")
+        lines = monitor.readings(monitor.load_journals(self.mac.custody)["battery"])
+        started = [line["started"]["wall_ns"] / 1e9 - self.start_wall for line in lines]
+        failed = [line for line, t in zip(lines, started) if 100 <= t < 250]
+        # never an ioreg every 5 s: the publication schedule, at most 30 s apart
+        self.assertTrue(4 <= len(failed) <= 8, [round(t) for t in started])
+        self.assertTrue(all(line["values"]["trigger"]["reason"] == "poll failed"
+                            and "AppleSmartBattery" in line["values"]["trigger"]["poll_error"]
+                            for line in failed))
+        stamps = [line["started"]["monotonic_ns"] / 1e9 for line in failed]
+        self.assertLessEqual(max(b - a for a, b in zip(stamps, stamps[1:])), 30.1)
+        # every publication is read, before, during and after the failure
+        publications = battery.publications(lines)
+        self.assertEqual([p["update_time_s"] for p in publications],
+                         [self.mac.first_publication + 60 * k for k in range(8)])
+        # the next task (on the publication schedule, t = 272) polls again and reads
+        # the change; then one ioreg per publication, 2 s after it (t = 330, 390)
+        self.assertEqual([round(t) for t in started if t >= 250], [272, 332, 392])
+        self.assertTrue(all(line["values"]["trigger"]["reason"] == "changed: UpdateTime"
+                            for line, t in zip(lines, started) if t >= 250))
+        cost = self.cost_lines()[-1]["values"]
+        self.assertEqual(cost["battery_poll_failures"], len(failed))
+
+    def test_a_stalled_gauge_is_still_read_by_ioreg_at_least_every_90_s(self):
+        def stalled(raw, t):
+            if t >= 90:  # no publication after the one at t = 30
+                return re.sub(rb'^( {6}"UpdateTime" = )[0-9]+$',
+                              lambda m: m.group(1) + str(self.mac.first_publication + 60).encode(),
+                              raw, count=1, flags=re.M)
+            return raw
+
+        self.gauge(stalled)
+        journals = self.run_monitor(420)
+        lines = monitor.readings(journals["battery"])
+        stamps = [line["started"]["monotonic_ns"] / 1e9 for line in lines]
+        backstop = [line for line in lines if line["values"]["trigger"]["reason"].startswith("no ioreg")]
+        self.assertEqual(len(backstop), 4)  # every 90-95 s after the read at t = 30
+        gaps = [b - a for a, b in zip(stamps[1:], stamps[2:])]
+        self.assertTrue(all(90 <= gap <= 95.01 for gap in gaps), gaps)
+        self.assertTrue(all(not line["raw"] for line in backstop))  # identical bytes are not kept again
+        span = {"monotonic_ns": [lines[2]["finished"]["monotonic_ns"], lines[4]["finished"]["monotonic_ns"]]}
+        self.assertIn("battery.unmeasured", [f["code"] for f in monitor.member_findings(journals, span=span)])
+
+    def test_the_harvest_reads_the_poll_journals(self):
+        """The window harvest (L5) reads these lines: none malformed, the same
+        publications, and the unplugged reading flags a member that holds it."""
+        try:
+            from joulewise.b5 import harvest
+        except ImportError:
+            self.skipTest("the window harvest is not in this tree")
+
+        def unplugged(raw, t):
+            if 182 <= t < 194:
+                return raw.replace(b'      "ExternalConnected" = Yes\n', b'      "ExternalConnected" = No\n')
+            return raw
+
+        self.gauge(unplugged)
+        journals = self.run_monitor(300)
+        directory = monitor.monitor_dir(self.mac.custody)
+        read = {name: harvest.read_monitor_journal(directory / f"{name}.jsonl", name)
+                for name in harvest.MONITOR_MODULES}
+        self.assertEqual({name: malformed for name, (_lines, malformed) in read.items()},
+                         {name: 0 for name in harvest.MONITOR_MODULES})
+        theirs = harvest.battery_publications(read["battery"][0])
+        ours = battery.publications(monitor.readings(journals["battery"]))
+        self.assertEqual([(p.update_time_s, p.monotonic_ns) for p in theirs],
+                         [(p["update_time_s"], p["monotonic_ns"]) for p in ours])
+        off = [line for line in monitor.readings(journals["battery"])
+               if line["values"]["external_connected"] is False][0]
+        stamp = off["finished"]["monotonic_ns"]
+        thresholds = {"battery_limit_ma": 200, "battery_unmeasured_gap_s": 120.0,
+                      "battery_accumulator_watts_per_unit": 0.001}
+        flags = {code: observed for code, observed, _interval in harvest.battery_member_flags(
+            [stamp - 10**9, stamp + 10**9], read["battery"][0], thresholds)}
+        # the publications in force are clean: the unplugged reading alone flags it
+        self.assertEqual([item.get("poll_monotonic_ns") for item in flags["battery.member_span"]["violations"]],
+                         [stamp])
 
 
 class SupervisorTests(unittest.TestCase):
@@ -294,6 +503,11 @@ class SupervisorTests(unittest.TestCase):
         self.assertIn("monitor.restarted", [e["code"] for e in monitor.window_events(journals)])
         ends = [line for line in journals["monitor"] if line["kind"] == "session_end"]
         self.assertEqual(len(ends), 1)  # the SIGKILLed session never closed; the stopped one did
+        if sys.platform == "darwin":  # production polls the battery in process
+            costs = [line["values"] for line in journals["monitor"] if line["kind"] == "cost"]
+            self.assertTrue(costs and all(cost["battery_reader"] for cost in costs))
+            self.assertTrue(all(line["values"]["trigger"]["poll"] is not None
+                                for line in monitor.readings(journals["battery"])))
 
     @unittest.skipUnless(sys.platform == "darwin", "a desk run of the real read-only probes (macOS)")
     def test_all_probes_together_cost_at_most_half_a_percent_of_one_core(self):
@@ -335,7 +549,9 @@ class SupervisorTests(unittest.TestCase):
             self.assertGreaterEqual(elapsed, 25)
             shares[name] = cpu / elapsed
             print(f"monitor desk cost ({name}): {cpu:.3f} CPU-s over {elapsed:.1f} s = "
-                  f"{100 * shares[name]:.3f} % of one core")
+                  f"{100 * shares[name]:.3f} % of one core; battery ioreg reads "
+                  f"{last['values']['battery_ioreg_reads'] - first['values']['battery_ioreg_reads']}, "
+                  f"polls {last['values']['battery_polls'] - first['values']['battery_polls']}")
             journals = monitor.load_journals(root)
             self.assertTrue(all(line["error"] is None for line in monitor.readings(journals["battery"])))
             self.assertTrue(all(line["error"] is None for line in monitor.readings(journals["thermal"])))

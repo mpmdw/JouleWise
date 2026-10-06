@@ -348,6 +348,31 @@ class LiveReadOnlyTests(unittest.TestCase):
         self.assertIsNone(measurement.error)
         self.assertIsNotNone(measurement.values["power_telemetry"]["BatteryPowerAccumulatorCount"])
 
+    def test_the_in_process_poll_reads_what_ioreg_prints(self):
+        """RegistryReader's six fields equal the grammar's fields on ioreg bytes
+        read between two polls that saw the same publication (and the test
+        fake's reading of the same bytes, so the fake stands where the registry
+        does)."""
+        import time
+        from tests.hazards.fakes import registry_values
+        reader = battery.RegistryReader()
+        self.addCleanup(reader.close)
+        for _attempt in range(3):
+            before = reader.read()
+            completed_ioreg = base.run_probe(battery.IOREG_BATTERY_ARGV, battery.PROBE_TIMEOUT_S)
+            after = reader.read()
+            if before == after:
+                break
+        self.assertEqual(before, after, "the gauge published during every attempt")
+        self.assertTrue(completed_ioreg.ok)
+        values = battery.parse_reading(completed_ioreg.stdout, time.time())
+        self.assertEqual(before, {"UpdateTime": values["update_time_s"],
+                                  "ExternalConnected": values["external_connected"],
+                                  "IsCharging": values["is_charging"],
+                                  "InstantAmperage": values["instant_amperage_ma"],
+                                  "Amperage": values["amperage_ma"], "Voltage": values["voltage_mv"]})
+        self.assertEqual(before, registry_values(completed_ioreg.stdout))
+
 
 if __name__ == "__main__":
     unittest.main()
