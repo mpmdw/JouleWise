@@ -1,0 +1,87 @@
+{
+  "cases": {
+    "battery_excursion": {
+      "l1_codes": [
+        "battery.member_span"
+      ],
+      "request": null,
+      "span": {
+        "monotonic_ns": [
+          999730000481641,
+          999770000481641
+        ]
+      }
+    },
+    "battery_later": {
+      "l1_codes": [],
+      "request": null,
+      "span": {
+        "monotonic_ns": [
+          999820000481641,
+          999860000481641
+        ]
+      }
+    },
+    "clock_step": {
+      "l1_codes": [
+        "clock.step_overlap"
+      ],
+      "request": null,
+      "span": {
+        "monotonic_ns": [
+          999889000001400,
+          999910000002600
+        ]
+      }
+    },
+    "contention_burst": {
+      "l1_codes": [
+        "battery.member_span",
+        "contention.request_overlap"
+      ],
+      "request": {
+        "monotonic_ns": [
+          999701000005900,
+          999709000005900
+        ]
+      },
+      "span": {
+        "monotonic_ns": [
+          999695000005900,
+          999715000005900
+        ]
+      }
+    },
+    "quiet": {
+      "l1_codes": [],
+      "request": null,
+      "span": {
+        "monotonic_ns": [
+          999630000006200,
+          999650000006200
+        ]
+      }
+    },
+    "thermal_nonzero": {
+      "l1_codes": [
+        "battery.member_span",
+        "thermal.os_level_nonzero"
+      ],
+      "request": null,
+      "span": {
+        "monotonic_ns": [
+          999798000004400,
+          999812000004400
+        ]
+      }
+    }
+  },
+  "generator": "tests/fixtures/b5_harvest/make_l1_monitor_journals.py",
+  "kernel_task_cpu_s_per_s": 0.3,
+  "l1_source": "joulewise/hazards/monitor.py member_findings and window_events",
+  "schema": "joulewise.b5_harvest_l1_journal_fixture.v1",
+  "window_events": [
+    "clock.step",
+    "disk.low"
+  ]
+}
