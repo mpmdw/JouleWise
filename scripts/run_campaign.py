@@ -1666,14 +1666,14 @@ def append_log(
     """
 
     if lock_token is None:
-        raise RuntimeError("campaign log append requires a held campaign.lock")
+        raise CampaignLockOwnershipError("campaign log append requires a held campaign.lock")
     ownership = _validated_campaign_lock_ownership(lock_token)
     resolved_log_parent = Path(log_path).resolve(strict=False).parent
     if (
         resolved_log_parent != ownership.runs_root
         and os.path.lexists(resolved_log_parent / "campaign.lock")
     ):
-        raise RuntimeError(
+        raise CampaignLockOwnershipError(
             "campaign log append cannot use a foreign lock token for lockable "
             f"root {resolved_log_parent}"
         )
@@ -1928,8 +1928,16 @@ def _refuse_marker_bearing_axi(configs: Sequence[Path]) -> None:
 def authenticate_campaign_child_launch_lineage(
     outer_authentication: Mapping[str, Any] | None,
     bundle_paths: Sequence[Path],
+    hazard: Any = None,
+    absent: list[Path] | None = None,
 ) -> None:
-    """Bind finalized child metadata to the lineage authenticated preflight."""
+    """Bind finalized child metadata to the lineage authenticated preflight.
+
+    HAZARD (``hazard`` and ``absent`` given): a bundle whose ``metadata.json``
+    is missing, unreadable or not JSON (a member that died mid-run) is
+    appended to ``absent`` and skipped.  Readable metadata whose lineage or
+    locator digest differs still raises ``launch_lineage_conflict``.
+    """
 
     if outer_authentication is None:
         return
@@ -1949,6 +1957,9 @@ def authenticate_campaign_child_launch_lineage(
         try:
             metadata = json.loads((bundle_path / "metadata.json").read_bytes())
         except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+            if hazard is not None and absent is not None:
+                absent.append(bundle_path)
+                continue
             raise LaunchLineageError(
                 "launch_lineage_conflict",
                 f"child bundle lacks readable launch metadata: {bundle_path}",
@@ -1979,6 +1990,8 @@ def run_authenticated_campaign_child(
     env: Mapping[str, str] | None,
     outer_authentication: Mapping[str, Any] | None,
     bundle_paths: Sequence[Path],
+    hazard: Any = None,
+    absent: list[Path] | None = None,
 ) -> subprocess.CompletedProcess[Any]:
     """Run one ordinary child and authenticate its preserved bundle stamps."""
 
@@ -1986,6 +1999,8 @@ def run_authenticated_campaign_child(
     authenticate_campaign_child_launch_lineage(
         outer_authentication,
         bundle_paths,
+        hazard=hazard,
+        absent=absent,
     )
     return completed
 
@@ -2822,7 +2837,25 @@ def evaluate_member(
     info: ConfigInfo,
     waivers: WaiverMap,
     cooldown_evidence: dict[str, Any] | None = None,
+    hazard: Any = None,
 ) -> MemberEvaluation:
+    if hazard is not None and _hazard_metadata_undecodable(bundle_dir):
+        # HAZARD (A4): bytes a crashed child left undecodable are the
+        # absent-metadata fact already flagged; every reader below re-decodes
+        # them, so the member is evaluated as failed here.  Legacy: unchanged.
+        return MemberEvaluation(
+            bundle_id=bundle_dir.name,
+            bundle_path=bundle_dir,
+            config_name=info.path.name,
+            status=None,
+            strict_valid=False,
+            validation_problems=("metadata.json is not UTF-8 (member failed mid-run)",),
+            preceding_campaign_cooldown=cooldown_evidence,
+            declared_role=info.role,
+            sentinel_position=info.sentinel_position,
+            scientific_config_sha256=info.scientific_config_sha256,
+            canonical_neg8_workload=info.canonical_neg8_workload,
+        )
     status, malformed = summary_status(bundle_dir / "summary_metrics.json")
     problems: list[str] = []
     strict_valid = False
@@ -2936,6 +2969,8 @@ def evaluate_members(
     runs_dir: Path,
     waivers: WaiverMap,
     cooldown_by_bundle: dict[str, dict[str, Any]] | None = None,
+    *,
+    hazard: Any = None,
 ) -> list[MemberEvaluation]:
     cooldown_by_bundle = cooldown_by_bundle or {}
     return [
@@ -2944,6 +2979,7 @@ def evaluate_members(
             info=info,
             waivers=waivers,
             cooldown_evidence=cooldown_by_bundle.get(bundle_dir.name),
+            **_hazard_kwargs(hazard),
         )
         for bundle_dir in expected_member_dirs(info, runs_dir)
     ]
@@ -3213,11 +3249,19 @@ def campaign_block_limit(
     launch_authentication: Mapping[str, Any] | None,
     order_entries: Sequence[OrderEntry],
     items: Sequence[ConfigInfo | ConfigError],
+    hazard: Any = None,
 ) -> CampaignBlockLimit | None:
-    """Validate bounded science before member 1; leave the legacy path untouched."""
+    """Validate bounded science before member 1; leave the legacy path untouched.
+
+    HAZARD with no ``--max-blocks``: no limit, and the launch record chain is
+    not re-read (the HAZARD purpose applies no limit; the harvest's lineage
+    audit reports that chain).  ``--max-blocks`` still takes today's path.
+    """
 
     if requested is not None and (type(requested) is not int or requested < 1):
         raise ValueError("--max-blocks must be >= 1")
+    if hazard is not None and launch_authentication is not None and requested is None:
+        return None
     # Other purposes retain every ordinary stage, including reference corpora,
     # without a block limit. G2-b's bracket reference configs are unauthenticated.
     if launch_authentication is not None:
@@ -3299,7 +3343,7 @@ _CAMPAIGN_LOCK_OWNERSHIP: dict[Path, CampaignLockToken] = {}
 _CAMPAIGN_LOCK_OWNERSHIP_LOCK = threading.Lock()
 
 
-def acquire_campaign_lock(runs_dir: Path) -> CampaignLockToken:
+def acquire_campaign_lock(runs_dir: Path, *, hazard: Any = None) -> CampaignLockToken:
     runs_root = Path(runs_dir).resolve(strict=False)
     runs_root.mkdir(parents=True, exist_ok=True)
     lock_path = runs_root / "campaign.lock"
@@ -3316,14 +3360,17 @@ def acquire_campaign_lock(runs_dir: Path) -> CampaignLockToken:
     try:
         fd = os.open(lock_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
     except FileExistsError as exc:
-        try:
-            existing = lock_path.read_text(encoding="utf-8").strip()
-        except OSError:
-            existing = "<unreadable>"
-        raise RuntimeError(
-            f"another campaign appears to be running (lock {lock_path}, created {existing}); "
-            "if no campaign is running, delete the lock file and retry"
-        ) from exc
+        if hazard is not None:
+            fd = _hazard_reclaim_stale_campaign_lock(lock_path, runs_root, hazard)
+        else:
+            try:
+                existing = lock_path.read_text(encoding="utf-8").strip()
+            except OSError:
+                existing = "<unreadable>"
+            raise CampaignLockOwnershipError(
+                f"another campaign appears to be running (lock {lock_path}, created {existing}); "
+                "if no campaign is running, delete the lock file and retry"
+            ) from exc
     try:
         acquired_stat = os.fstat(fd)
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
@@ -3375,24 +3422,24 @@ def _validated_campaign_lock_ownership(
     """Return acquisition identity only for this process's live lock."""
 
     if not isinstance(token, CampaignLockToken):
-        raise RuntimeError(
+        raise CampaignLockOwnershipError(
             "campaign provenance log write requires held lock acquired by this process"
         )
     lock_path = token.lock_path
     if lock_path.name != "campaign.lock":
-        raise RuntimeError("campaign log append requires a campaign.lock token")
+        raise CampaignLockOwnershipError("campaign log append requires a campaign.lock token")
     resolved_lock_path = lock_path.resolve(strict=False)
     with _CAMPAIGN_LOCK_OWNERSHIP_LOCK:
         current_token = _CAMPAIGN_LOCK_OWNERSHIP.get(resolved_lock_path)
     if current_token is not token:
-        raise RuntimeError(
+        raise CampaignLockOwnershipError(
             "campaign provenance log write requires held lock acquired by this process"
         )
     if (
         resolved_lock_path != token.lock_path
         or resolved_lock_path != token.runs_root / "campaign.lock"
     ):
-        raise RuntimeError(
+        raise CampaignLockOwnershipError(
             "campaign provenance log write requires the registered runs-root lock"
         )
     fd = -1
@@ -3407,7 +3454,7 @@ def _validated_campaign_lock_ownership(
             content_parts.append(part)
         content = b"".join(content_parts).decode("utf-8")
     except (OSError, UnicodeError) as exc:
-        raise RuntimeError(
+        raise CampaignLockOwnershipError(
             f"campaign provenance log write requires held lock {resolved_lock_path}"
         ) from exc
     finally:
@@ -3419,7 +3466,7 @@ def _validated_campaign_lock_ownership(
         or not content.startswith(f"pid={os.getpid()} ")
         or f" nonce={token.nonce} " not in content
     ):
-        raise RuntimeError(
+        raise CampaignLockOwnershipError(
             "campaign provenance log write requires this process's acquisition "
             f"identity for {resolved_lock_path}"
         )
@@ -3441,7 +3488,7 @@ def _assert_campaign_lock_held(runs_dir: Path) -> CampaignLockToken:
     with _CAMPAIGN_LOCK_OWNERSHIP_LOCK:
         token = _CAMPAIGN_LOCK_OWNERSHIP.get(lock_path)
     if token is None:
-        raise RuntimeError(
+        raise CampaignLockOwnershipError(
             "campaign provenance log write requires held lock acquired by this process"
         )
     return _assert_campaign_lock_token(token)
@@ -3481,6 +3528,801 @@ def release_campaign_lock(
             raise
         if _CAMPAIGN_LOCK_OWNERSHIP.get(resolved_lock_path) is token:
             _CAMPAIGN_LOCK_OWNERSHIP.pop(resolved_lock_path)
+
+
+# --- HAZARD_PACK flag path (core lane RC) -------------------------------------
+# Gate-prune core-prune design, section 3.2.  Each relaxation here runs only
+# when the runs root carries the HAZARD lineage locator: ``hazard`` is then a
+# ``joulewise.flags.core.HazardFlagContext``.  ``hazard is None`` is the legacy
+# path, whose behavior is unchanged.  Flags go to
+# ``<custody>/flags/core-run_campaign.jsonl``; the harvest folds them.
+
+
+class CampaignLockOwnershipError(RuntimeError):
+    """A lock acquisition or ownership failure: a two-writer integrity hazard, never a record."""
+
+
+_HAZARD_FAILED = object()  # unique sentinel: "the guarded call raised"
+# The uncaught-exception refusal the record guards replace (main's handler).
+_HAZARD_RECORD_LEGACY_SITE = "scripts/run_campaign.py:9187@e6b6a0ce"
+# Test seam for the stale-lock race test: called inside the reclaim flock,
+# after the existing lock was read and before it is judged.
+_HAZARD_LOCK_RECLAIM_SEAM: Any = None
+# Cooldown "unknown" because no reference baseline exists (versus a reference
+# that exists but whose recovery could not be measured).
+_COOLDOWN_REFERENCE_UNAVAILABLE_REASONS = frozenset({
+    "preceding baseline is ineligible and no eligible frozen clean cooldown anchor "
+    "is available",
+    "previous physical member evaluation unavailable",
+    "previous idle baseline unavailable",
+})
+
+
+def _hazard_flag_context(runs_dir: Path | str | None, *, stage: str = "window") -> Any:
+    """The HAZARD predicate (``None`` on the legacy path).  Never raises."""
+
+    from joulewise.flags import core as flags_core
+
+    return flags_core.hazard_flag_context(runs_dir, writer="core-run_campaign", stage=stage)
+
+
+def _hazard_kwargs(hazard: Any) -> dict[str, Any]:
+    """``{"hazard": hazard}`` on HAZARD, ``{}`` on legacy: legacy calls stay byte-identical."""
+
+    return {"hazard": hazard} if hazard is not None else {}
+
+
+def _hazard_call(
+    hazard: Any,
+    phase: str,
+    run_id: str | None,
+    call: Any,
+    *,
+    kind: str = "member_iteration_error",
+) -> Any:
+    """Legacy: return call().  HAZARD: an Exception other than LaunchLineageError or
+    CampaignLockOwnershipError becomes campaign.runner_record_flagged and returns
+    _HAZARD_FAILED."""
+
+    if hazard is None:
+        return call()
+    try:
+        return call()
+    except (LaunchLineageError, CampaignLockOwnershipError):
+        raise
+    except Exception as exc:  # noqa: BLE001 - a failed record write is a flag here
+        from joulewise.flags import core as flags_core
+
+        # The message goes to the stage log only; the flag carries names.
+        print(
+            f"warning: record step {phase} failed and was flagged: "
+            f"{type(exc).__name__}: {exc}",
+            file=sys.stderr,
+        )
+        flags_core.emit(
+            hazard, "campaign.runner_record_flagged",
+            level="member" if run_id else "window", run_id=run_id,
+            observed={"kind": kind, "phase": phase, "error_type": type(exc).__name__},
+            legacy_site=_HAZARD_RECORD_LEGACY_SITE, legacy_code="uncaught_exception",
+        )
+        return _HAZARD_FAILED
+
+
+def _hazard_metadata_undecodable(bundle_dir: Path) -> bool:
+    """True when ``metadata.json`` exists but its bytes are not UTF-8."""
+
+    try:
+        (bundle_dir / "metadata.json").read_bytes().decode("utf-8")
+    except UnicodeDecodeError:
+        return True
+    except OSError:
+        return False
+    return False
+
+
+def _hazard_member_run_id(info: Any) -> str | None:
+    """Member-scope run id: the bundle directory name of a one-repetition config."""
+
+    if getattr(info, "repetitions", None) == 1 and isinstance(getattr(info, "run_id", None), str):
+        return info.run_id
+    return None
+
+
+def _hazard_cooldown_unknown(
+    hazard: Any, physical_bundle_dirs: Sequence[Path], cooldown_note: Mapping[str, Any]
+) -> bool:
+    """True on HAZARD: an unknown cooldown is flagged per bundle and never blocks."""
+
+    if hazard is None:
+        return False
+    from joulewise.flags import core as flags_core
+
+    reason = cooldown_note.get("reason")
+    reason_class = (
+        "reference_unavailable"
+        if reason in _COOLDOWN_REFERENCE_UNAVAILABLE_REASONS
+        else "unmeasured"
+    )
+    fallback = cooldown_note.get("fallback_from")
+    for bundle_dir in physical_bundle_dirs:
+        flags_core.emit(
+            hazard, "cooldown.result_unknown", level="member", run_id=bundle_dir.name,
+            observed={"reason_class": reason_class,
+                      "reason": str(reason)[:300] if reason is not None else None,
+                      "failure_reason": cooldown_note.get("failure_reason"),
+                      # A fallback reference was selected but its measurement failed.
+                      "fallback": (
+                          {"from": "reference_unavailable",
+                           "reference_selection": cooldown_note.get("reference_selection")}
+                          if isinstance(fallback, Mapping) else None
+                      )},
+            legacy_site="scripts/run_campaign.py:8864@e6b6a0ce",
+            legacy_code="cooldown_v2_failed_closed_before_invoke",
+        )
+    return True
+
+
+def _hazard_preflight_error_record(
+    policy_binding: CampaignPolicyBinding, exc: BaseException
+) -> dict[str, Any]:
+    """A raised stage preflight, shaped like a normal not-admitted preflight.
+
+    Children accept it because it carries the policy hash
+    (``controller.py`` checks ``policy_sha256``).  The record is data: the
+    snapshot is re-read (``collect_environment_snapshot`` never raises; the
+    probe-free empty shape is the fallback), so it always carries
+    ``python_packages``, which ``reduce.py`` reads ``mlx_version`` from.  The
+    evaluation is that snapshot's own evaluation under the stage policy,
+    never ``None`` and never a constructed pass.  ``admitted`` stays False.
+    """
+
+    try:
+        snapshot = collect_environment_snapshot()
+    except Exception as snapshot_exc:  # noqa: BLE001 - keep the probe-free shape
+        snapshot = empty_environment_snapshot()
+        snapshot["errors"] = {"collect_environment_snapshot": (
+            f"{type(snapshot_exc).__name__}: {snapshot_exc}"[:300])}
+    try:
+        evaluation: dict[str, Any] | None = evaluate_environment_policy(
+            snapshot, policy_binding.policy.environment_guard
+        )
+    except Exception:  # noqa: BLE001 - the error field already says the preflight failed
+        evaluation = None
+    return {
+        "schema_version": "joulewise.campaign_environment_preflight.v1",
+        "policy_sha256": policy_binding.sha256,
+        "captured_at": utc_timestamp(),
+        "snapshot": snapshot,
+        "evaluation": evaluation,
+        "override": None,
+        "enforced": False,
+        "admitted": False,
+        "error": f"{type(exc).__name__}: {exc}"[:300],
+    }
+
+
+def _hazard_stage_preflight_not_admitted(
+    hazard: Any, environment_preflight: Mapping[str, Any], config_dir: Path
+) -> None:
+    """Flag a stage preflight that errored or was rejected; collection continues."""
+
+    from joulewise.flags import core as flags_core
+
+    errored = environment_preflight.get("error") is not None
+    evaluation = environment_preflight.get("evaluation")
+    findings = evaluation.get("findings") if isinstance(evaluation, Mapping) else None
+    failed = [
+        {"field": finding.get("field"), "status": finding.get("status")}
+        for finding in (findings if isinstance(findings, list) else [])
+        if isinstance(finding, Mapping) and finding.get("status") != "pass"
+    ]
+    print(
+        "warning: environment preflight not admitted; collecting and flagging: "
+        + (str(environment_preflight.get("error")) if errored else
+           "; ".join(f"{row['field']} ({row['status']})" for row in failed)),
+        file=sys.stderr,
+    )
+    flags_core.emit(
+        hazard, "env.stage_preflight_not_admitted", level="window",
+        observed={"status": "error" if errored else "rejected",
+                  "failed_findings": failed[:32],
+                  "campaign": Path(config_dir).name},
+        legacy_site=("scripts/run_campaign.py:8510@e6b6a0ce" if errored
+                     else "scripts/run_campaign.py:8547@e6b6a0ce"),
+        legacy_code=("environment preflight failed before member 1" if errored
+                     else "environment preflight rejected before member 1"),
+    )
+
+
+def _parse_campaign_lock_text(text: str) -> tuple[int, str | None] | None:
+    """``pid=<int> nonce=... created_at=... start_time=<json>`` or None."""
+
+    line = text.strip()
+    if not line.startswith("pid=") or "\n" in line:
+        return None
+    head, separator, start_text = line.rpartition(" start_time=")
+    if not separator:
+        return None
+    pid_text = head.split(" ", 1)[0][len("pid="):]
+    if not (pid_text.isascii() and pid_text.isdigit()) or int(pid_text) <= 0:
+        return None
+    try:
+        start_time = json.loads(start_text)
+    except ValueError:
+        return None
+    if start_time is not None and not isinstance(start_time, str):
+        return None
+    return int(pid_text), start_time
+
+
+def _campaign_lock_exists_message(lock_path: Path, existing: str) -> str:
+    return (
+        f"another campaign appears to be running (lock {lock_path}, created {existing}); "
+        "if no campaign is running, delete the lock file and retry"
+    )
+
+
+def _hazard_reclaim_stale_campaign_lock(
+    lock_path: Path, runs_root: Path, hazard: Any
+) -> int:
+    """Return an ``O_EXCL`` descriptor for ``lock_path`` after clearing a stale lock.
+
+    Stale means the recorded pid is DEAD, or LIVE with a recorded start time
+    that differs from the observed one (pid reuse).  Reclaimers serialize on
+    an exclusive flock of the runs-root directory, whose inode is never
+    replaced; only reclaimers unlink, and only the lock inode they just read.
+    Every other case raises CampaignLockOwnershipError with today's message.
+    """
+
+    import fcntl
+
+    existing = "<unreadable>"
+    directory_fd = os.open(runs_root, os.O_RDONLY)
+    try:
+        fcntl.flock(directory_fd, fcntl.LOCK_EX)
+        try:
+            try:
+                lock_fd = os.open(lock_path, os.O_RDONLY | os.O_NOFOLLOW)
+            except FileNotFoundError:
+                # Released between our create and the flock: the ordinary
+                # acquisition, once.  Nothing was cleared, so nothing is flagged.
+                try:
+                    return os.open(lock_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+                except FileExistsError:
+                    raise CampaignLockOwnershipError(
+                        _campaign_lock_exists_message(lock_path, existing)
+                    ) from None
+            except OSError as exc:
+                raise CampaignLockOwnershipError(
+                    _campaign_lock_exists_message(lock_path, existing)
+                ) from exc
+            try:
+                read_stat = os.fstat(lock_fd)
+                parts: list[bytes] = []
+                while True:
+                    part = os.read(lock_fd, 65536)
+                    if not part:
+                        break
+                    parts.append(part)
+            finally:
+                os.close(lock_fd)
+            try:
+                text = b"".join(parts).decode("utf-8")
+                existing = text.strip()
+            except UnicodeError:
+                text = None
+            parsed = _parse_campaign_lock_text(text) if text is not None else None
+            if _HAZARD_LOCK_RECLAIM_SEAM is not None:
+                _HAZARD_LOCK_RECLAIM_SEAM(lock_path)
+            identity = observe_identity(parsed[0]) if parsed is not None else None
+            stale = identity is not None and (
+                identity.state == "DEAD"
+                or (
+                    identity.state == "LIVE"
+                    and isinstance(parsed[1], str)
+                    and identity.start_time != parsed[1]
+                )
+            )
+            if not stale:
+                raise CampaignLockOwnershipError(
+                    _campaign_lock_exists_message(lock_path, existing)
+                )
+            try:
+                current_stat = os.stat(lock_path, follow_symlinks=False)
+            except OSError as exc:
+                raise CampaignLockOwnershipError(
+                    _campaign_lock_exists_message(lock_path, existing)
+                ) from exc
+            if (current_stat.st_dev, current_stat.st_ino) != (read_stat.st_dev, read_stat.st_ino):
+                raise CampaignLockOwnershipError(
+                    _campaign_lock_exists_message(lock_path, existing)
+                )
+            os.unlink(lock_path)
+            from joulewise.flags import core as flags_core
+
+            print(f"warning: cleared stale campaign lock {lock_path} ({existing})", file=sys.stderr)
+            flags_core.emit(
+                hazard, "campaign.runner_record_flagged", level="window",
+                observed={"kind": "stale_lock_cleared", "lock": existing[:300],
+                          "identity_state": identity.state,
+                          "runs_root_name": runs_root.name},
+                legacy_site="scripts/run_campaign.py:3317@e6b6a0ce",
+                legacy_code="campaign_lock_exists",
+            )
+            try:
+                return os.open(lock_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+            except FileExistsError as exc:
+                raise CampaignLockOwnershipError(
+                    _campaign_lock_exists_message(lock_path, existing)
+                ) from exc
+        finally:
+            fcntl.flock(directory_fd, fcntl.LOCK_UN)
+    finally:
+        os.close(directory_fd)
+
+
+# s2-01 (PLAN2 section 2.3): a cooldown reference is judged by what the member
+# itself observed.  HAZARD members are no longer aborted by an environment
+# guard (core lane CTL, A11), so a member whose own readings saw a display
+# awake, a screensaver engaged, or any failed finding of its own per-run
+# evaluation must not become a reference, whatever its admission decision.
+# An unknown reading is not a violation here: it carries its own DISCLOSE flag.
+
+
+def _hazard_quiet_state_violated(admission: Mapping[str, Any]) -> bool:
+    """True when the member's own readings definitively broke the quiet state."""
+
+    observations = admission.get("guard_observations")
+    for observation in observations if isinstance(observations, list) else []:
+        if isinstance(observation, Mapping) and (
+            observation.get("display_power_state") == "any_awake"
+            or observation.get("screensaver_engaged") is True
+        ):
+            return True
+    evaluation = admission.get("per_run_environment_evaluation")
+    findings = evaluation.get("findings") if isinstance(evaluation, Mapping) else None
+    return any(
+        isinstance(finding, Mapping) and finding.get("status") == "fail"
+        for finding in (findings if isinstance(findings, list) else [])
+    )
+
+
+def _hazard_flagged_admission_is_quiet(admission: Mapping[str, Any]) -> bool:
+    """A ``flagged`` decision whose own idle attempt was admitted, quietly.
+
+    ``flagged`` comes from an earlier member's failed reference admission or
+    from an ``on_fail: flag`` policy.  Only the first is accepted: the
+    member's own final idle attempt must have passed every admission
+    threshold, its own per-run evaluation must be present, and nothing it
+    observed may violate the quiet state.
+    """
+
+    attempts = admission.get("attempts")
+    evaluation = admission.get("per_run_environment_evaluation")
+    return bool(
+        admission.get("decision") == "flagged"
+        and isinstance(attempts, list)
+        and attempts
+        and isinstance(attempts[-1], Mapping)
+        and attempts[-1].get("admitted") is True
+        and isinstance(evaluation, Mapping)
+        and isinstance(evaluation.get("findings"), list)
+        and not _hazard_quiet_state_violated(admission)
+    )
+
+
+# s2-05 (PLAN2 section 2.3): an unknown cooldown because no reference exists is
+# replaced by a MEASURED cooldown against a fallback reference, so the member's
+# cooldown evidence verifies at harvest.  ``member.cooldown_evidence_unverified``
+# stays EXCLUDE_MEMBER for any member whose cooldown was still not measured.
+# Every threshold comes from the stage's campaign policy file (its ``cooldown``
+# block); nothing here is a second copy of the policy.  The one exception is
+# the self-referenced test, which has no idle anchor and so never runs looser
+# than the cooldown-v2 defaults (see _hazard_self_referenced_cooldown_gate).
+
+_HAZARD_COOLDOWN_LAST_ELIGIBLE = "hazard_last_eligible_baseline"
+_HAZARD_COOLDOWN_WINDOW_ANCHOR = "hazard_window_opening_anchor"
+_HAZARD_COOLDOWN_SELF_REFERENCED = "hazard_self_referenced"
+
+
+def _hazard_window_runs_roots(hazard: Any, runs_dir: Path) -> list[Path]:
+    """This stage's runs root, then the window plan's claim and bound roots."""
+
+    roots = [Path(runs_dir)]
+    try:
+        plan = json.loads((Path(hazard.custody_root) / "night_plan.json").read_bytes())
+        recorded = plan["hazard_window"]["runs_roots"]
+        for key in ("claim", "bound"):
+            value = recorded.get(key)
+            if isinstance(value, str) and Path(value).is_absolute():
+                roots.append(Path(value))
+    except Exception:  # noqa: BLE001 - no plan: this root only
+        pass
+    unique: list[Path] = []
+    for root in roots:
+        resolved = root.resolve(strict=False)
+        if resolved not in unique:
+            unique.append(resolved)
+    return unique
+
+
+def _hazard_window_opening_anchor(
+    hazard: Any, runs_dir: Path, policy_sha256: str
+) -> dict[str, Any] | None:
+    """An eligible frozen anchor anywhere in the window, any manifest id.
+
+    The NEG-8 start reference (the window's opening idle reference) wins;
+    otherwise the first eligible anchor in root order.  Anchor eligibility,
+    including the policy digest, is the unchanged ``cooldown_anchor_eligibility``.
+    """
+
+    found: list[dict[str, Any]] = []
+    for root in _hazard_window_runs_roots(hazard, runs_dir):
+        try:
+            if not root.is_dir():
+                continue
+            anchor = prior_campaign_cooldown_anchor(root, None, policy_sha256)
+        except Exception:  # noqa: BLE001 - an unreadable root offers no anchor
+            continue
+        if isinstance(anchor, dict):
+            found.append(anchor)
+    if not found:
+        return None
+    return next(
+        (anchor for anchor in found if anchor.get("source_kind") == "neg8_reference_start"),
+        found[0],
+    )
+
+
+def _hazard_cooldown_telemetry(config: Any) -> tuple[Any, Any, str | None]:
+    """``(telemetry, clock, None)``, or ``(None, None, reason)``.
+
+    The same resolution ``campaign_cooldown_before_member`` uses: mock
+    telemetry has no recovery evidence, and an unresolved adapter is unmeasured.
+    """
+
+    from joulewise import adapters
+    from joulewise.clock import SystemClock
+
+    if config.hardware_target.telemetry_backend == TelemetryBackend.MOCK:
+        return None, None, "mock telemetry has no thermal recovery evidence"
+    clock = SystemClock()
+    telemetry, failure = adapters.resolve_telemetry(config, clock)
+    if telemetry is None:
+        return None, None, (
+            failure.message if failure is not None else "telemetry adapter unavailable"
+        )
+    return telemetry, clock, None
+
+
+def _hazard_window_stats(
+    readings: Sequence[tuple[float, float, float, float]], lower_s: float, upper_s: float
+) -> tuple[float | None, float, float]:
+    """Duration-weighted mean, coverage and span of the evidence in [lower, upper]."""
+
+    weighted_sum = 0.0
+    coverage_s = 0.0
+    retained_start_s: float | None = None
+    for capture_start, evidence_start, evidence_end, value in readings:
+        overlap_s = max(0.0, min(evidence_end, upper_s) - max(evidence_start, lower_s))
+        if overlap_s <= 0.0:
+            continue
+        weighted_sum += overlap_s * value
+        coverage_s += overlap_s
+        start = max(capture_start, lower_s)
+        retained_start_s = start if retained_start_s is None else min(retained_start_s, start)
+    mean = weighted_sum / coverage_s if coverage_s > 0.0 else None
+    span_s = max(0.0, upper_s - retained_start_s) if retained_start_s is not None else 0.0
+    return mean, coverage_s, span_s
+
+
+def _hazard_self_referenced_cooldown_gate(
+    telemetry: Any,
+    config: Any,
+    clock: Any,
+    *,
+    run_id: str,
+    policy: CooldownPolicy,
+) -> dict[str, Any]:
+    """Hold until power is steady, with no outside reference.
+
+    Two adjacent complete windows, each with the policy's minimum coverage.
+    The newest window's duration-weighted mean is the reference; the release
+    criterion is two-sided: the window before it lies within ``stability
+    fraction`` of the reference, so power is neither still falling (a
+    recovery tail) nor rising.  With no idle anchor to bound the level, the
+    test never runs looser than the cooldown-v2 defaults
+    (``CooldownPolicy()``: 30 s windows, 10 %): the window is
+    ``max(policy.sustained_window_s, 30 s)`` and the fraction
+    ``min(policy.tolerance_fraction, 0.10)``.  A slow tail can look flat over
+    5 s but not over 30 s, and a recovery tolerance of 1.0 (the block-5
+    council value, judged against an idle reference) is no stability bound.
+    Thermal pressure must be nominal when the policy requires it; an absolute
+    ceiling caps the newest window; the policy's ``cap_s`` ends the wait as
+    ``cap_hit``.  The trace rows carry the terminal ``release`` and
+    ``release_criteria_met_late`` fields that ``cooldown_disposition_from_raw``
+    re-derives at harvest, exactly as ``controller.cooldown_gate`` writes them.
+    """
+
+    from dataclasses import asdict
+
+    from joulewise.controller import _jsonable
+
+    sub_config = replace(
+        config,
+        run_id=run_id,
+        sampling=replace(config.sampling, idle_seconds=policy.subwindow_s),
+    )
+    floor = CooldownPolicy()
+    window_s = max(policy.sustained_window_s, floor.sustained_window_s)
+    stability_fraction = min(policy.tolerance_fraction, floor.tolerance_fraction)
+    required_coverage_s = policy.coverage_fraction * window_s
+    start_s = clock.now()
+    readings: list[tuple[float, float, float, float]] = []
+    trace: list[dict[str, Any]] = []
+    while True:
+        capture_start_s = clock.now()
+        baseline = telemetry.measure_idle(sub_config)
+        now_s = clock.now()
+        duration_s = baseline.duration_s
+        if (
+            isinstance(duration_s, bool)
+            or not isinstance(duration_s, int | float)
+            or not math.isfinite(duration_s)
+            or duration_s <= 0.0
+        ):
+            duration_s = max(0.0, now_s - capture_start_s)
+        evidence_start_s = max(now_s - float(duration_s), capture_start_s)
+        value = baseline.power_w_mean
+        if isinstance(value, int | float) and not isinstance(value, bool) and math.isfinite(value):
+            readings.append((capture_start_s, evidence_start_s, now_s, float(value)))
+        readings = [reading for reading in readings if reading[2] > now_s - 2.0 * window_s]
+        current_mean, current_coverage_s, current_span_s = _hazard_window_stats(
+            readings, now_s - window_s, now_s
+        )
+        previous_mean, previous_coverage_s, previous_span_s = _hazard_window_stats(
+            readings, now_s - 2.0 * window_s, now_s - window_s
+        )
+        span_complete = (
+            current_span_s + 1e-6 >= window_s and previous_span_s + 1e-6 >= window_s
+        )
+        coverage_complete = (
+            current_coverage_s + 1e-6 >= required_coverage_s
+            and previous_coverage_s + 1e-6 >= required_coverage_s
+        )
+        window_complete = span_complete and coverage_complete
+        waited_s = now_s - start_s
+        try:
+            thermal_pressure = telemetry.thermal_state(sub_config).thermal_pressure
+        except Exception:  # noqa: BLE001 - unknown thermal fails the conjunctive gate
+            thermal_pressure = None
+        thermal_nominal = isinstance(thermal_pressure, str) and (
+            thermal_pressure.lower() in {"nominal", "normal"}
+        )
+        reference_upper_w = (
+            current_mean * (1.0 + stability_fraction)
+            if current_mean is not None
+            else None
+        )
+        reference_lower_w = (
+            current_mean * (1.0 - stability_fraction)
+            if current_mean is not None
+            else None
+        )
+        ceiling_ok = policy.absolute_ceiling_w is None or (
+            current_mean is not None and current_mean <= policy.absolute_ceiling_w
+        )
+        steady = bool(
+            reference_upper_w is not None
+            and reference_lower_w is not None
+            and previous_mean is not None
+            and reference_lower_w <= previous_mean <= reference_upper_w
+        )
+        release_criteria_met = bool(
+            window_complete
+            and steady
+            and ceiling_ok
+            and (thermal_nominal or not policy.require_thermal_nominal)
+        )
+        cap_hit = waited_s >= policy.cap_s
+        release_criteria_met_late = cap_hit and release_criteria_met
+        trace.append(
+            {
+                "timestamp_s": now_s,
+                "waited_s": waited_s,
+                "reference_mode": "self_referenced",
+                "rolling_mean_power_w": current_mean,
+                "previous_window_mean_power_w": previous_mean,
+                "window_span_s": current_span_s,
+                "window_coverage_s": current_coverage_s,
+                "previous_window_span_s": previous_span_s,
+                "previous_window_coverage_s": previous_coverage_s,
+                "required_coverage_s": required_coverage_s,
+                "span_complete": span_complete,
+                "coverage_complete": coverage_complete,
+                "window_complete": window_complete,
+                "reference_upper_w": reference_upper_w,
+                "reference_lower_w": reference_lower_w,
+                "self_reference_window_s": window_s,
+                "stability_fraction": stability_fraction,
+                "absolute_ceiling_w": policy.absolute_ceiling_w,
+                "steady": steady,
+                "thermal_pressure": thermal_pressure,
+                "thermal_nominal": thermal_nominal,
+                "release": release_criteria_met and not cap_hit,
+                "release_criteria_met_late": release_criteria_met_late,
+                "baseline": _jsonable(asdict(baseline)),
+            }
+        )
+        if cap_hit or release_criteria_met:
+            disposition = cooldown_disposition_from_raw(trace)
+            if disposition not in {"recovered", "cap_hit"}:  # pragma: no cover - by construction
+                raise RuntimeError("self-referenced cooldown trace has no disposition")
+            return {
+                **_cooldown_policy_decision_surface(policy),
+                "result": disposition,
+                "reference_mode": "self_referenced",
+                "waited_s": waited_s,
+                "reference_power_w": current_mean,
+                "tolerance_fraction": policy.tolerance_fraction,
+                "absolute_ceiling_w": policy.absolute_ceiling_w,
+                "reference_upper_w": reference_upper_w,
+                "reference_lower_w": reference_lower_w,
+                "effective_upper_w": reference_upper_w,
+                "self_reference": {
+                    "window_s": window_s,
+                    "stability_fraction": stability_fraction,
+                    "rule": "max(policy.sustained_window_s, 30 s); "
+                            "min(policy.tolerance_fraction, 0.10); two-sided",
+                },
+                "decision_rolling_mean_power_w": previous_mean,
+                "window_span_s": current_span_s,
+                "window_coverage_s": current_coverage_s,
+                "span_complete": span_complete,
+                "coverage_complete": coverage_complete,
+                "window_complete": window_complete,
+                "thermal_pressure": thermal_pressure,
+                "thermal_nominal": thermal_nominal,
+                "release_criterion": {
+                    "power": (
+                        "|previous_window_mean - newest_window_mean| "
+                        "<= stability_fraction * newest_window_mean"
+                    ),
+                    "reference_bound": "newest complete sustained window (self-referenced)",
+                    "absolute_ceiling_role": "additional_upper_cap_on_newest_window",
+                    "window": "two_adjacent_complete_sustained_windows",
+                    "coverage": (
+                        "each window_coverage_s >= coverage_fraction * self_reference.window_s"
+                    ),
+                    "thermal": (
+                        "nominal_required" if policy.require_thermal_nominal else "not_required"
+                    ),
+                },
+                "_trace": trace,
+            }
+
+
+def _hazard_measured_cooldown(
+    hazard: Any,
+    cooldown_note: dict[str, Any],
+    *,
+    following_info: ConfigInfo,
+    runs_dir: Path,
+    log_path: Path,
+    session_evaluations: Sequence[MemberEvaluation],
+    provenance_path: Path,
+    session_id: str,
+    policy_binding: CampaignPolicyBinding,
+) -> dict[str, Any]:
+    """HAZARD: replace a reference-unavailable ``unknown`` by a measured cooldown.
+
+    Reference order (PLAN2 s2-05): the last eligible baseline of this session;
+    else an eligible frozen anchor anywhere in the window, any manifest id,
+    the NEG-8 start reference first; else a self-referenced recovery test.
+    An ``unknown`` whose reference existed but whose measurement failed is
+    returned unchanged (the caller flags it ``unmeasured``).  The result is an
+    ordinary cooldown-v2 note with a hash-addressed raw trace, so the harvest
+    verifies it exactly as it verifies any other cooldown.  Never raises.
+    """
+
+    reason = cooldown_note.get("reason")
+    if hazard is None or reason not in _COOLDOWN_REFERENCE_UNAVAILABLE_REASONS:
+        return cooldown_note
+    policy = policy_binding.policy.cooldown
+    note: dict[str, Any] = {
+        key: value
+        for key, value in cooldown_note.items()
+        if key not in {"result", "reason", "failure_reason", "reference_selection"}
+    }
+    note.update(_cooldown_policy_decision_surface(policy))
+    note["policy_version"] = policy.policy_version
+    note["fallback_from"] = {"result": cooldown_note.get("result"), "reason": reason}
+    baseline = None
+    selection = _HAZARD_COOLDOWN_SELF_REFERENCED
+    source: dict[str, Any] | None = None
+    try:
+        for evaluation in reversed(list(session_evaluations)):
+            eligibility = cooldown_reference_eligibility(evaluation, hazard=hazard)
+            candidate = _idle_baseline_from_summary(evaluation.summary)
+            if eligibility.get("eligible") is True and candidate is not None:
+                baseline, selection = candidate, _HAZARD_COOLDOWN_LAST_ELIGIBLE
+                source = {"bundle_id": evaluation.bundle_id}
+                break
+        if baseline is None:
+            anchor = _hazard_window_opening_anchor(hazard, runs_dir, policy_binding.sha256)
+            anchor_baseline = anchor.get("baseline") if isinstance(anchor, dict) else None
+            candidate = (
+                _idle_baseline_from_summary({"idle_baseline": anchor_baseline})
+                if isinstance(anchor_baseline, dict)
+                else None
+            )
+            if candidate is not None:
+                baseline, selection = candidate, _HAZARD_COOLDOWN_WINDOW_ANCHOR
+                source = {
+                    key: anchor.get(key)
+                    for key in ("source_kind", "bundle_id", "run_id")
+                    if key in anchor
+                }
+                note["anchor_provenance"] = anchor
+        note["reference_selection"] = selection
+        note["fallback_reference_source"] = source
+        from joulewise.interfaces import AdapterFailure
+        from joulewise.schemas import BenchmarkConfig
+
+        config = BenchmarkConfig.from_mapping(
+            json.loads(following_info.path.read_text(encoding="utf-8"))
+        )
+        telemetry, clock, problem = _hazard_cooldown_telemetry(config)
+        if problem is not None:
+            note.update({"result": "unknown", "reason": problem})
+            return note
+        cooldown_run_id = (
+            f"{sanitize_id_component(session_id)}-cooldown-before-"
+            f"{sanitize_id_component(following_info.run_id)}"
+        )
+        note["cooldown_run_id"] = cooldown_run_id
+        try:
+            if baseline is not None:
+                from joulewise.controller import cooldown_gate
+
+                gate = cooldown_gate(
+                    telemetry, baseline, config, clock, run_id=cooldown_run_id, policy=policy
+                )
+            else:
+                gate = _hazard_self_referenced_cooldown_gate(
+                    telemetry, config, clock, run_id=cooldown_run_id, policy=policy
+                )
+        except AdapterFailure as exc:
+            note.update({
+                "result": "unknown",
+                "reason": exc.message,
+                "failure_reason": exc.failure_reason.value,
+            })
+            return note
+        trace = gate.pop("_trace", [])
+        note.update(gate)
+        if trace:
+            note["raw_artifact"] = _write_campaign_cooldown_trace(
+                provenance_path, following_info.run_id, trace
+            )
+        else:
+            note.update({"result": "unknown", "reason": "cooldown trace was empty"})
+    except Exception as exc:  # noqa: BLE001 - evidence failure stays an unknown result
+        note.update({"result": "unknown", "reason": f"{type(exc).__name__}: {exc}"})
+    if note.get("result") in {"recovered", "cap_hit"}:
+        from joulewise.flags import core as flags_core
+
+        flags_core.emit(
+            hazard, "campaign.runner_record_flagged", level="member",
+            run_id=following_info.run_id,
+            observed={"kind": "cooldown_fallback_reference",
+                      "reference_selection": selection,
+                      "result": note["result"],
+                      "fallback_from": "reference_unavailable"},
+            legacy_site="scripts/run_campaign.py:4232@e6b6a0ce",
+            legacy_code="cooldown_v2_failed_closed_before_invoke",
+        )
+    return note
 
 
 def _write_campaign_provenance_tmp(path: Path, payload: bytes) -> Path:
@@ -3609,6 +4451,27 @@ def new_campaign_provenance(
     log_path: Path | None = None,
     prospective_analysis_manifest: ProspectiveManifestIdentity | None = None,
 ) -> tuple[Path, dict[str, Any]]:
+    path, manifest = _construct_campaign_provenance(
+        config_dir,
+        runs_dir,
+        analysis_manifest,
+        policy_binding,
+        prospective_analysis_manifest=prospective_analysis_manifest,
+    )
+    write_campaign_provenance(path, manifest, log_path)
+    return path, manifest
+
+
+def _construct_campaign_provenance(
+    config_dir: Path,
+    runs_dir: Path,
+    analysis_manifest: AnalysisManifestState | None,
+    policy_binding: CampaignPolicyBinding | None = None,
+    *,
+    prospective_analysis_manifest: ProspectiveManifestIdentity | None = None,
+) -> tuple[Path, dict[str, Any]]:
+    """Build a new campaign provenance manifest in memory; write nothing."""
+
     stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
     session_id = f"campaign-{stamp}-p{os.getpid()}"
     path = runs_dir / "campaign_manifests" / f"{session_id}.json"
@@ -3637,7 +4500,6 @@ def new_campaign_provenance(
         manifest["analysis_manifest_sha256"] = (
             prospective_analysis_manifest.file_sha256
         )
-    write_campaign_provenance(path, manifest, log_path)
     return path, manifest
 
 
@@ -4056,8 +4918,19 @@ def _idle_baseline_from_summary(summary: dict[str, Any] | None):
 
 def cooldown_reference_eligibility(
     evaluation: MemberEvaluation,
+    *,
+    hazard: Any = None,
 ) -> dict[str, Any]:
-    """Return fail-closed eligibility for a baseline used by cooldown v2."""
+    """Return fail-closed eligibility for a baseline used by cooldown v2.
+
+    HAZARD only (s2-01): an admission decision of ``flagged`` is accepted when
+    the member's own idle attempt was admitted and its own quiet-state
+    readings passed (``_hazard_flagged_admission_is_quiet``); otherwise a
+    DISCLOSE guard flag on one member would exclude its neighbour.  And since
+    a HAZARD member is no longer aborted by its environment guard, any member
+    whose own readings definitively broke the quiet state is ineligible
+    (``quiet_state_violated``), whatever its decision.
+    """
 
     reasons: list[str] = []
     baseline = _idle_baseline_from_summary(evaluation.summary)
@@ -4073,8 +4946,12 @@ def cooldown_reference_eligibility(
     else:
         if admission.get("critical_environment_passed") is not True:
             reasons.append("critical_environment_not_passed")
-        if admission.get("decision") != "admitted":
+        if admission.get("decision") != "admitted" and not (
+            hazard is not None and _hazard_flagged_admission_is_quiet(admission)
+        ):
             reasons.append("idle_admission_not_passed")
+        if hazard is not None and _hazard_quiet_state_violated(admission):
+            reasons.append("quiet_state_violated")
         if admission.get("reference_provenance_present") is not True:
             reasons.append("reference_provenance_incomplete")
     if (
@@ -4110,8 +4987,9 @@ def _anchor_from_evaluation(
     policy_binding: CampaignPolicyBinding,
     *,
     source_kind: str,
+    hazard: Any = None,
 ) -> dict[str, Any] | None:
-    eligibility = cooldown_reference_eligibility(evaluation)
+    eligibility = cooldown_reference_eligibility(evaluation, **_hazard_kwargs(hazard))
     baseline = _idle_baseline_from_summary(evaluation.summary)
     if not eligibility["eligible"] or baseline is None:
         return None
@@ -4139,6 +5017,7 @@ def _first_eligible_cooldown_anchor(
     policy_binding: CampaignPolicyBinding,
     *,
     source_kind: str,
+    hazard: Any = None,
 ) -> dict[str, Any] | None:
     """Freeze the first eligible physical repetition in execution order."""
 
@@ -4148,6 +5027,7 @@ def _first_eligible_cooldown_anchor(
             info,
             policy_binding,
             source_kind=source_kind,
+            **_hazard_kwargs(hazard),
         )
         if anchor is not None:
             return anchor
@@ -4235,6 +5115,7 @@ def campaign_cooldown_before_member(
     session_id: str,
     policy_binding: CampaignPolicyBinding | None = None,
     frozen_anchor: dict[str, Any] | None = None,
+    hazard: Any = None,
 ) -> dict[str, Any]:
     """Measure D-014 recovery and attach its tri-state result to the next run."""
     note: dict[str, Any] = {
@@ -4246,7 +5127,9 @@ def campaign_cooldown_before_member(
     baseline = _idle_baseline_from_summary(previous_evaluation.summary)
     if policy_binding is not None and policy_binding.policy.idle_admission.enabled:
         note.update(_cooldown_policy_decision_surface(policy_binding.policy.cooldown))
-        reference_eligibility = cooldown_reference_eligibility(previous_evaluation)
+        reference_eligibility = cooldown_reference_eligibility(
+            previous_evaluation, **_hazard_kwargs(hazard)
+        )
         anchor_eligibility = _cooldown_anchor_eligibility(
             frozen_anchor, policy_binding.sha256
         )
@@ -6382,7 +7265,8 @@ def run_whole_window_verdict(args: argparse.Namespace) -> int:
         raise ValueError(f"--runs-dir is not a directory: {runs_dir}")
     log_path = Path(args.log) if args.log else runs_dir / "campaign_log.jsonl"
     _require_external_campaign_log(log_path)
-    lock_token = acquire_campaign_lock(runs_dir)
+    hazard = _hazard_flag_context(runs_dir, stage="harvest")
+    lock_token = acquire_campaign_lock(runs_dir, **_hazard_kwargs(hazard))
     in_flight: BaseException | None = None
     try:
         return _run_whole_window_verdict_locked(
@@ -8252,6 +9136,7 @@ def run_campaign(args: argparse.Namespace) -> int:
     assert args.config_dir is not None
     config_dir = Path(args.config_dir)
     runs_dir = Path(args.runs_dir)
+    hazard = _hazard_flag_context(runs_dir)
     log_path = Path(args.log) if args.log else runs_dir / "campaign_log.jsonl"
     _require_external_campaign_log(log_path)
 
@@ -8336,7 +9221,7 @@ def run_campaign(args: argparse.Namespace) -> int:
         readiness = claim_readiness_for(analysis_manifest, "invalid", [])
         if not args.dry_run:
             print_verdict("invalid", collection_reasons, categories, readiness)
-            verdict_lock = acquire_campaign_lock(runs_dir)
+            verdict_lock = acquire_campaign_lock(runs_dir, **_hazard_kwargs(hazard))
             in_flight: BaseException | None = None
             try:
                 append_verdict(
@@ -8384,7 +9269,8 @@ def run_campaign(args: argparse.Namespace) -> int:
         print(f"error: {duplicate_error}", file=sys.stderr)
         return 2
     block_limit = campaign_block_limit(
-        requested_max_blocks, launch_authentication, order_entries, items
+        requested_max_blocks, launch_authentication, order_entries, items,
+        **_hazard_kwargs(hazard),
     )
     block_limit_reached = False
     if block_limit is not None:
@@ -8410,7 +9296,7 @@ def run_campaign(args: argparse.Namespace) -> int:
         collection_reasons = ["analysis manifest validation failed before execution"]
         readiness = claim_readiness_for(analysis_manifest, "invalid", [])
         print_verdict("invalid", collection_reasons, categories, readiness)
-        verdict_lock = acquire_campaign_lock(runs_dir)
+        verdict_lock = acquire_campaign_lock(runs_dir, **_hazard_kwargs(hazard))
         in_flight: BaseException | None = None
         try:
             append_verdict(
@@ -8451,7 +9337,9 @@ def run_campaign(args: argparse.Namespace) -> int:
     )
     frozen_cooldown_anchor = prior_campaign_cooldown_anchor(
         runs_dir,
-        collection_analysis_manifest_id,
+        # HAZARD: claim and bound roots are fresh per attempt, so every anchor
+        # in them is this window's; no manifest-id filter.
+        None if hazard is not None else collection_analysis_manifest_id,
         policy_binding.sha256,
         log_path,
     )
@@ -8472,7 +9360,7 @@ def run_campaign(args: argparse.Namespace) -> int:
         print("Dry run: no commands will be invoked and no campaign log will be written.")
     else:
         try:
-            lock_path = acquire_campaign_lock(runs_dir)
+            lock_path = acquire_campaign_lock(runs_dir, **_hazard_kwargs(hazard))
         except RuntimeError as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 2
@@ -8512,27 +9400,59 @@ def run_campaign(args: argparse.Namespace) -> int:
                         ),
                         "unowned_bundle_ids": unowned_bundle_ids,
                     }
+            if identity_error is not None and hazard is not None:
+                from joulewise.flags import core as flags_core
+
+                print(f"warning: campaign log identity flagged: {identity_error}", file=sys.stderr)
+                flags_core.emit(
+                    hazard, "campaign.runner_record_flagged", level="window",
+                    observed={"kind": "campaign_log_unauthenticated",
+                              "detail": str(identity_error)[:300]},
+                    legacy_site="scripts/run_campaign.py:8459@e6b6a0ce",
+                    legacy_code=getattr(identity_error, "reason_code", None),
+                )
+                identity_error = None
             if identity_error is not None:
                 return refuse_campaign_analysis_identity_mismatch(
                     identity_error,
                     analysis_manifest=analysis_manifest,
                 )
-            campaign_provenance_path, campaign_provenance = new_campaign_provenance(
-                config_dir,
-                runs_dir,
-                analysis_manifest,
-                policy_binding,
-                log_path,
-                prospective_analysis_manifest=prospective_analysis_manifest,
-            )
+            if hazard is None:
+                campaign_provenance_path, campaign_provenance = new_campaign_provenance(
+                    config_dir,
+                    runs_dir,
+                    analysis_manifest,
+                    policy_binding,
+                    log_path,
+                    prospective_analysis_manifest=prospective_analysis_manifest,
+                )
+            else:
+                campaign_provenance_path, campaign_provenance = _construct_campaign_provenance(
+                    config_dir,
+                    runs_dir,
+                    analysis_manifest,
+                    policy_binding,
+                    prospective_analysis_manifest=prospective_analysis_manifest,
+                )
+                _hazard_call(
+                    hazard, "new_campaign_provenance", None,
+                    lambda: write_campaign_provenance(
+                        campaign_provenance_path, campaign_provenance, log_path
+                    ),
+                    kind="provenance_unpersisted",
+                )
             campaign_provenance["cooldown_anchor"] = frozen_cooldown_anchor
             campaign_provenance["cooldown_anchor_strategy"] = (
                 "neg8_reference_start_then_first_admission_passing"
                 if neg8_reference_expected
                 else "first_admission_passing"
             )
-            write_campaign_provenance(
-                campaign_provenance_path, campaign_provenance, log_path
+            _hazard_call(
+                hazard, "provenance_cooldown_anchor", None,
+                lambda: write_campaign_provenance(
+                    campaign_provenance_path, campaign_provenance, log_path
+                ),
+                kind="provenance_unpersisted",
             )
             try:
                 environment_preflight = campaign_environment_preflight(
@@ -8542,35 +9462,52 @@ def run_campaign(args: argparse.Namespace) -> int:
                     override_path=args.environment_override,
                 )
             except Exception as exc:  # noqa: BLE001 - preflight errors fail before member 1
-                environment_error = {
-                    "status": "error",
-                    "reason": f"{type(exc).__name__}: {exc}",
-                }
-                campaign_provenance["environment_preflight"] = environment_error
-                write_campaign_provenance(
-                    campaign_provenance_path, campaign_provenance, log_path
-                )
-                append_environment_preflight_verdict(
-                    log_path,
-                    lock_token=lock_path,
-                    analysis_manifest=analysis_manifest,
-                    campaign_provenance_path=campaign_provenance_path,
-                    preflight=preflight,
-                    environment_guard=environment_error,
-                    reason="environment preflight failed before member 1",
-                    prospective_analysis_manifest=prospective_analysis_manifest,
-                )
-                print(
-                    f"error: environment preflight failed: {exc}",
-                    file=sys.stderr,
-                )
-                return 2
+                if hazard is not None:
+                    environment_preflight = _hazard_preflight_error_record(
+                        policy_binding, exc
+                    )
+                    print(
+                        f"warning: environment preflight failed and was flagged: {exc}",
+                        file=sys.stderr,
+                    )
+                else:
+                    environment_error = {
+                        "status": "error",
+                        "reason": f"{type(exc).__name__}: {exc}",
+                    }
+                    campaign_provenance["environment_preflight"] = environment_error
+                    write_campaign_provenance(
+                        campaign_provenance_path, campaign_provenance, log_path
+                    )
+                    append_environment_preflight_verdict(
+                        log_path,
+                        lock_token=lock_path,
+                        analysis_manifest=analysis_manifest,
+                        campaign_provenance_path=campaign_provenance_path,
+                        preflight=preflight,
+                        environment_guard=environment_error,
+                        reason="environment preflight failed before member 1",
+                        prospective_analysis_manifest=prospective_analysis_manifest,
+                    )
+                    print(
+                        f"error: environment preflight failed: {exc}",
+                        file=sys.stderr,
+                    )
+                    return 2
             campaign_provenance["environment_preflight"] = environment_preflight
-            write_campaign_provenance(
-                campaign_provenance_path, campaign_provenance, log_path
+            _hazard_call(
+                hazard, "provenance_environment_preflight", None,
+                lambda: write_campaign_provenance(
+                    campaign_provenance_path, campaign_provenance, log_path
+                ),
+                kind="provenance_unpersisted",
             )
             preflight["environment_guard"] = environment_preflight
-            if not environment_preflight["admitted"]:
+            if hazard is not None and not environment_preflight["admitted"]:
+                _hazard_stage_preflight_not_admitted(
+                    hazard, environment_preflight, config_dir
+                )
+            elif not environment_preflight["admitted"]:
                 evaluation = environment_preflight["evaluation"]
                 failed_findings = [
                     finding
@@ -8621,17 +9558,21 @@ def run_campaign(args: argparse.Namespace) -> int:
                     continue
                 failures += 1
                 print(f"error: {item.message}", file=sys.stderr)
-                append_log(
-                    log_path,
-                    log_row(
-                        config_path=item.path,
-                        run_id=item.run_id,
-                        status="config_error",
-                        exit_code=None,
-                        duration_s=None,
-                        extra={"error": item.message},
+                _hazard_call(
+                    hazard, "log_config_error", _hazard_member_run_id(item),
+                    lambda: append_log(
+                        log_path,
+                        log_row(
+                            config_path=item.path,
+                            run_id=item.run_id,
+                            status="config_error",
+                            exit_code=None,
+                            duration_s=None,
+                            extra={"error": item.message},
+                        ),
+                        lock_token=lock_path,
                     ),
-                    lock_token=lock_path,
+                    kind="member_iteration_error",
                 )
                 counts["config_error"] += 1
                 if failures >= args.max_failures or (block_limit is not None and failures):
@@ -8734,7 +9675,11 @@ def run_campaign(args: argparse.Namespace) -> int:
                             f"bundle={exc.bundle_id} detail={exc.detail}",
                             file=sys.stderr,
                         )
-                    append_log(log_path, gate_record, lock_token=lock_path)
+                    _hazard_call(
+                        hazard, "log_existing_shakedown_gate", _hazard_member_run_id(info),
+                        lambda: append_log(log_path, gate_record, lock_token=lock_path),
+                        kind="member_iteration_error",
+                    )
                 exit_code = None
                 duration_s = None
                 if status != "failed" and state.members_total is None:
@@ -8763,32 +9708,40 @@ def run_campaign(args: argparse.Namespace) -> int:
                 }
                 assert campaign_provenance_path is not None
                 assert campaign_provenance is not None
-                record_campaign_member_provenance(
-                    campaign_provenance_path,
-                    campaign_provenance,
-                    info=info,
-                    bundle_ids=[evaluation.bundle_id for evaluation in evaluations],
-                    evaluations=evaluations,
-                    execution="existing",
-                    cooldown=(
-                        evaluations[0].preceding_campaign_cooldown
-                        if evaluations
-                        else None
+                _hazard_call(
+                    hazard, "provenance_existing_member", _hazard_member_run_id(info),
+                    lambda: record_campaign_member_provenance(
+                        campaign_provenance_path,
+                        campaign_provenance,
+                        info=info,
+                        bundle_ids=[evaluation.bundle_id for evaluation in evaluations],
+                        evaluations=evaluations,
+                        execution="existing",
+                        cooldown=(
+                            evaluations[0].preceding_campaign_cooldown
+                            if evaluations
+                            else None
+                        ),
+                        existing_invalid=status == "failed",
+                        log_path=log_path,
                     ),
-                    existing_invalid=status == "failed",
-                    log_path=log_path,
+                    kind="provenance_unpersisted",
                 )
-                append_log(
-                    log_path,
-                    log_row(
-                        config_path=config_path,
-                        run_id=info.run_id,
-                        status=status,
-                        exit_code=exit_code,
-                        duration_s=duration_s,
-                        extra=extra,
+                _hazard_call(
+                    hazard, "log_existing_member", _hazard_member_run_id(info),
+                    lambda: append_log(
+                        log_path,
+                        log_row(
+                            config_path=config_path,
+                            run_id=info.run_id,
+                            status=status,
+                            exit_code=exit_code,
+                            duration_s=duration_s,
+                            extra=extra,
+                        ),
+                        lock_token=lock_path,
                     ),
-                    lock_token=lock_path,
+                    kind="member_iteration_error",
                 )
                 counts[status] += 1
                 if block_limit is not None:
@@ -8842,30 +9795,38 @@ def run_campaign(args: argparse.Namespace) -> int:
                 }
                 assert campaign_provenance_path is not None
                 assert campaign_provenance is not None
-                record_campaign_member_provenance(
-                    campaign_provenance_path,
-                    campaign_provenance,
-                    info=info,
-                    bundle_ids=[
-                        evaluation.bundle_id for evaluation in existing_evaluations
-                    ],
-                    evaluations=existing_evaluations,
-                    execution="existing",
-                    cooldown=None,
-                    existing_incomplete=True,
-                    log_path=log_path,
-                )
-                append_log(
-                    log_path,
-                    log_row(
-                        config_path=config_path,
-                        run_id=info.run_id,
-                        status=status,
-                        exit_code=exit_code,
-                        duration_s=duration_s,
-                        extra=extra,
+                _hazard_call(
+                    hazard, "provenance_incomplete_member", _hazard_member_run_id(info),
+                    lambda: record_campaign_member_provenance(
+                        campaign_provenance_path,
+                        campaign_provenance,
+                        info=info,
+                        bundle_ids=[
+                            evaluation.bundle_id for evaluation in existing_evaluations
+                        ],
+                        evaluations=existing_evaluations,
+                        execution="existing",
+                        cooldown=None,
+                        existing_incomplete=True,
+                        log_path=log_path,
                     ),
-                    lock_token=lock_path,
+                    kind="provenance_unpersisted",
+                )
+                _hazard_call(
+                    hazard, "log_incomplete_member", _hazard_member_run_id(info),
+                    lambda: append_log(
+                        log_path,
+                        log_row(
+                            config_path=config_path,
+                            run_id=info.run_id,
+                            status=status,
+                            exit_code=exit_code,
+                            duration_s=duration_s,
+                            extra=extra,
+                        ),
+                        lock_token=lock_path,
+                    ),
+                    kind="member_iteration_error",
                 )
                 counts[status] += 1
                 if failures >= args.max_failures or (block_limit is not None and failures):
@@ -8893,8 +9854,12 @@ def run_campaign(args: argparse.Namespace) -> int:
                     "recorded_at": utc_timestamp(),
                 }
                 campaign_provenance["first_physical_run_id"] = first_physical_bundle_id
-                write_campaign_provenance(
-                    campaign_provenance_path, campaign_provenance, log_path
+                _hazard_call(
+                    hazard, "provenance_first_physical_member", _hazard_member_run_id(info),
+                    lambda: write_campaign_provenance(
+                        campaign_provenance_path, campaign_provenance, log_path
+                    ),
+                    kind="provenance_unpersisted",
                 )
             elif previous_physical_info is not None and previous_physical_evaluation is not None:
                 cooldown_note = campaign_cooldown_before_member(
@@ -8905,6 +9870,7 @@ def run_campaign(args: argparse.Namespace) -> int:
                     session_id=campaign_provenance["session_id"],
                     policy_binding=policy_binding,
                     frozen_anchor=frozen_cooldown_anchor,
+                    **_hazard_kwargs(hazard),
                 )
             else:
                 cooldown_note = {
@@ -8914,11 +9880,26 @@ def run_campaign(args: argparse.Namespace) -> int:
                     "following_run_id": first_physical_bundle_id,
                     "recorded_at": utc_timestamp(),
                 }
+            if hazard is not None and cooldown_note.get("result") == "unknown":
+                cooldown_note = _hazard_measured_cooldown(
+                    hazard,
+                    cooldown_note,
+                    following_info=following_physical_info,
+                    runs_dir=runs_dir,
+                    log_path=log_path,
+                    session_evaluations=all_evaluations,
+                    provenance_path=campaign_provenance_path,
+                    session_id=campaign_provenance["session_id"],
+                    policy_binding=policy_binding,
+                )
             cooldown_by_bundle[first_physical_bundle_id] = cooldown_note
 
             if (
                 policy_binding.policy.idle_admission.enabled
                 and cooldown_note.get("result") == "unknown"
+                and not _hazard_cooldown_unknown(
+                    hazard, physical_bundle_dirs, cooldown_note
+                )
             ):
                 blocked_bundle_ids = [path.name for path in physical_bundle_dirs]
                 missing_members.extend(blocked_bundle_ids)
@@ -8929,58 +9910,95 @@ def run_campaign(args: argparse.Namespace) -> int:
                     f"{cooldown_note.get('reason', 'unknown reference')}",
                     file=sys.stderr,
                 )
-                record_campaign_member_provenance(
-                    campaign_provenance_path,
-                    campaign_provenance,
-                    info=info,
-                    bundle_ids=blocked_bundle_ids,
-                    evaluations=[],
-                    execution="blocked_before_invoke",
-                    cooldown=cooldown_note,
-                    log_path=log_path,
-                )
-                append_log(
-                    log_path,
-                    log_row(
-                        config_path=config_path,
-                        run_id=info.run_id,
-                        status="failed",
-                        exit_code=None,
-                        duration_s=None,
-                        extra={
-                            **order_extra,
-                            "preceding_campaign_cooldown": cooldown_note,
-                            "blocked_before_invoke": True,
-                            "campaign_provenance_manifest": str(
-                                campaign_provenance_path
-                            ),
-                        },
+                _hazard_call(
+                    hazard, "provenance_blocked_member", _hazard_member_run_id(info),
+                    lambda: record_campaign_member_provenance(
+                        campaign_provenance_path,
+                        campaign_provenance,
+                        info=info,
+                        bundle_ids=blocked_bundle_ids,
+                        evaluations=[],
+                        execution="blocked_before_invoke",
+                        cooldown=cooldown_note,
+                        log_path=log_path,
                     ),
-                    lock_token=lock_path,
+                    kind="provenance_unpersisted",
+                )
+                _hazard_call(
+                    hazard, "log_blocked_member", _hazard_member_run_id(info),
+                    lambda: append_log(
+                        log_path,
+                        log_row(
+                            config_path=config_path,
+                            run_id=info.run_id,
+                            status="failed",
+                            exit_code=None,
+                            duration_s=None,
+                            extra={
+                                **order_extra,
+                                "preceding_campaign_cooldown": cooldown_note,
+                                "blocked_before_invoke": True,
+                                "campaign_provenance_manifest": str(
+                                    campaign_provenance_path
+                                ),
+                            },
+                        ),
+                        lock_token=lock_path,
+                    ),
+                    kind="member_iteration_error",
                 )
                 if failures >= args.max_failures or (block_limit is not None and failures):
                     break
                 continue
 
             start = time.monotonic()
+            absent_child_metadata: list[Path] = []
             result = run_authenticated_campaign_child(
                 command,
                 env=child_environment,
                 outer_authentication=launch_authentication,
                 bundle_paths=expected_member_dirs(info, runs_dir),
+                **(
+                    {**_hazard_kwargs(hazard), "absent": absent_child_metadata}
+                    if hazard is not None
+                    else {}
+                ),
             )
             duration_s = time.monotonic() - start
             exit_code = result.returncode
-            physical_cooldowns = _physical_cooldown_evidence_for_config(
-                info,
-                runs_dir,
-                cooldown_note,
-                campaign_provenance_path,
-                policy_binding.policy.cooldown,
+            if absent_child_metadata:
+                from joulewise.flags import core as flags_core
+
+                for absent_bundle in absent_child_metadata:
+                    print(
+                        f"warning: child bundle has no readable metadata.json "
+                        f"(member failed mid-run): {absent_bundle}",
+                        file=sys.stderr,
+                    )
+                    flags_core.emit(
+                        hazard, "campaign.runner_record_flagged", level="member",
+                        run_id=absent_bundle.name,
+                        observed={"kind": "child_metadata_absent",
+                                  "bundle_dir": absent_bundle.name,
+                                  "returncode": exit_code},
+                        legacy_site="scripts/run_campaign.py:1946@e6b6a0ce",
+                        legacy_code="launch_lineage_conflict",
+                    )
+            physical_cooldowns = _hazard_call(
+                hazard, "physical_cooldown_evidence", _hazard_member_run_id(info),
+                lambda: _physical_cooldown_evidence_for_config(
+                    info,
+                    runs_dir,
+                    cooldown_note,
+                    campaign_provenance_path,
+                    policy_binding.policy.cooldown,
+                ),
             )
+            if physical_cooldowns is _HAZARD_FAILED:
+                physical_cooldowns = {}
             cooldown_by_bundle.update(physical_cooldowns)
             evaluations = evaluate_members(
-                info, runs_dir, waivers, cooldown_by_bundle
+                info, runs_dir, waivers, cooldown_by_bundle, **_hazard_kwargs(hazard)
             )
             all_evaluations.extend(evaluations)
             if evaluations:
@@ -9004,12 +10022,17 @@ def run_campaign(args: argparse.Namespace) -> int:
                         info,
                         policy_binding,
                         source_kind=source_kind,
+                        **_hazard_kwargs(hazard),
                     )
                     if candidate_anchor is not None:
                         frozen_cooldown_anchor = candidate_anchor
                         campaign_provenance["cooldown_anchor"] = candidate_anchor
-                        write_campaign_provenance(
-                            campaign_provenance_path, campaign_provenance, log_path
+                        _hazard_call(
+                            hazard, "provenance_cooldown_anchor_frozen", _hazard_member_run_id(info),
+                            lambda: write_campaign_provenance(
+                                campaign_provenance_path, campaign_provenance, log_path
+                            ),
+                            kind="provenance_unpersisted",
                         )
             missing_after_run = [
                 evaluation.bundle_id
@@ -9043,8 +10066,12 @@ def run_campaign(args: argparse.Namespace) -> int:
                         f"detail={exc.detail}",
                         file=sys.stderr,
                     )
-                append_log(
-                    log_path, shakedown_record, lock_token=lock_path
+                _hazard_call(
+                    hazard, "log_invoked_shakedown_gate", _hazard_member_run_id(info),
+                    lambda: append_log(
+                        log_path, shakedown_record, lock_token=lock_path
+                    ),
+                    kind="member_iteration_error",
                 )
             if status == "failed":
                 failures += 1
@@ -9078,28 +10105,36 @@ def run_campaign(args: argparse.Namespace) -> int:
                 "preceding_campaign_cooldown": cooldown_note,
                 "campaign_provenance_manifest": str(campaign_provenance_path),
             }
-            record_campaign_member_provenance(
-                campaign_provenance_path,
-                campaign_provenance,
-                info=info,
-                bundle_ids=[evaluation.bundle_id for evaluation in evaluations],
-                evaluations=evaluations,
-                execution="invoked",
-                cooldown=cooldown_note,
-                cooldowns_by_bundle=physical_cooldowns,
-                log_path=log_path,
-            )
-            append_log(
-                log_path,
-                log_row(
-                    config_path=config_path,
-                    run_id=info.run_id,
-                    status=status,
-                    exit_code=exit_code,
-                    duration_s=duration_s,
-                    extra=extra,
+            _hazard_call(
+                hazard, "provenance_invoked_member", _hazard_member_run_id(info),
+                lambda: record_campaign_member_provenance(
+                    campaign_provenance_path,
+                    campaign_provenance,
+                    info=info,
+                    bundle_ids=[evaluation.bundle_id for evaluation in evaluations],
+                    evaluations=evaluations,
+                    execution="invoked",
+                    cooldown=cooldown_note,
+                    cooldowns_by_bundle=physical_cooldowns,
+                    log_path=log_path,
                 ),
-                lock_token=lock_path,
+                kind="provenance_unpersisted",
+            )
+            _hazard_call(
+                hazard, "log_invoked_member", _hazard_member_run_id(info),
+                lambda: append_log(
+                    log_path,
+                    log_row(
+                        config_path=config_path,
+                        run_id=info.run_id,
+                        status=status,
+                        exit_code=exit_code,
+                        duration_s=duration_s,
+                        extra=extra,
+                    ),
+                    lock_token=lock_path,
+                ),
+                kind="member_iteration_error",
             )
             counts[status] += 1
             print(f"{status} {info.run_id}: exit={exit_code} duration_s={duration_s:.3f}")
@@ -9109,7 +10144,11 @@ def run_campaign(args: argparse.Namespace) -> int:
                 and args.backup is not None
                 and args.shakedown_gate is None
             ):
-                backup_runs(runs_dir, backup_script_path(args.backup))
+                _hazard_call(
+                    hazard, "backup_runs", _hazard_member_run_id(info),
+                    lambda: backup_runs(runs_dir, backup_script_path(args.backup)),
+                    kind="member_iteration_error",
+                )
 
             if block_limit is not None:
                 if status != "ok":
@@ -9128,12 +10167,25 @@ def run_campaign(args: argparse.Namespace) -> int:
         categories = classify_campaign_members(all_evaluations, missing_members)
         collection_verdict, collection_reasons = collection_verdict_for(categories)
         sampling_audit = sampling_audit_for(analysis_manifest)
-        idle_admission_core = idle_admission_core_verdict(
-            all_evaluations,
-            policy_binding,
-            runs_root=runs_dir,
-            neg8_drift_bound=neg8_drift_bound,
+        stage_verdict_degraded = False
+        idle_admission_core = _hazard_call(
+            hazard, "idle_admission_core_verdict", None,
+            lambda: idle_admission_core_verdict(
+                all_evaluations,
+                policy_binding,
+                runs_root=runs_dir,
+                neg8_drift_bound=neg8_drift_bound,
+            ),
+            kind="stage_verdict_degraded",
         )
+        if idle_admission_core is _HAZARD_FAILED:
+            stage_verdict_degraded = True
+            idle_admission_core = {
+                "schema_version": IDLE_ADMISSION_CORE_SCHEMA,
+                "policy_sha256": policy_binding.sha256,
+                "members": [],
+                "conditions": ["idle_admission_core_evaluation_error"],
+            }
         extension = policy_binding.idle_admission_extension
         claim_bearing = bool(
             analysis_manifest is not None
@@ -9160,22 +10212,49 @@ def run_campaign(args: argparse.Namespace) -> int:
         else:
             print("  conditions: <none>")
         assert lock_path is not None
-        append_verdict(
-            log_path,
-            lock_token=lock_path,
-            collection_verdict=collection_verdict,
-            collection_reasons=collection_reasons,
-            categories=categories,
-            claim_readiness=claim_readiness,
-            analysis_manifest=analysis_manifest,
-            sampling_audit=sampling_audit,
-            members=all_evaluations,
-            campaign_provenance_path=campaign_provenance_path,
-            warning=order_warning,
-            preflight=preflight,
-            idle_admission_core=idle_admission_core,
-            prospective_analysis_manifest=prospective_analysis_manifest,
+        appended = _hazard_call(
+            hazard, "append_verdict", None,
+            lambda: append_verdict(
+                log_path,
+                lock_token=lock_path,
+                collection_verdict=collection_verdict,
+                collection_reasons=collection_reasons,
+                categories=categories,
+                claim_readiness=claim_readiness,
+                analysis_manifest=analysis_manifest,
+                sampling_audit=sampling_audit,
+                members=all_evaluations,
+                campaign_provenance_path=campaign_provenance_path,
+                warning=order_warning,
+                preflight=preflight,
+                idle_admission_core=idle_admission_core,
+                prospective_analysis_manifest=prospective_analysis_manifest,
+            ),
+            kind="stage_verdict_degraded",
         )
+        if appended is _HAZARD_FAILED:
+            # One minimal retry; if it also fails the flag is the only record.
+            stage_verdict_degraded = True
+            _hazard_call(
+                hazard, "append_verdict_minimal", None,
+                lambda: append_verdict(
+                    log_path,
+                    lock_token=lock_path,
+                    collection_verdict=collection_verdict,
+                    collection_reasons=collection_reasons,
+                    categories=categories,
+                    claim_readiness=claim_readiness,
+                    analysis_manifest=analysis_manifest,
+                    sampling_audit=sampling_audit,
+                    members=[],
+                    campaign_provenance_path=campaign_provenance_path,
+                    warning=order_warning,
+                    preflight=preflight,
+                    idle_admission_core=None,
+                    prospective_analysis_manifest=prospective_analysis_manifest,
+                ),
+                kind="stage_verdict_degraded",
+            )
         core_blocks_claim = bool(
             claim_bearing
             and _idle_admission_claim_barrier_reasons(idle_admission_core)
@@ -9184,6 +10263,7 @@ def run_campaign(args: argparse.Namespace) -> int:
             failures
             or collection_verdict in {"blocked", "invalid"}
             or core_blocks_claim
+            or stage_verdict_degraded
         )
         if block_limit_reached and not campaign_failed:
             assert block_limit is not None and block_limit.last_block is not None
