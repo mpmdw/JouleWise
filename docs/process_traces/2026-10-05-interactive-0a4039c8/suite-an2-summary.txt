@@ -1,0 +1,8 @@
+shard1.log: SHARD SUMMARY index=1/6 modules=1 tests=74 failures=0 errors=0 skipped=1 result=PASS
+shard2.log: SHARD SUMMARY index=2/6 modules=57 tests=1423 failures=0 errors=0 skipped=5 result=PASS
+shard3.log: SHARD SUMMARY index=3/6 modules=57 tests=1515 failures=0 errors=0 skipped=23 result=PASS
+shard4.log: SHARD SUMMARY index=4/6 modules=57 tests=1722 failures=0 errors=0 skipped=8 result=PASS
+shard5.log: SHARD SUMMARY index=5/6 modules=58 tests=1146 failures=0 errors=0 skipped=11 result=PASS
+shard6.log: SHARD SUMMARY index=6/6 modules=59 tests=1782 failures=3 errors=1 skipped=4 result=FAIL
+ex1.log: OK
+ex2.log: OK
