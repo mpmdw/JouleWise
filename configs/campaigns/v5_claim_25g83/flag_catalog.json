@@ -91,6 +91,27 @@
       "klass": "PHYSICS",
       "note": "A calibration capture's #421 battery pair shows the battery not floating; the bracket feeds every member's clock bound."
     },
+    "calibration.capture_battery_pair_unverified": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "CALIBRATION",
+      "klass": "PHYSICS",
+      "note": "HAZARD path (core-prune A1): the controller's per-member pre-slot battery pair verdict did not pass; the member runs and the fact is recorded (a recorded raw digest whose bytes are missing or changed still refuses). Claim status: the harvest re-derives the pair from the same bytes (calibration.capture_battery_pair_failed) and judges missing pair evidence from the continuous journal (calibration.capture_battery_unmeasured)."
+    },
+    "calibration.capture_battery_span": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_WINDOW",
+      "family": "CALIBRATION",
+      "klass": "PHYSICS",
+      "note": "Core-prune N7: the continuous battery journal joined over a calibration capture's span gives battery.member_span or battery.accumulator_excursion (the battery-float rule of #421 applied to the capture as to members). The capture is not a valid calibration anchor."
+    },
+    "calibration.capture_battery_unmeasured": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_WINDOW",
+      "family": "CALIBRATION",
+      "klass": "PHYSICS",
+      "note": "Core-prune N7: a calibration capture's battery pair verdict did not pass and the journal cannot stand in for it (the capture has no span, the battery journal is absent, or its join over the span gives battery.unmeasured). The capture's battery state is unmeasured."
+    },
     "calibration.capture_invalid": {
       "blinding": "STRUCTURE",
       "effect": "EXCLUDE_WINDOW",
@@ -126,12 +147,33 @@
       "klass": "NUMBER",
       "note": "No finalized bracket session: includes a chain stopped before post-calibration by disk.low, the agent census or the deadline."
     },
+    "calibration.power_policy_unverified": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "CALIBRATION",
+      "klass": "REPRESENTATION",
+      "note": "HAZARD path (core-prune A14): the power-policy label check (CLI label against the recorded binding label, or the runtime policy derived from preflight strings) did not match or could not be read; recorded instead of refusing. A label, not a measured quantity (battery state is judged by the battery codes)."
+    },
     "calibration.session_not_bound": {
       "blinding": "STRUCTURE",
       "effect": "EXCLUDE_WINDOW",
       "family": "CALIBRATION",
       "klass": "NUMBER",
       "note": "The bracket session names another plan, plan digest, window, evidence root or runs root."
+    },
+    "calibration.writer_record_flagged": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "CALIBRATION",
+      "klass": "REPRESENTATION",
+      "note": "HAZARD path (core-prune A6-R1 to R3, A7, A8): a calibration writer or reservation record check that used to refuse (desk-predicted identity, committed pin or historical custody, a stale head pin, pmset displaysleepnow failing, binding strings missing from the powermetrics header) is recorded instead; observed.kind names the fact. Every kind has this one effect."
+    },
+    "campaign.runner_record_flagged": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "RECORDS",
+      "klass": "REPRESENTATION",
+      "note": "HAZARD path (core-prune A4, A9, A13, A16, A20, V3): a campaign-runner record check that used to stop the stage (absent child metadata after a crash, a stale campaign lock, the GAMMA campaign-log analysis identity, an exception while writing a record or the stage verdict) is recorded instead; observed.kind names the fact. Window or member scope. Every kind has this one effect."
     },
     "cell.below_minimum": {
       "blinding": "STRUCTURE",
@@ -224,6 +266,13 @@
       "klass": "PHYSICS",
       "note": "Part of the member's request is covered by no ps interval."
     },
+    "cooldown.result_unknown": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "PHYSICS",
+      "note": "HAZARD path (core-prune A2, A19): the cooldown before a member returned unknown, or its probe raised or the adapter was unavailable; the member runs instead of the stage blocking. Claim status is still decided by member.cooldown_evidence_unverified."
+    },
     "diagnostic.s1_structural": {
       "blinding": "STRUCTURE",
       "effect": "DISCLOSE",
@@ -237,6 +286,27 @@
       "family": "DIAGNOSTIC",
       "klass": "PHYSICS",
       "note": "Free disk below 10 GiB; the driver stops the chain, and the window gets calibration.no_bracket."
+    },
+    "env.member_guard_flagged": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "REPRESENTATION",
+      "note": "HAZARD path (core-prune A11): the member environment guard recorded an unknown status or a capture error (not a measured quiet-state violation). The member runs; the reducer's environment claim barrier still excludes it from claims until LANE_BARRIER is registered."
+    },
+    "env.member_quiet_state_violated": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_MEMBER",
+      "family": "MEMBER_VALIDITY",
+      "klass": "PHYSICS",
+      "note": "HAZARD path (core-prune A11): the member environment guard measured a quiet-state violation during the member; the stage continues and the member is excluded."
+    },
+    "env.stage_preflight_not_admitted": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "REPRESENTATION",
+      "note": "HAZARD path (core-prune A10): the stage environment preflight raised or did not admit; the stage runs with a record shaped like a normal preflight. The reducer's environment claim barrier still excludes the affected members until LANE_BARRIER is registered."
     },
     "g10.discharged": {
       "blinding": "STRUCTURE",
@@ -293,6 +363,13 @@
       "family": "NEG8",
       "klass": "NUMBER",
       "note": "Aggregate: G3's F5-2 independent recompute of the whole-window verdict did not find a clean pass. Not window-removing for the same reason as whole_window.not_passed; its parts act through neg8.screen_failed, calibration.bracket_acceptance_failed and member.whole_window_member_failure (registration 6.5)."
+    },
+    "instrument.binary_identity_unmeasured": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_MEMBER",
+      "family": "INSTRUMENT",
+      "klass": "NUMBER",
+      "note": "HAZARD path (core-prune A14): the powermetrics binary digest for this member's invocation could not be read, so the member cannot be tied to the calibrated binary. A present digest that differs from the calibrated one still refuses."
     },
     "instrument.cadence_ratio_below_threshold": {
       "blinding": "STRUCTURE",
@@ -497,6 +574,13 @@
       "klass": "NUMBER",
       "note": "The member's campaign cooldown evidence does not verify."
     },
+    "member.idle_admission_telemetry_missing": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_MEMBER",
+      "family": "MEMBER_VALIDITY",
+      "klass": "PHYSICS",
+      "note": "HAZARD path (core-prune A18): every failed idle-admission condition was an evidence condition (CPU telemetry missing, malformed or too few samples; GPU admission unknown), so the member runs; its idle-window quietness is unmeasured. A threshold failure still retries and aborts as before."
+    },
     "member.idle_window_suspect": {
       "blinding": "STRUCTURE",
       "effect": "EXCLUDE_MEMBER",
@@ -615,6 +699,13 @@
       "family": "NEG8",
       "klass": "NUMBER",
       "note": "The NEG-8 bound was not derived: neither the core reader (all 12 corpus members) nor the harvest's collected-subset validation (at least 10 of 12, committed order, only unsucceeded members left out, bound arithmetic and corpus identity checked against the custodied manifest) accepts it (registration 5.3)."
+    },
+    "neg8.corpus_member_dropped": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "NEG8",
+      "klass": "REPRESENTATION",
+      "note": "Core-prune N2: a succeeded NEG-8 corpus member was left out of the bound's custodied manifest because the core's NEG-8 mint drops it for a registered member-validity reason (the harvest's NEG8_ACCEPTED_DROP_REASONS). Any other left-out succeeded member makes a selected corpus and gives neg8.bound_not_derived."
     },
     "neg8.screen_failed": {
       "blinding": "STRUCTURE",
@@ -791,6 +882,13 @@
       "klass": "NUMBER",
       "note": "The bundle's metadata.json run_id differs from its directory. A misfiled bundle already fails the per-member config check; this covers a bundle whose own records disagree about which member it is. A kept member needs one identity in every record a later program may key on, or one energy could count under two units or the wrong quad position. Emitter class REPRESENTATION, restated NUMBER here (registration 6.7)."
     },
+    "teardown.survivors": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "PHYSICS",
+      "note": "HAZARD path (core-prune A17): the sampler teardown report or the runtime cleanup after the member's measured window was not clean; recorded instead of failing the member (no further signals are sent). The next members' physics is measured by the contention journal (contention.request_overlap) and their own idle admission."
+    },
     "thermal.battery_temperature_unmeasured": {
       "blinding": "STRUCTURE",
       "effect": "DISCLOSE",
@@ -859,7 +957,7 @@
     "aggregate_disclosures": "whole_window.not_passed and g3.recompute_failed are DISCLOSE because they fail on any single member's failure. Their window-level parts are neg8.screen_failed (emitted by the harvest, with the collected-subset re-screen) and calibration.bracket_acceptance_failed; their member-level part is member.whole_window_member_failure.",
     "authority": "registration_block5.md section 6 states these rules in words; this file is normative for each code's effect.",
     "restated_classes": "roster.run_id_mismatch (emitter REPRESENTATION, restated NUMBER here) is the one restatement; its note says why. calibration.ledger_snapshot_refused now keeps its emitter's class, NUMBER.",
-    "status": "DRAFT, NOT SEALED. Revision 4, 2026-10-06 (registration-sync side lane; revision 3 is commit 71c91d74). Sealed with registration_block5.md, analysis_plan_block5.md and sealed_inventory.json by one cold gate (registration 12). Rehearsal round-1 additions, 2026-10-06 (gate-prune fix lane): roster.duplicate_run_id and roster.creation_unplaced. Timing-ruling additions, 2026-10-06 (timing lane): thermal.stage_battery_rise and thermal.battery_temperature_unmeasured, both DISCLOSE.",
+    "status": "DRAFT, NOT SEALED. Revision 4, 2026-10-06 (registration-sync side lane; revision 3 is commit 71c91d74). Sealed with registration_block5.md, analysis_plan_block5.md and sealed_inventory.json by one cold gate (registration 12). Rehearsal round-1 additions, 2026-10-06 (gate-prune fix lane): roster.duplicate_run_id and roster.creation_unplaced. Timing-ruling additions, 2026-10-06 (timing lane): thermal.stage_battery_rise and thermal.battery_temperature_unmeasured, both DISCLOSE. Core-prune integration additions, 2026-10-06 (integration lane): the fourteen codes the core-prune lanes emit (DESIGN.md section 5), with the effects given there.",
     "unclassified": "A code not listed here is UNCLASSIFIED: it blocks only the release event until classified blind by a cold erratum (registration 7.2). records.malformed_flag and collector.unmeasured are deliberately absent so that they always block release until read."
   },
   "rules": {
