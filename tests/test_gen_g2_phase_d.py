@@ -296,7 +296,7 @@ class G2bOneBlockChainTests(unittest.TestCase):
         self.assertIn('post-bracket-terminal-boundary.json', self.chain)
 
     @unittest.skipUnless(shutil.which("zsh"), "zsh required for generated chain")
-    def test_rendered_g2b_dispatches_unique_75_second_idle_run_ids(self):
+    def test_rendered_g2b_dispatches_unique_duration_sized_idle_run_ids(self):
         """Execute the rendered dispatch body with a read-only roster collector."""
         pack = REPO_ROOT / "configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5"
         tree = json.loads((pack / "plan_tree.json").read_bytes())
@@ -325,7 +325,7 @@ class G2bOneBlockChainTests(unittest.TestCase):
                 "    if limited and row['block_index'] > 1: continue\n"
                 "    config = json.loads((directory / row['config']).read_bytes())\n"
                 "    assert config['run_id'] == row['run_id']\n"
-                "    assert config['sampling']['idle_seconds'] == 75.0\n"
+                "    assert config['sampling']['idle_seconds'] == 57.6\n"
                 "    print(config['run_id'])\n"
                 "sys.exit(3 if limited else 0)\n"
             )

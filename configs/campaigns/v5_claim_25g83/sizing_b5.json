@@ -44,7 +44,14 @@
     "model_source": {
       "/Users/edr/jw_models/mlx-community/Qwen3-1.7B-4bit": "small",
       "/Users/edr/jw_models/mlx-community/Qwen3-8B-4bit": "large"
-    }
+    },
+    "superseded_block4_configs": [
+      "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b01-a1",
+      "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b01-a2",
+      "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b01-b1",
+      "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b01-b2"
+    ],
+    "superseded_rule": "a block-4 config whose bytes a block-5 pack regeneration replaced is read at the bytes the pack's plan tree records"
   },
   "clock_gate": {
     "frequency_margin_ppm": 0.25,
@@ -74,8 +81,8 @@
         "members_s": 70805,
         "pack_t0_s": 0,
         "pre_post_calibration_s": 770,
-        "programmed_span_s": 85978,
-        "settles_s": 1980,
+        "programmed_span_s": 84658,
+        "settles_s": 660,
         "stage_custody_s": 11863,
         "terminal_shutdown_s": 300
       },
@@ -107,9 +114,9 @@
       "pack_longest_stream_s": 314,
       "plan_tree": {
         "path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/plan_tree.json",
-        "sha256": "a0076ae7ed8dc89b81a5138ce35d38171946e5e8a30599202f7845e7bcb70938"
+        "sha256": "5218c2709274765c706f38766ae68cce30892a673e9ae5cc290701362f615eb1"
       },
-      "programmed_span_s": 85978,
+      "programmed_span_s": 84658,
       "science_members": 100,
       "stages": [
         {
@@ -166,7 +173,7 @@
           "members": 10,
           "order_manifest": {
             "path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/01_phase_decode_absolute/order_manifest.json",
-            "sha256": "68a02e2bae3ddff6816e775ae41b0a62e494f35cd2becccce272f551d64bd60c"
+            "sha256": "41a4318a336a5488a4260a067d4ea0a4f7a49c3732e006e3bdb2bd01ce94c75f"
           },
           "ordinal": 6,
           "science": true,
@@ -181,7 +188,7 @@
           "members": 20,
           "order_manifest": {
             "path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/02_phase_decode_abba_blocks_01_05/order_manifest.json",
-            "sha256": "0929d5c431ac0d8e795f34021f36de36bbca3c618b6a96c9832070b4c053db15"
+            "sha256": "a13572ede9627d6563db3e7acb0e245cee11c39408ded4af3db948c37b6e36d4"
           },
           "ordinal": 7,
           "science": true,
@@ -196,7 +203,7 @@
           "members": 20,
           "order_manifest": {
             "path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/03_phase_decode_abba_blocks_06_10/order_manifest.json",
-            "sha256": "af199b0535f77b83dea51e8692d6d1f2cc4660d74db27493ffc946b35e1faafd"
+            "sha256": "4d21fec58aa98823f7089405ec2558a6ab50fb70992dac124d2d8748a5d07c07"
           },
           "ordinal": 8,
           "science": true,
@@ -226,7 +233,7 @@
           "members": 10,
           "order_manifest": {
             "path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/04_phase_prefill_p2048_absolute/order_manifest.json",
-            "sha256": "329147797aac632dbee8e50378f0d7d08067efb68f47e55e7187df0d19f34bb0"
+            "sha256": "d85cd70fda1fedf4d0c75844f45e92ec9f874db6d338c49a684572fbc925c8ec"
           },
           "ordinal": 10,
           "science": true,
@@ -241,7 +248,7 @@
           "members": 20,
           "order_manifest": {
             "path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/05_phase_prefill_p2048_abba_blocks_01_05/order_manifest.json",
-            "sha256": "95c579390209655734059b3a8feb0415eb0cd0eda6fef1a98dff97912b0d3f3f"
+            "sha256": "1184c6d7f52ef35dc6e25b27b243dd61d8d0d0d8e32f65d26fa4256795ae6f15"
           },
           "ordinal": 11,
           "science": true,
@@ -256,7 +263,7 @@
           "members": 20,
           "order_manifest": {
             "path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/06_phase_prefill_p2048_abba_blocks_06_10/order_manifest.json",
-            "sha256": "afac8313f467a2248546e11342a14c19d3834bfc3dc72d34d9ca53f1522b0eba"
+            "sha256": "aaa061cd882e73f2a831c0912800af1604032ce599bcc9404937cedd96da6539"
           },
           "ordinal": 12,
           "science": true,
@@ -283,7 +290,7 @@
           "stage_id": "alpha-post-calibration"
         }
       ],
-      "window_max_s": 89280
+      "window_max_s": 87960
     },
     "BETA": {
       "T_stream_max_s": 335,
@@ -294,8 +301,8 @@
         "members_s": 73205,
         "pack_t0_s": 0,
         "pre_post_calibration_s": 770,
-        "programmed_span_s": 88378,
-        "settles_s": 1980,
+        "programmed_span_s": 87058,
+        "settles_s": 660,
         "stage_custody_s": 11863,
         "terminal_shutdown_s": 300
       },
@@ -328,9 +335,9 @@
       "pack_longest_stream_s": 335,
       "plan_tree": {
         "path": "configs/campaigns/d117_floor_qwen3-8b_v5/plan_tree.json",
-        "sha256": "ebd8c160feda7698698eb28b48e18f9f3b3b7df9dacd1d4b7d70a09e49f73d6a"
+        "sha256": "5bab773a481e4a06fae564217b178d8e1d76a5334f99a3b264c1174db692a6e4"
       },
-      "programmed_span_s": 88378,
+      "programmed_span_s": 87058,
       "science_members": 100,
       "stages": [
         {
@@ -387,7 +394,7 @@
           "members": 10,
           "order_manifest": {
             "path": "configs/campaigns/d117_floor_qwen3-8b_v5/01_phase_decode_absolute/order_manifest.json",
-            "sha256": "e14eb6ffbc89fb14cb38b07fbf367e4f950263b839965375507a95a683b92a26"
+            "sha256": "b6e0ed47f8b2eb41dba44b1a00e48d375725cb7ffa61c5efeb9b2c4c75239c72"
           },
           "ordinal": 6,
           "science": true,
@@ -402,7 +409,7 @@
           "members": 20,
           "order_manifest": {
             "path": "configs/campaigns/d117_floor_qwen3-8b_v5/02_phase_decode_abba_blocks_01_05/order_manifest.json",
-            "sha256": "f2690a5cd913f29313c55ba65da3ec134a68a2e84179c337cfc5c9d17ebd8af5"
+            "sha256": "ac48f550b5646975300d1e1c97afdc7c88c640a3ead5a239ddb7a19a7932cff5"
           },
           "ordinal": 7,
           "science": true,
@@ -417,7 +424,7 @@
           "members": 20,
           "order_manifest": {
             "path": "configs/campaigns/d117_floor_qwen3-8b_v5/03_phase_decode_abba_blocks_06_10/order_manifest.json",
-            "sha256": "f755488d849a14e22b1c6baa744e8010bc478fd8b65b5bb99dd3737ec4fb4238"
+            "sha256": "20e820ecae1e5f0a479ebd36f1a4940b5e7b9be2ff73a9ad3e44f8c58204a68e"
           },
           "ordinal": 8,
           "science": true,
@@ -447,7 +454,7 @@
           "members": 10,
           "order_manifest": {
             "path": "configs/campaigns/d117_floor_qwen3-8b_v5/04_phase_prefill_p2048_absolute/order_manifest.json",
-            "sha256": "335a8eaf90ad8fa911271a2d52d3cbedc41a85395e2c1d2eaf2c0c58dd359647"
+            "sha256": "78d06c46e2b519765eadd3362589610f0e2bcbe0824031d56857df4439ea53e3"
           },
           "ordinal": 10,
           "science": true,
@@ -462,7 +469,7 @@
           "members": 20,
           "order_manifest": {
             "path": "configs/campaigns/d117_floor_qwen3-8b_v5/05_phase_prefill_p2048_abba_blocks_01_05/order_manifest.json",
-            "sha256": "f8f773e3fd777be00e32ea3fba88f975ef02ec3f9932affdec2423c03b7adfda"
+            "sha256": "ef7f61e05358ebc0f53aea507810567cdce89d78939a1ba403e3a4ef76b8ba02"
           },
           "ordinal": 11,
           "science": true,
@@ -477,7 +484,7 @@
           "members": 20,
           "order_manifest": {
             "path": "configs/campaigns/d117_floor_qwen3-8b_v5/06_phase_prefill_p2048_abba_blocks_06_10/order_manifest.json",
-            "sha256": "7b29102ebcd7dcc739a563db425c342679945f38612eaadad3e3c031523712c0"
+            "sha256": "b23d5bc16147681dc8d4c6b49695b5d35bf281a5641931ab3f67d4fba7fcf42e"
           },
           "ordinal": 12,
           "science": true,
@@ -504,7 +511,7 @@
           "stage_id": "beta-post-calibration"
         }
       ],
-      "window_max_s": 91680
+      "window_max_s": 90360
     },
     "GAMMA": {
       "T_stream_max_s": 335,
@@ -515,8 +522,8 @@
         "members_s": 61055,
         "pack_t0_s": 0,
         "pre_post_calibration_s": 770,
-        "programmed_span_s": 74842,
-        "settles_s": 1980,
+        "programmed_span_s": 73522,
+        "settles_s": 660,
         "stage_custody_s": 10477,
         "terminal_shutdown_s": 300
       },
@@ -549,9 +556,9 @@
       "pack_longest_stream_s": 335,
       "plan_tree": {
         "path": "configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5/plan_tree.json",
-        "sha256": "7cdf1891ab8ddde7b2fcd882c211599bbf2205aeb08b30c9a9da92d749bf5b1e"
+        "sha256": "523864e25be4e94424dcc366b4e8ae2719f41d6c222d36679588a0c6aa087ab6"
       },
-      "programmed_span_s": 74842,
+      "programmed_span_s": 73522,
       "science_members": 80,
       "stages": [
         {
@@ -609,7 +616,7 @@
           "members": 20,
           "order_manifest": {
             "path": "configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5/01_decode_contrast_blocks_01_05/order_manifest.json",
-            "sha256": "70fedf20da5a3e7c023ebd80f5d01d6c7014a0c593eb5f9b28b186e1e768d84a"
+            "sha256": "8f7aec4ee14dc3da04304bac4279a969f80538ecee63ab5fd0683395ff1d4807"
           },
           "ordinal": 6,
           "science": true,
@@ -640,7 +647,7 @@
           "members": 20,
           "order_manifest": {
             "path": "configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5/02_decode_contrast_blocks_06_10/order_manifest.json",
-            "sha256": "97d8e733db122181dc0a0d306b3e1ba02245222306b4989f3d8afe86f141ce98"
+            "sha256": "43ea7a08d02fbf32905e4bd517495314a565f6734ee68a8e35f9641a78eb196a"
           },
           "ordinal": 8,
           "science": true,
@@ -671,7 +678,7 @@
           "members": 20,
           "order_manifest": {
             "path": "configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5/03_prefill_p2048_contrast_blocks_01_05/order_manifest.json",
-            "sha256": "07ca39f9e378568a316e61493e3df29fce95900a85cbcddcbdcd95f6e30034e0"
+            "sha256": "62d9dcaa0012eab48083c75040c1191c9331474831ee95f7bcd09bd0e6115767"
           },
           "ordinal": 10,
           "science": true,
@@ -702,7 +709,7 @@
           "members": 20,
           "order_manifest": {
             "path": "configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5/04_prefill_p2048_contrast_blocks_06_10/order_manifest.json",
-            "sha256": "1b307173ff107ad44b0bb5a41817eee045d4e0def02cb58c16a42d25214f47cd"
+            "sha256": "ab9c9c248f02239f405b71c9a17dec92b3f5d93427a2849ef0c81ee02100133f"
           },
           "ordinal": 12,
           "science": true,
@@ -729,7 +736,7 @@
           "stage_id": "gamma-calibration-post"
         }
       ],
-      "window_max_s": 78180
+      "window_max_s": 76860
     }
   },
   "schema_version": "joulewise.b5_sizing.v1",
@@ -887,7 +894,7 @@
       "source_pointer": "/derivations/stage_custody/reduction_allowance_s"
     },
     "settle_s": {
-      "seconds": 180,
+      "seconds": 60,
       "source": "joulewise/b5/chain.py SETTLE_S"
     },
     "stage_custody_formula": {

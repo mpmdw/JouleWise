@@ -1,4 +1,9 @@
-"""Idle-duration and historical-reference regressions for the issued v5 packs."""
+"""Idle-duration and historical-reference regressions for the issued v5 packs.
+
+The block-5 timing ruling (2026-10-06) sizes idle capture by duration: idle_seconds 57.6
+asks the adapter for ceil(57.6 / 0.1) = 576 records, about 75 s at the sampler's ~130.5 ms
+cadence. Before it, the packs set idle_seconds 75.0 (750 records, about 98 s).
+"""
 
 from __future__ import annotations
 
@@ -18,10 +23,11 @@ PACKS = (
     "d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5",
 )
 PIN = ROOT / "configs/campaigns/d117_contrast_v5/prefill_pin/prefill-prompt-pin.json"
+V5_IDLE_SECONDS = 57.6
 
 
 class V5PackRegenerationTests(unittest.TestCase):
-    def test_generators_emit_75_second_idle_from_issued_pin(self):
+    def test_generators_emit_duration_sized_idle_from_issued_pin(self):
         """Generate afresh until freeze; then respect the frozen-byte guard."""
         with tempfile.TemporaryDirectory(prefix="v5-idle-") as temporary:
             output = Path(temporary)
@@ -46,7 +52,7 @@ class V5PackRegenerationTests(unittest.TestCase):
                         if "sampling" in row and "run_id" in row:
                             members.append(row)
                     self.assertEqual(len(members), 80 if "contrast" in pack_id else 100)
-                    self.assertTrue(all(row["sampling"]["idle_seconds"] == 75.0
+                    self.assertTrue(all(row["sampling"]["idle_seconds"] == V5_IDLE_SECONDS
                                         for row in members))
 
     def test_v5_reference_copies_change_only_idle_and_retain_run_ids(self):
@@ -63,7 +69,7 @@ class V5PackRegenerationTests(unittest.TestCase):
                 copy_raw = (prospective / path.relative_to(historical)).read_bytes()
                 if b'"idle_seconds": 30.0' in raw:
                     self.assertEqual(copy_raw, raw.replace(b'"idle_seconds": 30.0',
-                                                          b'"idle_seconds": 75.0'))
+                                                          b'"idle_seconds": 57.6'))
                     count += 1
                 else:
                     self.assertEqual(copy_raw, raw)
@@ -87,7 +93,7 @@ class V5PackRegenerationTests(unittest.TestCase):
                 for member in external.get("members", []):
                     path = ROOT / member["path"]
                     self.assertEqual(hashlib.sha256(path.read_bytes()).hexdigest(), member["sha256"])
-                    self.assertEqual(json.loads(path.read_bytes())["sampling"]["idle_seconds"], 75.0)
+                    self.assertEqual(json.loads(path.read_bytes())["sampling"]["idle_seconds"], V5_IDLE_SECONDS)
         self.assertEqual(count, 15)
 
     def test_gamma_interior_stages_retain_shared_midpoint_until_block5_design(self):

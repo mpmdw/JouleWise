@@ -42,7 +42,7 @@
   },
   "sampling": {
     "power_hz": 10.0,
-    "idle_seconds": 75.0,
+    "idle_seconds": 57.6,
     "warmup_seconds": 5.0
   },
   "run_metadata": {
@@ -54,7 +54,7 @@
       "production-window",
       "floor-calibration",
       "df-condition=df-ph-prefill-p2048-qwen3-8b",
-      "calibration-plan-sha256=246af3753007fddbd14f655acfd7f3149e918edc93cd9a7392368ecf93887594",
+      "calibration-plan-sha256=7142cc8834ed656024c85664f6c9f990ad3c999e8751cc3cacbf51f4724f8180",
       "rep10",
       "calibration-abba-block-id=d117-df-cmp-abba-ph-prefill-p2048-qwen3-8b-b10",
       "calibration-abba-label=B",

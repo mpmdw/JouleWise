@@ -173,12 +173,21 @@ class SizingTests(unittest.TestCase):
         provenance = source["provenance"]
         self.assertEqual(len(provenance["config_inventory"]), 23)
         for row in provenance["config_inventory"]:
-            raw = (writer.REPO_ROOT / row["source"]["path"]).read_bytes()
+            # The block-5 timing ruling (2026-10-06) regenerated the _v5 configs at
+            # idle_seconds 57.6, so the bytes block 4's source recorded are read at the
+            # commit the source names as its head, where they must still hash and carry
+            # the recorded idle. The live config must be that regeneration, nothing else.
+            raw = subprocess.run(
+                ["git", "show", f"{source['head']}:{row['source']['path']}"],
+                cwd=writer.REPO_ROOT, check=True, capture_output=True).stdout
             self.assertEqual(hashlib.sha256(raw).hexdigest(), row["source"]["sha256"])
             sampling = json.loads(raw)["sampling"]
             self.assertEqual(sampling["idle_seconds"], row["sampling_idle_seconds"])
             self.assertEqual(row["sampling_idle_seconds"], 75)
             self.assertEqual(row["idle_records"], 750)
+            live = json.loads((writer.REPO_ROOT / row["source"]["path"]).read_bytes())
+            self.assertEqual(live["sampling"], {**sampling, "idle_seconds": 57.6})
+            self.assertEqual(live["model"], json.loads(raw)["model"])
         self.assertEqual(len(provenance["cadence_captures"]), 40)
         for row in provenance["cadence_captures"]:
             self.assertEqual(row["records"], 750)

@@ -25,7 +25,7 @@
     "quantization": "int4",
     "sampling": {
       "power_hz": 10.0,
-      "idle_seconds": 75.0,
+      "idle_seconds": 57.6,
       "warmup_seconds": 5.0
     },
     "decode_condition_family_id": "df-ph-decode-qwen3-1p7b",
@@ -1663,7 +1663,7 @@
   "campaign_log": "runs_d117_floor_qwen3-1p7b_v5/campaign_log.jsonl",
   "campaign_policy": {
     "policy_id": "quiet-mac-p2-production",
-    "path": "configs/campaign_policies/quiet_mac_p2_production.json",
-    "sha256": "b0d7b228b88bea717aa9269c103aca760cc36cf05239e0f86c235b4b29665efd"
+    "path": "configs/campaign_policies/quiet_mac_p2_b5.json",
+    "sha256": "ba0f7b7f1538fe87f6281362efbba4b05f7dff74b4bfd78e84c98b9e8859bc60"
   }
 }
