@@ -405,6 +405,19 @@ def _corpus_member_status(runs_root: Path | None, member: Any) -> str | None:
     return status if isinstance(status, str) else None
 
 
+# The mint drop reasons that may leave a succeeded corpus member out of a
+# derived bound: each a registered member-validity failure that would exclude a
+# science member (DESIGN N2's closed set).  Any other reason the mint gives (a
+# reducer exception folded into energy_evidence_invalid, an unauthenticated
+# lineage, an unrecorded string, a cross-member condition majority) is not
+# evidence about the member's number, so the bound is not derived: unknown
+# evidence never authorizes an omission.  The chain's helper still mirrors the
+# mint byte for byte; this set only decides what the harvest accepts.
+NEG8_ACCEPTED_DROP_REASONS = frozenset({"status_not_succeeded", "not_current_strict_mint",
+                                        "custody_triangle_disagrees", "precheck_ineligible",
+                                        "reduction_mismatch"})
+
+
 def neg8_mint_drops(runs_root: Path | None, committed: Mapping[str, Any],
                     succeeded: Sequence[Any]) -> tuple[dict[str, str], str]:
     """What the core's HAZARD NEG-8 mint drops from the corpus members that succeeded.
@@ -452,8 +465,10 @@ def neg8_bound_member_problems(bound: Mapping[str, Any], runs_root: Path) -> lis
     core; this ties its numbers to the bytes.  For each member: exactly one
     ordinary bundle in ``runs_root`` (``whole_window.ordinary_present_bundle_paths``,
     not a symlink) whose complete file inventory hashes to the recorded
-    ``bundle_evidence_sha256``; the mint's per-member predicates hold (custody
-    triangle, current strict mint, the bound's canonical condition); and both
+    ``bundle_evidence_sha256``; the mint's per-member predicates hold (launch
+    lineage authenticates, the calibration identity is the bound's, custody
+    triangle, current strict mint, the bound's canonical condition; stamped
+    members share one lineage, the bound's when it names one); and both
     claim-family points re-derive from the bundle by the core's own path
     (``whole_window._reference_energy_evidence``) to the recorded values, to
     the core's tolerance.  Problems name the member, never a number.
@@ -463,6 +478,11 @@ def neg8_bound_member_problems(bound: Mapping[str, Any], runs_root: Path) -> lis
     members = corpus.get("members") if isinstance(corpus, Mapping) else None
     if not isinstance(members, list) or not members:
         return ["bound_names_no_members"]
+    freshness = bound.get("freshness") if isinstance(bound.get("freshness"), Mapping) else {}
+    bindings = freshness.get("bindings") if isinstance(freshness.get("bindings"), Mapping) else {}
+    bound_calibration = bindings.get("calibration_identity_sha256")
+    bound_lineage = bound.get("launch_lineage") if isinstance(bound.get("launch_lineage"), Mapping) else None
+    member_lineages: dict[str, Any] = {}
     problems: list[str] = []
     for member in members:
         bundle_id = member.get("bundle_id") if isinstance(member, Mapping) else None
@@ -482,6 +502,21 @@ def neg8_bound_member_problems(bound: Mapping[str, Any], runs_root: Path) -> lis
         try:
             summary = ww._read_json_object(path / "summary_metrics.json")
             metadata = ww._read_json_object(path / "metadata.json")
+            config = ww._read_json_object(path / "config.json")
+            try:
+                authenticated = ww.authenticate_bundle_launch_lineage(path, config=config, metadata=metadata,
+                                                                      require_completion=False)
+            except ww.LaunchLineageError:
+                problems.append(f"bound_member_lineage_unauthenticated:{bundle_id}")
+                continue
+            if authenticated is not None:
+                extra = metadata.get("extra") if isinstance(metadata, Mapping) else None
+                lineage = extra.get("launch_lineage") if isinstance(extra, Mapping) else None
+                member_lineages[str(bundle_id)] = lineage
+            calibration = _neg8_member_calibration_identity(ww, metadata)
+            if calibration is None or calibration != bound_calibration:
+                problems.append(f"bound_member_calibration_differs:{bundle_id}")
+                continue
             identity, canonical = ww._scientific_config_identity(path)
             strict = (not ww._custody_strict_invalid(path, summary, metadata)
                       and ww._current_strict_summary(summary, path))
@@ -497,7 +532,20 @@ def neg8_bound_member_problems(bound: Mapping[str, Any], runs_root: Path) -> lis
                 gross.get("point_j"), member.get("point_gross_j")) \
                 or not _close(idle, member.get("point_idle_subtracted_j")):
             problems.append(f"bound_member_energy_differs:{bundle_id}")
+    # Stamped members carry one lineage, and it is the bound's when the bound names one (the mint's rule).
+    distinct = {json.dumps(value, sort_keys=True, default=str) for value in member_lineages.values()}
+    if len(distinct) > 1 or (member_lineages and bound_lineage is not None
+                             and distinct != {json.dumps(bound_lineage, sort_keys=True, default=str)}):
+        problems.append("bound_members_lineage_differs")
     return problems
+
+
+def _neg8_member_calibration_identity(ww: Any, metadata: Any) -> str | None:
+    """One bundle's calibration identity as the core reads it (the b1 mint's field reader when present)."""
+    fields_of = getattr(ww, "neg8_freshness_binding_fields", None)
+    fields = fields_of(metadata) if fields_of is not None else ww.neg8_freshness_bindings_from_metadata(metadata)
+    value = fields.get("calibration_identity_sha256") if isinstance(fields, Mapping) else None
+    return value if isinstance(value, str) else None
 
 
 def _close(fresh: Any, recorded: Any) -> bool:
@@ -2804,8 +2852,9 @@ class _Harvest:
           manifest's, whose members are committed members in committed order
           (at least ``NEG8_DRIFT_MINIMUM_N``), and which left out only members
           that did not succeed, or, on a HAZARD bound root, that succeeded but
-          the core's mint drops (``neg8_mint_drops``; each such drop is
-          ``neg8.corpus_member_dropped``).  Validation then takes those
+          the core's mint drops for a registered member-validity reason
+          (``neg8_mint_drops``, ``NEG8_ACCEPTED_DROP_REASONS``; each such drop
+          is ``neg8.corpus_member_dropped``).  Validation then takes those
           custodied bytes as ``reference_corpus_bytes`` with
           ``require_corpus_identity=True``.
 
@@ -3008,10 +3057,14 @@ class _Harvest:
             reasons, check["mint_rule"] = neg8_mint_drops(
                 root, committed, [member for member in listed if _corpus_member_status(root, member) == "succeeded"])
         omitted = [(member.get("bundle_id"), reasons[member.get("bundle_id")]) for member in dropped_succeeded
-                   if member.get("bundle_id") in reasons]
-        selected = [member.get("bundle_id") for member in dropped_succeeded if member.get("bundle_id") not in reasons]
+                   if reasons.get(member.get("bundle_id")) in NEG8_ACCEPTED_DROP_REASONS]
+        selected = [member.get("bundle_id") for member in dropped_succeeded
+                    if reasons.get(member.get("bundle_id")) not in NEG8_ACCEPTED_DROP_REASONS]
         if selected:
             problems.append("dropped_member_succeeded:" + ",".join(map(str, selected[:4])))
+            unaccepted = [f"{bundle}={reasons[bundle]}" for bundle in selected if bundle in reasons]
+            if unaccepted:
+                problems.append("mint_drop_reason_not_accepted:" + ",".join(unaccepted[:4]))
             return None
         for bundle_id, reason in omitted:
             placed = isinstance(bundle_id, str) and bool(bundle_id)
@@ -3788,11 +3841,18 @@ class _Harvest:
         sources: list[tuple[str, bytes | None]] = []
         for directory in directories:
             label = "operator-logs" if directory == directories[0] else str(directory)
-            for path in sorted(directory.glob("*.log")) if directory.is_dir() else []:
+            if not directory.is_dir():
+                continue
+            try:
+                names = sorted(name for name in os.listdir(directory) if name.endswith(".log"))
+            except OSError:  # a directory that cannot be listed may hold such a line
+                sources.append((label, None))
+                continue
+            for name in names:
                 try:
-                    sources.append((f"{label}/{path.name}", path.read_bytes()))
+                    sources.append((f"{label}/{name}", (directory / name).read_bytes()))
                 except OSError:
-                    sources.append((f"{label}/{path.name}", None))
+                    sources.append((f"{label}/{name}", None))
         transcript = getattr(self, "_desk_transcript", None)
         if isinstance(transcript, str):
             sources.append(("desk-transcript", transcript.encode("utf-8", "replace")))

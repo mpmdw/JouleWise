@@ -41,8 +41,9 @@ against the custodied collected subset (registration 5.3,
 ``harvest._collected_corpus_bytes``), so such a window is not excluded for that
 reason alone. ``neg8.bound_not_derived`` (EXCLUDE_WINDOW) follows when fewer
 than 10 are kept, when the custodied bytes or the bound do not validate, or
-when a member that succeeded was left out for any reason other than the mint's
-own drop rule (a selected corpus). The chain keeps those bytes and a
+when a member that succeeded was left out for any reason other than a mint
+drop for a registered member-validity reason (a selected corpus; the harvest's
+``NEG8_ACCEPTED_DROP_REASONS``). The chain keeps those bytes and a
 create-once summary (both paths and SHA-256, and each dropped member with its
 reason) under ``$NIGHT_DIR/transcript/``; the driver copies the locator into
 ``night/hazard_result.json`` (``neg8_corpus``).
@@ -132,7 +133,8 @@ DEVIATIONS = (
     "(registration 5.3), so such a window is not excluded for that reason alone: "
     "neg8.bound_not_derived (EXCLUDE_WINDOW) follows only when fewer than 10 are kept, when the "
     "custodied bytes or the bound do not validate, or when a member that succeeded was left out "
-    "for any reason but the mint's own drop rule, a selected corpus (locator: "
+    "for any reason but a mint drop for a registered member-validity reason, a selected corpus "
+    "(locator: "
     "night/hazard_result.json neg8_corpus)",
     "whole_window_verdict and backup stages are desk steps and are not in the chain",
 )

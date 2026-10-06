@@ -3323,6 +3323,28 @@ class UnwrittenCoreFlagTests(WindowTestCase):
                          [("operator-logs/07-b5t-science.log", 3)])
         self.assertIn("records.malformed_flag", window.window_flags()["flags"]["unclassified"])
 
+    def test_an_unreadable_log_or_log_directory_blocks_release(self):
+        """Review gap: a log that may hold a marker line but cannot be read is never silently skipped."""
+        for case in ("file", "directory"):
+            with self.subTest(case):
+                window = Window(self.tmp / f"unreadable-{case}", catalog_overrides=self.ISOLATE)
+                logs = window.custody / "operator-logs"
+                logs.mkdir(exist_ok=True)
+                (logs / "07-b5t-science.log").write_text("stage output\n")
+                target = logs / "07-b5t-science.log" if case == "file" else logs
+                target.chmod(0)
+                self.addCleanup(target.chmod, 0o755)
+                if os.access(target, os.R_OK):
+                    self.skipTest("running as a user who can read mode-000 files")
+                try:
+                    window.harvest()
+                finally:
+                    target.chmod(0o755)
+                malformed = [flag["observed"] for flag in window.flags() if flag["code"] == "records.malformed_flag"]
+                expected = "operator-logs/07-b5t-science.log" if case == "file" else "operator-logs"
+                self.assertIn(expected, [item["file"] for item in malformed])
+                self.assertIn("records.malformed_flag", window.window_flags()["flags"]["unclassified"])
+
     def test_a_marker_line_in_the_desk_transcript_is_recovered(self):
         window = self.window(prefix_ledger=True)
         line = self.unwritten_line("campaign.runner_record_flagged", level="window",
@@ -3404,7 +3426,7 @@ class Neg8MintDropTests(WindowTestCase):
 
     OMITTED = CORPUS_IDS[6]
     FAILED = CORPUS_IDS[0]
-    DROP = [{"bundle_id": CORPUS_IDS[6], "reason": "energy_evidence_invalid"}]
+    DROP = [{"bundle_id": CORPUS_IDS[6], "reason": "not_current_strict_mint"}]
 
     def corpus_window(self, name: str, *, hazard: bool = True, omit: bool = True) -> "Window":
         """A window whose collected manifest left out FAILED and OMITTED, or, with ``omit=False``, all 12.
@@ -3448,7 +3470,24 @@ class Neg8MintDropTests(WindowTestCase):
         self.assertNotIn("neg8.bound_not_derived", window.codes())
         dropped = [flag for flag in window.flags() if flag["code"] == "neg8.corpus_member_dropped"]
         self.assertEqual([(flag["scope"]["level"], flag["scope"]["run_id"], flag["observed"]) for flag in dropped],
-                         [("member", self.OMITTED, {"bundle_id": self.OMITTED, "reason": "energy_evidence_invalid"})])
+                         [("member", self.OMITTED, {"bundle_id": self.OMITTED, "reason": "not_current_strict_mint"})])
+
+    def test_a_mint_drop_for_a_reason_that_is_not_member_validity_is_a_selected_corpus(self):
+        """Keeper (review R1): a drop reason that is not evidence about the member's number authorizes nothing."""
+        for reason in ("energy_evidence_invalid", "launch_lineage:launch_consumption_invalid",
+                       "calibration_identity_unrecorded", "condition_differs", "bundle_inventory_invalid"):
+            with self.subTest(reason):
+                window = self.corpus_window(reason.replace(":", "-"))
+                check, asked = self.harvest(window, [{"bundle_id": self.OMITTED, "reason": reason}])
+                self.assertEqual(len(asked), 1)
+                self.assertIsNone(check["derived_from"])
+                self.assertEqual(check["problems"], [f"dropped_member_succeeded:{self.OMITTED}",
+                                                     f"mint_drop_reason_not_accepted:{self.OMITTED}={reason}"])
+                self.assertIn("neg8.bound_not_derived", window.exclusions()["reasons"])
+                self.assertNotIn("neg8.corpus_member_dropped", window.codes())
+        self.assertEqual(h.NEG8_ACCEPTED_DROP_REASONS,
+                         {"status_not_succeeded", "not_current_strict_mint", "custody_triangle_disagrees",
+                          "precheck_ineligible", "reduction_mismatch"})
 
     def test_any_other_drop_is_still_a_selected_corpus(self):
         """Keeper: a succeeded member the mint keeps, or a mint that cannot say, selects the corpus."""
@@ -3489,6 +3528,29 @@ class Neg8MintDropTests(WindowTestCase):
                 check, _asked = self.harvest(window, drops)
                 self.assertEqual(check["problems"], [f"bound_member_bytes_differ:{shifted}"])
                 self.assertIn("neg8.bound_not_derived", window.codes())
+            with self.subTest(derived, tamper="calibration"):
+                window = self.corpus_window(f"calibration-{derived}", omit=omit)
+                other = {**NEG8_FRESHNESS, "calibration_identity_sha256": "0" * 64}
+                fields = lambda metadata: dict(other if metadata.get("run_id") == shifted else NEG8_FRESHNESS)
+                check, _asked = self.harvest(
+                    window, drops,
+                    mock.patch.object(whole_window, "neg8_freshness_bindings_from_metadata", side_effect=fields),
+                    mock.patch.object(whole_window, "neg8_freshness_binding_fields", side_effect=fields, create=True))
+                self.assertEqual(check["problems"], [f"bound_member_calibration_differs:{shifted}"])
+                self.assertIsNone(check["derived_from"])
+            with self.subTest(derived, tamper="lineage"):
+                window = self.corpus_window(f"lineage-{derived}", omit=omit)
+
+                def lineage(path, **kwargs):
+                    if Path(path).name == shifted:
+                        raise whole_window.LaunchLineageError("launch_lineage_conflict", "a foreign stamp")
+                    return None
+
+                check, _asked = self.harvest(
+                    window, drops, mock.patch.object(whole_window, "authenticate_bundle_launch_lineage",
+                                                     side_effect=lineage))
+                self.assertEqual(check["problems"], [f"bound_member_lineage_unauthenticated:{shifted}"])
+                self.assertIsNone(check["derived_from"])
             with self.subTest(derived, tamper="none"):
                 window = self.corpus_window(f"clean-{derived}", omit=omit)
                 check, _asked = self.harvest(window, drops)
