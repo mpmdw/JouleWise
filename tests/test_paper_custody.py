@@ -22,6 +22,7 @@ from joulewise import paper_rendering as rendering
 from joulewise import identity_pins
 from joulewise.authentication_io import V2AuthenticationReadSession
 from joulewise.identity_pins import IdentityPinProjectionError
+from tests.fixtures.paper_custody import repin as fixture_repin
 from tests.git_fixture import init_git_fixture
 
 
@@ -113,7 +114,10 @@ class _FamilyFixture:
         self.runs_root.mkdir()
         self.anchor_root.mkdir()
 
-        supply_map_raw = SUPPLY_MAP.read_bytes()
+        # Fixture roles are computed from the current validator source at test
+        # time (lane L7); the committed map carries production roles only.
+        self.supply_map = fixture_repin.fixture_supply_map()
+        supply_map_raw = fixture_repin.supply_map_bytes(self.supply_map)
         supply_map = json.loads(supply_map_raw)
         self.entry = supply_map["roles"][self.role]
         input_by_role = {row["role"]: row for row in self.entry["inputs"]}
@@ -315,13 +319,17 @@ class PaperCustodyCensusTests(unittest.TestCase):
         return opened.evidence.inputs
 
     def test_supply_map_and_fixture_catalog_cover_exactly_five_families(self) -> None:
-        supply_map = json.loads(SUPPLY_MAP.read_text(encoding="utf-8"))
+        committed = json.loads(SUPPLY_MAP.read_text(encoding="utf-8"))
+        self.assertEqual(committed["schema_version"], "joulewise.paper_supply_map.v2")
+        self.assertFalse([role for role in committed["roles"] if role.startswith("fixture.")])
+        supply_map = fixture_repin.fixture_supply_map()
         catalog = json.loads(FIXTURE_CATALOG.read_text(encoding="utf-8"))
         self.assertEqual(supply_map["schema_version"], "joulewise.paper_supply_map.v2")
         self.assertEqual(
-            set(supply_map["roles"]),
+            {role for role in supply_map["roles"] if role.startswith("fixture.")},
             {f"fixture.{family}" for family in _FAMILIES},
         )
+        self.assertEqual(fixture_repin.fixture_families(), tuple(sorted(_FAMILIES)))
         self.assertEqual(catalog["families"], sorted(_FAMILIES))
         self.assertEqual(catalog["marker"], "synthetic-no-measurement-value")
 
@@ -580,7 +588,7 @@ class PaperCustodyApiTests(unittest.TestCase):
 
     def test_malformed_map_digest_and_nested_session_are_closed_refusals(self) -> None:
         fixture = self._fixture("reported_energy_parents")
-        supply_map = json.loads(SUPPLY_MAP.read_text(encoding="utf-8"))
+        supply_map = copy.deepcopy(fixture.supply_map)
         supply_map["roles"][fixture.role]["inputs"][0]["expected_sha256"] = None
         with mock.patch.object(custody, "_git_blob", return_value=_json_bytes(supply_map)):
             with self.assertRaises(custody.PaperCustodyRefusal) as malformed:
@@ -595,7 +603,7 @@ class PaperCustodyApiTests(unittest.TestCase):
         self.assertIn(nested.exception.code, custody.PAPER_CUSTODY_REFUSAL_CODES)
 
     def test_malformed_pending_roles_refuse_every_fixture_family(self) -> None:
-        supply_map = json.loads(SUPPLY_MAP.read_bytes())
+        supply_map = fixture_repin.fixture_supply_map()
         role, pending = next(iter(supply_map["pending_roles"].items()))
         malformed = [
             None, 7, [], "pending_desk_day",
@@ -960,6 +968,22 @@ class RoundFiveTests(unittest.TestCase):
                 self.assert_code("paper_custody_receipt_binding_mismatch", custody._validate_receipt, raw, supply.receipt,
                                  family=family, sources=(*supply.sources, *supply.source_census))
         print(f"KILLED {count} owner-source mutations and 5 grant-policy mutations: stale receipts refused")
+
+    def test_validator_source_edit_needs_no_fixture_repin(self):
+        """A one-line validator edit re-derives the fixture receipts (lane L7)."""
+        original = inspect.getsource
+        edited = custody._replay_family
+
+        def getsource(candidate):
+            return original(candidate) + ("\n# one-line validator edit\n" if candidate is edited else "")
+
+        baseline = custody._validator_source_sha256("d165_closeout")
+        with mock.patch.object(custody.inspect, "getsource", side_effect=getsource):
+            self.assertNotEqual(custody._validator_source_sha256("d165_closeout"), baseline)
+            fixture = self.fixture("d165_closeout")
+            self.assertIs(type(custody.open_paper_input(fixture.ref)), custody.FixtureD165Closeout)
+        # The receipt bound the edited source, so the unedited source refuses it.
+        self.assert_code("paper_custody_receipt_binding_mismatch", custody.open_paper_input, fixture.ref)
 
     def test_production_git_blob_coverage(self):
         supply = json.loads(SUPPLY_MAP.read_bytes())
