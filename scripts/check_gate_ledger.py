@@ -7,8 +7,7 @@ six-line Impact statement. Each key protects something real:
 
 1. independent review by a non-author, with a lens that executes the code;
 2. the whole suite on the merged tree;
-3. the final head the local suite and passes ran at (evidence: that head's
-   sha; hosted CI is post-merge advisory since 2026-10-05);
+3. CI green on the final head (evidence: that head's sha);
 4. a cold final pass on merge code that touches measurement, calibration
    or claims;
 5. findings dispositioned (fixed, deferred to a named lane, or rejected

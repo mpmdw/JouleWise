@@ -16,7 +16,7 @@ Set the Tier line to `Tier: full` or `Tier: light`. Full tier: any PR that chang
 | --- | --- | --- |
 | 1 | Independent review by a non-author, with a lens that executes the code (light tier: N/A (light tier)) | NOT-RUN |
 | 2 | Whole suite on the merged tree (current main merged into the head), exact tail recorded (light tier, docs only: N/A (docs only)) | NOT-RUN |
-| 3 | Final head: the local whole suite and the passes ran at this sha (hosted CI is post-merge advisory) | NOT-RUN |
+| 3 | CI green on the final head; evidence is that head's sha | NOT-RUN |
 | 4 | Cold Fable final pass on merge code that touches measurement, calibration or claims (otherwise: N/A (no measurement, calibration or claim code); light tier: N/A (light tier)) | NOT-RUN |
 | 5 | Findings dispositioned: each fixed, deferred to a named lane, or rejected with a reason (light tier: N/A (light tier)) | NOT-RUN |
 

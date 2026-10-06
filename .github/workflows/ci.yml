@@ -1,12 +1,9 @@
 name: ci
 
-# Hosted CI is post-merge and advisory (Ed, 2026-10-05): the code only runs on the
-# owner's Mac, so the merge gate is the whole suite run locally on that Mac at the
-# PR head. A Linux-only red here is fixed when convenient and never blocks a merge.
 on:
   push:
     branches: [main]
-  workflow_dispatch:
+  pull_request:
 
 # Pushes get a per-run group so nothing can evict a queued run; PRs share a ref group and cancel superseded runs.
 concurrency:
