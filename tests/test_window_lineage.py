@@ -270,16 +270,12 @@ class HazardWindowCallSiteTests(_SentinelMixin, unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
-        cls._tmp = tempfile.TemporaryDirectory()
-        cls._stack = cls._start_sentinels()
-        cls.w = build_window(Path(cls._tmp.name))
+        tmp = tempfile.TemporaryDirectory()
+        cls.addClassCleanup(tmp.cleanup)
+        cls.addClassCleanup(cls._start_sentinels().close)
+        cls.w = build_window(Path(tmp.name))
         cls.lineage = cls.w.lineage
         cls.bundle, cls.summary = run_member(cls.w, cls.w.member_path)
-
-    @classmethod
-    def tearDownClass(cls) -> None:
-        cls._stack.close()
-        cls._tmp.cleanup()
 
     def setUp(self) -> None:
         self.w = type(self).w
@@ -855,6 +851,11 @@ class PublicationAndAuditTests(unittest.TestCase):
         self.assertEqual(len(findings), 1)
         self.assertEqual((findings[0]["family"], findings[0]["klass"]), ("PACK_IDENTITY", "NUMBER"))
         self.assertEqual(findings[0]["expected"], self.w.lineage["plan_tree_sha256"])
+
+    def test_changed_arm_decision_is_a_finding(self) -> None:
+        write_night_records(self.w)
+        self.w.arm_decision.write_text('{"decision": "GO", "edited": true}\n')
+        self.assertEqual(self.audit(), ["lineage.arm_decision_digest_differs"])
 
     def test_audit_never_raises_on_missing_records(self) -> None:
         for path in (self.w.claim / window_lineage.LOCATOR_BASENAME,
