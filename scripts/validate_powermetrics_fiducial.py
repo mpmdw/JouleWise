@@ -376,6 +376,7 @@ def _derive_preflight_systematic_screen_s(
     preflight_record: dict[str, Any] | None = None,
     ledger_snapshot: CalibrationLedgerSnapshot | None = None,
     allow_stale_code: bool = False,
+    allow_stale_pin: bool = False,
 ) -> Decimal:
     """Authenticate the active acceptance and derive its level comparator.
 
@@ -384,6 +385,12 @@ def _derive_preflight_systematic_screen_s(
     acceptance's ``prospective_rederivation`` is recorded in
     ``preflight_record["stale_code"]`` instead of refused, and the caller flags
     it ``code.executed_differs_from_sealed``.  Every other check stays.
+
+    ``allow_stale_pin`` is the same path (gate prune 2, P2-VPF; vpf review Sol
+    F2): continued epochs are authenticated against a snapshot whose head pin
+    lags the window's reservation (the reservation-anchored extension shape),
+    so a continued epoch is not dropped because the pin is stale.  The
+    continuation's session-row cross-check is unchanged.
     """
 
     path = (
@@ -439,6 +446,7 @@ def _derive_preflight_systematic_screen_s(
     continuation_refusals: list[dict[str, str]] = []
     judged_epochs = acceptance_judged_epochs(
         artifact, ledger_snapshot=ledger_snapshot, refusal_details=continuation_refusals,
+        **({"allow_stale_pin": True} if allow_stale_pin else {}),
     )
     record = {
         "acceptance_id": acceptance_id,
@@ -554,6 +562,7 @@ def _derivation_only_screen_basis(
     *,
     acceptance_path: Path | None = None,
     ledger_snapshot: CalibrationLedgerSnapshot | None = None,
+    allow_stale_pin: bool = False,
 ) -> tuple[Decimal, dict[str, Any]]:
     """Authenticate the active acceptance WITHOUT its identity-epoch equality.
 
@@ -576,6 +585,7 @@ def _derivation_only_screen_basis(
     level_screen_s = _derive_preflight_systematic_screen_s(
         None, acceptance_path=path, preflight_record=preflight_record,
         ledger_snapshot=ledger_snapshot,
+        **({"allow_stale_pin": True} if allow_stale_pin else {}),
     )
     artifact = load_calibration_acceptance_bound(path)
     if artifact is None:
@@ -2184,6 +2194,7 @@ def main(argv: list[str] | None = None) -> int:
         try:
             _level_screen_s, basis = _derivation_only_screen_basis(
                 ledger_snapshot=preflight_snapshot,
+                **({} if hazard is None else {"allow_stale_pin": True}),
             )
         except _AcceptancePreflightError as exc:
             return emit_refusal(
@@ -2236,7 +2247,7 @@ def main(argv: list[str] | None = None) -> int:
             preflight_systematic_screen_s = _derive_preflight_systematic_screen_s(
                 planned_epoch, preflight_record=acceptance_preflight,
                 ledger_snapshot=preflight_snapshot,
-                **({} if hazard is None else {"allow_stale_code": True}),
+                **({} if hazard is None else {"allow_stale_code": True, "allow_stale_pin": True}),
             )
         except _AcceptancePreflightError as exc:
             return emit_refusal(

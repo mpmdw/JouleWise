@@ -179,8 +179,22 @@ def authenticate_epoch_continuation(
     ledger_snapshot: CalibrationLedgerSnapshot | None,
     *,
     registry: Mapping[str, Mapping[str, Any]] = EPOCH_CONTINUATION_REGISTRY,
+    allow_stale_pin: bool = False,
 ) -> Continuation:
-    """Authenticate one path; the CLI uses exactly this production reader."""
+    """Authenticate one path; the CLI uses exactly this production reader.
+
+    ``allow_stale_pin`` is the HAZARD_PACK writer path only (gate prune 2,
+    P2-VPF; vpf review Sol F2).  There a head pin that lags the window's own
+    reservation is a record, not a refusal (erratum s3-reservation-stop), so
+    the writer's snapshot carries ``calibration_ledger_head_mismatch`` without
+    the pin-anchored extension shape.  With this flag the snapshot is also
+    accepted when it has the reservation-anchored shape
+    (:attr:`CalibrationLedgerSnapshot.is_open_bracket_extension_past_stale_pin`:
+    no reason besides the open session and the head mismatch, the pin inside
+    the physical chain, exactly one open session, and every row after the
+    reservation's anchor that session's).  Every session-row check below runs
+    unchanged, and ``ledger_cross_check`` names the stale-pin basis.
+    """
 
     raw = read_authentication_input(path, grammar="json", label="epoch continuation")
     value = _json_object(raw)
@@ -271,9 +285,16 @@ def authenticate_epoch_continuation(
 
     cross_check = "skipped_no_ledger_snapshot"
     if ledger_snapshot is not None:
+        past_stale_pin = (
+            allow_stale_pin
+            and "calibration_ledger_head_mismatch" in ledger_snapshot.refusal_reasons
+            and not ledger_snapshot.is_governed_open_bracket_extension
+            and ledger_snapshot.is_open_bracket_extension_past_stale_pin
+        )
         _require(set(ledger_snapshot.refusal_reasons) <= SNAPSHOT_STATE_REFUSALS
                  and ("calibration_ledger_head_mismatch" not in ledger_snapshot.refusal_reasons
-                      or ledger_snapshot.is_governed_open_bracket_extension),
+                      or ledger_snapshot.is_governed_open_bracket_extension
+                      or past_stale_pin),
                  "ledger_snapshot_invalid")
         session = ledger_snapshot.bracket_session_by_id.get(evidence["session_id"])
         _require(session is not None, "session_absent")
@@ -302,7 +323,11 @@ def authenticate_epoch_continuation(
                      and row.exact_bound_lexeme_s == slot["b_fiducial_s"], "acknowledged_row_disagrees")
             if slot["disposition"] == "valid" and slot["anchor_v3_resolved"]:
                 _require(dict(row.identity_epoch) == epoch, "acknowledged_identity_epoch")
-        cross_check = "verified_terminal_derivation_session"
+        cross_check = (
+            "verified_terminal_derivation_session_past_stale_pin"
+            if past_stale_pin
+            else "verified_terminal_derivation_session"
+        )
     return Continuation(
         continuation_id, file_sha, MappingProxyType(epoch), evidence["session_id"],
         tuple(acknowledged), evidence["m"], "pass", cross_check,
@@ -315,11 +340,13 @@ def load_epoch_continuations(
     *,
     registry: Mapping[str, Mapping[str, Any]] = EPOCH_CONTINUATION_REGISTRY,
     refusal_details: list[dict[str, str]] | None = None,
+    allow_stale_pin: bool = False,
 ) -> tuple[Continuation, ...]:
     """Return valid issued continuations; optionally collect every refusal.
 
     Without a snapshot only the session cross-check is skipped. Each returned
     continuation explicitly records that degradation in ``ledger_cross_check``.
+    ``allow_stale_pin``: see :func:`authenticate_epoch_continuation`.
     """
 
     accepted: list[Continuation] = []
@@ -327,6 +354,7 @@ def load_epoch_continuations(
         try:
             continuation = authenticate_epoch_continuation(
                 Path(entry["path"]), acceptance_artifact, ledger_snapshot, registry=registry,
+                **({"allow_stale_pin": True} if allow_stale_pin else {}),
             )
             _require(continuation.continuation_id == continuation_id, "registry_continuation_id")
             accepted.append(continuation)
@@ -352,11 +380,16 @@ def acceptance_judged_epochs(
     registry: Mapping[str, Mapping[str, Any]] = EPOCH_CONTINUATION_REGISTRY,
     refusal_details: list[dict[str, str]] | None = None,
     continuation_details: list[Continuation] | None = None,
+    allow_stale_pin: bool = False,
 ) -> tuple[Mapping[str, Any], ...]:
-    """The original epoch followed by authenticated continued epochs."""
+    """The original epoch followed by authenticated continued epochs.
+
+    ``allow_stale_pin``: see :func:`authenticate_epoch_continuation`.
+    """
 
     continuations = load_epoch_continuations(
         acceptance_artifact, ledger_snapshot, registry=registry, refusal_details=refusal_details,
+        **({"allow_stale_pin": True} if allow_stale_pin else {}),
     )
     if continuation_details is not None:
         continuation_details.extend(continuations)
