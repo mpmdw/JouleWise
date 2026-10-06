@@ -59,7 +59,10 @@ from joulewise.calibration_ledger import (
     load_calibration_ledger_snapshot,
 )
 # Pinned verdict descriptors are pointwise dereferences, not catalog discovery.
-from joulewise.campaign_provenance import load_authenticated_campaign_manifest
+from joulewise.campaign_provenance import (
+    load_authenticated_campaign_catalog,
+    load_authenticated_campaign_manifest,
+)
 from joulewise.reduce import (
     _rederive_summary_for_authenticated_fiducial_bound,
     _verify_instrument_calibration,
@@ -1165,6 +1168,23 @@ def neg8_freshness_bindings_from_metadata(
 ) -> dict[str, str] | None:
     """Derive the revalidation binding vector from one reference bundle."""
 
+    fields = neg8_freshness_binding_fields(metadata)
+    if fields is None or any(value is None for value in fields.values()):
+        return None
+    return fields  # type: ignore[return-value]
+
+
+def neg8_freshness_binding_fields(
+    metadata: Any,
+) -> dict[str, str | None] | None:
+    """Each freshness binding of one bundle, ``None`` where it is unrecorded.
+
+    ``neg8_freshness_bindings_from_metadata`` needs all three.  HAZARD_PACK
+    readers use the fields one by one: the calibration identity is a physical
+    fact about the instrument; the os_build and power-supply strings are
+    records, disclosed rather than refused (doctrine 2026-10-05).
+    """
+
     if not isinstance(metadata, Mapping):
         return None
     snapshots: list[Mapping[str, Any]] = []
@@ -1237,15 +1257,11 @@ def neg8_freshness_bindings_from_metadata(
         ),
         None,
     )
-    if (
-        os_build is None
-        or power_identity is None
-        or calibration_sha is None
-    ):
-        return None
     return {
         "os_build": os_build,
-        "power_supply_identity_sha256": canonical_sha256(power_identity),
+        "power_supply_identity_sha256": (
+            canonical_sha256(power_identity) if power_identity is not None else None
+        ),
         "calibration_identity_sha256": calibration_sha,
     }
 
@@ -1278,12 +1294,31 @@ def build_neg8_freshness_observation(
     else:
         binding_status = "resolved"
         observed = dict(next(iter(unique.values())))
+    # The calibration identity resolved on its own (V2, doctrine 2026-10-05):
+    # it alone of the three bindings refuses a bound; os_build and the
+    # power-supply strings are disclosed by evaluate_neg8_bound_freshness.
+    calibrations = [
+        (
+            binding
+            if binding is not None
+            else neg8_freshness_binding_fields(metadata) or {}
+        ).get("calibration_identity_sha256")
+        for binding, metadata in zip(bindings, metadata_values)
+    ]
+    if not calibrations or any(value is None for value in calibrations):
+        calibration_status, calibration = "missing", None
+    elif len(set(calibrations)) != 1:
+        calibration_status, calibration = "conflict", None
+    else:
+        calibration_status, calibration = "resolved", calibrations[0]
     return {
         "evaluated_at_s": timestamp,
         "binding_status": binding_status,
         "bindings": observed,
         "member_count": len(bindings),
         "resolved_member_count": len(resolved),
+        "calibration_binding_status": calibration_status,
+        "calibration_identity_sha256": calibration,
     }
 
 
@@ -1326,7 +1361,26 @@ def evaluate_neg8_bound_freshness(
             triggers.append("freshness_fields_invalid")
         else:
             expires_at = derived_at + max_age
-    if (
+    # An observation built by build_neg8_freshness_observation resolves the
+    # calibration identity separately.  Then only the calibration identity
+    # and the clock decide freshness; os_build and power-supply strings that
+    # are missing, conflicting or changed are disclosed (V2).  Hand-built
+    # observations without that split keep the original all-three rule.
+    split = isinstance(observation, Mapping) and (
+        "calibration_binding_status" in observation
+    )
+    disclosed: list[str] = []
+    if split:
+        if (
+            observation.get("calibration_binding_status") != "resolved"
+            or evaluated_at is None
+        ):
+            triggers.append("freshness_observation_unresolved")
+        elif observation.get("binding_status") != "resolved":
+            disclosed.append(
+                f"binding_observation_{observation.get('binding_status')}"
+            )
+    elif (
         not isinstance(observation, Mapping)
         or observation.get("binding_status") != "resolved"
         or not isinstance(observed, Mapping)
@@ -1350,14 +1404,28 @@ def evaluate_neg8_bound_freshness(
         ("power_supply_identity_sha256", "power_supply_change"),
         ("calibration_identity_sha256", "calibration_identity_change"),
     ):
-        if (
+        if split and field == "calibration_identity_sha256":
+            if (
+                isinstance(artifact_bindings, Mapping)
+                and observation.get("calibration_binding_status") == "resolved"
+                and artifact_bindings.get(field)
+                != observation.get("calibration_identity_sha256")
+            ):
+                triggers.append(trigger)
+        elif (
             isinstance(artifact_bindings, Mapping)
             and isinstance(observed, Mapping)
             and artifact_bindings.get(field) != observed.get(field)
         ):
-            triggers.append(trigger)
+            (disclosed if split else triggers).append(trigger)
     unique_triggers = list(dict.fromkeys(triggers))
+    disclosure = (
+        {"disclosed_binding_changes": list(dict.fromkeys(disclosed))}
+        if disclosed
+        else {}
+    )
     return {
+        **disclosure,
         "decision": "stale" if unique_triggers else "fresh",
         "condition": (
             CONDITION_NEG8_DRIFT_BOUND_STALE
@@ -2448,6 +2516,8 @@ def _authenticated_bundle_launch_lineage_set(
     """Directly authenticate one identical lineage across exact bundles."""
 
     lineages: list[dict[str, Any]] = []
+    tagged_paths: list[Path] = []
+    untagged_paths: list[Path] = []
     for path in bundle_paths:
         config = _read_json_object(path / "config.json")
         metadata = _read_json_object(path / "metadata.json")
@@ -2468,8 +2538,13 @@ def _authenticated_bundle_launch_lineage_set(
                 if isinstance(raw_lineage, Mapping)
                 else dict(authenticated)
             )
+            tagged_paths.append(Path(path))
+        else:
+            untagged_paths.append(Path(path))
     if not lineages:
         return None
+    if _any_hazard_lineage(lineages):
+        return _hazard_member_lineage(lineages, tagged_paths, untagged_paths)
     if len(lineages) != len(bundle_paths) or len(
         {canonical_sha256(lineage) for lineage in lineages}
     ) != 1:
@@ -2480,13 +2555,184 @@ def _authenticated_bundle_launch_lineage_set(
     return lineages[0]
 
 
+# ---------------------------------------------------------------------------
+# HAZARD_PACK windows (joulewise.hazard_window_lineage.v1)
+#
+# A block-5 window's lineage is published once, before the chain starts, into
+# its two dedicated runs roots.  Only members whose config carries the
+# ``launch_lineage_required`` tag (the science members) stamp it into their
+# bundles; NEG-8 daily references, auxiliaries, the calibration captures and
+# the NEG-8 reference corpus are collected from untagged configs and carry no
+# stamp.  The ARM-path rules below would therefore refuse every hazard window
+# (members "do not carry one identical lineage", calibration and bound
+# lineages "absent").  The hazard branch authenticates the same physical
+# facts from bytes the window already preserves instead:
+#
+# * members: every stamp is identical, and every unstamped member sits in the
+#   same runs-root directory as a stamped one (its bytes are pinned by the
+#   evaluation basis's member_occurrences digests);
+# * calibrations: the bracket's pre/post endpoints are the ledger session and
+#   attempts the lineage named before the chain started (the bracket evaluator
+#   already authenticated those endpoints against the ledger), and the evidence
+#   bytes match the bracket's digest;
+# * bound: a consumed bound's reference-corpus members are bundles in the
+#   lineage's bound runs root whose complete file inventories still hash to the
+#   digests the bound recorded.  A bound that was not consumed authenticates
+#   nothing and refuses nothing.
+#
+# Dispatch is on the schema only: no ARM-schema lineage reaches these helpers.
+
+
+def _is_hazard_lineage(value: object) -> bool:
+    from joulewise import window_lineage  # noqa: PLC0415
+
+    return window_lineage.is_hazard_lineage(value)
+
+
+def _any_hazard_lineage(lineages: Sequence[Mapping[str, Any]]) -> bool:
+    return any(_is_hazard_lineage(lineage) for lineage in lineages)
+
+
+def _hazard_member_lineage(
+    lineages: Sequence[Mapping[str, Any]],
+    tagged_paths: Sequence[Path],
+    untagged_paths: Sequence[Path],
+) -> dict[str, Any]:
+    """One hazard lineage across stamped members; unstamped ones by root."""
+
+    if not all(_is_hazard_lineage(lineage) for lineage in lineages) or len(
+        {canonical_sha256(lineage) for lineage in lineages}
+    ) != 1:
+        raise LaunchLineageError(
+            "launch_lineage_conflict",
+            "window members do not carry one identical authenticated lineage",
+        )
+    try:
+        tagged_roots = {path.resolve().parent for path in tagged_paths}
+        stray = [
+            path
+            for path in untagged_paths
+            if path.resolve().parent not in tagged_roots
+        ]
+    except (OSError, RuntimeError) as exc:
+        raise LaunchLineageError(
+            "launch_binding_mismatch",
+            f"window member path cannot be resolved: {exc}",
+        ) from exc
+    if stray:
+        raise LaunchLineageError(
+            "launch_binding_mismatch",
+            "unstamped window member is outside the stamped members' runs root: "
+            + ", ".join(sorted(path.name for path in stray)[:4]),
+        )
+    from joulewise import window_lineage  # noqa: PLC0415
+
+    # "Unstamped" must mean a readable config without the lineage tag, not a
+    # tagged science member whose config.json cannot be read.
+    unreadable = [
+        path for path in untagged_paths if not window_lineage._bundle_config_untagged(path)
+    ]
+    if unreadable:
+        raise LaunchLineageError(
+            "launch_binding_mismatch",
+            "window member without a lineage stamp has no readable untagged config: "
+            + ", ".join(sorted(path.name for path in unreadable)[:4]),
+        )
+    return dict(lineages[0])
+
+
+def _hazard_calibration_binding(
+    descriptor: Mapping[str, Any],
+    role: str,
+    member_lineage: Mapping[str, Any],
+) -> None:
+    """Bind one unstamped capture to the window's ledger session and attempt."""
+
+    context = member_lineage.get("window_context")
+    expected_attempt = (
+        context.get(f"{role}_attempt_id") if isinstance(context, Mapping) else None
+    )
+    if (
+        descriptor.get("bracket_session_id")
+        != member_lineage.get("bracket_session_id")
+        or not isinstance(expected_attempt, str)
+        or descriptor.get("attempt_id") != expected_attempt
+    ):
+        raise LaunchLineageError(
+            "launch_binding_mismatch",
+            f"whole-window {role} calibration is not the window's bracket "
+            "session endpoint (session "
+            f"{descriptor.get('bracket_session_id')!r}, attempt "
+            f"{descriptor.get('attempt_id')!r})",
+        )
+
+
+def _hazard_bound_corpus_binding(
+    drift_bound_artifact: Mapping[str, Any],
+    member_lineage: Mapping[str, Any],
+) -> None:
+    """Re-hash every consumed corpus member in the window's bound runs root."""
+
+    corpus = drift_bound_artifact.get("reference_corpus")
+    members = corpus.get("members") if isinstance(corpus, Mapping) else None
+    context = member_lineage.get("window_context")
+    bound_root = (
+        context.get("bound_runs_root") if isinstance(context, Mapping) else None
+    )
+    if not isinstance(members, list) or not members or not isinstance(bound_root, str):
+        raise LaunchLineageError(
+            "launch_consumption_invalid",
+            "whole-window NEG-8 bound names no reference-corpus members",
+        )
+    from joulewise import window_lineage  # noqa: PLC0415
+
+    # The recorded root, or where window_lineage.relocated_custody says it
+    # now lives (an archived or copied window).
+    root = window_lineage.current_root(bound_root)
+    for member in members:
+        bundle_id = member.get("bundle_id") if isinstance(member, Mapping) else None
+        expected = (
+            member.get("bundle_evidence_sha256") if isinstance(member, Mapping) else None
+        )
+        paths = (
+            ordinary_present_bundle_paths(root, bundle_id)
+            if isinstance(bundle_id, str) and bundle_id
+            else []
+        )
+        if len(paths) != 1 or paths[0].is_symlink():
+            raise LaunchLineageError(
+                "launch_binding_mismatch",
+                f"NEG-8 bound corpus member {bundle_id!r} is not exactly one "
+                f"bundle in the window's bound runs root {root}",
+            )
+        try:
+            actual = _bundle_evidence_sha256(paths[0])
+        except (OSError, ValueError) as exc:
+            raise LaunchLineageError(
+                "launch_binding_mismatch",
+                f"NEG-8 bound corpus member {bundle_id!r} cannot be re-hashed: {exc}",
+            ) from exc
+        if actual != expected:
+            raise LaunchLineageError(
+                "launch_binding_mismatch",
+                f"NEG-8 bound corpus member {bundle_id!r} bytes differ from the bound",
+            )
+
+
 def _calibration_launch_lineages(
     calibration_bracket: Mapping[str, Any],
     *,
     require_completion: bool,
+    member_lineage: Mapping[str, Any] | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
-    """Reopen both selected calibration evidence files and their receipts."""
+    """Reopen both selected calibration evidence files and their receipts.
 
+    ``member_lineage`` matters only when it is a hazard lineage: then a
+    capture whose evidence carries no lineage is bound to the window through
+    its ledger session and attempt instead (see the HAZARD_PACK note above).
+    """
+
+    hazard = member_lineage is not None and _is_hazard_lineage(member_lineage)
     result: list[dict[str, Any]] = []
     for role in ("pre", "post"):
         descriptor = calibration_bracket.get(role)
@@ -2525,6 +2771,11 @@ def _calibration_launch_lineages(
                 f"whole-window {role} calibration evidence digest is invalid",
             )
         lineage = evidence.get("launch_lineage")
+        if hazard and not isinstance(lineage, Mapping):
+            assert member_lineage is not None
+            _hazard_calibration_binding(descriptor, role, member_lineage)
+            result.append(dict(member_lineage))
+            continue
         if not isinstance(lineage, Mapping):
             raise LaunchLineageError(
                 "launch_consumption_missing",
@@ -2555,14 +2806,36 @@ def _authenticate_whole_window_launch_sources(
             "launch_consumption_missing",
             "whole-window calibration bracket is absent",
         )
+    hazard = _is_hazard_lineage(member_lineage)
     lineages = [
         member_lineage,
-        *_calibration_launch_lineages(
-            calibration_bracket,
-            require_completion=require_completion,
+        *(
+            _calibration_launch_lineages(
+                calibration_bracket,
+                require_completion=require_completion,
+                member_lineage=member_lineage,
+            )
+            if hazard
+            else _calibration_launch_lineages(
+                calibration_bracket,
+                require_completion=require_completion,
+            )
         ),
     ]
-    if require_bound:
+    if require_bound and hazard:
+        # A bound that was not consumed (absent or not validated) put nothing
+        # into the numbers; the NEG-8 bracket then reports it underived.
+        if isinstance(drift_bound_artifact, Mapping):
+            bound_lineage = drift_bound_artifact.get("launch_lineage")
+            if isinstance(bound_lineage, Mapping):
+                authenticated_bound = authenticate_launch_lineage(
+                    bound_lineage,
+                    require_completion=require_completion,
+                )
+                lineages.append(dict(authenticated_bound["launch_lineage"]))
+            else:
+                _hazard_bound_corpus_binding(drift_bound_artifact, member_lineage)
+    elif require_bound:
         bound_lineage = (
             drift_bound_artifact.get("launch_lineage")
             if isinstance(drift_bound_artifact, Mapping)
@@ -3612,6 +3885,8 @@ def mint_neg8_drift_bound_artifact(
         raise ValueError(
             f"NEG-8 reference corpus requires n >= {NEG8_DRIFT_MINIMUM_N}"
         )
+    if _is_hazard_runs_root(root):
+        return _mint_hazard_neg8_drift_bound(root, manifest, raw)
 
     evidence_members: list[dict[str, Any]] = []
     freshness_bindings: list[dict[str, str]] = []
@@ -3728,6 +4003,247 @@ def mint_neg8_drift_bound_artifact(
     )
     if not _neg8_corpus_identity_matches_bytes(
         artifact["reference_corpus"], raw
+    ):
+        raise ValueError("NEG-8 drift-bound corpus identity did not bind to manifest bytes")
+    return artifact
+
+
+# ---------------------------------------------------------------------------
+# HAZARD_PACK NEG-8 mint (bound runs root carries a hazard lineage locator)
+#
+# The ARM-path mint above is all-or-nothing: one corpus member that fails a
+# per-member predicate, or a power-supply/os_build string that differs across
+# members, raises and no bound exists, so the window loses its NEG-8 screen.
+# On a hazard window (doctrine 2026-10-05) the mint instead DROPS a member
+# that fails a per-member predicate and derives the bound from the rest; it
+# raises only when no sound bound can exist:
+#
+# * the kept members do not share one calibration identity (a physical fact:
+#   the bound would mix instruments);
+# * the kept members do not share one scientific condition and no single
+#   condition is in the majority;
+# * stamped members carry two different window lineages;
+# * fewer than NEG8_DRIFT_MINIMUM_N members are kept.
+#
+# The power-supply and os_build strings are records: the bound records the
+# value most members agree on (or an explicit "unrecorded" value), and a
+# mismatch against the references is disclosed by the freshness evaluation.
+# The artifact binds to the manifest the mint actually used: the input bytes
+# when nothing is dropped, else the input with the dropped members removed,
+# rendered exactly as the chain's PRUNE_HELPER renders a pruned manifest, so
+# a pruner that drops the same members (``neg8_corpus_mint_drops``) writes the
+# identical bytes.
+
+NEG8_UNRECORDED_OS_BUILD = "unrecorded"
+NEG8_UNRECORDED_POWER_SUPPLY_SHA256 = canonical_sha256(
+    {"power_supply_identity": "unrecorded"}
+)
+
+
+def _is_hazard_runs_root(root: Path) -> bool:
+    from joulewise import window_lineage  # noqa: PLC0415
+
+    return window_lineage.is_hazard_runs_root(root)
+
+
+def _neg8_majority(values: Sequence[Any]) -> Any:
+    """The most common non-None value; ties go to the latest in order."""
+
+    counts: dict[Any, int] = {}
+    for value in values:
+        if value is not None:
+            counts[value] = counts.get(value, 0) + 1
+    if not counts:
+        return None
+    best = max(counts.values())
+    return [value for value in values if counts.get(value) == best][-1]
+
+
+def _hazard_neg8_corpus_selection(
+    root: Path, manifest: Mapping[str, Any]
+) -> dict[str, Any]:
+    """Evaluate every corpus member once; return kept rows and drops."""
+
+    rows: list[dict[str, Any]] = []
+    drops: list[dict[str, str]] = []
+    seen_ids: set[str] = set()
+    for member in manifest.get("members", []):
+        if not isinstance(member, Mapping) or set(member) != {
+            "bundle_id",
+            "bundle_path",
+        }:
+            raise ValueError("NEG-8 corpus member descriptor has invalid keys")
+        bundle_id = member.get("bundle_id")
+        bundle_path = _safe_source_path(root, member.get("bundle_path"))
+        if (
+            not isinstance(bundle_id, str)
+            or not bundle_id
+            or bundle_id in seen_ids
+            or bundle_path is None
+        ):
+            raise ValueError("NEG-8 corpus member is invalid, duplicated, or unsafe")
+        seen_ids.add(bundle_id)
+
+        def drop(reason: str) -> None:
+            drops.append({"bundle_id": bundle_id, "reason": reason})
+
+        if not bundle_path.is_dir():
+            drop("bundle_absent")
+            continue
+        summary = _read_json_object(bundle_path / "summary_metrics.json")
+        metadata = _read_json_object(bundle_path / "metadata.json")
+        config = _read_json_object(bundle_path / "config.json")
+        try:
+            authenticated_launch = authenticate_bundle_launch_lineage(
+                bundle_path,
+                config=config,
+                metadata=metadata,
+                require_completion=False,
+            )
+        except LaunchLineageError as exc:
+            drop(f"launch_lineage:{exc.reason_code}")
+            continue
+        lineage = None
+        if authenticated_launch is not None:
+            extra = metadata.get("extra") if isinstance(metadata, Mapping) else None
+            lineage = extra.get("launch_lineage") if isinstance(extra, Mapping) else None
+            if not isinstance(lineage, Mapping):
+                drop("launch_lineage:launch_consumption_invalid")
+                continue
+        if _custody_strict_invalid(bundle_path, summary, metadata):
+            drop("custody_triangle_disagrees")
+            continue
+        if not _current_strict_summary(summary, bundle_path):
+            drop("not_current_strict_mint")
+            continue
+        identity, canonical = _scientific_config_identity(bundle_path)
+        if identity is None or not canonical:
+            drop("not_canonical_condition")
+            continue
+        gross, idle_subtracted, problem = _reference_energy_evidence(bundle_path)
+        if problem is not None or gross is None or idle_subtracted is None:
+            drop("energy_evidence_invalid")
+            continue
+        fields = neg8_freshness_binding_fields(metadata) or {}
+        if fields.get("calibration_identity_sha256") is None:
+            drop("calibration_identity_unrecorded")
+            continue
+        try:
+            evidence_sha = _bundle_evidence_sha256(bundle_path)
+        except (OSError, ValueError):
+            drop("bundle_inventory_invalid")
+            continue
+        rows.append(
+            {
+                "descriptor": dict(member),
+                "identity": identity,
+                "lineage": lineage,
+                "fields": fields,
+                "evidence": {
+                    "bundle_id": bundle_id,
+                    "point_gross_j": gross["point_j"],
+                    "point_idle_subtracted_j": idle_subtracted,
+                    "bundle_evidence_sha256": evidence_sha,
+                },
+            }
+        )
+    identities = [row["identity"] for row in rows]
+    if identities:
+        counts = {value: identities.count(value) for value in set(identities)}
+        best = max(counts.values())
+        if list(counts.values()).count(best) > 1:
+            raise ValueError(
+                "NEG-8 reference corpus members split evenly across conditions"
+            )
+        majority = next(value for value, count in counts.items() if count == best)
+        for row in [row for row in rows if row["identity"] != majority]:
+            drops.append(
+                {"bundle_id": row["evidence"]["bundle_id"], "reason": "condition_differs"}
+            )
+        rows = [row for row in rows if row["identity"] == majority]
+    order = [
+        member.get("bundle_id")
+        for member in manifest.get("members", [])
+        if isinstance(member, Mapping)
+    ]
+    drops.sort(key=lambda row: order.index(row["bundle_id"]))
+    return {"rows": rows, "drops": drops}
+
+
+def neg8_corpus_mint_drops(
+    runs_root: Path, corpus_manifest_path: Path
+) -> list[dict[str, str]]:
+    """Members a HAZARD_PACK mint would drop, with the predicate each failed.
+
+    For the chain's corpus pruner: dropping exactly these members (and
+    rendering the pruned manifest as PRUNE_HELPER does) yields the manifest
+    bytes the hazard mint binds its bound to.  Raises like the mint when the
+    manifest itself is unusable.
+    """
+
+    raw = read_authentication_input(
+        Path(corpus_manifest_path),
+        grammar="json",
+        label="NEG-8 reference corpus manifest",
+    )
+    manifest = json.loads(raw)
+    if not isinstance(manifest, Mapping):
+        raise ValueError("NEG-8 reference corpus manifest is not an object")
+    return _hazard_neg8_corpus_selection(Path(runs_root).resolve(), manifest)["drops"]
+
+
+def _mint_hazard_neg8_drift_bound(
+    root: Path, manifest: Mapping[str, Any], raw: bytes
+) -> dict[str, Any]:
+    selection = _hazard_neg8_corpus_selection(root, manifest)
+    rows, drops = selection["rows"], selection["drops"]
+    if len(rows) < NEG8_DRIFT_MINIMUM_N:
+        raise ValueError(
+            f"NEG-8 reference corpus keeps {len(rows)} members after drops "
+            f"(n >= {NEG8_DRIFT_MINIMUM_N} required): "
+            + ", ".join(f"{row['bundle_id']}={row['reason']}" for row in drops)
+        )
+    calibrations = {row["fields"]["calibration_identity_sha256"] for row in rows}
+    if len(calibrations) != 1:
+        raise ValueError(
+            "NEG-8 reference corpus members do not share one calibration identity"
+        )
+    lineages = {
+        canonical_sha256(row["lineage"]): row["lineage"]
+        for row in rows
+        if row["lineage"] is not None
+    }
+    if len(lineages) > 1:
+        raise ValueError(
+            "launch_lineage_conflict: NEG-8 reference members do not share one lineage"
+        )
+    os_build = _neg8_majority([row["fields"].get("os_build") for row in rows])
+    power = _neg8_majority(
+        [row["fields"].get("power_supply_identity_sha256") for row in rows]
+    )
+    bound_raw = raw
+    if drops:
+        pruned = dict(manifest)
+        pruned["members"] = [row["descriptor"] for row in rows]
+        bound_raw = (json.dumps(pruned, indent=2, sort_keys=True) + "\n").encode("utf-8")
+    artifact = build_neg8_drift_bound_artifact(
+        corpus_id=manifest.get("corpus_id"),
+        condition_id=manifest.get("condition_id"),
+        manifest_sha256=hashlib.sha256(bound_raw).hexdigest(),
+        scientific_config_sha256=rows[0]["identity"],
+        members=[row["evidence"] for row in rows],
+        derivation_timestamp_s=time.time(),
+        freshness_bindings={
+            "os_build": os_build if os_build is not None else NEG8_UNRECORDED_OS_BUILD,
+            "power_supply_identity_sha256": (
+                power if power is not None else NEG8_UNRECORDED_POWER_SUPPLY_SHA256
+            ),
+            "calibration_identity_sha256": next(iter(calibrations)),
+        },
+        launch_lineage=next(iter(lineages.values())) if lineages else None,
+    )
+    if not _neg8_corpus_identity_matches_bytes(
+        artifact["reference_corpus"], bound_raw
     ):
         raise ValueError("NEG-8 drift-bound corpus identity did not bind to manifest bytes")
     return artifact
@@ -5172,6 +5688,67 @@ def validate_whole_window_verdict_row(
     )
 
 
+def hazard_window_membership_id(runs_root: Path, records: Sequence[Any]) -> str:
+    """Membership id of a HAZARD_PACK window: its whole manifest catalog.
+
+    The digest of the sorted {path, sha256, size} descriptors of exactly the
+    policy-matching campaign manifests in the window's dedicated runs root
+    (the same derivation run_campaign uses for a null-identity binding).
+    """
+
+    root = Path(runs_root).resolve()
+    descriptors = sorted(
+        (
+            {
+                "path": Path(record.path).resolve().relative_to(root).as_posix(),
+                "sha256": hashlib.sha256(record.raw_bytes).hexdigest(),
+                "size": len(record.raw_bytes),
+            }
+            for record in records
+        ),
+        key=lambda row: str(row["path"]),
+    )
+    return hashlib.sha256(
+        json.dumps(
+            descriptors,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+            allow_nan=False,
+        ).encode("utf-8")
+    ).hexdigest()
+
+
+def _hazard_membership_replay_reasons(
+    row: Mapping[str, Any], runs_root: Path, policy_sha: Any
+) -> set[str]:
+    """A hazard verdict must cover the window's complete current catalog."""
+
+    catalog = load_authenticated_campaign_catalog(
+        Path(runs_root), Path(runs_root) / "campaign_log.jsonl"
+    )
+    records = [
+        record
+        for record in (catalog or [])
+        if isinstance(record.value.get("campaign_policy"), Mapping)
+        and record.value["campaign_policy"].get("sha256") == policy_sha
+    ]
+    membership = row.get("window_membership")
+    try:
+        expected = hazard_window_membership_id(runs_root, records) if records else None
+    except (OSError, ValueError):
+        expected = None
+    if (
+        catalog is None
+        or expected is None
+        or not isinstance(membership, Mapping)
+        or membership.get("membership_id") != expected
+        or membership.get("binding") is not None
+    ):
+        return {"whole_window_verdict_provenance_invalid"}
+    return set()
+
+
 def _validate_row_uncached(
     row: Mapping[str, Any],
     runs_root: Path,
@@ -5271,6 +5848,13 @@ def _validate_row_uncached(
         != canonical_sha256(sorted(bundle_ids))
     ):
         reasons.add("whole_window_verdict_provenance_invalid")
+    if (
+        row_semantics != SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID
+        and _is_hazard_runs_root(runs_root)
+    ):
+        reasons.update(
+            _hazard_membership_replay_reasons(row, runs_root, policy_sha)
+        )
 
     core = row.get("idle_admission_core")
     if not isinstance(core, Mapping) or core.get("schema_version") != IDLE_ADMISSION_CORE_SCHEMA:

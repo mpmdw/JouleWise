@@ -162,6 +162,7 @@ from joulewise.whole_window import (  # noqa: E402
     SupersessionRecorderError,
     SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID,
     build_neg8_freshness_observation,
+    hazard_window_membership_id,
     build_evaluation_basis,
     build_neg8_drift_bound_artifact,
     build_row_provenance,
@@ -184,6 +185,7 @@ from joulewise.salvage_dangler import (  # noqa: E402
     SalvageAuthorizationError,
     authorize_salvage_dangler_exclusion,
 )
+from joulewise import window_lineage as _window_lineage  # noqa: E402
 from joulewise.calibration_bracketing import (  # noqa: E402
     calibration_bracket_for_bundles,
     load_calibration_acceptance_bound,
@@ -246,6 +248,10 @@ NEG8_REFERENCE_MIDPOINT_ROLE = "neg8_daily_reference_midpoint"
 NEG8_REFERENCE_END_ROLE = "neg8_daily_reference_end"
 FLOOR_MEMBER_ROLES = frozenset({"absolute_repeat", "comparative_abba_member"})
 CAMPAIGN_STOP_SCHEMA = "joulewise.campaign_stop.v1"
+# Membership group of a HAZARD_PACK window (one group per dedicated runs root).
+# Used only when the runs root carries a hazard locator, so a manifest whose
+# analysis_manifest_id happens to equal it elsewhere keeps the old grouping.
+HAZARD_WINDOW_MEMBERSHIP_KEY = "<hazard-window>"
 # Campaign return-code registry: 0 success, 1 failure, 2 usage/preflight,
 # 3 governed block limit, 130 interruption (main's KeyboardInterrupt handler).
 CAMPAIGN_STOP_RETURN_CODES = MappingProxyType({"max_blocks_reached": 3})
@@ -5163,6 +5169,7 @@ def _idle_admission_core_evaluation(
     calibration_bracket_binding: Mapping[str, Any] | None = None,
     calibration_bracket_identity: Mapping[str, str] | None = None,
     calibration_bracket_binding_supplied: bool = False,
+    freshness_at_end_reference: bool | None = None,
 ) -> _IdleAdmissionCoreEvaluation:
     """Evaluate the core and prospective per-member diagnostic surface.
 
@@ -5170,6 +5177,16 @@ def _idle_admission_core_evaluation(
     collection verdict and exit code are unchanged by this section.  Live
     (pre-invoke) enforcement belongs to the controller hookup that follows
     this core.
+
+    ``freshness_at_end_reference`` (V1): with no explicit
+    ``evaluation_timestamp_s``, the NEG-8 bound's 24 h freshness is evaluated
+    at the end of the last end-reference member's measured window, the
+    moment the bound is last used, rather than at the desk's wall clock when
+    the verdict happens to be written.  ``None`` (the default) turns it on
+    for a whole-window evaluation of a HAZARD_PACK runs root, whose chain
+    derives the bound before the start reference; other windows keep the
+    wall clock.  If an end reference has no measured window, the wall clock
+    is used as before.
     """
 
     extension = policy_binding.idle_admission_extension
@@ -5342,6 +5359,20 @@ def _idle_admission_core_evaluation(
         if spans and all(span is not None for span in spans)
         else None
     )
+    if freshness_at_end_reference is None:
+        freshness_at_end_reference = bool(
+            whole_window
+            and runs_root is not None
+            and _window_lineage.is_hazard_runs_root(runs_root)
+        )
+    end_spans = [item[3] for item in neg8_references["end"]]
+    end_reference_at_s = (
+        max(span[1] for span in end_spans if span is not None)
+        if freshness_at_end_reference
+        and end_spans
+        and all(span is not None for span in end_spans)
+        else None
+    )
     freshness_observation = build_neg8_freshness_observation(
         [
             item[4]
@@ -5349,9 +5380,11 @@ def _idle_admission_core_evaluation(
             for item in neg8_references[position]
         ],
         evaluated_at_s=(
-            time.time()
-            if evaluation_timestamp_s is None
-            else evaluation_timestamp_s
+            evaluation_timestamp_s
+            if evaluation_timestamp_s is not None
+            else end_reference_at_s
+            if end_reference_at_s is not None
+            else time.time()
         ),
     )
 
@@ -5748,6 +5781,18 @@ def _whole_window_campaign_membership(
 
     supersession_results = supersession_entry_validation_results(runs_dir, log_path)
     groups: dict[str, dict[str, Any]] = {}
+    # HAZARD_PACK windows: the runs root carries a hazard lineage locator and
+    # is dedicated to one window (publication refuses a shared root), so every
+    # policy-matching manifest in its authenticated catalog is the window,
+    # whatever analysis-manifest identity each stage recorded (block 5 records
+    # null for the reference stages and, on a contrast pack, an identity for
+    # the science stages).  The membership id is derived from exactly those
+    # manifests' bytes, so no separate binding artifact is needed.
+    hazard_window = (
+        consumption_semantics_id != SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID
+        and _window_lineage.is_hazard_runs_root(runs_dir)
+    )
+    hazard_records: list[Any] = []
     catalog = load_authenticated_campaign_catalog(runs_dir, log_path)
     membership_binding: dict[str, Any] | None = None
     if catalog is not None and membership_binding_path is not None:
@@ -5769,6 +5814,9 @@ def _whole_window_campaign_membership(
                 continue
             identity = manifest.get("analysis_manifest_id")
             key = identity if isinstance(identity, str) and identity else "<none>"
+            if hazard_window:
+                key = HAZARD_WINDOW_MEMBERSHIP_KEY
+                hazard_records.append(record)
             group = groups.setdefault(
                 key,
                 {
@@ -5912,6 +5960,13 @@ def _whole_window_campaign_membership(
                         if prior is not None and prior != provenance:
                             group["selection_invalid"] = True
                         group["bundle_provenance"][bundle_id] = provenance
+    if hazard_window:
+        for group in groups.values():
+            # One group holds the whole window.  An attempt-ledger selection
+            # would replace every ordinary manifest's members (references
+            # included), so a mix is unresolved rather than silently narrowed.
+            if group["selection_manifests"] and group["manifests"]:
+                group["selection_invalid"] = True
     candidates = []
     ambiguous_duplicate = False
     all_resolutions: list[OrdinaryOccurrenceResolution] = []
@@ -6070,6 +6125,8 @@ def _whole_window_campaign_membership(
             membership_id=(
                 membership_binding.get("membership_id")
                 if identity == "<none>" and membership_binding is not None
+                else hazard_window_membership_id(runs_dir, hazard_records)
+                if hazard_window and identity == HAZARD_WINDOW_MEMBERSHIP_KEY
                 else identity
             ),
             membership_binding=membership_binding,

@@ -9001,19 +9001,11 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
         self.assertEqual(section["neg8_bracket"]["decision"], "failed")
 
     def test_neg8_bound_binding_changes_trigger_stale_refusal(self) -> None:
+        # Doctrine 2026-10-05 (V2): only the calibration identity still makes
+        # the bound stale; os_build and power-supply changes are disclosed
+        # (test_neg8_bound_os_and_power_changes_are_disclosed_not_stale).
         binding = self._binding()
         cases = (
-            (
-                "os_build_change",
-                {"os_build": "25F85"},
-            ),
-            (
-                "power_supply_change",
-                {
-                    "adapter_watts": 96,
-                    "adapter_description": "96W USB-C Power Adapter",
-                },
-            ),
             (
                 "calibration_identity_change",
                 {"calibration_identity_sha256": "d" * 64},
@@ -9046,6 +9038,94 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
                     "neg8_drift_bound_stale", section["conditions"]
                 )
                 self.assertEqual(section["neg8_bracket"]["decision"], "failed")
+
+    def test_neg8_bound_os_and_power_changes_are_disclosed_not_stale(self) -> None:
+        binding = self._binding()
+        cases = (
+            ("os_build_change", {"os_build": "25F85"}),
+            (
+                "power_supply_change",
+                {
+                    "adapter_watts": 96,
+                    "adapter_description": "96W USB-C Power Adapter",
+                },
+            ),
+            ("binding_observation_missing", {"adapter_watts": None}),
+        )
+        for disclosed, overrides in cases:
+            with self.subTest(disclosed=disclosed):
+                members = [
+                    self._member(
+                        f"neg8-v2-{disclosed}-{position}",
+                        records=_clean_idle_records(),
+                        gross_energy_j=8.0 + index * 0.01,
+                        neg8_position=position,
+                        **overrides,
+                    )
+                    for index, position in enumerate(("start", "end"))
+                ]
+                section = run_campaign_module.idle_admission_core_verdict(
+                    members,
+                    binding,
+                    whole_window=True,
+                    neg8_drift_bound=self._drift_bound(),
+                )
+                freshness = section["neg8_bracket"]["bound_freshness"]
+                self.assertEqual(freshness["decision"], "fresh")
+                self.assertEqual(freshness["triggered_rederivation_reasons"], [])
+                self.assertIn(disclosed, freshness["disclosed_binding_changes"])
+                self.assertNotIn("neg8_drift_bound_stale", section["conditions"])
+
+    def test_whole_window_writer_evaluates_freshness_at_the_end_reference(self) -> None:
+        # V1: the verdict writer measures the bound's 24 h horizon at the end
+        # of the end reference's measured window, not at the desk clock.
+        binding = self._binding()
+        derived_at = time.time() - NEG8_DRIFT_BOUND_MAX_AGE_S - 3600.0
+        bound = self._drift_bound(derived_at_s=derived_at)
+        members = [
+            self._member(
+                f"neg8-v1-{position}",
+                records=_clean_idle_records(),
+                gross_energy_j=8.0 + index * 0.01,
+                neg8_position=position,
+            )
+            for index, position in enumerate(("start", "end"))
+        ]
+        end_at = derived_at + 7200.0
+        for index, member in enumerate(members):
+            start = derived_at + 600.0 + index * 3000.0
+            stop = end_at if index else start + 600.0
+            (member.bundle_path / "events.jsonl").write_text(
+                "".join(
+                    json.dumps(
+                        {
+                            "phase": "measured_run",
+                            "event_type": event,
+                            "timestamp_s": stamp,
+                            "message": event,
+                            "metadata": {},
+                        }
+                    )
+                    + "\n"
+                    for event, stamp in (
+                        ("sampling_started", start),
+                        ("sampling_stopped", stop),
+                    )
+                )
+            )
+        desk = run_campaign_module._idle_admission_core_evaluation(
+            members, binding, whole_window=True, neg8_drift_bound=bound
+        ).core["neg8_bracket"]["bound_freshness"]
+        self.assertIn("validity_horizon_expired", desk["triggered_rederivation_reasons"])
+        writer = run_campaign_module._idle_admission_core_evaluation(
+            members,
+            binding,
+            whole_window=True,
+            neg8_drift_bound=bound,
+            freshness_at_end_reference=True,
+        ).core["neg8_bracket"]["bound_freshness"]
+        self.assertEqual(writer["evaluated_at_s"], end_at)
+        self.assertEqual(writer["decision"], "fresh")
 
     def test_unissued_prefreshness_bound_wire_is_malformed_and_underived(self) -> None:
         binding = self._binding()

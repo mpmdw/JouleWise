@@ -537,6 +537,8 @@ def relocated_custody(relocations: Mapping[Path | str, Path | str]) -> Iterator[
     root named in ``relocations`` ({recorded custody_root: where it is now})
     is read from the same relative place under the new root.  Every other
     path is read as recorded.  The lineage bytes themselves never change.
+    A recorded claim or bound runs root may be named the same way
+    (:func:`current_root`).
     """
 
     merged = dict(_CUSTODY_RELOCATIONS.get())
@@ -563,6 +565,17 @@ def _custody_path(recorded: str, custody_root: str) -> Path:
         return actual_root / path.relative_to(custody_root)
     except ValueError:
         return path
+
+
+def current_root(recorded_root: str | Path) -> Path:
+    """Where a root the lineage recorded lives now.
+
+    A recorded runs root (claim or bound) named as a key of
+    :func:`relocated_custody` is read from its new place; anything else is
+    read as recorded.
+    """
+
+    return _custody_path(str(recorded_root), str(recorded_root))
 
 
 def _completion_records(night_dir: Path) -> dict[str, dict[str, str] | None]:
