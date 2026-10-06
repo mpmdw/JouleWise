@@ -281,7 +281,9 @@ L5_ONLY_CODES = frozenset({
     "whole_window.not_passed", "whole_window.verdict_absent", "whole_window.verdict_unauthenticated",
     "whole_window.producer_failed",
     "member.unreadable", "member.reduction_mismatch", "member.anchor_recompute_mismatch", "member.span_unknown",
-    "battery.capture_pair_missing", "battery.accumulator_activity", "battery.accumulator_unavailable",
+    # battery.accumulator_activity and battery.accumulator_unavailable are in
+    # L4's draft since fix lane fx-flags (2026-10-06), with this family and klass.
+    "battery.capture_pair_missing",
     *LINEAGE_CODES,
     "roster.run_id_mismatch", "roster.no_science_bundles",
     "records.monitor_journal_absent", "records.monitor_line_malformed", "records.arm_record_absent",
@@ -3007,14 +3009,25 @@ class _Harvest:
             unmeasured.append({"check": "executed_inventory", "missing_input": "sealed_inventory"})
         if sealed is not None and executed:
             # Executed code is what the driver inventories: joulewise/, scripts/
-            # and the pack (L2), or the sealed inventory's declared roots.  A
-            # sealed file outside those roots is not executed code here.
+            # and the pack (L2, joulewise.b5.driver.executed_inventory), always.
+            # A sealed file outside those roots is not executed code here, and
+            # declared sealed roots only narrow them, never widen them: the same
+            # scope as joulewise.flags.collect._window_scope (registration 14 Q2),
+            # so a sealed inventory listing every pack never makes a window
+            # differ.  A path both inventories list is compared wherever it lies.
             declared = sealed_value.get("roots") if isinstance(sealed_value, Mapping) else None
+            declared_roots = tuple(str(root).rstrip("/") for root in declared) \
+                if isinstance(declared, list) and declared else None
             pack_relative = _relative_to(inputs.pack_root, inputs.measurement_root)
-            roots = tuple(str(root).rstrip("/") + "/" for root in declared) if isinstance(declared, list) and declared \
-                else CODE_PREFIXES + ((pack_relative + "/",) if pack_relative else ())
+            roots = CODE_PREFIXES + ((pack_relative + "/",) if pack_relative else ())
+
+            def in_scope(relative: str) -> bool:
+                return relative.startswith(roots) and (declared_roots is None or any(
+                    relative == root or relative.startswith(root + "/") for root in declared_roots))
+
             for relative in sorted(set(sealed) | set(executed)):
-                if relative in PIN_ONLY_PATHS or not relative.startswith(roots):
+                if relative in PIN_ONLY_PATHS or not (in_scope(relative) or (relative in sealed
+                                                                             and relative in executed)):
                     continue
                 if sealed.get(relative) != executed.get(relative):
                     differences.append({"check": "executed_inventory", "path": relative,

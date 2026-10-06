@@ -2375,6 +2375,17 @@ class JoinTests(unittest.TestCase):
         self.assertEqual((code, observed["holes_monotonic_ns"], interval),
                          ("contention.unmeasured", [[20 * NS, None]], {"monotonic_ns": None}))
 
+    def test_contention_limit_is_pinned_on_both_sides(self):
+        """0.06 CPU-s/s flags and 0.04 does not, under the registered 0.05 (ported from L4's removed join test)."""
+        self.assertEqual(self.T["contention_cpu_s_per_s"], 0.05)
+        for load, want in ((0.06, ["contention.request_overlap"]), (0.04, []), (0.05, [])):
+            journal = L1Journal("contention")
+            journal.write("snapshot", -NS)
+            journal.write("interval", 0, 10 * NS, values=contention_values(0, 10 * NS, [
+                {"pid": 400, "command": "mds", "cpu_s_per_s": load}], kernel_task=0.9))
+            codes = [code for code, *_ in h.contention_member_flags([2 * NS, 3 * NS], parsed(journal), self.T)]
+            self.assertEqual(codes, want, load)
+
     def test_a_failed_ps_interval_covers_nothing(self):
         journal = L1Journal("contention")
         journal.write("interval", 0, 10 * NS, values=contention_values(0, 10 * NS))
@@ -2826,6 +2837,38 @@ class IdentityReplayTests(WindowTestCase):
         window.harvest()
         self.assertNotIn("code.executed_differs_from_sealed", window.codes())
         self.assertNotIn("code.identity_unmeasured", window.codes())
+
+    def test_declared_sealed_roots_never_widen_the_executed_roots(self):
+        """The real seal lists every pack and the catalog; the window inventories only its own (fx-flags 14 Q2).
+
+        Declared roots covering all three packs must not make another pack's
+        sealed file missing here, while a sealed file under the window's own
+        roots that the window did not execute still differs.  Declared roots
+        narrower than the window's never hide a file both inventories list
+        with different bytes (the collector's ``changed`` rule).
+        """
+        other_pack = "configs/campaigns/b5test_other_v5"
+        declared = ["joulewise", "scripts", f"configs/campaigns/{PACK_ID}", other_pack,
+                    "configs/campaigns/v5_claim_25g83/flag_catalog.json"]
+        for name, roots, extra, executed, want in (
+                ("other_pack", declared, {f"{other_pack}/01_abs/b5t-other-r01.json": "0" * 64}, {}, []),
+                ("own_root", declared, {"joulewise/b5t_sealed_not_executed.py": "1" * 64}, {},
+                 ["joulewise/b5t_sealed_not_executed.py"]),
+                ("narrow_declared", ["joulewise"], {}, {"scripts/b5t_stub.py": "2" * 64},
+                 ["scripts/b5t_stub.py"])):
+            with self.subTest(name):
+                window = Window(self.tmp / f"declared-{name}", catalog_overrides=self.ISOLATE,
+                                executed_overrides={"files": executed})
+                sealed = window.measurement / "configs/campaigns/v5_claim_25g83/sealed_inventory.json"
+                value = json.loads(sealed.read_bytes())
+                value["roots"] = roots
+                value["files"].update(extra)
+                put(sealed, value)
+                window.harvest()
+                flags = [flag for flag in window.flags() if flag["code"] == "code.executed_differs_from_sealed"]
+                paths = [row.get("path") for flag in flags for row in flag["observed"]["differences"]]
+                self.assertEqual(paths, want)
+                self.assertNotIn("code.identity_unmeasured", window.codes())
 
 
 @unittest.skipUnless((B3W1 / "harvest.json").is_file(), "block-3 b3w1 archive is local to the measurement Mac")

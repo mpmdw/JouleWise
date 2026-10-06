@@ -127,11 +127,15 @@ class OneSpanJoinTests(unittest.TestCase):
     @unittest.skipUnless(L5_AVAILABLE, "lane L5's joulewise.b5.harvest is not in this tree")
     def test_harvest_joins_on_l1_fixtures_feed_compute_like_l1s_own_join(self) -> None:
         from joulewise.b5 import harvest as h
+        # The harvest has no default thresholds: it reads registration 6.9's
+        # flat block (fx-harvest).  The harvest tests keep this literal equal
+        # to the design branch's registered block (RegisteredThresholdTests).
+        from tests.test_harvest_b5_window import REGISTERED_HARVEST_THRESHOLDS
 
         expected = json.loads((L1_JOURNALS / "expected.json").read_bytes())["cases"]
         journals = {module: h.read_monitor_journal(L1_JOURNALS / f"{module}.jsonl", module)[0]
                     for module in h.MONITOR_MODULES}
-        thresholds = h.DEFAULT_THRESHOLDS
+        thresholds = dict(REGISTERED_HARVEST_THRESHOLDS)
         steps, _changes = h.clock_steps(journals["clock"], thresholds)
         catalog = draft_catalog()
         flags, spans, members = [], {}, []
