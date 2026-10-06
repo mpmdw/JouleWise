@@ -24,6 +24,10 @@ battery     5 s      poll of the grammar's six fields in process
                      polled field changes.  Without the reader (or after a
                      failed poll): ``ioreg`` ~2 s after each publication,
                      retried every 5 s while one is late, at most 30 s apart
+battery     1 s      SMC battery current B0AC (and B0AV, PDTR, PSTR, PPBR)
+                     read in process (``smc.Reader``), one ``reading`` line
+                     each with ``values.source = "smc"``; each ``ioreg``
+                     line also carries the SMC read taken with it
 thermal     5 s      OS thermal pressure level (notify_get_state in process;
                      notifyutil when that fails)
 contention  10 s     ps interval, CPU-s/s outside the tree, host CPU ticks
@@ -65,7 +69,7 @@ from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
-from joulewise.hazards import battery, clock, contention, disk, thermal
+from joulewise.hazards import battery, clock, contention, disk, smc, thermal
 from joulewise.hazards.base import (
     Context, Stamp, canonical_json, sha256_hex, write_create_once,
 )
@@ -84,6 +88,7 @@ TASKPOLICY_PREFIX = ("/usr/sbin/taskpolicy", "-b")
 # the longest gap between ioreg reads with it, longer than one publication
 # period plus one poll so it never fires while the gauge publishes.
 DEFAULT_CADENCE: dict[str, float] = {"clock_s": 1.0, "frequency_s": 5.0, "battery_s": 5.0,
+                                     "battery_smc_s": 1.0,
                                      "battery_max_s": 30.0, "battery_publication_s": 60.0,
                                      "battery_full_max_s": 90.0,
                                      "thermal_s": 5.0, "contention_s": 10.0, "disk_s": 60.0,
@@ -186,7 +191,7 @@ class Monitor:
     def __init__(self, config: Mapping[str, Any], *, ctx: Context | None = None,
                  frequency_reader: Callable[[], Mapping[str, Any]] = clock.read_frequency,
                  statvfs: Callable[[str], Any] = os.statvfs, stat: Callable[[str], Any] = os.stat,
-                 notify_reader: Any = None, battery_reader: Any = None,
+                 notify_reader: Any = None, battery_reader: Any = None, smc_reader: Any = None,
                  host_reader: contention.HostReader | None = contention.read_host_cpu) -> None:
         self.config = validate_config(config)
         self.custody = Path(self.config["custody_dir"])
@@ -201,7 +206,12 @@ class Monitor:
         self.battery_reader = battery_reader
         self.battery_poll_at_read: dict[str, Any] | None = None  # the poll before the last good ioreg
         self.battery_read_ns: int | None = None                  # when that ioreg finished
-        self.counts = {"battery_polls": 0, "battery_poll_failures": 0, "battery_ioreg_reads": 0}
+        # None: no SMC lines (the battery current falls back to the registry,
+        # disclosed at the join); else ``smc.Reader`` (production), read every
+        # battery_smc_s.
+        self.smc_reader = smc_reader
+        self.counts = {"battery_polls": 0, "battery_poll_failures": 0, "battery_ioreg_reads": 0,
+                       "smc_reads": 0}
         self.host_reader = host_reader
         self.cadence = self.config["cadence"]
         self.tree_roots = tuple(self.config["tree_roots"])
@@ -210,8 +220,8 @@ class Monitor:
         self.session = f"{os.getpid()}-{first.monotonic_ns}"
         self.journals = {name: Journal(self.directory / f"{name}.jsonl") for name in JOURNALS}
         self.seq = {name: 0 for name in JOURNALS}
-        self.due = {name: first.monotonic_ns for name in ("clock", "battery", "thermal",
-                                                          "contention", "disk", "self")}
+        self.due = {name: first.monotonic_ns for name in ("clock", "battery_smc", "battery",
+                                                          "thermal", "contention", "disk", "self")}
         self.next_frequency_ns = first.monotonic_ns
         self.last_update_time: int | None = None
         self.previous_snapshot: contention.Snapshot | None = None
@@ -273,7 +283,8 @@ class Monitor:
                 self.ctx.clocks.sleep(pause)
 
     def tick(self, now_ns: int) -> None:
-        for name, task in (("clock", self._clock), ("battery", self._battery),
+        for name, task in (("clock", self._clock), ("battery_smc", self._battery_smc),
+                           ("battery", self._battery),
                            ("thermal", self._thermal), ("contention", self._contention),
                            ("disk", self._disk), ("self", self._self_cost)):
             if self.stopping:
@@ -302,6 +313,19 @@ class Monitor:
         self._write("clock", "reading", started=item["started"], finished=item["finished"],
                     values={"anchor": item["anchor"], "frequency": item["frequency"]},
                     error=item["error"])
+
+    def _battery_smc(self) -> None:
+        """The 1 s SMC read of the battery current, journaled whatever it returned."""
+
+        if self.smc_reader is None:
+            return
+        self.counts["smc_reads"] += 1
+        started = self.ctx.stamp()
+        sample = battery.smc_sample(self.smc_reader.read)
+        finished = self.ctx.stamp()
+        _current, why = battery.smc_current(sample)
+        self._write("battery", "reading", started=started, finished=finished,
+                    values={"source": "smc", "smc": sample}, error=why)
 
     def _battery(self) -> None:
         """The 5 s battery task: an in-process poll, and ``ioreg`` when it changed.
@@ -368,6 +392,8 @@ class Monitor:
         values: dict[str, Any] = {"returncode": completed.returncode}
         if trigger is not None:
             values["trigger"] = dict(trigger)
+        if self.smc_reader is not None:  # B0AC beside the registry's InstantAmperage
+            values["smc"] = battery.smc_sample(self.smc_reader.read, self.ctx)
         raw: list[dict[str, Any]] = []
         stamp_update = None
         if not completed.ok:
@@ -503,7 +529,9 @@ def run_forever(config_path: Path, argv: Sequence[str] = ()) -> int:
         battery_reader = battery.RegistryReader()
     except OSError:
         battery_reader = None  # ioreg on the publication schedule instead
-    monitor = Monitor(config, notify_reader=notify_reader, battery_reader=battery_reader)
+    smc_reader = smc.Reader() if sys.platform == "darwin" else None  # never raises; opens lazily
+    monitor = Monitor(config, notify_reader=notify_reader, battery_reader=battery_reader,
+                      smc_reader=smc_reader)
 
     def stop(signum, _frame):
         monitor.stopping = True

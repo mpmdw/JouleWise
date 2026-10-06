@@ -207,6 +207,37 @@ class FakeRegistry:
         return registry_values(self.source())
 
 
+class FakeSmc:
+    """``smc.Reader`` at the seam: B0AC from ``current(t)`` on the fake clocks'
+    timeline (t in seconds since construction; 0 mA unless a test sets one).
+
+    ``fail`` makes every key unreadable, as a missing AppleSMC service does.
+    """
+
+    def __init__(self, clocks: "FakeClocks", *, current: Callable[[float], int] = lambda t: 0) -> None:
+        self.clocks = clocks
+        self.start_raw_ns = clocks.raw_ns
+        self.current = current
+        self.fail = False
+        self.calls = 0
+
+    def elapsed_s(self) -> float:
+        return (self.clocks.raw_ns - self.start_raw_ns) / NS
+
+    def read(self, keys: Sequence[str] = ("B0AC", "B0AV", "PDTR", "PSTR", "PPBR")) -> dict[str, Any]:
+        self.calls += 1
+        if self.fail:
+            return {"values": {key: None for key in keys},
+                    "errors": {key: f"{key}: OSError: no AppleSMC service in the IO registry"
+                               for key in keys}}
+        values = {"B0AC": self.current(self.elapsed_s()), "B0AV": 12180, "PDTR": 48.1,
+                  "PSTR": 49.2, "PPBR": 0.41}
+        return {"values": {key: values.get(key) for key in keys}, "errors": {}}
+
+    def __call__(self) -> dict[str, Any]:  # the arm's ``smc_read`` seam
+        return self.read()
+
+
 # --------------------------------------------------------------------------
 # ps
 

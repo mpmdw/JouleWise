@@ -56,6 +56,8 @@ CATALOG_R3_BATTERY = {
     "battery.accumulator_diagnostic": ("DIAGNOSTIC", "PHYSICS", "DISCLOSE"),
     "battery.accumulator_activity": ("DIAGNOSTIC", "PHYSICS", "DISCLOSE"),
     "battery.accumulator_unavailable": ("DIAGNOSTIC", "PHYSICS", "DISCLOSE"),
+    # lane 2026-10-06-smc-battery-meter: the registry fallback when SMC B0AC is unread
+    "battery.smc_unavailable": ("DIAGNOSTIC", "PHYSICS", "DISCLOSE"),
 }
 
 
@@ -70,7 +72,7 @@ class BatteryNamingTests(unittest.TestCase):
     def test_l4_battery_vocabulary_matches_the_catalog(self) -> None:
         l4 = {code: _entry(DRAFT_CODES, code) for code in DRAFT_CODES
               if code == "battery.member_span" or code == "battery.unmeasured"
-              or code.startswith("battery.accumulator_")}
+              or code.startswith("battery.accumulator_") or code == "battery.smc_unavailable"}
         self.assertEqual(l4, CATALOG_R3_BATTERY)
 
     def test_sealed_catalog_battery_entries_match_l4_when_present(self) -> None:
@@ -88,19 +90,24 @@ class BatteryNamingTests(unittest.TestCase):
 
         rig = SpanRig()
         rig.setUp()
+        smc = rig.smc_lines(600)  # the monitor's 1 s SMC B0AC reads, 0 mA
         scenarios = {
-            # the 09-30 0555Z publication: -447 mA on AC
+            # the 09-30 0555Z publication: -447 mA on AC, judged on the registry (no SMC reads)
             "publication": rig.series(10, special={3: {"instant": -447}}),
+            # the 10-06 probe burst: B0AC -865 mA between clean publications
+            "smc_burst": rig.series(10) + rig.smc_lines(600, current={150: -865}),
             # 20 discharge ticks averaging -3 W between two 0 mA publications
-            "accumulator_excursion": rig.series(10, special={3: {"ticks": 20, "energy": -60_000}}),
+            "accumulator_excursion": rig.series(10, special={3: {"ticks": 20, "energy": -60_000}}) + smc,
             # the archived calibration-capture assist, about -140 mW
-            "assist": rig.series(10, special={3: {"ticks": 21, "energy": -2927}}),
+            "assist": rig.series(10, special={3: {"ticks": 21, "energy": -2927}}) + smc,
             # a gauge counter reset
-            "counter_reset": rig.series(10, special={3: {"ticks": -30_000, "energy": 0}}),
+            "counter_reset": rig.series(10, special={3: {"ticks": -30_000, "energy": 0}}) + smc,
         }
         emitted: dict[str, set[str]] = {}
         for name, readings in scenarios.items():
             emitted[name] = {f["code"] for f in battery.span_findings(readings, rig.span(130, 170))}
+        self.assertEqual(emitted["publication"], {"battery.smc_unavailable", "battery.member_span"})
+        self.assertEqual(emitted["smc_burst"], {"battery.member_span"})
         self.assertEqual(emitted["assist"], {"battery.accumulator_activity"})
         self.assertEqual(emitted["counter_reset"], {"battery.accumulator_unavailable"})
         catalog = draft_catalog()

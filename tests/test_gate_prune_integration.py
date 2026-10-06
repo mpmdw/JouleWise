@@ -97,7 +97,7 @@ class PlanThresholdsReachTheRealArm(WrittenPlans):
             self.seen_config = config
             rig_seams = hazard_arm.Seams(ctx=hazard_base.Context(run=rig.runner, clocks=rig.clocks),
                                          frequency_reader=rig.reader, statvfs=rig.statvfs, stat=rig.stat,
-                                         host_cpu=rig.table.host_cpu)
+                                         host_cpu=rig.table.host_cpu, smc_read=rig.smc)
             with mock.patch.dict(os.environ, {"FAKE_PM_FIXTURE": str(rig.cadence_fixture)}):
                 return real_run(config, rig_seams)
 

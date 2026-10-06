@@ -2356,9 +2356,12 @@ class JoinTests(unittest.TestCase):
                 limits = {"limit_ma": 200, "max_update_age_s": 180, "max_unobserved_s": 120}
                 ours = {code for code, *_ in h.battery_member_flags(span["monotonic_ns"], parsed(journal), self.T)
                         if code.startswith("battery.accumulator")}
+                # battery.smc_unavailable: these journals hold no SMC B0AC reads, so L1
+                # discloses its registry fallback; the harvest copy has no SMC rule yet
+                # (lane 2026-10-06-smc-battery-meter, WIRING.md).
                 theirs = {l1_name.get(finding["code"], finding["code"])
                           for finding in l1.span_findings(journal.lines, span, limits)
-                          if finding["code"] != "battery.unmeasured"}
+                          if finding["code"] not in ("battery.unmeasured", "battery.smc_unavailable")}
                 self.assertEqual(ours, theirs)
 
     def test_thermal_nonzero_and_unmeasured(self):
@@ -2571,8 +2574,10 @@ class L1JournalFormatTests(unittest.TestCase):
         journals = {name: monitor.read_journal(L1_JOURNALS / f"{name}.jsonl")[0] for name in monitor.JOURNALS}
         for name, case in sorted(self.expected["cases"].items()):
             with self.subTest(name):
+                # The recorded journals predate the 1 s SMC read: L1 discloses its
+                # registry fallback (battery.smc_unavailable) on every span.
                 live = {finding["code"] for finding in monitor.member_findings(
-                    journals, span=case["span"], request=case["request"])}
+                    journals, span=case["span"], request=case["request"])} - {"battery.smc_unavailable"}
                 self.assertEqual(sorted(live), case["l1_codes"])
 
 
