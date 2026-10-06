@@ -1757,8 +1757,7 @@ def assess_member(task: Mapping[str, Any]) -> dict[str, Any]:
     result["config_sha256"] = sha256_bytes(config_raw) if config_raw is not None else None
     result["stored_summary_sha256"] = sha256_bytes(summary_raw) if summary_raw is not None else None
     cache = _WORKER_PHYSICS_CACHE
-    result["calibration_cache"] = {"entries_before": len(cache),
-                                   "strict_uses_cache": _accepts_keyword(validate_bundle, "physics_cache")}
+    result["calibration_cache"] = {"strict_uses_cache": _accepts_keyword(validate_bundle, "physics_cache")}
     problems = guarded("strict", lambda: strict_problems(bundle, cache))
     result["strict_problems"] = problems
     result["strict_valid"] = problems == []
