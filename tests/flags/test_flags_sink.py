@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import json
-import multiprocessing
 import os
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -95,13 +96,19 @@ class FlagSinkTests(unittest.TestCase):
         self.assertFalse(self.path.exists())
 
     def test_concurrent_writers_deduplicate(self) -> None:
-        context = multiprocessing.get_context("spawn")
-        workers = [context.Process(target=_append_many, args=(str(self.path), start)) for start in (0, 5, 10)]
+        # Three writer processes started as plain interpreters (not multiprocessing
+        # spawn, which re-imports the runner's __main__ and so depends on how the
+        # suite was launched).
+        code = ("import sys; from tests.flags.test_flags_sink import _append_many; "
+                "_append_many(sys.argv[1], int(sys.argv[2]))")
+        root = Path(__file__).resolve().parents[2]
+        workers = [subprocess.Popen([sys.executable, "-B", "-c", code, str(self.path), str(start)], cwd=root,
+                                    env={**os.environ, "PYTHONPATH": str(root)},
+                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                   for start in (0, 5, 10)]
         for worker in workers:
-            worker.start()
-        for worker in workers:
-            worker.join(60)
-            self.assertEqual(worker.exitcode, 0)
+            _out, err = worker.communicate(timeout=60)
+            self.assertEqual(worker.returncode, 0, err.decode(errors="replace"))
         flags, problems = read_flags(self.path)
         self.assertEqual(problems, [])
         ids = [f["flag_id"] for f in flags]
