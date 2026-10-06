@@ -201,6 +201,8 @@ class ThresholdAndSizingTests(WindowPlanFixture):
     def test_every_key_a_module_reads_is_required_at_the_desk(self):
         for module, keys in fake_window.THRESHOLDS.items():
             for key in keys:
+                if fake_window.L1_DEFAULT_THRESHOLDS[module].get(key, 0) is None:
+                    continue  # an optional limit: test_an_optional_limit_is_null_or_positive_and_may_be_left_out
                 with self.subTest(key=f"{module}.{key}"):
                     thresholds = json.loads(json.dumps(fake_window.THRESHOLDS))
                     del thresholds[module][key]
@@ -217,7 +219,43 @@ class ThresholdAndSizingTests(WindowPlanFixture):
         textual["thermal"]["max_level"] = "0"
         with self.assertRaisesRegex(b5_plan.WindowPlanError, re.escape("thermal.max_level")):
             self.write(self.inputs(thresholds=textual))
+        boolean = json.loads(json.dumps(fake_window.THRESHOLDS))
+        boolean["battery"]["limit_ma"] = True
+        with self.assertRaisesRegex(b5_plan.WindowPlanError, re.escape("battery.limit_ma")):
+            self.write(self.inputs(thresholds=boolean))
         self.assert_nothing_written()
+
+    def test_an_optional_limit_is_null_or_positive_and_may_be_left_out(self):
+        # L1's contention.aggregate_cpu_limit_s_per_s defaults to null and is judged
+        # only when registered; contention.aggregate_limit raises on anything but
+        # null or a positive number, which the real arm would read as a NULL window.
+        for value in ("0.5", 0, -1, True, float("inf")):
+            with self.subTest(value=value):
+                bad = json.loads(json.dumps(fake_window.THRESHOLDS))
+                bad["contention"]["aggregate_cpu_limit_s_per_s"] = value
+                with self.assertRaisesRegex(b5_plan.WindowPlanError,
+                                            re.escape("contention.aggregate_cpu_limit_s_per_s")):
+                    self.write(self.inputs(thresholds=bad))
+                self.assert_nothing_written()
+        absent = json.loads(json.dumps(fake_window.THRESHOLDS))
+        del absent["contention"]["aggregate_cpu_limit_s_per_s"]
+        record = self.write(self.inputs(thresholds=absent))
+        self.assertEqual(["contention.aggregate_cpu_limit_s_per_s"],
+                         record["thresholds_audit"]["optional_keys_absent"])
+
+    def test_a_registered_optional_limit_is_kept_and_recorded(self):
+        registered = json.loads(json.dumps(fake_window.THRESHOLDS))
+        registered["contention"]["aggregate_cpu_limit_s_per_s"] = 0.5
+        record = self.write(self.inputs(thresholds=registered))
+        window = json.loads(Path(record["plan"]["path"]).read_text())["hazard_window"]
+        self.assertEqual(0.5, window["thresholds"]["contention"]["aggregate_cpu_limit_s_per_s"])
+        self.assertEqual([{"key": "contention.aggregate_cpu_limit_s_per_s", "value": 0.5, "default": None}],
+                         record["thresholds_audit"]["differences_from_defaults"])
+        try:
+            from joulewise.hazards import contention
+        except ImportError:
+            return
+        self.assertEqual(0.5, contention.aggregate_limit(window["thresholds"]["contention"]))
 
     def test_an_unavailable_contract_is_refused_at_the_desk(self):
         def missing():

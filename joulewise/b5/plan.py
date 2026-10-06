@@ -191,17 +191,21 @@ def audit_thresholds(thresholds: Mapping[str, Any], defaults: Mapping[str, Any],
 
     Refuses when a module lacks a key its defaults carry, or a value is not a
     finite number: the module's judge would raise on it at the real arm, which
-    the driver reads as a NULL window. The sized keys are replaced by the
+    the driver reads as a NULL window. A key whose default is null is an
+    optional limit that the module judges only when registered (L1's
+    ``contention.aggregate_cpu_limit_s_per_s``): it may be absent, and when
+    present it must be null or a positive finite number, the module's own rule
+    (``contention.aggregate_limit``). The sized keys are replaced by the
     window's own values. The audit records every value that differs from the
-    module default, every key the contract does not know, and every copied
-    sized value that was replaced.
+    module default, every key the contract does not know, every optional key
+    left out, and every copied sized value that was replaced.
     """
 
     _require(isinstance(defaults, Mapping) and set(defaults) == set(night_gate.HAZARD_MODULES)
              and all(isinstance(defaults[name], Mapping) for name in night_gate.HAZARD_MODULES),
              f"the threshold contract ({THRESHOLD_CONTRACT_SOURCE}) must name the six hazard modules")
     missing, not_numeric = [], []
-    differences, unknown, replaced = [], [], []
+    differences, unknown, replaced, optional_absent = [], [], [], []
     result: dict[str, dict[str, Any]] = {}
     for module in night_gate.HAZARD_MODULES:
         copied, contract = thresholds[module], defaults[module]
@@ -209,7 +213,15 @@ def audit_thresholds(thresholds: Mapping[str, Any], defaults: Mapping[str, Any],
         for key, default in contract.items():
             if (module, key) in sized:
                 continue
-            if key not in values:
+            if default is None:
+                if key not in values:
+                    optional_absent.append(f"{module}.{key}")
+                    continue
+                if values[key] is not None and not (_is_number(values[key]) and values[key] > 0):
+                    not_numeric.append(f"{module}.{key}")
+                elif values[key] is not None:
+                    differences.append({"key": f"{module}.{key}", "value": values[key], "default": None})
+            elif key not in values:
                 missing.append(f"{module}.{key}")
             elif _is_number(default) and not _is_number(values[key]):
                 not_numeric.append(f"{module}.{key}")
@@ -225,9 +237,11 @@ def audit_thresholds(thresholds: Mapping[str, Any], defaults: Mapping[str, Any],
         result[module] = values
     _require(not missing, "thresholds lack keys the hazard modules read (copy them from the sealed "
              f"registration): {', '.join(missing)}")
-    _require(not not_numeric, f"thresholds must be finite numbers: {', '.join(not_numeric)}")
+    _require(not not_numeric, "thresholds must be finite numbers (an optional limit: null or a positive "
+             f"finite number): {', '.join(not_numeric)}")
     audit = {"contract": THRESHOLD_CONTRACT_SOURCE, "differences_from_defaults": differences,
-             "keys_not_in_contract": unknown, "sized_keys_replaced": replaced,
+             "keys_not_in_contract": unknown, "optional_keys_absent": optional_absent,
+             "sized_keys_replaced": replaced,
              "sized_keys": [f"{module}.{key}" for module, key in sized]}
     return result, audit
 

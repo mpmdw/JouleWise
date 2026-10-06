@@ -713,8 +713,13 @@ class UnitTests(unittest.TestCase):
                           "observed", "expected", "evidence", "detail", "emitted", "catalog_sha256", "blinding"},
                          set(flag))
         identity = json.dumps({"code": "disk.low", "scope": flag["scope"], "observed": {"free_bytes": 1},
-                               "source": flag["source"]}, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+                               "source": flag["source"], "interval": flag["interval"]},
+                              sort_keys=True, separators=(",", ":"), ensure_ascii=False)
         self.assertEqual(hashlib.sha256(identity.encode()).hexdigest()[:20], flag["flag_id"])
+        # Two intervals are two facts: the fallback's flag_id changes with the interval
+        # exactly as joulewise.flags.schema.make_flag's does.
+        timed = dict(fields, interval={"monotonic_ns": [1, 2], "monotonic_raw_ns": None, "wall_s": None})
+        self.assertNotEqual(flag["flag_id"], b5_driver.build_flag(timed)["flag_id"])
         self.assertEqual(["level", "plan_id", "attempt", "stage_id", "run_id", "bundle_id"], list(flag["scope"]))
         try:
             from joulewise.flags.schema import make_flag, validate_flag
@@ -723,6 +728,8 @@ class UnitTests(unittest.TestCase):
         self.assertEqual([], validate_flag(flag))
         produced = make_flag(**fields)
         self.assertEqual(produced["flag_id"], flag["flag_id"])
+        self.assertEqual(make_flag(**timed)["flag_id"], b5_driver.build_flag(timed)["flag_id"])
+        self.assertEqual([], validate_flag(b5_driver.build_flag(timed)))
 
     def test_decision_reading_is_conservative(self):
         go = {name: "PASS" for name in SIX}

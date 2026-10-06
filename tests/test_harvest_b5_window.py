@@ -237,18 +237,30 @@ def battery_values(update_time_s: int, **override) -> dict:
 
 
 def contention_values(begin_ns: int, end_ns: int, outside=(), kernel_task=0.31) -> dict:
-    """``contention.interval`` output (kernel_task excluded, as in window)."""
-    rows = [{"pid": 310, "command": "WindowServer", "cpu_s_per_s": 0.01}, *outside]
+    """``contention.interval`` output (kernel_task excluded, as in window), with the
+    host-CPU, exited-process and aggregate keys of L1 e880af6d (aggregate journaled,
+    not judged: no limit registered)."""
+    rows = [{"pid": 310, "command": "WindowServer", "cpu_s_per_s": 0.01, "start": "Mon Sep 21 07:13:20 2026"},
+            *({"start": "Mon Oct 05 18:00:00 2026", **row} for row in outside)]
     rows.sort(key=lambda row: (-row["cpu_s_per_s"], row["pid"]))
+    elapsed_s = (end_ns - begin_ns) / 1e9
+    outside_total = sum(row["cpu_s_per_s"] for row in rows)
+    busy = 0.97 + outside_total + kernel_task
     return {"interval": {"monotonic_ns": [begin_ns, end_ns],
                          "monotonic_raw_ns": [begin_ns + RAW_OFFSET_NS, end_ns + RAW_OFFSET_NS],
                          "wall_ns": [begin_ns + WALL_OFFSET_NS, end_ns + WALL_OFFSET_NS]},
-            "elapsed_s": (end_ns - begin_ns) / 1e9, "clean": all(row["cpu_s_per_s"] <= 0.05 for row in rows),
+            "elapsed_s": elapsed_s, "clean": all(row["cpu_s_per_s"] <= 0.05 for row in rows),
             "max_outside": rows[0], "outside_over_limit": [row for row in rows if row["cpu_s_per_s"] > 0.05],
+            "exited_over_limit": [],
             "outside_listed": [row for row in rows if row["cpu_s_per_s"] >= 0.005],
-            "outside_total_cpu_s_per_s": sum(row["cpu_s_per_s"] for row in rows), "outside_process_count": 7,
+            "outside_total_cpu_s_per_s": outside_total, "outside_process_count": 7,
             "tree_cpu_s_per_s": 0.97, "tree_process_count": 3, "kernel_task_cpu_s_per_s": kernel_task,
-            "kernel_task_included": False, "unaccounted": [], "raw": []}
+            "kernel_task_included": False, "unaccounted": [], "raw": [],
+            "host_busy_cpu_s_per_s": busy, "host_idle_cpu_s_per_s": 16 - busy, "host_error": None,
+            "host_ticks": {"busy_ticks": round(busy * 100 * elapsed_s), "cpus": 16, "elapsed_s": elapsed_s,
+                           "idle_ticks": round((16 - busy) * 100 * elapsed_s), "ticks_per_s": 100.0},
+            "outside_aggregate_cpu_s_per_s": outside_total, "unattributed_cpu_s_per_s": 0.0,
+            "aggregate_limit_s_per_s": None, "aggregate_over_limit": False}
 
 
 def clock_values(raw_ns: int, anchor_ns: int, frequency: bool) -> dict:
@@ -932,6 +944,25 @@ class CollectedWindowTests(WindowTestCase):
         window.harvest()
         self.assertIn("model.identity_unpinned", window.codes())
         self.assertNotIn("model.identity_mismatch", window.codes())
+
+    def test_sealed_identity_pins_file_is_read_at_its_default_path(self):
+        """Integration: the one sealed pins file the arm collector also reads (``--identity-pins``)."""
+        identity = derive_model_runtime_config_from_metadata(
+            json.loads((template() / MEMBERS[0][0] / "config.json").read_bytes()),
+            json.loads((template() / MEMBERS[0][0] / "metadata.json").read_bytes()))[1]
+        for label, runtime_pin, expect_mismatch in (("matching", identity["runtime_identity_sha256"], False),
+                                                    ("other-runtime", "0" * 64, True)):
+            with self.subTest(label):
+                window = Window(self.tmp / f"w-{label}", catalog_overrides=self.ISOLATE, frozen_pins=False)
+                put(window.measurement / "configs/campaigns/v5_claim_25g83/identity_pins.json", {
+                    "schema": h.IDENTITY_PINS_SCHEMA, "runtime_versions_sha256": None,
+                    "units": {"b5t-unit": {"model_artifact_sha256": identity["model_artifact_sha256"],
+                                           "runtime_identity_sha256": runtime_pin}}})
+                window.harvest()
+                self.assertNotIn("model.identity_unpinned", window.codes())
+                mismatched = {flag["scope"]["run_id"] for flag in window.flags()
+                              if flag["code"] == "model.identity_mismatch"}
+                self.assertEqual(mismatched, {row[0] for row in MEMBERS} if expect_mismatch else set())
 
     def test_earlier_flag_files_are_absorbed_and_malformed_lines_recorded(self):
         """Desk, arm and driver flags, as L4's make_flag and sink write them, reach the exclusion function."""

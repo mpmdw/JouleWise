@@ -834,6 +834,52 @@ def recorded_download_revisions(source: str | None) -> list[str]:
     return sorted(revisions)
 
 
+IDENTITY_PINS_SCHEMA = "joulewise.b5_identity_pins.v1"
+
+
+def _is_sha256_hex(value: Any) -> bool:
+    return (isinstance(value, str) and len(value) == 64
+            and all(character in "0123456789abcdef" for character in value))
+
+
+def read_identity_pins(path: str | Path | None) -> dict[str, Any]:
+    """The sealed model and runtime pins: ``{"model_artifact_sha256": {unit: sha}, "runtime_versions_sha256": sha|None}``.
+
+    The file (L6 seals it beside the flag catalog; the driver passes it with
+    ``--identity-pins``, the harvest reads it as ``identity_pins.json``) is::
+
+        {"schema": "joulewise.b5_identity_pins.v1",
+         "units": {"<identity_unit_id>": {"model_artifact_sha256": "<hex>",
+                                          "runtime_identity_sha256": "<hex>", ...}},
+         "runtime_versions_sha256": "<hex>" | null}
+
+    ``units`` feeds the arm collector's model artifact check and the harvest's
+    per-bundle check; ``runtime_versions_sha256`` is the digest of
+    :func:`runtime_versions`. No path gives no pins. A file that cannot be
+    read or does not have this shape raises :class:`CollectorError`, which
+    leaves ``model.identity_unmeasured``: the check did not run.
+    """
+
+    empty: dict[str, Any] = {"model_artifact_sha256": {}, "runtime_versions_sha256": None}
+    if not path:
+        return empty
+    try:
+        document = json.loads(Path(path).read_bytes())
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise CollectorError(f"identity pins {path} cannot be read: {exc}") from exc
+    units = document.get("units") if isinstance(document, Mapping) else None
+    runtime = document.get("runtime_versions_sha256") if isinstance(document, Mapping) else None
+    if (not isinstance(document, Mapping) or document.get("schema") != IDENTITY_PINS_SCHEMA
+            or not isinstance(units, Mapping)
+            or not all(isinstance(entry, Mapping) and _is_sha256_hex(entry.get("model_artifact_sha256"))
+                       for entry in units.values())
+            or not (runtime is None or _is_sha256_hex(runtime))):
+        raise CollectorError(f"identity pins {path} are not a {IDENTITY_PINS_SCHEMA} document with "
+                             "lowercase SHA-256 pins")
+    return {"model_artifact_sha256": {str(unit): entry["model_artifact_sha256"] for unit, entry in units.items()},
+            "runtime_versions_sha256": runtime}
+
+
 def collect_model_identity(
     params: Mapping[str, Any],
     *,
@@ -845,7 +891,8 @@ def collect_model_identity(
 
     Per identity unit: the model artifact digest
     (``provenance.model_artifact_identity``) against the frozen pin or
-    ``expected_model_artifact_sha256[unit]``; the declared ``model_revision``
+    ``expected_model_artifact_sha256[unit]`` or the sealed ``identity_pins_path``
+    (:func:`read_identity_pins`); the declared ``model_revision``
     against each config's ``model.revision`` and the revision the download
     recorded; the tokenizer bytes against the configs' pins. Once per run:
     the runtime package versions of the measurement interpreter
@@ -870,7 +917,9 @@ def collect_model_identity(
     tree = json.loads((pack_root / "plan_tree.json").read_bytes())
     projection = ((tree.get("arm_attachments") or {}).get("identity_pin_projection")) or {}
     units = projection.get("identity_units") or []
-    expected_overrides = params.get("expected_model_artifact_sha256") or {}
+    # The sealed pins file (read_identity_pins); explicit parameters win over it.
+    sealed = read_identity_pins(params.get("identity_pins_path"))
+    expected_overrides = {**sealed["model_artifact_sha256"], **(params.get("expected_model_artifact_sha256") or {})}
     flags: list[dict[str, Any]] = []
     observed_units = []
     if not units:
@@ -996,7 +1045,7 @@ def collect_model_identity(
     # projection is unprojected (review 2026-10-05).
     python = params.get("runtime_python") or str(repo_root / ".venv" / "bin" / "python")
     packages = list(params.get("runtime_packages") or RUNTIME_PACKAGES)
-    expected_runtime = params.get("expected_runtime_versions_sha256")
+    expected_runtime = params.get("expected_runtime_versions_sha256") or sealed["runtime_versions_sha256"]
     try:
         versions = dict(probe_runtime(python, packages))
     except CollectorError as exc:

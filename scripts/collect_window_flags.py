@@ -57,6 +57,9 @@ def build_parser() -> argparse.ArgumentParser:
                         metavar="UNIT=SHA256", help="model artifact pin for an identity unit")
     parser.add_argument("--expected-runtime-versions-sha256",
                         help="sealed digest of the measurement interpreter's runtime package versions")
+    parser.add_argument("--identity-pins", type=Path,
+                        help="sealed joulewise.b5_identity_pins.v1 file (model artifact and runtime pins); "
+                             "--expected-* arguments win over it")
     parser.add_argument("--runtime-python", type=Path,
                         help="measurement interpreter (default <repo>/.venv/bin/python)")
     parser.add_argument("--verify-frozen-projection", action="store_true",
@@ -91,6 +94,7 @@ def build_specs(args: argparse.Namespace, catalog_sha256: str | None) -> list[tu
         "model_identity": {"pack_root": str(args.pack) if args.pack else None,
                            "expected_model_artifact_sha256": expected_models,
                            "expected_runtime_versions_sha256": args.expected_runtime_versions_sha256,
+                           "identity_pins_path": str(args.identity_pins) if args.identity_pins else None,
                            "runtime_python": str(args.runtime_python) if args.runtime_python else None,
                            "verify_frozen_projection": bool(args.verify_frozen_projection),
                            "bracket_session_id": args.session_id},

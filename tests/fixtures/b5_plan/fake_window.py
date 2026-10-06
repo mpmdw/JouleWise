@@ -43,15 +43,15 @@ SIZING_ALLOWANCES = REPO_ROOT / "configs/campaigns" / SIZING_PACK / "sizing_allo
 FIXTURE_SIZING_RELATIVE = "configs/sizing/b5_fixture_sizing.json"
 FIXTURE_SIZING = {"schema_version": "fixture.b5_sizing.v1", "totals": {"programmed_span_s": 3600}}
 # Lane L1's threshold contract (joulewise.hazards.arm.default_thresholds() at
-# L1 5fa6ddcf), injected into the plan writer here because L1's package lands
-# at integration; tests/test_b5_plan.py checks it against the real one when
-# the package is importable.
+# L1 e880af6d), injected into the plan writer here so these tests do not
+# depend on L1's module defaults; tests/test_b5_plan.py checks it against the
+# real one when the package is importable.
 L1_DEFAULT_THRESHOLDS = {
     "battery": {"limit_ma": 200, "max_unobserved_s": 120, "max_update_age_s": 180},
     "clock": {"frequency_margin_ppm": 0.25, "h_ms": 3.7, "limit_ms": 5.0, "residual_max_ns": 1000000,
               "skew_max_ns": 1000000, "step_ns": 1000000, "t_stream_max_s": 335},
-    "contention": {"cap_s": 2700, "clean_s": 600, "cpu_limit_s_per_s": 0.05, "interval_s": 30,
-                   "window_interval_s": 10},
+    "contention": {"aggregate_cpu_limit_s_per_s": None, "cap_s": 2700, "clean_s": 600,
+                   "cpu_limit_s_per_s": 0.05, "interval_s": 30, "window_interval_s": 10},
     "disk": {"headroom_bytes": 21474836480, "low_bytes": 10737418240, "planned_bytes": 22710059008},
     "instrument": {"bound_s": 55.0, "frames": 300, "max_ms_max": 200.0, "median_ms_max": 150.0},
     "thermal": {"max_gap_s": 15, "max_level": 0},

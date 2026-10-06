@@ -246,14 +246,17 @@ def build_flag(fields: Mapping[str, Any], *, boot_session_uuid: str | None = Non
     scope = {key: (fields.get("scope") or {}).get(key) for key in _SCOPE_KEYS}
     source = {key: (fields.get("source") or {}).get(key) for key in _SOURCE_KEYS}
     observed = fields.get("observed")
-    identity = json.dumps({"code": fields["code"], "scope": scope, "observed": observed, "source": source},
+    interval = dict(fields.get("interval") or {"monotonic_ns": None, "monotonic_raw_ns": None, "wall_s": None})
+    # The identity includes the interval, as joulewise.flags.schema.compute_flag_id does.
+    identity = json.dumps({"code": fields["code"], "scope": scope, "observed": observed, "source": source,
+                           "interval": interval},
                           sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False)
     return {
         "schema_version": FLAG_SCHEMA,
         "flag_id": hashlib.sha256(identity.encode("utf-8")).hexdigest()[:20],
         "code": fields["code"], "family": fields["family"], "klass": fields["klass"],
         "scope": scope,
-        "interval": dict(fields.get("interval") or {"monotonic_ns": None, "monotonic_raw_ns": None, "wall_s": None}),
+        "interval": interval,
         "source": source, "observed": observed, "expected": fields.get("expected"),
         "evidence": [dict(item) for item in fields.get("evidence") or ()],
         "detail": " ".join(str(fields.get("detail", "")).split())[:2000],
@@ -497,8 +500,11 @@ def production_seams(repo_root: Path) -> Seams:
         calibration_plan = Path(window["pack"]["pack_root"]) / "calibration_plan.json"
         if calibration_plan.is_file():
             argv += ["--calibration-plan", str(calibration_plan)]
+        # The sealed files, when the measurement checkout holds them. Without the
+        # identity pins the model collector records model.identity_unpinned.
         for flag, relative in (("--catalog", "configs/campaigns/v5_claim_25g83/flag_catalog.json"),
-                               ("--sealed-inventory", "configs/campaigns/v5_claim_25g83/sealed_inventory.json")):
+                               ("--sealed-inventory", "configs/campaigns/v5_claim_25g83/sealed_inventory.json"),
+                               ("--identity-pins", "configs/campaigns/v5_claim_25g83/identity_pins.json")):
             if (measurement / relative).is_file():
                 argv += [flag, str(measurement / relative)]
         return argv

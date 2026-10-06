@@ -82,6 +82,9 @@ STRUCTURE, RESTRICTED = "STRUCTURE", "RESTRICTED"
 PIN_ONLY_PATHS = frozenset({"configs/calibration/calibration_ledger_head.json"})
 CODE_PREFIXES = ("joulewise/", "scripts/")
 SEALED_DIRECTORY = "configs/campaigns/v5_claim_25g83"
+# joulewise.flags.collect.read_identity_pins documents this file; its "units"
+# map is read here as the per-unit pin override.
+IDENTITY_PINS_SCHEMA = "joulewise.b5_identity_pins.v1"
 
 # Thresholds.  The window plan copies the sealed registration's values into
 # ``hazard_window.thresholds``; these defaults are the registered values in
@@ -665,7 +668,8 @@ def resolve_inputs(plan_path: Path | str, overrides: Mapping[str, Any] | None = 
         or custody / "night" / "executed_inventory.json",
         catalog_path=path("catalog_path", "catalog_path", "flag_catalog", base=measurement)
         or measurement / SEALED_DIRECTORY / "flag_catalog.json",
-        identity_pins_path=path("identity_pins_path", base=measurement),
+        identity_pins_path=path("identity_pins_path", base=measurement)
+        or measurement / SEALED_DIRECTORY / "identity_pins.json",
         monitor_dir=path("monitor_dir") or custody / "hazards" / "monitor",
         arm_record_path=path("arm_record_path") or custody / "hazards" / "arm.json",
         flags_dir=path("flags_dir") or custody / "flags",
@@ -2394,6 +2398,8 @@ class _Harvest:
         units = (((tree.get("arm_attachments") or {}).get("identity_pin_projection") or {}).get("identity_units") or [])
         pins_path = self.archive / "sources" / "inputs" / "identity_pins.json"
         override = read_json(pins_path) if pins_path.is_file() else None
+        if isinstance(override, Mapping) and override.get("schema") == IDENTITY_PINS_SCHEMA:
+            override = override.get("units")  # the sealed file the arm collector also reads
         unit_of: dict[str, str] = {}
         frozen: dict[str, Mapping[str, Any]] = {}
         for unit in units:
