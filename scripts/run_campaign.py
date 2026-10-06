@@ -32,8 +32,10 @@ import hashlib
 import json
 import math
 import os
+import re
 import secrets
 import shlex
+import signal
 import stat
 import subprocess
 import sys
@@ -215,6 +217,9 @@ STATUSES = (
     "incomplete_existing",
     "config_error",
     "dry_run",
+    # HAZARD path only (gate-prune P2-RC row 8); the legacy path never sets them.
+    "timeout",
+    "drained",
 )
 ORDER_MANIFEST_NAME = "order_manifest.json"
 ANALYSIS_MANIFEST_NAME = "analysis_manifest.json"
@@ -441,6 +446,9 @@ class MemberEvaluation:
     sentinel_position: str | None = None
     scientific_config_sha256: str | None = None
     canonical_neg8_workload: bool = False
+    # HAZARD (P2-RC M3): "deferred_to_harvest" when only the structural check
+    # ran in the window; ``strict_valid`` is then that check's boolean.
+    strict_validation: str | None = None
 
     def failure_classes(self) -> tuple[str, ...]:
         classes: list[str] = []
@@ -517,6 +525,8 @@ class MemberEvaluation:
             ),
             "rerun_required": self.rerun_required,
         }
+        if self.strict_validation is not None:
+            row["strict_validation"] = self.strict_validation
         if self.waiver is not None:
             row["waiver"] = {
                 "target_kind": self.waiver.target_kind,
@@ -2855,13 +2865,19 @@ def evaluate_member(
             sentinel_position=info.sentinel_position,
             scientific_config_sha256=info.scientific_config_sha256,
             canonical_neg8_workload=info.canonical_neg8_workload,
+            strict_validation=HAZARD_STRICT_VALIDATION_DEFERRED,
         )
+    # HAZARD (P2-RC M3): the window runs the structural check only; the fresh
+    # re-reduction, uncertainty, rich-telemetry and raw-to-trace checks run at
+    # the desk verdict and the harvest.  The custody triangle, prompt-hash,
+    # config-binding and anchor-fallback checks below run on both paths.
+    strict_deferred = hazard is not None
     status, malformed = summary_status(bundle_dir / "summary_metrics.json")
     problems: list[str] = []
     strict_valid = False
     if bundle_dir.exists():
         try:
-            problems = validate_bundle(bundle_dir, strict=True)
+            problems = validate_bundle(bundle_dir, strict=not strict_deferred)
         except Exception as exc:
             problems = [f"strict validation raised {type(exc).__name__}: {exc}"]
         strict_valid = not problems
@@ -2961,6 +2977,9 @@ def evaluate_member(
         sentinel_position=info.sentinel_position,
         scientific_config_sha256=info.scientific_config_sha256,
         canonical_neg8_workload=info.canonical_neg8_workload,
+        strict_validation=(
+            HAZARD_STRICT_VALIDATION_DEFERRED if strict_deferred else None
+        ),
     )
 
 
@@ -3732,6 +3751,887 @@ def _hazard_stage_preflight_not_admitted(
         legacy_code=("environment preflight failed before member 1" if errored
                      else "environment preflight rejected before member 1"),
     )
+
+
+# --- HAZARD_PACK gate-prune round 2 (lane P2-RC) -----------------------------
+# night-archive gate-prune/prune2/PLAN2.md: M3 (strict validation deferred to the
+# harvest), S4 (minimal stage verdict), row 8 (member wall-clock cap, teardown
+# proof, drain after consecutive timeouts, SIGTERM handler), yield E (per-member
+# child stderr and ``child_refusal``) and the battery-thermistor diagnostic
+# (timing ruling 2026-10-06).  Everything here runs only when ``hazard`` is a
+# HAZARD context; the legacy path never reaches it.
+
+HAZARD_STRICT_VALIDATION_DEFERRED = "deferred_to_harvest"
+HAZARD_IDLE_ADMISSION_CORE_DEFERRED = MappingProxyType({"status": "deferred_to_desk"})
+# Row 8.  A member child that runs past the cap gets SIGTERM, then SIGKILL after
+# the grace; after this many consecutive timed-out members the window drains
+# (only end references still run; the post-calibration is not a campaign stage).
+HAZARD_MEMBER_CAP_S = 1800.0
+HAZARD_MEMBER_TERM_GRACE_S = 30.0
+HAZARD_MEMBER_TIMEOUT_DRAIN_AFTER = 2
+HAZARD_MEMBER_TIMEOUT_DIRNAME = "member-timeouts"
+HAZARD_MEMBER_TIMEOUT_STATE = "state.json"
+HAZARD_MEMBER_TIMEOUT_DRAIN = "drain.json"
+HAZARD_MEMBER_TIMEOUT_SCHEMA = "joulewise.member_timeout_drain.v1"
+HAZARD_TEARDOWN_PROOF_WAIT_S = 2.0
+HAZARD_INTERRUPTED_RC = 128 + int(signal.SIGTERM)
+# Yield E.
+HAZARD_MEMBER_STDERR_DIRNAME = "member-stderr"
+HAZARD_CHILD_REFUSAL_MAX_CHARS = 300
+# Battery thermistor (timing ruling 2026-10-06): read at each cooldown release,
+# outside every sampler stream, into the campaign manifest.  Hundredths of degC.
+BATTERY_TEMPERATURE_COMMAND: tuple[str, ...] = ("/usr/sbin/ioreg", "-rn", "AppleSmartBattery")
+BATTERY_TEMPERATURE_TIMEOUT_S = 5.0
+BATTERY_TEMPERATURE_SCHEMA = "joulewise.battery_thermistor_reading.v1"
+BATTERY_TEMPERATURE_MANIFEST_KEY = "battery_temperature_readings"
+_BATTERY_TEMPERATURE_PATTERN = re.compile(rb'^\s*"Temperature"\s*=\s*(-?\d+)\s*$', re.MULTILINE)
+# ``lstart`` (five words under LC_ALL=C) is the start time: with the argv it is the
+# process identity, so a reused pid running the same program is never signalled.
+_PROCESS_TABLE_COMMAND = ("/bin/ps", "-A", "-o", "pid=,ppid=,pgid=,uid=,stat=,lstart=,args=")
+
+
+class _HazardInterrupted(BaseException):
+    """SIGTERM reached a HAZARD stage: unwind, record ``interrupted``, release the lock."""
+
+
+# The one HAZARD stage running in this process: its member child (for SIGTERM
+# forwarding) and whether the first SIGTERM was already turned into an unwind.
+# ``defer``: a member child is being spawned or finished; a SIGTERM then only
+# sets ``pending`` and the runner raises it once the child is under the watch
+# (or its cleanup is done).  ``teardown``: the interrupted member's teardown proof.
+_HAZARD_SIGNAL_STATE: dict[str, Any] = {"child": None, "run_id": None, "raised": False,
+                                        "defer": False, "pending": False, "teardown": None}
+
+
+def _hazard_sigterm_handler(signum: int, frame: Any) -> None:  # noqa: ARG001
+    """Unwind once; the unwind forwards TERM to the member child's whole tree.
+
+    The first SIGTERM raises in the main thread, which is blocked in the
+    member child's ``wait()``; ``_HazardMemberWatch.interrupt`` then snapshots
+    the child's tree before signalling it (a TERM sent first could let a
+    grandchild be reparented out of reach).  A later SIGTERM, arriving while
+    that unwind runs, is forwarded to the child directly.
+    """
+
+    if _HAZARD_SIGNAL_STATE.get("defer") and not _HAZARD_SIGNAL_STATE.get("raised"):
+        _HAZARD_SIGNAL_STATE["pending"] = True
+        return
+    if not _HAZARD_SIGNAL_STATE.get("raised"):
+        _HAZARD_SIGNAL_STATE["raised"] = True
+        raise _HazardInterrupted(signum)
+    child = _HAZARD_SIGNAL_STATE.get("child")
+    if child is not None and getattr(child, "returncode", None) is None:
+        try:
+            os.kill(child.pid, signal.SIGTERM)
+        except OSError:
+            pass
+
+
+def _hazard_install_sigterm_handler() -> Any:
+    """Install the HAZARD SIGTERM handler (main thread only); return the previous one."""
+
+    _HAZARD_SIGNAL_STATE.update({"child": None, "run_id": None, "raised": False,
+                                 "defer": False, "pending": False, "teardown": None})
+    if threading.current_thread() is not threading.main_thread():
+        return None
+    try:
+        return signal.signal(signal.SIGTERM, _hazard_sigterm_handler)
+    except (ValueError, OSError):
+        return None
+
+
+def _hazard_restore_sigterm_handler(previous: Any) -> None:
+    if previous is None:
+        return
+    try:
+        signal.signal(signal.SIGTERM, previous)
+    except (ValueError, OSError, TypeError):
+        pass
+
+
+def _hazard_process_table() -> list[dict[str, Any]] | None:
+    """One ``ps`` snapshot: pid, ppid, pgid, uid and argv text.  None when unmeasured."""
+
+    try:
+        completed = subprocess.run(
+            list(_PROCESS_TABLE_COMMAND), capture_output=True, text=True,
+            timeout=10, check=False, env={**os.environ, "LC_ALL": "C"},
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if completed.returncode != 0:
+        return None
+    rows: list[dict[str, Any]] = []
+    for line in completed.stdout.splitlines():
+        parts = line.split(None, 10)
+        if len(parts) < 10:
+            continue
+        try:
+            pid, ppid, pgid, uid = (int(part) for part in parts[:4])
+        except ValueError:
+            continue
+        rows.append({"pid": pid, "ppid": ppid, "pgid": pgid, "uid": uid, "stat": parts[4],
+                     "started": " ".join(parts[5:10]),
+                     "args": parts[10] if len(parts) > 10 else ""})
+    return rows
+
+
+def _hazard_descendants(root_pid: int, table: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    children: dict[int, list[Mapping[str, Any]]] = {}
+    for row in table:
+        children.setdefault(int(row["ppid"]), []).append(row)
+    found: list[dict[str, Any]] = []
+    seen = {root_pid}
+    stack = [root_pid]
+    while stack:
+        for row in children.get(stack.pop(), []):
+            if row["pid"] not in seen:
+                seen.add(row["pid"])
+                found.append(dict(row))
+                stack.append(row["pid"])
+    return found
+
+
+def _hazard_program(args: str) -> str:
+    first = args.split(None, 1)[0] if args.strip() else ""
+    return os.path.basename(first)
+
+
+def _hazard_same_process(live: Mapping[str, Any] | None, tracked: Mapping[str, Any]) -> bool:
+    """Same pid, argv and start time: the tracked process itself, not a reused pid."""
+
+    return (
+        live is not None
+        and tracked.get("started") is not None
+        and live.get("started") == tracked.get("started")
+        and live.get("args") == tracked.get("args")
+    )
+
+
+def _hazard_is_sampler_wrapper(row: Mapping[str, Any]) -> bool:
+    """``sudo ... powermetrics``: SIGKILL would orphan the root sampler, so it only gets TERM."""
+
+    return _hazard_program(str(row.get("args", ""))) == "sudo" and "powermetrics" in str(row.get("args", ""))
+
+
+class _HazardMemberWatch:
+    """Wall-clock cap for one member child (PLAN2 row 8).
+
+    A timer thread sleeps until the cap (the parent blocks in ``wait()``: no
+    polling wake-ups while the child measures), then sends SIGTERM to the
+    child and every descendant, waits the grace, and sends SIGKILL to the
+    survivors (a ``sudo`` sampler wrapper gets TERM again instead, since
+    SIGKILL would orphan the root sampler).  The child stays in the chain's
+    process group, so the driver's group census still sees it.
+    """
+
+    def __init__(self, process: Any, *, cap_s: float, grace_s: float) -> None:
+        self.process = process
+        self.cap_s = float(cap_s)
+        self.grace_s = float(grace_s)
+        self.done = threading.Event()
+        self.timed_out = False
+        self.interrupted = False
+        self.kill_escalated = False
+        self.tracked: dict[int, dict[str, Any]] = {}
+        self.signals: list[dict[str, Any]] = []
+        self.census_failures = 0
+        # Whether the first snapshot found the child still running.  If it had
+        # already exited, its descendants may have been reparented out of
+        # reach: the census then cannot prove the tree gone.
+        self.ownership_established: bool | None = None
+        self.term_sent_at: float | None = None
+        self.teardown_escalated = False
+        self._lock = threading.Lock()
+        self._thread = threading.Thread(target=self._run, name="joulewise-member-cap", daemon=True)
+
+    def start(self) -> _HazardMemberWatch:
+        self._thread.start()
+        return self
+
+    def _snapshot(self) -> list[dict[str, Any]]:
+        """The child, its current descendants, and every earlier-tracked process still running.
+
+        A tracked process counts only while its pid still runs the same argv
+        with the same start time (a reused pid is never signalled).  Tracked
+        processes matter once the child has exited: its descendants are then
+        reparented and no longer reachable through the child's pid.
+        """
+
+        table = _hazard_process_table()
+        if table is None:
+            self.census_failures += 1
+            rows = [{"pid": int(self.process.pid), "ppid": os.getpid(), "pgid": None,
+                     "uid": os.getuid(), "stat": None, "started": None, "args": ""}]
+        else:
+            own = [dict(row) for row in table if row["pid"] == self.process.pid]
+            if self.ownership_established is None:
+                self.ownership_established = bool(
+                    own and self.process.returncode is None
+                    and not str(own[0].get("stat") or "").startswith("Z")
+                )
+            rows = own + _hazard_descendants(int(self.process.pid), table)
+            live = {row["pid"]: row for row in table}
+            current = {int(row["pid"]) for row in rows}
+            rows += [dict(row) for pid, row in self.tracked.items()
+                     if pid not in current and _hazard_same_process(live.get(pid), row)
+                     and pid != os.getpid()]
+        for row in rows:
+            self.tracked.setdefault(int(row["pid"]), row)
+        return rows
+
+    def _send(self, rows: Sequence[Mapping[str, Any]], signum: int) -> None:
+        for row in rows:
+            pid = int(row["pid"])
+            if pid == int(self.process.pid) and self.process.returncode is not None:
+                continue  # reaped: the pid may already belong to someone else
+            try:
+                os.kill(pid, signum)
+                outcome = "sent"
+            except ProcessLookupError:
+                outcome = "absent"
+            except PermissionError:
+                outcome = "not_permitted"
+            except OSError as exc:
+                outcome = type(exc).__name__
+            self.signals.append({"pid": pid, "program": _hazard_program(str(row.get("args", ""))),
+                                 "signal": signal.Signals(signum).name, "outcome": outcome})
+
+    def _terminate(self, exited: Any) -> None:
+        with self._lock:
+            rows = self._snapshot()
+            if self.term_sent_at is None:
+                self.term_sent_at = time.monotonic()
+            self._send(rows, signal.SIGTERM)
+        if exited(self.grace_s):
+            return
+        with self._lock:
+            self.kill_escalated = True
+            rows = self._snapshot()
+            wrappers = [row for row in rows if _hazard_is_sampler_wrapper(row)]
+            self._send(wrappers, signal.SIGTERM)
+            self._send([row for row in rows if not _hazard_is_sampler_wrapper(row)], signal.SIGKILL)
+
+    def _run(self) -> None:
+        if self.done.wait(self.cap_s):
+            return
+        self.timed_out = True
+        self._terminate(self.done.wait)
+
+    def interrupt(self) -> None:
+        """Main thread, after SIGTERM reached the stage: the same TERM-then-KILL, now."""
+
+        self.interrupted = True
+
+        def exited(timeout: float) -> bool:
+            try:
+                self.process.wait(timeout=timeout)
+            except subprocess.TimeoutExpired:
+                return False
+            return True
+
+        self._terminate(exited)
+        try:
+            self.process.wait(timeout=max(1.0, self.grace_s))
+        except subprocess.TimeoutExpired:
+            pass
+
+    def finish(self) -> None:
+        self.done.set()
+        self._thread.join()
+
+    def teardown_proof(self) -> dict[str, Any]:
+        """Prove no tracked process of this member survives; TERM/KILL a survivor once more.
+
+        A tracked pid counts as surviving only while it still runs the same argv
+        with the same start time (pid reuse is not a survivor).  A descendant
+        still running when the child exited keeps the rest of its grace from
+        the first TERM before it is killed.  A root-owned sampler orphan cannot
+        be signalled from here (no privilege); it is reported, never hidden.
+        The census is complete only when every ``ps`` read succeeded and the
+        first snapshot found the child still running.
+        """
+
+        def survivors() -> list[dict[str, Any]] | None:
+            table = _hazard_process_table()
+            if table is None:
+                return None
+            live = {row["pid"]: row for row in table}
+            return [dict(row) for pid, row in self.tracked.items()
+                    if _hazard_same_process(live.get(pid), row)
+                    and pid != os.getpid()]
+
+        remaining = survivors()
+        if remaining and self.term_sent_at is not None:
+            grace_end = self.term_sent_at + self.grace_s
+            while remaining and time.monotonic() < grace_end:
+                time.sleep(min(0.5, max(0.0, grace_end - time.monotonic())))
+                remaining = survivors()
+        if remaining:
+            self._send([row for row in remaining if _hazard_is_sampler_wrapper(row)], signal.SIGTERM)
+            killed = [row for row in remaining if not _hazard_is_sampler_wrapper(row)]
+            self._send(killed, signal.SIGKILL)
+            if killed:
+                self.teardown_escalated = True
+                self.kill_escalated = True
+            deadline = time.monotonic() + HAZARD_TEARDOWN_PROOF_WAIT_S
+            while remaining and time.monotonic() < deadline:
+                time.sleep(0.1)
+                remaining = survivors()
+        return {
+            "census_completed": (
+                remaining is not None and self.census_failures == 0
+                and self.ownership_established is True
+            ),
+            "ownership_established": self.ownership_established,
+            "teardown_escalated": self.teardown_escalated,
+            "tracked": len(self.tracked),
+            "sampler_tracked": sum(1 for row in self.tracked.values()
+                                   if "powermetrics" in str(row.get("args", ""))),
+            "survivors": [
+                {"pid": row["pid"], "uid": row.get("uid"),
+                 "program": _hazard_program(str(row.get("args", ""))),
+                 "sampler": "powermetrics" in str(row.get("args", ""))}
+                for row in (remaining or [])
+            ],
+        }
+
+    def record(self) -> dict[str, Any]:
+        return {
+            "cap_s": self.cap_s,
+            "grace_s": self.grace_s,
+            "timed_out": self.timed_out,
+            "interrupted": self.interrupted,
+            "kill_escalated": self.kill_escalated,
+            "signals": self.signals[:64],
+        }
+
+
+def _hazard_stage_stderr_path() -> Path | None:
+    """The regular file this process's stderr is written to (the stage log), if any."""
+
+    try:
+        if not stat.S_ISREG(os.fstat(2).st_mode):
+            return None
+        import fcntl
+
+        getpath = getattr(fcntl, "F_GETPATH", None)
+        if getpath is not None:
+            raw = fcntl.fcntl(2, getpath, bytes(1024))
+            text = os.fsdecode(raw.split(b"\0", 1)[0])
+            return Path(text) if text else None
+        return Path(os.readlink("/proc/self/fd/2"))
+    except (OSError, ValueError):
+        return None
+
+
+def _hazard_member_stderr_path(hazard: Any, run_id: str) -> Path | None:
+    """Yield E: ``<operator-logs>/member-stderr/<stage-log stem>--<run_id>.stderr``.
+
+    The operator-log directory is the custody's (where the chain sends stage
+    logs); the stage log's stem names the stage.  A subdirectory, so readers of
+    ``operator-logs/*.log`` see each line once, in the stage log copy.
+    """
+
+    stage_log = _hazard_stage_stderr_path()
+    stem = stage_log.stem if stage_log is not None else "stage"
+    name = f"{stem}--{sanitize_id_component(run_id)}.stderr"
+    custody = getattr(hazard, "custody_root", None)
+    if custody is not None:
+        return Path(custody) / "operator-logs" / HAZARD_MEMBER_STDERR_DIRNAME / name
+    if stage_log is not None:
+        return stage_log.parent / HAZARD_MEMBER_STDERR_DIRNAME / name
+    return None
+
+
+def _hazard_child_refusal(raw: bytes) -> str | None:
+    """Yield E: the child's last non-empty stderr line, digits as ``#``.
+
+    A launch-lineage refusal is named by its reason code instead (the code is
+    the cause; the text around it varies).
+    """
+
+    lines = [line.strip() for line in raw.decode("utf-8", "replace").splitlines() if line.strip()]
+    if not lines:
+        return None
+    try:
+        from joulewise.arm_readiness import LAUNCH_LINEAGE_REASON_CODES as codes
+    except Exception:  # noqa: BLE001 - the redacted line still names the refusal
+        codes = frozenset()
+    lineage_lines = [lines[-1]] + [line for line in reversed(lines) if "LaunchLineageError" in line]
+    for line in lineage_lines:
+        for token in re.findall(r"[a-z][a-z0-9_]*", line):
+            if token in codes:
+                return token
+    return re.sub(r"\d", "#", lines[-1])[:HAZARD_CHILD_REFUSAL_MAX_CHARS]
+
+
+def _hazard_copy_member_stderr(
+    path: Path | None, run_id: str
+) -> tuple[bytes, dict[str, str] | None]:
+    """Copy the member's stderr file into this stage's stderr (the stage log).
+
+    Returns the bytes read and, when the copy failed, what failed.  The child's
+    stderr can carry ``JOULEWISE_UNWRITTEN_FLAG`` lines (a flag whose file write
+    failed), which the harvest recovers from the stage log only; a failed copy
+    is therefore flagged by the caller, never dropped.
+    """
+
+    if path is None:
+        return b"", None
+    try:
+        raw = path.read_bytes()
+    except OSError as exc:
+        print(f"warning: member stderr {path} unreadable: {type(exc).__name__}: {exc}",
+              file=sys.stderr)
+        return b"", {"phase": "read", "error_type": type(exc).__name__}
+    if raw:
+        text = raw.decode("utf-8", "replace")
+        try:
+            sys.stderr.write(f"--- child stderr {run_id} ({path.name}) ---\n")
+            sys.stderr.write(text if text.endswith("\n") else text + "\n")
+            sys.stderr.write(f"--- end child stderr {run_id} ---\n")
+            sys.stderr.flush()
+        except (OSError, ValueError) as exc:
+            return raw, {"phase": "write", "error_type": type(exc).__name__}
+    return raw, None
+
+
+def _hazard_flag_member_stderr_uncopied(
+    hazard: Any, bundle_ids: Sequence[str], path: Path | None, failure: Mapping[str, str]
+) -> None:
+    """The member's stderr did not reach the stage log: any unwritten flag in it is unseen."""
+
+    from joulewise.flags import core as flags_core
+
+    for bundle_id in bundle_ids or [None]:
+        flags_core.emit(
+            hazard, "member.stderr_uncopied", level="member", run_id=bundle_id,
+            observed={**dict(failure), "file": path.name if path is not None else None},
+            detail="member stderr not copied into the stage log; "
+                   "an unwritten flag in it would be unseen by the harvest",
+        )
+
+
+def _hazard_flag_interrupted_teardown(
+    hazard: Any, bundle_ids: Sequence[str], teardown: Mapping[str, Any] | None
+) -> None:
+    """SIGTERM path: a member tree not proven gone is flagged, as on the timeout path."""
+
+    from joulewise.flags import core as flags_core
+
+    teardown = teardown or {}
+    survivors = list(teardown.get("survivors") or [])
+    if not survivors and teardown.get("census_completed") is True:
+        return
+    for bundle_id in bundle_ids or [None]:
+        flags_core.emit(
+            hazard, "teardown.survivors", level="member", run_id=bundle_id,
+            observed={"phase": "sigterm",
+                      "census_completed": teardown.get("census_completed"),
+                      "ownership_established": teardown.get("ownership_established"),
+                      "survivors": survivors[:16]},
+        )
+
+
+def _hazard_raise_pending_interrupt() -> None:
+    """End a deferral; a SIGTERM that arrived during it unwinds now."""
+
+    state = _HAZARD_SIGNAL_STATE
+    state["defer"] = False
+    if state.get("pending") and not state.get("raised"):
+        state["pending"] = False
+        state["raised"] = True
+        raise _HazardInterrupted(signal.SIGTERM)
+
+
+@dataclass
+class _HazardMemberRun:
+    """What the HAZARD member runner learned beyond the return code."""
+
+    watch: _HazardMemberWatch | None = None
+    teardown: dict[str, Any] | None = None
+    stderr_path: Path | None = None
+    stderr_raw: bytes = b""
+
+    @property
+    def timed_out(self) -> bool:
+        return self.watch is not None and self.watch.timed_out
+
+    def child_refusal(self) -> str | None:
+        return _hazard_child_refusal(self.stderr_raw)
+
+
+def _hazard_run_authenticated_campaign_child(
+    command: Sequence[str],
+    *,
+    env: Mapping[str, str] | None,
+    outer_authentication: Mapping[str, Any] | None,
+    bundle_paths: Sequence[Path],
+    hazard: Any,
+    absent: list[Path],
+    run_id: str,
+) -> tuple[subprocess.CompletedProcess[Any], _HazardMemberRun]:
+    """``run_authenticated_campaign_child`` on the HAZARD path.
+
+    Adds the member cap (row 8) and the per-member stderr file (yield E): the
+    child's stderr goes to a file (no pipe, no reader thread while the child
+    measures), which is copied into the stage log once the child has exited.
+    The lineage authentication after the child is the same call as legacy.
+    """
+
+    run = _HazardMemberRun(stderr_path=_hazard_member_stderr_path(hazard, run_id))
+    bundle_ids = [Path(path).name for path in bundle_paths]
+    state = _HAZARD_SIGNAL_STATE
+    stderr_handle = None
+    if run.stderr_path is not None:
+        try:
+            run.stderr_path.parent.mkdir(parents=True, exist_ok=True)
+            stderr_handle = open(run.stderr_path, "ab")  # noqa: SIM115 - closed right after spawn
+        except OSError as exc:
+            print(f"warning: member stderr file unavailable ({exc}); child stderr is inherited",
+                  file=sys.stderr)
+            run.stderr_path = None
+    # A SIGTERM between the spawn and the watch only sets ``pending``; it is
+    # raised once the child is under the watch, which then terminates it.
+    state["pending"] = False
+    state["defer"] = True
+    try:
+        try:
+            process = subprocess.Popen(list(command), env=env, stderr=stderr_handle)
+        finally:
+            if stderr_handle is not None:
+                stderr_handle.close()
+        state["child"] = process
+        state["run_id"] = run_id
+        watch = _HazardMemberWatch(
+            process, cap_s=HAZARD_MEMBER_CAP_S, grace_s=HAZARD_MEMBER_TERM_GRACE_S
+        ).start()
+    except BaseException:
+        state["child"] = None
+        _hazard_raise_pending_interrupt()
+        raise
+    run.watch = watch
+    try:
+        try:
+            try:
+                _hazard_raise_pending_interrupt()
+                returncode = process.wait()
+                # The child is done: a SIGTERM now waits until its cleanup is recorded.
+                state["defer"] = True
+            except _HazardInterrupted:
+                watch.interrupt()
+                raise
+            finally:
+                watch.finish()
+                state["child"] = None
+                if watch.timed_out or watch.interrupted:
+                    run.teardown = watch.teardown_proof()
+                if watch.interrupted:
+                    state["teardown"] = run.teardown
+                    _hazard_flag_interrupted_teardown(hazard, bundle_ids, run.teardown)
+        finally:
+            run.stderr_raw, copy_failure = _hazard_copy_member_stderr(run.stderr_path, run_id)
+            if copy_failure is not None:
+                _hazard_flag_member_stderr_uncopied(
+                    hazard, bundle_ids, run.stderr_path, copy_failure
+                )
+    except BaseException:
+        state["defer"] = False
+        raise
+    _hazard_raise_pending_interrupt()
+    state["run_id"] = None
+    authenticate_campaign_child_launch_lineage(
+        outer_authentication,
+        bundle_paths,
+        hazard=hazard,
+        absent=absent,
+    )
+    return subprocess.CompletedProcess(list(command), returncode), run
+
+
+def _hazard_member_timeout_paths(hazard: Any) -> tuple[Path, Path] | None:
+    custody = getattr(hazard, "custody_root", None)
+    if custody is None:
+        return None
+    directory = Path(custody) / HAZARD_MEMBER_TIMEOUT_DIRNAME
+    return directory / HAZARD_MEMBER_TIMEOUT_STATE, directory / HAZARD_MEMBER_TIMEOUT_DRAIN
+
+
+_HAZARD_TIMEOUT_MEMORY: dict[str, int] = {"consecutive": 0}
+
+
+def _hazard_note_member_outcome(
+    hazard: Any, *, timed_out: bool, bundle_ids: Sequence[str]
+) -> tuple[int, bool]:
+    """Count consecutive timed-out members across the window's stages.
+
+    The count lives in ``<custody>/member-timeouts/state.json`` (stages are
+    separate processes).  Reaching ``HAZARD_MEMBER_TIMEOUT_DRAIN_AFTER`` writes
+    the create-once drain marker.  Returns (consecutive, drain marker written
+    now).  A state file that cannot be read or written falls back to this
+    process's own count; it never stops collection.
+    """
+
+    paths = _hazard_member_timeout_paths(hazard)
+    previous = _HAZARD_TIMEOUT_MEMORY["consecutive"]
+    if paths is not None:
+        try:
+            value = json.loads(paths[0].read_bytes()).get("consecutive")
+            if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+                previous = value
+        except FileNotFoundError:
+            previous = 0
+        except (OSError, ValueError, AttributeError):
+            pass
+    consecutive = previous + 1 if timed_out else 0
+    _HAZARD_TIMEOUT_MEMORY["consecutive"] = consecutive
+    if paths is not None and consecutive != previous:
+        try:
+            paths[0].parent.mkdir(parents=True, exist_ok=True)
+            payload = {"schema_version": HAZARD_MEMBER_TIMEOUT_SCHEMA, "consecutive": consecutive,
+                       "last_bundle_ids": list(bundle_ids), "recorded_at": utc_timestamp()}
+            tmp = paths[0].with_name(f".{paths[0].name}.{os.getpid()}.tmp")
+            tmp.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
+            os.replace(tmp, paths[0])
+        except OSError as exc:
+            print(f"warning: member timeout state unwritten: {exc}", file=sys.stderr)
+    drain_now = False
+    if timed_out and consecutive >= HAZARD_MEMBER_TIMEOUT_DRAIN_AFTER and paths is not None:
+        try:
+            paths[1].parent.mkdir(parents=True, exist_ok=True)
+            descriptor = os.open(paths[1], os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+        except FileExistsError:
+            descriptor = None
+        except OSError as exc:
+            print(f"warning: member timeout drain marker unwritten: {exc}", file=sys.stderr)
+            descriptor = None
+        if descriptor is not None:
+            with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+                handle.write(json.dumps({
+                    "schema_version": HAZARD_MEMBER_TIMEOUT_SCHEMA,
+                    "reason": "consecutive_member_timeouts",
+                    "consecutive": consecutive,
+                    "trigger_bundle_ids": list(bundle_ids),
+                    "created_at": utc_timestamp(),
+                }, sort_keys=True) + "\n")
+                handle.flush()
+                os.fsync(handle.fileno())
+            drain_now = True
+    return consecutive, drain_now
+
+
+def _hazard_drain_requested(hazard: Any) -> Path | None:
+    """The drain marker path when this window is draining (or this process drains)."""
+
+    paths = _hazard_member_timeout_paths(hazard)
+    if paths is not None and paths[1].exists():
+        return paths[1]
+    if paths is not None:
+        # A stage that died after persisting the count but before writing the
+        # marker: the persisted count still decides, and the marker is written now.
+        try:
+            persisted = json.loads(paths[0].read_bytes()).get("consecutive")
+        except (OSError, ValueError, AttributeError):
+            persisted = None
+        if (isinstance(persisted, int) and not isinstance(persisted, bool)
+                and persisted >= HAZARD_MEMBER_TIMEOUT_DRAIN_AFTER):
+            try:
+                descriptor = os.open(paths[1], os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+            except FileExistsError:
+                descriptor = None
+            except OSError as exc:
+                print(f"warning: member timeout drain marker unwritten: {exc}", file=sys.stderr)
+                descriptor = None
+            if descriptor is not None:
+                with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+                    handle.write(json.dumps({
+                        "schema_version": HAZARD_MEMBER_TIMEOUT_SCHEMA,
+                        "reason": "consecutive_member_timeouts",
+                        "consecutive": persisted,
+                        "trigger_bundle_ids": [],
+                        "recovered_from_state": True,
+                        "created_at": utc_timestamp(),
+                    }, sort_keys=True) + "\n")
+                    handle.flush()
+                    os.fsync(handle.fileno())
+            return paths[1]
+    if _HAZARD_TIMEOUT_MEMORY["consecutive"] >= HAZARD_MEMBER_TIMEOUT_DRAIN_AFTER:
+        return paths[1] if paths is not None else Path(HAZARD_MEMBER_TIMEOUT_DRAIN)
+    return None
+
+
+def _hazard_drain_exempt(info: Any) -> bool:
+    """While draining, only the NEG-8 end references still run."""
+
+    return _declared_neg8_reference_position(
+        getattr(info, "role", None), getattr(info, "sentinel_position", None)
+    ) == "end"
+
+
+def _hazard_flag_member_timeout(
+    hazard: Any,
+    bundle_ids: Sequence[str],
+    run: _HazardMemberRun,
+    *,
+    consecutive: int,
+    drain_now: bool,
+) -> None:
+    from joulewise.flags import core as flags_core
+
+    watch = run.watch
+    teardown = run.teardown or {}
+    for bundle_id in bundle_ids:
+        flags_core.emit(
+            hazard, "member.timeout", level="member", run_id=bundle_id,
+            observed={"cap_s": watch.cap_s if watch else None,
+                      "grace_s": watch.grace_s if watch else None,
+                      "kill_escalated": bool(watch and watch.kill_escalated),
+                      "teardown_census_completed": teardown.get("census_completed"),
+                      "survivors": len(teardown.get("survivors") or []),
+                      "consecutive": consecutive,
+                      "drain_requested": drain_now},
+            detail="member child ran past the wall-clock cap; terminated",
+        )
+    survivors = teardown.get("survivors") or []
+    if survivors or teardown.get("census_completed") is False:
+        for bundle_id in bundle_ids:
+            flags_core.emit(
+                hazard, "teardown.survivors", level="member", run_id=bundle_id,
+                observed={"phase": "member_timeout",
+                          "census_completed": teardown.get("census_completed"),
+                          "survivors": survivors[:16]},
+            )
+
+
+def _hazard_read_battery_temperature(
+    *, following_run_id: str, cooldown_result: Any
+) -> dict[str, Any]:
+    """One battery-thermistor reading (``ioreg -rn AppleSmartBattery``, key ``Temperature``).
+
+    Unprivileged and outside every sampler stream: it runs after the cooldown
+    gate released and before the member child starts.  A failed read is a
+    record with ``temperature_centi_c`` null; it never stops collection.
+    """
+
+    reading: dict[str, Any] = {
+        "schema_version": BATTERY_TEMPERATURE_SCHEMA,
+        "following_run_id": following_run_id,
+        "cooldown_result": cooldown_result if isinstance(cooldown_result, str) else None,
+        "read_at": utc_timestamp(),
+        "source": "ioreg -rn AppleSmartBattery: Temperature",
+        "unit": "centi_degC",
+        "temperature_centi_c": None,
+        "temperature_c": None,
+        "error": None,
+    }
+    try:
+        completed = subprocess.run(
+            list(BATTERY_TEMPERATURE_COMMAND), capture_output=True,
+            timeout=BATTERY_TEMPERATURE_TIMEOUT_S, check=False,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        reading["error"] = f"{type(exc).__name__}: {exc}"[:200]
+        return reading
+    if completed.returncode != 0:
+        reading["error"] = f"exit {completed.returncode}"
+        return reading
+    matches = _BATTERY_TEMPERATURE_PATTERN.findall(completed.stdout or b"")
+    if not matches:
+        reading["error"] = "Temperature key absent"
+        return reading
+    value = int(matches[0])
+    reading["temperature_centi_c"] = value
+    reading["temperature_c"] = value / 100.0
+    if len(matches) > 1:
+        reading["error"] = f"{len(matches)} Temperature keys; first used"
+    return reading
+
+
+def _hazard_record_battery_temperature(
+    campaign_provenance: dict[str, Any] | None, *, following_run_id: str, cooldown_result: Any
+) -> None:
+    """Append one reading to the manifest in memory; the member's provenance write persists it."""
+
+    if campaign_provenance is None:
+        return
+    try:
+        reading = _hazard_read_battery_temperature(
+            following_run_id=following_run_id, cooldown_result=cooldown_result
+        )
+    except Exception as exc:  # noqa: BLE001 - a diagnostic never stops collection
+        reading = {"schema_version": BATTERY_TEMPERATURE_SCHEMA,
+                   "following_run_id": following_run_id, "temperature_centi_c": None,
+                   "temperature_c": None, "error": f"{type(exc).__name__}: {exc}"[:200]}
+    campaign_provenance.setdefault(BATTERY_TEMPERATURE_MANIFEST_KEY, []).append(reading)
+
+
+def _hazard_minimal_verdict_row(
+    *,
+    collection_verdict: str,
+    collection_reasons: list[str],
+    categories: dict[str, list[str]],
+    counts: Mapping[str, int],
+    analysis_manifest: AnalysisManifestState | None,
+    prospective_analysis_manifest: ProspectiveManifestIdentity | None,
+    campaign_provenance_path: Path | None,
+    warning: str | None,
+) -> dict[str, Any]:
+    """S4: the stage verdict under HAZARD, without the idle-admission core.
+
+    Nothing in block 5 reads the stage verdict; the desk whole-window verdict
+    and the harvest evaluate admission and strict validity from the bundles.
+    The row is labelled provisional.
+    """
+
+    row: dict[str, Any] = {
+        "schema_version": CAMPAIGN_VERDICT_SCHEMA,
+        "timestamp": utc_timestamp(),
+        "record_type": "campaign_verdict",
+        "status": "verdict",
+        "provisional": True,
+        "analysis_manifest": (
+            prospective_analysis_manifest.to_log()
+            if prospective_analysis_manifest is not None
+            else analysis_manifest.to_log()
+            if analysis_manifest is not None
+            else None
+        ),
+        "collection": {
+            "verdict": collection_verdict,
+            "reasons": collection_reasons,
+            "categories": categories,
+        },
+        "counts": {key: int(value) for key, value in sorted(counts.items()) if value},
+        "strict_validation": HAZARD_STRICT_VALIDATION_DEFERRED,
+        "idle_admission_core": dict(HAZARD_IDLE_ADMISSION_CORE_DEFERRED),
+        "campaign_provenance": (
+            {"manifest_path": str(campaign_provenance_path)}
+            if campaign_provenance_path is not None
+            else None
+        ),
+    }
+    if warning is not None:
+        row["block_order_warning"] = warning
+    return row
+
+
+def _hazard_interrupted_row(
+    *, run_id: str | None, campaign_provenance_path: Path | None
+) -> dict[str, Any]:
+    return {
+        "schema_version": CAMPAIGN_STOP_SCHEMA,
+        "record_type": "campaign_stop",
+        "timestamp": utc_timestamp(),
+        "status": "interrupted",
+        "stop_reason": "sigterm",
+        "exit_code": HAZARD_INTERRUPTED_RC,
+        "interrupted_run_id": run_id,
+        "teardown": _HAZARD_SIGNAL_STATE.get("teardown"),
+        "campaign_provenance_manifest": (
+            str(campaign_provenance_path) if campaign_provenance_path is not None else None
+        ),
+    }
 
 
 def _parse_campaign_lock_text(text: str) -> tuple[int, str | None] | None:
@@ -9137,6 +10037,8 @@ def run_campaign(args: argparse.Namespace) -> int:
     config_dir = Path(args.config_dir)
     runs_dir = Path(args.runs_dir)
     hazard = _hazard_flag_context(runs_dir)
+    if hazard is not None:
+        _HAZARD_TIMEOUT_MEMORY["consecutive"] = 0
     log_path = Path(args.log) if args.log else runs_dir / "campaign_log.jsonl"
     _require_external_campaign_log(log_path)
 
@@ -9365,6 +10267,13 @@ def run_campaign(args: argparse.Namespace) -> int:
             print(f"error: {exc}", file=sys.stderr)
             return 2
 
+    # HAZARD (P2-RC row 8): SIGTERM forwards to the member child, appends an
+    # ``interrupted`` row and releases the lock instead of dying with it held.
+    previous_sigterm = (
+        _hazard_install_sigterm_handler()
+        if hazard is not None and not args.dry_run
+        else None
+    )
     try:
         if not args.dry_run:
             try:
@@ -9836,6 +10745,39 @@ def run_campaign(args: argparse.Namespace) -> int:
             assert campaign_provenance_path is not None
             assert campaign_provenance is not None
             physical_bundle_dirs = expected_member_dirs(info, runs_dir)
+            drain_marker = (
+                _hazard_drain_requested(hazard) if hazard is not None else None
+            )
+            if drain_marker is not None and not _hazard_drain_exempt(info):
+                # Row 8: after consecutive member timeouts the window drains;
+                # only the end references still run.  No member is invoked.
+                drained_ids = [path.name for path in physical_bundle_dirs]
+                missing_members.extend(drained_ids)
+                counts["drained"] += 1
+                print(f"drained {info.run_id}: window is draining after member timeouts",
+                      file=sys.stderr)
+                _hazard_call(
+                    hazard, "log_drained_member", _hazard_member_run_id(info),
+                    lambda: append_log(
+                        log_path,
+                        log_row(
+                            config_path=config_path,
+                            run_id=info.run_id,
+                            status="drained",
+                            exit_code=None,
+                            duration_s=None,
+                            extra={
+                                **order_extra,
+                                "drained": {"reason": "consecutive_member_timeouts",
+                                            "marker": str(drain_marker)},
+                                "campaign_provenance_manifest": str(campaign_provenance_path),
+                            },
+                        ),
+                        lock_token=lock_path,
+                    ),
+                    kind="member_iteration_error",
+                )
+                continue
             first_physical_bundle_id = physical_bundle_dirs[0].name
             following_physical_info = replace(
                 info,
@@ -9951,21 +10893,63 @@ def run_campaign(args: argparse.Namespace) -> int:
                     break
                 continue
 
+            member_run: _HazardMemberRun | None = None
+            if hazard is not None:
+                # Battery thermistor at the cooldown release: after the gate's
+                # bounded captures, before the child's sampler starts.
+                _hazard_record_battery_temperature(
+                    campaign_provenance,
+                    following_run_id=first_physical_bundle_id,
+                    cooldown_result=cooldown_note.get("result"),
+                )
             start = time.monotonic()
             absent_child_metadata: list[Path] = []
-            result = run_authenticated_campaign_child(
-                command,
-                env=child_environment,
-                outer_authentication=launch_authentication,
-                bundle_paths=expected_member_dirs(info, runs_dir),
-                **(
-                    {**_hazard_kwargs(hazard), "absent": absent_child_metadata}
-                    if hazard is not None
-                    else {}
-                ),
-            )
+            if hazard is not None:
+                result, member_run = _hazard_run_authenticated_campaign_child(
+                    command,
+                    env=child_environment,
+                    outer_authentication=launch_authentication,
+                    bundle_paths=expected_member_dirs(info, runs_dir),
+                    hazard=hazard,
+                    absent=absent_child_metadata,
+                    run_id=info.run_id,
+                )
+            else:
+                result = run_authenticated_campaign_child(
+                    command,
+                    env=child_environment,
+                    outer_authentication=launch_authentication,
+                    bundle_paths=expected_member_dirs(info, runs_dir),
+                )
             duration_s = time.monotonic() - start
             exit_code = result.returncode
+            member_timed_out = member_run is not None and member_run.timed_out
+            if member_run is not None:
+                noted = _hazard_call(
+                    hazard, "member_timeout_state", _hazard_member_run_id(info),
+                    lambda: _hazard_note_member_outcome(
+                        hazard,
+                        timed_out=member_timed_out,
+                        bundle_ids=[path.name for path in physical_bundle_dirs],
+                    ),
+                )
+                timeout_count, drain_now = (
+                    noted if noted is not _HAZARD_FAILED else (0, False)
+                )
+                if member_timed_out:
+                    print(
+                        f"timeout {info.run_id}: member ran past the "
+                        f"{HAZARD_MEMBER_CAP_S:.0f} s cap and was terminated"
+                        + ("; the window now drains" if drain_now else ""),
+                        file=sys.stderr,
+                    )
+                    _hazard_flag_member_timeout(
+                        hazard,
+                        [path.name for path in physical_bundle_dirs],
+                        member_run,
+                        consecutive=timeout_count,
+                        drain_now=drain_now,
+                    )
             if absent_child_metadata:
                 from joulewise.flags import core as flags_core
 
@@ -10049,6 +11033,8 @@ def run_campaign(args: argparse.Namespace) -> int:
                 )
             else:
                 status = "failed"
+            if member_timed_out:
+                status = "timeout"  # HAZARD row 8: counted as a failed member
             shakedown_record: dict[str, Any] | None = None
             if status == "ok" and args.shakedown_gate == "production_uncertainty_v1":
                 bundle = evaluations[0].bundle_path
@@ -10099,12 +11085,27 @@ def run_campaign(args: argparse.Namespace) -> int:
                             "ordinary occurrence supersession",
                             file=sys.stderr,
                         )
+            if status == "timeout":
+                failures += 1
             extra = {
                 **order_extra,
                 "members": [evaluation.to_log() for evaluation in evaluations],
                 "preceding_campaign_cooldown": cooldown_note,
                 "campaign_provenance_manifest": str(campaign_provenance_path),
             }
+            if member_run is not None:
+                # Yield E: where the child's stderr is, and (for a member that
+                # did not succeed) its last line with digits redacted.
+                extra["child_stderr"] = (
+                    str(member_run.stderr_path) if member_run.stderr_path is not None else None
+                )
+                if status in {"failed", "timeout"}:
+                    extra["child_refusal"] = member_run.child_refusal()
+                if member_run.watch is not None and member_timed_out:
+                    extra["member_timeout"] = {
+                        **member_run.watch.record(),
+                        "teardown": member_run.teardown,
+                    }
             _hazard_call(
                 hazard, "provenance_invoked_member", _hazard_member_run_id(info),
                 lambda: record_campaign_member_provenance(
@@ -10166,6 +11167,42 @@ def run_campaign(args: argparse.Namespace) -> int:
             return 0
         categories = classify_campaign_members(all_evaluations, missing_members)
         collection_verdict, collection_reasons = collection_verdict_for(categories)
+        if hazard is not None:
+            # S4 (closes A20): no sampling audit, idle-admission core, claim
+            # readiness or claim barrier in the window; one provisional row.
+            print("COLLECTION VERDICT (provisional):")
+            print(f"  verdict: {collection_verdict}")
+            for reason in collection_reasons:
+                print(f"  reason: {reason}")
+            for key in ("usable", "waived", "failed", "missing"):
+                print(f"  {key}: {len(categories[key])}")
+            print("IDLE-ADMISSION CORE: deferred_to_desk")
+            assert lock_path is not None
+            appended = _hazard_call(
+                hazard, "append_minimal_verdict", None,
+                lambda: append_log(
+                    log_path,
+                    _hazard_minimal_verdict_row(
+                        collection_verdict=collection_verdict,
+                        collection_reasons=collection_reasons,
+                        categories=categories,
+                        counts=counts,
+                        analysis_manifest=analysis_manifest,
+                        prospective_analysis_manifest=prospective_analysis_manifest,
+                        campaign_provenance_path=campaign_provenance_path,
+                        warning=order_warning,
+                    ),
+                    lock_token=lock_path,
+                ),
+                kind="stage_verdict_degraded",
+            )
+            campaign_failed = bool(
+                failures
+                or counts["drained"]
+                or collection_verdict in {"blocked", "invalid"}
+                or appended is _HAZARD_FAILED
+            )
+            return 1 if campaign_failed else 0
         sampling_audit = sampling_audit_for(analysis_manifest)
         stage_verdict_degraded = False
         idle_admission_core = _hazard_call(
@@ -10282,15 +11319,37 @@ def run_campaign(args: argparse.Namespace) -> int:
             }, lock_token=lock_path)
             return MAX_BLOCKS_REACHED_RC
         return 1 if campaign_failed else 0
+    except _HazardInterrupted:
+        # HAZARD row 8: the member child already got TERM (then KILL after the
+        # grace); record the interruption, then the finally releases the lock.
+        print("interrupted: SIGTERM; member child terminated, campaign lock released",
+              file=sys.stderr)
+        if lock_path is not None:
+            _hazard_call(
+                hazard, "append_interrupted", _HAZARD_SIGNAL_STATE.get("run_id"),
+                lambda: append_log(
+                    log_path,
+                    _hazard_interrupted_row(
+                        run_id=_HAZARD_SIGNAL_STATE.get("run_id"),
+                        campaign_provenance_path=campaign_provenance_path,
+                    ),
+                    lock_token=lock_path,
+                ),
+                kind="member_iteration_error",
+            )
+        return HAZARD_INTERRUPTED_RC
     except BaseException as exc:
         in_flight = exc
         raise
     finally:
         try:
-            remove_campaign(registry_entry)
+            try:
+                remove_campaign(registry_entry)
+            finally:
+                if lock_path is not None:
+                    release_campaign_lock(lock_path, in_flight=in_flight)
         finally:
-            if lock_path is not None:
-                release_campaign_lock(lock_path, in_flight=in_flight)
+            _hazard_restore_sigterm_handler(previous_sigterm)
 
 
 def run_prompt_hash_check(args: argparse.Namespace) -> int:

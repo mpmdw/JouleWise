@@ -181,6 +181,9 @@ _CORE_PRUNE_CODES = {
     "env.stage_preflight_not_admitted": _code("DIAGNOSTIC", "REPRESENTATION", DISCLOSE),
     "campaign.runner_record_flagged": _code("RECORDS", "REPRESENTATION", DISCLOSE),
     "calibration.writer_record_flagged": _code("CALIBRATION", "REPRESENTATION", DISCLOSE),
+    # Gate-prune round 2, lane P2-RC (scripts/run_campaign.py; PLAN2 row 8, yield E).
+    "member.timeout": _code("MEMBER_VALIDITY", "NUMBER", EXCLUDE_MEMBER),
+    "member.stderr_uncopied": _code("MEMBER_VALIDITY", "NUMBER", EXCLUDE_MEMBER),
     # The harvest (joulewise.b5.harvest).
     "neg8.corpus_member_dropped": _code("NEG8", "REPRESENTATION", DISCLOSE),
     "calibration.capture_battery_span": _code("CALIBRATION", "PHYSICS", EXCLUDE_WINDOW),

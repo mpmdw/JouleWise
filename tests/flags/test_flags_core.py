@@ -61,6 +61,9 @@ SECTION_5 = {
     # Gate-prune round 2, lane P2-CHAIN (the block-5 chain, writer b5-chain).
     "roster.horizon_truncated": ("ROSTER", "REPRESENTATION", DISCLOSE),
     "member.retried": ("ROSTER", "REPRESENTATION", DISCLOSE),
+    # Gate-prune round 2, lane P2-RC.
+    "member.timeout": ("MEMBER_VALIDITY", "NUMBER", EXCLUDE_MEMBER),
+    "member.stderr_uncopied": ("MEMBER_VALIDITY", "NUMBER", EXCLUDE_MEMBER),
 }
 # Core codes whose consumer tables (DRAFT_CODES, the harvest's CODES and
 # CORE_WRITER_CODES, the fixture catalog) lane P2-HARV fills: until that lane
