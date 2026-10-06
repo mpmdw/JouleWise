@@ -83,6 +83,7 @@ import copy
 import hashlib
 import json
 import os
+import stat
 import subprocess
 import uuid
 from pathlib import Path, PurePosixPath
@@ -789,7 +790,21 @@ def authenticate_bundle(
 
 
 def _write_once(path: Path, raw: bytes) -> None:
-    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+    """Create ``path`` holding ``raw``, fsynced, or accept an identical copy.
+
+    Idempotent (PLAN2 row 9): when the file already exists and holds exactly
+    ``raw`` (an earlier publication attempt wrote it), it counts as written,
+    so a retried publication can complete.  Any other existing content raises
+    ``FileExistsError`` as before: a record is never replaced.
+    """
+
+    try:
+        descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+    except FileExistsError:
+        if not _existing_record_is(path, raw):
+            raise
+        _fsync_directory(path.parent)
+        return
     try:
         with os.fdopen(descriptor, "wb") as handle:
             handle.write(raw)
@@ -797,6 +812,50 @@ def _write_once(path: Path, raw: bytes) -> None:
             os.fsync(handle.fileno())
     finally:
         _fsync_directory(path.parent)
+
+
+def _existing_record_is(path: Path, raw: bytes) -> bool:
+    """Whether ``path`` is a regular file holding exactly ``raw``, made durable.
+
+    One descriptor does everything (P2-B1 review F1, F3): it is opened without
+    following a symlink and without blocking (a FIFO or device at the path is
+    then refused by the regular-file check instead of hanging the open), its
+    bytes are compared, and that same file is fsynced (the identical bytes may
+    not have reached the disk before the earlier attempt failed).  Last, the
+    path must still name that file, so a record replaced while it was being
+    compared is never acknowledged as written.
+    """
+
+    try:
+        descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    except OSError:
+        return False
+    try:
+        opened = os.fstat(descriptor)
+        if not stat.S_ISREG(opened.st_mode):
+            return False
+        if _read_descriptor(descriptor) != raw:
+            return False
+        os.fsync(descriptor)
+        try:
+            current = os.lstat(path)
+        except OSError:
+            return False
+        return (current.st_dev, current.st_ino) == (opened.st_dev, opened.st_ino)
+    finally:
+        os.close(descriptor)
+
+
+def _read_descriptor(descriptor: int) -> bytes:
+    """Every byte readable from ``descriptor``, from its current offset."""
+
+    chunks = []
+    while True:
+        chunk = os.read(descriptor, 1 << 20)
+        if not chunk:
+            break
+        chunks.append(chunk)
+    return b"".join(chunks)
 
 
 def _fsync_directory(path: Path) -> None:

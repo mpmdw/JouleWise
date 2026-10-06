@@ -2960,6 +2960,20 @@ def authenticate_window_launch_lineage(
             "launch_consumption_missing",
             "whole-window evaluation basis carrying launch lineage is absent",
         )
+    # Partial replay by design (b1 F1, P2-B1).  On a HAZARD window an
+    # unstamped capture is bound by the bracket descriptor's session and
+    # attempt ids; those ids are ledger-authenticated only by the full row
+    # replay (_validate_row_uncached -> _current_core_rederivation_reasons,
+    # which re-derives the bracket from the ledger before this check runs).
+    # This reader cannot run that replay itself: a minted-semantics row
+    # replays only inside a ready AuthenticatedConsumptionSession, which needs
+    # the caller's ledger snapshot and bracket binding.  Its floor-mint
+    # callers supply one: bind_v2_floor_artifact_evidence passes every artifact
+    # through the pinned binder (scripts/mint_floor_artifact.py
+    # _authenticated_consumption_summaries -> whole_window_refusal_reasons with
+    # a session), the common-mode recomputation runs the same replay, and the
+    # generalized mint binds every artifact it builds that way.  So no artifact
+    # rests on this partial replay alone.
     for row in candidates:
         reasons = _whole_window_row_launch_refusal_reasons(row, root)
         if reasons:
@@ -3748,6 +3762,37 @@ def _reference_energy_evidence(
 ) -> tuple[dict[str, float] | None, float | None, str | None]:
     """Re-derive both current NEG-8 claim-family points from primary bytes."""
 
+    gross, idle_subtracted, problem, _cause = _reference_energy_evidence_detail(
+        bundle_path, require_idle_subtracted=require_idle_subtracted
+    )
+    return gross, idle_subtracted, problem
+
+
+# Causes behind a ``_reference_energy_evidence`` problem, for the HAZARD_PACK
+# mint's per-member verdict (core-prune N2 / NONCORE R1).  Only the first two
+# are evidence about the member's number; every other cause means the
+# evaluation could not run or saw something it cannot classify.
+ENERGY_CAUSE_PRECHECK_INELIGIBLE = "precheck_ineligible"
+ENERGY_CAUSE_REDUCTION_MISMATCH = "reduction_mismatch"
+
+
+def _reference_energy_evidence_detail(
+    bundle_path: Path,
+    *,
+    require_idle_subtracted: bool = True,
+) -> tuple[dict[str, float] | None, float | None, str | None, str | None]:
+    """``_reference_energy_evidence`` plus the cause of its problem.
+
+    The first three values are exactly ``_reference_energy_evidence``'s.  The
+    cause is ``None`` when there is no problem, ``precheck_ineligible`` when
+    the fresh reduction succeeded and a required gate says ``eligible: False``,
+    ``reduction_mismatch`` when the fresh reduction disagrees with the stored
+    summary (a different status, a stored number absent or different), and
+    otherwise a name for why the evidence could not be classified
+    (``reduction_unavailable``, ``precheck_absent``, ``precheck_unknown``,
+    ``reduction_incomplete``, ``not_current_strict``).
+    """
+
     stored_summary = _read_json_object(bundle_path / "summary_metrics.json")
     stored_gross = _gross_fields(stored_summary)
     stored_idle = (
@@ -3757,13 +3802,17 @@ def _reference_energy_evidence(
     )
     reducer_version = _summary_reducer_version(stored_summary)
     if not _current_strict_summary(stored_summary, bundle_path):
-        return (
-            stored_gross,
-            stored_idle,
+        problem = (
             None
             if stored_gross is not None
             and (stored_idle is not None or not require_idle_subtracted)
-            else "provenance",
+            else "provenance"
+        )
+        return (
+            stored_gross,
+            stored_idle,
+            problem,
+            None if problem is None else "not_current_strict",
         )
     try:
         # Deliberately output-free: reduce_bundle is pure over the bundle and
@@ -3773,7 +3822,7 @@ def _reference_energy_evidence(
 
         reduced = reduce_bundle(bundle_path, reducer_version=reducer_version).to_dict()
     except Exception:  # noqa: BLE001 - any reducer/evidence failure refuses.
-        return None, None, "provenance"
+        return None, None, "provenance", "reduction_unavailable"
     fresh_gross = _gross_fields(reduced)
     fresh_idle = _finite_number(reduced.get("idle_subtracted_energy_j"))
     prechecks = reduced.get("window_evidence_precheck")
@@ -3798,7 +3847,25 @@ def _reference_energy_evidence(
             )
         )
     ):
-        return None, None, "provenance"
+        gates = [gross_gate, *((idle_gate,) if require_idle_subtracted else ())]
+        if reduced.get("status") != "succeeded":
+            # A stored success that a fresh reduction does not reproduce is a
+            # mismatch; a stored non-success is not this function's verdict.
+            cause = (
+                ENERGY_CAUSE_REDUCTION_MISMATCH
+                if isinstance(stored_summary, Mapping)
+                and stored_summary.get("status") == "succeeded"
+                else "stored_not_succeeded"
+            )
+        elif any(not isinstance(gate, Mapping) for gate in gates):
+            cause = "precheck_absent"
+        elif any(gate.get("eligible") is False for gate in gates):
+            cause = ENERGY_CAUSE_PRECHECK_INELIGIBLE
+        elif any(gate.get("eligible") is not True for gate in gates):
+            cause = "precheck_unknown"
+        else:
+            cause = "reduction_incomplete"
+        return None, None, "provenance", cause
     if stored_gross is None or any(
         not math.isclose(
             stored_gross[field], fresh_gross[field], rel_tol=1e-9, abs_tol=1e-9
@@ -3814,8 +3881,8 @@ def _reference_energy_evidence(
             )
         )
     ):
-        return None, None, "conflict"
-    return fresh_gross, fresh_idle, None
+        return None, None, "conflict", ENERGY_CAUSE_REDUCTION_MISMATCH
+    return fresh_gross, fresh_idle, None, None
 
 
 def _gross_energy_evidence(
@@ -4014,16 +4081,33 @@ def mint_neg8_drift_bound_artifact(
 # The ARM-path mint above is all-or-nothing: one corpus member that fails a
 # per-member predicate, or a power-supply/os_build string that differs across
 # members, raises and no bound exists, so the window loses its NEG-8 screen.
-# On a hazard window (doctrine 2026-10-05) the mint instead DROPS a member
-# that fails a per-member predicate and derives the bound from the rest; it
-# raises only when no sound bound can exist:
+# On a hazard window (doctrine 2026-10-05) the mint instead gives every corpus
+# member one of three verdicts (core-prune DESIGN N2, interface I3; the
+# orchestrator's NONCORE R1 ruling of 2026-10-06):
 #
-# * the kept members do not share one calibration identity (a physical fact:
-#   the bound would mix instruments);
-# * the kept members do not share one scientific condition and no single
-#   condition is in the majority;
-# * stamped members carry two different window lineages;
-# * fewer than NEG8_DRIFT_MINIMUM_N members are kept.
+# * keep: the member passes every per-member predicate;
+# * omit (drop): the member fails a registered member-validity predicate that
+#   would exclude a science member.  The reasons form a closed set,
+#   NEG8_MINT_DROP_REASONS: status_not_succeeded, not_current_strict_mint,
+#   custody_triangle_disagrees, precheck_ineligible (the fresh re-reduction's
+#   gross or idle-subtracted gate says eligible: False) and
+#   reduction_mismatch (the fresh re-reduction differs from the stored
+#   summary).  The bound is derived from the rest;
+# * indeterminate: the energy evaluation could not run or could not classify
+#   what it saw (a reducer exception, an absent or unknown gate, a missing
+#   fresh number).  The member is KEPT: unknown evidence
+#   never authorizes an omission.  A kept member with no verified numbers
+#   cannot enter a bound, so the mint then raises;
+#
+# and refuses (raises, so no bound is derived and the harvest reports
+# neg8.bound_not_derived) on anything that is not evidence about one member's
+# number: an unauthenticated launch lineage (launch_lineage:*), a member that
+# is not the canonical condition (not_canonical_condition), a member whose
+# calibration identity is unrecorded (calibration_identity_unrecorded), a
+# bundle inventory that cannot be sealed (bundle_inventory_invalid), kept
+# members of more than one condition (condition_differs; no majority vote),
+# kept members of more than one calibration identity, two window lineages, or
+# fewer than NEG8_DRIFT_MINIMUM_N kept members.
 #
 # The power-supply and os_build strings are records: the bound records the
 # value most members agree on (or an explicit "unrecorded" value), and a
@@ -4033,10 +4117,29 @@ def mint_neg8_drift_bound_artifact(
 # rendered exactly as the chain's PRUNE_HELPER renders a pruned manifest, so
 # a pruner that drops the same members (``neg8_corpus_mint_drops``) writes the
 # identical bytes.
+#
+# Freshness (V1, PLAN2 row 2): the bound's ``derived_at_s`` is the end of the
+# latest kept corpus member's measured window, a physical time recorded in
+# the bundles, not the clock of whoever runs the mint.  A desk re-mint
+# therefore yields the same artifact as the chain's, and the 24 h horizon is
+# counted from the corpus measurement, at or before the in-chain derivation
+# (``_hazard_bound_derived_at_s``).
 
 NEG8_UNRECORDED_OS_BUILD = "unrecorded"
 NEG8_UNRECORDED_POWER_SUPPLY_SHA256 = canonical_sha256(
     {"power_supply_identity": "unrecorded"}
+)
+# The closed set of reasons for which the HAZARD mint leaves a corpus member
+# out of the bound.  joulewise/b5/harvest.py NEG8_ACCEPTED_DROP_REASONS must
+# equal this set (the harvest accepts exactly the mint's drops).
+NEG8_MINT_DROP_REASONS = frozenset(
+    {
+        "status_not_succeeded",
+        "not_current_strict_mint",
+        "custody_triangle_disagrees",
+        ENERGY_CAUSE_PRECHECK_INELIGIBLE,
+        ENERGY_CAUSE_REDUCTION_MISMATCH,
+    }
 )
 
 
@@ -4059,13 +4162,35 @@ def _neg8_majority(values: Sequence[Any]) -> Any:
     return [value for value in values if counts.get(value) == best][-1]
 
 
+def _measured_window_end_s(bundle_path: Path) -> float | None:
+    """End of a bundle's measured window (its ``sampling_stopped`` stamp)."""
+
+    try:
+        window = BundleReader(bundle_path).measured_window()
+    except (BundleReadError, OSError, TypeError, ValueError, KeyError):
+        return None
+    if window is None or window.end_s < window.start_s:
+        return None
+    return _finite_number(window.end_s)
+
+
 def _hazard_neg8_corpus_selection(
     root: Path, manifest: Mapping[str, Any]
 ) -> dict[str, Any]:
-    """Evaluate every corpus member once; return kept rows and drops."""
+    """Give every corpus member its verdict once.
+
+    Returns ``{"rows", "drops", "indeterminate", "refusals"}``: the kept rows
+    (each with verified evidence), the dropped members ``{bundle_id, reason}``
+    (reason in :data:`NEG8_MINT_DROP_REASONS`), the kept members whose evidence
+    could not be classified ``{bundle_id, reason}``, and the refusals
+    ``{bundle_id, reason}`` (``bundle_id`` None for a cross-member refusal).
+    """
 
     rows: list[dict[str, Any]] = []
     drops: list[dict[str, str]] = []
+    indeterminate: list[dict[str, str]] = []
+    refusals: list[dict[str, Any]] = []
+    identities: list[tuple[str, Any]] = []
     seen_ids: set[str] = set()
     for member in manifest.get("members", []):
         if not isinstance(member, Mapping) or set(member) != {
@@ -4085,12 +4210,22 @@ def _hazard_neg8_corpus_selection(
         seen_ids.add(bundle_id)
 
         def drop(reason: str) -> None:
+            assert reason in NEG8_MINT_DROP_REASONS, reason
             drops.append({"bundle_id": bundle_id, "reason": reason})
 
-        if not bundle_path.is_dir():
-            drop("bundle_absent")
+        def refuse(reason: str) -> None:
+            refusals.append({"bundle_id": bundle_id, "reason": reason})
+
+        summary = (
+            _read_json_object(bundle_path / "summary_metrics.json")
+            if bundle_path.is_dir()
+            else None
+        )
+        # The registered status rule (the harvest's _corpus_member_status):
+        # an absent bundle or a summary that does not say succeeded.
+        if not isinstance(summary, Mapping) or summary.get("status") != "succeeded":
+            drop("status_not_succeeded")
             continue
-        summary = _read_json_object(bundle_path / "summary_metrics.json")
         metadata = _read_json_object(bundle_path / "metadata.json")
         config = _read_json_object(bundle_path / "config.json")
         try:
@@ -4101,14 +4236,14 @@ def _hazard_neg8_corpus_selection(
                 require_completion=False,
             )
         except LaunchLineageError as exc:
-            drop(f"launch_lineage:{exc.reason_code}")
+            refuse(f"launch_lineage:{exc.reason_code}")
             continue
         lineage = None
         if authenticated_launch is not None:
             extra = metadata.get("extra") if isinstance(metadata, Mapping) else None
             lineage = extra.get("launch_lineage") if isinstance(extra, Mapping) else None
             if not isinstance(lineage, Mapping):
-                drop("launch_lineage:launch_consumption_invalid")
+                refuse("launch_lineage:launch_consumption_invalid")
                 continue
         if _custody_strict_invalid(bundle_path, summary, metadata):
             drop("custody_triangle_disagrees")
@@ -4118,20 +4253,31 @@ def _hazard_neg8_corpus_selection(
             continue
         identity, canonical = _scientific_config_identity(bundle_path)
         if identity is None or not canonical:
-            drop("not_canonical_condition")
+            refuse("not_canonical_condition")
             continue
+        identities.append((bundle_id, identity))
         gross, idle_subtracted, problem = _reference_energy_evidence(bundle_path)
         if problem is not None or gross is None or idle_subtracted is None:
-            drop("energy_evidence_invalid")
+            # Classify only a failure (rare): the same evaluation again, with
+            # its cause.  A cause it cannot reproduce is not a drop reason.
+            _gross, _idle, _problem, cause = _reference_energy_evidence_detail(
+                bundle_path
+            )
+            if cause in NEG8_MINT_DROP_REASONS:
+                drop(cause)
+            else:
+                indeterminate.append(
+                    {"bundle_id": bundle_id, "reason": cause or "energy_unclassified"}
+                )
             continue
         fields = neg8_freshness_binding_fields(metadata) or {}
         if fields.get("calibration_identity_sha256") is None:
-            drop("calibration_identity_unrecorded")
+            refuse("calibration_identity_unrecorded")
             continue
         try:
             evidence_sha = _bundle_evidence_sha256(bundle_path)
         except (OSError, ValueError):
-            drop("bundle_inventory_invalid")
+            refuse("bundle_inventory_invalid")
             continue
         rows.append(
             {
@@ -4139,6 +4285,7 @@ def _hazard_neg8_corpus_selection(
                 "identity": identity,
                 "lineage": lineage,
                 "fields": fields,
+                "span_end_s": _measured_window_end_s(bundle_path),
                 "evidence": {
                     "bundle_id": bundle_id,
                     "point_gross_j": gross["point_j"],
@@ -4147,38 +4294,52 @@ def _hazard_neg8_corpus_selection(
                 },
             }
         )
-    identities = [row["identity"] for row in rows]
-    if identities:
-        counts = {value: identities.count(value) for value in set(identities)}
-        best = max(counts.values())
-        if list(counts.values()).count(best) > 1:
-            raise ValueError(
-                "NEG-8 reference corpus members split evenly across conditions"
-            )
-        majority = next(value for value, count in counts.items() if count == best)
-        for row in [row for row in rows if row["identity"] != majority]:
-            drops.append(
-                {"bundle_id": row["evidence"]["bundle_id"], "reason": "condition_differs"}
-            )
-        rows = [row for row in rows if row["identity"] == majority]
+    # Every kept member (verified or indeterminate) must be one condition.
+    # There is no majority vote: a corpus of two conditions is not a corpus.
+    dropped_ids = {row["bundle_id"] for row in drops}
+    kept_identities = {
+        identity for bundle_id, identity in identities if bundle_id not in dropped_ids
+    }
+    if len(kept_identities) > 1:
+        refusals.append({"bundle_id": None, "reason": "condition_differs"})
     order = [
         member.get("bundle_id")
         for member in manifest.get("members", [])
         if isinstance(member, Mapping)
     ]
-    drops.sort(key=lambda row: order.index(row["bundle_id"]))
-    return {"rows": rows, "drops": drops}
+    for listed in (drops, indeterminate):
+        listed.sort(key=lambda row: order.index(row["bundle_id"]))
+    return {
+        "rows": rows,
+        "drops": drops,
+        "indeterminate": indeterminate,
+        "refusals": refusals,
+    }
 
 
-def neg8_corpus_mint_drops(
+def _describe_members(rows: Sequence[Mapping[str, Any]]) -> str:
+    return ", ".join(
+        f"{row.get('bundle_id') or '<corpus>'}={row.get('reason')}" for row in rows
+    )
+
+
+def _raise_on_refusals(selection: Mapping[str, Any]) -> None:
+    refusals = selection["refusals"]
+    if refusals:
+        raise ValueError(
+            "NEG-8 reference corpus refused (a reason that is not evidence about "
+            "a member's number): " + _describe_members(refusals)
+        )
+
+
+def neg8_corpus_member_verdicts(
     runs_root: Path, corpus_manifest_path: Path
-) -> list[dict[str, str]]:
-    """Members a HAZARD_PACK mint would drop, with the predicate each failed.
+) -> dict[str, list[dict[str, Any]]]:
+    """Every corpus member's HAZARD mint verdict (DESIGN N2, interface I3).
 
-    For the chain's corpus pruner: dropping exactly these members (and
-    rendering the pruned manifest as PRUNE_HELPER does) yields the manifest
-    bytes the hazard mint binds its bound to.  Raises like the mint when the
-    manifest itself is unusable.
+    ``{"drops", "indeterminate", "refusals"}`` as
+    :func:`_hazard_neg8_corpus_selection` computes them, without raising on a
+    refusal: for a reader that wants to report why a bound cannot exist.
     """
 
     raw = read_authentication_input(
@@ -4189,19 +4350,71 @@ def neg8_corpus_mint_drops(
     manifest = json.loads(raw)
     if not isinstance(manifest, Mapping):
         raise ValueError("NEG-8 reference corpus manifest is not an object")
-    return _hazard_neg8_corpus_selection(Path(runs_root).resolve(), manifest)["drops"]
+    selection = _hazard_neg8_corpus_selection(Path(runs_root).resolve(), manifest)
+    return {key: selection[key] for key in ("drops", "indeterminate", "refusals")}
+
+
+def neg8_corpus_mint_drops(
+    runs_root: Path, corpus_manifest_path: Path
+) -> list[dict[str, str]]:
+    """Members a HAZARD_PACK mint would drop, with the predicate each failed.
+
+    For the chain's corpus pruner: dropping exactly these members (and
+    rendering the pruned manifest as PRUNE_HELPER does) yields the manifest
+    bytes the hazard mint binds its bound to.  Every reason is in
+    :data:`NEG8_MINT_DROP_REASONS`.  Indeterminate members are kept (not
+    listed).  Raises like the mint when the manifest itself is unusable or
+    when the corpus refuses (a launch-lineage, condition, calibration-record
+    or inventory reason), so no caller prunes a corpus the mint would refuse.
+    """
+
+    raw = read_authentication_input(
+        Path(corpus_manifest_path),
+        grammar="json",
+        label="NEG-8 reference corpus manifest",
+    )
+    manifest = json.loads(raw)
+    if not isinstance(manifest, Mapping):
+        raise ValueError("NEG-8 reference corpus manifest is not an object")
+    selection = _hazard_neg8_corpus_selection(Path(runs_root).resolve(), manifest)
+    _raise_on_refusals(selection)
+    return selection["drops"]
+
+
+def _hazard_bound_derived_at_s(rows: Sequence[Mapping[str, Any]]) -> float:
+    """The bound's derivation time: the latest kept member's measured-window end.
+
+    Every kept member passed a fresh reduction, which raises without a
+    measured window (reduce.py ``_ReduceError``: "no measured_run window"), so
+    each real kept member has one; the maximum is taken over those that read
+    (a subset can only make the bound older, never fresher).  Only a corpus
+    whose energy evaluation never reduced anything (a synthetic fixture) has
+    no readable end; then the mint falls back to its own clock, as before.
+    Making that fallback a refusal waits for the harvest fixtures that rely
+    on it (P2-B1 review F2, deferred to P2-HARV).
+    """
+
+    ends = [row["span_end_s"] for row in rows if row.get("span_end_s") is not None]
+    return max(ends) if ends else time.time()
 
 
 def _mint_hazard_neg8_drift_bound(
     root: Path, manifest: Mapping[str, Any], raw: bytes
 ) -> dict[str, Any]:
     selection = _hazard_neg8_corpus_selection(root, manifest)
+    _raise_on_refusals(selection)
     rows, drops = selection["rows"], selection["drops"]
+    if selection["indeterminate"]:
+        raise ValueError(
+            "NEG-8 reference corpus keeps members whose evidence could not be "
+            "verified (kept, never dropped, so no bound can be derived): "
+            + _describe_members(selection["indeterminate"])
+        )
     if len(rows) < NEG8_DRIFT_MINIMUM_N:
         raise ValueError(
             f"NEG-8 reference corpus keeps {len(rows)} members after drops "
             f"(n >= {NEG8_DRIFT_MINIMUM_N} required): "
-            + ", ".join(f"{row['bundle_id']}={row['reason']}" for row in drops)
+            + _describe_members(drops)
         )
     calibrations = {row["fields"]["calibration_identity_sha256"] for row in rows}
     if len(calibrations) != 1:
@@ -4232,7 +4445,7 @@ def _mint_hazard_neg8_drift_bound(
         manifest_sha256=hashlib.sha256(bound_raw).hexdigest(),
         scientific_config_sha256=rows[0]["identity"],
         members=[row["evidence"] for row in rows],
-        derivation_timestamp_s=time.time(),
+        derivation_timestamp_s=_hazard_bound_derived_at_s(rows),
         freshness_bindings={
             "os_build": os_build if os_build is not None else NEG8_UNRECORDED_OS_BUILD,
             "power_supply_identity_sha256": (
@@ -4379,6 +4592,7 @@ def _derived_neg8_decision(
         "end": [],
     }
     reference_metadata: list[Mapping[str, Any] | None] = []
+    end_reference_paths: list[Path] = []
     invalid_role = False
     for manifest in manifests:
         manifest_paths = (
@@ -4458,10 +4672,35 @@ def _derived_neg8_decision(
                 if problem is not None:
                     return None, problem
                 references[position].append((gross, idle_subtracted))
+                if position == "end":
+                    end_reference_paths.append(bundle_path)
                 if point_drift:
                     reference_metadata.append(
                         _read_json_object(bundle_path / "metadata.json")
                     )
+    if (
+        point_drift
+        and current
+        and end_reference_paths
+        and _is_hazard_runs_root(runs_root)
+    ):
+        # V1 (PLAN2 row 2): on a HAZARD_PACK window the bound's freshness is
+        # judged at the end of the last end reference's measured window, the
+        # moment the bound is last used, as the verdict writer evaluates it.
+        # Re-derive that time from the bundles instead of trusting the row's
+        # stored value; a row evaluated at any other clock then conflicts.
+        # When an end reference's window does not read, the stored value
+        # stands (the writer then used its own, later, clock), but never
+        # earlier than a physical end that does read: an earlier time would
+        # make the bound look fresher (P2-B1 review F2).
+        end_times = [_measured_window_end_s(path) for path in end_reference_paths]
+        readable = [value for value in end_times if value is not None]
+        if readable and len(readable) == len(end_times):
+            freshness_evaluated_at_s = max(readable)
+        elif readable:
+            stored_at = _finite_number(freshness_evaluated_at_s)
+            if stored_at is not None:
+                freshness_evaluated_at_s = max(stored_at, max(readable))
     legacy_pair = (
         len(references["start"]) == 1
         and not references["midpoint"]
@@ -5686,6 +5925,135 @@ def validate_whole_window_verdict_row(
         status=status,
         reasons=tuple(reasons),
     )
+
+
+# ---------------------------------------------------------------------------
+# Member strict validation for a HAZARD_PACK whole-window verdict, in parallel
+# (PLAN2 row 1).  Every member still gets the full strict validation
+# (``cli.validate_bundle(path, strict=True)``: structure, a fresh reduction
+# compared with the stored summary, uncertainty and raw-to-trace checks); only
+# the wall clock changes.  Serially an ALPHA window's 107 claim-root bundles
+# take about 3,700 s (34.5 s each), past the harvest's 1,800 s budget.
+#
+# Each worker process keeps one plain physics cache across the bundles it
+# validates and passes it to ``validate_bundle(..., physics_cache=...)`` once
+# that keyword exists (interface J2, owned by P2-CTL; a hit happens only after
+# every hash check has run).  Until then the validator is called exactly as
+# before.  The pool is spawned (no forked state) and lives in the verdict
+# process's process group, so a harvest that kills the group kills it too.
+
+WHOLE_WINDOW_WORKERS_ENV = "JOULEWISE_WHOLE_WINDOW_WORKERS"
+WHOLE_WINDOW_DEFAULT_MAX_WORKERS = 8
+_STRICT_WORKER_PHYSICS_CACHE: dict[Any, Any] | None = None
+
+
+def whole_window_strict_workers(member_count: int) -> int:
+    """Worker processes for ``member_count`` strict validations.
+
+    ``JOULEWISE_WHOLE_WINDOW_WORKERS`` (a positive integer) overrides the
+    default of ``min(8, cpu_count - 2)``; the result is at least 1 and never
+    more than the members.  1 means in-process, serially.
+    """
+
+    import os  # noqa: PLC0415
+
+    requested = os.environ.get(WHOLE_WINDOW_WORKERS_ENV)
+    workers: int | None = None
+    if requested is not None:
+        try:
+            workers = int(requested.strip())
+        except ValueError:
+            workers = None
+        if workers is not None and workers < 1:
+            workers = None
+    if workers is None:
+        workers = min(
+            WHOLE_WINDOW_DEFAULT_MAX_WORKERS, max(1, (os.cpu_count() or 1) - 2)
+        )
+    return max(1, min(workers, member_count))
+
+
+def _accepts_physics_cache(validator: Any) -> bool:
+    import inspect  # noqa: PLC0415
+
+    try:
+        return "physics_cache" in inspect.signature(validator).parameters
+    except (TypeError, ValueError):
+        return False
+
+
+def _strict_validation_problems(
+    path: Path, validator: Any, physics_cache: dict[Any, Any] | None
+) -> list[str]:
+    """One member's strict-validation problems, as the verdict writer records them."""
+
+    try:
+        if physics_cache is not None and _accepts_physics_cache(validator):
+            return list(validator(path, strict=True, physics_cache=physics_cache))
+        return list(validator(path, strict=True))
+    except Exception as exc:  # noqa: BLE001 - validator failure is invalid
+        return [f"strict validation raised {type(exc).__name__}: {exc}"]
+
+
+def _strict_validation_worker(path_text: str) -> list[str]:
+    """Process-pool entry point: the real validator and this worker's cache."""
+
+    global _STRICT_WORKER_PHYSICS_CACHE
+    from joulewise.cli import validate_bundle  # noqa: PLC0415
+
+    if _STRICT_WORKER_PHYSICS_CACHE is None:
+        _STRICT_WORKER_PHYSICS_CACHE = {}
+    return _strict_validation_problems(
+        Path(path_text), validate_bundle, _STRICT_WORKER_PHYSICS_CACHE
+    )
+
+
+def strict_validate_bundles(
+    paths: Sequence[Path],
+    *,
+    workers: int,
+    validator: Any = None,
+) -> list[list[str]]:
+    """Strict-validation problems for each path, in input order.
+
+    ``validator`` defaults to ``cli.validate_bundle``.  With ``workers`` > 1
+    and the real validator the paths are validated in a spawned process pool;
+    a substituted validator (a test double) cannot cross a process boundary,
+    so it runs in process.  A worker that dies leaves its paths to be
+    validated in process, so every path gets a result.
+    """
+
+    from joulewise.cli import validate_bundle as real_validator  # noqa: PLC0415
+
+    validator = real_validator if validator is None else validator
+    results: list[list[str] | None] = [None] * len(paths)
+    if workers > 1 and len(paths) > 1 and validator is real_validator:
+        import multiprocessing  # noqa: PLC0415
+        from concurrent.futures import ProcessPoolExecutor  # noqa: PLC0415
+
+        try:
+            with ProcessPoolExecutor(
+                max_workers=min(workers, len(paths)),
+                mp_context=multiprocessing.get_context("spawn"),
+            ) as pool:
+                futures = [
+                    pool.submit(_strict_validation_worker, str(path))
+                    for path in paths
+                ]
+                for index, future in enumerate(futures):
+                    try:
+                        results[index] = list(future.result())
+                    except Exception:  # noqa: BLE001 - redo it in process
+                        results[index] = None
+        except Exception:  # noqa: BLE001 - a pool that cannot start: in process
+            pass
+    cache: dict[Any, Any] = {}
+    return [
+        result
+        if result is not None
+        else _strict_validation_problems(Path(path), validator, cache)
+        for path, result in zip(paths, results)
+    ]
 
 
 def hazard_window_membership_id(runs_root: Path, records: Sequence[Any]) -> str:
