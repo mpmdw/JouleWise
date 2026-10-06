@@ -447,6 +447,14 @@ line (which use the released energies by rules fixed here), and printed with the
 - **Reference drift:** each window's NEG-8 screen result, allowance and corpus size (10, 11 or 12). For a corpus of 10
   or 11, also disclose that the bound was validated against the collected members and that the harvest's re-screen,
   not the stored verdict, decided the screen (registration §5.3; `derived/neg8-bound.json`, `derived/neg8-screen.json`).
+- **Battery temperature across each stage** (registration §0.6; timing ruling of 2026-10-06): beside the NEG-8
+  result, for each stage, the battery-thermistor readings taken at its cooldown releases, its rise (last reading
+  minus first, in K) and whether its last three readings plateau (within 0.5 K), with every stage flagged
+  `thermal.stage_battery_rise` (rise above 3 K, no plateau) or `thermal.battery_temperature_unmeasured` named.
+  Fixed sentence for a flagged stage: "Stage S warmed by X K without levelling off; the window's NEG-8 screen
+  [passed/failed], and the reported numbers rest on that screen, not on this reading." It changes no number and
+  removes nothing. Until the logging code lands (`scripts/run_campaign.py`, a later lane), the line reads "battery
+  temperature not recorded for this window.
 - **G10:** its result and the redraw cycles that followed (registration §3).
 - **p42:** "The 42-token prefill of the decode workload is shorter than one power record and could not be resolved;
   as registered, no p42 value is reported."
@@ -572,3 +580,7 @@ used by this plan changed.
 - The registration now removes, through the exclusion function, each member the whole-window verdict fails
   (`member.whole_window_member_failure`, registration §6.3). This plan reads exclusions only from `exclusions.json`
   (§2.2), so it needs no other change.
+- §8: a battery-temperature line beside the NEG-8 result, from the diagnostic the timing ruling of 2026-10-06 added
+  (`/Users/edr/night-archive/gate-prune/timing/RULING_fable_cooldown_2026-10-06.md`; registration §0.6). It is
+  disclosure only. The ruling's other changes (cooldown rule, 576-record idle baseline, 60 s settles) change how
+  members are collected, not how this plan computes from them.

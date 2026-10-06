@@ -36,7 +36,7 @@ after a chain of receipts verified, and discarded a whole window when one member
 1–15) to the section that carries it.
 
 **What changed in revision 4.** This revision brings the text into line with the integrated code (branch
-`feat/2026-10-05-gate-prune`, commit `f8164893`). No threshold changed.
+`feat/2026-10-05-gate-prune`, commit `f8164893`). No threshold changed except by the timing ruling of item 6.
 
 1. §5.3: each window starts with 12 reference runs, the NEG-8 corpus, from which a drift bound is derived (§0.12). A
    window in which only 10 or 11 of them succeeded no longer loses that bound: the harvest validates the bound
@@ -54,6 +54,13 @@ after a chain of receipts verified, and discarded a whole window when one member
    is about 15 h after a normal chain ends (§14 Q8).
 5. §1, §4.2, §5.6: the boundary label and the backup destinations are filled in. The backups sit on the same disk
    volume as the collected data, so the disk check at arm counts three copies of the window's bytes there, not one.
+6. §0.3, §0.6, §0.13, §2, §4.6, §5.1, §5.5: the cold-judge timing ruling of 2026-10-06
+   (`/Users/edr/night-archive/gate-prune/timing/RULING_fable_cooldown_2026-10-06.md`). The cooldown now starts the
+   next member at the first 5 s reading at or below twice the previous member's idle baseline (was: 30 s within
+   10%), under a new block-5 policy file; the idle baseline is 576 records, about 75 s (was 750 records, about
+   98 s), with the admission tests unchanged; all eleven settles are 60 s (was 180 s); a battery-temperature
+   diagnostic is added as a disclosed flag; and one 15-minute machinery smoke of the new cooldown is required before
+   the seal. The packs, the identity pins and the sizing output were regenerated.
 
 ## 0. Terms, built in the order they are used
 
@@ -97,9 +104,17 @@ A **member** is one run of one inference request in its own process. Its steps, 
  ...then, before the next member of the same stage starts: cooldown (§0.6)
 ```
 
-- **Idle baseline.** The sampler records the idle machine for the configuration's `idle_seconds`, 75 s in every
-  `_v5` pack (PR #481): about 750 records, which at block 3's cadence spanned 97.7–100.3 s. **Idle admission** then
-  tests whether the machine was quiet during that baseline (the tests are in §0.13).
+- **Idle baseline.** The sampler records the idle machine for a fixed number of power records. The adapter sets
+  that number from the configuration's `idle_seconds` as if a record arrived every 100 ms, the requested interval:
+  records = ceil(`idle_seconds` / 0.1) (`joulewise/adapters/powermetrics.py` `_idle_count`). The sampler in fact
+  delivers a record about every 130.5 ms (130.2–132.1 ms over block 3's 37 idle captures), so the record count, not
+  the setting, fixes how long the baseline lasts. Every `_v5` pack sets `idle_seconds` 57.6: 576 records, which over
+  those 37 captures would have spanned 75.0–75.9 s (median 75.2 s). 575 records would have fallen short of 75 s on
+  11 of the 37. The packs set 75 s until the timing ruling of 2026-10-06 (§0.6); that gave 750 records spanning
+  97.7–98.9 s. **Idle admission** then tests whether the machine was quiet during that baseline (the tests are in
+  §0.13; they did not change). Replayed on the first 75 s of block 3's 37 captures, the unchanged tests changed one
+  verdict, from pass to refuse: the 8B p4096 probe, a workload outside this registration (its CPU-busy 95th
+  percentile rose from 0.469 to 0.576).
 - **Warm-up.** One untimed generation of the same request, so the measured request does not pay first-call costs.
 - **Measured request.** The request whose energy is reported: 11.1–23.6 s long in block 3.
 - **Reducer.** `joulewise/reduce.py`, which turns the raw power records and the event timestamps into the member's
@@ -142,26 +157,70 @@ A **member** is one run of one inference request in its own process. Its steps, 
 
 ### 0.6 Stages, settles and cooldowns
 
+The values in this section follow the cold-judge ruling on block-5 per-member time of 2026-10-06
+(`/Users/edr/night-archive/gate-prune/timing/RULING_fable_cooldown_2026-10-06.md`; its numbers are in
+`judge/judge_checks.json` beside it).
+
 - **Stage.** One ordered list of members that `scripts/run_campaign.py` runs together. Each stage starts with a
-  180 s **settle**: the **chain** (the script that runs a window's stages in order, §0.17) sleeps so the machine
-  returns to idle.
-- **Cooldown.** Between members of a stage the runner waits until processor power has been steady for 30 s (judged
-  in 5 s sub-windows, within 10%) and the OS thermal state is nominal, or until the 300 s **cap**. A member whose
-  cooldown reached the cap is recorded as `cooldown_cap_hit`.
+  60 s **settle**: the **chain** (the script that runs a window's stages in order, §0.17) sleeps so the machine
+  returns to idle. The same 60 s settle precedes the pre calibration, so a window has eleven settles. The runbook's
+  180 s (`docs/phase_2/window_runbook.md` `SETTLE_S=180`) still governs the older windows; the block-5 chain lists
+  the difference among its deviations (`joulewise/b5/chain.py` `SETTLE_S`, `DEVIATIONS`). *Why 60 s:* processor
+  power is back at idle within about 15 s of a decode ending (block 3's sentinel reading, 0.1 W at 9 s), each first
+  member measures its own idle baseline, and the pre-calibration settle starts after a clean dwell of 633–1,477 s at
+  the arm, so a longer wait has nothing left to recover from.
+- **Cooldown.** Between members of a stage the runner reads the idle machine in 5 s readings: each reading is one
+  short sampler capture (50 records requested, about 6.5 s of wall time) reduced to its mean processor power. It
+  starts the next member at the first reading whose mean is at most twice the previous member's idle-baseline mean
+  while the OS thermal state is nominal, or at the 300 s **cap**, whichever comes first. The first member of a stage
+  has no previous member and no cooldown (`first_run_exempt`). A member whose cooldown reached the cap is recorded as
+  `cooldown_cap_hit`. The policy file states the rule as `sustained_window_s` 5.0 (only the last 5 s of readings
+  count, so one reading decides), `coverage_fraction` 0.8 (the readings must cover at least 4 of those 5 s),
+  `tolerance_fraction` 1.0 (the bound is the previous baseline × (1 + 1.0)), `subwindow_s` 5.0, `cap_s` 300 and
+  `require_thermal_nominal` true (`configs/campaign_policies/quiet_mac_p2_b5.json`, §0.13).
+  *Worked example (synthetic).* The previous member's idle baseline averaged 0.037 W (block 3's median), so the
+  bound is 0.074 W. The first reading averages 0.082 W: no start. The second averages 0.045 W with thermal state
+  nominal: the next member starts, about 13 s after the cooldown began.
+  *Why this rule, not block 3's.* Block 3 required 30 s of readings within 10% of the previous baseline. Its waits
+  averaged 53.9 s over 26 cooldowns; the new rule would have averaged about 9.1 s. One wait, 114 s before w2
+  member `g2a-small-p2048-r03` (readings of 0.822, 0.614 and 0.336 W after three readings of 0.034–0.064 W), was a
+  background OS process (Apple Intelligence asset activity in the unified log), which then made that member's idle
+  admission refuse it twice; the new rule would have started it at 8.6 s and admission would have refused it the
+  same way. Over the 28 block-3 small members that had a cooldown, each member's gross energy minus its group mean
+  did not move with the gap from the previous run's end (gaps 79–702 s; slope 0.003 J per 100 s, r = 0.027,
+  residual SD 0.22 J on 60–125 J members). Neither rule measures temperature, so neither bears on heat carried from
+  one 8B member to the next; that is measured by the reference members and the NEG-8 screen (§0.12) and by the
+  diagnostic below.
+- **Battery-temperature diagnostic** (recorded, never a refusal or an exclusion). At each cooldown release the
+  runner reads the battery thermistor (`ioreg -rn AppleSmartBattery`, key `Temperature`, in hundredths of a degree
+  Celsius; no privileges; outside the sampler stream) and writes it into the campaign manifest. At harvest, for each
+  stage: the **rise** is the last reading minus the first, and the stage has a **plateau** when it has at least
+  three readings and its last three lie within 0.5 K of each other (largest minus smallest ≤ 0.5 K). A stage whose
+  rise exceeds 3 K with no plateau is flagged `thermal.stage_battery_rise`; a stage with a cooldown release whose
+  temperature is missing or unreadable is flagged `thermal.battery_temperature_unmeasured`. A one-member stage has
+  no cooldown and no reading. Both are DISCLOSE (§6.8) and are reported beside the window's NEG-8
+  result. If the NEG-8 screen passes, the numbers stand and the kelvin figure sizes future gaps; if it fails, the
+  window is already removed by `neg8.screen_failed`. *Worked example (synthetic).* Readings 30.1, 31.0, 31.9, 32.6,
+  33.3 and 33.9 °C: rise 3.8 K; the last three span 1.3 K, so no plateau; the stage is flagged. The code lands in
+  `scripts/run_campaign.py` in a later lane; until it does, no reading exists and the reference members alone carry
+  the drift check. Adding it changes no exclusion, so it needs no erratum.
 
 ### 0.7 Packs, attempts, windows and the measurement block
 
 - **Pack.** The frozen, hash-pinned set of stages, member configurations and plans for one window. Its **plan tree**
   (`plan_tree.json`) lists the stages in order (`stage_graph`), with each stage's inputs, command line and expected
-  member count. Three packs exist, all with 75 s idle baselines (PR #481):
+  member count. Three packs exist, all with the duration-sized idle baseline of §0.3 (`idle_seconds` 57.6) and the
+  block-5 policy of §0.13:
   **ALPHA** `configs/campaigns/d117_floor_qwen3-1p7b_v5` (Qwen3-1.7B, 4-bit), **BETA**
   `configs/campaigns/d117_floor_qwen3-8b_v5` (Qwen3-8B, 4-bit) and **GAMMA**
-  `configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5` (both models). Their plan-tree SHA-256s at the
-  integration head `a0a4f5a7` are ALPHA `a0076ae7ed8dc89b81a5138ce35d38171946e5e8a30599202f7845e7bcb70938`, BETA
-  `ebd8c160feda7698698eb28b48e18f9f3b3b7df9dacd1d4b7d70a09e49f73d6a`, GAMMA
-  `7cdf1891ab8ddde7b2fcd882c211599bbf2205aeb08b30c9a9da92d749bf5b1e` (unchanged at the gate-prune integration head
-  `f8164893`); the values in force are those in the sealed
-  inventory at H_claim (§11), and GAMMA's changes once more before GAMMA-1 (§2, "Before GAMMA-1 arms").
+  `configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5` (both models). Their plan-tree SHA-256s after the
+  timing lane regenerated them (branch `lane/2026-10-06-timing-policy`, commit `f4cf9047`) are ALPHA
+  `5218c2709274765c706f38766ae68cce30892a673e9ae5cc290701362f615eb1`, BETA
+  `5bab773a481e4a06fae564217b178d8e1d76a5334f99a3b264c1174db692a6e4`, GAMMA
+  `523864e25be4e94424dcc366b4e8ae2719f41d6c222d36679588a0c6aa087ab6`. (At the gate-prune integration head
+  `f8164893`, before the timing lane, they were `a0076ae7…`, `ebd8c160…` and `7cdf1891…`.) The values in force are
+  those in the sealed inventory at H_claim (§11), and GAMMA's changes once more before GAMMA-1 (§2, "Before GAMMA-1
+  arms").
 - **Attempt.** One arm-to-harvest occurrence of one pack, labelled `ALPHA-n`, `BETA-n` or `GAMMA-n`, n = 1, 2, …
 - **Window.** The stretch of machine time an attempt occupies, from its scheduled start t0 (§0.17) to its chain's
   exit.
@@ -251,9 +310,15 @@ printed. GAMMA's two contrasts are its target cells, each over 10 quads.
 
 ### 0.13 Idle admission
 
-Before each member's request, its idle baseline must pass (production policy
-`configs/campaign_policies/quiet_mac_p2_production.json`, SHA-256
-`b0d7b228b88bea717aa9269c103aca760cc36cf05239e0f86c235b4b29665efd`):
+Before each member's request, its idle baseline must pass the block-5 policy
+`configs/campaign_policies/quiet_mac_p2_b5.json`, SHA-256
+`ba0f7b7f1538fe87f6281362efbba4b05f7dff74b4bfd78e84c98b9e8859bc60`. It is the production policy
+`configs/campaign_policies/quiet_mac_p2_production.json` (SHA-256
+`b0d7b228b88bea717aa9269c103aca760cc36cf05239e0f86c235b4b29665efd`) with three cooldown fields changed (§0.6:
+`sustained_window_s` 30 → 5, `tolerance_fraction` 0.1 → 1.0, `coverage_fraction` written out at its default 0.8)
+and its `policy_id` set to `quiet-mac-p2-b5`. The admission tests below and the retry rule are byte-for-byte the
+production policy's. The production file stays unchanged because the older packs and `scripts/run_campaign.py`'s
+default still use it. The tests:
 
 - an **environment guard**: AC power, external power connected, displays asleep, screensaver not running, Low Power
   Mode off, thermal state nominal;
@@ -413,17 +478,26 @@ Each is evidenced by a path and SHA-256 before the point named.
 
 **Before ALPHA-1 arms:**
 
-1. H_claim is fixed: the commit carrying PR #483 (the `_v5` qualification-code integration) and lanes L1–L4, L7 and
-   L8 of the gate-prune plan, merged under the merge gates. `FILL[H-CLAIM]`.
+1. H_claim is fixed: the commit carrying PR #483 (the `_v5` qualification-code integration), lanes L1–L4, L7 and
+   L8 of the gate-prune plan, and the timing lane of 2026-10-06 (block-5 policy, idle records and settles; branch
+   `lane/2026-10-06-timing-policy`), merged under the merge gates. `FILL[H-CLAIM]`.
 2. The #416 pre-arm triple audit has run once at H_claim and every verified BLOCKER is cleared (§9.1).
    `FILL[416-AUDIT-RECORD]`.
 3. This file, the analysis plan, the flag catalog and the sealed inventory are sealed (§12). `FILL[B5-SEAL-RECORD]`.
-4. The three idle-75 packs are at H_claim, and their files are in the sealed inventory.
+4. The three packs as the timing lane regenerated them (§0.7) are at H_claim, and their files are in the sealed
+   inventory.
 5. The measurement checkout (the dedicated clone a window runs from) is fast-forwarded to H_claim with its Python
    environment relocked, and the ledger seed (§4.6 item 6) is installed at its default ledger path.
 6. A mock-runtime dry render of all three packs' chains through the `HAZARD_PACK` driver has passed (every expected
    bundle present, return code 0, only physical seams stubbed), and a desk dry arm with agents alive has refused at
    the census before any action. `FILL[B5-DRY-RENDER-RECORD]`, `FILL[B5-DRY-ARM-RECORD]`.
+7. Before the seal, one machinery smoke of the block-5 cooldown policy has passed (timing ruling item 2): a
+   dummy-label stage of three small members run under `quiet_mac_p2_b5.json` and harvested through
+   `campaign_cooldown_evidence` and `scripts/check_window_provenance.py`. It passes when every cooldown record
+   verifies as `recovered` (or `first_run_exempt`) with a one-reading trace, and the join reports zero
+   `campaign_cooldown_evidence_missing` and zero `cooldown_evidence_unverified`. It takes about 15 minutes. No
+   thermal qualification run is required: the first BETA window measures 8B-after-8B carryover through its
+   reference members (§0.12) and the battery-temperature diagnostic (§0.6). `FILL[B5-COOLDOWN-SMOKE-RECORD]`.
 
 **Before ALPHA-1's harvest:** the harvest program (lane L5) emits `member.whole_window_member_failure` for every member
 the whole-window verdict fails (§6.3, §6.5; the integration head `f8164893` does not emit it yet), has passed its
@@ -642,8 +716,10 @@ Load average, process-name lists and the `corecaptured` spawn count, which revis
    `9033a69906aab1f0ff5724b5a6c2f3efd623512ee49a7048713e2410e701c794`. That digest covers Python 3.13.1, mlx 0.31.2,
    mlx-lm 0.31.3, mlx-metal 0.31.2, numpy 2.5.1, safetensors 0.8.0, tokenizers 0.22.2 and transformers 5.12.1.
    `scripts/write_b5_identity_pins.py` generated the file from the packs' identity units and 24 block-3 reference
-   bundles of the same two models, without loading a model. Its draft SHA-256 at `f8164893` is
-   `039d3e3c79d75a8bbf935d73bab3f94b0bf0ccf9ca3df5f199848f849dda9160`; the seal binds the bytes at H_claim.
+   bundles of the same two models, without loading a model. Its draft SHA-256 after the timing lane
+   (`f4cf9047`) is `9c2ecd89ba4fb88b87a12065754f596e3642206886b2b0913b6febe7644d5322` (`039d3e3c…` at `f8164893`;
+   only the packs' plan-tree and config-inventory digests changed, not the model or runtime pins); the seal binds
+   the bytes at H_claim.
    Two programs compare against these pins. At the arm, the driver passes the file to the model-identity collector
    (`--identity-pins`) when the measurement checkout holds it. At harvest, the harvest reads its archived copy. If
    either finds no pin to compare against, it records `model.identity_unpinned`, which removes the window (§6.5).
@@ -651,7 +727,8 @@ Load average, process-name lists and the `corecaptured` spawn count, which revis
    `d1209f6d5998e4a48ac0dae7ed04a8f6a2c5ec9950d768f0df9ef8839a32dccb`, selection
    `c694c4884ff7f31b677b5ade1ab9710a4797c4529eaad61fba85fea080a88222`, ladder
    `43a77ea99cb2ac1f087f19d2f672444727b3e73a839e5dcfd8db1198d1352885`.
-5. **Policy:** §0.13, `b0d7b228b88bea717aa9269c103aca760cc36cf05239e0f86c235b4b29665efd`.
+5. **Policy:** §0.13, `configs/campaign_policies/quiet_mac_p2_b5.json`,
+   `ba0f7b7f1538fe87f6281362efbba4b05f7dff74b4bfd78e84c98b9e8859bc60`.
 6. **Ledger seed:** block 3's ledger at pin 402 (§0.11), installed at the measurement checkout's default ledger
    path, `<checkout>/runs/calibration_observation_ledger.jsonl`, because the controller's pre-calibration route reads
    that path; the plan writer refuses at the desk if the plan names another. Before each arm the desk runs the
@@ -665,12 +742,12 @@ A change to any item after the seal needs a prospective cold erratum before the 
 
 ### 5.1 The chain
 
-The chain runs its pack's stage graph in block 3's order: the bracket reservation; a 180 s settle; the pre
+The chain runs its pack's stage graph in block 3's order: the bracket reservation; a 60 s settle; the pre
 calibration and its screen; the NEG-8 corpus and the bound derivation; the start triplet; the science stages with
 the pack's interior references in their places; the end triplet; the post calibration and a record of the bracket
-session's status. Every collection stage starts with its own 180 s settle.
+session's status. Every collection stage starts with its own 60 s settle (§0.6; block 3 used 180 s).
 
-- **The only stops**, all before member 1 (about 15 min into the chain): a failed reservation, a failed pre
+- **The only stops**, all before member 1 (about 13 min into the chain): a failed reservation, a failed pre
   calibration capture, and a pre fiducial bound above the pre screen 0.036462861644980 s
   (`instrument.precal_screen_failed`). Outside the chain, the driver stops it on `disk.low`, on a non-clean census
   and at the window deadline (§5.5).
@@ -747,13 +824,15 @@ driver holds nothing after it. The supervising watchdog does not yet release the
   |f| ≤ 3.6306 ppm.
 - **Programmed span.** The programmed span is the chain's length if every member takes its longest allowed path.
   The rule keeps block 4's conventions and uses block 5's chain:
-  - span = (1 + collection stages) × 180 s settle + the stages' 20 s arm countdowns + the pre and post calibration
+  - span = (1 + collection stages) × 60 s settle + the stages' 20 s arm countdowns + the pre and post calibration
     pair (770 s) + the bound derivation (60 s) + the sum of member allowances + stage custody + the terminal shutdown
     (300 s);
   - a **member allowance** is load + warm-up + prefill + forced decode + the cooldown at its 300 s cap + both
     idle-admission attempts (275 s: two attempts of 110 s each plus guards, against an observed attempt maximum of
-    103.6 s at 75 s idle). That is 595 s for a 1.7B member and 619 s for an 8B member. NEG-8 and reference members
-    are charged as 1.7B members;
+    103.6 s at the former 750 records). That is 595 s for a 1.7B member and 619 s for an 8B member. NEG-8 and
+    reference members are charged as 1.7B members. These allowances come from block 4's committed source, which
+    predates the 576-record idle baseline (§0.3); an attempt now takes about 83 s (75 s of capture plus block 3's
+    8 s of attempt overhead), so the allowance over-covers it and is kept;
   - **stage custody** (the bookkeeping time around members) is 180 s per collection stage, plus 77 s per member
     (45 s reduction, 32 s sampler start and wind-down), plus 2 × 240 s bracket-writer custody, 300 s reservation and
     120 s terminal custody.
@@ -761,26 +840,30 @@ driver holds nothing after it. The supervising watchdog does not yet release the
   arm's allowance: the dwell cap of 2700 s plus the census, reads, network-time OFF, collectors and cadence probe.
 - **`B5-SIZING-OUTPUTS`** (filled; draft values, re-derived and sealed at H_claim):
   `configs/campaigns/v5_claim_25g83/sizing_b5.json`, schema `joulewise.b5_sizing.v1`, SHA-256
-  `9d16edfe6c7f508f5908d1222326df5acadf1610ac2a472cb069db33652bee1f` at `f8164893` (status `UNSEALED_DRAFT`).
+  `b31a27b5433306f08aa22ff6eec8842b74d085410816fc60f7f72ae22b935edb` after the timing lane (`f4cf9047`; it was
+  `9d16edfe…` at `f8164893`) (status `UNSEALED_DRAFT`).
   `scripts/size_b5_window.py` writes it from block 4's committed sizing source
   (`configs/campaigns/v5_qualification_25g83/sizing_sources/sizing_source_v2.json`, SHA-256
   `f414301cd0328236f9309962b60ff4635026dac973ca3b0ce564b677c47baa81`) and from the packs' stage graphs, order
   manifests and configs. `--check` reproduces the file byte for byte. The program also refuses unless its
-  arithmetic reproduces block 4's committed 22,494 s span and 25,800 s window. Each window plan reads
+  arithmetic reproduces block 4's committed 22,494 s span and 25,800 s window. Block 4's source names four GAMMA
+  configs to fix which model is 1.7B-class and which 8B; the timing lane's regeneration changed their bytes (their
+  `idle_seconds` and plan tag), so the program reads them at the bytes GAMMA's plan tree now records and lists them
+  under `class_map.superseded_block4_configs`; bytes recorded by neither still refuse. Each window plan reads
   `/packs/<label>/programmed_span_s` and `/packs/<label>/T_stream_max_s` from it. GAMMA's pack changes before GAMMA-1
   (§2), so GAMMA's row is re-derived then.
 
   | Pack | Members, 1.7B-class / 8B | Programmed span | `WINDOW_MAX_S` | Expected chain (below) |
   |---|---|---|---|---|
-  | ALPHA | 119 / 0 | 85,978 s (23.9 h) | 89,280 s (24.8 h) | 32,264 s (9.0 h) |
-  | BETA | 19 / 100 | 88,378 s (24.5 h) | 91,680 s (25.5 h) | 33,314 s (9.3 h) |
-  | GAMMA | 61 / 40 | 74,842 s (20.8 h) | 78,180 s (21.7 h) | 28,427 s (7.9 h) |
+  | ALPHA | 119 / 0 | 84,658 s (23.5 h) | 87,960 s (24.4 h) | 30,944 s (8.6 h) |
+  | BETA | 19 / 100 | 87,058 s (24.2 h) | 90,360 s (25.1 h) | 31,994 s (8.9 h) |
+  | GAMMA | 61 / 40 | 73,522 s (20.4 h) | 76,860 s (21.4 h) | 27,107 s (7.5 h) |
 
 - **Why the deadline is about 2.7 times the expected chain.** The rule charges every member, at once, both worst
   cases: the cooldown runs to its cap and idle admission needs its second attempt. *Worked decomposition, ALPHA:*
   119 members × 595 s = 70,805 s. Of that, 35,700 s is every member's cooldown at its 300 s cap and 32,725 s is
   every member's two admission attempts. Per-member custody adds 119 × 77 = 9,163 s. Settles, countdowns,
-  calibration, derivation, stage custody and shutdown add the other 6,010 s, for a span of 85,978 s. Block 3 measured
+  calibration, derivation, stage custody and shutdown add the other 4,690 s, for a span of 84,658 s. Block 3 measured
   a start-to-start member cycle, which already includes cooldown and custody, with a median of 236.5 s and a maximum
   of 274.9 s. Each member here is charged 672 s (595 + 77).
 - **Is that right? As a deadline, yes.** A chain stopped at its deadline loses its post calibration, and so the
@@ -794,8 +877,8 @@ driver holds nothing after it. The supervising watchdog does not yet release the
   exists. While any plan is active it launches no **headless agent session**, meaning a model session that the
   watchdog starts with no person present, which is how unattended work resumes after a window. The watchdog records
   this hold as `FENCED`. The dead-man job, the second scheduled job that cleans up if the driver dies, is timed from
-  the same instant. ALPHA's chain normally ends 9.2–9.8 h after t0 (an 11–47 min arm plus a 9.0 h chain), but the
-  fence holds until 24.9 h after t0. That leaves about 15 h in which the machine is idle and no headless session may
+  the same instant. ALPHA's chain normally ends 8.8–9.4 h after t0 (an 11–47 min arm plus an 8.6 h chain), but the
+  fence holds until 24.5 h after t0. That leaves about 15 h in which the machine is idle and no headless session may
   run the harvest or arm BETA. Across the three windows, that is about 44 h.
 - **Fix (code, before ALPHA-1; §14 Q8).** End a collected window's span at the driver's terminal evidence:
   `chain.exited`, the driver's terminal `result.json`, `courier.sent` (the marker that the driver's structure-only
@@ -805,12 +888,16 @@ driver holds nothing after it. The supervising watchdog does not yet release the
   above costs only the time to notice one. Shrinking the size is not proposed: it would save hang-detection time
   only, and every cut would risk stopping a usable window.
 - **Expected chain time** (planning only; it gates nothing). From block 3 at 75 s idle: median start-to-start member
-  cycle 236.5 s, plus 10.5 s for an 8B member; per collection stage 180 s settle + 39 s head + 62 s tail; fixed
-  180 s settle + 770 s calibration pair + 60 s bound derivation + 300 s terminal (scratch `sizing_v2.json`, SHA-256
+  cycle 236.5 s, plus 10.5 s for an 8B member; per collection stage 60 s settle + 39 s head + 62 s tail; fixed
+  60 s settle + 770 s calibration pair + 60 s bound derivation + 300 s terminal (scratch `sizing_v2.json`, SHA-256
   `6a82745f47b40c8aa1ea6aefe2c45c2d4cce2b7a7e65d114165057e64fae00de`). Each pack has 10 collection stages.
-  - ALPHA: 1,310 + 10 × 281 + 119 × 236.5 = 32,264 s ≈ 9.0 h.
-  - BETA: 1,310 + 2,810 + 19 × 236.5 + 100 × 247.0 = 33,314 s ≈ 9.3 h.
-  - GAMMA: 1,310 + 2,810 + 61 × 236.5 + 40 × 247.0 = 28,427 s ≈ 7.9 h.
+  - ALPHA: 1,190 + 10 × 161 + 119 × 236.5 = 30,944 s ≈ 8.6 h.
+  - BETA: 1,190 + 1,610 + 19 × 236.5 + 100 × 247.0 = 31,994 s ≈ 8.9 h.
+  - GAMMA: 1,190 + 1,610 + 61 × 236.5 + 40 × 247.0 = 27,107 s ≈ 7.5 h.
+  The member cycle above is block 3's, measured with 750 idle records and block 3's cooldown rule. The timing
+  ruling projects, from replays of block-3 traces, that each ALPHA window saves about 1.4 h through the cooldown
+  rule, 0.8 h through the shorter idle capture and, once a later lane halves the software time between members,
+  0.7 h more; these are projections, not measurements, and the table does not include them.
   Each window adds its 11–47 min arm. (The gate-prune plan's 9.1, 9.4 and 8.0 h include a 360 s launch allowance that
   is no longer inside the chain.)
 - **Deadline stop.** A chain still running at t0 + `WINDOW_MAX_S` is stopped by the driver; the window then has no
@@ -821,7 +908,7 @@ driver holds nothing after it. The supervising watchdog does not yet release the
 - **Block duration.** Assume every window is claim-usable on its first attempt. If the watchdog releases each window
   at its chain's exit (the fix above), the block takes about 35–45 h, including desk gaps and any frequency redraw
   before BETA. With the watchdog as it is at `f8164893`, each window holds headless work off until
-  t0 + `WINDOW_MAX_S` + 300 s. That is 89,580 + 91,980 + 78,480 s ≈ 72 h for the three windows, before desk gaps.
+  t0 + `WINDOW_MAX_S` + 300 s. That is 88,260 + 90,660 + 77,160 s ≈ 71 h for the three windows, before desk gaps.
 
 ### 5.6 Disk between windows
 
@@ -875,7 +962,7 @@ are always UNCLASSIFIED, so they always block the release event until a person r
 | PHYSICS_IN_SPAN | §6.4 | EXCLUDE_MEMBER |
 | ROSTER | §6.7 | EXCLUDE_MEMBER (window-level roster failures: EXCLUDE_WINDOW) |
 | RECORDS | receipts, lineage formalities, attempt history, pin ledger, provenance digests, naming, notices, missing journals | DISCLOSE (one exception: source bytes changed during the harvest, EXCLUDE_WINDOW) |
-| DIAGNOSTIC | network-time output, clock steps and frequency changes outside any span, `kernel_task` share, G10, s1-structural checks | DISCLOSE |
+| DIAGNOSTIC | network-time output, clock steps and frequency changes outside any span, `kernel_task` share, G10, s1-structural checks, the battery-temperature rise across a stage (§0.6) | DISCLOSE |
 
 ### 6.3 Member exclusions: validity
 
@@ -1068,7 +1155,8 @@ otherwise, beside the `battery.unmeasured` that then removes the member); `batte
 accumulator rule could not run on an interval; the publication rule still applies); clock steps and frequency
 changes outside any span; `disk.low` (its effect arrives through `calibration.no_bracket`); the desk's ledger
 readiness checks before an arm (`calibration.ledger_not_ready`, `calibration.ledger_readiness_unmeasured`); the G10
-result; the s1-structural diagnostics.
+result; the s1-structural diagnostics; the battery-temperature diagnostic of §0.6 (`thermal.stage_battery_rise`,
+`thermal.battery_temperature_unmeasured`), reported beside the window's NEG-8 result.
 
 ### 6.9 Harvest thresholds
 
@@ -1260,18 +1348,19 @@ sensitivity line of analysis plan §8.
 | Sealed inventory | `sealed_inventory.json` filled at H_claim | Seal |
 | Dry render, dry arm | `B5-DRY-RENDER-RECORD`, `B5-DRY-ARM-RECORD` | Before ALPHA-1 arms |
 | Audit, seats | `416-AUDIT-RECORD`, `416-SEATS`, `B5-SEAL-SEATS` | Seats at seal; audit before ALPHA-1 |
-| Sizing | `B5-SIZING-OUTPUTS`: filled in revision 4 with draft values (§5.5); re-derived and pinned at H_claim | Seal |
+| Sizing | `B5-SIZING-OUTPUTS`: filled in revision 4 with draft values, re-derived after the timing lane (§5.5); pinned at H_claim | Seal |
+| Cooldown smoke | `B5-COOLDOWN-SMOKE-RECORD` (§2 item 7) | Seal |
 | Disk | `BACKUP-DESTINATIONS`: filled in revision 4 (§5.6) | Seal |
-| Identity pins | `identity_pins.json` (§4.6 item 3): draft at `f8164893`; pinned at H_claim | Seal |
+| Identity pins | `identity_pins.json` (§4.6 item 3): draft after the timing lane; pinned at H_claim | Seal |
 | Blinding | `B5-BLIND-CUSTODY-MAP`, `B5-RELEASE-EVENT` | Map at seal; release after the block closes |
 | Boundary | `BOUNDARY-LABEL`: filled in revision 4 (§1) | Seal |
 | Attribution floor | `ATTRIBUTION-FLOOR-BINDING` | Seal |
 | Seal | `B5-SEAL-RECORD` | Seal |
 
 Still open after revision 4: `H-CLAIM`, `416-AUDIT-RECORD`, `416-SEATS`, `B5-SEAL-SEATS`, `B5-SEAL-RECORD`,
-`B5-DRY-RENDER-RECORD`, `B5-DRY-ARM-RECORD`, `B5-BLIND-CUSTODY-MAP`, `B5-RELEASE-EVENT` and
-`ATTRIBUTION-FLOOR-BINDING`. None can be filled from committed bytes: each names a commit, a record or a ruling that
-does not exist yet.
+`B5-COOLDOWN-SMOKE-RECORD`, `B5-DRY-RENDER-RECORD`, `B5-DRY-ARM-RECORD`, `B5-BLIND-CUSTODY-MAP`,
+`B5-RELEASE-EVENT` and `ATTRIBUTION-FLOOR-BINDING`. None can be filled from committed bytes: each names a commit, a
+record or a ruling that does not exist yet.
 
 Removed from revision 2 because the mechanism they bound is retired or now measured: `V5-PACK-REGEN-RECORD` and
 `V5-IDLE-SECONDS` (done, PR #481), `B4-*`, `L10-A-RATIFICATION-RECORD`, `Q110-CLOSURE`, `A6-AT-H-CLAIM`,
@@ -1280,8 +1369,10 @@ Removed from revision 2 because the mechanism they bound is retired or now measu
 (§7.1), `CLAIM-HARVEST-CLI` (`scripts/harvest_b5_window.py`), `G3-CLAIM-ARGS` (the harvest runs G3 on GAMMA; floor
 packs have no analysis manifest), `ED-PREDICATE` and `ED-DISPOSITION` (§6.4 contention), `SPOTLIGHT-EXCLUSION` and
 the disk ledger FILLs (measured by the contention and disk hazards), `B5-ATTEMPT-BUDGET` (attempts are planned, never
-capped), `LONGEST-STREAM-SIZING`, `SHORTEST-STREAM-SIZING`, `REF-STREAM-FLOOR` (T_stream_max is committed; the 75 s
-idle gives at least 97.5 s of idle stream, above the 60 s minimum), `COURIER-BLINDNESS-CAMPAIGN` (§8 item 2), and the
+capped), `LONGEST-STREAM-SIZING`, `SHORTEST-STREAM-SIZING`, `REF-STREAM-FLOOR` (T_stream_max is committed; the
+576 idle records give about 75 s of idle stream at the observed cadence, and at least 57.6 s even if every record
+took only the requested 100 ms; every member then adds its warm-up and request, at least 117 more records in block 3,
+so each stream exceeds the 60 s minimum of the clock fit), `COURIER-BLINDNESS-CAMPAIGN` (§8 item 2), and the
 battery evidence map (§9.2).
 
 ## 14. Open questions (each names where it goes)
@@ -1360,3 +1451,12 @@ For revision 4, the author read the code at the gate-prune integration head `f81
 
 The author also read the block-3 timing summary that §5.5 cites (scratch `sizing_v2.json`, member-cycle timing
 only). The catalog was validated with `joulewise.flags.catalog.load_catalog`. No energy or power value was read.
+
+For the timing edits of revision 4 (item 6 of "What changed in revision 4"), the author read the cold-judge ruling
+and the two council reports it judged (`/Users/edr/night-archive/gate-prune/timing/`: the ruling, `council-sol.md`,
+`council-opus/council_opus_summary.json`, `timing_analysis.json`); the adapter's record-count rule
+(`powermetrics.py` `_idle_count`), the controller's cooldown release loop, the clock fit's 60 s minimum
+(`uncertainty_evidence.py` `MIN_RATE_FIT_BASELINE_S`) and the idle trace's three-bandwidth rule
+(`idle_dependence.py`); and, from block 3's 37 idle captures, the record durations only, to choose 576 records.
+The block-3 power figures quoted in §0.3 and §0.6 are the ruling's and the councils' (block 3 is not a claim
+window). No `_v5` claim byte exists.

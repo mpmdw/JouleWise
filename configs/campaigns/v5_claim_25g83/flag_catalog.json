@@ -791,6 +791,13 @@
       "klass": "NUMBER",
       "note": "The bundle's metadata.json run_id differs from its directory. A misfiled bundle already fails the per-member config check; this covers a bundle whose own records disagree about which member it is. A kept member needs one identity in every record a later program may key on, or one energy could count under two units or the wrong quad position. Emitter class REPRESENTATION, restated NUMBER here (registration 6.7)."
     },
+    "thermal.battery_temperature_unmeasured": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "PHYSICS",
+      "note": "A cooldown release in the stage has no readable battery-thermistor reading, so the stage's rise was not fully measured; the reference members and the NEG-8 screen still carry the drift check (registration 0.6)."
+    },
     "thermal.os_level_nonzero": {
       "blinding": "STRUCTURE",
       "effect": "EXCLUDE_MEMBER",
@@ -804,6 +811,13 @@
       "family": "PHYSICS_IN_SPAN",
       "klass": "PHYSICS",
       "note": "The member's own powermetrics records show elevated thermal pressure."
+    },
+    "thermal.stage_battery_rise": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "PHYSICS",
+      "note": "Battery thermistor read at each cooldown release: the stage's last reading minus its first exceeds 3 K and its last three readings do not lie within 0.5 K of each other (no plateau). Reported beside the window's NEG-8 result; never excludes (registration 0.6, timing ruling 2026-10-06). Emitter lands with the run_campaign.py logging lane."
     },
     "thermal.unmeasured": {
       "blinding": "STRUCTURE",
@@ -845,7 +859,7 @@
     "aggregate_disclosures": "whole_window.not_passed and g3.recompute_failed are DISCLOSE because they fail on any single member's failure. Their window-level parts are neg8.screen_failed (emitted by the harvest, with the collected-subset re-screen) and calibration.bracket_acceptance_failed; their member-level part is member.whole_window_member_failure.",
     "authority": "registration_block5.md section 6 states these rules in words; this file is normative for each code's effect.",
     "restated_classes": "roster.run_id_mismatch (emitter REPRESENTATION, restated NUMBER here) is the one restatement; its note says why. calibration.ledger_snapshot_refused now keeps its emitter's class, NUMBER.",
-    "status": "DRAFT, NOT SEALED. Revision 4, 2026-10-06 (registration-sync side lane; revision 3 is commit 71c91d74). Sealed with registration_block5.md, analysis_plan_block5.md and sealed_inventory.json by one cold gate (registration 12). Rehearsal round-1 additions, 2026-10-06 (gate-prune fix lane): roster.duplicate_run_id and roster.creation_unplaced.",
+    "status": "DRAFT, NOT SEALED. Revision 4, 2026-10-06 (registration-sync side lane; revision 3 is commit 71c91d74). Sealed with registration_block5.md, analysis_plan_block5.md and sealed_inventory.json by one cold gate (registration 12). Rehearsal round-1 additions, 2026-10-06 (gate-prune fix lane): roster.duplicate_run_id and roster.creation_unplaced. Timing-ruling additions, 2026-10-06 (timing lane): thermal.stage_battery_rise and thermal.battery_temperature_unmeasured, both DISCLOSE.",
     "unclassified": "A code not listed here is UNCLASSIFIED: it blocks only the release event until classified blind by a cold erratum (registration 7.2). records.malformed_flag and collector.unmeasured are deliberately absent so that they always block release until read."
   },
   "rules": {
