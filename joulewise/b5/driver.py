@@ -486,6 +486,9 @@ def production_seams(repo_root: Path) -> Seams:
                 "--session-id", window["bracket_session_id"]]
         if window["pack"]["pack_sha256"]:
             argv += ["--expected-pack-tree-sha256", window["pack"]["pack_sha256"]]
+        calibration_plan = Path(window["pack"]["pack_root"]) / "calibration_plan.json"
+        if calibration_plan.is_file():
+            argv += ["--calibration-plan", str(calibration_plan)]
         for flag, relative in (("--catalog", "configs/campaigns/v5_claim_25g83/flag_catalog.json"),
                                ("--sealed-inventory", "configs/campaigns/v5_claim_25g83/sealed_inventory.json")):
             if (measurement / relative).is_file():
