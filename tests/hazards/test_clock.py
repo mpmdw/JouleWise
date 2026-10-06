@@ -146,6 +146,18 @@ class DwellResidualTests(unittest.TestCase):
         self.assertEqual(verdict.status, base.REFUSE)
         self.assertIn("boot session changed", verdict.reasons[0])
 
+    def test_one_dwell_sample_with_read_skew_above_1ms_refuses(self):
+        clocks = FakeClocks()
+        series = dwell(clocks, 30)
+        samples = [dict(item, anchor=dict(item["anchor"])) for item in series.values["samples"]]
+        samples[12]["anchor"]["read_skew_ns"] = 1_000_001
+        changed = clock.series(samples, boot_start=BOOT_UUID, boot_end=BOOT_UUID,
+                               started=series.started, finished=series.finished)
+        self.assertEqual(clock.judge(series, LIMITS).status, base.PASS)
+        verdict = clock.judge(changed, LIMITS)
+        self.assertEqual(verdict.status, base.REFUSE)
+        self.assertEqual(verdict.reasons, ("anchor read skew 1000001 ns exceeds 1000000 ns",))
+
     def test_failed_sample_makes_the_dwell_unmeasured(self):
         clocks = FakeClocks()
         reader = FrequencyReader(clocks)
@@ -200,6 +212,63 @@ class WindowEventTests(unittest.TestCase):
             clocks.sleep(1.0)
         codes = [event["code"] for event in clock.window_events(samples)]
         self.assertEqual(codes, ["clock.frequency_changed"])
+
+    def journal_with_failure(self, step_ns: int, *, fail_anchor: bool):
+        """1 Hz samples, f every 5 s; at 100.5 s the wall clock steps by ``step_ns``
+        and the sample at 100 s fails (its f read, or its anchor read too)."""
+
+        clocks = FakeClocks()
+        clocks.step_at(100.5, step_ns)
+        reader = FrequencyReader(clocks)
+        ctx = base.Context(run=boot_runner(), clocks=clocks)
+        samples = []
+        for second in range(200):
+            if second == 100:
+                reader.fail = True
+                item = clock.sample(ctx, frequency_reader=reader)  # anchor read, then f fails
+                reader.fail = False
+                self.assertIsNotNone(item["error"])
+                if fail_anchor:
+                    item["anchor"] = None
+                samples.append(item)
+            else:
+                samples.append(clock.sample(ctx, frequency_reader=reader if second % 5 == 0 else None))
+            clocks.sleep(1.0)
+        return samples
+
+    def test_step_across_a_failed_f_read_is_still_seen(self):
+        # Review finding: a 2 ms step (inside the 1-5 ms band the per-member
+        # anchor bound does not catch) straddling a sample whose f read failed.
+        samples = self.journal_with_failure(2_000_000, fail_anchor=False)
+        self.assertEqual([event["code"] for event in clock.window_events(samples)], ["clock.step"])
+        mid = samples[100]["finished"]["monotonic_ns"]
+        span = {"monotonic_ns": [mid - 3 * 10**9, mid + 3 * 10**9]}
+        self.assertEqual([f["code"] for f in clock.span_findings(samples, span)],
+                         ["clock.step_overlap"])
+
+    def test_step_across_a_failed_anchor_read_is_compared_across_the_gap(self):
+        samples = self.journal_with_failure(2_000_000, fail_anchor=True)
+        events = clock.window_events(samples)
+        self.assertEqual([event["code"] for event in events], ["clock.step"])
+        a, b = events[0]["interval"]["monotonic_ns"]
+        self.assertEqual(a, samples[99]["started"]["monotonic_ns"])
+        self.assertEqual(b, samples[101]["finished"]["monotonic_ns"])
+        # a 2 s gap is under the 3 s coverage bound: no clock.unmeasured
+        span = {"monotonic_ns": [a - 10**9, b + 10**9]}
+        self.assertEqual([f["code"] for f in clock.span_findings(samples, span)],
+                         ["clock.step_overlap"])
+
+    def test_no_step_no_event_across_failed_samples(self):
+        clocks = FakeClocks()
+        reader = FrequencyReader(clocks)
+        ctx = base.Context(run=boot_runner(), clocks=clocks)
+        samples = []
+        for second in range(120):
+            reader.fail = second in (40, 41, 77)
+            samples.append(clock.sample(ctx, frequency_reader=reader if second % 5 == 0 or reader.fail
+                                        else None))
+            clocks.sleep(1.0)
+        self.assertEqual(clock.window_events(samples), [])
 
     def test_gap_in_the_journal_is_unmeasured(self):
         clocks = FakeClocks()

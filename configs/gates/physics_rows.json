@@ -3728,7 +3728,8 @@
    "line_at_base": 1727,
    "mapping": "retired proxy, replaced by contention",
    "module": "contention",
-   "test": "tests/hazards/test_contention.py::DwellTests::test_fseventsd_184_and_mediaanalysisd_114_percent_refuse_at_2700_s"
+   "note": "A host-wide load average counts every runnable thread, short-lived ones included. Its replacement has two parts. The per-process rule (5% of one core, plus a process that exits after an interval above the limit) refuses at the dwell. The host aggregate (host_processor_info busy CPU outside the measurement tree) is journaled in every dwell and window interval. That aggregate refuses at the dwell only once the window plan registers aggregate_cpu_limit_s_per_s, and none is registered yet. Before each member, the core's idle admission judges aggregate CPU busy and processor power, unchanged.",
+   "test": "tests/hazards/test_contention.py::HostAggregateTests::test_hidden_work_is_journaled_and_refuses_only_under_a_registered_limit"
   },
   {
    "checks": "1-minute host-wide load average from sysctl vm.loadavg must be <= 2.0 at t0 (legacy/pack path only)",
@@ -3744,7 +3745,8 @@
    "line_at_base": 1733,
    "mapping": "retired proxy, replaced by contention",
    "module": "contention",
-   "test": "tests/hazards/test_contention.py::DwellTests::test_fseventsd_184_and_mediaanalysisd_114_percent_refuse_at_2700_s"
+   "note": "A host-wide load average counts every runnable thread, short-lived ones included. Its replacement has two parts. The per-process rule (5% of one core, plus a process that exits after an interval above the limit) refuses at the dwell. The host aggregate (host_processor_info busy CPU outside the measurement tree) is journaled in every dwell and window interval. That aggregate refuses at the dwell only once the window plan registers aggregate_cpu_limit_s_per_s, and none is registered yet. Before each member, the core's idle admission judges aggregate CPU busy and processor power, unchanged.",
+   "test": "tests/hazards/test_contention.py::HostAggregateTests::test_hidden_work_is_journaled_and_refuses_only_under_a_registered_limit"
   },
   {
    "checks": "pmset -g therm parse and exit code",
@@ -3792,7 +3794,8 @@
    "line_at_base": 1799,
    "mapping": "retired proxy, replaced by contention",
    "module": "contention",
-   "test": "tests/hazards/test_contention.py::DwellTests::test_fseventsd_184_and_mediaanalysisd_114_percent_refuse_at_2700_s"
+   "note": "corecaptured respawning is short-lived process work that a ps difference cannot name. It is counted in the journaled host aggregate (host_processor_info busy CPU outside the measurement tree). That aggregate refuses at the dwell only once the window plan registers aggregate_cpu_limit_s_per_s, and none is registered yet. The respawn count itself is not read. Before each member, the core's idle admission judges aggregate CPU busy and processor power, unchanged.",
+   "test": "tests/hazards/test_contention.py::HostAggregateTests::test_hidden_work_is_journaled_and_refuses_only_under_a_registered_limit"
   },
   {
    "checks": "the per-process CPU sampler raised",
@@ -6177,7 +6180,8 @@
    "line_at_base": 101,
    "mapping": "retired proxy, replaced by contention",
    "module": "contention",
-   "test": "tests/hazards/test_contention.py::DwellTests::test_fseventsd_184_and_mediaanalysisd_114_percent_refuse_at_2700_s"
+   "note": "A host-wide load average counts every runnable thread, short-lived ones included. Its replacement has two parts. The per-process rule (5% of one core, plus a process that exits after an interval above the limit) refuses at the dwell. The host aggregate (host_processor_info busy CPU outside the measurement tree) is journaled in every dwell and window interval. That aggregate refuses at the dwell only once the window plan registers aggregate_cpu_limit_s_per_s, and none is registered yet. Before each member, the core's idle admission judges aggregate CPU busy and processor power, unchanged.",
+   "test": "tests/hazards/test_contention.py::HostAggregateTests::test_hidden_work_is_journaled_and_refuses_only_under_a_registered_limit"
   },
   {
    "checks": "First line of pmset -g batt contains 'AC Power'.",

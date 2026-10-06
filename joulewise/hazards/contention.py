@@ -34,21 +34,46 @@ per call against 9.6 ms with ``ucomm`` (measured 10-05), and the monitor's
 whole budget is 0.5 % of one core.  The column layout is the one
 ``parse_ps`` reads.
 
-Known blind spots: a process that starts and exits between two snapshots is
-invisible to a ps difference; one that exits inside an interval has no
-measurable delta and is listed as ``unaccounted``.  An unprivileged ``ps -A``
-on this Mac does not list ``kernel_task`` (pid 0; checked 10-05), so its
-share is journaled as None; the include/exclude rule applies when it is
-listed.
+Work a ps difference cannot name.  A process that starts and exits between
+two snapshots is invisible to it, and one that exits inside an interval has
+no closing counter (it is listed as ``unaccounted``).  Two measurements cover
+that work:
+
+- **Exited above the limit.**  A process above the limit in one interval
+  that exits inside the next makes that next interval dirty too, at its
+  previous rate (``exited_over_limit``).  It ran for some part of the
+  interval, and no counter says it slowed down.
+- **The host term.**  Every snapshot also reads the host's cumulative CPU
+  ticks in process (``host_processor_info``, 100 ticks per CPU-second; about
+  14 us, no child).  Each interval journals ``host_busy_cpu_s_per_s`` (user +
+  system + nice over every logical CPU), ``outside_aggregate_cpu_s_per_s`` =
+  host busy minus the measurement tree (and minus a listed, excluded
+  ``kernel_task``), and ``unattributed_cpu_s_per_s`` = host busy minus every
+  process ps measured.  The aggregate term counts the short-lived and many
+  small processes that the old load-average proxies saw.  The dwell judges it
+  only when the window plan registers ``aggregate_cpu_limit_s_per_s``.  No
+  value is registered yet: the idle aggregate of this Mac has not been
+  measured under a launchd job, and a threshold sized without that number
+  could make every dwell refuse.  ALPHA-1's journal measures it.  In the
+  window the aggregate is journaled, never judged: it includes the kernel's
+  own work for the request, which an unprivileged ``ps -A`` cannot separate,
+  because it does not list ``kernel_task`` (pid 0; checked 10-05).  Before
+  each member, the core's idle admission judges the aggregate (CPU busy ratio
+  and processor power, unchanged).
+
+The kernel_task include/exclude rule applies when ps lists it.
 """
 
 from __future__ import annotations
 
+import ctypes
 import dataclasses
 import gzip
 import math
+import os
+import sys
 from datetime import datetime
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from typing import Any
 
 from joulewise import prewindow, quiet_admission
@@ -69,8 +94,94 @@ DEFAULT_THRESHOLDS: dict[str, Any] = {
     "clean_s": prewindow.MIN_CLEAN_DWELL_S,                     # 600
     "cap_s": prewindow.DEFAULT_TIMEOUT_S,                       # 2700
     "window_interval_s": 10,
+    # None: the host aggregate is journaled at the dwell, not judged (module
+    # docstring).  A registered number makes an interval dirty above it.
+    "aggregate_cpu_limit_s_per_s": None,
 }
 ARM_THRESHOLD_KEYS = ("cpu_limit_s_per_s", "interval_s", "clean_s", "cap_s")
+AGGREGATE_KEY = "aggregate_cpu_limit_s_per_s"
+
+HostReader = Callable[[], Sequence[Sequence[int]]]
+CPU_STATES = ("user", "system", "idle", "nice")  # host_processor_info order
+PROCESSOR_CPU_LOAD_INFO = 2
+TICK_WRAP = 1 << 32  # natural_t per-CPU counters
+
+
+def aggregate_limit(thresholds: Mapping[str, Any]) -> float | None:
+    """The registered aggregate limit, or None when the plan registers none."""
+
+    value = thresholds.get(AGGREGATE_KEY)
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not value > 0:
+        raise ValueError(f"{MODULE} threshold {AGGREGATE_KEY} must be a positive number or null")
+    return float(value)
+
+
+# --------------------------------------------------------------------------
+# Host CPU ticks (in process)
+
+
+_HOST: dict[str, Any] = {}
+
+
+def _host_functions() -> dict[str, Any]:
+    if not _HOST:
+        libc = ctypes.CDLL("/usr/lib/libSystem.B.dylib")
+        libc.mach_host_self.restype = ctypes.c_uint
+        libc.host_processor_info.argtypes = [
+            ctypes.c_uint, ctypes.c_int, ctypes.POINTER(ctypes.c_uint),
+            ctypes.POINTER(ctypes.POINTER(ctypes.c_int)), ctypes.POINTER(ctypes.c_uint)]
+        libc.host_processor_info.restype = ctypes.c_int
+        libc.vm_deallocate.argtypes = [ctypes.c_uint, ctypes.c_size_t, ctypes.c_size_t]
+        libc.vm_deallocate.restype = ctypes.c_int
+        _HOST.update(libc=libc, host=libc.mach_host_self(),
+                     task=ctypes.c_uint.in_dll(libc, "mach_task_self_").value)
+    return _HOST
+
+
+def read_host_cpu() -> list[list[int]]:
+    """Cumulative ticks per logical CPU, ``[[user, system, idle, nice], ...]``.
+
+    ``host_processor_info(PROCESSOR_CPU_LOAD_INFO)``: read-only, unprivileged,
+    in process.  One tick is 1/100 s (``sysconf(_SC_CLK_TCK)``; checked live
+    10-05: 99.5 ticks per CPU per second over 5 s on 16 CPUs).  Raises OSError
+    off macOS or on a Mach error.
+    """
+
+    if sys.platform != "darwin":
+        raise OSError("host_processor_info requires macOS")
+    functions = _host_functions()
+    count = ctypes.c_uint()
+    info = ctypes.POINTER(ctypes.c_int)()
+    words = ctypes.c_uint()
+    status = functions["libc"].host_processor_info(
+        functions["host"], PROCESSOR_CPU_LOAD_INFO, ctypes.byref(count), ctypes.byref(info),
+        ctypes.byref(words))
+    if status != 0:
+        raise OSError(f"host_processor_info failed with kern_return {status}")
+    try:
+        values = [info[index] & 0xFFFFFFFF for index in range(words.value)]
+    finally:
+        functions["libc"].vm_deallocate(functions["task"], ctypes.cast(info, ctypes.c_void_p).value,
+                                        words.value * ctypes.sizeof(ctypes.c_int))
+    if count.value <= 0 or len(values) != count.value * len(CPU_STATES):
+        raise OSError(f"host_processor_info returned {len(values)} words for {count.value} CPUs")
+    return [values[cpu * 4:(cpu + 1) * 4] for cpu in range(count.value)]
+
+
+def host_ticks_delta(before: Sequence[Sequence[int]], after: Sequence[Sequence[int]],
+                     ) -> dict[str, int]:
+    """Busy (user + system + nice) and idle ticks between two reads, per-CPU wrap-safe."""
+
+    if len(before) != len(after):
+        raise ValueError("the logical CPU count changed between host reads")
+    busy = idle = 0
+    for first, final in zip(before, after):
+        delta = [(b - a) % TICK_WRAP for a, b in zip(first, final)]
+        busy += delta[0] + delta[1] + delta[3]
+        idle += delta[2]
+    return {"busy_ticks": busy, "idle_ticks": idle, "cpus": len(after)}
 
 
 # --------------------------------------------------------------------------
@@ -84,6 +195,8 @@ class Snapshot:
     rows: Mapping[tuple[int, str], Mapping[str, Any]]
     raw: RawRef | None
     error: str | None = None
+    host: Sequence[Sequence[int]] | None = None  # read_host_cpu() just after ``started``
+    host_error: str | None = None
 
     @property
     def midpoint_ns(self) -> int:
@@ -133,10 +246,21 @@ def parse(stdout: bytes) -> dict[tuple[int, str], dict[str, Any]]:
     return result
 
 
-def take_snapshot(ctx: Context, *, raw_name: str = "ps.txt", compress: bool = False) -> Snapshot:
-    """One ``ps`` snapshot; the raw bytes are kept (gzip with mtime 0 when ``compress``)."""
+def take_snapshot(ctx: Context, *, raw_name: str = "ps.txt", compress: bool = False,
+                  host_reader: HostReader | None = read_host_cpu) -> Snapshot:
+    """One ``ps`` snapshot; the raw bytes are kept (gzip with mtime 0 when ``compress``).
+
+    The host's CPU ticks are read just before ps (``host_reader``; None skips
+    them).  A failed host read is recorded on the snapshot, never a ps error.
+    """
 
     started = ctx.stamp()
+    host = host_error = None
+    if host_reader is not None:
+        try:
+            host = [list(cpu) for cpu in host_reader()]
+        except Exception as exc:  # recorded; judged only under a registered aggregate limit
+            host_error = f"{type(exc).__name__}: {exc}"
     completed = ctx.run(PS_ARGV, PROBE_TIMEOUT_S)
     finished = ctx.stamp()
     data = completed.stdout
@@ -155,7 +279,7 @@ def take_snapshot(ctx: Context, *, raw_name: str = "ps.txt", compress: bool = Fa
             rows = parse(data)
         except ValueError as exc:
             error = f"ps output unparsable: {exc}"
-    return Snapshot(started, finished, rows, raw, error)
+    return Snapshot(started, finished, rows, raw, error, host, host_error)
 
 
 def tree_identities(rows: Iterable[Mapping[str, Any]], roots: Iterable[int]) -> set[int]:
@@ -171,13 +295,22 @@ def tree_identities(rows: Iterable[Mapping[str, Any]], roots: Iterable[int]) -> 
 
 
 def interval(before: Snapshot, after: Snapshot, *, tree_roots: Iterable[int],
-             include_kernel_task: bool, limit: float) -> dict[str, Any]:
+             include_kernel_task: bool, limit: float,
+             previous_over: Mapping[tuple[int, str], float] | None = None,
+             aggregate_limit: float | None = None) -> dict[str, Any]:
     """CPU-s/s of every process between two snapshots, split by tree membership.
 
     Ported from ``quiet_admission.interval_metrics``: a process present in both
     snapshots contributes its counter difference; a process that started inside
     the interval contributes its whole counter; one that exited has no
     measurable delta and is listed as unaccounted.
+
+    ``previous_over`` maps (pid, start) to the rate of each outside process
+    that was above ``limit`` in the previous interval (:func:`over_limit`); one
+    of them that exited inside this interval makes it dirty at that rate.
+    ``aggregate_limit`` (None: not judged) makes the interval dirty when the
+    host's busy CPU outside the tree exceeds it; with a limit, an unread host
+    term leaves the interval unmeasured.
     """
 
     window = {"monotonic_ns": [before.midpoint_ns, after.midpoint_ns],
@@ -196,6 +329,7 @@ def interval(before: Snapshot, after: Snapshot, *, tree_roots: Iterable[int],
     wall_start_s = before.started.wall_ns / 1e9
     outside: list[dict[str, Any]] = []
     unaccounted: list[dict[str, Any]] = []
+    exited_over: list[dict[str, Any]] = []
     tree_cpu = 0.0
     kernel_task_cpu = None
     for identity in sorted(set(before.rows) | set(after.rows)):
@@ -205,6 +339,11 @@ def interval(before: Snapshot, after: Snapshot, *, tree_roots: Iterable[int],
             unaccounted.append({"pid": row["pid"], "command": row["command"],
                                 "start": row["start_identity"],
                                 "reason": "exited" if final is None else "missed by the first snapshot"})
+            if final is None and previous_over and identity in previous_over:
+                exited_over.append({
+                    "pid": row["pid"], "command": row["command"], "start": row["start_identity"],
+                    "cpu_s_per_s": previous_over[identity],
+                    "basis": "exited inside this interval; its rate over the previous interval"})
             continue
         delta = final["cumulative_cpu_seconds"] - (first["cumulative_cpu_seconds"] if first else 0.0)
         if not math.isfinite(delta) or delta < 0:
@@ -221,25 +360,76 @@ def interval(before: Snapshot, after: Snapshot, *, tree_roots: Iterable[int],
         if row["pid"] in tree:
             tree_cpu += rate
             continue
-        outside.append({"pid": row["pid"], "command": row["command"], "cpu_s_per_s": rate})
+        outside.append({"pid": row["pid"], "command": row["command"],
+                        "start": row["start_identity"], "cpu_s_per_s": rate})
     outside.sort(key=lambda item: (-item["cpu_s_per_s"], item["pid"]))
     worst = outside[0] if outside else None
+    outside_total = sum(item["cpu_s_per_s"] for item in outside)
+    excluded_kernel = (kernel_task_cpu or 0.0) if not include_kernel_task else 0.0
+    host = _host_rates(before, after)
+    host_busy = host["host_busy_cpu_s_per_s"]
+    outside_aggregate = None if host_busy is None else host_busy - tree_cpu - excluded_kernel
+    unattributed = (None if host_busy is None
+                    else host_busy - tree_cpu - outside_total - excluded_kernel)
+    aggregate_over = (aggregate_limit is not None and outside_aggregate is not None
+                      and outside_aggregate > aggregate_limit)
+    over = [item for item in outside if item["cpu_s_per_s"] > limit]
     result.update(
         elapsed_s=elapsed_s,
-        clean=worst is None or worst["cpu_s_per_s"] <= limit,
+        clean=not over and not exited_over and not aggregate_over,
         max_outside=worst,
-        outside_over_limit=[item for item in outside if item["cpu_s_per_s"] > limit],
+        outside_over_limit=over + exited_over,
+        exited_over_limit=exited_over,
         outside_listed=[item for item in outside if item["cpu_s_per_s"] >= REPORT_FLOOR_CPU_S_PER_S],
-        outside_total_cpu_s_per_s=sum(item["cpu_s_per_s"] for item in outside),
+        outside_total_cpu_s_per_s=outside_total,
         outside_process_count=len(outside),
         tree_cpu_s_per_s=tree_cpu,
         tree_process_count=len([pid for pid in tree if any(r["pid"] == pid for r in union.values())]),
         kernel_task_cpu_s_per_s=kernel_task_cpu,
         kernel_task_included=include_kernel_task,
+        **host,
+        outside_aggregate_cpu_s_per_s=outside_aggregate,
+        unattributed_cpu_s_per_s=unattributed,
+        aggregate_limit_s_per_s=aggregate_limit,
+        aggregate_over_limit=aggregate_over,
         unaccounted=unaccounted,
         raw=[ref.to_json() for ref in (before.raw, after.raw) if ref is not None],
     )
+    if aggregate_limit is not None and host_busy is None:
+        result.update(error=f"host CPU unread, so the registered aggregate limit cannot be "
+                            f"judged: {host['host_error']}", clean=None)
     return result
+
+
+def over_limit(result: Mapping[str, Any]) -> dict[tuple[int, str], float]:
+    """(pid, start) -> rate of each outside process measured above the limit in
+    ``result``: the ``previous_over`` of the next interval."""
+
+    return {(item["pid"], item["start"]): item["cpu_s_per_s"]
+            for item in result.get("outside_over_limit") or ()
+            if "basis" not in item and item.get("start") is not None}
+
+
+def _host_rates(before: Snapshot, after: Snapshot) -> dict[str, Any]:
+    out: dict[str, Any] = {"host_busy_cpu_s_per_s": None, "host_idle_cpu_s_per_s": None,
+                           "host_ticks": None, "host_error": None}
+    if before.host is None or after.host is None:
+        out["host_error"] = before.host_error or after.host_error or "host CPU not read"
+        return out
+    elapsed_s = (after.started.monotonic_ns - before.started.monotonic_ns) / 1e9
+    try:
+        ticks = host_ticks_delta(before.host, after.host)
+    except ValueError as exc:
+        out["host_error"] = str(exc)
+        return out
+    if not elapsed_s > 0:
+        out["host_error"] = "host reads are not in time order"
+        return out
+    rate = float(os.sysconf("SC_CLK_TCK"))
+    out.update(host_ticks={**ticks, "ticks_per_s": rate, "elapsed_s": elapsed_s},
+               host_busy_cpu_s_per_s=ticks["busy_ticks"] / rate / elapsed_s,
+               host_idle_cpu_s_per_s=ticks["idle_ticks"] / rate / elapsed_s)
+    return out
 
 
 def _mid(snapshot: Snapshot, field: str) -> int:
@@ -301,13 +491,17 @@ class Dwell:
 
 def _summary(result: Mapping[str, Any]) -> dict[str, Any]:
     keys = ("interval", "error", "clean", "elapsed_s", "max_outside", "outside_over_limit",
-            "outside_total_cpu_s_per_s", "outside_process_count", "tree_cpu_s_per_s",
-            "kernel_task_cpu_s_per_s", "unaccounted", "raw")
+            "exited_over_limit", "outside_total_cpu_s_per_s", "outside_process_count",
+            "tree_cpu_s_per_s", "kernel_task_cpu_s_per_s", "host_busy_cpu_s_per_s",
+            "outside_aggregate_cpu_s_per_s", "unattributed_cpu_s_per_s",
+            "aggregate_limit_s_per_s", "aggregate_over_limit", "host_error", "unaccounted",
+            "raw")
     return {key: result.get(key) for key in keys}
 
 
 def run_dwell(ctx: Context, thresholds: Mapping[str, Any], *, tree_roots: Iterable[int],
-              on_tick=None, tick_s: float = 1.0) -> Measurement:
+              on_tick=None, tick_s: float = 1.0,
+              host_reader: HostReader | None = read_host_cpu) -> Measurement:
     """The arm dwell: a ps snapshot every ``interval_s``; ``on_tick`` runs every
     ``tick_s`` in between (the arm samples the clock there at 1 Hz).
 
@@ -315,19 +509,26 @@ def run_dwell(ctx: Context, thresholds: Mapping[str, Any], *, tree_roots: Iterab
     """
 
     limits = require_thresholds(MODULE, thresholds, ARM_THRESHOLD_KEYS)
+    aggregate = aggregate_limit(limits)
     roots = tuple(tree_roots)
     started = ctx.stamp()
     dwell = Dwell(limits, started_ns=started.monotonic_ns)
     index = 0
-    previous = take_snapshot(ctx, raw_name=f"dwell-{index:04d}-ps.txt", compress=True)
+    previous = take_snapshot(ctx, raw_name=f"dwell-{index:04d}-ps.txt", compress=True,
+                             host_reader=host_reader)
+    previous_over: dict[tuple[int, str], float] = {}
     next_snapshot_ns = previous.midpoint_ns + int(limits["interval_s"] * 1e9)
     while True:
         now = ctx.clocks.monotonic_ns()
         if now >= next_snapshot_ns:
             index += 1
-            current = take_snapshot(ctx, raw_name=f"dwell-{index:04d}-ps.txt", compress=True)
-            dwell.add(interval(previous, current, tree_roots=roots, include_kernel_task=True,
-                               limit=limits["cpu_limit_s_per_s"]))
+            current = take_snapshot(ctx, raw_name=f"dwell-{index:04d}-ps.txt", compress=True,
+                                    host_reader=host_reader)
+            result = interval(previous, current, tree_roots=roots, include_kernel_task=True,
+                              limit=limits["cpu_limit_s_per_s"], previous_over=previous_over,
+                              aggregate_limit=aggregate)
+            previous_over = over_limit(result)
+            dwell.add(result)
             previous = current
             next_snapshot_ns = current.midpoint_ns + int(limits["interval_s"] * 1e9)
             if dwell.ready:
@@ -366,10 +567,15 @@ def judge(measurement: Measurement, thresholds: Mapping[str, Any]) -> Verdict:
     if last_dirty is not None:
         if last_dirty["error"]:
             detail = f"; last failed interval: {last_dirty['error']}"
-        elif last_dirty["max_outside"]:
-            worst = last_dirty["max_outside"]
+        elif last_dirty.get("outside_over_limit"):
+            worst = max(last_dirty["outside_over_limit"], key=lambda item: item["cpu_s_per_s"])
             detail = (f"; last dirty interval: {worst['command']} (pid {worst['pid']}) at "
-                      f"{worst['cpu_s_per_s']:.3f} CPU-s/s")
+                      f"{worst['cpu_s_per_s']:.3f} CPU-s/s"
+                      + (" (exited inside it; previous-interval rate)" if "basis" in worst else ""))
+        elif last_dirty.get("aggregate_over_limit"):
+            detail = (f"; last dirty interval: host CPU outside the tree "
+                      f"{last_dirty['outside_aggregate_cpu_s_per_s']:.3f} CPU-s/s > "
+                      f"{last_dirty['aggregate_limit_s_per_s']} CPU-s/s")
     return Verdict(MODULE, REFUSE,
                    (f"no {limits['clean_s']} s run of clean {limits['interval_s']} s intervals "
                     f"within {limits['cap_s']} s{detail}",), limits, observed)

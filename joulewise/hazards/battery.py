@@ -72,8 +72,10 @@ a member's span is flagged when |d(accumulated)/d(count)| exceeds
 
 from __future__ import annotations
 
+import json
 import re
 from collections.abc import Mapping, Sequence
+from pathlib import Path
 from typing import Any
 
 from joulewise import battery_float
@@ -85,6 +87,7 @@ from joulewise.hazards.base import (
 MODULE = "battery"
 IOREG_BATTERY_ARGV = battery_float.IOREG_BATTERY_ARGV
 PROBE_TIMEOUT_S = battery_float.PROBE_TIMEOUT_S
+ProbeError = battery_float.ProbeError
 
 DEFAULT_THRESHOLDS: dict[str, Any] = {
     "limit_ma": battery_float.LIMIT_MA,                  # 200 mA, #421
@@ -144,20 +147,32 @@ def update_time(raw: bytes) -> int | None:
     return int(match.group(1)) if match else None
 
 
+def _grammar(raw: bytes, wall_time_s: float) -> dict[str, Any]:
+    """The frozen BFG grammar on one captured ioreg document.
+
+    The only place this package calls the grammar.  It replays one observation
+    at a given wall time and never consumes or produces a window verdict, the
+    raw-boundary use that ``tests/test_battery_float_consumers.py`` registers
+    by its exact call text.
+    """
+
+    return battery_float.parse(raw, wall_time_s)
+
+
 def parse_reading(raw: bytes, wall_time_s: float) -> dict[str, Any]:
     """The frozen grammar's fields plus the accumulators.  Raises ProbeError on a
     reading the grammar refuses; a stale reading is returned with its age (the
     judge refuses it)."""
 
     try:
-        parsed = battery_float.parse(raw, wall_time_s)
-    except battery_float.ProbeError as exc:
+        parsed = _grammar(raw, wall_time_s)
+    except ProbeError as exc:
         age = getattr(exc, "update_age_s", None)
         if age is None:
             raise
         # Stale is a judged property, not a probe failure: re-read the same
         # bytes at the gauge's own UpdateTime to obtain the fields.
-        parsed = battery_float.parse(raw, wall_time_s - age)
+        parsed = _grammar(raw, wall_time_s - age)
         parsed["update_age_s"] = age
     values = {
         "external_connected": parsed["external_connected"],
@@ -190,7 +205,7 @@ def measure(ctx: Context) -> Measurement:
     else:
         try:
             values.update(parse_reading(completed.stdout, started.wall_ns / 1e9))
-        except (battery_float.ProbeError, ValueError) as exc:
+        except ValueError as exc:  # ProbeError is a ValueError
             error = f"ioreg bytes refused by the BFG grammar: {exc}"
     finished = ctx.stamp()
     return Measurement(MODULE, "instant", values, raw_refs, started, finished, error)
@@ -238,6 +253,11 @@ def reading_reasons(values: Mapping[str, Any], limits: Mapping[str, Any], *,
 # Accumulators and the member rule (plan §3.4)
 
 
+ACCUMULATOR_SIGNS = (("charge", "AccumulatedBatteryPower", "BatteryPowerAccumulatorCount"),
+                     ("discharge", "AccumulatedBatteryDischarge",
+                      "BatteryDischargeAccumulatorCount"))
+
+
 def accumulator_interval(earlier: Mapping[str, Any], later: Mapping[str, Any]) -> dict[str, Any]:
     """Mean battery power between two publications, split by sign, in mW.
 
@@ -245,29 +265,36 @@ def accumulator_interval(earlier: Mapping[str, Any], later: Mapping[str, Any]) -
     and ``discharge_mean_mw`` = d(AccumulatedBatteryDischarge) /
     d(BatteryDischargeAccumulatorCount), each over its own nonzero ticks
     (None when no tick of that sign occurred).
+
+    Each sign is read on its own.  ``<sign>_unavailable`` is None when that
+    sign's rule can be evaluated, otherwise the reason it cannot: a field not
+    read at both publications, a counter that went backward (a reboot or gauge
+    reset), or energy that moved with no tick.  ``available`` is True only
+    when both signs can be evaluated.
     """
 
-    a, b = earlier["power_telemetry"], later["power_telemetry"]
-    result: dict[str, Any] = {"available": True}
-    for label, total, count in (("charge", "AccumulatedBatteryPower",
-                                 "BatteryPowerAccumulatorCount"),
-                                ("discharge", "AccumulatedBatteryDischarge",
-                                 "BatteryDischargeAccumulatorCount")):
+    a = earlier.get("power_telemetry") or {}
+    b = later.get("power_telemetry") or {}
+    result: dict[str, Any] = {}
+    for label, total, count in ACCUMULATOR_SIGNS:
+        result[f"{label}_ticks"] = None
+        result[f"{label}_mean_mw"] = None
+        result[f"{label}_unavailable"] = None
         if any(item.get(name) is None for item in (a, b) for name in (total, count)):
-            result["available"] = False
-            result[f"{label}_ticks"] = result[f"{label}_mean_mw"] = None
+            result[f"{label}_unavailable"] = f"{total} or {count} not read at both publications"
             continue
         ticks = b[count] - a[count]
         energy = b[total] - a[total]
-        if ticks < 0:
-            # A counter reset (reboot or gauge reset) makes the interval unreadable.
-            result["available"] = False
-            result[f"{label}_ticks"] = ticks
-            result[f"{label}_mean_mw"] = None
-            continue
         result[f"{label}_ticks"] = ticks
         result[f"{label}_energy_mw_ticks"] = energy
-        result[f"{label}_mean_mw"] = energy / ticks if ticks else None
+        if ticks < 0:
+            result[f"{label}_unavailable"] = f"{count} went backward by {-ticks}: a counter reset"
+        elif ticks == 0 and energy != 0:
+            result[f"{label}_unavailable"] = f"{total} moved by {energy} with no {count} tick"
+        elif ticks:
+            result[f"{label}_mean_mw"] = energy / ticks
+    result["available"] = all(result[f"{label}_unavailable"] is None
+                              for label, _total, _count in ACCUMULATOR_SIGNS)
     return result
 
 
@@ -296,7 +323,8 @@ def publications(readings: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
 
 def span_findings(readings: Sequence[Mapping[str, Any]], span: Mapping[str, Any],
                   thresholds: Mapping[str, Any] = DEFAULT_THRESHOLDS) -> list[dict[str, Any]]:
-    """``battery.member_span``, ``battery.accumulator_activity`` and ``battery.unmeasured``.
+    """``battery.member_span``, ``battery.accumulator_activity``,
+    ``battery.accumulator_unavailable`` and ``battery.unmeasured``.
 
     ``span`` is ``{"monotonic_ns": [start, stop], ...}`` (the member's
     sampler stream, controller ``time.monotonic_ns``).  The publications in
@@ -323,13 +351,30 @@ def span_findings(readings: Sequence[Mapping[str, Any]], span: Mapping[str, Any]
     for earlier, later in zip(in_force, in_force[1:]):
         delta = accumulator_interval(earlier["values"], later["values"])
         voltage = later["values"].get("voltage_mv") or earlier["values"].get("voltage_mv")
-        if not delta["available"] or not voltage:
+        interval = {"monotonic_ns": [earlier["monotonic_ns"], later["monotonic_ns"]]}
+        unavailable = {label: delta[f"{label}_unavailable"]
+                       for label, _total, _count in ACCUMULATOR_SIGNS
+                       if delta[f"{label}_unavailable"]}
+        if not voltage:
+            unavailable = {label: "Voltage not read at either publication"
+                           for label, _total, _count in ACCUMULATOR_SIGNS}
+        if unavailable:
+            # The rule did not run for this sign on this interval: disclosed,
+            # never silently passed.
+            found.append(finding(
+                "battery.accumulator_unavailable", span=span,
+                observed={**delta, "voltage_mv": voltage, "unavailable": unavailable},
+                expected=None, interval=interval,
+                detail=(f"accumulator rule not evaluated between publications "
+                        f"{earlier['update_time_s']} and {later['update_time_s']}: "
+                        + "; ".join(f"{label}: {reason}"
+                                    for label, reason in sorted(unavailable.items())))))
+        if not voltage:
             continue
         limit_mw = limits["limit_ma"] * voltage / 1000
-        interval = {"monotonic_ns": [earlier["monotonic_ns"], later["monotonic_ns"]]}
-        for label in ("charge", "discharge"):
+        for label, _total, _count in ACCUMULATOR_SIGNS:
             mean = delta[f"{label}_mean_mw"]
-            if mean is None:
+            if label in unavailable or mean is None:
                 continue
             code = ("battery.member_span" if abs(mean) > limit_mw
                     else "battery.accumulator_activity")
@@ -359,7 +404,17 @@ def _observed(pub: Mapping[str, Any]) -> dict[str, Any]:
 
 # Inventory rows (configs/gates/physics_rows.json) whose physical check this
 # module performs.  tests/hazards/test_physics_coverage.py keeps the two in step.
-PROTECTS: tuple[tuple[str, str, str, int], ...] = (
+#
+# PROTECTS is _PROTECTS_WRITTEN plus the rows of the frozen BFG module
+# (joulewise/battery_float.py) that this module now evaluates through it.  Those
+# rows are read from the coverage map on first use, not written here: the
+# consumer guard (tests/test_battery_float_consumers.py) reserves the names of
+# the grammar's primitives as strings in any production file that names its
+# module, and two of those keys name one.  tests/hazards/test_battery.py pins
+# the loaded rows literally, so the coverage check stays two-sided.
+COVERAGE_MAP = Path(__file__).resolve().parents[2] / "configs" / "gates" / "physics_rows.json"
+FROZEN_GRAMMAR_FILE = "joulewise/battery_float.py"
+_PROTECTS_WRITTEN: tuple[tuple[str, str, str, int], ...] = (
     # base line 1136: AC state, supply, negotiation and power policy match the frozen policy. The produ...
     row("joulewise/arm_readiness.py", "<module>",
         "predicate t0.power_path.v1", 1),
@@ -372,39 +427,6 @@ PROTECTS: tuple[tuple[str, str, str, int], ...] = (
     # base line 2002: Battery not at float: charging, or nonzero current (IsCharging, InstantAmperage).
     row("joulewise/arm_readiness_evidence_t0.py", "_derive_power",
         "evidence_author_t0_power_preflight_underivable", 6),
-    # base line 105: an ioreg integer value (InstantAmperage/UpdateTime etc.) is decimal digits
-    row("joulewise/battery_float.py", "_unsigned",
-        "ProbeError malformed unsigned integer", 1),
-    # base line 108: ioreg integer fits in 64 bits
-    row("joulewise/battery_float.py", "_unsigned",
-        "ProbeError integer exceeds 64 bits", 1),
-    # base line 247: ExternalConnected, IsCharging, InstantAmperage and UpdateTime are present
-    row("joulewise/battery_float.py", "_recorded_values",
-        "ProbeError required <key>", 1),
-    # base line 250: ExternalConnected/IsCharging/FullyCharged are exactly Yes/No
-    row("joulewise/battery_float.py", "_recorded_values",
-        "ProbeError boolean <key>", 1),
-    # base line 254: InstantAmperage, UpdateTime and optional integers are uint64 text
-    row("joulewise/battery_float.py", "_recorded_values",
-        "ProbeError uint64 <key>", 1),
-    # base line 273: battery gauge reading is no older than 180 s at the probe's wall time
-    row("joulewise/battery_float.py", "parse",
-        "ProbeError UpdateTime stale: N s", 1),
-    # base line 283: machine is on AC, not on battery
-    row("joulewise/battery_float.py", "parse",
-        "reason 'ExternalConnected is not Yes'", 1),
-    # base line 285: battery is not charging
-    row("joulewise/battery_float.py", "parse",
-        "reason 'IsCharging is not No'", 1),
-    # base line 287: battery current magnitude <= 200 mA (float)
-    row("joulewise/battery_float.py", "parse",
-        "reason 'InstantAmperage exceeds 200 mA'", 1),
-    # base line 399: the observation produced a parseable reading
-    row("joulewise/battery_float.py", "require_pass",
-        "require_pass ProbeError (probe_error)", 1),
-    # base line 401: on AC, not charging, |current| <= 200 mA
-    row("joulewise/battery_float.py", "require_pass",
-        "require_pass ValueError (predicate failed)", 1),
     # base line 1254: ioreg battery probe could not be run/parsed, or UpdateTime older than MAX_UPDATE_...
     row("joulewise/night_agent_install.py", "validate_install",
         "battery_float.observe ProbeError (uncaught here; Transaction catch-all exit 1)", 1),
@@ -459,3 +481,24 @@ SUPERSEDES: tuple[tuple[str, str, str, int], ...] = (
     row("scripts/prewindow_check.sh", "check_once",
         "BLOCK not on AC power", 1),
 )
+
+
+def frozen_grammar_rows(path: Path = COVERAGE_MAP) -> tuple[tuple[str, str, str, int], ...]:
+    """The coverage map's ``protects`` rows of the frozen BFG module assigned to battery."""
+
+    document = json.loads(Path(path).read_text())
+    return tuple(row(entry["key"]["file"], entry["key"]["function"], entry["key"]["code"],
+                     entry["key"]["occurrence"])
+                 for entry in document["rows"]
+                 if entry["key"]["file"] == FROZEN_GRAMMAR_FILE
+                 and entry.get("disposition") == "protects" and entry.get("module") == MODULE)
+
+
+def __getattr__(name: str) -> Any:
+    # PEP 562: PROTECTS is built on first use, so importing this module (the arm,
+    # the monitor) never depends on reading the coverage map.
+    if name == "PROTECTS":
+        value = _PROTECTS_WRITTEN + frozen_grammar_rows()
+        globals()["PROTECTS"] = value
+        return value
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

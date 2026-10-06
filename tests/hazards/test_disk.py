@@ -51,6 +51,14 @@ class DiskJudgeTests(unittest.TestCase):
         self.assertEqual(verdict.status, base.REFUSE)  # 2 x 21.2 + 20 = 62.4 GiB on one volume
         self.assertEqual(verdict.observed["volumes"][0]["copies"], 2)
 
+    def test_a_volume_is_judged_on_its_smallest_free_reading(self):
+        # Two paths on one volume read a moment apart: the lower reading binds.
+        targets = [disk.planned_target("/runs"), {"path": "/runs/archive", "copies": 0}]
+        volumes = {"/runs": (1, 45 * GIB), "/runs/archive": (1, 40 * GIB)}
+        verdict = disk.judge(measure(targets, volumes), LIMITS)
+        self.assertEqual(verdict.status, base.REFUSE)
+        self.assertEqual(verdict.observed["volumes"][0]["free_bytes"], 40 * GIB)
+
     def test_backup_destination_needs_its_own_headroom(self):
         targets = [disk.planned_target("/runs"), disk.planned_target("/backup")]
         verdict = disk.judge(measure(targets, {"/runs": (1, 264 * GIB), "/backup": (2, 30 * GIB)}),

@@ -64,7 +64,7 @@ class FakeMac:
                                       cadence=cadence)
         return monitor.Monitor(config, ctx=base.Context(run=self.runner, clocks=self.clocks),
                                frequency_reader=FrequencyReader(self.clocks), statvfs=self.statvfs,
-                               stat=self.stat)
+                               stat=self.stat, host_reader=self.table.host_cpu)
 
 
 class MonitorJournalTests(unittest.TestCase):

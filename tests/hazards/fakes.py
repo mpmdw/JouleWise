@@ -210,6 +210,12 @@ class FakeProcessTable:
         self.add(Process(350, 1, "mediaanalysisd", cpu_per_s=0.0))
         self.add(Process(360, 1, "XprotectService", cpu_per_s=0.0))
         self.next_pid = 9000
+        # The host's CPU, as host_processor_info counts it: every listed process's
+        # time plus ``hidden_cpu_per_s`` of work ps never lists (processes that
+        # start and exit between snapshots, kernel threads).
+        self.hidden_cpu_per_s = 0.0
+        self.host_busy_s = 0.0
+        self.cpus = 16
 
     def add(self, process: Process) -> Process:
         self.processes[process.pid] = process
@@ -226,8 +232,23 @@ class FakeProcessTable:
                 # integrate the piecewise-constant rate over [a, b] at 0.1 s resolution
                 steps = max(1, int((b - a) / 0.1))
                 width = (b - a) / steps
-                process.cpu += sum(process.rate_at(a + (i + 0.5) * width) for i in range(steps)) * width
+                used = sum(process.rate_at(a + (i + 0.5) * width) for i in range(steps)) * width
+                process.cpu += used
+                self.host_busy_s += used
+            self.host_busy_s += self.hidden_cpu_per_s * (b - a)
         self.last_raw = now
+
+    def host_cpu(self) -> list[list[int]]:
+        """``contention.read_host_cpu`` at the seam: one row per logical CPU,
+        [user, system, idle, nice] ticks at 100 per CPU-second."""
+
+        self._advance()
+        busy = int(round(self.host_busy_s * 100))
+        total = int(round(self.elapsed_s() * 100)) * self.cpus + 10**9
+        rows = [[0, 0, 0, 0] for _ in range(self.cpus)]
+        rows[0][0] = busy % (1 << 32)
+        rows[0][2] = max(0, total - busy) % (1 << 32)
+        return rows
 
     def ps(self, argv: Sequence[str]) -> base.Completed:
         self._advance()

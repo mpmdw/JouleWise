@@ -16,9 +16,10 @@ Runs inside the launchd job after t0, in this fixed order:
 6. **Dwell** (600-2700 s): contention in 30 s intervals; the clock sampled at
    1 Hz for its linearity.
 7. **Final reads** of battery, thermal and the frequency word (f must equal
-   its dwell value), then GO.
+   its dwell value), then the **agent census again** (an agent that started
+   during the dwell must not get GO), then GO.
 
-GO only if every verdict is PASS and the census is clean; otherwise NULL.
+GO only if every verdict is PASS and both censuses are clean; otherwise NULL.
 UNMEASURED refuses.  The record is ``<custody>/hazards/arm.json``, written
 create-once with fsync; every step is also appended to
 ``<custody>/hazards/arm.steps.jsonl`` as it happens, and raw probe bytes go to
@@ -95,6 +96,7 @@ class Seams:
     statvfs: Callable[[str], Any] = os.statvfs
     stat: Callable[[str], Any] = os.stat
     python: str = sys.executable
+    host_cpu: contention.HostReader | None = contention.read_host_cpu
 
 
 @dataclasses.dataclass(frozen=True)
@@ -156,7 +158,8 @@ def run(config: ArmConfig, seams: Seams | None = None) -> ArmResult:
     record: dict[str, Any] = {
         "schema": ARM_SCHEMA, "started": started.to_json(), "thresholds": thresholds,
         "process": {"pid": os.getpid(), "argv": list(sys.argv), "python": sys.executable},
-        "tree_roots": list(config.tree_roots), "census": None, "network_time_off": None,
+        "tree_roots": list(config.tree_roots), "census": None, "census_at_go": None,
+        "network_time_off": None,
         "record_only": [], "diagnostics": [], "decision": None, "refused_at": None,
         "reasons": []}
 
@@ -219,7 +222,7 @@ def run(config: ArmConfig, seams: Seams | None = None) -> ArmResult:
     dwell = contention.run_dwell(
         ctx, thresholds["contention"], tree_roots=config.tree_roots,
         on_tick=lambda: samples.append(clock.sample(ctx, frequency_reader=seams.frequency_reader)),
-        tick_s=config.dwell_tick_s)
+        tick_s=config.dwell_tick_s, host_reader=seams.host_cpu)
     samples.append(clock.sample(ctx, frequency_reader=seams.frequency_reader))
     boot_end = _boot(seams, ctx)
     contention_verdict = recorder.hazard(
@@ -247,6 +250,15 @@ def run(config: ArmConfig, seams: Seams | None = None) -> ArmResult:
     refused = _refusals(finals)
     if refused:
         return finish(NULL, "final", refused)
+
+    # The census again, last: step 1 ran up to ~47 min earlier (cadence probe
+    # plus a dwell of up to 2700 s), and doctrine says never start [QUIET-MAC]
+    # work while an agent session is alive.
+    census_at_go = agent_census(ctx)
+    record["census_at_go"] = census_at_go
+    recorder.step("census_at_go", clean=census_at_go["clean"])
+    if not census_at_go["clean"]:
+        return finish(NULL, "census_at_go", [census_at_go["detail"]])
     return finish(GO, None, [])
 
 

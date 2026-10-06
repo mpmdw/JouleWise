@@ -123,6 +123,38 @@ class ProductionCommandTests(unittest.TestCase):
         self.assertIn("did not finish", verdict.reasons[0])
 
 
+class JudgeBoundTests(unittest.TestCase):
+    """The maximum-interval and elapsed bounds, each alone (review test gaps)."""
+
+    def judge(self, **changes):
+        values = {"count_expected": 300, "frames": 300, "returncode": 0, "timed_out": False,
+                  "elapsed_s": 39.8, "median_ms": 120.0, "p95_ms": 140.0, "max_ms": 180.0,
+                  "group_gone": True, "group_census": []}
+        values.update(changes)
+        stamp = FakeClocks().stamp()
+        return instrument.judge(base.Measurement("instrument", "instant", values, (), stamp, stamp),
+                                LIMITS)
+
+    def test_the_baseline_passes(self):
+        self.assertEqual(self.judge().status, base.PASS)
+
+    def test_one_250_ms_gap_at_a_120_ms_median_refuses(self):
+        verdict = self.judge(max_ms=250.0)
+        self.assertEqual(verdict.status, base.REFUSE)
+        self.assertEqual(verdict.reasons, ("maximum interval 250.0 ms > 200.0 ms",))
+
+    def test_200_ms_is_inside_the_bound(self):
+        self.assertEqual(self.judge(max_ms=200.0).status, base.PASS)
+
+    def test_elapsed_beyond_55_s_refuses(self):
+        verdict = self.judge(elapsed_s=55.5)
+        self.assertEqual(verdict.status, base.REFUSE)
+        self.assertEqual(verdict.reasons, ("elapsed 55.5 s exceeds the 55.0 s bound",))
+
+    def test_missing_elapsed_refuses(self):
+        self.assertEqual(self.judge(elapsed_s=None).status, base.REFUSE)
+
+
 def _kill_group(pgid: int) -> None:
     try:
         os.killpg(pgid, signal.SIGKILL)

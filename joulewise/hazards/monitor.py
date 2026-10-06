@@ -21,7 +21,8 @@ battery     ~30 s    ioreg ~2 s after each 60 s gauge publication (retry
                      raw bytes kept whenever UpdateTime changes
 thermal     5 s      OS thermal pressure level (notify_get_state in process;
                      notifyutil when that fails)
-contention  10 s     ps interval, CPU-s/s outside the tree; raw ps (gzip)
+contention  10 s     ps interval, CPU-s/s outside the tree, host CPU ticks
+                     (in process); raw ps (gzip)
 disk        60 s     statvfs; ``disk.low`` marker below 10 GiB
 monitor     30 s     own pid, pgid, CPU time of itself and its children
 =========== ======== ==================================================
@@ -161,7 +162,8 @@ class Monitor:
     def __init__(self, config: Mapping[str, Any], *, ctx: Context | None = None,
                  frequency_reader: Callable[[], Mapping[str, Any]] = clock.read_frequency,
                  statvfs: Callable[[str], Any] = os.statvfs, stat: Callable[[str], Any] = os.stat,
-                 notify_reader: Any = None) -> None:
+                 notify_reader: Any = None,
+                 host_reader: contention.HostReader | None = contention.read_host_cpu) -> None:
         self.config = validate_config(config)
         self.custody = Path(self.config["custody_dir"])
         self.directory = monitor_dir(self.custody)
@@ -170,6 +172,7 @@ class Monitor:
         self.frequency_reader = frequency_reader
         self.statvfs, self.stat = statvfs, stat
         self.notify_reader = notify_reader  # None: read the level through notifyutil
+        self.host_reader = host_reader
         self.cadence = self.config["cadence"]
         self.tree_roots = tuple(self.config["tree_roots"])
         self.stopping = False
@@ -182,6 +185,7 @@ class Monitor:
         self.next_frequency_ns = first.monotonic_ns
         self.last_update_time: int | None = None
         self.previous_snapshot: contention.Snapshot | None = None
+        self.previous_over: dict[tuple[int, str], float] = {}
         self.disk_low_written = (self.directory / DISK_LOW_MARKER).exists()
         self.started = first
         self._raw_index = 0
@@ -284,7 +288,7 @@ class Monitor:
             stamp_update = battery.update_time(completed.stdout)
             try:
                 values.update(battery.parse_reading(completed.stdout, started.wall_ns / 1e9))
-            except (ValueError, battery.battery_float.ProbeError) as exc:
+            except ValueError as exc:  # battery.ProbeError is a ValueError
                 error = f"ioreg bytes refused by the BFG grammar: {exc}"
             if error is not None or stamp_update != self.last_update_time:
                 ref = self._raw_context("battery").keep_raw("battery.ioreg", completed.stdout)
@@ -338,16 +342,20 @@ class Monitor:
                     error=measurement.error)
 
     def _contention(self) -> None:
-        snapshot = contention.take_snapshot(self._raw_context("contention"), compress=True)
+        snapshot = contention.take_snapshot(self._raw_context("contention"), compress=True,
+                                            host_reader=self.host_reader)
         previous, self.previous_snapshot = self.previous_snapshot, snapshot
         if previous is None:
             self._write("contention", "snapshot", started=snapshot.started,
                         finished=snapshot.finished, values=None, error=snapshot.error,
                         raw=[snapshot.raw.to_json()] if snapshot.raw else [])
             return
+        # In the window the host aggregate is journaled, never judged (contention docstring).
         result = contention.interval(previous, snapshot, tree_roots=self.tree_roots,
                                      include_kernel_task=False,
-                                     limit=self.config["cpu_limit_s_per_s"])
+                                     limit=self.config["cpu_limit_s_per_s"],
+                                     previous_over=self.previous_over)
+        self.previous_over = contention.over_limit(result)
         error = result.pop("error")
         self._write("contention", "interval", started=previous.started, finished=snapshot.finished,
                     values=result, error=error, raw=result.get("raw") or ())

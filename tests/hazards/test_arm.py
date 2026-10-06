@@ -37,6 +37,7 @@ class Rig:
         self.thermal_level = 0
         self.free_bytes = 264 * GIB
         self.census = (1, b"")
+        self.census_after_s: tuple[float, tuple[int, bytes]] | None = None
         self.off = (0, OFF_ALREADY)
         self.cadence_fixture = INSTRUMENT / "cadence-20261004-block3-idle.json"
         self.reader = FrequencyReader(self.clocks)
@@ -64,7 +65,10 @@ class Rig:
     def _census(self, argv):
         if "census" in self.fail:
             return completed(argv, error="OSError: pgrep missing")
-        return completed(argv, self.census[1], returncode=self.census[0])
+        returncode, stdout = self.census
+        if self.census_after_s and self.elapsed_s() >= self.census_after_s[0]:
+            returncode, stdout = self.census_after_s[1]
+        return completed(argv, stdout, returncode=returncode)
 
     def _ioreg(self, argv):
         if "battery" in self.fail:
@@ -112,7 +116,8 @@ class Rig:
 
     def run(self, **overrides) -> arm.ArmResult:
         seams = arm.Seams(ctx=base.Context(run=self.runner, clocks=self.clocks),
-                          frequency_reader=self.reader, statvfs=self.statvfs, stat=self.stat)
+                          frequency_reader=self.reader, statvfs=self.statvfs, stat=self.stat,
+                          host_cpu=self.table.host_cpu)
         with mock.patch.dict(os.environ, {"FAKE_PM_FIXTURE": str(self.cadence_fixture)}):
             return arm.run(self.config(**overrides), seams)
 
@@ -132,7 +137,7 @@ class ArmTests(unittest.TestCase):
         self.assertEqual(self.steps(result), [
             "census", "battery.instant", "thermal.instant", "disk.instant", "clock.instant",
             "network_time_off", "instrument.probe", "contention.dwell", "battery.final",
-            "thermal.final", "clock.dwell_and_go", "decision"])
+            "thermal.final", "clock.dwell_and_go", "census_at_go", "decision"])
         first_calls = [call[0] for call in self.rig.runner.calls[:2]]
         self.assertEqual(first_calls, ["/usr/bin/pgrep", "/usr/sbin/ioreg"])
         record = json.loads(result.path.read_text())
@@ -157,6 +162,36 @@ class ArmTests(unittest.TestCase):
     def test_census_that_cannot_run_refuses(self):
         self.rig.fail.add("census")
         self.assertEqual(self.rig.run().refused_at, "census")
+
+    def test_pgrep_failure_with_empty_output_is_not_a_clean_census(self):
+        # pgrep exits 2 (syntax) or 3 (fatal) with nothing on stdout: no census ran.
+        for returncode in (2, 3):
+            with self.subTest(returncode=returncode):
+                rig = Rig(Path(tempfile.mkdtemp(dir=self.tmp.name)))
+                rig.census = (returncode, b"")
+                result = rig.run()
+                self.assertEqual((result.decision, result.refused_at), (arm.NULL, "census"))
+                self.assertEqual(rig.runner.calls, [arm.AGENT_CENSUS_ARGV])
+
+    def test_agent_that_starts_during_the_dwell_gets_no_go(self):
+        # Review finding: step 1 runs up to ~47 min before GO.
+        self.rig.census_after_s = (300.0, (0, b"91234 /opt/homebrew/bin/codex exec\n"))
+        result = self.rig.run()
+        self.assertEqual((result.decision, result.refused_at), (arm.NULL, "census_at_go"))
+        self.assertIn("codex", result.reasons[0])
+        self.assertEqual(self.steps(result)[-3:], ["clock.dwell_and_go", "census_at_go", "decision"])
+        record = json.loads(result.path.read_text())
+        self.assertTrue(record["census"]["clean"])
+        self.assertFalse(record["census_at_go"]["clean"])
+        self.assertEqual(self.rig.runner.calls[-1], arm.AGENT_CENSUS_ARGV)
+
+    def test_go_records_a_clean_census_taken_after_the_final_reads(self):
+        result = self.rig.run()
+        self.assertEqual(result.decision, arm.GO, result.reasons)
+        census = result.document["census_at_go"]
+        self.assertTrue(census["clean"])
+        final_clock = result.document["hazards"]["clock"][-1]["measurement"]["finished"]
+        self.assertGreater(census["stamp"]["monotonic_ns"], final_clock["monotonic_ns"])
 
     def test_each_instant_hazard_refuses_before_network_time_is_touched(self):
         cases = {

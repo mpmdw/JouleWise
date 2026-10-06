@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import sys
 import unittest
+import unittest.mock
 
 from joulewise import battery_float
 from joulewise.hazards import base, battery
@@ -162,8 +163,8 @@ def reading(raw: bytes, *, update: int, mono_ns: int, wall_offset_ns: int = 0,
             "raw": [{"path": "monitor/raw/battery/x.ioreg", "sha256": "0" * 64}]}
 
 
-class MemberSpanTests(unittest.TestCase):
-    """The in-force publication rule and the accumulator rule on a 60 s gauge."""
+class SpanRig:
+    """A 60 s gauge built from today's real float bytes, on a test timeline."""
 
     def setUp(self):
         self.raw = battery_bytes("float-20261005-desk.ioreg")
@@ -189,6 +190,10 @@ class MemberSpanTests(unittest.TestCase):
 
     def span(self, start_s: float, stop_s: float) -> dict:
         return {"monotonic_ns": [self.mono0 + int(start_s * 10**9), self.mono0 + int(stop_s * 10**9)]}
+
+
+class MemberSpanTests(SpanRig, unittest.TestCase):
+    """The in-force publication rule and the accumulator rule on a 60 s gauge."""
 
     def test_clean_float_gives_no_finding(self):
         self.assertEqual(battery.span_findings(self.series(10), self.span(130, 250)), [])
@@ -222,6 +227,118 @@ class MemberSpanTests(unittest.TestCase):
         del readings[3:6]  # publications at +180, +240, +300 never observed
         codes = [f["code"] for f in battery.span_findings(readings, self.span(200, 260))]
         self.assertIn("battery.unmeasured", codes)
+
+
+class MemberSpanGapTests(SpanRig, unittest.TestCase):
+    """Review findings (gate-prune L1 review): the gauge-averaged Amperage rule
+    and the accumulator rule when one of its inputs cannot be read."""
+
+    def test_gauge_averaged_amperage_above_200_ma_flags_even_at_zero_instant_current(self):
+        readings = self.series(10)
+        readings[3]["values"]["amperage_ma"] = -300  # InstantAmperage stays 0
+        self.assertEqual(readings[3]["values"]["instant_amperage_ma"], 0)
+        found = battery.span_findings(readings, self.span(130, 170))
+        self.assertEqual([f["code"] for f in found], ["battery.member_span"])
+        self.assertIn("|Amperage| 300 mA > 200 mA", found[0]["detail"])
+
+    def test_unreadable_charge_counter_still_judges_discharge_and_discloses(self):
+        # -3 W of discharge between two 0 mA publications, while the charge
+        # counter is missing at the later one: the discharge rule must still run.
+        readings = self.series(10, special={3: {"ticks": 20, "energy": -60_000}})
+        readings[3]["values"]["power_telemetry"]["BatteryPowerAccumulatorCount"] = None
+        found = battery.span_findings(readings, self.span(130, 170))
+        codes = [f["code"] for f in found]
+        self.assertIn("battery.member_span", codes)
+        self.assertIn("battery.accumulator_unavailable", codes)
+        disclosed = next(f for f in found if f["code"] == "battery.accumulator_unavailable")
+        self.assertIn("charge", disclosed["observed"]["unavailable"])
+        self.assertNotIn("discharge", disclosed["observed"]["unavailable"])
+
+    def test_counter_reset_is_disclosed_not_silently_passed(self):
+        readings = self.series(10, special={3: {"ticks": -30_000, "energy": 0}})
+        found = battery.span_findings(readings, self.span(130, 170))
+        self.assertEqual([f["code"] for f in found], ["battery.accumulator_unavailable"])
+        self.assertIn("went backward", found[0]["detail"])
+
+    def test_absent_power_telemetry_is_disclosed(self):
+        readings = self.series(10)
+        for item in readings:
+            item["values"]["power_telemetry"] = {name: None for name in battery.ACCUMULATOR_FIELDS}
+        found = battery.span_findings(readings, self.span(130, 170))
+        self.assertEqual([f["code"] for f in found], ["battery.accumulator_unavailable"])
+
+    def test_each_sign_is_read_on_its_own(self):
+        pre = {"power_telemetry": {"AccumulatedBatteryDischarge": -100, "BatteryDischargeAccumulatorCount": 10}}
+        post = {"power_telemetry": {"AccumulatedBatteryDischarge": -3100, "BatteryDischargeAccumulatorCount": 11}}
+        delta = battery.accumulator_interval(pre, post)
+        self.assertFalse(delta["available"])
+        self.assertIsNotNone(delta["charge_unavailable"])
+        self.assertIsNone(delta["discharge_unavailable"])
+        self.assertEqual(delta["discharge_mean_mw"], -3000)
+
+
+class FrozenGrammarRegistrationTests(unittest.TestCase):
+    """The consumer guard of tests/test_battery_float_consumers.py (review BLOCKER).
+
+    The guard walks every production file and refuses any reference to the
+    grammar's primitives outside registered sites.  This package reads the
+    grammar at exactly one site whose call text is the registered form, and
+    writes no primitive name as a string."""
+
+    SITE = ("joulewise/hazards/battery.py", "_grammar", "battery_float.parse(raw, wall_time_s)")
+    # The coverage map's battery rows for the frozen module, pinned here because
+    # battery.py reads them from the map (it may not write the parser's name).
+    FROZEN_ROWS = {
+        ("joulewise/battery_float.py", "_unsigned", "ProbeError malformed unsigned integer", 1),
+        ("joulewise/battery_float.py", "_unsigned", "ProbeError integer exceeds 64 bits", 1),
+        ("joulewise/battery_float.py", "_recorded_values", "ProbeError required <key>", 1),
+        ("joulewise/battery_float.py", "_recorded_values", "ProbeError boolean <key>", 1),
+        ("joulewise/battery_float.py", "_recorded_values", "ProbeError uint64 <key>", 1),
+        ("joulewise/battery_float.py", "parse", "ProbeError UpdateTime stale: N s", 1),
+        ("joulewise/battery_float.py", "parse", "reason 'ExternalConnected is not Yes'", 1),
+        ("joulewise/battery_float.py", "parse", "reason 'IsCharging is not No'", 1),
+        ("joulewise/battery_float.py", "parse", "reason 'InstantAmperage exceeds 200 mA'", 1),
+        ("joulewise/battery_float.py", "require_pass", "require_pass ProbeError (probe_error)", 1),
+        ("joulewise/battery_float.py", "require_pass", "require_pass ValueError (predicate failed)", 1),
+    }
+
+    def lane_files(self):
+        return sorted((ROOT / "joulewise" / "hazards").glob("*.py")) + [ROOT / "scripts" / "hazard_monitor.py"]
+
+    def test_the_package_meets_the_guard_with_one_registered_raw_boundary_site(self):
+        from tests import test_battery_float_consumers as guard
+        registered = set(guard.RAW_BOUNDARY_PARSE_CALLS) | {self.SITE}
+        found = []
+        with unittest.mock.patch.object(guard, "RAW_BOUNDARY_PARSE_CALLS", registered):
+            for path in self.lane_files():
+                relative = path.relative_to(ROOT).as_posix()
+                found += guard.violations(relative, path.read_text())
+        self.assertEqual(found, [])
+
+    def test_the_single_site_is_the_registered_call_text(self):
+        import ast
+        tree = ast.parse((ROOT / self.SITE[0]).read_text())
+        calls = [(function.name, ast.unparse(node)) for function in ast.walk(tree)
+                 if isinstance(function, ast.FunctionDef) for node in ast.walk(function)
+                 if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+                 and isinstance(node.func.value, ast.Name) and node.func.value.id == "battery_float"
+                 and node.func.attr == "parse"]
+        self.assertEqual(calls, [self.SITE[1:]])
+
+    def test_protects_carries_the_frozen_grammar_rows(self):
+        loaded = {key for key in battery.PROTECTS if key[0] == "joulewise/battery_float.py"}
+        self.assertEqual(loaded, self.FROZEN_ROWS)
+        self.assertEqual(set(battery.frozen_grammar_rows()), self.FROZEN_ROWS)
+        self.assertEqual(len(battery.PROTECTS), len(set(battery.PROTECTS)))
+
+    def test_parse_reading_keeps_its_contract(self):
+        raw = battery_bytes("float-20261005-desk.ioreg")
+        stale = battery.parse_reading(raw, update_time(raw) + 400.0)
+        self.assertEqual(stale["update_age_s"], 400.0)
+        self.assertEqual(stale["instant_amperage_ma"], 0)
+        with self.assertRaises(battery.ProbeError):
+            battery.parse_reading(battery_bytes("malformed-synthetic-from-real.ioreg"),
+                                  update_time(raw) + 1.0)
 
 
 @unittest.skipUnless(sys.platform == "darwin", "reads the real gauge (macOS)")

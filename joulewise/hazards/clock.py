@@ -288,18 +288,21 @@ def window_events(samples: Sequence[Mapping[str, Any]], *, step_ns: int = 1_000_
                   ) -> list[dict[str, Any]]:
     """``clock.step`` and ``clock.frequency_changed`` events from 1 Hz journal samples.
 
-    A step is a residual movement above ``step_ns`` between consecutive good
-    samples, computed with the f in force (the latest f read at or before the
-    earlier sample).  Samples before the first f read cannot be judged and
-    are skipped.
+    A step is a residual movement above ``step_ns`` between consecutive
+    samples that read an anchor, computed with the f in force (the latest f
+    read at or before the earlier sample).  A sample whose anchor read failed
+    is skipped without resetting the comparison: the next good anchor is
+    compared with the last one across the gap, and the residual removes f x
+    the elapsed RAW time, so a step that falls across a failed sample is still
+    seen.  A sample that read its anchor but failed only its f read keeps its
+    anchor.  Samples before the first f read cannot be judged.
     """
 
     events: list[dict[str, Any]] = []
     word = None       # the f in force at ``previous``
-    previous = None   # the last good sample
+    previous = None   # the last sample that read an anchor
     for item in samples:
-        if item.get("error") or not item.get("anchor"):
-            previous = None
+        if not item.get("anchor"):
             continue
         if previous is not None and word is not None:
             moved = residual_ns(previous["anchor"], item["anchor"], word)
@@ -352,13 +355,14 @@ def coverage_gap(samples: Sequence[Mapping[str, Any]], start: int, stop: int,
                  max_gap_ns: int) -> list[int] | None:
     """The first [a, b] monotonic gap longer than ``max_gap_ns`` that overlaps [start, stop].
 
-    Good readings are the points; the span is covered when a good reading lies
+    Readings that read an anchor are the points (a failed f read does not
+    blind the step check); the span is covered when a good reading lies
     within ``max_gap_ns`` before its start and after its stop and no two
     consecutive good readings inside it are further apart than ``max_gap_ns``.
     """
 
     return base_coverage_gap(
-        [item["finished"]["monotonic_ns"] for item in samples if not item.get("error")],
+        [item["finished"]["monotonic_ns"] for item in samples if item.get("anchor")],
         start, stop, max_gap_ns)
 
 

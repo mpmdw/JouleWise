@@ -134,6 +134,234 @@ class DwellTests(unittest.TestCase):
         self.assertIn("counter regressed", [item["reason"] for item in result["unaccounted"]])
 
 
+class DwellRuleTests(unittest.TestCase):
+    """Guards the review found unprotected: the consecutive-run reset and the
+    whole-counter rule for a process that starts inside an interval."""
+
+    def test_a_dirty_interval_restarts_the_600_s_clean_run(self):
+        clocks, table, ctx = machine()
+        # clean for about 300 s, then one dirty interval, then clean
+        table.processes[360].schedule = [(300.0, 330.0, 0.368)]
+        measurement = run_dwell(ctx)
+        verdict = contention.judge(measurement, LIMITS)
+        self.assertEqual(verdict.status, base.PASS, verdict.reasons)
+        intervals = measurement.values["intervals"]
+        dirty = [item for item in intervals if item["clean"] is False]
+        self.assertTrue(dirty)
+        self.assertTrue(intervals[0]["clean"])
+        dirty_end = dirty[-1]["interval"]["monotonic_ns"][1]
+        clean_before = dirty[0]["interval"]["monotonic_ns"][0] - intervals[0]["interval"]["monotonic_ns"][0]
+        self.assertGreater(clean_before, 270 * 10**9)  # ~300 s clean, then the dirty one
+        ready = measurement.values["ready_at_monotonic_ns"]
+        self.assertGreaterEqual(ready - dirty_end, 600 * 10**9)
+        self.assertGreater(measurement.values["elapsed_s"], 900)
+
+    def test_a_process_that_starts_inside_an_interval_counts_its_whole_counter(self):
+        clocks, table, ctx = machine()
+        before = contention.take_snapshot(ctx, host_reader=table.host_cpu)
+        clocks.sleep(15)
+        table.add(Process(9500, 1, "softwareupdated", cpu_per_s=1.0, start_epoch=clocks.wall_s,
+                          cpu0=0.0))
+        clocks.sleep(15)
+        after = contention.take_snapshot(ctx, host_reader=table.host_cpu)
+        result = contention.interval(before, after, tree_roots=[DRIVER], include_kernel_task=True,
+                                     limit=0.05)
+        self.assertFalse(result["clean"])
+        [entry] = result["outside_over_limit"]
+        self.assertEqual(entry["command"], "softwareupdated")
+        self.assertGreater(entry["cpu_s_per_s"], 0.45)
+
+
+class ExitedProcessTests(unittest.TestCase):
+    """A process above the limit that exits inside the next interval (review finding)."""
+
+    def snapshots(self, table, clocks, ctx):
+        first = contention.take_snapshot(ctx, host_reader=table.host_cpu)
+        clocks.sleep(10)
+        second = contention.take_snapshot(ctx, host_reader=table.host_cpu)
+        clocks.sleep(5)
+        table.processes.pop(9600)  # exits 5 s into the next interval
+        clocks.sleep(5)
+        third = contention.take_snapshot(ctx, host_reader=table.host_cpu)
+        return first, second, third
+
+    def test_exit_inside_the_next_interval_keeps_it_dirty_at_the_previous_rate(self):
+        clocks, table, ctx = machine()
+        table.add(Process(9600, 1, "mdworker_shared", cpu_per_s=0.4, start_epoch=clocks.wall_s - 100))
+        first, second, third = self.snapshots(table, clocks, ctx)
+        one = contention.interval(first, second, tree_roots=[DRIVER], include_kernel_task=False,
+                                  limit=0.05)
+        self.assertFalse(one["clean"])
+        two = contention.interval(second, third, tree_roots=[DRIVER], include_kernel_task=False,
+                                  limit=0.05, previous_over=contention.over_limit(one))
+        self.assertFalse(two["clean"])
+        [entry] = two["exited_over_limit"]
+        self.assertEqual(entry["command"], "mdworker_shared")
+        self.assertAlmostEqual(entry["cpu_s_per_s"], 0.4, delta=0.01)
+        self.assertIn(entry, two["outside_over_limit"])
+        # without the previous interval the exit is invisible to a ps difference
+        blind = contention.interval(second, third, tree_roots=[DRIVER], include_kernel_task=False,
+                                    limit=0.05)
+        self.assertTrue(blind["clean"])
+        # the in-window rule flags a request inside the exit interval
+        journal = [dict(two, raw=[])]
+        a, b = two["interval"]["monotonic_ns"]
+        found = contention.span_findings(journal, {"monotonic_ns": [a + 10**9, b - 10**9]})
+        self.assertEqual([f["code"] for f in found], ["contention.request_overlap"])
+
+    def test_exit_after_a_quiet_interval_stays_clean(self):
+        clocks, table, ctx = machine()
+        table.add(Process(9600, 1, "mdworker_shared", cpu_per_s=0.01, start_epoch=clocks.wall_s - 100))
+        first, second, third = self.snapshots(table, clocks, ctx)
+        one = contention.interval(first, second, tree_roots=[DRIVER], include_kernel_task=False,
+                                  limit=0.05)
+        two = contention.interval(second, third, tree_roots=[DRIVER], include_kernel_task=False,
+                                  limit=0.05, previous_over=contention.over_limit(one))
+        self.assertTrue(two["clean"])
+        self.assertEqual(two["exited_over_limit"], [])
+
+    def test_the_dwell_carries_the_previous_interval(self):
+        clocks, table, ctx = machine()
+        table.add(Process(9600, 1, "mdworker_shared", cpu_per_s=0.4, start_epoch=clocks.wall_s - 100))
+        original = table.ps
+
+        def ps(argv):
+            if table.elapsed_s() >= 75:  # exits between the ~60 s and ~90 s snapshots
+                table.processes.pop(9600, None)
+            return original(argv)
+
+        ctx.run.handlers[contention.PS_ARGV] = ps
+        measurement = run_dwell(ctx)
+        self.assertEqual(contention.judge(measurement, LIMITS).status, base.PASS)
+        intervals = measurement.values["intervals"]
+        exits = [item for item in intervals if item["exited_over_limit"]]
+        self.assertEqual(len(exits), 1)
+        self.assertIs(exits[0]["clean"], False)
+        self.assertTrue(all(item["clean"] for item in intervals[intervals.index(exits[0]) + 1:]))
+        ready = measurement.values["ready_at_monotonic_ns"]
+        self.assertGreaterEqual(ready - exits[0]["interval"]["monotonic_ns"][1], 600 * 10**9)
+
+    def test_the_monitor_excludes_kernel_task_in_the_window(self):
+        from joulewise.hazards import monitor
+        import tempfile
+        clocks, table, _ctx = machine()
+        table.add(Process(0, 0, "kernel_task", cpu_per_s=0.2))
+        runner = Runner({contention.PS_ARGV: table.ps})
+        with tempfile.TemporaryDirectory(dir=os.environ.get("TMPDIR")) as directory:
+            config = monitor.build_config(custody_dir=directory, tree_roots=[DRIVER], disk_targets=[])
+            instance = monitor.Monitor(config, ctx=base.Context(run=runner, clocks=clocks),
+                                       host_reader=table.host_cpu)
+            instance._contention()
+            clocks.sleep(10)
+            instance._contention()
+            instance.close_session("test")
+            lines = monitor.load_journals(directory)["contention"]
+        [line] = [line for line in lines if line["kind"] == "interval"]
+        values = line["values"]
+        self.assertTrue(values["clean"])
+        self.assertFalse(values["kernel_task_included"])
+        self.assertAlmostEqual(values["kernel_task_cpu_s_per_s"], 0.2, delta=0.01)
+        # the host term keeps kernel_task out of the outside aggregate too
+        self.assertLess(values["outside_aggregate_cpu_s_per_s"], 0.1)
+
+    def test_the_monitor_carries_the_previous_interval(self):
+        from joulewise.hazards import monitor
+        import tempfile
+        clocks, table, _ctx = machine()
+        hog = table.add(Process(9600, 1, "mdworker_shared", cpu_per_s=0.4,
+                                start_epoch=clocks.wall_s - 100))
+        runner = Runner({contention.PS_ARGV: table.ps})
+        with tempfile.TemporaryDirectory(dir=os.environ.get("TMPDIR")) as directory:
+            config = monitor.build_config(custody_dir=directory, tree_roots=[DRIVER], disk_targets=[])
+            instance = monitor.Monitor(config, ctx=base.Context(run=runner, clocks=clocks),
+                                       host_reader=table.host_cpu)
+            for second in (0, 10, 20):
+                if second == 20:
+                    clocks.sleep(5)
+                    table.processes.pop(hog.pid)
+                    clocks.sleep(5)
+                elif second:
+                    clocks.sleep(10)
+                instance._contention()
+            instance.close_session("test")
+            lines = monitor.load_journals(directory)["contention"]
+        intervals = [line for line in lines if line["kind"] == "interval"]
+        self.assertEqual(len(intervals), 2)
+        self.assertEqual([item["command"] for item in intervals[1]["values"]["exited_over_limit"]],
+                         ["mdworker_shared"])
+
+
+class HostAggregateTests(unittest.TestCase):
+    """Work no ps difference can name: the in-process host term (review finding)."""
+
+    def test_hidden_work_is_journaled_and_refuses_only_under_a_registered_limit(self):
+        clocks, table, ctx = machine()
+        table.hidden_cpu_per_s = 0.6  # short-lived processes ps never lists
+        measurement = contention.run_dwell(ctx, LIMITS, tree_roots=[DRIVER],
+                                           host_reader=table.host_cpu)
+        self.assertEqual(contention.judge(measurement, LIMITS).status, base.PASS)
+        first = measurement.values["intervals"][0]
+        self.assertTrue(first["clean"])
+        self.assertAlmostEqual(first["unattributed_cpu_s_per_s"], 0.6, delta=0.02)
+        self.assertGreater(first["outside_aggregate_cpu_s_per_s"], 0.6)
+        self.assertIsNone(first["aggregate_limit_s_per_s"])
+
+        clocks, table, ctx = machine()
+        table.hidden_cpu_per_s = 0.6
+        registered = {**LIMITS, "aggregate_cpu_limit_s_per_s": 0.5, "cap_s": 900}
+        measurement = contention.run_dwell(ctx, registered, tree_roots=[DRIVER],
+                                           host_reader=table.host_cpu)
+        verdict = contention.judge(measurement, registered)
+        self.assertEqual(verdict.status, base.REFUSE)
+        self.assertIn("host CPU outside the tree", verdict.reasons[0])
+        self.assertTrue(all(item["aggregate_over_limit"] for item in measurement.values["intervals"]))
+
+    def test_quiet_mac_passes_under_a_registered_limit(self):
+        clocks, table, ctx = machine()
+        registered = {**LIMITS, "aggregate_cpu_limit_s_per_s": 0.5}
+        measurement = contention.run_dwell(ctx, registered, tree_roots=[DRIVER],
+                                           host_reader=table.host_cpu)
+        self.assertEqual(contention.judge(measurement, registered).status, base.PASS)
+        first = measurement.values["intervals"][0]
+        self.assertAlmostEqual(first["unattributed_cpu_s_per_s"], 0.0, delta=0.02)
+
+    def test_unread_host_is_recorded_and_blocks_only_a_registered_limit(self):
+        def broken():
+            raise OSError("host_processor_info failed with kern_return 5")
+
+        clocks, table, ctx = machine()
+        measurement = contention.run_dwell(ctx, LIMITS, tree_roots=[DRIVER], host_reader=broken)
+        self.assertEqual(contention.judge(measurement, LIMITS).status, base.PASS)
+        self.assertIn("kern_return 5", measurement.values["intervals"][0]["host_error"])
+
+        clocks, table, ctx = machine()
+        registered = {**LIMITS, "aggregate_cpu_limit_s_per_s": 0.5, "cap_s": 120}
+        measurement = contention.run_dwell(ctx, registered, tree_roots=[DRIVER], host_reader=broken)
+        self.assertEqual(contention.judge(measurement, registered).status, base.UNMEASURED)
+
+    def test_a_malformed_registered_limit_is_a_misuse(self):
+        for value in (0, -1, True, "0.5"):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                contention.aggregate_limit({"aggregate_cpu_limit_s_per_s": value})
+        self.assertIsNone(contention.aggregate_limit(LIMITS))
+
+    def test_tick_counters_are_wrap_safe_per_cpu(self):
+        delta = contention.host_ticks_delta([[2**32 - 10, 5, 100, 0], [0, 0, 0, 0]],
+                                            [[5, 10, 130, 1], [3, 0, 7, 0]])
+        self.assertEqual(delta, {"busy_ticks": 15 + 5 + 1 + 3, "idle_ticks": 37, "cpus": 2})
+        with self.assertRaises(ValueError):
+            contention.host_ticks_delta([[0, 0, 0, 0]], [[0, 0, 0, 0], [0, 0, 0, 0]])
+
+    @unittest.skipUnless(sys.platform == "darwin", "reads the real host CPU ticks (macOS)")
+    def test_live_host_ticks_read_without_privileges(self):
+        first = contention.read_host_cpu()
+        second = contention.read_host_cpu()
+        self.assertEqual(len(first), os.cpu_count())
+        self.assertTrue(all(len(cpu) == 4 for cpu in first))
+        delta = contention.host_ticks_delta(first, second)
+        self.assertGreaterEqual(delta["busy_ticks"] + delta["idle_ticks"], 0)
+
+
 class RequestOverlapTests(unittest.TestCase):
     def journal(self, rates_by_interval):
         out = []
