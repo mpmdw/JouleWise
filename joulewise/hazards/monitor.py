@@ -8,9 +8,13 @@ cores).  The driver's one-second supervision loop calls
 :meth:`Supervisor.stop` runs after the chain's process group is proven gone.
 
 The monitor writes one JSON-lines journal per module under
-``<custody>/hazards/monitor/`` with an fsync per line, plus ``monitor.jsonl``
-(its own pids and CPU time) and ``supervisor.jsonl`` (starts, deaths,
-restarts and gaps, written by the driver side).  Cadence (plan §2.3):
+``<custody>/hazards/monitor/`` plus ``monitor.jsonl`` (its own pids and CPU
+time) and ``supervisor.jsonl`` (starts, deaths, restarts and gaps, written by
+the driver side).  Each line is written to the kernel at once (``os.write``),
+so a reader and a monitor crash see it immediately; the monitor's journals
+fsync at most every ``FSYNC_INTERVAL_S`` and at close (PLAN2 t3-8: one fsync a
+second on the clock journal was most of its disk wake-ups), so only a power
+loss can drop the last few seconds.  Cadence (plan §2.3):
 
 =========== ======== ==================================================
 journal     every    reading
@@ -78,6 +82,8 @@ DISK_LOW_MARKER = "disk.low"
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MONITOR_SCRIPT = REPO_ROOT / "scripts" / "hazard_monitor.py"
 TASKPOLICY_PREFIX = ("/usr/sbin/taskpolicy", "-b")
+# PLAN2 t3-8: the monitor's journals batch their fsyncs; 0 is one fsync per line.
+FSYNC_INTERVAL_S = 5.0
 
 # battery_s: the poll (and the ioreg retry without the reader); battery_max_s:
 # the longest gap between ioreg reads without the reader; battery_full_max_s:
@@ -93,15 +99,25 @@ DEFAULT_CADENCE: dict[str, float] = {"clock_s": 1.0, "frequency_s": 5.0, "batter
 def build_config(*, custody_dir: Path | str, tree_roots: Sequence[int],
                  disk_targets: Sequence[Mapping[str, Any]], low_bytes: int = disk.DEFAULT_THRESHOLDS["low_bytes"],
                  cpu_limit_s_per_s: float = contention.DEFAULT_THRESHOLDS["cpu_limit_s_per_s"],
-                 cadence: Mapping[str, float] | None = None) -> dict[str, Any]:
-    """The monitor's whole input; the driver writes it once as ``monitor/config.json``."""
+                 cadence: Mapping[str, float] | None = None,
+                 tree_root_files: Sequence[str] = ()) -> dict[str, Any]:
+    """The monitor's whole input; the driver writes it once as ``monitor/config.json``.
+
+    ``tree_root_files`` (PLAN2 row 10) name JSON files whose ``pgid`` becomes a
+    further tree root once the file appears: the driver passes the chain's
+    ``night/chain.started``, so the chain's process tree stays inside the
+    measurement tree even if the driver dies and the chain is reparented.
+    """
 
     merged = dict(DEFAULT_CADENCE)
     merged.update(cadence or {})
-    return {"schema": CONFIG_SCHEMA, "custody_dir": str(custody_dir),
-            "tree_roots": [int(pid) for pid in tree_roots],
-            "disk_targets": [dict(item) for item in disk_targets], "low_bytes": int(low_bytes),
-            "cpu_limit_s_per_s": float(cpu_limit_s_per_s), "cadence": merged}
+    config = {"schema": CONFIG_SCHEMA, "custody_dir": str(custody_dir),
+              "tree_roots": [int(pid) for pid in tree_roots],
+              "disk_targets": [dict(item) for item in disk_targets], "low_bytes": int(low_bytes),
+              "cpu_limit_s_per_s": float(cpu_limit_s_per_s), "cadence": merged}
+    if tree_root_files:
+        config["tree_root_files"] = [str(path) for path in tree_root_files]
+    return config
 
 
 def validate_config(config: Mapping[str, Any]) -> dict[str, Any]:
@@ -119,6 +135,10 @@ def validate_config(config: Mapping[str, Any]) -> dict[str, Any]:
         value = config["cadence"].get(key)
         if isinstance(value, bool) or not isinstance(value, (int, float)) or value <= 0:
             raise ValueError(f"monitor cadence {key} must be positive")
+    files = config.get("tree_root_files", [])
+    if not isinstance(files, list) or not all(isinstance(item, str) and Path(item).is_absolute()
+                                              for item in files):
+        raise ValueError("monitor config tree_root_files must be a list of absolute paths")
     return dict(config)
 
 
@@ -131,23 +151,36 @@ def monitor_dir(custody_dir: Path | str) -> Path:
 
 
 class Journal:
-    """Append-only JSON lines, one fsync per line."""
+    """Append-only JSON lines; ``os.write`` per line, an fsync at most every
+    ``fsync_interval_s`` (0: every line) and at close."""
 
-    def __init__(self, path: Path) -> None:
+    def __init__(self, path: Path, *, fsync_interval_s: float = 0.0) -> None:
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._fd = os.open(self.path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o644)
+        self.fsync_interval_s = float(fsync_interval_s)
+        self._synced_at = time.monotonic()
+        self._dirty = False
 
     def write(self, record: Mapping[str, Any]) -> None:
         line = json.dumps(record, sort_keys=True, separators=(",", ":"), allow_nan=False,
                           default=str) + "\n"
         os.write(self._fd, line.encode())
-        os.fsync(self._fd)
+        self._dirty = True
+        now = time.monotonic()
+        if self.fsync_interval_s <= 0 or now - self._synced_at >= self.fsync_interval_s:
+            os.fsync(self._fd)
+            self._synced_at, self._dirty = now, False
 
     def close(self) -> None:
         if self._fd >= 0:
-            os.close(self._fd)
-            self._fd = -1
+            try:
+                if self._dirty:
+                    os.fsync(self._fd)
+            finally:
+                os.close(self._fd)
+                self._fd = -1
+                self._dirty = False
 
 
 def read_journal(path: Path) -> tuple[list[dict[str, Any]], str | None]:
@@ -208,7 +241,9 @@ class Monitor:
         self.stopping = False
         first = self.ctx.stamp()
         self.session = f"{os.getpid()}-{first.monotonic_ns}"
-        self.journals = {name: Journal(self.directory / f"{name}.jsonl") for name in JOURNALS}
+        self.journals = {name: Journal(self.directory / f"{name}.jsonl", fsync_interval_s=FSYNC_INTERVAL_S)
+                         for name in JOURNALS}
+        self.tree_root_files = {str(path): None for path in self.config.get("tree_root_files", [])}
         self.seq = {name: 0 for name in JOURNALS}
         self.due = {name: first.monotonic_ns for name in ("clock", "battery", "thermal",
                                                           "contention", "disk", "self")}
@@ -434,7 +469,27 @@ class Monitor:
                     values={"level": measurement.values.get("level"), "source": "notifyutil"},
                     error=measurement.error)
 
+    def _resolve_tree_roots(self) -> None:
+        """Add the pgid of each ``tree_root_files`` entry once it exists (PLAN2 row 10)."""
+
+        for path, resolved in self.tree_root_files.items():
+            if resolved is not None:
+                continue
+            try:
+                pgid = json.loads(Path(path).read_bytes()).get("pgid")
+            except (OSError, ValueError, AttributeError):
+                continue
+            if type(pgid) is not int or pgid <= 1:
+                continue
+            self.tree_root_files[path] = pgid
+            if pgid not in self.tree_roots:
+                self.tree_roots = (*self.tree_roots, pgid)
+            self._write("monitor", "event", values={"task": "tree_root", "pgid": pgid, "source": path,
+                                                    "tree_roots": list(self.tree_roots)})
+
     def _contention(self) -> None:
+        if self.tree_root_files:
+            self._resolve_tree_roots()
         snapshot = contention.take_snapshot(self._raw_context("contention"), compress=True,
                                             host_reader=self.host_reader)
         previous, self.previous_snapshot = self.previous_snapshot, snapshot
