@@ -546,7 +546,7 @@ def write_window_plan(inputs: Mapping[str, Any], *, settle_s: int | float = b5_c
     """Validate everything, then create the window's custody once; return the record.
 
     ``settle_s`` is a keyword for the mock-runtime render only; the command
-    line always renders the registered 180 s. ``threshold_defaults`` returns
+    line always renders the registered 60 s (``chain.SETTLE_S``). ``threshold_defaults`` returns
     the hazard modules' threshold contract (default:
     :func:`hazard_threshold_defaults`).
     """

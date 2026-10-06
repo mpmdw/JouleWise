@@ -3,14 +3,14 @@
   "draft_status": "as_generated_pre_d134_freeze",
   "manifest_id": "d117-floor-qwen3-8b-v5-03-phase-decode-abba-blocks-06-10-order-v1",
   "plan_id": "plan-d117-floor-qwen3-8b-decode-prefill-p2048-v5",
-  "calibration_plan_sha256": "246af3753007fddbd14f655acfd7f3149e918edc93cd9a7392368ecf93887594",
+  "calibration_plan_sha256": "7142cc8834ed656024c85664f6c9f990ad3c999e8751cc3cacbf51f4724f8180",
   "ordering_note": "Fixed contiguous null A/B/B/A decode blocks 6-10.",
   "planned_n_bundles": 20,
   "executed_order": [
     {
       "index": 1,
       "config": "d117fq38-df-cmp-abba-ph-decode-b06-a1.json",
-      "config_sha256": "74a31f1d324e6f80aa500f86c3d23c12e8a2ef6e9ab1a027073f065d3a629932",
+      "config_sha256": "dd6e64dfe38eea699c4a0516459d44ff571eac42ff878fb2f78c02e8c0d3988f",
       "run_id": "d117fq38-df-cmp-abba-ph-decode-b06-a1",
       "model_tag": "qwen3-8b-mlx",
       "rep": 6,
@@ -25,7 +25,7 @@
     {
       "index": 2,
       "config": "d117fq38-df-cmp-abba-ph-decode-b06-b1.json",
-      "config_sha256": "8aa84610072e74a3aed2f6916f82900cccf7160ecf3216b827b36596a8d76657",
+      "config_sha256": "1d3d08026d06691e9eb1ca626dc9717b29bc4072d9e0862e3b101dba7c90c419",
       "run_id": "d117fq38-df-cmp-abba-ph-decode-b06-b1",
       "model_tag": "qwen3-8b-mlx",
       "rep": 6,
@@ -40,7 +40,7 @@
     {
       "index": 3,
       "config": "d117fq38-df-cmp-abba-ph-decode-b06-b2.json",
-      "config_sha256": "032c269accd7739d22a0f83e7c86d330d7ec11fb87fe9a040214fab93bbb7389",
+      "config_sha256": "69eae75e1d9ef8c0e3567897483f63804264f1dd402734ab0a55e50260fbe273",
       "run_id": "d117fq38-df-cmp-abba-ph-decode-b06-b2",
       "model_tag": "qwen3-8b-mlx",
       "rep": 6,
@@ -55,7 +55,7 @@
     {
       "index": 4,
       "config": "d117fq38-df-cmp-abba-ph-decode-b06-a2.json",
-      "config_sha256": "2392cd343e17c904298f8392646038622860f3b0f73bb9580d724993799b04a1",
+      "config_sha256": "41f49db2917a08ad8c82bf2261f95cda5accb7611072c64df8acaec3df6d9864",
       "run_id": "d117fq38-df-cmp-abba-ph-decode-b06-a2",
       "model_tag": "qwen3-8b-mlx",
       "rep": 6,
@@ -70,7 +70,7 @@
     {
       "index": 5,
       "config": "d117fq38-df-cmp-abba-ph-decode-b07-a1.json",
-      "config_sha256": "3c38c225db760c37ea5e91ca51ebfa1a7cfdf0c405537a361f66181e45cae0e7",
+      "config_sha256": "ffc8c6102d33e20bd20094f75f54205ce2590c055d550cc8b6545ac95cf81d52",
       "run_id": "d117fq38-df-cmp-abba-ph-decode-b07-a1",
       "model_tag": "qwen3-8b-mlx",
       "rep": 7,
@@ -85,7 +85,7 @@
     {
       "index": 6,
       "config": "d117fq38-df-cmp-abba-ph-decode-b07-b1.json",
-      "config_sha256": "99f51cd93d8aefdb0af00d4195532c28fe56baf1d9756684e46906917a5748ff",
+      "config_sha256": "0791a1272854a2d9148ce5adc346a291f73242fc212b4fa7b5c3f37536c4d47b",
       "run_id": "d117fq38-df-cmp-abba-ph-decode-b07-b1",
       "model_tag": "qwen3-8b-mlx",
       "rep": 7,
@@ -100,7 +100,7 @@
     {
       "index": 7,
       "config": "d117fq38-df-cmp-abba-ph-decode-b07-b2.json",
-      "config_sha256": "80f105f4783c65533ed750da86bc8ff69d2c35f0a0ae0cb6ec8d03b2c96d695c",
+      "config_sha256": "44c28a29f8f73e3464768a9fffc352b48bb4b663780d65d994f982376d923843",
       "run_id": "d117fq38-df-cmp-abba-ph-decode-b07-b2",
       "model_tag": "qwen3-8b-mlx",
       "rep": 7,
@@ -115,7 +115,7 @@
     {
       "index": 8,
       "config": "d117fq38-df-cmp-abba-ph-decode-b07-a2.json",
-      "config_sha256": "ec25830f7f3e3bed333d4836bdd024485e5058e792410e181c6a575d12b3e40c",
+      "config_sha256": "4893e686e859aff210796ca5e46b63b48628a9648fb71cef208ddd74f0247879",
       "run_id": "d117fq38-df-cmp-abba-ph-decode-b07-a2",
       "model_tag": "qwen3-8b-mlx",
       "rep": 7,
@@ -130,7 +130,7 @@
     {
       "index": 9,
       "config": "d117fq38-df-cmp-abba-ph-decode-b08-a1.json",
-      "config_sha256": "b21b37cb9500b73f11635eb28af0f6e5ee99cc0b9e5b3798627ca8a238a74175",
+      "config_sha256": "7f667793ba8c54b6781c63224475918a91e2f0748595fb294c8bb04919cda8c5",
       "run_id": "d117fq38-df-cmp-abba-ph-decode-b08-a1",
       "model_tag": "qwen3-8b-mlx",
       "rep": 8,
@@ -145,7 +145,7 @@
     {
       "index": 10,
       "config": "d117fq38-df-cmp-abba-ph-decode-b08-b1.json",
-      "config_sha256": "fa0a77876981d73e1e9676401d9b2d2dce867c82c4c9914d7c9d4172d369bd87",
+      "config_sha256": "62e9a18ac7e521447728b808cb447bfe03a61c61551fa19e77e654bdc49d34b7",
       "run_id": "d117fq38-df-cmp-abba-ph-decode-b08-b1",
       "model_tag": "qwen3-8b-mlx",
       "rep": 8,
@@ -160,7 +160,7 @@
     {
       "index": 11,
       "config": "d117fq38-df-cmp-abba-ph-decode-b08-b2.json",
-      "config_sha256": "157d92f86ce9d9061efd4463fb358ba1f8800bf9f53220413dd5811f1c3c965f",
+      "config_sha256": "398f90690a2fdb1e95814a37348d67bc935bff4a76abf79768a3f79cb1df4bbd",
       "run_id": "d117fq38-df-cmp-abba-ph-decode-b08-b2",
       "model_tag": "qwen3-8b-mlx",
       "rep": 8,
@@ -175,7 +175,7 @@
     {
       "index": 12,
       "config": "d117fq38-df-cmp-abba-ph-decode-b08-a2.json",
-      "config_sha256": "fc29674c48022481d16e710590ff0f85129075504cfcb43a6682b439e8201c15",
+      "config_sha256": "1fc3de653b031f109da0ce21ee93abb38e0fda7dcb72b545522425e095cad902",
       "run_id": "d117fq38-df-cmp-abba-ph-decode-b08-a2",
       "model_tag": "qwen3-8b-mlx",
       "rep": 8,
@@ -190,7 +190,7 @@
     {
       "index": 13,
       "config": "d117fq38-df-cmp-abba-ph-decode-b09-a1.json",
-      "config_sha256": "e553bd0646f95cc81073b7da187f922ebf039bf3f293af8ec62654ce4beef459",
+      "config_sha256": "47c8198bab1ebe2a10520a50dc90c7363911284841458d7e75b7671708054395",
       "run_id": "d117fq38-df-cmp-abba-ph-decode-b09-a1",
       "model_tag": "qwen3-8b-mlx",
       "rep": 9,
@@ -205,7 +205,7 @@
     {
       "index": 14,
       "config": "d117fq38-df-cmp-abba-ph-decode-b09-b1.json",
-      "config_sha256": "635cc3104f9117eb44a7d6c748486e4d90799188ff5a3cb98cf93ccb1cc25618",
+      "config_sha256": "53e426b3c60c850ceed6010bc383068c463b77b1812b749800ebdc9257b02f3c",
       "run_id": "d117fq38-df-cmp-abba-ph-decode-b09-b1",
       "model_tag": "qwen3-8b-mlx",
       "rep": 9,
@@ -220,7 +220,7 @@
     {
       "index": 15,
       "config": "d117fq38-df-cmp-abba-ph-decode-b09-b2.json",
-      "config_sha256": "587e6855c9a3f33a2b4e4d8ec82d1989c4c07153f4020c91710e9f6bf5386b22",
+      "config_sha256": "9ed476eaa64ca5d69d8e8f9eb91d3cc604a3ef0e09126f73ca770a2a4135e3a7",
       "run_id": "d117fq38-df-cmp-abba-ph-decode-b09-b2",
       "model_tag": "qwen3-8b-mlx",
       "rep": 9,
@@ -235,7 +235,7 @@
     {
       "index": 16,
       "config": "d117fq38-df-cmp-abba-ph-decode-b09-a2.json",
-      "config_sha256": "42eb888c53b4a198d67b5e5cb2988395643067ea7b73ddfea366ceac4d1fbf1e",
+      "config_sha256": "d395bc170217401780fc2b38224ba71ee1070aa5acca9277411a8a0ab0d42114",
       "run_id": "d117fq38-df-cmp-abba-ph-decode-b09-a2",
       "model_tag": "qwen3-8b-mlx",
       "rep": 9,
@@ -250,7 +250,7 @@
     {
       "index": 17,
       "config": "d117fq38-df-cmp-abba-ph-decode-b10-a1.json",
-      "config_sha256": "906e6682f22d3d1f7571d3728f714d7f3090d3352c11f54263d0a5c827ab2411",
+      "config_sha256": "0f7ecaff68aa6337ef1ea2115ba8ef024e7002460cb4c180209c9e404b69dfde",
       "run_id": "d117fq38-df-cmp-abba-ph-decode-b10-a1",
       "model_tag": "qwen3-8b-mlx",
       "rep": 10,
@@ -265,7 +265,7 @@
     {
       "index": 18,
       "config": "d117fq38-df-cmp-abba-ph-decode-b10-b1.json",
-      "config_sha256": "716a86d396b5214e46a368b4a3cbcde9502eb03dc31226a7e3866ce0f0bdaa8a",
+      "config_sha256": "84b543eba5cddb6f50d298579c0f277adaf3cf488c9866e80bea7757c3ce70c9",
       "run_id": "d117fq38-df-cmp-abba-ph-decode-b10-b1",
       "model_tag": "qwen3-8b-mlx",
       "rep": 10,
@@ -280,7 +280,7 @@
     {
       "index": 19,
       "config": "d117fq38-df-cmp-abba-ph-decode-b10-b2.json",
-      "config_sha256": "1192f83f92cd2b0cac56f8cfe7f74bbe3c57c3b9510afb2d4f47669b2652014a",
+      "config_sha256": "016f65b12c93557bfc1871f4e6160060ce97e6148e5e10a95d4814daa41c1c66",
       "run_id": "d117fq38-df-cmp-abba-ph-decode-b10-b2",
       "model_tag": "qwen3-8b-mlx",
       "rep": 10,
@@ -295,7 +295,7 @@
     {
       "index": 20,
       "config": "d117fq38-df-cmp-abba-ph-decode-b10-a2.json",
-      "config_sha256": "c40fc1f370b216344d02145fc503ae84993925dfa5909d4e0f221c82d26d407f",
+      "config_sha256": "65979175313a73d5b772f234b5bcbfc688e6dd1bda67352ada843fdca3aecf96",
       "run_id": "d117fq38-df-cmp-abba-ph-decode-b10-a2",
       "model_tag": "qwen3-8b-mlx",
       "rep": 10,

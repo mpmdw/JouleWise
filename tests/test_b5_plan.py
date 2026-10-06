@@ -85,8 +85,8 @@ class WindowPlanTests(WindowPlanFixture):
                     self.assertEqual([], list(Path(window["runs_roots"][name]).iterdir()))
                 chain = Path(plan.chain_path).read_bytes()
                 self.assertEqual(b5_chain.sidecar_bytes(chain, "chain.zsh"), Path(plan.chain_sha256_path).read_bytes())
-                self.assertIn(b"export SETTLE_S=180\n", chain)
-                self.assertEqual(180, window["settle_s"])
+                self.assertIn(b"export SETTLE_S=60\n", chain)
+                self.assertEqual(60, window["settle_s"])
 
     def test_window_env_is_the_exact_25_key_allowlist(self):
         record = self.write()
@@ -96,13 +96,17 @@ class WindowPlanTests(WindowPlanFixture):
         self.assertEqual(values["CALIBRATION_LEDGER"], str(self.measurement / b5_plan.DEFAULT_LEDGER_RELATIVE))
         self.assertEqual("b5-alpha-1-calibration", values["BRACKET_SESSION_ID"])
 
-    def test_the_command_line_renders_the_registered_180_s_settle(self):
-        # Review finding (L2 settle): the registered settle is the runbook's
-        # SETTLE_S=180 (registration draft sections 0.6 and 5.2), not 600 s.
+    def test_the_command_line_renders_the_registered_60_s_settle(self):
+        # Review finding (L2 settle) set the runbook's SETTLE_S=180, not 600 s. The
+        # block-5 timing ruling (2026-10-06) cut every block-5 settle to 60 s
+        # (registration draft sections 0.6 and 5.1); the runbook keeps 180 s for
+        # the legacy windows, and the chain lists the difference as a deviation.
         runbook = (REPO_ROOT / b5_chain.RUNBOOK_RELATIVE).read_text()
         registered = re.findall(r"(?m)^SETTLE_S=([0-9]+)$", runbook)
         self.assertEqual(["180"], registered)
-        self.assertEqual(int(registered[0]), b5_chain.SETTLE_S)
+        self.assertEqual(60, b5_chain.SETTLE_S)
+        self.assertEqual(1, sum("SETTLE_S = 60 s, not the runbook's SETTLE_S=180" in item
+                                for item in b5_chain.DEVIATIONS))
         path = self.root / "inputs.json"
         path.write_text(json.dumps(self.inputs()))
         output = io.StringIO()
@@ -111,12 +115,13 @@ class WindowPlanTests(WindowPlanFixture):
             self.assertEqual(0, __import__("scripts.write_b5_window_plan", fromlist=["main"]).main(["--inputs", str(path)]))
         record = json.loads(output.getvalue())
         chain = Path(record["chain"]["path"]).read_bytes()
-        self.assertIn(b"export SETTLE_S=180\n", chain)
+        self.assertIn(b"export SETTLE_S=60\n", chain)
         self.assertNotIn(b"SETTLE_S=600", chain)
+        self.assertNotIn(b"export SETTLE_S=180", chain)
         plan = json.loads(Path(record["plan"]["path"]).read_text())
-        self.assertEqual(180, plan["hazard_window"]["settle_s"])
+        self.assertEqual(60, plan["hazard_window"]["settle_s"])
         env = t0_author.parse_window_environment(Path(record["window_env"]["path"]).read_bytes())
-        self.assertEqual("180", env["SETTLE_S"])
+        self.assertEqual("60", env["SETTLE_S"])
 
     def test_a_ledger_other_than_the_checkout_default_is_refused_at_the_desk(self):
         other = self.root / "other-ledger.jsonl"

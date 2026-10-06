@@ -539,7 +539,10 @@ def generation_hardware() -> dict[str, Any]:
         **HARDWARE,
         "notes": f"{HARDWARE['notes']}; pack status {emitted_draft_status()}.",
     }
-SAMPLING = {"power_hz": 10.0, "idle_seconds": 75.0, "warmup_seconds": 5.0}
+# idle_seconds 57.6: the adapter asks powermetrics for ceil(57.6 / 0.1) = 576 records, and the sampler
+# delivers one every ~130.5 ms, so the idle capture lasts about 75 s (75.0-75.9 s over block 3's 37
+# captures). Block-5 timing ruling, 2026-10-06 (idle capture by duration, 75 s).
+SAMPLING = {"power_hz": 10.0, "idle_seconds": 57.6, "warmup_seconds": 5.0}
 
 
 def dominance_criterion_registration() -> dict[str, Any]:
@@ -1224,7 +1227,7 @@ REFERENCE_CADENCE_AUTHORITY = (
 STAGE_SPECS: tuple[dict[str, Any], ...] = ()
 REFERENCE_AFTER_STAGE: dict[str, str] = {}
 
-POLICY_PATH = Path("configs/campaign_policies/quiet_mac_p2_production.json")
+POLICY_PATH = Path("configs/campaign_policies/quiet_mac_p2_b5.json")
 NEG8_MANIFEST_PATH = Path("configs/campaigns/neg8_reference_corpus_v5/order_manifest.json")
 NEG8_CORPUS_PATH = Path(
     "configs/campaigns/neg8_reference_corpus_v5/derivation/settled_corpus.json"

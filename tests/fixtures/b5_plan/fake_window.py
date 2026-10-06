@@ -322,7 +322,7 @@ def hazard_window_mapping(root: Path, *, pack_root: Path, g10: bool = False) -> 
         "runs_roots": {"claim": str(claim), "bound": str(bound)},
         "T_stream_max_s": 335, "planned_bytes": 0, "member_count": 0,
         "thresholds": json.loads(json.dumps(THRESHOLDS)), "g10": g10,
-        "programmed_span_s": 600, "t0_stage_cap_s": 3300, "settle_s": 180,
+        "programmed_span_s": 600, "t0_stage_cap_s": 3300, "settle_s": 60,
         "window_env": {"path": str(root / "custody/window.env"), "sha256": "d" * 64},
         "registration": None, "chain_deviations": [], "disk_volumes": [str(claim), str(bound)],
         "stages": [{"stage_id": "fixture-reservation", "kind": "bracket_reservation", "ordinal": 1,

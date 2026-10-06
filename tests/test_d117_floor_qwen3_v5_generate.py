@@ -941,7 +941,7 @@ class D117FloorQwen3V5PackTests(unittest.TestCase):
                     )
                     self.assertEqual(len(configs), 100)
                     for path in configs:
-                        self.assertEqual(json.loads(path.read_bytes())["sampling"]["idle_seconds"], 75.0)
+                        self.assertEqual(json.loads(path.read_bytes())["sampling"]["idle_seconds"], 57.6)
                     decode_configs = configs[:50]
                     prefill_configs = configs[50:]
                     decode_manifest = json.loads(

@@ -49,7 +49,7 @@ def hand_span(source: dict[str, Any], small: int, large: int, stages: int = 10) 
 
     member = {klass: sum(source["members"][klass].values()) for klass in ("small", "large")}
     members = small + large
-    return ((1 + stages) * 180 + stages * 20                      # chain settles, campaign arm countdowns
+    return ((1 + stages) * 60 + stages * 20                       # chain settles (60 s), campaign arm countdowns
             + source["fixed"]["pre_post_calibration"]             # 770
             + source["auxiliary"]["gamma-bound-derivation"]       # 60
             + small * member["small"] + large * member["large"]   # 595, 619 per member
@@ -85,10 +85,22 @@ class SizesOfTheCommittedPacks(unittest.TestCase):
                 self.assertEqual(60 * math.ceil((pack["programmed_span_s"] + 3300) / 60), pack["window_max_s"])
                 self.assertEqual(longest, pack["pack_longest_stream_s"])
                 self.assertEqual(335, pack["T_stream_max_s"])
-        self.assertEqual((85978, 88378, 74842), tuple(self.document["packs"][label]["programmed_span_s"]
+        self.assertEqual((84658, 87058, 73522), tuple(self.document["packs"][label]["programmed_span_s"]
                                                       for label in ("ALPHA", "BETA", "GAMMA")))
-        self.assertEqual((89280, 91680, 78180), tuple(self.document["packs"][label]["window_max_s"]
+        self.assertEqual((87960, 90360, 76860), tuple(self.document["packs"][label]["window_max_s"]
                                                       for label in ("ALPHA", "BETA", "GAMMA")))
+        self.assertEqual(60, self.document["terms"]["settle_s"]["seconds"])
+
+    def test_block4_configs_superseded_by_the_timing_regeneration_are_listed(self) -> None:
+        # The 2026-10-06 timing ruling regenerated the _v5 packs (idle_seconds 57.6), so the
+        # four block-4 science configs no longer hash to block 4's recorded digests; the
+        # sizer reads them at the bytes the GAMMA plan tree records and says so.
+        self.assertEqual([f"d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b01-{slot}"
+                          for slot in ("a1", "a2", "b1", "b2")],
+                         self.document["class_map"]["superseded_block4_configs"])
+        self.assertEqual({"/Users/edr/jw_models/mlx-community/Qwen3-1.7B-4bit": "small",
+                          "/Users/edr/jw_models/mlx-community/Qwen3-8B-4bit": "large"},
+                         self.document["class_map"]["model_source"])
 
     def test_the_clock_gate_still_allows_3_6_ppm(self) -> None:
         limit = float((Fraction(5) - Fraction("3.7")) * 1000 / (Fraction("3.6") + Fraction("0.25")))
@@ -196,6 +208,14 @@ class Refusals(unittest.TestCase):
         manifest = self.repo / "configs/campaigns/d117_floor_qwen3-8b_v5/02_phase_decode_abba_blocks_01_05/order_manifest.json"
         manifest.write_bytes(manifest.read_bytes() + b"\n")
         with self.assertRaisesRegex(S.SizingError, "order manifest .* hashes to"):
+            S.derive_document(self.repo, S.DEFAULT_PACKS)
+
+    def test_a_block4_config_recorded_by_no_plan_tree_refuses(self) -> None:
+        config = self.repo / ("configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5/"
+                              "01_decode_contrast_blocks_01_05/"
+                              "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b01-b1.json")
+        config.write_bytes(config.read_bytes().replace(b"Qwen3-8B-4bit", b"Qwen3-1.7B-4bit"))
+        with self.assertRaisesRegex(S.SizingError, "b01-b1 changed and no block-5 plan tree records"):
             S.derive_document(self.repo, S.DEFAULT_PACKS)
 
     def test_a_science_config_that_differs_from_its_recorded_digest_refuses(self) -> None:

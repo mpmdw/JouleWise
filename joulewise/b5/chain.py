@@ -6,8 +6,8 @@ committed ``plan_tree.json`` stage graph in ordinal order, in the block-3
 runbook protocol:
 
 1. the bracket reservation;
-2. a settle (``SETTLE_S``, 180 s: the runbook's ``SETTLE_S=180``, registration
-   §0.6) before the pre slot;
+2. a settle (``SETTLE_S``, 60 s: registration §0.6, block-5 timing ruling of
+   2026-10-06) before the pre slot;
 3. the pre-calibration capture and its fiducial screen;
 4. the NEG-8 reference corpus and its bound derivation;
 5. the start references;
@@ -59,9 +59,12 @@ from typing import Any, Mapping, Sequence
 
 CHAIN_SCHEMA = "joulewise.b5_chain.v1"
 CHAIN_INTERFACE = "b5-hazard-chain-v1"
-# The registered settle: docs/phase_2/window_runbook.md `SETTLE_S=180`, the
-# block-5 registration §0.6 and §5.2 ("180 s settle per stage").
-SETTLE_S = 180
+# The registered settle, 60 s before the pre slot and before every collection
+# stage: block-5 registration §0.6 and §5.2, and the block-5 timing ruling of
+# 2026-10-06 (all eleven settles cut from the runbook's 180 s to 60 s; the
+# machine is at idle within about 15 s of a decode ending, and each first
+# member measures its own idle baseline).
+SETTLE_S = 60
 # The pre-calibration screen is not re-implemented here: the chain embeds the
 # runbook's own D-079 clause 3 block (the literal bound and the
 # screen_pre_calibration function every live window since block 3 ran),
@@ -122,6 +125,8 @@ DEVIATIONS = (
     "window still ends neg8.bound_not_derived (EXCLUDE_WINDOW) until a prospective erratum lets a "
     "consumer authenticate the custodied pruned bytes (locator: night/hazard_result.json neg8_corpus)",
     "whole_window_verdict and backup stages are desk steps and are not in the chain",
+    "every settle (before the pre slot and before each collection stage) is SETTLE_S = 60 s, not the "
+    "runbook's SETTLE_S=180 (block-5 timing ruling of 2026-10-06; registration sections 0.6 and 5.1)",
 )
 
 _IDENTIFIER_RE = re.compile(r"[A-Za-z0-9._-]+")

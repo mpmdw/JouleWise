@@ -28,7 +28,7 @@ Inputs, all committed:
   collection stage's order manifest and configs (bytes checked against their
   recorded SHA-256), which give the roster: members per stage and per class,
   and each stage's ``--arm-countdown-s``;
-* the chain's settle, ``joulewise.b5.chain.SETTLE_S`` (180 s, before the pre
+* the chain's settle, ``joulewise.b5.chain.SETTLE_S`` (60 s, before the pre
   slot and before every collection stage).
 
 Programmed span (block 4's conventions with block 5's chain)::
@@ -240,20 +240,36 @@ def member_allowance(source: Source, klass: str) -> int:
     return sum(source.seconds(f"/members/{klass}/{term}") for term in MEMBER_TERMS)
 
 
-def class_map(source: Source, repo: Path) -> tuple[dict[str, str], str]:
-    """Model source -> member class, from block 4's members; and the auxiliary class."""
+def class_map(source: Source, repo: Path,
+              pack_digests: Mapping[Path, set[str]] | None = None) -> tuple[dict[str, str], str, list[str]]:
+    """Model source -> member class, from block 4's members; the auxiliary class; superseded configs.
+
+    Each block-4 member's config must hash to the digest block 4's source
+    recorded for it. A block-5 pack regeneration (the 2026-10-06 timing ruling
+    changed every ``_v5`` config's ``idle_seconds`` and calibration-plan tag)
+    supersedes those bytes; such a config is accepted only when its current
+    bytes are the ones a block-5 pack plan tree records for that path
+    (``pack_digests``), and its run id is returned in the third value. Bytes
+    recorded by neither refuse.
+    """
 
     members = (source.adapter.get("sizing") or {}).get("members") or {}
     inventory = {row.get("run_id"): row for row in
                  (source.document.get("provenance") or {}).get("config_inventory") or []}
     mapping: dict[str, set[str]] = {}
+    superseded: list[str] = []
     for run_id, terms in members.items():
         classes = {str(item["source_pointer"]).split("/")[2] for item in terms.values()}
         _require(len(classes) == 1, f"block-4 member {run_id} mixes member classes {sorted(classes)}")
         row = inventory.get(run_id)
         _require(isinstance(row, Mapping), f"block-4 member {run_id} has no config in the source inventory")
-        config, raw = _read_json(_relative(repo, row["source"]["path"], "block-4 config"), "block-4 config")
-        _require(sha256_bytes(raw) == row["source"]["sha256"], f"block-4 config of {run_id} changed")
+        path = _relative(repo, row["source"]["path"], "block-4 config")
+        config, raw = _read_json(path, "block-4 config")
+        if sha256_bytes(raw) != row["source"]["sha256"]:
+            recorded = (pack_digests or {}).get(path.resolve(), set())
+            _require(recorded == {sha256_bytes(raw)},
+                     f"block-4 config of {run_id} changed and no block-5 plan tree records its current bytes")
+            superseded.append(run_id)
         mapping.setdefault(config["model"]["source"], set()).update(classes)
     _require(bool(mapping) and all(len(classes) == 1 for classes in mapping.values()),
              f"block-4 members do not give each model one class: {mapping}")
@@ -261,7 +277,8 @@ def class_map(source: Source, repo: Path) -> tuple[dict[str, str], str]:
     auxiliary = {str(item["source_pointer"]).split("/")[2] for name, item in streams.items()
                  if name not in members and not str(item["source_pointer"]).endswith("/bracket")}
     _require(len(auxiliary) == 1, f"block-4 auxiliary streams use more than one class: {sorted(auxiliary)}")
-    return {model: next(iter(classes)) for model, classes in sorted(mapping.items())}, next(iter(auxiliary))
+    return ({model: next(iter(classes)) for model, classes in sorted(mapping.items())}, next(iter(auxiliary)),
+            sorted(superseded))
 
 
 def _recorded_digests(tree: Mapping[str, Any], pack: Path, repo: Path) -> dict[Path, set[str]]:
@@ -470,7 +487,13 @@ def stream_limit_s(required_ppm: Fraction = REQUIRED_ABS_F_PPM) -> float:
 def derive_document(repo: Path, packs: Sequence[tuple[str, str]], adapter: str = DEFAULT_ADAPTER) -> dict[str, Any]:
     source = load_source(repo, adapter)
     custody, formula = custody_terms(source)
-    classes, auxiliary_class = class_map(source, repo)
+    pack_digests: dict[Path, set[str]] = {}
+    for label, relative in packs:
+        pack = _relative(repo, relative, f"pack {label}")
+        tree, _raw = _read_json(pack / "plan_tree.json", "plan tree")
+        for path, digests in _recorded_digests(tree, pack, repo).items():
+            pack_digests.setdefault(path, set()).update(digests)
+    classes, auxiliary_class, superseded = class_map(source, repo, pack_digests)
     member_classes = sorted(set(classes.values()) | {auxiliary_class})
     member_s = {klass: member_allowance(source, klass) for klass in member_classes}
     stream_s = {klass: source.seconds(f"/streams/{klass}") for klass in member_classes}
@@ -558,7 +581,10 @@ def derive_document(repo: Path, packs: Sequence[tuple[str, str]], adapter: str =
             "settle_s": {"seconds": b5_chain.SETTLE_S, "source": "joulewise/b5/chain.py SETTLE_S"},
         },
         "class_map": {"model_source": classes, "auxiliary": auxiliary_class,
-                      "derived_from": "block 4's adapter members and the configs its source inventory names"},
+                      "derived_from": "block 4's adapter members and the configs its source inventory names",
+                      "superseded_block4_configs": superseded,
+                      "superseded_rule": ("a block-4 config whose bytes a block-5 pack regeneration replaced is "
+                                          "read at the bytes the pack's plan tree records")},
         "block4_reproduction": reproduction,
         "clock_gate": {"source": "joulewise/hazards/clock.py DEFAULT_THRESHOLDS and frequency_bound",
                        "h_ms": clock_hazard.DEFAULT_THRESHOLDS["h_ms"],

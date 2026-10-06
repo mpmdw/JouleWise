@@ -193,10 +193,10 @@ PREFILL_SELECTION_SOURCE_REL: Path | None = None
 PREFILL_SELECTION_SOURCE_RAW = b""
 DECODE_PROFILE: dict[str, Any] = {}
 DECODE_RENDERING: dict[str, Any] = {}
-POLICY_REL = Path("configs/campaign_policies/quiet_mac_p2_production.json")
+POLICY_REL = Path("configs/campaign_policies/quiet_mac_p2_b5.json")
 ACCEPTANCE_REL = Path("configs/calibration/calibration_acceptance_d079_v2.json")
 LEDGER_HEAD_REL = Path("configs/calibration/calibration_ledger_head.json")
-POLICY_SHA256 = "b0d7b228b88bea717aa9269c103aca760cc36cf05239e0f86c235b4b29665efd"
+POLICY_SHA256 = "ba0f7b7f1538fe87f6281362efbba4b05f7dff74b4bfd78e84c98b9e8859bc60"
 DECODE_FAMILY_DOMAIN_SHA256 = ""
 PREFILL_FAMILY_DOMAIN_SHA256 = ""
 P512_FAMILY_DOMAIN_SHA256 = ""
@@ -604,7 +604,10 @@ WORKLOAD = {
     "output_tokens": 512,
 }
 P512_WORKLOAD_NAME = "df_ph_prefill_p512_candidate"
-SAMPLING = {"power_hz": 10.0, "idle_seconds": 75.0, "warmup_seconds": 5.0}
+# idle_seconds 57.6: the adapter asks powermetrics for ceil(57.6 / 0.1) = 576 records, and the sampler
+# delivers one every ~130.5 ms, so the idle capture lasts about 75 s (75.0-75.9 s over block 3's 37
+# captures). Block-5 timing ruling, 2026-10-06 (idle capture by duration, 75 s).
+SAMPLING = {"power_hz": 10.0, "idle_seconds": 57.6, "warmup_seconds": 5.0}
 STAGES = (
     {
         "stage_id": "01_phase_decode_absolute",

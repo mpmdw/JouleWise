@@ -911,7 +911,7 @@ class D117ContrastV5PackTests(unittest.TestCase):
             ]
             self.assertEqual(len(configs), 80)
             for path in configs:
-                self.assertEqual(json.loads(path.read_bytes())["sampling"]["idle_seconds"], 75.0)
+                self.assertEqual(json.loads(path.read_bytes())["sampling"]["idle_seconds"], 57.6)
             for config_path in configs:
                 model = json.loads(config_path.read_text(encoding="utf-8"))["model"]
                 with self.subTest(config=config_path.name):
