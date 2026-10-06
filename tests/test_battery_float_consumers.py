@@ -78,6 +78,9 @@ ALLOWLIST = {
 RAW_BOUNDARY_PARSE_CALLS = {
     ("joulewise/v5_qualification.py", "battery_boundaries", "battery_float.parse(raw, stored['wall_time_s'])"),
     ("scripts/check_v5_arm_abort.py", "battery_sources", "battery_float.parse(raw, record['wall_time_s'])"),
+    # Gate prune L1: the battery hazard reads each captured ioreg document (arm
+    # read, monitor poll) through the frozen grammar; it never forms a verdict.
+    ("joulewise/hazards/battery.py", "_grammar", "battery_float.parse(raw, wall_time_s)"),
 }
 # The only test file the production guard walks.
 GUARDED_TEST_FILES = ("tests/fixtures/epoch_bootstrap/build.py",)
@@ -326,7 +329,7 @@ class ConsumerGuardTests(unittest.TestCase):
             self.assertEqual(violations(relative, source + call + "\n"), [])
             self.assertTrue(violations(relative, source + "battery_float.parse(raw, 0)\n"))
             self.assertTrue(violations(relative, source + "battery_float.validate_window(raw)\n"))
-        self.assertEqual(len(found), 2)
+        self.assertEqual(len(found), 3)
 
     def test_new_parse_reference_outside_pair_seam_is_flagged(self) -> None:
         source = "def new_reader(raw):\n    return parse(raw, 1)\n"

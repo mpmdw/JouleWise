@@ -8,19 +8,113 @@ process with os.kill.
 """
 from __future__ import annotations
 
+import contextlib
 from fractions import Fraction
+import importlib
 import importlib.util
+import inspect
+import io
 import json
+import math
 import os
 from pathlib import Path
 import signal
 import subprocess
 import sys
+import tempfile
 import time
-
-import pytest
+import unittest
 
 from joulewise import kernel_clock, network_time_off
+
+
+# --------------------------------------------------------------------------
+# Runner adapter. The repository's suite runs under unittest
+# (scripts/shard_tests.py); the tests below are written as plain functions
+# taking tmp_path, monkeypatch and capsys. G10ControlTests at the end of this
+# file binds each function to one unittest method with those three helpers, so
+# unittest discovery and pytest collect the same tests.
+
+
+class approx:
+    """``x == approx(expected, abs=..., rel=...)``: pytest.approx's tolerance rule."""
+
+    def __init__(self, expected, *, abs=None, rel=None):  # noqa: A002 - pytest's keyword
+        self.expected = expected
+        relative = (1e-6 if rel is None else rel) * math.fabs(expected)
+        self.tolerance = max(relative, 1e-12 if abs is None else abs)
+
+    def __eq__(self, other):
+        return math.fabs(other - self.expected) <= self.tolerance
+
+    def __repr__(self):
+        return f"{self.expected} ± {self.tolerance:.3g}"
+
+
+@contextlib.contextmanager
+def raises(exception):
+    try:
+        yield
+    except exception:
+        return
+    raise AssertionError(f"{exception.__name__} not raised")
+
+
+def importorskip(name):
+    try:
+        return importlib.import_module(name)
+    except ImportError as exc:
+        raise unittest.SkipTest(f"{name} is not importable: {exc}") from exc
+
+
+def parametrize(argname, values):
+    def mark(function):
+        function.g10_parameters = (argname, tuple(values))
+        return function
+    return mark
+
+
+def skipif(condition, *, reason):
+    def mark(function):
+        function.g10_skip = (bool(condition), reason)
+        return function
+    return mark
+
+
+class _MonkeyPatch:
+    def __init__(self):
+        self._undo = []
+
+    def setattr(self, target, name, value):
+        self._undo.append((target, name, getattr(target, name)))
+        setattr(target, name, value)
+
+    def undo(self):
+        while self._undo:
+            target, name, value = self._undo.pop()
+            setattr(target, name, value)
+
+
+class _Capsys:
+    def __init__(self):
+        self._out, self._err = io.StringIO(), io.StringIO()
+        self._saved = None
+
+    def start(self):
+        self._saved = (sys.stdout, sys.stderr)
+        sys.stdout, sys.stderr = self._out, self._err
+
+    def stop(self):
+        if self._saved is not None:
+            sys.stdout, sys.stderr = self._saved
+            self._saved = None
+
+    def readouterr(self):
+        captured = (self._out.getvalue(), self._err.getvalue())
+        for stream in (self._out, self._err):
+            stream.seek(0)
+            stream.truncate()
+        return type("CaptureResult", (), {"out": captured[0], "err": captured[1]})()
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = REPO_ROOT / "scripts" / "g10_clock_step_control.py"
@@ -154,7 +248,7 @@ class FakeMac:
         return [names[c["argv"]] for c in self.calls]
 
 
-@pytest.fixture(autouse=True)
+@contextlib.contextmanager
 def no_real_machine_calls(monkeypatch):
     """The control under test must reach the Mac only through the fakes."""
 
@@ -196,7 +290,7 @@ def test_step_trace_discharges_and_writes_the_record(tmp_path):
     assert mac.commands() == ["on", "off"]
     step = record["step"]
     assert step["detected"] is True
-    assert step["elapsed_since_on_s"] == pytest.approx(4.0, abs=1.01)
+    assert step["elapsed_since_on_s"] == approx(4.0, abs=1.01)
     assert abs(step["residual_ns"] - STEP_NS) < 2_000_000
     # Before the step every 1 Hz sample sits on the drift line.
     assert all(abs(p["residual_ns"]) <= 1 for p in record["trace"][:-1])
@@ -223,7 +317,7 @@ def test_flat_trace_is_not_discharged(tmp_path):
     assert record["verdict"]["verdict"] == g10.PASS
     assert record["step"]["detected"] is False
     assert len(record["trace"]) == 300
-    assert record["trace"][-1]["elapsed_since_on_s"] == pytest.approx(300.0)
+    assert record["trace"][-1]["elapsed_since_on_s"] == approx(300.0)
     assert max(abs(p["residual_ns"]) for p in record["trace"]) <= 1
     assert mac.commands() == ["on", "off"]
     assert mac.network_on is False
@@ -312,7 +406,7 @@ def test_off_runs_on_exception(tmp_path):
     assert out.exists()
 
 
-@pytest.mark.parametrize("signum", [signal.SIGTERM, signal.SIGHUP])
+@parametrize("signum", [signal.SIGTERM, signal.SIGHUP])
 def test_off_runs_under_signal_during_poll(tmp_path, signum):
     sent = []
 
@@ -459,7 +553,7 @@ def test_off_when_frequency_reaches_target(tmp_path):
     assert settling["stop_reason"] == "target"
     assert [r["elapsed_since_on_s"] for r in settling["reads"]] == [60.0, 120.0, 180.0]
     off_call = [c for c in mac.calls if c["argv"] == g10.OFF_ARGV][0]
-    assert off_call["since_on"] == pytest.approx(180.0)
+    assert off_call["since_on"] == approx(180.0)
     assert record["next_arm_frequency_gate"]["passes"] is True
 
 
@@ -471,10 +565,10 @@ def test_off_at_fifteen_minutes_when_frequency_stays_high(tmp_path):
     assert [r["elapsed_since_on_s"] for r in settling["reads"]] == [
         60.0 * k for k in range(1, 16)]
     off_call = [c for c in mac.calls if c["argv"] == g10.OFF_ARGV][0]
-    assert off_call["since_on"] == pytest.approx(900.0)
+    assert off_call["since_on"] == approx(900.0)
     # -3.17 ppm still passes the next arm's gate (4.846 ms <= 5 ms).
     gate = record["next_arm_frequency_gate"]
-    assert gate["passes"] is True and gate["bound_ms"] == pytest.approx(4.8457, abs=1e-3)
+    assert gate["passes"] is True and gate["bound_ms"] == approx(4.8457, abs=1e-3)
 
 
 def test_settling_cap_is_honoured_off_the_minute_grid(tmp_path):
@@ -482,14 +576,14 @@ def test_settling_cap_is_honoured_off_the_minute_grid(tmp_path):
     record, _, _ = run(mac, tmp_path, settle_max_s=150.0)
     assert [r["elapsed_since_on_s"] for r in record["settling"]["reads"]] == [60.0, 120.0, 150.0]
     off_call = [c for c in mac.calls if c["argv"] == g10.OFF_ARGV][0]
-    assert off_call["since_on"] == pytest.approx(150.0)
+    assert off_call["since_on"] == approx(150.0)
 
 
 def test_signal_guard_raises_once_then_defers():
     guard = g10.SignalGuard()
     guard.install()
     try:
-        with pytest.raises(g10.Interrupted):
+        with raises(g10.Interrupted):
             os.kill(os.getpid(), signal.SIGTERM)
             time.monotonic()  # a bytecode boundary for the handler to run at
         os.kill(os.getpid(), signal.SIGHUP)
@@ -679,7 +773,7 @@ def test_script_help_and_import_stay_off_the_retired_path():
     assert result.stdout.strip() == "[]"
 
 
-@pytest.mark.skipif(sys.platform != "darwin", reason="reads the macOS kernel clock")
+@skipif(sys.platform != "darwin", reason="reads the macOS kernel clock")
 def test_real_readers_are_read_only_probes():
     # ntp_adjtime(modes=0) and clock_gettime only; nothing changes machine state.
     frequency = g10.real_read_frequency()
@@ -819,7 +913,7 @@ def test_evaluator_disagreement_is_recorded_and_the_module_verdict_stands(tmp_pa
 
 
 def test_real_clock_module_through_main(tmp_path):
-    pytest.importorskip("joulewise.hazards.clock")
+    importorskip("joulewise.hazards.clock")
     assert g10.load_hazard_clock() is not None
     stepped, code = _main_record(tmp_path, FakeMac())
     assert code == g10.EXIT_OK
@@ -845,7 +939,7 @@ def test_negative_step_is_detected(tmp_path):
     assert record["step"]["detected"] is True
     assert record["step"]["residual_ns"] < -STEP_NS + 2_000_000
     assert record["result"] == g10.DISCHARGED
-    assert record["step"]["elapsed_since_on_s"] == pytest.approx(4.0, abs=1.01)
+    assert record["step"]["elapsed_since_on_s"] == approx(4.0, abs=1.01)
 
 
 def test_real_run_starts_commands_in_their_own_session(monkeypatch):
@@ -868,7 +962,7 @@ def test_main_passes_t_stream_max_to_the_next_arm_gate(tmp_path, monkeypatch):
     record, _ = _main_record(tmp_path, FakeMac(), "--t-stream-max-s", "200")
     assert record["next_arm_frequency_gate"]["t_stream_max_s"] == 200
     expected = kernel_clock.frequency_gate(probe(WORD_TODAY), 200.0)
-    assert record["next_arm_frequency_gate"]["bound_ms"] == pytest.approx(expected["bound_ms"])
+    assert record["next_arm_frequency_gate"]["bound_ms"] == approx(expected["bound_ms"])
 
 
 def test_pair_residual_uses_the_frequency_at_the_start():
@@ -933,7 +1027,7 @@ def test_capture_processes_leave_out_the_driver_ancestry():
     # A run_night that is not this process's ancestor is a capture process.
     found = g10.find_capture_processes(ps, own_pid=700)
     assert (100, "run_night") in [(m["pid"], m["match"]) for m in found]
-    with pytest.raises(ValueError):
+    with raises(ValueError):
         g10.find_capture_processes("", own_pid=1)
 
 
@@ -950,3 +1044,52 @@ def test_real_capture_check_runs_ps_read_only(monkeypatch):
     assert [m["pid"] for m in g10.real_capture_processes()] == [9]
     assert seen == [list(g10.PS_ARGV)]
     assert g10.Env().capture_processes is g10.real_capture_processes
+
+
+# --------------------------------------------------------------------------
+# One unittest method per test function (see the runner adapter at the top).
+
+
+class G10ControlTests(unittest.TestCase):
+    """Every test function above, each run with a fresh tmp_path, monkeypatch and
+    capsys inside ``no_real_machine_calls``."""
+
+
+def _bind(function, extra):
+    wanted = inspect.signature(function).parameters
+
+    def method(self):
+        skip = getattr(function, "g10_skip", None)
+        if skip is not None and skip[0]:
+            self.skipTest(skip[1])
+        patch, capture = _MonkeyPatch(), _Capsys()
+        with tempfile.TemporaryDirectory(prefix="g10-test-") as directory:
+            available = {"tmp_path": Path(directory), "monkeypatch": patch, "capsys": capture, **extra}
+            try:
+                with no_real_machine_calls(patch):
+                    if "capsys" in wanted:
+                        capture.start()
+                    try:
+                        function(**{name: available[name] for name in wanted})
+                    finally:
+                        capture.stop()
+            finally:
+                patch.undo()
+
+    method.__doc__ = function.__doc__
+    return method
+
+
+for _name, _function in list(globals().items()):
+    if not (_name.startswith("test_") and inspect.isfunction(_function)):
+        continue
+    _parameters = getattr(_function, "g10_parameters", None)
+    if _parameters is None:
+        setattr(G10ControlTests, _name, _bind(_function, {}))
+    else:
+        _argname, _values = _parameters
+        for _value in _values:
+            _label = getattr(_value, "name", None) or repr(_value)
+            setattr(G10ControlTests, f"{_name}_{_label}", _bind(_function, {_argname: _value}))
+    del globals()[_name]
+del _name, _function
