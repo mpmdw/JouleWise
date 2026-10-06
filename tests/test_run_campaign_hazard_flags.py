@@ -313,8 +313,11 @@ class CooldownUnknownTests(_Stage):
         runs = self.hazard_root()
         clock = FakeClock(start=100.0)
         telemetry = _StubTelemetry(clock, [5.0])
+        # create=True: on a base without the helper the stage still runs, and
+        # the test fails on the refusal itself (members 2 and 3 blocked).
         with self._ineligible(), patch.object(
-                run_campaign, "_hazard_cooldown_telemetry", return_value=(telemetry, clock, None)):
+                run_campaign, "_hazard_cooldown_telemetry", return_value=(telemetry, clock, None),
+                create=True):
             result = self.run_stage(self.configs(*self.MEMBERS), runs, policy=self.idle_policy())
         self.assertEqual(result.code, 0, result.err)
         self.assertEqual(self.invoked(runs), list(self.MEMBERS), result.err)
