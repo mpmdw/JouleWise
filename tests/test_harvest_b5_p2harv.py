@@ -265,10 +265,6 @@ class DeskConcurrencyTests(base.WindowTestCase):
         self.assertIn("/withheld/reassessed/", assessments["b5t-abs-r01"]["rereduced"]["path"])
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class WorkerCalibrationCacheTests(base.WindowTestCase):
     """X3 (t3-9): one calibration physics cache per worker, for the re-reduction and (with J2) strict."""
 
@@ -655,3 +651,279 @@ class ArmCollectorBudgetTests(unittest.TestCase):
                 collect.run_collectors([(name, {}) for name in collect.ARM_TIMEOUTS_S], stage=stage, sink=sink)
         self.assertEqual(asked["arm"], collect.ARM_TIMEOUTS_S)
         self.assertEqual(set(asked["desk"].values()), {None})  # the desk keeps DEFAULT_TIMEOUTS_S
+
+
+# ---------------------------------------------------------------------------
+# Independent review (Sol 6.1, 2026-10-06) findings F1-F7 and their probes.
+# ---------------------------------------------------------------------------
+
+def _bare_harvest(**attrs):
+    """A _Harvest with only the attributes a unit under test reads; emits and errors are recorded."""
+    run = object.__new__(h._Harvest)
+    run.emitted, run.prior = [], []
+    run.emit = lambda code, **kwargs: run.emitted.append((code, kwargs))
+    run._prior_collector_error = lambda **kwargs: run.prior.append(kwargs)
+    run.collector_ok, run.collector_ok_runs = set(), []
+    run.__dict__.update(attrs)
+    return run
+
+
+def _arm_run_record(started_wall_s, ok=("pack_identity", "checkout_identity", "executed_code", "model_identity")):
+    return {"schema_version": h.COLLECTOR_RUN_SCHEMA, "stage": "arm", "started": {"wall_s": started_wall_s},
+            "finished": {"wall_s": started_wall_s + 20},
+            "collectors": [{"collector": name, "status": "ok"} for name in ok], "collector_errors": []}
+
+
+class ArmCallBindingTests(unittest.TestCase):
+    """Review F1/F2: an ok arm row speaks only for a call it could have come from; a bad receipt fails closed."""
+
+    def arm(self, night: Path, runs=(), **receipts):
+        run = _bare_harvest(inputs=SimpleNamespace(night_dir=night))
+        for record in runs:
+            run._fold_collector_run(record, source="flags/collector_runs.jsonl:1")
+        for name, value in receipts.items():
+            (night / f"{name}.json").write_text(value if isinstance(value, str) else json.dumps(value))
+        run._arm_collector_records(None)
+        return run, sorted(code for code, _kwargs in run.emitted if code.endswith(".identity_unmeasured"))
+
+    def killed(self, started_wall_s, call=2):
+        return {"schema": "joulewise.b5_arm_collectors.v1", "call": call, "ran_by": "driver",
+                "collector_error": "timed out", "timed_out": True, "returncode": None,
+                "started": {"wall_s": started_wall_s}}
+
+    def test_an_earlier_completed_call_does_not_speak_for_a_later_killed_one(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _run, codes = self.arm(Path(tmp), [_arm_run_record(100.0)], **{"arm_collectors": self.killed(200.0)})
+        self.assertEqual(codes, ["code.identity_unmeasured", "code.identity_unmeasured",
+                                 "model.identity_unmeasured", "pack.identity_unmeasured"])
+
+    def test_a_run_record_from_the_killed_call_itself_still_counts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _run, codes = self.arm(Path(tmp), [_arm_run_record(201.0, ok=("model_identity",))],
+                                   **{"arm_collectors": self.killed(200.0)})
+        self.assertNotIn("model.identity_unmeasured", codes)
+        self.assertIn("pack.identity_unmeasured", codes)
+
+    def test_a_truncated_receipt_fails_closed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run, codes = self.arm(Path(tmp), [_arm_run_record(100.0)], **{"arm_collectors": '{"collector_error":'})
+        self.assertIn("model.identity_unmeasured", codes)
+        self.assertEqual([row["status"] for row in run.prior], ["malformed"])
+
+    def test_a_receipt_that_is_not_an_object_fails_closed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _run, codes = self.arm(Path(tmp), [_arm_run_record(100.0)], **{"arm_collectors": "[]"})
+        self.assertIn("model.identity_unmeasured", codes)
+
+    def test_a_completed_call_raises_nothing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ok = {"schema": "joulewise.b5_arm_collectors.v1", "call": 1, "ran_by": "driver", "returncode": 0,
+                  "timed_out": False, "error": None, "started": {"wall_s": 99.0}}
+            _run, codes = self.arm(Path(tmp), [_arm_run_record(100.0)], **{"arm_collectors": ok})
+        self.assertEqual(codes, [])
+
+
+class SupersessionCheckSetTests(unittest.TestCase):
+    """Review F7 (M49) and probes: supersession needs the named checks, a resolved dispatch, and keeps the flag."""
+
+    FULL = {"pack_identity": {"pins": True, "config_run_id": True, "registered_digests": True},
+            "checkout_identity": {"head": True, "tracked_edits": True, "untracked_in_executed_roots": True},
+            "executed_code": {"executed_inventory": True, "chain_sidecar": True}}
+
+    def supersede(self, collector, checks, **attrs):
+        record = arm_unmeasured(collector)
+        ledger = SimpleNamespace(records=[record])
+        ledger.remove = lambda flag_id: ledger.records.remove(record)
+        run = _bare_harvest(flags=ledger, identity_checks=checks, dispatches={}, dispatch_unresolved=[], **attrs)
+        run.supersede_identity_unmeasured()
+        return run, record, ledger
+
+    def test_every_named_check_is_required(self):
+        for collector in ("pack_identity", "checkout_identity", "executed_code"):
+            for missing in self.FULL[collector]:
+                with self.subTest(collector=collector, missing=missing):
+                    checks = {name: dict(value) for name, value in self.FULL.items()}
+                    del checks[collector][missing]
+                    _run, _record, ledger = self.supersede(collector, checks)
+                    self.assertEqual(len(ledger.records), 1)
+
+    def test_a_full_set_supersedes_and_records_the_whole_flag(self):
+        run, record, ledger = self.supersede("checkout_identity", self.FULL)
+        self.assertEqual(ledger.records, [])
+        (code, kwargs), = run.emitted
+        self.assertEqual(code, "records.identity_unmeasured_superseded")
+        self.assertEqual(kwargs["observed"]["superseded_flag"], record)
+
+    def test_pack_identity_waits_for_every_collection_stage_to_resolve(self):
+        _run, _record, ledger = self.supersede("pack_identity", self.FULL)
+        self.assertEqual(ledger.records, [])
+        record = arm_unmeasured("pack_identity")
+        ledger = SimpleNamespace(records=[record])
+        ledger.remove = lambda flag_id: ledger.records.remove(record)
+        run = _bare_harvest(flags=ledger, identity_checks=self.FULL, dispatches={}, dispatch_unresolved=["s"])
+        run.supersede_identity_unmeasured()
+        self.assertEqual(ledger.records, [record])
+
+
+class ConfigRunIdReplayTests(base.WindowTestCase):
+    """Review F7 (M42): the harvest replays the arm's config run-id check from the preserved bytes."""
+
+    def test_a_config_whose_run_id_is_not_the_rosters_is_a_pack_identity_mismatch(self):
+        window = self.window()
+        config = window.pack / "01_abs" / "b5t-abs-r01.json"
+        value = json.loads(config.read_bytes())
+        value["run_id"] = "b5t-abs-other"
+        config.write_bytes(base.normalized_config(value))
+        window.harvest()
+        flag = next(flag for flag in window.flags() if flag["code"] == "pack.identity_mismatch")
+        self.assertIn({"path": f"configs/campaigns/{base.PACK_ID}/01_abs/b5t-abs-r01.json", "check": "config_run_id",
+                       "expected": "b5t-abs-r01", "observed": "b5t-abs-other"}, flag["observed"]["mismatches"])
+
+
+class DeskChildSupervisionTests(unittest.TestCase):
+    """Review F3/F5: a started writer is never left unsupervised, and a reused group id is never signalled."""
+
+    def test_a_failure_after_spawn_tears_the_group_down(self):
+        kills, waits = [], []
+        child = SimpleNamespace(pid=424242, wait=lambda timeout=None: waits.append(timeout))
+
+        def observe(pid):
+            raise OSError("ps failed")
+
+        seams = h.Seams(desk_popen=lambda *a, **k: child, observe_identity=observe,
+                        killpg=lambda pid, signum: kills.append(signum), group_alive=lambda pgid: False,
+                        desk_term_grace_s=0.01, desk_gone_wait_s=0.01)
+        with self.assertRaises(h.DeskChildInitError) as caught:
+            h.DeskVerdictChild(["writer"], cwd=".", timeout_s=1.0, bundles=0, seams=seams, runs_root=Path("."))
+        self.assertEqual(kills[:1], [signal.SIGTERM])
+        self.assertTrue(caught.exception.group_gone)
+
+    def test_an_unproven_teardown_after_spawn_is_a_harvest_fault(self):
+        child = SimpleNamespace(pid=424242, wait=lambda timeout=None: None)
+
+        def observe(pid):
+            raise OSError("ps failed")
+
+        seams = h.Seams(desk_popen=lambda *a, **k: child, observe_identity=observe, killpg=lambda *a: None,
+                        group_alive=lambda pgid: True, desk_term_grace_s=0.01, desk_gone_wait_s=0.01)
+        run = _bare_harvest(seams=seams, faults=[])
+        run.fault = lambda collector, reason: run.faults.append((collector, reason))
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = Path(tmp)
+            run.inputs = SimpleNamespace(claim_runs_root=runs, bracket_session_id="s", measurement_root=runs,
+                                         pre_attempt_id=None, post_attempt_id=None, bound_runs_root=None,
+                                         ledger_path=runs / "ledger", head_pin_path=runs / "pin")
+            run._policy_path = lambda: runs / "policy.json"
+            (runs / "bracket-binding.json").write_text("{}")
+            started = run.start_desk_verdict()
+        self.assertFalse(started)
+        self.assertIn(("desk", "desk_verdict_group_not_proven_gone"), run.faults)
+        observed = next(kwargs["observed"] for code, kwargs in run.emitted if code == "whole_window.producer_failed")
+        self.assertTrue(observed["started_then_torn_down"])
+        self.assertFalse(observed["group_gone"])
+
+    def supervised(self, identity, *, alive=(True, False)):
+        signals, probes = [], iter(alive)
+        child = object.__new__(h.DeskVerdictChild)
+        child._started, child.timeout_s, child.pid, child.start_time = time.monotonic(), 5.0, 42, "original"
+        child.process = SimpleNamespace(wait=lambda timeout=None: 0)
+        child.timed_out, child.error, child.group_gone, child.survivors_after_exit = False, None, None, False
+        child.pid_recycled = child.generation_unverified = child._reaped = False
+        child.heartbeats, child.bundles = 0, 0
+        child.seams = h.Seams(group_alive=lambda pgid: next(probes, True),
+                              killpg=lambda pid, signum: signals.append(signum),
+                              observe_identity=lambda pid: identity, desk_term_grace_s=0.01, desk_gone_wait_s=0.01)
+        child._supervise()
+        return child, signals
+
+    def test_a_reused_group_id_is_not_signalled_and_the_group_counts_as_gone(self):
+        child, signals = self.supervised(SimpleNamespace(state="LIVE", start_time="different-start"))
+        self.assertEqual(signals, [])
+        self.assertTrue(child.group_gone)
+        self.assertTrue(child.pid_recycled)
+        self.assertFalse(child.survivors_after_exit)
+
+    def test_survivors_of_the_writers_own_group_are_still_killed(self):
+        child, signals = self.supervised(SimpleNamespace(state="DEAD", start_time=None), alive=(True, True, False))
+        self.assertIn(signal.SIGKILL, signals)
+        self.assertTrue(child.survivors_after_exit)
+        self.assertTrue(child.group_gone)
+
+    def test_an_unverifiable_group_is_not_signalled_and_not_proven_gone(self):
+        child, signals = self.supervised(SimpleNamespace(state="UNKNOWN", start_time=None),
+                                         alive=(True,) * 1000)
+        self.assertEqual(signals, [])
+        self.assertTrue(child.generation_unverified)
+        self.assertFalse(child.group_gone)
+
+
+class DispatchAndYieldProbeTests(unittest.TestCase):
+    """Review F4 and probes: a failing J3 is flagged, an empty stage stays in the yield, bytes count as present."""
+
+    TREE = {"stage_graph": [{"stage_id": "s", "kind": "campaign_collection", "ordinal": 1,
+                             "input_ref": {"kind": "external_input", "input_id": "i"}}],
+            "external_inputs": [{"input_id": "i", "members": [{"run_id": "legacy"}]}]}
+
+    def test_a_raising_resolver_falls_back_but_is_listed_unresolved(self):
+        def broken(*args, **kwargs):
+            raise ValueError("bad argv")
+        report = {}
+        with mock.patch.object(h, "_j3_resolver", return_value=broken):
+            dispatches, unresolved = h.stage_dispatches(self.TREE, Path("."), Path("."), report=report)
+        self.assertEqual(unresolved, ["s"])
+        self.assertEqual(list(dispatches), ["legacy"])  # the counts still come from input_ref
+        self.assertEqual(report["j3_failures"], {"s": "ValueError: bad argv"})
+
+    def test_a_malformed_resolver_value_is_a_failure_and_none_is_a_decline(self):
+        for value, failed in ((("root", [""]), True), (42, True), (None, False)):
+            with self.subTest(value=value), mock.patch.object(h, "_j3_resolver",
+                                                              return_value=lambda *a, **k: value):
+                report = {}
+                _dispatches, unresolved = h.stage_dispatches(self.TREE, Path("."), Path("."), report=report)
+                self.assertEqual(unresolved, ["s"] if failed else [])
+                self.assertEqual(bool(report["j3_failures"]), failed)
+
+    def test_a_resolved_stage_with_no_members_stays_in_the_yield(self):
+        tree = {"stage_graph": [{"stage_id": "empty", "kind": "campaign_collection", "ordinal": 3}]}
+        report = {}
+        with mock.patch.object(h, "_j3_resolver", return_value=lambda *a, **k: ("claim_runs_root", [])):
+            dispatches, unresolved = h.stage_dispatches(tree, Path("."), Path("."), report=report)
+        run = _bare_harvest(dispatches=dispatches, dispatch_unresolved=unresolved, dispatch_stages=report["stages"])
+        self.assertEqual(run._collection_stages(), [("empty", [])])
+
+    def test_bundle_bytes_without_an_assessment_are_present_not_valid(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "real-bundle").mkdir()
+            run = _bare_harvest(members={}, inputs=SimpleNamespace(claim_runs_root=root, bound_runs_root=None))
+            run._campaign_join = lambda: {}
+            counts = run._counts(["real-bundle", "absent-bundle"])
+        self.assertEqual((counts["planned"], counts["present"], counts["raw_valid"], counts["succeeded"]),
+                         (2, 1, 0, 0))
+
+
+class ThermistorManifestTests(unittest.TestCase):
+    """Review F6: a stage manifest that cannot be read is disclosed as unmeasured, never skipped."""
+
+    def emitted(self, text):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "campaign_manifests").mkdir()
+            (root / "campaign_manifests" / "stage.json").write_text(text)
+            run = _bare_harvest()
+            run._runs_roots = lambda: [root]
+            run.battery_thermistor()
+        return [(code, kwargs["observed"].get("reason")) for code, kwargs in run.emitted]
+
+    def test_a_truncated_manifest_is_unmeasured(self):
+        self.assertEqual(self.emitted("{"), [("thermal.battery_temperature_unmeasured", "manifest_unreadable")])
+
+    def test_a_manifest_that_is_not_an_object_is_unmeasured(self):
+        self.assertEqual(self.emitted("[]"), [("thermal.battery_temperature_unmeasured", "manifest_malformed")])
+
+    def test_a_json_object_that_is_not_a_stage_manifest_is_skipped(self):
+        self.assertEqual(self.emitted('{"kind": "other"}'), [])
+
+
+if __name__ == "__main__":
+    unittest.main()

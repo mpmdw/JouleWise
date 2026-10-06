@@ -376,6 +376,14 @@ ARM_COLLECTOR_UNMEASURED = {
     "executed_code": "code.identity_unmeasured", "model_identity": "model.identity_unmeasured",
 }
 COLLECTOR_SOURCE_PREFIX = "joulewise.flags.collect."
+# Every check the harvest must have run before it supersedes an arm
+# collector's unmeasured flag (PLAN2 row 12).  Explicit, so a check the
+# harvest stopped recording cannot pass by its absence.
+IDENTITY_SUPERSESSION_CHECKS = {
+    "pack_identity": frozenset({"pins", "config_run_id", "registered_digests"}),
+    "checkout_identity": frozenset({"head", "tracked_edits", "untracked_in_executed_roots"}),
+    "executed_code": frozenset({"executed_inventory", "chain_sidecar"}),
+}
 LINEAGE_CODES = frozenset(code for code in CODES if code.startswith("lineage."))
 NEVER_CLASSIFIED_CODES = frozenset({"records.malformed_flag"})
 # Codes L4's draft catalog does not name (handed to L4 and L6 for the draft
@@ -1451,25 +1459,38 @@ def _j3_resolver() -> Callable[..., Any] | None:
     return resolver if callable(resolver) else None
 
 
+class J3DispatchError(Exception):
+    """The J3 resolver exists but raised, or returned something that is not (runs root, run ids)."""
+
+
 def _j3_dispatch(resolver: Callable[..., Any], stage: Mapping[str, Any], pack_root: Path,
                  repo_root: Path | None) -> tuple[str | None, list[str]] | None:
-    """(runs root, run ids) from J3, or None when it cannot resolve the stage."""
+    """(runs root, run ids) from J3; None when J3 declines the stage (returns None).
+
+    A resolver that raises, or returns a malformed value, is a J3 failure
+    (``J3DispatchError``): the caller still falls back to ``input_ref`` for
+    the counts, but lists the stage as unresolved so the substitution is
+    flagged, never silent.
+    """
     try:
         value = resolver(stage, pack_root=pack_root, repo_root=repo_root)
-    except Exception:  # unresolvable: the input_ref fallback decides
+    except Exception as exc:
+        raise J3DispatchError(f"{type(exc).__name__}: {exc}"[:200]) from exc
+    if value is None:
         return None
     if isinstance(value, Mapping):
         root, run_ids = value.get("runs_root"), value.get("run_ids")
     elif isinstance(value, (tuple, list)) and len(value) == 2:
         root, run_ids = value
     else:
-        return None
+        raise J3DispatchError(f"unexpected value {type(value).__name__}")
     if not isinstance(run_ids, (list, tuple)) or not all(isinstance(run_id, str) and run_id for run_id in run_ids):
-        return None
+        raise J3DispatchError("run_ids not a list of non-empty strings")
     return (str(root) if root is not None else None), list(run_ids)
 
 
-def stage_dispatches(tree: Mapping[str, Any], pack_root: Path, repo_root: Path | None = None
+def stage_dispatches(tree: Mapping[str, Any], pack_root: Path, repo_root: Path | None = None, *,
+                     report: dict[str, Any] | None = None
                      ) -> tuple[dict[str, list[dict[str, Any]]], list[str]]:
     """Every run id the plan tree's collection stages launch, stage by stage, with the runs root.
 
@@ -1480,9 +1501,16 @@ def stage_dispatches(tree: Mapping[str, Any], pack_root: Path, repo_root: Path |
     already exists in its runs root, so a run id two stages launch into one
     root is measured once and its later planned positions are never measured
     (rehearsal round 1, B3).  Returns ``({run_id: [{stage_id, ordinal,
-    runs_root}]}, [stages whose members could not be read])``.
+    runs_root}]}, [stages whose members could not be read])``.  A stage
+    whose J3 resolution failed is in the second list too, although its
+    members then come from ``input_ref``.  ``report``, when given, receives
+    ``stages`` (every collection stage read, as (ordinal, stage_id), so a
+    stage launching no run id still appears in the yield) and
+    ``j3_failures`` ({stage_id: error}).
     """
     resolver = _j3_resolver()
+    stages_read: list[tuple[Any, str]] = []
+    j3_failures: dict[str, str] = {}
     external = tree.get("external_inputs")
     manifests = external.get("manifests", []) if isinstance(external, Mapping) else (external or [])
     inputs = {str(row.get("input_id") or row.get("external_input_id")): row
@@ -1495,7 +1523,12 @@ def stage_dispatches(tree: Mapping[str, Any], pack_root: Path, repo_root: Path |
         reference = stage.get("input_ref") if isinstance(stage.get("input_ref"), Mapping) else {}
         run_ids: list[Any] | None = None
         runs_root = _stage_runs_root_binding(stage)
-        resolved = _j3_dispatch(resolver, stage, pack_root, repo_root) if resolver is not None else None
+        resolved = None
+        if resolver is not None:
+            try:
+                resolved = _j3_dispatch(resolver, stage, pack_root, repo_root)
+            except J3DispatchError as exc:
+                j3_failures[str(stage.get("stage_id"))] = str(exc)
         if resolved is not None:
             runs_root, run_ids = resolved[0] or runs_root, resolved[1]
         elif reference.get("kind") == "external_input":
@@ -1512,10 +1545,16 @@ def stage_dispatches(tree: Mapping[str, Any], pack_root: Path, repo_root: Path |
         if run_ids is None or not all(isinstance(run_id, str) and run_id for run_id in run_ids):
             unresolved.append(str(stage.get("stage_id")))
             continue
+        if str(stage.get("stage_id")) in j3_failures:
+            unresolved.append(str(stage.get("stage_id")))
+        stages_read.append((stage.get("ordinal"), str(stage.get("stage_id"))))
         for run_id in run_ids:
             dispatches.setdefault(run_id, []).append({"stage_id": stage.get("stage_id"),
                                                       "ordinal": stage.get("ordinal"),
                                                       "runs_root": runs_root})
+    if report is not None:
+        report["stages"] = stages_read
+        report["j3_failures"] = j3_failures
     return dispatches, unresolved
 
 
@@ -2456,6 +2495,14 @@ def remove_dead_child_lock(runs_root: Path, *, child_pid: int | None, child_star
         os.close(directory_fd)
 
 
+class DeskChildInitError(RuntimeError):
+    """The writer started but its supervision could not; ``group_gone`` says whether teardown was proven."""
+
+    def __init__(self, message: str, *, group_gone: bool):
+        super().__init__(message)
+        self.group_gone = group_gone
+
+
 class DeskVerdictChild:
     """The desk verdict subprocess: own session, heartbeat, wall budget, proven teardown.
 
@@ -2478,23 +2525,94 @@ class DeskVerdictChild:
         self.heartbeats = 0
         self.lock = "not_checked"
         self.error: str | None = None
+        self.start_time: str | None = None
+        self.pid_recycled = False          # the leader's pid now names another process
+        self.generation_unverified = False  # a signal was withheld: the group's identity could not be checked
+        self._reaped = False
         self._stdout = tempfile.TemporaryFile()
         self._stderr = tempfile.TemporaryFile()
         self._started = time.monotonic()
-        self.process = seams.desk_popen(self.argv, cwd=cwd, stdin=subprocess.DEVNULL, stdout=self._stdout,
-                                        stderr=self._stderr, start_new_session=True)
+        try:
+            self.process = seams.desk_popen(self.argv, cwd=cwd, stdin=subprocess.DEVNULL, stdout=self._stdout,
+                                            stderr=self._stderr, start_new_session=True)
+        except BaseException:
+            self._close_handles()
+            raise
         self.pid = getattr(self.process, "pid", None)
-        identity = seams.observe_identity(self.pid) if isinstance(self.pid, int) and self.pid > 0 else None
-        self.start_time = getattr(identity, "start_time", None) if getattr(identity, "state", None) == "LIVE" \
-            else None
-        self._thread = threading.Thread(target=self._supervise, name="desk-verdict-supervisor", daemon=True)
-        self._thread.start()
+        try:
+            identity = seams.observe_identity(self.pid) if isinstance(self.pid, int) and self.pid > 0 else None
+            self.start_time = getattr(identity, "start_time", None) \
+                if getattr(identity, "state", None) == "LIVE" else None
+            self._thread = threading.Thread(target=self._supervise, name="desk-verdict-supervisor", daemon=True)
+            self._thread.start()
+        except BaseException as exc:
+            # The writer is running but unsupervised: tear its group down before
+            # anything else reads the runs root, and say whether that was proven.
+            self.error = f"{type(exc).__name__}: {exc}"[:500]
+            try:
+                self._teardown()
+            except BaseException:
+                self.group_gone = False
+            self._close_handles()
+            raise DeskChildInitError(self.error, group_gone=self.group_gone is True) from exc
 
     def _heartbeat(self) -> None:
         self.heartbeats += 1
         elapsed = time.monotonic() - self._started
         print(f"harvest: whole-window verdict running, {elapsed:.0f} s of {self.timeout_s:.0f} s "
               f"({self.bundles} claim-root bundles; pid {self.pid})", file=sys.stderr, flush=True)
+
+    def _close_handles(self) -> None:
+        for handle in (self._stdout, self._stderr):
+            try:
+                handle.close()
+            except Exception:
+                pass
+
+    def _generation(self) -> str:
+        """``ours``, ``recycled`` or ``unverified``: may the group id still be signalled?
+
+        Before the leader is reaped its pid, and so the group id, cannot be
+        reused.  After, a LIVE process with that pid and another start time
+        means the id was reused, and the kernel never reuses a pid while a
+        process group of that id exists, so the writer's group is gone.  No
+        process with that pid (DEAD) leaves the id to the writer's group.  A
+        LIVE pid without the start time observed at spawn, or a failed
+        observation, cannot be told apart: no signal is sent, and a group
+        still alive then is not proven gone (a harvest fault).
+        """
+        if not self._reaped:
+            return "ours"
+        try:
+            identity = self.seams.observe_identity(self.pid)
+        except Exception:
+            return "unverified"
+        state = getattr(identity, "state", None)
+        if state == "DEAD":
+            return "ours"  # no process holds the id: only the writer's own group can
+        if state == "LIVE" and isinstance(self.start_time, str):
+            return "ours" if getattr(identity, "start_time", None) == self.start_time else "recycled"
+        return "unverified"
+
+    def _group_alive(self) -> bool:
+        """Whether a process of the writer's group may remain (a recycled id means none does)."""
+        if not (isinstance(self.pid, int) and self.pid > 0):
+            return False
+        if not self.seams.group_alive(self.pid):
+            return False
+        if self._generation() == "recycled":
+            self.pid_recycled = True
+            return False
+        return True
+
+    def _wait(self, timeout: float) -> bool:
+        """Wait for the leader; True once it is reaped."""
+        try:
+            self.process.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            return False
+        self._reaped = True
+        return True
 
     def _supervise(self) -> None:
         try:
@@ -2504,14 +2622,12 @@ class DeskVerdictChild:
                 if remaining <= 0:
                     self.timed_out = True
                     break
-                try:
-                    self.process.wait(timeout=max(0.01, min(self.seams.desk_heartbeat_s, remaining)))
+                if self._wait(max(0.01, min(self.seams.desk_heartbeat_s, remaining))):
                     break
-                except subprocess.TimeoutExpired:
-                    self._heartbeat()
+                self._heartbeat()
             if self.timed_out:
                 self._teardown()
-            elif isinstance(self.pid, int) and self.pid > 0 and self.seams.group_alive(self.pid):
+            elif self._group_alive():
                 # The leader exited but something it started is still in its group.
                 self.survivors_after_exit = True
                 self._teardown()
@@ -2525,31 +2641,34 @@ class DeskVerdictChild:
                 pass
 
     def _signal_group(self, signum: int) -> None:
-        if isinstance(self.pid, int) and self.pid > 0:
-            try:
-                self.seams.killpg(self.pid, signum)
-            except (ProcessLookupError, PermissionError):
-                pass
+        """Signal the writer's group, never a reused group id (``_generation``)."""
+        if not (isinstance(self.pid, int) and self.pid > 0):
+            return
+        generation = self._generation()
+        if generation == "recycled":
+            self.pid_recycled = True
+            return
+        if generation == "unverified":
+            self.generation_unverified = True
+            return
+        try:
+            self.seams.killpg(self.pid, signum)
+        except (ProcessLookupError, PermissionError):
+            pass
 
     def _teardown(self) -> None:
         import signal
 
         self._signal_group(signal.SIGTERM)
-        try:
-            self.process.wait(timeout=self.seams.desk_term_grace_s)
-        except subprocess.TimeoutExpired:
-            pass
+        self._wait(self.seams.desk_term_grace_s)
         self._signal_group(signal.SIGKILL)  # the leader and anything it left in the group
-        try:
-            self.process.wait(timeout=self.seams.desk_term_grace_s)
-        except subprocess.TimeoutExpired:
-            pass
+        self._wait(self.seams.desk_term_grace_s)
         deadline = time.monotonic() + self.seams.desk_gone_wait_s
-        gone = not (isinstance(self.pid, int) and self.pid > 0 and self.seams.group_alive(self.pid))
+        gone = not self._group_alive()
         while not gone and time.monotonic() < deadline:
             time.sleep(0.05)
             self._signal_group(signal.SIGKILL)
-            gone = not self.seams.group_alive(self.pid)
+            gone = not self._group_alive()
         self.group_gone = gone
 
     def finish(self) -> dict[str, Any]:
@@ -2575,6 +2694,7 @@ class DeskVerdictChild:
                 "heartbeats": self.heartbeats, "group_gone": self.group_gone,
                 "survivors_after_exit": self.survivors_after_exit, "lock": self.lock,
                 "child_start_time_observed": self.start_time is not None, "error": self.error,
+                "pid_recycled": self.pid_recycled, "generation_unverified": self.generation_unverified,
                 "elapsed_s": round(time.monotonic() - self._started, 3)}
 
 
@@ -2725,6 +2845,9 @@ class _Harvest:
         self.identity_checks: dict[str, dict[str, bool]] = {}
         # Arm collectors whose run ended with status ok, by stage.
         self.collector_ok: set[tuple[str, str]] = set()
+        # Each collector run record: its stage, ok collectors and start wall
+        # time, so an ok row binds only to calls it could have come from.
+        self.collector_ok_runs: list[dict[str, Any]] = []
 
     # -- step wrappers ------------------------------------------------------
     def step(self, name: str, function: Callable[[], Any], *, fault: bool = True) -> Any:
@@ -2843,13 +2966,21 @@ class _Harvest:
         plan tree; the sealed catalog decides the effect.
         """
         tree = read_json(self.pack_copy / "plan_tree.json")
-        dispatches, unresolved = stage_dispatches(tree, self.pack_copy, self.repo_root_copy)
+        report: dict[str, Any] = {}
+        dispatches, unresolved = stage_dispatches(tree, self.pack_copy, self.repo_root_copy, report=report)
         self.dispatches, self.dispatch_unresolved = dispatches, list(unresolved)
+        self.dispatch_stages = list(report.get("stages") or [])
+        self.dispatch_j3_failures = dict(report.get("j3_failures") or {})
         if unresolved:
-            # Their run ids are in no duplicate check and no per-stage yield count.
+            # Their run ids are in no duplicate check and no per-stage yield
+            # count, except a J3 failure's, whose members came from input_ref.
             self.emit("roster.dispatch_unresolved", level="window", collector="roster",
                       observed={"stages": sorted(unresolved)[:32], "count": len(unresolved),
-                                "resolver": "j3" if _j3_resolver() is not None else "input_ref"})
+                                "resolver": "j3" if _j3_resolver() is not None else "input_ref",
+                                "j3_failures": dict(sorted(self.dispatch_j3_failures.items())[:32]),
+                                "fell_back_to_input_ref": sorted(
+                                    stage for stage in self.dispatch_j3_failures
+                                    if stage in {stage_id for _ordinal, stage_id in self.dispatch_stages})[:32]})
         listings = self.roster.get("duplicate_listings") or {}
         for run_id in sorted(set(listings) | {key for key, rows in dispatches.items() if len(rows) > 1}):
             rows = dispatches.get(run_id, [])
@@ -3730,9 +3861,16 @@ class _Harvest:
         try:
             self._desk_child = DeskVerdictChild(argv, cwd=str(inputs.measurement_root), timeout_s=timeout_s,
                                                 bundles=bundles, seams=self.seams, runs_root=runs)
-        except Exception as exc:  # the writer never started: recorded, the verdict stays absent
+        except Exception as exc:  # the writer never started, or was torn down: recorded, the verdict stays absent
+            started = isinstance(exc, DeskChildInitError)
             self.emit("whole_window.producer_failed", level="window", collector="desk",
-                      observed={"step": "whole_window_verdict", "spawn_error": type(exc).__name__})
+                      observed={"step": "whole_window_verdict", "spawn_error": type(exc).__name__,
+                                "started_then_torn_down": started,
+                                "group_gone": exc.group_gone if started else None})
+            if started and not exc.group_gone:
+                # Something of the writer's group may still be writing the runs
+                # root: the archived bytes are not proven to be final.
+                self.fault("desk", "desk_verdict_group_not_proven_gone")
             return False
         return True
 
@@ -4340,7 +4478,9 @@ class _Harvest:
         untracked files under the executed roots), executed_code (executed
         inventory against the sealed one, chain sidecar) and pack_identity
         (plan-tree pins, the registered plan-tree digest, config run ids;
-        run-id uniqueness is ``roster.duplicate_run_id``).  The harvest's
+        run-id uniqueness is ``roster.duplicate_run_id``, so every collection
+        stage must have resolved).  The checks required are
+        ``IDENTITY_SUPERSESSION_CHECKS``, named explicitly.  The harvest's
         own result, mismatch or clean, then stands.  model_identity is never
         superseded: the harvest does not re-hash the model artifact,
         tokenizer or runtime packages.  The removed flag is recorded whole in
@@ -4363,19 +4503,22 @@ class _Harvest:
                 continue
             if collector not in ARM_COLLECTOR_UNMEASURED or ARM_COLLECTOR_UNMEASURED[collector] != code:
                 continue
-            checks = self.identity_checks.get(collector)
-            if not checks or not all(checks.values()):
+            checks = self.identity_checks.get(collector) or {}
+            required = IDENTITY_SUPERSESSION_CHECKS.get(collector)
+            if not required or not all(checks.get(name) is True for name in required):
                 continue
             if collector == "pack_identity":
                 code_checks = self.identity_checks.get("checkout_identity") or {}
-                if not (code_checks.get("tracked_edits") and code_checks.get("untracked_in_executed_roots")
-                        and getattr(self, "dispatches", None) is not None):
+                if not (code_checks.get("tracked_edits") is True
+                        and code_checks.get("untracked_in_executed_roots") is True
+                        and getattr(self, "dispatches", None) is not None
+                        and not getattr(self, "dispatch_unresolved", None)):
                     continue  # the committed-pack and run-id checks ride on these
             self.flags.remove(record["flag_id"])
             self.emit("records.identity_unmeasured_superseded", level="window", collector="identity",
                       observed={"superseded_flag_id": record["flag_id"], "code": code, "collector": collector,
                                 "stage": stage, "check": observed.get("check"),
-                                "harvest_checks": sorted(checks)})
+                                "harvest_checks": sorted(required), "superseded_flag": dict(record)})
 
     # -- arm record and earlier flag files -------------------------------------
     def arm_and_desk_records(self) -> None:
@@ -4506,8 +4649,12 @@ class _Harvest:
         """A ``joulewise.flag_collector_run.v1`` record: every collector whose status is not ``ok``."""
         stage = record.get("stage") if isinstance(record.get("stage"), str) else "unknown"
         rows = record.get("collectors") if isinstance(record.get("collectors"), list) else []
-        self.collector_ok |= {(stage, str(row.get("collector"))) for row in rows
-                              if isinstance(row, Mapping) and row.get("status") == "ok"}
+        ok = {str(row.get("collector")) for row in rows if isinstance(row, Mapping) and row.get("status") == "ok"}
+        self.collector_ok |= {(stage, name) for name in ok}
+        if not hasattr(self, "collector_ok_runs"):
+            self.collector_ok_runs = []
+        self.collector_ok_runs.append({"stage": stage, "ok": frozenset(ok),
+                                       "started_wall_s": _stamp_wall_s(record.get("started"))})
         listed = record.get("collector_errors") if isinstance(record.get("collector_errors"), list) else []
         failed = [row for row in rows if isinstance(row, Mapping) and row.get("status") != "ok"]
         named = {row.get("collector") for row in failed}
@@ -4546,6 +4693,9 @@ class _Harvest:
         """
         night = self.inputs.night_dir
         records = []
+        # (source, start wall seconds or None) of every call that failed as a
+        # whole or whose receipt cannot be read (fail closed, PLAN2 row 12).
+        failed_calls: list[tuple[str, float | None]] = []
         for path in sorted(night.glob("arm_collectors*.json")) if night.is_dir() else []:
             try:
                 records.append((path, read_json(path)))
@@ -4553,9 +4703,11 @@ class _Harvest:
                 self._prior_collector_error(stage="arm", collector=path.name, status="malformed",
                                             error="unreadable driver collector record", elapsed_s=None,
                                             source=f"night/{path.name}")
+                failed_calls.append((f"night/{path.name}", None))
         results: list[tuple[str, Mapping[str, Any]]] = []
         for path, record in records:
             if not isinstance(record, Mapping):
+                failed_calls.append((f"night/{path.name}", None))
                 continue
             source = f"night/{path.name}"
             items = [item for item in record.get("results") or [] if isinstance(item, Mapping)] \
@@ -4569,31 +4721,44 @@ class _Harvest:
         if not records and isinstance(arm_value, Mapping):
             results = [("hazards/arm.json", item) for item in arm_value.get("record_only") or []
                        if isinstance(item, Mapping)]
-        call_failed = [source for source, record in ((f"night/{path.name}", record) for path, record in records)
-                       if isinstance(record, Mapping) and not record.get("results") and record.get("collector_error")]
+        failed_calls += [(f"night/{path.name}", _stamp_wall_s(record.get("started")) or _stamp_wall_s(record.get("at")))
+                         for path, record in records
+                         if isinstance(record, Mapping) and not record.get("results") and record.get("collector_error")]
         for source, item in results:
             failed = item.get("error") or item.get("timed_out") or (
                 _is_int(item.get("returncode")) and item.get("returncode") != 0)
             if failed:
-                call_failed.append(source)
-            if failed:
+                failed_calls.append((source, _stamp_wall_s(item.get("started"))))
                 status = "timeout" if item.get("timed_out") else "error"
                 error = item.get("error") or ("timed out" if item.get("timed_out")
                                               else f"exit {item.get('returncode')}")
                 self._prior_collector_error(stage="arm", collector=str(item.get("name") or "collector"),
                                             status=status, error=error, elapsed_s=item.get("elapsed_s"),
                                             source=source)
-        if call_failed:
+        if failed_calls:
             # The arm's collector call was killed or failed as a whole, so a
             # collector it never finished wrote neither its flags nor its run
-            # row.  Fail closed: each collector without an ok arm row is
-            # unmeasured (PLAN2 row 12); supersede_identity_unmeasured then
-            # lifts the ones this harvest re-derived.
+            # row.  Fail closed: each collector without an ok arm row from a
+            # run that started no earlier than the latest failed call is
+            # unmeasured (PLAN2 row 12); an ok row from an earlier call does
+            # not speak for a later one, and a failed call whose start is
+            # unknown (an unreadable receipt) lets no ok row through.
+            # supersede_identity_unmeasured then lifts the ones this harvest
+            # re-derived.
+            starts = [start for _source, start in failed_calls]
+            latest = max(starts) if starts and all(start is not None for start in starts) else None
+            bound = set()
+            if latest is not None:
+                for run in getattr(self, "collector_ok_runs", None) or []:
+                    started = run.get("started_wall_s")
+                    if run.get("stage") == "arm" and started is not None and started >= latest:
+                        bound |= set(run.get("ok") or ())
             for name, code in ARM_COLLECTOR_UNMEASURED.items():
-                if ("arm", name) not in self.collector_ok:
+                if name not in bound:
                     self.emit(code, level="window", collector="arm_collectors",
                               observed={"check": "collector_run", "collector": name, "status": "call_failed",
-                                        "source": call_failed[0]},
+                                        "source": failed_calls[-1][0],
+                                        "failed_calls": [source for source, _start in failed_calls][:8]},
                               expected={"status": "ok"})
 
     # -- G3 provenance checker -------------------------------------------------
@@ -4851,6 +5016,13 @@ class _Harvest:
                                         "reason": _DIGITS_RE.sub("#", reason)[:200] if reason else None}
         return observed
 
+    def _bundle_on_disk(self, run_id: str) -> bool:
+        """A bundle directory for ``run_id`` in a runs root (no flag; :meth:`locate` emits)."""
+        try:
+            return any((root / run_id).is_dir() for root in self._runs_roots())
+        except OSError:
+            return False
+
     def _raw_valid(self, result: Mapping[str, Any]) -> bool:
         stream = result.get("stream_bytes")
         return bool(result.get("present")) and not result.get("files_missing") \
@@ -4865,11 +5037,21 @@ class _Harvest:
                 counts["present"] += 1
                 counts["raw_valid"] += self._raw_valid(result)
                 counts["succeeded"] += result.get("status") == "succeeded"
+            elif result is None and self._bundle_on_disk(run_id):
+                # Bytes are present though no assessment of them is: present,
+                # never raw_valid or succeeded (an assessment that failed or
+                # never ran proves neither).
+                counts["present"] += 1
             counts["strict_deferred"] += (joined.get(run_id) or {}).get("strict_validation") == STRICT_DEFERRED
         return counts
 
     def _collection_stages(self) -> list[tuple[str, list[str]]]:
-        """(stage_id, run ids it first launches), in plan-tree order, from the dispatch map."""
+        """(stage_id, run ids it first launches), in plan-tree order, from the dispatch map.
+
+        A collection stage that was read but launches no run id (or only run
+        ids an earlier stage launched) is listed with no run ids, so the yield
+        shows it as planned 0 instead of dropping it.
+        """
         stages: dict[str, list[str]] = {}
         order: list[tuple[Any, str]] = []
         for run_id, rows in (getattr(self, "dispatches", None) or {}).items():
@@ -4880,6 +5062,10 @@ class _Harvest:
                 stages[stage_id] = []
                 order.append((rows[0].get("ordinal") if _is_int(rows[0].get("ordinal")) else 0, stage_id))
             stages[stage_id].append(run_id)
+        for ordinal, stage_id in getattr(self, "dispatch_stages", None) or []:
+            if stage_id not in stages:
+                stages[stage_id] = []
+                order.append((ordinal if _is_int(ordinal) else 0, stage_id))
         return [(stage_id, stages[stage_id]) for _ordinal, stage_id in sorted(order)]
 
     def stage_journal(self) -> list[dict[str, Any]] | None:
@@ -4924,6 +5110,7 @@ class _Harvest:
                                       for stage_id, run_ids in sorted(per_roster.items())],
                  "per_collection_stage": per_collection,
                  "unresolved_collection_stages": sorted(getattr(self, "dispatch_unresolved", []) or []),
+                 "j3_failed_stages": sorted(getattr(self, "dispatch_j3_failures", None) or {}),
                  "stage_journal": None if journal is None else {
                      "stages": len(journal),
                      "campaign_collection": sum(row.get("kind") == "campaign_collection" for row in journal)}}
@@ -5011,10 +5198,19 @@ class _Harvest:
             for path in sorted(directory.glob("*.json")) if directory.is_dir() else []:
                 try:
                     manifest = read_json(path)
-                except (OSError, ValueError):
+                except (OSError, ValueError) as exc:
+                    # The stage's readings are not readable: disclosed, never skipped.
+                    self.emit("thermal.battery_temperature_unmeasured", level="window", collector="thermistor",
+                              observed={"manifest": path.name, "runs_root": root.name, "config_dir": None,
+                                        "reason": "manifest_unreadable", "error": type(exc).__name__})
                     continue
-                if not isinstance(manifest, Mapping) or not isinstance(manifest.get("members"), list):
+                if not isinstance(manifest, Mapping):
+                    self.emit("thermal.battery_temperature_unmeasured", level="window", collector="thermistor",
+                              observed={"manifest": path.name, "runs_root": root.name, "config_dir": None,
+                                        "reason": "manifest_malformed"})
                     continue
+                if not isinstance(manifest.get("members"), list):
+                    continue  # not a stage's campaign manifest (run_campaign writes members on every one)
                 stage = {"manifest": path.name, "runs_root": root.name,
                          "config_dir": Path(str(manifest.get("config_dir") or "")).name or None}
                 readings = manifest.get(BATTERY_TEMPERATURE_MANIFEST_KEY)
@@ -5200,6 +5396,17 @@ def _g3_lines(stdout: str) -> list[dict[str, str]]:
         if match and match.group(2) != "CLI":
             rows.append({"status": match.group(1), "id": match.group(2)})
     return rows
+
+
+def _stamp_wall_s(value: Any) -> float | None:
+    """Wall seconds from a stamp: ``wall_s`` (driver, flags) or ``wall_ns`` (hazards); else None."""
+    if not isinstance(value, Mapping):
+        return None
+    if _is_number(value.get("wall_s")):
+        return float(value["wall_s"])
+    if _is_int(value.get("wall_ns")):
+        return value["wall_ns"] / 1e9
+    return None
 
 
 def _porcelain_path(text: str) -> str:
