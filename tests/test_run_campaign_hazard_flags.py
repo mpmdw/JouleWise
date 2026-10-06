@@ -96,6 +96,10 @@ FAKE_CLI = textwrap.dedent(
     if "nometa" in run_id:
         (runs_dir / run_id).mkdir(parents=True)
         raise SystemExit(9)
+    if "badutf8" in run_id:
+        (runs_dir / run_id).mkdir(parents=True)
+        (runs_dir / run_id / "metadata.json").write_bytes(bytes([0xFF, 0xFE, 0x7B]))
+        raise SystemExit(9)
     if "foreignlineage" in run_id:
         (runs_dir / run_id).mkdir(parents=True)
         (runs_dir / run_id / "metadata.json").write_text(json.dumps({{"extra": {{
@@ -220,9 +224,10 @@ class _Stage(unittest.TestCase):
             (directory / f"{index:02d}-{run_id}.json").write_text(json.dumps(payload) + "\n")
         return directory
 
-    def idle_policy(self) -> Path:
+    def idle_policy(self, **cooldown) -> Path:
         payload = json.loads(TEST_POLICY.read_text())
         payload["idle_admission"]["enabled"] = True
+        payload["cooldown"].update(cooldown)
         path = self.base / "policy-idle.json"
         path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
         return path
@@ -318,7 +323,8 @@ class CooldownUnknownTests(_Stage):
         with self._ineligible(), patch.object(
                 run_campaign, "_hazard_cooldown_telemetry", return_value=(telemetry, clock, None),
                 create=True):
-            result = self.run_stage(self.configs(*self.MEMBERS), runs, policy=self.idle_policy())
+            result = self.run_stage(self.configs(*self.MEMBERS), runs,
+                                    policy=self.idle_policy(cap_s=300.0))
         self.assertEqual(result.code, 0, result.err)
         self.assertEqual(self.invoked(runs), list(self.MEMBERS), result.err)
         self.assertEqual([row for row in self.flags() if row["code"] == "cooldown.result_unknown"], [])
@@ -341,7 +347,7 @@ class CooldownUnknownTests(_Stage):
             self.assertEqual(note["reference_selection"], "hazard_self_referenced")
             self.assertEqual(note["fallback_from"]["result"], "unknown")
             # The thresholds are the stage policy file's, not a second copy.
-            policy = json.loads(self.idle_policy().read_text())["cooldown"]
+            policy = json.loads(self.idle_policy(cap_s=300.0).read_text())["cooldown"]
             for key in ("sustained_window_s", "tolerance_fraction", "cap_s", "subwindow_s"):
                 self.assertEqual(note["thresholds"][key], policy[key])
 
@@ -531,47 +537,70 @@ class MeasuredCooldownTests(_Stage):
         from joulewise.clock import FakeClock
 
         clock = FakeClock()
-        telemetry = _StubTelemetry(clock, [9.0, 7.0, 5.6, 5.1, 5.0])
+        # Six 5 s captures still hot (one 30 s window), then idle at 5.0 W.
+        telemetry = _StubTelemetry(clock, [9.0] * 6 + [5.0])
         note = self.measure(telemetry, clock, self.binding())
         self.assertEqual(note["result"], "recovered")
         self.assertEqual(note["reference_selection"], "hazard_self_referenced")
-        # (9,7) and (7,5.6) are still falling by more than 10 %; (5.6,5.1) is steady.
-        self.assertEqual(telemetry.captures, 4)
-        self.assertEqual(note["waited_s"], 20.0)
-        self.assertEqual(note["reference_power_w"], 5.1)
+        # Release needs two adjacent steady 30 s windows after the tail.
+        self.assertEqual(telemetry.captures, 18)
+        self.assertEqual(note["waited_s"], 90.0)
+        self.assertEqual(note["reference_power_w"], 5.0)
+        self.assertEqual(note["self_reference"]["window_s"], 30.0)
         self.assertEqual(note["fallback_from"], {"result": "unknown", "reason": REFERENCE_UNAVAILABLE})
         kinds = [row["observed"] for row in self.flags()]
         self.assertEqual(kinds, [{"kind": "cooldown_fallback_reference",
                                   "reference_selection": "hazard_self_referenced",
                                   "result": "recovered", "fallback_from": "reference_unavailable"}])
 
-    def test_keepers_a_tail_that_never_settles_or_a_hot_machine_is_cap_hit(self) -> None:
+    def test_keepers_falling_rising_or_hot_power_is_never_released(self) -> None:
+        # Sol review F1: a still-falling tail and a rising level are not steady,
+        # also under the council's tolerance 1.0; a hot machine is not cool.
         from joulewise.clock import FakeClock
 
-        for name, powers, thermal in (
-            ("still_falling", [10.0 * 0.8 ** k for k in range(80)], "nominal"),
-            ("thermal_not_nominal", [5.0], "serious"),
+        for name, powers, thermal, cooldown in (
+            ("still_falling", [10.0 * 0.95 ** k for k in range(80)], "nominal", {}),
+            ("rising", [5.0 * 1.05 ** k for k in range(80)], "nominal", {}),
+            ("council_falling", [10.0 * 0.8 ** k for k in range(80)], "nominal",
+             {"sustained_window_s": 5.0, "tolerance_fraction": 1.0}),
+            ("council_rising", [5.0 * 1.2 ** k for k in range(80)], "nominal",
+             {"sustained_window_s": 5.0, "tolerance_fraction": 1.0}),
+            ("thermal_not_nominal", [5.0], "serious", {}),
         ):
             with self.subTest(name):
                 self.provenance = self.runs / "campaign_manifests" / f"campaign-{name}.json"
                 clock = FakeClock()
-                note = self.measure(_StubTelemetry(clock, powers, thermal), clock, self.binding())
+                note = self.measure(_StubTelemetry(clock, powers, thermal), clock,
+                                    self.binding(**cooldown))
                 self.assertEqual(note["result"], "cap_hit")
                 self.assertGreaterEqual(note["waited_s"], 300.0)
 
     def test_thresholds_come_from_the_policy_file(self) -> None:
-        # The council's block-5 values (sustained 5 s, tolerance 1.0): the
-        # same tail is steady after two windows.
+        # The council's block-5 values (sustained 5 s, tolerance 1.0) are read
+        # and recorded; the self-referenced test never runs looser than the
+        # cooldown-v2 defaults (30 s windows, 10 %), since it has no idle anchor.
         from joulewise.clock import FakeClock
 
         clock = FakeClock()
-        telemetry = _StubTelemetry(clock, [9.0, 7.0, 5.6])
-        note = self.measure(telemetry, clock, self.binding(tolerance_fraction=1.0))
+        telemetry = _StubTelemetry(clock, [5.0])
+        note = self.measure(telemetry, clock, self.binding(sustained_window_s=5.0,
+                                                           tolerance_fraction=1.0, cap_s=240.0))
         self.assertEqual(note["result"], "recovered")
-        self.assertEqual(telemetry.captures, 2)
+        self.assertEqual(telemetry.captures, 12)
         self.assertEqual(note["thresholds"]["tolerance_fraction"], 1.0)
         self.assertEqual(note["thresholds"]["sustained_window_s"], 5.0)
-        self.assertEqual(note["reference_upper_w"], 14.0)
+        self.assertEqual(note["thresholds"]["cap_s"], 240.0)
+        self.assertEqual(note["self_reference"]["window_s"], 30.0)
+        self.assertEqual(note["self_reference"]["stability_fraction"], 0.1)
+        # A policy stricter than the floor is used as written.
+        self.provenance = self.runs / "campaign_manifests" / "campaign-strict.json"
+        clock = FakeClock()
+        strict = self.measure(_StubTelemetry(clock, [5.0]), clock,
+                              self.binding(sustained_window_s=60.0, tolerance_fraction=0.05))
+        self.assertEqual(strict["self_reference"], {
+            "window_s": 60.0, "stability_fraction": 0.05,
+            "rule": "max(policy.sustained_window_s, 30 s); min(policy.tolerance_fraction, 0.10); "
+                    "two-sided"})
 
     def test_last_eligible_session_baseline_is_the_first_fallback(self) -> None:
         from joulewise.clock import FakeClock
@@ -654,6 +683,20 @@ class ChildMetadataAbsentTests(_Stage):
         self.assertEqual(flags[0]["observed"]["returncode"], 9)
         statuses = {row.get("run_id"): row.get("status") for row in self.log_rows(runs)}
         self.assertEqual(statuses["hz-nometa-1"], "failed")
+
+    def test_a4_undecodable_metadata_fails_alone_and_is_flagged(self) -> None:
+        # Bytes a crashed child left half-written (not UTF-8) are the same
+        # absent-metadata fact: that member fails, the next one still runs.
+        runs = self.hazard_root()
+        with self._authenticated():
+            result = self.run_stage(self.configs("hz-badutf8-1", "hz-nobundle-2"), runs)
+        self.assertEqual(result.code, 1, result.err)
+        self.assertEqual(self.invoked(runs), ["hz-badutf8-1", "hz-nobundle-2"])
+        self.assertEqual([row["scope"]["run_id"] for row in self.flags()
+                          if row["observed"].get("kind") == "child_metadata_absent"],
+                         ["hz-badutf8-1"])
+        statuses = {row.get("run_id"): row.get("status") for row in self.log_rows(runs)}
+        self.assertEqual(statuses["hz-badutf8-1"], "failed")
 
     def test_a4_keeper_foreign_child_lineage_still_ends_the_stage(self) -> None:
         runs = self.hazard_root()

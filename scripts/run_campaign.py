@@ -2831,7 +2831,25 @@ def evaluate_member(
     info: ConfigInfo,
     waivers: WaiverMap,
     cooldown_evidence: dict[str, Any] | None = None,
+    hazard: Any = None,
 ) -> MemberEvaluation:
+    if hazard is not None and _hazard_metadata_undecodable(bundle_dir):
+        # HAZARD (A4): bytes a crashed child left undecodable are the
+        # absent-metadata fact already flagged; every reader below re-decodes
+        # them, so the member is evaluated as failed here.  Legacy: unchanged.
+        return MemberEvaluation(
+            bundle_id=bundle_dir.name,
+            bundle_path=bundle_dir,
+            config_name=info.path.name,
+            status=None,
+            strict_valid=False,
+            validation_problems=("metadata.json is not UTF-8 (member failed mid-run)",),
+            preceding_campaign_cooldown=cooldown_evidence,
+            declared_role=info.role,
+            sentinel_position=info.sentinel_position,
+            scientific_config_sha256=info.scientific_config_sha256,
+            canonical_neg8_workload=info.canonical_neg8_workload,
+        )
     status, malformed = summary_status(bundle_dir / "summary_metrics.json")
     problems: list[str] = []
     strict_valid = False
@@ -2945,6 +2963,8 @@ def evaluate_members(
     runs_dir: Path,
     waivers: WaiverMap,
     cooldown_by_bundle: dict[str, dict[str, Any]] | None = None,
+    *,
+    hazard: Any = None,
 ) -> list[MemberEvaluation]:
     cooldown_by_bundle = cooldown_by_bundle or {}
     return [
@@ -2953,6 +2973,7 @@ def evaluate_members(
             info=info,
             waivers=waivers,
             cooldown_evidence=cooldown_by_bundle.get(bundle_dir.name),
+            **_hazard_kwargs(hazard),
         )
         for bundle_dir in expected_member_dirs(info, runs_dir)
     ]
@@ -3581,6 +3602,18 @@ def _hazard_call(
         return _HAZARD_FAILED
 
 
+def _hazard_metadata_undecodable(bundle_dir: Path) -> bool:
+    """True when ``metadata.json`` exists but its bytes are not UTF-8."""
+
+    try:
+        (bundle_dir / "metadata.json").read_bytes().decode("utf-8")
+    except UnicodeDecodeError:
+        return True
+    except OSError:
+        return False
+    return False
+
+
 def _hazard_member_run_id(info: Any) -> str | None:
     """Member-scope run id: the bundle directory name of a one-repetition config."""
 
@@ -3877,7 +3910,9 @@ def _hazard_flagged_admission_is_quiet(admission: Mapping[str, Any]) -> bool:
 # cooldown evidence verifies at harvest.  ``member.cooldown_evidence_unverified``
 # stays EXCLUDE_MEMBER for any member whose cooldown was still not measured.
 # Every threshold comes from the stage's campaign policy file (its ``cooldown``
-# block); nothing here is a second copy of the policy.
+# block); nothing here is a second copy of the policy.  The one exception is
+# the self-referenced test, which has no idle anchor and so never runs looser
+# than the cooldown-v2 defaults (see _hazard_self_referenced_cooldown_gate).
 
 _HAZARD_COOLDOWN_LAST_ELIGIBLE = "hazard_last_eligible_baseline"
 _HAZARD_COOLDOWN_WINDOW_ANCHOR = "hazard_window_opening_anchor"
@@ -3983,16 +4018,21 @@ def _hazard_self_referenced_cooldown_gate(
     run_id: str,
     policy: CooldownPolicy,
 ) -> dict[str, Any]:
-    """Hold until the machine has stopped cooling, with no outside reference.
+    """Hold until power is steady, with no outside reference.
 
-    Two adjacent complete windows of the policy's ``sustained_window_s``,
-    each with the policy's minimum coverage: the newest window's
-    duration-weighted mean is the reference, and the release criterion is
-    that the window before it lies at or below ``reference * (1 +
-    tolerance_fraction)``: power is no longer falling by more than the
-    policy's own tolerance, so the recovery tail of the previous member is
-    over.  Thermal pressure must be nominal when the policy requires it; an
-    absolute ceiling caps the newest window; ``cap_s`` ends the wait as
+    Two adjacent complete windows, each with the policy's minimum coverage.
+    The newest window's duration-weighted mean is the reference; the release
+    criterion is two-sided: the window before it lies within ``stability
+    fraction`` of the reference, so power is neither still falling (a
+    recovery tail) nor rising.  With no idle anchor to bound the level, the
+    test never runs looser than the cooldown-v2 defaults
+    (``CooldownPolicy()``: 30 s windows, 10 %): the window is
+    ``max(policy.sustained_window_s, 30 s)`` and the fraction
+    ``min(policy.tolerance_fraction, 0.10)``.  A slow tail can look flat over
+    5 s but not over 30 s, and a recovery tolerance of 1.0 (the block-5
+    council value, judged against an idle reference) is no stability bound.
+    Thermal pressure must be nominal when the policy requires it; an absolute
+    ceiling caps the newest window; the policy's ``cap_s`` ends the wait as
     ``cap_hit``.  The trace rows carry the terminal ``release`` and
     ``release_criteria_met_late`` fields that ``cooldown_disposition_from_raw``
     re-derives at harvest, exactly as ``controller.cooldown_gate`` writes them.
@@ -4007,7 +4047,9 @@ def _hazard_self_referenced_cooldown_gate(
         run_id=run_id,
         sampling=replace(config.sampling, idle_seconds=policy.subwindow_s),
     )
-    window_s = policy.sustained_window_s
+    floor = CooldownPolicy()
+    window_s = max(policy.sustained_window_s, floor.sustained_window_s)
+    stability_fraction = min(policy.tolerance_fraction, floor.tolerance_fraction)
     required_coverage_s = policy.coverage_fraction * window_s
     start_s = clock.now()
     readings: list[tuple[float, float, float, float]] = []
@@ -4052,7 +4094,12 @@ def _hazard_self_referenced_cooldown_gate(
             thermal_pressure.lower() in {"nominal", "normal"}
         )
         reference_upper_w = (
-            current_mean * (1.0 + policy.tolerance_fraction)
+            current_mean * (1.0 + stability_fraction)
+            if current_mean is not None
+            else None
+        )
+        reference_lower_w = (
+            current_mean * (1.0 - stability_fraction)
             if current_mean is not None
             else None
         )
@@ -4061,8 +4108,9 @@ def _hazard_self_referenced_cooldown_gate(
         )
         steady = bool(
             reference_upper_w is not None
+            and reference_lower_w is not None
             and previous_mean is not None
-            and previous_mean <= reference_upper_w
+            and reference_lower_w <= previous_mean <= reference_upper_w
         )
         release_criteria_met = bool(
             window_complete
@@ -4088,6 +4136,9 @@ def _hazard_self_referenced_cooldown_gate(
                 "coverage_complete": coverage_complete,
                 "window_complete": window_complete,
                 "reference_upper_w": reference_upper_w,
+                "reference_lower_w": reference_lower_w,
+                "self_reference_window_s": window_s,
+                "stability_fraction": stability_fraction,
                 "absolute_ceiling_w": policy.absolute_ceiling_w,
                 "steady": steady,
                 "thermal_pressure": thermal_pressure,
@@ -4110,7 +4161,14 @@ def _hazard_self_referenced_cooldown_gate(
                 "tolerance_fraction": policy.tolerance_fraction,
                 "absolute_ceiling_w": policy.absolute_ceiling_w,
                 "reference_upper_w": reference_upper_w,
+                "reference_lower_w": reference_lower_w,
                 "effective_upper_w": reference_upper_w,
+                "self_reference": {
+                    "window_s": window_s,
+                    "stability_fraction": stability_fraction,
+                    "rule": "max(policy.sustained_window_s, 30 s); "
+                            "min(policy.tolerance_fraction, 0.10); two-sided",
+                },
                 "decision_rolling_mean_power_w": previous_mean,
                 "window_span_s": current_span_s,
                 "window_coverage_s": current_coverage_s,
@@ -4121,13 +4179,14 @@ def _hazard_self_referenced_cooldown_gate(
                 "thermal_nominal": thermal_nominal,
                 "release_criterion": {
                     "power": (
-                        "previous_window_mean <= newest_window_mean * (1 + tolerance_fraction)"
+                        "|previous_window_mean - newest_window_mean| "
+                        "<= stability_fraction * newest_window_mean"
                     ),
                     "reference_bound": "newest complete sustained window (self-referenced)",
                     "absolute_ceiling_role": "additional_upper_cap_on_newest_window",
                     "window": "two_adjacent_complete_sustained_windows",
                     "coverage": (
-                        "each window_coverage_s >= coverage_fraction * sustained_window_s"
+                        "each window_coverage_s >= coverage_fraction * self_reference.window_s"
                     ),
                     "thermal": (
                         "nominal_required" if policy.require_thermal_nominal else "not_required"
@@ -9882,7 +9941,7 @@ def run_campaign(args: argparse.Namespace) -> int:
                 physical_cooldowns = {}
             cooldown_by_bundle.update(physical_cooldowns)
             evaluations = evaluate_members(
-                info, runs_dir, waivers, cooldown_by_bundle
+                info, runs_dir, waivers, cooldown_by_bundle, **_hazard_kwargs(hazard)
             )
             all_evaluations.extend(evaluations)
             if evaluations:
