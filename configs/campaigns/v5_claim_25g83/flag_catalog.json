@@ -749,6 +749,20 @@
       "klass": "NUMBER",
       "note": "A bundle created before chain.started; it is ignored, not used."
     },
+    "roster.creation_unplaced": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_MEMBER",
+      "family": "ROSTER",
+      "klass": "NUMBER",
+      "note": "A bundle with no stamp that places it after chain.started (no sampler, controller or run_started stamp); it is ignored, not used, like an early one. Derived by the exclusion function. Added after the end-to-end rehearsal, round 1 (B7)."
+    },
+    "roster.duplicate_run_id": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_WINDOW",
+      "family": "ROSTER",
+      "klass": "NUMBER",
+      "note": "The plan tree launches (or lists) one run id more than once; the campaign runner skips a run id whose bundle exists, so every planned position after the first is never measured and the window is not the registered design (GAMMA's interior references until lane L10 gives them distinct run ids). Added after the end-to-end rehearsal, round 1 (B3)."
+    },
     "roster.foreign_attempt": {
       "blinding": "STRUCTURE",
       "effect": "EXCLUDE_MEMBER",
@@ -831,7 +845,7 @@
     "aggregate_disclosures": "whole_window.not_passed and g3.recompute_failed are DISCLOSE because they fail on any single member's failure. Their window-level parts are neg8.screen_failed (emitted by the harvest, with the collected-subset re-screen) and calibration.bracket_acceptance_failed; their member-level part is member.whole_window_member_failure.",
     "authority": "registration_block5.md section 6 states these rules in words; this file is normative for each code's effect.",
     "restated_classes": "roster.run_id_mismatch (emitter REPRESENTATION, restated NUMBER here) is the one restatement; its note says why. calibration.ledger_snapshot_refused now keeps its emitter's class, NUMBER.",
-    "status": "DRAFT, NOT SEALED. Revision 4, 2026-10-06 (registration-sync side lane; revision 3 is commit 71c91d74). Sealed with registration_block5.md, analysis_plan_block5.md and sealed_inventory.json by one cold gate (registration 12).",
+    "status": "DRAFT, NOT SEALED. Revision 4, 2026-10-06 (registration-sync side lane; revision 3 is commit 71c91d74). Sealed with registration_block5.md, analysis_plan_block5.md and sealed_inventory.json by one cold gate (registration 12). Rehearsal round-1 additions, 2026-10-06 (gate-prune fix lane): roster.duplicate_run_id and roster.creation_unplaced.",
     "unclassified": "A code not listed here is UNCLASSIFIED: it blocks only the release event until classified blind by a cold erratum (registration 7.2). records.malformed_flag and collector.unmeasured are deliberately absent so that they always block release until read."
   },
   "rules": {
