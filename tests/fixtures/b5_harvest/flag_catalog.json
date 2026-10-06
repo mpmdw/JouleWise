@@ -456,6 +456,12 @@
       "family": "MEMBER_VALIDITY",
       "klass": "NUMBER"
     },
+    "member.stderr_uncopied": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_MEMBER",
+      "family": "MEMBER_VALIDITY",
+      "klass": "NUMBER"
+    },
     "member.strict_validation_failed": {
       "blinding": "STRUCTURE",
       "effect": "EXCLUDE_MEMBER",
@@ -463,6 +469,12 @@
       "klass": "NUMBER"
     },
     "member.target_phase_precheck_failed": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_MEMBER",
+      "family": "MEMBER_VALIDITY",
+      "klass": "NUMBER"
+    },
+    "member.timeout": {
       "blinding": "STRUCTURE",
       "effect": "EXCLUDE_MEMBER",
       "family": "MEMBER_VALIDITY",

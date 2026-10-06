@@ -58,6 +58,9 @@ SECTION_5 = {
     "neg8.corpus_member_dropped": ("NEG8", "REPRESENTATION", DISCLOSE),
     "calibration.capture_battery_span": ("CALIBRATION", "PHYSICS", EXCLUDE_WINDOW),
     "calibration.capture_battery_unmeasured": ("CALIBRATION", "PHYSICS", EXCLUDE_WINDOW),
+    # Gate-prune round 2, lane P2-RC.
+    "member.timeout": ("MEMBER_VALIDITY", "NUMBER", EXCLUDE_MEMBER),
+    "member.stderr_uncopied": ("MEMBER_VALIDITY", "NUMBER", EXCLUDE_MEMBER),
 }
 HARVEST_NONCORE_CODES = ("neg8.corpus_member_dropped", "calibration.capture_battery_span",
                          "calibration.capture_battery_unmeasured", "calibration.capture_invalid")

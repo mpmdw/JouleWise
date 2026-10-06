@@ -50,6 +50,9 @@ CORE_FLAG_CODES: Mapping[str, tuple[str, str]] = {
     # --- gate-prune round 2, lane P2-RC (scripts/run_campaign.py; PLAN2 row 8) ---
     # A member child killed at the wall-clock cap.  Proposed effect EXCLUDE_MEMBER.
     "member.timeout": ("MEMBER_VALIDITY", "NUMBER"),
+    # The member's stderr file did not reach the stage log, so an unwritten flag
+    # in it would be unseen by the harvest.  Proposed effect EXCLUDE_MEMBER.
+    "member.stderr_uncopied": ("MEMBER_VALIDITY", "NUMBER"),
 }
 
 

@@ -300,6 +300,9 @@ CODES: dict[str, CodeSpec] = {
         ("env.stage_preflight_not_admitted", ("DIAGNOSTIC", "REPRESENTATION")),
         ("campaign.runner_record_flagged", ("RECORDS", "REPRESENTATION")),
         ("calibration.writer_record_flagged", ("CALIBRATION", "REPRESENTATION")),
+        # Gate-prune round 2, lane P2-RC (PLAN2 row 8, yield E).
+        ("member.timeout", ("MEMBER_VALIDITY", "NUMBER")),
+        ("member.stderr_uncopied", ("MEMBER_VALIDITY", "NUMBER")),
     )},
 }
 # The codes above that only protected-core writers emit (the harvest folds them).
@@ -308,6 +311,8 @@ CORE_WRITER_CODES = frozenset({
     "instrument.binary_identity_unmeasured", "env.member_quiet_state_violated", "env.member_guard_flagged",
     "member.idle_admission_telemetry_missing", "teardown.survivors", "cooldown.result_unknown",
     "env.stage_preflight_not_admitted", "campaign.runner_record_flagged", "calibration.writer_record_flagged",
+    # Gate-prune round 2, lane P2-RC.
+    "member.timeout", "member.stderr_uncopied",
 })
 # joulewise.flags.core.UNWRITTEN_MARKER, read and never imported: a core flag
 # whose write failed is printed whole to the stage's stderr behind it (N8).
