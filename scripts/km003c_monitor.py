@@ -76,11 +76,15 @@ def rusage() -> dict:
             "nvcsw": ru.ru_nvcsw, "nivcsw": ru.ru_nivcsw}
 
 
-def init_meter(args, errors: list[str]):
-    """(meter, header fields) on success; raises MeterAbsent after the last failed attempt."""
+def init_meter(args, errors: list[str], stopping=lambda: False):
+    """(meter, header fields) on success; raises MeterAbsent after the last failed
+    attempt, or as soon as ``stopping()`` is true between attempts (a SIGTERM
+    during initialisation ends the retries)."""
 
     lib = usb.load_libusb(args.libusb)  # MeterAbsent when libusb is missing
     for attempt in range(1, args.init_attempts + 1):
+        if stopping():
+            raise usb.MeterAbsent(f"stopped by a signal before init attempt {attempt}")
         device = None
         try:
             device = usb.UsbDevice(lib, vid=args.vid, pid=args.pid,
@@ -108,7 +112,7 @@ def init_meter(args, errors: list[str]):
             errors.append(f"attempt {attempt}: {type(exc).__name__}: {exc}")
             if device is not None:
                 device.close()
-            if attempt < args.init_attempts:
+            if attempt < args.init_attempts and not stopping():
                 time.sleep(1.0)
     raise usb.MeterAbsent(f"all {args.init_attempts} init attempts failed")
 
@@ -150,18 +154,21 @@ def main(argv: list[str] | None = None) -> int:
               "qos": "default", "init_errors": [], "process_id": os.getpid(),
               "smc_keys": list(smc.KEYS), "smc_units": dict(smc.UNITS)}
     meter = None
-    try:
-        meter, fields = init_meter(args, header["init_errors"])
-        header.update(fields)
-    except usb.MeterAbsent as exc:
-        header.update(status="absent", reason=str(exc), init_attempts=len(header["init_errors"]))
-    header.update(start_raw_ns=raw_ns(), start_mono_ns=time.monotonic_ns(), start_real_ns=time.time_ns())
-    out.write(json.dumps(header, sort_keys=True) + "\n")
-    out.flush()
-
     counts = {"polls": 0, "empties": 0, "bad": 0, "usb_errors": 0}
-    t_start = header["start_raw_ns"]
+    t_start = raw_ns()
+    # Everything after the output is open sits inside the cleanup boundary: a
+    # failed write (a full disk) still stops the graph and releases the meter.
     try:
+        try:
+            meter, fields = init_meter(args, header["init_errors"],
+                                       stopping=lambda: stop["reason"] is not None)
+            header.update(fields)
+        except usb.MeterAbsent as exc:
+            header.update(status="absent", reason=str(exc), init_attempts=len(header["init_errors"]))
+        header.update(start_raw_ns=raw_ns(), start_mono_ns=time.monotonic_ns(), start_real_ns=time.time_ns())
+        t_start = header["start_raw_ns"]
+        out.write(json.dumps(header, sort_keys=True) + "\n")
+        out.flush()
         if meter is not None:
             next_t = time.monotonic()
             deadline = next_t + args.duration if args.duration > 0 else None
@@ -209,23 +216,29 @@ def main(argv: list[str] | None = None) -> int:
                 next_t += poll_s
                 pause = next_t - time.monotonic()
                 if pause > 0:
-                    time.sleep(pause)  # a signal ends the sleep early; the loop then exits
+                    # A signal handler that returns does not cut the sleep short
+                    # (PEP 475); the loop exits after at most one poll period.
+                    time.sleep(pause)
                 else:
                     next_t = time.monotonic()  # late: resume the grid from now
     finally:
         if meter is not None:
-            meter.stop_graph()
-            meter.disconnect()
-            meter.usb.close()
+            try:
+                meter.stop_graph()
+                meter.disconnect()
+            finally:
+                meter.usb.close()
         reader.close()
         end_raw = raw_ns()
         trailer = {"k": "t", **counts, "elapsed_s": (end_raw - t_start) / 1e9, "end_raw_ns": end_raw,
                    "end_mono_ns": time.monotonic_ns(), **rusage(),
                    "stop_reason": stop["reason"] or ("absent" if meter is None else "exception")}
-        out.write(json.dumps(trailer, sort_keys=True) + "\n")
-        out.flush()
-        os.fsync(out.fileno())
-        out.close()
+        try:
+            out.write(json.dumps(trailer, sort_keys=True) + "\n")
+            out.flush()
+            os.fsync(out.fileno())
+        finally:
+            out.close()
     return 0
 
 

@@ -222,6 +222,8 @@ class UsbDevice:
                                            ctypes.byref(self.transferred), timeout_ms)
         if rc != 0:
             raise UsbError("bulk write", rc)
+        if self.transferred.value != len(data):  # a partial command is not a command
+            raise UsbError(f"bulk write sent {self.transferred.value} of {len(data)} bytes;", 0)
 
     def read(self, timeout_ms: int = 2000) -> bytes:
         rc = self.lib.libusb_bulk_transfer(self.handle, EP_IN, self.buffer, len(self.buffer),
@@ -367,8 +369,10 @@ class Meter:
 def parse_put_data(reply: bytes) -> tuple[bytes, int, bool]:
     """(sample bytes, sample count, ok) of one GetData answer.
 
-    ok is False for anything that is not an AdcQueue PutData of the declared
-    length; an empty queue is (b"", 0, True).
+    ok is False for anything that is not an AdcQueue PutData of exactly the
+    declared length (8 header bytes + 20 per sample: what the meter sent on
+    every one of 40 live polls on 10-06; surplus bytes would be samples the
+    count does not cover); an empty queue is (b"", 0, True).
     """
 
     if len(reply) == 4 and (reply[0] & 0x7F) == 0x41:
@@ -379,9 +383,9 @@ def parse_put_data(reply: bytes) -> tuple[bytes, int, bool]:
     if ext & 0x7FFF != 0x0002:
         return b"", 0, False
     n = (ext >> 16) & 0x3F
-    payload = reply[8:8 + n * SAMPLE_BYTES]
-    if len(payload) != n * SAMPLE_BYTES:
+    if len(reply) != 8 + n * SAMPLE_BYTES:
         return b"", 0, False
+    payload = reply[8:]
     return payload, n, True
 
 

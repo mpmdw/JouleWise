@@ -373,3 +373,32 @@ class FlagTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ReviewRegressionTests(unittest.TestCase):
+    """Sol 6.1 review of 10-06 (F3, F4)."""
+
+    def test_a_malformed_interior_line_is_a_protocol_error_and_a_truncated_last_line_is_not(self):
+        fixture = Path(__file__).resolve().parents[1] / "fixtures" / "km003c" / "repo_live_50sps.jsonl"
+        lines_ = fixture.read_text().splitlines()
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "s.jsonl"
+            path.write_text("\n".join(lines_[:5] + ['{"k":"b","tx":1,'] + lines_[5:]) + "\n" + '{"k":"b","t')
+            header, trailer, batches, errors = kp.load(path)
+        self.assertEqual([e.get("line") for e in errors if "parse_error" in e], [6])
+        self.assertEqual(len(batches), len([l for l in lines_ if '"k":"b"' in l]))
+
+    def test_samples_without_a_clock_fit_are_disclosed_as_unfitted_not_absent(self):
+        fixture = Path(__file__).resolve().parents[1] / "fixtures" / "km003c" / "repo_live_50sps.jsonl"
+        lines_ = fixture.read_text().splitlines()
+        first_sample = next(i for i, l in enumerate(lines_) if '"k":"b"' in l and '"n":0,' not in l)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "s.jsonl"
+            path.write_text("\n".join([lines_[0], lines_[first_sample]]) + "\n")
+            stream = kp.parse(path)
+        self.assertTrue(stream.present)
+        self.assertFalse(stream.aligned)
+        codes = [f["code"] for f in kp.flags(stream)]
+        self.assertNotIn("meter.absent", codes)
+        self.assertIn("meter.clock_fit_residual", codes)
+

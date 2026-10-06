@@ -43,6 +43,7 @@ standard library.
 from __future__ import annotations
 
 import ctypes
+import math
 import struct
 import sys
 from collections.abc import Mapping, Sequence
@@ -175,6 +176,10 @@ class IOKitTransport:
             ctypes.byref(reply), ctypes.byref(size))
         if kr != 0:
             raise OSError(f"IOConnectCallStructMethod returned {kr:#x}")
+        if size.value != ctypes.sizeof(SMCKeyData):
+            # A short reply leaves the zero-initialised tail in place: B0AC would
+            # read as a false 0 mA.  It is a failed read.
+            raise OSError(f"AppleSMC replied {size.value} bytes, not {ctypes.sizeof(SMCKeyData)}")
         return reply
 
     def close(self) -> None:
@@ -236,8 +241,8 @@ class Reader:
                 self._info.pop(key, None)
                 return None, _result_text(key, reply.result, "read")
             value = decode(data_type, bytes(reply.bytes[:size]))
-            if isinstance(value, float) and value != value:  # NaN is not a reading
-                return None, f"{key}: {data_type!r} value is NaN"
+            if isinstance(value, float) and not math.isfinite(value):  # NaN/inf is not a reading
+                return None, f"{key}: {data_type!r} value is {value}"
             return value, None
         except OSError as exc:  # the transport failed (or could not open): data, never a raise
             self._info.pop(key, None)

@@ -61,6 +61,108 @@ class ProtocolTests(unittest.TestCase):
         wrong = bytes([0x41, 3, 0, 0]) + ((2 << 16) | 0x0001).to_bytes(4, "little") + payload
         self.assertFalse(usb.parse_put_data(wrong)[2])                          # not AdcQueue
         self.assertFalse(usb.parse_put_data(bytes([0x06, 3, 0, 0]))[2])         # Reject
+        self.assertFalse(usb.parse_put_data(good + bytes(20))[2])              # surplus sample bytes
+
+    def test_a_partial_bulk_write_is_an_error(self):
+        """Review F5: libusb returning success with fewer bytes sent than the command."""
+
+        class Lib:
+            def libusb_bulk_transfer(self, handle, endpoint, data, length, transferred, timeout):
+                transferred._obj.value = 1
+                return 0
+
+        device = object.__new__(usb.UsbDevice)
+        device.lib, device.handle = Lib(), object()
+        device.transferred = __import__("ctypes").c_int(0)
+        with self.assertRaises(usb.UsbError):
+            device.write(bytes([0x0C, 1, 0x04, 0x00]))
+
+
+class CleanupTests(unittest.TestCase):
+    """Review F2: a write that fails after the meter started still releases it."""
+
+    def test_a_full_disk_at_the_header_still_stops_and_releases_the_meter(self):
+        import importlib.util
+        from unittest import mock
+
+        spec = importlib.util.spec_from_file_location("km003c_monitor_cleanup", SCRIPT)
+        script = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(script)
+        calls: list[str] = []
+
+        class FakeUsb:
+            def close(self):
+                calls.append("usb.close")
+
+        class FakeMeter:
+            usb = FakeUsb()
+
+            def stop_graph(self):
+                calls.append("stop_graph")
+
+            def disconnect(self):
+                calls.append("disconnect")
+
+        class FullDisk:
+            def write(self, _text):
+                raise OSError(28, "No space left on device")
+
+            def flush(self):
+                pass
+
+            def fileno(self):
+                return 0
+
+            def close(self):
+                calls.append("out.close")
+
+        handlers = {sig: signal.getsignal(sig) for sig in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP)}
+        self.addCleanup(lambda: [signal.signal(sig, handler) for sig, handler in handlers.items()])
+        with mock.patch.object(script, "init_meter", lambda *a, **k: (FakeMeter(), {})), \
+                mock.patch.object(script, "open", lambda *a, **k: FullDisk(), create=True):
+            with self.assertRaises(OSError):
+                script.main(["--out", "/nonexistent/never-written.jsonl"])
+        self.assertEqual(calls, ["stop_graph", "disconnect", "usb.close", "out.close"])
+
+
+class InitCancellationTests(unittest.TestCase):
+    """Review F6: a SIGTERM during initialisation ends the retries."""
+
+    def test_stopping_between_attempts_ends_init_without_retry_sleeps(self):
+        import importlib.util
+        from types import SimpleNamespace
+        from unittest import mock
+
+        spec = importlib.util.spec_from_file_location("km003c_monitor_under_test", SCRIPT)
+        script = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(script)
+        attempts = []
+
+        def failing_device(*_args, **_kwargs):
+            attempts.append(1)
+            raise usb.UsbError("open", -4)
+
+        stop = {"now": False}
+        args = SimpleNamespace(libusb=None, init_attempts=4, vid=usb.VID, pid=usb.PID, reset=False, rate=2)
+        errors: list[str] = []
+        with mock.patch.object(script.usb, "load_libusb", lambda path: object()), \
+                mock.patch.object(script.usb, "UsbDevice", failing_device), \
+                mock.patch.object(script.time, "sleep") as sleep:
+            def stopping():
+                return stop["now"]
+
+            original = failing_device
+
+            def device_then_signal(*a, **k):
+                stop["now"] = True  # the SIGTERM handler ran during attempt 1
+                return original(*a, **k)
+
+            with mock.patch.object(script.usb, "UsbDevice", device_then_signal):
+                with self.assertRaises(usb.MeterAbsent) as caught:
+                    script.init_meter(args, errors, stopping=stopping)
+        self.assertEqual(len(attempts), 1)
+        sleep.assert_not_called()
+        self.assertIn("stopped by a signal", str(caught.exception))
 
 
 class AbsentMeterTests(unittest.TestCase):

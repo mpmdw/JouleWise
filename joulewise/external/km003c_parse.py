@@ -91,29 +91,38 @@ CODES = ("meter.absent", "meter.drops_excess", "meter.duplicates", "meter.clock_
 def load(path: str | Path) -> tuple[dict | None, dict | None, list[dict], list[dict]]:
     """(header, trailer, batches, errors) of one stream file.
 
-    A truncated last line (a writer killed mid-line) is ignored.
+    A truncated last line (a writer killed mid-line) is ignored.  Any other
+    line that is not a JSON object is kept in ``errors`` as
+    ``{"k": "e", "parse_error": ..., "line": number}``, so it counts as a
+    protocol error; the samples it carried show up as dropped samples.
     """
 
     header = trailer = None
     batches: list[dict] = []
     errors: list[dict] = []
     with open(path) as handle:
-        for line in handle:
-            if not line.strip():
-                continue
-            try:
-                item = json.loads(line)
-            except ValueError:
-                continue
-            kind = item.get("k")
-            if kind == "h":
-                header = item
-            elif kind == "t":
-                trailer = item
-            elif kind == "e":
-                errors.append(item)
-            elif kind == "b":
-                batches.append(item)
+        lines = handle.read().split("\n")
+    for number, line in enumerate(lines, 1):
+        if not line.strip():
+            continue
+        try:
+            item = json.loads(line)
+            if not isinstance(item, dict):
+                raise ValueError(f"a JSON {type(item).__name__}, not an object")
+        except ValueError as exc:
+            if number == len(lines):
+                continue  # no newline after it: the truncated final line
+            errors.append({"k": "e", "parse_error": str(exc)[:200], "line": number})
+            continue
+        kind = item.get("k")
+        if kind == "h":
+            header = item
+        elif kind == "t":
+            trailer = item
+        elif kind == "e":
+            errors.append(item)
+        elif kind == "b":
+            batches.append(item)
     return header, trailer, batches, errors
 
 
@@ -289,7 +298,16 @@ class Stream:
 
     @property
     def present(self) -> bool:
-        return bool(self.header and self.header.get("status") == "streaming" and self.host_ns)
+        """The meter streamed samples (whether or not they could be put on host time)."""
+
+        return bool(self.header and self.header.get("status") == "streaming" and self.samples is not None
+                    and self.samples.dev_ms)
+
+    @property
+    def aligned(self) -> bool:
+        """The samples carry host times (the clock fit succeeded)."""
+
+        return bool(self.host_ns)
 
     def battery_watts(self) -> tuple[list[int], list[float]]:
         """(poll times, battery power into the machine W) where B0AC and B0AV were read."""
@@ -512,7 +530,9 @@ def flags(stream: Stream, windows: Iterable[Sequence[int]] = ()) -> list[dict[st
 def characterise(stream: Stream) -> dict[str, Any]:
     out: dict[str, Any] = {"status": (stream.header or {}).get("status"), "polls": len(stream.batches),
                            "protocol_errors": len(stream.errors)}
-    if stream.present:
+    if stream.present and not stream.aligned:
+        out.update(samples=len(stream.samples.dev_ms), fit=stream.fit_error)
+    if stream.aligned:
         span_s = (stream.host_ns[-1] - stream.host_ns[0]) / 1e9
         out.update(samples=len(stream.host_ns), host_span_s=span_s,
                    achieved_sps=len(stream.host_ns) / span_s if span_s else None,

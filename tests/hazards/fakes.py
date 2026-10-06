@@ -230,8 +230,9 @@ class FakeSmc:
             return {"values": {key: None for key in keys},
                     "errors": {key: f"{key}: OSError: no AppleSMC service in the IO registry"
                                for key in keys}}
+        # PSTR moves with time as the real block does (it republishes about once a second)
         values = {"B0AC": self.current(self.elapsed_s()), "B0AV": 12180, "PDTR": 48.1,
-                  "PSTR": 49.2, "PPBR": 0.41}
+                  "PSTR": round(49.2 + 0.001 * self.elapsed_s(), 6), "PPBR": 0.41}
         return {"values": {key: values.get(key) for key in keys}, "errors": {}}
 
     def __call__(self) -> dict[str, Any]:  # the arm's ``smc_read`` seam

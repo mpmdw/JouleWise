@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sys
+from typing import Any
 import unittest
 import unittest.mock
 
@@ -206,9 +207,13 @@ class SpanRig:
         self.assertEqual(found[0]["observed"]["good_reads"], 0)
         return found[1:]
 
-    def smc_lines(self, stop_s: int, *, current: dict[int, int] | None = None,
-                  missing: range = range(0), error_at: range = range(0)) -> list[dict]:
-        """The monitor's 1 s SMC lines from t = 0 to ``stop_s`` (0 mA unless set)."""
+    def smc_lines(self, stop_s: int, *, current: dict[int, Any] | None = None,
+                  missing: range = range(0), error_at: range = range(0),
+                  frozen: range = range(0)) -> list[dict]:
+        """The monitor's 1 s SMC lines from t = 0 to ``stop_s`` (0 mA unless set).
+
+        PSTR changes every second as on the real SMC; inside ``frozen`` the
+        whole block repeats the previous second's values."""
 
         out = []
         for second in range(stop_s + 1):
@@ -223,8 +228,10 @@ class SpanRig:
                                      for key in smc.KEYS}}
                 error = sample["errors"]["B0AC"]
             else:
-                sample = {"values": {"B0AC": (current or {}).get(second, 0), "B0AV": 12180,
-                                     "PDTR": 48.1, "PSTR": 49.2, "PPBR": 0.41}, "errors": {}}
+                moment = second if second not in frozen else frozen.start - 1
+                sample = {"values": {"B0AC": (current or {}).get(moment, 0), "B0AV": 12180,
+                                     "PDTR": 48.1, "PSTR": 49.2 + 0.01 * moment, "PPBR": 0.41},
+                          "errors": {}}
                 error = None
             out.append({"started": stamp, "finished": stamp, "error": error, "raw": [],
                         "values": {"source": "smc", "smc": sample}})
@@ -449,6 +456,55 @@ class SmcMemberSpanTests(SpanRig, unittest.TestCase):
         # SMC does not cover the span, but the reads it has are still judged.
         readings = self.series(10) + self.smc_lines(600, missing=range(160, 200), current={140: -865})
         codes = [f["code"] for f in battery.span_findings(readings, self.span(130, 250))]
+        self.assertEqual(codes, ["battery.member_span", battery.SMC_UNAVAILABLE])
+
+    def test_200_ma_either_way_is_within_the_limit_and_201_is_not(self):
+        for value, codes in ((200, []), (-200, []), (201, ["battery.member_span"]),
+                             (-201, ["battery.member_span"])):
+            with self.subTest(value=value):
+                readings = self.series(10) + self.smc_lines(600, current={150: value})
+                self.assertEqual([f["code"] for f in battery.span_findings(readings, self.span(130, 170))],
+                                 codes)
+
+    def test_a_boolean_or_errored_b0ac_is_not_a_reading(self):
+        readings = self.series(10) + self.smc_lines(600, current={second: True for second in range(601)})
+        self.assertEqual([f["code"] for f in battery.span_findings(readings, self.span(130, 170))][:1],
+                         [battery.SMC_UNAVAILABLE])
+        # an integer beside a B0AC error is not trusted either
+        readings = self.series(10) + self.smc_lines(600)
+        for line in readings[10:]:
+            line["values"]["smc"]["errors"] = {"B0AC": "B0AC: OSError: short reply"}
+        found = battery.span_findings(readings, self.span(130, 170))
+        self.assertEqual(found[0]["code"], battery.SMC_UNAVAILABLE)
+        self.assertIn("short reply", found[0]["detail"])
+
+    def test_reads_must_continue_past_the_stop_and_start_before_the_start(self):
+        # The edge clauses of coverage_gap: a mutation of their > to >= is equivalent
+        # (the gap to the next read is never shorter), so these pin presence instead.
+        readings = self.series(10) + self.smc_lines(169)  # the stream ended before the stop
+        self.assertEqual([f["code"] for f in battery.span_findings(readings, self.span(130, 175))][:1],
+                         [battery.SMC_UNAVAILABLE])
+        readings = self.series(10) + self.smc_lines(600, missing=range(0, 131))  # started late
+        self.assertEqual([f["code"] for f in battery.span_findings(readings, self.span(124.5, 170))][:1],
+                         [battery.SMC_UNAVAILABLE])
+        self.assertEqual(battery.span_findings(readings, self.span(131, 170)), [])
+
+    def test_a_frozen_smc_block_is_not_coverage(self):
+        # The SMC answers but its block stops changing for 20 s: a repeat, not a reading.
+        readings = (self.series(10, special={3: {"instant": -447}})
+                    + self.smc_lines(600, frozen=range(140, 160)))
+        found = battery.span_findings(readings, self.span(130, 170))
+        self.assertEqual([f["code"] for f in found], [battery.SMC_UNAVAILABLE, "battery.member_span"])
+        self.assertIn("repeated the previous SMC block", found[0]["detail"])
+        self.assertEqual(found[0]["observed"]["gap_monotonic_ns"],
+                         [self.mono0 + 139 * 10**9, self.mono0 + 160 * 10**9])
+        # four frozen seconds are still covered
+        readings = self.series(10) + self.smc_lines(600, frozen=range(140, 144))
+        self.assertEqual(battery.span_findings(readings, self.span(130, 170)), [])
+
+    def test_a_frozen_block_over_the_limit_still_flags(self):
+        readings = self.series(10) + self.smc_lines(600, current={139: -900}, frozen=range(140, 160))
+        codes = [f["code"] for f in battery.span_findings(readings, self.span(130, 170))]
         self.assertEqual(codes, ["battery.member_span", battery.SMC_UNAVAILABLE])
 
     def test_the_smc_read_attached_to_an_ioreg_line_counts(self):

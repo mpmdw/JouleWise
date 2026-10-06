@@ -141,11 +141,41 @@ class ReaderTests(unittest.TestCase):
             self.assertEqual(reader.read(("B0AC",))["values"]["B0AC"], -865)
         self.assertEqual(len(opened), 2)
 
+    def test_a_short_native_reply_is_an_error_not_a_zero(self):
+        """IOConnectCallStructMethod succeeding with fewer than 80 bytes would leave
+        B0AC's bytes zero; the transport refuses it (review F1)."""
+
+        class ShortIOKit:
+            def __init__(self, size):
+                self.size = size
+
+            def IOConnectCallStructMethod(self, conn, selector, inp, in_size, out, out_size):
+                reply = out._obj
+                request = inp._obj
+                reply.result = 0
+                if request.data8 == smc.CMD_GET_KEY_INFO:
+                    reply.keyInfo.dataSize = 2
+                    reply.keyInfo.dataType = smc.fourcc("si16")
+                else:
+                    reply.bytes[0], reply.bytes[1] = 0x9F, 0xFC  # -865 mA
+                out_size._obj.value = self.size
+                return 0
+
+        for size, expected in ((48, None), (80, -865)):
+            with self.subTest(size=size):
+                transport = object.__new__(smc.IOKitTransport)
+                transport._iokit = ShortIOKit(size)
+                transport._conn = ctypes.c_uint32(0)
+                value, error = smc.Reader(transport).read_key("B0AC")
+                self.assertEqual(value, expected)
+                if expected is None:
+                    self.assertIn("replied 48 bytes", error)
+
     def test_nan_and_unsupported_types_are_errors(self):
         keys = {"PDTR": ("flt ", struct.pack("<f", math.nan)), "B0AC": ("sp78", b"\x00\x10")}
         result = smc.Reader(FakeTransport(keys)).read(("PDTR", "B0AC"))
         self.assertEqual(result["values"], {"PDTR": None, "B0AC": None})
-        self.assertIn("NaN", result["errors"]["PDTR"])
+        self.assertIn("nan", result["errors"]["PDTR"])
         self.assertIn("unsupported SMC data type", result["errors"]["B0AC"])
 
     def test_no_service_gives_every_key_an_error(self):

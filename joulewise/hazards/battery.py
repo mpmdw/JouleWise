@@ -355,9 +355,11 @@ def smc_current(sample: Mapping[str, Any] | None) -> tuple[int | None, str | Non
     if not isinstance(sample, Mapping):
         return None, "no SMC sample"
     value = (sample.get("values") or {}).get(SMC_CURRENT_KEY)
+    error = (sample.get("errors") or {}).get(SMC_CURRENT_KEY)
+    if error:  # a value beside an error is not trusted
+        return None, str(error)
     if isinstance(value, bool) or not isinstance(value, int):
-        error = (sample.get("errors") or {}).get(SMC_CURRENT_KEY)
-        return None, error or f"{SMC_CURRENT_KEY} is {value!r}, not an integer"
+        return None, f"{SMC_CURRENT_KEY} is {value!r}, not an integer"
     return value, None
 
 
@@ -526,6 +528,10 @@ def smc_samples(readings: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
     monitor's 1 s ``source: smc`` lines, and the SMC read attached to each
     ``ioreg`` line).  Its time is the sample's own ``finished`` stamp when it
     has one, else the line's.  ``current_ma`` is B0AC, or None with ``error``.
+    ``fresh`` is False for a good read whose five SMC values all equal the
+    previous good read's: the SMC republishes the block about once a second
+    (largest gap between changes 1.01 s over 580 s of recorded idle, load and
+    recovery on 10-06), so an unchanged block is a repeat, not a new reading.
     """
 
     out = []
@@ -541,9 +547,17 @@ def smc_samples(readings: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
         current, why = smc_current(sample)
         if current is None and values.get("source") == "smc" and item.get("error"):
             why = item["error"]
+        block = tuple((sample.get("values") or {}).get(key) for key in smc.KEYS)
         out.append({"monotonic_ns": moment, "current_ma": current, "error": why,
-                    "voltage_mv": (sample.get("values") or {}).get(SMC_VOLTAGE_KEY)})
+                    "voltage_mv": (sample.get("values") or {}).get(SMC_VOLTAGE_KEY), "block": block})
     out.sort(key=lambda entry: entry["monotonic_ns"])
+    previous = None
+    for entry in out:
+        if entry["current_ma"] is None:
+            entry["fresh"] = False
+            continue
+        entry["fresh"] = entry["block"] != previous
+        previous = entry["block"]
     return out
 
 
@@ -555,10 +569,12 @@ def smc_span_findings(readings: Sequence[Mapping[str, Any]], span: Mapping[str, 
     The good B0AC reads in force are the last at or before the span's start,
     every one inside it and the first at or after its stop (the publication
     rule's conservative choice).  Any with |B0AC| above ``limit_ma`` gives one
-    ``battery.member_span`` listing them.  ``covered`` is True when good reads
-    lie no more than ``smc_max_gap_s`` apart across the whole span
-    (:func:`base.coverage_gap`); otherwise ``battery.smc_unavailable``
-    (DISCLOSE) is added and the caller judges the registry current instead.
+    ``battery.member_span`` listing them.  ``covered`` is True when good,
+    fresh reads (:func:`smc_samples`: the SMC block changed since the previous
+    read, so a frozen SMC does not count as coverage) lie no more than
+    ``smc_max_gap_s`` apart across the whole span (:func:`base.coverage_gap`);
+    otherwise ``battery.smc_unavailable`` (DISCLOSE) is added and the caller
+    judges the registry current instead.
 
     Example: limit 200 mA, span [100 s, 110 s], reads every second reading 0
     except -865 mA at 104 s: one member_span (1 of 12 in-force reads above the
@@ -587,16 +603,19 @@ def smc_span_findings(readings: Sequence[Mapping[str, Any]], span: Mapping[str, 
             interval={"monotonic_ns": [over[0]["monotonic_ns"], over[-1]["monotonic_ns"]]},
             detail=(f"|SMC B0AC| above {limit} mA in {len(over)} of {len(in_force)} reads in "
                     f"force (largest {worst['current_ma']:+d} mA)")))
-    gap = coverage_gap([entry["monotonic_ns"] for entry in good], start, stop, max_gap_ns)
+    fresh = [entry for entry in good if entry["fresh"]]
+    gap = coverage_gap([entry["monotonic_ns"] for entry in fresh], start, stop, max_gap_ns)
     if gap is not None:
         errors = sorted({entry["error"] for entry in samples
                          if entry["current_ma"] is None and entry["error"]})
+        if len(fresh) < len(good):
+            errors.append(f"{len(good) - len(fresh)} reads repeated the previous SMC block unchanged")
         found.append(finding(
             SMC_UNAVAILABLE, span=span, expected=max_gap_ns / 1e9,
-            observed={"gap_monotonic_ns": gap, "good_reads": len(good), "reads": len(samples),
-                      "errors": errors[:4]},
+            observed={"gap_monotonic_ns": gap, "good_reads": len(good), "fresh_reads": len(fresh),
+                      "reads": len(samples), "errors": errors[:4]},
             interval={"monotonic_ns": gap},
-            detail=(f"no good SMC B0AC read for more than {max_gap_ns / 1e9:g} s overlapping the "
+            detail=(f"no good, fresh SMC B0AC read for more than {max_gap_ns / 1e9:g} s overlapping the "
                     "span; the registry InstantAmperage/Amperage rule was applied instead"
                     + (f" (errors: {'; '.join(errors[:2])})" if errors else ""))))
     return found, gap is None
