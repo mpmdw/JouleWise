@@ -238,7 +238,7 @@
   "contention.request_overlap": {"category": "PHYSICS", "protects": "a contending process above the limit during the member's request"},
   "contention.unmeasured": {"category": "PHYSICS", "protects": "a contention snapshot hole over the member span: contention unmeasured"},
   "env.member_quiet_state_violated": {"category": "PHYSICS", "protects": "display awake or screensaver engaged during the member (A11 quiet state)", "added": "0da2d3013"},
-  "instrument.binary_identity_unmeasured": {"category": "NUMBER_INTEGRITY", "protects": "the powermetrics binary digest was not observed for this invocation: the calibration may not apply to the sampler that ran (A14)", "added": "0da2d3013"},
+  "instrument.binary_identity_unmeasured": {"category": "NUMBER_INTEGRITY", "protects": "the powermetrics binary digest was not observed for this invocation and the harvest could not re-derive it (on the collection boot, the executable hashed equal to the calibrated digest supersedes the flag: instrument.binary_identity_rederived, cold pass N1): the calibration may not apply to the sampler that ran (A14)", "added": "0da2d3013"},
   "instrument.cadence_ratio_below_threshold": {"category": "PHYSICS", "protects": "powermetrics delivered too few samples per second in the member window"},
   "instrument.insufficient_in_window_samples": {"category": "PHYSICS", "protects": "too few instrument samples inside the measured window"},
   "member.admission_aborted": {"category": "BASELINE", "note": "idle admission aborted; not reviewed by the census"},

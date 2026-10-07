@@ -299,6 +299,13 @@ CODES: dict[str, CodeSpec] = {
     # An operator log (or log directory) the harvest could not read: it may
     # have held an unwritten-flag marker line.  Disclosed.
     "records.operator_log_unreadable": _spec("RECORDS", "REPRESENTATION"),
+    # Cold pass N1 / Fable audit F10: the member's runtime powermetrics digest
+    # could not be read (instrument.binary_identity_unmeasured, EXCLUDE_MEMBER),
+    # but on the collection boot the harvest hashed the executable the member
+    # recorded and it equals the calibrated digest.  The member flag is
+    # superseded by this one; it is kept when the digest differs, the boot
+    # differs or the executable cannot be read.
+    "instrument.binary_identity_rederived": _spec("INSTRUMENT", "NUMBER"),
     "g3.assertion_failed": _spec("RECORDS", "REPRESENTATION", legacy="scripts/check_window_provenance.py"),
     "g3.recompute_failed": _spec("NEG8", "NUMBER", legacy="scripts/check_window_provenance.py:837"),
     "g3.not_applicable": _spec("DIAGNOSTIC", "REPRESENTATION"),
@@ -418,6 +425,9 @@ CORE_WRITER_CODES = frozenset({
 # joulewise.flags.core.UNWRITTEN_MARKER, read and never imported: a core flag
 # whose write failed is printed whole to the stage's stderr behind it (N8).
 UNWRITTEN_MARKER = "JOULEWISE_UNWRITTEN_FLAG "
+# joulewise.adapters.powermetrics.POWER_METRICS, read and never imported (a
+# pinned estimator file): the sampler a member that recorded no path ran.
+POWERMETRICS_EXECUTABLE = "/usr/bin/powermetrics"
 # Under each operator-log directory: the members' own stderr copies
 # (scripts/run_campaign.py), scanned for the marker like the stage logs.
 MEMBER_STDERR_DIR = "member-stderr"
@@ -478,6 +488,7 @@ NEVER_CLASSIFIED_CODES: frozenset[str] = frozenset()
 AUDFIX2_CODES = frozenset({
     "records.malformed_flag", "records.malformed_flag_exclusion_possible",
     "records.malformed_flag_member_exclusion_possible", "records.flag_unbuilt", "records.operator_log_unreadable",
+    "instrument.binary_identity_rederived",
 })
 # Codes L4's draft catalog does not name (handed to L4 and L6 for the draft
 # and the sealed catalog).  ``tests/test_harvest_b5_window.py`` keeps this
@@ -2066,7 +2077,21 @@ def assess_member(task: Mapping[str, Any]) -> dict[str, Any]:
     result["run_started_epoch_s"] = stamp if isinstance(stamp, (int, float)) and not isinstance(stamp, bool) else None
     raw_plist = bundle / "raw" / "powermetrics.plist"
     result["stream_bytes"] = raw_plist.stat().st_size if raw_plist.is_file() else None
+    result["powermetrics_binary"] = _powermetrics_binary_record(metadata)
     return result
+
+
+def _powermetrics_binary_record(metadata: Any) -> dict[str, Any]:
+    """The member's recorded sampler executable, its calibrated digest and its collection boot."""
+    def at(*keys: str) -> Any:
+        value: Any = metadata
+        for key in keys:
+            value = value.get(key) if isinstance(value, Mapping) else None
+        return value
+    return {"executable_path": at("device", "powermetrics", "executable_path"),
+            "runtime_sha256": at("device", "powermetrics", "executable_sha256"),
+            "calibrated_sha256": at("instrument_calibration", "bindings", "powermetrics_sha256"),
+            "collection_boot": at("extra", "launch_lineage", "collection_boot_session_id")}
 
 
 def assess_members(tasks: Sequence[Mapping[str, Any]], *, workers: int = 1) -> list[dict[str, Any]]:
@@ -5646,6 +5671,50 @@ class _Harvest:
             "refusal_reason": masked(refusal.get("reason"))})
 
     # -- arm-collector unmeasured flags the harvest re-derived (PLAN2 row 12) ---
+    def rederive_binary_identity(self) -> None:
+        """Supersede ``instrument.binary_identity_unmeasured`` when the harvest can measure it (cold pass N1).
+
+        The member's own read of the powermetrics digest failed, which removed
+        it (EXCLUDE_MEMBER) on a failed probe.  The binary is a system file
+        bound to the OS build and changes only across a reboot, so on the
+        member's collection boot the harvest hashes the executable the member
+        recorded (``/usr/bin/powermetrics`` when it recorded none).  Equal to
+        the calibrated digest: the flag is removed and recorded whole in
+        ``instrument.binary_identity_rederived`` (DISCLOSE).  Different, a
+        different or unknown boot, or an unreadable executable: the exclusion
+        stays.
+        """
+        digests: dict[str, str | None] = {}
+        harvest_boot = (self.flags._boot or "").casefold() or None
+        for record in list(self.flags.records):
+            if record.get("code") != "instrument.binary_identity_unmeasured":
+                continue
+            scope = record.get("scope") if isinstance(record.get("scope"), Mapping) else {}
+            member = self.members.get(scope.get("run_id")) if scope.get("level") == "member" else None
+            binary = member.get("powermetrics_binary") if isinstance(member, Mapping) else None
+            if not isinstance(binary, Mapping):
+                continue
+            path = binary.get("executable_path") if isinstance(binary.get("executable_path"), str) \
+                else POWERMETRICS_EXECUTABLE
+            calibrated = binary.get("calibrated_sha256")
+            boot = binary.get("collection_boot")
+            same_boot = isinstance(boot, str) and harvest_boot is not None and boot.casefold() == harvest_boot
+            if not same_boot or not isinstance(calibrated, str) or not re.fullmatch(r"[0-9a-f]{64}", calibrated):
+                continue
+            if path not in digests:
+                try:
+                    digests[path] = sha256_bytes(Path(path).read_bytes())
+                except OSError:
+                    digests[path] = None
+            if digests[path] != calibrated:
+                continue
+            self.flags.remove(record["flag_id"])
+            self.emit("instrument.binary_identity_rederived", level="member", run_id=scope.get("run_id"),
+                      collector="binary_identity",
+                      observed={"superseded_flag_id": record["flag_id"], "executable_path": path,
+                                "harvest_sha256": digests[path], "calibrated_sha256": calibrated,
+                                "collection_boot": boot, "superseded_flag": dict(record)})
+
     def supersede_identity_unmeasured(self) -> None:
         """Lift a desk or arm ``*.identity_unmeasured`` only where this harvest re-derived every check.
 
@@ -6849,6 +6918,7 @@ def harvest(inputs: WindowInputs, archive_root: Path | str, *, seams: Seams | No
     run.step("code_identity", run.code_identity)
     run.step("model_identity", run.model_identity)
     run.step("identity_supersession", run.supersede_identity_unmeasured)
+    run.step("binary_identity", run.rederive_binary_identity, fault=False)
     run.step("lineage", run.lineage_audit)
     run.step("monitor", run.monitor_joins)
     run.step("meter", run.meter_joins, fault=False)

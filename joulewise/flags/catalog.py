@@ -315,6 +315,10 @@ _AUDFIX2_CODES = {
     "records.malformed_flag_member_exclusion_possible": _code("RECORDS", "NUMBER", EXCLUDE_MEMBER),
     "records.flag_unbuilt": _code("RECORDS", "REPRESENTATION", DISCLOSE),
     "records.operator_log_unreadable": _code("RECORDS", "REPRESENTATION", DISCLOSE),
+    # Cold pass N1 / Fable audit F10: the harvest hashed the member's
+    # powermetrics executable on the collection boot and it equals the
+    # calibrated digest, superseding instrument.binary_identity_unmeasured.
+    "instrument.binary_identity_rederived": _code("INSTRUMENT", "NUMBER", DISCLOSE),
 }
 
 DRAFT_CODES: Mapping[str, Mapping[str, str]] = {

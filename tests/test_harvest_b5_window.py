@@ -3952,6 +3952,59 @@ class UnwrittenCoreFlagTests(WindowTestCase):
         self.assertNotIn("records.malformed_flag", window.codes())
 
 
+class BinaryIdentityRederivedTests(WindowTestCase):
+    """Cold pass N1 / Fable audit F10: an unread runtime powermetrics digest is re-derived at harvest.
+
+    Before: instrument.binary_identity_unmeasured (EXCLUDE_MEMBER) removed the
+    member whenever its own digest read failed, though the binary is the OS
+    build's and the harvest on the same boot can hash it."""
+
+    def window_with(self, name: str, *, calibrated: bool = True, boot: str = "B5-TEST-BOOT",
+                    readable: bool = True) -> tuple[Window, str, str]:
+        window = Window(self.tmp / name, catalog_overrides=self.ISOLATE)
+        run_id = MEMBERS[0][0]
+        sampler = self.tmp / f"{name}-powermetrics"
+        sampler.write_bytes(b"stand-in powermetrics executable " + name.encode())
+        digest = hashlib.sha256(sampler.read_bytes()).hexdigest()
+        bundle = window.claim / run_id
+        metadata = json.loads((bundle / "metadata.json").read_bytes())
+        metadata.setdefault("device", {})["powermetrics"] = {"executable_path": str(sampler),
+                                                             "executable_sha256": None}
+        metadata["instrument_calibration"] = {"bindings": {
+            "powermetrics_sha256": digest if calibrated else "0" * 64}}
+        metadata.setdefault("extra", {})["launch_lineage"] = {"collection_boot_session_id": boot.lower()}
+        put(bundle / "metadata.json", metadata)
+        if not readable:
+            sampler.unlink()
+        line = UnwrittenCoreFlagTests.unwritten_line(
+            "instrument.binary_identity_unmeasured", level="member", run_id=run_id,
+            observed={"runtime_powermetrics_sha256": None})
+        logs = window.custody / "operator-logs"
+        logs.mkdir(exist_ok=True)
+        (logs / "07-b5t-science.log").write_text(line + "\n")
+        return window, run_id, digest
+
+    def test_an_equal_digest_on_the_collection_boot_supersedes_the_exclusion(self):
+        window, run_id, digest = self.window_with("equal")
+        window.harvest()
+        self.assertNotIn("instrument.binary_identity_unmeasured", window.codes())
+        (flag,) = [flag for flag in window.flags() if flag["code"] == "instrument.binary_identity_rederived"]
+        self.assertEqual((run_id, digest, digest), (flag["scope"]["run_id"], flag["observed"]["harvest_sha256"],
+                                                    flag["observed"]["calibrated_sha256"]))
+        excluded = {row["run_id"]: row["codes"] for row in window.exclusions()["members_excluded"]}
+        self.assertNotIn("instrument.binary_identity_unmeasured", excluded.get(run_id, []))
+
+    def test_a_different_digest_boot_or_an_unreadable_binary_keeps_the_exclusion(self):
+        for label, kwargs in (("differs", {"calibrated": False}), ("other_boot", {"boot": "OTHER-BOOT"}),
+                              ("unreadable", {"readable": False})):
+            with self.subTest(label):
+                window, run_id, _ = self.window_with(label, **kwargs)
+                window.harvest()
+                self.assertNotIn("instrument.binary_identity_rederived", window.codes())
+                excluded = {row["run_id"]: row["codes"] for row in window.exclusions()["members_excluded"]}
+                self.assertIn("instrument.binary_identity_unmeasured", excluded[run_id])
+
+
 ABSENT = object()  # the core provides no neg8_corpus_mint_drops (as before the b1 lane lands)
 
 

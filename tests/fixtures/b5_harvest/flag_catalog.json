@@ -372,6 +372,12 @@
       "family": "NEG8",
       "klass": "NUMBER"
     },
+    "instrument.binary_identity_rederived": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "INSTRUMENT",
+      "klass": "NUMBER"
+    },
     "instrument.binary_identity_unmeasured": {
       "blinding": "STRUCTURE",
       "effect": "EXCLUDE_MEMBER",
