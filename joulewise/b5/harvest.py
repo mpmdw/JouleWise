@@ -5680,7 +5680,6 @@ class _Harvest:
                 if window_inputs:
                     differences.append({"check": "head", "observed": executed_head, "expected": h_claim,
                                         "changed_paths": window_inputs[:16]})
-        self.outputs["derived/code-identity.json"] = write_json_once(self.derived / "code-identity.json", head_record)
         if isinstance(porcelain, str):
             tracked = [line for line in porcelain.splitlines() if line.strip() and not line.startswith("??")]
             if tracked:
@@ -5709,6 +5708,8 @@ class _Harvest:
         if unmeasured:
             self.emit("code.identity_unmeasured", level="window", collector="code_identity",
                       observed={"unmeasured": unmeasured})
+        # Written last: the flags above stand even if this record cannot be written.
+        self.outputs["derived/code-identity.json"] = write_json_once(self.derived / "code-identity.json", head_record)
 
     def _changed_paths(self, base: str, head: str) -> list[str] | None:
         """Every path whose committed bytes differ between two commits, or None when git cannot say.
