@@ -3507,6 +3507,81 @@ class CampaignLockAllowlistTests(WindowTestCase):
         self.assertEqual(flag["observed"]["changed"], [".campaign.lock"])
 
 
+class WholeWindowMemberFailureTests(WindowTestCase):
+    """Registration 6.3 and 2: each member the whole-window verdict fails, for a reason no other
+    member code carries, is removed by ``member.whole_window_member_failure`` (EXCLUDE_MEMBER).
+
+    Those reasons are the verdict's ``member_failures`` reason codes
+    (``whole_window.PROSPECTIVE_MEMBER_FAILURE_REASON_CODES``) except in-window
+    thermal pressure (``thermal.powermetrics_pressure_elevated``) and an invalid
+    bundle (``member.strict_validation_failed`` and its kin).  The environment
+    reasons carry D-078 item 4's display-asleep and screensaver-off observation.
+    """
+
+    CODE = "member.whole_window_member_failure"
+
+    def write(self, window, status, failures):
+        put(window.claim / "whole-window-verdict.json", {
+            "status": status, "bundle_ids": sorted(row[0] for row in MEMBERS),
+            "idle_admission_core": {"conditions": sorted({reason for _member, reason, _detail in failures})},
+            "member_failures": [{"member_id": member, "reason_code": reason, "detail": detail}
+                                for member, reason, detail in sorted(failures)]})
+
+    def test_the_reasons_are_the_verdicts_less_the_two_with_their_own_codes(self):
+        from joulewise.flags.catalog import DRAFT_CODES
+        self.assertEqual(set(h.WHOLE_WINDOW_MEMBER_FAILURE_REASONS),
+                         set(whole_window.PROSPECTIVE_MEMBER_FAILURE_REASON_CODES)
+                         - {"thermal_pressure_elevated_in_window", "whole_window_bundle_invalid"})
+        self.assertEqual(11, len(h.WHOLE_WINDOW_MEMBER_FAILURE_REASONS))
+        fixture = json.loads((FIXTURES / "flag_catalog.json").read_bytes())["codes"]
+        self.assertEqual("EXCLUDE_MEMBER", fixture[self.CODE]["effect"])
+        self.assertEqual("EXCLUDE_MEMBER", DRAFT_CODES[self.CODE]["effect"])
+        self.assertEqual(("MEMBER_VALIDITY", "NUMBER"), (h.CODES[self.CODE].family, h.CODES[self.CODE].klass))
+
+    def test_each_member_the_verdict_fails_is_removed_once_with_its_reasons(self):
+        """Before: nothing emitted the code, so a member whose display woke in its request was kept."""
+        window = self.window()
+        self.write(window, "failed", [
+            ("b5t-abs-r01", "environment_admission_failed", "display awake during the request"),
+            ("b5t-abs-r02", "cpu_busy_ratio_p95_exceeded", "cpu busy p95 0.31 > 0.25"),
+            ("b5t-abs-r02", "gpu_idle_admission_not_passed", "gpu idle admission not passed"),
+            # Reasons with their own member codes: not this code.
+            ("b5t-cmp-b01-a1", "thermal_pressure_elevated_in_window", "thermal pressure elevated"),
+            ("b5t-cmp-b01-b1", "whole_window_bundle_invalid", "bundle invalid"),
+        ])
+        window.harvest()
+        found = {flag["scope"]["run_id"]: flag for flag in window.flags() if flag["code"] == self.CODE}
+        self.assertEqual({"b5t-abs-r01", "b5t-abs-r02"}, set(found))
+        self.assertEqual(["environment_admission_failed"], found["b5t-abs-r01"]["observed"]["reasons"])
+        self.assertEqual(["cpu_busy_ratio_p95_exceeded", "gpu_idle_admission_not_passed"],
+                         found["b5t-abs-r02"]["observed"]["reasons"])
+        self.assertEqual("member", found["b5t-abs-r01"]["scope"]["level"])
+        self.assertEqual("display awake during the request", found["b5t-abs-r01"]["observed"]["details"][0])
+        excluded = {row["run_id"]: row["codes"] for row in window.exclusions()["members_excluded"]}
+        self.assertIn(self.CODE, excluded["b5t-abs-r01"])
+        self.assertIn(self.CODE, excluded["b5t-abs-r02"])
+        self.assertNotIn(self.CODE, excluded.get("b5t-cmp-b01-a1", []))
+        self.assertIn("whole_window.not_passed", window.codes())
+        self.assertNotIn("whole_window.not_passed", window.exclusions()["reasons"])
+
+    def test_a_passed_verdict_with_no_member_failures_removes_nobody(self):
+        window = self.window()
+        self.write(window, "passed", [])
+        window.harvest()
+        self.assertNotIn(self.CODE, window.codes())
+
+    def test_a_malformed_member_failure_list_is_recorded_not_guessed(self):
+        window = self.window()
+        put(window.claim / "whole-window-verdict.json", {
+            "status": "failed", "bundle_ids": sorted(row[0] for row in MEMBERS), "idle_admission_core": {},
+            "member_failures": [{"member_id": "b5t-abs-r01", "reason_code": "not_a_registered_reason",
+                                 "detail": "x"}]})
+        window.harvest()
+        self.assertNotIn(self.CODE, window.codes())
+        (flag,) = [flag for flag in window.flags() if flag["code"] == "whole_window.not_passed"]
+        self.assertEqual("malformed", flag["observed"]["member_failures"])
+
+
 class FixtureCatalogTests(WindowTestCase):
     """N5 (sweep V4): whole_window.not_passed is disclosed, as in the draft catalog (revision 3)."""
 

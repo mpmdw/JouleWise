@@ -212,6 +212,9 @@ CODES: dict[str, CodeSpec] = {
     "neg8.screen_failed": _spec("NEG8", "NUMBER"),
     "whole_window.not_passed": _spec("NEG8", "NUMBER"),
     "whole_window.verdict_absent": _spec("NEG8", "NUMBER"),
+    # Registration 6.3 and 2: a member the whole-window verdict fails for a reason
+    # no other member code carries (WHOLE_WINDOW_MEMBER_FAILURE_REASONS).
+    "member.whole_window_member_failure": _spec("MEMBER_VALIDITY", "NUMBER"),
     "whole_window.verdict_unauthenticated": _spec("NEG8", "REPRESENTATION"),
     "whole_window.producer_failed": _spec("NEG8", "REPRESENTATION"),
     # Clock.
@@ -469,6 +472,24 @@ L5_ONLY_CODES = frozenset({
     # L4's draft names g10.discharged and g10.not_discharged; the block-5
     # catalog draft classifies all five (DIAGNOSTIC, PHYSICS, DISCLOSE).
     "g10.unmeasured", "g10.interrupted", "g10.error",
+})
+# The verdict's per-member failure reasons (joulewise.whole_window.
+# PROSPECTIVE_MEMBER_FAILURE_REASON_CODES) that no other member code carries,
+# so each removes its member as member.whole_window_member_failure
+# (registration 6.3): environment evidence missing or failed (it holds D-078
+# item 4's display-asleep and screensaver-off observation), CPU-idle criteria
+# or GPU idle admission that do not replay, an idle-admission attempt that
+# cannot be paired with its telemetry.  The verdict's other two reasons have
+# their own member codes (thermal_pressure_elevated_in_window:
+# thermal.powermetrics_pressure_elevated; whole_window_bundle_invalid:
+# member.strict_validation_failed and its kin) and are left to them, which keeps
+# each exclusion in one family (analysis plan 8).
+WHOLE_WINDOW_MEMBER_FAILURE_REASONS = frozenset({
+    "environment_admission_missing", "environment_admission_failed",
+    "cpu_admission_unenforced", "cpu_baseline_sample_count_insufficient", "cpu_baseline_telemetry_malformed",
+    "cpu_baseline_telemetry_missing", "cpu_busy_ratio_p95_exceeded", "processor_combined_power_w_p95_exceeded",
+    "gpu_idle_admission_not_passed", "gpu_idle_admission_unknown",
+    "idle_admission_attempt_ledger_invalid",
 })
 # G10's result -> its code (scripts/g10_clock_step_control.py FLAG_CODES).
 G10_RESULT_CODES = {"DISCHARGED": "g10.discharged", "NOT_DISCHARGED": "g10.not_discharged",
@@ -4223,12 +4244,50 @@ class _Harvest:
             self.emit("whole_window.verdict_unauthenticated", level="window", collector="whole_window",
                       observed={"verdict_rows": len(matches)})
         status = row.get("status")
+        member_failures = self.whole_window_member_failures(row)
         if status != "passed":
             conditions = (row.get("idle_admission_core") or {}).get("conditions") \
                 if isinstance(row.get("idle_admission_core"), Mapping) else None
             self.emit("whole_window.not_passed", level="window", collector="whole_window",
-                      observed={"status": status, "conditions": sorted(map(str, conditions or []))})
+                      observed={"status": status, "conditions": sorted(map(str, conditions or [])),
+                                "member_failures": member_failures})
         self.neg8_screen(row, authentic=authentic)
+
+    def whole_window_member_failures(self, row: Mapping[str, Any]) -> str:
+        """``member.whole_window_member_failure`` for each member the verdict fails (registration 6.3).
+
+        The verdict's ``member_failures`` is read with the verdict validator's
+        own parser (``whole_window._validated_member_failures``: each record
+        names a member in the row, a registered reason and a detail, sorted,
+        no pair twice).  Every member with at least one reason in
+        :data:`WHOLE_WINDOW_MEMBER_FAILURE_REASONS` gets one flag listing
+        those reasons and their details; its effect is the catalog's
+        (EXCLUDE_MEMBER).  The verdict's authenticity does not gate this: a
+        member the stored verdict names as failed is removed either way.
+        Returns how the list read, for ``whole_window.not_passed``:
+        ``"listed"``, ``"absent"`` (a row with no such field: no member can
+        be named) or ``"malformed"`` (the validator rejects it too, as
+        ``whole_window_verdict_provenance_invalid``; no member is guessed).
+        """
+        from joulewise.whole_window import _validated_member_failures
+        if "member_failures" not in row:
+            return "absent"
+        parsed = _validated_member_failures(row)
+        if parsed is None:
+            return "malformed"
+        by_member: dict[str, list[Mapping[str, str]]] = {}
+        for record in parsed:
+            if record["reason_code"] in WHOLE_WINDOW_MEMBER_FAILURE_REASONS:
+                by_member.setdefault(record["member_id"], []).append(record)
+        roster = {member["run_id"]: member for member in self.roster.get("members", [])}
+        for member_id, records in sorted(by_member.items()):
+            self.emit("member.whole_window_member_failure", level="member", run_id=member_id,
+                      stage_id=roster.get(member_id, {}).get("stage_id"), collector="whole_window",
+                      observed={"reasons": [record["reason_code"] for record in records],
+                                "details": [record["detail"] for record in records],
+                                "verdict_status": row.get("status")},
+                      legacy_code="whole_window member_failures")
+        return "listed"
 
     def neg8_screen(self, row: Mapping[str, Any], *, authentic: bool = False) -> None:
         """``neg8.screen_failed`` from the verdict's NEG-8 result (registration 6.5).

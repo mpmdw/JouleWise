@@ -107,6 +107,10 @@ _MEMBER_CODES = {
     "member.config_not_in_inventory": _code("MEMBER_VALIDITY", "NUMBER", EXCLUDE_MEMBER),
     "member.bytes_missing": _code("MEMBER_VALIDITY", "NUMBER", EXCLUDE_MEMBER),
     "member.bytes_ambiguous": _code("MEMBER_VALIDITY", "NUMBER", EXCLUDE_MEMBER),
+    # Registration 6.3 (block-5 revision 4): a member the whole-window verdict
+    # fails for a reason no other member code carries (the harvest's
+    # WHOLE_WINDOW_MEMBER_FAILURE_REASONS).
+    "member.whole_window_member_failure": _code("MEMBER_VALIDITY", "NUMBER", EXCLUDE_MEMBER),
     "battery.capture_pair_failed": _code("MEMBER_VALIDITY", "PHYSICS", EXCLUDE_MEMBER),
     "battery.member_span": _code("PHYSICS_IN_SPAN", "PHYSICS", EXCLUDE_MEMBER),
     "battery.accumulator_excursion": _code("PHYSICS_IN_SPAN", "PHYSICS", EXCLUDE_MEMBER),
