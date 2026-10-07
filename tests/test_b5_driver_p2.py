@@ -391,7 +391,16 @@ class YieldTests(unittest.TestCase):
         self.assertNotIn("duration_s", published)
 
     def test_gamma_plans_a_run_id_once_per_runs_root(self):
-        harness = Harness(self, "gamma", g10=False)
+        # Integration int3: P2-CHAIN refuses the committed GAMMA pack's duplicate
+        # dispatch at the desk (WindowPlanError; test_b5_chain_prune2 and the
+        # assertion below). The driver's yield plan still nets a duplicate on its
+        # own, so a plan of GAMMA's shape is written here with only the duplicate
+        # refusal lifted; the unresolved-stage refusal stays in force.
+        from joulewise.b5 import plan as b5_plan
+        with self.assertRaisesRegex(b5_plan.WindowPlanError, "launched more than once"):
+            Harness(self, "gamma", g10=False)
+        with mock.patch.object(b5_plan, "duplicate_dispatches", return_value=[]):
+            harness = Harness(self, "gamma", g10=False)
         plan = b5_driver.yield_plan(harness.plan)
         midpoints = [row for row in plan["stages"] if "midpoint" in row["stage_id"] or "arm-boundary" in row["stage_id"]]
         self.assertEqual([1, 0, 0], [row["planned"] for row in midpoints])
