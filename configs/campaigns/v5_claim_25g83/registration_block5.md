@@ -3014,14 +3014,13 @@ program calls it.
   (`harvest.supersede_identity_unmeasured`).
   *Model identity* is superseded the same way since Opus audit F5 (commit `a28e8611e`): the arm's model-identity
   collector has a 55 s budget, and a slow one left `model.identity_unmeasured`, which removed the window. Every
-  member's metadata carries the
-  content hash of the model tree its own process loaded and its runtime stack, and the harvest compares them with the
-  pins (`harvest.model_identity`). When the harvest read the pins and compared the identity of every succeeded science
-  member (at least one) with a pin, its own result (a mismatch, or clean) stands and the arm's flag moves into
-  `records.identity_unmeasured_superseded`; a science member whose identity cannot be derived keeps the arm's flag
-  (`IDENTITY_SUPERSESSION_CHECKS` `model_identity`: `pins`, `members_compared`). Revision 6 said model identity was
-  never superseded because the harvest does not re-hash the model files; it still does not, but each member's own
-  recorded hash is the evidence the comparison needs.
+  member's metadata carries the content hash of the model tree its own process loaded and its runtime stack, and the
+  harvest compares them with the pins (`harvest.model_identity`). When the harvest read the pins and compared the
+  identity of every succeeded science member (at least one) with a pin, its own result (a mismatch, or clean) stands
+  and the arm's flag moves into `records.identity_unmeasured_superseded`; a science member whose identity cannot be
+  derived keeps the arm's flag (`IDENTITY_SUPERSESSION_CHECKS` `model_identity`: `pins`, `members_compared`). Revision
+  6 said model identity was never superseded because the harvest does not re-hash the model files; it still does not,
+  but each member's own recorded hash is the evidence the comparison needs.
 - **UNCLASSIFIED codes** block only the release event. For scheduling, an attempt with an unclassified code but no
   classified window-removing code counts as claim-usable. The code is classified blind (from its definition and
   emitter, reading no energy) by a cold erratum to the catalog before the release event. If that makes the attempt
@@ -3106,8 +3105,8 @@ may differ, byte for byte, in the commit a later window runs.
 ### 7.6 What re-arming can and cannot select on
 
 The decision to re-arm is a rule the lead applies (§7.2), not code. It reads only `claim_usable`, the verdict, the
-flag codes and the yield counts, never an energy. So a measured value can influence re-arming only through what
-`claim_usable` itself reads.
+window's reasons and the yield counts (all in `harvest.json`, §7.1), never an energy. So a measured value can
+influence re-arming only through what `claim_usable` itself reads.
 `claim_usable` reads no science member's energy except the single pass/fail precheck ratio of §6.3, which is
 RESTRICTED. It does read reference-workload energies (the NEG-8 screen), power (idle admission, the bracket), timing,
 and the physical hazards. So re-arming cannot select on the science outcome, but every reported number is
@@ -3286,10 +3285,11 @@ prospective cold erratum (one judge, one refuter), settled in one erratum. The �
 A larger per-member time allowance after a deadline stop (§5.5) does need one. The allowance is a value of the sealed
 sizing output (`sizing_b5.json`, `member_allowance_s`), and no program derives a new one from an observed member
 cycle: the sizer (`scripts/size_b5_window.py`) takes no such input, and its `--check` mode passes only when it
-reproduces the sealed file byte for byte. A larger allowance is therefore a cold erratum with a new sizing file,
-pinned by an addendum to the seal record (§12), and the question goes to a consult first. A review finding that
-concerns only how something is recorded (receipts, naming, schema formality) is dispositioned "flag, not refuse" and
-never sent to a fix round.
+reproduces the sealed file byte for byte. A larger allowance is therefore a cold erratum with a new sizing file. The
+new file is pinned by an addendum to the seal record (§12: the record that pins each sealed file by its SHA-256; an
+addendum adds a pin to it), and the question goes to a consult first. A review finding that concerns only how
+something is recorded (receipts, naming, schema formality) is dispositioned "flag, not refuse" and never sent to a
+fix round.
 
 **Registered deviations from committed bytes, made prospectively here:**
 
@@ -3474,7 +3474,9 @@ the superseded A1 window-exclusion code appears in none of them, and loaded the 
 (catalog at `c6843537`, 178 codes): 14 codes the code emits were missing (the five `*.arm_unmeasured`,
 `monitor.orphan_unverified`, `records.malformed_flag`, the two malformed-flag exclusions, `records.flag_unbuilt`,
 `records.operator_log_unreadable`, `instrument.binary_identity_rederived`, `neg8.reference_lost`,
-`neg8.midpoint_lost`), and the same 14 were in the test fixture but not here; 28 open disagreements in all. After: 192
+`neg8.midpoint_lost`), and the same 14 were in the test fixture but not here; 28 open disagreements in all (14
+against the code's tables plus 14 against the fixture; the documented `g3.recompute_failed` disagreement is not
+counted among them). After: 192
 codes, none missing, none extra, `collector.unmeasured` deliberately absent (§6.2), `load_catalog` OK, and one
 documented disagreement only: `g3.recompute_failed`, which the fixture keeps at its earlier effect EXCLUDE_WINDOW
 (`tests/fixtures/b5_harvest/README.md`) against DISCLOSE here (§6.5). The `roster.run_id_mismatch` restatement of
