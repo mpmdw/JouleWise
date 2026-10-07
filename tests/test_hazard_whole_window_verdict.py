@@ -368,6 +368,47 @@ class HazardWholeWindowVerdictTests(_SentinelMixin, unittest.TestCase):
                 self.assertEqual(whole_window.authenticate_window_launch_lineage(
                     self.w.claim, set(row["bundle_ids"])), self.lineage)
 
+    def test_a_tagged_member_that_crashed_before_metadata_is_that_members_failure(self) -> None:
+        # Refusal-census triage (b), 2026-10-07: a tagged science member whose
+        # child died after config.json and before metadata.json carries no
+        # stamp, so lineage authentication over it would raise
+        # launch_consumption_missing for the whole set.  The writer validates
+        # members strictly first and authenticates the lineage over the usable
+        # ones only: the crash is that member's failure, the window keeps its
+        # verdict, lineage and the other three members.
+        crashed = self.w.claim / "hazard-science-crashed"
+        crashed.mkdir()
+        config = json.loads((self.science / "config.json").read_bytes())
+        config["run_id"] = crashed.name
+        self.assertIn("launch_lineage_required", json.dumps(config))
+        (crashed / "config.json").write_text(json.dumps(config) + "\n")
+        self.addCleanup(shutil.rmtree, crashed, True)
+        with self.assertRaises(arm_readiness.LaunchLineageError) as caught:
+            whole_window._authenticated_bundle_launch_lineage_set(
+                [*self.members, crashed], require_completion=True)
+        self.assertEqual(caught.exception.reason_code, "launch_consumption_missing")
+        write_manifests = self._write_manifests
+
+        def with_crashed_member(layout: str) -> None:
+            write_manifests(layout)
+            path = self.w.claim / "campaign_manifests" / "01-science.json"
+            manifest = json.loads(path.read_bytes())
+            manifest["members"].append(_manifest_member(crashed, role="comparative_contrast_member",
+                                                        position=None))
+            path.write_text(json.dumps(manifest) + "\n")
+
+        with patch.object(self, "_write_manifests", side_effect=with_crashed_member):
+            code, transcript, row = self._write_verdict("alpha")
+        self.assertEqual(code, 0, transcript)
+        self.assertEqual(sorted(row["bundle_ids"]), sorted(path.name for path in self.members))
+        self.assertEqual(row["evaluation_basis"]["launch_lineage"], self.lineage)
+        self.assertEqual([(failure["member_id"], failure["reason_code"]) for failure in row["member_failures"]],
+                         [(crashed.name, "whole_window_bundle_invalid")])
+        self.assertIn("missing required artifact: metadata.json",
+                      row["excluded_bundles"][0]["validation_problems"])
+        self.assertEqual(whole_window.authenticate_window_launch_lineage(
+            self.w.claim, set(row["bundle_ids"])), self.lineage)
+
     def test_validator_replays_an_eleven_member_untagged_bound(self) -> None:
         _code, transcript, row = self._write_verdict("alpha")
         self.assertIsNotNone(row, transcript)
