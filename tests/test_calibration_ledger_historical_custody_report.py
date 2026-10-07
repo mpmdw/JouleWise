@@ -73,9 +73,35 @@ class HistoricalCustodyReportTests(unittest.TestCase):
         self.assertEqual(report["status"], "unmeasured", report)
         self.assertEqual(report["mismatched"], [])
         self.assertEqual(report["verified"], 1)
-        self.assertEqual({Path(item["custody_locator"]).name for item in report["unmeasured"]},
-                         {self.fixture.custodies[0].name, self.fixture.custodies[1].name})
-        self.assertTrue(all(item["evicted"] is True for item in report["unmeasured"]))
+        outcomes = {Path(item["custody_locator"]).name: (item["outcome"], item["evicted"])
+                    for item in report["unmeasured"]}
+        self.assertEqual(outcomes, {self.fixture.custodies[0].name: ("absent", True),
+                                    self.fixture.custodies[1].name: ("absent_or_unreachable", False)})
+        (evicted,) = [item for item in report["unmeasured"] if item["evicted"]]
+        self.assertEqual(evicted["artifacts"]["events.jsonl"], "missing")
+        self.assertTrue(all(state in ("matched", "missing") for state in evicted["artifacts"].values()))
+
+    def test_census_a_present_unreadable_file_is_unreadable_not_evicted(self):
+        # Sol 6.1 review F7: an unreadable present file is not evidence of eviction.
+        events = self.fixture.custodies[0] / "events.jsonl"
+        events.chmod(0)
+        self.addCleanup(events.chmod, 0o644)
+        report = self.report()
+        self.assertEqual(report["status"], "unmeasured", report)
+        (item,) = report["unmeasured"]
+        self.assertEqual((item["outcome"], item["evicted"]), ("unreadable", False))
+        self.assertEqual(item["artifacts"]["events.jsonl"], "unreadable")
+
+    def test_census_a_changed_file_beside_an_unreadable_one_is_a_mismatch(self):
+        events = self.fixture.custodies[0] / "events.jsonl"
+        events.chmod(0)
+        self.addCleanup(events.chmod, 0o644)
+        trace = self.fixture.custodies[0] / "power_trace.csv"
+        trace.write_bytes(trace.read_bytes() + b"\n")
+        report = self.report()
+        self.assertEqual(report["status"], "mismatch", report)
+        (item,) = report["mismatched"]
+        self.assertEqual(item["artifacts"]["power_trace.csv"], "hash_mismatch")
 
     def test_census_a_changed_capture_beside_an_evicted_file_is_still_a_mismatch(self):
         (self.fixture.custodies[0] / "events.jsonl").unlink()

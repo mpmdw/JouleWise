@@ -6589,46 +6589,70 @@ def head_pin_for_receipt(receipt: Mapping[str, Any]) -> dict[str, Any]:
 HISTORICAL_CUSTODY_REPORT_SCHEMA = "joulewise.calibration_historical_custody_report.v1"
 
 
-def _historical_custody_kind(
+def _historical_custody_outcome(
     observation: LedgerObservation, repo_root: Path, *,
     mode: Literal["read_replay", "issuing"] = "issuing",
-) -> Literal["changed", "absent"]:
-    """Why a historical observation failed custody: present bytes ``changed``, or bytes ``absent``.
+) -> tuple[str, dict[str, str]]:
+    """One artifact-aware custody pass over one historical observation.
 
-    ``changed`` when the row names no artifacts (nothing could have been
-    evicted) or any artifact that is present and readable hashes to a value
-    other than the ledger's.  ``absent`` when the capture directory is missing
-    or unreachable, or every artifact that is present still matches and the
-    rest are missing or unreadable (an evicted iCloud placeholder).  Never
-    raises: a failure to classify is ``changed``, the conservative answer.
+    Returns ``(outcome, artifacts)``.  ``artifacts`` maps each governed
+    artifact to ``matched``, ``hash_mismatch``, ``missing`` or ``unreadable``.
+    ``outcome`` is ``changed`` when any present artifact's bytes differ from
+    the ledger's hash (or the row names no artifacts and is not abandoned),
+    else ``unreadable`` when any artifact is present but could not be read,
+    else ``absent`` when any artifact is missing, else ``verified``; and
+    ``absent_or_unreachable`` when the capture directory is missing or did
+    not answer the bounded probe.  One pass, so a mismatch once observed is
+    never reported as absence (Sol 6.1 review F7, 2026-10-06).  Reads go
+    through ``probe_custody`` and ``read_authentication_input``, as the
+    writer's own pass does; under the night's budget marker the probe raises,
+    and the caller reports the row unmeasured.
     """
 
     if not observation.artifact_sha256:
-        return "changed"
+        if observation.disposition == "abandoned":
+            return "verified", {}
+        return "changed", {}
     root = Path(observation.custody_locator)
     if not root.is_absolute():
         root = Path(repo_root) / root
 
-    def inspect(path: Path) -> str:
+    def inspect(path: Path) -> dict[str, str]:
+        outcomes: dict[str, str] = {}
         for relative, expected in observation.artifact_sha256.items():
             candidate = path / relative
             try:
-                if not candidate.is_file():
-                    continue
-                actual = hashlib.sha256(read_authentication_input(
+                present = candidate.is_file()
+            except OSError:
+                outcomes[relative] = "unreadable"
+                continue
+            if not present:
+                outcomes[relative] = "missing"
+                continue
+            try:
+                raw = read_authentication_input(
                     candidate, grammar="raw",
                     label=f"calibration ledger historical custody {observation.attempt_id} {relative}",
-                )).hexdigest()
+                )
             except OSError:
+                outcomes[relative] = "unreadable"
                 continue
-            if actual != expected:
-                return "changed"
-        return "absent"
+            outcomes[relative] = (
+                "matched" if hashlib.sha256(raw).hexdigest() == expected else "hash_mismatch"
+            )
+        return outcomes
 
-    try:
-        return probe_custody(root, inspect, lambda: "absent", mode=mode)
-    except Exception:  # noqa: BLE001 - unclassifiable stays a mismatch
-        return "changed"
+    artifacts = probe_custody(root, inspect, lambda: None, mode=mode)
+    if artifacts is None:
+        return "absent_or_unreachable", {}
+    states = set(artifacts.values())
+    if "hash_mismatch" in states:
+        return "changed", artifacts
+    if "unreadable" in states:
+        return "unreadable", artifacts
+    if "missing" in states:
+        return "absent", artifacts
+    return "verified", artifacts
 
 
 def historical_custody_report(
@@ -6666,11 +6690,16 @@ def historical_custody_report(
     night's custody budget marker the unbounded probe refuses, and those rows
     are reported ``unmeasured``.
 
-    Refusal census 2026-10-06: an observation whose capture directory or files
-    are absent (evicted to iCloud, archived, deleted) and whose present files
-    all still hash to the ledger's values is ``unmeasured`` with
-    ``evicted: True``, not ``mismatch``.  Absent bytes cannot be checked; they
-    are not shown to be wrong.  Only present bytes that differ are a mismatch.
+    Refusal census 2026-10-06: each observation is judged in one
+    artifact-aware pass (``_historical_custody_outcome``).  Present bytes that
+    differ from the ledger hash are a ``mismatch``.  Missing files (evicted to
+    iCloud, archived, deleted) whose present siblings all match are
+    ``unmeasured`` with ``outcome`` ``absent`` and ``evicted: True``; a present
+    file that cannot be read is ``unreadable``, and a capture directory that
+    is missing or does not answer the bounded probe is
+    ``absent_or_unreachable``, both ``unmeasured`` with ``evicted: False``.
+    Absent or unreadable bytes cannot be checked; they are not shown to be
+    wrong.
     """
 
     report: dict[str, Any] = {
@@ -6718,16 +6747,19 @@ def historical_custody_report(
             "bracket_session_id": observation.bracket_session_id,
         }
         try:
-            reasons = _custody_reasons([observation], Path(repo_root), mode=mode)
+            outcome, artifacts = _historical_custody_outcome(observation, Path(repo_root), mode=mode)
         except Exception as exc:  # noqa: BLE001 - this row is unmeasured
             report["unmeasured"].append({**entry, "error": f"{type(exc).__name__}: {exc}"[:300]})
             continue
-        if reasons and _historical_custody_kind(observation, Path(repo_root), mode=mode) == "absent":
-            report["unmeasured"].append({**entry, "reasons": sorted(reasons), "evicted": True})
-        elif reasons:
-            report["mismatched"].append({**entry, "reasons": sorted(reasons)})
-        else:
+        if outcome == "verified":
             report["verified"] += 1
+        elif outcome == "changed":
+            report["mismatched"].append({**entry, "reasons": ["calibration_ledger_custody_invalid"],
+                                         "artifacts": artifacts})
+        else:
+            report["unmeasured"].append({**entry, "reasons": ["calibration_ledger_custody_invalid"],
+                                         "outcome": outcome, "evicted": outcome == "absent",
+                                         "artifacts": artifacts})
     if report["mismatched"]:
         report["status"] = "mismatch"
     elif report["unmeasured"] or set(report["ledger_reasons"]) - {

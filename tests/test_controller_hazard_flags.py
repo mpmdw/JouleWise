@@ -248,6 +248,26 @@ class HazardWindowAttachmentTests(unittest.TestCase):
         self.assertEqual(value["pack_root"], str(moved))
         self.assertEqual(Path(value["repository"]).resolve(), self.w.repo.resolve())
 
+    def test_census_relocated_pack_outside_any_worktree_refuses(self) -> None:
+        # Sol 6.1 review F10: with no repository the ledger cannot be found, so
+        # the session binding cannot be checked; that stays a refusal.
+        import shutil
+
+        outside = Path(tempfile.mkdtemp(dir=os.environ.get("TMPDIR") or None))
+        self.addCleanup(shutil.rmtree, outside, True)
+        moved = outside / self.w.pack.name
+        shutil.copytree(self.w.pack, moved)
+        real = arm_readiness.authenticate_campaign_launch_lineage
+
+        def relocated(*args, **kwargs):
+            context = dict(real(*args, **kwargs))
+            context["pack_root"] = str(moved)
+            return context
+
+        with patch.object(arm_readiness, "authenticate_campaign_launch_lineage", side_effect=relocated):
+            with self.assertRaises(arm_readiness.ArmReadinessError):
+                load_attachment(self.w, hazard=self.hazard)
+
     def test_census_relocated_pack_keeper_session_binding_still_refuses(self) -> None:
         _moved, relocated = self._relocated_pack_context()
         real = ledger.calibration_session_status
