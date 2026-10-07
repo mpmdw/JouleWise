@@ -159,6 +159,7 @@ class InWindowYieldAlertTests(base.WatchdogTestCase):
         _decision, state = self.decide()
         self.assertEqual([], yield_notices(state))
         self.assertNotIn(wd.YIELD_ALERT_STATE_KEY, state)
+        self.assertNotIn("yield_alert_reader_errors", state)
 
     def test_alerts_outside_the_plan_span_and_tail_are_not_read(self) -> None:
         plan = self.write_hazard_plan(t0=self.base.timestamp() - 40 * 86400)
@@ -166,6 +167,156 @@ class InWindowYieldAlertTests(base.WatchdogTestCase):
         zero_stage_alert(night, plan.plan_id)
         _decision, state = self.decide()
         self.assertEqual([], yield_notices(state))
+
+
+ALERT_ERRORS = "yield_alert_reader_errors"
+
+
+def whole_alert(owner: str, **changes: object) -> dict:
+    alert = {"schema": wd.YIELD_ALERT_SCHEMA, "plan_id": owner, "code": "yield.stage_low",
+             "stage_id": "s5", "ordinal": 5, "role": "science", "planned": 20, "present": 20,
+             "succeeded": 15, "min_valid": 16, "status": "LOW", "rc": 0, "at": "t"}
+    alert.update(changes)
+    return {key: value for key, value in alert.items() if value is not None}
+
+
+class YieldAlertReviewTests(base.WatchdogTestCase):
+    """Sol review of P3-WD: bounds, record validation, durable dedupe, failure visibility."""
+
+    write_hazard_plan = base.TerminalWindowReleaseTests.write_hazard_plan
+    decide = base.TerminalWindowReleaseTests.decide
+    events = base.TerminalWindowReleaseTests.events
+
+    def queue(self, plans: list, state: dict, at: float) -> list[str]:
+        when = dt.datetime.fromtimestamp(at).astimezone()
+        return wd.queue_yield_alerts(plans, self.harness.storage, state, when)
+
+    def plan_with_alert(self, **changes: object) -> tuple[wd.NightPlan, Path]:
+        plan = self.write_hazard_plan(t0=self.base.timestamp() - 3600)
+        night = Path(plan.custody_root) / "night"
+        (night / "yield_alert-5.json").write_text(json.dumps(whole_alert(plan.plan_id, **changes)),
+                                                  encoding="utf-8")
+        return plan, night
+
+    def test_the_window_opens_at_the_stand_down_lead_and_closes_after_the_tail(self) -> None:
+        plan, _night = self.plan_with_alert()
+        opens = plan.t0_epoch_s - wd.PLAN_LEAD_S
+        closes = wd.deadman_epoch(plan) + wd.COURIER_LOCK_FRESH_S
+        state: dict = {}
+        self.assertEqual([], self.queue([plan], state, opens - 1))
+        self.assertEqual([], yield_notices(state))
+        self.assertEqual(1, len(self.queue([plan], state, opens)))
+        self.assertTrue(wd._yield_alert_window(plan, closes))
+        self.assertFalse(wd._yield_alert_window(plan, closes + 1))
+
+    def test_a_record_with_another_schema_is_unrecognized(self) -> None:
+        plan, _night = self.plan_with_alert(schema="joulewise.other.v1")
+        state: dict = {}
+        self.queue([plan], state, self.base.timestamp())
+        self.assertIsNone(yield_notices(state)[0]["alert"])
+        self.assertIn("unrecognized yield alert", yield_notices(state)[0]["reason"])
+
+    def test_a_record_for_another_plan_is_unrecognized(self) -> None:
+        plan, _night = self.plan_with_alert(plan_id="b5-beta-9")
+        state: dict = {}
+        self.queue([plan], state, self.base.timestamp())
+        self.assertIsNone(yield_notices(state)[0]["alert"])
+
+    def test_a_record_missing_a_count_is_unrecognized(self) -> None:
+        plan, _night = self.plan_with_alert(succeeded=None)
+        state: dict = {}
+        self.queue([plan], state, self.base.timestamp())
+        self.assertIsNone(yield_notices(state)[0]["alert"])
+
+    def test_a_plan_missing_from_discovery_for_a_tick_is_not_queued_again(self) -> None:
+        plan, _night = self.plan_with_alert()
+        now = self.base.timestamp()
+        state: dict = {}
+        self.assertEqual(1, len(self.queue([plan], state, now)))
+        state["notice_pending"] = []          # the magistrate acknowledged it
+        self.queue([], state, now + 300)      # the plan file was briefly unreadable
+        self.assertEqual([], self.queue([plan], state, now + 600))
+        self.assertEqual([], yield_notices(state))
+        self.assertEqual(1, len(self.events("yield_alert_queued")))
+
+    def test_a_queued_key_is_dropped_only_after_its_plan_tail(self) -> None:
+        plan, _night = self.plan_with_alert()
+        state: dict = {}
+        self.queue([plan], state, self.base.timestamp())
+        self.assertEqual(1, len(state[wd.YIELD_ALERT_STATE_KEY]))
+        closes = wd.deadman_epoch(plan) + wd.COURIER_LOCK_FRESH_S
+        self.queue([], state, closes)
+        self.assertEqual(1, len(state[wd.YIELD_ALERT_STATE_KEY]))
+        self.queue([], state, closes + 1)
+        self.assertEqual({}, state[wd.YIELD_ALERT_STATE_KEY])
+
+    def test_an_unreadable_alert_is_recorded_then_queued_once_the_window_ends(self) -> None:
+        plan, night = self.plan_with_alert()
+        path = night / "yield_alert-5.json"
+        path.chmod(0)
+        self.addCleanup(lambda: path.exists() and path.chmod(0o600))
+        try:
+            path.read_bytes()
+        except PermissionError:
+            pass
+        else:
+            self.skipTest("running with privileges that ignore file modes")
+        now = self.base.timestamp()
+        state: dict = {}
+        self.queue([plan], state, now)
+        self.queue([plan], state, now + 300)
+        self.assertEqual([], yield_notices(state))
+        errors = self.events("yield_alert_reader_error")
+        self.assertEqual(1, len(errors))
+        self.assertIn("PermissionError", errors[0]["errors"][0])
+        (night / "result.json").write_text("{}", encoding="utf-8")
+        self.queue([plan], state, now + 600)
+        notices = yield_notices(state)
+        self.assertEqual(1, len(notices))
+        self.assertIsNone(notices[0]["alert"])
+        self.assertIsNone(notices[0]["sha256"])
+        self.assertNotIn(ALERT_ERRORS, state)
+
+    def test_a_reader_exception_is_recorded_once_and_never_changes_the_decision(self) -> None:
+        plan, _night = self.plan_with_alert()
+        (Path(plan.custody_root) / "night" / "chain.started").write_text('{"pgid": 4242}',
+                                                                          encoding="utf-8")
+        state = wd.load_state(self.harness.storage)
+        state["notice_pending"] = {}          # malformed: appending to it raises
+        self.harness.storage.atomic_json(self.harness.storage.root / "state.json", state)
+        first, _state = self.decide()
+        second, state = self.decide()
+        self.assertEqual(("FENCED", "FENCED"), (first.state, second.state))
+        errors = self.events("yield_alert_reader_error")
+        self.assertEqual(1, len(errors))
+        self.assertIn("AttributeError", errors[0]["errors"][0])
+        self.assertEqual(errors[0]["errors"], state[ALERT_ERRORS])
+
+    def test_an_oversized_alert_is_queued_unread(self) -> None:
+        plan, night = self.plan_with_alert(pad="x" * (wd.YIELD_ALERT_MAX_BYTES + 10))
+        reads: list[int] = []
+        real_open = Path.open
+
+        def counting_open(path: Path, *args: object, **kwargs: object):
+            handle = real_open(path, *args, **kwargs)
+            if path.name.startswith("yield_alert-"):
+                real_read = handle.read
+
+                def read(size: int = -1) -> bytes:
+                    data = real_read(size)
+                    reads.append(len(data))
+                    return data
+                handle.read = read
+            return handle
+
+        state: dict = {}
+        with mock.patch.object(Path, "open", counting_open), \
+                mock.patch.object(Path, "read_bytes", lambda path: counting_open(path, "rb").read()):
+            self.queue([plan], state, self.base.timestamp())
+        notices = yield_notices(state)
+        self.assertEqual(1, len(notices))
+        self.assertIsNone(notices[0]["alert"])
+        self.assertLessEqual(max(reads), wd.YIELD_ALERT_MAX_BYTES + 1)
 
 
 class DriverRecordsToWatchdogTests(unittest.TestCase):

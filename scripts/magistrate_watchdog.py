@@ -112,6 +112,9 @@ YIELD_ALERT_SCHEMA = "joulewise.b5_yield_alert.v1"
 YIELD_ALERT_FIELDS = ("code", "stage_id", "ordinal", "role", "planned", "present",
                       "succeeded", "min_valid", "status", "rc")
 YIELD_ALERT_STATE_KEY = "queued_yield_alerts"
+YIELD_ALERT_ERROR_KEY = "yield_alert_reader_errors"
+# The driver writes about 400 bytes; anything far larger is queued unread.
+YIELD_ALERT_MAX_BYTES = 64 * 1024
 SUPERVISOR_POLL_S = 10
 REMOTE_STOP_PROBE_CADENCE_S = 5 * 60
 STOP_COOPERATIVE_S = 9 * 60
@@ -303,6 +306,11 @@ class Storage:
 
     def read_bytes(self, path: Path) -> bytes:
         return path.read_bytes()
+
+    def read_bytes_bounded(self, path: Path, limit: int) -> bytes:
+        """At most ``limit + 1`` bytes, so a caller can tell an oversized file."""
+        with path.open("rb") as handle:
+            return handle.read(limit + 1)
 
     def list_directory(self, path: Path) -> Sequence[Path]:
         # Unlike glob/exists, iterdir propagates unreadable-directory errors.
@@ -1095,9 +1103,13 @@ def _yield_alert_window(plan: NightPlan, now_epoch_s: float) -> bool:
         return False
     try:
         return (plan.t0_epoch_s - PLAN_LEAD_S <= now_epoch_s
-                <= deadman_epoch(plan) + COURIER_LOCK_FRESH_S)
+                <= _yield_alert_expiry(plan))
     except (OverflowError, ValueError):
         return False
+
+
+def _yield_alert_expiry(plan: NightPlan) -> float:
+    return deadman_epoch(plan) + COURIER_LOCK_FRESH_S
 
 
 def _yield_alert_prefix(plan: NightPlan) -> str:
@@ -1106,59 +1118,92 @@ def _yield_alert_prefix(plan: NightPlan) -> str:
 
 def _yield_alert_reason(plan: NightPlan, name: str, alert: object) -> tuple[str, dict[str, Any] | None]:
     if (not isinstance(alert, dict) or alert.get("schema") != YIELD_ALERT_SCHEMA
-            or alert.get("plan_id") != plan.plan_id):
+            or alert.get("plan_id") != plan.plan_id
+            or any(key not in alert for key in YIELD_ALERT_FIELDS)):
         return (f"plan {plan.plan_id}: unrecognized yield alert record night/{name}; "
                 "read it in custody"), None
-    facts = {key: alert.get(key) for key in YIELD_ALERT_FIELDS}
+    facts = {key: alert[key] for key in YIELD_ALERT_FIELDS}
     return (f"plan {plan.plan_id}: stage {facts['stage_id']} ({facts['role']}) yield "
             f"{facts['status']}: {facts['succeeded']} of {facts['planned']} planned members "
             f"succeeded, {facts['present']} bundles present, minimum {facts['min_valid']}, "
             f"stage rc {facts['rc']}; collection continues"), facts
 
 
+def _note_yield_alert_errors(
+    storage: Storage, state: dict[str, Any], errors: Sequence[str], now_epoch_s: float,
+) -> None:
+    """Record reader failures once per distinct set, so a failing reader is never silent."""
+
+    if not errors:
+        state.pop(YIELD_ALERT_ERROR_KEY, None)
+        return
+    distinct = sorted(set(errors))
+    if state.get(YIELD_ALERT_ERROR_KEY) == distinct:
+        return
+    state[YIELD_ALERT_ERROR_KEY] = distinct
+    storage.append_jsonl(storage.root / "events.jsonl", {
+        "schema": EVENT_SCHEMA, "kind": "yield_alert_reader_error", "errors": distinct,
+        "epoch_s": now_epoch_s,
+    })
+
+
 def queue_yield_alerts(
     plans: Sequence[NightPlan], storage: Storage, state: dict[str, Any], now: dt.datetime,
 ) -> list[str]:
-    """Queue each new night/yield_alert-*.json into notice_pending once; never raises.
+    """Queue each new night/yield_alert-*.json into notice_pending once.
 
     An alert is identified by plan, custody root and file name, kept under its
-    own state key so a notice acknowledgement never re-queues it. A file that
-    does not parse yet is retried on the next tick (the driver may be mid
-    write); once the window's result.json exists it is queued as unreadable.
+    own state key (with the plan's dead-man tail as its expiry) so a notice
+    acknowledgement, or a plan briefly missing from discovery, never re-queues
+    it. A file that does not parse or cannot be read yet is retried on the next
+    tick (the driver may be mid write); once the window's result.json exists it
+    is queued as unreadable. A file above YIELD_ALERT_MAX_BYTES is queued
+    unread. Read failures are recorded as a yield_alert_reader_error event.
     Returns the queued keys.
     """
 
     now_epoch_s = now.timestamp()
     in_window = [plan for plan in plans if _yield_alert_window(plan, now_epoch_s)]
-    seen = state.get(YIELD_ALERT_STATE_KEY, [])
-    if not isinstance(seen, list):
-        seen = []
-    prefixes = tuple(_yield_alert_prefix(plan) for plan in in_window)
-    seen = sorted({key for key in seen if isinstance(key, str) and key.startswith(prefixes)}) \
-        if prefixes else []
+    recorded = state.get(YIELD_ALERT_STATE_KEY, {})
+    if not isinstance(recorded, dict):
+        recorded = {}
+    seen: dict[str, float] = {
+        key: expiry for key, expiry in recorded.items()
+        if isinstance(key, str) and isinstance(expiry, (int, float))
+        and not isinstance(expiry, bool) and expiry >= now_epoch_s
+    }
     queued: list[str] = []
+    errors: list[str] = []
     for plan in in_window:
         night = _night_dir(plan)
         try:
             names = sorted(entry.name for entry in storage.list_directory(night)
                            if fnmatch.fnmatchcase(entry.name, YIELD_ALERT_GLOB))
-        except OSError:
+        except FileNotFoundError:
+            continue
+        except OSError as exc:
+            errors.append(f"{night}: {type(exc).__name__}: {exc}")
             continue
         for name in names:
             key = _yield_alert_prefix(plan) + name
             if key in seen:
                 continue
             path = night / name
+            raw: bytes | None
             try:
-                raw = storage.read_bytes(path)
-            except OSError:
-                continue
-            try:
-                alert: object = json.loads(raw)
-            except ValueError:
+                raw = storage.read_bytes_bounded(path, YIELD_ALERT_MAX_BYTES)
+            except OSError as exc:
                 if not storage.exists(night / "result.json"):
+                    errors.append(f"{path}: {type(exc).__name__}: {exc}")
                     continue
-                alert = None
+                raw = None
+            alert: object = None
+            if raw is not None and len(raw) <= YIELD_ALERT_MAX_BYTES:
+                try:
+                    alert = json.loads(raw)
+                except ValueError:
+                    if not storage.exists(night / "result.json"):
+                        continue
             reason, facts = _yield_alert_reason(plan, name, alert)
             notice_id = f"yield-alert-{key}"
             notices = state.setdefault("notice_pending", [])
@@ -1166,17 +1211,20 @@ def queue_yield_alerts(
                 notices.append({
                     "id": notice_id, "kind": "yield_alert", "epoch_s": now_epoch_s,
                     "reason": reason, "plan_id": plan.plan_id, "path": str(path),
-                    "sha256": hashlib.sha256(raw).hexdigest(), "alert": facts,
+                    "sha256": (hashlib.sha256(raw).hexdigest()
+                               if raw is not None and len(raw) <= YIELD_ALERT_MAX_BYTES else None),
+                    "alert": facts,
                 })
             storage.append_jsonl(storage.root / "events.jsonl", {
                 "schema": EVENT_SCHEMA, "kind": "yield_alert_queued", "plan_id": plan.plan_id,
                 "key": key, "alert": facts, "epoch_s": now_epoch_s,
             })
-            seen.append(key)
+            seen[key] = _yield_alert_expiry(plan)
             queued.append(key)
     # Legacy plans never add the key: their state.json stays as it was.
     if seen or YIELD_ALERT_STATE_KEY in state:
-        state[YIELD_ALERT_STATE_KEY] = sorted(set(seen))
+        state[YIELD_ALERT_STATE_KEY] = dict(sorted(seen.items()))
+    _note_yield_alert_errors(storage, state, errors, now_epoch_s)
     return queued
 
 
@@ -1914,8 +1962,10 @@ def decide(
     # PLAN2 yield C: file reads only; never changes the decision below.
     try:
         queue_yield_alerts(plans, storage, state, wall)
-    except Exception:  # noqa: BLE001 - an alert is a notice, never a hold
-        pass
+    except Exception as exc:  # noqa: BLE001 - an alert is a notice, never a hold
+        with contextlib.suppress(Exception):
+            _note_yield_alert_errors(
+                storage, state, [f"reader: {type(exc).__name__}: {exc}"], wall.timestamp())
     if snapshot.errors:
         return Decision("HOLD_UNSAFE", "; ".join(snapshot.errors))
     # Delivery is only a candidate for release. The courier and driver can
