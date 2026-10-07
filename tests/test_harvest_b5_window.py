@@ -1341,6 +1341,25 @@ class DeskAndG3Tests(WindowTestCase):
         self.assertEqual(flag["observed"]["changed"], ["b5t-abs-r01/logs/controller.log"])
         self.assertIn("whole_window.verdict_unauthenticated", window.codes())
 
+    def test_an_os_metadata_file_appearing_during_the_harvest_changes_no_source(self):
+        """Opus triple audit F7: a Finder .DS_Store in a bundle directory is not a changed number.
+
+        Before: records.source_changed_during_harvest (EXCLUDE_WINDOW) removed the window."""
+        window = self.window(prefix_ledger=True)
+        advance_pin(window)
+
+        def runner(argv, **kwargs):
+            runs = Path(argv[argv.index("--runs-dir") + 1])
+            (runs / "whole-window-verdict.json").write_text('{"status":"failed"}\n')
+            (runs / "b5t-abs-r01" / ".DS_Store").write_bytes(b"Bud1 finder")
+            (runs / "b5t-abs-r01" / "raw" / "._powermetrics.plist").write_bytes(b"appledouble")
+            return SimpleNamespace(returncode=1, stdout="", stderr="")
+
+        window.harvest(seams=desk_seams(runner), prepare_desk=True, run_g3=False)
+        self.assertNotIn("records.source_changed_during_harvest", window.codes())
+        self.assertTrue(h._os_metadata("b5t-abs-r01/.DS_Store"))
+        self.assertFalse(h._os_metadata("b5t-abs-r01/logs/controller.log"))
+
     def test_g3_is_not_applicable_to_a_floor_pack(self):
         window = self.window()
         window.harvest()

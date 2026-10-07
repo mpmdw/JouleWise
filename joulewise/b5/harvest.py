@@ -1412,6 +1412,24 @@ def resolve_inputs(plan_path: Path | str, overrides: Mapping[str, Any] | None = 
 # Archive: an APFS clone where possible, verified byte for byte.
 # ---------------------------------------------------------------------------
 
+# Names the OS writes into a browsed directory (Finder, AppleDouble); no
+# reducer, validator or harvest step reads them, so their appearing is not a
+# change of any source a number came from (Opus triple audit F7).
+OS_METADATA_NAMES = frozenset({".DS_Store", ".localized"})
+
+
+def _os_metadata(relative: str) -> bool:
+    name = relative.rsplit("/", 1)[-1]
+    return name in OS_METADATA_NAMES or name.startswith("._")
+
+
+def number_bearing(inventory: Mapping[str, Any] | None) -> dict[str, Any] | None:
+    """``inventory`` without OS metadata files, for the source-changed comparisons."""
+    if inventory is None:
+        return None
+    return {key: value for key, value in inventory.items() if not _os_metadata(key)}
+
+
 def tree_inventory(root: Path) -> dict[str, dict[str, Any]]:
     """Relative path -> {sha256, size} for every regular file; links kept literal."""
     rows: dict[str, dict[str, Any]] = {}
@@ -4674,7 +4692,7 @@ class _Harvest:
         allowed = {"campaign_log.jsonl", "bracket-binding.json", "whole-window-verdict.json", CAMPAIGN_LOCK_NAME,
                    MEMBERSHIP_BINDING_NAME}
         changed = sorted(name for name in set(before) | set(after)
-                         if name not in allowed and before.get(name) != after.get(name))
+                         if name not in allowed and not _os_metadata(name) and before.get(name) != after.get(name))
         appended_ok = (log.read_bytes().startswith(old_log) if log.is_file() else not old_log)
         if changed or not appended_ok:
             self.emit("records.source_changed_during_harvest", level="window", collector="desk",
@@ -4713,7 +4731,7 @@ class _Harvest:
         def rows(inventory: Mapping[str, Any] | None) -> dict[str, Any] | None:
             if inventory is None:
                 return None
-            return {key: value for key, value in inventory.items() if key.startswith(prefix)}
+            return {key: value for key, value in number_bearing(inventory).items() if key.startswith(prefix)}
 
         archived = rows(self._archived_inventory(desk["runs"]))
         before, after = rows(desk["before"]), rows(desk["after"])
@@ -6666,7 +6684,8 @@ class _Harvest:
 
     # -- outputs ---------------------------------------------------------------
     def sources_unchanged(self) -> None:
-        changed = [name for name, path in self.sources.items() if tree_inventory(path) != self.original.get(name)]
+        changed = [name for name, path in self.sources.items()
+                   if number_bearing(tree_inventory(path)) != number_bearing(self.original.get(name))]
         if changed:
             self.emit("records.source_changed_during_harvest", level="window", collector="archive",
                       observed={"sources": sorted(changed)})
