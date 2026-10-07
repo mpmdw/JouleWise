@@ -834,12 +834,14 @@ class PublicationAndAuditTests(unittest.TestCase):
         empty_pack = self.w.base / "empty-pack"
         empty_pack.mkdir()
         (empty_pack / "plan_tree.json").write_text("{}\n")
-        with self.assertRaisesRegex(window_lineage.LineagePublicationError, "inventory"):
+        # Cold pass 2 N6: the driver's A5 refusal keys on this subclass, not on the message.
+        with self.assertRaisesRegex(window_lineage.PackInventoryUnusableError, "inventory") as raised:
             window_lineage.publish_window_lineage(
                 pack_root=empty_pack, pack_id=PACK_ID, plan_id=PLAN_ID, window_id=WINDOW_ID,
                 bracket_session_id=SESSION_ID, pre_attempt_id=PRE_ATTEMPT, post_attempt_id=POST_ATTEMPT,
                 claim_runs_root=self.w.claim, bound_runs_root=self.w.bound, custody_root=self.w.custody,
                 pack_sha256="0" * 64)
+        self.assertIsInstance(raised.exception, window_lineage.LineagePublicationError)
 
     def test_records_formalities_are_findings_not_refusals(self) -> None:
         w = self.w

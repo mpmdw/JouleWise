@@ -91,8 +91,6 @@ REFUSED_LAUNCH_ABANDONED = "night_refused_launch_abandoned"
 # config inventory is unusable, so no member's config bytes can be checked
 # against the sealed inventory and every tagged member would refuse anyway.
 REFUSED_PACK_INVENTORY_UNUSABLE = "night_refused_pack_inventory_unusable"
-# window_lineage.publish_window_lineage's message for that case.
-PACK_INVENTORY_UNUSABLE_MESSAGE = "pack inventory is unusable"
 if {REFUSED_HAZARD, STOPPED_DISK_LOW, STOPPED_CENSUS_UNMEASURED, STOPPED_MONITOR_OUTAGE,
         REFUSED_INSTRUMENT_NOT_SAMPLING, REFUSED_BOOT_CHANGED,
         REFUSED_LAUNCH_ABANDONED, REFUSED_PACK_INVENTORY_UNUSABLE} != set(night_gate.HAZARD_DRIVER_REASON_CODES):
@@ -2213,8 +2211,10 @@ def run_hazard_night(rt: Any, plan_path: Path, plan: Any, probes: Any, initial_c
             inventory_unusable = False
         except Exception as error:  # noqa: BLE001
             lineage_error = _error_text(error)
-            inventory_unusable = (type(error).__name__ == "LineagePublicationError"
-                                  and str(error).startswith(PACK_INVENTORY_UNUSABLE_MESSAGE))
+            # window_lineage.publish_window_lineage raises this subclass for
+            # that case; the type decides, never the message (cold pass 2 N6).
+            from joulewise import window_lineage
+            inventory_unusable = isinstance(error, window_lineage.PackInventoryUnusableError)
             lineage_record["attempts"].append({"attempt": attempt, "published": False, "error": lineage_error})
 
     def verify() -> Any:
