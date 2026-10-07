@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -141,7 +142,8 @@ class AgentIdentityTests(unittest.TestCase):
             ("/Applications/ChatGPT.app/Contents/Resources/codex", None): True,
             ("/opt/homebrew/bin/node", ("node", "/opt/homebrew/bin/codex", "exec")): True,
             ("/opt/homebrew/bin/node", ("node", "scripts/claude-bridge-mcp.mjs")): True,
-            ("/opt/homebrew/bin/node", ("node", "scripts/run.mjs", "codex")): False,
+            # A runtime naming an agent anywhere in its arguments (orchestrator ruling, 2026-10-07).
+            ("/opt/homebrew/bin/node", ("node", "scripts/run.mjs", "codex")): True,
             ("/bin/zsh", ("/bin/zsh", "-c", "source /Users/edr/.claude/shell-snapshots/x.sh")): False,
             ("/usr/bin/python3", ("python3", "-m", "scripts.run_campaign", ATTEMPT3_ROOT)): False,
         }
@@ -164,19 +166,28 @@ class AgentIdentityTests(unittest.TestCase):
             ("/opt/homebrew/bin/node", ("node", f"{modules}/@anthropic-ai/sdk/dist/index.js")): False,
             ("/opt/homebrew/bin/node", ("node", f"{modules}/@openai/agents/cli.js")): False,
             ("/opt/homebrew/bin/node", ("node", "/Users/edr/.claude/hooks/notify.js")): False,
+            # The package path as an argument of another script is still an agent: anywhere counts.
             ("/opt/homebrew/bin/node", ("node", "scripts/run.mjs", f"{modules}/@anthropic-ai/claude-code/cli.js")):
-                False,
+                True,
         }
         for (executable, argv), expected in cases.items():
             with self.subTest(argv=argv):
                 self.assertIs(expected, agent_identity.is_agent(executable, argv))
 
-    def test_interpreter_option_operands_are_not_read_as_the_script(self):
-        """Sol delta audit A4: ``node --require /tmp/preload.cjs …/claude-code/cli.js`` read the preload as the script."""
-        node, modules = "/opt/homebrew/bin/node", "/opt/homebrew/lib/node_modules"
+    def test_a_runtime_naming_an_agent_anywhere_is_an_agent(self):
+        """Orchestrator ruling (2026-10-07): runtime options are never parsed.
+
+        Parsing failed twice: Sol delta audit A4 (``--require <preload>`` read as
+        the script) and delta audit 2 R1 (``--trace-require-module all``: ``all``
+        read as the script, so real Codex read as no agent and the census clean).
+        """
+        modules = "/opt/homebrew/lib/node_modules"
         cli = f"{modules}/@anthropic-ai/claude-code/cli.js"
+        codex_cli = f"{modules}/@openai/codex/cli.js"
         agents = [
-            ("node", "--require", "/tmp/preload.cjs", cli),  # the audit's exact trigger
+            ("node", "--trace-require-module", "all", codex_cli),  # R1's exact trigger
+            ("node", "--trace-require-module", "all", cli, "-p", "x"),
+            ("node", "--require", "/tmp/preload.cjs", cli),  # A4's exact trigger
             ("node", "-r", "/tmp/preload.cjs", cli, "-p", "x"),
             ("node", "--import", "/tmp/loader.mjs", cli),
             ("node", "--loader", "/tmp/loader.mjs", "--no-warnings", cli),
@@ -185,47 +196,96 @@ class AgentIdentityTests(unittest.TestCase):
             ("node", "--require", "/tmp/preload.cjs", "/opt/homebrew/bin/codex", "exec"),
             ("node", "--import=/tmp/loader.mjs", cli),
             ("node", "--", cli),
-            # An agent package anywhere among the interpreter's own arguments.
+            ("node", "--some-future-option", "/tmp/value", cli),  # an option no table knows
             ("node", "--require", f"{modules}/@anthropic-ai/claude-code/preload.js", "/tmp/app.js"),
+            # Inline code that names the package.
             ("node", "-e", f"require('{cli}')"),
+            ("node", "--eval", "import('@openai/codex').then(m => m.run())"),
+            ("node", "-pe", "require.resolve(\"@anthropic-ai/claude-code\")"),
+            ("deno", "eval", "await import('npm:@openai/codex')"),
+            # Launchers and install directories seen live on this machine (2026-10-07).
+            # The desk dry arm's hit (pid 81281): a Codex seat run by its installed launcher.
+            ("node", "/opt/homebrew/bin/codex", "exec", "-m", "gpt-6.1-sol", "-c", "model_reasoning_effort=xhigh",
+             "-C", "/Users/edr/code/JouleWise-wt-int5", "-s", "workspace-write", "-o", "/tmp/REPORT.md", "prompt"),
+            ("node", "/usr/local/bin/claude", "-p", "x"),
+            ("node", "/usr/local/lib/node_modules/claude-code/cli.js"),
+            ("node", "/Users/edr/.npm/_npx/d3e0db43a6e4314a/node_modules/.bin/codex", "mcp-server"),
+            ("node", "/Users/edr/.local/share/claude/versions/2.1.289/cli.js"),
             ("bun", "--preload", "/tmp/p.ts", "run", f"{modules}/@openai/codex/dist/main.js"),
             ("bun", "x", "@anthropic-ai/claude-code"),
+            ("deno", "run", "-A", "npm:@anthropic-ai/claude-code"),
+            ("node22", "--trace-require-module", "all", codex_cli),  # a versioned runtime name
         ]
         for argv in agents:
             with self.subTest(argv=argv):
                 executable = f"/opt/homebrew/bin/{argv[0]}"
                 self.assertEqual("agent", agent_identity.identify(executable, argv))
                 self.assertIs(True, agent_identity.is_agent(executable, argv))
-        # Launch forms that cannot be parsed with confidence stay hits (undecided).
+        # ``npm exec`` retitles its node process: argv[0] carries the package, the rest is empty.
+        npm_exec = ('npm exec @openai/codex@0.153.3 mcp-server -c model="gpt-5.6-sol"', "", "")
+        self.assertEqual("agent", agent_identity.identify("/opt/homebrew/Cellar/node/23.7.0/bin/node", npm_exec))
+        # A runtime that names no agent but runs code no argument names stays a hit.
         undecided = [
-            ("node", "--some-future-option", "/tmp/value", cli),
+            ("node", "-"),
+            ("node", "-e", "process.exit(0)"),
             ("node", "-pe", "1"),
-            ("node", "-e", "process.exit(0)", "codex"),
-            ("node", "-", "claude"),
+            ("node", "--eval=1"),
+            ("bun", "-e", "1"),
+            ("deno", "eval", "1"),
         ]
+        node = "/opt/homebrew/bin/node"
         for argv in undecided:
             with self.subTest(argv=argv):
                 self.assertEqual("undecided", agent_identity.identify(node, argv))
                 self.assertIs(True, agent_identity.is_agent(node, argv))
-        # Window-path controls: argument substrings only, never an agent.
+        # Runtime controls: no argument names an agent, so not an agent.
         window = [
-            ("node", "scripts/run.mjs", f"{ATTEMPT3_ROOT}/codex"),
-            ("node", "--require", f"{ATTEMPT3_ROOT}/preload.cjs", "scripts/run.mjs", "claude"),
-            ("node", "--no-warnings", "--inspect-port", "9229", "scripts/run.mjs", cli),
+            ("node", "somescript.js", "--path", f"{ATTEMPT3_ROOT}/members/m01"),
+            ("node", "--trace-require-module", "all", "/tmp/app/cli.js"),
+            ("node", "/Users/edr/.claude/hooks/notify.js"),
+            ("node", f"{modules}/@anthropic-ai/sdk/dist/index.js"),
             ("node", "--version"),
         ]
         for argv in window:
             with self.subTest(argv=argv):
                 self.assertEqual("not_agent", agent_identity.identify(node, argv))
-        for executable, argv in (("/usr/bin/python3", ("python3", "-m", "scripts.run_campaign", ATTEMPT3_ROOT)),
-                                 ("/bin/zsh", ("/bin/zsh", "-f", f"{ATTEMPT3_ROOT}/chain.zsh"))):
+        # Not a runtime: arguments are never read, whatever they name.  These are
+        # the window's own shapes (the rendered chain runs /bin/zsh -f and python).
+        snapshot = "/Users/edr/.claude/shell-snapshots/snapshot-zsh-1791188896438-of8k3h.sh"
+        for executable, argv in (
+                ("/usr/bin/python3", ("python3", "-m", "scripts.run_campaign", ATTEMPT3_ROOT)),
+                ("/bin/zsh", ("/bin/zsh", "-f", f"{ATTEMPT3_ROOT}/chain.zsh")),
+                ("/bin/zsh", ("/bin/zsh", "-c", f"source {snapshot} 2>/dev/null || true && eval 'claude -p x'")),
+                ("/opt/homebrew/bin/python3.13", ("python3.13", "-B", "-c", "import x  # codex", "-e",
+                                                  f"/Users/edr/.claude/{cli}")),
+                ("/private/tmp/b5/measurement/.venv/bin/python", ("python", "-B", "-c", "pass", "--",
+                                                                  "/Users/edr/.claude/custody/codex-run"))):
             with self.subTest(argv=argv):
                 self.assertEqual("not_agent", agent_identity.identify(executable, argv))
+
+    def test_sol_r1_live_node_launch_is_a_census_hit(self):
+        """Delta audit 2 R1, live: a real node process with ``--trace-require-module all``."""
+        node = shutil.which("node") or "/opt/homebrew/bin/node"
+        if not os.access(node, os.X_OK):
+            self.skipTest("no node runtime on this machine")
+        package = Path(self.tmp.name) / "node_modules" / "@openai" / "codex"
+        package.mkdir(parents=True)
+        cli = package / "cli.js"
+        cli.write_text("setInterval(() => {}, 1000);\n", encoding="utf-8")
+        process = self.spawn([node, "--trace-require-module", "all", str(cli)])
+        info = agent_identity.inspect(process.pid)
+        self.assertEqual("agent", agent_identity.identify(info.executable, info.argv))
+        decided = agent_identity.filter_census(_line(process))
+        self.assertEqual([(process.pid, "agent_executable")], [(item["pid"], item["reason"]) for item in decided.kept])
+        result, refusal = night_gate.agent_census(_census_probes(_line(process)))
+        self.assertEqual(0, result.exit_code)
+        self.assertIsNotNone(refusal)
+        self.assertIn(str(process.pid), result.stdout)
 
     def test_an_undecided_interpreter_launch_is_kept_with_its_reason(self):
         # A stand-in kernel view: the census line is decided against it as against a live pid.
         rows = {
-            4101: ("/opt/homebrew/bin/node", ("node", "--some-future-option", "/tmp/value", "b5-gamma-attempt3")),
+            4101: ("/opt/homebrew/bin/node", ("node", "-", "b5-gamma-attempt3")),
             4102: ("/opt/homebrew/bin/node", ("node", "--require", "/tmp/preload.cjs",
                                               "/opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js")),
             4103: ("/opt/homebrew/bin/node", ("node", "scripts/run.mjs", ATTEMPT3_ROOT)),

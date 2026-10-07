@@ -5740,15 +5740,19 @@ class _Harvest:
 
         The references at start, midpoint and end and their spares are copies
         of one reference workload, so all of them must have run one model and
-        one runtime stack.  The expected identity is the sealed pin when the
-        identity pins carry one for the unit ``NEG8_REFERENCE_IDENTITY_UNIT``;
-        otherwise (the block-5 pins carry none) it is the identity a strict
+        one runtime stack.  The expected identity is the sealed pin for the
+        unit ``NEG8_REFERENCE_IDENTITY_UNIT`` (the block-5 pins carry one:
+        ``neg8_reference`` in ``configs/campaigns/v5_claim_25g83/identity_pins.json``).
+        Only pins without that unit fall back to the identity a strict
         majority of the window's references and spares share.  A member whose
-        identity differs is ``model.identity_mismatch``; with no strict
-        majority no member's identity can be told right, and each is
-        ``model.identity_underivable``.  Both are member-level, so the NEG-8
-        screen drops that reference (``NEG8_REFERENCE_LOSS_CODES``) and the
-        survivors rule decides.  No energy is read.
+        identity differs is ``model.identity_mismatch``, whose catalog effect
+        is EXCLUDE_WINDOW: a reference or spare that ran another model or
+        runtime excludes the whole window, whatever the NEG-8 survivors rule
+        says (the flag is also in ``NEG8_REFERENCE_LOSS_CODES``, so the screen
+        drops that reference too).  With no sealed pin and no strict majority
+        no member's identity can be told right, and each is
+        ``model.identity_underivable`` (not in the flag catalog, so its effect
+        is UNCLASSIFIED; it is a NEG-8 reference loss code).  No energy is read.
         """
         if not references:
             return

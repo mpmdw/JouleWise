@@ -10,24 +10,37 @@ contains one of the substrings (``b5-gamma-attempt3`` before the T3 prune, a cus
 processes on it, and the census then stopped the window for a string (Opus
 triple audit F3, 2026-10-07).
 
-This module decides each listed process by what the kernel says it is running,
-never by its arguments:
+This module decides each listed process by what the kernel says it is running:
 
 * **Executable identity.**  The kernel's executable path for the pid
   (``proc_pidpath`` on Darwin, ``/proc/<pid>/exe`` on Linux) and the process
   name (``argv[0]``).  A process is an agent when either basename starts with
   ``claude`` or ``codex`` (``codex``, ``codex-code-mode-host``, the ChatGPT
-  app's bundled ``codex``, the Claude app), when the executable sits in a
+  app's bundled ``codex``, the Claude app), or when the executable sits in a
   ``claude/versions/<version>`` or ``codex/versions/<version>`` install (the
-  Claude Code native binary is ``~/.local/share/claude/versions/2.1.289``), or
-  when it is a script interpreter (``node``, ``bun``, ``deno``) whose script is
-  named ``claude*`` or ``codex*`` (``node /opt/homebrew/bin/codex exec``) or
-  whose own arguments (options, their values, inline code, the script) name an
-  agent's npm package directory
-  (``node .../node_modules/@anthropic-ai/claude-code/cli.js``, ``@openai/codex*``,
-  ``claude-code``).  The interpreter's options are parsed, so a preload or
-  loader value is never read as the script (Sol delta audit A4); a launch that
-  cannot be parsed with confidence is undecided and stays a hit.
+  Claude Code native binary is ``~/.local/share/claude/versions/2.1.289``).
+* **JavaScript runtimes.**  When the executable or process name is a
+  JavaScript/TypeScript runtime (a basename starting with ``node``, ``bun`` or
+  ``deno``, so ``node22`` and ``bun-1.1`` count), the agent's own code is a
+  script the runtime loads, so the runtime's arguments are read, but never
+  parsed: the process is an agent when any argument contains a path component
+  or word that starts with ``claude`` or ``codex``.  Arguments are cut into
+  components at ``/``, ``\\``, whitespace, quotes, brackets and ``= , ; : +``,
+  so this covers an npm package directory (``@anthropic-ai/claude-code``,
+  ``@openai/codex``), an install directory (``claude/versions``), a launcher
+  (``node .../node_modules/.bin/codex mcp-server``), an ``npm exec`` title
+  (``npm exec @openai/codex@0.153.3 ...``) and inline code (``-e
+  "require('@openai/codex')"``), wherever the argument stands: an option
+  value, the script, or after it.  Earlier versions parsed the runtime's
+  options to find the script and twice read an option's value as the script
+  (Sol delta audit A4, ``--require <preload>``; delta audit 2 R1,
+  ``--trace-require-module all``), which made a real agent read as no agent.
+  Reading every argument cannot make that mistake.  A runtime that names no
+  agent but runs code the command line does not name (a script on standard
+  input, ``-``; inline code, ``-e``, ``-p``, ``--eval``, ``--print``,
+  ``eval``) is undecided and stays a hit.  Any other runtime is not an agent.
+  This rule can over-match only runtime processes; the window runs ``zsh``,
+  ``python`` and system tools, never a JavaScript runtime.
 * **The caller's own tree.**  With ``own_tree_root`` set, a listed process
   whose parent chain reaches that pid, or whose process group is led by such a
   process, is the window itself and is ignored whatever it runs.  The tree
@@ -63,13 +76,12 @@ from typing import Callable
 AGENT_PREFIXES = ("claude", "codex")
 AGENT_INSTALL_DIRS = ("claude", "codex")
 SCRIPT_INTERPRETERS = ("node", "bun", "deno")
-# An agent's npm package, as a directory of the interpreter's script path
-# (cold pass 2 N5): ``node .../@anthropic-ai/claude-code/cli.js`` runs Claude
-# Code by its real path, whose basename (``cli.js``) is no agent name.  A
-# scope matches only with a package named for its agent; ``claude-code`` also
-# matches unscoped.
-AGENT_PACKAGE_SCOPES = {"@anthropic-ai": ("claude",), "@openai": ("codex",)}
-AGENT_PACKAGE_DIRS = ("claude-code",)
+# Runtime arguments that run code no argument names: a script on standard
+# input, inline code (node/bun ``-e``/``-p``/``-pe``, ``--eval``, ``--print``;
+# ``deno eval``).
+UNNAMED_CODE_ARGS = frozenset({"-", "-e", "-p", "-pe", "--eval", "--print", "eval"})
+UNNAMED_CODE_PREFIXES = ("--eval=", "--print=")
+_COMPONENT_SPLIT = re.compile(r"""[/\\\s'"`()\[\]{}=,;:+]+""")
 _PID_PREFIX = re.compile(r"([0-9]+) ")
 
 
@@ -110,136 +122,26 @@ def _agent_name(name: str) -> bool:
     return bool(name) and name.startswith(AGENT_PREFIXES)
 
 
-# Interpreter launches (Sol delta audit A4, 2026-10-07).  ``node --require
-# /tmp/preload.cjs .../@anthropic-ai/claude-code/cli.js`` used to read the
-# preload file as the script, so a real Claude Code process read as no agent.
-# The interpreter's own arguments are now parsed: an option in the value set
-# takes the next argv element as its value (``--option=value`` is always one
-# element); an option the flag rules know takes none.  Any other option written
-# without ``=`` may or may not consume the next element, so the launch cannot be
-# read with confidence and stays undecided (a hit).
-_VALUE_OPTIONS = {
-    "node": frozenset({
-        "-r", "--require", "--import", "--loader", "--experimental-loader", "-C", "--conditions",
-        "--inspect-port", "--debug-port", "--env-file", "--env-file-if-exists", "--input-type", "--title",
-        "--disable-warning", "--watch-path", "--stack-trace-limit", "--max-http-header-size",
-        "--openssl-config", "--icu-data-dir", "--redirect-warnings", "--diagnostic-dir", "--report-dir",
-        "--report-directory", "--report-filename", "--report-signal", "--unhandled-rejections",
-        "--dns-result-order", "--experimental-config-file", "--localstorage-file",
-        "--trace-event-categories", "--trace-event-file-pattern", "--cpu-prof-dir", "--cpu-prof-name",
-        "--heap-prof-dir", "--heap-prof-name", "--test-reporter", "--test-reporter-destination",
-        "--test-name-pattern", "--secure-heap", "--secure-heap-min", "--heapsnapshot-signal",
-        "--max-old-space-size", "--max-semi-space-size", "--stack-size", "--run",
-    }),
-    "bun": frozenset({
-        "-r", "--preload", "--cwd", "-c", "--config", "--env-file", "--tsconfig-override", "-d", "--define",
-        "-l", "--loader", "--conditions", "--main-fields", "--extension-order", "--jsx-factory",
-        "--jsx-fragment", "--jsx-import-source", "--port", "--elide-lines", "--filter", "-F",
-    }),
-    "deno": frozenset({
-        "-c", "--config", "--import-map", "--location", "--seed", "--cert", "--ext", "-L", "--log-level",
-        "--preload",
-    }),
-}
-# Options whose value is inline code: there is no script file to name.
-_EVAL_OPTIONS = {"node": frozenset({"-e", "--eval", "-p", "--print"}),
-                 "bun": frozenset({"-e", "--eval", "-p", "--print"}),
-                 "deno": frozenset()}
-# A first positional that names a subcommand, not a script (``bun run x.js``,
-# ``bunx``/``bun x <package>``, ``deno run x.ts``); ``deno eval`` takes code.
-_SUBCOMMANDS = {"node": frozenset(), "bun": frozenset({"run", "x", "exec"}),
-                "deno": frozenset({"run", "x", "eval"})}
-_FLAG_OPTIONS = frozenset({
-    "-i", "--interactive", "-c", "--check", "--watch", "--test", "--frozen-intrinsics", "--pending-deprecation",
-    "--throw-deprecation", "--abort-on-uncaught-exception", "--jitless", "--use-strict", "--zero-fill-buffers",
-    "--force-fips", "--prof", "--cpu-prof", "--heap-prof", "--insecure-http-parser", "--v8-options", "-v",
-    "--version", "-h", "--help", "-A", "-q", "--quiet", "-r", "--reload", "--hot", "--smol", "--bun",
-    "--silent", "--cached-only", "--frozen", "--lock", "--inspect", "--inspect-brk", "--inspect-wait",
-    "--preserve-symlinks", "--preserve-symlinks-main", "--deprecation", "--warnings", "--node-memory-debug",
-})
-_FLAG_PREFIXES = ("--no-", "--experimental-", "--trace-", "--expose-", "--enable-", "--harmony",
-                  "--allow-", "--deny-", "--unstable")
-_COMPONENT_SPLIT = re.compile(r"""[/\\\s'"`()=,;:]+""")
+def _interpreter(names: set[str]) -> bool:
+    return any(name.startswith(SCRIPT_INTERPRETERS) for name in names)
 
 
-def _interpreter_kind(names: set[str]) -> str | None:
-    for kind in SCRIPT_INTERPRETERS:
-        if any(name.startswith(kind) for name in names):
-            return kind
-    return None
+def _names_agent(text: str) -> bool:
+    """True when a path component or word of ``text`` starts with ``claude`` or ``codex``."""
+
+    return any(_agent_name(part) for part in _COMPONENT_SPLIT.split(text.lower()))
 
 
-def _flag_option(arg: str) -> bool:
-    return arg in _FLAG_OPTIONS or arg.startswith(_FLAG_PREFIXES)
-
-
-def _interpreter_launch(kind: str, args: tuple[str, ...]) -> tuple[str, list[str]]:
-    """How the interpreter was launched, and its own arguments up to the script.
-
-    The form is ``script`` (the region's last element is the script), ``eval``
-    (inline code, no script file), ``none`` (options only) or ``unparsed``.
-    """
-
-    values, evals, subcommands = _VALUE_OPTIONS[kind], _EVAL_OPTIONS[kind], _SUBCOMMANDS[kind]
-    region: list[str] = []
-    index, subcommand_seen = 0, False
-    while index < len(args):
-        arg = args[index]
-        region.append(arg)
-        if arg == "--":
-            if index + 1 < len(args):
-                region.append(args[index + 1])
-                return "script", region
-            return "none", region
-        if arg == "-":
-            return "unparsed", region  # the script is read from standard input
-        if arg.startswith("-"):
-            name = arg.split("=", 1)[0]
-            if name in evals:
-                if "=" not in arg and index + 1 < len(args):
-                    region.append(args[index + 1])
-                return "eval", region
-            if "=" in arg and name.startswith("--"):
-                index += 1
-            elif arg in values:
-                if index + 1 < len(args):
-                    region.append(args[index + 1])
-                index += 2
-            elif _flag_option(arg):
-                index += 1
-            else:
-                return "unparsed", region
-            continue
-        if not subcommand_seen and arg in subcommands:
-            subcommand_seen = True
-            if kind == "deno" and arg == "eval":
-                region.extend(args[index + 1:index + 2])
-                return "eval", region
-            index += 1
-            continue
-        return "script", region
-    return "none", region
-
-
-def _mentions_agent_package(text: str) -> bool:
-    """True when any path component sequence in ``text`` is an agent's npm package."""
-
-    parts = [part for part in _COMPONENT_SPLIT.split(text.lower()) if part]
-    for index, part in enumerate(parts):
-        if part in AGENT_PACKAGE_DIRS:
-            return True
-        prefixes = AGENT_PACKAGE_SCOPES.get(part)
-        if prefixes and index + 1 < len(parts) and parts[index + 1].startswith(prefixes):
-            return True
-    return False
+def _unnamed_code(arg: str) -> bool:
+    return arg in UNNAMED_CODE_ARGS or arg.startswith(UNNAMED_CODE_PREFIXES)
 
 
 def identify(executable: str | None, argv: tuple[str, ...] | None) -> str:
     """``agent``, ``not_agent`` or ``undecided`` for one process (see module doc).
 
-    ``undecided`` is an interpreter launch that cannot be read with confidence
-    (an unknown option, inline code, a script on standard input); the census
-    keeps it as a hit.
+    ``undecided`` is a JavaScript runtime that names no agent but runs code no
+    argument names (a script on standard input, inline code); the census keeps
+    it as a hit.
     """
 
     if _agent_name(_basename(executable)):
@@ -251,37 +153,18 @@ def identify(executable: str | None, argv: tuple[str, ...] | None) -> str:
         for index in range(len(parts) - 2):
             if parts[index] in AGENT_INSTALL_DIRS and parts[index + 1] == "versions":
                 return "agent"
-    kind = _interpreter_kind({_basename(executable)} | ({_basename(argv[0])} if argv else set()))
-    if not argv or kind is None:
+    if not argv or not _interpreter({_basename(executable), _basename(argv[0])}):
         return "not_agent"
-    form, region = _interpreter_launch(kind, tuple(argv[1:]))
-    # An agent package anywhere among the interpreter's own arguments (a
-    # preload, a loader, inline code, the script) is an agent.
-    if any(_mentions_agent_package(token) for token in region):
+    # argv[0] is read too: ``npm exec`` retitles its node process with the package it runs.
+    if any(_names_agent(arg) for arg in argv):
         return "agent"
-    if form == "script":
-        script = region[-1]
-        return "agent" if _agent_name(_basename(script)) or _agent_package_script(script) else "not_agent"
-    return "not_agent" if form == "none" else "undecided"
+    return "undecided" if any(_unnamed_code(arg) for arg in argv[1:]) else "not_agent"
 
 
 def is_agent(executable: str | None, argv: tuple[str, ...] | None) -> bool:
     """True unless the process is decided not to be an agent (undecided counts)."""
 
     return identify(executable, argv) != "not_agent"
-
-
-def _agent_package_script(script: str) -> bool:
-    """True when a directory of ``script`` is an agent's npm package (``@anthropic-ai/claude-code``)."""
-
-    parts = [part.lower() for part in PurePosixPath(script).parts[:-1]]
-    for index, part in enumerate(parts):
-        if part in AGENT_PACKAGE_DIRS:
-            return True
-        prefixes = AGENT_PACKAGE_SCOPES.get(part)
-        if prefixes and index + 1 < len(parts) and parts[index + 1].startswith(prefixes):
-            return True
-    return False
 
 
 # --- kernel reads -----------------------------------------------------------
