@@ -762,6 +762,12 @@
       "family": "RECORDS",
       "klass": "REPRESENTATION"
     },
+    "records.flag_unbuilt": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "RECORDS",
+      "klass": "REPRESENTATION"
+    },
     "records.identity_unmeasured_superseded": {
       "blinding": "STRUCTURE",
       "effect": "DISCLOSE",
@@ -774,6 +780,24 @@
       "family": "RECORDS",
       "klass": "REPRESENTATION"
     },
+    "records.malformed_flag": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "RECORDS",
+      "klass": "REPRESENTATION"
+    },
+    "records.malformed_flag_exclusion_possible": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_WINDOW",
+      "family": "RECORDS",
+      "klass": "NUMBER"
+    },
+    "records.malformed_flag_member_exclusion_possible": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_MEMBER",
+      "family": "RECORDS",
+      "klass": "NUMBER"
+    },
     "records.monitor_journal_absent": {
       "blinding": "STRUCTURE",
       "effect": "DISCLOSE",
@@ -781,6 +805,12 @@
       "klass": "REPRESENTATION"
     },
     "records.monitor_line_malformed": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "RECORDS",
+      "klass": "REPRESENTATION"
+    },
+    "records.operator_log_unreadable": {
       "blinding": "STRUCTURE",
       "effect": "DISCLOSE",
       "family": "RECORDS",

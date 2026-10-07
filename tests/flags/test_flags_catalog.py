@@ -99,8 +99,12 @@ class CatalogTests(unittest.TestCase):
     def test_draft_classifies_every_code_this_lane_emits(self) -> None:
         self.assertEqual(missing_codes(draft_catalog(), EMITTED_BY_THIS_LANE), [])
         self.assertEqual(missing_codes(draft_catalog(), EMITTED_BY_THE_SPAN_JOINS), [])
-        # These two stay unclassified on purpose: they always block release.
-        self.assertEqual(missing_codes(draft_catalog(), NEVER_CLASSIFIED_CODES), sorted(NEVER_CLASSIFIED_CODES))
+        # No code is beyond the catalog's reach any more (Opus audit F2); the
+        # malformed-flag record is DISCLOSE, collector.unmeasured stays out of
+        # the draft and so blocks release until a cold erratum classifies it.
+        self.assertEqual(NEVER_CLASSIFIED_CODES, ())
+        self.assertEqual(missing_codes(draft_catalog(), ("records.malformed_flag", "collector.unmeasured")),
+                         ["collector.unmeasured"])
 
 
 # Codes that joulewise.flags.collect and joulewise.flags.exclusions.compute can emit.

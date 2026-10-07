@@ -19,7 +19,8 @@ File format, schema ``joulewise.flag_catalog.v1``::
     }
 
 ``NEVER_CLASSIFIED_CODES`` must not appear in any catalog; the loader refuses
-one that lists them, so they always block release.
+one that lists them. It is empty (audit-fix batch 2): a code no catalog may
+classify blocked release with no cure.
 
 ``DRAFT_CODES`` below is this lane's proposal, transcribed from plan sections
 3.4 and 3.5. It exists so that L6 can seal from it and so that the tests and
@@ -48,11 +49,15 @@ EFFECTS = (EXCLUDE_WINDOW, EXCLUDE_MEMBER, DISCLOSE)
 
 DEFAULT_CELL_UNIT_MINIMUM = 8
 
-# Codes this package emits that must never be classified, so that they always
-# block the release event until a person looks: a flag record that failed
-# validation (its exclusion may be lost) and a collector the package does not
-# know how to class.
-NEVER_CLASSIFIED_CODES = ("records.malformed_flag", "collector.unmeasured")
+# Codes the loader refuses to see classified. Empty since the Opus triple
+# audit F2 fix (2026-10-07): records.malformed_flag and collector.unmeasured
+# used to be listed, so an attempt carrying either was release-blocked for
+# ever (first_claim_usable returned None and the registered cure, a cold
+# erratum classifying the code, was refused here). records.malformed_flag is
+# now DISCLOSE with a conservative exclusion beside it (_AUDFIX2_CODES);
+# collector.unmeasured stays out of the draft, so it still blocks release
+# until a cold erratum classifies it, which the loader now accepts.
+NEVER_CLASSIFIED_CODES: tuple[str, ...] = ()
 
 
 class CatalogError(ValueError):
@@ -298,6 +303,20 @@ _INT4_CODES = {
     "whole_window.member_failures_unreadable": _code("NEG8", "NUMBER", EXCLUDE_WINDOW),
 }
 
+# Audit-fix batch 2 (2026-10-07; Opus triple audit F2). A flag line that is
+# not a valid flag is disclosed; when the code it still shows (whole or as a
+# prefix) could be an exclusion, the harvest adds one of the two exclusion
+# codes, so no exclusion is lost and nothing waits for a person. The stand-in
+# line a writer prints when it could not build its flag is rebuilt as that
+# flag and recorded; an operator log that could not be read is disclosed.
+_AUDFIX2_CODES = {
+    "records.malformed_flag": _code("RECORDS", "REPRESENTATION", DISCLOSE),
+    "records.malformed_flag_exclusion_possible": _code("RECORDS", "NUMBER", EXCLUDE_WINDOW),
+    "records.malformed_flag_member_exclusion_possible": _code("RECORDS", "NUMBER", EXCLUDE_MEMBER),
+    "records.flag_unbuilt": _code("RECORDS", "REPRESENTATION", DISCLOSE),
+    "records.operator_log_unreadable": _code("RECORDS", "REPRESENTATION", DISCLOSE),
+}
+
 DRAFT_CODES: Mapping[str, Mapping[str, str]] = {
     **_WINDOW_CODES,
     **_MEMBER_CODES,
@@ -306,6 +325,7 @@ DRAFT_CODES: Mapping[str, Mapping[str, str]] = {
     **_PRUNE2_CODES,
     **_PRUNE3_CODES,
     **_INT4_CODES,
+    **_AUDFIX2_CODES,
 }
 
 # Codes the cell rule and the roster rule of exclusions.compute derive

@@ -283,10 +283,22 @@ CODES: dict[str, CodeSpec] = {
     "records.terminal_record_absent": _spec("RECORDS", "REPRESENTATION"),
     "records.source_changed_during_harvest": _spec("RECORDS", "NUMBER"),
     "records.collector_failed": _spec("RECORDS", "REPRESENTATION"),
-    # An earlier flag line (desk, arm, driver) that is not a valid flag.  It
-    # may have been an exclusion, so it is never classified: L4's
-    # NEVER_CLASSIFIED_CODES, which blocks the release event until read.
+    # An earlier flag line (desk, arm, driver) that is not a valid flag.
+    # Disclosed (Opus triple audit F2, 2026-10-07: never classifying it
+    # deadlocked first_claim_usable and the catalog could not cure it); when
+    # the line's recoverable code could name an exclusion, the conservative
+    # rule (_malformed_flag_line) adds one of the two exclusion codes below.
     "records.malformed_flag": _spec("RECORDS", "REPRESENTATION"),
+    "records.malformed_flag_exclusion_possible": _spec("RECORDS", "NUMBER"),
+    "records.malformed_flag_member_exclusion_possible": _spec("RECORDS", "NUMBER"),
+    # A designed output, not a malformed one: the stand-in line a flag writer
+    # prints when it could not build or write its flag (flags.core.emit's
+    # fallback; the chain's flag() wrapper and FLAG_HELPER).  The flag it names
+    # is rebuilt from the line's code, level and run id; this records that.
+    "records.flag_unbuilt": _spec("RECORDS", "REPRESENTATION"),
+    # An operator log (or log directory) the harvest could not read: it may
+    # have held an unwritten-flag marker line.  Disclosed.
+    "records.operator_log_unreadable": _spec("RECORDS", "REPRESENTATION"),
     "g3.assertion_failed": _spec("RECORDS", "REPRESENTATION", legacy="scripts/check_window_provenance.py"),
     "g3.recompute_failed": _spec("NEG8", "NUMBER", legacy="scripts/check_window_provenance.py:837"),
     "g3.not_applicable": _spec("DIAGNOSTIC", "REPRESENTATION"),
@@ -456,7 +468,17 @@ IDENTITY_SUPERSESSION_CHECKS = {
     "executed_code": frozenset({"executed_inventory", "chain_sidecar"}),
 }
 LINEAGE_CODES = frozenset(code for code in CODES if code.startswith("lineage."))
-NEVER_CLASSIFIED_CODES = frozenset({"records.malformed_flag"})
+# Empty since the Opus triple audit F2 fix (2026-10-07): a never-classified
+# code blocked release with no registered cure.  Kept so the tests' set
+# arithmetic reads the same.
+NEVER_CLASSIFIED_CODES: frozenset[str] = frozenset()
+# Codes added by audit-fix batch 2 (2026-10-07): classified in the L4 draft
+# (joulewise.flags.catalog._AUDFIX2_CODES) and the test fixture; the design
+# branch's draft sealed catalog gains them through REG before the seal.
+AUDFIX2_CODES = frozenset({
+    "records.malformed_flag", "records.malformed_flag_exclusion_possible",
+    "records.malformed_flag_member_exclusion_possible", "records.flag_unbuilt", "records.operator_log_unreadable",
+})
 # Codes L4's draft catalog does not name (handed to L4 and L6 for the draft
 # and the sealed catalog).  ``tests/test_harvest_b5_window.py`` keeps this
 # list equal to CODES minus the draft whenever joulewise.flags is importable.
@@ -475,7 +497,8 @@ L5_ONLY_CODES = frozenset({
     "roster.run_id_mismatch", "roster.no_science_bundles", "roster.duplicate_run_id",
     "records.monitor_journal_absent", "records.monitor_line_malformed", "records.arm_record_absent",
     "records.terminal_record_absent", "records.source_changed_during_harvest", "records.collector_failed",
-    "records.malformed_flag",
+    # records.malformed_flag and the other AUDFIX2_CODES are in L4's draft since
+    # audit-fix batch 2 (2026-10-07).
     "g3.assertion_failed", "g3.recompute_failed", "g3.not_applicable",
     # L4's draft names g10.discharged and g10.not_discharged; the block-5
     # catalog draft classifies all five (DIAGNOSTIC, PHYSICS, DISCLOSE).
@@ -1035,6 +1058,40 @@ class Catalog:
         entry = self.entries.get(code)
         effect = entry.get("effect") if isinstance(entry, Mapping) else None
         return effect if effect in EFFECTS else UNCLASSIFIED
+
+
+UNBUILT_MARKER_KEYS = frozenset({"code", "level", "run_id", "observed", "unbuilt"})
+_SALVAGE_CODE = re.compile(rb'"code"\s*:\s*"([a-z0-9_.]*)("?)')
+_SALVAGE_RUN_ID = re.compile(rb'"run_id"\s*:\s*"([A-Za-z0-9._-]+)"')
+
+
+def _is_unbuilt_marker(value: Any) -> bool:
+    """The designed stand-in line of flags.core.emit and the chain's flag writer (not a torn flag)."""
+    return (isinstance(value, Mapping) and "unbuilt" in value and set(value) <= UNBUILT_MARKER_KEYS
+            and isinstance(value.get("code"), str) and CODE_RE.fullmatch(value["code"]) is not None)
+
+
+def _salvage_flag_fields(line: bytes, value: Any) -> tuple[str | None, bool, str | None]:
+    """What a damaged flag line still shows: (code or code prefix, whether the code is whole, run id)."""
+    code: str | None = None
+    exact = False
+    run_id: str | None = None
+    if isinstance(value, Mapping):
+        if isinstance(value.get("code"), str):
+            code, exact = value["code"], True
+        scope = value.get("scope")
+        candidate = scope.get("run_id") if isinstance(scope, Mapping) else value.get("run_id")
+        run_id = candidate if isinstance(candidate, str) and candidate else None
+    if code is None:
+        match = _SALVAGE_CODE.search(line)
+        if match:
+            code, exact = match.group(1).decode("ascii"), bool(match.group(2))
+    if run_id is None:
+        match = _SALVAGE_RUN_ID.search(line)
+        run_id = match.group(1).decode("ascii") if match else None
+    if exact and CODE_RE.fullmatch(code or "") is None:
+        exact = False
+    return code, exact, run_id
 
 
 class FlagLedger:
@@ -5656,7 +5713,8 @@ class _Harvest:
             self.emit("records.arm_record_absent", level="window", collector="arm", observed={"arm_record": None})
         # Every flag file written before harvest: L4's desk and arm collectors,
         # L2's driver.jsonl.  A line that is not a valid flag may have been an
-        # exclusion, so it becomes records.malformed_flag, never classified.
+        # exclusion: it becomes records.malformed_flag (DISCLOSE) and, when its
+        # recoverable code could be an exclusion, that exclusion (F2 rule).
         # The collectors' run log (collector_runs.jsonl, written beside the
         # flag files by scripts/collect_window_flags.py) holds run records, not
         # flags: it is read by _collector_run_records, and so is a run record
@@ -5686,11 +5744,77 @@ class _Harvest:
 
     def _malformed_flag_line(self, file: str, number: int | None, line: bytes, value: Any,
                              problems: Sequence[str]) -> None:
-        salvaged = value.get("code") if isinstance(value, Mapping) else None
-        self.emit("records.malformed_flag", level="window", collector="flags",
-                  observed={"file": file, "line": number, "line_sha256": sha256_bytes(line),
-                            "salvaged_code": salvaged if isinstance(salvaged, str) else None,
-                            "problems": list(problems)[:5]})
+        """A flag line that is not a valid flag: disclosed, plus the conservative rule (Opus audit F2).
+
+        ``records.malformed_flag`` is DISCLOSE.  What the line still shows of
+        its code (the whole code, or a prefix when the line was torn inside
+        it) names the codes it could have been.  If any of them is
+        EXCLUDE_WINDOW in the catalog in force, the window is excluded
+        (``records.malformed_flag_exclusion_possible``).  Else, if any is
+        EXCLUDE_MEMBER and the line still shows a run id, that member is
+        excluded (``records.malformed_flag_member_exclusion_possible``).  A
+        line that shows no code, or a member code but no run id, is disclosed
+        only (the brief's rule: exclude only on what the line still shows).
+        """
+        code, exact, run_id = _salvage_flag_fields(line, value)
+        candidates = self._candidate_codes(code, exact)
+        effects = {self.catalog.effect(item) for item in candidates}
+        observed = {"file": file, "line": number, "line_sha256": sha256_bytes(line),
+                    "salvaged_code": code if exact else None,
+                    "salvaged_code_prefix": None if exact else code,
+                    "salvaged_run_id": run_id, "problems": list(problems)[:5]}
+        flag = self.emit("records.malformed_flag", level="window", collector="flags", observed=observed)
+        if code is None:
+            return
+        rule = {"malformed_flag_id": flag["flag_id"], **observed,
+                "candidate_codes": sorted(candidates)[:20], "candidate_count": len(candidates)}
+        if "EXCLUDE_WINDOW" in effects:
+            self.emit("records.malformed_flag_exclusion_possible", level="window", collector="flags",
+                      observed={**rule, "excluding": sorted(item for item in candidates
+                                                            if self.catalog.effect(item) == "EXCLUDE_WINDOW")[:20]})
+        elif "EXCLUDE_MEMBER" in effects and run_id:
+            self.emit("records.malformed_flag_member_exclusion_possible", level="member", run_id=run_id,
+                      collector="flags",
+                      observed={**rule, "excluding": sorted(item for item in candidates
+                                                            if self.catalog.effect(item) == "EXCLUDE_MEMBER")[:20]})
+
+    def _candidate_codes(self, code: str | None, exact: bool) -> set[str]:
+        """Every code the catalog or this harvest knows that ``code`` (or its prefix) could be."""
+        if code is None:
+            return set()
+        known = set(self.catalog.entries) | set(CODES)
+        return {code} if exact else {item for item in known if item.startswith(code)}
+
+    def _rebuild_unbuilt_flag(self, source: str, number: int, value: Mapping[str, Any]) -> None:
+        """A writer's designed stand-in line for a flag it could not build or write.
+
+        ``joulewise.flags.core.emit`` prints ``{code, level, run_id, unbuilt}``
+        and the chain's flag writer ``{code, level, run_id, observed,
+        unbuilt}`` when the flag could not be made or written in time.  The
+        flag is rebuilt from what the line names, so its catalog effect
+        applies (an exclusion is never lost), and ``records.flag_unbuilt``
+        (DISCLOSE) records the line.
+        """
+        code, level, run_id = value["code"], value.get("level"), value.get("run_id")
+        run_id = run_id if isinstance(run_id, str) and run_id else None
+        observed: dict[str, Any] = {"unbuilt": value.get("unbuilt"), "source": source, "line": number}
+        if "observed" in value:
+            observed["value"] = value["observed"]
+        if level not in ("window", "stage", "quad", "member") or level in ("stage", "quad"):
+            # No stage id travels with the line: a stage or quad fact is
+            # applied to the whole window, which is the conservative reading.
+            observed["level_written"] = level
+            level = "window"
+        if level == "member" and run_id is None:
+            level, observed["run_id_missing"] = "window", True
+        entry = self.catalog.entries.get(code, {})
+        spec = CODES.get(code) or _spec(entry.get("family") if entry.get("family") in FAMILIES else "RECORDS",
+                                        entry.get("klass") if entry.get("klass") in KLASSES else "REPRESENTATION")
+        rebuilt = self.emit(code, level=level, run_id=run_id if level == "member" else None,
+                            collector="unbuilt_marker", observed=observed, spec=spec)
+        self.emit("records.flag_unbuilt", level="window", collector="flags",
+                  observed={"code": code, "level": value.get("level"), "run_id": run_id, "source": source,
+                            "line": number, "unbuilt": value.get("unbuilt"), "rebuilt_flag_id": rebuilt["flag_id"]})
 
     def _unwritten_core_flags(self) -> None:
         """Core flags whose flag-file write failed, recovered from stderr (core-prune N8).
@@ -5701,9 +5825,12 @@ class _Harvest:
         each member's stderr to ``operator-logs/member-stderr/*.stderr``, and
         the desk verdict's stderr is this harvest's desk transcript.  Each marked line goes through the
         flag-file path: a valid flag is absorbed (it is the flag, nothing more
-        is emitted), anything else is ``records.malformed_flag``, which is never
-        classified and so blocks release.  A log that cannot be read may hold
-        such a line, so it is recorded the same way.
+        is emitted); a writer's designed stand-in line (``{code, level, run_id,
+        [observed,] unbuilt}``) is rebuilt as the flag it names plus
+        ``records.flag_unbuilt``; anything else is ``records.malformed_flag``
+        under the conservative rule of ``_malformed_flag_line``.  A log that
+        cannot be read may hold such a line: ``records.operator_log_unreadable``
+        (DISCLOSE).  None of these blocks release (Opus triple audit F2).
         """
         marker = UNWRITTEN_MARKER.encode("utf-8")
         directories = [self.inputs.custody_root / "operator-logs"]
@@ -5738,7 +5865,8 @@ class _Harvest:
             sources.append(("desk-transcript", transcript.encode("utf-8", "replace")))
         for source, raw in sources:
             if raw is None:
-                self._malformed_flag_line(source, None, b"", None, ["operator log unreadable"])
+                self.emit("records.operator_log_unreadable", level="window", collector="flags",
+                          observed={"file": source})
                 continue
             if marker not in raw:
                 continue
@@ -5752,6 +5880,9 @@ class _Harvest:
                 except ValueError as exc:
                     problems = [f"not JSON: {type(exc).__name__}"]
                 else:
+                    if _is_unbuilt_marker(value):
+                        self._rebuild_unbuilt_flag(source, number, value)
+                        continue
                     problems = self.flags.absorb(value)
                 if problems:
                     self._malformed_flag_line(source, number, remainder, value, problems)
