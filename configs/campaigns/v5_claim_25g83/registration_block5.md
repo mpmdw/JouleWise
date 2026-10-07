@@ -1,9 +1,10 @@
 # Registration V5-CLAIM-25G83-B5: the first claim-bearing `_v5` windows (measurement block 5)
 
-Status: **DRAFT, NOT SEALED. Revision 5, 2026-10-06.** Written by Opus 5.5, as lane L6 of the gate-prune workflow
+Status: **DRAFT, NOT SEALED. Revision 6, 2026-10-07.** Written by Opus 5.5, as lane L6 of the gate-prune workflow
 (revision 3, commit `71c91d74`), then as the registration-sync side lane (revision 4, last commit `7261a585`), then
-as the REG lane of gate-prune round 3 (revision 5), on branch `design/2026-10-05-v5-claim-block-draft` (revision 2
-is commit `bfd1ee8c`). This file authorizes no arm, no
+as the REG lane of gate-prune round 3 (revision 5, last commit `9d63b4df`), then as the REG sync to the frozen head
+(revision 6), on branch `design/2026-10-05-v5-claim-block-draft` (revision 2 is commit `bfd1ee8c`). This file
+authorizes no arm, no
 launch and no analysis. It binds only when one cold gate (§0.1, §12) seals it together with three companions in the
 same directory:
 
@@ -99,6 +100,45 @@ citations for tracing a rule to the record that motivated it; no rule here depen
 8. **Catalog** (`flag_catalog.json`): `battery.assist` (DISCLOSE), `calibration.historical_custody_mismatch`
    (EXCLUDE_WINDOW) and `calibration.historical_custody_unmeasured` (DISCLOSE) are added; the battery notes follow
    the ruling.
+
+**What changed in revision 6.** Revision 5 described several rules "as P3 will install them". The P3 round, lane
+L10, a **refusal census** (a sweep that listed every place the code can refuse, stop or exclude, and turned each one
+that was not physics or number protection into a flag) and an integrator's triage of what the census found have
+since been merged into one **frozen head**: the commit the integration stopped changing so that the review gates
+before the seal all judge the same bytes. It is commit `a434e363d96621318657418e60b8d14410079d82` (branch
+`integrate/2026-10-06-gate-prune-4`; whole suite run at that commit, `/Users/edr/night-archive/gate-prune/
+FROZEN_HEAD.md`), and it is the candidate for H_claim (§2 item 1). This revision reads that code and makes the text
+say what it does. Where the code chose differently from revision 5, the text now follows the code; each such place
+is listed here and in the sync record of §13. No registered threshold changed.
+
+1. **Battery** (§4.2, §6.3, §6.4, §6.5, §9.2): assist is now **any** negative battery current read from the SMC,
+   not only one below −200 mA; −200 mA is the threshold the assist report counts reads against. The
+   charge-accumulator test keeps its own code, `battery.accumulator_excursion`. The assist report splits a member
+   into the code's three phases: before the measured request, the request, after it. A calibration capture's assist
+   is `calibration.capture_battery_assist`. A member's #421 pair (the battery registry read just before and just after
+   its sampler stream) that failed on discharge alone is disclosed when the SMC reads cover the member. With SMC
+   coverage, a hole of more than 120 s between registry reads of the charging and AC state makes the member
+   `battery.unmeasured`.
+2. **Desk order** (§2, §4.6 item 6): the **pin advance** (the pin-only commit that moves the repository's record of
+   the calibration ledger's tip to this window's last entry) now comes **before** the harvest, not after it, because
+   the program that writes the whole-window verdict at the desk reads the ledger through that committed record.
+3. **Clock** (§4.2): a clock sample whose three reads took more than 250 µs is re-read up to five times and is
+   otherwise unmeasured, never a step (`FILL[P3-CLOCK-SKEW-BOUND]` filled).
+4. **Driver** (§0.17, §2, §5.4): the monitor and meter stop at least 5 s after the chain exits, after G10; the
+   pre-launch lineage check records a mismatch (`records.lineage_prelaunch_mismatch`) and refuses only when the
+   machine rebooted since the lineage was published.
+5. **Records that no longer remove anything** (§6.3, §6.8, §6.10): `member.stderr_uncopied` is disclosed; an
+   exception inside the member environment guard's collector is disclosed (`env.member_guard_flagged`, finding
+   `collector_raised`); a historical calibration capture whose bytes changed removes the window only when this
+   window's acceptance relies on it (`calibration.historical_custody_mismatch_unused` otherwise).
+6. **A new window exclusion** (§6.5): `whole_window.member_failures_unreadable`, when a verdict that did not pass
+   cannot name the members it failed.
+7. **Which refusals may remain** (§6.11, new): every refusal left in the code is either physics or the protection
+   of a number, and a test enforces the list.
+8. **Fills** (§2 item 7, §2 item 8, §13): the cooldown smoke record, the P3 sync record and the sizing and pin
+   digests at the frozen head.
+9. **Smaller corrections:** the meter's restricted record is one file, `withheld/meter.json` (§5.8); G3 does not run
+   on the floor packs (§2 item 7, §6.8); GAMMA's battery-assist line is adopted (§14 Q9 closed; analysis plan §8.1).
 
 ## 0. Terms, built in the order they are used
 
@@ -241,7 +281,7 @@ The values in this section follow the cold-judge ruling on block-5 per-member ti
   window is already removed by `neg8.screen_failed`. *Worked example (synthetic).* Readings 30.1, 31.0, 31.9, 32.6,
   33.3 and 33.9 °C: rise 3.8 K; the last three span 1.3 K, so no plateau; the stage is flagged. The reading is
   taken by `scripts/run_campaign.py` (`_hazard_read_battery_temperature`, manifest key
-  `battery_temperature_readings`) and judged by the harvest; both are at `b9d02700a`.
+  `battery_temperature_readings`) and judged by the harvest; both are at the frozen head `a434e363d`.
 
 ### 0.7 Packs, attempts, windows and the measurement block
 
@@ -256,8 +296,10 @@ The values in this section follow the cold-judge ruling on block-5 per-member ti
   `5218c2709274765c706f38766ae68cce30892a673e9ae5cc290701362f615eb1` and BETA
   `5bab773a481e4a06fae564217b178d8e1d76a5334f99a3b264c1174db692a6e4`. GAMMA's, after lane L10 gave its interior
   references distinct run ids (branch `lane/2026-10-06-l10-gamma-refs`, commit `c6309e1a`; §2, "Before GAMMA-1
-  arms"), is `fb51b4aa0c47fb36bbc838369fd6b5af0db4656becf01ebc5051c9794b8b8bc3` (`523864e2…` after the timing lane,
-  and still at the integration head `b9d02700a`, which does not yet carry L10). (At the gate-prune integration head
+  arms"), is `fb51b4aa0c47fb36bbc838369fd6b5af0db4656becf01ebc5051c9794b8b8bc3` (`523864e2…` after the timing lane
+  and at the integration head `b9d02700a`, which did not carry L10). All three digests were recomputed from the
+  frozen head `a434e363d`, which carries L10, and equal the `plan_tree.sha256` values its sizing output records
+  (§5.5). (At the gate-prune integration head
   `f8164893`, before the timing lane, they were `a0076ae7…`, `ebd8c160…` and `7cdf1891…`.) The values in force are
   those in the sealed inventory at H_claim (§11).
 - **Attempt.** One arm-to-harvest occurrence of one pack, labelled `ALPHA-n`, `BETA-n` or `GAMMA-n`, n = 1, 2, …
@@ -424,7 +466,8 @@ that member's unit (§6.3).
 - **Arm.** The sequence the driver runs after t0 that decides whether this window's chain starts (§4.1). It returns
   **GO** only if every hazard verdict is PASS, the agent census (§4.5) is clean, and the machine's OS build and model
   are ones the calibration acceptance has judged (§4.7). UNMEASURED refuses, because an unread hazard may be present.
-  Nothing else enters the decision.
+  Nothing else enters the decision. Which refusals the code may contain anywhere, at the arm or later, is fixed by
+  one rule (physics or number integrity) that a test enforces (§6.11).
 
 ### 0.16 Flags, the catalog, exclusions and claim-usable
 
@@ -459,18 +502,29 @@ that member's unit (§6.3).
 - **Launch lineage.** A small file in each runs root, published by the driver before the chain starts, that ties
   every bundle to its plan, window and bracket session (`joulewise/window_lineage.py`, schema
   `joulewise.hazard_window_lineage.v1`). The measurement code reads it before writing a `_v5` bundle and refuses a
-  member whose configuration bytes are not in the pack's committed inventory (§6.3).
+  member whose configuration bytes are not in the pack's committed inventory (§6.3). Just before launching the chain
+  the driver reads each runs root's lineage back with the members' own reader (`_production_lineage_check`). One
+  finding refuses the window: the machine has rebooted since the lineage was published
+  (`night_refused_boot_changed`), because member stamps on the monotonic clocks of two different boots cannot be
+  placed on one time axis. Everything else is recorded and the chain launches: a lineage file that is absent,
+  unreadable, rejected by the members' reader, or naming another plan, window or bracket session is
+  `records.lineage_prelaunch_mismatch` (DISCLOSE), and a publication that still fails after its one retry, 5 s later,
+  is `records.lineage_formality` (DISCLOSE). Members that then cannot authenticate their lineage refuse themselves,
+  and the yield counts (§5.7) show it.
 - **Monitor.** `scripts/hazard_monitor.py`, a background process that runs from GO until the chain's processes are
   proven gone. It journals the clock anchor every 1 s and the frequency word every 5 s, the battery state (from the
   **registry**, the OS's record of the battery that `ioreg` prints) and the thermal level every 5 s, the battery
   current (from the **SMC**, the Mac's power-management controller; both sources are built in §4.2) every 1 s,
   per-process CPU every 10 s and free disk every 60 s, one append-only file per hazard. Every reading carries three
   timestamps (wall time, the controller's `time.monotonic_ns()`, and CLOCK_MONOTONIC_RAW), so readings join member
-  spans exactly. The driver stops it no sooner than 5 s after the chain exits, so that the 1 s battery reads cover
-  the end of the post calibration (§6.5; P3-DRV, a sync point of §13).
+  spans exactly. The driver stops it no sooner than 5 s after the chain exits (`joulewise/b5/driver.py`
+  `MONITOR_POST_CHAIN_HOLD_S` = 5.0, `hold_monitors_after_chain`), so that the 1 s battery reads cover the end of the
+  post calibration (§6.5).
 - **Meter.** `scripts/km003c_monitor.py`, a second background process, started and stopped with the monitor, that
   records the whole machine's DC input through an inline USB-C power meter (§5.8). It is a diagnostic: it never
-  refuses, removes or enters a claim number (P3-DRV wires it into the driver; §13).
+  refuses, removes or enters a claim number. The driver runs it under its own supervisor (`MonitorSupervisor`, name
+  `meter`), which restarts it after a crash but never after a clean exit, because the reader exits cleanly when no
+  meter is attached.
 - **Harvest.** `scripts/harvest_b5_window.py`, the desk program run after the chain exits. It archives the window,
   re-derives every number-protecting check from the preserved bytes, joins the monitor's journals to the member
   spans, writes every flag, and runs the exclusion function (§7.1).
@@ -543,7 +597,10 @@ Each is evidenced by a path and SHA-256 before the point named.
    `lane/2026-10-06-timing-policy`), the core-prune lanes and gate-prune round 2 (integration head `b9d02700a`,
    branch `integrate/2026-10-06-gate-prune-3`), the P3 round (lanes `lane/2026-10-06-p3-{harv,haz,drv,wd}`) and
    lane L10, merged under the merge gates, with one consolidated Fable cold pass over the measurement code changed
-   since `e6b6a0ce`. `FILL[H-CLAIM]`.
+   since `e6b6a0ce`. `FILL[H-CLAIM]`. The candidate is the frozen head `a434e363d96621318657418e60b8d14410079d82`,
+   which carries all of these plus the refusal census and its triage (revision 6 list); it becomes H_claim only
+   through the cold pass, the merge gates and the seal. If H_claim differs from it, the sync of item 8 is repeated on
+   the difference.
 2. The #416 pre-arm triple audit has run once at H_claim and every verified BLOCKER is cleared (§9.1).
    `FILL[416-AUDIT-RECORD]`.
 3. This file, the analysis plan, the flag catalog and the sealed inventory are sealed (§12). `FILL[B5-SEAL-RECORD]`.
@@ -557,24 +614,61 @@ Each is evidenced by a path and SHA-256 before the point named.
    bundle present, return code 0, only physical seams stubbed), and a desk dry arm with agents alive has refused at
    the census before any action. `FILL[B5-DRY-RENDER-RECORD]`, `FILL[B5-DRY-ARM-RECORD]`.
 7. Before the seal, one machinery smoke of the block-5 cooldown policy has passed (timing ruling item 2): a
-   dummy-label stage of three small members run under `quiet_mac_p2_b5.json` and harvested through
-   `campaign_cooldown_evidence` and `scripts/check_window_provenance.py`. It passes when every cooldown record
-   verifies as `recovered` (or `first_run_exempt`) with a one-reading trace, and the join reports zero
-   `campaign_cooldown_evidence_missing` and zero `cooldown_evidence_unverified`. It takes about 15 minutes. No
-   thermal qualification run is required: the first BETA window measures 8B-after-8B carryover through its
-   reference members (§0.12) and the battery-temperature diagnostic (§0.6). The smoke runs at the head that will be
-   sealed (after P3), so that it exercises the final chain, runner and harvest. `FILL[B5-COOLDOWN-SMOKE-RECORD]`.
+   dummy-label stage of three small members run under `quiet_mac_p2_b5.json` and harvested through the cooldown
+   join, `campaign_cooldown_evidence` (the check that pairs each member with its cooldown record in the campaign
+   manifest and verifies that record's raw trace). The ruling also named `scripts/check_window_provenance.py` (G3),
+   but G3 does not apply to a floor pack: the harvest runs it only on a pack with an analysis manifest
+   (`analysis_manifest_v3.json`, GAMMA's), and records `g3.not_applicable` (DISCLOSE) on ALPHA and BETA. So the smoke,
+   an ALPHA stage, is judged on the cooldown join alone. It passes when every cooldown record verifies as `recovered`
+   (or `first_run_exempt`) with a one-reading trace, and the join reports zero `campaign_cooldown_evidence_missing`
+   and zero `cooldown_evidence_unverified`. It takes about 15 minutes. No thermal qualification run is required: the
+   first BETA window measures 8B-after-8B carryover through its reference members (§0.12) and the
+   battery-temperature diagnostic (§0.6).
+   **`B5-COOLDOWN-SMOKE-RECORD`** (filled in revision 6; the record as written by the smoke's lead, with the four
+   SHA-256s re-computed by this author from the files under `/Users/edr/night-archive/gate-prune/cooldown-smoke/
+   run-4/`, where `night/` is `custody/night/` and `harvest.json` is `archive/harvest.json`): "Cooldown smoke run-4,
+   2026-10-06 23:27–23:48 PDT, at head 3a9327e51c9d51ce5181f6db44983b6cf83a91df (integrate/2026-10-06-gate-prune-4;
+   H_claim clone 3e2f67fb6). Plan REH-cdsmoke-alpha-20261007T0627Z, ALPHA pack, one stage of three small members
+   (01_phase_decode_absolute r01–r03) under quiet_mac_p2_b5.json; other stages zero members. Rehearsal overrides:
+   agent census (R1) and display (R4) only, arm dwell 60/120 s. Lineage published and verified without workaround;
+   driver GO. Cooldown join (campaign_cooldown_evidence): r01 first_run_exempt, r02 recovered (waited 8.19 s), r03
+   recovered (waited 8.20 s), all verified with one-reading traces; campaign_cooldown_evidence_missing 0,
+   cooldown_evidence_unverified 0. PASS. Member r02 was refused by the real idle admission (CPU busy p95 0.634 and
+   0.732 against 0.5; Spotlight indexing, corespotlightd 0.54 CPU-s/s), a physics refusal, not a cooldown fault.
+   Evidence: night-archive/gate-prune/cooldown-smoke/run-4/cooldown-join-check.json sha256
+   57ec28128a2915b2a0b73fb6a85d0f4f0fd4b9650791d6954fe5950d40a2be90; night/lineage.json sha256
+   c35cb60a94333050cb2a0e8aa3a31aef79e09789f5bec15705947f7f5254faf4; night/result.json sha256
+   b0863e43a4d0b90dc91fa7d92e5ef0943462c6f6227bf6ab483b67cd50a46619; harvest.json sha256
+   b5015904eceddc640f28c4b088d77f8af455918d6bc882a11f4cba228a4482fa." The frozen head `a434e363d` carries the same
+   driver code: between `3a9327e51` and `a434e363d` (`git diff --stat`, run by this author) only
+   `joulewise/b5/harvest.py`, `joulewise/calibration_ledger.py`, `joulewise/controller.py` (the guard-collector and
+   pack-root triage of §6.10), `joulewise/flags/catalog.py`, `joulewise/flags/core.py` and
+   `configs/gates/hazard_refusals.json` changed under `joulewise/`, `scripts/` and `configs/`; the driver, the chain,
+   the runner `scripts/run_campaign.py` and the cooldown join are byte-identical.
 8. The P3 sync points of §13 are each confirmed against the merged code, and this text is corrected where the code
-   chose differently (a draft edit, before the seal). `FILL[P3-SYNC-RECORD]`.
+   chose differently (a draft edit, before the seal). **`P3-SYNC-RECORD`** (filled in revision 6): confirmed against
+   the frozen head `a434e363d`; the result of each sync point is the table in §13, and the catalog comparison there.
+   It holds for H_claim only if H_claim is that commit (item 1).
 
-**Before ALPHA-1's harvest:** the harvest program (lane L5) emits `member.whole_window_member_failure` for every member
-the whole-window verdict fails (§6.3, §6.5; neither `f8164893` nor the integration head `b9d02700a` emits it yet),
-has passed its Fable final pass, and is pinned by an addendum to the seal record (§11 item 4). Also required before
-ALPHA-1's harvest (PLAN2 §3.3): the desk verdict's timeout sized to the window, max(1,800 s, 90 s per claim-root
-bundle) with a heartbeat (at `b9d02700a`: an ALPHA verdict needs about 3,700 s, and the old fixed 1,800 s would have
-lost it, `whole_window.verdict_absent`); and the harvest handing the verdict writer the window's terminal ledger pin,
-not the pre-window one (real-model rehearsal finding; P3-HARV), without which every window fails with
-`calibration_ledger_head_mismatch`.
+**Before ALPHA-1's harvest:** the harvest program (lane L5) has passed its Fable final pass and is pinned by an
+addendum to the seal record (§11 item 4). Three requirements that revision 5 listed here are met at the frozen head
+`a434e363d`:
+
+- the harvest emits `member.whole_window_member_failure` for every member the whole-window verdict fails for one of
+  the reasons of §6.3 (`harvest.whole_window_member_failures`), and `whole_window.member_failures_unreadable` when a
+  verdict that did not pass cannot name its failed members (§6.5);
+- the desk verdict's timeout is sized to the window: max(1,800 s, 90 s per claim-root bundle), with a 60 s
+  heartbeat (`harvest.desk_verdict_timeout_s`; an ALPHA verdict needs about 3,700 s, and the old fixed 1,800 s would
+  have lost it as `whole_window.verdict_absent`);
+- the verdict writer never reads a stale ledger pin. *Forcing problem* (real-model rehearsal): the writer reads the
+  calibration ledger through the committed pin, and the window's own post calibration has moved the ledger past the
+  pin the window armed at, so a verdict written before the pin advance fails its bracket with
+  `calibration_ledger_head_mismatch`, and its row stays in the append-only campaign log. *Mechanism:* the desk order
+  is chain exit, then the pin advance, then the harvest (§4.6 item 6). Before starting the writer the harvest checks
+  that the committed pin is this bracket session's terminal entry (`harvest._desk_pin_problem`); if it is not, it
+  writes no verdict and records why (`whole_window.producer_failed`, `step` `head_pin`, with a reason such as
+  `pin_behind`). The window then lacks a verdict (`whole_window.verdict_absent`, a harvest problem under §7.2); the
+  cure is the advance and a re-harvest from the same bytes.
 
 **Before GAMMA-1 arms:** GAMMA's three interior reference stages launch three distinct `run_id`s (lane L10, branch
 `lane/2026-10-06-l10-gamma-refs`, commits `c6309e1a` and `7bfd7c2c`). Before L10 all three launched the same
@@ -588,11 +682,10 @@ pins those two manifests and configs by SHA-256 as external inputs, as it pins t
 generator refuses if their bytes differ from the shared midpoint's in anything other than `run_id`. No science
 config, calibration plan, analysis manifest or root order manifest changed; GAMMA still runs 80 science and 21
 auxiliary members. Besides GAMMA's pack and the two new reference directories, the change touches only the retired
-block-4 writer (`scripts/write_v5_qualification_plan.py`, which no block-5 window runs) and tests. L10 is not in
-the integration head `b9d02700a`; it merges into the next integration (with the sizing and identity pins re-derived
-there by the current sizer and `repin.py`). If it lands before the seal its bytes are sealed directly; otherwise a
-prospective cold erratum seals them before GAMMA-1 arms. Under §7.5 it supersedes no completed ALPHA or BETA
-window, because neither executes GAMMA's files.
+block-4 writer (`scripts/write_v5_qualification_plan.py`, which no block-5 window runs) and tests. L10 is merged in
+the frozen head `a434e363d` (commit `7bfd7c2cf` is its ancestor), with the sizing output and identity pins re-derived
+there (§4.6 item 3, §5.5), so its bytes are sealed directly with H_claim and no erratum is needed. Under §7.5 it
+supersedes no completed ALPHA or BETA window, because neither executes GAMMA's files.
 
 **Before the release event:** the analysis code (lane L9) is written blind, pinned by an addendum, and the blind dry
 run of analysis plan §3.2 has completed.
@@ -628,7 +721,7 @@ build to corral weaker models working on this".
   after ON, at which the next arm's frequency gate (§4.2: 3.7 ms + (|f| + 0.25 ppm) × T_stream_max ≤ 5 ms) would pass,
   or 15 min after ON. (Revision 4's |f| ≤ 3.0 ppm target sat below this machine's own f of about −3.17 ppm, so it
   would always have run the full 15 min; each read still records whether |f| ≤ 3.0 ppm. PLAN2 item S7,
-  `scripts/g10_clock_step_control.py` at `b9d02700a`.) OFF always runs, including on an exception or a SIGTERM or
+  `scripts/g10_clock_step_control.py` at `a434e363d`.) OFF always runs, including on an exception or a SIGTERM or
   SIGHUP. (6) Write `night/g10.json` write-once.
 - *Why it should discharge.* With network time OFF the wall clock's offset from a time server was about 1.15 s on
   2026-10-05 and grows about 0.3–0.5 s per day (gate-prune plan §4), so turning network time ON one night later
@@ -650,7 +743,7 @@ after; the desk dry arm of §2 item 6), and does arming run end to end on native
 **Stand-down leads.** *Forcing problem:* the agent census at t0 (§4.5) refuses the window if any agent session is
 alive, so every session must be gone by t0; but every second of agent-free idle before t0 is time the machine does
 nothing, and the arm's own dwell measures contention after t0 anyway. The supervising watchdog (a scheduled job,
-`scripts/magistrate_watchdog.py` at `b9d02700a`, P2-WD, that starts and stops the agent sessions on this machine
+`scripts/magistrate_watchdog.py` at `a434e363d`, P2-WD, that starts and stops the agent sessions on this machine
 around each window) therefore stops launching sessions and asks every agent
 session to exit at t0 − 180 s, sends SIGTERM to any that remain at t0 − 90 s, and SIGKILL at t0 − 60 s (revision 4:
 t0 − 8, −6 and −5 min, about 450 s of idle; now about 125 s). *Why these numbers:* real sessions took 20–31 s to
@@ -698,14 +791,22 @@ the longest streams exceed the 5 ms bound (§0.14).
   (iii) Each anchor read pair is taken within 1 ms. (iv) f is identical at dwell start, dwell end and GO; any change
   means something adjusted the clock.
 - *In window:* the monitor journals the anchor at 1 Hz and f every 5 s. A residual move of more than 1 ms between
-  consecutive samples is a `clock.step`; a change of f is `clock.frequency_changed`. Each anchor sample is three
-  reads in a row, RAW, REALTIME, RAW; its **read skew** is the time between the two RAW reads. *Forcing problem:* in
-  mock rehearsal round 3 a `ps` probe pre-empted the monitor between those reads, giving skews of 3.9–8.3 ms, and the
+  consecutive samples is a `clock.step`; a change of f is `clock.frequency_changed`. Each anchor sample is three reads
+  in a row, RAW, REALTIME, RAW; its **read skew** is the time between the two RAW reads. *Forcing problem:* in mock
+  rehearsal round 3 a `ps` probe pre-empted the monitor between those reads, giving skews of 3.9–8.3 ms, and the
   residual computed from such a sample moved by more than 1 ms with no clock step, so the harvest recorded false
-  `clock.step` and `clock.step_overlap` (finding R3-1). P3 (lane P3-HAZ) re-reads a sample whose skew exceeds a bound
-  well under the 1 ms step limit, up to a fixed number of tries, and then records the sample as unmeasured
-  (`clock.unmeasured`, DISCLOSE), never as a step (`FILL[P3-CLOCK-SKEW-BOUND]`, §13). A real step moves every later
-  sample, so a skipped sample cannot hide one.
+  `clock.step` and `clock.step_overlap` (finding R3-1). *Mechanism* (lane P3-HAZ, at `a434e363d`):
+  **`P3-CLOCK-SKEW-BOUND`** (filled in revision 6) is a quarter of the step limit, 1 ms ÷ 4 = 250 µs
+  (`joulewise/hazards/clock.py` `window_skew_max_ns`, `SKEW_DIVISOR_OF_STEP` = 4). The monitor reads the anchor up to
+  five times (`ANCHOR_TRIES` = 5) and keeps the first read whose skew is at most 250 µs; if all five exceed it, the
+  sample has no anchor, its rejected reads are journaled, and the member join records `clock.unmeasured` (DISCLOSE,
+  `observed.rule` `read_skew`). The harvest applies the same 250 µs bound to every journaled sample
+  (`harvest._clock_point`): a sample above it is skipped, and the next good sample is compared with the last good one,
+  so a step is never computed from a skewed sample. A real step moves every later sample, so a skipped sample cannot
+  hide one. *Why a quarter:* the REALTIME read lies somewhere between the two RAW reads, so a skew of s can misplace
+  one sample's residual by at most s; two consecutive samples misplaced in opposite directions by 250 µs each differ
+  by 500 µs, still half the 1 ms that defines a step. (The arm's dwell samples are re-read the same way against the
+  arm's own bound, `skew_max_ns` = 1 ms, rule iii above.)
 - *Replaces:* the 8 ppm sizing convention of revision 2 and the network-time OFF receipt's wording check. There is
   no resync at the arm: the wall clock's absolute offset enters no energy, because the anchor fit and every phase
   edge use relative times.
@@ -734,7 +835,8 @@ outcome.
     the mean over the preceding interval. Between publications the registry misses discharge entirely: over the interval ending at
     UpdateTime 1791324894, B0AC read as low as −3,580 mA (mean −351 mA), and the registry published 0. A probe
     earlier that day saw −865 mA bursts during Qwen3-8B decode while every registry value read 0. So the registry
-    now supplies only the state, and the SMC the current (`joulewise/hazards/battery.py` at `b9d02700a`).
+    now supplies only the state, and the SMC the current (`joulewise/hazards/battery.py`, and the harvest's own copy
+    of the member rule, `harvest.battery_join`, at `a434e363d`).
   - *Validation of B0AC* (`/Users/edr/night-archive/wallmeter-probe/verify/b0ac_validation.md`, 2026-10-06 22:12Z).
     25 s idle, then 170 s of load (a 16-process CPU burner plus four Qwen3-8B generations; DC input peaked at
     135.7 W on the 140 W adapter, so the battery had to help), then 200 s of recovery. *Sign:* B0AC was negative
@@ -771,7 +873,7 @@ to the model; idle admission screens only the idle baseline before the request. 
   core).
 - *Arm (the dwell):* 30 s intervals; an interval is clean when no outside process exceeds 0.05 CPU-s/s. GO needs
   180 s (six intervals) of consecutive clean intervals; none within 2,700 s refuses. *Why 180 s, not revision 4's
-  600 s* (PLAN2 finding t2-08; `joulewise/hazards/contention.py` `HAZARD_ARM_CLEAN_S` at `b9d02700a`): no number
+  600 s* (PLAN2 finding t2-08; `joulewise/hazards/contention.py` `HAZARD_ARM_CLEAN_S` at `a434e363d`): no number
   depends on the dwell. Each member's idle admission screens its own baseline, the monitor checks contention every
   10 s through the window, and a persistent contender still fails the 0.05 limit in every interval and is refused at
   the cap. The dwell also carries the clock's linearity check, and 180 s still sees a step or a timed slew: a slew of
@@ -827,7 +929,7 @@ by the window's own values (§5.5); the values shown are ALPHA's.
 `aggregate_cpu_limit_s_per_s: null` means the whole-machine CPU total is journaled at the dwell but not judged; only
 the per-process limit decides.
 
-`clean_s` is 180 in revision 5 (was 600). The hazard module's default is already 180 at `b9d02700a`, but the arm
+`clean_s` is 180 in revision 5 (was 600). The hazard module's default is already 180 at `a434e363d`, but the arm
 judges the value the window plan copied from this block (`joulewise/b5/driver.py` `_arm_thresholds`), and the plan
 writer records any copied value that differs from a module default. So the change takes effect only in plans written
 from this block after the seal: any window plan written earlier, and any plan-input file (the input from which the
@@ -879,8 +981,9 @@ Load average, process-name lists and the `corecaptured` spawn count, which revis
    mlx-lm 0.31.3, mlx-metal 0.31.2, numpy 2.5.1, safetensors 0.8.0, tokenizers 0.22.2 and transformers 5.12.1.
    `scripts/write_b5_identity_pins.py` generated the file from the packs' identity units and 24 block-3 reference
    bundles of the same two models, without loading a model. Its draft SHA-256 after lane L10 (`c6309e1a`) is
-   `ccce59f908ddefd881ac0d8ba9b510e7de9e54adced1ae77d9353da398999c32` (`9c2ecd89…` after the timing lane
-   `f4cf9047` and still at the integration head `b9d02700a`; `039d3e3c…` at `f8164893`; each change moved only the
+   `ccce59f908ddefd881ac0d8ba9b510e7de9e54adced1ae77d9353da398999c32`, recomputed from the frozen head `a434e363d`
+   (`9c2ecd89…` after the timing lane `f4cf9047` and at the integration head `b9d02700a`; `039d3e3c…` at
+   `f8164893`; each change moved only the
    packs' plan-tree and config-inventory digests, L10's only GAMMA's plan-tree digest, never the model or runtime
    pins); the seal binds the bytes at H_claim.
    Two programs compare against these pins. At the arm, the driver passes the file to the model-identity collector
@@ -892,22 +995,31 @@ Load average, process-name lists and the `corecaptured` spawn count, which revis
    `43a77ea99cb2ac1f087f19d2f672444727b3e73a839e5dcfd8db1198d1352885`.
 5. **Policy:** §0.13, `configs/campaign_policies/quiet_mac_p2_b5.json`,
    `ba0f7b7f1538fe87f6281362efbba4b05f7dff74b4bfd78e84c98b9e8859bc60`.
-6. **Ledger seed:** block 3's ledger at pin 402 (§0.11), installed at the measurement checkout's default ledger
-   path, `<checkout>/runs/calibration_observation_ledger.jsonl`, because the controller's pre-calibration route reads
-   that path; the plan writer refuses at the desk if the plan names another. Before each arm the desk runs the
-   read-only ledger readiness check; a session left open by an abandoned attempt is closed with the existing abort
-   plus a pin advance. For each later attempt the seed is the previous attempt's harvested terminal ledger, whose tip
-   the pin advance names. A pin advance is a pin-only commit made in the measurement checkout (H_claim plus pin-only
-   commits, §0.18, §11), not a merged pull request: the merge path took 15–60 min per window for a one-file data
-   change (PLAN2 X4). The order stays harvest, then pin advance, then the next arm, because the harvest reads the live
-   ledger and an append before it would drop the harvested window from it.
+6. **Ledger seed:** block 3's ledger at pin 402 (§0.11), installed at the measurement checkout's default ledger path,
+   `<checkout>/runs/calibration_observation_ledger.jsonl`, because the controller's pre-calibration route reads that
+   path; the plan writer refuses at the desk if the plan names another. Before each arm the desk runs the read-only
+   ledger readiness check; a session left open by an abandoned attempt is closed with the existing abort plus a pin
+   advance. For each later attempt the seed is the previous attempt's terminal ledger, whose tip the pin advance
+   names. A pin advance is a pin-only commit made in the measurement checkout (H_claim plus pin-only commits, §0.18,
+   §11), not a merged pull request: the merge path took 15–60 min per window for a one-file data change (PLAN2 X4).
+   **The desk order is chain exit, pin advance, harvest, next arm** (`scripts/advance_b5_ledger_pin.py` at
+   `a434e363d`; revision 5 had the advance after the harvest, which the code no longer allows). *Why this order:* the
+   window's own post calibration finalizes its bracket session and moves the ledger past the pin the window armed at.
+   The desk verdict writer and the next window's bracket reservation both read the ledger through the committed pin,
+   so both refuse until the pin names this session's terminal entry (§2, "Before ALPHA-1's harvest"; the plan writer
+   refuses the next plan at the desk for the same reason). The advance reads the session's terminal entry from the
+   ledger, advances the pin through the guarded `advance-head-pin` path of `scripts/recover_calibration_ledger.py`,
+   and makes a pin-only commit that it checks changes that one path alone. A window stopped before its post
+   calibration leaves its session open: the desk aborts the session first, and the abort is then the terminal entry.
+   The harvest still reads the live ledger and records how the committed pin relates to the window's terminal entry
+   (`pin_relation`; `equal` when harvested in this order).
 
 A change to any item after the seal needs a prospective cold erratum before the next arm (§10).
 
 ### 4.7 The one identity refusal at the arm: an OS build no acceptance judged
 
 *What it checks* (core-prune row ARM-OS; `joulewise/hazards/arm.py` `identity_read`, `joulewise/b5/driver.py`
-`_production_arm`, at `b9d02700a`). Right after the instant reads, the arm reads `kern.osversion` (the OS build, for
+`_production_arm`, at `a434e363d`). Right after the instant reads, the arm reads `kern.osversion` (the OS build, for
 example 25G83) and `hw.model` (Mac15,9) with `sysctl`, and compares the pair with the **judged epochs** of the
 calibration acceptance: the (OS build, machine model) pairs the acceptance's captures were taken on, with any
 continuation the ledger authenticates. A pair the acceptance never judged refuses the window (`refused_at:
@@ -1005,7 +1117,7 @@ instead. This is a **registered deviation** from the pack bytes (§10). The plan
 GAMMA) is read only by the retired freeze author (`arm_readiness_evidence.py`); it is superseded by the flag catalog
 and disclosed, not regenerated.
 
-**The member cap** (PLAN2 row 8; `scripts/run_campaign.py` `HAZARD_MEMBER_CAP_S` at `b9d02700a`). *Forcing problem:*
+**The member cap** (PLAN2 row 8; `scripts/run_campaign.py` `HAZARD_MEMBER_CAP_S` at `a434e363d`). *Forcing problem:*
 no member had a wall-clock limit. A hung member held the chain until the window deadline, whose kill then lost the
 post calibration and so the whole window, plus about 15 h of machine time; on 2026-09-16 a blocked file open held a
 driver for 11 h. *Mechanism:* a member's child process gets 1,800 s. On expiry it gets SIGTERM, then SIGKILL 30 s
@@ -1068,7 +1180,7 @@ Structure (decisions, conditions, member counts, digests) goes to `derived/neg8-
 
 **Which corpus members the mint may leave out: one closed list.** *Forcing problem:* the bound may rest on 10 or 11
 members, so something must decide which succeeded members are left out, and a loose rule would let a corpus be
-*selected* (an inconvenient but valid member dropped). The NEG-8 mint (`whole_window.py`, at `b9d02700a`) gives each
+*selected* (an inconvenient but valid member dropped). The NEG-8 mint (`whole_window.py`, at `a434e363d`) gives each
 corpus member one of three verdicts:
 
 - **keep:** it passes every per-member test the mint applies;
@@ -1087,23 +1199,27 @@ The mint refuses outright (no bound; `neg8.bound_not_derived`) on anything that 
 number: an unauthenticated launch lineage, a member that is not the canonical condition, an unrecorded calibration
 identity, a bundle inventory that cannot be sealed, kept members of more than one condition (no majority vote), of
 more than one calibration identity or of two window lineages, or fewer than 10 kept members. The chain's corpus prune
-asks the mint itself which members it drops (`whole_window.neg8_corpus_mint_drops`), so the chain's collected
-manifest and the mint's input are the same bytes. The harvest accepts a left-out succeeded member only for one of the
-five reasons, and records it `neg8.corpus_member_dropped` (DISCLOSE); any other left-out succeeded member makes a
-selected corpus and `neg8.bound_not_derived`. At `b9d02700a` the harvest holds its own copy of the five reasons
-(`harvest.NEG8_ACCEPTED_DROP_REASONS`, equal today); P3-HARV makes it import the mint's set, so the two can never
-drift (sync point, §13). *Worked example:* member 7 succeeded, but its fresh re-reduction differs from its stored
-summary (`reduction_mismatch`): it is omitted, the bound uses the other 11, and the harvest records
-`neg8.corpus_member_dropped` for it. Had member 7's reducer raised instead, it would be indeterminate and kept, and the
-mint would refuse.
+asks the mint itself which members it drops (`whole_window.neg8_corpus_mint_drops`), so the chain's collected manifest
+and the mint's input are the same bytes. The harvest accepts a left-out succeeded member only for one of the five
+reasons, and records it `neg8.corpus_member_dropped` (DISCLOSE); any other left-out succeeded member makes a selected
+corpus and `neg8.bound_not_derived`. The harvest's accepted reasons are the mint's own set, imported, not copied
+(`harvest.py`: `from joulewise.whole_window import NEG8_MINT_DROP_REASONS as NEG8_ACCEPTED_DROP_REASONS`, at
+`a434e363d`), so the two cannot drift. *Worked example:* member 7 succeeded, but its fresh re-reduction differs from
+its stored summary (`reduction_mismatch`): it is omitted, the bound uses the other 11, and the harvest records
+`neg8.corpus_member_dropped` for it. Had member 7's reducer raised instead, it would be indeterminate and kept, and
+the mint would refuse.
 
 **The bound's age is judged on physical times** (PLAN2 row 2, V1). *Forcing problem:* the bound is valid for 24 h,
 and revision 4 judged its age at the desk clock of whoever wrote the verdict. A headless harvest of BETA would start
 after the watchdog's hold, when BETA's bound was already 23.8–24.4 h old, and the window would be removed for good
-(`validity_horizon_expired`). *Mechanism* (`whole_window.py` at `b9d02700a`): the bound's derivation time is the end
+(`validity_horizon_expired`). *Mechanism* (`whole_window.py` at `a434e363d`): the bound's derivation time is the end
 of the latest kept corpus member's measured window, and its evaluation time is the end of the last end reference's
 measured window, both read from the bundles. *Worked example:* the corpus's last member ends at 01:10 and the last end
-reference at 08:40: the bound is 7.5 h old when used, whether the verdict is written at 09:00 or 40 h later.
+reference at 08:40: the bound is 7.5 h old when used, whether the verdict is written at 09:00 or 40 h later. A corpus
+none of whose kept members has a readable measured-window end has no physical derivation time; the mint then
+refuses (`whole_window._hazard_bound_derived_at_s` raises, at `a434e363d`) instead of dating the bound by its own
+clock, and the window gets `neg8.bound_not_derived`. Every real kept member passed a fresh reduction, which itself
+refuses a bundle with no measured window, so this can happen only to a corrupted corpus.
 
 **OS-build and power-supply strings are disclosed, not staleness triggers** (V2). The bound records the OS build and
 a digest of the power-supply identity its corpus saw. A difference against the references used to mark the bound
@@ -1114,13 +1230,19 @@ judged against that identity.
 
 ### 5.4 The window's tail
 
-After the post calibration: the chain exits; the driver proves the chain's process group gone (a census of the
-group with no signal, then the existing termination proof); the monitor and the meter stop, no sooner than 5 s after
-the chain exited (§0.17); G10 runs if the plan asks (§3); the driver writes its terminal record with the window's
-yield (§5.7). The harvest may open as soon as that terminal record exists (§7.1), because the driver holds nothing
-after it.
+After the post calibration, in this order (`joulewise/b5/driver.py` `run_hazard_night`, at `a434e363d`): the chain
+exits and the driver stamps that moment; the driver proves the chain's process group gone (a census of the group
+with no signal, then the existing termination proof) and counts the window's yield (§5.7); G10 runs if the plan asks
+and the chain exited by itself (§3), with the monitor and the meter still journaling; then the driver waits until at
+least 5 s have passed since the chain exited (polling both supervisors meanwhile; after G10 that time has long
+passed) and stops the monitor and the meter (§0.17); last, it writes its terminal record with the window's yield. If
+the chain's exit could not be proven, the monitor and the meter are left running for the dead-man (the watchdog's
+fallback stop). During G10 nothing restarts a monitor or meter that dies, because the driver is waiting on G10's
+process; a gap there touches no member, since every member has ended, and could touch the post calibration's
+battery reads only if the monitor died within G10's first 5 s. The harvest may open as soon as the terminal
+record exists (§7.1), because the driver holds nothing after it.
 
-**The watchdog releases a finished window at once** (PLAN2 X1; `scripts/magistrate_watchdog.py` at `b9d02700a`,
+**The watchdog releases a finished window at once** (PLAN2 X1; `scripts/magistrate_watchdog.py` at `a434e363d`,
 P2-WD). *Forcing problem:* in revision 4 the watchdog treated a window as running until t0 + `WINDOW_MAX_S` + 300 s
 even after its chain had exited, and launched no headless session meanwhile, so the machine sat idle about 15 h after
 every chain. *Mechanism:* the watchdog releases the window's hold, once and for good (a one-way latch keyed on the
@@ -1138,7 +1260,7 @@ bounds only a hung chain or a dead driver.
   every pack's `T_stream_max_s` to the block's longest, 335 s, at which the frequency gate passes for
   |f| ≤ 3.6306 ppm.
 - **Programmed span.** The programmed span is the chain's length if every member takes its longest allowed path. The
-  rule keeps block 4's conventions and uses the chain at `b9d02700a` (`scripts/size_b5_window.py`, its
+  rule keeps block 4's conventions and uses the chain at `a434e363d` (`scripts/size_b5_window.py`, its
   `conventions` list):
   - span = (1 + collection stages) × 60 s settle + the collection stages' countdowns (0 s, §5.1) + the pre and post
     calibration pair (770 s) + the bound derivation (320 s) + the corpus prune (320 s) + the window calibration
@@ -1160,12 +1282,14 @@ bounds only a hung chain or a dead driver.
     verdict** (§5.1) is charged 60 s for one refit of about 15 s.
 - **`WINDOW_MAX_S`**, the window's deadline measured from t0, = 60 × ceil((span + 3,300 s) / 60). The 3,300 s is the
   arm's allowance: the dwell cap of 2,700 s plus the census, reads, network-time OFF, collectors and cadence probe.
-- **`B5-SIZING-OUTPUTS`** (draft values at the integration head `b9d02700a`; re-derived and sealed at H_claim):
+- **`B5-SIZING-OUTPUTS`** (draft values at the frozen head `a434e363d`; sealed at H_claim):
   `configs/campaigns/v5_claim_25g83/sizing_b5.json`, schema `joulewise.b5_sizing.v1`, SHA-256
-  `a5c6ec05c8cd0df84b7ee2c8e21709d17a96f87a5de5cfdbf711087e2944ca52` at `b9d02700a` (status `UNSEALED_DRAFT`;
-  `7c53ebc8…` on lane L10's branch with the older sizer, `b31a27b5…` after the timing lane `f4cf9047`, `9d16edfe…` at
-  `f8164893`). The next integration merges L10 and re-derives it with the current sizer; the value in force is the
-  one sealed at H_claim. `scripts/size_b5_window.py` writes it from block 4's committed sizing source
+  `f114f9b98b57c1471b171f56012512bc13b285c8873414c51c8168f6074b6552` at `a434e363d` (status `UNSEALED_DRAFT`;
+  computed by this author with `shasum -a 256`, and `scripts/size_b5_window.py --check` reproduced it byte for byte
+  at that commit). Earlier drafts: `a5c6ec05…` at `b9d02700a`, `7c53ebc8…` on lane L10's branch with the older
+  sizer, `b31a27b5…` after the timing lane `f4cf9047`, `9d16edfe…` at `f8164893`. The integration that merged L10
+  (commit `309a20678`) re-derived it with the current sizer; the table below is unchanged by that, and the value in
+  force is the one sealed at H_claim. `scripts/size_b5_window.py` writes it from block 4's committed sizing source
   (`configs/campaigns/v5_qualification_25g83/sizing_sources/sizing_source_v2.json`, SHA-256
   `f414301cd0328236f9309962b60ff4635026dac973ca3b0ce564b677c47baa81`) and from the packs' stage graphs, order
   manifests and configs. `--check` reproduces the file byte for byte. The program also refuses unless its arithmetic
@@ -1229,8 +1353,8 @@ bounds only a hung chain or a dead driver.
   releasable under §8).
 - **Block duration.** Assume every window is claim-usable on its first attempt. With the watchdog releasing each
   window at its terminal record (§5.4), one window to the next is the window plus about 0.6–1.6 h: the driver's tail
-  and courier about 0.1 h, a watchdog tick of up to 5 min, the harvest 0.5–1.5 h, the pin-only commit and the next
-  plan a few minutes, and the 180 s stand-down lead (PLAN2 §1.3). Adding three arms of 4–47 min, the three windows
+  and courier about 0.1 h, a watchdog tick of up to 5 min, the pin advance and the next plan a few minutes, the
+  harvest 0.5–1.5 h, and the 180 s stand-down lead (PLAN2 §1.3). Adding three arms of 4–47 min, the three windows
   take about 18–23 h at the projected chains (15.9 h of chain) and about 28–33 h at the block-3 basis (25.6 h of
   chain), before any re-arm or frequency redraw. (Revision 4, with the
   fence held to t0 + `WINDOW_MAX_S` + 300 s, gave about 71 h before desk gaps.)
@@ -1267,7 +1391,7 @@ cause would repeat in every window, at 1.5–3 h of chain each, until someone re
 
 The **yield** is counts only: members planned, logged, succeeded, and bundles present. It is never an energy, a
 power or a duration, so it is releasable structure under §8 item 2. It never stops collection, and it costs under
-50 ms of reads per stage boundary. (PLAN2 §2.2; `joulewise/b5/driver.py` and the harvest at `b9d02700a`.)
+50 ms of reads per stage boundary. (PLAN2 §2.2; `joulewise/b5/driver.py` and the harvest at `a434e363d`.)
 
 - **Yield plan.** Before the chain starts, the driver lists, for each collection stage: its id and position, its
   runs root, its run ids (less any run id an earlier stage already launched into the same root), the number planned,
@@ -1289,9 +1413,15 @@ power or a duration, so it is releasable structure under §8 item 2. It never st
   bundle for one shared cause (the member's last error line with its digits replaced by `#`, or else its exit code)
   record `stage.members_refused_pre_bundle_identical`, once per cause.
 - **Stall.** No new bundle directory and no new stage journal line for 3,600 s records `yield.stage_stalled`, once.
-- **No process is started for any of this in the window.** The agent census matches "t3", "claude" or "codex"
-  anywhere in a command line, and a network call would sit inside a settle. The watchdog, a scheduled job and not an
-  agent, picks the alert files up into its notice queue on its own tick (P3-WD; sync point, §13).
+- **No process is started for any of this in the window.** The agent census matches "t3", "claude" or "codex" anywhere
+  in a command line, and a network call would sit inside a settle. The watchdog, a scheduled job and not an agent,
+  picks the alert files up on its own tick (`scripts/magistrate_watchdog.py` `queue_yield_alerts`, lane P3-WD, at
+  `a434e363d`): for a window from t0 − 180 s until its dead-man deadline, each `night/yield_alert-*.json` is queued
+  once as a notice for Ed (`notice_pending`, kind `yield_alert`, with the file's SHA-256). A file it cannot read is
+  recorded as an event, and a file over 64 KiB is queued unread. Reading an alert never changes a fence, a release or
+  a launch. The notice reaches Ed when the watchdog next launches a headless lead session (the **magistrate**), which
+  comes soon after the window ends because the watchdog releases a finished window at once (§5.4); a true mid-window
+  email would need a process inside the window, which the census rules out.
 - **Terminal record.** After the chain's process group is proven gone, the driver writes the window's yield into
   `night/hazard_result.json`: planned, logged, succeeded, failed, bundles present, the per-stage rows, and the
   **yield status**: **EMPTY** (no bundle present at all), **LOW** (some stage below its min_valid), **FULL** (every
@@ -1349,7 +1479,7 @@ instrument at the machine's power input can, without touching any claim.
 So the meter's boundary is **whole-machine DC input plus the battery term**, not wall AC: the charger's loss is
 excluded.
 
-*The reader.* `scripts/km003c_monitor.py` (at `b9d02700a`) polls the meter every 200 ms at ordinary scheduling
+*The reader.* `scripts/km003c_monitor.py` (at `a434e363d`) polls the meter every 200 ms at ordinary scheduling
 priority (the probe rejected background priority) and reads B0AC, B0AV, PDTR, PSTR and PPBR from the SMC at every
 poll. It writes one create-once stream file per start, `<custody>/hazards/meter/stream-NNN.jsonl`: a header (status
 `streaming` or `absent`), one line per poll, error lines, and a trailer. The header and trailer each carry a pair of
@@ -1359,8 +1489,9 @@ CPU-s over a 120 s live run, 0.25% of one core. It runs outside the chain's proc
 counts it, at about 0.0025 CPU-s/s, one twentieth of the 0.05 limit; its own energy is on the rails like the
 monitor's and is disclosed with it (analysis plan §8.1).
 
-*Quantities* (`joulewise/external/km003c_parse.py`, at `b9d02700a`), for each member and each analysed window (the
-member's measured request, and each phase where the bundle records phase boundaries):
+*Quantities* (`joulewise/external/km003c_parse.py` and the harvest's `meter_joins`, at `a434e363d`), for each member
+over one window, its measured request (the harvest's request span, `sampling_started` to `sampling_stopped`). Revision
+5 also named each phase; the code computes the request only, so phase-level figures are not produced in block 5:
 
 - **ΔE_rail**: the rail energy above the member's idle baseline, the bundle's `idle_subtracted_energy_j` as the
   harvest re-derives it from the raw records;
@@ -1405,10 +1536,15 @@ energy, so they are structure):
 | `meter.vbus_out_of_contract` | a sample's Vbus is outside 26.6–29.4 V (28 V ± 5%) |
 
 *What it can never do.* The meter never refuses an arm or a window, never removes a member, and never enters a
-claim-bearing number. ΔE_rail, ΔE_machine and ρ are energies and an energy ratio: they go to restricted custody
-(`withheld/meter/<run_id>.json`) until the release event, like every other energy (§8). The driver wiring (start,
-stop, the supervisor's name, no restart after `absent`) is P3-DRV's and the harvest hook is P3-HARV's; both are sync
-points (§13).
+claim-bearing number. ΔE_rail, ΔE_machine and ρ are energies and an energy ratio: they go to restricted custody in
+one file per window, `withheld/meter.json` (one row per member, with the stream used, the clock-offset source and
+whether the battery term was available), until the release event, like every other energy (§8). No file is written
+when the window has no meter stream; `meter.absent` records that. `meter.battery_activity` is a member-level flag;
+the other `meter.*` flags are window-level. The driver's supervision of the reader (§0.17) adds one more DISCLOSE
+code, `meter.supervision_fault`: the reader could not be started; it crashed within 30 s of its start five times in a
+row (it is still restarted, every 30 s instead of every 1 s); the supervisor failed to record an event; or the
+reader could not be proven stopped (`joulewise/b5/driver.py`, `MONITOR_BACKOFF_AFTER` = 5, `MONITOR_RAPID_EXIT_S` = 30,
+`MONITOR_RESTART_BACKOFF_S` = 30).
 
 ## 6. Flags and exclusions
 
@@ -1433,14 +1569,14 @@ are always UNCLASSIFIED, so they always block the release event until a person r
 | Family | What it covers | Effect |
 |---|---|---|
 | PACK_IDENTITY, CODE_IDENTITY, MODEL_IDENTITY | the pack, the executed code or the model differs from what was sealed, or could not be compared | EXCLUDE_WINDOW (one member whose model identity cannot be derived from its own metadata: EXCLUDE_MEMBER) |
-| CALIBRATION | the bracket is missing, invalid, unbound or fails the acceptance, or the ledger it is judged from fails its own integrity checks | EXCLUDE_WINDOW (the desk's ledger-readiness checks before an arm: DISCLOSE) |
-| NEG8 | the bound was not derived, the screen failed, or the verdict holding the screen is absent | EXCLUDE_WINDOW (aggregate verdict codes: DISCLOSE, §6.5) |
-| INSTRUMENT | the pre-calibration screen failed | EXCLUDE_WINDOW |
+| CALIBRATION | the bracket is missing, invalid, unbound or fails the acceptance, the ledger it is judged from fails its own integrity checks, a capture saw charging or AC loss, or an earlier capture the acceptance relies on changed | EXCLUDE_WINDOW (DISCLOSE: the desk's ledger-readiness checks before an arm; battery assist during a capture; a changed capture the acceptance does not rely on; a historical file that could not be read; the writers' records of §6.10) |
+| NEG8 | the bound was not derived, the screen failed, the verdict holding the screen is absent, or a verdict that did not pass cannot name its failed members | EXCLUDE_WINDOW (DISCLOSE: the aggregate verdict codes of §6.5, a corpus member the mint dropped for a registered reason, and the verdict producer's own records) |
+| INSTRUMENT | the pre-calibration screen failed | EXCLUDE_WINDOW (a member that could not read the sampler binary's digest: EXCLUDE_MEMBER, §6.3) |
 | CLOCK_SYSTEMATIC | a step during a calibration capture; most recorded anchors not `bounded` | EXCLUDE_WINDOW |
 | MEMBER_VALIDITY | §6.3 | EXCLUDE_MEMBER |
 | PHYSICS_IN_SPAN | §6.4 (battery assist is DIAGNOSTIC, not this family) | EXCLUDE_MEMBER |
-| ROSTER | §6.7 | EXCLUDE_MEMBER (window-level roster failures: EXCLUDE_WINDOW) |
-| RECORDS | receipts, lineage formalities, attempt history, pin ledger, provenance digests, naming, notices, missing journals | DISCLOSE (one exception: source bytes changed during the harvest, EXCLUDE_WINDOW) |
+| ROSTER | §6.7 | EXCLUDE_MEMBER (window-level roster failures: EXCLUDE_WINDOW; the chain's roster records, such as a retried member or a horizon-truncated tail, §5.1: DISCLOSE) |
+| RECORDS | receipts, lineage formalities and the driver's pre-launch lineage check, attempt history, pin ledger, provenance digests, naming, notices, missing journals, a member's error output not copied | DISCLOSE (one exception: source bytes changed during the harvest, EXCLUDE_WINDOW) |
 | DIAGNOSTIC | network-time output, clock steps and frequency changes outside any span, G10, s1-structural checks, the battery-temperature rise across a stage (§0.6), battery assist (§6.4), the whole-machine meter (§5.8), the yield counts (§5.7) | DISCLOSE |
 
 ### 6.3 Member exclusions: validity
@@ -1466,8 +1602,13 @@ A member is removed from every cell it feeds when any of these is flagged:
   check refuses such a member at write time, so normally its bundle is simply absent);
 - its model identity cannot be derived from its metadata (`model.identity_underivable`);
 - its #421 per-capture battery pair (the registry read just before and just after its sampler stream, kept as raw
-  bytes) is present and shows charging or AC lost (`battery.capture_pair_failed`); a pair that fails only on
-  discharge current is disclosed as `battery.assist` (§6.4; P3 sync point, §13);
+  bytes) is present and failed (`battery.capture_pair_failed`). One failure is disclosed instead: when the pair failed
+  on its endpoint current alone (the pair rule tests the unsigned |InstantAmperage| > 200 mA), every failed endpoint
+  reads a negative InstantAmperage from its own raw bytes, the SMC reads cover the member (§6.4), and the member's
+  battery join found none of `battery.member_span`, `battery.accumulator_excursion` and `battery.unmeasured`, the
+  failure was discharge, and `battery.capture_pair_assist` (DISCLOSE) replaces the exclusion and names it
+  (`harvest._pair_assist`). Without SMC coverage the exclusion stands, because the journal then cannot show the span
+  free of charging;
 - the whole-window verdict lists it among its per-member failures (`member_failures` in the verdict row) for a reason
   that no other member code carries (`member.whole_window_member_failure`). Those reasons are:
   - its environment evidence is missing or failed (`environment_admission_missing`, `environment_admission_failed`);
@@ -1485,14 +1626,14 @@ A member is removed from every cell it feeds when any of these is flagged:
   asleep and the screensaver stayed off through the request. That observation is how decision D-078 (item 4) closed
   the screensaver contamination class of July 2026, and no other code measures it. The verdict as a whole is only
   disclosed (§6.5), so without this member rule a member whose display woke during its request would be kept.
-  *Code state:* at `b9d02700a` the harvest does not yet emit this code (it is in the catalog, not in the harvest's
-  code table); §2 requires it before ALPHA-1's harvest.
+  *Code state:* the harvest emits it at `a434e363d` (`harvest.whole_window_member_failures`), one flag per listed
+  member with its reasons, whether or not the verdict authenticates. When a verdict that did not pass has no
+  `member_failures` list, or one its own validator rejects, no member can be named, and the window is removed
+  instead (`whole_window.member_failures_unreadable`, §6.5).
 
 Codes added since revision 4 that remove a member (catalog effect EXCLUDE_MEMBER; their writers are in §6.10):
 
 - `member.timeout`: the member's child was stopped at the 1,800 s cap (§5.2);
-- `member.stderr_uncopied`: the copy of the member's error output into the stage log failed, so a flag the member
-  could not write (recovered from that log, §6.10) may be lost;
 - `env.member_quiet_state_violated`: during the member a display was awake, the screensaver ran, or Low Power Mode
   was on (measured states);
 - `member.idle_admission_telemetry_missing`: idle admission passed every test it could evaluate, but its CPU
@@ -1500,53 +1641,91 @@ Codes added since revision 4 that remove a member (catalog effect EXCLUDE_MEMBER
 - `instrument.binary_identity_unmeasured`: the member could not read the SHA-256 of the `powermetrics` binary it ran
   (a different digest still refuses the member before it runs).
 
+Revision 5 also listed `member.stderr_uncopied` here. It is now DISCLOSE (orchestrator, 2026-10-06, at `a434e363d`):
+it records that the copy of a member's error output into the stage log failed, which is a record not written, not
+a measured fault. A flag the member printed there behind the unwritten-flag marker (§6.10) is still recovered,
+because the harvest also scans the member's own error-output file (`operator-logs/member-stderr/`).
+
 ### 6.4 Member exclusions: physics in the member's span
 
-A member's **span** is its sampler stream, from the `start_sampling` stamp to the stop stamp, in the controller's
-`time.monotonic_ns()` domain. A member whose span cannot be placed is removed (`member.span_unknown`), because the
-rules below cannot be applied to it.
+A member's **span** is the earliest-to-latest hull of two time ranges, in the controller's `time.monotonic_ns()`
+domain: its sampler stream (the `pre_spawn` to `post_parse` clock stamps, or the sampling markers when those are
+missing) and the controller's battery span (from the start of the idle baseline to the end of the **idle drift
+sentinel**, the short idle reading the controller takes right after the request). The hull over-covers rather than
+under-covers. The member's **request span** is `sampling_started` to `sampling_stopped`: the measured request
+(`harvest.member_spans`, at `a434e363d`). A member whose span cannot be placed is removed (`member.span_unknown`),
+because the rules below cannot be applied to it.
 
-**Battery** (ruling of 2026-10-06, §9.2; sources and validation in §4.2). Terms used below:
+**Battery** (ruling of 2026-10-06, §9.2; sources and validation in §4.2). The harvest's join decides
+(`joulewise/b5/harvest.py` `battery_join`, `_battery_assist`, `accumulator_member_flags`, at `a434e363d`). Terms used
+below:
 
 - The registry publications **in force** for a span are the last publication at or before its start, every
-  publication inside it, and the first publication at or after its end.
+  publication inside it, and the first publication at or after its end. SMC reads in force are chosen the same way.
 - An SMC read is **good** when B0AC is an integer with no read error, and **fresh** when its five recorded keys
   (B0AC, B0AV, PDTR, PSTR, PPBR) differ from the previous good read's: a frozen SMC repeats its block, and repeats
   are not new measurements. The SMC **covers** a span when good, fresh reads are no more than 5 s apart across it
   (`battery.SMC_MAX_GAP_S`). When it does not, the registry's InstantAmperage and Amperage at the in-force
-  publications stand in for B0AC in every rule below, and `battery.smc_unavailable` (DISCLOSE) records the fallback.
+  publications stand in for B0AC in the current rules below, and `battery.smc_unavailable` (DISCLOSE) records the
+  fallback.
+- Each good read **holds** its value from its own time until the next good read, never longer than 5 s. A read
+  belongs to a stretch of time when its hold overlaps that stretch for a positive time, so the read in force at a
+  stretch's start belongs to it, and a read taken at or after its end belongs to what follows.
 - **Assist**: the battery discharging into the machine while the adapter is connected and the battery is not
-  charging: a B0AC read below −200 mA with ExternalConnected Yes and IsCharging No.
+  charging. It is **any** negative B0AC read (ruling item 1) on a span with no read of charging or AC loss. −200 mA
+  is not part of the definition; it is the threshold the assist report counts reads against.
 
 Rules:
 
 - `battery.member_span` (EXCLUDE_MEMBER) fires on any of:
-  1. *charging current:* a B0AC read inside the span above +200 mA;
-  2. *charging or AC lost:* IsCharging Yes or ExternalConnected No at any in-force publication or any 5 s registry
-     poll inside the span;
-  3. *charging energy:* over an interval between two consecutive in-force publications, the charge accumulator
-     implies a mean charging power above 200 mA × the publication's voltage (units below).
-- `battery.unmeasured` (EXCLUDE_MEMBER), the missing-evidence predicate, unchanged: no registry publication was
-  observed for more than 120 s overlapping the span, or an in-force publication lacks a needed field. Without the
-  registry the state (charging, AC connected) is unknown, so the member cannot be kept.
-- `battery.assist` (DISCLOSE): assist inside the member. For each phase of the member, prepare (before the sampler
-  starts), idle baseline, warm-up and measured request, the flag records the number of reads below −200 mA, the
-  minimum B0AC, the sampled duration below −200 mA (each read counts for the time until the next read) and the
-  discharged energy, ∫ max(0, −B0AC × B0AV) dt (the mean of max(0, −B0AC × B0AV) over the phase's reads times the
-  phase's length, the rule the meter uses, §5.8). The counts, minimum and duration are structure; the energy goes to
-  restricted custody (`withheld/`) with the other machine energies (§8). Battery energy is never added to or
-  subtracted from a rail energy. A discharge accumulator above 200 mA × V on an interval overlapping the span is also
-  recorded here. Reads in prepare, idle baseline and warm-up are reported separately and decide nothing; the
-  battery-assist sensitivity line (analysis plan §8.1) marks a member only by reads in its measured request.
-- `battery.accumulator_activity` (DISCLOSE): an accumulator mean that is nonzero but at or below the limit. Every
-  archived calibration capture shows 7–32 discharge ticks at −122 to −151 mW while InstantAmperage read 0.
-
-*Code state.* At `b9d02700a` the harvest still judges the current on the registry publications and removes a member
-on |InstantAmperage| or |Amperage| above 200 mA in either direction, and `battery.accumulator_excursion`
-(EXCLUDE_MEMBER) fires on either accumulator sign. P3 (lanes P3-HARV and P3-HAZ) moves the harvest and the hazard
-module to the SMC reads and to the rule above: discharge becomes `battery.assist`; the charge-accumulator test stays
-excluding, under `battery.member_span` or `battery.accumulator_excursion` restricted to the charge sign
-(`FILL[P3-BATTERY-CODES]`, §13).
+  1. *charging current:* a good B0AC read in force above +200 mA; without SMC coverage, InstantAmperage or Amperage
+     above +200 mA at an in-force publication;
+  2. *charging or AC lost:* IsCharging Yes or ExternalConnected No at any in-force publication, or at any good 5 s
+     registry poll inside the span.
+- `battery.accumulator_excursion` (EXCLUDE_MEMBER): over an interval between two consecutive in-force publications,
+  the charge accumulator implies a mean charging power above 200 mA × the publication's voltage (units below); or the
+  discharge accumulator's mean is **positive** and beyond that limit. The discharge accumulator sums discharging
+  ticks only, so a positive mean is inconsistent evidence, not discharge, and keeps the exclusion
+  (`observed.sign_inconsistent`). A negative discharge mean beyond the limit is assist evidence, below.
+- `battery.unmeasured` (EXCLUDE_MEMBER), the missing-evidence predicate: the charging and AC state over the span is
+  unknown, so the member cannot be kept. Only the registry reads that state; the SMC current says nothing about it.
+  - *With SMC coverage:* no registry publication in force at or before the span's start; an in-force publication
+    that lacks IsCharging or ExternalConnected; or a **state hole**: more than 120 s between consecutive good
+    registry reads that carry both state fields, among the last such read at or before the span's start, every one
+    inside and the first at or after its end. With no read before the start, the stretch from the start to the first
+    read counts; with no read after the end, the stretch from the last read to the end counts (the monitor may have
+    stopped after the span; while it runs, its 5 s poll writes a line on any state change).
+    *Worked example (synthetic):* span 100–130 s. State reads at 0 s and 62 s and none after: the stretches are
+    62 s and 130 − 62 = 68 s, both at most 120 s, so the state counts as measured. State read only at 0 s: the
+    stretch from 0 s to the span's end is 130 s, more than 120 s, so the member is `battery.unmeasured`.
+  - *Without SMC coverage* (unchanged from revision 4): no registry publication for more than 120 s overlapping the
+    span, or an in-force publication lacking a state or current field.
+- `battery.assist` and `battery.assist_outside_request` (both DISCLOSE). Computed only when no read in the span
+  showed charging or AC loss. The member's span is split into **phases**: with a request span inside it,
+  `pre_request` (from the span's start to the request: the idle baseline and the warm-up), `request`, and
+  `post_request` (from the request's end: the idle drift sentinel); without one, the whole span is one phase,
+  `span`. For each phase the flag records: the SMC reads that belong to it (`smc_reads_in_force`), how many are
+  negative (`smc_reads_negative`) and how many are below −200 mA (`smc_reads_below`), the minimum B0AC, the held
+  time below −200 mA (`smc_duration_below_s`), and, without SMC coverage only, the in-force publications taken before
+  the phase ends whose InstantAmperage or Amperage is negative (`registry_publications_negative`); also the
+  discharge-accumulator intervals beyond the limit that overlap the phase (`accumulator_intervals_over_limit`). A
+  phase is **assisted** when any of these counts is nonzero. The member carries `battery.assist`, the marker the
+  sensitivity line uses (analysis plan §8.1), when the deciding phase (`request`, or `span`) has a negative SMC read,
+  or, without SMC coverage only, any of the other evidence; it carries `battery.assist_outside_request` when only
+  other phases were assisted, which decides nothing (ruling item 5). With SMC coverage the 1 s reads locate the
+  discharge, so an accumulator interval (about 60 s long) that overlaps the request without a negative read in it
+  is reported in that phase and does not decide. The discharged energy of each phase, the sum over its negative
+  reads of held time (clipped to the phase) × (−B0AC × B0AV), goes to restricted custody
+  (`withheld/battery-assist.json`) with the other machine energies (§8); the counts, minimum and durations are
+  structure. Battery energy is never added to or subtracted from a rail energy. A member that is also
+  `battery.unmeasured` because a publication in force did not read the state keeps its disclosure, marked
+  `observed.state_unread`.
+- `battery.accumulator_activity` (DISCLOSE): an accumulator sign with at least one tick on an in-force interval and
+  a mean at or below the limit. Every archived calibration capture shows 7–32 discharge ticks at −122 to −151 mW
+  while InstantAmperage read 0.
+- `battery.accumulator_unavailable` (DISCLOSE): the accumulator rule could not run on an interval (a field not read
+  at both publications, a counter that went backward, or no voltage); also, with SMC coverage, a gap of more than
+  120 s between registry publications, over which only the accumulator test goes unevaluated.
 
 *Accumulator units* (lane L1, 2026-10-05, on 66 archived publications and a live read): each `Accumulated*` field
 adds its instantaneous value in mW once per tick (about 1.01 s), each `*AccumulatorCount` counts ticks, and battery
@@ -1557,15 +1736,20 @@ that sign occurred, and the registered scale is 0.001 W per unit. *Positive cont
 and 2026-10-01 06:17 publications the discharge accumulator gained 15,043 ticks at a mean of −5,415 mW; the registry
 reading inside that interval was −447 mA at 12,180 mV = −5,444 mW; they agree within 0.6%.
 
-*Worked example (synthetic).* A member's measured request runs 5 s, with B0AC reads one second apart of −865,
-−1,200, −400, −150 and 0 mA, B0AV 12,180 mV, ExternalConnected Yes and IsCharging No throughout. Three reads are below
-−200 mA; the minimum is −1,200 mA; the sampled duration below −200 mA is 3 s. The discharged powers are 10.54, 14.62,
-4.87, 1.83 and 0 W (the −150 mA read counts toward the energy, not toward the count); their mean, 6.37 W, times 5 s
-is 31.85 J of discharged energy. The member is kept and carries `battery.assist`. Had one read been +450 mA, or one
-registry poll in the span read IsCharging Yes, the member would be removed by `battery.member_span`. If between two
-in-force publications the charge accumulator gained 40 ticks totalling +216,000 mW·ticks, its mean is +5,400 mW,
-above 200 mA × 12.18 V = 2,436 mW, and the member is removed; the same numbers on the discharge accumulator give
-`battery.assist` only.
+*Worked example (synthetic).* A member's measured request runs from 0 to 5 s, with good, fresh B0AC reads at 0, 1, 2,
+3 and 4 s of −865, −1,200, −400, −150 and 0 mA, the next read at 5 s, B0AV 12,180 mV, and ExternalConnected Yes and
+IsCharging No throughout. Each read holds 1 s inside the request; the read at 5 s belongs to `post_request`. In the
+`request` phase: 5 reads belong, 4 are negative, 3 are below −200 mA, the minimum is −1,200 mA, and 3 s are held
+below −200 mA. The discharged powers are 10.54, 14.62, 4.87 and 1.83 W, so the discharged energy is
+(0.865 + 1.200 + 0.400 + 0.150) A × 12.18 V × 1 s = 31.85 J (to `withheld/`). The member is kept and carries
+`battery.assist`; the −150 mA read alone would have made it so. Had the only negative read fallen in the warm-up, the
+member would carry `battery.assist_outside_request` and stay in both lines of the sensitivity pair. Had one read in
+force been +450 mA, or one registry poll in the span read IsCharging Yes, the member would be removed by
+`battery.member_span`, and no assist would be computed. If between two in-force publications the charge accumulator
+gained 40 ticks totalling +216,000 mW·ticks, its mean is +5,400 mW, above 200 mA × 12.18 V = 2,436 mW, and the member
+is removed by `battery.accumulator_excursion`. The same numbers with a negative sign on the discharge accumulator
+remove nothing: with SMC coverage the interval is reported in each phase it overlaps, and only a negative 1 s read in
+the request decides the marker.
 
 **Thermal.** `thermal.os_level_nonzero`: any in-force 5 s sample of the OS level is nonzero (in force as for the
 battery). `thermal.powermetrics_pressure_elevated`: the member's own records show thermal pressure
@@ -1598,12 +1782,12 @@ The window is not claim-usable when any of these fired:
   checkout lacks `identity_pins.json`).
 - `*.identity_unmeasured` for pack, code or model: a number-protecting identity check could not run. This is a
   harvest problem first (§7.2).
-- `calibration.capture_invalid`, `calibration.capture_battery_pair_failed` (a calibration capture's #421 pair
-  shows charging or AC lost), `calibration.bracket_acceptance_failed` (evaluated with the acceptance's ledger-cutoff
-  baseline), `calibration.acceptance_mismatch` (the acceptance bytes differ from the plan tree's pin),
-  `calibration.session_not_bound` (the bracket session names another plan, window or runs root),
-  `calibration.binding_failed`, and `calibration.no_bracket` (including a chain stopped before its post calibration
-  by `disk.low`, the census or the deadline).
+- `calibration.capture_invalid`, `calibration.capture_battery_pair_failed` (a calibration capture's #421 pair failed,
+  other than on discharge alone with the journal confirming it, below), `calibration.bracket_acceptance_failed`
+  (evaluated with the acceptance's ledger-cutoff baseline), `calibration.acceptance_mismatch` (the acceptance bytes
+  differ from the plan tree's pin), `calibration.session_not_bound` (the bracket session names another plan, window or
+  runs root), `calibration.binding_failed`, and `calibration.no_bracket` (including a chain stopped before its post
+  calibration by `disk.low`, the census or the deadline).
 - `calibration.ledger_snapshot_refused`: the calibration ledger, read up to this window's terminal entry, fails its
   own integrity checks. That means a missing or malformed ledger, a broken digest chain, or the acceptance's cutoff
   entry (sequence 376 with its recorded head digest) not found in the chain. The bracket's captures and the
@@ -1611,20 +1795,36 @@ The window is not claim-usable when any of these fired:
   refuses with the same reasons, so `calibration.bracket_acceptance_failed` fires as well. Classing this code as
   window-removing therefore costs no extra window, and it keeps the window removed even if that propagation changed.
 - `calibration.capture_battery_span` and `calibration.capture_battery_unmeasured`: the battery rule of §6.4 applied
-  to each calibration capture's span, as to a member's. Charging, AC lost or the charge accumulator above the limit
-  gives `calibration.capture_battery_span`; a capture whose #421 pair did not pass and whose span the journal cannot
-  stand in for (no span, no battery journal, or the §6.4 missing-evidence predicate) gives
-  `calibration.capture_battery_unmeasured`. A capture with only discharge is disclosed (`battery.assist`, window
-  scope). *Forcing problem for the 1 s reads:* at `b9d02700a` this join reads the registry, and the monitor stops
-  right after the chain exits, before the registry's next publication; so the post capture's last in-force
-  publication never exists and every window would get `calibration.capture_battery_unmeasured` (mock rehearsal
-  round 3, finding R3-5). P3 makes the join read the 1 s SMC reads and stops the monitor no sooner than 5 s after the
-  chain exits (§0.17; sync point, §13).
-- `calibration.historical_custody_mismatch`: a file of an earlier calibration capture, re-hashed by the harvest,
-  differs from the SHA-256 its ledger entry recorded (§6.10).
+  to each calibration capture's span, as to a member's (`harvest._capture_battery_joins`, at `a434e363d`). A capture
+  has no request inside it, so its whole span is one deciding phase. `battery.member_span` or
+  `battery.accumulator_excursion` over the span gives `calibration.capture_battery_span`. A capture whose #421 pair
+  did not pass and whose span the journal cannot stand in for gives `calibration.capture_battery_unmeasured`: no
+  capture span, no battery journal, a join that could not run, or `battery.unmeasured` over the span. (A capture
+  whose pair passed is not removed for a gap in the journal.) Discharge alone is disclosed:
+  `calibration.capture_battery_assist` (DISCLOSE), with the capture's discharged energy in
+  `withheld/battery-assist.json`. A capture pair that failed on its endpoint current alone, with every failed endpoint
+  reading a negative InstantAmperage from its raw bytes, an SMC-covered span and none of the three excluding battery
+  codes, is `calibration.capture_battery_pair_assist` (DISCLOSE) in place of `calibration.capture_battery_pair_failed`
+  (the member rule of §6.3, applied to a capture). *Forcing problem for the 1 s reads* (mock rehearsal round 3,
+  finding R3-5): when this join read the registry, the monitor stopped right after the chain exited, before the
+  registry's next publication, so the post capture's last in-force publication never existed and every window got
+  `calibration.capture_battery_unmeasured`. *Mechanism at `a434e363d`:* the join judges the current on the 1 s SMC
+  reads, the state-hole rule of §6.4 measures the trailing stretch only to the span's end, and the driver stops the
+  monitor no sooner than 5 s after the chain exits (§0.17).
+- `calibration.historical_custody_mismatch`: a file of an earlier calibration capture that this window's acceptance
+  relies on, re-hashed by the harvest, differs from the SHA-256 its ledger entry recorded (§6.10). A changed capture
+  the acceptance does not rely on is `calibration.historical_custody_mismatch_unused` (DISCLOSE).
 - `clock.step_overlap_calibration`: a clock step inside a calibration capture.
 - `neg8.bound_not_derived` (§5.3) and `neg8.screen_failed`; also `whole_window.verdict_absent`, because the NEG-8
   screen's result is held in the whole-window verdict.
+- `whole_window.member_failures_unreadable` (NEG8, NUMBER; orchestrator item P4, at `a434e363d`): the whole-window
+  verdict did not pass, and its `member_failures` list is absent or rejected by the verdict's own validator
+  (`whole_window._validated_member_failures`). Then no failed member can be named, so
+  `member.whole_window_member_failure` (§6.3) cannot remove the members the verdict failed, and keeping every member
+  would keep numbers the verdict rejected. A verdict that passed, or a well-formed list (an empty one included), does
+  not emit it. An absent verdict file is `whole_window.verdict_absent` instead, and an unparseable one is
+  `neg8.screen_failed` (the screen it holds cannot be read) with `whole_window.verdict_unauthenticated`; both remove the
+  window already.
 - `instrument.precal_screen_failed`.
 - `clock.systematic`: at least 5 members of the window have a recorded anchor status and more than half of them are
   not `bounded`.
@@ -1701,13 +1901,24 @@ changes outside any span; `disk.low` (its effect arrives through `calibration.no
 readiness checks before an arm (`calibration.ledger_not_ready`, `calibration.ledger_readiness_unmeasured`); the G10
 result; the s1-structural diagnostics; the battery-temperature diagnostic of §0.6 (`thermal.stage_battery_rise`,
 `thermal.battery_temperature_unmeasured`), reported beside the window's NEG-8 result; battery assist
-(`battery.assist`, §6.4) and the SMC fallback (`battery.smc_unavailable`); the whole-machine meter's flags
-(`meter.*`, §5.8); the yield flags (§5.7); and the records of §6.10.
+(`battery.assist`, `battery.assist_outside_request`, §6.4; `calibration.capture_battery_assist`, §6.5), the #421
+pairs that failed on discharge alone (`battery.capture_pair_assist`, §6.3; `calibration.capture_battery_pair_assist`,
+§6.5) and the SMC fallback (`battery.smc_unavailable`); clock samples too skewed to use (`clock.unmeasured`,
+`read_skew`, §4.2); the whole-machine meter's flags (`meter.*`, §5.8); the yield flags (§5.7); G3 not applying to a
+floor pack (`g3.not_applicable`); the driver's pre-launch lineage check (`records.lineage_prelaunch_mismatch`,
+§0.17); a member's error output not copied into the stage log (`member.stderr_uncopied`, §6.3); a changed historical
+capture the acceptance does not rely on, and a historical file that could not be read
+(`calibration.historical_custody_mismatch_unused`, `calibration.historical_custody_unmeasured`, §6.10); and the
+records of §6.10.
 
 `contention.kernel_task_share` stays in the catalog but cannot fire today: an unprivileged `ps` never lists
 `kernel_task` (process id 0; checked 2026-10-05), so neither the arm nor the monitor sees its CPU time by name. Its
 work is inside the host's total busy time, which the monitor journals every 10 s and nothing judges in the window
-(§4.2, Contention).
+(§4.2, Contention). It is to be removed in the prune after block 5 (orchestrator ruling of 2026-10-06).
+`monitor.restarted` is classified (DISCLOSE) but is written by no production path at `a434e363d`: it is named only
+by `joulewise/hazards/monitor.py` `window_events`, which the harvest does not call; monitor restarts reach the
+flags as `monitor.crash_loop` and `monitor.outage` (§5.1). It is classified so that it could never block the
+release event if a later harvest emitted it.
 
 ### 6.9 Harvest thresholds
 
@@ -1733,8 +1944,9 @@ are the same physical limits as §4.3 under the harvest's names.
 Ed's ruling of 2026-10-05 (§0, revision 3) turned every check that is not a physical hazard into a flag. Inside the
 protected measurement code (the controller, the campaign runner, the calibration writer and the bracket reservation)
 that was done by the core-prune lanes (`/Users/edr/night-archive/gate-prune/core-prune/DESIGN.md` §3) and the round-2
-lanes, all at `b9d02700a`. Each row below says what used to refuse, what is recorded now, and what still decides the
-claim. A refusal that protects integrity stays a refusal; those are named.
+lanes, and finished by the refusal census and its triage, all at `a434e363d`. Each row below says what used to
+refuse, what is recorded now, and what still decides the claim. A refusal that protects integrity stays a refusal;
+those are named, and §6.11 says how the whole list is enforced.
 
 **The controller, once per member** (`joulewise/controller.py`):
 
@@ -1742,7 +1954,9 @@ claim. A refusal that protects integrity stays a refusal; those are named.
 |---|---|---|
 | the pre-slot calibration's #421 battery pair did not pass (A1) | `calibration.capture_battery_pair_unverified` (DISCLOSE) | the harvest re-derives the pair from the same bytes (`calibration.capture_battery_pair_failed`) and joins the battery journal over the capture (§6.5) |
 | `git` or the ledger's shape could not be read per member (A5) | `records.pin_ledger` (DISCLOSE) | the harvest's ledger integrity check (`calibration.ledger_snapshot_refused`, EXCLUDE_WINDOW) |
+| the pack's directory was not at `<repo>/configs/campaigns/<pack>`, so the repository could not be found from the path (refusal census) | the repository is found with one `git` lookup and `records.pin_ledger` (DISCLOSE, `kind` `pack_root_layout`) is recorded | the session, slot, plan, custody and digest checks that bind the member to the ledger still refuse |
 | the member's environment guard failed (A11) | a measured quiet-state violation (display awake, screensaver, Low Power Mode): `env.member_quiet_state_violated` (EXCLUDE_MEMBER); an unknown field, or AC or thermal failures that the hazard journals measure directly: `env.member_guard_flagged` (DISCLOSE) | the reducer's environment barrier is unchanged, so a member whose own environment evaluation failed is still removed through `member.target_phase_precheck_failed` |
+| the guard's observation collector raised an exception (refusal-census triage c; `controller._hazard_guard_observation`) | that one observation is recorded as unmeasured (every reading null, `collector_error` naming the exception) and the member runs; at idle admission the finding `collector_raised` is added to `env.member_guard_flagged` (DISCLOSE) | the other observations' readings still apply; a post-run observation recorded this way is missing environment evidence, which the whole-window verdict fails (`environment_admission_failed`), so the member is removed by `member.whole_window_member_failure` (§6.3) |
 | the power-policy label or the runtime power observation differed from the calibration's (A14) | `calibration.power_policy_unverified` (DISCLOSE) | a label is not a measurement; the battery and thermal hazards measure the power state |
 | the `powermetrics` binary's digest could not be read (A14) | `instrument.binary_identity_unmeasured` (EXCLUDE_MEMBER) | a present, different digest still refuses (the binary must be the calibrated one) |
 | sampler or runtime processes survived the member's teardown (A17) | `teardown.survivors` (DISCLOSE) | the next members' contention is measured directly (`contention.request_overlap`) |
@@ -1802,25 +2016,98 @@ The executed estimator code differing from the acceptance's (A15) is not a recor
 `code.executed_differs_from_sealed` (EXCLUDE_WINDOW). The ledger's integrity refusals stay: a malformed ledger, a
 broken hash chain, a rollback, an identity conflict, a held lease, an unfinished recovery.
 
-**Historical custody is re-verified at the harvest, once** (P2-VPF `calibration_ledger.historical_custody_report`;
-wired by P3-HARV, sync point §13). Because the slots skip the historical re-hash, the harvest re-hashes every
-historical calibration file the ledger records, once per window, against the SHA-256 in its ledger entry:
+**Historical custody is re-verified at the harvest, once** (`calibration_ledger.historical_custody_report`, lane
+P2-VPF; called by `harvest._Harvest.historical_custody`, at `a434e363d`; the report goes to
+`derived/historical-custody.json`). Because the slots skip the historical re-hash, the harvest re-hashes every
+historical calibration file the archived ledger records, once per window, against the SHA-256 in its ledger entry.
+This window's own bracket session is left out, because its files are verified at finalization. Each ledger row gets
+one outcome: **changed** (a present file's bytes differ from its recorded digest, or a row that was not abandoned
+records no file hashes), **unreadable** (a present file could not be read), **absent** (a file is missing, for
+example evicted from local iCloud storage, while its present siblings match), **absent_or_unreachable** (the capture
+directory is missing, or did not answer a 2 s probe), or **verified**. A digest mismatch is never downgraded to an
+absence.
 
-- **mismatch** (a file's bytes differ from its recorded digest): `calibration.historical_custody_mismatch`
-  (EXCLUDE_WINDOW). The acceptance's screens and this window's bracket are judged against those captures; changed
-  bytes mean the evidence the acceptance rests on is not the evidence that was judged.
-- **unmeasured** (a file could not be read, for example evicted from local storage, or nothing was checked):
-  `calibration.historical_custody_unmeasured` (DISCLOSE; name to be confirmed at the P3 sync). An unreadable file is
-  not evidence of a change, and the hash chain and the pin are still checked.
+*Which captures the window relies on* (refusal-census triage d, 2026-10-07). *Forcing problem:* the first version of
+this pass removed the window for a changed file in any earlier capture, including another window's bracket, which no
+number of this window uses, so the removal protected no number of the window it removed. *Mechanism:* the
+harvest reads the window's acceptance (§0.11) and takes the attempt ids of the captures it was derived from (its
+`derivation_corpus` members, which set the pre screen and the bracket screen) and of the captures it judged before
+issuance (its `prior_observation_set`). On the real acceptance these are all 110 governed rows up to sequence 376
+(as the integrator's triage reports, `FROZEN_HEAD.md`). Then:
+
+- **changed, and relied on:** `calibration.historical_custody_mismatch` (EXCLUDE_WINDOW, `observed.scope`
+  `acceptance_relied`). The acceptance's screens are numbers computed from those captures; changed bytes mean the
+  evidence the screens rest on is not the evidence that was judged. If the acceptance cannot be read, nothing can be
+  scoped, and every changed row counts (`observed.scope` `acceptance_unreadable`).
+- **changed, not relied on:** `calibration.historical_custody_mismatch_unused` (DISCLOSE; `observed.attempt_ids`
+  names the captures). Both codes can fire in one pass.
+- **no row changed, but some row is unreadable, absent or unreachable, the ledger could not be read, or no row was
+  verified:** `calibration.historical_custody_unmeasured` (DISCLOSE; `observed.evicted` counts the evicted files). A
+  file that cannot be read is not evidence of a change, and the ledger's hash chain and pin are still checked. Its
+  class is NUMBER, as the emitter gives it (revision 5 had restated it as REPRESENTATION); only its effect is
+  DISCLOSE.
 
 *Worked example (synthetic):* of 190 historical files, 189 re-hash to their recorded digests and one cannot be read
-because iCloud evicted it: the window is not removed and the unmeasured file is listed. Had that file read back with a
-different digest, the window would be removed.
+because iCloud evicted it: the window is kept, `calibration.historical_custody_unmeasured` lists it. Had that file
+read back with a different digest, the window would be removed if the file belongs to a capture in the acceptance's
+derivation corpus or prior observations, and kept with `calibration.historical_custody_mismatch_unused` if it belongs
+to, say, an earlier window's bracket.
 
 **Recovering flags a writer could not write** (core-prune N8). A core writer that cannot write its flag file prints
-the whole flag behind a fixed marker on its error output; the harvest scans the stage logs (and, after P3, each
-member's error-output file) for the marker and absorbs each flag as if written. A marker line that is not a valid flag
-becomes `records.malformed_flag`, which the catalog never classifies, so it blocks the release event until read.
+the whole flag behind a fixed marker (`JOULEWISE_UNWRITTEN_FLAG `) on its error output. The harvest scans the stage
+logs (`operator-logs/*.log`), each member's own error-output file (`operator-logs/member-stderr/*.stderr`), the planned
+operator-log root and the desk transcript for the marker, and absorbs each flag as if written
+(`harvest._unwritten_core_flags`, at `a434e363d`). A marker line that is not a valid flag, or a log that cannot be
+read, becomes `records.malformed_flag`, which the catalog never classifies, so it blocks the release event until read.
+
+### 6.11 Which refusals remain, and how that is enforced
+
+*The rule* (Ed, 2026-10-05; `CLAUDE.local.md`, "Physics refuses; everything else is a flag"): a refusal, a stop or
+an exclusion is allowed for exactly two reasons. **PHYSICS**: a physical hazard, measured directly, would corrupt the
+energy (§4.2, §6.4). **NUMBER_INTEGRITY**: a number would be wrong or could not be attributed to what it claims to
+measure (an identity, a calibration, a screen, a roster position). Anything else (a receipt's wording, a record's
+format, a missing log) is a flag that removes nothing.
+
+*How the code enforces it* (refusal census, lane `6fab71954`, merged at `a434e363d`). The file
+`configs/gates/hazard_refusals.json` (schema `joulewise.hazard_refusals.v1`) lists every **refusal site**: each place
+in the 92 files it scans (90 Python files the hazard path imports or runs, `scripts/backup_runs.sh`, and the runbook
+whose shell functions the chain copies) where the code raises or asserts, exits nonzero, returns a nonzero code or a
+blocking status, writes a refusal reason, kills a process, or (in the chain's shell text) stops the chain. Each site
+carries a **category**:
+
+| Category | Meaning (the file's own definition) | Entries | Sites |
+|---|---|---|---|
+| PHYSICS | refuses on a measured physical hazard; names the quantity | 27 | 28 |
+| NUMBER_INTEGRITY | refuses because a number would be wrong or unattributable; names the number | 33 | 56 |
+| INTERNAL | never stops collection or excludes a window (for example an import-time constant check); names why | 90 | 116 |
+| BASELINE | present at the sweep base `e6b6a0ce` and unchanged; not individually reviewed; frozen | 2,598 | 3,668 |
+| DEFERRED_REPRESENTATION | a representation refusal another lane is converting | 0 | 0 |
+
+(Counts computed from the file at `a434e363d`: entries are list items, sites the sum of their `count` fields; 2,748
+entries and 3,868 sites in all.) The file also lists every flag code the catalogs mark EXCLUDE_WINDOW (32 codes: 27
+NUMBER_INTEGRITY, 4 PHYSICS, 1 BASELINE) or EXCLUDE_MEMBER (38 codes: 18 NUMBER_INTEGRITY, 16 PHYSICS, 4
+BASELINE), each with the quantity or number it protects.
+
+The test `tests/hazards/test_refusal_allowlist.py` scans those modules' syntax trees on every run and fails when:
+a refusal site appears that the file does not list, or a listed site changes its count or its guarding conditions;
+a non-BASELINE entry does not say in at least 30 characters what it protects; a BASELINE entry is new, moved,
+re-guarded or more frequent than in the frozen list `tests/hazards/refusal_baseline_frozen.txt` (whose own SHA-256
+the test pins), so BASELINE can only shrink; a module the hazard path imports is neither scanned nor listed as
+deliberately unscanned; or an excluding catalog code is missing from the file, carries another category, or is
+BASELINE outside six named codes (`calibration.ledger_snapshot_refused`, `whole_window.verdict_absent`,
+`member.admission_aborted`, `member.cooldown_evidence_unverified`, `member.strict_validation_failed`,
+`member.target_phase_precheck_failed`). So a new refusal cannot enter the hazard path without being classed PHYSICS
+or NUMBER_INTEGRITY (or INTERNAL, which by definition stops nothing) and saying what it protects.
+
+*What the scan does not see* (its own docstring): a bare `return False` from an admission predicate, a `continue`
+that skips a member, and a new call to an existing raising function. Those are checked by hand in review
+(`/Users/edr/night-archive/gate-prune/REVIEW_BRIEF_RULE.md`).
+
+*Seal-time item.* The test reads this directory's `flag_catalog.json` once it is in the code tree. At `a434e363d` it
+checks `DRAFT_CODES` and the test fixture only, and those mark `roster.run_id_mismatch` DISCLOSE, so the file does not
+list it; this catalog marks it EXCLUDE_MEMBER (§6.7). Before the catalog is committed at H_claim the file must list
+`roster.run_id_mismatch` under its member exclusions (NUMBER_INTEGRITY: one member's identity in every record), or the
+test fails (§13).
 
 ## 7. Verdicts, re-arming and END STATE
 
@@ -1971,7 +2258,10 @@ So discharge with the adapter connected is disclosed (`battery.assist`), with it
 discharged energy per phase, and every reported cell is printed both with and without the members that carry it
 (analysis plan §8.1); neither value is chosen after the fact. The same disposition applies to calibration captures,
 to the #421 endpoint pairs and to the accumulator bounds (§6.3, §6.5): a discharge-only failure is disclosed; charging
-or AC loss keeps its exclusion. No discharge exclusion remains anywhere once P3 lands (§13).
+or AC loss keeps its exclusion. At `a434e363d` no rule removes a member or a window for discharge as such. One case
+keeps a pair exclusion: a #421 pair that failed on discharge alone is disclosed only when the SMC reads cover the
+span, because only then can the journal show that the span held no charging; without SMC coverage the pair's
+exclusion stands, as missing evidence, not as discharge.
 
 **What would reopen the ruling** (by erratum to an exclusion scoped to the affected phase): power-mode or power-limit
 transitions that reproducibly accompany assist; lower rail power, frequency or tokens per second in assisted seconds
@@ -2007,7 +2297,8 @@ collection deadline, the corpus retry) are not deviations from pack bytes: they 
 
 ## 11. Commit rule and the sealed inventory
 
-1. **H_claim** is the commit of §2 item 1. It is extended only by (i) pin-only commits from this block's harvests,
+1. **H_claim** is the commit of §2 item 1. It is extended only by (i) pin-only commits from this block's pin advances
+   (§4.6 item 6),
    shown by a `git diff --name-only` map against H_claim that names only `configs/calibration/calibration_ledger_head.json`;
    (ii) gated R3 fixes to code that does not run during collection; (iii) commits touching only `docs/`, `tests/`,
    `RUN_STATE.md` or `TASK_QUEUE.md`; (iv) a §7.5 cure confined to collection code no completed window executed.
@@ -2062,40 +2353,54 @@ sensitivity line of analysis plan §8.
 | Sealed inventory | `sealed_inventory.json` filled at H_claim | Seal |
 | Dry render, dry arm | `B5-DRY-RENDER-RECORD`, `B5-DRY-ARM-RECORD` | Before ALPHA-1 arms |
 | Audit, seats | `416-AUDIT-RECORD`, `416-SEATS`, `B5-SEAL-SEATS` | Seats at seal; audit before ALPHA-1 |
-| Sizing | `B5-SIZING-OUTPUTS`: draft values at `b9d02700a` (§5.5); re-derived after L10 merges; pinned at H_claim | Seal |
-| Cooldown smoke | `B5-COOLDOWN-SMOKE-RECORD` (§2 item 7), run at the head to be sealed | Seal |
+| Sizing | `B5-SIZING-OUTPUTS`: draft values at the frozen head `a434e363d` (§5.5), L10 included; pinned at H_claim | Seal |
+| Cooldown smoke | `B5-COOLDOWN-SMOKE-RECORD` (§2 item 7): filled in revision 6 | Seal |
 | Plans | `B5-PLANS-REGENERATED`: every window plan and plan-input file written from the sealed §4.3 block (contention `clean_s` 180) | Before ALPHA-1 arms |
-| P3 sync | `P3-SYNC-RECORD` (§2 item 8), covering `P3-BATTERY-CODES` and `P3-CLOCK-SKEW-BOUND` and the sync points below | Seal |
+| P3 sync | `P3-SYNC-RECORD` (§2 item 8), with `P3-BATTERY-CODES` (§6.4, and the table below) and `P3-CLOCK-SKEW-BOUND` (§4.2): filled in revision 6 against `a434e363d` | Seal |
+| Refusal allowlist | `roster.run_id_mismatch` listed under the member exclusions of `configs/gates/hazard_refusals.json` before this catalog is committed at H_claim (§6.11); a code change, not a FILL | Seal |
 | Disk | `BACKUP-DESTINATIONS`: filled in revision 4 (§5.6) | Seal |
-| Identity pins | `identity_pins.json` (§4.6 item 3): draft after L10; pinned at H_claim | Seal |
+| Identity pins | `identity_pins.json` (§4.6 item 3): draft at `a434e363d`, L10 included; pinned at H_claim | Seal |
 | Blinding | `B5-BLIND-CUSTODY-MAP`, `B5-RELEASE-EVENT` | Map at seal; release after the block closes |
 | Boundary | `BOUNDARY-LABEL`: filled in revision 4 (§1) | Seal |
 | Attribution floor | `ATTRIBUTION-FLOOR-BINDING` | Seal |
 | Seal | `B5-SEAL-RECORD` | Seal |
 
-Still open after revision 5: `H-CLAIM`, `416-AUDIT-RECORD`, `416-SEATS`, `B5-SEAL-SEATS`, `B5-SEAL-RECORD`,
-`B5-COOLDOWN-SMOKE-RECORD`, `B5-DRY-RENDER-RECORD`, `B5-DRY-ARM-RECORD`, `B5-BLIND-CUSTODY-MAP`,
-`B5-RELEASE-EVENT`, `ATTRIBUTION-FLOOR-BINDING`, `B5-PLANS-REGENERATED`, `P3-SYNC-RECORD` (with
-`P3-BATTERY-CODES` and `P3-CLOCK-SKEW-BOUND`), and the sealed inventory itself. None can be filled from committed
-bytes: each names a commit, a record or a ruling that does not exist yet. `B5-SIZING-OUTPUTS` holds draft values.
+Still open after revision 6: `H-CLAIM` (the candidate is `a434e363d`, §2 item 1), `416-AUDIT-RECORD`, `416-SEATS`,
+`B5-SEAL-SEATS`, `B5-SEAL-RECORD`, `B5-DRY-RENDER-RECORD`, `B5-DRY-ARM-RECORD`, `B5-BLIND-CUSTODY-MAP`,
+`B5-RELEASE-EVENT`, `ATTRIBUTION-FLOOR-BINDING`, `B5-PLANS-REGENERATED`, and the sealed inventory itself. None can be
+filled from committed bytes: each names a commit, a record, a ruling or a regeneration that does not exist yet.
+`B5-SIZING-OUTPUTS` and the identity pins hold draft values. Filled in revision 6: `B5-COOLDOWN-SMOKE-RECORD`,
+`P3-SYNC-RECORD`, `P3-BATTERY-CODES`, `P3-CLOCK-SKEW-BOUND`.
 
-**P3 sync points.** This revision describes the following behaviour from the rulings; the code at `b9d02700a` does
-not have it yet, and the final P3 round installs it. Before the seal each is checked against the merged code
-(`P3-SYNC-RECORD`):
+**P3 sync record** (`P3-SYNC-RECORD`, revision 6). Revision 5 described the behaviour below from the rulings, before
+the code had it. Each row was read in the frozen head `a434e363d` (`/Users/edr/code/JouleWise-wt-int4`); the last
+column says whether the code matched revision 5's text or the text was changed to match the code.
 
-| Sync point | Text here | Lane |
+| Sync point | Code at `a434e363d` | Text |
 |---|---|---|
-| battery member rule on SMC 1 s reads, assist disclosed, the exact codes for each predicate (`P3-BATTERY-CODES`) | §6.4 | P3-HARV, P3-HAZ |
-| capture battery join on SMC reads; assist rule for captures and #421 pairs | §6.3, §6.5 | P3-HARV |
-| monitor and meter stopped no sooner than 5 s after the chain exits | §0.17, §5.4 | P3-DRV |
-| clock samples with a large read skew re-read, then unmeasured, never a step (`P3-CLOCK-SKEW-BOUND`) | §4.2 | P3-HAZ |
-| meter driver wiring and harvest hook; `withheld/meter/`; `meter.*` flags | §5.8; analysis plan §8.2 | P3-DRV, P3-HARV |
-| historical custody re-verified at harvest; the unmeasured code's name | §6.10 | P3-HARV |
-| harvest drop reasons imported from the mint's set | §5.3 | P3-HARV |
-| terminal ledger pin handed to the desk verdict | §2 | P3-HARV |
-| member error-output files scanned for unwritten flags | §6.10 | P3-HARV |
-| yield alerts queued by the watchdog | §5.7 | P3-WD |
-| `member.whole_window_member_failure` emitted (not in any P3 lane's list) | §6.3, §2 | open |
+| battery member rule on SMC 1 s reads, assist disclosed, the codes for each predicate (`P3-BATTERY-CODES`) | `harvest.battery_join`, `_battery_assist`, `accumulator_member_flags`. The codes: `battery.member_span` (a charging current; charging or AC lost), `battery.accumulator_excursion` (the charge accumulator; a sign-inconsistent discharge accumulator), `battery.unmeasured` (missing state evidence, including the 120 s state hole under SMC coverage), `battery.smc_unavailable`, `battery.assist` and `battery.assist_outside_request` (any negative read; −200 mA is the report's threshold), `battery.accumulator_activity`, `battery.accumulator_unavailable` | changed: §6.4 rewritten (any negative read; the code's three phases; the excursion code; the state hole; the energy as held time × power) |
+| capture battery join on SMC reads; assist for captures and #421 pairs | `harvest._capture_battery_joins`, `_pair_assist`: `calibration.capture_battery_span`, `_unmeasured`, `_assist`, `_pair_assist`; `battery.capture_pair_assist` | changed: §6.3, §6.5 (capture assist has its own code; pair assist needs SMC coverage) |
+| monitor and meter stopped no sooner than 5 s after the chain exits | `driver.MONITOR_POST_CHAIN_HOLD_S` = 5.0, `hold_monitors_after_chain`, after G10 | changed: §5.4 order (G10 before the stop) |
+| clock samples with a large read skew re-read, then unmeasured, never a step (`P3-CLOCK-SKEW-BOUND`) | `clock.window_skew_max_ns` = step ÷ 4 = 250 µs, `ANCHOR_TRIES` = 5; harvest `_clock_point` applies the same bound | filled: §4.2 |
+| meter driver wiring and harvest hook; restricted record; `meter.*` flags | `MonitorSupervisor` named `meter`, no restart on a clean exit; `meter.supervision_fault`; `harvest.meter_joins` | changed: §5.8 (one file `withheld/meter.json`; the request window only, no phases) |
+| historical custody re-verified at harvest; the unmeasured code's name | `harvest.historical_custody`; scoped to the acceptance's captures (triage d) | changed: §6.10 (scope; `_mismatch_unused`; class NUMBER) |
+| harvest drop reasons imported from the mint's set | imported from `whole_window.NEG8_MINT_DROP_REASONS` | matched: §5.3 |
+| terminal ledger pin handed to the desk verdict | the committed pin must already be this session's terminal entry (`harvest._desk_pin_problem`), so the desk order is chain exit, pin advance, harvest | changed: §2, §4.6 item 6 (pin advance before the harvest) |
+| member error-output files scanned for unwritten flags | `harvest._unwritten_core_flags` scans `operator-logs/member-stderr/` | matched: §6.10 |
+| yield alerts queued by the watchdog | `magistrate_watchdog.queue_yield_alerts` | matched: §5.7 |
+| `member.whole_window_member_failure` emitted | `harvest.whole_window_member_failures`; plus `whole_window.member_failures_unreadable` (P4) | matched: §6.3; new code in §6.5 |
+
+**Catalog comparison** (revision 6). A script read, from `a434e363d`, every code named by the harvest's `CODES`
+table, `joulewise.flags.catalog.DRAFT_CODES`, `joulewise.flags.core.CORE_FLAG_CODES`, `km003c_parse.CODES`,
+`window_lineage.FINDING_CODES` and the literal codes of `joulewise/hazards/monitor.py`, plus the test fixture catalog
+`tests/fixtures/b5_harvest/flag_catalog.json`, and compared each with this directory's catalog (family, class,
+effect, blinding), then loaded the catalog with `joulewise.flags.catalog.load_catalog`. Before revision 6 (catalog at
+commit `f3473b7a`): every emitted code was present, and one disagreement was not documented,
+`calibration.historical_custody_unmeasured` classed REPRESENTATION here and NUMBER in the code. After: 178 codes,
+none missing, none extra, the two never-classified codes absent, and four documented disagreements only:
+`roster.run_id_mismatch` restated NUMBER and EXCLUDE_MEMBER here (§6.7) against the emitter's REPRESENTATION and the
+fixture's DISCLOSE, and `g3.recompute_failed`, which the fixture keeps at its earlier effect EXCLUDE_WINDOW
+(`tests/fixtures/b5_harvest/README.md`) against DISCLOSE here (§6.5).
 
 Removed from revision 2 because the mechanism they bound is retired or now measured: `V5-PACK-REGEN-RECORD` and
 `V5-IDLE-SECONDS` (done, PR #481), `B4-*`, `L10-A-RATIFICATION-RECORD`, `Q110-CLOSURE`, `A6-AT-H-CLAIM`,
@@ -2132,11 +2437,14 @@ battery evidence map (§9.2).
 - **Q7. Ed's hardware setting (optional).** A fixed 80% charge limit with Optimized Battery Charging off avoids arms
   refused because the OS chose to charge.
 - **Q8. The watchdog held each window open until its deadline. Closed in revision 5.** The watchdog now releases a
-  finished window on its terminal evidence (§5.4; P2-WD at `b9d02700a`).
-- **Q9. The battery-assist line for GAMMA's contrasts (seal gate).** The ruling of 2026-10-06 prints every reported
-  cell with and without assisted members (analysis plan §8.1). GAMMA's contrasts are not reported cells (§0.9), and
-  8B members, one side of every quad, are the ones that assist most. Should each contrast's estimate also be printed
-  without the quads that hold an assist member? Adopt (the line is descriptive and gates nothing) or strike.
+  finished window on its terminal evidence (§5.4; P2-WD, at `a434e363d`).
+- **Q9. The battery-assist line for GAMMA's contrasts. Closed in revision 6: adopted.** The ruling of 2026-10-06
+  prints every reported cell with and without assisted members (analysis plan §8.1). GAMMA's contrasts are not
+  reported cells (§0.9), and 8B members, one side of every quad, are the ones that assist most. The orchestrator
+  ruled on revision 5's open points (2026-10-06, `/Users/edr/night-archive/gate-prune/INTEGRATION_TODO.md`): GAMMA's
+  contrasts get the line too, because 8B is where assist occurs. Analysis plan §8.1 now prints each contrast's
+  estimate also without the quads that hold an assist member. The line is descriptive and gates nothing; the seal
+  gate may still strike it.
 - **Q10. Whole-machine meter, central band (none; recorded).** The band for ρ is set by the first clean window
   (analysis plan §8.2). If no window of the block is clean, no band is set, and the cross-check reports only the hard
   plausibility band and the spreads. Nothing waits on this.
@@ -2214,3 +2522,18 @@ and writer's record kinds; `km003c_parse.py`; `sizing_b5.json` (its totals and c
 source of §5.5; and the digest census's era records. It compared every code the harvest, the draft vocabulary and
 the core table name with the catalog (§13 lists the one code the catalog has and the harvest does not yet emit). No
 energy or power value of any window was read; the power figures quoted are the validation runs' and the rulings'.
+
+For revision 6, the author read: the integration list's REG items and the frozen-head record
+(`/Users/edr/night-archive/gate-prune/INTEGRATION_TODO.md`, `FROZEN_HEAD.md`); the battery-assist ruling, the meter
+wiring note, the timing ruling and lane L10's erratum (all already applied in revision 5, re-checked); the cooldown
+smoke's run-4 directory (the join-check record, and the SHA-256 of the four evidence files, computed). At the frozen
+head `a434e363d` (`/Users/edr/code/JouleWise-wt-int4`, read only) it read, directly or through three read-only
+investigation seats whose citations it spot-checked: the harvest's battery join, assist rule, accumulator rule,
+capture join and pair replacement, member spans, meter join, historical custody pass, desk-pin guard and verdict
+handling, unwritten-flag scan, drop-reason import and G3 condition; `joulewise/hazards/battery.py` and `clock.py`;
+the driver's lineage check, monitor and meter supervision and tail order; the watchdog's leads and yield-alert reader;
+`scripts/advance_b5_ledger_pin.py`; the controller's guard-collector wrapper; `whole_window.py`'s change since
+`b9d02700a`; the chain's constants; the refusal allowlist and its test (counts recomputed); `sizing_b5.json`
+(re-derived with `--check`) and `identity_pins.json` (hashed); and `git diff --stat` between `3a9327e51` and
+`a434e363d` and between `b9d02700a` and `a434e363d`. It compared the catalog with the code by script (§13). No energy
+or power value of any window was read.
