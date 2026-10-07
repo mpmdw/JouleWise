@@ -578,9 +578,9 @@
     },
     "member.stderr_uncopied": {
       "blinding": "STRUCTURE",
-      "effect": "EXCLUDE_MEMBER",
-      "family": "MEMBER_VALIDITY",
-      "klass": "NUMBER"
+      "effect": "DISCLOSE",
+      "family": "RECORDS",
+      "klass": "REPRESENTATION"
     },
     "member.strict_validation_failed": {
       "blinding": "STRUCTURE",

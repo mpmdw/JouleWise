@@ -252,7 +252,6 @@
   "member.reduction_mismatch": {"category": "NUMBER_INTEGRITY", "protects": "the stored reduction differs from a fresh reduction of the same bytes"},
   "member.span_unknown": {"category": "NUMBER_INTEGRITY", "protects": "the member's measured span cannot be placed in time, so no hazard journal can be joined to it"},
   "member.status_not_succeeded": {"category": "NUMBER_INTEGRITY", "protects": "the member did not finish: no number"},
-  "member.stderr_uncopied": {"category": "DEFERRED_REPRESENTATION", "protects": "the member's stderr was not copied into the stage log, so an unwritten flag in it could be unseen; a missing record, not a measured fault", "added": "8048cfab5", "owner": "orchestrator: the block-5 design catalog (effect EXCLUDE_MEMBER -> DISCLOSE)", "note": "suspect REPRESENTATION: a design-catalog change to DISCLOSE is proposed to the orchestrator"},
   "member.strict_validation_failed": {"category": "BASELINE", "note": "strict bundle validation; not reviewed by the census"},
   "member.target_phase_precheck_failed": {"category": "BASELINE", "note": "the reducer's environment claim barrier; LANE_BARRIER (core-prune DESIGN section 6)"},
   "member.timeout": {"category": "PHYSICS", "protects": "the member was killed at its wall-clock cap (HAZARD_MEMBER_CAP_S): it was not measured to the end", "added": "c24010210"},

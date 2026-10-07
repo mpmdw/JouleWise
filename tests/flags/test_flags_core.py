@@ -63,7 +63,7 @@ SECTION_5 = {
     "member.retried": ("ROSTER", "REPRESENTATION", DISCLOSE),
     # Gate-prune round 2, lane P2-RC.
     "member.timeout": ("MEMBER_VALIDITY", "NUMBER", EXCLUDE_MEMBER),
-    "member.stderr_uncopied": ("MEMBER_VALIDITY", "NUMBER", EXCLUDE_MEMBER),
+    "member.stderr_uncopied": ("RECORDS", "REPRESENTATION", DISCLOSE),
     # Gate-prune round 2, lane P2-CTL (controller).
     "calibration.refit_cache_miss": ("CALIBRATION", "REPRESENTATION", DISCLOSE),
     "records.auxiliary_match_raised": ("RECORDS", "REPRESENTATION", DISCLOSE),

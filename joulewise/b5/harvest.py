@@ -332,7 +332,7 @@ CODES: dict[str, CodeSpec] = {
         ("calibration.writer_record_flagged", ("CALIBRATION", "REPRESENTATION")),
         # Gate-prune round 2, lane P2-RC (PLAN2 row 8, yield E).
         ("member.timeout", ("MEMBER_VALIDITY", "NUMBER")),
-        ("member.stderr_uncopied", ("MEMBER_VALIDITY", "NUMBER")),
+        ("member.stderr_uncopied", ("RECORDS", "REPRESENTATION")),
         # Gate-prune round 2, lane P2-CTL (controller; PLAN2 row 5).
         ("records.auxiliary_match_raised", ("RECORDS", "REPRESENTATION")),
     )},

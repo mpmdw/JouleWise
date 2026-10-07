@@ -62,8 +62,9 @@ CORE_FLAG_CODES: Mapping[str, tuple[str, str]] = {
     # A member child killed at the wall-clock cap.  Proposed effect EXCLUDE_MEMBER.
     "member.timeout": ("MEMBER_VALIDITY", "NUMBER"),
     # The member's stderr file did not reach the stage log, so an unwritten flag
-    # in it would be unseen by the harvest.  Proposed effect EXCLUDE_MEMBER.
-    "member.stderr_uncopied": ("MEMBER_VALIDITY", "NUMBER"),
+    # in it would be unseen by the harvest.  A record not written: DISCLOSE
+    # (orchestrator, 2026-10-06; it was proposed EXCLUDE_MEMBER).
+    "member.stderr_uncopied": ("RECORDS", "REPRESENTATION"),
 }
 
 

@@ -213,7 +213,8 @@ _CORE_PRUNE_CODES = {
     "calibration.writer_record_flagged": _code("CALIBRATION", "REPRESENTATION", DISCLOSE),
     # Gate-prune round 2, lane P2-RC (scripts/run_campaign.py; PLAN2 row 8, yield E).
     "member.timeout": _code("MEMBER_VALIDITY", "NUMBER", EXCLUDE_MEMBER),
-    "member.stderr_uncopied": _code("MEMBER_VALIDITY", "NUMBER", EXCLUDE_MEMBER),
+    # A record not written (orchestrator 2026-10-06, "physics refuses; everything else is a flag"):
+    "member.stderr_uncopied": _code("RECORDS", "REPRESENTATION", DISCLOSE),
     # The harvest (joulewise.b5.harvest).
     "neg8.corpus_member_dropped": _code("NEG8", "REPRESENTATION", DISCLOSE),
     "calibration.capture_battery_span": _code("CALIBRATION", "PHYSICS", EXCLUDE_WINDOW),

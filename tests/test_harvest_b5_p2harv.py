@@ -344,7 +344,7 @@ class Prune2CodeRegistrationTests(unittest.TestCase):
         "thermal.stage_battery_rise": ("DIAGNOSTIC", "PHYSICS", "DISCLOSE"),
         "thermal.battery_temperature_unmeasured": ("DIAGNOSTIC", "PHYSICS", "DISCLOSE"),
         # Registered at integration (int3).
-        "member.stderr_uncopied": ("MEMBER_VALIDITY", "NUMBER", "EXCLUDE_MEMBER"),
+        "member.stderr_uncopied": ("RECORDS", "REPRESENTATION", "DISCLOSE"),
         "records.auxiliary_match_raised": ("RECORDS", "REPRESENTATION", "DISCLOSE"),
         "census.journal_write_failed": ("RECORDS", "REPRESENTATION", "DISCLOSE"),
         "supervision.pass_failed": ("RECORDS", "REPRESENTATION", "DISCLOSE"),
