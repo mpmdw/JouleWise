@@ -8,5 +8,15 @@
     "id": "nv5-fake-node-worker",
     "command_regex": "(?:^|\\s)\\S*/node_worker\\.py\\s+--task\\s+\\S*/nv5-localhost-contract/tasks/[^\\s/]+\\.json(?:\\s|$)",
     "source": "tests/test_node_worker_subprocess.py: LocalSubprocessTransport and nv5-localhost-contract run_id; argv built by joulewise/adapters/node_client.py:run_task"
+  },
+  {
+    "id": "b5-fake-km003c-meter",
+    "command_regex": "\\s-c\\s(?:\\\\012)?import json, pathlib, signal, sys, time\\\\012mode, out = sys\\.argv\\[1\\]",
+    "source": "tests/test_b5_driver_p3.py: FAKE_METER (python -c, a stand-in for scripts/km003c_monitor.py); ps renders its newlines as \\012"
+  },
+  {
+    "id": "b5-fake-hazard-monitor",
+    "command_regex": "\\s-c\\s(?:\\\\012)?import json, os, pathlib, sys, time\\\\012custody, life, code = ",
+    "source": "tests/test_b5_driver.py: FAKE_MONITOR via fake_monitor_argv (python -c, a stand-in for the hazard monitor); ps renders its newlines as \\012"
   }
 ]

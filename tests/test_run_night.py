@@ -31,6 +31,7 @@ from zoneinfo import ZoneInfo
 from joulewise.measurement_liveness import Identity
 from joulewise import calibration_ledger, night_gate
 from joulewise.night_plan_writer import write_night_plan
+from tests import process_reaper
 from tests.git_fixture import init_git_fixture
 from tests import battery_float_fixture
 
@@ -6970,7 +6971,7 @@ class HazardPackPrimitiveTests(unittest.TestCase):
             (night / name).write_text(json.dumps({"pid": None, "pgid": None, "exit_code": 0,
                                                   "epoch_s": now, "monotonic_ns": 1}))
         monitor = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"], start_new_session=True)
-        self.addCleanup(lambda: monitor.poll() is None and monitor.kill())
+        self.addCleanup(process_reaper.kill_and_wait, monitor)
         identity = self.driver.observe_identity(monitor.pid)
         (night / hazard_driver.MONITOR_JOURNAL).write_text(json.dumps(
             {"event": "start", "pid": monitor.pid, "pgid": monitor.pid, "start_time": identity.start_time}) + "\n")

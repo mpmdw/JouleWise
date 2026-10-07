@@ -4,10 +4,12 @@ import contextlib
 import datetime as dt
 import io
 import json
+import shutil
 import os
 from pathlib import Path
 import subprocess
 import sys
+import tempfile
 import time
 import unittest
 from unittest import mock
@@ -161,6 +163,54 @@ class FixtureOrphanCensusTests(unittest.TestCase):
         self.assertEqual(deps.spawn.call_count, 2)
         deps.census.assert_not_called()
         processes.send_signal.assert_not_called()
+
+    def test_block5_driver_fakes_are_fixture_signatures(self) -> None:
+        # Test hygiene (2026-10-07): the fake KM003C meter and the fake hazard
+        # monitor leaked from the driver suites (21:27 cleanup, 2026-10-06).
+        # ps renders their -c sources' newlines as \012 (observed on macOS 26).
+        from tests.test_b5_driver import FAKE_MONITOR
+        from tests.test_b5_driver_p3 import FAKE_METER
+        python = "/opt/homebrew/Cellar/python@3.13/3.13.1/Frameworks/Python.framework/Versions/3.13/Resources/Python.app/Contents/MacOS/Python"
+        meter = f"{python} -c {FAKE_METER.replace(chr(10), chr(92) + '012')} streaming --out /private/tmp/x/hazards/meter/stream-001.jsonl"
+        monitor = f"{python} -c {FAKE_MONITOR.replace(chr(10), chr(92) + '012')} /private/tmp/x/custody 600.0 0"
+        for command, expected in ((meter, "b5-fake-km003c-meter"), (monitor, "b5-fake-hazard-monitor")):
+            with self.subTest(expected=expected):
+                self.assertEqual([item["signature"] for item in sentinel.census(row(command), self.signatures)],
+                                 [expected])
+        for command in (f"{python} /Users/edr/code/JouleWise/scripts/km003c_monitor.py --out /x/stream-001.jsonl",
+                        f"{python} -m joulewise.hazards.monitor --config /x/hazards/monitor.json"):
+            with self.subTest(production=command):
+                self.assertEqual(sentinel.census(row(command), self.signatures), [])
+
+    def test_live_an_orphaned_fake_meter_is_reported(self) -> None:
+        # A real orphan: the fake meter started by a shell that exits at once,
+        # so the meter is reparented to PID 1; the census must name it.
+        from tests import process_reaper
+        from tests.test_b5_driver_p3 import FAKE_METER
+        directory = Path(tempfile.mkdtemp(prefix="orphan-census-"))
+        self.addCleanup(shutil.rmtree, directory, True)
+        out = directory / "hazards" / "meter" / "stream-001.jsonl"
+        out.parent.mkdir(parents=True)
+        self.addCleanup(process_reaper.reap, str(directory))
+        shell = subprocess.run(
+            ["/bin/sh", "-c", '"$0" -c "$1" streaming --out "$2" >/dev/null 2>&1 & echo $!',
+             sys.executable, FAKE_METER, str(out)],
+            capture_output=True, text=True, timeout=10, check=True)
+        pid = int(shell.stdout.strip())
+        deadline = time.monotonic() + 10
+        rows = []
+        while time.monotonic() < deadline:
+            try:
+                rows = [item for item in sentinel.collect() if item["pid"] == pid]
+            except PermissionError:
+                self.skipTest("sandbox denies ps")
+            if rows:
+                break
+            time.sleep(0.1)
+        self.assertEqual([item["signature"] for item in rows], ["b5-fake-km003c-meter"])
+        self.assertEqual(process_reaper.reap(str(directory)), [pid])
+        with self.assertRaises(ProcessLookupError):
+            os.kill(pid, 0)
 
     def test_live_cli_smoke(self) -> None:
         result = subprocess.run(

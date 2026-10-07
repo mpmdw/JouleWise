@@ -28,6 +28,7 @@ from unittest import mock
 
 from joulewise import arm_retry
 from joulewise.b5 import driver as b5_driver
+from tests import process_reaper
 from tests.test_b5_driver import Harness, load_driver
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -102,6 +103,8 @@ class SupervisorTests(unittest.TestCase):
         directory = tempfile.TemporaryDirectory(prefix="b5-p3-supervisor-")
         self.addCleanup(directory.cleanup)
         self.night = Path(directory.name)
+        self.addCleanup(process_reaper.reap, str(self.night), night=self.night,
+                        started_monotonic=time.monotonic())
         patch(self, b5_driver, "MONITOR_RESTART_INTERVAL_S", 0.0)
 
     def supervisor(self, argv, **keywords):
@@ -450,7 +453,7 @@ class MeterDisclosureTests(unittest.TestCase):
             night = Path(directory)
             stranger = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"],
                                         start_new_session=True)
-            self.addCleanup(lambda: stranger.poll() is None and stranger.kill())
+            self.addCleanup(process_reaper.kill_and_wait, stranger)
             lines = [{"event": "start", "pid": stranger.pid, "pgid": stranger.pid},
                      {"event": "exit", "pid": stranger.pid, "returncode": 0, "lived_s": 0.1, "final": True}]
             (night / b5_driver.METER_JOURNAL).write_text("".join(json.dumps(line) + "\n" for line in lines))
@@ -521,7 +524,7 @@ class DeadManMeterTests(unittest.TestCase):
         harness = Harness(self, g10=False)
         harness.night.mkdir(parents=True, exist_ok=True)
         process = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"], start_new_session=True)
-        self.addCleanup(lambda: process.poll() is None and process.kill())
+        self.addCleanup(process_reaper.kill_and_wait, process)
         identity = observe_identity(process.pid)
         start = {"event": "start", "pid": process.pid, "pgid": process.pid, "start_time": identity.start_time}
         (harness.night / b5_driver.METER_JOURNAL).write_text(json.dumps(start) + "\n")
@@ -535,7 +538,7 @@ class DeadManMeterTests(unittest.TestCase):
             night = Path(directory)
             process = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"],
                                        start_new_session=True)
-            self.addCleanup(lambda: process.poll() is None and process.kill())
+            self.addCleanup(process_reaper.kill_and_wait, process)
             (night / b5_driver.METER_JOURNAL).write_text(
                 json.dumps({"event": "start", "pid": process.pid, "pgid": process.pid}) + "\n")
             self.assertIsNone(b5_driver.reap_orphan_monitor(night))

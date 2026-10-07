@@ -27,6 +27,7 @@ from pathlib import Path
 from unittest import mock
 
 from joulewise import night_gate
+from tests import process_reaper
 from joulewise.b5 import chain as b5_chain
 from joulewise.b5 import driver as b5_driver
 from joulewise.b5 import plan as b5_plan
@@ -224,6 +225,11 @@ class Harness:
         home = mock.patch.object(Path, "home", return_value=self.home)
         home.start()
         test.addCleanup(home.stop)
+        # Test hygiene (2026-10-07): the fake monitor and meter name this root on their
+        # command lines and the chains' children sit in groups the night journals record;
+        # whatever a test left alive is killed and waited for before the root is removed.
+        test.addCleanup(process_reaper.reap, str(self.root), night=self.night,
+                        started_monotonic=time.monotonic())
 
     def run_command(self, argv, timeout):
         if tuple(argv) == b5_driver.NETWORK_TIME_OFF_ARGV:
@@ -1019,7 +1025,7 @@ class UnitTests(unittest.TestCase):
             night = Path(directory)
             process = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"],
                                        start_new_session=True)
-            self.addCleanup(lambda: process.poll() is None and process.kill())
+            self.addCleanup(process_reaper.kill_and_wait, process)
             identity = observe_identity(process.pid)
             start = {"event": "start", "pid": process.pid, "pgid": process.pid, "start_time": identity.start_time}
             (night / b5_driver.MONITOR_JOURNAL).write_text(json.dumps(start) + "\n")
