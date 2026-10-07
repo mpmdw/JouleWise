@@ -456,7 +456,7 @@ class NightGateTests(unittest.TestCase):
 
     def test_production_argv_constants_are_pinned(self) -> None:
         self.assertEqual(
-            ("/usr/bin/pgrep", "-lf", "[c]odex|[c]laude|[t]3"),
+            ("/usr/bin/pgrep", "-a", "-lf", "[c]odex|[c]laude|[t]3"),
             night_gate.AGENT_CENSUS_ARGV,
         )
         self.assertEqual(
@@ -570,7 +570,7 @@ class NightGateTests(unittest.TestCase):
         _, refusal = night_gate.agent_census(source.probes())
         self.assertEqual("night_refused_agent_present", refusal.reason)
         self.assertIn("25658 /Applications/ChatGPT.app", refusal.detail)
-        self.assertEqual(("/usr/bin/pgrep", "-lf", "[c]odex|[c]laude|[t]3"), night_gate.AGENT_CENSUS_ARGV)
+        self.assertEqual(("/usr/bin/pgrep", "-a", "-lf", "[c]odex|[c]laude|[t]3"), night_gate.AGENT_CENSUS_ARGV)
 
     def test_a_nonmatch_exit_with_output_still_refuses_the_census(self) -> None:
         source = FakeProbeSource()

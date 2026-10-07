@@ -1,8 +1,10 @@
 """Which agent-census hits are agent processes: one matcher for every census site.
 
 The agent census (``night_gate.AGENT_CENSUS_ARGV``, ``hazards.arm.AGENT_CENSUS_ARGV``)
-is ``pgrep -lf '[c]odex|[c]laude|[t]3'``: a regular expression over every
-process's whole command line.  That list is a superset.  Any id or path that
+is ``pgrep -a -lf '[c]odex|[c]laude|[t]3'``: a regular expression over every
+process's whole command line, including the caller's own ancestors (``-a``;
+without it Darwin pgrep drops them, and an agent session that launched the
+census was invisible: dry-records F1, 2026-10-07).  That list is a superset.  Any id or path that
 contains one of the three substrings (``b5-gamma-attempt3``, a custody root under
 ``.claude``) puts the window's own ``python``, ``zsh`` and ``run_campaign``
 processes on it, and the census then stopped the window for a string (Opus
@@ -21,12 +23,19 @@ never by its arguments:
   Claude Code native binary is ``~/.local/share/claude/versions/2.1.289``), or
   when it is a script interpreter (``node``, ``bun``, ``deno``) whose script is
   named ``claude*`` or ``codex*`` (``node /opt/homebrew/bin/codex exec``) or
-  whose script path runs through an agent's npm package directory
+  whose own arguments (options, their values, inline code, the script) name an
+  agent's npm package directory
   (``node .../node_modules/@anthropic-ai/claude-code/cli.js``, ``@openai/codex*``,
-  ``claude-code``).
+  ``claude-code``).  The interpreter's options are parsed, so a preload or
+  loader value is never read as the script (Sol delta audit A4); a launch that
+  cannot be parsed with confidence is undecided and stays a hit.
 * **The caller's own tree.**  With ``own_tree_root`` set, a listed process
   whose parent chain reaches that pid, or whose process group is led by such a
-  process, is the window itself and is ignored whatever it runs.
+  process, is the window itself and is ignored whatever it runs.  The tree
+  runs downward only: the root's ancestors (the agent session or shell that
+  launched it, launchd) are not in it and are decided by executable identity
+  like any other listed process, so an agent that launched the window stays a
+  hit and a shell running ``chain.zsh`` from an ``attempt3`` path does not.
 
 A listed line is decided only when the live process's argument vector, joined
 as pgrep joins it, equals the line's text: that proves the line is that pid and
@@ -101,25 +110,165 @@ def _agent_name(name: str) -> bool:
     return bool(name) and name.startswith(AGENT_PREFIXES)
 
 
-def is_agent(executable: str | None, argv: tuple[str, ...] | None) -> bool:
-    """True when the kernel executable or the process name is an agent's (see module doc)."""
+# Interpreter launches (Sol delta audit A4, 2026-10-07).  ``node --require
+# /tmp/preload.cjs .../@anthropic-ai/claude-code/cli.js`` used to read the
+# preload file as the script, so a real Claude Code process read as no agent.
+# The interpreter's own arguments are now parsed: an option in the value set
+# takes the next argv element as its value (``--option=value`` is always one
+# element); an option the flag rules know takes none.  Any other option written
+# without ``=`` may or may not consume the next element, so the launch cannot be
+# read with confidence and stays undecided (a hit).
+_VALUE_OPTIONS = {
+    "node": frozenset({
+        "-r", "--require", "--import", "--loader", "--experimental-loader", "-C", "--conditions",
+        "--inspect-port", "--debug-port", "--env-file", "--env-file-if-exists", "--input-type", "--title",
+        "--disable-warning", "--watch-path", "--stack-trace-limit", "--max-http-header-size",
+        "--openssl-config", "--icu-data-dir", "--redirect-warnings", "--diagnostic-dir", "--report-dir",
+        "--report-directory", "--report-filename", "--report-signal", "--unhandled-rejections",
+        "--dns-result-order", "--experimental-config-file", "--localstorage-file",
+        "--trace-event-categories", "--trace-event-file-pattern", "--cpu-prof-dir", "--cpu-prof-name",
+        "--heap-prof-dir", "--heap-prof-name", "--test-reporter", "--test-reporter-destination",
+        "--test-name-pattern", "--secure-heap", "--secure-heap-min", "--heapsnapshot-signal",
+        "--max-old-space-size", "--max-semi-space-size", "--stack-size", "--run",
+    }),
+    "bun": frozenset({
+        "-r", "--preload", "--cwd", "-c", "--config", "--env-file", "--tsconfig-override", "-d", "--define",
+        "-l", "--loader", "--conditions", "--main-fields", "--extension-order", "--jsx-factory",
+        "--jsx-fragment", "--jsx-import-source", "--port", "--elide-lines", "--filter", "-F",
+    }),
+    "deno": frozenset({
+        "-c", "--config", "--import-map", "--location", "--seed", "--cert", "--ext", "-L", "--log-level",
+        "--preload",
+    }),
+}
+# Options whose value is inline code: there is no script file to name.
+_EVAL_OPTIONS = {"node": frozenset({"-e", "--eval", "-p", "--print"}),
+                 "bun": frozenset({"-e", "--eval", "-p", "--print"}),
+                 "deno": frozenset()}
+# A first positional that names a subcommand, not a script (``bun run x.js``,
+# ``bunx``/``bun x <package>``, ``deno run x.ts``); ``deno eval`` takes code.
+_SUBCOMMANDS = {"node": frozenset(), "bun": frozenset({"run", "x", "exec"}),
+                "deno": frozenset({"run", "x", "eval"})}
+_FLAG_OPTIONS = frozenset({
+    "-i", "--interactive", "-c", "--check", "--watch", "--test", "--frozen-intrinsics", "--pending-deprecation",
+    "--throw-deprecation", "--abort-on-uncaught-exception", "--jitless", "--use-strict", "--zero-fill-buffers",
+    "--force-fips", "--prof", "--cpu-prof", "--heap-prof", "--insecure-http-parser", "--v8-options", "-v",
+    "--version", "-h", "--help", "-A", "-q", "--quiet", "-r", "--reload", "--hot", "--smol", "--bun",
+    "--silent", "--cached-only", "--frozen", "--lock", "--inspect", "--inspect-brk", "--inspect-wait",
+    "--preserve-symlinks", "--preserve-symlinks-main", "--deprecation", "--warnings", "--node-memory-debug",
+})
+_FLAG_PREFIXES = ("--no-", "--experimental-", "--trace-", "--expose-", "--enable-", "--harmony",
+                  "--allow-", "--deny-", "--unstable")
+_COMPONENT_SPLIT = re.compile(r"""[/\\\s'"`()=,;:]+""")
+
+
+def _interpreter_kind(names: set[str]) -> str | None:
+    for kind in SCRIPT_INTERPRETERS:
+        if any(name.startswith(kind) for name in names):
+            return kind
+    return None
+
+
+def _flag_option(arg: str) -> bool:
+    return arg in _FLAG_OPTIONS or arg.startswith(_FLAG_PREFIXES)
+
+
+def _interpreter_launch(kind: str, args: tuple[str, ...]) -> tuple[str, list[str]]:
+    """How the interpreter was launched, and its own arguments up to the script.
+
+    The form is ``script`` (the region's last element is the script), ``eval``
+    (inline code, no script file), ``none`` (options only) or ``unparsed``.
+    """
+
+    values, evals, subcommands = _VALUE_OPTIONS[kind], _EVAL_OPTIONS[kind], _SUBCOMMANDS[kind]
+    region: list[str] = []
+    index, subcommand_seen = 0, False
+    while index < len(args):
+        arg = args[index]
+        region.append(arg)
+        if arg == "--":
+            if index + 1 < len(args):
+                region.append(args[index + 1])
+                return "script", region
+            return "none", region
+        if arg == "-":
+            return "unparsed", region  # the script is read from standard input
+        if arg.startswith("-"):
+            name = arg.split("=", 1)[0]
+            if name in evals:
+                if "=" not in arg and index + 1 < len(args):
+                    region.append(args[index + 1])
+                return "eval", region
+            if "=" in arg and name.startswith("--"):
+                index += 1
+            elif arg in values:
+                if index + 1 < len(args):
+                    region.append(args[index + 1])
+                index += 2
+            elif _flag_option(arg):
+                index += 1
+            else:
+                return "unparsed", region
+            continue
+        if not subcommand_seen and arg in subcommands:
+            subcommand_seen = True
+            if kind == "deno" and arg == "eval":
+                region.extend(args[index + 1:index + 2])
+                return "eval", region
+            index += 1
+            continue
+        return "script", region
+    return "none", region
+
+
+def _mentions_agent_package(text: str) -> bool:
+    """True when any path component sequence in ``text`` is an agent's npm package."""
+
+    parts = [part for part in _COMPONENT_SPLIT.split(text.lower()) if part]
+    for index, part in enumerate(parts):
+        if part in AGENT_PACKAGE_DIRS:
+            return True
+        prefixes = AGENT_PACKAGE_SCOPES.get(part)
+        if prefixes and index + 1 < len(parts) and parts[index + 1].startswith(prefixes):
+            return True
+    return False
+
+
+def identify(executable: str | None, argv: tuple[str, ...] | None) -> str:
+    """``agent``, ``not_agent`` or ``undecided`` for one process (see module doc).
+
+    ``undecided`` is an interpreter launch that cannot be read with confidence
+    (an unknown option, inline code, a script on standard input); the census
+    keeps it as a hit.
+    """
 
     if _agent_name(_basename(executable)):
-        return True
+        return "agent"
     if argv and _agent_name(_basename(argv[0])):
-        return True
+        return "agent"
     if executable:
         parts = [part.lower() for part in PurePosixPath(executable).parts]
         for index in range(len(parts) - 2):
             if parts[index] in AGENT_INSTALL_DIRS and parts[index + 1] == "versions":
-                return True
-    names = {_basename(executable)} | ({_basename(argv[0])} if argv else set())
-    if argv and any(name.startswith(SCRIPT_INTERPRETERS) for name in names):
-        for token in argv[1:]:
-            if token.startswith("-"):
-                continue
-            return _agent_name(_basename(token)) or _agent_package_script(token)
-    return False
+                return "agent"
+    kind = _interpreter_kind({_basename(executable)} | ({_basename(argv[0])} if argv else set()))
+    if not argv or kind is None:
+        return "not_agent"
+    form, region = _interpreter_launch(kind, tuple(argv[1:]))
+    # An agent package anywhere among the interpreter's own arguments (a
+    # preload, a loader, inline code, the script) is an agent.
+    if any(_mentions_agent_package(token) for token in region):
+        return "agent"
+    if form == "script":
+        script = region[-1]
+        return "agent" if _agent_name(_basename(script)) or _agent_package_script(script) else "not_agent"
+    return "not_agent" if form == "none" else "undecided"
+
+
+def is_agent(executable: str | None, argv: tuple[str, ...] | None) -> bool:
+    """True unless the process is decided not to be an agent (undecided counts)."""
+
+    return identify(executable, argv) != "not_agent"
 
 
 def _agent_package_script(script: str) -> bool:
@@ -293,10 +442,12 @@ def filter_census(stdout: str, *, own_tree_root: int | None = None,
                     record = stdout[position:record_end]
                     entry = {"pid": pid, "executable": info.executable,
                              "process_name": info.argv[0] if info.argv else None}
+                    verdict = identify(info.executable, info.argv)
                     if own_tree_root is not None and in_tree(pid, own_tree_root, inspector, info):
                         result.ignored.append({**entry, "reason": "own_tree"})
-                    elif is_agent(info.executable, info.argv):
-                        result.kept.append({**entry, "reason": "agent_executable"})
+                    elif verdict != "not_agent":
+                        result.kept.append({**entry, "reason": "agent_executable" if verdict == "agent"
+                                            else "undecided_launch"})
                         kept_chunks.append(record)
                     else:
                         result.ignored.append({**entry, "reason": "not_agent_executable"})

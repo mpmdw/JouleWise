@@ -205,7 +205,15 @@ def probe_payload_kind(text):
     return kind
 # Brackets preserve agent matches but exclude peer pgrep argv: overlapping
 # driver/chain censuses self-matched and aborted the 2026-09-20 pilot night.
-AGENT_CENSUS_ARGV = ("/usr/bin/pgrep", "-lf", "[c]odex|[c]laude|[t]3")
+# ``-a``: Darwin pgrep leaves the calling process's ancestors out of its list
+# unless asked, so an agent session that launched the census (the desk dry arm
+# run from an agent's shell) was invisible to it (dry-records finding F1,
+# 2026-10-07).  With ``-a`` the ancestors are listed like any other process and
+# agent_identity decides each: launchd and a shell running chain.zsh are not
+# agent executables and are ignored, the caller's own tree is ignored, and an
+# agent ancestor stays a hit.  pgrep never lists itself, with or without -a.
+AGENT_CENSUS_PATTERN = "[c]odex|[c]laude|[t]3"
+AGENT_CENSUS_ARGV = ("/usr/bin/pgrep", "-a", "-lf", AGENT_CENSUS_PATTERN)
 
 PMSET_BATT_ARGV = ("/usr/bin/pmset", "-g", "batt")
 IOREG_BATTERY_ARGV = battery_float.IOREG_BATTERY_ARGV

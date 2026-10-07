@@ -158,7 +158,7 @@ class AgentCensusConcurrencyTests(unittest.TestCase):
     def test_synchronized_peer_censuses_do_not_match(self):
         """Old literal at agent_census's exec site detects sibling pgrep PIDs."""
         self.assertEqual([], self._overlap_hits(AGENT_CENSUS_ARGV))
-        old_argv = (*AGENT_CENSUS_ARGV[:2], "|".join(("codex", "claude", "t3")))
+        old_argv = (*AGENT_CENSUS_ARGV[:-1], "|".join(("codex", "claude", "t3")))
         control_hits = self._overlap_hits(old_argv)
         if not control_hits:
             self.skipTest("INCONCLUSIVE: 2 x 300 old-pattern probes had zero peer hits; scheduler did not expose overlap")

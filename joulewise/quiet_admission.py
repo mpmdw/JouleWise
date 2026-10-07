@@ -236,7 +236,7 @@ def sample_interval(interval_s, *, observer_pid=None):
     concurrent census are independent of those command bounds.
     """
     argv = top_argv(interval_s)
-    from joulewise.night_gate import AGENT_CENSUS_ARGV
+    from joulewise.night_gate import AGENT_CENSUS_ARGV, ProbeResult, decide_census
     observer_pid = os.getpid() if observer_pid is None else observer_pid
     def run(argv, timeout=30):
         return subprocess.run(argv, capture_output=True, text=True, check=True,
@@ -267,13 +267,19 @@ def sample_interval(interval_s, *, observer_pid=None):
     # Preserve the interval census; the parent measures whole-round observer cost.
     census = subprocess.run(AGENT_CENSUS_ARGV, capture_output=True, text=True, check=False,
                             timeout=30, env={**os.environ, "LC_ALL": "C"})
+    # The argv carries -a (dry-records F1, 2026-10-07), so it lists this
+    # process's ancestors; the shared matcher decides every listed line by
+    # executable identity (a driver whose argv carries a claude path is not an
+    # agent; an agent ancestor is), as night_gate.agent_census does.
+    census = decide_census(ProbeResult(tuple(AGENT_CENSUS_ARGV), census.returncode, census.stdout,
+                                       census.stderr, 0), own_tree_root=os.getpid())
     observation = dict(wall_start=wall_start, wall_end=time.time(),
                 monotonic_start=mono_start, monotonic_end=time.monotonic(),
                 interval_s=ps_end - ps_start, boot_identity=boot,
                 raw_sha256={name: hashlib.sha256(raw.encode()).hexdigest() for name, raw in
                             (("ps_before", before_text), ("ps_after", after_text), ("top", top_text))},
                 metrics=metrics, load_avg_diagnostic=load,
-                census=dict(exit_code=census.returncode, stdout=census.stdout, stderr=census.stderr),
+                census=dict(exit_code=census.exit_code, stdout=census.stdout, stderr=census.stderr),
                 **unavailable)
     return observation
 

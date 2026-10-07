@@ -60,9 +60,11 @@ from joulewise.hazards.base import (
 )
 
 ARM_SCHEMA = "joulewise.hazard_arm.v1"
-# Ported from night_gate.AGENT_CENSUS_ARGV (night_gate.py:178); the brackets keep
-# a peer pgrep from matching itself.  tests/hazards/test_arm.py pins equality.
-AGENT_CENSUS_ARGV = ("/usr/bin/pgrep", "-lf", "[c]odex|[c]laude|[t]3")
+# Ported from night_gate.AGENT_CENSUS_ARGV; the brackets keep a peer pgrep from
+# matching itself, and -a lists this process's ancestors, which Darwin pgrep
+# otherwise leaves out (an agent that launched the arm was invisible:
+# dry-records F1, 2026-10-07).  tests/hazards/test_arm.py pins equality.
+AGENT_CENSUS_ARGV = ("/usr/bin/pgrep", "-a", "-lf", "[c]odex|[c]laude|[t]3")
 NETWORK_TIME_OFF_ARGV = ("/usr/bin/sudo", "-n", "/usr/sbin/systemsetup",
                          "-setusingnetworktime", "off")
 # The writer's own identity reads (validate_powermetrics_fiducial._sysctl_identity).

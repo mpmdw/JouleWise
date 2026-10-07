@@ -668,6 +668,9 @@ _CENSUS = {"exit_codes": [0, 1]}
 
 QUALIFICATION_PROCESS_OUTCOMES = (
     # Author and driver absence censuses; only these require empty stdout.
+    (("/usr/bin/pgrep", "-a", "-lf", "[c]odex|[c]laude|[t]3"), _ABSENT, "joulewise/arm_readiness_evidence_t0.py:1849; joulewise/night_gate.py:agent_census"),
+    # The same census before -a (dry-records F1, 2026-10-07), kept so journals
+    # recorded before that change still resolve to their registered outcome.
     (("/usr/bin/pgrep", "-lf", "[c]odex|[c]laude|[t]3"), _ABSENT, "joulewise/arm_readiness_evidence_t0.py:1849; joulewise/night_gate.py:736"),
     (("/usr/bin/pgrep", "-x", "caffeinate"), _ABSENT, "joulewise/arm_readiness_evidence_t0.py:1848"),
     (("/usr/bin/pgrep", "-lf", t0_author._BROWSER_CENSUS_PATTERN), _ABSENT, "joulewise/arm_readiness_evidence_t0.py:1850"),
