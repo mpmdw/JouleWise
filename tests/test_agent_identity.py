@@ -172,37 +172,6 @@ class AgentIdentityTests(unittest.TestCase):
             with self.subTest(argv=argv):
                 self.assertIs(expected, agent_identity.is_agent(executable, argv))
 
-    def test_the_t3_code_harness_is_an_agent_by_its_real_paths(self):
-        """Orchestrator call (2026-10-07): the T3 Code harness, by the path shapes of its install.
-
-        The desktop app (/Applications/T3 Code (Alpha).app) runs its server as
-        ``process.execPath`` (the app binary) on ``app.asar/apps/server/dist/bin.mjs``
-        and bundles the ``@t3tools/*`` packages; its CLI is the npm package
-        ``t3`` (``npx t3``), run as ``node .../node_modules/.bin/t3`` or
-        ``node .../node_modules/t3/dist/bin.mjs``.
-        """
-        app = "/Applications/T3 Code (Alpha).app/Contents"
-        npx = "/Users/edr/.npm/_npx/0f1e2d3c4b5a6978/node_modules"
-        cases = {
-            (f"{app}/MacOS/T3 Code (Alpha)",
-             (f"{app}/MacOS/T3 Code (Alpha)", f"{app}/Resources/app.asar/apps/server/dist/bin.mjs")): True,
-            (f"{app}/Frameworks/T3 Code (Alpha) Helper (Renderer).app/Contents/MacOS/T3 Code (Alpha) Helper "
-             "(Renderer)", None): True,
-            ("/opt/homebrew/bin/node", ("node", f"{npx}/.bin/t3", "--port", "3773")): True,
-            ("/opt/homebrew/bin/node", ("node", f"{npx}/t3/dist/bin.mjs")): True,
-            ("/opt/homebrew/bin/node", ("node", f"{npx}/@t3tools/desktop/dist/main.js")): True,
-            ("/opt/homebrew/bin/node", ("node", "--import", f"{npx}/@t3tools/shared/register.mjs",
-                                        "server.mjs")): True,
-            # A t3 component outside an npm install, a run id with t3 in it,
-            # another package that merely starts with t3: not the harness.
-            ("/opt/homebrew/bin/node", ("node", "/Users/edr/work/t3/app.js")): False,
-            ("/opt/homebrew/bin/node", ("node", f"{npx}/t3-utils/index.js")): False,
-            ("/usr/bin/python3", ("python3", "-m", "scripts.run_campaign", ATTEMPT3_ROOT)): False,
-        }
-        for (executable, argv), expected in cases.items():
-            with self.subTest(executable=executable, argv=argv):
-                self.assertIs(expected, agent_identity.is_agent(executable, argv))
-
     def test_interpreter_option_operands_are_not_read_as_the_script(self):
         """Sol delta audit A4: ``node --require /tmp/preload.cjs …/claude-code/cli.js`` read the preload as the script."""
         node, modules = "/opt/homebrew/bin/node", "/opt/homebrew/lib/node_modules"

@@ -26,8 +26,7 @@ never by its arguments:
   whose own arguments (options, their values, inline code, the script) name an
   agent's npm package directory
   (``node .../node_modules/@anthropic-ai/claude-code/cli.js``, ``@openai/codex*``,
-  ``claude-code``, the T3 Code harness's ``@t3tools/*`` and ``node_modules/t3``,
-  or its bin shim ``.bin/t3``).  The interpreter's options are parsed, so a preload or
+  ``claude-code``).  The interpreter's options are parsed, so a preload or
   loader value is never read as the script (Sol delta audit A4); a launch that
   cannot be parsed with confidence is undecided and stays a hit.
 * **The caller's own tree.**  With ``own_tree_root`` set, a listed process
@@ -69,17 +68,8 @@ SCRIPT_INTERPRETERS = ("node", "bun", "deno")
 # Code by its real path, whose basename (``cli.js``) is no agent name.  A
 # scope matches only with a package named for its agent; ``claude-code`` also
 # matches unscoped.
-AGENT_PACKAGE_SCOPES = {"@anthropic-ai": ("claude",), "@openai": ("codex",),
-                        # The T3 Code harness (Ed's driver; orchestrator call,
-                        # 2026-10-07): every package of its scope.
-                        "@t3tools": ("",)}
+AGENT_PACKAGE_SCOPES = {"@anthropic-ai": ("claude",), "@openai": ("codex",)}
 AGENT_PACKAGE_DIRS = ("claude-code",)
-# Agent npm packages whose name is too short to match outside an install: they
-# count only as ``node_modules/<name>``.  ``t3`` is the T3 Code CLI (``npx t3``,
-# ``node .../node_modules/t3/dist/bin.mjs``).
-AGENT_INSTALLED_PACKAGES = ("t3",)
-# Exact basenames of an agent's npm bin shim (``node .../node_modules/.bin/t3``).
-AGENT_EXACT_NAMES = ("t3",)
 _PID_PREFIX = re.compile(r"([0-9]+) ")
 
 
@@ -117,21 +107,7 @@ def _basename(text: str | None) -> str:
 
 
 def _agent_name(name: str) -> bool:
-    return bool(name) and (name.startswith(AGENT_PREFIXES) or name in AGENT_EXACT_NAMES)
-
-
-def _agent_package_parts(parts: list[str]) -> bool:
-    """True when a component sequence is an agent's npm package directory."""
-
-    for index, part in enumerate(parts):
-        if part in AGENT_PACKAGE_DIRS:
-            return True
-        if part in AGENT_INSTALLED_PACKAGES and index > 0 and parts[index - 1] == "node_modules":
-            return True
-        prefixes = AGENT_PACKAGE_SCOPES.get(part)
-        if prefixes and index + 1 < len(parts) and parts[index + 1].startswith(prefixes):
-            return True
-    return False
+    return bool(name) and name.startswith(AGENT_PREFIXES)
 
 
 # Interpreter launches (Sol delta audit A4, 2026-10-07).  ``node --require
@@ -248,7 +224,14 @@ def _interpreter_launch(kind: str, args: tuple[str, ...]) -> tuple[str, list[str
 def _mentions_agent_package(text: str) -> bool:
     """True when any path component sequence in ``text`` is an agent's npm package."""
 
-    return _agent_package_parts([part for part in _COMPONENT_SPLIT.split(text.lower()) if part])
+    parts = [part for part in _COMPONENT_SPLIT.split(text.lower()) if part]
+    for index, part in enumerate(parts):
+        if part in AGENT_PACKAGE_DIRS:
+            return True
+        prefixes = AGENT_PACKAGE_SCOPES.get(part)
+        if prefixes and index + 1 < len(parts) and parts[index + 1].startswith(prefixes):
+            return True
+    return False
 
 
 def identify(executable: str | None, argv: tuple[str, ...] | None) -> str:
@@ -291,7 +274,14 @@ def is_agent(executable: str | None, argv: tuple[str, ...] | None) -> bool:
 def _agent_package_script(script: str) -> bool:
     """True when a directory of ``script`` is an agent's npm package (``@anthropic-ai/claude-code``)."""
 
-    return _agent_package_parts([part.lower() for part in PurePosixPath(script).parts[:-1]])
+    parts = [part.lower() for part in PurePosixPath(script).parts[:-1]]
+    for index, part in enumerate(parts):
+        if part in AGENT_PACKAGE_DIRS:
+            return True
+        prefixes = AGENT_PACKAGE_SCOPES.get(part)
+        if prefixes and index + 1 < len(parts) and parts[index + 1].startswith(prefixes):
+            return True
+    return False
 
 
 # --- kernel reads -----------------------------------------------------------
