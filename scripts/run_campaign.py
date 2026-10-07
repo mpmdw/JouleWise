@@ -7011,6 +7011,10 @@ def _idle_admission_core_evaluation(
             ]
         ],
     ] = {"start": [], "midpoint": [], "end": []}
+    # NEG-8 ruling 2026-10-07 (registration 0.12): a reference the runner
+    # recorded with a status other than succeeded is lost; the screen runs on
+    # the survivors.  The loss test reads the runner's status, never an energy.
+    neg8_lost: list[dict[str, Any]] = []
     for evaluation in evaluations:
         current_environment_reasons = set(
             _current_member_environment_refusals(evaluation)
@@ -7084,6 +7088,19 @@ def _idle_admission_core_evaluation(
         )
         if neg8_position == "invalid":
             conditions.add("neg8_bracket_reference_invalid")
+        elif (
+            neg8_position in neg8_references
+            and isinstance(evaluation.status, str)
+            and evaluation.status != "succeeded"
+        ):
+            neg8_lost.append(
+                {
+                    "bundle_id": evaluation.bundle_id,
+                    "position": neg8_position,
+                    "reason": "status_not_succeeded",
+                    "status": evaluation.status,
+                }
+            )
         elif neg8_position in neg8_references:
             neg8_references[neg8_position].append(
                 (
@@ -7110,15 +7127,34 @@ def _idle_admission_core_evaluation(
         len(neg8_references[position])
         for position in ("start", "midpoint", "end")
     )
-    complete_legacy_pair = counts == (1, 0, 1)
+    complete_legacy_pair = counts == (1, 0, 1) and not neg8_lost
     complete_replicated_trajectory = counts == (3, 1, 3)
+    # Survivors: two or three at each endpoint, the midpoint optional.  With a
+    # loss behind it, any shape within the plan goes to the evaluator, which
+    # names one with fewer than two survivors at an endpoint.
+    survivor_shape = (
+        counts[0] in (2, 3) and counts[1] in (0, 1) and counts[2] in (2, 3)
+    )
+    within_plan_after_losses = bool(
+        neg8_lost and counts[0] <= 3 and counts[1] <= 1 and counts[2] <= 3
+    )
     ambiguous = bool(
         (neg8_references["start"] or neg8_references["end"])
-        and not (complete_legacy_pair or complete_replicated_trajectory)
+        and not (
+            complete_legacy_pair
+            or complete_replicated_trajectory
+            or survivor_shape
+            or within_plan_after_losses
+        )
     )
     if ambiguous:
         conditions.add("neg8_bracket_ambiguous_reference")
-    reference_shape_valid = complete_legacy_pair or complete_replicated_trajectory
+    reference_shape_valid = (
+        complete_legacy_pair
+        or complete_replicated_trajectory
+        or survivor_shape
+        or within_plan_after_losses
+    )
     identities = [
         item[2]
         for position in ("start", "midpoint", "end")
@@ -7192,6 +7228,7 @@ def _idle_admission_core_evaluation(
             end_idle_subtracted_j=family_values("end", 1),
             window_duration_s=duration_s,
             bound_freshness_observation=freshness_observation,
+            lost_references=neg8_lost,
         )
     else:
         bracket = neg8_bracket_not_evaluated(
