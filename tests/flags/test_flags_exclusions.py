@@ -386,5 +386,71 @@ class FirstClaimUsableTests(unittest.TestCase):
         self.assertIsNone(first_claim_usable([{"attempt": 1, "claim_usable": False}]))
 
 
+
+class GammaMidpointLostTests(unittest.TestCase):
+    """Orchestrator ruling Q11 (2026-10-07): on GAMMA only, neg8.midpoint_lost is not claim-usable."""
+
+    GAMMA = "d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5"
+    ALPHA = "d117_floor_qwen3-1p7b_v5"
+    BETA = "d117_floor_qwen3-8b_v5"
+
+    def attempt(self, pack_id: Any, attempt: int, *, lost: bool) -> dict[str, Any]:
+        roster = dict(floor_roster(attempt=attempt), pack_id=pack_id)
+        flags = [window_flag("neg8.midpoint_lost", family="NEG8", attempt=attempt)] if lost else []
+        return compute(flags, roster, spans_for(roster), CATALOG)
+
+    def test_the_rule_is_registered_for_gamma_only(self) -> None:
+        from joulewise.flags.exclusions import GAMMA_PACK_ID, PACK_SCOPED_WINDOW_REASONS
+        self.assertEqual(GAMMA_PACK_ID, self.GAMMA)
+        self.assertEqual(dict(PACK_SCOPED_WINDOW_REASONS),
+                         {self.GAMMA: {"neg8.midpoint_lost": "neg8.midpoint_lost_primary"}})
+        self.assertEqual(CATALOG.entry("neg8.midpoint_lost")["effect"], DISCLOSE)
+
+    def test_gamma_with_a_lost_midpoint_is_not_claim_usable_and_a_later_clean_attempt_is_analysed(self) -> None:
+        first = self.attempt(self.GAMMA, 1, lost=True)
+        self.assertFalse(first["claim_usable"])
+        self.assertEqual(first["reasons"], ["neg8.midpoint_lost_primary"])
+        self.assertEqual(first["members_excluded"], [])
+        self.assertFalse(first["release_blocked"])
+        second = self.attempt(self.GAMMA, 2, lost=False)
+        self.assertTrue(second["claim_usable"])
+        attempts = [{"attempt": 1, "claim_usable": first["claim_usable"],
+                     "release_blocked": first["release_blocked"]},
+                    {"attempt": 2, "claim_usable": second["claim_usable"],
+                     "release_blocked": second["release_blocked"]}]
+        self.assertEqual(first_claim_usable(attempts), 2)
+
+    def test_the_floor_packs_keep_the_flag_disclose(self) -> None:
+        for pack_id in (self.ALPHA, self.BETA, None):
+            with self.subTest(pack_id=pack_id):
+                result = self.attempt(pack_id, 1, lost=True)
+                self.assertTrue(result["claim_usable"])
+                self.assertEqual(result["reasons"], [])
+                self.assertEqual(result["flag_counts"]["by_code"], {"neg8.midpoint_lost": 1})
+                self.assertEqual(first_claim_usable([{"attempt": 1, "claim_usable": result["claim_usable"],
+                                                      "release_blocked": result["release_blocked"]}]), 1)
+
+    def test_a_foreign_attempts_flag_does_not_exclude_gamma(self) -> None:
+        roster = dict(floor_roster(attempt=2), pack_id=self.GAMMA)
+        result = compute([window_flag("neg8.midpoint_lost", family="NEG8", attempt=1)], roster,
+                         spans_for(roster), CATALOG)
+        self.assertTrue(result["claim_usable"])
+
+    def test_the_rule_reads_only_the_pack_id_and_the_code(self) -> None:
+        roster = dict(floor_roster(), pack_id=self.GAMMA)
+        spans = spans_for(roster)
+        flags = [window_flag("neg8.midpoint_lost", family="NEG8")]
+        clear = compute(flags, roster, spans, CATALOG)
+        blind = compute([poison_flag(f) for f in flags], poison_roster(roster), poison_spans(spans), CATALOG)
+        self.assertEqual(render(blind), render(clear))
+        self.assertEqual(blind["reasons"], ["neg8.midpoint_lost_primary"])
+
+    def test_the_harvest_hands_compute_the_pack_id(self) -> None:
+        from joulewise.b5 import harvest
+        roster, _spans = harvest.l4_exclusion_inputs({"pack_id": self.GAMMA, "cells": [], "members": []}, {},
+                                                    plan_id=PLAN, attempt=1)
+        self.assertEqual(roster["pack_id"], self.GAMMA)
+
+
 if __name__ == "__main__":
     unittest.main()

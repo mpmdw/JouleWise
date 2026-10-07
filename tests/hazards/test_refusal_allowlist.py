@@ -169,6 +169,11 @@ def window_exclusion_problems(document: dict, catalogs: list[dict]) -> list[str]
     for section, effect in EXCLUSION_SECTIONS:
         listed = document[section]
         codes = exclusion_codes(catalogs, effect)
+        if effect == "EXCLUDE_WINDOW":
+            # Pack-scoped window reasons (ruling Q11): a DISCLOSE code that
+            # removes the window on one pack only is listed like a code.
+            from joulewise.flags.exclusions import PACK_SCOPED_WINDOW_REASONS
+            codes |= {reason for reasons in PACK_SCOPED_WINDOW_REASONS.values() for reason in reasons.values()}
         problems += [f"{effect} code {code} is not in {section}: name the physical quantity or the number it "
                      f"protects, or make it DISCLOSE" for code in sorted(codes - set(listed))]
         problems += [f"{section} lists {code}, which no catalog makes {effect}"

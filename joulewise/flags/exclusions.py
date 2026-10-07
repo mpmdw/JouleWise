@@ -15,6 +15,17 @@ Two parts, both pure functions of their arguments (no I/O, no clock reads):
 2. :func:`first_claim_usable` -- a pack's analysed window is its first
    claim-usable attempt, so attempts are never mixed.
 
+Pack-scoped window reasons (:data:`PACK_SCOPED_WINDOW_REASONS`): a few codes
+the catalog makes DISCLOSE remove a window from a claim only for one pack.
+Orchestrator ruling Q11 (2026-10-07, confirmed at the seal gate): on GAMMA
+(the contrast pack), ``neg8.midpoint_lost`` makes the attempt not
+claim-usable, with reason ``neg8.midpoint_lost_primary``, so GAMMA is
+re-armed and :func:`first_claim_usable` passes over the attempt. GAMMA's
+midpoint reference sits at the arm boundary between the two models; without
+it, the primary contrasts carry a drift allowance with no evidence of an
+interior excursion. On the floor packs (ALPHA, BETA) the flag stays
+DISCLOSE. The rule reads only the roster's ``pack_id`` and the flag's code.
+
 The physics-in-span joins of plan section 3.4 (monitor journals against
 member spans) have one implementation: the harvest's
 (``joulewise.b5.harvest``: ``battery_member_flags``, ``thermal_member_flags``,
@@ -31,6 +42,8 @@ Input shapes for :func:`compute`
 ``roster``::
 
     {
+      "pack_id": str | None,                          # optional; selects the
+                                                      # pack-scoped window reasons
       "plan_id": str | None, "attempt": str | int | None,
       "chain_started_monotonic_ns": int | None,
       "members": [
@@ -82,6 +95,16 @@ EXCLUSIONS_SCHEMA = "joulewise.exclusions.v1"
 # Every target cell has a quad stratum (floors: repeats and quads; GAMMA
 # contrasts: quads only). A roster cell may declare its full set in "strata".
 REQUIRED_STRATA = ("quad",)
+# The contrast pack (GAMMA): joulewise.arm_readiness, scripts/size_b5_window.py.
+GAMMA_PACK_ID = "d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5"
+# pack_id -> {flag code: window reason}. A flag whose catalog effect is
+# DISCLOSE adds the window reason (claim_usable False) on that pack only.
+# Every reason is listed in configs/gates/hazard_refusals.json
+# window_exclusions (tests/hazards/test_refusal_allowlist.py).
+PACK_SCOPED_WINDOW_REASONS: Mapping[str, Mapping[str, str]] = {
+    # Orchestrator ruling Q11 (2026-10-07).
+    GAMMA_PACK_ID: {"neg8.midpoint_lost": "neg8.midpoint_lost_primary"},
+}
 
 
 class ExclusionInputError(ValueError):
@@ -126,6 +149,8 @@ def compute(
 
     plan_id = roster["plan_id"] if "plan_id" in roster else None
     attempt = roster["attempt"] if "attempt" in roster else None
+    pack_id = roster["pack_id"] if "pack_id" in roster else None
+    pack_reasons = PACK_SCOPED_WINDOW_REASONS.get(pack_id, {}) if isinstance(pack_id, str) else {}
     chain_started = (
         roster["chain_started_monotonic_ns"] if "chain_started_monotonic_ns" in roster else None
     )
@@ -193,6 +218,8 @@ def compute(
             unclassified.add(code)
             continue
         if effect == DISCLOSE:
+            if code in pack_reasons:
+                window_reasons.add(pack_reasons[code])
             continue
         if effect == EXCLUDE_WINDOW:
             window_reasons.add(code)
