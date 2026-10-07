@@ -766,10 +766,15 @@ def write_window_plan(inputs: Mapping[str, Any], *, settle_s: int | float = b5_c
         raise WindowPlanError(f"stage graph: {exc}") from exc
     members = sum(stage.expected_count for stage in stages
                   if stage.in_chain and stage.kind == "campaign_collection")
+    # NEG-8 ruling 2026-10-07 (registration 0.12): the spare-slot retry can add
+    # up to each reference stage's largest spare set; the disk budget carries
+    # that worst case (member_count stays the planned roster).
+    spare_members = sum(max(stage.spare_sets) for stage in stages
+                        if stage.in_chain and stage.kind == "campaign_collection" and stage.spare_sets)
     dispatches = resolve_stage_dispatches(tree, measurement)
     refusal = dispatch_refusal(dispatches)
     _require(refusal is None, f"stage dispatch: {refusal}")
-    planned_bytes = inputs["bytes_per_member"] * members
+    planned_bytes = inputs["bytes_per_member"] * (members + spare_members)
     span_seconds, span_allowance = read_allowance(inputs["programmed_span_s"], "programmed_span_s",
                                                   measurement=measurement)
     programmed_span_s = math.ceil(span_seconds)

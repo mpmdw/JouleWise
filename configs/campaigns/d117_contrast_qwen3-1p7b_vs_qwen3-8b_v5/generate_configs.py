@@ -26,6 +26,7 @@ CURRENT_FAMILY_SUFFIX = "_v5"
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+from joulewise.b5.reference_spares import attach_spare_retries  # noqa: E402
 from joulewise.campaign_generator_core import (  # noqa: E402
     actual_pack_paths,
     make_render_json,
@@ -2517,7 +2518,9 @@ def build_stage_graph(stage_manifests: dict[str, dict[str, Any]]) -> list[dict[s
         rows.append(
             stage_row(stage_id, index, kind, count, predecessor, successor, input_ref, commands)
         )
-    return rows
+    # NEG-8 ruling 2026-10-07 (registration 0.12): each window reference stage
+    # pins its spare members for the chain's spare-slot retry.
+    return attach_spare_retries(rows, REPO_ROOT)
 
 
 def family_tree_rows(

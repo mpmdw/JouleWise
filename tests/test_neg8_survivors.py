@@ -607,3 +607,261 @@ class HarvestSurvivorTests(_hb().WindowTestCase):
         self.assertEqual(flag["observed"]["source"], "corpus_physics")
         self.assertIn("clean_members_below_minimum", flag["observed"]["problems"])
         self.assertIn("neg8.bound_not_derived", window.exclusions()["reasons"])
+
+
+# ---------------------------------------------------------------------------
+# Part 4: the spare-slot retry (registration 0.12 "One retry, by spare slot").
+# ---------------------------------------------------------------------------
+
+V5_PACKS = ("d117_floor_qwen3-1p7b_v5", "d117_floor_qwen3-8b_v5", "d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5")
+
+
+def _repo():
+    from pathlib import Path
+    return Path(__file__).resolve().parents[1]
+
+
+def _tree(pack: str) -> dict:
+    import json
+    return json.loads((_repo() / "configs/campaigns" / pack / "plan_tree.json").read_bytes())
+
+
+class SpareFilesTests(unittest.TestCase):
+    def test_committed_spares_verify_and_copy_the_stage_config_but_the_run_id(self) -> None:
+        import json
+
+        from joulewise.b5 import reference_spares as rs
+
+        self.assertEqual(rs.check(_repo()), [])
+        root = _repo()
+        for slot, (source_dir, stem, run_stem, maximum) in rs.SLOTS.items():
+            source_manifest = json.loads((root / source_dir / "order_manifest.json").read_bytes())
+            first = source_manifest["executed_order"][0]
+            source_raw = (root / source_dir / first["config"]).read_bytes()
+            for count in range(1, maximum + 1):
+                directory = root / rs.spare_directory(slot, count)
+                manifest = json.loads((directory / "order_manifest.json").read_bytes())
+                self.assertEqual(manifest["planned_n_bundles"], count)
+                self.assertEqual([row["run_id"] for row in manifest["executed_order"]],
+                                 [f"{run_stem}-{index}" for index in range(1, count + 1)])
+                for row in manifest["executed_order"]:
+                    with self.subTest(slot=slot, count=count, run_id=row["run_id"]):
+                        self.assertEqual((row["role"], row["sentinel_position"]),
+                                         (first["role"], first["sentinel_position"]))
+                        raw = (directory / row["config"]).read_bytes()
+                        self.assertEqual(raw.replace(row["run_id"].encode(), first["run_id"].encode()), source_raw)
+                        self.assertEqual(sorted(p.name for p in directory.iterdir()),
+                                         sorted([*(r["config"] for r in manifest["executed_order"]),
+                                                 "order_manifest.json"]))
+
+    def test_every_v5_window_reference_stage_carries_its_spares_and_no_other_stage_does(self) -> None:
+        from joulewise.b5 import reference_spares as rs
+
+        for pack in V5_PACKS:
+            stages = _tree(pack)["stage_graph"]
+            carried = {stage["stage_id"]: stage["spare_retry"]["slot"] for stage in stages if "spare_retry" in stage}
+            with self.subTest(pack=pack):
+                self.assertEqual(sorted(carried.values()), ["end", "midpoint", "start"])
+                for stage in stages:
+                    if stage["stage_id"] in carried:
+                        self.assertEqual(stage["spare_retry"], rs.spare_retry_record(carried[stage["stage_id"]]))
+                # GAMMA's two interior diagnostic references are no NEG-8 slot.
+                self.assertFalse({"gamma-reference-decode-midpoint", "gamma-reference-prefill-midpoint"} & set(carried))
+
+
+class ChainSpareRetryTests(unittest.TestCase):
+    def test_stage_plan_reads_the_spare_sets(self) -> None:
+        from joulewise.b5 import chain as b5_chain
+
+        for pack in V5_PACKS:
+            stages = {stage.stage_id: stage for stage in b5_chain.stage_plan(_tree(pack)) if stage.spare_sets}
+            with self.subTest(pack=pack):
+                self.assertEqual(sorted(stage.spare_slot for stage in stages.values()), ["end", "midpoint", "start"])
+                for stage in stages.values():
+                    self.assertEqual(sorted(stage.spare_sets), list(range(1, 4 if stage.spare_slot != "midpoint"
+                                                                          else 2)))
+
+    def test_a_malformed_spare_record_refuses_to_render(self) -> None:
+        import copy
+
+        from joulewise.b5 import chain as b5_chain
+
+        tree = _tree(V5_PACKS[0])
+        broken = copy.deepcopy(tree)
+        stage = next(stage for stage in broken["stage_graph"] if "spare_retry" in stage)
+        stage["spare_retry"]["spare_sets"].pop()
+        with self.assertRaises(b5_chain.ChainRenderError):
+            b5_chain.stage_plan(broken)
+
+    def render(self, pack: str) -> str:
+        from joulewise.b5 import chain as b5_chain
+        from scripts.check_b5_chain import synthetic_bindings
+
+        root = _repo()
+        tree = _tree(pack)
+        raw = b5_chain.render_chain(tree=tree, tree_sha256="c" * 64, stages=b5_chain.stage_plan(tree),
+                                    bindings=synthetic_bindings(root, root / "configs/campaigns" / pack),
+                                    measurement_root=root, pack_root=root / "configs/campaigns" / pack,
+                                    plan_id="b5-spare-1", runbook_text=(root / b5_chain.RUNBOOK_RELATIVE).read_text())
+        return raw.decode()
+
+    def test_every_pack_renders_a_spare_retry_after_each_reference_stage(self) -> None:
+        import subprocess
+        import tempfile
+
+        for pack in V5_PACKS:
+            text = self.render(pack)
+            with self.subTest(pack=pack), tempfile.NamedTemporaryFile(suffix=".zsh") as handle:
+                handle.write(text.encode())
+                handle.flush()
+                subprocess.run(["/bin/zsh", "-n", handle.name], check=True)
+                self.assertEqual(text.count("# Spare-slot retry (NEG-8 ruling 2026-10-07)"), 3)
+                self.assertEqual(text.count("window_reference_spares_v5/start_triplet_spares_"), 6)
+                self.assertEqual(text.count("window_reference_spares_v5/midpoint_spares_1"), 2)
+                self.assertIn('B5_SPARE_PY="$(/bin/cat', text)
+
+    def test_the_retry_runs_exactly_planned_minus_succeeded_spares_and_flags_them(self) -> None:
+        """The rendered shell, executed with stub stage runners over a runs root where 2 of 3 failed."""
+        import json
+        import os
+        import subprocess
+        import sys
+        import tempfile
+        from pathlib import Path
+
+        from joulewise.b5 import chain as b5_chain
+
+        tree = _tree(V5_PACKS[0])
+        stage = next(stage for stage in b5_chain.stage_plan(tree) if stage.spare_slot == "start")
+        root = _repo()
+        with tempfile.TemporaryDirectory(prefix="neg8-spares-") as directory:
+            work = Path(directory)
+            runs = work / "runs_claim"
+            for run_id, status in (("neg8-window-start-r1", "failed"), ("neg8-window-start-r2", "succeeded"),
+                                   ("neg8-window-start-r3", "failed")):
+                (runs / run_id).mkdir(parents=True)
+                (runs / run_id / "summary_metrics.json").write_text(json.dumps({"status": status}))
+            argv = [sys.executable, str(root / "scripts/run_campaign.py"),
+                    str(root / "configs/campaigns/window_references_v5/start_triplet"),
+                    "--runs-dir", str(runs), "--max-failures", "3"]
+
+            def log_path(stage, suffix=""):
+                return b5_chain.Shell(f'"$OPERATOR_LOG_ROOT/{stage.stage_id}{suffix}.log"')
+
+            def run(stage, argv, *, label=None, kind=None, suffix="", out=None):
+                head = [label or stage.stage_id, kind or stage.kind]
+                return "run_stage " + " ".join(b5_chain._literal(item) for item in [*head, *argv])
+
+            lines = b5_chain.spare_retry_lines(stage, argv, root, sys.executable, log_path, run,
+                                               lambda kind, argv: list(argv), 7)
+            stub = "\n".join([
+                "set -u",
+                f"TRANSCRIPT_ROOT={b5_chain._literal(str(work))}",
+                f"OPERATOR_LOG_ROOT={b5_chain._literal(str(work))}",
+                f'B5_SPARE_PY="$(/bin/cat {b5_chain._literal(str(work / "helper.py"))})"',
+                "journal() { :; }", "note() { :; }", "settle() { :; }", "horizon_skip() { :; }",
+                "horizon_allows() { return 0; }",
+                # The stub runner measures each spare the real runner would: a succeeded bundle.
+                'run_stage() { print -r -- "$*" >> "$TRANSCRIPT_ROOT/calls"; local dir="$5"; '
+                'for id in $(/usr/bin/sed -n \'s/.*"run_id": "\\(.*\\)".*/\\1/p\' "$dir/order_manifest.json"); do '
+                f'/bin/mkdir -p {b5_chain._literal(str(runs))}/$id; '
+                f'print -r -- \'{{"status": "succeeded"}}\' > {b5_chain._literal(str(runs))}/$id/summary_metrics.json; '
+                'done; }',
+                'flag() { print -r -- "$1 $2 $3 $4" >> "$TRANSCRIPT_ROOT/flags"; }',
+                *lines, ""])
+            (work / "helper.py").write_text(b5_chain.SPARE_RETRY_HELPER)
+            (work / "chain.zsh").write_text(stub)
+            subprocess.run(["/bin/zsh", "-f", str(work / "chain.zsh")], check=True, env={**os.environ})
+            calls = (work / "calls").read_text().splitlines()
+            self.assertEqual(len(calls), 1)
+            self.assertIn("window_reference_spares_v5/start_triplet_spares_2", calls[0])
+            self.assertIn("--max-failures 2", calls[0])
+            self.assertTrue(calls[0].startswith("alpha-reference-start.spares campaign_collection"))
+            flags = (work / "flags").read_text().splitlines()
+            self.assertEqual([line.split()[:3] for line in flags],
+                             [["member.retried", "member", "neg8-window-start-spare-1"],
+                              ["member.retried", "member", "neg8-window-start-spare-2"]])
+            snapshot = json.loads((work / "neg8-spares-alpha-reference-start.json").read_bytes())
+            self.assertEqual((snapshot["planned"], snapshot["succeeded"], snapshot["spares"]), (3, 1, 2))
+            # The failed bundles are never touched.
+            self.assertEqual(json.loads((runs / "neg8-window-start-r1" / "summary_metrics.json").read_bytes()),
+                             {"status": "failed"})
+
+    def test_a_stage_that_succeeded_runs_no_spare(self) -> None:
+        import json
+        import subprocess
+        import sys
+        import tempfile
+        from pathlib import Path
+
+        from joulewise.b5 import chain as b5_chain
+
+        with tempfile.TemporaryDirectory(prefix="neg8-spares-") as directory:
+            work = Path(directory)
+            manifest = _repo() / "configs/campaigns/window_references_v5/end_triplet/order_manifest.json"
+            for run_id in ("neg8-window-end-r1", "neg8-window-end-r2", "neg8-window-end-r3"):
+                (work / run_id).mkdir()
+                (work / run_id / "summary_metrics.json").write_text(json.dumps({"status": "succeeded"}))
+            result = subprocess.run([sys.executable, "-B", "-c", b5_chain.SPARE_RETRY_HELPER, "count", str(manifest),
+                                     str(work), str(work / "snapshot.json"), "3"],
+                                    capture_output=True, text=True, check=True)
+            self.assertEqual(result.stdout.strip(), "0")
+
+
+class SpareRosterAndYieldTests(unittest.TestCase):
+    def test_the_harvest_roster_lists_each_spare_with_its_slot(self) -> None:
+        from joulewise.b5 import harvest as h
+
+        for pack in V5_PACKS:
+            roster = h.build_roster(_repo() / "configs/campaigns" / pack, _repo())
+            spares = {member["run_id"]: member["spare_slot"] for member in roster["members"]
+                      if member.get("spare_slot")}
+            with self.subTest(pack=pack):
+                self.assertEqual(sorted(spares.values()), ["end", "end", "end", "midpoint", "start", "start", "start"])
+                self.assertEqual(roster["duplicate_listings"], {})
+
+    def test_driver_minimums_follow_the_survivor_floor(self) -> None:
+        from joulewise.b5 import driver as b5_driver
+
+        self.assertEqual(b5_driver._stage_role("claim", "bound", ["neg8_daily_reference_start"] * 3), "reference")
+        self.assertEqual(b5_driver._stage_role("claim", "bound", ["neg8_daily_reference_midpoint"]),
+                         "reference_midpoint")
+        self.assertEqual(b5_driver._min_valid("reference", 3), 2)
+        self.assertEqual(b5_driver._min_valid("reference_midpoint", 1), 0)
+        self.assertEqual(b5_driver._min_valid("corpus", 12), 10)
+
+    def test_an_invoked_spare_is_a_reference_the_replay_evaluator_reads(self) -> None:
+        """Site 8: the spare's campaign-manifest row (execution invoked, its slot's role) takes the slot."""
+        import json
+
+        hb = _hb()
+        replay = ReplaySurvivorTests()
+        replay.setUp()
+        self.addCleanup(replay._tmp.cleanup)
+        points = hb.neg8_trajectory(0.0)
+        points["neg8-window-start-spare-1"] = 30.33
+        bundle = replay.root / "neg8-window-start-spare-1"
+        hb.put(bundle / "config.json", {"run_id": "neg8-window-start-spare-1"})
+        hb.put(bundle / "metadata.json", {"run_id": "neg8-window-start-spare-1"})
+        hb.put(bundle / "summary_metrics.json", {"status": "succeeded"})
+        spare_manifest = {"schema_version": "joulewise.campaign_provenance.v1",
+                          "campaign_policy": {"sha256": hb.sha(hb.ROOT / hb.POLICY)},
+                          "members": [{"execution": "invoked", "run_id": "neg8-window-start-spare-1",
+                                       "bundle_ids": ["neg8-window-start-spare-1"],
+                                       "role": "neg8_daily_reference_start", "sentinel_position": "start",
+                                       "canonical_neg8_workload": True, "scientific_config_sha256": "d" * 64}]}
+        raw = hb.put(replay.root / "campaign_manifests/b5t-neg8-spares.json", spare_manifest)
+        original = ww._derived_neg8_decision
+
+        def with_spare(manifests, *args, **kwargs):
+            return original([*manifests, json.loads(raw)], *args, **kwargs)
+
+        from unittest import mock
+        with mock.patch.object(ww, "_derived_neg8_decision", with_spare):
+            bracket, problem = replay.derive(points, failed={"b5t-neg8-start-2"})
+        self.assertIsNone(problem)
+        self.assertEqual(bracket["endpoint_protocol"], "replicated_endpoints_with_midpoint")
+        self.assertEqual(bracket["reference_counts"], {"start": 3, "midpoint": 1, "end": 3})
+        self.assertEqual([item["bundle_id"] for item in bracket["reference_losses"]], ["b5t-neg8-start-2"])
+        self.assertAlmostEqual(bracket["claim_families"][ww.NEG8_CLAIM_FAMILY_GROSS]["start"]["mean_j"],
+                               (30.30 + 30.34 + 30.33) / 3, places=9)

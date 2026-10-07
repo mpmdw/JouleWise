@@ -293,7 +293,7 @@ class D117FloorQwen3V5PackTests(unittest.TestCase):
             shutil.copy2(ROOT / relative, repository / relative)
         # Prospective reference inputs may be uncommitted alongside the
         # generators, so the clone must grade those working-tree bytes too.
-        for directory in ("neg8_reference_corpus_v5", "window_references_v5"):
+        for directory in ("neg8_reference_corpus_v5", "window_references_v5", "window_reference_spares_v5"):
             relative = Path("configs/campaigns") / directory
             shutil.copytree(ROOT / relative, repository / relative, dirs_exist_ok=True)
         return repository

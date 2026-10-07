@@ -3027,7 +3027,8 @@ class RecordTests(unittest.TestCase):
         roster = h.build_roster(pack, ROOT)
         members = {row["run_id"]: row for row in roster["members"]}
         self.assertEqual(sum(row["kind"] == "science" for row in roster["members"]), 100)
-        self.assertEqual(sum(row["kind"] == "auxiliary" for row in roster["members"]), 19)
+        # 19 corpus and reference members plus the 7 reference spares (NEG-8 ruling 2026-10-07).
+        self.assertEqual(sum(row["kind"] == "auxiliary" for row in roster["members"]), 26)
         quad_member = members["d117fq31p7-df-cmp-abba-ph-decode-b01-a1"]
         self.assertIn({"unit_kind": "quad", "unit_id": "d117-df-cmp-abba-ph-decode-qwen3-1p7b-b01"},
                       [{key: cell[key] for key in ("unit_kind", "unit_id")} for cell in quad_member["cells"]])
@@ -3086,12 +3087,13 @@ class ExclusionSeamTests(unittest.TestCase):
             per_stratum[(cell_id, stratum)] = per_stratum.get((cell_id, stratum), 0) + 1
         self.assertEqual(per_stratum, {(family, stratum): 10 for family in families for stratum in ("quad", "repeat")})
         self.assertEqual({len(runs) for (_cell, stratum, _unit), runs in units.items() if stratum == "quad"}, {4})
-        self.assertEqual(sum(not member["units"] for member in document["members"]), 19)  # auxiliaries feed no cell
+        # auxiliaries feed no cell: 19 corpus and reference members plus the 7 spares (NEG-8 ruling 2026-10-07)
+        self.assertEqual(sum(not member["units"] for member in document["members"]), 26)
         (first, *_rest) = spans.values()
         self.assertEqual(set(first), {"monotonic_ns", "request_monotonic_ns", "stage_id", "bundle_id"})
         self.assertEqual((document["plan_id"], document["attempt"], document["chain_started_monotonic_ns"]),
                          ("plan", 1, 50 * NS))
-        self.assertEqual(len(document["bundles"]), 119)
+        self.assertEqual(len(document["bundles"]), 126)  # this fixture gives every roster member, spares too, a bundle
 
     def test_contrast_cells_are_quads_only(self):
         _roster, document, _spans = self.inputs(self.GAMMA)
@@ -3361,7 +3363,7 @@ class RehearsalRound1Tests(WindowTestCase):
                           "gamma-interior-reference-prefill-midpoint": "gamma-reference-prefill-midpoint"})
         self.assertEqual(sum(len(rows) for rows in dispatches.values()), 101)
         roster = h.build_roster(self.GAMMA, ROOT)
-        self.assertEqual(len(roster["members"]), 101)
+        self.assertEqual(len(roster["members"]), 108)  # 101 launched by stages + 7 reference spares
         self.assertEqual(roster["duplicate_listings"], {})
 
     def test_b6_untagged_auxiliary_bundles_are_not_lineage_findings(self):

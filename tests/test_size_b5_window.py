@@ -31,6 +31,7 @@ SOURCE = ROOT / "configs/campaigns/v5_qualification_25g83/sizing_sources/sizing_
 COPIED = ("configs/campaigns/d117_floor_qwen3-1p7b_v5", "configs/campaigns/d117_floor_qwen3-8b_v5",
           "configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5", "configs/campaigns/neg8_reference_corpus_v5",
           "configs/campaigns/window_references_v5", "configs/campaigns/gamma_interior_references_v5",
+          "configs/campaigns/window_reference_spares_v5",
           "configs/campaigns/v5_qualification_25g83")
 
 
@@ -57,7 +58,10 @@ def hand_span(source: dict[str, Any], small: int, large: int, stages: int = 10) 
             + stages * 180 + members * 45 + 2 * 240 + 300 + 120   # stage custody (block 4's labelled terms)
             + members * (15 + 17)                                 # native sampler start and wind-down
             + source["fixed"]["terminal_shutdown"]                # 300
-            + 60 + 180 + 12 * (member["small"] + 45 + 15 + 17))   # one corpus retry: 12 small-proxy members
+            + 60 + 180 + 12 * (member["small"] + 45 + 15 + 17)    # one corpus retry: 12 small-proxy members
+            # NEG-8 ruling 2026-10-07: one spare-slot retry per reference stage (3 stages), every spare run
+            # (3 + 1 + 3 small-proxy members): 3 * (60 + 180) + 7 * 672 = 5424 s.
+            + 3 * (60 + 180) + 7 * (member["small"] + 45 + 15 + 17))
 
 
 class SizesOfTheCommittedPacks(unittest.TestCase):
@@ -89,10 +93,15 @@ class SizesOfTheCommittedPacks(unittest.TestCase):
                 self.assertEqual(335, pack["T_stream_max_s"])
         # Gate-prune 2 (lane P2-CHAIN): countdowns 0 s (-200 s), derivation 60 -> 320 s, corpus prune
         # 320 s, J1 verdict 60 s and one corpus retry 8304 s; before: 84658, 87058, 73522 s.
-        self.assertEqual((93402, 95802, 82266), tuple(self.document["packs"][label]["programmed_span_s"]
-                                                      for label in ("ALPHA", "BETA", "GAMMA")))
-        self.assertEqual((96720, 99120, 85620), tuple(self.document["packs"][label]["window_max_s"]
-                                                      for label in ("ALPHA", "BETA", "GAMMA")))
+        # NEG-8 ruling 2026-10-07: one spare-slot retry per reference stage, worst case 5424 s; before:
+        # 93402, 95802, 82266 s (window maxima 96720, 99120, 85620 s).
+        self.assertEqual((98826, 101226, 87690), tuple(self.document["packs"][label]["programmed_span_s"]
+                                                       for label in ("ALPHA", "BETA", "GAMMA")))
+        self.assertEqual((102180, 104580, 91020), tuple(self.document["packs"][label]["window_max_s"]
+                                                        for label in ("ALPHA", "BETA", "GAMMA")))
+        self.assertEqual({label: pack["breakdown"]["reference_spare_retry_s"]
+                          for label, pack in self.document["packs"].items()},
+                         {"ALPHA": 5424, "BETA": 5424, "GAMMA": 5424})
         self.assertEqual(60, self.document["terms"]["settle_s"]["seconds"])
         for label in ("ALPHA", "BETA", "GAMMA"):
             pack = self.document["packs"][label]

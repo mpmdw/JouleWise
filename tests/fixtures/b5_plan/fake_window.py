@@ -38,7 +38,8 @@ PACKS = {
     "beta": "d117_floor_qwen3-8b_v5",
     "gamma": "d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5",
 }
-AUXILIARY_PACKS = ("neg8_reference_corpus_v5", "window_references_v5", "gamma_interior_references_v5")
+AUXILIARY_PACKS = ("neg8_reference_corpus_v5", "window_references_v5", "gamma_interior_references_v5",
+                   "window_reference_spares_v5")
 # Block 4's committed sizing adapter output; its T_stream_max allowance is the
 # X10 sizing value the clock gate uses (335 s).
 SIZING_PACK = "v5_qualification_25g83"

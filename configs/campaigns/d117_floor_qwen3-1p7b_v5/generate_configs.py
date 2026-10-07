@@ -22,6 +22,7 @@ SOURCE_PATH = Path(__file__).resolve()
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+from joulewise.b5.reference_spares import attach_spare_retries  # noqa: E402
 from joulewise.campaign_generator_core import (  # noqa: E402
     actual_pack_paths,
     make_render_json,
@@ -2006,7 +2007,9 @@ def stage_graph(
         stage["ordinal"] = index + 1
         stage["predecessor"] = stages[index - 1]["stage_id"] if index else None
         stage["successor"] = stages[index + 1]["stage_id"] if index + 1 < len(stages) else None
-    return stages
+    # NEG-8 ruling 2026-10-07 (registration 0.12): each window reference stage
+    # pins its spare members for the chain's spare-slot retry.
+    return attach_spare_retries(stages, REPO_ROOT)
 
 
 def definition_binding(

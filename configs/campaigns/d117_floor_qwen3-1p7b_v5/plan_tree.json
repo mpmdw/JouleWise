@@ -11,7 +11,7 @@
   },
   "generator": {
     "path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/generate_configs.py",
-    "sha256": "b8d34a6b1339ac253a10493694e26c6a47a73d983dbc484bc1e75ca5a02e20d1"
+    "sha256": "f58a893446233235552a2370dfba083bc079a88fd4d5ec36dd07290e8c09ec7f"
   },
   "window_identity": {
     "window_id": "plan-d117-floor-qwen3-1p7b-decode-prefill-p2048-v5",
@@ -1777,7 +1777,53 @@
       },
       "ordinal": 5,
       "predecessor": "alpha-bound-derivation",
-      "successor": "alpha-science-absolute"
+      "successor": "alpha-science-absolute",
+      "spare_retry": {
+        "schema_version": "joulewise.b5_reference_spare_retry.v1",
+        "slot": "start",
+        "max_spares": 3,
+        "rule": "NEG-8 ruling 2026-10-07, registration 0.12: after the stage, when fewer members succeeded than planned, the chain runs the spare set of size (planned - succeeded), once, into the same runs root, under the collection deadline; each spare measured is flagged member.retried",
+        "members": [
+          {
+            "run_id": "neg8-window-start-spare-1",
+            "path": "configs/campaigns/window_reference_spares_v5/start_triplet_spares_3/neg8-window-start-spare-1.json",
+            "sha256": "b8dc33e33deef3cb95af9981a7c0b31e15c7d0511f9f4c4e51d08fa95167c8ec"
+          },
+          {
+            "run_id": "neg8-window-start-spare-2",
+            "path": "configs/campaigns/window_reference_spares_v5/start_triplet_spares_3/neg8-window-start-spare-2.json",
+            "sha256": "e8a0e8b7ff7b2e29c616dc62cc6f25a3b797cacd91f14f9c1b78c1b184b9a71d"
+          },
+          {
+            "run_id": "neg8-window-start-spare-3",
+            "path": "configs/campaigns/window_reference_spares_v5/start_triplet_spares_3/neg8-window-start-spare-3.json",
+            "sha256": "7229fcd9a5c10cad4af0d4baf821a2cb6a3b9e6db084578734a9dde25ac2eecf"
+          }
+        ],
+        "spare_sets": [
+          {
+            "count": 1,
+            "order_manifest": {
+              "path": "configs/campaigns/window_reference_spares_v5/start_triplet_spares_1/order_manifest.json",
+              "sha256": "756ffff40f4fa6d5a1a76cd866ad21f6ba0e18f0981ce3ad12e03566042f9e5f"
+            }
+          },
+          {
+            "count": 2,
+            "order_manifest": {
+              "path": "configs/campaigns/window_reference_spares_v5/start_triplet_spares_2/order_manifest.json",
+              "sha256": "284be660ba99e7f1abdba5ad1c424224cea91de59e6277ca8c40296309a407cc"
+            }
+          },
+          {
+            "count": 3,
+            "order_manifest": {
+              "path": "configs/campaigns/window_reference_spares_v5/start_triplet_spares_3/order_manifest.json",
+              "sha256": "2090dd9aca021991840c8e98291e88acffed577b09daaedb1f18b97fe57dd3b0"
+            }
+          }
+        ]
+      }
     },
     {
       "stage_id": "alpha-science-absolute",
@@ -2180,7 +2226,29 @@
       },
       "ordinal": 9,
       "predecessor": "alpha-science-abba-06-10",
-      "successor": "alpha-science-prefill-p2048-absolute"
+      "successor": "alpha-science-prefill-p2048-absolute",
+      "spare_retry": {
+        "schema_version": "joulewise.b5_reference_spare_retry.v1",
+        "slot": "midpoint",
+        "max_spares": 1,
+        "rule": "NEG-8 ruling 2026-10-07, registration 0.12: after the stage, when fewer members succeeded than planned, the chain runs the spare set of size (planned - succeeded), once, into the same runs root, under the collection deadline; each spare measured is flagged member.retried",
+        "members": [
+          {
+            "run_id": "neg8-window-midpoint-spare-1",
+            "path": "configs/campaigns/window_reference_spares_v5/midpoint_spares_1/neg8-window-midpoint-spare-1.json",
+            "sha256": "a8912381c6eea48cb0d9f670615504d161935f4996e6c4258a83f88949e12109"
+          }
+        ],
+        "spare_sets": [
+          {
+            "count": 1,
+            "order_manifest": {
+              "path": "configs/campaigns/window_reference_spares_v5/midpoint_spares_1/order_manifest.json",
+              "sha256": "34559b89c110fe2ce3092c074618d106c4d5ff959f2f04d65f322a9e10d86908"
+            }
+          }
+        ]
+      }
     },
     {
       "stage_id": "alpha-science-prefill-p2048-absolute",
@@ -2583,7 +2651,53 @@
       },
       "ordinal": 13,
       "predecessor": "alpha-science-prefill-p2048-abba-06-10",
-      "successor": "alpha-post-calibration"
+      "successor": "alpha-post-calibration",
+      "spare_retry": {
+        "schema_version": "joulewise.b5_reference_spare_retry.v1",
+        "slot": "end",
+        "max_spares": 3,
+        "rule": "NEG-8 ruling 2026-10-07, registration 0.12: after the stage, when fewer members succeeded than planned, the chain runs the spare set of size (planned - succeeded), once, into the same runs root, under the collection deadline; each spare measured is flagged member.retried",
+        "members": [
+          {
+            "run_id": "neg8-window-end-spare-1",
+            "path": "configs/campaigns/window_reference_spares_v5/end_triplet_spares_3/neg8-window-end-spare-1.json",
+            "sha256": "8136cc9af53efaaaceb2d42965e292d187fc4a265f62e487934c07554e4fc2c2"
+          },
+          {
+            "run_id": "neg8-window-end-spare-2",
+            "path": "configs/campaigns/window_reference_spares_v5/end_triplet_spares_3/neg8-window-end-spare-2.json",
+            "sha256": "c65e16766658a1cf0350728f6bbd7968ff855690c6fe61fc23a6df51e50c8fae"
+          },
+          {
+            "run_id": "neg8-window-end-spare-3",
+            "path": "configs/campaigns/window_reference_spares_v5/end_triplet_spares_3/neg8-window-end-spare-3.json",
+            "sha256": "3faaaab2ed92bda9558b38fa51708c14b4a30cf6cf0c2b74909f9ba5b7db6017"
+          }
+        ],
+        "spare_sets": [
+          {
+            "count": 1,
+            "order_manifest": {
+              "path": "configs/campaigns/window_reference_spares_v5/end_triplet_spares_1/order_manifest.json",
+              "sha256": "8e5e78a0566a083175cc0fa7f40b77bf8d0dec5009618489241e078ec0587a24"
+            }
+          },
+          {
+            "count": 2,
+            "order_manifest": {
+              "path": "configs/campaigns/window_reference_spares_v5/end_triplet_spares_2/order_manifest.json",
+              "sha256": "6af8b489da25584c35f120a019caec34b1baef6dc55a7782a43e8d953fbd6760"
+            }
+          },
+          {
+            "count": 3,
+            "order_manifest": {
+              "path": "configs/campaigns/window_reference_spares_v5/end_triplet_spares_3/order_manifest.json",
+              "sha256": "d6317a3aa566b841e6dd7797fb2d0554a4ec3e26804b4298ead7e8cbffec1f87"
+            }
+          }
+        ]
+      }
     },
     {
       "stage_id": "alpha-post-calibration",

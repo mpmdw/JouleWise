@@ -36,7 +36,9 @@ Inputs, all committed:
   the bound derivation (``B5_BOUND_DERIVATION_S``), the chain's NEG-8 corpus
   prune (``B5_CORPUS_PRUNE_S``), the window calibration verdict
   (``B5_WINDOW_CALIBRATION_VERDICT_S``, interface J1) and the one NEG-8 corpus
-  retry (row 13), sized as one more corpus stage.
+  retry (row 13), sized as one more corpus stage;
+* the NEG-8 spare-slot retry (ruling of 2026-10-07): each reference stage's
+  largest spare set, sized as one more stage of that many members.
 
 Programmed span (block 4's conventions with block 5's chain)::
 
@@ -48,6 +50,8 @@ Programmed span (block 4's conventions with block 5's chain)::
     + terminal shutdown
     + corpus retry (settle + stage overhead + corpus members * (member allowance
       + reduction + native sampler start + wind-down))
+    + reference spare retry (per reference stage: settle + stage overhead
+      + spares * (member allowance + reduction + native sampler start + wind-down))
 
 Block 4's 360 s pack launch allowance is not in the chain any more (the arm's
 3300 s holds the launch; registration 5.5). The same arithmetic with block 4's
@@ -334,6 +338,17 @@ def _recorded_digests(tree: Mapping[str, Any], pack: Path, repo: Path) -> dict[P
     for row in tree.get("science") or []:
         if isinstance(row, Mapping):
             note_either(row.get("config_path"), row.get("config_sha256"))
+    # NEG-8 spare-slot retry (registration 0.12): each reference stage's spares and spare-set manifests.
+    for row in tree.get("stage_graph") or []:
+        retry = row.get("spare_retry") if isinstance(row, Mapping) else None
+        if isinstance(retry, Mapping):
+            for member in retry.get("members") or []:
+                if isinstance(member, Mapping):
+                    note_either(member.get("path"), member.get("sha256"))
+            for spare_set in retry.get("spare_sets") or []:
+                manifest = spare_set.get("order_manifest") if isinstance(spare_set, Mapping) else None
+                if isinstance(manifest, Mapping):
+                    note_either(manifest.get("path"), manifest.get("sha256"))
     projection = (tree.get("arm_attachments") or {}).get("identity_pin_projection") or {}
     for unit in projection.get("identity_units") or []:
         for row in unit.get("config_inventory") or []:
@@ -401,6 +416,25 @@ def pack_roster(pack: Path, repo: Path, classes: Mapping[str, str], auxiliary_cl
                 _require(position + 1 < len(literals) and literals[position + 1].isdigit(),
                          f"{stage.stage_id}: {COUNTDOWN_FLAG} has no whole-second value")
                 countdown = int(literals[position + 1])
+            if stage.spare_sets:
+                # The largest spare set: the worst case the retry can run (NEG-8 ruling 2026-10-07).
+                spare_count = max(stage.spare_sets)
+                spare_path = _relative(repo, stage.spare_sets[spare_count], f"{stage.stage_id} spare set")
+                spare_manifest, spare_raw = _authenticated(spare_path, recorded, None,
+                                                           f"{stage.stage_id} spare set order manifest")
+                spare_order = spare_manifest.get("executed_order") if isinstance(spare_manifest, Mapping) else None
+                _require(isinstance(spare_order, list) and len(spare_order) == spare_count,
+                         f"{stage.stage_id}: the spare set of {spare_count} lists {len(spare_order or [])} members")
+                spare_classes: dict[str, int] = {}
+                for member in spare_order:
+                    config, _config_raw = _authenticated(spare_path.parent / str(member.get("config")), recorded,
+                                                         None, f"{stage.stage_id} spare config")
+                    klass = classes.get((config.get("model") or {}).get("source"), auxiliary_class)
+                    spare_classes[klass] = spare_classes.get(klass, 0) + 1
+                entry["spare_retry"] = {"slot": stage.spare_slot, "max_spares": spare_count,
+                                        "classes": dict(sorted(spare_classes.items())),
+                                        "order_manifest": {"path": stage.spare_sets[spare_count],
+                                                           "sha256": sha256_bytes(spare_raw)}}
             entry.update({"science": science, "members": stage.expected_count, "classes": dict(sorted(counts.items())),
                           # The chain passes its own countdown in place of the pack's literal (S3).
                           "arm_countdown_s": b5_chain.COLLECTION_ARM_COUNTDOWN_S,
@@ -562,6 +596,12 @@ def derive_document(repo: Path, packs: Sequence[tuple[str, str]], adapter: str =
         retry_s = sum(b5_chain.SETTLE_S + custody.stage_overhead_s
                       + sum(count * (member_s[klass] + per_member_custody) for klass, count in stage["classes"].items())
                       for stage in corpus)
+        # NEG-8 ruling 2026-10-07: one spare-slot retry per reference stage, at its worst case (every
+        # spare run): settle + stage overhead + spares * (member allowance + per-member custody).
+        spare_s = sum(b5_chain.SETTLE_S + custody.stage_overhead_s
+                      + sum(count * (member_s[klass] + per_member_custody)
+                            for klass, count in stage["spare_retry"]["classes"].items())
+                      for stage in collections if "spare_retry" in stage)
         parts = span_breakdown(
             settle_s=b5_chain.SETTLE_S, stages=len(collections),
             countdowns_s=sum(stage["arm_countdown_s"] for stage in collections),
@@ -572,7 +612,8 @@ def derive_document(repo: Path, packs: Sequence[tuple[str, str]], adapter: str =
             terminal_shutdown_s=source.seconds("/fixed/terminal_shutdown"), custody=custody,
             extra={"corpus_prune_s": kinds.count("bound_derivation") * B5_CORPUS_PRUNE_S,
                    "window_calibration_verdict_s": B5_WINDOW_CALIBRATION_VERDICT_S,
-                   "corpus_retry_s": retry_s})
+                   "corpus_retry_s": retry_s,
+                   "reference_spare_retry_s": spare_s})
         longest = max([stream_s[klass] for klass in by_class] + [bracket_stream_s])
         packs_out[label] = {
             "pack_id": pack.name,
@@ -607,7 +648,11 @@ def derive_document(repo: Path, packs: Sequence[tuple[str, str]], adapter: str =
         "conventions": [
             "programmed span = (1 + collection stages) * settle + stage arm countdowns + pre/post calibration pair "
             "+ bound derivation + corpus prune + window calibration verdict + member allowances + stage custody "
-            "+ terminal shutdown + corpus retry",
+            "+ terminal shutdown + corpus retry + reference spare retry",
+            "reference spare retry = sum over the window reference stages (start triplet, midpoint, end triplet) of "
+            "settle + stage overhead + spares * (member allowance + reduction + native sampler start and wind-down), "
+            "every spare run: the worst case of the one spare-slot retry per reference stage (NEG-8 ruling "
+            "2026-10-07, registration 0.12 and 5.5)",
             "stage arm countdowns are the chain's (0 s per collection stage, gate-prune 2 S3), not the pack's literal",
             "corpus retry = settle + stage overhead + corpus members * (member allowance + reduction + native sampler "
             "start and wind-down): the one NEG-8 corpus retry (gate-prune 2 row 13), sized as one more corpus stage",

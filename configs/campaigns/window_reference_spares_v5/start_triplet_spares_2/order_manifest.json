@@ -1,0 +1,34 @@
+{
+  "schema_version": "joulewise.order_manifest.v1",
+  "manifest_id": "neg8-window-reference-start-triplet-v1-spares-2",
+  "plan_id": "neg8-window-reference-trajectory-m3max-qwen25-1p5b-v1",
+  "calibration_plan_sha256": "e529a0624b7618edaade511dd610ae0837f31de299dde642a055974c382681ab",
+  "ordering_note": "Spare-slot retry (NEG-8 ruling 2026-10-07, registration 0.12): the first 2 spare(s) of start_triplet, run by the chain only when the stage ends with 2 fewer succeeded member(s) than it planned.",
+  "planned_n_bundles": 2,
+  "executed_order": [
+    {
+      "index": 1,
+      "config": "neg8-window-start-spare-1.json",
+      "run_id": "neg8-window-start-spare-1",
+      "model_tag": "qwen25-1p5b-mlx",
+      "rep": 1,
+      "workload": "df-rq-mid",
+      "role": "neg8_daily_reference_start",
+      "block_index": 1,
+      "position_in_block": 1,
+      "sentinel_position": "start"
+    },
+    {
+      "index": 2,
+      "config": "neg8-window-start-spare-2.json",
+      "run_id": "neg8-window-start-spare-2",
+      "model_tag": "qwen25-1p5b-mlx",
+      "rep": 2,
+      "workload": "df-rq-mid",
+      "role": "neg8_daily_reference_start",
+      "block_index": 1,
+      "position_in_block": 2,
+      "sentinel_position": "start"
+    }
+  ]
+}

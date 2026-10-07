@@ -107,6 +107,9 @@ class ChainRunTests(RenderedChainFixture):
                 expected.append(stage.stage_id + ".window-calibration-verdict")  # J1 (gate-prune 2)
             if stage.stage_id == "alpha-bound-collection":
                 expected.append(stage.stage_id + ".retry-decision")  # row 13: 12 of 12, no retry
+            if stage.spare_sets:
+                # NEG-8 ruling 2026-10-07: every reference member succeeded, so no spare runs.
+                expected.append(stage.stage_id + ".spares-decision")
             if stage.kind == "bound_derivation":
                 expected.insert(len(expected) - 1, stage.stage_id + ".corpus")
             if stage.slot == "post":

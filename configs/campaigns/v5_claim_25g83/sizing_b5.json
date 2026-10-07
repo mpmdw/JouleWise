@@ -62,7 +62,8 @@
     "stream_limit_s": 337.6623376623377
   },
   "conventions": [
-    "programmed span = (1 + collection stages) * settle + stage arm countdowns + pre/post calibration pair + bound derivation + corpus prune + window calibration verdict + member allowances + stage custody + terminal shutdown + corpus retry",
+    "programmed span = (1 + collection stages) * settle + stage arm countdowns + pre/post calibration pair + bound derivation + corpus prune + window calibration verdict + member allowances + stage custody + terminal shutdown + corpus retry + reference spare retry",
+    "reference spare retry = sum over the window reference stages (start triplet, midpoint, end triplet) of settle + stage overhead + spares * (member allowance + reduction + native sampler start and wind-down), every spare run: the worst case of the one spare-slot retry per reference stage (NEG-8 ruling 2026-10-07, registration 0.12 and 5.5)",
     "stage arm countdowns are the chain's (0 s per collection stage, gate-prune 2 S3), not the pack's literal",
     "corpus retry = settle + stage overhead + corpus members * (member allowance + reduction + native sampler start and wind-down): the one NEG-8 corpus retry (gate-prune 2 row 13), sized as one more corpus stage",
     "bound derivation, corpus prune and window calibration verdict are block 5's own estimates (B5_BOUND_DERIVATION_S, B5_CORPUS_PRUNE_S, B5_WINDOW_CALIBRATION_VERDICT_S); block 4 sized the derivation at 60 s",
@@ -86,7 +87,8 @@
         "members_s": 70805,
         "pack_t0_s": 0,
         "pre_post_calibration_s": 770,
-        "programmed_span_s": 93402,
+        "programmed_span_s": 98826,
+        "reference_spare_retry_s": 5424,
         "settles_s": 660,
         "stage_custody_s": 11863,
         "terminal_shutdown_s": 300,
@@ -120,9 +122,9 @@
       "pack_longest_stream_s": 314,
       "plan_tree": {
         "path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/plan_tree.json",
-        "sha256": "5218c2709274765c706f38766ae68cce30892a673e9ae5cc290701362f615eb1"
+        "sha256": "1d87a30955fa978d3a3a22dc0048720691e0128e4a3fe83477fc375d13dd031a"
       },
-      "programmed_span_s": 93402,
+      "programmed_span_s": 98826,
       "science_members": 100,
       "stages": [
         {
@@ -173,6 +175,17 @@
           "pack_arm_countdown_s": 20,
           "runs_dir_binding": "claim_runs_root",
           "science": false,
+          "spare_retry": {
+            "classes": {
+              "small": 3
+            },
+            "max_spares": 3,
+            "order_manifest": {
+              "path": "configs/campaigns/window_reference_spares_v5/start_triplet_spares_3/order_manifest.json",
+              "sha256": "2090dd9aca021991840c8e98291e88acffed577b09daaedb1f18b97fe57dd3b0"
+            },
+            "slot": "start"
+          },
           "stage_id": "alpha-reference-start"
         },
         {
@@ -241,6 +254,17 @@
           "pack_arm_countdown_s": 20,
           "runs_dir_binding": "claim_runs_root",
           "science": false,
+          "spare_retry": {
+            "classes": {
+              "small": 1
+            },
+            "max_spares": 1,
+            "order_manifest": {
+              "path": "configs/campaigns/window_reference_spares_v5/midpoint_spares_1/order_manifest.json",
+              "sha256": "34559b89c110fe2ce3092c074618d106c4d5ff959f2f04d65f322a9e10d86908"
+            },
+            "slot": "midpoint"
+          },
           "stage_id": "alpha-reference-midpoint"
         },
         {
@@ -309,6 +333,17 @@
           "pack_arm_countdown_s": 20,
           "runs_dir_binding": "claim_runs_root",
           "science": false,
+          "spare_retry": {
+            "classes": {
+              "small": 3
+            },
+            "max_spares": 3,
+            "order_manifest": {
+              "path": "configs/campaigns/window_reference_spares_v5/end_triplet_spares_3/order_manifest.json",
+              "sha256": "d6317a3aa566b841e6dd7797fb2d0554a4ec3e26804b4298ead7e8cbffec1f87"
+            },
+            "slot": "end"
+          },
           "stage_id": "alpha-reference-end"
         },
         {
@@ -317,7 +352,7 @@
           "stage_id": "alpha-post-calibration"
         }
       ],
-      "window_max_s": 96720
+      "window_max_s": 102180
     },
     "BETA": {
       "T_stream_max_s": 335,
@@ -330,7 +365,8 @@
         "members_s": 73205,
         "pack_t0_s": 0,
         "pre_post_calibration_s": 770,
-        "programmed_span_s": 95802,
+        "programmed_span_s": 101226,
+        "reference_spare_retry_s": 5424,
         "settles_s": 660,
         "stage_custody_s": 11863,
         "terminal_shutdown_s": 300,
@@ -365,9 +401,9 @@
       "pack_longest_stream_s": 335,
       "plan_tree": {
         "path": "configs/campaigns/d117_floor_qwen3-8b_v5/plan_tree.json",
-        "sha256": "5bab773a481e4a06fae564217b178d8e1d76a5334f99a3b264c1174db692a6e4"
+        "sha256": "0cdb33836f4632827bc74be194e388450c53b3314db1c72d9e9904e625868670"
       },
-      "programmed_span_s": 95802,
+      "programmed_span_s": 101226,
       "science_members": 100,
       "stages": [
         {
@@ -418,6 +454,17 @@
           "pack_arm_countdown_s": 20,
           "runs_dir_binding": "claim_runs_root",
           "science": false,
+          "spare_retry": {
+            "classes": {
+              "small": 3
+            },
+            "max_spares": 3,
+            "order_manifest": {
+              "path": "configs/campaigns/window_reference_spares_v5/start_triplet_spares_3/order_manifest.json",
+              "sha256": "2090dd9aca021991840c8e98291e88acffed577b09daaedb1f18b97fe57dd3b0"
+            },
+            "slot": "start"
+          },
           "stage_id": "beta-reference-start"
         },
         {
@@ -486,6 +533,17 @@
           "pack_arm_countdown_s": 20,
           "runs_dir_binding": "claim_runs_root",
           "science": false,
+          "spare_retry": {
+            "classes": {
+              "small": 1
+            },
+            "max_spares": 1,
+            "order_manifest": {
+              "path": "configs/campaigns/window_reference_spares_v5/midpoint_spares_1/order_manifest.json",
+              "sha256": "34559b89c110fe2ce3092c074618d106c4d5ff959f2f04d65f322a9e10d86908"
+            },
+            "slot": "midpoint"
+          },
           "stage_id": "beta-reference-midpoint"
         },
         {
@@ -554,6 +612,17 @@
           "pack_arm_countdown_s": 20,
           "runs_dir_binding": "claim_runs_root",
           "science": false,
+          "spare_retry": {
+            "classes": {
+              "small": 3
+            },
+            "max_spares": 3,
+            "order_manifest": {
+              "path": "configs/campaigns/window_reference_spares_v5/end_triplet_spares_3/order_manifest.json",
+              "sha256": "d6317a3aa566b841e6dd7797fb2d0554a4ec3e26804b4298ead7e8cbffec1f87"
+            },
+            "slot": "end"
+          },
           "stage_id": "beta-reference-end"
         },
         {
@@ -562,7 +631,7 @@
           "stage_id": "beta-post-calibration"
         }
       ],
-      "window_max_s": 99120
+      "window_max_s": 104580
     },
     "GAMMA": {
       "T_stream_max_s": 335,
@@ -575,7 +644,8 @@
         "members_s": 61055,
         "pack_t0_s": 0,
         "pre_post_calibration_s": 770,
-        "programmed_span_s": 82266,
+        "programmed_span_s": 87690,
+        "reference_spare_retry_s": 5424,
         "settles_s": 660,
         "stage_custody_s": 10477,
         "terminal_shutdown_s": 300,
@@ -610,9 +680,9 @@
       "pack_longest_stream_s": 335,
       "plan_tree": {
         "path": "configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5/plan_tree.json",
-        "sha256": "fb51b4aa0c47fb36bbc838369fd6b5af0db4656becf01ebc5051c9794b8b8bc3"
+        "sha256": "8b1d1d7176f5ee2286038e91df6427e47476c3a4bdee45a1c24687d49d80e3bf"
       },
-      "programmed_span_s": 82266,
+      "programmed_span_s": 87690,
       "science_members": 80,
       "stages": [
         {
@@ -663,6 +733,17 @@
           "pack_arm_countdown_s": 20,
           "runs_dir_binding": "claim_runs_root",
           "science": false,
+          "spare_retry": {
+            "classes": {
+              "small": 3
+            },
+            "max_spares": 3,
+            "order_manifest": {
+              "path": "configs/campaigns/window_reference_spares_v5/start_triplet_spares_3/order_manifest.json",
+              "sha256": "2090dd9aca021991840c8e98291e88acffed577b09daaedb1f18b97fe57dd3b0"
+            },
+            "slot": "start"
+          },
           "stage_id": "gamma-reference-start"
         },
         {
@@ -733,6 +814,17 @@
           "pack_arm_countdown_s": 20,
           "runs_dir_binding": "claim_runs_root",
           "science": false,
+          "spare_retry": {
+            "classes": {
+              "small": 1
+            },
+            "max_spares": 1,
+            "order_manifest": {
+              "path": "configs/campaigns/window_reference_spares_v5/midpoint_spares_1/order_manifest.json",
+              "sha256": "34559b89c110fe2ce3092c074618d106c4d5ff959f2f04d65f322a9e10d86908"
+            },
+            "slot": "midpoint"
+          },
           "stage_id": "gamma-reference-arm-boundary"
         },
         {
@@ -803,6 +895,17 @@
           "pack_arm_countdown_s": 20,
           "runs_dir_binding": "claim_runs_root",
           "science": false,
+          "spare_retry": {
+            "classes": {
+              "small": 3
+            },
+            "max_spares": 3,
+            "order_manifest": {
+              "path": "configs/campaigns/window_reference_spares_v5/end_triplet_spares_3/order_manifest.json",
+              "sha256": "d6317a3aa566b841e6dd7797fb2d0554a4ec3e26804b4298ead7e8cbffec1f87"
+            },
+            "slot": "end"
+          },
           "stage_id": "gamma-reference-end"
         },
         {
@@ -811,7 +914,7 @@
           "stage_id": "gamma-calibration-post"
         }
       ],
-      "window_max_s": 85620
+      "window_max_s": 91020
     }
   },
   "schema_version": "joulewise.b5_sizing.v1",

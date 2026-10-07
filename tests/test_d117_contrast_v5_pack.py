@@ -1008,6 +1008,7 @@ class D117ContrastV5PackTests(unittest.TestCase):
             "configs/campaigns/neg8_reference_corpus_v5",
             "configs/campaigns/window_references_v5",
             "configs/campaigns/gamma_interior_references_v5",
+            "configs/campaigns/window_reference_spares_v5",
             "configs/arm_readiness",
             "configs/analysis_registry",
         ):

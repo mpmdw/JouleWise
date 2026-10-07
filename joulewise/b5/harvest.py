@@ -1480,6 +1480,23 @@ def build_roster(pack_root: Path, repo_root: Path) -> dict[str, Any]:
                 "stage_id": input_id, "role": input_id, "block_id": None, "position": None, "arm": None,
                 "config_path": row.get("path"), "config_sha256": row.get("sha256"), "cells": [],
             })
+    # NEG-8 spare-slot retry (registration 0.12): each reference stage's spare
+    # members, run only when a member of the stage did not succeed.  They are
+    # roster members (their bytes, physics and identity are harvested like any
+    # reference's) with the slot they take; an unrun spare is no missing member.
+    for stage in tree.get("stage_graph") or []:
+        retry = stage.get("spare_retry") if isinstance(stage, Mapping) else None
+        if not isinstance(retry, Mapping):
+            continue
+        for row in retry.get("members") or []:
+            if not isinstance(row, Mapping) or not isinstance(row.get("run_id"), str):
+                continue
+            listings.setdefault(row["run_id"], []).append(f"spare_retry:{stage.get('stage_id')}")
+            members.setdefault(row["run_id"], {
+                "run_id": row["run_id"], "kind": "auxiliary", "ordinal": None,
+                "stage_id": f"{stage.get('stage_id')}.spares", "role": "neg8_reference_spare", "block_id": None,
+                "position": None, "arm": None, "config_path": row.get("path"), "config_sha256": row.get("sha256"),
+                "cells": [], "spare_slot": retry.get("slot")})
     cells: list[dict[str, Any]] = []
 
     def attach(run_id: str, cell: Mapping[str, Any], unit_kind: str, unit_id: str) -> None:
@@ -3606,6 +3623,8 @@ class _Harvest:
         discarded: list[str] = []
         for member in self.roster["members"]:
             path = self.locate(member["run_id"])
+            if path is None and member.get("spare_slot") is not None:
+                continue  # a spare the retry did not need (registration 0.12): nothing was planned to run
             if path is None:
                 self.emit("member.bytes_missing", level="member", run_id=member["run_id"], collector="members",
                           stage_id=member.get("stage_id"), observed=self._bytes_missing_observed(member["run_id"]))
@@ -6383,8 +6402,12 @@ class _Harvest:
             chain_started = value if _is_int(value) else None
         except (OSError, ValueError, AttributeError):
             pass
+        # A spare the retry did not run is not a planned member (registration 0.12).
+        roster = {**self.roster, "members": [
+            member for member in self.roster.get("members", [])
+            if member.get("spare_slot") is None or self._bundle_on_disk(member["run_id"])]}
         self.exclusion_roster, self.exclusion_spans = l4_exclusion_inputs(
-            self.roster, self.spans, plan_id=self.inputs.plan_id, attempt=self.inputs.attempt,
+            roster, self.spans, plan_id=self.inputs.plan_id, attempt=self.inputs.attempt,
             chain_started_monotonic_ns=chain_started, bundles=self.bundle_records())
 
     def bundle_records(self) -> list[dict[str, Any]]:
@@ -6600,7 +6623,9 @@ class _Harvest:
 
     def yield_summary(self) -> None:
         """Counts only (PLAN2 2.2 F): planned, present, raw_valid, succeeded; overall and per stage."""
-        roster = self.roster.get("members", [])
+        # A spare counts as planned only when the retry ran it (registration 0.12).
+        roster = [member for member in self.roster.get("members", [])
+                  if member.get("spare_slot") is None or self._bundle_on_disk(member["run_id"])]
         per_roster: dict[str, list[str]] = {}
         for member in roster:
             per_roster.setdefault(str(member.get("stage_id")), []).append(member["run_id"])
