@@ -18,6 +18,24 @@
       "family": "DIAGNOSTIC",
       "klass": "PHYSICS"
     },
+    "battery.assist": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "PHYSICS"
+    },
+    "battery.assist_outside_request": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "PHYSICS"
+    },
+    "battery.capture_pair_assist": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "PHYSICS"
+    },
     "battery.capture_pair_failed": {
       "blinding": "STRUCTURE",
       "effect": "EXCLUDE_MEMBER",
@@ -40,6 +58,12 @@
       "blinding": "STRUCTURE",
       "effect": "EXCLUDE_MEMBER",
       "family": "PHYSICS_IN_SPAN",
+      "klass": "PHYSICS"
+    },
+    "battery.smc_unavailable": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
       "klass": "PHYSICS"
     },
     "battery.unmeasured": {
@@ -65,6 +89,18 @@
       "effect": "EXCLUDE_WINDOW",
       "family": "CALIBRATION",
       "klass": "NUMBER"
+    },
+    "calibration.capture_battery_assist": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "CALIBRATION",
+      "klass": "PHYSICS"
+    },
+    "calibration.capture_battery_pair_assist": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "CALIBRATION",
+      "klass": "PHYSICS"
     },
     "calibration.capture_battery_pair_failed": {
       "blinding": "STRUCTURE",
@@ -93,6 +129,18 @@
     "calibration.capture_invalid": {
       "blinding": "STRUCTURE",
       "effect": "EXCLUDE_WINDOW",
+      "family": "CALIBRATION",
+      "klass": "NUMBER"
+    },
+    "calibration.historical_custody_mismatch": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_WINDOW",
+      "family": "CALIBRATION",
+      "klass": "NUMBER"
+    },
+    "calibration.historical_custody_unmeasured": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
       "family": "CALIBRATION",
       "klass": "NUMBER"
     },
@@ -564,6 +612,48 @@
       "family": "MEMBER_VALIDITY",
       "klass": "NUMBER"
     },
+    "meter.absent": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "PHYSICS"
+    },
+    "meter.battery_activity": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "PHYSICS"
+    },
+    "meter.clock_fit_residual": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "PHYSICS"
+    },
+    "meter.drops_excess": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "PHYSICS"
+    },
+    "meter.duplicates": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "PHYSICS"
+    },
+    "meter.pdtr_gain_out_of_band": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "PHYSICS"
+    },
+    "meter.vbus_out_of_contract": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "PHYSICS"
+    },
     "model.identity_inconsistent_in_window": {
       "blinding": "STRUCTURE",
       "effect": "EXCLUDE_WINDOW",
@@ -691,6 +781,12 @@
       "klass": "NUMBER"
     },
     "records.terminal_record_absent": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "RECORDS",
+      "klass": "REPRESENTATION"
+    },
+    "records.window_not_launched": {
       "blinding": "STRUCTURE",
       "effect": "DISCLOSE",
       "family": "RECORDS",
@@ -835,7 +931,7 @@
       "klass": "REPRESENTATION"
     }
   },
-  "notes": "TEST catalog for tests/test_harvest_b5_window.py, not the sealed one (lane L6 seals configs/campaigns/v5_claim_25g83/flag_catalog.json). Codes L4's draft names carry L4's draft effect; the codes in harvest.L5_ONLY_CODES carry an effect drafted from gate-prune plan section 3.5. records.malformed_flag is deliberately absent: it must stay UNCLASSIFIED. whole_window.not_passed is DISCLOSE, as in L4's draft and the block-5 draft catalog (revision 3): one member's failure fails the aggregate verdict (core-prune N5). The gate-prune core-prune codes (joulewise.flags.core.CORE_FLAG_CODES and the harvest's N2 and N7 codes) carry L4's draft classification. The gate-prune round-2 codes (lane P2-HARV) carry the classification of joulewise.flags.catalog._PRUNE2_CODES (PLAN2 sections 2.2 G and 3.1).",
+  "notes": "TEST catalog for tests/test_harvest_b5_window.py, not the sealed one (lane L6 seals configs/campaigns/v5_claim_25g83/flag_catalog.json). Codes L4's draft names carry L4's draft effect; the codes in harvest.L5_ONLY_CODES carry an effect drafted from gate-prune plan section 3.5. records.malformed_flag is deliberately absent: it must stay UNCLASSIFIED. whole_window.not_passed is DISCLOSE, as in L4's draft and the block-5 draft catalog (revision 3): one member's failure fails the aggregate verdict (core-prune N5). The gate-prune core-prune codes (joulewise.flags.core.CORE_FLAG_CODES and the harvest's N2 and N7 codes) carry L4's draft classification. The gate-prune round-2 codes (lane P2-HARV) carry the classification of joulewise.flags.catalog._PRUNE2_CODES (PLAN2 sections 2.2 G and 3.1). The gate-prune round-3 codes (lane P3-HARV: the battery-assist ruling of 2026-10-06, the SMC battery source, the historical calibration custody pass, the NULL-window record and the KM003C meter) carry the classification of joulewise.flags.catalog.DRAFT_CODES.",
   "rules": {
     "cell_unit_minimum": 8
   },
