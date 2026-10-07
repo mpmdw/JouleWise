@@ -484,6 +484,46 @@ class LedgerHeadTests(WindowPlanFixture):
         self.assertEqual(2, code)
         self.assertEqual("REFUSED", json.loads(output.getvalue())["status"])
 
+    def test_complete_unfinalized_custody_is_cured_by_resume_finalize_not_abort(self):
+        """Mock rehearsal round 3, R3-6.
+
+        The chain stopped after the pre-calibration's capture custody was
+        written whole but before it was finalized into the ledger.
+        abort-session refuses that state (calibration_custody_complete_use_resume),
+        so the desk refusal must name resume-finalize for that slot, not abort.
+        """
+        from joulewise.calibration_exits import RefusalCode
+        from joulewise.calibration_ledger import GOVERNED_ARTIFACTS, calibration_session_status
+        slots, _epoch, _t1 = self.reserve("alpha-1-calibration")
+        capture = Path(slots["pre"]["custody_locator"])
+        for name in GOVERNED_ARTIFACTS:
+            (capture / name).parent.mkdir(parents=True, exist_ok=True)
+            (capture / name).write_bytes(json.dumps({"slot": "pre"}).encode() if name.endswith(".json")
+                                         else f"{name}-bytes".encode())
+        # The premise: the ledger itself names resume-finalize for this session (abort-session's own check).
+        ledger_status = calibration_session_status(
+            self.ledger, self.pin, session_id="alpha-1-calibration", repo_root=self.measurement,
+            custody_mode="read_replay", custody_state_scope="next_slot")
+        self.assertEqual(("pre", "complete"), (ledger_status["next_slot"],
+                                                ledger_status["slots"]["pre"]["custody_state"]))
+        self.assertEqual(RefusalCode.CUSTODY_COMPLETE_USE_RESUME.value, ledger_status["refusal_code"])
+        status = b5_plan.ledger_head_status(self.measurement)
+        self.assertEqual({"alpha-1-calibration": {"next_slot": "pre", "custody_state": "complete",
+                                                  "refusal_code": "calibration_custody_complete_use_resume",
+                                                  "error": None}}, status["open_session_next_slots"])
+        with self.assertRaises(b5_plan.WindowPlanError) as refused:
+            self.write()
+        text = str(refused.exception)
+        self.assertIn("resume-finalize --session-id alpha-1-calibration --slot pre", text)
+        self.assertNotIn("abort the open bracket session first", text)
+        self.assertIn(b5_plan.PIN_ADVANCE_SCRIPT, text)
+        self.assert_nothing_written()
+        # An open session whose next slot holds no custody keeps the abort cure.
+        self.assertIn("abort the open bracket session first", b5_plan.ledger_head_refusal(
+            dict(status, open_session_next_slots={"alpha-1-calibration": {"next_slot": "pre",
+                                                                          "custody_state": "empty"}}),
+            self.measurement))
+
 
 class HazardWindowValidationTests(unittest.TestCase):
     def setUp(self):
