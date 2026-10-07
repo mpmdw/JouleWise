@@ -168,12 +168,19 @@
       "klass": "NUMBER",
       "note": "The harvest re-hashed the historical calibration files the ledger records (calibration_ledger.historical_custody_report, once per window, this window's own bracket left out) and at least one PRESENT file that this window's acceptance relies on has bytes that differ from the SHA-256 its ledger entry recorded (or a non-abandoned row records no artifact hashes). Relies on: the acceptance's derivation_corpus members (their b_fiducial_s set the preflight level screen, the corpus maximum, and the bracket screen, its range) and its prior_observation_set (judged before issuance), matched to ledger attempt ids; observed.scope is acceptance_relied. When the acceptance cannot be read nothing can be scoped and every mismatch counts (observed.scope acceptance_unreadable). Present bytes that differ in a capture the acceptance does not name are calibration.historical_custody_mismatch_unused; a missing, evicted or unreadable file is calibration.historical_custody_unmeasured. The slots skip this re-hash on the HAZARD path (calibration.writer_record_flagged, historical_custody_unverified)."
     },
+    "calibration.historical_custody_mismatch_unused": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "CALIBRATION",
+      "klass": "NUMBER",
+      "note": "The historical custody pass found present bytes that differ from the ledger hash in a capture this window's acceptance neither derived from nor judged (for example an earlier window's bracket capture). It does not enter this window's numbers, so it is disclosed and the window is kept (refusal-census triage d, 2026-10-07); observed.attempt_ids names the captures."
+    },
     "calibration.historical_custody_unmeasured": {
       "blinding": "STRUCTURE",
       "effect": "DISCLOSE",
       "family": "CALIBRATION",
-      "klass": "REPRESENTATION",
-      "note": "historical_custody_report status unmeasured: a historical calibration file is missing (evicted from local iCloud storage, archived or deleted; observed.evicted counts these), present but unreadable, or its capture directory is missing or did not answer the bounded probe; or the ledger could not be read, or no observation was checked. Bytes that cannot be read are not shown to be wrong, so this is disclosed and the window is kept (refusal census, 2026-10-06); the hash chain and the pin are still checked. Present bytes that differ are calibration.historical_custody_mismatch."
+      "klass": "NUMBER",
+      "note": "historical_custody_report status unmeasured: a historical calibration file is missing (evicted from local iCloud storage, archived or deleted; observed.evicted counts these), present but unreadable, or its capture directory is missing or did not answer the bounded probe; or the ledger could not be read, or no observation was checked. Bytes that cannot be read are not shown to be wrong, so this is disclosed and the window is kept (refusal census, 2026-10-06); the hash chain and the pin are still checked. Class NUMBER, as the emitter gives it: the check protects the acceptance's numbers, and only its effect is DISCLOSE (revision 6 aligned the class with the code, which it had restated as REPRESENTATION). Present bytes that differ are calibration.historical_custody_mismatch (or _mismatch_unused for a capture the acceptance does not rely on)."
     },
     "calibration.ledger_not_ready": {
       "blinding": "STRUCTURE",
@@ -313,7 +320,7 @@
       "effect": "DISCLOSE",
       "family": "DIAGNOSTIC",
       "klass": "PHYSICS",
-      "note": "A gap in the 1 Hz clock journal; each member's own anchor bound stays authoritative."
+      "note": "A gap in the 1 Hz clock journal, or (observed.rule read_skew) clock samples whose read skew (the time between the two CLOCK_MONOTONIC_RAW reads around the CLOCK_REALTIME read) exceeded step_ns / 4 = 250 us on all of their reads; such a sample is never used to compute a step. Each member's own anchor bound stays authoritative."
     },
     "code.executed_differs_from_sealed": {
       "blinding": "STRUCTURE",
@@ -390,7 +397,7 @@
       "effect": "DISCLOSE",
       "family": "DIAGNOSTIC",
       "klass": "REPRESENTATION",
-      "note": "HAZARD path (core-prune A11): the member environment guard recorded an unknown status or a capture error (not a measured quiet-state violation). The member runs; the reducer's environment claim barrier still excludes it from claims until LANE_BARRIER is registered."
+      "note": "HAZARD path (core-prune A11): the member environment guard recorded an unknown status or a capture error at idle admission (not a measured quiet-state violation, which is env.member_quiet_state_violated). Since refusal-census triage c (2026-10-07) this includes the finding collector_raised: the guard's collector raised an exception, so that one observation is recorded as unmeasured (all readings null, collector_error naming the exception) and the member runs; before the fix the member failed. The other observations' readings still apply. The post-run observation is collected the same way but adds no finding here: an unmeasured post-run observation is missing environment evidence to the whole-window verdict (environment_admission_failed), so the member is removed by member.whole_window_member_failure. The reducer's environment claim barrier is unchanged."
     },
     "env.member_quiet_state_violated": {
       "blinding": "STRUCTURE",
@@ -880,7 +887,7 @@
       "effect": "DISCLOSE",
       "family": "DIAGNOSTIC",
       "klass": "REPRESENTATION",
-      "note": "The hazard monitor was restarted by the driver; the gap appears as the modules' unmeasured flags."
+      "note": "More than one monitor session (session_start line) in the window's monitor journal: the monitor was restarted, and the gap appears as the modules' unmeasured flags. Named by joulewise.hazards.monitor.window_events; at the frozen head a434e363d no production path writes it into the window's flags (the harvest takes clock events from joulewise.hazards.clock directly and reports restarts through monitor.crash_loop and monitor.outage). Classified so that it never blocks release if a later harvest emits it."
     },
     "neg8.bound_not_derived": {
       "blinding": "STRUCTURE",
@@ -971,7 +978,7 @@
       "effect": "DISCLOSE",
       "family": "RECORDS",
       "klass": "REPRESENTATION",
-      "note": "A lineage formality other than configuration bytes."
+      "note": "A lineage formality other than configuration bytes; also the driver's launch-lineage publication that failed after its one retry (the chain still launches)."
     },
     "records.lineage_prelaunch_mismatch": {
       "blinding": "STRUCTURE",
@@ -1013,7 +1020,7 @@
       "effect": "DISCLOSE",
       "family": "RECORDS",
       "klass": "REPRESENTATION",
-      "note": "Pin-ledger matching."
+      "note": "Pin-ledger matching. Also (refusal census, 2026-10-06) observed.kind pack_root_layout: on the HAZARD path a pack outside <repo>/configs/campaigns/<pack> was located with one git lookup and the member was collected; the session, slot, plan, custody and digest checks that bind the member to the ledger still refuse."
     },
     "records.provenance_digest": {
       "blinding": "STRUCTURE",
@@ -1176,6 +1183,13 @@
       "klass": "PHYSICS",
       "note": "A gap in OS thermal samples; the member's own powermetrics records still carry thermal pressure."
     },
+    "whole_window.member_failures_unreadable": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_WINDOW",
+      "family": "NEG8",
+      "klass": "NUMBER",
+      "note": "The whole-window verdict did not pass and its member_failures list is absent or malformed (rejected by the verdict validator's own parser), so no failed member can be named and member.whole_window_member_failure cannot remove them. Keeping every member would keep numbers the verdict failed, so the window is removed (orchestrator P4, 2026-10-06). observed.member_failures is absent or malformed. A passed verdict, or a well-formed list (empty included), does not emit it."
+    },
     "whole_window.not_passed": {
       "blinding": "STRUCTURE",
       "effect": "DISCLOSE",
@@ -1231,27 +1245,13 @@
       "family": "DIAGNOSTIC",
       "klass": "REPRESENTATION",
       "note": "In-window yield tripwire: a collection stage ended with no bundle present out of a positive planned count (PLAN2 2.2 B). Counts only; changes no number."
-    },
-    "calibration.historical_custody_mismatch_unused": {
-      "blinding": "STRUCTURE",
-      "effect": "DISCLOSE",
-      "family": "CALIBRATION",
-      "klass": "NUMBER",
-      "note": "The historical custody pass found present bytes that differ from the ledger hash in a capture this window's acceptance neither derived from nor judged (for example an earlier window's bracket capture). It does not enter this window's numbers, so it is disclosed and the window is kept (refusal-census triage d, 2026-10-07); observed.attempt_ids names the captures."
-    },
-    "whole_window.member_failures_unreadable": {
-      "blinding": "STRUCTURE",
-      "effect": "EXCLUDE_WINDOW",
-      "family": "NEG8",
-      "klass": "NUMBER",
-      "note": "The whole-window verdict did not pass and its member_failures list is absent or malformed (rejected by the verdict validator's own parser), so no failed member can be named and member.whole_window_member_failure cannot remove them. Keeping every member would keep numbers the verdict failed, so the window is removed (orchestrator P4, 2026-10-06). observed.member_failures is absent or malformed. A passed verdict, or a well-formed list (empty included), does not emit it."
     }
   },
   "notes": {
     "aggregate_disclosures": "whole_window.not_passed and g3.recompute_failed are DISCLOSE because they fail on any single member's failure. Their window-level parts are neg8.screen_failed (emitted by the harvest, with the collected-subset re-screen) and calibration.bracket_acceptance_failed; their member-level part is member.whole_window_member_failure.",
     "authority": "registration_block5.md section 6 states these rules in words; this file is normative for each code's effect.",
     "restated_classes": "roster.run_id_mismatch (emitter REPRESENTATION, restated NUMBER here) is the one restatement; its note says why. calibration.ledger_snapshot_refused now keeps its emitter's class, NUMBER.",
-    "status": "DRAFT, NOT SEALED. Revision 4, 2026-10-06 (registration-sync side lane; revision 3 is commit 71c91d74). Sealed with registration_block5.md, analysis_plan_block5.md and sealed_inventory.json by one cold gate (registration 12). Rehearsal round-1 additions, 2026-10-06 (gate-prune fix lane): roster.duplicate_run_id and roster.creation_unplaced. Timing-ruling additions, 2026-10-06 (timing lane): thermal.stage_battery_rise and thermal.battery_temperature_unmeasured, both DISCLOSE. Core-prune integration additions, 2026-10-06 (integration lane): the fourteen codes the core-prune lanes emit (DESIGN.md section 5), with the effects given there. Gate-prune round-2 integration additions, 2026-10-06 (integration int3): the 30 codes the round-2 lanes (P2-CHAIN, P2-CTL, P2-RC, P2-DRV, P2-HARV), PLAN2 2.2 G and the SMC battery and wall-meter lane emit; member.timeout and member.stderr_uncopied EXCLUDE_MEMBER, every other one DISCLOSE. battery.member_span is unchanged (a council is ruling on it). Revision 5, 2026-10-06 (REG lane, gate-prune round 3): battery.assist (DISCLOSE) added and the battery notes rewritten to the battery-assist ruling (charging, AC loss and missing evidence exclude; discharge is disclosed); calibration.historical_custody_mismatch (EXCLUDE_WINDOW) and calibration.historical_custody_unmeasured (DISCLOSE) added for the harvest's historical custody pass; contention.kernel_task_share noted as unable to fire. Checked against integration head b9d02700a: every code the harvest CODES table, DRAFT_CODES and CORE_FLAG_CODES name is classified; member.whole_window_member_failure and monitor.restarted are classified but not in the harvest table. Integration int4 sync, 2026-10-06 (gate-prune round 3 plus L10): added the five remaining P3-HARV codes (battery.assist_outside_request, battery.capture_pair_assist, calibration.capture_battery_assist, calibration.capture_battery_pair_assist, records.window_not_launched) and P3-DRV's meter.supervision_fault, all DISCLOSE; battery.assist is any negative B0AC (-200 mA is the reporting threshold) with observed.state_unread; battery.unmeasured gains the 120 s registry state-hole rule under SMC coverage; the other battery notes describe the int4 code (a sign-inconsistent discharge accumulator stays battery.accumulator_excursion; discharge-only pair failures the journal confirms are the *_pair_assist codes); member.whole_window_member_failure is emitted. Checked against int4: every code the harvest CODES table, DRAFT_CODES and CORE_FLAG_CODES name is classified; monitor.restarted is classified but not in the harvest table. calibration.historical_custody_unmeasured is REPRESENTATION here and NUMBER in the code's draft (DISCLOSE either way). Integrator int4 frozen-head sync, 2026-10-07: member.stderr_uncopied becomes DISCLOSE (RECORDS, REPRESENTATION; a record not written); the two historical custody notes are rewritten to the refusal census's split (present bytes that differ: mismatch; missing, evicted or unreadable: unmeasured, disclosed). registration_block5.md section 6 still lists member.stderr_uncopied among the codes that remove a member; REG must move it. Integrator frozen-head triage (d), 2026-10-07: calibration.historical_custody_mismatch is scoped to the captures this window's acceptance relies on (derivation corpus and prior observation set); calibration.historical_custody_mismatch_unused (DISCLOSE) added for the others. P4, 2026-10-07: whole_window.member_failures_unreadable (EXCLUDE_WINDOW) added.",
+    "status": "DRAFT, NOT SEALED. Revision 4, 2026-10-06 (registration-sync side lane; revision 3 is commit 71c91d74). Sealed with registration_block5.md, analysis_plan_block5.md and sealed_inventory.json by one cold gate (registration 12). Rehearsal round-1 additions, 2026-10-06 (gate-prune fix lane): roster.duplicate_run_id and roster.creation_unplaced. Timing-ruling additions, 2026-10-06 (timing lane): thermal.stage_battery_rise and thermal.battery_temperature_unmeasured, both DISCLOSE. Core-prune integration additions, 2026-10-06 (integration lane): the fourteen codes the core-prune lanes emit (DESIGN.md section 5), with the effects given there. Gate-prune round-2 integration additions, 2026-10-06 (integration int3): the 30 codes the round-2 lanes (P2-CHAIN, P2-CTL, P2-RC, P2-DRV, P2-HARV), PLAN2 2.2 G and the SMC battery and wall-meter lane emit; member.timeout and member.stderr_uncopied EXCLUDE_MEMBER, every other one DISCLOSE. battery.member_span is unchanged (a council is ruling on it). Revision 5, 2026-10-06 (REG lane, gate-prune round 3): battery.assist (DISCLOSE) added and the battery notes rewritten to the battery-assist ruling (charging, AC loss and missing evidence exclude; discharge is disclosed); calibration.historical_custody_mismatch (EXCLUDE_WINDOW) and calibration.historical_custody_unmeasured (DISCLOSE) added for the harvest's historical custody pass; contention.kernel_task_share noted as unable to fire. Checked against integration head b9d02700a: every code the harvest CODES table, DRAFT_CODES and CORE_FLAG_CODES name is classified; member.whole_window_member_failure and monitor.restarted are classified but not in the harvest table. Integration int4 sync, 2026-10-06 (gate-prune round 3 plus L10): added the five remaining P3-HARV codes (battery.assist_outside_request, battery.capture_pair_assist, calibration.capture_battery_assist, calibration.capture_battery_pair_assist, records.window_not_launched) and P3-DRV's meter.supervision_fault, all DISCLOSE; battery.assist is any negative B0AC (-200 mA is the reporting threshold) with observed.state_unread; battery.unmeasured gains the 120 s registry state-hole rule under SMC coverage; the other battery notes describe the int4 code (a sign-inconsistent discharge accumulator stays battery.accumulator_excursion; discharge-only pair failures the journal confirms are the *_pair_assist codes); member.whole_window_member_failure is emitted. Checked against int4: every code the harvest CODES table, DRAFT_CODES and CORE_FLAG_CODES name is classified; monitor.restarted is classified but not in the harvest table. calibration.historical_custody_unmeasured is REPRESENTATION here and NUMBER in the code's draft (DISCLOSE either way). Integrator int4 frozen-head sync, 2026-10-07: member.stderr_uncopied becomes DISCLOSE (RECORDS, REPRESENTATION; a record not written); the two historical custody notes are rewritten to the refusal census's split (present bytes that differ: mismatch; missing, evicted or unreadable: unmeasured, disclosed). registration_block5.md section 6 still lists member.stderr_uncopied among the codes that remove a member; REG must move it. Integrator frozen-head triage (d), 2026-10-07: calibration.historical_custody_mismatch is scoped to the captures this window's acceptance relies on (derivation corpus and prior observation set); calibration.historical_custody_mismatch_unused (DISCLOSE) added for the others. P4, 2026-10-07: whole_window.member_failures_unreadable (EXCLUDE_WINDOW) added. Revision 6, 2026-10-07 (REG sync to the frozen head a434e363d): calibration.historical_custody_unmeasured takes the emitter's class NUMBER (effect DISCLOSE unchanged); notes rewritten for monitor.restarted (named by the monitor module, written by no production path), env.member_guard_flagged (collector_raised), records.pin_ledger (pack_root_layout), records.lineage_formality (failed lineage publication) and clock.unmeasured (the read-skew rule). Checked against a434e363d: every code named by harvest.CODES, DRAFT_CODES, CORE_FLAG_CODES, km003c_parse.CODES and window_lineage.FINDING_CODES is classified with DRAFT_CODES' family, class, effect and blinding; the only restatement is roster.run_id_mismatch.",
     "unclassified": "A code not listed here is UNCLASSIFIED: it blocks only the release event until classified blind by a cold erratum (registration 7.2). records.malformed_flag and collector.unmeasured are deliberately absent so that they always block release until read."
   },
   "rules": {
