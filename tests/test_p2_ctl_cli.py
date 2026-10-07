@@ -100,7 +100,12 @@ class SigtermSalvageTests(unittest.TestCase):
         script.write_text(_SIGTERM_CHILD.format(repo=str(REPO)))
         child = subprocess.Popen(
             [sys.executable, str(script), mode, str(runs), str(Path(tmp.name) / "config.json")],
-            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, cwd=str(REPO), text=True)
+            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, cwd=str(REPO), text=True,
+            # An ignored SIGTERM is inherited across exec; another module in the
+            # same test process (night_agent_install's shield, via
+            # test_gen_g2a_window) can leave SIGTERM ignored.  The member starts
+            # with the default disposition, as the chain launches it.
+            preexec_fn=lambda: signal.signal(signal.SIGTERM, signal.SIG_DFL))
         try:
             self.assertEqual(child.stdout.readline().strip(), "ready")
             child.send_signal(signal.SIGTERM)
