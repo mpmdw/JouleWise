@@ -1825,7 +1825,6 @@
   {"file": "joulewise/measurement_liveness.py", "function": "pending_launch_closed", "kind": "raise", "detail": "ValueError|invalid launcher closure", "count": 1, "guard": "6f0d01938838f26a", "category": "BASELINE"},
   {"file": "joulewise/measurement_liveness.py", "function": "pending_launch_closed", "kind": "raise", "detail": "ValueError|launcher closure is", "count": 1, "guard": "b5c8d3724dfd6b24", "category": "BASELINE"},
   {"file": "joulewise/measurement_liveness.py", "function": "publish_campaign", "kind": "raise", "detail": "<reraise>", "count": 1, "guard": "420f332386437c13", "category": "BASELINE"},
-  {"file": "joulewise/measurement_liveness.py", "function": "publish_campaign", "kind": "raise", "detail": "RuntimeError|campaign start identity", "count": 1, "guard": "1bb8aeb54243a18a", "category": "BASELINE"},
   {"file": "joulewise/night_gate.py", "function": "<module>", "kind": "raise", "detail": "RuntimeError|hazard driver reason", "count": 1, "guard": "2e00fb77359ccd8a", "category": "BASELINE"},
   {"file": "joulewise/night_gate.py", "function": "<module>", "kind": "raise", "detail": "RuntimeError|night gate and", "count": 1, "guard": "35ceca30be056136", "category": "BASELINE"},
   {"file": "joulewise/night_gate.py", "function": "NightPlan.from_mapping", "kind": "raise", "detail": "PlanError|night_plan_malformed", "count": 26, "guard": "da2bd49e22bd0502", "category": "BASELINE"},

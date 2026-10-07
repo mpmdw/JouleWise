@@ -4664,13 +4664,68 @@ def _campaign_lock_exists_message(lock_path: Path, existing: str) -> str:
     )
 
 
+# A creator writes its lock line in the same few system calls as its O_EXCL
+# create; an empty or unparseable lock younger than this is left alone.
+TORN_LOCK_MIN_AGE_S = 30.0
+LSOF_ARGV = ("/usr/sbin/lsof", "-t", "--")
+LSOF_TIMEOUT_S = 20.0
+
+
+def _hazard_torn_lock_unheld(lock_path: Path, read_stat: os.stat_result, runs_root: Path) -> dict[str, Any] | None:
+    """Evidence that an empty or unparseable campaign.lock has no live writer, or None.
+
+    Three facts, all required (Opus triple audit F4b; refuter: a registry
+    check alone is unsafe because the entry is published after the create):
+    the lock inode is at least TORN_LOCK_MIN_AGE_S old; no process holds it
+    open (``lsof -t`` exits 1 with no output; the content is written only
+    through the creator's own descriptor, so with no holder nothing can
+    complete it); and no active-campaign registry entry naming this runs root
+    belongs to a process that is LIVE or UNKNOWN. A probe that fails proves
+    nothing, and the lock is kept.
+    """
+
+    from joulewise.measurement_liveness import custody_parent
+
+    age_s = time.time() - read_stat.st_mtime
+    if age_s < TORN_LOCK_MIN_AGE_S:
+        return None
+    try:
+        holders = subprocess.run((*LSOF_ARGV, str(lock_path)), capture_output=True, text=True,
+                                 timeout=LSOF_TIMEOUT_S, check=False)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if holders.returncode != 1 or holders.stdout.strip():
+        return None
+    registry = custody_parent() / "active-campaigns"
+    named: list[str] = []
+    try:
+        entries = sorted(registry.iterdir()) if registry.is_dir() else []
+    except OSError:
+        return None
+    for entry in entries:
+        try:
+            record = json.loads(entry.read_text(encoding="utf-8"))
+            pid = record.get("pid")
+            root = Path(record.get("runs_root"))
+        except (OSError, ValueError, TypeError, AttributeError):
+            return None  # an entry we cannot read might name this root
+        if root != runs_root.resolve(strict=False):
+            continue
+        if type(pid) is not int or observe_identity(pid).state != "DEAD":
+            return None
+        named.append(entry.name)
+    return {"age_s": round(age_s, 3), "open_holders": 0, "dead_registry_entries": named}
+
+
 def _hazard_reclaim_stale_campaign_lock(
     lock_path: Path, runs_root: Path, hazard: Any
 ) -> int:
     """Return an ``O_EXCL`` descriptor for ``lock_path`` after clearing a stale lock.
 
     Stale means the recorded pid is DEAD, or LIVE with a recorded start time
-    that differs from the observed one (pid reuse).  Reclaimers serialize on
+    that differs from the observed one (pid reuse), or the lock is empty or
+    unparseable and :func:`_hazard_torn_lock_unheld` proves it has no live
+    writer.  Reclaimers serialize on
     an exclusive flock of the runs-root directory, whose inode is never
     replaced; only reclaimers unlink, and only the lock inode they just read.
     Every other case raises CampaignLockOwnershipError with today's message.
@@ -4717,14 +4772,21 @@ def _hazard_reclaim_stale_campaign_lock(
             if _HAZARD_LOCK_RECLAIM_SEAM is not None:
                 _HAZARD_LOCK_RECLAIM_SEAM(lock_path)
             identity = observe_identity(parsed[0]) if parsed is not None else None
-            stale = identity is not None and (
+            # Opus triple audit F4b: an empty or unparseable lock is a creator
+            # killed between its O_EXCL create and its write, unless a process
+            # still holds the inode open (only the creator's descriptor can
+            # write the content). Proven unheld, old and unclaimed by a live
+            # registry entry, it is stale; anything unproven keeps the lock.
+            torn = (_hazard_torn_lock_unheld(lock_path, read_stat, runs_root)
+                    if parsed is None else None)
+            stale = torn is not None or (identity is not None and (
                 identity.state == "DEAD"
                 or (
                     identity.state == "LIVE"
                     and isinstance(parsed[1], str)
                     and identity.start_time != parsed[1]
                 )
-            )
+            ))
             if not stale:
                 raise CampaignLockOwnershipError(
                     _campaign_lock_exists_message(lock_path, existing)
@@ -4745,9 +4807,11 @@ def _hazard_reclaim_stale_campaign_lock(
             print(f"warning: cleared stale campaign lock {lock_path} ({existing})", file=sys.stderr)
             flags_core.emit(
                 hazard, "campaign.runner_record_flagged", level="window",
-                observed={"kind": "stale_lock_cleared", "lock": existing[:300],
-                          "identity_state": identity.state,
-                          "runs_root_name": runs_root.name},
+                observed={"kind": "stale_lock_cleared" if torn is None else "torn_lock_cleared",
+                          "lock": existing[:300],
+                          "identity_state": identity.state if identity is not None else None,
+                          "runs_root_name": runs_root.name,
+                          **({"torn_lock": torn} if torn is not None else {})},
                 legacy_site="scripts/run_campaign.py:3317@e6b6a0ce",
                 legacy_code="campaign_lock_exists",
             )
@@ -10322,6 +10386,20 @@ def run_campaign(args: argparse.Namespace) -> int:
             except RuntimeError as exc:
                 print(f"error: {exc}", file=sys.stderr)
                 return 2
+            if hazard is not None and b'"start_time": null' in registry_entry.payload:
+                # Opus triple audit F4a: the ps identity probe returned UNKNOWN;
+                # the entry is published without a start time and the stage goes on.
+                from joulewise.flags import core as flags_core
+
+                print("warning: campaign registry entry published without a start time "
+                      "(identity probe unavailable)", file=sys.stderr)
+                flags_core.emit(
+                    hazard, "campaign.runner_record_flagged", level="window",
+                    observed={"kind": "registry_start_time_unavailable",
+                              "runs_root_name": lock_path.runs_root.name},
+                    legacy_site="joulewise/measurement_liveness.py:publish_campaign@a434e363d",
+                    legacy_code="campaign start identity unavailable",
+                )
             config_infos = [
                 item for item in items if isinstance(item, ConfigInfo)
             ]

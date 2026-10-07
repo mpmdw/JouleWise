@@ -213,19 +213,32 @@ class CampaignMeasurementRegistryTests(unittest.TestCase):
             child.assert_not_called()
         self.assertEqual(self.entries(), [])
 
-    def test_failing_identity_probe_refuses_cleanly_and_releases_lock(self):
+    def test_failing_identity_probe_publishes_without_a_start_time(self):
+        """Opus triple audit F4a: an UNKNOWN identity probe no longer loses the stage.
+
+        Before: publish_campaign raised 'campaign start identity unavailable' and
+        run_campaign returned 2 without dispatching any member."""
+        class MockChildStop(Exception):
+            pass
         for axi in (False, True):
+            records = []
+
+            def child(*args, **kwargs):
+                (entry,) = self.entries()
+                records.append(json.loads(entry.read_text()))
+                raise MockChildStop("mock child stopped")
             stderr = io.StringIO()
             with self.subTest(axi=axi), patch.dict(os.environ, {
                 "JOULEWISE_IDENTITY_PROBE": "/usr/bin/true",
-            }), patch.object(run_campaign_module, "observe_identity", wraps=self.live.observe_identity), patch.object(run_campaign_module, "run_authenticated_campaign_child") as child, redirect_stderr(stderr):
-                self.assertEqual(self.invoke(axi=axi), 2)
-                self.assertEqual(stderr.getvalue().splitlines()[-1],
-                                 "error: campaign start identity unavailable")
-                self.assertNotIn("Traceback", stderr.getvalue())
+            }), patch.object(run_campaign_module, "observe_identity", wraps=self.live.observe_identity), patch.object(run_campaign_module, "run_authenticated_campaign_child", side_effect=child) as launch, redirect_stderr(stderr):
+                with self.assertRaisesRegex(MockChildStop, "mock child stopped"):
+                    self.invoke(axi=axi)
+                launch.assert_called_once()
+                self.assertEqual([(record["pid"], record["start_time"]) for record in records],
+                                 [(os.getpid(), None)])
+                self.assertNotIn("campaign start identity unavailable", stderr.getvalue())
                 self.assertFalse((self.runs / 'campaign.lock').exists())
                 self.assertEqual(self.entries(), [])
-                child.assert_not_called()
 
     def test_registry_publication_error_releases_campaign_lock(self):
         for axi in (False, True):

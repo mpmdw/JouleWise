@@ -870,6 +870,67 @@ class StaleLockTests(_Stage):
         self.assertEqual((runs / "campaign.lock").read_text(), replacement)
         self.assertEqual(self.kinds(), [])
 
+    def test_f4a_unknown_identity_publishes_and_flags_and_the_stage_runs(self) -> None:
+        """Opus triple audit F4a. Before: 'campaign start identity unavailable', exit 2, no member ran."""
+        runs = self.hazard_root()
+        unknown = lambda pid: Identity("UNKNOWN")  # noqa: E731
+        with patch.object(run_campaign, "observe_identity", side_effect=unknown), \
+                patch.object(measurement_liveness, "observe_identity", side_effect=unknown):
+            result = self.run_stage(self.configs("hz-lock-1"), runs)
+        self.assertEqual(result.code, 0, result.err)
+        self.assertEqual(self.invoked(runs), ["hz-lock-1"])
+        self.assertIn("registry_start_time_unavailable", self.kinds())
+        self.assertFalse((runs / "campaign.lock").exists())
+
+    def _torn(self, runs: Path, *, age_s: float = 120.0) -> Path:
+        lock = runs / "campaign.lock"
+        lock.write_bytes(b"")
+        old = time.time() - age_s
+        os.utime(lock, (old, old))
+        return lock
+
+    @unittest.skipUnless(Path(getattr(run_campaign, "LSOF_ARGV", ("/usr/sbin/lsof",))[0]).is_file(), "lsof is not installed")
+    def test_f4b_an_old_unheld_torn_lock_is_reclaimed_and_flagged(self) -> None:
+        """Opus triple audit F4b. Before: an empty lock refused this stage and every later one."""
+        runs = self.hazard_root()
+        self._torn(runs)
+        result = self.run_stage(self.configs("hz-lock-1"), runs)
+        self.assertEqual(result.code, 0, result.err)
+        self.assertEqual(self.invoked(runs), ["hz-lock-1"])
+        (flag,) = [row for row in self.flags() if row["observed"].get("kind") == "torn_lock_cleared"]
+        self.assertEqual(flag["observed"]["torn_lock"]["open_holders"], 0)
+        self.assertGreaterEqual(flag["observed"]["torn_lock"]["age_s"], 100)
+
+    @unittest.skipUnless(Path(getattr(run_campaign, "LSOF_ARGV", ("/usr/sbin/lsof",))[0]).is_file(), "lsof is not installed")
+    def test_f4b_keepers_young_held_or_registered_torn_locks_refuse(self) -> None:
+        held_handles: list = []
+
+        def held(runs: Path) -> None:
+            held_handles.append(self._torn(runs).open("rb"))  # a live process holds the inode open
+
+        def registered(runs: Path) -> None:
+            self._torn(runs)
+            measurement_liveness.publish_campaign(runs, "nonce", start_time=START)
+
+        cases = (("young", lambda runs: self._torn(runs, age_s=1.0)), ("held", held), ("registered", registered))
+        try:
+            for name, make in cases:
+                with self.subTest(name):
+                    runs = self.hazard_root(f"runs_torn_{name}")
+                    make(runs)
+                    result = self.run_stage(self.configs("hz-lock-1", name=f"configs_torn_{name}"), runs)
+                    self.assertEqual(result.code, 2, result.err)
+                    self.assertIn("another campaign appears to be running", result.err)
+                    self.assertEqual(self.invoked(runs), [])
+                    self.assertTrue((runs / "campaign.lock").exists())
+        finally:
+            for handle in held_handles:
+                handle.close()
+            registry = measurement_liveness.custody_parent() / "active-campaigns"
+            for entry in registry.iterdir() if registry.is_dir() else []:
+                entry.unlink()
+        self.assertNotIn("torn_lock_cleared", self.kinds())
+
     def _verdict(self, runs: Path) -> SimpleNamespace:
         out, err = io.StringIO(), io.StringIO()
         with redirect_stdout(out), redirect_stderr(err):
