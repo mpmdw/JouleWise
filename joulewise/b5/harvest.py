@@ -6306,7 +6306,7 @@ class _Harvest:
                     "salvaged_code_prefix": None if exact else code,
                     "salvaged_run_id": run_id, "problems": list(problems)[:5]}
         flag = self.emit("records.malformed_flag", level="window", collector="flags", observed=observed)
-        if code is None:
+        if not code:  # None, or an empty prefix (torn just after the opening quote): no code shows
             return
         rule = {"malformed_flag_id": flag["flag_id"], **observed,
                 "candidate_codes": sorted(candidates)[:20], "candidate_count": len(candidates)}
@@ -6321,8 +6321,11 @@ class _Harvest:
                                                             if self.catalog.effect(item) == "EXCLUDE_MEMBER")[:20]})
 
     def _candidate_codes(self, code: str | None, exact: bool) -> set[str]:
-        """Every code the catalog or this harvest knows that ``code`` (or its prefix) could be."""
-        if code is None:
+        """Every code the catalog or this harvest knows that ``code`` (or its prefix) could be.
+
+        An empty prefix shows no code and names none (cold pass 2 N7).
+        """
+        if not code:
             return set()
         known = set(self.catalog.entries) | set(CODES)
         return {code} if exact else {item for item in known if item.startswith(code)}
