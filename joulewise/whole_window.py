@@ -4993,6 +4993,10 @@ def _current_core_rederivation_reasons(
                     bundle_path=path,
                     measured_window_start_s=window.start_s,
                     measured_window_end_s=window.end_s,
+                    # The verdict writer's own setting (run_campaign
+                    # _idle_admission_core_evaluation; ruling on audit-fix
+                    # batch 1 item 6): the re-derivation must agree with it.
+                    post_run_collector_raised_unmeasured=True,
                 )
             )
         else:

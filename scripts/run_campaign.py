@@ -6516,6 +6516,8 @@ def _excluded_member_failure(
 
 def _current_member_environment_refusals(
     evaluation: MemberEvaluation,
+    *,
+    post_run_collector_raised_unmeasured: bool = False,
 ) -> tuple[str, ...]:
     summary = evaluation.summary
     provenance = summary.get("summary_provenance") if isinstance(summary, dict) else None
@@ -6544,6 +6546,7 @@ def _current_member_environment_refusals(
         bundle_path=evaluation.bundle_path,
         measured_window_start_s=measured_window.start_s,
         measured_window_end_s=measured_window.end_s,
+        post_run_collector_raised_unmeasured=post_run_collector_raised_unmeasured,
     )
 
 
@@ -7076,8 +7079,15 @@ def _idle_admission_core_evaluation(
         ],
     ] = {"start": [], "midpoint": [], "end": []}
     for evaluation in evaluations:
+        # Orchestrator ruling on audit-fix batch 1 item 6 (2026-10-07): on
+        # this, the whole-window VERDICT path, a HAZARD post-run guard
+        # observation whose collector raised is unmeasured (disclosed by the
+        # controller as env.member_guard_flagged), not failed environment
+        # evidence.  The reducer's barrier and claim readiness keep it failed.
         current_environment_reasons = set(
-            _current_member_environment_refusals(evaluation)
+            _current_member_environment_refusals(
+                evaluation, post_run_collector_raised_unmeasured=True
+            )
         )
         conditions.update(current_environment_reasons)
         environment_reasons = set(current_environment_reasons)
@@ -7091,7 +7101,10 @@ def _idle_admission_core_evaluation(
             )
             if telemetry_name != "mock" and not current_environment_reasons:
                 post_run_reasons = set(
-                    post_run_environment_refusals(evaluation.metadata)
+                    post_run_environment_refusals(
+                        evaluation.metadata,
+                        post_run_collector_raised_unmeasured=True,
+                    )
                 )
                 conditions.update(post_run_reasons)
                 environment_reasons.update(post_run_reasons)

@@ -1431,7 +1431,10 @@ def _hazard_guard_observation(**kwargs: Any) -> dict[str, Any]:
     recorded this way is disclosed the same way (phase ``post_run``) and is
     unmeasured, not missing, evidence to the whole-window verdict
     (``environment_admission.post_run_observation_collector_raised``;
-    audit-fix batch 1, item 6, 2026-10-07).
+    audit-fix batch 1, item 6, 2026-10-07).  The orchestrator's ruling keeps
+    this to the verdict path: the pinned reducer's environment claim barrier
+    still reads it as ``environment_admission_failed`` (an unmeasured
+    post-run environment cannot show the member clean).
     """
 
     try:

@@ -57,11 +57,16 @@ def post_run_observation_collector_raised(observation: Any) -> bool:
     ``controller._hazard_guard_observation`` writes it (only on the HAZARD
     path): every reading null, ``collector_error`` naming the exception.  It is
     an observation that was not measured, not a measured quiet-state
-    violation.  Audit-fix batch 1 (item 6, 2026-10-07): it is disclosed
-    (``env.member_guard_flagged``, finding ``collector_raised``, phase
-    ``post_run``) and no longer fails the member's environment evidence.  AC
-    and charging over the member's span are measured directly by the hazard
-    monitor's battery journal (``battery.member_span``).
+    violation.  Audit-fix batch 1 (item 6, 2026-10-07) and the orchestrator's
+    ruling on it: it is disclosed (``env.member_guard_flagged``, finding
+    ``collector_raised``, phase ``post_run``), and on the whole-window
+    VERDICT path only it does not fail the member's environment evidence
+    (``post_run_environment_refusals(...,
+    post_run_collector_raised_unmeasured=True)``).  Every other consumer,
+    the pinned reducer's environment claim barrier first, keeps the
+    behaviour of a434e363d: an unmeasured post-run environment cannot show
+    the member clean, so it stays ``environment_admission_failed`` there
+    (the same reasoning that keeps ``contention.unmeasured`` EXCLUDE_MEMBER).
     """
 
     return (
@@ -72,13 +77,21 @@ def post_run_observation_collector_raised(observation: Any) -> bool:
     )
 
 
-def post_run_environment_refusals(metadata: Any) -> tuple[str, ...]:
+def post_run_environment_refusals(
+    metadata: Any, *, post_run_collector_raised_unmeasured: bool = False
+) -> tuple[str, ...]:
     """Validate the post-run observation used by whole-window claims.
 
-    A HAZARD post-run observation whose collector raised
+    ``post_run_collector_raised_unmeasured`` is set only by the whole-window
+    verdict's writer (``scripts/run_campaign.py:_idle_admission_core_evaluation``)
+    and its re-derivation (``whole_window._current_core_rederivation_reasons``).
+    There a HAZARD post-run observation whose collector raised
     (:func:`post_run_observation_collector_raised`) is unmeasured, never a
-    refusal; any measured reading (an awake display, an engaged screensaver)
-    still refuses.
+    refusal (it is disclosed by the controller's ``env.member_guard_flagged``).
+    With the default (every other caller, the pinned reducer's environment
+    barrier among them) it is ``environment_admission_failed`` exactly as at
+    a434e363d.  Any measured reading (an awake display, an engaged
+    screensaver) refuses either way.
     """
 
     environment = metadata.get("environment") if isinstance(metadata, Mapping) else None
@@ -87,7 +100,7 @@ def post_run_environment_refusals(metadata: Any) -> tuple[str, ...]:
         if isinstance(environment, Mapping)
         else None
     )
-    if post_run_observation_collector_raised(observation):
+    if post_run_collector_raised_unmeasured and post_run_observation_collector_raised(observation):
         return ()
     if (
         not isinstance(observation, Mapping)
@@ -165,11 +178,15 @@ def current_environment_refusals(
     bundle_path: Path,
     measured_window_start_s: Any,
     measured_window_end_s: Any,
+    post_run_collector_raised_unmeasured: bool = False,
 ) -> tuple[str, ...]:
     """Current-mint causal and cross-field environment evidence validator.
 
     Callers must dispatch here only for strict 0.5.2/0.6.2 claim paths.  The
     frozen replay arms intentionally retain their committed validator surface.
+    ``post_run_collector_raised_unmeasured`` is passed through to
+    :func:`post_run_environment_refusals`; only the whole-window verdict path
+    sets it.
     """
 
     admission = metadata.get("environment_admission") if isinstance(metadata, Mapping) else None
@@ -238,7 +255,12 @@ def current_environment_refusals(
     )
     if captured_at_s is None or captured_at_s < end_s:
         reasons.add("environment_admission_missing")
-    reasons.update(post_run_environment_refusals(metadata))
+    reasons.update(
+        post_run_environment_refusals(
+            metadata,
+            post_run_collector_raised_unmeasured=post_run_collector_raised_unmeasured,
+        )
+    )
     reasons.update(
         _window_thermal_pressure_refusals(
             metadata,

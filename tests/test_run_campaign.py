@@ -8922,6 +8922,109 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
         self.assertEqual(observed, expected)
         self.assertEqual(len(observed), len(set(observed)))
 
+    def test_item6_ruling_verdict_path_discloses_a_collector_raised_post_run(
+        self,
+    ) -> None:
+        # Orchestrator ruling on audit-fix batch 1 item 6 (2026-10-07): on the
+        # whole-window verdict path, a HAZARD post-run guard record whose
+        # collector raised (every reading null, collector_error) is unmeasured
+        # evidence, disclosed by the controller's env.member_guard_flagged; it
+        # is not environment_admission_failed, so the harvest does not remove
+        # the member as member.whole_window_member_failure.  The reducer's
+        # barrier keeps it failed (tests/test_controller_hazard_flags.py).
+        # A legacy-shaped null reading with no collector_error, and a
+        # measured awake display, still fail the member here.
+        from joulewise.environment_admission import post_run_environment_refusals
+
+        binding = self._binding()
+        raised = {
+            "capture_duration_s": 0.0,
+            "capture_skipped": False,
+            "captured_at_s": 1.0,
+            "collector_error": "OSError: [Errno 5] Input/output error: 'system_profiler'",
+            "display_power_state": None,
+            "errors": {"collector": "OSError"},
+            "hid_idle_s": None,
+            "screensaver_delay_s": None,
+            "screensaver_engaged": None,
+            "screensaver_module": None,
+        }
+        legacy_unknown = {
+            key: value for key, value in raised.items() if key != "collector_error"
+        }
+        awake = {**raised, "display_power_state": "any_awake"}
+        cases = (
+            ("raised", raised, False),
+            ("legacy-unknown", legacy_unknown, True),
+            ("awake", awake, True),
+        )
+        for label, observation, fails in cases:
+            with self.subTest(label=label):
+                member = self._member(
+                    f"item6-{label}", records=_clean_idle_records()
+                )
+                member.metadata["environment"]["post_run_observation"] = dict(
+                    observation
+                )
+                self.assertEqual(
+                    post_run_environment_refusals(member.metadata),
+                    ("environment_admission_failed",),
+                )
+                result = run_campaign_module._idle_admission_core_evaluation(
+                    [member], binding
+                )
+                failures = {
+                    (failure["member_id"], failure["reason_code"])
+                    for failure in result.member_failures
+                }
+                self.assertEqual(
+                    (member.bundle_id, "environment_admission_failed")
+                    in failures,
+                    fails,
+                )
+                self.assertEqual(
+                    "environment_admission_failed"
+                    in result.core["conditions"],
+                    fails,
+                )
+
+    def test_item6_ruling_verdict_path_passes_the_flag_to_the_strict_validator(
+        self,
+    ) -> None:
+        # The strict current-mint validator is reached through
+        # _current_member_environment_refusals; the verdict writer sets the
+        # verdict-only keyword there too, and the readiness path does not.
+        seen: list[dict] = []
+
+        def spy(evaluation, **keywords):
+            seen.append(dict(keywords))
+            return ()
+
+        binding = self._binding()
+        member = self._member("item6-spy", records=_clean_idle_records())
+        with patch.object(
+            run_campaign_module, "_current_member_environment_refusals", spy
+        ):
+            run_campaign_module._idle_admission_core_evaluation([member], binding)
+        self.assertEqual(
+            seen, [{"post_run_collector_raised_unmeasured": True}]
+        )
+        source = inspect.getsource(run_campaign_module._member_readiness_reasons)
+        self.assertIn("_current_member_environment_refusals(evaluation)", source)
+        self.assertNotIn("post_run_collector_raised_unmeasured", source)
+        # The verdict validator re-derives the writer's conditions with the
+        # same setting; the pinned reducer never names it (old default).
+        from joulewise import reduce as reducer
+        from joulewise import whole_window
+
+        rederivation = inspect.getsource(
+            whole_window._current_core_rederivation_reasons
+        )
+        self.assertIn("post_run_collector_raised_unmeasured=True", rederivation)
+        self.assertNotIn(
+            "post_run_collector_raised_unmeasured", inspect.getsource(reducer)
+        )
+
     def test_global_neg8_condition_has_no_fabricated_member_failure(
         self,
     ) -> None:

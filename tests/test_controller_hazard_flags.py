@@ -643,10 +643,12 @@ class EnvironmentGuardTests(_LifecycleBase):
         # No physics reading at all: every guard observation (admission and
         # post-run) is unmeasured.  The member is collected with the guard
         # flag, whose findings name the post-run observation too.  Audit-fix
-        # batch 1 (item 6, 2026-10-07): the post-run observation is unmeasured,
-        # not failed, evidence.  Before: post_run_environment_refusals gave
-        # environment_admission_failed, which the whole-window verdict turned
-        # into member.whole_window_member_failure (EXCLUDE_MEMBER).
+        # batch 1 (item 6, 2026-10-07), as the orchestrator ruled it: on the
+        # whole-window verdict path the post-run observation is unmeasured,
+        # not failed, evidence.  Before: the verdict got
+        # environment_admission_failed and turned it into
+        # member.whole_window_member_failure (EXCLUDE_MEMBER).  Every other
+        # consumer (the pinned reducer's barrier) still reads it as failed.
         from joulewise.environment_admission import post_run_environment_refusals
         with self.hazard():
             (bundle, summary), _seen = self.run_raising_guard("hazard-triage-c-all", {-1})
@@ -658,7 +660,9 @@ class EnvironmentGuardTests(_LifecycleBase):
         metadata = json.loads((bundle / "metadata.json").read_bytes())
         post_run = metadata["environment"]["post_run_observation"]
         self.assertIn("OSError", post_run["collector_error"])
-        self.assertEqual(post_run_environment_refusals(metadata), ())
+        self.assertEqual(post_run_environment_refusals(
+            metadata, post_run_collector_raised_unmeasured=True), ())
+        self.assertEqual(post_run_environment_refusals(metadata), ("environment_admission_failed",))
 
     def test_item6_only_the_post_run_collector_raising_is_disclosed_not_failed(self) -> None:
         from joulewise.environment_admission import post_run_environment_refusals
@@ -675,16 +679,85 @@ class EnvironmentGuardTests(_LifecycleBase):
         self.assertEqual({row.get("phase") for row in observed(flag)["findings"]}, {"post_run"})
         self.assertEqual(self.member_flags("env.member_quiet_state_violated"), [])
         metadata = json.loads((bundle / "metadata.json").read_bytes())
-        self.assertEqual(post_run_environment_refusals(metadata), ())
+        verdict = {"post_run_collector_raised_unmeasured": True}
+        self.assertEqual(post_run_environment_refusals(metadata, **verdict), ())
+        # Off the verdict path (the default) it is failed evidence, as at a434e363d.
+        self.assertEqual(post_run_environment_refusals(metadata), ("environment_admission_failed",))
         # A measured reading in a post-run observation still refuses, collector error or not.
         awake = {**metadata["environment"]["post_run_observation"], "display_power_state": "any_awake"}
-        self.assertEqual(post_run_environment_refusals({"environment": {"post_run_observation": awake}}),
-                         ("environment_admission_failed",))
+        for keywords in ({}, verdict):
+            self.assertEqual(post_run_environment_refusals({"environment": {"post_run_observation": awake}},
+                                                           **keywords),
+                             ("environment_admission_failed",))
         # A legacy-shaped unknown reading (no collector error) still refuses as before.
         unknown = {key: value for key, value in awake.items() if key != "collector_error"}
         unknown["display_power_state"] = None
-        self.assertEqual(post_run_environment_refusals({"environment": {"post_run_observation": unknown}}),
-                         ("environment_admission_failed",))
+        for keywords in ({}, verdict):
+            self.assertEqual(post_run_environment_refusals({"environment": {"post_run_observation": unknown}},
+                                                           **keywords),
+                             ("environment_admission_failed",))
+
+    def test_item6_ruling_the_pinned_reducer_barrier_still_fails_a_collector_raised_post_run(self) -> None:
+        # Orchestrator ruling on audit-fix batch 1 item 6 (2026-10-07): the
+        # disclosure is on the whole-window verdict path only.  The pinned
+        # reducer's environment claim barrier (reduce.py, unchanged) must
+        # behave exactly as at a434e363d for a bundle whose post-run guard
+        # record carries collector_error: environment_admission_failed on the
+        # target-phase prechecks (the harvest's member.target_phase_precheck_failed),
+        # because an unmeasured post-run environment cannot show the member
+        # clean.  The verdict path, on the same bytes, discloses instead.
+        from joulewise import reduce as reducer
+        from joulewise.bundle_read import BundleReader
+        from joulewise.environment_admission import current_environment_refusals, post_run_environment_refusals
+        with self.hazard():
+            (clean_bundle, clean), seen = self.run_raising_guard("hazard-item6-barrier-clean", set())
+        self.assertEqual(clean.status, RunStatus.SUCCEEDED, clean.failure_message)
+        with self.hazard():
+            (bundle, summary), _seen = self.run_raising_guard("hazard-item6-barrier", {len(seen) - 1})
+        self.assertEqual(summary.status, RunStatus.SUCCEEDED, summary.failure_message)
+        metadata = json.loads((bundle / "metadata.json").read_bytes())
+        clean_metadata = json.loads((clean_bundle / "metadata.json").read_bytes())
+        self.assertIn("OSError", metadata["environment"]["post_run_observation"]["collector_error"])
+        self.assertNotEqual(reducer._telemetry_source(metadata), "mock")
+
+        def stamped(meta: dict[str, Any], **keywords: Any) -> dict[str, Any]:
+            prechecks = {"gross_request": {"eligible": True, "reasons": []},
+                         "phase": {"decode": {"eligible": True, "reasons": [], "windows": []}}}
+            reducer._apply_environment_claim_barrier(prechecks, meta, strict=True, **keywords)
+            return prechecks
+
+        # The reducer's own barrier, unwindowed and windowed.
+        self.assertEqual(reducer._environment_claim_reasons(clean_metadata, strict=True), [])
+        self.assertEqual(reducer._environment_claim_reasons(metadata, strict=True),
+                         ["environment_admission_failed"])
+        window = BundleReader(bundle).measured_window()
+        clean_window = BundleReader(clean_bundle).measured_window()
+        self.assertIsNotNone(window)
+        windowed = set(reducer._environment_claim_reasons(
+            metadata, strict=True, bundle_path=bundle, measured_window=window))
+        clean_windowed = set(reducer._environment_claim_reasons(
+            clean_metadata, strict=True, bundle_path=clean_bundle, measured_window=clean_window))
+        self.assertEqual(windowed - clean_windowed, {"environment_admission_failed"})
+        for keywords in ({}, {"bundle_path": bundle, "measured_window": window}):
+            prechecks = stamped(metadata, **keywords)
+            self.assertIn("environment_admission_failed", prechecks["gross_request"]["reasons"])
+            self.assertIs(prechecks["gross_request"]["eligible"], False)
+            self.assertIn("environment_admission_failed", prechecks["phase"]["decode"]["reasons"])
+            self.assertIs(prechecks["phase"]["decode"]["eligible"], False)
+            self.assertIn("environment_admission_failed", prechecks["throughput"]["reasons"])
+        self.assertNotIn("throughput", stamped(clean_metadata))
+
+        # The verdict path on the same bytes: the post-run record is not
+        # failed evidence; the controller's guard flag discloses it.
+        self.assertEqual(post_run_environment_refusals(metadata, post_run_collector_raised_unmeasured=True), ())
+        verdict_windowed = set(current_environment_refusals(
+            metadata, bundle_path=bundle, measured_window_start_s=window.start_s,
+            measured_window_end_s=window.end_s, post_run_collector_raised_unmeasured=True))
+        self.assertNotIn("environment_admission_failed", verdict_windowed)
+        self.assertEqual(verdict_windowed, clean_windowed)
+        (flag,) = self.member_flags("env.member_guard_flagged")
+        self.assertEqual(flag["scope"]["run_id"], bundle.name)
+        self.assertEqual({row.get("phase") for row in observed(flag)["findings"]}, {"post_run"})
 
     def test_triage_c_legacy_guard_collector_exception_still_fails(self) -> None:
         (_bundle, summary), _seen = self.run_raising_guard("legacy-triage-c", {1})
