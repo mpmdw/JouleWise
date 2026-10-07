@@ -218,6 +218,7 @@
   "model.identity_unmeasured": {"category": "NUMBER_INTEGRITY", "protects": "which model weights produced the numbers could not be established at arm and the harvest could not re-derive it (the harvest supersedes the arm flag when it re-derives)"},
   "model.identity_unpinned": {"category": "NUMBER_INTEGRITY", "protects": "the model weights have no pin to compare against"},
   "neg8.bound_not_derived": {"category": "NUMBER_INTEGRITY", "protects": "no NEG-8 drift bound: the window's numbers have no drift bound"},
+  "neg8.reference_member_excluded": {"category": "PHYSICS", "protects": "the NEG-8 drift allowance (E_whole_window_drift_allowance_j) and drift screen are computed from a start, midpoint or end reference whose span a directly measured hazard (contention, battery, thermal, clock step, instrument sampling) overlapped or left unmeasured; the bracket needs all 3+1+3 references, so it cannot be re-derived without that one", "added": "audit-fix batch 1 (A1), 2026-10-07"},
   "neg8.screen_failed": {"category": "NUMBER_INTEGRITY", "protects": "the NEG-8 drift screen failed for the window"},
   "pack.identity_mismatch": {"category": "NUMBER_INTEGRITY", "protects": "the executed pack differs from the sealed pack"},
   "pack.identity_unmeasured": {"category": "NUMBER_INTEGRITY", "protects": "which pack produced the numbers could not be established"},

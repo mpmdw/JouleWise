@@ -726,6 +726,12 @@
       "family": "NEG8",
       "klass": "REPRESENTATION"
     },
+    "neg8.reference_member_excluded": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_WINDOW",
+      "family": "NEG8",
+      "klass": "PHYSICS"
+    },
     "neg8.screen_failed": {
       "blinding": "STRUCTURE",
       "effect": "EXCLUDE_WINDOW",

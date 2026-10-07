@@ -210,6 +210,10 @@ CODES: dict[str, CodeSpec] = {
     # NEG-8 bound and the whole-window verdict.
     "neg8.bound_not_derived": _spec("NEG8", "NUMBER"),
     "neg8.screen_failed": _spec("NEG8", "NUMBER"),
+    # Audit A1 (2026-10-07): a NEG-8 window reference (start, midpoint or end)
+    # carries a PHYSICS member exclusion, so the drift allowance and screen
+    # computed from it are not the uncontaminated ones.
+    "neg8.reference_member_excluded": _spec("NEG8", "PHYSICS"),
     "whole_window.not_passed": _spec("NEG8", "NUMBER"),
     "whole_window.verdict_absent": _spec("NEG8", "NUMBER"),
     # P4 (orchestrator, 2026-10-06): a verdict that did not pass and whose
@@ -512,6 +516,16 @@ MEMBERSHIP_BINDING_NAME = "window-membership-binding.json"
 MEMBERSHIP_BINDING_SCHEMA = "joulewise.whole_window_membership_binding.v1"  # joulewise.salvage_dangler
 # Ledger refusal reasons that mean the committed pin is not the head the
 # verdict writer must read (calibration_ledger.load_calibration_ledger_snapshot).
+# The plan trees' external inputs that hold the NEG-8 window references the
+# whole-window verdict brackets the window with (start x3, midpoint, end x3:
+# whole_window.evaluate_neg8_point_drift).  The floor packs name them in the
+# singular, the contrast pack (GAMMA) in the plural; GAMMA's decode and
+# prefill interior references are not NEG-8 bracket references.
+NEG8_REFERENCE_INPUT_IDS = frozenset({"start_reference", "start_references", "midpoint_reference",
+                                      "end_reference", "end_references"})
+# Codes added by audit-fix batch 1 (2026-10-07) that the design branch's draft
+# sealed catalog gains through the registration row (REG) before the seal.
+AUDFIX1_CODES = frozenset({"neg8.reference_member_excluded"})
 PIN_REFUSAL_REASONS = frozenset({"calibration_ledger_head_mismatch", "calibration_ledger_rollback",
                                  "calibration_ledger_head_uncommitted", "calibration_ledger_missing",
                                  "calibration_ledger_malformed"})
@@ -6069,6 +6083,35 @@ class _Harvest:
                             "rereduced_identical": identical})
 
     # -- exclusion-function inputs (L4 seam) ------------------------------------
+    def neg8_reference_exclusions(self) -> None:
+        """Audit A1: a physics exclusion on a NEG-8 window reference excludes the window.
+
+        The references are auxiliary members with no cells, so a member
+        exclusion on one removes nothing from a claim, while the drift
+        allowance and screen the whole-window verdict computed from it stay in
+        use (``whole_window.evaluate_neg8_point_drift`` needs all 3+1+3, so the
+        bracket cannot be re-derived without it).  Every code the catalog
+        classes PHYSICS with effect EXCLUDE_MEMBER on a reference's run id
+        (contention, battery, thermal, clock step, instrument sampling, span)
+        raises ``neg8.reference_member_excluded`` at window level.  A
+        representation or number flag on a reference does not.
+        """
+        references = {member["run_id"]: member.get("stage_id") for member in (self.roster or {}).get("members", ())
+                      if member.get("kind") == "auxiliary" and member.get("stage_id") in NEG8_REFERENCE_INPUT_IDS}
+        found: dict[str, set[str]] = {}
+        for record in self.flags.records:
+            scope = record.get("scope") or {}
+            run_id = scope.get("run_id")
+            if scope.get("level") != "member" or run_id not in references:
+                continue
+            entry = self.catalog.entries.get(record["code"])
+            klass = entry.get("klass") if isinstance(entry, Mapping) else record.get("klass")
+            if klass == "PHYSICS" and self.catalog.effect(record["code"]) == "EXCLUDE_MEMBER":
+                found.setdefault(run_id, set()).add(record["code"])
+        for run_id, codes in sorted(found.items()):
+            self.emit("neg8.reference_member_excluded", level="window", collector="neg8",
+                      observed={"run_id": run_id, "stage_id": references[run_id], "codes": sorted(codes)})
+
     def exclusion_inputs(self) -> None:
         chain_started = None
         try:
@@ -6722,6 +6765,7 @@ def harvest(inputs: WindowInputs, archive_root: Path | str, *, seams: Seams | No
     run.step("monitor", run.monitor_joins)
     run.step("meter", run.meter_joins, fault=False)
     run.step("g10", run.g10_result, fault=False)
+    run.step("neg8_references", run.neg8_reference_exclusions)
     run.step("exclusion_inputs", run.exclusion_inputs)
     run.step("g3", lambda: run.g3(skipped=not run_g3), fault=False)
     run.step("diagnostics", run.diagnostics, fault=False)

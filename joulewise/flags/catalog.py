@@ -298,6 +298,16 @@ _INT4_CODES = {
     "whole_window.member_failures_unreadable": _code("NEG8", "NUMBER", EXCLUDE_WINDOW),
 }
 
+# Audit-fix batch 1 (2026-10-07, Astra triple audit).  A1: a NEG-8 window
+# reference (start, midpoint or end) carries a PHYSICS member exclusion
+# (contention, battery, thermal, clock step, instrument sampling).  The
+# reference has no cells, so the member exclusion removes nothing, while the
+# drift allowance and screen computed from it stay in use; the bracket cannot
+# be re-derived without it (3+1+3), so the window is excluded.
+_AUDFIX1_CODES = {
+    "neg8.reference_member_excluded": _code("NEG8", "PHYSICS", EXCLUDE_WINDOW),
+}
+
 DRAFT_CODES: Mapping[str, Mapping[str, str]] = {
     **_WINDOW_CODES,
     **_MEMBER_CODES,
@@ -306,6 +316,7 @@ DRAFT_CODES: Mapping[str, Mapping[str, str]] = {
     **_PRUNE2_CODES,
     **_PRUNE3_CODES,
     **_INT4_CODES,
+    **_AUDFIX1_CODES,
 }
 
 # Codes the cell rule and the roster rule of exclusions.compute derive

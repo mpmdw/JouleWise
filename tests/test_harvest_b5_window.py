@@ -2274,7 +2274,7 @@ class EmittedCodeTests(unittest.TestCase):
         # The gate-prune round-2 and round-3 codes reach the draft through the
         # registration row (REG) before the seal; any other unclassified code fails here.
         missing = set(h.CODES) - set(codes)
-        self.assertEqual(missing - h.PRUNE2_CODES - h.PRUNE3_CODES, set(h.NEVER_CLASSIFIED_CODES))
+        self.assertEqual(missing - h.PRUNE2_CODES - h.PRUNE3_CODES - h.AUDFIX1_CODES, set(h.NEVER_CLASSIFIED_CODES))
         self.assertTrue(h.NEVER_CLASSIFIED_CODES.isdisjoint(codes))
 
     def test_the_design_catalog_classifies_every_int4_code_with_the_drafts_effect(self):
@@ -2287,7 +2287,8 @@ class EmittedCodeTests(unittest.TestCase):
         from joulewise.flags.core import CORE_FLAG_CODES
         codes = json.loads(raw)["codes"]
         emitted = set(h.CODES) | set(DRAFT_CODES) | set(CORE_FLAG_CODES)
-        self.assertEqual(emitted - set(codes), set(h.NEVER_CLASSIFIED_CODES))
+        # Audit-fix batch 1's codes reach the design catalog through REG before the seal.
+        self.assertEqual(emitted - set(codes) - h.AUDFIX1_CODES, set(h.NEVER_CLASSIFIED_CODES))
         self.assertEqual({code: (codes[code]["effect"], DRAFT_CODES[code]["effect"]) for code in DRAFT_CODES
                           if code in codes and codes[code]["effect"] != DRAFT_CODES[code]["effect"]}, {})
 
@@ -4392,6 +4393,115 @@ class DeskDiagnosticsTests(WindowTestCase):
         self.assertIn("bracket session b5t-session names runs root 2 of 3", transcript)
         (problem,) = desk_flags(window, "bracket_binding")
         self.assertEqual(problem["error_line"], "ValueError: bracket session b5t-session names runs root # of #")
+
+
+class Neg8ReferencePhysicsTests(WindowTestCase):
+    """Audit A1 (2026-10-07): a physics exclusion on a NEG-8 window reference excludes the window.
+
+    The references are auxiliary roster members with no cells, so the member
+    exclusion alone removed nothing (claim_usable stayed True) while the drift
+    allowance computed from the contaminated reference stayed in the claim.
+    The reference here is a real bundle collected over b5t-abs-r02's span.
+    """
+
+    CODE = "neg8.reference_member_excluded"
+    REFERENCE = "neg8-window-start-r1"
+
+    def window_with_reference(self, **kwargs) -> Window:
+        window = self.window(**kwargs)
+        target = window.claim / self.REFERENCE
+        make_member(target, self.REFERENCE, SHIFT_S["b5t-abs-r02"])
+        tree_path = window.pack / "plan_tree.json"
+        tree = json.loads(tree_path.read_bytes())
+        tree["external_inputs"]["manifests"] = [{"input_id": "start_reference", "members": [{
+            "run_id": self.REFERENCE, "path": f"configs/campaigns/{PACK_ID}/refs/{self.REFERENCE}.json",
+            "sha256": sha(target / "config.json")}]}]
+        put(tree_path, tree)
+        (window.pack / "plan_tree.sha256").write_text(f"{sha(tree_path)}  plan_tree.json\n")
+        # The sealed and executed inventories name the plan tree as written.
+        changed = {path.relative_to(window.measurement).as_posix(): sha(path)
+                   for path in (tree_path, window.pack / "plan_tree.sha256")}
+        sealed = window.measurement / "configs/campaigns/v5_claim_25g83/sealed_inventory.json"
+        value = json.loads(sealed.read_bytes())
+        value["files"].update(changed)
+        put(sealed, value)
+        executed = window.custody / "night" / "executed_inventory.json"
+        value = json.loads(executed.read_bytes())
+        value["measurement_checkout"]["files"].update(changed)
+        put(executed, value)
+        return window
+
+    def test_contention_over_a_start_reference_request_excludes_the_window(self):
+        """Before the fix: contention.request_overlap on the reference, claim_usable True, no window reason."""
+        request = request_span_ns("b5t-abs-r02")
+        window = self.window_with_reference(journals={
+            "contention_extra": [((request[0] - NS, request[1] + NS),
+                                  {"pid": 77, "command": "fseventsd", "cpu_s_per_s": 1.84})]})
+        record = window.harvest()
+        self.assertEqual(record["verdict"], "COLLECTED", record["faults"])
+        roster = {row["run_id"]: row for row in json.loads((window.archive / "derived" / "roster.json")
+                                                          .read_bytes())["members"]}
+        member = roster[self.REFERENCE]
+        self.assertEqual((member["kind"], member["stage_id"], member.get("cells", [])), ("auxiliary", "start_reference", []))
+        self.assertIn("contention.request_overlap", window.codes(self.REFERENCE))
+        (flag,) = [flag for flag in window.flags() if flag["code"] == self.CODE]
+        self.assertEqual(flag["scope"]["level"], "window")
+        self.assertEqual(flag["observed"], {"run_id": self.REFERENCE, "stage_id": "start_reference",
+                                            "codes": ["contention.request_overlap"]})
+        self.assertEqual(h.flag_problems(flag), [])
+        self.assertIn(self.CODE, window.exclusions()["reasons"])
+        self.assertFalse(window.exclusions()["claim_usable"])
+        self.assertFalse(record["claim_usable"])
+
+    def test_a_clean_reference_does_not_exclude_the_window(self):
+        window = self.window_with_reference()
+        window.harvest()
+        self.assertNotIn("contention.request_overlap", window.codes(self.REFERENCE))
+        self.assertNotIn(self.CODE, window.codes())
+
+    def run_on(self, roster_members, emitted):
+        """The step itself, on the real ledger and the committed fixture catalog."""
+        run = h._Harvest.__new__(h._Harvest)
+        run.catalog = h.Catalog.load(FIXTURES / "flag_catalog.json")
+        run.flags = h.FlagLedger(plan_id=PLAN_ID, attempt=1, catalog=run.catalog, boot_session_uuid="B")
+        run.roster = {"members": roster_members}
+        for code, run_id in emitted:
+            run.flags.emit(code, level="member", run_id=run_id, collector="test", observed={"n": 1})
+        run.neg8_reference_exclusions()
+        return [record for record in run.flags.records if record["code"] == self.CODE]
+
+    def test_only_physics_member_exclusions_on_bracket_references_count(self):
+        def aux(run_id, stage_id):
+            return {"run_id": run_id, "kind": "auxiliary", "stage_id": stage_id, "cells": []}
+
+        members = [aux("neg8-window-start-r2", "start_references"), aux("neg8-window-midpoint", "midpoint_reference"),
+                   aux("neg8-window-end-r3", "end_reference"),
+                   aux("gamma-interior-reference-decode-midpoint", "decode_midpoint_reference"),
+                   aux("neg8-refcorpus-r01", "neg8_bound"),
+                   {"run_id": "sci-1", "kind": "science", "stage_id": "start_reference", "cells": []}]
+        found = self.run_on(members, [
+            # Representation and number flags on a reference: not physics.
+            ("member.retried", "neg8-window-start-r2"), ("member.status_not_succeeded", "neg8-window-start-r2"),
+            ("battery.assist", "neg8-window-start-r2"),  # physics, but DISCLOSE
+            # Physics exclusions on references: each counts.
+            ("thermal.os_level_nonzero", "neg8-window-midpoint"), ("clock.step_overlap", "neg8-window-end-r3"),
+            ("battery.member_span", "neg8-window-end-r3"),
+            # Physics exclusions on members that are not bracket references.
+            ("contention.request_overlap", "gamma-interior-reference-decode-midpoint"),
+            ("contention.request_overlap", "neg8-refcorpus-r01"), ("contention.request_overlap", "sci-1")])
+        self.assertEqual({flag["observed"]["run_id"]: flag["observed"]["codes"] for flag in found},
+                         {"neg8-window-midpoint": ["thermal.os_level_nonzero"],
+                          "neg8-window-end-r3": ["battery.member_span", "clock.step_overlap"]})
+        self.assertTrue(all(flag["scope"]["level"] == "window" for flag in found))
+
+    def test_the_code_is_registered_everywhere_with_one_effect(self):
+        from joulewise.flags.catalog import DRAFT_CODES
+        fixture = json.loads((FIXTURES / "flag_catalog.json").read_bytes())["codes"]
+        allowlist = json.loads((ROOT / "configs/gates/hazard_refusals.json").read_bytes())
+        self.assertEqual(("NEG8", "PHYSICS"), (h.CODES[self.CODE].family, h.CODES[self.CODE].klass))
+        self.assertEqual("EXCLUDE_WINDOW", fixture[self.CODE]["effect"])
+        self.assertEqual("EXCLUDE_WINDOW", DRAFT_CODES[self.CODE]["effect"])
+        self.assertEqual("PHYSICS", allowlist["window_exclusions"][self.CODE]["category"])
 
 
 class RealB3w1BytesTests(unittest.TestCase):
