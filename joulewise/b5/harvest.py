@@ -1629,6 +1629,31 @@ def build_roster(pack_root: Path, repo_root: Path) -> dict[str, Any]:
                 "stage_id": f"{stage.get('stage_id')}.spares", "role": "neg8_reference_spare", "block_id": None,
                 "position": None, "arm": None, "config_path": row.get("path"), "config_sha256": row.get("sha256"),
                 "cells": [], "spare_slot": retry.get("slot")})
+    # The planned NEG-8 references: the external-input members of each stage
+    # that carries a spare-slot retry (exactly the start, midpoint and end
+    # reference stages), with the slot they fill.  A floor stage names its
+    # input by the order manifest's path, a contrast stage by input id.  Read
+    # by the harvest to name a reference whose bundle is wholly absent
+    # (``bundle_absent``, cold pass 2 N2).
+    for stage in tree.get("stage_graph") or []:
+        retry = stage.get("spare_retry") if isinstance(stage, Mapping) else None
+        if not isinstance(retry, Mapping) or not isinstance(retry.get("slot"), str):
+            continue
+        ref = stage.get("input_ref") if isinstance(stage.get("input_ref"), Mapping) else {}
+        stage_input = stage.get("input") if isinstance(stage.get("input"), Mapping) else {}
+        for manifest in manifests:
+            if not isinstance(manifest, Mapping):
+                continue
+            input_id = manifest.get("external_input_id") or manifest.get("input_id")
+            inner = manifest.get("manifest") if isinstance(manifest.get("manifest"), Mapping) else {}
+            manifest_path = inner.get("path") or manifest.get("manifest_path")
+            if not ((ref.get("input_id") is not None and ref.get("input_id") == input_id)
+                    or (stage_input.get("path") is not None and stage_input.get("path") == manifest_path)):
+                continue
+            for row in manifest.get("members") or []:
+                member = members.get(row.get("run_id")) if isinstance(row, Mapping) else None
+                if member is not None and member.get("spare_slot") is None:
+                    member["neg8_slot"] = retry["slot"]
     cells: list[dict[str, Any]] = []
 
     def attach(run_id: str, cell: Mapping[str, Any], unit_kind: str, unit_id: str) -> None:
@@ -4695,6 +4720,21 @@ class _Harvest:
             measured = [spare for spare in spares.get(slot, []) if (members.get(spare) or {}).get("present")]
             rows.append({"run_id": run_id, "slot": slot, "reason": reason or item.get("reason"),
                          "status": item.get("status"),
+                         "retry": {"spares_measured": measured,
+                                   "spares_succeeded": [spare for spare in measured
+                                                        if (members.get(spare) or {}).get("status") == "succeeded"]}})
+        # A planned reference whose bundle is wholly absent never reaches the
+        # verdict writer (its stage did not run it), so no bracket records it;
+        # the roster names it (``neg8_slot``, cold pass 2 N2).
+        named = {row["run_id"] for row in rows}
+        for member in (getattr(self, "roster", None) or {}).get("members") or []:
+            slot = member.get("neg8_slot") if isinstance(member, Mapping) else None
+            run_id = member.get("run_id") if isinstance(slot, str) else None
+            if not isinstance(run_id, str) or run_id in named or (members.get(run_id) or {}).get("present") \
+                    or self._bundle_on_disk(run_id):
+                continue
+            measured = [spare for spare in spares.get(slot, []) if (members.get(spare) or {}).get("present")]
+            rows.append({"run_id": run_id, "slot": slot, "reason": "bundle_absent", "status": None,
                          "retry": {"spares_measured": measured,
                                    "spares_succeeded": [spare for spare in measured
                                                         if (members.get(spare) or {}).get("status") == "succeeded"]}})

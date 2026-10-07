@@ -757,6 +757,41 @@ class HarvestSurvivorTests(_hb().WindowTestCase):
             window = self.run_window("unauthenticated-clean", self.points(0.0))
         self.assertFalse({"neg8.screen_failed", "neg8.reference_lost"} & window.codes())
 
+    def run_window_with_absent_references(self, name, absent: dict[str, str]):
+        """The stage never ran the references in ``absent`` ({run_id: slot}): no bundle, no manifest row.
+
+        The roster (the sealed plan tree) still plans them; here they are
+        added to the harness pack's roster with their ``neg8_slot``, as
+        ``build_roster`` marks a real pack's reference-stage members.
+        """
+        from unittest import mock
+
+        hb = _hb()
+        h = hb.h
+        real = h.build_roster
+
+        def roster(pack_root, repo_root):
+            value = real(pack_root, repo_root)
+            for run_id, slot in absent.items():
+                value["members"].append({
+                    "run_id": run_id, "kind": "auxiliary", "ordinal": None, "stage_id": f"{slot}_reference",
+                    "role": f"{slot}_reference", "block_id": None, "position": None, "arm": None,
+                    "config_path": None, "config_sha256": None, "cells": [], "neg8_slot": slot})
+            return value
+
+        references = [row for row in hb.NEG8_REFERENCES if row[0] not in absent]
+        with mock.patch.object(h, "build_roster", roster):
+            return self.run_window(name, self.points(0.0), references=references)
+
+    def test_a_wholly_absent_reference_is_named_by_the_roster(self) -> None:
+        """Cold pass 2 N2: ``neg8.reference_lost`` said fewer references than planned but named none."""
+        window = self.run_window_with_absent_references("absent", {"b5t-neg8-end-3": "end"})
+        self.assertNotIn("neg8.screen_failed", window.codes())
+        (lost,) = [flag for flag in window.flags() if flag["code"] == "neg8.reference_lost"]
+        self.assertEqual(lost["observed"]["reference_counts"], {"start": 3, "midpoint": 1, "end": 2})
+        self.assertEqual([(row["run_id"], row["slot"], row["reason"]) for row in lost["observed"]["lost"]],
+                         [("b5t-neg8-end-3", "end", "bundle_absent")])
+
     def test_an_unmeasured_reference_is_kept(self) -> None:
         window = self.run_window("unmeasured", self.points(0.0),
                                  reference_flags=[("b5t-neg8-end-1", "contention.unmeasured")])
@@ -1009,6 +1044,19 @@ class SpareRosterAndYieldTests(unittest.TestCase):
             with self.subTest(pack=pack):
                 self.assertEqual(sorted(spares.values()), ["end", "end", "end", "midpoint", "start", "start", "start"])
                 self.assertEqual(roster["duplicate_listings"], {})
+
+    def test_the_harvest_roster_marks_each_planned_reference_with_its_slot(self) -> None:
+        """Cold pass 2 N2: the planned references (not the corpus, spares or GAMMA's interior diagnostics)."""
+        from joulewise.b5 import harvest as h
+
+        for pack in V5_PACKS:
+            roster = h.build_roster(_repo() / "configs/campaigns" / pack, _repo())
+            slots = {member["run_id"]: member["neg8_slot"] for member in roster["members"]
+                     if member.get("neg8_slot")}
+            with self.subTest(pack=pack):
+                self.assertEqual(slots, {**{f"neg8-window-start-r{index}": "start" for index in (1, 2, 3)},
+                                         "neg8-window-midpoint": "midpoint",
+                                         **{f"neg8-window-end-r{index}": "end" for index in (1, 2, 3)}})
 
     def test_driver_minimums_follow_the_survivor_floor(self) -> None:
         from joulewise.b5 import driver as b5_driver
