@@ -2089,6 +2089,11 @@ def _cmd_analyze_claims(args: argparse.Namespace) -> int:
             output_path=Path(args.output),
             legacy_l1_mechanics=args.legacy_l1_mechanics,
             legacy_allowlist=_STRICT_LEGACY_BUNDLE_IDENTITIES,
+            neg8_harvest_archive=(
+                Path(args.neg8_harvest_archive)
+                if args.neg8_harvest_archive is not None
+                else None
+            ),
         )
     except (AnalysisInputError, ClaimArtifactError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
@@ -2388,6 +2393,15 @@ def build_parser() -> argparse.ArgumentParser:
         "--legacy-l1-mechanics",
         action="store_true",
         help="mechanics-only legacy mode; frozen six-bundle allowlist and L1 ceiling",
+    )
+    analyze.add_argument(
+        "--neg8-harvest-archive",
+        default=None,
+        help=(
+            "the window's block-5 harvest archive; the whole-window drift "
+            "allowance comes from the NEG-8 bracket its screen left standing "
+            "(required for a HAZARD runs root)"
+        ),
     )
     analyze.set_defaults(func=_cmd_analyze_claims)
 

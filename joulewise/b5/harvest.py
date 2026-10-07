@@ -102,6 +102,11 @@ NEG8_REFERENCE_LOSS_CODES = (*NEG8_PHYSICS_LOSS_CODES, "member.timeout", "member
 # comes first: a member SIGKILLed at the hung-process cap has no summary, and
 # its timeout is the physical cause (cold pass 2 D1).
 NEG8_STATUS_LOSS_CODES = ("member.timeout", "member.admission_aborted", "member.status_not_succeeded")
+# The identity unit of the NEG-8 reference workload: every start, midpoint and
+# end reference and every spare (audit A2).  A sealed pin under this key in the
+# identity pins is the expected identity; without one, the references' strict
+# majority is.
+NEG8_REFERENCE_IDENTITY_UNIT = "neg8_reference"
 NEG8_BOUND_NAME = "neg8-drift-bound.json"      # in the bound runs root (the pack's bound-derivation output)
 HAZARD_RESULT_NAME = "hazard_result.json"      # L2's driver terminal record, night/
 ARM_DECISION_NAME = "arm_decision.json"        # joulewise.b5.driver ARM_DECISION, night/
@@ -4554,7 +4559,7 @@ class _Harvest:
                       legacy_code="whole_window member_failures")
         return "listed"
 
-    def neg8_screen(self, row: Mapping[str, Any], *, authentic: bool = False) -> None:
+    def neg8_screen(self, row: Mapping[str, Any], *, authentic: bool = False) -> str:
         """``neg8.screen_failed`` from the verdict's NEG-8 result (registration 6.5 and 0.12).
 
         ``whole_window.not_passed`` is disclosed only, because any one member's
@@ -4587,6 +4592,10 @@ class _Harvest:
         ``references_insufficient`` and each lost reference's reason.  A screen
         on fewer than (3, 1, 3) references records ``neg8.reference_lost``; a
         lost midpoint records ``neg8.midpoint_lost`` (both DISCLOSE).
+
+        Returns which bracket the window's drift allowance comes from:
+        ``stored_verdict``, ``survivor_rescreen`` or ``screen_failed``
+        (recorded by :meth:`neg8_allowance`, audit A1).
         """
         from joulewise import whole_window as ww
         core = row.get("idle_admission_core") if isinstance(row.get("idle_admission_core"), Mapping) else None
@@ -4606,8 +4615,14 @@ class _Harvest:
         if conditions:
             reasons.append("neg8_conditions")
         harvest_losses = self._neg8_reference_losses(row)
+        # The stored bracket's own loss list is trusted only when its sources
+        # authenticate: otherwise every known loss goes to the re-screen, which
+        # then cannot run, so an unauthenticated source never leaves a passing
+        # screen standing over a loss-flagged reference (delta audit A3).
+        source = getattr(self, "neg8_reference_source", None)
+        sources_authentic = isinstance(source, Mapping) and source.get("source") == "verdict_sources"
         stored_lost = {item.get("bundle_id") for item in (bracket or {}).get("reference_losses") or []
-                       if isinstance(item, Mapping)}
+                       if isinstance(item, Mapping)} if sources_authentic else set()
         new_losses = {run_id: code for run_id, code in harvest_losses.items() if run_id not in stored_lost}
         clean_bound = getattr(self, "neg8_clean_bound", None)
         survivors = bool(new_losses) or clean_bound is not None
@@ -4615,15 +4630,17 @@ class _Harvest:
         collected = (self.neg8 or {}).get("derived_from") == "collected_subset" and bool(conditions & underived)
         if not reasons and not survivors:
             self._neg8_disclose(bracket, harvest_losses, record="whole-window-verdict.json")
-            return
+            return "stored_verdict"
         observed: dict[str, Any] = {
             "reasons": reasons, "decision": decision if isinstance(decision, str) else None,
             "conditions": sorted(conditions)[:16],
             "registered_conditions": sorted(conditions & ww.NEG8_POINT_DRIFT_CONDITION_CODES)}
         screened: Mapping[str, Any] | None = bracket
         if collected or survivors:
+            # The exclusion pass always runs (with no harvest loss too), so a
+            # strict-invalid reference is dropped before aggregation (A5).
             rescreen = self._neg8_rescreen(row, bracket, conditions - underived, authentic=authentic,
-                                           exclude=harvest_losses if survivors else None, survivors=survivors)
+                                           exclude=harvest_losses, survivors=survivors)
             observed["collected_bound_rescreen"] = rescreen
             if survivors:
                 observed["survivor_rescreen"] = {"new_losses": dict(sorted(new_losses.items())),
@@ -4634,7 +4651,10 @@ class _Harvest:
                 screened = rescreen.get("survivors")
                 self._neg8_disclose(screened, harvest_losses, record="withheld/neg8-rescreen-bracket.json")
                 if rescreen["decision"] == "passed" and not rescreen["conditions"]:
-                    return  # the screen passed on the window's own validated bound and survivors
+                    # The screen passed on the window's own validated bound and
+                    # survivors; this bracket, not the stored one, carries the
+                    # allowance (audit A1).
+                    return "survivor_rescreen"
             else:
                 screened = None
         else:
@@ -4646,6 +4666,44 @@ class _Harvest:
         if isinstance(reference_source, Mapping) and reference_source.get("source") != "verdict_sources":
             observed["reference_source"] = dict(reference_source)
         self.emit("neg8.screen_failed", level="window", collector="whole_window", observed=observed)
+        return "screen_failed"
+
+    def neg8_allowance(self, row: Mapping[str, Any], source: str | None) -> None:
+        """``derived/neg8-allowance.json``: which NEG-8 bracket the window's drift allowance comes from (audit A1).
+
+        Structure only (paths and SHA-256 digests; the energies stay in
+        ``withheld/``).  It names the verdict row it screened (canonical
+        SHA-256 of the row and its evaluation basis) and the source: the
+        stored bracket, the survivor re-screen's bracket (with the withheld
+        bracket's and, when used, the clean bound's and clean corpus
+        manifest's digests, and the canonical digest of the bound the
+        re-screen used), or none when the screen did not pass.  The allowance
+        consumer (``whole_window.harvest_neg8_allowance_bracket``) reads it
+        through ``harvest.json``'s ``outputs`` digest.
+        """
+        from joulewise import whole_window as ww
+        basis = row.get("evaluation_basis")
+        basis_sha = basis.get("sha256") if isinstance(basis, Mapping) else None
+        try:
+            row_sha: str | None = ww.canonical_sha256(row)
+        except (TypeError, ValueError):
+            row_sha = None
+        record: dict[str, Any] = {
+            "schema": ww.NEG8_HARVEST_ALLOWANCE_SCHEMA,
+            "verdict": {"path": "whole-window-verdict.json", "row_sha256": row_sha,
+                        "evaluation_basis_sha256": basis_sha if isinstance(basis_sha, str) else None},
+            "source": source if source in ("stored_verdict", "survivor_rescreen") else "none",
+            "survivor_bracket": None, "bound_used": None, "bound_artifact_sha256": None, "clean_bound": None}
+        binding = getattr(self, "neg8_rescreen_binding", None)
+        if record["source"] == "survivor_rescreen" and isinstance(binding, Mapping):
+            try:
+                bound_sha: str | None = ww.canonical_sha256(binding.get("bound"))
+            except (TypeError, ValueError):
+                bound_sha = None
+            record.update({"survivor_bracket": binding.get("survivor_bracket"), "bound_used": binding.get("bound_used"),
+                           "bound_artifact_sha256": bound_sha, "clean_bound": binding.get("clean_bound")})
+        self.outputs[ww.NEG8_HARVEST_ALLOWANCE_RECORD] = write_json_once(
+            self.archive / ww.NEG8_HARVEST_ALLOWANCE_RECORD, record)
 
     def _neg8_reference_losses(self, row: Mapping[str, Any]) -> dict[str, str]:
         """{run_id: code} for each NEG-8 reference the verdict names that a reference-loss flag hits.
@@ -4662,7 +4720,10 @@ class _Harvest:
         and ``neg8.screen_failed`` is emitted, instead of a stored screen that
         holds the reference's energy standing silently.  The fallback names
         references only; it never supplies an energy or a passing screen.
-        ``self.neg8_reference_source`` records which source was used.
+        ``self.neg8_reference_source`` records which source was used.  The
+        sealed roster's planned references and spares are always named too
+        (delta audit A3), so absent or unreadable manifests cannot erase a
+        known loss.
         """
         from joulewise import whole_window as ww
         runs = getattr(getattr(self, "inputs", None), "claim_runs_root", None)
@@ -4687,6 +4748,15 @@ class _Harvest:
                 if ww._neg8_position(member.get("role"), member.get("sentinel_position")) in ("start", "midpoint",
                                                                                                 "end"):
                     references.update(item for item in member.get("bundle_ids") or [] if isinstance(item, str))
+        # Delta audit A3: the sealed roster (the plan tree) names every planned
+        # reference (``neg8_slot``) and every spare (``spare_slot``) whatever
+        # the manifests say, so a known loss always reaches the survivors
+        # re-screen even when no manifest reads.  A spare that never ran
+        # carries no flag, so naming it adds no loss.
+        for member in (getattr(self, "roster", None) or {}).get("members") or []:
+            if isinstance(member, Mapping) and isinstance(member.get("run_id"), str) \
+                    and (isinstance(member.get("neg8_slot"), str) or isinstance(member.get("spare_slot"), str)):
+                references.add(member["run_id"])
         order = {code: index for index, code in enumerate(NEG8_REFERENCE_LOSS_CODES)}
         losses: dict[str, str] = {}
         for flag in self.flags.records:
@@ -4797,8 +4867,11 @@ class _Harvest:
         Authenticity: re-derived without the harvest's exclusions, each
         family's bound-independent fields (endpoints, protocol, point delta)
         must equal the stored bracket's, or these are not the reference
-        bundles the verdict was written from and nothing is evaluated.  With
-        ``exclude`` ({run_id: code}, ``survivors``) the decision is then the
+        bundles the verdict was written from and nothing is evaluated (that
+        pass replays the stored selection: references the stored bracket
+        lists as ``strict_invalid`` are dropped once verified, an unlisted
+        strict-invalid one is read as the writer read it).  With
+        ``exclude`` ({run_id: code}, possibly empty) the decision is then the
         re-derivation that drops those references before aggregation.  The
         collected-bound case alone (no exclusions, no clean bound) still runs
         only when the stored NEG-8 conditions were the two ``*_UNDERIVED``
@@ -4848,11 +4921,28 @@ class _Harvest:
                 else:
                     manifests, current, policy = sources
 
+                    # Delta audit A5: a strict-invalid reference (custody
+                    # triangle, or this harvest's own strict validation) is
+                    # lost before aggregation.  The authenticity pass replays
+                    # the stored bracket's selection: it drops the references
+                    # that bracket lists as strict_invalid and reads an
+                    # unlisted one as the writer did; the exclusion pass then
+                    # drops every strict-invalid reference.
+                    members = getattr(self, "members", None) or {}
+                    stored_strict = {item.get("bundle_id") for item in (bracket or {}).get("reference_losses") or []
+                                     if isinstance(item, Mapping) and item.get("reason") == "strict_invalid"}
+
+                    def harvest_strict_invalid(bundle_id: str, _path: Path) -> bool:
+                        return (members.get(bundle_id) or {}).get("strict_valid") is False
+
                     def rederive(excluded: Mapping[str, str] | None) -> tuple[Any, str | None]:
+                        replay = {"stored_strict_losses": stored_strict, "unlisted_strict_invalid": "read"} \
+                            if excluded is None else {}
                         return ww._derived_neg8_decision(
                             manifests, runs, policy, current=current, point_drift=True,
                             drift_bound_artifact=bound, return_bracket=True,
-                            freshness_evaluated_at_s=evaluated_at, exclude_bundle_ids=excluded)
+                            freshness_evaluated_at_s=evaluated_at, exclude_bundle_ids=excluded,
+                            strict_invalid=harvest_strict_invalid, **replay)
 
                     stored, problem = rederive(None)
                     if problem is not None:
@@ -4863,7 +4953,7 @@ class _Harvest:
                             or stored.get("estimand") != (bracket or {}).get("estimand"):
                         problems.append("rederivation_differs_from_stored_bracket")
                     derived = stored
-                    if not problems and exclude:
+                    if not problems and exclude is not None:
                         derived, problem = rederive(dict(exclude))
                         if problem is not None:
                             problems.append(f"rederivation_failed:{problem}")
@@ -4871,9 +4961,12 @@ class _Harvest:
                             problems.append("rederivation_invalid")
             except Exception as exc:  # the core failing evaluates nothing
                 problems.append(f"rederivation_raised:{type(exc).__name__}")
+        survivor_bracket = None
         if isinstance(derived, Mapping):
-            write_json_once(self.withheld / "neg8-rescreen-bracket.json",
-                            {"schema": NEG8_SCREEN_SCHEMA, "bracket": derived})
+            # Hash-bound into the derived records, so an allowance consumer
+            # can authenticate the bracket the screen passed on (audit A1).
+            survivor_bracket = {"path": "withheld/neg8-rescreen-bracket.json", "sha256": write_json_once(
+                self.withheld / "neg8-rescreen-bracket.json", {"schema": NEG8_SCREEN_SCHEMA, "bracket": derived})}
             if not problems:
                 freshness = derived.get("bound_freshness") if isinstance(derived.get("bound_freshness"), Mapping) \
                     else {}
@@ -4889,13 +4982,18 @@ class _Harvest:
                     "endpoint_protocol", "reference_counts", "planned_reference_counts", "reference_losses",
                     "midpoint_lost", "survivor_screen") if key in derived}
         decision = bracket.get("decision") if bracket is not None else None
+        bound_used = ("corpus_physics_clean" if getattr(self, "neg8_clean_bound", None) is not None
+                      else "collected_subset" if getattr(self, "neg8_collected_bound", None) is not None
+                      else "stored_bracket" if bound is not None else None)
+        clean_bound = getattr(self, "neg8_clean_bound_record", None) if bound_used == "corpus_physics_clean" else None
+        self.neg8_rescreen_binding = {"survivor_bracket": survivor_bracket, "bound": bound, "bound_used": bound_used,
+                                      "clean_bound": clean_bound}
         self.outputs["derived/neg8-screen.json"] = write_json_once(self.derived / "neg8-screen.json", {
             "schema": NEG8_SCREEN_SCHEMA, "bound_derived_from": (self.neg8 or {}).get("derived_from"),
-            "bound_used": ("corpus_physics_clean" if getattr(self, "neg8_clean_bound", None) is not None
-                           else "collected_subset" if getattr(self, "neg8_collected_bound", None) is not None
-                           else "stored_bracket" if bound is not None else None),
+            "bound_used": bound_used,
             "harvest_reference_losses": dict(sorted((exclude or {}).items())),
             "bound_formula": ww.NEG8_COUNT_ADJUSTED_BOUND_FORMULA,
+            "survivor_bracket": survivor_bracket, "clean_bound": clean_bound,
             "stored": {"decision": decision if isinstance(decision, str) else None,
                        "conditions_beyond_bound_underived": sorted(other_conditions)},
             "rescreen": result})
@@ -4988,8 +5086,11 @@ class _Harvest:
             if valid:
                 record["clean_bound_validated"] = True
                 self.neg8_clean_bound = clean
-                write_json_once(self.withheld / "neg8-clean-bound.json",
-                                {"schema": NEG8_CORPUS_PHYSICS_SCHEMA, "bound": clean})
+                # Hash-bound so an allowance consumer can authenticate the
+                # clean bound the survivor screen used (audit A1).
+                record["clean_bound"] = {"path": "withheld/neg8-clean-bound.json", "sha256": write_json_once(
+                    self.withheld / "neg8-clean-bound.json", {"schema": NEG8_CORPUS_PHYSICS_SCHEMA, "bound": clean})}
+                self.neg8_clean_bound_record = {**record["clean_bound"], "corpus_manifest": record["clean_manifest"]}
             elif not problems:
                 problems.append("clean_bound_does_not_validate")
         self.outputs["derived/neg8-corpus-physics.json"] = write_json_once(
@@ -5004,7 +5105,7 @@ class _Harvest:
         pending = getattr(self, "neg8_pending", None)
         if pending is not None:
             row, authentic = pending
-            self.neg8_screen(row, authentic=authentic)
+            self.neg8_allowance(row, self.neg8_screen(row, authentic=authentic))
 
     def prepare_desk_verdict(self) -> None:
         """Produce the whole-window verdict with the production writer, if absent (start, then finish)."""
@@ -5587,6 +5688,11 @@ class _Harvest:
         # stack) compared with a pin is the model check itself, so it may
         # supersede an arm model_identity collector that did not finish.
         science_compared, science_complete = 0, bool(frozen)
+        # Audit A2: every NEG-8 reference and every spare runs the one reference
+        # workload, so they are one identity unit, compared member by member
+        # with the workload's expected identity below.
+        references: dict[str, tuple[str, str]] = {}
+        reference_triples: dict[str, Mapping[str, Any]] = {}
         for member in self.roster["members"]:
             result = self.members.get(member["run_id"])
             if result is None or result.get("status") != "succeeded":
@@ -5594,9 +5700,11 @@ class _Harvest:
             relative = str(member.get("config_path") or "")
             if relative.startswith(pack_relative + "/"):
                 relative = relative[len(pack_relative) + 1:]
-            # Auxiliary members (NEG-8 corpus, references) may run another model;
+            reference = isinstance(member.get("neg8_slot"), str) or isinstance(member.get("spare_slot"), str)
+            # Other auxiliary members (the NEG-8 corpus) may run another model;
             # each auxiliary input is its own consistency group.
-            unit_id = unit_of.get(relative) or f"{member.get('kind')}:{member.get('stage_id')}"
+            unit_id = NEG8_REFERENCE_IDENTITY_UNIT if reference \
+                else unit_of.get(relative) or f"{member.get('kind')}:{member.get('stage_id')}"
             triple = result.get("identity")
             science = member.get("kind") == "science"
             if not isinstance(triple, Mapping):
@@ -5605,6 +5713,10 @@ class _Harvest:
                           collector="model_identity", observed={"error": "identity" in result.get("errors", {})})
                 continue
             seen.setdefault(str(unit_id), set()).add((triple["model_artifact_sha256"], triple["runtime_identity_sha256"]))
+            if reference:
+                references[member["run_id"]] = (triple["model_artifact_sha256"], triple["runtime_identity_sha256"])
+                reference_triples[member["run_id"]] = triple
+                continue
             pins = frozen.get(unit_id)
             if science:
                 science_complete = science_complete and pins is not None
@@ -5614,12 +5726,53 @@ class _Harvest:
                 self.emit("model.identity_mismatch", level="member", run_id=member["run_id"],
                           collector="model_identity", observed=dict(triple),
                           expected={key: pins.get(key) for key in ("model_artifact_sha256", "runtime_identity_sha256")})
+        self._reference_model_identity(references, reference_triples, override)
         for unit_id, identities in sorted(seen.items()):
             if len(identities) > 1:
                 self.emit("model.identity_inconsistent_in_window", level="window", collector="model_identity",
                           observed={"identity_unit": unit_id, "distinct": sorted(map(list, identities))[:8]})
         self.identity_checks["model_identity"] = {"pins": bool(frozen),
                                                   "members_compared": science_complete and science_compared > 0}
+
+    def _reference_model_identity(self, references: Mapping[str, tuple[str, str]],
+                                  triples: Mapping[str, Mapping[str, Any]], pins: Any) -> None:
+        """Each NEG-8 reference and spare against the reference workload's expected identity (audit A2, ruling N8).
+
+        The references at start, midpoint and end and their spares are copies
+        of one reference workload, so all of them must have run one model and
+        one runtime stack.  The expected identity is the sealed pin when the
+        identity pins carry one for the unit ``NEG8_REFERENCE_IDENTITY_UNIT``;
+        otherwise (the block-5 pins carry none) it is the identity a strict
+        majority of the window's references and spares share.  A member whose
+        identity differs is ``model.identity_mismatch``; with no strict
+        majority no member's identity can be told right, and each is
+        ``model.identity_underivable``.  Both are member-level, so the NEG-8
+        screen drops that reference (``NEG8_REFERENCE_LOSS_CODES``) and the
+        survivors rule decides.  No energy is read.
+        """
+        if not references:
+            return
+        pinned = pins.get(NEG8_REFERENCE_IDENTITY_UNIT) if isinstance(pins, Mapping) else None
+        expected: tuple[str, str] | None = None
+        if isinstance(pinned, Mapping) and _is_sha256(pinned.get("model_artifact_sha256")) \
+                and _is_sha256(pinned.get("runtime_identity_sha256")):
+            expected, source = (pinned["model_artifact_sha256"], pinned["runtime_identity_sha256"]), "sealed_pin"
+        else:
+            source = "reference_majority"
+            (top, count), *_rest = Counter(references.values()).most_common()
+            if 2 * count > len(references):
+                expected = top
+        for run_id, identity in sorted(references.items()):
+            if expected is None:
+                self.emit("model.identity_underivable", level="member", run_id=run_id, collector="model_identity",
+                          observed={"error": False, "identity_unit": NEG8_REFERENCE_IDENTITY_UNIT,
+                                    "reason": "reference_identity_without_majority",
+                                    "distinct": len(set(references.values())), "members": len(references)})
+            elif identity != expected:
+                self.emit("model.identity_mismatch", level="member", run_id=run_id, collector="model_identity",
+                          observed={**dict(triples[run_id]), "identity_unit": NEG8_REFERENCE_IDENTITY_UNIT,
+                                    "pin_source": source},
+                          expected={"model_artifact_sha256": expected[0], "runtime_identity_sha256": expected[1]})
 
     # -- launch lineage (lane L3's records audit) ------------------------------
     def lineage_audit(self) -> None:

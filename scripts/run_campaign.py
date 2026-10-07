@@ -7184,6 +7184,19 @@ def _idle_admission_core_evaluation(
                     "status": evaluation.status if readable else None,
                 }
             )
+        elif neg8_position in neg8_references and not evaluation.strict_valid:
+            # Delta audit A5: a succeeded reference whose strict validation
+            # failed is lost before aggregation (the replay drops it the same
+            # way), not handed to the evaluator as None, which failed the
+            # whole screen as neg8_bracket_reference_invalid.
+            neg8_lost.append(
+                {
+                    "bundle_id": evaluation.bundle_id,
+                    "position": neg8_position,
+                    "reason": "strict_invalid",
+                    "status": evaluation.status,
+                }
+            )
         elif neg8_position in neg8_references:
             neg8_references[neg8_position].append(
                 (

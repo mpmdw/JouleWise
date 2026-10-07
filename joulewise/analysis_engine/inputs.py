@@ -3254,6 +3254,7 @@ def load_analysis_inputs(
     evaluation_basis_sha256: str | None = None,
     mode: Literal["read_replay", "issuing"] = "issuing",
     calibration_ledger_snapshot: CalibrationLedgerSnapshot | None = None,
+    neg8_harvest_archive: Path | None = None,
 ) -> LoadedAnalysisInputs:
     """Load analysis-corpus inputs and independently bind floor evidence.
 
@@ -3261,6 +3262,11 @@ def load_analysis_inputs(
     is absent it also supplies the legacy bare-Path floor-binding input; an
     artifact declaring multiple distinct evidence-root IDs then refuses with
     ``evidence_root_mapping_required``.
+
+    ``neg8_harvest_archive`` is the window's block-5 harvest archive: the
+    whole-window drift allowance then comes from the NEG-8 bracket the
+    harvest's screen left standing (``whole_window_drift_allowances``; required
+    on a HAZARD runs root, audit A1).
     """
 
     analysis_manifest_path = Path(analysis_manifest_path)
@@ -3466,6 +3472,7 @@ def load_analysis_inputs(
             runs_root,
             effective_bundle_ids,
             consumption_session=consumption_session,
+            neg8_harvest_archive=neg8_harvest_archive,
             **basis_kwargs,
         )
         for evidence in (*registered.values(), *extras):
