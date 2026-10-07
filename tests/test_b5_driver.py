@@ -636,6 +636,46 @@ class LaunchTests(unittest.TestCase):
         self.assertEqual(calls, len(harness.arm.contexts))
 
 
+class G10SupervisionTests(unittest.TestCase):
+    """Cold pass N7: while G10 runs, the driver keeps supervising the monitor and meter.
+
+    Before: _run_g10 blocked in process.wait(timeout=1500) and took no
+    supervision, so a monitor crash during G10 was neither restarted nor flagged."""
+
+    def g10(self, supervise, seconds: float = 0.8):
+        night = Path(tempfile.mkdtemp(dir=os.environ.get("TMPDIR")))
+        self.addCleanup(lambda: __import__("shutil").rmtree(night, ignore_errors=True))
+        seams = types.SimpleNamespace(
+            g10_argv=lambda night, t: [sys.executable, "-c", f"import time; time.sleep({seconds})"],
+            popen=subprocess.Popen)
+        window = types.SimpleNamespace(seams=seams, note=lambda text: None)
+        with mock.patch.object(b5_driver, "G10_POLL_S", 0.1):
+            return b5_driver._run_g10(window, night, 300.0, supervise=supervise)
+
+    def test_supervision_runs_between_polls_until_g10_exits(self):
+        calls = []
+        record = self.g10(lambda: calls.append(time.monotonic()))
+        self.assertEqual(0, record["returncode"])
+        self.assertGreaterEqual(len(calls), 3)
+        self.assertEqual(len(calls), record["supervision_passes"])
+
+    def test_a_stop_or_a_raise_from_supervision_never_stops_g10(self):
+        stops = []
+
+        def stop_once():
+            stops.append(1)
+            return {"reason": "night_stopped_monitor_outage"}
+        record = self.g10(stop_once)
+        self.assertEqual((0, 1), (record["returncode"], len(stops)))
+        self.assertEqual("night_stopped_monitor_outage", record["supervision_stop"]["reason"])
+
+        def boom():
+            raise RuntimeError("monitor poll failed")
+        record = self.g10(boom)
+        self.assertEqual(0, record["returncode"])
+        self.assertIn("monitor poll failed", record["supervision_errors"][0])
+
+
 class CourierPayloadTests(unittest.TestCase):
     """For this class the courier carries structure only: no runs-root file, no chain log."""
 

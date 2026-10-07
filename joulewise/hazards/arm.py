@@ -2,9 +2,11 @@
 
 Runs inside the launchd job after t0, in this fixed order:
 
-1. **Agent census** ``pgrep -lf '[c]odex|[c]laude|[t]3'``: it must exit 1 with
-   empty output, or the arm refuses before any action (kept by doctrine:
-   never start [QUIET-MAC] work while an agent session is alive).
+1. **Agent census** ``pgrep -lf '[c]odex|[c]laude|[t]3'``, decided by the
+   shared matcher ``joulewise.agent_identity`` (a listed process counts only
+   when it runs an agent executable and is not in this process's own tree):
+   no agent may remain, or the arm refuses before any action (kept by
+   doctrine: never start [QUIET-MAC] work while an agent session is alive).
 2. **Instant reads**: battery (state from ioreg, current from SMC B0AC),
    thermal (with ``pmset -g therm`` kept as a diagnostic), disk, and the
    clock's frequency gate.  When the config names
@@ -51,6 +53,7 @@ from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
+from joulewise import agent_identity
 from joulewise.hazards import battery, clock, contention, disk, instrument, smc, thermal
 from joulewise.hazards.base import (
     PASS, UNMEASURED, Context, Measurement, Verdict, canonical_json, row, write_create_once,
@@ -315,21 +318,34 @@ def agent_census(ctx: Context) -> dict[str, Any]:
 
     completed = ctx.run(AGENT_CENSUS_ARGV, CENSUS_TIMEOUT_S)
     stdout = completed.stdout.decode("utf-8", errors="replace")
+    # The shared matcher (joulewise/agent_identity.py, Opus triple audit F3):
+    # a listed process counts only when the kernel says it runs an agent
+    # executable; this process's own tree (the driver and its children) and
+    # anything whose argv merely contains the substrings are recorded, not hits.
+    returncode = completed.returncode
+    decided: dict[str, Any] = {}
+    if stdout.strip() and completed.error is None and not completed.timed_out:
+        matched = agent_identity.filter_census(stdout, own_tree_root=os.getpid())
+        if matched.ignored:
+            decided = {"raw_returncode": returncode, "raw_stdout": stdout, "ignored": matched.ignored}
+            stdout = matched.kept_text
+            if not stdout.strip() and returncode == 0:
+                returncode = 1
     clean = (completed.error is None and not completed.timed_out
-             and completed.returncode == 1 and stdout.strip() == "")
+             and returncode == 1 and stdout.strip() == "")
     if clean:
         detail = "no agent process"
     elif completed.error or completed.timed_out:
         detail = f"agent census did not run: {completed.error or 'timed out'}"
     else:
         lines = stdout.strip().splitlines()
-        detail = f"agent census exit {completed.returncode}"
+        detail = f"agent census exit {returncode}"
         if lines:
             detail += "; agent process present: " + "; ".join(lines[:20])
-    return {"argv": list(AGENT_CENSUS_ARGV), "returncode": completed.returncode,
+    return {"argv": list(AGENT_CENSUS_ARGV), "returncode": returncode,
             "stdout": stdout, "stderr": completed.stderr.decode("utf-8", errors="replace"),
             "timed_out": completed.timed_out, "error": completed.error, "clean": clean,
-            "detail": detail, "stamp": ctx.stamp().to_json()}
+            "detail": detail, "stamp": ctx.stamp().to_json(), **decided}
 
 
 def identity_read(ctx: Context, expected_epochs: Sequence[Mapping[str, Any]]) -> dict[str, Any]:

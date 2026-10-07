@@ -107,9 +107,17 @@ class IntervalIdentityTests(unittest.TestCase):
 
 
 class MalformedRecordTests(unittest.TestCase):
-    """Finding 7: read_flags dropped an exclusion-bearing record without a trace."""
+    """Finding 7: read_flags dropped an exclusion-bearing record without a trace.
 
-    def test_malformed_physics_flag_blocks_release(self) -> None:
+    Opus triple audit F2 (2026-10-07): the salvaged record used to be never
+    classified, so it blocked release for ever (first_claim_usable returned
+    None and the catalog loader refused the registered cure). It is DISCLOSE
+    now; the block-5 harvest, the production reader, adds the conservative
+    exclusion when the line's recoverable code could be one
+    (tests/test_harvest_b5_window.py UnwrittenCoreFlagTests).
+    """
+
+    def test_malformed_physics_flag_is_salvaged_and_disclosed(self) -> None:
         good = flag("battery.member_span", "member", run_id="q0_0")
         bad = dict(good, evidence=[{"path": "/abs/raw.plist", "sha256": "0" * 64}])
         with tempfile.TemporaryDirectory() as directory:
@@ -122,24 +130,56 @@ class MalformedRecordTests(unittest.TestCase):
         self.assertEqual(flags[0]["scope"]["plan_id"], "P")
         self.assertEqual(validate_flag(flags[0]), [])
         result = compute(flags, roster(), SPANS, CATALOG)
-        self.assertEqual(result["unclassified"], ["records.malformed_flag"])
-        self.assertTrue(result["release_blocked"])
+        self.assertEqual(CATALOG.effect("records.malformed_flag"), "DISCLOSE")
+        self.assertEqual((result["unclassified"], result["release_blocked"]), ([], False))
 
-    def test_unparseable_line_blocks_release_for_any_plan(self) -> None:
+    def test_a_malformed_line_no_longer_deadlocks_the_pack(self) -> None:
+        """The Opus probe: one malformed line in attempt 1, attempt 2 clean.
+
+        Before: attempt 1 release_blocked True, first_claim_usable([1, 2]) None
+        for ever, and a catalog classifying records.malformed_flag refused."""
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "z.jsonl"
             path.write_bytes(b'{"code": "battery.member_span", "scope": ')
             flags, _ = read_flags(path)
         self.assertEqual(flags[0]["scope"]["plan_id"], None)
-        self.assertTrue(compute(flags, roster(), SPANS, CATALOG)["release_blocked"])
+        first = compute(flags, roster(), SPANS, CATALOG)
+        second = compute([], {**roster(), "attempt": 2}, SPANS, CATALOG)
+        self.assertFalse(first["release_blocked"])
+        self.assertEqual(first_claim_usable([first, second]), 1)
+        document = draft_catalog_document()
+        document["codes"]["records.malformed_flag"]["effect"] = "EXCLUDE_WINDOW"
+        reclassified = catalog_from_bytes(json.dumps(document).encode())
+        self.assertEqual(reclassified.effect("records.malformed_flag"), "EXCLUDE_WINDOW")
 
-    def test_catalog_may_not_classify_the_never_classified_codes(self) -> None:
-        for code in NEVER_CLASSIFIED_CODES:
-            document = draft_catalog_document()
-            document["codes"][code] = {"family": "RECORDS", "klass": "REPRESENTATION", "effect": "DISCLOSE"}
-            with self.subTest(code=code), self.assertRaises(CatalogError):
-                catalog_from_bytes(json.dumps(document).encode())
-            self.assertNotIn(code, CATALOG.codes)
+    def test_no_code_is_beyond_the_catalogs_reach(self) -> None:
+        self.assertEqual(NEVER_CLASSIFIED_CODES, ())
+        document = draft_catalog_document()
+        document["codes"]["collector.unmeasured"] = {"family": "DIAGNOSTIC", "klass": "REPRESENTATION",
+                                                     "effect": "DISCLOSE"}
+        self.assertEqual(catalog_from_bytes(json.dumps(document).encode()).effect("collector.unmeasured"),
+                         "DISCLOSE")
+        self.assertNotIn("collector.unmeasured", CATALOG.codes)  # the draft still leaves it unclassified
+
+
+class BundleIdScopeTests(unittest.TestCase):
+    """Fable audit F9: a member exclusion naming its member by bundle id is not dropped.
+
+    Before: run_id 'bundle-q0_0' is not a roster run id, so the flag went to
+    unmatched_member and the member stayed in the claim."""
+
+    def test_a_bundle_id_scope_reaches_its_member(self) -> None:
+        bundled = {**roster(), "bundles": [{"bundle_id": f"bundle-{m['run_id']}", "run_id": m["run_id"],
+                                            "attempt": 1, "created_monotonic_ns": None}
+                                           for m in roster()["members"]]}
+        by_bundle = flag("battery.member_span", "member", run_id="bundle-q0_0")
+        result = compute([by_bundle], bundled, SPANS, CATALOG)
+        excluded = {row["run_id"] for row in result["members_excluded"]}
+        self.assertIn("q0_0", excluded)
+        self.assertEqual(0, result["flag_counts"]["unmatched_member"])
+        foreign = flag("battery.member_span", "member", run_id="not-a-member")
+        result = compute([foreign], bundled, SPANS, CATALOG)
+        self.assertEqual(1, result["flag_counts"]["unmatched_member"])  # still not this window's member
 
 
 class CellRuleTests(unittest.TestCase):

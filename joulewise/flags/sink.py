@@ -6,7 +6,8 @@ reads any bytes other writers appended since its last look, and skips the
 append when the id is already present. A torn last line (a crash mid-write) is
 left in place; the next append first writes a newline so the torn bytes stay a
 line of their own, which :func:`read_flags` reports as a problem and replaces
-with an unclassified ``records.malformed_flag`` record.
+with a ``records.malformed_flag`` record (DISCLOSE; the harvest adds the
+conservative exclusion its recoverable code calls for).
 """
 
 from __future__ import annotations
@@ -174,10 +175,12 @@ def malformed_flag(
 ) -> dict[str, Any]:
     """A ``records.malformed_flag`` record standing for one line that failed validation.
 
-    The code is never classified (``catalog.NEVER_CLASSIFIED_CODES``), so the
-    exclusion function reports it ``UNCLASSIFIED`` and the release event is
-    blocked until a person reads the line: a malformed record may have been
-    an exclusion (review 2026-10-05).
+    The record keeps the salvaged code and scope. The code is DISCLOSE in
+    the draft since the Opus triple audit F2 fix (2026-10-07): it used to be
+    never classified, which blocked release with no cure. The block-5
+    harvest, the production reader of flag lines, adds the conservative
+    exclusion when a malformed line's recoverable code could be one
+    (``joulewise.b5.harvest.WindowHarvest._malformed_flag_line``).
     """
 
     salvaged_code = value.get("code") if isinstance(value, Mapping) else None
@@ -214,9 +217,8 @@ def read_flags(
     Reading never raises on content: a malformed record is a problem string,
     because a malformed record must never stop anything downstream. With
     ``salvage`` (the default) each malformed line also yields a
-    ``records.malformed_flag`` record in the returned flags; that code is
-    never classified, so a lost exclusion blocks the release event instead of
-    disappearing.
+    ``records.malformed_flag`` record in the returned flags, so the line is
+    never lost without a trace (see :func:`malformed_flag`).
     """
 
     target = Path(path)

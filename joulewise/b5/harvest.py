@@ -289,10 +289,29 @@ CODES: dict[str, CodeSpec] = {
     "records.terminal_record_absent": _spec("RECORDS", "REPRESENTATION"),
     "records.source_changed_during_harvest": _spec("RECORDS", "NUMBER"),
     "records.collector_failed": _spec("RECORDS", "REPRESENTATION"),
-    # An earlier flag line (desk, arm, driver) that is not a valid flag.  It
-    # may have been an exclusion, so it is never classified: L4's
-    # NEVER_CLASSIFIED_CODES, which blocks the release event until read.
+    # An earlier flag line (desk, arm, driver) that is not a valid flag.
+    # Disclosed (Opus triple audit F2, 2026-10-07: never classifying it
+    # deadlocked first_claim_usable and the catalog could not cure it); when
+    # the line's recoverable code could name an exclusion, the conservative
+    # rule (_malformed_flag_line) adds one of the two exclusion codes below.
     "records.malformed_flag": _spec("RECORDS", "REPRESENTATION"),
+    "records.malformed_flag_exclusion_possible": _spec("RECORDS", "NUMBER"),
+    "records.malformed_flag_member_exclusion_possible": _spec("RECORDS", "NUMBER"),
+    # A designed output, not a malformed one: the stand-in line a flag writer
+    # prints when it could not build or write its flag (flags.core.emit's
+    # fallback; the chain's flag() wrapper and FLAG_HELPER).  The flag it names
+    # is rebuilt from the line's code, level and run id; this records that.
+    "records.flag_unbuilt": _spec("RECORDS", "REPRESENTATION"),
+    # An operator log (or log directory) the harvest could not read: it may
+    # have held an unwritten-flag marker line.  Disclosed.
+    "records.operator_log_unreadable": _spec("RECORDS", "REPRESENTATION"),
+    # Cold pass N1 / Fable audit F10: the member's runtime powermetrics digest
+    # could not be read (instrument.binary_identity_unmeasured, EXCLUDE_MEMBER),
+    # but on the collection boot the harvest hashed the executable the member
+    # recorded and it equals the calibrated digest.  The member flag is
+    # superseded by this one; it is kept when the digest differs, the boot
+    # differs or the executable cannot be read.
+    "instrument.binary_identity_rederived": _spec("INSTRUMENT", "NUMBER"),
     "g3.assertion_failed": _spec("RECORDS", "REPRESENTATION", legacy="scripts/check_window_provenance.py"),
     "g3.recompute_failed": _spec("NEG8", "NUMBER", legacy="scripts/check_window_provenance.py:837"),
     "g3.not_applicable": _spec("DIAGNOSTIC", "REPRESENTATION"),
@@ -420,6 +439,9 @@ CORE_WRITER_CODES = frozenset({
 # joulewise.flags.core.UNWRITTEN_MARKER, read and never imported: a core flag
 # whose write failed is printed whole to the stage's stderr behind it (N8).
 UNWRITTEN_MARKER = "JOULEWISE_UNWRITTEN_FLAG "
+# joulewise.adapters.powermetrics.POWER_METRICS, read and never imported (a
+# pinned estimator file): the sampler a member that recorded no path ran.
+POWERMETRICS_EXECUTABLE = "/usr/bin/powermetrics"
 # Under each operator-log directory: the members' own stderr copies
 # (scripts/run_campaign.py), scanned for the marker like the stage logs.
 MEMBER_STDERR_DIR = "member-stderr"
@@ -468,9 +490,23 @@ IDENTITY_SUPERSESSION_CHECKS = {
     "pack_identity": frozenset({"pins", "config_run_id", "registered_digests"}),
     "checkout_identity": frozenset({"head", "tracked_edits", "untracked_in_executed_roots"}),
     "executed_code": frozenset({"executed_inventory", "chain_sidecar"}),
+    # Opus audit F5: the pins were read and every succeeded science member's
+    # recorded model and runtime identity was derived and compared with them.
+    "model_identity": frozenset({"pins", "members_compared"}),
 }
 LINEAGE_CODES = frozenset(code for code in CODES if code.startswith("lineage."))
-NEVER_CLASSIFIED_CODES = frozenset({"records.malformed_flag"})
+# Empty since the Opus triple audit F2 fix (2026-10-07): a never-classified
+# code blocked release with no registered cure.  Kept so the tests' set
+# arithmetic reads the same.
+NEVER_CLASSIFIED_CODES: frozenset[str] = frozenset()
+# Codes added by audit-fix batch 2 (2026-10-07): classified in the L4 draft
+# (joulewise.flags.catalog._AUDFIX2_CODES) and the test fixture; the design
+# branch's draft sealed catalog gains them through REG before the seal.
+AUDFIX2_CODES = frozenset({
+    "records.malformed_flag", "records.malformed_flag_exclusion_possible",
+    "records.malformed_flag_member_exclusion_possible", "records.flag_unbuilt", "records.operator_log_unreadable",
+    "instrument.binary_identity_rederived",
+})
 # Codes L4's draft catalog does not name (handed to L4 and L6 for the draft
 # and the sealed catalog).  ``tests/test_harvest_b5_window.py`` keeps this
 # list equal to CODES minus the draft whenever joulewise.flags is importable.
@@ -489,7 +525,8 @@ L5_ONLY_CODES = frozenset({
     "roster.run_id_mismatch", "roster.no_science_bundles", "roster.duplicate_run_id",
     "records.monitor_journal_absent", "records.monitor_line_malformed", "records.arm_record_absent",
     "records.terminal_record_absent", "records.source_changed_during_harvest", "records.collector_failed",
-    "records.malformed_flag",
+    # records.malformed_flag and the other AUDFIX2_CODES are in L4's draft since
+    # audit-fix batch 2 (2026-10-07).
     "g3.assertion_failed", "g3.recompute_failed", "g3.not_applicable",
     # L4's draft names g10.discharged and g10.not_discharged; the block-5
     # catalog draft classifies all five (DIAGNOSTIC, PHYSICS, DISCLOSE).
@@ -524,8 +561,6 @@ G10_DRIVER_RECORD_NAME = "g10" ".driver.json"  # joulewise.b5.driver G10_DRIVER_
 # binding when the verdict writer's membership resolver needs one (R2-2a).
 MEMBERSHIP_BINDING_NAME = "window-membership-binding.json"
 MEMBERSHIP_BINDING_SCHEMA = "joulewise.whole_window_membership_binding.v1"  # joulewise.salvage_dangler
-# Ledger refusal reasons that mean the committed pin is not the head the
-# verdict writer must read (calibration_ledger.load_calibration_ledger_snapshot).
 # The plan trees' external inputs that hold the NEG-8 window references the
 # whole-window verdict brackets the window with (start x3, midpoint, end x3:
 # whole_window.evaluate_neg8_point_drift).  The floor packs name them in the
@@ -538,6 +573,8 @@ NEG8_REFERENCE_INPUT_IDS = frozenset({"start_reference", "start_references", "mi
 AUDFIX1_CODES = frozenset({"neg8.reference_member_excluded", "monitor.orphan_unverified",
                            *(f"{module}.arm_unmeasured" for module in ("clock", "battery", "thermal", "contention",
                                                                        "disk"))})
+# Ledger refusal reasons that mean the committed pin is not the head the
+# verdict writer must read (calibration_ledger.load_calibration_ledger_snapshot).
 PIN_REFUSAL_REASONS = frozenset({"calibration_ledger_head_mismatch", "calibration_ledger_rollback",
                                  "calibration_ledger_head_uncommitted", "calibration_ledger_missing",
                                  "calibration_ledger_malformed"})
@@ -1063,6 +1100,40 @@ class Catalog:
         return effect if effect in EFFECTS else UNCLASSIFIED
 
 
+UNBUILT_MARKER_KEYS = frozenset({"code", "level", "run_id", "observed", "unbuilt"})
+_SALVAGE_CODE = re.compile(rb'"code"\s*:\s*"([a-z0-9_.]*)("?)')
+_SALVAGE_RUN_ID = re.compile(rb'"run_id"\s*:\s*"([A-Za-z0-9._-]+)"')
+
+
+def _is_unbuilt_marker(value: Any) -> bool:
+    """The designed stand-in line of flags.core.emit and the chain's flag writer (not a torn flag)."""
+    return (isinstance(value, Mapping) and "unbuilt" in value and set(value) <= UNBUILT_MARKER_KEYS
+            and isinstance(value.get("code"), str) and CODE_RE.fullmatch(value["code"]) is not None)
+
+
+def _salvage_flag_fields(line: bytes, value: Any) -> tuple[str | None, bool, str | None]:
+    """What a damaged flag line still shows: (code or code prefix, whether the code is whole, run id)."""
+    code: str | None = None
+    exact = False
+    run_id: str | None = None
+    if isinstance(value, Mapping):
+        if isinstance(value.get("code"), str):
+            code, exact = value["code"], True
+        scope = value.get("scope")
+        candidate = scope.get("run_id") if isinstance(scope, Mapping) else value.get("run_id")
+        run_id = candidate if isinstance(candidate, str) and candidate else None
+    if code is None:
+        match = _SALVAGE_CODE.search(line)
+        if match:
+            code, exact = match.group(1).decode("ascii"), bool(match.group(2))
+    if run_id is None:
+        match = _SALVAGE_RUN_ID.search(line)
+        run_id = match.group(1).decode("ascii") if match else None
+    if exact and CODE_RE.fullmatch(code or "") is None:
+        exact = False
+    return code, exact, run_id
+
+
 class FlagLedger:
     """Every flag of one harvest, deduplicated by ``flag_id``, in emission order."""
 
@@ -1366,6 +1437,24 @@ def resolve_inputs(plan_path: Path | str, overrides: Mapping[str, Any] | None = 
 # ---------------------------------------------------------------------------
 # Archive: an APFS clone where possible, verified byte for byte.
 # ---------------------------------------------------------------------------
+
+# Names the OS writes into a browsed directory (Finder, AppleDouble); no
+# reducer, validator or harvest step reads them, so their appearing is not a
+# change of any source a number came from (Opus triple audit F7).
+OS_METADATA_NAMES = frozenset({".DS_Store", ".localized"})
+
+
+def _os_metadata(relative: str) -> bool:
+    name = relative.rsplit("/", 1)[-1]
+    return name in OS_METADATA_NAMES or name.startswith("._")
+
+
+def number_bearing(inventory: Mapping[str, Any] | None) -> dict[str, Any] | None:
+    """``inventory`` without OS metadata files, for the source-changed comparisons."""
+    if inventory is None:
+        return None
+    return {key: value for key, value in inventory.items() if not _os_metadata(key)}
+
 
 def tree_inventory(root: Path) -> dict[str, dict[str, Any]]:
     """Relative path -> {sha256, size} for every regular file; links kept literal."""
@@ -2035,7 +2124,21 @@ def assess_member(task: Mapping[str, Any]) -> dict[str, Any]:
     result["run_started_epoch_s"] = stamp if isinstance(stamp, (int, float)) and not isinstance(stamp, bool) else None
     raw_plist = bundle / "raw" / "powermetrics.plist"
     result["stream_bytes"] = raw_plist.stat().st_size if raw_plist.is_file() else None
+    result["powermetrics_binary"] = _powermetrics_binary_record(metadata)
     return result
+
+
+def _powermetrics_binary_record(metadata: Any) -> dict[str, Any]:
+    """The member's recorded sampler executable, its calibrated digest and its collection boot."""
+    def at(*keys: str) -> Any:
+        value: Any = metadata
+        for key in keys:
+            value = value.get(key) if isinstance(value, Mapping) else None
+        return value
+    return {"executable_path": at("device", "powermetrics", "executable_path"),
+            "runtime_sha256": at("device", "powermetrics", "executable_sha256"),
+            "calibrated_sha256": at("instrument_calibration", "bindings", "powermetrics_sha256"),
+            "collection_boot": at("extra", "launch_lineage", "collection_boot_session_id")}
 
 
 def assess_members(tasks: Sequence[Mapping[str, Any]], *, workers: int = 1) -> list[dict[str, Any]]:
@@ -2500,7 +2603,8 @@ def battery_join(span: Sequence[int], readings: Sequence[Reading], thresholds: M
                                                 "max_gap_s": SMC_MAX_GAP_S},
                     _hole_interval(smc_holes[0])))
     discharge_rows: list[dict[str, Any]] = []
-    out.extend(accumulator_member_flags(in_force_pubs, thresholds, discharge_out=discharge_rows))
+    out.extend(accumulator_member_flags(in_force_pubs, thresholds, discharge_out=discharge_rows,
+                                        smc_covered=covered))
     # Assist is discharge on AC and not charging (ruling item 1).  A span
     # with a read of IsCharging Yes or ExternalConnected No is excluded
     # (battery.member_span) and its discharge is not assist (review F5).  A
@@ -2663,7 +2767,7 @@ def pair_discharge_only(reasons: Any, currents: Any) -> bool:
 
 
 def accumulator_member_flags(in_force_publications: Sequence[Publication], thresholds: Mapping[str, Any], *,
-                             discharge_out: list[dict[str, Any]] | None = None
+                             discharge_out: list[dict[str, Any]] | None = None, smc_covered: bool = False
                              ) -> list[tuple[str, dict[str, Any], dict[str, Any]]]:
     """The accumulator rule of registration 6.4, on L1's own interval reader.
 
@@ -2678,7 +2782,11 @@ def accumulator_member_flags(in_force_publications: Sequence[Publication], thres
     ``discharge_out`` for ``battery.assist``; a positive discharge mean beyond
     it (the discharge-only accumulator rose: sign-inconsistent) stays
     ``battery.accumulator_excursion``, marked ``sign_inconsistent``, as in the
-    hazard copy (P3-HAZ review F2); a nonzero mean at or below the
+    hazard copy (P3-HAZ review F2), unless ``smc_covered`` (the 1 Hz SMC B0AC
+    reads cover the span, so the current was measured directly and any
+    charging is the SMC rule's): then it is ``battery.accumulator_unavailable``
+    (DISCLOSE; cold pass N4), a registry record disagreeing with itself, not a
+    measured hazard; a nonzero mean at or below the
     limit is ``battery.accumulator_activity``; a sign that
     cannot be read, or an interval without a voltage, is
     ``battery.accumulator_unavailable`` (the publication rule still applies).
@@ -2723,7 +2831,16 @@ def accumulator_member_flags(in_force_publications: Sequence[Publication], thres
                 # not discharge, and keeps the exclusion, as in
                 # joulewise.hazards.battery.span_findings (P3-HAZ review F2).
                 entry["sign_inconsistent"] = True
-                excursions.append(entry)
+                if smc_covered:
+                    # Cold pass N4: the SMC reads measure the current over the
+                    # span; the self-contradicting record is disclosed.
+                    unavailable_rows.append({"interval_monotonic_ns": interval,
+                                             "update_times_s": [earlier.update_time_s, later.update_time_s],
+                                             "unavailable": {label: "sign-inconsistent (the discharge "
+                                                             "accumulator rose); the SMC reads cover the span"},
+                                             "sign_inconsistent": entry})
+                else:
+                    excursions.append(entry)
             elif discharge_out is not None:
                 discharge_out.append(entry)
     out: list[tuple[str, dict[str, Any], dict[str, Any]]] = []
@@ -4601,7 +4718,7 @@ class _Harvest:
         allowed = {"campaign_log.jsonl", "bracket-binding.json", "whole-window-verdict.json", CAMPAIGN_LOCK_NAME,
                    MEMBERSHIP_BINDING_NAME}
         changed = sorted(name for name in set(before) | set(after)
-                         if name not in allowed and before.get(name) != after.get(name))
+                         if name not in allowed and not _os_metadata(name) and before.get(name) != after.get(name))
         appended_ok = (log.read_bytes().startswith(old_log) if log.is_file() else not old_log)
         if changed or not appended_ok:
             self.emit("records.source_changed_during_harvest", level="window", collector="desk",
@@ -4640,7 +4757,7 @@ class _Harvest:
         def rows(inventory: Mapping[str, Any] | None) -> dict[str, Any] | None:
             if inventory is None:
                 return None
-            return {key: value for key, value in inventory.items() if key.startswith(prefix)}
+            return {key: value for key, value in number_bearing(inventory).items() if key.startswith(prefix)}
 
         archived = rows(self._archived_inventory(desk["runs"]))
         before, after = rows(desk["before"]), rows(desk["after"])
@@ -5059,6 +5176,11 @@ class _Harvest:
                       observed={"identity_units": [unit.get("identity_unit_id") for unit in units]})
         pack_relative = _relative_to(self.pack_copy, self.repo_root_copy) or ""
         seen: dict[str, set[tuple[str, str]]] = {}
+        # Opus audit F5: every succeeded science member's identity (the
+        # weights tree hash its process took at prepare, and its runtime
+        # stack) compared with a pin is the model check itself, so it may
+        # supersede an arm model_identity collector that did not finish.
+        science_compared, science_complete = 0, bool(frozen)
         for member in self.roster["members"]:
             result = self.members.get(member["run_id"])
             if result is None or result.get("status") != "succeeded":
@@ -5070,12 +5192,17 @@ class _Harvest:
             # each auxiliary input is its own consistency group.
             unit_id = unit_of.get(relative) or f"{member.get('kind')}:{member.get('stage_id')}"
             triple = result.get("identity")
+            science = member.get("kind") == "science"
             if not isinstance(triple, Mapping):
+                science_complete = science_complete and not science
                 self.emit("model.identity_underivable", level="member", run_id=member["run_id"],
                           collector="model_identity", observed={"error": "identity" in result.get("errors", {})})
                 continue
             seen.setdefault(str(unit_id), set()).add((triple["model_artifact_sha256"], triple["runtime_identity_sha256"]))
             pins = frozen.get(unit_id)
+            if science:
+                science_complete = science_complete and pins is not None
+                science_compared += pins is not None
             if pins is not None and (triple["model_artifact_sha256"] != pins.get("model_artifact_sha256")
                                      or triple["runtime_identity_sha256"] != pins.get("runtime_identity_sha256")):
                 self.emit("model.identity_mismatch", level="member", run_id=member["run_id"],
@@ -5085,6 +5212,8 @@ class _Harvest:
             if len(identities) > 1:
                 self.emit("model.identity_inconsistent_in_window", level="window", collector="model_identity",
                           observed={"identity_unit": unit_id, "distinct": sorted(map(list, identities))[:8]})
+        self.identity_checks["model_identity"] = {"pins": bool(frozen),
+                                                  "members_compared": science_complete and science_compared > 0}
 
     # -- launch lineage (lane L3's records audit) ------------------------------
     def lineage_audit(self) -> None:
@@ -5615,6 +5744,50 @@ class _Harvest:
             "refusal_reason": masked(refusal.get("reason"))})
 
     # -- arm-collector unmeasured flags the harvest re-derived (PLAN2 row 12) ---
+    def rederive_binary_identity(self) -> None:
+        """Supersede ``instrument.binary_identity_unmeasured`` when the harvest can measure it (cold pass N1).
+
+        The member's own read of the powermetrics digest failed, which removed
+        it (EXCLUDE_MEMBER) on a failed probe.  The binary is a system file
+        bound to the OS build and changes only across a reboot, so on the
+        member's collection boot the harvest hashes the executable the member
+        recorded (``/usr/bin/powermetrics`` when it recorded none).  Equal to
+        the calibrated digest: the flag is removed and recorded whole in
+        ``instrument.binary_identity_rederived`` (DISCLOSE).  Different, a
+        different or unknown boot, or an unreadable executable: the exclusion
+        stays.
+        """
+        digests: dict[str, str | None] = {}
+        harvest_boot = (self.flags._boot or "").casefold() or None
+        for record in list(self.flags.records):
+            if record.get("code") != "instrument.binary_identity_unmeasured":
+                continue
+            scope = record.get("scope") if isinstance(record.get("scope"), Mapping) else {}
+            member = self.members.get(scope.get("run_id")) if scope.get("level") == "member" else None
+            binary = member.get("powermetrics_binary") if isinstance(member, Mapping) else None
+            if not isinstance(binary, Mapping):
+                continue
+            path = binary.get("executable_path") if isinstance(binary.get("executable_path"), str) \
+                else POWERMETRICS_EXECUTABLE
+            calibrated = binary.get("calibrated_sha256")
+            boot = binary.get("collection_boot")
+            same_boot = isinstance(boot, str) and harvest_boot is not None and boot.casefold() == harvest_boot
+            if not same_boot or not isinstance(calibrated, str) or not re.fullmatch(r"[0-9a-f]{64}", calibrated):
+                continue
+            if path not in digests:
+                try:
+                    digests[path] = sha256_bytes(Path(path).read_bytes())
+                except OSError:
+                    digests[path] = None
+            if digests[path] != calibrated:
+                continue
+            self.flags.remove(record["flag_id"])
+            self.emit("instrument.binary_identity_rederived", level="member", run_id=scope.get("run_id"),
+                      collector="binary_identity",
+                      observed={"superseded_flag_id": record["flag_id"], "executable_path": path,
+                                "harvest_sha256": digests[path], "calibrated_sha256": calibrated,
+                                "collection_boot": boot, "superseded_flag": dict(record)})
+
     def supersede_identity_unmeasured(self) -> None:
         """Lift a desk or arm ``*.identity_unmeasured`` only where this harvest re-derived every check.
 
@@ -5629,12 +5802,13 @@ class _Harvest:
         inventory against the sealed one, chain sidecar) and pack_identity
         (plan-tree pins, the registered plan-tree digest, config run ids;
         run-id uniqueness is ``roster.duplicate_run_id``, so every collection
-        stage must have resolved).  The checks required are
-        ``IDENTITY_SUPERSESSION_CHECKS``, named explicitly.  The harvest's
-        own result, mismatch or clean, then stands.  model_identity is never
-        superseded: the harvest does not re-hash the model artifact,
-        tokenizer or runtime packages.  The removed flag is recorded whole in
-        ``records.identity_unmeasured_superseded``.
+        stage must have resolved) and model_identity (Opus audit F5: the
+        pins were read and every succeeded science member's identity, the
+        model tree hash and runtime stack its own process recorded at
+        prepare, was derived and compared with them).  The checks required
+        are ``IDENTITY_SUPERSESSION_CHECKS``, named explicitly.  The harvest's
+        own result, mismatch or clean, then stands.  The removed flag is
+        recorded whole in ``records.identity_unmeasured_superseded``.
         """
         for record in list(self.flags.records):
             code = record.get("code")
@@ -5682,7 +5856,8 @@ class _Harvest:
             self.emit("records.arm_record_absent", level="window", collector="arm", observed={"arm_record": None})
         # Every flag file written before harvest: L4's desk and arm collectors,
         # L2's driver.jsonl.  A line that is not a valid flag may have been an
-        # exclusion, so it becomes records.malformed_flag, never classified.
+        # exclusion: it becomes records.malformed_flag (DISCLOSE) and, when its
+        # recoverable code could be an exclusion, that exclusion (F2 rule).
         # The collectors' run log (collector_runs.jsonl, written beside the
         # flag files by scripts/collect_window_flags.py) holds run records, not
         # flags: it is read by _collector_run_records, and so is a run record
@@ -5712,11 +5887,77 @@ class _Harvest:
 
     def _malformed_flag_line(self, file: str, number: int | None, line: bytes, value: Any,
                              problems: Sequence[str]) -> None:
-        salvaged = value.get("code") if isinstance(value, Mapping) else None
-        self.emit("records.malformed_flag", level="window", collector="flags",
-                  observed={"file": file, "line": number, "line_sha256": sha256_bytes(line),
-                            "salvaged_code": salvaged if isinstance(salvaged, str) else None,
-                            "problems": list(problems)[:5]})
+        """A flag line that is not a valid flag: disclosed, plus the conservative rule (Opus audit F2).
+
+        ``records.malformed_flag`` is DISCLOSE.  What the line still shows of
+        its code (the whole code, or a prefix when the line was torn inside
+        it) names the codes it could have been.  If any of them is
+        EXCLUDE_WINDOW in the catalog in force, the window is excluded
+        (``records.malformed_flag_exclusion_possible``).  Else, if any is
+        EXCLUDE_MEMBER and the line still shows a run id, that member is
+        excluded (``records.malformed_flag_member_exclusion_possible``).  A
+        line that shows no code, or a member code but no run id, is disclosed
+        only (the brief's rule: exclude only on what the line still shows).
+        """
+        code, exact, run_id = _salvage_flag_fields(line, value)
+        candidates = self._candidate_codes(code, exact)
+        effects = {self.catalog.effect(item) for item in candidates}
+        observed = {"file": file, "line": number, "line_sha256": sha256_bytes(line),
+                    "salvaged_code": code if exact else None,
+                    "salvaged_code_prefix": None if exact else code,
+                    "salvaged_run_id": run_id, "problems": list(problems)[:5]}
+        flag = self.emit("records.malformed_flag", level="window", collector="flags", observed=observed)
+        if code is None:
+            return
+        rule = {"malformed_flag_id": flag["flag_id"], **observed,
+                "candidate_codes": sorted(candidates)[:20], "candidate_count": len(candidates)}
+        if "EXCLUDE_WINDOW" in effects:
+            self.emit("records.malformed_flag_exclusion_possible", level="window", collector="flags",
+                      observed={**rule, "excluding": sorted(item for item in candidates
+                                                            if self.catalog.effect(item) == "EXCLUDE_WINDOW")[:20]})
+        elif "EXCLUDE_MEMBER" in effects and run_id:
+            self.emit("records.malformed_flag_member_exclusion_possible", level="member", run_id=run_id,
+                      collector="flags",
+                      observed={**rule, "excluding": sorted(item for item in candidates
+                                                            if self.catalog.effect(item) == "EXCLUDE_MEMBER")[:20]})
+
+    def _candidate_codes(self, code: str | None, exact: bool) -> set[str]:
+        """Every code the catalog or this harvest knows that ``code`` (or its prefix) could be."""
+        if code is None:
+            return set()
+        known = set(self.catalog.entries) | set(CODES)
+        return {code} if exact else {item for item in known if item.startswith(code)}
+
+    def _rebuild_unbuilt_flag(self, source: str, number: int, value: Mapping[str, Any]) -> None:
+        """A writer's designed stand-in line for a flag it could not build or write.
+
+        ``joulewise.flags.core.emit`` prints ``{code, level, run_id, unbuilt}``
+        and the chain's flag writer ``{code, level, run_id, observed,
+        unbuilt}`` when the flag could not be made or written in time.  The
+        flag is rebuilt from what the line names, so its catalog effect
+        applies (an exclusion is never lost), and ``records.flag_unbuilt``
+        (DISCLOSE) records the line.
+        """
+        code, level, run_id = value["code"], value.get("level"), value.get("run_id")
+        run_id = run_id if isinstance(run_id, str) and run_id else None
+        observed: dict[str, Any] = {"unbuilt": value.get("unbuilt"), "source": source, "line": number}
+        if "observed" in value:
+            observed["value"] = value["observed"]
+        if level not in ("window", "stage", "quad", "member") or level in ("stage", "quad"):
+            # No stage id travels with the line: a stage or quad fact is
+            # applied to the whole window, which is the conservative reading.
+            observed["level_written"] = level
+            level = "window"
+        if level == "member" and run_id is None:
+            level, observed["run_id_missing"] = "window", True
+        entry = self.catalog.entries.get(code, {})
+        spec = CODES.get(code) or _spec(entry.get("family") if entry.get("family") in FAMILIES else "RECORDS",
+                                        entry.get("klass") if entry.get("klass") in KLASSES else "REPRESENTATION")
+        rebuilt = self.emit(code, level=level, run_id=run_id if level == "member" else None,
+                            collector="unbuilt_marker", observed=observed, spec=spec)
+        self.emit("records.flag_unbuilt", level="window", collector="flags",
+                  observed={"code": code, "level": value.get("level"), "run_id": run_id, "source": source,
+                            "line": number, "unbuilt": value.get("unbuilt"), "rebuilt_flag_id": rebuilt["flag_id"]})
 
     def _unwritten_core_flags(self) -> None:
         """Core flags whose flag-file write failed, recovered from stderr (core-prune N8).
@@ -5727,9 +5968,12 @@ class _Harvest:
         each member's stderr to ``operator-logs/member-stderr/*.stderr``, and
         the desk verdict's stderr is this harvest's desk transcript.  Each marked line goes through the
         flag-file path: a valid flag is absorbed (it is the flag, nothing more
-        is emitted), anything else is ``records.malformed_flag``, which is never
-        classified and so blocks release.  A log that cannot be read may hold
-        such a line, so it is recorded the same way.
+        is emitted); a writer's designed stand-in line (``{code, level, run_id,
+        [observed,] unbuilt}``) is rebuilt as the flag it names plus
+        ``records.flag_unbuilt``; anything else is ``records.malformed_flag``
+        under the conservative rule of ``_malformed_flag_line``.  A log that
+        cannot be read may hold such a line: ``records.operator_log_unreadable``
+        (DISCLOSE).  None of these blocks release (Opus triple audit F2).
         """
         marker = UNWRITTEN_MARKER.encode("utf-8")
         directories = [self.inputs.custody_root / "operator-logs"]
@@ -5764,7 +6008,8 @@ class _Harvest:
             sources.append(("desk-transcript", transcript.encode("utf-8", "replace")))
         for source, raw in sources:
             if raw is None:
-                self._malformed_flag_line(source, None, b"", None, ["operator log unreadable"])
+                self.emit("records.operator_log_unreadable", level="window", collector="flags",
+                          observed={"file": source})
                 continue
             if marker not in raw:
                 continue
@@ -5778,6 +6023,9 @@ class _Harvest:
                 except ValueError as exc:
                     problems = [f"not JSON: {type(exc).__name__}"]
                 else:
+                    if _is_unbuilt_marker(value):
+                        self._rebuild_unbuilt_flag(source, number, value)
+                        continue
                     problems = self.flags.absorb(value)
                 if problems:
                     self._malformed_flag_line(source, number, remainder, value, problems)
@@ -6491,7 +6739,8 @@ class _Harvest:
 
     # -- outputs ---------------------------------------------------------------
     def sources_unchanged(self) -> None:
-        changed = [name for name, path in self.sources.items() if tree_inventory(path) != self.original.get(name)]
+        changed = [name for name, path in self.sources.items()
+                   if number_bearing(tree_inventory(path)) != number_bearing(self.original.get(name))]
         if changed:
             self.emit("records.source_changed_during_harvest", level="window", collector="archive",
                       observed={"sources": sorted(changed)})
@@ -6773,6 +7022,7 @@ def harvest(inputs: WindowInputs, archive_root: Path | str, *, seams: Seams | No
     run.step("code_identity", run.code_identity)
     run.step("model_identity", run.model_identity)
     run.step("identity_supersession", run.supersede_identity_unmeasured)
+    run.step("binary_identity", run.rederive_binary_identity, fault=False)
     run.step("lineage", run.lineage_audit)
     run.step("monitor", run.monitor_joins)
     run.step("meter", run.meter_joins, fault=False)

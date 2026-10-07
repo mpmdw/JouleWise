@@ -1094,9 +1094,10 @@ class CollectedWindowTests(WindowTestCase):
                            if flag["code"] == "records.malformed_flag")
         self.assertEqual(malformed, [("arm.jsonl", 2)])  # an edited detail keeps a valid flag_id: same fact
         # The arm-time model mismatch excludes the window; the malformed line
-        # is never classified, so the release event is blocked until read.
+        # shows no code, so it is disclosed and blocks nothing (Opus audit F2).
         self.assertIn("model.identity_mismatch", window.exclusions()["reasons"])
-        self.assertIn("records.malformed_flag", window.window_flags()["flags"]["unclassified"])
+        self.assertNotIn("records.malformed_flag", window.window_flags()["flags"]["unclassified"])
+        self.assertFalse(window.exclusions()["release_blocked"])
 
     def test_unknown_catalog_entry_is_reported_unclassified(self):
         window = self.window()
@@ -1339,6 +1340,25 @@ class DeskAndG3Tests(WindowTestCase):
                     and "changed" in flag["observed"])
         self.assertEqual(flag["observed"]["changed"], ["b5t-abs-r01/logs/controller.log"])
         self.assertIn("whole_window.verdict_unauthenticated", window.codes())
+
+    def test_an_os_metadata_file_appearing_during_the_harvest_changes_no_source(self):
+        """Opus triple audit F7: a Finder .DS_Store in a bundle directory is not a changed number.
+
+        Before: records.source_changed_during_harvest (EXCLUDE_WINDOW) removed the window."""
+        window = self.window(prefix_ledger=True)
+        advance_pin(window)
+
+        def runner(argv, **kwargs):
+            runs = Path(argv[argv.index("--runs-dir") + 1])
+            (runs / "whole-window-verdict.json").write_text('{"status":"failed"}\n')
+            (runs / "b5t-abs-r01" / ".DS_Store").write_bytes(b"Bud1 finder")
+            (runs / "b5t-abs-r01" / "raw" / "._powermetrics.plist").write_bytes(b"appledouble")
+            return SimpleNamespace(returncode=1, stdout="", stderr="")
+
+        window.harvest(seams=desk_seams(runner), prepare_desk=True, run_g3=False)
+        self.assertNotIn("records.source_changed_during_harvest", window.codes())
+        self.assertTrue(h._os_metadata("b5t-abs-r01/.DS_Store"))
+        self.assertFalse(h._os_metadata("b5t-abs-r01/logs/controller.log"))
 
     def test_g3_is_not_applicable_to_a_floor_pack(self):
         window = self.window()
@@ -2274,7 +2294,8 @@ class EmittedCodeTests(unittest.TestCase):
         # The gate-prune round-2 and round-3 codes reach the draft through the
         # registration row (REG) before the seal; any other unclassified code fails here.
         missing = set(h.CODES) - set(codes)
-        self.assertEqual(missing - h.PRUNE2_CODES - h.PRUNE3_CODES - h.AUDFIX1_CODES, set(h.NEVER_CLASSIFIED_CODES))
+        self.assertEqual(missing - h.PRUNE2_CODES - h.PRUNE3_CODES - h.AUDFIX1_CODES - h.AUDFIX2_CODES,
+                         set(h.NEVER_CLASSIFIED_CODES))
         self.assertTrue(h.NEVER_CLASSIFIED_CODES.isdisjoint(codes))
 
     def test_the_design_catalog_classifies_every_int4_code_with_the_drafts_effect(self):
@@ -2287,8 +2308,8 @@ class EmittedCodeTests(unittest.TestCase):
         from joulewise.flags.core import CORE_FLAG_CODES
         codes = json.loads(raw)["codes"]
         emitted = set(h.CODES) | set(DRAFT_CODES) | set(CORE_FLAG_CODES)
-        # Audit-fix batch 1's codes reach the design catalog through REG before the seal.
-        self.assertEqual(emitted - set(codes) - h.AUDFIX1_CODES, set(h.NEVER_CLASSIFIED_CODES))
+        # Audit-fix batches 1 and 2's codes reach the design catalog through REG before the seal.
+        self.assertEqual(emitted - set(codes) - h.AUDFIX1_CODES - h.AUDFIX2_CODES, set(h.NEVER_CLASSIFIED_CODES))
         self.assertEqual({code: (codes[code]["effect"], DRAFT_CODES[code]["effect"]) for code in DRAFT_CODES
                           if code in codes and codes[code]["effect"] != DRAFT_CODES[code]["effect"]}, {})
 
@@ -2763,8 +2784,15 @@ class BatteryRuleParityTests(unittest.TestCase):
         "smc_discharge": ({"smc": lambda second: -800}, {"battery.assist"}),
         "smc_small_discharge": ({"smc": lambda second: -100}, {"battery.assist"}),
         "smc_charge_inside_span": ({"smc": lambda second: 800 if second == 15 else 0}, {"battery.member_span"}),
+        # Cold pass N4: with the 1 Hz SMC reads covering the span, a sign-inconsistent
+        # discharge accumulator is disclosed, not excluded (before: battery.member_span).
         "smc_discharge_with_rose_accumulator": ({"smc": lambda second: -800, "later_telemetry": DISCHARGE_ROSE},
-                                                {"battery.member_span", "battery.assist"}),
+                                                {"battery.accumulator_unavailable", "battery.assist"}),
+        "smc_zero_with_rose_accumulator": ({"smc": lambda second: 0, "later_telemetry": DISCHARGE_ROSE},
+                                           {"battery.accumulator_unavailable"}),
+        "smc_charge_with_rose_accumulator": ({"smc": lambda second: 800 if second == 15 else 0,
+                                              "later_telemetry": DISCHARGE_ROSE},
+                                             {"battery.member_span", "battery.accumulator_unavailable"}),
     }
 
     def test_hazard_and_harvest_copies_decide_alike(self):
@@ -2788,6 +2816,20 @@ class BatteryRuleParityTests(unittest.TestCase):
         self.assertIn(code, h.BATTERY_EXCLUDING_CODES)
         catalog = json.loads((FIXTURES / "flag_catalog.json").read_text())
         self.assertEqual("EXCLUDE_MEMBER", catalog["codes"][code]["effect"])
+
+
+    def test_a_sign_inconsistent_accumulator_under_smc_coverage_is_disclosed(self):
+        """Cold pass N4: the SMC measured the current over the span; the record disagreeing with itself is disclosed."""
+        flags = h.accumulator_member_flags(
+            h.battery_publications(parsed(self.journal(later_telemetry=self.DISCHARGE_ROSE)))[:2], self.T,
+            discharge_out=(rows := []), smc_covered=True)
+        self.assertEqual([], rows)
+        ((code, observed, _interval),) = flags
+        self.assertEqual("battery.accumulator_unavailable", code)
+        (row,) = observed["intervals"]
+        self.assertEqual((40, 5400.0), (row["sign_inconsistent"]["ticks"], row["sign_inconsistent"]["mean_per_tick"]))
+        catalog = json.loads((FIXTURES / "flag_catalog.json").read_text())
+        self.assertEqual("DISCLOSE", catalog["codes"][code]["effect"])
 
 
 class L1JournalFormatTests(unittest.TestCase):
@@ -3827,10 +3869,91 @@ class UnwrittenCoreFlagTests(WindowTestCase):
         malformed = [flag["observed"] for flag in window.flags() if flag["code"] == "records.malformed_flag"]
         self.assertEqual([(item["file"], item["line"]) for item in malformed],
                          [("operator-logs/07-b5t-science.log", 3)])
-        self.assertIn("records.malformed_flag", window.window_flags()["flags"]["unclassified"])
+        # Torn one letter into its code ("t"): no EXCLUDE_WINDOW code starts with it and
+        # no run id shows, so it is disclosed only and release is not blocked.
+        self.assertEqual(["t"], [item["salvaged_code_prefix"] for item in malformed])
+        self.assertFalse({"records.malformed_flag_exclusion_possible",
+                          "records.malformed_flag_member_exclusion_possible"} & set(window.codes()))
+        self.assertFalse(window.exclusions()["release_blocked"])
 
-    def test_an_unreadable_log_or_log_directory_blocks_release(self):
-        """Review gap: a log that may hold a marker line but cannot be read is never silently skipped."""
+    def test_a_writers_unbuilt_stand_in_line_rebuilds_its_flag(self):
+        """Opus audit F2 (a): the chain's own 'unbuilt' line is a designed output, not a torn flag.
+
+        Before: it failed validation (13 missing fields), became records.malformed_flag,
+        which was never classified, so release_blocked stayed True for ever and the
+        member exclusion the line names was lost."""
+        window = self.window()
+        run_id = MEMBERS[0][0]
+        chain_line = h.UNWRITTEN_MARKER + json.dumps(
+            {"code": "battery.member_span", "level": "member", "observed": {"smc_ma_max": 412}, "run_id": run_id,
+             "unbuilt": "flag writer exceeded its wall budget"}, sort_keys=True)
+        core_line = h.UNWRITTEN_MARKER + json.dumps(
+            {"code": "teardown.survivors", "level": "member", "run_id": None,
+             "unbuilt": "FlagSchemaError: bad observed"}, sort_keys=True)
+        logs = window.custody / "operator-logs"
+        logs.mkdir(exist_ok=True)
+        (logs / "07-b5t-science.log").write_text(f"stage output\n{chain_line}\n{core_line}\n")
+        window.harvest()
+        self.assertNotIn("records.malformed_flag", window.codes())
+        rebuilt = [flag for flag in window.flags() if flag["code"] == "battery.member_span"
+                   and flag["source"]["collector"] == "unbuilt_marker"]
+        self.assertEqual([(run_id, "member")], [(flag["scope"]["run_id"], flag["scope"]["level"]) for flag in rebuilt])
+        self.assertEqual({"smc_ma_max": 412}, rebuilt[0]["observed"]["value"])
+        excluded = {row["run_id"]: row["codes"] for row in window.exclusions()["members_excluded"]}
+        self.assertIn("battery.member_span", excluded[run_id])
+        survivors = [flag for flag in window.flags() if flag["code"] == "teardown.survivors"]
+        self.assertEqual([("window", True)], [(flag["scope"]["level"], flag["observed"]["run_id_missing"])
+                                              for flag in survivors])
+        unbuilt = sorted(flag["observed"]["code"] for flag in window.flags() if flag["code"] == "records.flag_unbuilt")
+        self.assertEqual(["battery.member_span", "teardown.survivors"], unbuilt)
+        self.assertFalse(window.exclusions()["release_blocked"])
+
+    def test_a_torn_flag_line_is_disclosed_or_excluded_by_what_it_still_shows(self):
+        """Opus audit F2 (c): a torn line never blocks release; a recoverable exclusion code still excludes."""
+        run_id = MEMBERS[1][0]
+        full_window = self.unwritten_line("calibration.capture_invalid", level="window", observed={"slot": "post"})
+        full_member = self.unwritten_line("battery.member_span", level="member", run_id=run_id,
+                                          observed={"smc_ma_max": 412})
+        cases = {
+            # torn inside the code: the prefix "calibration.capt" could be calibration.capture_invalid
+            "window_prefix": (full_window[:full_window.index('"calibration.capt') + len('"calibration.capt')],
+                              "records.malformed_flag_exclusion_possible", "window", None),
+            # torn after the run id: battery.member_span is EXCLUDE_MEMBER and names its member
+            "member_whole": (full_member[:full_member.index(run_id, full_member.index('"run_id"')) + len(run_id) + 1],
+                             "records.malformed_flag_member_exclusion_possible", "member", run_id),
+            # torn before the code: nothing recoverable, disclosed only
+            "no_code": (full_member[:60], None, None, None),
+            # a member code but torn before the run id: disclosed only
+            "member_unplaced": (full_member[:full_member.index('"battery.member_span"') + 22], None, None, None),
+        }
+        for label, (torn, extra, level, scoped) in cases.items():
+            with self.subTest(label):
+                window = Window(self.tmp / f"torn-{label}", catalog_overrides=self.ISOLATE)
+                logs = window.custody / "operator-logs"
+                logs.mkdir(exist_ok=True)
+                (logs / "07-b5t-science.log").write_text(f"stage output\n{torn}\n")
+                window.harvest()
+                self.assertIn("records.malformed_flag", window.codes())
+                exclusions = window.exclusions()
+                self.assertFalse(exclusions["release_blocked"])
+                self.assertEqual([], exclusions["unclassified"])
+                if extra is None:
+                    self.assertFalse({"records.malformed_flag_exclusion_possible",
+                                      "records.malformed_flag_member_exclusion_possible"} & set(window.codes()))
+                    continue
+                (flag,) = [flag for flag in window.flags() if flag["code"] == extra]
+                self.assertEqual((level, scoped), (flag["scope"]["level"], flag["scope"]["run_id"]))
+                if level == "window":
+                    self.assertIn(extra, exclusions["reasons"])
+                    self.assertIn("calibration.capture_invalid", flag["observed"]["excluding"])
+                else:
+                    excluded = {row["run_id"]: row["codes"] for row in exclusions["members_excluded"]}
+                    self.assertIn(extra, excluded[run_id])
+
+    def test_an_unreadable_log_or_log_directory_is_disclosed(self):
+        """Review gap: a log that may hold a marker line but cannot be read is never silently skipped.
+
+        Opus audit F2: it is its own DISCLOSE code, not records.malformed_flag, and blocks nothing."""
         for case in ("file", "directory"):
             with self.subTest(case):
                 window = Window(self.tmp / f"unreadable-{case}", catalog_overrides=self.ISOLATE)
@@ -3846,10 +3969,12 @@ class UnwrittenCoreFlagTests(WindowTestCase):
                     window.harvest()
                 finally:
                     target.chmod(0o755)
-                malformed = [flag["observed"] for flag in window.flags() if flag["code"] == "records.malformed_flag"]
+                unreadable = [flag["observed"] for flag in window.flags()
+                              if flag["code"] == "records.operator_log_unreadable"]
                 expected = "operator-logs/07-b5t-science.log" if case == "file" else "operator-logs"
-                self.assertIn(expected, [item["file"] for item in malformed])
-                self.assertIn("records.malformed_flag", window.window_flags()["flags"]["unclassified"])
+                self.assertIn(expected, [item["file"] for item in unreadable])
+                self.assertNotIn("records.malformed_flag", window.codes())
+                self.assertFalse(window.exclusions()["release_blocked"])
 
     def test_a_marker_line_in_the_desk_transcript_is_recovered(self):
         window = self.window(prefix_ledger=True)
@@ -3866,6 +3991,59 @@ class UnwrittenCoreFlagTests(WindowTestCase):
         flag = next(flag for flag in window.flags() if flag["code"] == "campaign.runner_record_flagged")
         self.assertEqual(flag["observed"], {"kind": "stale_lock_cleared"})
         self.assertNotIn("records.malformed_flag", window.codes())
+
+
+class BinaryIdentityRederivedTests(WindowTestCase):
+    """Cold pass N1 / Fable audit F10: an unread runtime powermetrics digest is re-derived at harvest.
+
+    Before: instrument.binary_identity_unmeasured (EXCLUDE_MEMBER) removed the
+    member whenever its own digest read failed, though the binary is the OS
+    build's and the harvest on the same boot can hash it."""
+
+    def window_with(self, name: str, *, calibrated: bool = True, boot: str = "B5-TEST-BOOT",
+                    readable: bool = True) -> tuple[Window, str, str]:
+        window = Window(self.tmp / name, catalog_overrides=self.ISOLATE)
+        run_id = MEMBERS[0][0]
+        sampler = self.tmp / f"{name}-powermetrics"
+        sampler.write_bytes(b"stand-in powermetrics executable " + name.encode())
+        digest = hashlib.sha256(sampler.read_bytes()).hexdigest()
+        bundle = window.claim / run_id
+        metadata = json.loads((bundle / "metadata.json").read_bytes())
+        metadata.setdefault("device", {})["powermetrics"] = {"executable_path": str(sampler),
+                                                             "executable_sha256": None}
+        metadata["instrument_calibration"] = {"bindings": {
+            "powermetrics_sha256": digest if calibrated else "0" * 64}}
+        metadata.setdefault("extra", {})["launch_lineage"] = {"collection_boot_session_id": boot.lower()}
+        put(bundle / "metadata.json", metadata)
+        if not readable:
+            sampler.unlink()
+        line = UnwrittenCoreFlagTests.unwritten_line(
+            "instrument.binary_identity_unmeasured", level="member", run_id=run_id,
+            observed={"runtime_powermetrics_sha256": None})
+        logs = window.custody / "operator-logs"
+        logs.mkdir(exist_ok=True)
+        (logs / "07-b5t-science.log").write_text(line + "\n")
+        return window, run_id, digest
+
+    def test_an_equal_digest_on_the_collection_boot_supersedes_the_exclusion(self):
+        window, run_id, digest = self.window_with("equal")
+        window.harvest()
+        self.assertNotIn("instrument.binary_identity_unmeasured", window.codes())
+        (flag,) = [flag for flag in window.flags() if flag["code"] == "instrument.binary_identity_rederived"]
+        self.assertEqual((run_id, digest, digest), (flag["scope"]["run_id"], flag["observed"]["harvest_sha256"],
+                                                    flag["observed"]["calibrated_sha256"]))
+        excluded = {row["run_id"]: row["codes"] for row in window.exclusions()["members_excluded"]}
+        self.assertNotIn("instrument.binary_identity_unmeasured", excluded.get(run_id, []))
+
+    def test_a_different_digest_boot_or_an_unreadable_binary_keeps_the_exclusion(self):
+        for label, kwargs in (("differs", {"calibrated": False}), ("other_boot", {"boot": "OTHER-BOOT"}),
+                              ("unreadable", {"readable": False})):
+            with self.subTest(label):
+                window, run_id, _ = self.window_with(label, **kwargs)
+                window.harvest()
+                self.assertNotIn("instrument.binary_identity_rederived", window.codes())
+                excluded = {row["run_id"]: row["codes"] for row in window.exclusions()["members_excluded"]}
+                self.assertIn("instrument.binary_identity_unmeasured", excluded[run_id])
 
 
 ABSENT = object()  # the core provides no neg8_corpus_mint_drops (as before the b1 lane lands)

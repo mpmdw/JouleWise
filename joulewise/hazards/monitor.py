@@ -114,13 +114,19 @@ def build_config(*, custody_dir: Path | str, tree_roots: Sequence[int],
                  disk_targets: Sequence[Mapping[str, Any]], low_bytes: int = disk.DEFAULT_THRESHOLDS["low_bytes"],
                  cpu_limit_s_per_s: float = contention.DEFAULT_THRESHOLDS["cpu_limit_s_per_s"],
                  cadence: Mapping[str, float] | None = None,
-                 tree_root_files: Sequence[str] = ()) -> dict[str, Any]:
+                 tree_root_files: Sequence[str] = (), clock_step_ns: int | None = None) -> dict[str, Any]:
     """The monitor's whole input; the driver writes it once as ``monitor/config.json``.
 
     ``tree_root_files`` (PLAN2 row 10) name JSON files whose ``pgid`` becomes a
     further tree root once the file appears: the driver passes the chain's
     ``night/chain.started``, so the chain's process tree stays inside the
     measurement tree even if the driver dies and the chain is reparented.
+
+    ``clock_step_ns`` (cold pass N5) is the plan's registered clock-step
+    threshold; the clock task's anchor read-skew bound is derived from it
+    (``clock.window_skew_max_ns``), as the harvest derives its own, so the two
+    stay in step if the threshold is ever re-registered.  Absent: the module
+    default (1 ms, 250 us skew).
     """
 
     merged = dict(DEFAULT_CADENCE)
@@ -131,6 +137,8 @@ def build_config(*, custody_dir: Path | str, tree_roots: Sequence[int],
               "cpu_limit_s_per_s": float(cpu_limit_s_per_s), "cadence": merged}
     if tree_root_files:
         config["tree_root_files"] = [str(path) for path in tree_root_files]
+    if clock_step_ns is not None:
+        config["clock_step_ns"] = int(clock_step_ns)
     return config
 
 
@@ -256,6 +264,10 @@ class Monitor:
                        "smc_reads": 0}
         self.host_reader = host_reader
         self.cadence = self.config["cadence"]
+        step = self.config.get("clock_step_ns")
+        # A config without a usable step keeps the module default (never a stop).
+        self.clock_skew_max_ns = clock.window_skew_max_ns(
+            step if type(step) is int and step > 0 else clock.DEFAULT_THRESHOLDS["step_ns"])
         self.tree_roots = tuple(self.config["tree_roots"])
         self.stopping = False
         first = self.ctx.stamp()
@@ -388,7 +400,7 @@ class Monitor:
         if now >= self.next_frequency_ns:
             reader = self.frequency_reader
             self.next_frequency_ns = now + int(self.cadence["frequency_s"] * 1e9)
-        item = clock.sample(self.ctx, frequency_reader=reader)
+        item = clock.sample(self.ctx, frequency_reader=reader, max_skew_ns=self.clock_skew_max_ns)
         values = {"anchor": item["anchor"], "frequency": item["frequency"]}
         if item.get("rejected_anchors"):  # preempted reads (R3-1): kept, never compared
             values["rejected_anchors"] = item["rejected_anchors"]

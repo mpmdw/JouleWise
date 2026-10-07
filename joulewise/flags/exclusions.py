@@ -148,6 +148,15 @@ def compute(
         if stage_id is not None:
             stage_members[stage_id].append(run_id)
 
+    # Fable audit F9: a member-level flag may name its member by bundle id
+    # (the whole-window verdict's member_failures do); the roster's bundles
+    # map each bundle id to its run id, so such a flag reaches its member
+    # instead of falling into ``unmatched`` and being dropped.
+    bundle_run: dict[str, str] = {}
+    for bundle in roster["bundles"] if "bundles" in roster and roster["bundles"] is not None else ():
+        if bundle["run_id"] in member_index:
+            bundle_run.setdefault(str(bundle["bundle_id"]), bundle["run_id"])
+
     member_spans: dict[str, tuple[int, int] | None] = {}
     for run_id in member_index:
         entry = spans[run_id] if run_id in spans else None
@@ -193,6 +202,9 @@ def compute(
             continue
         if level == "member" or (level == "quad" and scope["run_id"] is not None):
             run_id = scope["run_id"]
+            if run_id not in member_index:
+                bundle_id = scope["bundle_id"] if "bundle_id" in scope else None
+                run_id = bundle_run.get(str(bundle_id)) or bundle_run.get(str(run_id)) or run_id
             if run_id in member_index:
                 excluded[run_id].add(code)
             else:

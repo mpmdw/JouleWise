@@ -83,6 +83,54 @@ class FakeMac:
         return sum(1 for argv in self.runner.calls if argv == battery.IOREG_BATTERY_ARGV)
 
 
+class ClockSkewBoundTests(unittest.TestCase):
+    """Cold pass N5: the monitor's anchor read-skew bound follows the plan's clock-step threshold.
+
+    Before: the clock task called ``clock.sample`` with the module default
+    (250 us, from a 1 ms step) whatever the plan registered."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory(dir=os.environ.get("TMPDIR"))
+        self.addCleanup(self.tmp.cleanup)
+        self.mac = FakeMac(Path(self.tmp.name))
+
+    def instance(self, **extra) -> monitor.Monitor:
+        config = monitor.build_config(custody_dir=self.mac.custody, tree_roots=[DRIVER],
+                                      disk_targets=[{"path": "/runs", "copies": 1}], **extra)
+        return monitor.Monitor(monitor.validate_config(config),
+                               ctx=base.Context(run=self.mac.runner, clocks=self.mac.clocks),
+                               frequency_reader=FrequencyReader(self.mac.clocks), statvfs=self.mac.statvfs,
+                               stat=self.mac.stat, host_reader=self.mac.table.host_cpu)
+
+    def test_the_clock_task_reads_with_the_plans_step_quarter(self):
+        from unittest import mock
+
+        from joulewise.hazards import clock
+        for extra, expected in (({"clock_step_ns": 2_000_000}, 500_000), ({}, 250_000),
+                                ({"clock_step_ns": 4_000_000}, 1_000_000)):
+            with self.subTest(extra=extra):
+                instance = self.instance(**extra)
+                self.assertEqual(expected, instance.clock_skew_max_ns)
+                seen = []
+                real = clock.sample
+
+                def spy(ctx, **kwargs):
+                    seen.append(kwargs.get("max_skew_ns"))
+                    return real(ctx, **kwargs)
+                instance.open_session(["test"])
+                with mock.patch.object(clock, "sample", side_effect=spy):
+                    instance._clock()
+                instance.close_session("test end")
+                self.assertEqual([expected], seen)
+
+    def test_the_driver_passes_the_plans_step(self):
+        from joulewise.b5 import driver
+        self.assertEqual(2_000_000, driver._plan_clock_step_ns(
+            {"harvest_thresholds": {"clock_step_ns": 2_000_000}, "thresholds": {"clock": {"step_ns": 1_000_000}}}))
+        self.assertEqual(1_000_000, driver._plan_clock_step_ns({"thresholds": {"clock": {"step_ns": 1_000_000}}}))
+        self.assertIsNone(driver._plan_clock_step_ns({"thresholds": {}}))
+
+
 class MonitorJournalTests(unittest.TestCase):
     """The journals with the battery read by ioreg on the publication schedule
     (the path without the in-process reader); :class:`PollMonitorJournalTests`

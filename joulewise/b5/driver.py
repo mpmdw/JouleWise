@@ -111,6 +111,10 @@ DISK_CHECK_INTERVAL_S = 60.0
 DISK_LOW_BYTES_DEFAULT = 10 * 1024 ** 3
 G10_TIMEOUT_S = 300.0 + 900.0 + 300.0
 G10_TERM_GRACE_S = 120.0
+# Cold pass N7: while G10 runs, the driver polls it this often and runs the
+# same supervision pass as during the chain (monitor and meter restarts,
+# outages, disk), instead of blocking in one wait for up to 25 minutes.
+G10_POLL_S = 5.0
 GIT_TIMEOUT_S = 60.0
 # PLAN2 row 7: the in-window census. A probe that is neither clean (exit 1,
 # empty stdout) nor a detection (any stdout) is unmeasured: retried, then a
@@ -656,6 +660,21 @@ def _production_lineage(request: LineageRequest) -> Any:
         boot_session_id=request.boot_session_uuid)
 
 
+def _plan_clock_step_ns(window: Mapping[str, Any]) -> int | None:
+    """The plan's clock-step threshold for the monitor's skew bound (cold pass N5), or None.
+
+    The harvest judges steps with ``hazard_window.harvest_thresholds.clock_step_ns``;
+    the arm's block carries the same registered value as ``thresholds.clock.step_ns``.
+    """
+
+    for value in ((window.get("harvest_thresholds") or {}).get("clock_step_ns"),
+                  ((window.get("thresholds") or {}).get("clock") or {}).get("step_ns")):
+        if not isinstance(value, bool) and isinstance(value, (int, float)) and value > 0 \
+                and float(value) == int(value):
+            return int(value)
+    return None
+
+
 def production_seams(repo_root: Path) -> Seams:
     """The production seams; ``repo_root`` is the driver's own checkout."""
 
@@ -675,7 +694,8 @@ def production_seams(repo_root: Path) -> Seams:
             disk_targets=disk_targets(window, arm=False),
             low_bytes=int(thresholds.get("disk", {}).get("low_bytes", DISK_LOW_BYTES_DEFAULT)),
             cpu_limit_s_per_s=float(thresholds.get("contention", {}).get("cpu_limit_s_per_s", 0.05)),
-            tree_root_files=(str(Path(request.night_dir) / "chain.started"),))
+            tree_root_files=(str(Path(request.night_dir) / "chain.started"),),
+            clock_step_ns=_plan_clock_step_ns(window))
         path = hazard_monitor.monitor_dir(request.custody_root) / "config.json"
         path.parent.mkdir(parents=True, exist_ok=True)
         if not path.exists():
@@ -1285,7 +1305,7 @@ class HazardCensus:
 
     def _probe(self) -> tuple[Any, Any]:
         try:
-            return self.window.rt.agent_census(self.probes)
+            return self.window.rt.agent_census(self.probes, own_tree_root=os.getpid())
         except Exception as error:  # noqa: BLE001 - an unreadable census is unmeasured, never a crash
             probe = night_gate.ProbeResult(tuple(night_gate.AGENT_CENSUS_ARGV), -1, "", _error_text(error),
                                            time.monotonic_ns())
@@ -1928,7 +1948,7 @@ class _Window:
         return record
 
     def agent_census(self) -> dict[str, Any]:
-        probe, refusal = self.rt.agent_census(self.probes)
+        probe, refusal = self.rt.agent_census(self.probes, own_tree_root=os.getpid())
         if not self.dry_arm:
             try:
                 self.rt._append_census(self.night / "censuses.jsonl", probe, refusal)
@@ -2521,7 +2541,8 @@ def run_hazard_night(rt: Any, plan_path: Path, plan: Any, probes: Any, initial_c
     # 7. G10, with the monitor still journaling, only after a natural exit proven gone.
     want_g10 = bool(plan.hazard_window.get("g10"))
     if want_g10 and started and proven and abort is None:
-        hazard["g10"] = _run_g10(window, night, float(plan.hazard_window["T_stream_max_s"]))
+        hazard["g10"] = _run_g10(window, night, float(plan.hazard_window["T_stream_max_s"]),
+                                 supervise=supervise)
     else:
         hazard["g10"] = {"ran": False, "requested": want_g10,
                          "reason": ("not requested" if not want_g10 else
@@ -2682,7 +2703,38 @@ def hold_monitors_after_chain(chain_returned: Mapping[str, Any], poll: Callable[
             "released_after_chain_s": round((released["monotonic_ns"] - start_ns) / 1e9, 3)}
 
 
-def _run_g10(window: _Window, night: Path, t_stream_max_s: float) -> dict[str, Any]:
+def _wait_supervised(process: Any, record: dict[str, Any], supervise: Callable[[], Any] | None) -> int:
+    """``process.wait(timeout=G10_TIMEOUT_S)``, polling every G10_POLL_S and supervising between polls.
+
+    A supervision pass that raises is recorded and the wait goes on; one that
+    returns a stop (disk low, monitor outage: its flag is already written) is
+    recorded and supervision ends, while G10, a diagnostic, runs to its end.
+    """
+
+    deadline = time.monotonic() + G10_TIMEOUT_S
+    record["supervision_passes"] = 0
+    while True:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise subprocess.TimeoutExpired(getattr(process, "args", "g10"), G10_TIMEOUT_S)
+        try:
+            return process.wait(timeout=max(0.001, min(G10_POLL_S, remaining)))
+        except subprocess.TimeoutExpired:
+            pass
+        if supervise is not None:
+            record["supervision_passes"] += 1
+            try:
+                stop = supervise()
+            except Exception as error:  # noqa: BLE001 - supervision is a record here, never a stop
+                record.setdefault("supervision_errors", []).append(_error_text(error))
+                stop = None
+            if stop is not None:
+                record["supervision_stop"] = stop
+                supervise = None
+
+
+def _run_g10(window: _Window, night: Path, t_stream_max_s: float, *,
+             supervise: Callable[[], Any] | None = None) -> dict[str, Any]:
     """Run G10 with its fixed argv in its own group; bound it; record the driver's view."""
 
     record: dict[str, Any] = {"schema": G10_DRIVER_SCHEMA, "ran": True, "started": stamp()}
@@ -2693,7 +2745,7 @@ def _run_g10(window: _Window, night: Path, t_stream_max_s: float) -> dict[str, A
             process = window.seams.popen(argv, stdin=subprocess.DEVNULL, stdout=out, stderr=err,
                                          start_new_session=True, close_fds=True)
         try:
-            record["returncode"] = process.wait(timeout=G10_TIMEOUT_S)
+            record["returncode"] = _wait_supervised(process, record, supervise)
         except subprocess.TimeoutExpired:
             record["timed_out"] = True
             for number, grace in ((signal.SIGTERM, G10_TERM_GRACE_S), (signal.SIGKILL, 10.0)):

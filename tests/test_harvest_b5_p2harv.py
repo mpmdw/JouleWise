@@ -608,13 +608,26 @@ class ArmIdentitySupersessionTests(base.WindowTestCase):
         codes = [flag["code"] for flag in window.flags()]
         self.assertNotIn("code.identity_unmeasured", codes)
         self.assertNotIn("pack.identity_unmeasured", codes)
-        self.assertIn("model.identity_unmeasured", codes)  # the harvest does not re-hash the model
+        # Opus audit F5: every succeeded science member's own model identity was
+        # compared with the pins, so the model collector is superseded too
+        # (before: model.identity_unmeasured was never superseded).
+        self.assertNotIn("model.identity_unmeasured", codes)
         superseded = sorted(flag["observed"]["collector"] for flag in window.flags()
                             if flag["code"] == "records.identity_unmeasured_superseded")
-        self.assertEqual(superseded, ["checkout_identity", "executed_code", "pack_identity"])
+        self.assertEqual(superseded, ["checkout_identity", "executed_code", "model_identity", "pack_identity"])
         reasons = window.exclusions()["reasons"]
-        self.assertIn("model.identity_unmeasured", reasons)
+        self.assertNotIn("model.identity_unmeasured", reasons)
         self.assertNotIn("code.identity_unmeasured", reasons)
+
+    def test_a_science_member_without_a_derivable_identity_keeps_the_model_flag(self):
+        window = self.window()
+        self.write_arm_flags(window, "model_identity")
+        science = next(path for path in sorted(window.claim.iterdir())
+                       if path.is_dir() and (path / "config.json").is_file())
+        (science / "config.json").write_text("{}")  # the member's identity cannot be derived
+        window.harvest()
+        self.assertIn("model.identity_unmeasured", window.codes())
+        self.assertIn("model.identity_unmeasured", window.exclusions()["reasons"])
 
     def test_a_check_the_harvest_could_not_run_keeps_the_arm_flag(self):
         window = self.window(executed_overrides={"status_porcelain": None})
@@ -631,11 +644,11 @@ class ArmIdentitySupersessionTests(base.WindowTestCase):
         window.harvest()
         unmeasured = sorted((flag["code"], flag["observed"]["collector"]) for flag in window.flags()
                             if flag["code"].endswith(".identity_unmeasured"))
-        self.assertEqual(unmeasured, [("model.identity_unmeasured", "model_identity")])
-        self.assertIn("model.identity_unmeasured", window.exclusions()["reasons"])
+        self.assertEqual(unmeasured, [])  # Opus audit F5: model_identity is superseded too
+        self.assertNotIn("model.identity_unmeasured", window.exclusions()["reasons"])
         superseded = sorted(flag["observed"]["collector"] for flag in window.flags()
                             if flag["code"] == "records.identity_unmeasured_superseded")
-        self.assertEqual(superseded, ["checkout_identity", "executed_code", "pack_identity"])
+        self.assertEqual(superseded, ["checkout_identity", "executed_code", "model_identity", "pack_identity"])
 
 
 class ArmCollectorBudgetTests(unittest.TestCase):
