@@ -1238,7 +1238,7 @@ class HazardCensus:
 
     def _probe(self) -> tuple[Any, Any]:
         try:
-            return self.window.rt.agent_census(self.probes)
+            return self.window.rt.agent_census(self.probes, own_tree_root=os.getpid())
         except Exception as error:  # noqa: BLE001 - an unreadable census is unmeasured, never a crash
             probe = night_gate.ProbeResult(tuple(night_gate.AGENT_CENSUS_ARGV), -1, "", _error_text(error),
                                            time.monotonic_ns())
@@ -1886,7 +1886,7 @@ class _Window:
         return record
 
     def agent_census(self) -> dict[str, Any]:
-        probe, refusal = self.rt.agent_census(self.probes)
+        probe, refusal = self.rt.agent_census(self.probes, own_tree_root=os.getpid())
         if not self.dry_arm:
             try:
                 self.rt._append_census(self.night / "censuses.jsonl", probe, refusal)

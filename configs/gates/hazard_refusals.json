@@ -42,6 +42,7 @@
    "joulewise/adapters/mlx_runtime.py",
    "joulewise/adapters/powermetrics.py",
    "joulewise/adapters/suite_control.py",
+   "joulewise/agent_identity.py",
    "joulewise/aggregate.py",
    "joulewise/analysis_engine/registry.py",
    "joulewise/arm_readiness.py",

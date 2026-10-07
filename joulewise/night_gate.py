@@ -25,7 +25,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Mapping, Protocol
 
-from joulewise import battery_float, corecaptured_loop
+from joulewise import agent_identity, battery_float, corecaptured_loop
 from joulewise.night_kinds import NIGHT_KINDS, kind_row
 
 
@@ -940,9 +940,32 @@ def _run(probes: CensusProbes, argv: tuple[str, ...]) -> ProbeResult:
     return result
 
 
-def agent_census(probes: CensusProbes) -> tuple[ProbeResult, Refusal | None]:
+def decide_census(result: ProbeResult, *, own_tree_root: int | None = None) -> ProbeResult:
+    """The census probe with every listed non-agent process removed (agent_identity).
+
+    pgrep's list is a regular expression over command lines, so a window whose
+    ids or paths contain ``codex``, ``claude`` or ``t3`` listed its own
+    processes (Opus triple audit F3).  A line survives only when the kernel says
+    that pid runs an agent executable, or when it cannot be decided.  The raw
+    exit code and every ignored pid with its executable go to ``stderr``; a
+    list left empty by the filter reads as pgrep's own no-match (exit 1).
+    """
+
+    if not result.stdout.strip():
+        return result
+    decided = agent_identity.filter_census(result.stdout, own_tree_root=own_tree_root)
+    if not decided.ignored:
+        return result
+    note = f"pgrep exit {result.exit_code}; {decided.note()}"
+    exit_code = 1 if not decided.kept_text.strip() and result.exit_code == 0 else result.exit_code
+    return replace(result, exit_code=exit_code, stdout=decided.kept_text,
+                   stderr=(result.stderr + ("\n" if result.stderr else "") + note))
+
+
+def agent_census(probes: CensusProbes, *, own_tree_root: int | None = None
+                 ) -> tuple[ProbeResult, Refusal | None]:
     try:
-        result = _run(probes, AGENT_CENSUS_ARGV)
+        result = decide_census(_run(probes, AGENT_CENSUS_ARGV), own_tree_root=own_tree_root)
     except ProbeError as exc:
         try:
             observed_monotonic_ns = _safe_monotonic_ns(probes)
