@@ -182,6 +182,25 @@ class FixtureOrphanCensusTests(unittest.TestCase):
             with self.subTest(production=command):
                 self.assertEqual(sentinel.census(row(command), self.signatures), [])
 
+    def test_generic_sleeper_and_spinner_stubs_are_fixture_signatures(self) -> None:
+        # Test hygiene (2026-10-07): 23 tests start a Python one-liner that only sleeps or only
+        # spins as a stand-in child. A test run killed outright (SIGKILL) can stop none of its
+        # children, and these two have no other name to be found by afterwards.
+        python = "/opt/homebrew/Cellar/python@3.13/3.13.1/Frameworks/Python.framework/Versions/3.13/Resources/Python.app/Contents/MacOS/Python"
+        for command, expected in ((f"{python} -c import time; time.sleep(60)", "tests-python-sleeper"),
+                                  (f"{python} -B -c import time; time.sleep(600)", "tests-python-sleeper"),
+                                  (f"{python} -c while True: pass", "tests-python-spinner")):
+            with self.subTest(command=command):
+                self.assertEqual([item["signature"] for item in sentinel.census(row(command), self.signatures)],
+                                 [expected])
+                self.assertEqual(sentinel.census(row(command, ppid=199), self.signatures), [])   # not orphaned
+        for command in (f"{python} -c import time; time.sleep(60); do_the_work()",   # sleeps, then works
+                        f"{python} -c while True: pass_the_request_on()",
+                        f"{python} /Users/someone/job.py import time; time.sleep(60)",  # a script file, no -c
+                        "/bin/sleep 60"):
+            with self.subTest(other=command):
+                self.assertEqual(sentinel.census(row(command), self.signatures), [])
+
     def test_live_an_orphaned_fake_meter_is_reported(self) -> None:
         # A real orphan: the fake meter started by a shell that exits at once,
         # so the meter is reparented to PID 1; the census must name it.

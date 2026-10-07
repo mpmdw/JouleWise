@@ -18,5 +18,15 @@
     "id": "b5-fake-hazard-monitor",
     "command_regex": "\\s-c\\s(?:\\\\012)?import json, os, pathlib, sys, time\\\\012custody, life, code = ",
     "source": "tests/test_b5_driver.py: FAKE_MONITOR via fake_monitor_argv (python -c, a stand-in for the hazard monitor); ps renders its newlines as \\012"
+  },
+  {
+    "id": "tests-python-sleeper",
+    "command_regex": "\\s-c\\simport time; time\\.sleep\\(\\d+\\)$",
+    "source": "the stand-in child many tests start as [sys.executable, \"-c\", \"import time; time.sleep(N)\"] with N = 30, 31, 60 or 600 (tests/test_run_campaign_p2_rc.py, tests/test_harvest_b5_p2harv.py, tests/test_b5_driver_p3.py, tests/test_run_night.py and others); the regex ends at the closing bracket, so a one-liner that does anything after the sleep does not match"
+  },
+  {
+    "id": "tests-python-spinner",
+    "command_regex": "\\s-c\\swhile True: pass$",
+    "source": "a child that keeps one core busy until it is killed: tests/test_calibration_exits.py (load injector), tests/test_calibration_writer_crash_matrix.py (inherited-pipe descendant) and tests/owned_process_runner.py (spawn_spinning_descendant_for_guard_test)"
   }
 ]
