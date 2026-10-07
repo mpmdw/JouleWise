@@ -1,8 +1,10 @@
 """Keep a test independent of how the test runner was started and of what ran before it.
 
 Test hygiene, 2026-10-07. Three failures were filed as "fails under machine
-load, passes alone". Reproduced, each turned out to depend on the runner or on
-an earlier test, not on load. The three helpers here remove those dependencies.
+load, passes alone". Reproduced, the first depends on how the runner was
+started, the second on a test that ran earlier in the same process, and the
+third on a start-up race that load only widens. The three helpers here remove
+those dependencies.
 
 1. ``hide_main_from_spawned_children``. ``multiprocessing`` can start a child
    by "spawn": a fresh interpreter that first re-imports the parent's main
@@ -33,20 +35,26 @@ an earlier test, not on load. The three helpers here remove those dependencies.
    A later test's child then survives the SIGTERM that test relies on. The
    helper puts the dispositions back when its block ends.
 
-3. ``wait_until_ps_shows``. ``subprocess.Popen`` returns once the child has
-   replaced its program image, but Homebrew's ``python3.13`` is a small
-   launcher that immediately replaces itself again with the framework binary.
-   While that second replacement is in progress ``ps`` cannot read the
-   process's arguments and prints only ``(python3.13)``. A test that checks
-   the child's command line through ``ps`` within milliseconds of the spawn
-   can land in that gap; a busy machine widens it. The helper waits for the
-   command line to be readable.
+3. ``wait_until_child_reports_ready``. ``subprocess.Popen`` returns once the
+   child has replaced its program image, but Homebrew's ``python3.13`` is a
+   small launcher that immediately replaces itself again with the framework
+   binary. ``ps`` reads a process's arguments from its current image, so right
+   after the spawn it shows, in turn: the launcher with the arguments; then,
+   while the second replacement is in progress, only ``(python3.13)``; then
+   the framework binary with the arguments. A test that checks the child's
+   command line through ``ps`` within milliseconds of the spawn can land in
+   the middle state; a busy machine widens it. Polling ``ps`` until the
+   arguments appear is not enough, because they also appear in the first
+   state (measured: 7 of 600 polls returned there). The one event that cannot
+   precede the final image is the child's own Python code running, so the
+   child prints a line and the test waits for it.
 """
 
 from __future__ import annotations
 
 import contextlib
 import os
+import select
 import signal
 import subprocess
 import sys
@@ -57,6 +65,10 @@ from unittest import mock
 SHIELDED_SIGNALS = (signal.SIGINT, signal.SIGTERM, signal.SIGHUP)
 
 PS_COMMAND_ARGV = ("/bin/ps", "-o", "command=", "-p")
+
+# Code for ``python -c``: print one line as soon as the interpreter runs it, then stay alive.
+READY_LINE = b"ready"
+READY_SLEEPER = 'import time; print("ready", flush=True); time.sleep(60)'
 
 
 @contextlib.contextmanager
@@ -108,20 +120,28 @@ def ps_command(pid: int) -> str:
     return result.stdout.strip()
 
 
-def wait_until_ps_shows(pid: int, text: str, *, cap_s: float = 30.0, poll_s: float = 0.01) -> float:
-    """Wait until ``ps`` shows ``text`` in the command line of ``pid``; return the seconds waited.
+def wait_until_child_reports_ready(process: subprocess.Popen, *, cap_s: float = 60.0) -> float:
+    """Wait for the ``ready`` line of a child started from ``READY_SLEEPER``; return the seconds waited.
 
-    The wait ends on the event, not on a fixed delay. ``cap_s`` is only the
-    point at which a child that never shows its arguments is called a failure:
-    ``AssertionError`` then names what ``ps`` showed last.
+    The child must have been started with ``stdout=subprocess.PIPE``. The wait
+    ends on the event (the line arriving), not on a fixed delay. ``cap_s`` is
+    only the point at which a child that never runs its code is called a
+    failure: the child is then killed and ``AssertionError`` raised. The same
+    happens when the child exits without printing the line. The pipe is closed
+    afterwards; the child does not write again.
     """
 
     started = time.monotonic()
-    while True:
-        shown = ps_command(pid)
+    try:
+        readable, _, _ = select.select([process.stdout], [], [], cap_s)
+        line = process.stdout.readline() if readable else b""
+    finally:
         waited = time.monotonic() - started
-        if text in shown:
-            return waited
-        if waited >= cap_s:
-            raise AssertionError(f"ps did not show {text!r} for pid {pid} within {cap_s} s; it showed {shown!r}")
-        time.sleep(poll_s)
+    if line.strip() != READY_LINE:
+        process.kill()
+        process.wait()
+        process.stdout.close()
+        raise AssertionError(f"child {process.pid} did not report ready within {cap_s} s "
+                             f"(waited {waited:.2f} s, read {line!r})")
+    process.stdout.close()
+    return waited

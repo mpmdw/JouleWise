@@ -23,8 +23,6 @@ from unittest import mock
 from tests import process_reaper
 from tests import runner_isolation
 
-SLEEPER_ARGUMENTS = "-c import time; time.sleep(60)"
-
 
 @contextlib.contextmanager
 def child_stderr_discarded():
@@ -134,29 +132,36 @@ class SignalDispositionTests(unittest.TestCase):
         self.assertIs(signal.getsignal(signal.SIGTERM), signal.SIG_DFL)
 
 
-class PsCommandLineWaitTests(unittest.TestCase):
-    def sleeper(self) -> subprocess.Popen:
-        process = subprocess.Popen([sys.executable, *SLEEPER_ARGUMENTS.split(" ", 1)], start_new_session=True)
+class ChildReadyTests(unittest.TestCase):
+    def child(self, code: str) -> subprocess.Popen:
+        process = subprocess.Popen([sys.executable, "-c", code], start_new_session=True, stdout=subprocess.PIPE)
         self.addCleanup(process_reaper.kill_and_wait, process)
         return process
 
-    def test_the_wait_ends_when_ps_shows_the_childs_arguments(self):
-        process = self.sleeper()
-        waited = runner_isolation.wait_until_ps_shows(process.pid, SLEEPER_ARGUMENTS)
-        self.assertGreaterEqual(waited, 0.0)
-        self.assertIn(SLEEPER_ARGUMENTS, runner_isolation.ps_command(process.pid))
-        self.assertIsNone(process.poll(), "waiting must not disturb the child")
+    def test_after_the_ready_line_ps_shows_the_childs_arguments_every_time(self):
+        # Without the wait, ps showed "(python3.13)" instead in 21 of 400 runs of the reaper
+        # test on a busy machine (base commit, 2026-10-07). Forty spawns here.
+        arguments = "-c " + runner_isolation.READY_SLEEPER
+        for _ in range(40):
+            process = self.child(runner_isolation.READY_SLEEPER)
+            waited = runner_isolation.wait_until_child_reports_ready(process)
+            self.assertGreaterEqual(waited, 0.0)
+            self.assertIn(arguments, runner_isolation.ps_command(process.pid))
+            self.assertIsNone(process.poll(), "waiting must not disturb the child")
+            process_reaper.kill_and_wait(process)
 
-    def test_counterfactual_a_child_that_never_shows_the_text_fails_at_the_cap(self):
-        process = self.sleeper()
+    def test_counterfactual_a_child_that_never_reports_fails_at_the_cap_and_is_killed(self):
+        process = self.child("import time; time.sleep(60)")
         started = time.monotonic()
-        with self.assertRaisesRegex(AssertionError, "ps did not show 'no-such-argument'"):
-            runner_isolation.wait_until_ps_shows(process.pid, "no-such-argument", cap_s=0.5)
+        with self.assertRaisesRegex(AssertionError, "did not report ready within 0.5 s"):
+            runner_isolation.wait_until_child_reports_ready(process, cap_s=0.5)
         self.assertGreaterEqual(time.monotonic() - started, 0.5)
+        self.assertEqual(process.returncode, -signal.SIGKILL)
 
-    def test_counterfactual_a_process_that_is_gone_fails_at_the_cap(self):
-        process = self.sleeper()
-        process_reaper.kill_and_wait(process)
-        with self.assertRaisesRegex(AssertionError, "it showed ''"):
-            runner_isolation.wait_until_ps_shows(process.pid, SLEEPER_ARGUMENTS, cap_s=0.3)
-
+    def test_counterfactual_a_child_that_exits_without_reporting_fails_at_once(self):
+        process = self.child("raise SystemExit(3)")
+        started = time.monotonic()
+        with self.assertRaisesRegex(AssertionError, r"did not report ready within 60.0 s .*read b''"):
+            runner_isolation.wait_until_child_reports_ready(process)
+        self.assertLess(time.monotonic() - started, 30.0)
+        self.assertEqual(process.returncode, 3)

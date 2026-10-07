@@ -537,8 +537,8 @@ class DeadManMeterTests(unittest.TestCase):
     def test_the_reaper_reads_the_named_journal(self):
         with tempfile.TemporaryDirectory(prefix="b5-p3-reap-") as directory:
             night = Path(directory)
-            argv = [sys.executable, "-c", "import time; time.sleep(60)"]
-            process = subprocess.Popen(argv, start_new_session=True)
+            argv = [sys.executable, "-c", runner_isolation.READY_SLEEPER]
+            process = subprocess.Popen(argv, start_new_session=True, stdout=subprocess.PIPE)
             self.addCleanup(process_reaper.kill_and_wait, process)
             # The supervisor's start record (no identity reader: start_time None).
             (night / b5_driver.METER_JOURNAL).write_text(json.dumps(
@@ -548,8 +548,8 @@ class DeadManMeterTests(unittest.TestCase):
             # it hours after the spawn; this test runs it milliseconds after, when ps can
             # still show only "(python3.13)" and the reaper then rightly declines
             # (tests/runner_isolation.py, item 3). Wait for the event the test needs, the
-            # child's own arguments being readable, instead of assuming it has happened.
-            runner_isolation.wait_until_ps_shows(process.pid, " ".join(argv[1:]))
+            # child running its own code in its final program image, instead of assuming it.
+            runner_isolation.wait_until_child_reports_ready(process)
             self.assertIsNone(b5_driver.reap_orphan_monitor(night))
             self.assertIsNone(process.poll())
             self.assertTrue(b5_driver.reap_orphan_monitor(night, journal=b5_driver.METER_JOURNAL)["signalled"])
@@ -562,19 +562,20 @@ class DeadManMeterTests(unittest.TestCase):
             night = custody / "night"
             night.mkdir()
             (custody / "night_plan.json").write_text(json.dumps({"plan_id": "plan-x", "hazard_window": {"attempt": 2}}))
-            process = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"],
-                                       start_new_session=True)
+            process = subprocess.Popen([sys.executable, "-c", runner_isolation.READY_SLEEPER],
+                                       start_new_session=True, stdout=subprocess.PIPE)
             self.addCleanup(process_reaper.kill_and_wait, process)
             # The third case below expects "start time differs", which the reaper reports only
-            # after the command line matched; so ps must already show the child's arguments.
-            runner_isolation.wait_until_ps_shows(process.pid, "-c import time; time.sleep(60)")
+            # after the command line matched; so ps must already show the child's arguments
+            # (tests/runner_isolation.py, item 3).
+            runner_isolation.wait_until_child_reports_ready(process)
             for label, start in (
                     ("no command line", {"event": "start", "pid": process.pid, "pgid": process.pid}),
                     ("another command line", {"event": "start", "pid": process.pid, "pgid": process.pid,
                                               "argv": [sys.executable, "-B", "/x/scripts/km003c_monitor.py"],
                                               "at": b5_driver.stamp()}),
                     ("an older start", {"event": "start", "pid": process.pid, "pgid": process.pid,
-                                        "argv": [sys.executable, "-c", "import time; time.sleep(60)"],
+                                        "argv": [sys.executable, "-c", runner_isolation.READY_SLEEPER],
                                         "at": {**b5_driver.stamp(), "wall_s": time.time() + 3600}})):
                 with self.subTest(label):
                     (night / b5_driver.METER_JOURNAL).write_text(json.dumps(start) + "\n")
