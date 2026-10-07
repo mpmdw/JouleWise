@@ -162,6 +162,26 @@ class MalformedRecordTests(unittest.TestCase):
         self.assertNotIn("collector.unmeasured", CATALOG.codes)  # the draft still leaves it unclassified
 
 
+class BundleIdScopeTests(unittest.TestCase):
+    """Fable audit F9: a member exclusion naming its member by bundle id is not dropped.
+
+    Before: run_id 'bundle-q0_0' is not a roster run id, so the flag went to
+    unmatched_member and the member stayed in the claim."""
+
+    def test_a_bundle_id_scope_reaches_its_member(self) -> None:
+        bundled = {**roster(), "bundles": [{"bundle_id": f"bundle-{m['run_id']}", "run_id": m["run_id"],
+                                            "attempt": 1, "created_monotonic_ns": None}
+                                           for m in roster()["members"]]}
+        by_bundle = flag("battery.member_span", "member", run_id="bundle-q0_0")
+        result = compute([by_bundle], bundled, SPANS, CATALOG)
+        excluded = {row["run_id"] for row in result["members_excluded"]}
+        self.assertIn("q0_0", excluded)
+        self.assertEqual(0, result["flag_counts"]["unmatched_member"])
+        foreign = flag("battery.member_span", "member", run_id="not-a-member")
+        result = compute([foreign], bundled, SPANS, CATALOG)
+        self.assertEqual(1, result["flag_counts"]["unmatched_member"])  # still not this window's member
+
+
 class CellRuleTests(unittest.TestCase):
     """Finding 8: a roster could lower the sealed minimum or lose a stratum."""
 
