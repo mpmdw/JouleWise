@@ -99,7 +99,7 @@ def t0_check(repository, window, *, emit=print):
     try:
         names = probe(('ps', '-A', '-o', 'comm='))
         agents = sum(bool(re.match(
-            r'^(codex|claude|t3|mcp-server|run_campaign|window-chain)([-_.\s].*)?$',
+            r'^(codex|claude|mcp-server|run_campaign|window-chain)([-_.\s].*)?$',
             name.strip().rsplit('/', 1)[-1], re.I)) for name in names.splitlines())
         if agents:
             block(f'{agents} agent/measurement process(es) already running')

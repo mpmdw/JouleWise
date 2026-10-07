@@ -66,7 +66,8 @@ POSITIVE_CONTROL_SCHEMA = "joulewise.t0_unattended_anchor_positive_control.v1"
 
 _SHA256_RE = re.compile(r"[0-9a-f]{64}")
 _HID_IDLE_RE = re.compile(r'^\s*"HIDIdleTime"\s*=\s*([0-9]+)\s*$')
-_AGENT_TOKEN_RE = re.compile(r"(?:^|[/\s])(codex|claude|t3)(?:[/\s]|$)", re.I)
+# T3 is no longer an agent (Ed, 2026-10-07: "I've abandoned all t3 integration as a control plane so you can prune all that out").
+_AGENT_TOKEN_RE = re.compile(r"(?:^|[/\s])(codex|claude)(?:[/\s]|$)", re.I)
 _CLOCK_ROW_DEFINITION = {
     "applicability_rule": "ALWAYS",
     "evaluation_phase": "ARM_ONLY",
@@ -668,6 +669,9 @@ _CENSUS = {"exit_codes": [0, 1]}
 
 QUALIFICATION_PROCESS_OUTCOMES = (
     # Author and driver absence censuses; only these require empty stdout.
+    (("/usr/bin/pgrep", "-a", "-lf", "[c]odex|[c]laude"), _ABSENT, "joulewise/arm_readiness_evidence_t0.py:1868; joulewise/night_gate.py:agent_census"),
+    # The census before the T3 prune (2026-10-07), kept so journals recorded
+    # with it still resolve to their registered outcome.
     (("/usr/bin/pgrep", "-a", "-lf", "[c]odex|[c]laude|[t]3"), _ABSENT, "joulewise/arm_readiness_evidence_t0.py:1849; joulewise/night_gate.py:agent_census"),
     # The same census before -a (dry-records F1, 2026-10-07), kept so journals
     # recorded before that change still resolve to their registered outcome.

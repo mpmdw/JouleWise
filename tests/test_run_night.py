@@ -1193,7 +1193,7 @@ runpy.run_path(script, run_name='__main__')
         self.assertEqual([], calls)
         prepare.assert_not_called()
         author.assert_not_called()
-        self.assertEqual(("/usr/bin/pgrep", "-a", "-lf", "[c]odex|[c]laude|[t]3"), events[0])
+        self.assertEqual(("/usr/bin/pgrep", "-a", "-lf", "[c]odex|[c]laude"), events[0])
         night = self.custody / "night"
         for name in ("receipt.json", "refusal.json"):
             record = json.loads((night / name).read_text())
@@ -1553,7 +1553,7 @@ runpy.run_path(script, run_name='__main__')
         self.assertEqual("night_aborted_agent_present", result["aborted_reason"])
         self.assertEqual("night_aborted_agent_present", refusal["refusal"]["reason"])
         self.assertEqual("20 claude\n", result["census_hits"][0]["stdout"])
-        self.assertEqual(["/usr/bin/pgrep", "-a", "-lf", "[c]odex|[c]laude|[t]3"], result["census_hits"][0]["argv"])
+        self.assertEqual(["/usr/bin/pgrep", "-a", "-lf", "[c]odex|[c]laude"], result["census_hits"][0]["argv"])
 
     def test_courier_uses_one_launch_three_retries_and_every_backoff(self) -> None:
         plan = self.driver._load_plan(self.plan_path)
@@ -4293,7 +4293,7 @@ class PackNightProducerTests(unittest.TestCase):
         self.assertEqual("REFUSED", result["verdict"])
         self.assertEqual("night_refused_agent_present", result["aborted_reason"])
         census = json.loads((night / "censuses.jsonl").read_text().splitlines()[0])
-        self.assertEqual(["/usr/bin/pgrep", "-a", "-lf", "[c]odex|[c]laude|[t]3"], census["argv"])
+        self.assertEqual(["/usr/bin/pgrep", "-a", "-lf", "[c]odex|[c]laude"], census["argv"])
         self.assertEqual("20 claude\n", census["stdout"])
         self.assertFalse((night / "go_receipt.json").exists())
 

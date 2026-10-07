@@ -17,13 +17,14 @@ import time
 import unittest
 from unittest.mock import patch
 
-# The generator refuses any path carrying a census substring ("codex", "claude",
-# "t3"); a random tempfile suffix can contain "t3" (seen once: case-qa4uqbt3),
-# so every fixture directory is re-drawn until its name is census-clean.
+# The generator refuses any path carrying a census substring ("codex",
+# "claude"; before the T3 prune of 2026-10-07 also "t3", which a random
+# tempfile suffix could contain), so every fixture directory is re-drawn until
+# its name is census-clean.
 try:  # the generator's own guard list is the source of truth
     from scripts.gen_derivation_night import CENSUS_SUBSTRINGS as _CENSUS_SUBSTRINGS
 except ImportError:  # pragma: no cover - defensive fallback for a moved module
-    _CENSUS_SUBSTRINGS = ("codex", "claude", "t3")
+    _CENSUS_SUBSTRINGS = ("codex", "claude")
 
 
 def _census_clean_tempdir(**kwargs):
@@ -966,7 +967,8 @@ class LifecycleTests(unittest.TestCase):
             retry.write_text(retry.read_text() + f"\ndef classify_abort(cause):\n    return {clone_route!r}\n")
         if self._testMethodName == "test_b6_clone_old_census_literal_is_reported":
             gate = self.canonical / "joulewise/night_gate.py"
-            gate.write_text(gate.read_text().replace("[c]odex|[c]laude|[t]3", "codex|claude|t3"))
+            gate.write_text(gate.read_text().replace('AGENT_CENSUS_PATTERN = "[c]odex|[c]laude"',
+                                                     'AGENT_CENSUS_PATTERN = "codex|claude"'))
         self.arrival = int(time.time()) - 1000
         self.old = self.commit("old", self.arrival - 100)
         self.head = self.commit("fix", self.arrival)
@@ -1097,7 +1099,7 @@ class LifecycleTests(unittest.TestCase):
             str(self.stage.parent / ".locks" / (self.stage.name + ".lock")),
             battery["record"]["path"], battery["raw"]["path"]})
         self.assertEqual(before, {p: after[p] for p in before})
-        self.assertEqual(record["checks"]["census"]["argv"][-1], "[c]odex|[c]laude|[t]3")
+        self.assertEqual(record["checks"]["census"]["argv"][-1], "[c]odex|[c]laude")
         self.assertIn(20, record["checks"]["census"]["owned_helpers"])
         self.assertFalse(any("launchctl" in str(c) for c in self.calls))
 
@@ -2383,7 +2385,7 @@ class LifecycleTests(unittest.TestCase):
                 entry.check(**self.kw)
         record = json.loads(self.journal("check.json").read_text())
         self.assertIn("census fix", record["checks"]["canonical"]["reason"])
-        self.assertEqual(record["checks"]["census"]["argv"][-1], "codex|claude|t3")
+        self.assertEqual(record["checks"]["census"]["argv"][-1], "codex|claude")
 
     def test_b6_classification_runs_inside_clone(self):
         original = entry.run
@@ -2394,7 +2396,7 @@ class LifecycleTests(unittest.TestCase):
             return original(argv, **kwargs)
         with patch.object(entry, "run", side_effect=spy):
             record = self.checked()
-        self.assertEqual(record["checks"]["census"]["argv"][-1], "[c]odex|[c]laude|[t]3")
+        self.assertEqual(record["checks"]["census"]["argv"][-1], "[c]odex|[c]laude")
         self.assertTrue(executions)
         self.assertTrue(all(argv[:3] == [self.root / ".venv/bin/python", "-B", "-c"] and
                             kw["cwd"] == self.root for argv, kw in executions))

@@ -423,8 +423,8 @@ class NightKindTests(unittest.TestCase):
 
     def prepare_candidate_head(self, *, window_max_s=None):
         # Clone the committed candidate H locally; no network or machine action.
-        # Census-clean like the fixture root: a random suffix containing "t3"
-        # would make the generator refuse the plan path.
+        # Census-clean like the fixture root: a path containing a census
+        # substring would make the generator refuse the plan path.
         head_dir = _census_clean_tempdir(prefix="head-", dir=FIXTURE, ignore_cleanup_errors=True)
         self.addCleanup(head_dir.cleanup)
         work = Path(head_dir.name)

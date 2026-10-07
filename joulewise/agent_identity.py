@@ -1,11 +1,11 @@
 """Which agent-census hits are agent processes: one matcher for every census site.
 
 The agent census (``night_gate.AGENT_CENSUS_ARGV``, ``hazards.arm.AGENT_CENSUS_ARGV``)
-is ``pgrep -a -lf '[c]odex|[c]laude|[t]3'``: a regular expression over every
+is ``pgrep -a -lf '[c]odex|[c]laude'``: a regular expression over every
 process's whole command line, including the caller's own ancestors (``-a``;
 without it Darwin pgrep drops them, and an agent session that launched the
 census was invisible: dry-records F1, 2026-10-07).  That list is a superset.  Any id or path that
-contains one of the three substrings (``b5-gamma-attempt3``, a custody root under
+contains one of the substrings (``b5-gamma-attempt3`` before the T3 prune, a custody root under
 ``.claude``) puts the window's own ``python``, ``zsh`` and ``run_campaign``
 processes on it, and the census then stopped the window for a string (Opus
 triple audit F3, 2026-10-07).
@@ -17,8 +17,7 @@ never by its arguments:
   (``proc_pidpath`` on Darwin, ``/proc/<pid>/exe`` on Linux) and the process
   name (``argv[0]``).  A process is an agent when either basename starts with
   ``claude`` or ``codex`` (``codex``, ``codex-code-mode-host``, the ChatGPT
-  app's bundled ``codex``, the Claude app), starts with ``t3 code`` or
-  ``t3code`` (the T3 Code app and its helpers), when the executable sits in a
+  app's bundled ``codex``, the Claude app), when the executable sits in a
   ``claude/versions/<version>`` or ``codex/versions/<version>`` install (the
   Claude Code native binary is ``~/.local/share/claude/versions/2.1.289``), or
   when it is a script interpreter (``node``, ``bun``, ``deno``) whose script is
@@ -60,7 +59,8 @@ from dataclasses import dataclass, field
 from pathlib import PurePosixPath
 from typing import Callable
 
-AGENT_PREFIXES = ("claude", "codex", "t3 code", "t3code")
+# T3 Code is no longer an agent control plane (Ed, 2026-10-07: "I've abandoned all t3 integration as a control plane so you can prune all that out").
+AGENT_PREFIXES = ("claude", "codex")
 AGENT_INSTALL_DIRS = ("claude", "codex")
 SCRIPT_INTERPRETERS = ("node", "bun", "deno")
 # An agent's npm package, as a directory of the interpreter's script path

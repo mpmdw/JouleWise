@@ -2480,7 +2480,7 @@ class ContractTests(WatchdogTestCase):
             / "com.joulewise.magistrate.plist.template"
         ).read_text(encoding="utf-8")
         program = template.split("<key>ProgramArguments</key>", 1)[1].split("</array>", 1)[0].lower()
-        for forbidden in ("claude", "codex", "t3"):
+        for forbidden in ("claude", "codex"):
             self.assertNotIn(forbidden, program)
         self.assertNotIn("KeepAlive", template)
         self.assertIn("<integer>300</integer>", template)

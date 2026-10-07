@@ -1,9 +1,10 @@
 """The shared agent-census matcher (joulewise/agent_identity.py; Opus triple audit F3).
 
-The census probe ``pgrep -lf '[c]odex|[c]laude|[t]3'`` lists every process
+The census probe ``pgrep -a -lf '[c]odex|[c]laude'`` lists every process
 whose command line contains one of the substrings.  A window whose custody
-root or attempt id contains ``attempt3`` listed its own processes, and the
-census stopped the window for a string.  These tests start real processes and
+root contained one of them (before the T3 prune of 2026-10-07 also ``t3``, as
+in an ``attempt3`` id) listed its own processes, and the census stopped the
+window for a string.  These tests start real processes and
 build the census line exactly as pgrep prints it (pid, a space, the argv joined
 by spaces) from the kernel's argv, so they hold on Darwin and Linux alike.
 """
@@ -85,10 +86,9 @@ class AgentIdentityTests(unittest.TestCase):
             runner.symlink_to("/bin/sleep")
         return self.spawn([str(runner), "60"])
 
-    def test_a_window_process_whose_argv_contains_t3_is_not_an_agent(self):
+    def test_a_listed_window_process_is_not_an_agent(self):
         process = self.window_process()
         stdout = _line(process)
-        self.assertRegex(stdout, "[c]odex|[c]laude|[t]3")  # pgrep's own pattern lists it
         observed, refusal = night_gate.agent_census(_census_probes(stdout))
         self.assertIsNone(refusal, observed)
         self.assertEqual((1, ""), (observed.exit_code, observed.stdout))
@@ -97,7 +97,7 @@ class AgentIdentityTests(unittest.TestCase):
 
     def test_an_agent_named_process_is_still_an_agent(self):
         window = self.window_process()
-        for name in ("claude", "codex", "T3 Code (Alpha)"):
+        for name in ("claude", "codex"):
             with self.subTest(name=name):
                 agent = self.spawn([self.marker(name), "60"])
                 stdout = _line(window) + _line(agent)
@@ -139,7 +139,6 @@ class AgentIdentityTests(unittest.TestCase):
             ("/Users/edr/.local/share/claude/versions/2.1.289", ("claude",)): True,
             ("/opt/homebrew/lib/node_modules/@openai/codex/vendor/bin/codex-code-mode-host", None): True,
             ("/Applications/ChatGPT.app/Contents/Resources/codex", None): True,
-            ("/Applications/T3 Code (Alpha).app/Contents/MacOS/T3 Code (Alpha)", None): True,
             ("/opt/homebrew/bin/node", ("node", "/opt/homebrew/bin/codex", "exec")): True,
             ("/opt/homebrew/bin/node", ("node", "scripts/claude-bridge-mcp.mjs")): True,
             ("/opt/homebrew/bin/node", ("node", "scripts/run.mjs", "codex")): False,
@@ -364,7 +363,9 @@ class AncestorCensusLiveTests(unittest.TestCase):
         agent.symlink_to("/bin/zsh")
         own_marker = root / "codex"
         own_marker.symlink_to("/bin/sleep")
-        custody = root / "night-custody" / "b5-gamma-attempt3" / "custody"
+        # Under a .claude directory, so pgrep lists the foreign run_campaign by
+        # argv substring alone (before the T3 prune the attempt3 id did).
+        custody = root / ".claude" / "night-custody" / "b5-gamma-attempt3" / "custody"
         custody.mkdir(parents=True)
         chain = custody / "chain.zsh"
         chain.write_text('#!/bin/zsh -f\n"$1" "$2" "$3"\n:\n', encoding="utf-8")

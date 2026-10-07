@@ -74,11 +74,12 @@ GEN = _load_generator()
 
 
 def _census_clean_temporary_directory() -> tempfile.TemporaryDirectory:
-    """A temp directory whose whole path is free of `codex`, `claude`, `t3`.
+    """A temp directory whose whole path is free of `codex` and `claude`.
 
-    mkdtemp's random component hits one of those substrings every few hundred
-    runs (`tmp4ew_t3eu` is a real example), and the generator then refuses to
-    emit — correctly, since the night's own agent census would match the path.
+    Before the T3 prune (2026-10-07) mkdtemp's random component hit `t3` every
+    few hundred runs (`tmp4ew_t3eu`); any census substring makes the generator
+    refuse to emit — correctly, since the night's own agent census would match
+    the path.
     Retrying keeps that correct refusal from reading as a flaky test.
     """
 
@@ -501,7 +502,7 @@ class DerivationNightWrapperTests(unittest.TestCase):
         self.assertEqual(0, result.returncode, result.stderr)
 
     def test_a_census_substring_anywhere_in_the_night_refuses(self) -> None:
-        """`pgrep -lf "[c]odex|[c]laude|[t]3"` still matches unsafe plan argv.
+        """`pgrep -a -lf "[c]odex|[c]laude"` still matches unsafe plan argv.
 
         The census probe (joulewise/night_gate.py:agent_census) matches full
         command lines, so a session id or night root carrying one of those
@@ -515,7 +516,7 @@ class DerivationNightWrapperTests(unittest.TestCase):
             with self.subTest(field=field):
                 fixture = self.fixture
                 if field == "night custody root":
-                    poisoned = fixture.night_root.parent / "t3-night"
+                    poisoned = fixture.night_root.parent / "claude-night"
                     poisoned.mkdir()
                     fixture.write_plan(custody_root=str(poisoned))
                 else:

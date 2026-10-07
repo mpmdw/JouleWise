@@ -339,13 +339,13 @@ def author_g2a_window(args, *, now=time.time):
         if getattr(args, name) is None:
             raise ValueError(f"--new-g2a-window requires --{name.replace('_', '-')}")
     roots = [args.measurement_root, args.night_root, args.g2a_root, args.new_g2a_window]
-    if any(re.search(r"codex|claude|t3", str(value), re.IGNORECASE)
+    if any(re.search(r"codex|claude", str(value), re.IGNORECASE)
            for value in [args.plan_id, *roots]):
-        raise ValueError("plan id and paths must not contain codex, claude or t3")
+        raise ValueError("plan id and paths must not contain codex or claude")
     if any(not path.is_absolute() for path in roots):
         raise ValueError("window paths must be absolute")
-    if any(re.search(r"codex|claude|t3", str(path.resolve()), re.IGNORECASE) for path in roots):
-        raise ValueError("resolved paths must not contain codex, claude or t3")
+    if any(re.search(r"codex|claude", str(path.resolve()), re.IGNORECASE) for path in roots):
+        raise ValueError("resolved paths must not contain codex or claude")
     measurement = args.measurement_root.resolve()
     parent = Path("/Users/edr/night-custody/measurement")
     if parent not in measurement.parents:

@@ -1741,7 +1741,7 @@ exact `DIAGNOSTIC_NO_PACK` v2 plan; `window_max_s` cannot hold the
 programmed span (settle + (slots − 1) × cadence + one capture budget =
 7680 s for twelve slots) plus the 300 s pre-settle allowance;
 `t0 + window_max_s + 300 s` (the courier allowance) is not before the
-derived dead-man epoch; any emitted literal contains `codex`, `claude` or `t3`,
+derived dead-man epoch; any emitted literal contains `codex` or `claude`,
 which the night's own 30-second agent census would match and kill the
 night for; or the slot count is not the pre-registered twelve without an
 explicit `--slot-count-ruling` reference (which must be one line of

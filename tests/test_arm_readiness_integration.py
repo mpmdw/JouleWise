@@ -421,7 +421,7 @@ class ArmReadinessIntegrationTests(unittest.TestCase):
         before = {path: Path(path).read_bytes() for path in authored["receipt_paths"]}
         for pattern, kind in (
             ("XProtect", "MAINTENANCE_CENSUS"),
-            ("[c]odex|[c]laude|[t]3", "PROCESS_CENSUS"),
+            ("[c]odex|[c]laude", "PROCESS_CENSUS"),
         ):
             for exit_code, stdout in (
                 ((0, "123 5.1 XProtect\n"), (2, ""), (0, "malformed\n"))

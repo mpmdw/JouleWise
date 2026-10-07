@@ -64,10 +64,10 @@ END_MARKER = "<!-- END GENERATED: derivation-night-wrapper -->"
 TRACKED_CHAIN_RELPATH = "scripts/night_chains/calibration_derivation_only.zsh"
 TRACKED_CHAIN_PATH = REPO_ROOT / TRACKED_CHAIN_RELPATH
 
-# joulewise/night_gate.py censuses `pgrep -lf "[c]odex|[c]laude|[t]3"` every 30 s
+# joulewise/night_gate.py censuses `pgrep -a -lf "[c]odex|[c]laude"` every 30 s
 # and aborts the night on any hit, so no literal this wrapper bakes into a
 # command line may contain one of these substrings.
-CENSUS_SUBSTRINGS = ("codex", "claude", "t3")
+CENSUS_SUBSTRINGS = ("codex", "claude")  # "t3" dropped with the T3 prune (2026-10-07)
 
 # Courier allowance is unchanged; the driver owns the derived dead-man.
 COURIER_DEADLINE_S = 300
@@ -807,7 +807,7 @@ def render_region(chain_bytes: bytes) -> str:
         f"the {PRE_SETTLE_ALLOWANCE_S} s pre-settle allowance;\n"
         f"`t0 + window_max_s + {COURIER_DEADLINE_S} s` (the courier allowance) is "
         "not before the\n"
-        "derived dead-man epoch; any emitted literal contains `codex`, `claude` or `t3`,\n"
+        "derived dead-man epoch; any emitted literal contains `codex` or `claude`,\n"
         "which the night's own 30-second agent census would match and kill the\n"
         "night for; or the slot count is not the pre-registered twelve without an\n"
         "explicit `--slot-count-ruling` reference (which must be one line of\n"

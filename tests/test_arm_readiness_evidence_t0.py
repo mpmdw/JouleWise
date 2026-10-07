@@ -2829,7 +2829,7 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
             "PROCESS_CENSUS",
             (
                 ("/usr/bin/pgrep", "-x", "caffeinate"),
-                ("/usr/bin/pgrep", "-a", "-lf", "[c]odex|[c]laude|[t]3"),
+                ("/usr/bin/pgrep", "-a", "-lf", "[c]odex|[c]laude"),
                 (
                     "/usr/bin/pgrep",
                     "-lf",
@@ -2896,7 +2896,7 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
         """
         commands = (
             ("/usr/bin/pgrep", "-x", "caffeinate"),
-            ("/usr/bin/pgrep", "-a", "-lf", "[c]odex|[c]laude|[t]3"),
+            ("/usr/bin/pgrep", "-a", "-lf", "[c]odex|[c]laude"),
             ("/usr/bin/pgrep", "-lf", t0._BROWSER_CENSUS_PATTERN),
             ("/usr/bin/pgrep", "-lf", t0._MONITOR_CENSUS_PATTERN),
         )

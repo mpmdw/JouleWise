@@ -212,7 +212,11 @@ def probe_payload_kind(text):
 # agent_identity decides each: launchd and a shell running chain.zsh are not
 # agent executables and are ignored, the caller's own tree is ignored, and an
 # agent ancestor stays a hit.  pgrep never lists itself, with or without -a.
-AGENT_CENSUS_PATTERN = "[c]odex|[c]laude|[t]3"
+# T3 is no longer an agent control plane and is not censused
+# (Ed, 2026-10-07: "I've abandoned all t3 integration as a control plane so you can prune all that out");
+# journals recorded with the former ``[t]3`` alternative still resolve
+# through t0_rehearsal's registry of historical census argvs.
+AGENT_CENSUS_PATTERN = "[c]odex|[c]laude"
 AGENT_CENSUS_ARGV = ("/usr/bin/pgrep", "-a", "-lf", AGENT_CENSUS_PATTERN)
 
 PMSET_BATT_ARGV = ("/usr/bin/pmset", "-g", "batt")
@@ -953,7 +957,7 @@ def decide_census(result: ProbeResult, *, own_tree_root: int | None = None) -> P
     """The census probe with every listed non-agent process removed (agent_identity).
 
     pgrep's list is a regular expression over command lines, so a window whose
-    ids or paths contain ``codex``, ``claude`` or ``t3`` listed its own
+    ids or paths contain ``codex`` or ``claude`` (or, before the T3 prune, ``t3``) listed its own
     processes (Opus triple audit F3).  A line survives only when the kernel says
     that pid runs an agent executable, or when it cannot be decided.  The raw
     exit code and every ignored pid with its executable go to ``stderr``; a

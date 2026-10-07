@@ -130,9 +130,8 @@ def _interactive_root(row: DarwinProcessRecord) -> bool:
         return role not in {"daemon", "bg-pty-host", "--bg-pty-host", "bg-spare", "--bg-spare"} and not any(
             arg == "-p" or arg.startswith("--print") for arg in args
         )
-    if name in {"node", "nodejs"}:
-        script, _, _ = _command(row)
-        return script.endswith("/t3-code/dist/cli.js")
+    # The T3 Code CLI (node .../t3-code/dist/cli.js) was an interactive root
+    # until the T3 prune (Ed, 2026-10-07: "I've abandoned all t3 integration as a control plane so you can prune all that out").
     return False
 
 

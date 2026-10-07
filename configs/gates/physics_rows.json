@@ -1434,7 +1434,7 @@
    "test": "tests/hazards/test_import_graph.py::ImportGraphTests::test_hazard_modules_reach_no_retired_module"
   },
   {
-   "checks": "the GO records an agent census (pgrep -lf codex|claude|t3) that exited 1 with empty stdout before issue",
+   "checks": "the GO records an agent census (pgrep -lf codex|claude) that exited 1 with empty stdout before issue",
    "disposition": "retired_proxy",
    "inventory_action": "measure_directly",
    "key": {
@@ -3585,7 +3585,7 @@
    "test_matched_on": "night_probe_error"
   },
   {
-   "checks": "pgrep -lf '[c]odex|[c]laude|[t]3' finds any agent process alive at t0 (presence, not CPU)",
+   "checks": "pgrep -lf '[c]odex|[c]laude' finds any agent process alive at t0 (presence, not CPU)",
    "disposition": "unchanged_in_core",
    "inventory_action": "keep",
    "key": {
@@ -4007,7 +4007,7 @@
    "test": "tests/hazards/test_disk.py::DiskJudgeTests::test_missing_target_is_unmeasured"
   },
   {
-   "checks": "Count of processes whose comm basename matches ^(codex|claude|t3|mcp-server|run_campaign|window-chain).",
+   "checks": "Count of processes whose comm basename matches ^(codex|claude|mcp-server|run_campaign|window-chain).",
    "disposition": "retired_proxy",
    "inventory_action": "measure_directly",
    "key": {
@@ -4587,7 +4587,7 @@
    "test": "tests/hazards/test_arm.py::ArmTests::test_agent_present_refuses_at_the_census_before_any_action"
   },
   {
-   "checks": "no argv matching codex|claude|t3 during capture",
+   "checks": "no argv matching codex|claude during capture",
    "disposition": "retired_proxy",
    "inventory_action": "measure_directly",
    "key": {
@@ -6216,7 +6216,7 @@
    "test": "tests/hazards/test_disk.py::DiskJudgeTests::test_free_space_below_the_requirement_refuses"
   },
   {
-   "checks": "Count of processes whose comm matches codex|claude|t3|mcp-server|run_campaign|window-chain.",
+   "checks": "Count of processes whose comm matches codex|claude|mcp-server|run_campaign|window-chain.",
    "disposition": "retired_proxy",
    "inventory_action": "measure_directly",
    "key": {
@@ -6820,7 +6820,7 @@
    "test_matched_on": "night_chain_alive"
   },
   {
-   "checks": "Every 30 s during the window, 'pgrep -lf [c]odex|[c]laude|[t]3' finds no process whose command line matches those names. The chain is terminated on a hit (abort_on_census).",
+   "checks": "Every 30 s during the window, 'pgrep -lf [c]odex|[c]laude' finds no process whose command line matches those names. The chain is terminated on a hit (abort_on_census).",
    "disposition": "unchanged_in_core",
    "inventory_action": "measure_directly",
    "key": {
@@ -6872,7 +6872,7 @@
    "test": "tests/hazards/test_arm.py::ArmTests::test_quiet_float_mac_arms_go_in_the_registered_order"
   },
   {
-   "checks": "At GO, 'pgrep -lf [c]odex|[c]laude|[t]3' exits 1 with empty stdout. Any matching process name, or a probe error, refuses.",
+   "checks": "At GO, 'pgrep -lf [c]odex|[c]laude' exits 1 with empty stdout. Any matching process name, or a probe error, refuses.",
    "disposition": "retired_proxy",
    "inventory_action": "measure_directly",
    "key": {

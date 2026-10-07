@@ -2,7 +2,7 @@
 
 Runs inside the launchd job after t0, in this fixed order:
 
-1. **Agent census** ``pgrep -lf '[c]odex|[c]laude|[t]3'``, decided by the
+1. **Agent census** ``pgrep -a -lf '[c]odex|[c]laude'``, decided by the
    shared matcher ``joulewise.agent_identity`` (a listed process counts only
    when it runs an agent executable and is not in this process's own tree):
    no agent may remain, or the arm refuses before any action (kept by
@@ -64,7 +64,8 @@ ARM_SCHEMA = "joulewise.hazard_arm.v1"
 # matching itself, and -a lists this process's ancestors, which Darwin pgrep
 # otherwise leaves out (an agent that launched the arm was invisible:
 # dry-records F1, 2026-10-07).  tests/hazards/test_arm.py pins equality.
-AGENT_CENSUS_ARGV = ("/usr/bin/pgrep", "-a", "-lf", "[c]odex|[c]laude|[t]3")
+# T3 is no longer censused (Ed, 2026-10-07: "I've abandoned all t3 integration as a control plane so you can prune all that out").
+AGENT_CENSUS_ARGV = ("/usr/bin/pgrep", "-a", "-lf", "[c]odex|[c]laude")
 NETWORK_TIME_OFF_ARGV = ("/usr/bin/sudo", "-n", "/usr/sbin/systemsetup",
                          "-setusingnetworktime", "off")
 # The writer's own identity reads (validate_powermetrics_fiducial._sysctl_identity).
@@ -481,13 +482,13 @@ SUPERSEDES: tuple[tuple[str, str, str, int], ...] = (
     # base line 7168: The PROCESS_CENSUS receipt says the agent, browser, keep_awake and monitor proces...
     row("joulewise/arm_readiness.py", "_evaluate_rows",
         "readiness_dependency_refused (row t0.no_stray_keepawake)", 1),
-    # base line 10314: the GO records an agent census (pgrep -lf codex|claude|t3) that exited 1 with emp...
+    # base line 10314: the GO records an agent census (pgrep -lf codex|claude) that exited 1 with emp...
     row("joulewise/arm_readiness.py", "_authenticate_pack_launch_go",
         "launch_go_receipt_invalid:census", 1),
     # base line 1414: pgrep finds any caffeinate, agent session, browser app binary, or monitor (powerm...
     row("joulewise/arm_readiness_evidence_t0.py", "_expect_absent",
         "evidence_author_t0_process_census_underivable", 1),
-    # base line 105: Count of processes whose comm basename matches ^(codex|claude|t3|mcp-server|run_c...
+    # base line 105: Count of processes whose comm basename matches ^(codex|claude|mcp-server|run_c...
     row("joulewise/prewindow.py", "t0_check",
         "BLOCK agent/measurement process(es) already running", 1),
     # base line 109: ps -A -o comm= ran.
@@ -499,7 +500,7 @@ SUPERSEDES: tuple[tuple[str, str, str, int], ...] = (
     # base line 1332: agent exit stamp precedes capture start
     row("joulewise/t0_rehearsal.py", "evaluate_g8",
         "G8 agent did not exit before capture began", 1),
-    # base line 1366: no argv matching codex|claude|t3 during capture
+    # base line 1366: no argv matching codex|claude during capture
     row("joulewise/t0_rehearsal.py", "evaluate_g8",
         "G8 agent process existed during capture census N", 1),
     # base line 61: Fifteen T-0 evidence receipts: background quiet, clock anchor, battery, network t...
@@ -508,7 +509,7 @@ SUPERSEDES: tuple[tuple[str, str, str, int], ...] = (
     # base line 107: G8 agent exit ordering and capture-time pgrep censuses
     row("scripts/harvest_v5_qualification.py", "harvest",
         "g8_not_passed", 1),
-    # base line 165: Count of processes whose comm matches codex|claude|t3|mcp-server|run_campaign|win...
+    # base line 165: Count of processes whose comm matches codex|claude|mcp-server|run_campaign|win...
     row("scripts/prewindow_check.sh", "check_once",
         "BLOCK agent/measurement process(es) already running", 1),
     # base line 99: pgrep agent census returned an exit code other than 0/1 or rc1 with output
@@ -526,7 +527,7 @@ SUPERSEDES: tuple[tuple[str, str, str, int], ...] = (
     # base line 2338: Qualification t0 capture, control order, start budget, the network-time-OFF recei...
     row("scripts/run_night.py", "arm_only",
         "refusals from _capture_qualification_t0 (2335), _admit_qualification_control_order (2336), _derivation_start_budget (2337), _admit_network_time_off + _admit_qualification_clean_dwell (2338) (call sites; bodies at 3350-3750)", 1),
-    # base line 2419: At GO, 'pgrep -lf [c]odex|[c]laude|[t]3' exits 1 with empty stdout. Any matching...
+    # base line 2419: At GO, 'pgrep -lf [c]odex|[c]laude' exits 1 with empty stdout. Any matching...
     row("scripts/run_night.py", "_produce_pack_go",
         "PackNightRefusal census: <agent present | stdout must be empty>", 1),
     # base line 2948: The agent-census pgrep exits 0 with output or 1 with empty output; any other comb...

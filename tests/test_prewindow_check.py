@@ -24,7 +24,6 @@ class PrewindowCheckTests(unittest.TestCase):
         process_lines = (
             "edr 101 0.0 0.0 0 0 ?? S 0:00.00 claude daemon",
             "edr 102 0.0 0.0 0 0 ?? S 0:00.00 codex app-server",
-            "edr 103 0.0 0.0 0 0 ?? S 0:00.00 t3 worker",
             "edr 104 0.0 0.0 0 0 ?? S 0:00.00 mcp-server",
             "edr 105 0.0 0.0 0 0 ?? S 0:00.00 run_campaign",
             "edr 106 0.0 0.0 0 0 ?? S 0:00.00 window-chain",
@@ -32,7 +31,7 @@ class PrewindowCheckTests(unittest.TestCase):
         old_pattern = re.compile(
             r"codex exec|codex-run|run_campaign|window-chain"
         )
-        for process_line in process_lines[:4]:
+        for process_line in process_lines[:3]:
             self.assertIsNone(old_pattern.search(process_line))
 
         completed = self._check_lines(process_lines)
@@ -40,11 +39,11 @@ class PrewindowCheckTests(unittest.TestCase):
             completed.returncode, 1, completed.stdout + completed.stderr
         )
         self.assertIn(
-            "6 agent/measurement process(es) already running",
+            "5 agent/measurement process(es) already running",
             completed.stdout,
         )
         self.assertIn("NOT READY.", completed.stdout)
-        # Counterfactual: removing the six offending lines admits readiness.
+        # Counterfactual: removing the five offending lines admits readiness.
         self.assertEqual(self._check_lines([]).returncode, 0)
 
     def _check_lines(self, process_lines, *args, load="0.10", fast_dwell=False):
@@ -148,7 +147,7 @@ class PrewindowCheckTests(unittest.TestCase):
         )
         grep_command = (
             "edr 202 0.0 0.0 0 0 ?? S 0:00.00 grep -cE "
-            "[c]odex|[c]laude|[t]3|[m]cp-server|[r]un_campaign|[w]indow-chain"
+            "[c]odex|[c]laude|[m]cp-server|[r]un_campaign|[w]indow-chain"
         )
         completed = self._check_lines([driver_command, grep_command])
         self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
@@ -174,7 +173,7 @@ class PrewindowCheckTests(unittest.TestCase):
         self.assertEqual(admitted.returncode, 0, admitted.stdout + admitted.stderr)
 
     def test_check_8_refuses_executable_names_containing_spaces(self):
-        names = ("Codex (Service)", "T3 Code", "Claude Desktop", "mcp-server worker",
+        names = ("Codex (Service)", "Claude Desktop", "mcp-server worker",
                  "run_campaign worker", "window-chain worker")
         for name in names:
             with self.subTest(comm=name):
@@ -185,7 +184,7 @@ class PrewindowCheckTests(unittest.TestCase):
                 self.assertIn("1 agent/measurement process(es) already running", refused.stdout)
         refused = self._check_lines([(name, "worker") for name in names])
         self.assertEqual(refused.returncode, 1, refused.stdout + refused.stderr)
-        self.assertIn("6 agent/measurement process(es) already running", refused.stdout)
+        self.assertIn(f"{len(names)} agent/measurement process(es) already running", refused.stdout)
 
 
 class T0DwellTests(unittest.TestCase):
