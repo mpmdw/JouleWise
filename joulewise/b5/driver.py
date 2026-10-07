@@ -1378,16 +1378,26 @@ _RUN_ID_SAFE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
 def _stage_role(runs_root: str, bound_root: str, roles: Sequence[Any]) -> str:
     if str(runs_root) == str(bound_root) or any(role == "neg8_reference_corpus_member" for role in roles):
         return "corpus"
+    if roles and all(role == "neg8_daily_reference_midpoint" for role in roles):
+        return "reference_midpoint"
     if roles and all(isinstance(role, str) and role.startswith("neg8_daily_reference") for role in roles):
         return "reference"
     return "science"
+
+
+# NEG-8 ruling 2026-10-07 (registration 0.12 and 5.7): the screen needs two
+# surviving references at each endpoint; the midpoint is not required by it.
+REFERENCE_ENDPOINT_MIN_VALID = 2
+REFERENCE_MIDPOINT_MIN_VALID = 0
 
 
 def _min_valid(role: str, planned: int) -> int:
     if role == "corpus":
         return min(CORPUS_MIN_VALID, planned)
     if role == "reference":
-        return planned
+        return min(REFERENCE_ENDPOINT_MIN_VALID, planned)
+    if role == "reference_midpoint":
+        return min(REFERENCE_MIDPOINT_MIN_VALID, planned)
     return -(-planned * SCIENCE_MIN_NUMERATOR // SCIENCE_MIN_DENOMINATOR)
 
 

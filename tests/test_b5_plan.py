@@ -65,7 +65,8 @@ class WindowPlanTests(WindowPlanFixture):
                 window = plan.hazard_window
                 self.assertEqual(set(night_gate.HAZARD_LAUNCH_BINDINGS), set(window["bindings"]))
                 self.assertEqual(members, window["member_count"])
-                self.assertEqual(members * inputs["bytes_per_member"], window["planned_bytes"])
+                # NEG-8 ruling 2026-10-07: the disk budget carries the 7 reference spares' worst case.
+                self.assertEqual((members + 7) * inputs["bytes_per_member"], window["planned_bytes"])
                 self.assertEqual(inputs["bracket_session_id"], window["bracket_session_id"])
                 self.assertEqual(str(self.measurement / b5_plan.DEFAULT_LEDGER_RELATIVE), window["bindings"]["ledger_path"])
                 # The copied thresholds, plus the two keys the window sizes itself.

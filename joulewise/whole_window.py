@@ -135,6 +135,17 @@ NEG8_IDLE_SUB_POINT_DRIFT_ESTIMAND = (
 NEG8_DRIFT_ESTIMATOR_ID = "d054_point_contrast_guard_v1"
 NEG8_DRIFT_MINIMUM_N = 10
 NEG8_REPLICATED_ENDPOINT_N = 3
+# NEG-8 ruling 2026-10-07 (block-5 registration 0.12): the screen runs on the
+# surviving references, two or three at each endpoint and zero or one at the
+# midpoint, with the bound recomputed for the realised endpoint counts.
+NEG8_SURVIVOR_ENDPOINT_COUNTS = frozenset({2, 3})
+NEG8_SURVIVOR_MIDPOINT_COUNTS = frozenset({0, 1})
+NEG8_SURVIVOR_PROTOCOL = "replicated_endpoints"
+NEG8_COUNT_ADJUSTED_BOUND_FORMULA = (
+    "max(max(mean(largest_n_start)-mean(smallest_n_end),"
+    "mean(largest_n_end)-mean(smallest_n_start)),"
+    "t_0.975,n-1*sample_stddev_j*sqrt(1/n_start+1/n_end))"
+)
 NEG8_DRIFT_BOUND_MAX_AGE_S = 86400
 REGISTERED_NEG8_REFERENCE_CORPUS_DIR = (
     Path(__file__).resolve().parents[1]
@@ -1896,9 +1907,136 @@ def _endpoint_admissible_summary(values: Sequence[Any]) -> dict[str, Any] | None
     }
 
 
+def neg8_count_adjusted_bound(
+    points: Sequence[float], n_start: int, n_end: int
+) -> dict[str, Any] | None:
+    """The NEG-8 bound for an endpoint pair of ``n_start`` and ``n_end`` references.
+
+    ``points`` are the kept corpus energies of one claim family.  U_j is the
+    mean of the corpus's j largest energies and L_j the mean of its j
+    smallest.  The envelope max(U_ns - L_ne, U_ne - L_ns) is the widest gap a
+    start mean of n_s members and an end mean of n_e members drawn from the
+    corpus itself can show; the prediction term t(0.975, n - 1) * s *
+    sqrt(1/n_s + 1/n_e) is the 95% repeatability bound for a difference of
+    two means of those sizes when nothing drifts.  The bound is the larger
+    (block-5 registration 0.12, NEG-8 ruling decision 3).  ``None`` when the
+    points or counts cannot give one (fewer than two finite points, a count
+    outside 1..n).
+    """
+
+    values = [_finite_number(value) for value in points]
+    if (
+        any(value is None for value in values)
+        or len(values) < 2
+        or any(
+            type(count) is not int or count < 1 or count > len(values)
+            for count in (n_start, n_end)
+        )
+    ):
+        return None  # no bound: the caller's screen has no bound to pass
+    ordered = sorted(float(value) for value in values)
+
+    def upper(count: int) -> float:
+        return statistics.fmean(ordered[-count:])
+
+    def lower(count: int) -> float:
+        return statistics.fmean(ordered[:count])
+
+    envelope = max(upper(n_start) - lower(n_end), upper(n_end) - lower(n_start))
+    prediction = (
+        student_t_critical_95(len(ordered) - 1)
+        * statistics.stdev(ordered)
+        * math.sqrt(1.0 / n_start + 1.0 / n_end)
+    )
+    return {
+        "n_start": n_start,
+        "n_end": n_end,
+        "envelope_j": envelope,
+        "prediction_j": prediction,
+        "bound_j": max(envelope, prediction),
+        "formula": NEG8_COUNT_ADJUSTED_BOUND_FORMULA,
+    }
+
+
+def neg8_family_endpoint_bound(
+    artifact: Mapping[str, Any] | None, family: str, n_start: int, n_end: int
+) -> dict[str, Any] | None:
+    """``neg8_count_adjusted_bound`` for one claim family of a derived bound artifact.
+
+    At the planned shape (3, 3) and the legacy shape (1, 1) the artifact's own
+    stored terms are returned, so every bound minted before the survivor rule
+    replays to the same bytes; any other shape is computed from the
+    artifact's corpus members.  ``None`` when the artifact cannot supply it.
+    """
+
+    families = (
+        artifact.get("claim_family_bounds")
+        if isinstance(artifact, Mapping)
+        else None
+    )
+    family_record = families.get(family) if isinstance(families, Mapping) else None
+    estimator = (
+        family_record.get("estimator")
+        if isinstance(family_record, Mapping)
+        else None
+    )
+    if not isinstance(estimator, Mapping):
+        return None
+    stored = {
+        (NEG8_REPLICATED_ENDPOINT_N, NEG8_REPLICATED_ENDPOINT_N): (
+            "replicated_endpoint_sample_range_j",
+            "prediction_two_endpoint_means_j",
+            "replicated_endpoint_bound_j",
+        ),
+        (1, 1): (
+            "sample_range_j",
+            "prediction_two_point_j",
+            "single_member_endpoint_bound_j",
+        ),
+    }.get((n_start, n_end))
+    if stored is not None:
+        envelope, prediction, bound = (
+            _finite_number(estimator.get(field)) for field in stored
+        )
+        if envelope is None or prediction is None or bound is None or bound <= 0.0:
+            return None
+        return {
+            "n_start": n_start,
+            "n_end": n_end,
+            "envelope_j": envelope,
+            "prediction_j": prediction,
+            "bound_j": bound,
+            "formula": NEG8_COUNT_ADJUSTED_BOUND_FORMULA,
+        }
+    corpus = artifact.get("reference_corpus") if isinstance(artifact, Mapping) else None
+    members = corpus.get("members") if isinstance(corpus, Mapping) else None
+    point_field = family_record.get("point_field")
+    if not isinstance(members, list) or not isinstance(point_field, str):
+        return None
+    terms = neg8_count_adjusted_bound(
+        [
+            member.get(point_field) if isinstance(member, Mapping) else None
+            for member in members
+        ],
+        n_start,
+        n_end,
+    )
+    return terms if terms is not None and terms["bound_j"] > 0.0 else None
+
+
 def _family_bound(
-    artifact: Mapping[str, Any] | None, family: str, protocol: str
+    artifact: Mapping[str, Any] | None,
+    family: str,
+    protocol: str,
+    *,
+    n_start: int | None = None,
+    n_end: int | None = None,
 ) -> float | None:
+    if protocol == NEG8_SURVIVOR_PROTOCOL:
+        if n_start is None or n_end is None:
+            return None
+        terms = neg8_family_endpoint_bound(artifact, family, n_start, n_end)
+        return terms["bound_j"] if terms is not None else None
     families = (
         artifact.get("claim_family_bounds")
         if isinstance(artifact, Mapping)
@@ -1946,14 +2084,50 @@ def _family_drift_record(
     trajectory_points = [float(start["mean_j"]), float(end["mean_j"])]
     if midpoint is not None:
         trajectory_points.insert(1, float(midpoint["mean_j"]))
+    # A lost midpoint leaves the two-value spread |end mean - start mean|.
     excursion = max(trajectory_points) - min(trajectory_points)
-    derived_bound = _family_bound(artifact, family, protocol)
+    survivor_terms = (
+        neg8_family_endpoint_bound(
+            artifact, family, int(start["n"]), int(end["n"])
+        )
+        if protocol == NEG8_SURVIVOR_PROTOCOL
+        else None
+    )
+    derived_bound = (
+        survivor_terms["bound_j"]
+        if survivor_terms is not None
+        else None
+        if protocol == NEG8_SURVIVOR_PROTOCOL
+        else _family_bound(artifact, family, protocol)
+    )
     allowance = (
         max(excursion, derived_bound)
         if derived_bound is not None
         else None
     )
+    survivor_fields: dict[str, Any] = (
+        {
+            "endpoint_counts": {
+                "start": int(start["n"]),
+                "midpoint": int(midpoint["n"]) if midpoint is not None else 0,
+                "end": int(end["n"]),
+            },
+            "bound_envelope_j": (
+                survivor_terms["envelope_j"] if survivor_terms is not None else None
+            ),
+            "bound_prediction_j": (
+                survivor_terms["prediction_j"]
+                if survivor_terms is not None
+                else None
+            ),
+            "bound_formula": NEG8_COUNT_ADJUSTED_BOUND_FORMULA,
+        }
+        # The planned (3, 1, 3) and legacy records keep their historical bytes.
+        if protocol == NEG8_SURVIVOR_PROTOCOL
+        else {}
+    )
     return {
+        **survivor_fields,
         "claim_family": family,
         "endpoint_protocol": protocol,
         "start": dict(start),
@@ -2008,8 +2182,22 @@ def evaluate_neg8_point_drift(
     midpoint_idle_subtracted_j: Any = None,
     window_duration_s: Any = None,
     bound_freshness_observation: Any = None,
+    lost_references: Sequence[Mapping[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """Gate both claim families and mint non-vanishing drift allowances."""
+    """Gate both claim families and mint non-vanishing drift allowances.
+
+    ``lost_references`` (NEG-8 ruling 2026-10-07, registration 0.12) lists
+    the references the caller dropped before aggregation, each
+    ``{bundle_id, position, reason}``; the values passed are the survivors.
+    The planned shape (3, 1, 3) is ``replicated_endpoints_with_midpoint``; any
+    other survivor shape with two or three references at each endpoint and
+    zero or one at the midpoint is ``replicated_endpoints``, screened against
+    the count-adjusted bound.  The legacy single pair (1, 0, 1) is accepted
+    only when no reference was lost, so a modern roster that lost references
+    never downgrades to it.  Fewer than two survivors at an endpoint, or more
+    references than planned, is ``neg8_bracket_reference_invalid``; with a
+    loss behind it the record names ``references_insufficient``.
+    """
 
     conditions: set[str] = set()
     artifact = (
@@ -2055,7 +2243,14 @@ def evaluate_neg8_point_drift(
         len(midpoint_idle_values),
         len(end_idle_values),
     )
-    if gross_counts == (1, 0, 1) and idle_counts == (1, 0, 1):
+    losses = [
+        dict(item) for item in (lost_references or ()) if isinstance(item, Mapping)
+    ]
+    if (
+        gross_counts == (1, 0, 1)
+        and idle_counts == (1, 0, 1)
+        and not losses
+    ):
         protocol = "legacy_single_member_endpoints"
     elif (
         gross_counts
@@ -2067,6 +2262,13 @@ def evaluate_neg8_point_drift(
         and idle_counts == gross_counts
     ):
         protocol = "replicated_endpoints_with_midpoint"
+    elif (
+        gross_counts[0] in NEG8_SURVIVOR_ENDPOINT_COUNTS
+        and gross_counts[1] in NEG8_SURVIVOR_MIDPOINT_COUNTS
+        and gross_counts[2] in NEG8_SURVIVOR_ENDPOINT_COUNTS
+        and idle_counts == gross_counts
+    ):
+        protocol = NEG8_SURVIVOR_PROTOCOL
     else:
         protocol = "invalid"
     if not start_gross_values or not end_gross_values:
@@ -2081,7 +2283,9 @@ def evaluate_neg8_point_drift(
     midpoint_idle = _endpoint_point_summary(midpoint_idle_values)
     end_idle = _endpoint_point_summary(end_idle_values)
     required_summaries = (start_gross, end_gross, start_idle, end_idle)
-    if protocol == "replicated_endpoints_with_midpoint":
+    if protocol == "replicated_endpoints_with_midpoint" or (
+        protocol == NEG8_SURVIVOR_PROTOCOL and gross_counts[1] == 1
+    ):
         required_summaries = (*required_summaries, midpoint_gross, midpoint_idle)
     if any(summary is None for summary in required_summaries):
         conditions.add("neg8_bracket_reference_invalid")
@@ -2098,6 +2302,7 @@ def evaluate_neg8_point_drift(
         and end_idle is not None
         and (
             protocol == "legacy_single_member_endpoints"
+            or (protocol == NEG8_SURVIVOR_PROTOCOL and gross_counts[1] == 0)
             or (midpoint_gross is not None and midpoint_idle is not None)
         )
     ):
@@ -2182,10 +2387,50 @@ def evaluate_neg8_point_drift(
         decision = "failed"
     else:
         decision = "passed"
+    # Recorded only when a reference was lost or the survivor protocol ran, so
+    # a full (3, 1, 3) or legacy bracket keeps its historical bytes.
+    survivor_record: dict[str, Any] = (
+        {
+            "reference_counts": {
+                "start": gross_counts[0],
+                "midpoint": gross_counts[1],
+                "end": gross_counts[2],
+            },
+            "planned_reference_counts": {
+                "start": NEG8_REPLICATED_ENDPOINT_N,
+                "midpoint": 1,
+                "end": NEG8_REPLICATED_ENDPOINT_N,
+            },
+            "reference_losses": losses,
+            "midpoint_lost": protocol == NEG8_SURVIVOR_PROTOCOL
+            and gross_counts[1] == 0,
+            "survivor_screen": (
+                "references_insufficient"
+                if losses
+                and (
+                    gross_counts[0] < min(NEG8_SURVIVOR_ENDPOINT_COUNTS)
+                    or gross_counts[2] < min(NEG8_SURVIVOR_ENDPOINT_COUNTS)
+                )
+                else "more_references_than_planned"
+                if protocol == "invalid"
+                and (
+                    gross_counts[0] > NEG8_REPLICATED_ENDPOINT_N
+                    or gross_counts[1] > 1
+                    or gross_counts[2] > NEG8_REPLICATED_ENDPOINT_N
+                )
+                else "invalid"
+                if protocol == "invalid"
+                else "evaluated"
+            ),
+        }
+        if losses or protocol == NEG8_SURVIVOR_PROTOCOL
+        else {}
+    )
     return {
         "schema_version": NEG8_BRACKET_SCHEMA,
         "estimand": NEG8_POINT_DRIFT_ESTIMAND,
         "endpoint_protocol": protocol,
+        **survivor_record,
         "decision": decision,
         "passed": decision == "passed",
         "conditions": sorted(conditions),
@@ -4570,6 +4815,7 @@ def _derived_neg8_decision(
     drift_bound_artifact: Any = None,
     return_bracket: bool = False,
     freshness_evaluated_at_s: Any = None,
+    exclude_bundle_ids: Mapping[str, Any] | None = None,
 ) -> tuple[Any, str | None]:
     """Re-derive a verdict from source-member summaries, never the stored row.
 
@@ -4578,6 +4824,14 @@ def _derived_neg8_decision(
     committed 0925480 ``runs_root / bundle_id`` resolution unconditionally
     (frozen-arm purity — a custody improvement must never change a frozen
     row's disposition in either direction).
+
+    On the current point-drift path the screen runs on the surviving
+    references (NEG-8 ruling 2026-10-07, registration 0.12): a reference
+    whose stored summary records a status other than ``succeeded`` is lost
+    (the verdict writer drops the same references), and so is one named in
+    ``exclude_bundle_ids`` ({bundle_id: reason}, the harvest's physics and
+    strict-validation losses).  The loss test never reads an energy.  Lost
+    references go to the evaluator as ``lost_references``.
     """
 
     try:
@@ -4594,6 +4848,17 @@ def _derived_neg8_decision(
     reference_metadata: list[Mapping[str, Any] | None] = []
     end_reference_paths: list[Path] = []
     invalid_role = False
+    survivors = bool(current and point_drift)
+    excluded = (
+        {
+            str(key): value
+            for key, value in exclude_bundle_ids.items()
+            if isinstance(key, str)
+        }
+        if survivors and isinstance(exclude_bundle_ids, Mapping)
+        else {}
+    )
+    lost: list[dict[str, Any]] = []
     for manifest in manifests:
         manifest_paths = (
             _manifest_bundle_paths([manifest], runs_root) if current else None
@@ -4648,6 +4913,36 @@ def _derived_neg8_decision(
                         )
                     continue
                 stored_summary = _read_json_object(bundle_path / "summary_metrics.json")
+                if survivors:
+                    stored_status = (
+                        stored_summary.get("status")
+                        if isinstance(stored_summary, Mapping)
+                        else None
+                    )
+                    # A recorded status other than succeeded is a loss; a summary
+                    # with no status falls through to the evidence checks below.
+                    reason = (
+                        excluded[bundle_id]
+                        if bundle_id in excluded
+                        else "status_not_succeeded"
+                        if isinstance(stored_status, str)
+                        and stored_status != "succeeded"
+                        else None
+                    )
+                    if reason is not None:
+                        lost.append(
+                            {
+                                "bundle_id": bundle_id,
+                                "position": position,
+                                "reason": reason,
+                                "status": (
+                                    stored_status
+                                    if isinstance(stored_status, str)
+                                    else None
+                                ),
+                            }
+                        )
+                        continue
                 if _custody_strict_invalid(bundle_path, stored_summary):
                     return None, "bundle_strict_invalid"
                 if _current_strict_summary(stored_summary, bundle_path):
@@ -4705,13 +5000,17 @@ def _derived_neg8_decision(
         len(references["start"]) == 1
         and not references["midpoint"]
         and len(references["end"]) == 1
+        and not lost
     )
     replicated = (
         len(references["start"]) == NEG8_REPLICATED_ENDPOINT_N
         and len(references["midpoint"]) == 1
         and len(references["end"]) == NEG8_REPLICATED_ENDPOINT_N
     )
-    shape_valid = legacy_pair or (point_drift and replicated)
+    # The survivor protocol: the evaluator classifies any realised shape (two
+    # or three at each endpoint, the midpoint optional) and names one with too
+    # few or too many references; frozen replay keeps the two exact shapes.
+    shape_valid = legacy_pair or (point_drift and replicated) or survivors
     start_gross = (
         [item[0] for item in references["start"]]
         if shape_valid
@@ -4755,6 +5054,7 @@ def _derived_neg8_decision(
                 reference_metadata,
                 evaluated_at_s=freshness_evaluated_at_s,
             ),
+            lost_references=lost if survivors else None,
         )
         return (bracket if return_bracket else bracket["decision"], None)
     start = start_gross[0] if legacy_pair and start_gross else None

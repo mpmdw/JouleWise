@@ -222,6 +222,12 @@ _CORE_PRUNE_CODES = {
     "member.stderr_uncopied": _code("RECORDS", "REPRESENTATION", DISCLOSE),
     # The harvest (joulewise.b5.harvest).
     "neg8.corpus_member_dropped": _code("NEG8", "REPRESENTATION", DISCLOSE),
+    # NEG-8 ruling 2026-10-07 (registration 0.12): the screen ran on fewer than
+    # (3, 1, 3) references; the midpoint reference was lost.  Disclosed here;
+    # the analysis plan lists neg8.midpoint_lost as claim-excluding for the
+    # primary contrasts until the block's midpoint record says otherwise.
+    "neg8.reference_lost": _code("NEG8", "NUMBER", DISCLOSE),
+    "neg8.midpoint_lost": _code("NEG8", "NUMBER", DISCLOSE),
     "calibration.capture_battery_span": _code("CALIBRATION", "PHYSICS", EXCLUDE_WINDOW),
     "calibration.capture_battery_unmeasured": _code("CALIBRATION", "PHYSICS", EXCLUDE_WINDOW),
     "whole_window.not_passed": _code("NEG8", "NUMBER", DISCLOSE),
@@ -306,14 +312,12 @@ _INT4_CODES = {
     "whole_window.member_failures_unreadable": _code("NEG8", "NUMBER", EXCLUDE_WINDOW),
 }
 
-# Audit-fix batch 1 (2026-10-07, Astra triple audit).  A1: a NEG-8 window
-# reference (start, midpoint or end) carries a PHYSICS member exclusion
-# (contention, battery, thermal, clock step, instrument sampling).  The
-# reference has no cells, so the member exclusion removes nothing, while the
-# drift allowance and screen computed from it stay in use; the bracket cannot
-# be re-derived without it (3+1+3), so the window is excluded.
+# Audit-fix batch 1 (2026-10-07, Astra triple audit).  Its A1 code,
+# neg8.reference_member_excluded (EXCLUDE_WINDOW), is superseded by the NEG-8
+# survivors ruling (registration 0.12): a physics-excluded window reference
+# is dropped and the screen re-derived on the survivors
+# (neg8.reference_lost, neg8.midpoint_lost, neg8.screen_failed).
 _AUDFIX1_CODES = {
-    "neg8.reference_member_excluded": _code("NEG8", "PHYSICS", EXCLUDE_WINDOW),
     # Audit A3: an UNMEASURED arm verdict of a module other than the instrument
     # (a failed probe, not a measured hazard) is recorded by the driver and the
     # window goes on; the in-window monitor measures the module per member span.

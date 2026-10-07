@@ -27,7 +27,7 @@
         "pack_id": "d117_floor_qwen3-1p7b_v5",
         "plan_tree": {
           "path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/plan_tree.json",
-          "sha256": "5218c2709274765c706f38766ae68cce30892a673e9ae5cc290701362f615eb1"
+          "sha256": "1d87a30955fa978d3a3a22dc0048720691e0128e4a3fe83477fc375d13dd031a"
         },
         "projection_state": "unprojected"
       },
@@ -35,7 +35,7 @@
         "pack_id": "d117_floor_qwen3-8b_v5",
         "plan_tree": {
           "path": "configs/campaigns/d117_floor_qwen3-8b_v5/plan_tree.json",
-          "sha256": "5bab773a481e4a06fae564217b178d8e1d76a5334f99a3b264c1174db692a6e4"
+          "sha256": "0cdb33836f4632827bc74be194e388450c53b3314db1c72d9e9904e625868670"
         },
         "projection_state": "unprojected"
       },
@@ -43,7 +43,7 @@
         "pack_id": "d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5",
         "plan_tree": {
           "path": "configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5/plan_tree.json",
-          "sha256": "fb51b4aa0c47fb36bbc838369fd6b5af0db4656becf01ebc5051c9794b8b8bc3"
+          "sha256": "8b1d1d7176f5ee2286038e91df6427e47476c3a4bdee45a1c24687d49d80e3bf"
         },
         "projection_state": "unprojected"
       }

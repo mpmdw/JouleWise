@@ -504,7 +504,10 @@ class YieldTests(unittest.TestCase):
         plan = json.loads((harness.night / b5_driver.YIELD_PLAN).read_text())
         minimums = {row["stage_id"]: (row["role"], row["planned"], row["min_valid"]) for row in plan["stages"]}
         self.assertEqual(("corpus", 12, 10), minimums["alpha-bound-collection"])
-        self.assertEqual(("reference", 3, 3), minimums["alpha-reference-start"])
+        # NEG-8 ruling 2026-10-07: two survivors at each endpoint; the midpoint is not required.
+        self.assertEqual(("reference", 3, 2), minimums["alpha-reference-start"])
+        self.assertEqual(("reference", 3, 2), minimums["alpha-reference-end"])
+        self.assertEqual(("reference_midpoint", 1, 0), minimums["alpha-reference-midpoint"])
         self.assertEqual(("science", 20, 16), minimums["alpha-science-abba-01-05"])
         self.assertEqual(("science", 10, 8), minimums["alpha-science-absolute"])
         report = facts(harness)

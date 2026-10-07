@@ -43,6 +43,14 @@ Gate-prune round 2 (PLAN2) adds, each listed in ``DEVIATIONS``:
   stage runs once more; each member it measures is flagged
   ``member.retried``. There is no drain.
 
+NEG-8 ruling 2026-10-07 (registration 0.12, "One retry, by spare slot") adds,
+also in ``DEVIATIONS``: a window reference stage whose plan-tree row carries
+``spare_retry`` (``joulewise.b5.reference_spares``) is followed, when fewer of
+its members succeeded than it planned, by exactly (planned - succeeded) of its
+pre-registered spare members, run once from the committed spare set of that
+size into the same runs root, under the collection deadline; each spare
+measured is flagged ``member.retried``. The failed bundles are never touched.
+
 The chain's own flags go through ``joulewise.flags.core`` (writer
 ``b5-chain``); a flag that cannot be written lands in the chain log behind
 the core's unwritten-flag marker.
@@ -172,6 +180,7 @@ STAGE_WALL_BUDGET_S = {
     "pre_calibration_capture": 1800,
     "window_calibration_verdict": 600,
     "neg8_corpus_retry_decision": 300,
+    "neg8_spare_retry_decision": 300,
     "neg8_corpus_collected": 1800,
     "bound_derivation": 1800,
     "session_status_record": 600,
@@ -225,6 +234,10 @@ COLLECTION_DEADLINE_RECORD = "collection-deadline.json"
 # prune helper still runs once, after it. There is no drain.
 NEG8_RETRY_MINIMUM = 10
 NEG8_RETRY_SNAPSHOT = "neg8-corpus-before-retry.json"
+# NEG-8 ruling 2026-10-07 (registration 0.12): the spare-slot retry of a window
+# reference stage. One create-once snapshot per stage, named by its stage id.
+SPARE_RETRY_SCHEMA = "joulewise.b5_reference_spare_retry.v1"
+SPARE_RETRY_SNAPSHOT = "neg8-spares-{stage_id}.json"
 
 # The chain's own flag writer (joulewise.flags.core; custody/flags/<writer>.jsonl).
 CHAIN_FLAG_WRITER = "b5-chain"
@@ -265,6 +278,11 @@ DEVIATIONS = (
     "whole_window_verdict and backup stages are desk steps and are not in the chain",
     "every settle (before the pre slot and before each collection stage) is SETTLE_S = 60 s, not the "
     "runbook's SETTLE_S=180 (block-5 timing ruling of 2026-10-06; registration sections 0.6 and 5.1)",
+    "a window reference stage with a spare_retry record (start triplet, midpoint, end triplet) is followed, "
+    "when fewer of its members succeeded than it planned, by the committed spare set of size (planned - "
+    "succeeded), run once, after a settle, into the same runs root and under the collection deadline; the "
+    "failed bundles are never touched and each spare measured is flagged member.retried (NEG-8 ruling "
+    "2026-10-07, registration 0.12)",
 )
 
 _IDENTIFIER_RE = re.compile(r"[A-Za-z0-9._-]+")
@@ -294,6 +312,9 @@ class Stage:
     commands: tuple[Command, ...]
     in_chain: bool
     slot: str | None  # "pre" / "post" for calibration captures
+    # NEG-8 spare-slot retry (registration 0.12): {count: spare set order manifest, repo-relative}.
+    spare_sets: Mapping[int, str] | None = None
+    spare_slot: str | None = None
 
     def summary(self) -> dict[str, Any]:
         return {"stage_id": self.stage_id, "kind": self.kind, "ordinal": self.ordinal,
@@ -387,8 +408,9 @@ def stage_plan(tree: Mapping[str, Any]) -> list[Stage]:
         if kind == "campaign_collection":
             _require(expected >= 1, f"{stage_id}: a collection stage expects at least one member")
             _require(commands[0].tool_id == "campaign_runner", f"{stage_id}: collection must use campaign_runner")
+        spare_sets, spare_slot = _spare_retry(row.get("spare_retry"), stage_id, kind, expected)
         stages.append(Stage(stage_id, ordinal, kind, expected, tuple(commands),
-                            kind in IN_CHAIN_KINDS, slot))
+                            kind in IN_CHAIN_KINDS, slot, spare_sets, spare_slot))
     stages.sort(key=lambda stage: stage.ordinal)
     _require([stage.ordinal for stage in stages] == list(range(1, len(stages) + 1)),
              "stage ordinals must be exactly 1..n")
@@ -413,6 +435,36 @@ def stage_plan(tree: Mapping[str, Any]) -> list[Stage]:
     _require(len(derivations) == 1 and derivations[0] > min(collections),
              "exactly one bound derivation, after the corpus collection")
     return stages
+
+
+def _spare_retry(value: Any, stage_id: str, kind: str, expected: int) -> tuple[dict[int, str] | None, str | None]:
+    """A reference stage's ``spare_retry`` record: {spare count: order manifest path} and the slot."""
+
+    if value is None:
+        return None, None
+    _require(kind == "campaign_collection", f"{stage_id}: only a collection stage carries spare_retry")
+    _require(isinstance(value, Mapping) and value.get("schema_version") == SPARE_RETRY_SCHEMA,
+             f"{stage_id}: spare_retry must be {SPARE_RETRY_SCHEMA}")
+    slot = value.get("slot")
+    maximum = value.get("max_spares")
+    _require(slot in {"start", "midpoint", "end"}, f"{stage_id}: spare_retry slot must be start, midpoint or end")
+    _require(type(maximum) is int and 1 <= maximum <= expected,
+             f"{stage_id}: spare_retry max_spares must be an integer in 1..expected_count")
+    sets = value.get("spare_sets")
+    _require(isinstance(sets, list) and len(sets) == maximum, f"{stage_id}: spare_retry needs one spare set per count")
+    spare_sets: dict[int, str] = {}
+    for row in sets:
+        manifest = row.get("order_manifest") if isinstance(row, Mapping) else None
+        count = row.get("count") if isinstance(row, Mapping) else None
+        _require(type(count) is int and 1 <= count <= maximum and count not in spare_sets
+                 and isinstance(manifest, Mapping) and _SHA256_RE.fullmatch(str(manifest.get("sha256"))) is not None,
+                 f"{stage_id}: spare_retry spare set {row!r} is malformed")
+        path = _relative(manifest.get("path"), f"{stage_id} spare set {count} order manifest")
+        _require(PurePosixPath(path).name == "order_manifest.json",
+                 f"{stage_id}: a spare set names its directory's order_manifest.json")
+        spare_sets[count] = path
+    _require(sorted(spare_sets) == list(range(1, maximum + 1)), f"{stage_id}: spare sets must cover 1..max_spares")
+    return spare_sets, slot
 
 
 def json_pointer(tree: Mapping[str, Any], pointer: str) -> Any:
@@ -801,6 +853,56 @@ else:
     sys.exit(2)
 """
 
+# NEG-8 ruling 2026-10-07 (registration 0.12): the spare-slot retry (stdlib
+# only). "count" reads the stage's own order manifest, writes a create-once
+# snapshot of each member's summary status and prints how many spares to run:
+# planned - succeeded, at most the stage's spares. It reads statuses only,
+# never an energy. "measured" prints, one per line, each run id of a spare set
+# whose bundle directory now holds a summary or metadata: the spares the retry
+# measured.
+SPARE_RETRY_HELPER = r"""
+import json, os, sys
+mode = sys.argv[1]
+def run_ids(manifest_path):
+    with open(manifest_path, "rb") as handle:
+        return [row["run_id"] for row in json.loads(handle.read())["executed_order"]]
+def state(runs_root, run_id):
+    path = os.path.join(runs_root, run_id, "summary_metrics.json")
+    if not os.path.isfile(path):
+        return False, None
+    try:
+        with open(path, "rb") as handle:
+            return True, json.loads(handle.read()).get("status")
+    except (OSError, ValueError, AttributeError):
+        return True, None
+if mode == "count":
+    manifest_path, runs_root, snapshot_path, maximum = sys.argv[2], sys.argv[3], sys.argv[4], int(sys.argv[5])
+    rows = []
+    for run_id in run_ids(manifest_path):
+        present, status = state(runs_root, run_id)
+        rows.append({"run_id": run_id, "summary_present": present, "status": status})
+    succeeded = sum(row["status"] == "succeeded" for row in rows)
+    spares = min(max(len(rows) - succeeded, 0), maximum)
+    record = {"schema": "joulewise.b5_neg8_spare_retry.v1", "planned": len(rows), "succeeded": succeeded,
+              "spares": spares, "max_spares": maximum, "members": rows}
+    descriptor = os.open(snapshot_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+    with os.fdopen(descriptor, "wb") as handle:
+        handle.write((json.dumps(record, indent=2, sort_keys=True) + "\n").encode("utf-8"))
+        handle.flush()
+        os.fsync(handle.fileno())
+    print(spares)
+elif mode == "measured":
+    manifest_path, runs_root = sys.argv[2], sys.argv[3]
+    for run_id in run_ids(manifest_path):
+        bundle = os.path.join(runs_root, run_id)
+        if os.path.isfile(os.path.join(bundle, "summary_metrics.json")) or os.path.isfile(
+                os.path.join(bundle, "metadata.json")):
+            print(run_id)
+else:
+    sys.exit(2)
+"""
+
+
 def runbook_screen(runbook_text: str) -> str:
     """The runbook's D-079 pre-calibration screen block, verbatim.
 
@@ -997,6 +1099,7 @@ def render_chain(*, tree: Mapping[str, Any], tree_sha256: str, stages: Sequence[
         *heredoc("B5_BUDGET_PY", BUDGET_HELPER),
         *heredoc("B5_FLAG_PY", FLAG_HELPER),
         *heredoc("B5_CORPUS_PY", CORPUS_RETRY_HELPER),
+        *heredoc("B5_SPARE_PY", SPARE_RETRY_HELPER),
         '/bin/mkdir -p "$OPERATOR_LOG_ROOT" "$TRANSCRIPT_ROOT" "$CLAIM_RUNS_ROOT/instrument_validation" "$BOUND_RUNS_ROOT"',
         _PRELUDE_FUNCTIONS,
         prelude_gate_prune_2,
@@ -1082,6 +1185,8 @@ def render_chain(*, tree: Mapping[str, Any], tree_sha256: str, stages: Sequence[
             if stage is corpus_stage and corpus_manifest is not None:
                 lines += corpus_retry_lines(stage, argv, corpus_manifest, corpus_runs_dir, python,
                                             log_path, run, budgeted, collection_allowance(stage), remaining(stage))
+            if stage.spare_sets:
+                lines += spare_retry_lines(stage, argv, root, python, log_path, run, budgeted, remaining(stage))
             lines.append(f"else horizon_skip {stage.stage_id}; fi")
         elif stage.kind == "bound_derivation":
             manifest = value_after(argv, "--derive-neg8-drift-bound")
@@ -1135,6 +1240,69 @@ def corpus_retry_lines(stage: Stage, argv: Sequence[str], manifest: str, runs_di
         f"else horizon_skip {retry_id}; fi",
         "fi",
     ]
+
+
+def spare_argv(stage: Stage, argv: Sequence[str], measurement_root: Path, count: int) -> list[str]:
+    """The stage's own argv with its config directory replaced by the spare set of ``count`` (and that many failures)."""
+
+    _require(bool(stage.spare_sets) and count in stage.spare_sets, f"{stage.stage_id}: no spare set of {count}")
+    spare = list(argv)
+    spare[2] = str(Path(measurement_root) / PurePosixPath(stage.spare_sets[count]).parent)
+    position = spare.index("--max-failures")
+    spare[position + 1] = str(count)
+    return spare
+
+
+def spare_retry_lines(stage: Stage, argv: Sequence[str], measurement_root: Path, python: str, log_path: Any,
+                      run: Any, budgeted: Any, members_remaining: int) -> list[str]:
+    """NEG-8 ruling 2026-10-07: one spare-slot retry after a window reference stage (registration 0.12).
+
+    Runs the committed spare set of size (planned - succeeded) once, after a
+    settle and under the collection deadline, into the stage's runs root.
+    Each spare measured is flagged ``member.retried``. The failed bundles are
+    never touched; nothing here reads an energy.
+    """
+
+    _require(argv.count("--runs-dir") == 1 and argv.index("--runs-dir") + 1 < len(argv),
+             f"{stage.stage_id}: a spare retry needs the stage's --runs-dir")
+    runs_dir = argv[argv.index("--runs-dir") + 1]
+    stage_manifest = str(Path(argv[2]) / "order_manifest.json")
+    snapshot = Shell('"$TRANSCRIPT_ROOT/' + SPARE_RETRY_SNAPSHOT.format(stage_id=stage.stage_id) + '"')
+    decision_log = log_path(stage, ".spares-decision")
+    label = stage.stage_id + ".spares"
+    maximum = max(stage.spare_sets)
+    count = budgeted("neg8_spare_retry_decision", [
+        python, "-B", "-c", Shell('"$B5_SPARE_PY"'), "count", stage_manifest, runs_dir, snapshot, str(maximum)])
+    lines = [
+        f"# Spare-slot retry (NEG-8 ruling 2026-10-07): planned - succeeded of {stage.stage_id}'s "
+        f"{maximum} spare(s), once.",
+        'NEG8_SPARES_STARTED="$(/bin/date +%s)"',
+        "NEG8_SPARES=\"$(" + " ".join(_literal(item) for item in count) + f" 2>> {decision_log})\"",
+        f'journal {label}-decision neg8_spare_retry_decision $? "$NEG8_SPARES_STARTED"',
+        f'note "neg8_spare_retry stage={stage.stage_id} spares=$NEG8_SPARES"',
+        'case "$NEG8_SPARES" in',
+    ]
+    for spares, manifest in sorted(stage.spare_sets.items()):
+        measured = budgeted("neg8_spare_retry_decision", [
+            python, "-B", "-c", Shell('"$B5_SPARE_PY"'), "measured", str(Path(measurement_root) / manifest),
+            runs_dir])
+        observed = ('{\\"stage_id\\":\\"' + stage.stage_id + '\\",\\"slot\\":\\"' + str(stage.spare_slot)
+                    + '\\",\\"spares\\":' + str(spares) + ',\\"attempt\\":2}')
+        allowance = SETTLE_S + HORIZON_STAGE_OVERHEAD_S + spares * HORIZON_MEMBER_ALLOWANCE_S
+        lines += [
+            f"{spares})",
+            f"if horizon_allows {label} {allowance} {members_remaining}; then",
+            "settle",
+            run(stage, spare_argv(stage, argv, measurement_root, spares), label=label, suffix=".spares"),
+            " ".join(_literal(item) for item in measured) + f" 2>> {decision_log} | while IFS= read -r NEG8_SPARE; do",
+            f'  flag member.retried member "$NEG8_SPARE" "{observed}" {_literal(runs_dir)} '
+            '"measured by the spare-slot retry of its reference stage after a member of that stage did not succeed"',
+            "done",
+            f"else horizon_skip {label}; fi",
+            ";;",
+        ]
+    lines += ["*) ;;", "esac"]
+    return lines
 
 
 def sha256_bytes(raw: bytes) -> str:
@@ -1229,4 +1397,5 @@ __all__ = [
     "WINDOW_CALIBRATION_VERDICT_BASENAME", "WINDOW_CALIBRATION_VERDICT_PROGRAM", "window_calibration_verdict_path",
     "CALIBRATION_HORIZON_S", "HORIZON_MEMBER_ALLOWANCE_S", "HORIZON_POST_RESERVE_S", "HORIZON_SKIPPED_RC",
     "COLLECTION_DEADLINE_RECORD", "NEG8_RETRY_MINIMUM", "NEG8_RETRY_SNAPSHOT", "CHAIN_FLAG_WRITER",
+    "SPARE_RETRY_HELPER", "SPARE_RETRY_SCHEMA", "SPARE_RETRY_SNAPSHOT", "spare_argv", "spare_retry_lines",
 ]

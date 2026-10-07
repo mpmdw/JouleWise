@@ -2294,7 +2294,8 @@ class EmittedCodeTests(unittest.TestCase):
         # The gate-prune round-2 and round-3 codes reach the draft through the
         # registration row (REG) before the seal; any other unclassified code fails here.
         missing = set(h.CODES) - set(codes)
-        self.assertEqual(missing - h.PRUNE2_CODES - h.PRUNE3_CODES - h.AUDFIX1_CODES - h.AUDFIX2_CODES,
+        self.assertEqual(missing - h.PRUNE2_CODES - h.PRUNE3_CODES - h.AUDFIX1_CODES - h.AUDFIX2_CODES
+                         - h.NEG8_SURVIVOR_CODES,
                          set(h.NEVER_CLASSIFIED_CODES))
         self.assertTrue(h.NEVER_CLASSIFIED_CODES.isdisjoint(codes))
 
@@ -2308,8 +2309,10 @@ class EmittedCodeTests(unittest.TestCase):
         from joulewise.flags.core import CORE_FLAG_CODES
         codes = json.loads(raw)["codes"]
         emitted = set(h.CODES) | set(DRAFT_CODES) | set(CORE_FLAG_CODES)
-        # Audit-fix batches 1 and 2's codes reach the design catalog through REG before the seal.
-        self.assertEqual(emitted - set(codes) - h.AUDFIX1_CODES - h.AUDFIX2_CODES, set(h.NEVER_CLASSIFIED_CODES))
+        # Audit-fix batches 1 and 2's codes and the NEG-8 survivors codes (ruling
+        # 2026-10-07) reach the design catalog through REG before the seal.
+        self.assertEqual(emitted - set(codes) - h.AUDFIX1_CODES - h.AUDFIX2_CODES - h.NEG8_SURVIVOR_CODES,
+                         set(h.NEVER_CLASSIFIED_CODES))
         self.assertEqual({code: (codes[code]["effect"], DRAFT_CODES[code]["effect"]) for code in DRAFT_CODES
                           if code in codes and codes[code]["effect"] != DRAFT_CODES[code]["effect"]}, {})
 
@@ -3068,7 +3071,8 @@ class RecordTests(unittest.TestCase):
         roster = h.build_roster(pack, ROOT)
         members = {row["run_id"]: row for row in roster["members"]}
         self.assertEqual(sum(row["kind"] == "science" for row in roster["members"]), 100)
-        self.assertEqual(sum(row["kind"] == "auxiliary" for row in roster["members"]), 19)
+        # 19 corpus and reference members plus the 7 reference spares (NEG-8 ruling 2026-10-07).
+        self.assertEqual(sum(row["kind"] == "auxiliary" for row in roster["members"]), 26)
         quad_member = members["d117fq31p7-df-cmp-abba-ph-decode-b01-a1"]
         self.assertIn({"unit_kind": "quad", "unit_id": "d117-df-cmp-abba-ph-decode-qwen3-1p7b-b01"},
                       [{key: cell[key] for key in ("unit_kind", "unit_id")} for cell in quad_member["cells"]])
@@ -3127,12 +3131,13 @@ class ExclusionSeamTests(unittest.TestCase):
             per_stratum[(cell_id, stratum)] = per_stratum.get((cell_id, stratum), 0) + 1
         self.assertEqual(per_stratum, {(family, stratum): 10 for family in families for stratum in ("quad", "repeat")})
         self.assertEqual({len(runs) for (_cell, stratum, _unit), runs in units.items() if stratum == "quad"}, {4})
-        self.assertEqual(sum(not member["units"] for member in document["members"]), 19)  # auxiliaries feed no cell
+        # auxiliaries feed no cell: 19 corpus and reference members plus the 7 spares (NEG-8 ruling 2026-10-07)
+        self.assertEqual(sum(not member["units"] for member in document["members"]), 26)
         (first, *_rest) = spans.values()
         self.assertEqual(set(first), {"monotonic_ns", "request_monotonic_ns", "stage_id", "bundle_id"})
         self.assertEqual((document["plan_id"], document["attempt"], document["chain_started_monotonic_ns"]),
                          ("plan", 1, 50 * NS))
-        self.assertEqual(len(document["bundles"]), 119)
+        self.assertEqual(len(document["bundles"]), 126)  # this fixture gives every roster member, spares too, a bundle
 
     def test_contrast_cells_are_quads_only(self):
         _roster, document, _spans = self.inputs(self.GAMMA)
@@ -3402,7 +3407,7 @@ class RehearsalRound1Tests(WindowTestCase):
                           "gamma-interior-reference-prefill-midpoint": "gamma-reference-prefill-midpoint"})
         self.assertEqual(sum(len(rows) for rows in dispatches.values()), 101)
         roster = h.build_roster(self.GAMMA, ROOT)
-        self.assertEqual(len(roster["members"]), 101)
+        self.assertEqual(len(roster["members"]), 108)  # 101 launched by stages + 7 reference spares
         self.assertEqual(roster["duplicate_listings"], {})
 
     def test_b6_untagged_auxiliary_bundles_are_not_lineage_findings(self):
@@ -4574,19 +4579,23 @@ class DeskDiagnosticsTests(WindowTestCase):
 
 
 class Neg8ReferencePhysicsTests(WindowTestCase):
-    """Audit A1 (2026-10-07): a physics exclusion on a NEG-8 window reference excludes the window.
+    """A physics exclusion on a NEG-8 window reference no longer excludes the window by itself.
 
-    The references are auxiliary roster members with no cells, so the member
-    exclusion alone removed nothing (claim_usable stayed True) while the drift
-    allowance computed from the contaminated reference stayed in the claim.
+    Audit A1 (batch 1, 2026-10-07) had made it neg8.reference_member_excluded
+    (EXCLUDE_WINDOW).  The NEG-8 survivors ruling (registration 0.12)
+    supersedes that: the reference is dropped and the screen is re-derived on
+    the surviving references, so only the survivors screen
+    (neg8.screen_failed) can remove the window
+    (tests/test_neg8_survivors.py HarvestSurvivorTests covers the screen).
     The reference here is a real bundle collected over b5t-abs-r02's span.
     """
 
     CODE = "neg8.reference_member_excluded"
     REFERENCE = "neg8-window-start-r1"
 
-    def window_with_reference(self, **kwargs) -> Window:
-        window = self.window(**kwargs)
+    def window_with_reference(self, subdir: str = "w", **kwargs) -> Window:
+        kwargs.setdefault("catalog_overrides", self.ISOLATE)
+        window = Window(self.tmp / subdir, **kwargs)
         target = window.claim / self.REFERENCE
         make_member(target, self.REFERENCE, SHIFT_S["b5t-abs-r02"])
         tree_path = window.pack / "plan_tree.json"
@@ -4609,8 +4618,8 @@ class Neg8ReferencePhysicsTests(WindowTestCase):
         put(executed, value)
         return window
 
-    def test_contention_over_a_start_reference_request_excludes_the_window(self):
-        """Before the fix: contention.request_overlap on the reference, claim_usable True, no window reason."""
+    def test_contention_over_a_start_reference_request_does_not_exclude_the_window_by_itself(self):
+        """Under A1: a window flag, claim_usable False. Now: the member flag only; the screen decides."""
         request = request_span_ns("b5t-abs-r02")
         window = self.window_with_reference(journals={
             "contention_extra": [((request[0] - NS, request[1] + NS),
@@ -4622,64 +4631,28 @@ class Neg8ReferencePhysicsTests(WindowTestCase):
         member = roster[self.REFERENCE]
         self.assertEqual((member["kind"], member["stage_id"], member.get("cells", [])), ("auxiliary", "start_reference", []))
         self.assertIn("contention.request_overlap", window.codes(self.REFERENCE))
-        (flag,) = [flag for flag in window.flags() if flag["code"] == self.CODE]
-        self.assertEqual(flag["scope"]["level"], "window")
-        self.assertEqual(flag["observed"], {"run_id": self.REFERENCE, "stage_id": "start_reference",
-                                            "codes": ["contention.request_overlap"]})
-        self.assertEqual(h.flag_problems(flag), [])
-        self.assertIn(self.CODE, window.exclusions()["reasons"])
-        self.assertFalse(window.exclusions()["claim_usable"])
-        self.assertFalse(record["claim_usable"])
+        self.assertNotIn(self.CODE, {flag["code"] for flag in window.flags()})
+        # No window-level flag is raised from the reference's member flag: every
+        # window reason is one the same window has without the contender.
+        reference_window = self.window_with_reference("uncontended")
+        reference_window.harvest()
+        self.assertNotIn("contention.request_overlap", reference_window.codes(self.REFERENCE))
+        self.assertEqual(set(window.exclusions()["reasons"]) - {"contention.request_overlap"},
+                         set(reference_window.exclusions()["reasons"]))
 
-    def test_a_clean_reference_does_not_exclude_the_window(self):
-        window = self.window_with_reference()
-        window.harvest()
-        self.assertNotIn("contention.request_overlap", window.codes(self.REFERENCE))
-        self.assertNotIn(self.CODE, window.codes())
-
-    def run_on(self, roster_members, emitted):
-        """The step itself, on the real ledger and the committed fixture catalog."""
-        run = h._Harvest.__new__(h._Harvest)
-        run.catalog = h.Catalog.load(FIXTURES / "flag_catalog.json")
-        run.flags = h.FlagLedger(plan_id=PLAN_ID, attempt=1, catalog=run.catalog, boot_session_uuid="B")
-        run.roster = {"members": roster_members}
-        for code, run_id in emitted:
-            run.flags.emit(code, level="member", run_id=run_id, collector="test", observed={"n": 1})
-        run.neg8_reference_exclusions()
-        return [record for record in run.flags.records if record["code"] == self.CODE]
-
-    def test_only_physics_member_exclusions_on_bracket_references_count(self):
-        def aux(run_id, stage_id):
-            return {"run_id": run_id, "kind": "auxiliary", "stage_id": stage_id, "cells": []}
-
-        members = [aux("neg8-window-start-r2", "start_references"), aux("neg8-window-midpoint", "midpoint_reference"),
-                   aux("neg8-window-end-r3", "end_reference"),
-                   aux("gamma-interior-reference-decode-midpoint", "decode_midpoint_reference"),
-                   aux("neg8-refcorpus-r01", "neg8_bound"),
-                   {"run_id": "sci-1", "kind": "science", "stage_id": "start_reference", "cells": []}]
-        found = self.run_on(members, [
-            # Representation and number flags on a reference: not physics.
-            ("member.retried", "neg8-window-start-r2"), ("member.status_not_succeeded", "neg8-window-start-r2"),
-            ("battery.assist", "neg8-window-start-r2"),  # physics, but DISCLOSE
-            # Physics exclusions on references: each counts.
-            ("thermal.os_level_nonzero", "neg8-window-midpoint"), ("clock.step_overlap", "neg8-window-end-r3"),
-            ("battery.member_span", "neg8-window-end-r3"),
-            # Physics exclusions on members that are not bracket references.
-            ("contention.request_overlap", "gamma-interior-reference-decode-midpoint"),
-            ("contention.request_overlap", "neg8-refcorpus-r01"), ("contention.request_overlap", "sci-1")])
-        self.assertEqual({flag["observed"]["run_id"]: flag["observed"]["codes"] for flag in found},
-                         {"neg8-window-midpoint": ["thermal.os_level_nonzero"],
-                          "neg8-window-end-r3": ["battery.member_span", "clock.step_overlap"]})
-        self.assertTrue(all(flag["scope"]["level"] == "window" for flag in found))
-
-    def test_the_code_is_registered_everywhere_with_one_effect(self):
+    def test_the_superseded_code_is_registered_nowhere(self):
         from joulewise.flags.catalog import DRAFT_CODES
         fixture = json.loads((FIXTURES / "flag_catalog.json").read_bytes())["codes"]
         allowlist = json.loads((ROOT / "configs/gates/hazard_refusals.json").read_bytes())
-        self.assertEqual(("NEG8", "PHYSICS"), (h.CODES[self.CODE].family, h.CODES[self.CODE].klass))
-        self.assertEqual("EXCLUDE_WINDOW", fixture[self.CODE]["effect"])
-        self.assertEqual("EXCLUDE_WINDOW", DRAFT_CODES[self.CODE]["effect"])
-        self.assertEqual("PHYSICS", allowlist["window_exclusions"][self.CODE]["category"])
+        self.assertNotIn(self.CODE, h.CODES)
+        self.assertNotIn(self.CODE, DRAFT_CODES)
+        self.assertNotIn(self.CODE, fixture)
+        self.assertNotIn(self.CODE, allowlist["window_exclusions"])
+        self.assertNotIn(self.CODE, h.AUDFIX1_CODES | h.AUDFIX2_CODES | h.NEG8_SURVIVOR_CODES)
+        self.assertFalse(hasattr(h._Harvest, "neg8_reference_exclusions"))
+        for code in ("neg8.reference_lost", "neg8.midpoint_lost"):
+            self.assertEqual("DISCLOSE", fixture[code]["effect"])
+            self.assertEqual("DISCLOSE", DRAFT_CODES[code]["effect"])
 
 
 class RealB3w1BytesTests(unittest.TestCase):

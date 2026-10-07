@@ -78,6 +78,22 @@ ROSTER_SCHEMA = "joulewise.b5_harvest_roster.v1"
 TERMINAL_BOUNDARY_SCHEMA = "joulewise.b5_terminal_boundary.v1"
 NEG8_CHECK_SCHEMA = "joulewise.b5_neg8_bound_check.v1"
 NEG8_SCREEN_SCHEMA = "joulewise.b5_neg8_screen.v1"
+NEG8_CORPUS_PHYSICS_SCHEMA = "joulewise.b5_neg8_corpus_physics.v1"
+# NEG-8 ruling 2026-10-07 (registration 0.12 "Lost references", 5.3): the
+# member-level physics exclusions of 6.4 that drop a corpus member from the
+# bound and a reference from the screen.  The order is the order a lost
+# reference's reason is named in when several fire on it.
+NEG8_PHYSICS_LOSS_CODES = ("contention.request_overlap", "battery.member_span", "battery.accumulator_excursion",
+                           "thermal.os_level_nonzero", "thermal.powermetrics_pressure_elevated",
+                           "clock.step_overlap")
+# A reference is also lost when the runner stopped it (timeout, admission
+# abort) or it fails strict validation.  The "unmeasured" codes are not here:
+# unknown evidence never authorises an omission.
+NEG8_REFERENCE_LOSS_CODES = (*NEG8_PHYSICS_LOSS_CODES, "member.timeout", "member.admission_aborted",
+                             "member.strict_validation_failed")
+# How a reference the verdict writer dropped for its status is named, when the
+# harvest has the member's own flag.
+NEG8_STATUS_LOSS_CODES = ("member.admission_aborted", "member.timeout", "member.status_not_succeeded")
 NEG8_BOUND_NAME = "neg8-drift-bound.json"      # in the bound runs root (the pack's bound-derivation output)
 HAZARD_RESULT_NAME = "hazard_result.json"      # L2's driver terminal record, night/
 ARM_DECISION_NAME = "arm_decision.json"        # joulewise.b5.driver ARM_DECISION, night/
@@ -210,10 +226,6 @@ CODES: dict[str, CodeSpec] = {
     # NEG-8 bound and the whole-window verdict.
     "neg8.bound_not_derived": _spec("NEG8", "NUMBER"),
     "neg8.screen_failed": _spec("NEG8", "NUMBER"),
-    # Audit A1 (2026-10-07): a NEG-8 window reference (start, midpoint or end)
-    # carries a PHYSICS member exclusion, so the drift allowance and screen
-    # computed from it are not the uncontaminated ones.
-    "neg8.reference_member_excluded": _spec("NEG8", "PHYSICS"),
     "whole_window.not_passed": _spec("NEG8", "NUMBER"),
     "whole_window.verdict_absent": _spec("NEG8", "NUMBER"),
     # P4 (orchestrator, 2026-10-06): a verdict that did not pass and whose
@@ -341,6 +353,9 @@ CODES: dict[str, CodeSpec] = {
     "calibration.capture_battery_span": _spec("CALIBRATION", "PHYSICS"),
     "calibration.capture_battery_unmeasured": _spec("CALIBRATION", "PHYSICS"),
     "neg8.corpus_member_dropped": _spec("NEG8", "REPRESENTATION"),
+    # NEG-8 ruling 2026-10-07 (registration 0.12): the survivors screen.
+    "neg8.reference_lost": _spec("NEG8", "NUMBER"),
+    "neg8.midpoint_lost": _spec("NEG8", "NUMBER"),
     # Written by protected-core code on the HAZARD_PACK path into
     # <custody>/flags/core-*.jsonl, or printed behind UNWRITTEN_MARKER when
     # that write failed (N8); the harvest folds them, it never emits them.
@@ -476,6 +491,10 @@ PRUNE3_CODES = frozenset({
     "meter.absent", "meter.drops_excess", "meter.duplicates", "meter.clock_fit_residual",
     "meter.pdtr_gain_out_of_band", "meter.battery_activity", "meter.vbus_out_of_contract",
 })
+# The NEG-8 survivors ruling's codes (2026-10-07, registration 0.12): classified
+# in the L4 draft (joulewise.flags.catalog) and the test fixture; the design
+# branch's draft sealed catalog gains them through REG before the seal.
+NEG8_SURVIVOR_CODES = frozenset({"neg8.reference_lost", "neg8.midpoint_lost"})
 # joulewise.flags.collect.UNMEASURED_BY_COLLECTOR, read and never imported: the
 # flag each arm collector leaves when its checks did not (all) run.
 ARM_COLLECTOR_UNMEASURED = {
@@ -561,16 +580,13 @@ G10_DRIVER_RECORD_NAME = "g10" ".driver.json"  # joulewise.b5.driver G10_DRIVER_
 # binding when the verdict writer's membership resolver needs one (R2-2a).
 MEMBERSHIP_BINDING_NAME = "window-membership-binding.json"
 MEMBERSHIP_BINDING_SCHEMA = "joulewise.whole_window_membership_binding.v1"  # joulewise.salvage_dangler
-# The plan trees' external inputs that hold the NEG-8 window references the
-# whole-window verdict brackets the window with (start x3, midpoint, end x3:
-# whole_window.evaluate_neg8_point_drift).  The floor packs name them in the
-# singular, the contrast pack (GAMMA) in the plural; GAMMA's decode and
-# prefill interior references are not NEG-8 bracket references.
-NEG8_REFERENCE_INPUT_IDS = frozenset({"start_reference", "start_references", "midpoint_reference",
-                                      "end_reference", "end_references"})
 # Codes added by audit-fix batch 1 (2026-10-07) that the design branch's draft
 # sealed catalog gains through the registration row (REG) before the seal.
-AUDFIX1_CODES = frozenset({"neg8.reference_member_excluded", "monitor.orphan_unverified",
+# Batch 1's A1 code (neg8.reference_member_excluded, EXCLUDE_WINDOW) was
+# superseded by the NEG-8 survivors ruling (registration 0.12): a
+# physics-excluded reference is dropped and the screen re-derived on the
+# survivors (neg8_screen), so it is not emitted.
+AUDFIX1_CODES = frozenset({"monitor.orphan_unverified",
                            *(f"{module}.arm_unmeasured" for module in ("clock", "battery", "thermal", "contention",
                                                                        "disk"))})
 # Ledger refusal reasons that mean the committed pin is not the head the
@@ -800,7 +816,9 @@ def _close(fresh: Any, recorded: Any) -> bool:
 # evaluator does not receive); every other field is fixed by the reference
 # bundles alone.
 _NEG8_BOUND_DEPENDENT_FIELDS = frozenset({
-    "derived_repeatability_bound_j", "screen_passed", "drift_allowance_j", "provenance", "window_duration_s"})
+    "derived_repeatability_bound_j", "screen_passed", "drift_allowance_j", "provenance", "window_duration_s",
+    # The survivor protocol's two bound terms (NEG-8 ruling 2026-10-07).
+    "bound_envelope_j", "bound_prediction_j"})
 
 
 def _neg8_endpoints(bracket: Any) -> dict[str, Any] | None:
@@ -1570,6 +1588,23 @@ def build_roster(pack_root: Path, repo_root: Path) -> dict[str, Any]:
                 "stage_id": input_id, "role": input_id, "block_id": None, "position": None, "arm": None,
                 "config_path": row.get("path"), "config_sha256": row.get("sha256"), "cells": [],
             })
+    # NEG-8 spare-slot retry (registration 0.12): each reference stage's spare
+    # members, run only when a member of the stage did not succeed.  They are
+    # roster members (their bytes, physics and identity are harvested like any
+    # reference's) with the slot they take; an unrun spare is no missing member.
+    for stage in tree.get("stage_graph") or []:
+        retry = stage.get("spare_retry") if isinstance(stage, Mapping) else None
+        if not isinstance(retry, Mapping):
+            continue
+        for row in retry.get("members") or []:
+            if not isinstance(row, Mapping) or not isinstance(row.get("run_id"), str):
+                continue
+            listings.setdefault(row["run_id"], []).append(f"spare_retry:{stage.get('stage_id')}")
+            members.setdefault(row["run_id"], {
+                "run_id": row["run_id"], "kind": "auxiliary", "ordinal": None,
+                "stage_id": f"{stage.get('stage_id')}.spares", "role": "neg8_reference_spare", "block_id": None,
+                "position": None, "arm": None, "config_path": row.get("path"), "config_sha256": row.get("sha256"),
+                "cells": [], "spare_slot": retry.get("slot")})
     cells: list[dict[str, Any]] = []
 
     def attach(run_id: str, cell: Mapping[str, Any], unit_kind: str, unit_id: str) -> None:
@@ -3724,6 +3759,8 @@ class _Harvest:
         discarded: list[str] = []
         for member in self.roster["members"]:
             path = self.locate(member["run_id"])
+            if path is None and member.get("spare_slot") is not None:
+                continue  # a spare the retry did not need (registration 0.12): nothing was planned to run
             if path is None:
                 self.emit("member.bytes_missing", level="member", run_id=member["run_id"], collector="members",
                           stage_id=member.get("stage_id"), observed=self._bytes_missing_observed(member["run_id"]))
@@ -4190,6 +4227,7 @@ class _Harvest:
             except Exception:  # the core reader failing verifies nothing
                 registered = False
             derived_from = "registered_corpus" if registered else None
+            collected = None
             if not registered:
                 collected = self._collected_corpus_bytes(check)
                 valid = False
@@ -4218,6 +4256,11 @@ class _Harvest:
             check["derived_from"] = derived_from
             if derived_from == "collected_subset":
                 self.neg8_collected_bound = value
+            if derived_from is not None:
+                # For the corpus physics drop after the monitor joins (neg8_corpus_physics):
+                # the validated bound and the manifest bytes it is bound to.
+                self.neg8_bound_value = value
+                self.neg8_corpus_bytes = collected if derived_from == "collected_subset" else None
         elif value is not None:
             problems.append("bound_artifact_not_an_object")
         self.outputs["derived/neg8-bound.json"] = write_json_once(self.derived / "neg8-bound.json", check)
@@ -4412,7 +4455,10 @@ class _Harvest:
                 # can be kept on it (number integrity).
                 self.emit("whole_window.member_failures_unreadable", level="window", collector="whole_window",
                           observed={"status": status, "member_failures": member_failures})
-        self.neg8_screen(row, authentic=authentic)
+        # The NEG-8 screen runs after the monitor joins (step neg8_screen), so the
+        # 6.4 physics flags on the references and the corpus precede it
+        # (NEG-8 ruling 2026-10-07).
+        self.neg8_pending = (row, authentic)
 
     def whole_window_member_failures(self, row: Mapping[str, Any]) -> str:
         """``member.whole_window_member_failure`` for each member the verdict fails (registration 6.3).
@@ -4454,7 +4500,7 @@ class _Harvest:
         return "listed"
 
     def neg8_screen(self, row: Mapping[str, Any], *, authentic: bool = False) -> None:
-        """``neg8.screen_failed`` from the verdict's NEG-8 result (registration 6.5).
+        """``neg8.screen_failed`` from the verdict's NEG-8 result (registration 6.5 and 0.12).
 
         ``whole_window.not_passed`` is disclosed only, because any one member's
         admission failure fails it; the NEG-8 screen it holds is window-level
@@ -4464,17 +4510,27 @@ class _Harvest:
         ``whole_window.NEG8_POINT_DRIFT_CONDITION_CODES``, and the bracket's
         shape conditions).
 
-        One case is evaluated again.  The verdict writer
-        (``run_campaign --whole-window-verdict``) authenticates a bound only
-        against the committed 12-member corpus, so a bound derived from the
-        collected 10 or 11 members (``neg8_bound``: ``collected_subset``)
-        always reaches its screen as no bound, and the stored bracket carries
-        the two ``*_UNDERIVED`` conditions.  When those are the verdict's only
-        NEG-8 conditions, ``_neg8_rescreen`` evaluates the screen with the
-        core's own evaluator against the validated collected bound, and that
-        result alone decides ``neg8.screen_failed``
-        (``observed.collected_bound_rescreen``).  A re-evaluation that cannot
-        run leaves the screen failed.
+        The screen is evaluated again (``_neg8_rescreen``) in three cases, and
+        that result alone then decides ``neg8.screen_failed``:
+
+        * the bound was derived from the collected 10 or 11 members
+          (``collected_subset``) and the stored bracket's only NEG-8 conditions
+          are the two ``*_UNDERIVED`` ones: the verdict writer authenticates a
+          bound only against the committed 12-member corpus
+          (``observed.collected_bound_rescreen``);
+        * a reference the verdict names carries a reference-loss flag the
+          stored bracket did not drop (``NEG8_REFERENCE_LOSS_CODES``: a 6.4
+          physics exclusion, a timeout, an admission abort, failed strict
+          validation): the screen runs on the survivors (NEG-8 ruling
+          2026-10-07, registration 0.12);
+        * a corpus member carries a 6.4 physics exclusion, so the bound was
+          re-derived from the clean members (``neg8_corpus_physics``, 5.3).
+
+        A re-evaluation that cannot run leaves the screen failed.  A screen on
+        fewer than two survivors at an endpoint fails with ``observed.reason``
+        ``references_insufficient`` and each lost reference's reason.  A screen
+        on fewer than (3, 1, 3) references records ``neg8.reference_lost``; a
+        lost midpoint records ``neg8.midpoint_lost`` (both DISCLOSE).
         """
         from joulewise import whole_window as ww
         core = row.get("idle_admission_core") if isinstance(row.get("idle_admission_core"), Mapping) else None
@@ -4493,37 +4549,173 @@ class _Harvest:
             reasons.append("bracket_not_passed")
         if conditions:
             reasons.append("neg8_conditions")
-        if not reasons:
+        harvest_losses = self._neg8_reference_losses(row)
+        stored_lost = {item.get("bundle_id") for item in (bracket or {}).get("reference_losses") or []
+                       if isinstance(item, Mapping)}
+        new_losses = {run_id: code for run_id, code in harvest_losses.items() if run_id not in stored_lost}
+        clean_bound = getattr(self, "neg8_clean_bound", None)
+        survivors = bool(new_losses) or clean_bound is not None
+        underived = {ww.CONDITION_NEG8_DRIFT_BOUND_UNDERIVED, ww.CONDITION_NEG8_IDLE_SUB_DRIFT_BOUND_UNDERIVED}
+        collected = (self.neg8 or {}).get("derived_from") == "collected_subset" and bool(conditions & underived)
+        if not reasons and not survivors:
+            self._neg8_disclose(bracket, harvest_losses, record="whole-window-verdict.json")
             return
         observed: dict[str, Any] = {
             "reasons": reasons, "decision": decision if isinstance(decision, str) else None,
             "conditions": sorted(conditions)[:16],
             "registered_conditions": sorted(conditions & ww.NEG8_POINT_DRIFT_CONDITION_CODES)}
-        underived = {ww.CONDITION_NEG8_DRIFT_BOUND_UNDERIVED, ww.CONDITION_NEG8_IDLE_SUB_DRIFT_BOUND_UNDERIVED}
-        if (self.neg8 or {}).get("derived_from") == "collected_subset" and conditions & underived:
-            rescreen = self._neg8_rescreen(row, bracket, conditions - underived, authentic=authentic)
+        screened: Mapping[str, Any] | None = bracket
+        if collected or survivors:
+            rescreen = self._neg8_rescreen(row, bracket, conditions - underived, authentic=authentic,
+                                           exclude=harvest_losses if survivors else None, survivors=survivors)
             observed["collected_bound_rescreen"] = rescreen
-            if rescreen["evaluated"] and rescreen["decision"] == "passed" and not rescreen["conditions"]:
-                return  # the screen passed against the window's own validated bound
+            if survivors:
+                observed["survivor_rescreen"] = {"new_losses": dict(sorted(new_losses.items())),
+                                                 "corpus_clean_bound": clean_bound is not None}
+                if not reasons:
+                    observed["reasons"] = ["survivor_rescreen"]
+            if rescreen["evaluated"]:
+                screened = rescreen.get("survivors")
+                self._neg8_disclose(screened, harvest_losses, record="withheld/neg8-rescreen-bracket.json")
+                if rescreen["decision"] == "passed" and not rescreen["conditions"]:
+                    return  # the screen passed on the window's own validated bound and survivors
+            else:
+                screened = None
+        else:
+            self._neg8_disclose(bracket, harvest_losses, record="whole-window-verdict.json")
+        if isinstance(screened, Mapping) and screened.get("survivor_screen") == "references_insufficient":
+            observed["reason"] = "references_insufficient"
+            observed["lost"] = self._neg8_lost_rows(screened, harvest_losses)
         self.emit("neg8.screen_failed", level="window", collector="whole_window", observed=observed)
 
-    def _neg8_rescreen(self, row: Mapping[str, Any], bracket: Mapping[str, Any] | None, other_conditions: set[str],
-                       *, authentic: bool) -> dict[str, Any]:
-        """The verdict's NEG-8 screen evaluated against the validated collected bound.
+    def _neg8_reference_losses(self, row: Mapping[str, Any]) -> dict[str, str]:
+        """{run_id: code} for each NEG-8 reference the verdict names that a reference-loss flag hits.
 
-        Runs only when the stored screen failed for want of a bound alone: a
-        bracket whose NEG-8 conditions (with the core's) are the two
-        ``*_UNDERIVED`` ones and nothing else.  The bracket is re-derived from
-        primary evidence by ``whole_window._derived_neg8_decision``, the
-        evaluator ``validate_whole_window_verdict_row`` replays, over the
-        inputs that validator selects (``verdict_neg8_sources``: source
-        manifests authenticated at their recorded digests, projected onto the
-        evaluation basis), with the collected bound in place of the absent one
-        and the bound's freshness evaluated at the verdict's completion time.
-        Each family's bound-independent fields (endpoints, protocol, point
-        delta) must then equal the stored bracket's: otherwise these are not
-        the reference bundles the verdict was written from, and nothing is
-        evaluated.
+        The references are the invoked start, midpoint and end members of the
+        verdict's own source manifests (``verdict_neg8_sources``); the codes
+        are ``NEG8_REFERENCE_LOSS_CODES`` at member level, the first in that
+        order naming the loss.  No energy is read.  Empty when the sources do
+        not read (the stored screen then stands, as before the rule).
+        """
+        from joulewise import whole_window as ww
+        runs = getattr(getattr(self, "inputs", None), "claim_runs_root", None)
+        if runs is None or getattr(self, "flags", None) is None:
+            return {}
+        try:
+            sources = verdict_neg8_sources(row, runs)
+        except Exception:
+            return {}
+        if isinstance(sources, str):
+            return {}
+        references: set[str] = set()
+        for manifest in sources[0]:
+            for member in manifest.get("members") or [] if isinstance(manifest, Mapping) else []:
+                if not isinstance(member, Mapping) or member.get("execution") != "invoked":
+                    continue
+                if ww._neg8_position(member.get("role"), member.get("sentinel_position")) in ("start", "midpoint",
+                                                                                                "end"):
+                    references.update(item for item in member.get("bundle_ids") or [] if isinstance(item, str))
+        order = {code: index for index, code in enumerate(NEG8_REFERENCE_LOSS_CODES)}
+        losses: dict[str, str] = {}
+        for flag in self.flags.records:
+            scope = flag.get("scope") if isinstance(flag.get("scope"), Mapping) else {}
+            run_id, code = scope.get("run_id"), flag.get("code")
+            if scope.get("level") == "member" and run_id in references and code in order \
+                    and (run_id not in losses or order[code] < order[losses[run_id]]):
+                losses[run_id] = code
+        return losses
+
+    def _neg8_spares(self) -> dict[str, list[str]]:
+        """{slot: spare run ids} from the roster (the spare-slot retry, registration 0.12)."""
+        spares: dict[str, list[str]] = {}
+        for member in (getattr(self, "roster", None) or {}).get("members") or []:
+            slot = member.get("spare_slot") if isinstance(member, Mapping) else None
+            if isinstance(slot, str):
+                spares.setdefault(slot, []).append(member["run_id"])
+        return spares
+
+    def _neg8_lost_rows(self, screened: Mapping[str, Any], harvest_losses: Mapping[str, str]) -> list[dict[str, Any]]:
+        """Each lost reference: run id, slot, reason and the outcome of its stage's spare-slot retry."""
+        flags_by_member: dict[str, set[str]] = {}
+        for flag in getattr(getattr(self, "flags", None), "records", None) or []:
+            scope = flag.get("scope") if isinstance(flag.get("scope"), Mapping) else {}
+            if scope.get("level") == "member" and isinstance(scope.get("run_id"), str):
+                flags_by_member.setdefault(scope["run_id"], set()).add(flag.get("code"))
+        spares = self._neg8_spares()
+        members = getattr(self, "members", None) or {}
+        rows = []
+        for item in screened.get("reference_losses") or []:
+            if not isinstance(item, Mapping):
+                continue
+            run_id, slot = item.get("bundle_id"), item.get("position")
+            reason = harvest_losses.get(run_id) if isinstance(run_id, str) else None
+            if reason is None and item.get("reason") == "status_not_succeeded":
+                reason = next((code for code in NEG8_STATUS_LOSS_CODES if code in flags_by_member.get(run_id, ())),
+                              "status_not_succeeded")
+            measured = [spare for spare in spares.get(slot, []) if (members.get(spare) or {}).get("present")]
+            rows.append({"run_id": run_id, "slot": slot, "reason": reason or item.get("reason"),
+                         "status": item.get("status"),
+                         "retry": {"spares_measured": measured,
+                                   "spares_succeeded": [spare for spare in measured
+                                                        if (members.get(spare) or {}).get("status") == "succeeded"]}})
+        return rows
+
+    def _neg8_disclose(self, screened: Mapping[str, Any] | None, harvest_losses: Mapping[str, str], *,
+                       record: str) -> None:
+        """``neg8.reference_lost`` and ``neg8.midpoint_lost`` for a screen on fewer than (3, 1, 3) references.
+
+        Structure only: counts, run ids, slots, reasons, retry outcomes and the
+        formula.  The bound and its two terms are energies and stay in
+        ``record`` (the verdict, or ``withheld/neg8-rescreen-bracket.json``).
+        """
+        from joulewise import whole_window as ww
+        if not isinstance(screened, Mapping) or not isinstance(screened.get("reference_counts"), Mapping):
+            return
+        counts = dict(screened["reference_counts"])
+        planned = dict(screened.get("planned_reference_counts") or {"start": 3, "midpoint": 1, "end": 3})
+        lost = self._neg8_lost_rows(screened, harvest_losses)
+        fewer = any(not isinstance(counts.get(slot), int) or counts[slot] < planned.get(slot, 0) for slot in planned)
+        summary = {"schema": NEG8_SCREEN_SCHEMA, "endpoint_protocol": screened.get("endpoint_protocol"),
+                   "reference_counts": counts, "planned_reference_counts": planned, "lost": lost,
+                   "survivor_screen": screened.get("survivor_screen"),
+                   "bound_formula": ww.NEG8_COUNT_ADJUSTED_BOUND_FORMULA, "bound_record": record}
+        derived = getattr(self, "derived", None)
+        if derived is not None and not (derived / "neg8-screen.json").exists():
+            self.outputs["derived/neg8-screen.json"] = write_json_once(derived / "neg8-screen.json", summary)
+        if fewer:
+            self.emit("neg8.reference_lost", level="window", collector="whole_window",
+                      observed={key: summary[key] for key in ("endpoint_protocol", "reference_counts",
+                                                              "planned_reference_counts", "lost", "survivor_screen",
+                                                              "bound_formula", "bound_record")})
+        if screened.get("midpoint_lost") is True:
+            self.emit("neg8.midpoint_lost", level="window", collector="whole_window",
+                      observed={"lost": [row for row in lost if row["slot"] == "midpoint"],
+                                "reference_counts": counts, "bound_record": record})
+
+    def _neg8_rescreen(self, row: Mapping[str, Any], bracket: Mapping[str, Any] | None, other_conditions: set[str],
+                       *, authentic: bool, exclude: Mapping[str, str] | None = None,
+                       survivors: bool = False) -> dict[str, Any]:
+        """The verdict's NEG-8 screen evaluated again: the window's own bound, its surviving references.
+
+        The bracket is re-derived from primary evidence by
+        ``whole_window._derived_neg8_decision``, the evaluator
+        ``validate_whole_window_verdict_row`` replays, over the inputs that
+        validator selects (``verdict_neg8_sources``: source manifests
+        authenticated at their recorded digests, projected onto the evaluation
+        basis), with the bound's freshness evaluated at the verdict's
+        completion time.  The bound is the clean bound of
+        ``neg8_corpus_physics`` when one exists, else the validated collected
+        bound, else (survivor re-screen only) the stored bracket's own.
+
+        Authenticity: re-derived without the harvest's exclusions, each
+        family's bound-independent fields (endpoints, protocol, point delta)
+        must equal the stored bracket's, or these are not the reference
+        bundles the verdict was written from and nothing is evaluated.  With
+        ``exclude`` ({run_id: code}, ``survivors``) the decision is then the
+        re-derivation that drops those references before aggregation.  The
+        collected-bound case alone (no exclusions, no clean bound) still runs
+        only when the stored NEG-8 conditions were the two ``*_UNDERIVED``
+        ones.
 
         Row authenticity is recorded (``verdict_authenticated``), not
         required: the harvest validates rows without a consumption session,
@@ -4532,8 +4724,8 @@ class _Harvest:
         disclosed), and the screen is re-derived rather than read from the row.
 
         The re-derived bracket (energies) goes to
-        ``withheld/neg8-rescreen-bracket.json``; its decision, conditions and
-        freshness verdict go to ``derived/neg8-screen.json``.
+        ``withheld/neg8-rescreen-bracket.json``; its decision, conditions,
+        freshness verdict and survivor counts go to ``derived/neg8-screen.json``.
         """
         from joulewise import whole_window as ww
         result: dict[str, Any] = {"evaluated": False, "decision": None, "conditions": [], "freshness": None,
@@ -4542,9 +4734,11 @@ class _Harvest:
         problems: list[str] = result["problems"]
         if bracket is None:
             problems.append("bracket_absent")
-        if other_conditions:
+        if other_conditions and not survivors:
             problems.append("conditions_beyond_bound_underived")
-        bound = getattr(self, "neg8_collected_bound", None)
+        bound = getattr(self, "neg8_clean_bound", None) or getattr(self, "neg8_collected_bound", None)
+        if bound is None and survivors and bracket is not None:
+            bound = bracket.get("drift_bound_artifact")
         if bound is None:
             problems.append("collected_bound_unavailable")
         evaluated_at = None
@@ -4566,17 +4760,28 @@ class _Harvest:
                     problems.append(sources)
                 else:
                     manifests, current, policy = sources
-                    derived, problem = ww._derived_neg8_decision(
-                        manifests, runs, policy, current=current, point_drift=True,
-                        drift_bound_artifact=bound, return_bracket=True,
-                        freshness_evaluated_at_s=evaluated_at)
+
+                    def rederive(excluded: Mapping[str, str] | None) -> tuple[Any, str | None]:
+                        return ww._derived_neg8_decision(
+                            manifests, runs, policy, current=current, point_drift=True,
+                            drift_bound_artifact=bound, return_bracket=True,
+                            freshness_evaluated_at_s=evaluated_at, exclude_bundle_ids=excluded)
+
+                    stored, problem = rederive(None)
                     if problem is not None:
                         problems.append(f"rederivation_failed:{problem}")
-                    elif not isinstance(derived, Mapping):
+                    elif not isinstance(stored, Mapping):
                         problems.append("rederivation_invalid")
-                    elif _neg8_endpoints(derived) is None or _neg8_endpoints(derived) != _neg8_endpoints(bracket) \
-                            or derived.get("estimand") != (bracket or {}).get("estimand"):
+                    elif _neg8_endpoints(stored) is None or _neg8_endpoints(stored) != _neg8_endpoints(bracket) \
+                            or stored.get("estimand") != (bracket or {}).get("estimand"):
                         problems.append("rederivation_differs_from_stored_bracket")
+                    derived = stored
+                    if not problems and exclude:
+                        derived, problem = rederive(dict(exclude))
+                        if problem is not None:
+                            problems.append(f"rederivation_failed:{problem}")
+                        elif not isinstance(derived, Mapping):
+                            problems.append("rederivation_invalid")
             except Exception as exc:  # the core failing evaluates nothing
                 problems.append(f"rederivation_raised:{type(exc).__name__}")
         if isinstance(derived, Mapping):
@@ -4592,13 +4797,127 @@ class _Harvest:
                     "conditions": sorted(map(str, listed)),
                     "freshness": {"decision": freshness.get("decision"),
                                   "triggers": list(freshness.get("triggered_rederivation_reasons") or [])}})
+                # Structure only: counts, run ids, slots and reasons (no energy).
+                result["survivors"] = {key: derived[key] for key in (
+                    "endpoint_protocol", "reference_counts", "planned_reference_counts", "reference_losses",
+                    "midpoint_lost", "survivor_screen") if key in derived}
         decision = bracket.get("decision") if bracket is not None else None
         self.outputs["derived/neg8-screen.json"] = write_json_once(self.derived / "neg8-screen.json", {
             "schema": NEG8_SCREEN_SCHEMA, "bound_derived_from": (self.neg8 or {}).get("derived_from"),
+            "bound_used": ("corpus_physics_clean" if getattr(self, "neg8_clean_bound", None) is not None
+                           else "collected_subset" if getattr(self, "neg8_collected_bound", None) is not None
+                           else "stored_bracket" if bound is not None else None),
+            "harvest_reference_losses": dict(sorted((exclude or {}).items())),
+            "bound_formula": ww.NEG8_COUNT_ADJUSTED_BOUND_FORMULA,
             "stored": {"decision": decision if isinstance(decision, str) else None,
                        "conditions_beyond_bound_underived": sorted(other_conditions)},
             "rescreen": result})
         return result
+
+    def neg8_corpus_physics(self) -> None:
+        """Registration 5.3 (NEG-8 ruling 2026-10-07): a corpus member with a 6.4 physics exclusion is omitted.
+
+        Runs after the monitor joins, which alone can see the journals.  A
+        corpus member of the validated bound on which a member-level physics
+        exclusion fires (``NEG8_PHYSICS_LOSS_CODES``) measured the
+        disturbance, not the instrument; kept, it widens the bound and the
+        allowance.  Each is ``neg8.corpus_member_dropped`` (reason: the
+        physics code).  The bound is re-derived from the clean members by the
+        collected-subset path: the clean manifest is the bound's own manifest
+        bytes less those members (written to ``derived/neg8-clean-corpus.json``),
+        the core builds the bound from the bound's recorded member points,
+        freshness and lineage, and validates its arithmetic and its corpus
+        identity against those bytes.  Fewer than ``NEG8_DRIFT_MINIMUM_N``
+        clean members, or a clean bound that does not validate, is
+        ``neg8.bound_not_derived``.  Members whose physics is unmeasured are
+        kept.  The clean bound (energies) goes to
+        ``withheld/neg8-clean-bound.json``; the screen re-runs against it
+        (``neg8_screen``).
+        """
+        from joulewise import whole_window as ww
+        check = self.neg8 or {}
+        bound = getattr(self, "neg8_bound_value", None)
+        if check.get("derived_from") is None or not isinstance(bound, Mapping):
+            return
+        corpus = bound.get("reference_corpus") if isinstance(bound.get("reference_corpus"), Mapping) else {}
+        members = [member for member in corpus.get("members") or [] if isinstance(member, Mapping)]
+        ids = {member.get("bundle_id") for member in members}
+        order = {code: index for index, code in enumerate(NEG8_PHYSICS_LOSS_CODES)}
+        flagged: dict[str, set[str]] = {}
+        for flag in self.flags.records:
+            scope = flag.get("scope") if isinstance(flag.get("scope"), Mapping) else {}
+            if scope.get("level") == "member" and scope.get("run_id") in ids and flag.get("code") in order:
+                flagged.setdefault(scope["run_id"], set()).add(flag["code"])
+        if not flagged:
+            return
+        record: dict[str, Any] = {
+            "schema": NEG8_CORPUS_PHYSICS_SCHEMA, "bound_derived_from": check.get("derived_from"),
+            "dropped": [{"bundle_id": bundle_id, "reasons": sorted(codes, key=order.__getitem__)}
+                        for bundle_id, codes in sorted(flagged.items())],
+            "members_bound": len(members), "members_kept": None, "minimum_n": ww.NEG8_DRIFT_MINIMUM_N,
+            "clean_manifest": None, "clean_bound_validated": False, "problems": []}
+        problems: list[str] = record["problems"]
+        for row in record["dropped"]:
+            self.emit("neg8.corpus_member_dropped", level="member", run_id=row["bundle_id"], collector="neg8",
+                      observed={"bundle_id": row["bundle_id"], "reason": row["reasons"][0],
+                                "reasons": row["reasons"], "source": "harvest_physics"})
+        kept = [dict(member) for member in members if member.get("bundle_id") not in flagged]
+        record["members_kept"] = len(kept)
+        base = getattr(self, "neg8_corpus_bytes", None)
+        if base is None:
+            base = self._committed_corpus_bytes({"problems": problems})
+        clean_raw = None
+        if base is None:
+            problems.append("corpus_manifest_bytes_unavailable")
+        else:
+            try:
+                manifest = json.loads(base, object_pairs_hook=_unique_pairs)
+                rows = [item for item in manifest["members"]
+                        if not (isinstance(item, Mapping) and item.get("bundle_id") in flagged)]
+                clean_raw = (json.dumps({**manifest, "members": rows}, indent=2, sort_keys=True) + "\n").encode()
+            except (ValueError, TypeError, KeyError):
+                problems.append("corpus_manifest_unreadable")
+        if clean_raw is not None:
+            write_once(self.derived / "neg8-clean-corpus.json", clean_raw)
+            record["clean_manifest"] = {"path": "derived/neg8-clean-corpus.json", "sha256": sha256_bytes(clean_raw)}
+        if len(kept) < ww.NEG8_DRIFT_MINIMUM_N:
+            problems.append("clean_members_below_minimum")
+        if not problems:
+            freshness = bound.get("freshness") if isinstance(bound.get("freshness"), Mapping) else {}
+            try:
+                clean = ww.build_neg8_drift_bound_artifact(
+                    corpus_id=corpus.get("corpus_id"), condition_id=corpus.get("condition_id"),
+                    manifest_sha256=sha256_bytes(clean_raw),
+                    scientific_config_sha256=corpus.get("scientific_config_sha256"), members=kept,
+                    derivation_timestamp_s=freshness.get("derived_at_s"),
+                    freshness_bindings=freshness.get("bindings"),
+                    launch_lineage=bound.get("launch_lineage") if isinstance(bound.get("launch_lineage"), Mapping)
+                    else None)
+                valid = ww.validate_neg8_drift_bound_artifact(clean, reference_corpus_bytes=clean_raw,
+                                                              require_corpus_identity=True)
+            except Exception as exc:  # the core refusing derives nothing
+                clean, valid = None, False
+                problems.append(f"clean_bound_raised:{type(exc).__name__}")
+            if valid:
+                record["clean_bound_validated"] = True
+                self.neg8_clean_bound = clean
+                write_json_once(self.withheld / "neg8-clean-bound.json",
+                                {"schema": NEG8_CORPUS_PHYSICS_SCHEMA, "bound": clean})
+            elif not problems:
+                problems.append("clean_bound_does_not_validate")
+        self.outputs["derived/neg8-corpus-physics.json"] = write_json_once(
+            self.derived / "neg8-corpus-physics.json", record)
+        if problems:
+            self.emit("neg8.bound_not_derived", level="window", collector="neg8",
+                      observed={"artifact": True, "problems": problems[:8], "members_collected": len(kept),
+                                "minimum_n": ww.NEG8_DRIFT_MINIMUM_N, "source": "corpus_physics"})
+
+    def neg8_deferred_screen(self) -> None:
+        """The NEG-8 screen held by ``whole_window``, after the physics joins and the corpus physics drop."""
+        pending = getattr(self, "neg8_pending", None)
+        if pending is not None:
+            row, authentic = pending
+            self.neg8_screen(row, authentic=authentic)
 
     def prepare_desk_verdict(self) -> None:
         """Produce the whole-window verdict with the production writer, if absent (start, then finish)."""
@@ -6343,35 +6662,6 @@ class _Harvest:
                             "rereduced_identical": identical})
 
     # -- exclusion-function inputs (L4 seam) ------------------------------------
-    def neg8_reference_exclusions(self) -> None:
-        """Audit A1: a physics exclusion on a NEG-8 window reference excludes the window.
-
-        The references are auxiliary members with no cells, so a member
-        exclusion on one removes nothing from a claim, while the drift
-        allowance and screen the whole-window verdict computed from it stay in
-        use (``whole_window.evaluate_neg8_point_drift`` needs all 3+1+3, so the
-        bracket cannot be re-derived without it).  Every code the catalog
-        classes PHYSICS with effect EXCLUDE_MEMBER on a reference's run id
-        (contention, battery, thermal, clock step, instrument sampling, span)
-        raises ``neg8.reference_member_excluded`` at window level.  A
-        representation or number flag on a reference does not.
-        """
-        references = {member["run_id"]: member.get("stage_id") for member in (self.roster or {}).get("members", ())
-                      if member.get("kind") == "auxiliary" and member.get("stage_id") in NEG8_REFERENCE_INPUT_IDS}
-        found: dict[str, set[str]] = {}
-        for record in self.flags.records:
-            scope = record.get("scope") or {}
-            run_id = scope.get("run_id")
-            if scope.get("level") != "member" or run_id not in references:
-                continue
-            entry = self.catalog.entries.get(record["code"])
-            klass = entry.get("klass") if isinstance(entry, Mapping) else record.get("klass")
-            if klass == "PHYSICS" and self.catalog.effect(record["code"]) == "EXCLUDE_MEMBER":
-                found.setdefault(run_id, set()).add(record["code"])
-        for run_id, codes in sorted(found.items()):
-            self.emit("neg8.reference_member_excluded", level="window", collector="neg8",
-                      observed={"run_id": run_id, "stage_id": references[run_id], "codes": sorted(codes)})
-
     def exclusion_inputs(self) -> None:
         chain_started = None
         try:
@@ -6379,8 +6669,12 @@ class _Harvest:
             chain_started = value if _is_int(value) else None
         except (OSError, ValueError, AttributeError):
             pass
+        # A spare the retry did not run is not a planned member (registration 0.12).
+        roster = {**self.roster, "members": [
+            member for member in self.roster.get("members", [])
+            if member.get("spare_slot") is None or self._bundle_on_disk(member["run_id"])]}
         self.exclusion_roster, self.exclusion_spans = l4_exclusion_inputs(
-            self.roster, self.spans, plan_id=self.inputs.plan_id, attempt=self.inputs.attempt,
+            roster, self.spans, plan_id=self.inputs.plan_id, attempt=self.inputs.attempt,
             chain_started_monotonic_ns=chain_started, bundles=self.bundle_records())
 
     def bundle_records(self) -> list[dict[str, Any]]:
@@ -6596,7 +6890,9 @@ class _Harvest:
 
     def yield_summary(self) -> None:
         """Counts only (PLAN2 2.2 F): planned, present, raw_valid, succeeded; overall and per stage."""
-        roster = self.roster.get("members", [])
+        # A spare counts as planned only when the retry ran it (registration 0.12).
+        roster = [member for member in self.roster.get("members", [])
+                  if member.get("spare_slot") is None or self._bundle_on_disk(member["run_id"])]
         per_roster: dict[str, list[str]] = {}
         for member in roster:
             per_roster.setdefault(str(member.get("stage_id")), []).append(member["run_id"])
@@ -7026,8 +7322,11 @@ def harvest(inputs: WindowInputs, archive_root: Path | str, *, seams: Seams | No
     run.step("lineage", run.lineage_audit)
     run.step("monitor", run.monitor_joins)
     run.step("meter", run.meter_joins, fault=False)
+    # NEG-8 ruling 2026-10-07: the physics flags (monitor, members) precede the
+    # corpus physics drop and the survivors screen.
+    run.step("neg8_corpus_physics", run.neg8_corpus_physics)
+    run.step("neg8_screen", run.neg8_deferred_screen)
     run.step("g10", run.g10_result, fault=False)
-    run.step("neg8_references", run.neg8_reference_exclusions)
     run.step("exclusion_inputs", run.exclusion_inputs)
     run.step("g3", lambda: run.g3(skipped=not run_g3), fault=False)
     run.step("diagnostics", run.diagnostics, fault=False)
