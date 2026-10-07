@@ -2586,7 +2586,12 @@ class L1JournalFormatTests(unittest.TestCase):
                 # registry fallback (battery.smc_unavailable) on every span.
                 live = {finding["code"] for finding in monitor.member_findings(
                     journals, span=case["span"], request=case["request"])} - {"battery.smc_unavailable"}
-                self.assertEqual(sorted(live), case["l1_codes"])
+                # The recorded excursion is the -447 mA discharge (publication 3): the
+                # recorded join named it battery.member_span; under the battery-assist
+                # ruling (2026-10-06) L1 discloses it as battery.assist.
+                expected = sorted({"battery.assist" if code == "battery.member_span" else code
+                                   for code in case["l1_codes"]})
+                self.assertEqual(sorted(live), expected)
 
 
 class RecordTests(unittest.TestCase):
