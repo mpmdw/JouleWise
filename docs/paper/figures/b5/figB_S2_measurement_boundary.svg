@@ -1,0 +1,150 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="628" viewBox="0 0 1000 628" role="img" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" data-figure="B-S2">
+<title>Figure B-S2. Two measurement boundaries on one machine</title>
+<desc>Energy path from the wall outlet through the power adapter, an inline meter and the laptop's DC input to the processor rails and the rest of the machine, with the battery joining after the DC input; the sampler's measurement boundary around the processor rails, the wider measurement boundary of the whole-machine meter, the three places where instruments read, and a synthetic worked example of the rail share.</desc>
+<rect data-role="background" width="1000" height="628" fill="#ffffff"/>
+<g data-role="figure-title">
+<text x="30" y="34" font-size="20" fill="#0b0b0b" font-weight="bold">Figure B-S2. Two measurement boundaries on one machine</text>
+<text x="30" y="56" font-size="13.5" fill="#52514e">Schematic, not to scale. The bottom strip is a SYNTHETIC worked example: its numbers are invented, not measured.</text>
+</g>
+<g data-element="the Mac"><title>the Mac</title>
+<rect x="590" y="76" width="386" height="296" fill="#faf9f6" stroke="#898781" stroke-width="1.2" rx="10"/>
+<text x="604" y="98" font-size="13" fill="#0b0b0b" font-weight="bold">the Mac (M3 Max laptop)</text>
+</g>
+<g data-element="mains AC"><title>mains AC</title>
+<rect x="30" y="160" width="100" height="60" fill="#f4f3ef" stroke="#898781" stroke-width="1.2" rx="4"/>
+<text x="80" y="186.1" font-size="13" fill="#0b0b0b" text-anchor="middle" font-weight="bold">mains AC</text>
+<text x="80" y="203" font-size="13" fill="#52514e" text-anchor="middle">wall outlet</text>
+</g>
+<g data-element="power adapter"><title>power adapter</title>
+<rect x="160" y="150" width="120" height="80" fill="#f4f3ef" stroke="#898781" stroke-width="1.2" rx="4"/>
+<text x="220" y="186.1" font-size="13" fill="#0b0b0b" text-anchor="middle" font-weight="bold">power adapter</text>
+<text x="220" y="203" font-size="13" fill="#52514e" text-anchor="middle">140 W</text>
+</g>
+<g data-element="conversion loss"><title>conversion loss</title>
+<line x1="220" y1="230" x2="220" y2="246" stroke="#898781" stroke-width="1"/>
+<text x="220" y="261" font-size="12" fill="#52514e" text-anchor="middle">conversion loss here</text>
+<text x="220" y="276.6" font-size="12" fill="#52514e" text-anchor="middle">is not measured</text>
+</g>
+<g data-element="USB-C cable"><title>USB-C cable</title>
+<text x="342" y="179" font-size="12.5" fill="#0b0b0b" text-anchor="middle">USB-C cable, 28 V</text>
+</g>
+<g data-element="whole-machine meter"><title>whole-machine meter</title>
+<rect x="404" y="150" width="156" height="80" fill="#f4f3ef" stroke="#898781" stroke-width="1.2" rx="4"/>
+<text x="482" y="178.18" font-size="12.5" fill="#0b0b0b" text-anchor="middle" font-weight="bold">whole-machine meter</text>
+<text x="482" y="194.38" font-size="12.5" fill="#52514e" text-anchor="middle">voltage × current</text>
+<text x="482" y="210.58" font-size="12.5" fill="#52514e" text-anchor="middle">50 samples/s</text>
+<circle cx="560" cy="150" r="9.5" fill="#0b0b0b" stroke="#ffffff" stroke-width="2"/>
+<text x="560" y="154.2" font-size="12" fill="#ffffff" text-anchor="middle" font-weight="bold">2</text>
+</g>
+<g data-element="DC input"><title>DC input</title>
+<rect x="610" y="165" width="72" height="50" fill="#f4f3ef" stroke="#898781" stroke-width="1.2" rx="4"/>
+<text x="646" y="194.55" font-size="13" fill="#0b0b0b" text-anchor="middle" font-weight="bold">DC input</text>
+</g>
+<g data-element="meter&#x27;s boundary"><title>meter's boundary</title>
+<rect x="744" y="134" width="218" height="216" fill="none" stroke="#eb6834" stroke-width="2.2" stroke-dasharray="7 4" rx="6"/>
+<text x="748" y="126" font-size="12.5" fill="#0b0b0b" font-weight="bold">meter's boundary</text>
+</g>
+<g data-element="sampler&#x27;s boundary"><title>sampler's boundary</title>
+<rect x="786" y="159" width="164" height="62" fill="#e6f0fc" stroke="#2a78d6" stroke-width="2.6" rx="4"/>
+<text x="790" y="152" font-size="12.5" fill="#0b0b0b" font-weight="bold">sampler's boundary</text>
+</g>
+<g data-element="processor rails"><title>processor rails</title>
+<text x="868" y="186" font-size="13" fill="#0b0b0b" text-anchor="middle" font-weight="bold">processor rails</text>
+<text x="868" y="203" font-size="13" fill="#52514e" text-anchor="middle">CPU + GPU + ANE</text>
+</g>
+<g data-element="rest of the machine"><title>rest of the machine</title>
+<rect x="786" y="258" width="164" height="72" fill="#f4f3ef" stroke="#898781" stroke-width="1.2" rx="4"/>
+<text x="868" y="282.18" font-size="12.5" fill="#0b0b0b" text-anchor="middle" font-weight="bold">rest of the machine</text>
+<text x="868" y="298.38" font-size="12.5" fill="#52514e" text-anchor="middle">memory, storage, fans,</text>
+<text x="868" y="314.57" font-size="12.5" fill="#52514e" text-anchor="middle">display (asleep)</text>
+</g>
+<g data-element="battery"><title>battery</title>
+<rect x="610" y="300" width="90" height="54" fill="#f4f3ef" stroke="#898781" stroke-width="1.2" rx="4"/>
+<text x="655" y="331.55" font-size="13" fill="#0b0b0b" text-anchor="middle" font-weight="bold">battery</text>
+</g>
+<g data-element="energy flow"><title>energy flow</title>
+<line x1="130" y1="190" x2="152" y2="190" stroke="#52514e" stroke-width="1.8"/>
+<polygon points="160,190 151,193.8 151,186.2" fill="#52514e"/>
+<line x1="280" y1="190" x2="396" y2="190" stroke="#52514e" stroke-width="1.8"/>
+<polygon points="404,190 395,193.8 395,186.2" fill="#52514e"/>
+<line x1="560" y1="190" x2="602" y2="190" stroke="#52514e" stroke-width="1.8"/>
+<polygon points="610,190 601,193.8 601,186.2" fill="#52514e"/>
+<line x1="682" y1="190" x2="768" y2="190" stroke="#52514e" stroke-width="1.8"/>
+<circle cx="716" cy="190" r="4" fill="#52514e"/>
+<line x1="768" y1="190" x2="768" y2="294" stroke="#52514e" stroke-width="1.8"/>
+<line x1="767" y1="190" x2="778" y2="190" stroke="#52514e" stroke-width="1.8"/>
+<polygon points="786,190 777,193.8 777,186.2" fill="#52514e"/>
+<line x1="767" y1="294" x2="778" y2="294" stroke="#52514e" stroke-width="1.8"/>
+<polygon points="786,294 777,297.8 777,290.2" fill="#52514e"/>
+<polyline points="708,327 716,327 716,202" fill="none" stroke="#52514e" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/>
+<polygon points="716,194 719.8,203 712.2,203" fill="#52514e"/>
+<polygon points="700,327 709,323.2 709,330.8" fill="#52514e"/>
+</g>
+<g data-element="sampler"><title>sampler</title>
+<circle cx="950" cy="159" r="9.5" fill="#0b0b0b" stroke="#ffffff" stroke-width="2"/>
+<text x="950" y="163.2" font-size="12" fill="#ffffff" text-anchor="middle" font-weight="bold">1</text>
+</g>
+<g data-element="battery sensor"><title>battery sensor</title>
+<circle cx="716" cy="262" r="9.5" fill="#0b0b0b" stroke="#ffffff" stroke-width="2"/>
+<text x="716" y="266.2" font-size="12" fill="#ffffff" text-anchor="middle" font-weight="bold">3</text>
+</g>
+<g data-element="instruments"><title>instruments</title>
+<text x="30" y="322" font-size="13" fill="#0b0b0b" font-weight="bold">Three instruments, numbered where they read</text>
+</g>
+<g data-element="sampler"><title>sampler</title>
+<circle cx="40" cy="341.5" r="8.5" fill="#0b0b0b" stroke="#ffffff" stroke-width="2"/>
+<text x="40" y="345.7" font-size="12" fill="#ffffff" text-anchor="middle" font-weight="bold">1</text>
+<text x="58" y="346" font-size="12.5" fill="#0b0b0b">sampler: average processor-rail power, one record requested every 100 ms</text>
+</g>
+<g data-element="whole-machine meter"><title>whole-machine meter</title>
+<circle cx="40" cy="365.5" r="8.5" fill="#0b0b0b" stroke="#ffffff" stroke-width="2"/>
+<text x="40" y="369.7" font-size="12" fill="#ffffff" text-anchor="middle" font-weight="bold">2</text>
+<text x="58" y="370" font-size="12.5" fill="#0b0b0b">whole-machine meter: voltage and current in the USB-C cable, 50 samples a second</text>
+</g>
+<g data-element="battery sensor"><title>battery sensor</title>
+<circle cx="40" cy="389.5" r="8.5" fill="#0b0b0b" stroke="#ffffff" stroke-width="2"/>
+<text x="40" y="393.7" font-size="12" fill="#ffffff" text-anchor="middle" font-weight="bold">3</text>
+<text x="58" y="394" font-size="12.5" fill="#0b0b0b">battery sensor: battery current and voltage, read once a second</text>
+</g>
+<g data-element="energy flow"><title>energy flow</title>
+<line x1="604" y1="395.5" x2="632" y2="395.5" stroke="#52514e" stroke-width="1.8"/>
+<polygon points="640,395.5 631,399.3 631,391.7" fill="#52514e"/>
+<text x="650" y="400" font-size="12.5" fill="#0b0b0b">energy flow (two heads: either direction)</text>
+</g>
+<g data-element="sampler&#x27;s boundary"><title>sampler's boundary</title>
+<rect x="606" y="412" width="32" height="15" fill="#e6f0fc" stroke="#2a78d6" stroke-width="2.6" rx="3"/>
+<text x="650" y="424" font-size="12.5" fill="#0b0b0b">sampler's boundary: every reported energy</text>
+</g>
+<g data-element="meter&#x27;s boundary"><title>meter's boundary</title>
+<rect x="606" y="436" width="32" height="15" fill="none" stroke="#eb6834" stroke-width="2.2" stroke-dasharray="7 4" rx="3"/>
+<text x="650" y="448" font-size="12.5" fill="#0b0b0b">meter's boundary: cross-check only</text>
+</g>
+<g data-element="worked example"><title>worked example</title>
+<rect x="30" y="468" width="940" height="148" fill="#f4f3ef" rx="6"/>
+<text x="44" y="490" font-size="13" fill="#0b0b0b" font-weight="bold">SYNTHETIC worked example: one measured request of 20.0 s. Every energy is idle-subtracted.</text>
+<text x="44" y="585" font-size="12.5" fill="#52514e">Idle-subtracted means: less what the idle machine would have used in the same 20.0 s.</text>
+</g>
+<g data-element="meter term"><title>meter term</title>
+<circle cx="54" cy="509.5" r="8.5" fill="#0b0b0b" stroke="#ffffff" stroke-width="2"/>
+<text x="54" y="513.7" font-size="12" fill="#ffffff" text-anchor="middle" font-weight="bold">2</text>
+<text x="70" y="514" font-size="13" fill="#0b0b0b">meter term: (52.0 W − 9.0 W at idle) × 20.0 s = 860 J</text>
+</g>
+<g data-element="battery term"><title>battery term</title>
+<circle cx="54" cy="533.5" r="8.5" fill="#0b0b0b" stroke="#ffffff" stroke-width="2"/>
+<text x="54" y="537.7" font-size="12" fill="#ffffff" text-anchor="middle" font-weight="bold">3</text>
+<text x="70" y="538" font-size="13" fill="#0b0b0b">battery term: (1.5 W − 0 W at idle) × 20.0 s = 30 J</text>
+<text x="44" y="603" font-size="12.5" fill="#52514e">The battery term is battery current × battery voltage, positive during battery assist (the battery helping to supply the machine).</text>
+</g>
+<g data-element="idle-subtracted machine energy"><title>idle-subtracted machine energy</title>
+<text x="70" y="562" font-size="13" fill="#0b0b0b" font-weight="bold">idle-subtracted machine energy = 860 J + 30 J = 890 J</text>
+</g>
+<g data-element="idle-subtracted rail energy"><title>idle-subtracted rail energy</title>
+<circle cx="552" cy="509.5" r="8.5" fill="#0b0b0b" stroke="#ffffff" stroke-width="2"/>
+<text x="552" y="513.7" font-size="12" fill="#ffffff" text-anchor="middle" font-weight="bold">1</text>
+<text x="568" y="514" font-size="13" fill="#0b0b0b">idle-subtracted rail energy: 712 J</text>
+</g>
+<g data-element="rail share"><title>rail share</title>
+<text x="568" y="538" font-size="13" fill="#0b0b0b" font-weight="bold">rail share = 712 J ÷ 890 J = 0.80</text>
+<text x="568" y="562" font-size="13" fill="#52514e">without the battery term: 712 J ÷ 860 J = 0.83, too high</text>
+</g>
+</svg>

@@ -1,0 +1,1244 @@
+{
+  "schema": "joulewise.paper_b_slot_manifest.v1",
+  "purpose": "Every place where Paper B will print a value that only measurement block 5 can supply, named before any such value exists. A slot says which artifact the value is read from, which field of it, in what unit, and where the analysis plan registers it. No slot has a value: every value is null until the release event.",
+  "token": "{{slot:<id>}}",
+  "synced_to": {
+    "note": "The registration, analysis plan and flag catalog are revision 9, DRAFT, not sealed. The test checks this manifest against them strictly while their bytes equal these digests, and reports a stale sync point (without failing) once they have moved.",
+    "code_head": "9b0c680ed79d5c7b72b4b39ed04b9fe51dd116d4",
+    "analysis_plan": {
+      "path": "configs/campaigns/v5_claim_25g83/analysis_plan_block5.md",
+      "revision": 9,
+      "sealed": false,
+      "sha256": "9f0ad06bfdab1bb2c1f153802084be1347bc9a2e3f9397f1d4bda37665c60154"
+    },
+    "registration": {
+      "path": "configs/campaigns/v5_claim_25g83/registration_block5.md",
+      "revision": 9,
+      "sealed": false,
+      "sha256": "12ac5c78876f09e7b7611ed7de91c4ba70048e6381169143d7a98e5ed41b1eef"
+    },
+    "flag_catalog": {
+      "path": "configs/campaigns/v5_claim_25g83/flag_catalog.json",
+      "sha256": "2b1595e488d1f52c9e10e7971f95e3d335bf34ab4f19bc5a75fdd97f93f21810"
+    }
+  },
+  "vocabulary": {
+    "models": {
+      "small": {
+        "model": "qwen3-1p7b",
+        "name": "1.7B model",
+        "released_as": "Qwen3-1.7B",
+        "site": "1p7b",
+        "floor_pack": "alpha"
+      },
+      "large": {
+        "model": "qwen3-8b",
+        "name": "8B model",
+        "released_as": "Qwen3-8B",
+        "site": "8b",
+        "floor_pack": "beta"
+      }
+    },
+    "phases": {
+      "decode": {
+        "registered": "decode",
+        "metric": "phase_energy_j.decode",
+        "per_token_divisor": "runtime-observed output tokens"
+      },
+      "prefill": {
+        "registered": "prefill-p2048",
+        "metric": "phase_energy_j.prefill",
+        "per_token_divisor": "runtime-observed prompt tokens"
+      }
+    },
+    "packs": {
+      "alpha": {
+        "name": "1.7B window",
+        "label": "ALPHA",
+        "pack_id": "d117_floor_qwen3-1p7b_v5",
+        "models": [
+          "small"
+        ],
+        "holds": "for the 1.7B model, the absolute repeats and null quads of both workloads"
+      },
+      "beta": {
+        "name": "8B window",
+        "label": "BETA",
+        "pack_id": "d117_floor_qwen3-8b_v5",
+        "models": [
+          "large"
+        ],
+        "holds": "the same for the 8B model"
+      },
+      "gamma": {
+        "name": "contrast window",
+        "label": "GAMMA",
+        "pack_id": "d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5",
+        "models": [
+          "small",
+          "large"
+        ],
+        "holds": "for each workload, quads with the 1.7B model on side A and the 8B model on side B"
+      }
+    },
+    "forms": {
+      "absolute": "floor form over the kept absolute repeats",
+      "comparative": "floor form over the kept null-quad differences",
+      "shared_sign": "the comparative floor replayed with one shared sign across all kept quads (the plan's R_cm)"
+    },
+    "shapes": {
+      "number": "one real number",
+      "count": "one non-negative integer",
+      "flag": "true or false",
+      "label": "one value from a closed list of names",
+      "table": "rows whose number is not known before collection; parts names the columns",
+      "line": "one registered line of text with the numbers named in parts"
+    },
+    "issue": {
+      "copy": "copied, or conservatively rounded, from the named field (the plan's MEASURED)",
+      "derive": "computed from the named field by the formula the plan names in rule (the plan's DERIVE)"
+    },
+    "available": {
+      "before_collection": "a design parameter, known before block 5 collects",
+      "structure": "counts, verdicts and measured hazard quantities, releasable during the block (registration section 8 item 2)",
+      "after_release": "an energy or a quantity derived from one, readable only after the release event (registration section 8)"
+    },
+    "placement_states": {
+      "RETIRED_FALLBACK": "a site retired by the fallback decision, printable only after a new ruling",
+      "PROPOSED_STOP_FILL": "a proposed site whose fill is blocked until adopted",
+      "NOT_PROPOSED": "no site proposed yet (the plan's open DISCLOSURE-SITES)"
+    },
+    "basis": {
+      "named": "the plan names this field, an object on its path, or every flag code selected",
+      "inferred": "the plan names the quantity in words; this manifest inferred the field from the code, to be confirmed at the post-seal sync"
+    }
+  },
+  "frozen_identifiers": {
+    "note": "Cell, family and contrast identifiers used in select, with the committed file each is read from.",
+    "reported_cells": {
+      "small.decode": "d117-reported-mean-ph-decode-qwen3-1p7b",
+      "small.prefill": "d117-reported-mean-ph-prefill-p2048-qwen3-1p7b",
+      "large.decode": "d117-reported-mean-ph-decode-qwen3-8b",
+      "large.prefill": "d117-reported-mean-ph-prefill-p2048-qwen3-8b"
+    },
+    "floor_families": {
+      "small.decode": "df-ph-decode-qwen3-1p7b",
+      "small.prefill": "df-ph-prefill-p2048-qwen3-1p7b",
+      "large.decode": "df-ph-decode-qwen3-8b",
+      "large.prefill": "df-ph-prefill-p2048-qwen3-8b"
+    },
+    "contrasts": {
+      "decode": "ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b",
+      "prefill": "ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b"
+    },
+    "sources": {
+      "alpha": "configs/campaigns/d117_floor_qwen3-1p7b_v5/extraction_spec.json",
+      "beta": "configs/campaigns/d117_floor_qwen3-8b_v5/extraction_spec.json",
+      "gamma": "configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5/analysis_manifest_v3.json"
+    }
+  },
+  "artifacts": {
+    "prefill_selection": {
+      "schema": "joulewise.g2a_prefill_selection.v1",
+      "what": "The prefill-length selection record of measurement block 3: the prompt length block 5 uses.",
+      "where": "selection.json of the block-3 probe (registration section 0.5)",
+      "code": {
+        "file": "scripts/select_g2a_prefill_length.py",
+        "schema_constant": "SCHEMA_VERSION"
+      },
+      "objects": {
+        "": {
+          "kind": "function",
+          "symbol": "select"
+        }
+      }
+    },
+    "identity_pins": {
+      "schema": "joulewise.b5_identity_pins.v1",
+      "what": "The sealed pins that fix which model files and runtime versions may be measured.",
+      "where": "configs/campaigns/v5_claim_25g83/identity_pins.json (registration section 4.6)",
+      "code": {
+        "file": "joulewise/flags/collect.py",
+        "schema_constant": "IDENTITY_PINS_SCHEMA"
+      },
+      "objects": {
+        "": {
+          "kind": "function",
+          "symbol": "derive_document",
+          "file": "scripts/write_b5_identity_pins.py"
+        }
+      }
+    },
+    "reported_energy": {
+      "schema": "joulewise.paper_reported_energy_projection.v1",
+      "what": "One record per reported cell: mean, interval endpoints, per-token value and the units kept.",
+      "where": "analysis step 10 (analysis plan section 3.1); one record per cell, in analysis custody",
+      "code": {
+        "file": "joulewise/paper_reported_energy.py",
+        "schema_constant": "SCHEMA"
+      },
+      "objects": {
+        "": {
+          "kind": "function",
+          "symbol": "_synthetic_projection"
+        },
+        "cells[]": {
+          "kind": "function",
+          "symbol": "_project_cell"
+        },
+        "cells[].interval": {
+          "kind": "function",
+          "symbol": "_project_cell"
+        },
+        "cells[].per_token": {
+          "kind": "function",
+          "symbol": "_project_cell"
+        },
+        "cells[].binding": {
+          "kind": "function",
+          "symbol": "_project_cell"
+        }
+      }
+    },
+    "detection_floor": {
+      "schema": "joulewise.detection_floor_artifact.v2",
+      "what": "The aggregate detection-floor artifact: one cell per model and phase, with its absolute and comparative components.",
+      "where": "analysis step 5, the production mint (analysis plan section 3.1)",
+      "code": {
+        "file": "joulewise/detection_floor.py",
+        "schema_constant": "SCHEMA_VERSION"
+      },
+      "objects": {
+        "": {
+          "kind": "constant",
+          "symbol": "_TOP_KEYS"
+        },
+        "cells[]": {
+          "kind": "constant",
+          "symbol": "_CELL_KEYS"
+        },
+        "cells[].absolute": {
+          "kind": "constant",
+          "symbol": "_ABS_KEYS"
+        },
+        "cells[].comparative": {
+          "kind": "constant",
+          "symbol": "_CMP_KEYS"
+        }
+      }
+    },
+    "dominance_closeout": {
+      "schema": "joulewise.d165_dominance_closeout.v1",
+      "what": "The close-out record: every dominance ratio with its two floors, and the branch decision.",
+      "where": "analysis step 6 (analysis plan section 3.1)",
+      "code": {
+        "file": "joulewise/dominance_closeout.py",
+        "schema_constant": "CLOSEOUT_SCHEMA_VERSION"
+      },
+      "objects": {
+        "": {
+          "kind": "constant",
+          "symbol": "_CLOSEOUT_TOP_KEYS"
+        },
+        "independent_ratios[]": {
+          "kind": "constant",
+          "symbol": "_CLOSEOUT_INDEPENDENT_KEYS"
+        },
+        "comparative_common_mode_ratios[]": {
+          "kind": "constant",
+          "symbol": "_CLOSEOUT_COMMON_KEYS"
+        }
+      }
+    },
+    "claim_verdicts": {
+      "schema": "joulewise.claim_verdicts.v1",
+      "what": "The claim gate's output: for each contrast its estimate, intervals, floor, multiplicity decision, outcome and claim ceiling.",
+      "where": "analysis step 9, the claim gate (analysis plan section 3.1)",
+      "code": {
+        "file": "joulewise/analysis_engine/artifact.py",
+        "schema_constant": "SCHEMA_VERSION"
+      },
+      "objects": {
+        "": {
+          "kind": "constant",
+          "symbol": "_TOP_KEYS"
+        },
+        "contrasts[]": {
+          "kind": "constant",
+          "symbol": "_CONTRAST_KEYS"
+        },
+        "contrasts[].estimator": {
+          "kind": "constant",
+          "symbol": "_ESTIMATOR_KEYS"
+        },
+        "contrasts[].estimator.metrology_aware_CI95": {
+          "kind": "function",
+          "symbol": "_interval_pair"
+        },
+        "contrasts[].deterministic_bounds": {
+          "kind": "constant",
+          "symbol": "_DETERMINISTIC_KEYS"
+        },
+        "contrasts[].deterministic_bounds.decision_interval": {
+          "kind": "function",
+          "symbol": "_interval_pair"
+        },
+        "contrasts[].floor": {
+          "kind": "constant",
+          "symbol": "_FLOOR_KEYS"
+        },
+        "contrasts[].multiplicity": {
+          "kind": "constant",
+          "symbol": "_MULTIPLICITY_EVIDENCE_KEYS"
+        },
+        "contrasts[].claim_evaluation": {
+          "kind": "constant",
+          "symbol": "_EVALUATION_KEYS"
+        },
+        "contrasts[].loo": {
+          "kind": "constant",
+          "symbol": "_LOO_KEYS"
+        },
+        "contrasts[].loo.rows[]": {
+          "kind": "constant",
+          "symbol": "_LOO_ROW_KEYS"
+        }
+      }
+    },
+    "exclusions": {
+      "schema": "joulewise.exclusions.v1",
+      "what": "The exclusion function's output for one attempt: removed members, the kept and removed units of each cell, and whether the attempt is claim-usable.",
+      "where": "derived/exclusions.json in the attempt's harvest archive (analysis plan section 2.2)",
+      "code": {
+        "file": "joulewise/flags/exclusions.py",
+        "schema_constant": "EXCLUSIONS_SCHEMA"
+      },
+      "objects": {
+        "": {
+          "kind": "function",
+          "symbol": "compute"
+        },
+        "cells[]": {
+          "kind": "function",
+          "symbol": "compute"
+        }
+      }
+    },
+    "harvest_record": {
+      "schema": "joulewise.harvest_b5_window.v1",
+      "what": "The harvest's one record per attempt: its verdict and its window-removing reasons.",
+      "where": "harvest.json in the attempt's harvest archive (registration sections 5.7 and 7.1)",
+      "code": {
+        "file": "joulewise/b5/harvest.py",
+        "schema_constant": "SCHEMA"
+      },
+      "objects": {
+        "": {
+          "kind": "function",
+          "symbol": "_Harvest.finish"
+        }
+      }
+    },
+    "window_flags": {
+      "schema": "joulewise.window_flags.v1",
+      "what": "The harvest's per-attempt summary: flag counts by code, family and effect, and the hazard measurements taken at the arm.",
+      "where": "derived/window_flags.json in the attempt's harvest archive (registration section 5.7)",
+      "code": {
+        "file": "joulewise/b5/harvest.py",
+        "schema_constant": "WINDOW_FLAGS_SCHEMA"
+      },
+      "objects": {
+        "": {
+          "kind": "function",
+          "symbol": "_Harvest.finish"
+        },
+        "flags": {
+          "kind": "function",
+          "symbol": "_Harvest.finish"
+        }
+      }
+    },
+    "window_yield": {
+      "schema": "joulewise.b5_window_yield.v1",
+      "what": "The driver's count of what a window collected: members planned, bundles present, and a yield status.",
+      "where": "the yield block of night/hazard_result.json, the driver's terminal record (registration section 5.7)",
+      "code": {
+        "file": "joulewise/b5/driver.py",
+        "schema_constant": "YIELD_SCHEMA"
+      },
+      "objects": {
+        "": {
+          "kind": "function",
+          "symbol": "terminal_yield"
+        }
+      }
+    },
+    "flag": {
+      "schema": "joulewise.flag.v1",
+      "what": "One flag: one recorded fact with its code, scope and observed values.",
+      "where": "derived/flags.jsonl in the attempt's harvest archive, one flag per line (registration section 0.16)",
+      "code": {
+        "file": "joulewise/flags/schema.py",
+        "schema_constant": "FLAG_SCHEMA"
+      },
+      "objects": {
+        "": {
+          "kind": "constant",
+          "symbol": "FIELDS"
+        }
+      }
+    },
+    "reference_bound_check": {
+      "schema": "joulewise.b5_neg8_bound_check.v1",
+      "what": "The harvest's structural check of the window's reference-drift bound, with the number of reference-corpus members collected.",
+      "where": "derived/neg8-bound.json in the attempt's harvest archive (registration section 5.3)",
+      "code": {
+        "file": "joulewise/b5/harvest.py",
+        "schema_constant": "NEG8_CHECK_SCHEMA"
+      },
+      "objects": {
+        "": {
+          "kind": "function",
+          "symbol": "_Harvest.neg8_bound"
+        }
+      }
+    },
+    "meter": {
+      "schema": "joulewise.b5_meter_cross_check.v1",
+      "what": "The whole-machine meter's record for one window: per member, the rail energy and the machine energy above idle, and their quotient.",
+      "where": "withheld/meter.json in the attempt's harvest archive (analysis plan section 8.2)",
+      "code": {
+        "file": "joulewise/b5/harvest.py",
+        "schema_constant": "METER_SCHEMA"
+      },
+      "objects": {
+        "": {
+          "kind": "function",
+          "symbol": "_Harvest.meter_joins"
+        },
+        "members{}": {
+          "kind": "function",
+          "symbol": "_Harvest.meter_joins"
+        },
+        "members{}.machine": {
+          "kind": "function",
+          "symbol": "delta_machine_energy",
+          "file": "joulewise/external/km003c_parse.py"
+        }
+      }
+    }
+  },
+  "families": [
+    {
+      "family": "identity",
+      "prefixes": [
+        "identity"
+      ],
+      "title": "Design identity printed with the results",
+      "plan": [
+        "9 row 1"
+      ],
+      "registration": [
+        "0.5",
+        "4.6"
+      ],
+      "rung": null,
+      "block_five_result": false,
+      "placement": {
+        "state": "PROPOSED_STOP_FILL",
+        "sites": [
+          "CP-X01-identity",
+          "CP-X01-length"
+        ]
+      },
+      "waits_on": [],
+      "available": "before_collection",
+      "registered": "registered",
+      "note": "Design parameters, not results of block 5. Methods prose takes them from the registered-values table, not from a slot; the slots exist so that every row of analysis plan section 9 is covered."
+    },
+    {
+      "family": "reported",
+      "prefixes": [
+        "reported"
+      ],
+      "title": "Reported phase energy per model and phase",
+      "plan": [
+        "4",
+        "9 row 2"
+      ],
+      "registration": [
+        "0.9",
+        "1"
+      ],
+      "rung": "L1",
+      "block_five_result": true,
+      "placement": {
+        "state": "RETIRED_FALLBACK",
+        "sites": [
+          "CP-X05-1p7b-decode",
+          "CP-X05-1p7b-prefill",
+          "CP-X05-8b-decode",
+          "CP-X05-8b-prefill"
+        ]
+      },
+      "waits_on": [
+        "EXCLUSIONS-CONSUMER",
+        "REPORTED-ENERGY-ISSUER"
+      ],
+      "available": "after_release",
+      "registered": "registered",
+      "note": "At the sync point the code fixes the kept-unit counts at their planned values; the amended estimator over kept units is the open REPORTED-ENERGY-ISSUER work."
+    },
+    {
+      "family": "attribution_floor",
+      "prefixes": [
+        "attribution_floor"
+      ],
+      "title": "Attribution floor printed beside each reported cell",
+      "plan": [
+        "4 step 7",
+        "9 row 3"
+      ],
+      "registration": [
+        "0.10",
+        "14 Q5"
+      ],
+      "rung": "L1",
+      "block_five_result": true,
+      "placement": {
+        "state": "RETIRED_FALLBACK",
+        "sites": [
+          "CP-X05-1p7b-decode",
+          "CP-X05-1p7b-prefill",
+          "CP-X05-8b-decode",
+          "CP-X05-8b-prefill"
+        ]
+      },
+      "waits_on": [
+        "ATTRIBUTION-FLOOR-BINDING",
+        "REPORTED-ENERGY-ISSUER"
+      ],
+      "available": "after_release",
+      "registered": "registered",
+      "note": "Printed beside the cell and never added into its interval. Its value and its applicability to this OS build are an open binding."
+    },
+    {
+      "family": "floor",
+      "prefixes": [
+        "floor"
+      ],
+      "title": "Detection floors per model and phase",
+      "plan": [
+        "5",
+        "9 row 4"
+      ],
+      "registration": [
+        "0.10",
+        "1"
+      ],
+      "rung": "L1",
+      "block_five_result": true,
+      "placement": {
+        "state": "PROPOSED_STOP_FILL",
+        "sites": [
+          "CP-X04-1p7b-decode",
+          "CP-X04-1p7b-prefill",
+          "CP-X04-8b-decode",
+          "CP-X04-8b-prefill",
+          "CP-X04-composition"
+        ]
+      },
+      "waits_on": [
+        "EXCLUSIONS-CONSUMER",
+        "FLOOR-EXTRACTION-KEPT-UNITS",
+        "L9-NEG8",
+        "V5-FINAL-PINSET",
+        "V5-V2-INPUT-MANIFEST"
+      ],
+      "available": "after_release",
+      "registered": "registered",
+      "note": "The artifact's cell id for each model and phase is fixed by the mint's input manifest, which is open; a slot therefore selects its cell by condition family."
+    },
+    {
+      "family": "dominance",
+      "prefixes": [
+        "dominance"
+      ],
+      "title": "Dominance ratios, the branch and what the branch licenses",
+      "plan": [
+        "6",
+        "9 row 5"
+      ],
+      "registration": [
+        "1"
+      ],
+      "rung": "disclosure",
+      "block_five_result": true,
+      "placement": {
+        "state": "PROPOSED_STOP_FILL",
+        "sites": [
+          "CP-X02-ratios",
+          "CP-X02-abstract",
+          "CP-X02-discussion",
+          "CP-X02-conclusion",
+          "CP-X02-headline",
+          "CP-X03-section4",
+          "CP-X03-abstract",
+          "CP-X03-discussion",
+          "CP-X03-conclusion"
+        ]
+      },
+      "waits_on": [
+        "EXCLUSIONS-CONSUMER",
+        "FLOOR-EXTRACTION-KEPT-UNITS",
+        "L9-NEG8",
+        "V5-FINAL-PINSET",
+        "V5-V2-INPUT-MANIFEST",
+        "MINT-TO-CLOSEOUT-ADAPTER"
+      ],
+      "available": "after_release",
+      "registered": "registered",
+      "note": "Each ratio prints with its numerator and denominator in joules and the number of units of its floor component (the floor family's kept-unit slots). A ratio is a point diagnostic with no interval."
+    },
+    {
+      "family": "contrast",
+      "prefixes": [
+        "contrast"
+      ],
+      "title": "The two model contrasts and their verdicts",
+      "plan": [
+        "7.1",
+        "7.2",
+        "9 rows 6 and 8"
+      ],
+      "registration": [
+        "0.8",
+        "1"
+      ],
+      "rung": "L2 only if the claim gate's claim_ready_for_l2_l3 is true; otherwise L1 wording",
+      "block_five_result": true,
+      "placement": {
+        "state": "PROPOSED_STOP_FILL",
+        "sites": [
+          "CP-X06-table",
+          "CP-X07-table",
+          "CP-X08-decode-a-abstract",
+          "CP-X08-decode-a-discussion",
+          "CP-X08-decode-a-conclusion",
+          "CP-X08-decode-b-abstract",
+          "CP-X08-decode-b-discussion",
+          "CP-X08-decode-b-conclusion",
+          "CP-X08-prefill-a-abstract",
+          "CP-X08-prefill-a-discussion",
+          "CP-X08-prefill-a-conclusion",
+          "CP-X08-prefill-b-abstract",
+          "CP-X08-prefill-b-discussion",
+          "CP-X08-prefill-b-conclusion"
+        ]
+      },
+      "waits_on": [
+        "EXCLUSIONS-CONSUMER",
+        "GAMMA-MANIFEST-EXCLUSIONS-BINDING",
+        "L9-NEG8",
+        "V5-FINAL-PINSET",
+        "V5-V2-INPUT-MANIFEST",
+        "CLAIM-VERDICT-TO-FILL-ADAPTER"
+      ],
+      "available": "after_release",
+      "registered": "registered",
+      "note": null
+    },
+    {
+      "family": "descriptive",
+      "prefixes": [
+        "ratio",
+        "per_token_difference"
+      ],
+      "title": "Registered descriptive estimates beside each contrast",
+      "plan": [
+        "7.3",
+        "9 row 7"
+      ],
+      "registration": [
+        "1"
+      ],
+      "rung": "descriptive, never gating",
+      "block_five_result": true,
+      "placement": {
+        "state": "NOT_PROPOSED",
+        "sites": []
+      },
+      "waits_on": [
+        "DISCLOSURE-PRODUCER",
+        "DISCLOSURE-SITES"
+      ],
+      "available": "after_release",
+      "registered": "registered",
+      "note": "Computed by the disclosure producer, which does not exist yet; each slot names the existing field its registered formula starts from."
+    },
+    {
+      "family": "disclosure_units",
+      "prefixes": [
+        "kept"
+      ],
+      "title": "Disclosure: the units removed from each cell and contrast",
+      "plan": [
+        "8.1 kept units",
+        "9 row 9"
+      ],
+      "registration": [
+        "6.6"
+      ],
+      "rung": "disclosure",
+      "block_five_result": true,
+      "placement": {
+        "state": "NOT_PROPOSED",
+        "sites": []
+      },
+      "waits_on": [
+        "DISCLOSURE-PRODUCER",
+        "DISCLOSURE-SITES"
+      ],
+      "available": "structure",
+      "registered": "registered",
+      "note": "The counts of kept units are slots of the reported, floor and contrast families."
+    },
+    {
+      "family": "disclosure_attempts",
+      "prefixes": [
+        "attempts"
+      ],
+      "title": "Disclosure: the attempt history of each pack",
+      "plan": [
+        "8.1 attempt history and conditionality",
+        "9 row 9"
+      ],
+      "registration": [
+        "5.7",
+        "7.1",
+        "7.3",
+        "7.6"
+      ],
+      "rung": "disclosure",
+      "block_five_result": true,
+      "placement": {
+        "state": "NOT_PROPOSED",
+        "sites": []
+      },
+      "waits_on": [
+        "DISCLOSURE-PRODUCER",
+        "DISCLOSURE-SITES"
+      ],
+      "available": "structure",
+      "registered": "registered",
+      "note": "One row per attempt of the pack, analysed or not."
+    },
+    {
+      "family": "disclosure_assist",
+      "prefixes": [
+        "assist"
+      ],
+      "title": "Disclosure: every reported cell and contrast with and without battery-assisted members",
+      "plan": [
+        "8.1 battery-assist sensitivity line",
+        "9 row 9"
+      ],
+      "registration": [
+        "6.4",
+        "9.2",
+        "14 Q9"
+      ],
+      "rung": "disclosure, decides nothing",
+      "block_five_result": true,
+      "placement": {
+        "state": "NOT_PROPOSED",
+        "sites": []
+      },
+      "waits_on": [
+        "DISCLOSURE-PRODUCER",
+        "DISCLOSURE-SITES"
+      ],
+      "available": "after_release",
+      "registered": "registered",
+      "note": "The value with assisted members is the reported cell or contrast itself."
+    },
+    {
+      "family": "disclosure_sensitivity",
+      "prefixes": [
+        "sensitivity"
+      ],
+      "title": "Disclosure (proposed): each cell and contrast without the physics-in-span exclusions",
+      "plan": [
+        "8.1 sensitivity line",
+        "9 row 9"
+      ],
+      "registration": [
+        "14 Q6"
+      ],
+      "rung": "disclosure, decides nothing",
+      "block_five_result": true,
+      "placement": {
+        "state": "NOT_PROPOSED",
+        "sites": []
+      },
+      "waits_on": [
+        "DISCLOSURE-PRODUCER",
+        "DISCLOSURE-SITES"
+      ],
+      "available": "after_release",
+      "registered": "proposed",
+      "note": "The seal gate adopts or strikes this line; if it is struck these slots are deleted."
+    },
+    {
+      "family": "disclosure_cross_window",
+      "prefixes": [
+        "cross_window"
+      ],
+      "title": "Disclosure: agreement between the contrast window and each floor window",
+      "plan": [
+        "8.1 cross-window consistency check",
+        "9 row 9"
+      ],
+      "registration": [
+        "1"
+      ],
+      "rung": "disclosure, changes no number",
+      "block_five_result": true,
+      "placement": {
+        "state": "NOT_PROPOSED",
+        "sites": []
+      },
+      "waits_on": [
+        "DISCLOSURE-PRODUCER",
+        "DISCLOSURE-SITES"
+      ],
+      "available": "after_release",
+      "registered": "registered",
+      "note": null
+    },
+    {
+      "family": "disclosure_contrast_checks",
+      "prefixes": [
+        "decision_vs_floor",
+        "leave_one_out"
+      ],
+      "title": "Disclosure: the decision interval against the floor, and the leave-one-quad-out concern",
+      "plan": [
+        "7.2 leave-one-quad-out",
+        "8.1 decision interval against the floor",
+        "8.1 leave-one-quad-out magnitude concern",
+        "9 row 9"
+      ],
+      "registration": [
+        "1"
+      ],
+      "rung": "disclosure",
+      "block_five_result": true,
+      "placement": {
+        "state": "NOT_PROPOSED",
+        "sites": []
+      },
+      "waits_on": [
+        "DISCLOSURE-PRODUCER",
+        "DISCLOSURE-SITES"
+      ],
+      "available": "after_release",
+      "registered": "registered",
+      "note": null
+    },
+    {
+      "family": "disclosure_window",
+      "prefixes": [
+        "window"
+      ],
+      "title": "Disclosure: what the monitor and the harvest recorded about each analysed window",
+      "plan": [
+        "8.1 battery, thermal, contention, clock",
+        "8.1 reference drift",
+        "8.1 battery temperature across each stage",
+        "8.1 monitor cost",
+        "9 row 9"
+      ],
+      "registration": [
+        "0.6",
+        "0.12",
+        "0.17",
+        "5.3",
+        "6.4",
+        "8"
+      ],
+      "rung": "disclosure",
+      "block_five_result": true,
+      "placement": {
+        "state": "NOT_PROPOSED",
+        "sites": []
+      },
+      "waits_on": [
+        "DISCLOSURE-PRODUCER",
+        "DISCLOSURE-SITES"
+      ],
+      "available": "structure",
+      "registered": "registered",
+      "note": "Counts and measured hazard quantities only. The energies that belong to the same disclosures are listed under unbound_lines."
+    },
+    {
+      "family": "disclosure_clock_step",
+      "prefixes": [
+        "clock_step_control"
+      ],
+      "title": "Disclosure: the deliberate clock-step control",
+      "plan": [
+        "8.1 G10",
+        "9 row 9"
+      ],
+      "registration": [
+        "3"
+      ],
+      "rung": "disclosure",
+      "block_five_result": true,
+      "placement": {
+        "state": "NOT_PROPOSED",
+        "sites": []
+      },
+      "waits_on": [
+        "DISCLOSURE-PRODUCER",
+        "DISCLOSURE-SITES"
+      ],
+      "available": "structure",
+      "registered": "registered",
+      "note": "Runs once, at the tail of the first ALPHA window."
+    },
+    {
+      "family": "disclosure_meter",
+      "prefixes": [
+        "meter"
+      ],
+      "title": "Whole-machine cross-check (descriptive, never a claim number)",
+      "plan": [
+        "8.2",
+        "9 row 9"
+      ],
+      "registration": [
+        "5.8",
+        "1"
+      ],
+      "rung": "descriptive, never a claim",
+      "block_five_result": true,
+      "placement": {
+        "state": "NOT_PROPOSED",
+        "sites": []
+      },
+      "waits_on": [
+        "DISCLOSURE-PRODUCER",
+        "DISCLOSURE-SITES"
+      ],
+      "available": "after_release",
+      "registered": "registered",
+      "note": "Describes every collected member, kept or removed. Never refuses a window, removes a member or enters a claim."
+    }
+  ],
+  "slots": [
+    {"id": "identity.prefill_length", "family": "identity", "shape": "count", "unit": "tokens", "artifact": "prefill_selection", "field": "selected_prefill_tokens", "select": {}, "issue": "copy", "site": "CP-X01-length", "basis": "named", "value": null},
+    {"id": "identity.stack", "family": "identity", "shape": "table", "unit": "table", "artifact": "identity_pins", "field": "units", "select": {}, "issue": "copy", "site": "CP-X01-identity", "parts": ["model", "revision", "runtime", "output policy", "measurement boundary"], "basis": "inferred", "value": null},
+    {"id": "reported.small.decode.mean", "family": "reported", "shape": "number", "unit": "J", "artifact": "reported_energy", "field": "cells[].mean_j", "select": {"cell_id": "d117-reported-mean-ph-decode-qwen3-1p7b"}, "issue": "copy", "site": "CP-X05-1p7b-decode", "basis": "named", "value": null},
+    {"id": "reported.small.decode.lower", "family": "reported", "shape": "number", "unit": "J", "artifact": "reported_energy", "field": "cells[].lower_j", "select": {"cell_id": "d117-reported-mean-ph-decode-qwen3-1p7b"}, "issue": "copy", "site": "CP-X05-1p7b-decode", "basis": "named", "value": null},
+    {"id": "reported.small.decode.upper", "family": "reported", "shape": "number", "unit": "J", "artifact": "reported_energy", "field": "cells[].upper_j", "select": {"cell_id": "d117-reported-mean-ph-decode-qwen3-1p7b"}, "issue": "copy", "site": "CP-X05-1p7b-decode", "basis": "named", "value": null},
+    {"id": "reported.small.decode.per_token", "family": "reported", "shape": "number", "unit": "J/token", "artifact": "reported_energy", "field": "cells[].per_token.j_per_token", "select": {"cell_id": "d117-reported-mean-ph-decode-qwen3-1p7b"}, "issue": "copy", "site": "CP-X05-1p7b-decode", "basis": "named", "value": null},
+    {"id": "reported.small.decode.members", "family": "reported", "shape": "count", "unit": "members", "artifact": "reported_energy", "field": "cells[].n_bundles", "select": {"cell_id": "d117-reported-mean-ph-decode-qwen3-1p7b"}, "issue": "copy", "site": "CP-X05-1p7b-decode", "basis": "named", "value": null},
+    {"id": "reported.small.decode.kept_repeats", "family": "reported", "shape": "count", "unit": "units", "artifact": "reported_energy", "field": "cells[].interval.n_r", "select": {"cell_id": "d117-reported-mean-ph-decode-qwen3-1p7b"}, "issue": "copy", "site": "CP-X05-1p7b-decode", "basis": "named", "value": null},
+    {"id": "reported.small.decode.kept_quads", "family": "reported", "shape": "count", "unit": "units", "artifact": "reported_energy", "field": "cells[].interval.n_b", "select": {"cell_id": "d117-reported-mean-ph-decode-qwen3-1p7b"}, "issue": "copy", "site": "CP-X05-1p7b-decode", "basis": "named", "value": null},
+    {"id": "reported.small.prefill.mean", "family": "reported", "shape": "number", "unit": "J", "artifact": "reported_energy", "field": "cells[].mean_j", "select": {"cell_id": "d117-reported-mean-ph-prefill-p2048-qwen3-1p7b"}, "issue": "copy", "site": "CP-X05-1p7b-prefill", "basis": "named", "value": null},
+    {"id": "reported.small.prefill.lower", "family": "reported", "shape": "number", "unit": "J", "artifact": "reported_energy", "field": "cells[].lower_j", "select": {"cell_id": "d117-reported-mean-ph-prefill-p2048-qwen3-1p7b"}, "issue": "copy", "site": "CP-X05-1p7b-prefill", "basis": "named", "value": null},
+    {"id": "reported.small.prefill.upper", "family": "reported", "shape": "number", "unit": "J", "artifact": "reported_energy", "field": "cells[].upper_j", "select": {"cell_id": "d117-reported-mean-ph-prefill-p2048-qwen3-1p7b"}, "issue": "copy", "site": "CP-X05-1p7b-prefill", "basis": "named", "value": null},
+    {"id": "reported.small.prefill.per_token", "family": "reported", "shape": "number", "unit": "J/token", "artifact": "reported_energy", "field": "cells[].per_token.j_per_token", "select": {"cell_id": "d117-reported-mean-ph-prefill-p2048-qwen3-1p7b"}, "issue": "copy", "site": "CP-X05-1p7b-prefill", "basis": "named", "value": null},
+    {"id": "reported.small.prefill.members", "family": "reported", "shape": "count", "unit": "members", "artifact": "reported_energy", "field": "cells[].n_bundles", "select": {"cell_id": "d117-reported-mean-ph-prefill-p2048-qwen3-1p7b"}, "issue": "copy", "site": "CP-X05-1p7b-prefill", "basis": "named", "value": null},
+    {"id": "reported.small.prefill.kept_repeats", "family": "reported", "shape": "count", "unit": "units", "artifact": "reported_energy", "field": "cells[].interval.n_r", "select": {"cell_id": "d117-reported-mean-ph-prefill-p2048-qwen3-1p7b"}, "issue": "copy", "site": "CP-X05-1p7b-prefill", "basis": "named", "value": null},
+    {"id": "reported.small.prefill.kept_quads", "family": "reported", "shape": "count", "unit": "units", "artifact": "reported_energy", "field": "cells[].interval.n_b", "select": {"cell_id": "d117-reported-mean-ph-prefill-p2048-qwen3-1p7b"}, "issue": "copy", "site": "CP-X05-1p7b-prefill", "basis": "named", "value": null},
+    {"id": "reported.large.decode.mean", "family": "reported", "shape": "number", "unit": "J", "artifact": "reported_energy", "field": "cells[].mean_j", "select": {"cell_id": "d117-reported-mean-ph-decode-qwen3-8b"}, "issue": "copy", "site": "CP-X05-8b-decode", "basis": "named", "value": null},
+    {"id": "reported.large.decode.lower", "family": "reported", "shape": "number", "unit": "J", "artifact": "reported_energy", "field": "cells[].lower_j", "select": {"cell_id": "d117-reported-mean-ph-decode-qwen3-8b"}, "issue": "copy", "site": "CP-X05-8b-decode", "basis": "named", "value": null},
+    {"id": "reported.large.decode.upper", "family": "reported", "shape": "number", "unit": "J", "artifact": "reported_energy", "field": "cells[].upper_j", "select": {"cell_id": "d117-reported-mean-ph-decode-qwen3-8b"}, "issue": "copy", "site": "CP-X05-8b-decode", "basis": "named", "value": null},
+    {"id": "reported.large.decode.per_token", "family": "reported", "shape": "number", "unit": "J/token", "artifact": "reported_energy", "field": "cells[].per_token.j_per_token", "select": {"cell_id": "d117-reported-mean-ph-decode-qwen3-8b"}, "issue": "copy", "site": "CP-X05-8b-decode", "basis": "named", "value": null},
+    {"id": "reported.large.decode.members", "family": "reported", "shape": "count", "unit": "members", "artifact": "reported_energy", "field": "cells[].n_bundles", "select": {"cell_id": "d117-reported-mean-ph-decode-qwen3-8b"}, "issue": "copy", "site": "CP-X05-8b-decode", "basis": "named", "value": null},
+    {"id": "reported.large.decode.kept_repeats", "family": "reported", "shape": "count", "unit": "units", "artifact": "reported_energy", "field": "cells[].interval.n_r", "select": {"cell_id": "d117-reported-mean-ph-decode-qwen3-8b"}, "issue": "copy", "site": "CP-X05-8b-decode", "basis": "named", "value": null},
+    {"id": "reported.large.decode.kept_quads", "family": "reported", "shape": "count", "unit": "units", "artifact": "reported_energy", "field": "cells[].interval.n_b", "select": {"cell_id": "d117-reported-mean-ph-decode-qwen3-8b"}, "issue": "copy", "site": "CP-X05-8b-decode", "basis": "named", "value": null},
+    {"id": "reported.large.prefill.mean", "family": "reported", "shape": "number", "unit": "J", "artifact": "reported_energy", "field": "cells[].mean_j", "select": {"cell_id": "d117-reported-mean-ph-prefill-p2048-qwen3-8b"}, "issue": "copy", "site": "CP-X05-8b-prefill", "basis": "named", "value": null},
+    {"id": "reported.large.prefill.lower", "family": "reported", "shape": "number", "unit": "J", "artifact": "reported_energy", "field": "cells[].lower_j", "select": {"cell_id": "d117-reported-mean-ph-prefill-p2048-qwen3-8b"}, "issue": "copy", "site": "CP-X05-8b-prefill", "basis": "named", "value": null},
+    {"id": "reported.large.prefill.upper", "family": "reported", "shape": "number", "unit": "J", "artifact": "reported_energy", "field": "cells[].upper_j", "select": {"cell_id": "d117-reported-mean-ph-prefill-p2048-qwen3-8b"}, "issue": "copy", "site": "CP-X05-8b-prefill", "basis": "named", "value": null},
+    {"id": "reported.large.prefill.per_token", "family": "reported", "shape": "number", "unit": "J/token", "artifact": "reported_energy", "field": "cells[].per_token.j_per_token", "select": {"cell_id": "d117-reported-mean-ph-prefill-p2048-qwen3-8b"}, "issue": "copy", "site": "CP-X05-8b-prefill", "basis": "named", "value": null},
+    {"id": "reported.large.prefill.members", "family": "reported", "shape": "count", "unit": "members", "artifact": "reported_energy", "field": "cells[].n_bundles", "select": {"cell_id": "d117-reported-mean-ph-prefill-p2048-qwen3-8b"}, "issue": "copy", "site": "CP-X05-8b-prefill", "basis": "named", "value": null},
+    {"id": "reported.large.prefill.kept_repeats", "family": "reported", "shape": "count", "unit": "units", "artifact": "reported_energy", "field": "cells[].interval.n_r", "select": {"cell_id": "d117-reported-mean-ph-prefill-p2048-qwen3-8b"}, "issue": "copy", "site": "CP-X05-8b-prefill", "basis": "named", "value": null},
+    {"id": "reported.large.prefill.kept_quads", "family": "reported", "shape": "count", "unit": "units", "artifact": "reported_energy", "field": "cells[].interval.n_b", "select": {"cell_id": "d117-reported-mean-ph-prefill-p2048-qwen3-8b"}, "issue": "copy", "site": "CP-X05-8b-prefill", "basis": "named", "value": null},
+    {"id": "attribution_floor.small.decode", "family": "attribution_floor", "shape": "number", "unit": "J", "artifact": "reported_energy", "field": "cells[].binding.attribution_floor_j", "select": {"cell_id": "d117-reported-mean-ph-decode-qwen3-1p7b"}, "issue": "copy", "site": "CP-X05-1p7b-decode", "basis": "named", "value": null},
+    {"id": "attribution_floor.small.prefill", "family": "attribution_floor", "shape": "number", "unit": "J", "artifact": "reported_energy", "field": "cells[].binding.attribution_floor_j", "select": {"cell_id": "d117-reported-mean-ph-prefill-p2048-qwen3-1p7b"}, "issue": "copy", "site": "CP-X05-1p7b-prefill", "basis": "named", "value": null},
+    {"id": "attribution_floor.large.decode", "family": "attribution_floor", "shape": "number", "unit": "J", "artifact": "reported_energy", "field": "cells[].binding.attribution_floor_j", "select": {"cell_id": "d117-reported-mean-ph-decode-qwen3-8b"}, "issue": "copy", "site": "CP-X05-8b-decode", "basis": "named", "value": null},
+    {"id": "attribution_floor.large.prefill", "family": "attribution_floor", "shape": "number", "unit": "J", "artifact": "reported_energy", "field": "cells[].binding.attribution_floor_j", "select": {"cell_id": "d117-reported-mean-ph-prefill-p2048-qwen3-8b"}, "issue": "copy", "site": "CP-X05-8b-prefill", "basis": "named", "value": null},
+    {"id": "floor.small.decode.gate", "family": "floor", "shape": "number", "unit": "J", "artifact": "detection_floor", "field": "cells[].floor_gate_j", "select": {"condition_family_id": "df-ph-decode-qwen3-1p7b"}, "issue": "copy", "site": "CP-X04-1p7b-decode", "basis": "named", "value": null},
+    {"id": "floor.small.decode.absolute", "family": "floor", "shape": "number", "unit": "J", "artifact": "detection_floor", "field": "cells[].floor_abs_j", "select": {"condition_family_id": "df-ph-decode-qwen3-1p7b"}, "issue": "copy", "site": "CP-X04-1p7b-decode", "basis": "inferred", "value": null},
+    {"id": "floor.small.decode.comparative", "family": "floor", "shape": "number", "unit": "J", "artifact": "detection_floor", "field": "cells[].floor_cmp_j", "select": {"condition_family_id": "df-ph-decode-qwen3-1p7b"}, "issue": "copy", "site": "CP-X04-1p7b-decode", "basis": "inferred", "value": null},
+    {"id": "floor.small.decode.kept_repeats", "family": "floor", "shape": "count", "unit": "units", "artifact": "detection_floor", "field": "cells[].absolute.n", "select": {"condition_family_id": "df-ph-decode-qwen3-1p7b"}, "issue": "copy", "site": "CP-X04-1p7b-decode", "basis": "inferred", "value": null},
+    {"id": "floor.small.decode.kept_quads", "family": "floor", "shape": "count", "unit": "units", "artifact": "detection_floor", "field": "cells[].comparative.n_blocks", "select": {"condition_family_id": "df-ph-decode-qwen3-1p7b"}, "issue": "copy", "site": "CP-X04-1p7b-decode", "basis": "inferred", "value": null},
+    {"id": "floor.small.prefill.gate", "family": "floor", "shape": "number", "unit": "J", "artifact": "detection_floor", "field": "cells[].floor_gate_j", "select": {"condition_family_id": "df-ph-prefill-p2048-qwen3-1p7b"}, "issue": "copy", "site": "CP-X04-1p7b-prefill", "basis": "named", "value": null},
+    {"id": "floor.small.prefill.absolute", "family": "floor", "shape": "number", "unit": "J", "artifact": "detection_floor", "field": "cells[].floor_abs_j", "select": {"condition_family_id": "df-ph-prefill-p2048-qwen3-1p7b"}, "issue": "copy", "site": "CP-X04-1p7b-prefill", "basis": "inferred", "value": null},
+    {"id": "floor.small.prefill.comparative", "family": "floor", "shape": "number", "unit": "J", "artifact": "detection_floor", "field": "cells[].floor_cmp_j", "select": {"condition_family_id": "df-ph-prefill-p2048-qwen3-1p7b"}, "issue": "copy", "site": "CP-X04-1p7b-prefill", "basis": "inferred", "value": null},
+    {"id": "floor.small.prefill.kept_repeats", "family": "floor", "shape": "count", "unit": "units", "artifact": "detection_floor", "field": "cells[].absolute.n", "select": {"condition_family_id": "df-ph-prefill-p2048-qwen3-1p7b"}, "issue": "copy", "site": "CP-X04-1p7b-prefill", "basis": "inferred", "value": null},
+    {"id": "floor.small.prefill.kept_quads", "family": "floor", "shape": "count", "unit": "units", "artifact": "detection_floor", "field": "cells[].comparative.n_blocks", "select": {"condition_family_id": "df-ph-prefill-p2048-qwen3-1p7b"}, "issue": "copy", "site": "CP-X04-1p7b-prefill", "basis": "inferred", "value": null},
+    {"id": "floor.large.decode.gate", "family": "floor", "shape": "number", "unit": "J", "artifact": "detection_floor", "field": "cells[].floor_gate_j", "select": {"condition_family_id": "df-ph-decode-qwen3-8b"}, "issue": "copy", "site": "CP-X04-8b-decode", "basis": "named", "value": null},
+    {"id": "floor.large.decode.absolute", "family": "floor", "shape": "number", "unit": "J", "artifact": "detection_floor", "field": "cells[].floor_abs_j", "select": {"condition_family_id": "df-ph-decode-qwen3-8b"}, "issue": "copy", "site": "CP-X04-8b-decode", "basis": "inferred", "value": null},
+    {"id": "floor.large.decode.comparative", "family": "floor", "shape": "number", "unit": "J", "artifact": "detection_floor", "field": "cells[].floor_cmp_j", "select": {"condition_family_id": "df-ph-decode-qwen3-8b"}, "issue": "copy", "site": "CP-X04-8b-decode", "basis": "inferred", "value": null},
+    {"id": "floor.large.decode.kept_repeats", "family": "floor", "shape": "count", "unit": "units", "artifact": "detection_floor", "field": "cells[].absolute.n", "select": {"condition_family_id": "df-ph-decode-qwen3-8b"}, "issue": "copy", "site": "CP-X04-8b-decode", "basis": "inferred", "value": null},
+    {"id": "floor.large.decode.kept_quads", "family": "floor", "shape": "count", "unit": "units", "artifact": "detection_floor", "field": "cells[].comparative.n_blocks", "select": {"condition_family_id": "df-ph-decode-qwen3-8b"}, "issue": "copy", "site": "CP-X04-8b-decode", "basis": "inferred", "value": null},
+    {"id": "floor.large.prefill.gate", "family": "floor", "shape": "number", "unit": "J", "artifact": "detection_floor", "field": "cells[].floor_gate_j", "select": {"condition_family_id": "df-ph-prefill-p2048-qwen3-8b"}, "issue": "copy", "site": "CP-X04-8b-prefill", "basis": "named", "value": null},
+    {"id": "floor.large.prefill.absolute", "family": "floor", "shape": "number", "unit": "J", "artifact": "detection_floor", "field": "cells[].floor_abs_j", "select": {"condition_family_id": "df-ph-prefill-p2048-qwen3-8b"}, "issue": "copy", "site": "CP-X04-8b-prefill", "basis": "inferred", "value": null},
+    {"id": "floor.large.prefill.comparative", "family": "floor", "shape": "number", "unit": "J", "artifact": "detection_floor", "field": "cells[].floor_cmp_j", "select": {"condition_family_id": "df-ph-prefill-p2048-qwen3-8b"}, "issue": "copy", "site": "CP-X04-8b-prefill", "basis": "inferred", "value": null},
+    {"id": "floor.large.prefill.kept_repeats", "family": "floor", "shape": "count", "unit": "units", "artifact": "detection_floor", "field": "cells[].absolute.n", "select": {"condition_family_id": "df-ph-prefill-p2048-qwen3-8b"}, "issue": "copy", "site": "CP-X04-8b-prefill", "basis": "inferred", "value": null},
+    {"id": "floor.large.prefill.kept_quads", "family": "floor", "shape": "count", "unit": "units", "artifact": "detection_floor", "field": "cells[].comparative.n_blocks", "select": {"condition_family_id": "df-ph-prefill-p2048-qwen3-8b"}, "issue": "copy", "site": "CP-X04-8b-prefill", "basis": "inferred", "value": null},
+    {"id": "dominance.small.decode.absolute.ratio", "family": "dominance", "shape": "number", "unit": "ratio", "artifact": "dominance_closeout", "field": "independent_ratios[].ratio", "select": {"condition_family_id": "df-ph-decode-qwen3-1p7b", "component": "absolute"}, "issue": "copy", "site": "CP-X02-ratios", "basis": "inferred", "value": null},
+    {"id": "dominance.small.decode.absolute.widened", "family": "dominance", "shape": "number", "unit": "J", "artifact": "dominance_closeout", "field": "independent_ratios[].corner_widened_unguarded_floor_j", "select": {"condition_family_id": "df-ph-decode-qwen3-1p7b", "component": "absolute"}, "issue": "copy", "site": "CP-X02-ratios", "basis": "named", "value": null},
+    {"id": "dominance.small.decode.absolute.point", "family": "dominance", "shape": "number", "unit": "J", "artifact": "dominance_closeout", "field": "independent_ratios[].point_unguarded_floor_j", "select": {"condition_family_id": "df-ph-decode-qwen3-1p7b", "component": "absolute"}, "issue": "copy", "site": "CP-X02-ratios", "basis": "named", "value": null},
+    {"id": "dominance.small.decode.absolute.passes", "family": "dominance", "shape": "flag", "unit": "flag", "artifact": "dominance_closeout", "field": "independent_ratios[].passes", "select": {"condition_family_id": "df-ph-decode-qwen3-1p7b", "component": "absolute"}, "issue": "copy", "site": "CP-X02-ratios", "basis": "inferred", "value": null},
+    {"id": "dominance.small.decode.comparative.ratio", "family": "dominance", "shape": "number", "unit": "ratio", "artifact": "dominance_closeout", "field": "independent_ratios[].ratio", "select": {"condition_family_id": "df-ph-decode-qwen3-1p7b", "component": "comparative"}, "issue": "copy", "site": "CP-X02-ratios", "basis": "inferred", "value": null},
+    {"id": "dominance.small.decode.comparative.widened", "family": "dominance", "shape": "number", "unit": "J", "artifact": "dominance_closeout", "field": "independent_ratios[].corner_widened_unguarded_floor_j", "select": {"condition_family_id": "df-ph-decode-qwen3-1p7b", "component": "comparative"}, "issue": "copy", "site": "CP-X02-ratios", "basis": "named", "value": null},
+    {"id": "dominance.small.decode.comparative.point", "family": "dominance", "shape": "number", "unit": "J", "artifact": "dominance_closeout", "field": "independent_ratios[].point_unguarded_floor_j", "select": {"condition_family_id": "df-ph-decode-qwen3-1p7b", "component": "comparative"}, "issue": "copy", "site": "CP-X02-ratios", "basis": "named", "value": null},
+    {"id": "dominance.small.decode.comparative.passes", "family": "dominance", "shape": "flag", "unit": "flag", "artifact": "dominance_closeout", "field": "independent_ratios[].passes", "select": {"condition_family_id": "df-ph-decode-qwen3-1p7b", "component": "comparative"}, "issue": "copy", "site": "CP-X02-ratios", "basis": "inferred", "value": null},
+    {"id": "dominance.small.prefill.absolute.ratio", "family": "dominance", "shape": "number", "unit": "ratio", "artifact": "dominance_closeout", "field": "independent_ratios[].ratio", "select": {"condition_family_id": "df-ph-prefill-p2048-qwen3-1p7b", "component": "absolute"}, "issue": "copy", "site": "CP-X02-ratios", "basis": "inferred", "value": null},
+    {"id": "dominance.small.prefill.absolute.widened", "family": "dominance", "shape": "number", "unit": "J", "artifact": "dominance_closeout", "field": "independent_ratios[].corner_widened_unguarded_floor_j", "select": {"condition_family_id": "df-ph-prefill-p2048-qwen3-1p7b", "component": "absolute"}, "issue": "copy", "site": "CP-X02-ratios", "basis": "named", "value": null},
+    {"id": "dominance.small.prefill.absolute.point", "family": "dominance", "shape": "number", "unit": "J", "artifact": "dominance_closeout", "field": "independent_ratios[].point_unguarded_floor_j", "select": {"condition_family_id": "df-ph-prefill-p2048-qwen3-1p7b", "component": "absolute"}, "issue": "copy", "site": "CP-X02-ratios", "basis": "named", "value": null},
+    {"id": "dominance.small.prefill.absolute.passes", "family": "dominance", "shape": "flag", "unit": "flag", "artifact": "dominance_closeout", "field": "independent_ratios[].passes", "select": {"condition_family_id": "df-ph-prefill-p2048-qwen3-1p7b", "component": "absolute"}, "issue": "copy", "site": "CP-X02-ratios", "basis": "inferred", "value": null},
+    {"id": "dominance.small.prefill.comparative.ratio", "family": "dominance", "shape": "number", "unit": "ratio", "artifact": "dominance_closeout", "field": "independent_ratios[].ratio", "select": {"condition_family_id": "df-ph-prefill-p2048-qwen3-1p7b", "component": "comparative"}, "issue": "copy", "site": "CP-X02-ratios", "basis": "inferred", "value": null},
+    {"id": "dominance.small.prefill.comparative.widened", "family": "dominance", "shape": "number", "unit": "J", "artifact": "dominance_closeout", "field": "independent_ratios[].corner_widened_unguarded_floor_j", "select": {"condition_family_id": "df-ph-prefill-p2048-qwen3-1p7b", "component": "comparative"}, "issue": "copy", "site": "CP-X02-ratios", "basis": "named", "value": null},
+    {"id": "dominance.small.prefill.comparative.point", "family": "dominance", "shape": "number", "unit": "J", "artifact": "dominance_closeout", "field": "independent_ratios[].point_unguarded_floor_j", "select": {"condition_family_id": "df-ph-prefill-p2048-qwen3-1p7b", "component": "comparative"}, "issue": "copy", "site": "CP-X02-ratios", "basis": "named", "value": null},
+    {"id": "dominance.small.prefill.comparative.passes", "family": "dominance", "shape": "flag", "unit": "flag", "artifact": "dominance_closeout", "field": "independent_ratios[].passes", "select": {"condition_family_id": "df-ph-prefill-p2048-qwen3-1p7b", "component": "comparative"}, "issue": "copy", "site": "CP-X02-ratios", "basis": "inferred", "value": null},
+    {"id": "dominance.large.decode.absolute.ratio", "family": "dominance", "shape": "number", "unit": "ratio", "artifact": "dominance_closeout", "field": "independent_ratios[].ratio", "select": {"condition_family_id": "df-ph-decode-qwen3-8b", "component": "absolute"}, "issue": "copy", "site": "CP-X02-ratios", "basis": "inferred", "value": null},
+    {"id": "dominance.large.decode.absolute.widened", "family": "dominance", "shape": "number", "unit": "J", "artifact": "dominance_closeout", "field": "independent_ratios[].corner_widened_unguarded_floor_j", "select": {"condition_family_id": "df-ph-decode-qwen3-8b", "component": "absolute"}, "issue": "copy", "site": "CP-X02-ratios", "basis": "named", "value": null},
+    {"id": "dominance.large.decode.absolute.point", "family": "dominance", "shape": "number", "unit": "J", "artifact": "dominance_closeout", "field": "independent_ratios[].point_unguarded_floor_j", "select": {"condition_family_id": "df-ph-decode-qwen3-8b", "component": "absolute"}, "issue": "copy", "site": "CP-X02-ratios", "basis": "named", "value": null},
+    {"id": "dominance.large.decode.absolute.passes", "family": "dominance", "shape": "flag", "unit": "flag", "artifact": "dominance_closeout", "field": "independent_ratios[].passes", "select": {"condition_family_id": "df-ph-decode-qwen3-8b", "component": "absolute"}, "issue": "copy", "site": "CP-X02-ratios", "basis": "inferred", "value": null},
+    {"id": "dominance.large.decode.comparative.ratio", "family": "dominance", "shape": "number", "unit": "ratio", "artifact": "dominance_closeout", "field": "independent_ratios[].ratio", "select": {"condition_family_id": "df-ph-decode-qwen3-8b", "component": "comparative"}, "issue": "copy", "site": "CP-X02-ratios", "basis": "inferred", "value": null},
+    {"id": "dominance.large.decode.comparative.widened", "family": "dominance", "shape": "number", "unit": "J", "artifact": "dominance_closeout", "field": "independent_ratios[].corner_widened_unguarded_floor_j", "select": {"condition_family_id": "df-ph-decode-qwen3-8b", "component": "comparative"}, "issue": "copy", "site": "CP-X02-ratios", "basis": "named", "value": null},
+    {"id": "dominance.large.decode.comparative.point", "family": "dominance", "shape": "number", "unit": "J", "artifact": "dominance_closeout", "field": "independent_ratios[].point_unguarded_floor_j", "select": {"condition_family_id": "df-ph-decode-qwen3-8b", "component": "comparative"}, "issue": "copy", "site": "CP-X02-ratios", "basis": "named", "value": null},
+    {"id": "dominance.large.decode.comparative.passes", "family": "dominance", "shape": "flag", "unit": "flag", "artifact": "dominance_closeout", "field": "independent_ratios[].passes", "select": {"condition_family_id": "df-ph-decode-qwen3-8b", "component": "comparative"}, "issue": "copy", "site": "CP-X02-ratios", "basis": "inferred", "value": null},
+    {"id": "dominance.large.prefill.absolute.ratio", "family": "dominance", "shape": "number", "unit": "ratio", "artifact": "dominance_closeout", "field": "independent_ratios[].ratio", "select": {"condition_family_id": "df-ph-prefill-p2048-qwen3-8b", "component": "absolute"}, "issue": "copy", "site": "CP-X02-ratios", "basis": "inferred", "value": null},
+    {"id": "dominance.large.prefill.absolute.widened", "family": "dominance", "shape": "number", "unit": "J", "artifact": "dominance_closeout", "field": "independent_ratios[].corner_widened_unguarded_floor_j", "select": {"condition_family_id": "df-ph-prefill-p2048-qwen3-8b", "component": "absolute"}, "issue": "copy", "site": "CP-X02-ratios", "basis": "named", "value": null},
+    {"id": "dominance.large.prefill.absolute.point", "family": "dominance", "shape": "number", "unit": "J", "artifact": "dominance_closeout", "field": "independent_ratios[].point_unguarded_floor_j", "select": {"condition_family_id": "df-ph-prefill-p2048-qwen3-8b", "component": "absolute"}, "issue": "copy", "site": "CP-X02-ratios", "basis": "named", "value": null},
+    {"id": "dominance.large.prefill.absolute.passes", "family": "dominance", "shape": "flag", "unit": "flag", "artifact": "dominance_closeout", "field": "independent_ratios[].passes", "select": {"condition_family_id": "df-ph-prefill-p2048-qwen3-8b", "component": "absolute"}, "issue": "copy", "site": "CP-X02-ratios", "basis": "inferred", "value": null},
+    {"id": "dominance.large.prefill.comparative.ratio", "family": "dominance", "shape": "number", "unit": "ratio", "artifact": "dominance_closeout", "field": "independent_ratios[].ratio", "select": {"condition_family_id": "df-ph-prefill-p2048-qwen3-8b", "component": "comparative"}, "issue": "copy", "site": "CP-X02-ratios", "basis": "inferred", "value": null},
+    {"id": "dominance.large.prefill.comparative.widened", "family": "dominance", "shape": "number", "unit": "J", "artifact": "dominance_closeout", "field": "independent_ratios[].corner_widened_unguarded_floor_j", "select": {"condition_family_id": "df-ph-prefill-p2048-qwen3-8b", "component": "comparative"}, "issue": "copy", "site": "CP-X02-ratios", "basis": "named", "value": null},
+    {"id": "dominance.large.prefill.comparative.point", "family": "dominance", "shape": "number", "unit": "J", "artifact": "dominance_closeout", "field": "independent_ratios[].point_unguarded_floor_j", "select": {"condition_family_id": "df-ph-prefill-p2048-qwen3-8b", "component": "comparative"}, "issue": "copy", "site": "CP-X02-ratios", "basis": "named", "value": null},
+    {"id": "dominance.large.prefill.comparative.passes", "family": "dominance", "shape": "flag", "unit": "flag", "artifact": "dominance_closeout", "field": "independent_ratios[].passes", "select": {"condition_family_id": "df-ph-prefill-p2048-qwen3-8b", "component": "comparative"}, "issue": "copy", "site": "CP-X02-ratios", "basis": "inferred", "value": null},
+    {"id": "dominance.small.decode.shared_sign.ratio", "family": "dominance", "shape": "number", "unit": "ratio", "artifact": "dominance_closeout", "field": "comparative_common_mode_ratios[].ratio", "select": {"condition_family_id": "df-ph-decode-qwen3-1p7b", "component": "comparative"}, "issue": "copy", "site": "CP-X02-ratios", "basis": "inferred", "value": null},
+    {"id": "dominance.small.decode.shared_sign.widened", "family": "dominance", "shape": "number", "unit": "J", "artifact": "dominance_closeout", "field": "comparative_common_mode_ratios[].common_mode_corner_widened_unguarded_floor_j", "select": {"condition_family_id": "df-ph-decode-qwen3-1p7b", "component": "comparative"}, "issue": "copy", "site": "CP-X02-ratios", "basis": "inferred", "value": null},
+    {"id": "dominance.small.decode.shared_sign.point", "family": "dominance", "shape": "number", "unit": "J", "artifact": "dominance_closeout", "field": "comparative_common_mode_ratios[].point_unguarded_floor_j", "select": {"condition_family_id": "df-ph-decode-qwen3-1p7b", "component": "comparative"}, "issue": "copy", "site": "CP-X02-ratios", "basis": "named", "value": null},
+    {"id": "dominance.small.decode.shared_sign.passes", "family": "dominance", "shape": "flag", "unit": "flag", "artifact": "dominance_closeout", "field": "comparative_common_mode_ratios[].passes", "select": {"condition_family_id": "df-ph-decode-qwen3-1p7b", "component": "comparative"}, "issue": "copy", "site": "CP-X02-ratios", "basis": "inferred", "value": null},
+    {"id": "dominance.small.prefill.shared_sign.ratio", "family": "dominance", "shape": "number", "unit": "ratio", "artifact": "dominance_closeout", "field": "comparative_common_mode_ratios[].ratio", "select": {"condition_family_id": "df-ph-prefill-p2048-qwen3-1p7b", "component": "comparative"}, "issue": "copy", "site": "CP-X02-ratios", "basis": "inferred", "value": null},
+    {"id": "dominance.small.prefill.shared_sign.widened", "family": "dominance", "shape": "number", "unit": "J", "artifact": "dominance_closeout", "field": "comparative_common_mode_ratios[].common_mode_corner_widened_unguarded_floor_j", "select": {"condition_family_id": "df-ph-prefill-p2048-qwen3-1p7b", "component": "comparative"}, "issue": "copy", "site": "CP-X02-ratios", "basis": "inferred", "value": null},
+    {"id": "dominance.small.prefill.shared_sign.point", "family": "dominance", "shape": "number", "unit": "J", "artifact": "dominance_closeout", "field": "comparative_common_mode_ratios[].point_unguarded_floor_j", "select": {"condition_family_id": "df-ph-prefill-p2048-qwen3-1p7b", "component": "comparative"}, "issue": "copy", "site": "CP-X02-ratios", "basis": "named", "value": null},
+    {"id": "dominance.small.prefill.shared_sign.passes", "family": "dominance", "shape": "flag", "unit": "flag", "artifact": "dominance_closeout", "field": "comparative_common_mode_ratios[].passes", "select": {"condition_family_id": "df-ph-prefill-p2048-qwen3-1p7b", "component": "comparative"}, "issue": "copy", "site": "CP-X02-ratios", "basis": "inferred", "value": null},
+    {"id": "dominance.large.decode.shared_sign.ratio", "family": "dominance", "shape": "number", "unit": "ratio", "artifact": "dominance_closeout", "field": "comparative_common_mode_ratios[].ratio", "select": {"condition_family_id": "df-ph-decode-qwen3-8b", "component": "comparative"}, "issue": "copy", "site": "CP-X02-ratios", "basis": "inferred", "value": null},
+    {"id": "dominance.large.decode.shared_sign.widened", "family": "dominance", "shape": "number", "unit": "J", "artifact": "dominance_closeout", "field": "comparative_common_mode_ratios[].common_mode_corner_widened_unguarded_floor_j", "select": {"condition_family_id": "df-ph-decode-qwen3-8b", "component": "comparative"}, "issue": "copy", "site": "CP-X02-ratios", "basis": "inferred", "value": null},
+    {"id": "dominance.large.decode.shared_sign.point", "family": "dominance", "shape": "number", "unit": "J", "artifact": "dominance_closeout", "field": "comparative_common_mode_ratios[].point_unguarded_floor_j", "select": {"condition_family_id": "df-ph-decode-qwen3-8b", "component": "comparative"}, "issue": "copy", "site": "CP-X02-ratios", "basis": "named", "value": null},
+    {"id": "dominance.large.decode.shared_sign.passes", "family": "dominance", "shape": "flag", "unit": "flag", "artifact": "dominance_closeout", "field": "comparative_common_mode_ratios[].passes", "select": {"condition_family_id": "df-ph-decode-qwen3-8b", "component": "comparative"}, "issue": "copy", "site": "CP-X02-ratios", "basis": "inferred", "value": null},
+    {"id": "dominance.large.prefill.shared_sign.ratio", "family": "dominance", "shape": "number", "unit": "ratio", "artifact": "dominance_closeout", "field": "comparative_common_mode_ratios[].ratio", "select": {"condition_family_id": "df-ph-prefill-p2048-qwen3-8b", "component": "comparative"}, "issue": "copy", "site": "CP-X02-ratios", "basis": "inferred", "value": null},
+    {"id": "dominance.large.prefill.shared_sign.widened", "family": "dominance", "shape": "number", "unit": "J", "artifact": "dominance_closeout", "field": "comparative_common_mode_ratios[].common_mode_corner_widened_unguarded_floor_j", "select": {"condition_family_id": "df-ph-prefill-p2048-qwen3-8b", "component": "comparative"}, "issue": "copy", "site": "CP-X02-ratios", "basis": "inferred", "value": null},
+    {"id": "dominance.large.prefill.shared_sign.point", "family": "dominance", "shape": "number", "unit": "J", "artifact": "dominance_closeout", "field": "comparative_common_mode_ratios[].point_unguarded_floor_j", "select": {"condition_family_id": "df-ph-prefill-p2048-qwen3-8b", "component": "comparative"}, "issue": "copy", "site": "CP-X02-ratios", "basis": "named", "value": null},
+    {"id": "dominance.large.prefill.shared_sign.passes", "family": "dominance", "shape": "flag", "unit": "flag", "artifact": "dominance_closeout", "field": "comparative_common_mode_ratios[].passes", "select": {"condition_family_id": "df-ph-prefill-p2048-qwen3-8b", "component": "comparative"}, "issue": "copy", "site": "CP-X02-ratios", "basis": "inferred", "value": null},
+    {"id": "dominance.branch", "family": "dominance", "shape": "label", "unit": "label", "artifact": "dominance_closeout", "field": "branch", "select": {}, "issue": "copy", "site": "CP-X02-ratios", "basis": "named", "value": null},
+    {"id": "dominance.all_pass", "family": "dominance", "shape": "flag", "unit": "flag", "artifact": "dominance_closeout", "field": "all_independent_pass", "select": {}, "issue": "copy", "site": "CP-X02-ratios", "basis": "inferred", "value": null},
+    {"id": "dominance.all_shared_sign_pass", "family": "dominance", "shape": "flag", "unit": "flag", "artifact": "dominance_closeout", "field": "all_required_common_mode_pass", "select": {}, "issue": "copy", "site": "CP-X02-ratios", "basis": "inferred", "value": null},
+    {"id": "dominance.sentence_licensed", "family": "dominance", "shape": "flag", "unit": "flag", "artifact": "dominance_closeout", "field": "dominance_sentence_licensed", "select": {}, "issue": "copy", "site": "CP-X02-abstract", "basis": "inferred", "value": null},
+    {"id": "dominance.subtitle_licensed", "family": "dominance", "shape": "flag", "unit": "flag", "artifact": "dominance_closeout", "field": "subtitle_licensed", "select": {}, "issue": "copy", "site": "CP-X02-headline", "basis": "inferred", "value": null},
+    {"id": "contrast.decode.estimate", "family": "contrast", "shape": "number", "unit": "J", "artifact": "claim_verdicts", "field": "contrasts[].estimator.estimate", "select": {"contrast_id": "ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b"}, "issue": "copy", "site": "CP-X06-table", "basis": "named", "value": null},
+    {"id": "contrast.decode.kept_quads", "family": "contrast", "shape": "count", "unit": "units", "artifact": "claim_verdicts", "field": "contrasts[].estimator.n", "select": {"contrast_id": "ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b"}, "issue": "copy", "site": "CP-X06-table", "basis": "named", "value": null},
+    {"id": "contrast.decode.standard_deviation", "family": "contrast", "shape": "number", "unit": "J", "artifact": "claim_verdicts", "field": "contrasts[].estimator.s_d", "select": {"contrast_id": "ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b"}, "issue": "copy", "site": "CP-X06-table", "basis": "named", "value": null},
+    {"id": "contrast.decode.standard_error", "family": "contrast", "shape": "number", "unit": "J", "artifact": "claim_verdicts", "field": "contrasts[].estimator.SE_total", "select": {"contrast_id": "ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b"}, "issue": "copy", "site": "CP-X06-table", "basis": "named", "value": null},
+    {"id": "contrast.decode.metrology_lower", "family": "contrast", "shape": "number", "unit": "J", "artifact": "claim_verdicts", "field": "contrasts[].estimator.metrology_aware_CI95.lower", "select": {"contrast_id": "ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b"}, "issue": "copy", "site": "CP-X06-table", "basis": "named", "value": null},
+    {"id": "contrast.decode.metrology_upper", "family": "contrast", "shape": "number", "unit": "J", "artifact": "claim_verdicts", "field": "contrasts[].estimator.metrology_aware_CI95.upper", "select": {"contrast_id": "ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b"}, "issue": "copy", "site": "CP-X06-table", "basis": "named", "value": null},
+    {"id": "contrast.decode.bound_total", "family": "contrast", "shape": "number", "unit": "J", "artifact": "claim_verdicts", "field": "contrasts[].deterministic_bounds.total", "select": {"contrast_id": "ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b"}, "issue": "copy", "site": "CP-X06-table", "basis": "inferred", "value": null},
+    {"id": "contrast.decode.decision_lower", "family": "contrast", "shape": "number", "unit": "J", "artifact": "claim_verdicts", "field": "contrasts[].deterministic_bounds.decision_interval.lower", "select": {"contrast_id": "ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b"}, "issue": "copy", "site": "CP-X06-table", "basis": "named", "value": null},
+    {"id": "contrast.decode.decision_upper", "family": "contrast", "shape": "number", "unit": "J", "artifact": "claim_verdicts", "field": "contrasts[].deterministic_bounds.decision_interval.upper", "select": {"contrast_id": "ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b"}, "issue": "copy", "site": "CP-X06-table", "basis": "named", "value": null},
+    {"id": "contrast.decode.floor", "family": "contrast", "shape": "number", "unit": "J", "artifact": "claim_verdicts", "field": "contrasts[].floor.active_floor_j", "select": {"contrast_id": "ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b"}, "issue": "copy", "site": "CP-X06-table", "basis": "named", "value": null},
+    {"id": "contrast.decode.raw_p", "family": "contrast", "shape": "number", "unit": "probability", "artifact": "claim_verdicts", "field": "contrasts[].multiplicity.raw_p", "select": {"contrast_id": "ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b"}, "issue": "copy", "site": "CP-X06-table", "basis": "named", "value": null},
+    {"id": "contrast.decode.adjusted_p", "family": "contrast", "shape": "number", "unit": "probability", "artifact": "claim_verdicts", "field": "contrasts[].multiplicity.adjusted_p", "select": {"contrast_id": "ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b"}, "issue": "copy", "site": "CP-X06-table", "basis": "named", "value": null},
+    {"id": "contrast.decode.rejected", "family": "contrast", "shape": "flag", "unit": "flag", "artifact": "claim_verdicts", "field": "contrasts[].multiplicity.rejected", "select": {"contrast_id": "ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b"}, "issue": "copy", "site": "CP-X06-table", "basis": "named", "value": null},
+    {"id": "contrast.decode.outcome", "family": "contrast", "shape": "label", "unit": "label", "artifact": "claim_verdicts", "field": "contrasts[].claim_evaluation.outcome", "select": {"contrast_id": "ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b"}, "issue": "copy", "site": "CP-X06-table", "basis": "named", "value": null},
+    {"id": "contrast.decode.direction", "family": "contrast", "shape": "label", "unit": "label", "artifact": "claim_verdicts", "field": "contrasts[].claim_evaluation.direction", "select": {"contrast_id": "ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b"}, "issue": "copy", "site": "CP-X06-table", "basis": "named", "value": null},
+    {"id": "contrast.decode.ceiling", "family": "contrast", "shape": "label", "unit": "label", "artifact": "claim_verdicts", "field": "contrasts[].claim_evaluation.claim_level_ceiling", "select": {"contrast_id": "ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b"}, "issue": "copy", "site": "CP-X06-table", "basis": "named", "value": null},
+    {"id": "contrast.decode.ready", "family": "contrast", "shape": "flag", "unit": "flag", "artifact": "claim_verdicts", "field": "contrasts[].claim_evaluation.claim_ready_for_l2_l3", "select": {"contrast_id": "ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b"}, "issue": "copy", "site": "CP-X06-table", "basis": "named", "value": null},
+    {"id": "contrast.prefill.estimate", "family": "contrast", "shape": "number", "unit": "J", "artifact": "claim_verdicts", "field": "contrasts[].estimator.estimate", "select": {"contrast_id": "ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b"}, "issue": "copy", "site": "CP-X07-table", "basis": "named", "value": null},
+    {"id": "contrast.prefill.kept_quads", "family": "contrast", "shape": "count", "unit": "units", "artifact": "claim_verdicts", "field": "contrasts[].estimator.n", "select": {"contrast_id": "ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b"}, "issue": "copy", "site": "CP-X07-table", "basis": "named", "value": null},
+    {"id": "contrast.prefill.standard_deviation", "family": "contrast", "shape": "number", "unit": "J", "artifact": "claim_verdicts", "field": "contrasts[].estimator.s_d", "select": {"contrast_id": "ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b"}, "issue": "copy", "site": "CP-X07-table", "basis": "named", "value": null},
+    {"id": "contrast.prefill.standard_error", "family": "contrast", "shape": "number", "unit": "J", "artifact": "claim_verdicts", "field": "contrasts[].estimator.SE_total", "select": {"contrast_id": "ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b"}, "issue": "copy", "site": "CP-X07-table", "basis": "named", "value": null},
+    {"id": "contrast.prefill.metrology_lower", "family": "contrast", "shape": "number", "unit": "J", "artifact": "claim_verdicts", "field": "contrasts[].estimator.metrology_aware_CI95.lower", "select": {"contrast_id": "ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b"}, "issue": "copy", "site": "CP-X07-table", "basis": "named", "value": null},
+    {"id": "contrast.prefill.metrology_upper", "family": "contrast", "shape": "number", "unit": "J", "artifact": "claim_verdicts", "field": "contrasts[].estimator.metrology_aware_CI95.upper", "select": {"contrast_id": "ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b"}, "issue": "copy", "site": "CP-X07-table", "basis": "named", "value": null},
+    {"id": "contrast.prefill.bound_total", "family": "contrast", "shape": "number", "unit": "J", "artifact": "claim_verdicts", "field": "contrasts[].deterministic_bounds.total", "select": {"contrast_id": "ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b"}, "issue": "copy", "site": "CP-X07-table", "basis": "inferred", "value": null},
+    {"id": "contrast.prefill.decision_lower", "family": "contrast", "shape": "number", "unit": "J", "artifact": "claim_verdicts", "field": "contrasts[].deterministic_bounds.decision_interval.lower", "select": {"contrast_id": "ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b"}, "issue": "copy", "site": "CP-X07-table", "basis": "named", "value": null},
+    {"id": "contrast.prefill.decision_upper", "family": "contrast", "shape": "number", "unit": "J", "artifact": "claim_verdicts", "field": "contrasts[].deterministic_bounds.decision_interval.upper", "select": {"contrast_id": "ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b"}, "issue": "copy", "site": "CP-X07-table", "basis": "named", "value": null},
+    {"id": "contrast.prefill.floor", "family": "contrast", "shape": "number", "unit": "J", "artifact": "claim_verdicts", "field": "contrasts[].floor.active_floor_j", "select": {"contrast_id": "ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b"}, "issue": "copy", "site": "CP-X07-table", "basis": "named", "value": null},
+    {"id": "contrast.prefill.raw_p", "family": "contrast", "shape": "number", "unit": "probability", "artifact": "claim_verdicts", "field": "contrasts[].multiplicity.raw_p", "select": {"contrast_id": "ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b"}, "issue": "copy", "site": "CP-X07-table", "basis": "named", "value": null},
+    {"id": "contrast.prefill.adjusted_p", "family": "contrast", "shape": "number", "unit": "probability", "artifact": "claim_verdicts", "field": "contrasts[].multiplicity.adjusted_p", "select": {"contrast_id": "ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b"}, "issue": "copy", "site": "CP-X07-table", "basis": "named", "value": null},
+    {"id": "contrast.prefill.rejected", "family": "contrast", "shape": "flag", "unit": "flag", "artifact": "claim_verdicts", "field": "contrasts[].multiplicity.rejected", "select": {"contrast_id": "ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b"}, "issue": "copy", "site": "CP-X07-table", "basis": "named", "value": null},
+    {"id": "contrast.prefill.outcome", "family": "contrast", "shape": "label", "unit": "label", "artifact": "claim_verdicts", "field": "contrasts[].claim_evaluation.outcome", "select": {"contrast_id": "ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b"}, "issue": "copy", "site": "CP-X07-table", "basis": "named", "value": null},
+    {"id": "contrast.prefill.direction", "family": "contrast", "shape": "label", "unit": "label", "artifact": "claim_verdicts", "field": "contrasts[].claim_evaluation.direction", "select": {"contrast_id": "ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b"}, "issue": "copy", "site": "CP-X07-table", "basis": "named", "value": null},
+    {"id": "contrast.prefill.ceiling", "family": "contrast", "shape": "label", "unit": "label", "artifact": "claim_verdicts", "field": "contrasts[].claim_evaluation.claim_level_ceiling", "select": {"contrast_id": "ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b"}, "issue": "copy", "site": "CP-X07-table", "basis": "named", "value": null},
+    {"id": "contrast.prefill.ready", "family": "contrast", "shape": "flag", "unit": "flag", "artifact": "claim_verdicts", "field": "contrasts[].claim_evaluation.claim_ready_for_l2_l3", "select": {"contrast_id": "ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b"}, "issue": "copy", "site": "CP-X07-table", "basis": "named", "value": null},
+    {"id": "ratio.decode.estimate", "family": "descriptive", "shape": "number", "unit": "ratio", "artifact": "exclusions", "field": "cells[].kept_units", "select": {"pack": "gamma", "cell_id": "ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b"}, "issue": "derive", "rule": "analysis plan 7.3 item 1: the ratio of phase energies, large model to small, over the kept quads", "basis": "inferred", "value": null},
+    {"id": "ratio.decode.lower", "family": "descriptive", "shape": "number", "unit": "ratio", "artifact": "exclusions", "field": "cells[].kept_units", "select": {"pack": "gamma", "cell_id": "ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b"}, "issue": "derive", "rule": "analysis plan 7.3 item 1: the ratio of phase energies, large model to small, over the kept quads", "basis": "inferred", "value": null},
+    {"id": "ratio.decode.upper", "family": "descriptive", "shape": "number", "unit": "ratio", "artifact": "exclusions", "field": "cells[].kept_units", "select": {"pack": "gamma", "cell_id": "ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b"}, "issue": "derive", "rule": "analysis plan 7.3 item 1: the ratio of phase energies, large model to small, over the kept quads", "basis": "inferred", "value": null},
+    {"id": "per_token_difference.decode.estimate", "family": "descriptive", "shape": "number", "unit": "J/token", "artifact": "claim_verdicts", "field": "contrasts[].estimator.estimate", "select": {"contrast_id": "ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b"}, "issue": "derive", "rule": "analysis plan 7.3 item 2: the field divided by the registered token count of the phase", "basis": "named", "value": null},
+    {"id": "per_token_difference.decode.metrology_lower", "family": "descriptive", "shape": "number", "unit": "J/token", "artifact": "claim_verdicts", "field": "contrasts[].estimator.metrology_aware_CI95.lower", "select": {"contrast_id": "ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b"}, "issue": "derive", "rule": "analysis plan 7.3 item 2: the field divided by the registered token count of the phase", "basis": "named", "value": null},
+    {"id": "per_token_difference.decode.metrology_upper", "family": "descriptive", "shape": "number", "unit": "J/token", "artifact": "claim_verdicts", "field": "contrasts[].estimator.metrology_aware_CI95.upper", "select": {"contrast_id": "ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b"}, "issue": "derive", "rule": "analysis plan 7.3 item 2: the field divided by the registered token count of the phase", "basis": "named", "value": null},
+    {"id": "per_token_difference.decode.decision_lower", "family": "descriptive", "shape": "number", "unit": "J/token", "artifact": "claim_verdicts", "field": "contrasts[].deterministic_bounds.decision_interval.lower", "select": {"contrast_id": "ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b"}, "issue": "derive", "rule": "analysis plan 7.3 item 2: the field divided by the registered token count of the phase", "basis": "named", "value": null},
+    {"id": "per_token_difference.decode.decision_upper", "family": "descriptive", "shape": "number", "unit": "J/token", "artifact": "claim_verdicts", "field": "contrasts[].deterministic_bounds.decision_interval.upper", "select": {"contrast_id": "ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b"}, "issue": "derive", "rule": "analysis plan 7.3 item 2: the field divided by the registered token count of the phase", "basis": "named", "value": null},
+    {"id": "ratio.prefill.estimate", "family": "descriptive", "shape": "number", "unit": "ratio", "artifact": "exclusions", "field": "cells[].kept_units", "select": {"pack": "gamma", "cell_id": "ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b"}, "issue": "derive", "rule": "analysis plan 7.3 item 1: the ratio of phase energies, large model to small, over the kept quads", "basis": "inferred", "value": null},
+    {"id": "ratio.prefill.lower", "family": "descriptive", "shape": "number", "unit": "ratio", "artifact": "exclusions", "field": "cells[].kept_units", "select": {"pack": "gamma", "cell_id": "ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b"}, "issue": "derive", "rule": "analysis plan 7.3 item 1: the ratio of phase energies, large model to small, over the kept quads", "basis": "inferred", "value": null},
+    {"id": "ratio.prefill.upper", "family": "descriptive", "shape": "number", "unit": "ratio", "artifact": "exclusions", "field": "cells[].kept_units", "select": {"pack": "gamma", "cell_id": "ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b"}, "issue": "derive", "rule": "analysis plan 7.3 item 1: the ratio of phase energies, large model to small, over the kept quads", "basis": "inferred", "value": null},
+    {"id": "per_token_difference.prefill.estimate", "family": "descriptive", "shape": "number", "unit": "J/token", "artifact": "claim_verdicts", "field": "contrasts[].estimator.estimate", "select": {"contrast_id": "ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b"}, "issue": "derive", "rule": "analysis plan 7.3 item 2: the field divided by the registered token count of the phase", "basis": "named", "value": null},
+    {"id": "per_token_difference.prefill.metrology_lower", "family": "descriptive", "shape": "number", "unit": "J/token", "artifact": "claim_verdicts", "field": "contrasts[].estimator.metrology_aware_CI95.lower", "select": {"contrast_id": "ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b"}, "issue": "derive", "rule": "analysis plan 7.3 item 2: the field divided by the registered token count of the phase", "basis": "named", "value": null},
+    {"id": "per_token_difference.prefill.metrology_upper", "family": "descriptive", "shape": "number", "unit": "J/token", "artifact": "claim_verdicts", "field": "contrasts[].estimator.metrology_aware_CI95.upper", "select": {"contrast_id": "ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b"}, "issue": "derive", "rule": "analysis plan 7.3 item 2: the field divided by the registered token count of the phase", "basis": "named", "value": null},
+    {"id": "per_token_difference.prefill.decision_lower", "family": "descriptive", "shape": "number", "unit": "J/token", "artifact": "claim_verdicts", "field": "contrasts[].deterministic_bounds.decision_interval.lower", "select": {"contrast_id": "ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b"}, "issue": "derive", "rule": "analysis plan 7.3 item 2: the field divided by the registered token count of the phase", "basis": "named", "value": null},
+    {"id": "per_token_difference.prefill.decision_upper", "family": "descriptive", "shape": "number", "unit": "J/token", "artifact": "claim_verdicts", "field": "contrasts[].deterministic_bounds.decision_interval.upper", "select": {"contrast_id": "ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b"}, "issue": "derive", "rule": "analysis plan 7.3 item 2: the field divided by the registered token count of the phase", "basis": "named", "value": null},
+    {"id": "kept.small.decode.removed", "family": "disclosure_units", "shape": "table", "unit": "table", "artifact": "exclusions", "field": "cells[].dropped_units", "select": {"pack": "alpha", "cell_id": "df-ph-decode-qwen3-1p7b"}, "issue": "copy", "parts": ["stratum", "unit", "catalog families of the removing codes", "stage and ordinal"], "basis": "inferred", "value": null},
+    {"id": "kept.small.prefill.removed", "family": "disclosure_units", "shape": "table", "unit": "table", "artifact": "exclusions", "field": "cells[].dropped_units", "select": {"pack": "alpha", "cell_id": "df-ph-prefill-p2048-qwen3-1p7b"}, "issue": "copy", "parts": ["stratum", "unit", "catalog families of the removing codes", "stage and ordinal"], "basis": "inferred", "value": null},
+    {"id": "kept.large.decode.removed", "family": "disclosure_units", "shape": "table", "unit": "table", "artifact": "exclusions", "field": "cells[].dropped_units", "select": {"pack": "beta", "cell_id": "df-ph-decode-qwen3-8b"}, "issue": "copy", "parts": ["stratum", "unit", "catalog families of the removing codes", "stage and ordinal"], "basis": "inferred", "value": null},
+    {"id": "kept.large.prefill.removed", "family": "disclosure_units", "shape": "table", "unit": "table", "artifact": "exclusions", "field": "cells[].dropped_units", "select": {"pack": "beta", "cell_id": "df-ph-prefill-p2048-qwen3-8b"}, "issue": "copy", "parts": ["stratum", "unit", "catalog families of the removing codes", "stage and ordinal"], "basis": "inferred", "value": null},
+    {"id": "kept.contrast.decode.removed", "family": "disclosure_units", "shape": "table", "unit": "table", "artifact": "exclusions", "field": "cells[].dropped_units", "select": {"pack": "gamma", "cell_id": "ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b"}, "issue": "copy", "parts": ["stratum", "unit", "catalog families of the removing codes", "stage and ordinal"], "basis": "inferred", "value": null},
+    {"id": "kept.contrast.prefill.removed", "family": "disclosure_units", "shape": "table", "unit": "table", "artifact": "exclusions", "field": "cells[].dropped_units", "select": {"pack": "gamma", "cell_id": "ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b"}, "issue": "copy", "parts": ["stratum", "unit", "catalog families of the removing codes", "stage and ordinal"], "basis": "inferred", "value": null},
+    {"id": "attempts.alpha.verdicts", "family": "disclosure_attempts", "shape": "table", "unit": "table", "artifact": "harvest_record", "field": "verdict", "select": {"pack": "alpha", "attempts": "all"}, "issue": "copy", "basis": "inferred", "value": null},
+    {"id": "attempts.alpha.causes", "family": "disclosure_attempts", "shape": "table", "unit": "table", "artifact": "harvest_record", "field": "exclude_window_reasons", "select": {"pack": "alpha", "attempts": "all"}, "issue": "derive", "rule": "registration 7.3: the cause key of an attempt that is not claim-usable", "basis": "inferred", "value": null},
+    {"id": "attempts.alpha.flag_counts", "family": "disclosure_attempts", "shape": "table", "unit": "table", "artifact": "window_flags", "field": "flags.by_family", "select": {"pack": "alpha", "attempts": "all"}, "issue": "copy", "basis": "inferred", "value": null},
+    {"id": "attempts.alpha.collected", "family": "disclosure_attempts", "shape": "table", "unit": "table", "artifact": "window_yield", "field": "bundles_present", "select": {"pack": "alpha", "attempts": "all"}, "issue": "copy", "basis": "inferred", "value": null},
+    {"id": "attempts.alpha.planned", "family": "disclosure_attempts", "shape": "table", "unit": "table", "artifact": "window_yield", "field": "planned", "select": {"pack": "alpha", "attempts": "all"}, "issue": "copy", "basis": "inferred", "value": null},
+    {"id": "attempts.alpha.yield_status", "family": "disclosure_attempts", "shape": "table", "unit": "table", "artifact": "window_yield", "field": "yield_status", "select": {"pack": "alpha", "attempts": "all"}, "issue": "copy", "basis": "inferred", "value": null},
+    {"id": "attempts.beta.verdicts", "family": "disclosure_attempts", "shape": "table", "unit": "table", "artifact": "harvest_record", "field": "verdict", "select": {"pack": "beta", "attempts": "all"}, "issue": "copy", "basis": "inferred", "value": null},
+    {"id": "attempts.beta.causes", "family": "disclosure_attempts", "shape": "table", "unit": "table", "artifact": "harvest_record", "field": "exclude_window_reasons", "select": {"pack": "beta", "attempts": "all"}, "issue": "derive", "rule": "registration 7.3: the cause key of an attempt that is not claim-usable", "basis": "inferred", "value": null},
+    {"id": "attempts.beta.flag_counts", "family": "disclosure_attempts", "shape": "table", "unit": "table", "artifact": "window_flags", "field": "flags.by_family", "select": {"pack": "beta", "attempts": "all"}, "issue": "copy", "basis": "inferred", "value": null},
+    {"id": "attempts.beta.collected", "family": "disclosure_attempts", "shape": "table", "unit": "table", "artifact": "window_yield", "field": "bundles_present", "select": {"pack": "beta", "attempts": "all"}, "issue": "copy", "basis": "inferred", "value": null},
+    {"id": "attempts.beta.planned", "family": "disclosure_attempts", "shape": "table", "unit": "table", "artifact": "window_yield", "field": "planned", "select": {"pack": "beta", "attempts": "all"}, "issue": "copy", "basis": "inferred", "value": null},
+    {"id": "attempts.beta.yield_status", "family": "disclosure_attempts", "shape": "table", "unit": "table", "artifact": "window_yield", "field": "yield_status", "select": {"pack": "beta", "attempts": "all"}, "issue": "copy", "basis": "inferred", "value": null},
+    {"id": "attempts.gamma.verdicts", "family": "disclosure_attempts", "shape": "table", "unit": "table", "artifact": "harvest_record", "field": "verdict", "select": {"pack": "gamma", "attempts": "all"}, "issue": "copy", "basis": "inferred", "value": null},
+    {"id": "attempts.gamma.causes", "family": "disclosure_attempts", "shape": "table", "unit": "table", "artifact": "harvest_record", "field": "exclude_window_reasons", "select": {"pack": "gamma", "attempts": "all"}, "issue": "derive", "rule": "registration 7.3: the cause key of an attempt that is not claim-usable", "basis": "inferred", "value": null},
+    {"id": "attempts.gamma.flag_counts", "family": "disclosure_attempts", "shape": "table", "unit": "table", "artifact": "window_flags", "field": "flags.by_family", "select": {"pack": "gamma", "attempts": "all"}, "issue": "copy", "basis": "inferred", "value": null},
+    {"id": "attempts.gamma.collected", "family": "disclosure_attempts", "shape": "table", "unit": "table", "artifact": "window_yield", "field": "bundles_present", "select": {"pack": "gamma", "attempts": "all"}, "issue": "copy", "basis": "inferred", "value": null},
+    {"id": "attempts.gamma.planned", "family": "disclosure_attempts", "shape": "table", "unit": "table", "artifact": "window_yield", "field": "planned", "select": {"pack": "gamma", "attempts": "all"}, "issue": "copy", "basis": "inferred", "value": null},
+    {"id": "attempts.gamma.yield_status", "family": "disclosure_attempts", "shape": "table", "unit": "table", "artifact": "window_yield", "field": "yield_status", "select": {"pack": "gamma", "attempts": "all"}, "issue": "copy", "basis": "inferred", "value": null},
+    {"id": "assist.small.decode.without", "family": "disclosure_assist", "shape": "line", "unit": "line", "artifact": "flag", "field": "code", "select": {"pack": "alpha", "codes": ["battery.assist"], "cell_id": "d117-reported-mean-ph-decode-qwen3-1p7b"}, "issue": "derive", "rule": "analysis plan 8.1, battery-assist sensitivity line: the same estimator over the kept units without every unit that holds a member flagged battery.assist", "parts": ["mean", "lower", "upper", "kept repeats", "kept quads", "assist members per stratum"], "basis": "named", "value": null},
+    {"id": "assist.small.prefill.without", "family": "disclosure_assist", "shape": "line", "unit": "line", "artifact": "flag", "field": "code", "select": {"pack": "alpha", "codes": ["battery.assist"], "cell_id": "d117-reported-mean-ph-prefill-p2048-qwen3-1p7b"}, "issue": "derive", "rule": "analysis plan 8.1, battery-assist sensitivity line: the same estimator over the kept units without every unit that holds a member flagged battery.assist", "parts": ["mean", "lower", "upper", "kept repeats", "kept quads", "assist members per stratum"], "basis": "named", "value": null},
+    {"id": "assist.large.decode.without", "family": "disclosure_assist", "shape": "line", "unit": "line", "artifact": "flag", "field": "code", "select": {"pack": "beta", "codes": ["battery.assist"], "cell_id": "d117-reported-mean-ph-decode-qwen3-8b"}, "issue": "derive", "rule": "analysis plan 8.1, battery-assist sensitivity line: the same estimator over the kept units without every unit that holds a member flagged battery.assist", "parts": ["mean", "lower", "upper", "kept repeats", "kept quads", "assist members per stratum"], "basis": "named", "value": null},
+    {"id": "assist.large.prefill.without", "family": "disclosure_assist", "shape": "line", "unit": "line", "artifact": "flag", "field": "code", "select": {"pack": "beta", "codes": ["battery.assist"], "cell_id": "d117-reported-mean-ph-prefill-p2048-qwen3-8b"}, "issue": "derive", "rule": "analysis plan 8.1, battery-assist sensitivity line: the same estimator over the kept units without every unit that holds a member flagged battery.assist", "parts": ["mean", "lower", "upper", "kept repeats", "kept quads", "assist members per stratum"], "basis": "named", "value": null},
+    {"id": "assist.contrast.decode.without", "family": "disclosure_assist", "shape": "line", "unit": "line", "artifact": "flag", "field": "code", "select": {"pack": "gamma", "codes": ["battery.assist"], "contrast_id": "ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b"}, "issue": "derive", "rule": "analysis plan 8.1, battery-assist sensitivity line: the same estimator over the kept units without every unit that holds a member flagged battery.assist", "parts": ["estimate", "metrology lower", "metrology upper", "kept quads", "quads holding assist members"], "basis": "named", "value": null},
+    {"id": "assist.contrast.prefill.without", "family": "disclosure_assist", "shape": "line", "unit": "line", "artifact": "flag", "field": "code", "select": {"pack": "gamma", "codes": ["battery.assist"], "contrast_id": "ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b"}, "issue": "derive", "rule": "analysis plan 8.1, battery-assist sensitivity line: the same estimator over the kept units without every unit that holds a member flagged battery.assist", "parts": ["estimate", "metrology lower", "metrology upper", "kept quads", "quads holding assist members"], "basis": "named", "value": null},
+    {"id": "sensitivity.small.decode", "family": "disclosure_sensitivity", "shape": "line", "unit": "line", "artifact": "exclusions", "field": "cells[].dropped_units", "select": {"pack": "alpha", "cell_id": "df-ph-decode-qwen3-1p7b"}, "issue": "derive", "rule": "analysis plan 8.1, sensitivity line (proposed): the same estimator over the units kept when codes of the physics-in-span family are ignored", "parts": ["mean", "lower", "upper", "kept repeats", "kept quads"], "basis": "inferred", "value": null},
+    {"id": "sensitivity.small.prefill", "family": "disclosure_sensitivity", "shape": "line", "unit": "line", "artifact": "exclusions", "field": "cells[].dropped_units", "select": {"pack": "alpha", "cell_id": "df-ph-prefill-p2048-qwen3-1p7b"}, "issue": "derive", "rule": "analysis plan 8.1, sensitivity line (proposed): the same estimator over the units kept when codes of the physics-in-span family are ignored", "parts": ["mean", "lower", "upper", "kept repeats", "kept quads"], "basis": "inferred", "value": null},
+    {"id": "sensitivity.large.decode", "family": "disclosure_sensitivity", "shape": "line", "unit": "line", "artifact": "exclusions", "field": "cells[].dropped_units", "select": {"pack": "beta", "cell_id": "df-ph-decode-qwen3-8b"}, "issue": "derive", "rule": "analysis plan 8.1, sensitivity line (proposed): the same estimator over the units kept when codes of the physics-in-span family are ignored", "parts": ["mean", "lower", "upper", "kept repeats", "kept quads"], "basis": "inferred", "value": null},
+    {"id": "sensitivity.large.prefill", "family": "disclosure_sensitivity", "shape": "line", "unit": "line", "artifact": "exclusions", "field": "cells[].dropped_units", "select": {"pack": "beta", "cell_id": "df-ph-prefill-p2048-qwen3-8b"}, "issue": "derive", "rule": "analysis plan 8.1, sensitivity line (proposed): the same estimator over the units kept when codes of the physics-in-span family are ignored", "parts": ["mean", "lower", "upper", "kept repeats", "kept quads"], "basis": "inferred", "value": null},
+    {"id": "sensitivity.contrast.decode", "family": "disclosure_sensitivity", "shape": "line", "unit": "line", "artifact": "exclusions", "field": "cells[].dropped_units", "select": {"pack": "gamma", "cell_id": "ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b"}, "issue": "derive", "rule": "analysis plan 8.1, sensitivity line (proposed): the same estimator over the units kept when codes of the physics-in-span family are ignored", "parts": ["estimate", "metrology lower", "metrology upper", "kept quads"], "basis": "inferred", "value": null},
+    {"id": "sensitivity.contrast.prefill", "family": "disclosure_sensitivity", "shape": "line", "unit": "line", "artifact": "exclusions", "field": "cells[].dropped_units", "select": {"pack": "gamma", "cell_id": "ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b"}, "issue": "derive", "rule": "analysis plan 8.1, sensitivity line (proposed): the same estimator over the units kept when codes of the physics-in-span family are ignored", "parts": ["estimate", "metrology lower", "metrology upper", "kept quads"], "basis": "inferred", "value": null},
+    {"id": "cross_window.small.decode", "family": "disclosure_cross_window", "shape": "line", "unit": "line", "artifact": "reported_energy", "field": "cells[].interval.h_j", "select": {"cell_id": "d117-reported-mean-ph-decode-qwen3-1p7b"}, "issue": "derive", "rule": "analysis plan 8.1, cross-window consistency check: the contrast window's side mean minus the reported cell mean, against the two within-window half-widths", "parts": ["difference", "which of the two registered sentences"], "basis": "inferred", "value": null},
+    {"id": "cross_window.small.prefill", "family": "disclosure_cross_window", "shape": "line", "unit": "line", "artifact": "reported_energy", "field": "cells[].interval.h_j", "select": {"cell_id": "d117-reported-mean-ph-prefill-p2048-qwen3-1p7b"}, "issue": "derive", "rule": "analysis plan 8.1, cross-window consistency check: the contrast window's side mean minus the reported cell mean, against the two within-window half-widths", "parts": ["difference", "which of the two registered sentences"], "basis": "inferred", "value": null},
+    {"id": "cross_window.large.decode", "family": "disclosure_cross_window", "shape": "line", "unit": "line", "artifact": "reported_energy", "field": "cells[].interval.h_j", "select": {"cell_id": "d117-reported-mean-ph-decode-qwen3-8b"}, "issue": "derive", "rule": "analysis plan 8.1, cross-window consistency check: the contrast window's side mean minus the reported cell mean, against the two within-window half-widths", "parts": ["difference", "which of the two registered sentences"], "basis": "inferred", "value": null},
+    {"id": "cross_window.large.prefill", "family": "disclosure_cross_window", "shape": "line", "unit": "line", "artifact": "reported_energy", "field": "cells[].interval.h_j", "select": {"cell_id": "d117-reported-mean-ph-prefill-p2048-qwen3-8b"}, "issue": "derive", "rule": "analysis plan 8.1, cross-window consistency check: the contrast window's side mean minus the reported cell mean, against the two within-window half-widths", "parts": ["difference", "which of the two registered sentences"], "basis": "inferred", "value": null},
+    {"id": "decision_vs_floor.decode", "family": "disclosure_contrast_checks", "shape": "line", "unit": "line", "artifact": "claim_verdicts", "field": "contrasts[].deterministic_bounds.decision_interval", "select": {"contrast_id": "ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b"}, "issue": "derive", "rule": "analysis plan 8.1, decision interval against the floor", "parts": ["whether the near end of the decision interval is beyond the floor"], "basis": "named", "value": null},
+    {"id": "leave_one_out.decode", "family": "disclosure_contrast_checks", "shape": "line", "unit": "line", "artifact": "claim_verdicts", "field": "contrasts[].loo.rows[].influence_triggers", "select": {"contrast_id": "ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b"}, "issue": "derive", "rule": "analysis plan 7.2 and 8.1, leave-one-quad-out: printed only if the magnitude concern is raised", "parts": ["quad", "movement of the estimate"], "basis": "inferred", "value": null},
+    {"id": "decision_vs_floor.prefill", "family": "disclosure_contrast_checks", "shape": "line", "unit": "line", "artifact": "claim_verdicts", "field": "contrasts[].deterministic_bounds.decision_interval", "select": {"contrast_id": "ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b"}, "issue": "derive", "rule": "analysis plan 8.1, decision interval against the floor", "parts": ["whether the near end of the decision interval is beyond the floor"], "basis": "named", "value": null},
+    {"id": "leave_one_out.prefill", "family": "disclosure_contrast_checks", "shape": "line", "unit": "line", "artifact": "claim_verdicts", "field": "contrasts[].loo.rows[].influence_triggers", "select": {"contrast_id": "ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b"}, "issue": "derive", "rule": "analysis plan 7.2 and 8.1, leave-one-quad-out: printed only if the magnitude concern is raised", "parts": ["quad", "movement of the estimate"], "basis": "inferred", "value": null},
+    {"id": "window.alpha.arm_hazards", "family": "disclosure_window", "shape": "table", "unit": "table", "artifact": "window_flags", "field": "hazards", "select": {"pack": "alpha"}, "issue": "copy", "parts": ["hazard", "measured quantity", "verdict"], "basis": "inferred", "value": null},
+    {"id": "window.alpha.code_counts", "family": "disclosure_window", "shape": "table", "unit": "table", "artifact": "window_flags", "field": "flags.by_code", "select": {"pack": "alpha"}, "issue": "copy", "parts": ["flag code", "count"], "basis": "inferred", "value": null},
+    {"id": "window.alpha.battery_assist", "family": "disclosure_window", "shape": "table", "unit": "table", "artifact": "flag", "field": "observed", "select": {"pack": "alpha", "codes": ["battery.assist", "battery.assist_outside_request", "calibration.capture_battery_assist", "battery.smc_unavailable", "battery.capture_pair_assist", "calibration.capture_battery_pair_assist"]}, "issue": "derive", "rule": "analysis plan 8.1, battery line: counts per code and, per phase of a member, the negative current reads, the reads below the report threshold, the minimum current and the held time", "parts": ["members per code", "per-phase current reads"], "basis": "named", "value": null},
+    {"id": "window.alpha.reference_counts", "family": "disclosure_window", "shape": "table", "unit": "table", "artifact": "flag", "field": "observed", "select": {"pack": "alpha", "codes": ["neg8.reference_lost"]}, "issue": "copy", "parts": ["realised reference counts", "planned reference counts", "bound formula at those counts", "each lost reference with its slot and reason"], "basis": "named", "value": null},
+    {"id": "window.alpha.midpoint_lost", "family": "disclosure_window", "shape": "flag", "unit": "flag", "artifact": "flag", "field": "code", "select": {"pack": "alpha", "codes": ["neg8.midpoint_lost"]}, "issue": "derive", "rule": "analysis plan 8.1, reference drift: whether the window carries the flag", "basis": "named", "value": null},
+    {"id": "window.alpha.spares", "family": "disclosure_window", "shape": "table", "unit": "table", "artifact": "flag", "field": "observed", "select": {"pack": "alpha", "codes": ["member.retried"]}, "issue": "copy", "parts": ["slot", "whether the spare succeeded"], "basis": "named", "value": null},
+    {"id": "window.alpha.corpus_dropped", "family": "disclosure_window", "shape": "table", "unit": "table", "artifact": "flag", "field": "observed", "select": {"pack": "alpha", "codes": ["neg8.corpus_member_dropped"]}, "issue": "copy", "parts": ["member", "code"], "basis": "named", "value": null},
+    {"id": "window.alpha.corpus_size", "family": "disclosure_window", "shape": "count", "unit": "members", "artifact": "reference_bound_check", "field": "members_collected", "select": {"pack": "alpha"}, "issue": "copy", "basis": "inferred", "value": null},
+    {"id": "window.alpha.battery_temperature", "family": "disclosure_window", "shape": "table", "unit": "table", "artifact": "flag", "field": "observed", "select": {"pack": "alpha", "codes": ["thermal.stage_battery_rise", "thermal.battery_temperature_unmeasured"]}, "issue": "copy", "parts": ["stage", "flag"], "basis": "named", "value": null},
+    {"id": "window.alpha.monitor_probes", "family": "disclosure_window", "shape": "count", "unit": "probes", "artifact": "flag", "field": "code", "select": {"pack": "alpha", "codes": ["monitor.probe_in_phase"]}, "issue": "derive", "rule": "analysis plan 8.1, monitor cost: the number of monitor probes that fell inside target phases", "basis": "inferred", "value": null},
+    {"id": "window.beta.arm_hazards", "family": "disclosure_window", "shape": "table", "unit": "table", "artifact": "window_flags", "field": "hazards", "select": {"pack": "beta"}, "issue": "copy", "parts": ["hazard", "measured quantity", "verdict"], "basis": "inferred", "value": null},
+    {"id": "window.beta.code_counts", "family": "disclosure_window", "shape": "table", "unit": "table", "artifact": "window_flags", "field": "flags.by_code", "select": {"pack": "beta"}, "issue": "copy", "parts": ["flag code", "count"], "basis": "inferred", "value": null},
+    {"id": "window.beta.battery_assist", "family": "disclosure_window", "shape": "table", "unit": "table", "artifact": "flag", "field": "observed", "select": {"pack": "beta", "codes": ["battery.assist", "battery.assist_outside_request", "calibration.capture_battery_assist", "battery.smc_unavailable", "battery.capture_pair_assist", "calibration.capture_battery_pair_assist"]}, "issue": "derive", "rule": "analysis plan 8.1, battery line: counts per code and, per phase of a member, the negative current reads, the reads below the report threshold, the minimum current and the held time", "parts": ["members per code", "per-phase current reads"], "basis": "named", "value": null},
+    {"id": "window.beta.reference_counts", "family": "disclosure_window", "shape": "table", "unit": "table", "artifact": "flag", "field": "observed", "select": {"pack": "beta", "codes": ["neg8.reference_lost"]}, "issue": "copy", "parts": ["realised reference counts", "planned reference counts", "bound formula at those counts", "each lost reference with its slot and reason"], "basis": "named", "value": null},
+    {"id": "window.beta.midpoint_lost", "family": "disclosure_window", "shape": "flag", "unit": "flag", "artifact": "flag", "field": "code", "select": {"pack": "beta", "codes": ["neg8.midpoint_lost"]}, "issue": "derive", "rule": "analysis plan 8.1, reference drift: whether the window carries the flag", "basis": "named", "value": null},
+    {"id": "window.beta.spares", "family": "disclosure_window", "shape": "table", "unit": "table", "artifact": "flag", "field": "observed", "select": {"pack": "beta", "codes": ["member.retried"]}, "issue": "copy", "parts": ["slot", "whether the spare succeeded"], "basis": "named", "value": null},
+    {"id": "window.beta.corpus_dropped", "family": "disclosure_window", "shape": "table", "unit": "table", "artifact": "flag", "field": "observed", "select": {"pack": "beta", "codes": ["neg8.corpus_member_dropped"]}, "issue": "copy", "parts": ["member", "code"], "basis": "named", "value": null},
+    {"id": "window.beta.corpus_size", "family": "disclosure_window", "shape": "count", "unit": "members", "artifact": "reference_bound_check", "field": "members_collected", "select": {"pack": "beta"}, "issue": "copy", "basis": "inferred", "value": null},
+    {"id": "window.beta.battery_temperature", "family": "disclosure_window", "shape": "table", "unit": "table", "artifact": "flag", "field": "observed", "select": {"pack": "beta", "codes": ["thermal.stage_battery_rise", "thermal.battery_temperature_unmeasured"]}, "issue": "copy", "parts": ["stage", "flag"], "basis": "named", "value": null},
+    {"id": "window.beta.monitor_probes", "family": "disclosure_window", "shape": "count", "unit": "probes", "artifact": "flag", "field": "code", "select": {"pack": "beta", "codes": ["monitor.probe_in_phase"]}, "issue": "derive", "rule": "analysis plan 8.1, monitor cost: the number of monitor probes that fell inside target phases", "basis": "inferred", "value": null},
+    {"id": "window.gamma.arm_hazards", "family": "disclosure_window", "shape": "table", "unit": "table", "artifact": "window_flags", "field": "hazards", "select": {"pack": "gamma"}, "issue": "copy", "parts": ["hazard", "measured quantity", "verdict"], "basis": "inferred", "value": null},
+    {"id": "window.gamma.code_counts", "family": "disclosure_window", "shape": "table", "unit": "table", "artifact": "window_flags", "field": "flags.by_code", "select": {"pack": "gamma"}, "issue": "copy", "parts": ["flag code", "count"], "basis": "inferred", "value": null},
+    {"id": "window.gamma.battery_assist", "family": "disclosure_window", "shape": "table", "unit": "table", "artifact": "flag", "field": "observed", "select": {"pack": "gamma", "codes": ["battery.assist", "battery.assist_outside_request", "calibration.capture_battery_assist", "battery.smc_unavailable", "battery.capture_pair_assist", "calibration.capture_battery_pair_assist"]}, "issue": "derive", "rule": "analysis plan 8.1, battery line: counts per code and, per phase of a member, the negative current reads, the reads below the report threshold, the minimum current and the held time", "parts": ["members per code", "per-phase current reads"], "basis": "named", "value": null},
+    {"id": "window.gamma.reference_counts", "family": "disclosure_window", "shape": "table", "unit": "table", "artifact": "flag", "field": "observed", "select": {"pack": "gamma", "codes": ["neg8.reference_lost"]}, "issue": "copy", "parts": ["realised reference counts", "planned reference counts", "bound formula at those counts", "each lost reference with its slot and reason"], "basis": "named", "value": null},
+    {"id": "window.gamma.midpoint_lost", "family": "disclosure_window", "shape": "flag", "unit": "flag", "artifact": "flag", "field": "code", "select": {"pack": "gamma", "codes": ["neg8.midpoint_lost"]}, "issue": "derive", "rule": "analysis plan 8.1, reference drift: whether the window carries the flag", "basis": "named", "value": null},
+    {"id": "window.gamma.spares", "family": "disclosure_window", "shape": "table", "unit": "table", "artifact": "flag", "field": "observed", "select": {"pack": "gamma", "codes": ["member.retried"]}, "issue": "copy", "parts": ["slot", "whether the spare succeeded"], "basis": "named", "value": null},
+    {"id": "window.gamma.corpus_dropped", "family": "disclosure_window", "shape": "table", "unit": "table", "artifact": "flag", "field": "observed", "select": {"pack": "gamma", "codes": ["neg8.corpus_member_dropped"]}, "issue": "copy", "parts": ["member", "code"], "basis": "named", "value": null},
+    {"id": "window.gamma.corpus_size", "family": "disclosure_window", "shape": "count", "unit": "members", "artifact": "reference_bound_check", "field": "members_collected", "select": {"pack": "gamma"}, "issue": "copy", "basis": "inferred", "value": null},
+    {"id": "window.gamma.battery_temperature", "family": "disclosure_window", "shape": "table", "unit": "table", "artifact": "flag", "field": "observed", "select": {"pack": "gamma", "codes": ["thermal.stage_battery_rise", "thermal.battery_temperature_unmeasured"]}, "issue": "copy", "parts": ["stage", "flag"], "basis": "named", "value": null},
+    {"id": "window.gamma.monitor_probes", "family": "disclosure_window", "shape": "count", "unit": "probes", "artifact": "flag", "field": "code", "select": {"pack": "gamma", "codes": ["monitor.probe_in_phase"]}, "issue": "derive", "rule": "analysis plan 8.1, monitor cost: the number of monitor probes that fell inside target phases", "basis": "inferred", "value": null},
+    {"id": "clock_step_control.result", "family": "disclosure_clock_step", "shape": "label", "unit": "label", "artifact": "flag", "field": "code", "select": {"pack": "alpha", "attempt": "first", "codes": ["g10.discharged", "g10.not_discharged", "g10.unmeasured", "g10.interrupted", "g10.error"]}, "issue": "copy", "basis": "inferred", "value": null},
+    {"id": "meter.alpha.small.members", "family": "disclosure_meter", "shape": "table", "unit": "table", "artifact": "meter", "field": "members{}.rho", "select": {"pack": "alpha", "model": "qwen3-1p7b"}, "issue": "copy", "parts": ["member", "rail energy above idle", "machine energy above idle", "quotient"], "basis": "inferred", "value": null},
+    {"id": "meter.alpha.small.median", "family": "disclosure_meter", "shape": "number", "unit": "ratio", "artifact": "meter", "field": "members{}.rho", "select": {"pack": "alpha", "model": "qwen3-1p7b"}, "issue": "derive", "rule": "analysis plan 8.2 item 2: the median", "basis": "inferred", "value": null},
+    {"id": "meter.alpha.small.minimum", "family": "disclosure_meter", "shape": "number", "unit": "ratio", "artifact": "meter", "field": "members{}.rho", "select": {"pack": "alpha", "model": "qwen3-1p7b"}, "issue": "derive", "rule": "analysis plan 8.2 item 2: the minimum", "basis": "inferred", "value": null},
+    {"id": "meter.alpha.small.maximum", "family": "disclosure_meter", "shape": "number", "unit": "ratio", "artifact": "meter", "field": "members{}.rho", "select": {"pack": "alpha", "model": "qwen3-1p7b"}, "issue": "derive", "rule": "analysis plan 8.2 item 2: the maximum", "basis": "inferred", "value": null},
+    {"id": "meter.alpha.small.quartile_low", "family": "disclosure_meter", "shape": "number", "unit": "ratio", "artifact": "meter", "field": "members{}.rho", "select": {"pack": "alpha", "model": "qwen3-1p7b"}, "issue": "derive", "rule": "analysis plan 8.2 item 2: the lower quartile", "basis": "inferred", "value": null},
+    {"id": "meter.alpha.small.quartile_high", "family": "disclosure_meter", "shape": "number", "unit": "ratio", "artifact": "meter", "field": "members{}.rho", "select": {"pack": "alpha", "model": "qwen3-1p7b"}, "issue": "derive", "rule": "analysis plan 8.2 item 2: the upper quartile", "basis": "inferred", "value": null},
+    {"id": "meter.alpha.small.outside", "family": "disclosure_meter", "shape": "table", "unit": "table", "artifact": "meter", "field": "members{}.rho", "select": {"pack": "alpha", "model": "qwen3-1p7b"}, "issue": "derive", "rule": "analysis plan 8.2 item 3: member windows outside the hard plausibility band, each with its meter flags", "parts": ["member", "quotient", "meter flags"], "basis": "inferred", "value": null},
+    {"id": "meter.alpha.small.spread", "family": "disclosure_meter", "shape": "number", "unit": "ratio", "artifact": "meter", "field": "members{}.rho", "select": {"pack": "alpha", "model": "qwen3-1p7b"}, "issue": "derive", "rule": "analysis plan 8.2 item 4: the within-model spread", "basis": "inferred", "value": null},
+    {"id": "meter.alpha.small.inside_band", "family": "disclosure_meter", "shape": "line", "unit": "line", "artifact": "meter", "field": "members{}.rho", "select": {"pack": "alpha", "model": "qwen3-1p7b"}, "issue": "derive", "rule": "analysis plan 8.2 item 5: member windows inside the first clean window's band", "parts": ["count inside", "count of member windows"], "basis": "inferred", "value": null},
+    {"id": "meter.beta.large.members", "family": "disclosure_meter", "shape": "table", "unit": "table", "artifact": "meter", "field": "members{}.rho", "select": {"pack": "beta", "model": "qwen3-8b"}, "issue": "copy", "parts": ["member", "rail energy above idle", "machine energy above idle", "quotient"], "basis": "inferred", "value": null},
+    {"id": "meter.beta.large.median", "family": "disclosure_meter", "shape": "number", "unit": "ratio", "artifact": "meter", "field": "members{}.rho", "select": {"pack": "beta", "model": "qwen3-8b"}, "issue": "derive", "rule": "analysis plan 8.2 item 2: the median", "basis": "inferred", "value": null},
+    {"id": "meter.beta.large.minimum", "family": "disclosure_meter", "shape": "number", "unit": "ratio", "artifact": "meter", "field": "members{}.rho", "select": {"pack": "beta", "model": "qwen3-8b"}, "issue": "derive", "rule": "analysis plan 8.2 item 2: the minimum", "basis": "inferred", "value": null},
+    {"id": "meter.beta.large.maximum", "family": "disclosure_meter", "shape": "number", "unit": "ratio", "artifact": "meter", "field": "members{}.rho", "select": {"pack": "beta", "model": "qwen3-8b"}, "issue": "derive", "rule": "analysis plan 8.2 item 2: the maximum", "basis": "inferred", "value": null},
+    {"id": "meter.beta.large.quartile_low", "family": "disclosure_meter", "shape": "number", "unit": "ratio", "artifact": "meter", "field": "members{}.rho", "select": {"pack": "beta", "model": "qwen3-8b"}, "issue": "derive", "rule": "analysis plan 8.2 item 2: the lower quartile", "basis": "inferred", "value": null},
+    {"id": "meter.beta.large.quartile_high", "family": "disclosure_meter", "shape": "number", "unit": "ratio", "artifact": "meter", "field": "members{}.rho", "select": {"pack": "beta", "model": "qwen3-8b"}, "issue": "derive", "rule": "analysis plan 8.2 item 2: the upper quartile", "basis": "inferred", "value": null},
+    {"id": "meter.beta.large.outside", "family": "disclosure_meter", "shape": "table", "unit": "table", "artifact": "meter", "field": "members{}.rho", "select": {"pack": "beta", "model": "qwen3-8b"}, "issue": "derive", "rule": "analysis plan 8.2 item 3: member windows outside the hard plausibility band, each with its meter flags", "parts": ["member", "quotient", "meter flags"], "basis": "inferred", "value": null},
+    {"id": "meter.beta.large.spread", "family": "disclosure_meter", "shape": "number", "unit": "ratio", "artifact": "meter", "field": "members{}.rho", "select": {"pack": "beta", "model": "qwen3-8b"}, "issue": "derive", "rule": "analysis plan 8.2 item 4: the within-model spread", "basis": "inferred", "value": null},
+    {"id": "meter.beta.large.inside_band", "family": "disclosure_meter", "shape": "line", "unit": "line", "artifact": "meter", "field": "members{}.rho", "select": {"pack": "beta", "model": "qwen3-8b"}, "issue": "derive", "rule": "analysis plan 8.2 item 5: member windows inside the first clean window's band", "parts": ["count inside", "count of member windows"], "basis": "inferred", "value": null},
+    {"id": "meter.gamma.small.members", "family": "disclosure_meter", "shape": "table", "unit": "table", "artifact": "meter", "field": "members{}.rho", "select": {"pack": "gamma", "model": "qwen3-1p7b"}, "issue": "copy", "parts": ["member", "rail energy above idle", "machine energy above idle", "quotient"], "basis": "inferred", "value": null},
+    {"id": "meter.gamma.small.median", "family": "disclosure_meter", "shape": "number", "unit": "ratio", "artifact": "meter", "field": "members{}.rho", "select": {"pack": "gamma", "model": "qwen3-1p7b"}, "issue": "derive", "rule": "analysis plan 8.2 item 2: the median", "basis": "inferred", "value": null},
+    {"id": "meter.gamma.small.minimum", "family": "disclosure_meter", "shape": "number", "unit": "ratio", "artifact": "meter", "field": "members{}.rho", "select": {"pack": "gamma", "model": "qwen3-1p7b"}, "issue": "derive", "rule": "analysis plan 8.2 item 2: the minimum", "basis": "inferred", "value": null},
+    {"id": "meter.gamma.small.maximum", "family": "disclosure_meter", "shape": "number", "unit": "ratio", "artifact": "meter", "field": "members{}.rho", "select": {"pack": "gamma", "model": "qwen3-1p7b"}, "issue": "derive", "rule": "analysis plan 8.2 item 2: the maximum", "basis": "inferred", "value": null},
+    {"id": "meter.gamma.small.quartile_low", "family": "disclosure_meter", "shape": "number", "unit": "ratio", "artifact": "meter", "field": "members{}.rho", "select": {"pack": "gamma", "model": "qwen3-1p7b"}, "issue": "derive", "rule": "analysis plan 8.2 item 2: the lower quartile", "basis": "inferred", "value": null},
+    {"id": "meter.gamma.small.quartile_high", "family": "disclosure_meter", "shape": "number", "unit": "ratio", "artifact": "meter", "field": "members{}.rho", "select": {"pack": "gamma", "model": "qwen3-1p7b"}, "issue": "derive", "rule": "analysis plan 8.2 item 2: the upper quartile", "basis": "inferred", "value": null},
+    {"id": "meter.gamma.small.outside", "family": "disclosure_meter", "shape": "table", "unit": "table", "artifact": "meter", "field": "members{}.rho", "select": {"pack": "gamma", "model": "qwen3-1p7b"}, "issue": "derive", "rule": "analysis plan 8.2 item 3: member windows outside the hard plausibility band, each with its meter flags", "parts": ["member", "quotient", "meter flags"], "basis": "inferred", "value": null},
+    {"id": "meter.gamma.small.spread", "family": "disclosure_meter", "shape": "number", "unit": "ratio", "artifact": "meter", "field": "members{}.rho", "select": {"pack": "gamma", "model": "qwen3-1p7b"}, "issue": "derive", "rule": "analysis plan 8.2 item 4: the within-model spread", "basis": "inferred", "value": null},
+    {"id": "meter.gamma.small.inside_band", "family": "disclosure_meter", "shape": "line", "unit": "line", "artifact": "meter", "field": "members{}.rho", "select": {"pack": "gamma", "model": "qwen3-1p7b"}, "issue": "derive", "rule": "analysis plan 8.2 item 5: member windows inside the first clean window's band", "parts": ["count inside", "count of member windows"], "basis": "inferred", "value": null},
+    {"id": "meter.gamma.large.members", "family": "disclosure_meter", "shape": "table", "unit": "table", "artifact": "meter", "field": "members{}.rho", "select": {"pack": "gamma", "model": "qwen3-8b"}, "issue": "copy", "parts": ["member", "rail energy above idle", "machine energy above idle", "quotient"], "basis": "inferred", "value": null},
+    {"id": "meter.gamma.large.median", "family": "disclosure_meter", "shape": "number", "unit": "ratio", "artifact": "meter", "field": "members{}.rho", "select": {"pack": "gamma", "model": "qwen3-8b"}, "issue": "derive", "rule": "analysis plan 8.2 item 2: the median", "basis": "inferred", "value": null},
+    {"id": "meter.gamma.large.minimum", "family": "disclosure_meter", "shape": "number", "unit": "ratio", "artifact": "meter", "field": "members{}.rho", "select": {"pack": "gamma", "model": "qwen3-8b"}, "issue": "derive", "rule": "analysis plan 8.2 item 2: the minimum", "basis": "inferred", "value": null},
+    {"id": "meter.gamma.large.maximum", "family": "disclosure_meter", "shape": "number", "unit": "ratio", "artifact": "meter", "field": "members{}.rho", "select": {"pack": "gamma", "model": "qwen3-8b"}, "issue": "derive", "rule": "analysis plan 8.2 item 2: the maximum", "basis": "inferred", "value": null},
+    {"id": "meter.gamma.large.quartile_low", "family": "disclosure_meter", "shape": "number", "unit": "ratio", "artifact": "meter", "field": "members{}.rho", "select": {"pack": "gamma", "model": "qwen3-8b"}, "issue": "derive", "rule": "analysis plan 8.2 item 2: the lower quartile", "basis": "inferred", "value": null},
+    {"id": "meter.gamma.large.quartile_high", "family": "disclosure_meter", "shape": "number", "unit": "ratio", "artifact": "meter", "field": "members{}.rho", "select": {"pack": "gamma", "model": "qwen3-8b"}, "issue": "derive", "rule": "analysis plan 8.2 item 2: the upper quartile", "basis": "inferred", "value": null},
+    {"id": "meter.gamma.large.outside", "family": "disclosure_meter", "shape": "table", "unit": "table", "artifact": "meter", "field": "members{}.rho", "select": {"pack": "gamma", "model": "qwen3-8b"}, "issue": "derive", "rule": "analysis plan 8.2 item 3: member windows outside the hard plausibility band, each with its meter flags", "parts": ["member", "quotient", "meter flags"], "basis": "inferred", "value": null},
+    {"id": "meter.gamma.large.spread", "family": "disclosure_meter", "shape": "number", "unit": "ratio", "artifact": "meter", "field": "members{}.rho", "select": {"pack": "gamma", "model": "qwen3-8b"}, "issue": "derive", "rule": "analysis plan 8.2 item 4: the within-model spread", "basis": "inferred", "value": null},
+    {"id": "meter.gamma.large.inside_band", "family": "disclosure_meter", "shape": "line", "unit": "line", "artifact": "meter", "field": "members{}.rho", "select": {"pack": "gamma", "model": "qwen3-8b"}, "issue": "derive", "rule": "analysis plan 8.2 item 5: member windows inside the first clean window's band", "parts": ["count inside", "count of member windows"], "basis": "inferred", "value": null},
+    {"id": "meter.central_band.window", "family": "disclosure_meter", "shape": "label", "unit": "label", "artifact": "meter", "field": "members{}.rho", "select": {"pack": "first clean"}, "issue": "derive", "rule": "analysis plan 8.2 item 5: the identifier of the first analysed window with no meter flag", "basis": "inferred", "value": null},
+    {"id": "meter.central_band.small.low", "family": "disclosure_meter", "shape": "number", "unit": "ratio", "artifact": "meter", "field": "members{}.rho", "select": {"pack": "first clean", "model": "qwen3-1p7b"}, "issue": "derive", "rule": "analysis plan 8.2 item 5: the central band, the first clean window's range of the quotient", "basis": "inferred", "value": null},
+    {"id": "meter.central_band.small.high", "family": "disclosure_meter", "shape": "number", "unit": "ratio", "artifact": "meter", "field": "members{}.rho", "select": {"pack": "first clean", "model": "qwen3-1p7b"}, "issue": "derive", "rule": "analysis plan 8.2 item 5: the central band, the first clean window's range of the quotient", "basis": "inferred", "value": null},
+    {"id": "meter.central_band.large.low", "family": "disclosure_meter", "shape": "number", "unit": "ratio", "artifact": "meter", "field": "members{}.rho", "select": {"pack": "first clean", "model": "qwen3-8b"}, "issue": "derive", "rule": "analysis plan 8.2 item 5: the central band, the first clean window's range of the quotient", "basis": "inferred", "value": null},
+    {"id": "meter.central_band.large.high", "family": "disclosure_meter", "shape": "number", "unit": "ratio", "artifact": "meter", "field": "members{}.rho", "select": {"pack": "first clean", "model": "qwen3-8b"}, "issue": "derive", "rule": "analysis plan 8.2 item 5: the central band, the first clean window's range of the quotient", "basis": "inferred", "value": null}
+  ],
+  "unbound_lines": [
+    {"key": "reference drift: screen result and drift allowance of each window", "plan": "8.1 reference drift", "why": "The allowance is an energy read through a function that authenticates the harvest record (analysis plan section 4 step 4); the plan names no single field to print it from."},
+    {"key": "reference drift: the bound's two terms at the realised reference counts", "plan": "8.1 reference drift", "why": "Energies kept in restricted custody; the plan names no field."},
+    {"key": "clock: members whose clock anchor is bounded, and the largest effective bound, per window", "plan": "8.1 battery, thermal, contention, clock", "why": "No harvest record holds this count as one field at the sync point."},
+    {"key": "contention: the host's total busy CPU during requests, per window", "plan": "8.1 battery, thermal, contention, clock", "why": "The input field was not found in the harvest records at the sync point."},
+    {"key": "battery: the discharged energies of assisted members", "plan": "8.1 battery, thermal, contention, clock", "why": "Energies in withheld/battery-assist.json; the plan names the file, not a field."},
+    {"key": "monitor cost: CPU time of the hazard monitor and of the meter reader, per window", "plan": "8.1 monitor cost", "why": "The input field was not found in the harvest records at the sync point."},
+    {"key": "battery temperature: every stage's readings, rise and plateau", "plan": "8.1 battery temperature across each stage", "why": "The readings live in each stage's campaign manifest, which has no schema id in code; only the two flags are slots."},
+    {"key": "clock-step control: the redraw cycles that followed it", "plan": "8.1 G10", "why": "No record with a schema id holds the count."}
+  ],
+  "fixed_sentences": [
+    {"key": "conditionality of every number on a window that passed the registered checks", "plan": "8.1 attempt history and conditionality", "conditional": false},
+    {"key": "gross energy", "plan": "7.3 item 3", "conditional": false},
+    {"key": "monitor and meter reader CPU share was not subtracted", "plan": "8.1 monitor cost", "conditional": false},
+    {"key": "single window", "plan": "8.1 single window", "conditional": false},
+    {"key": "floor transfer assumption and its evidentiary limit", "plan": "5; 8.1 floor transfer", "conditional": false},
+    {"key": "fixed, unrandomized quad order", "plan": "8.1 order", "conditional": false},
+    {"key": "conservative contrast interval", "plan": "7.1 step 3; 8.1 conservative contrast interval", "conditional": false},
+    {"key": "the short prefill is not reported", "plan": "8.1 p42", "conditional": false},
+    {"key": "attribution floor beside each reported cell", "plan": "4 step 7", "conditional": false},
+    {"key": "separate windows are not a comparison", "plan": "8.1 separate windows", "conditional": false},
+    {"key": "a dominance ratio is a point diagnostic", "plan": "6; 8.1 dominance", "conditional": false},
+    {"key": "phase attribution without a measured phase-accounting check", "plan": "8.1 D-177", "conditional": false},
+    {"key": "one fixed decode prompt", "plan": "8.1 fixed prompt", "conditional": false},
+    {"key": "whole-machine boundary", "plan": "8.2", "conditional": false},
+    {"key": "midpoint reference lost", "plan": "8.1 reference drift", "conditional": true},
+    {"key": "a stage warmed without levelling off", "plan": "8.1 battery temperature across each stage", "conditional": true},
+    {"key": "the estimate exceeds the floor but its decision interval reaches below it", "plan": "8.1 decision interval against the floor", "conditional": true}
+  ]
+}

@@ -106,8 +106,14 @@ bar on refining a component whose defects are shrinking.
   mutation (delete-the-guard) tests on number-bearing code stay.
 - **Enforcement charges ask first:** "can one setting or one command remove
   this hazard?" Network time is the example: it stays OFF (Ed,
-  2026-09-29), with one OFF receipt per window at arm, instead of an
-  enforcement machine.
+  2026-09-29), with one OFF receipt per window at arm (a file recording
+  that the OFF command ran and what it printed), instead of an enforcement
+  machine. For the windows that will carry the paper's claims (measurement
+  block 5), under Ed's ruling of 2026-10-05, what the OFF command prints is
+  recorded and not judged, and the clock itself is measured (D-187; see
+  "Physics refuses; everything else is a flag" below). Calibration windows,
+  whose design was fixed earlier (revision 6 of the calibration
+  registration), still check the receipt's wording.
 
 ### What the prune keeps, and the number each protects
 
@@ -132,6 +138,92 @@ bar on refining a component whose defects are shrinking.
   calibration.
 - The whole suite on the merged tree before merge: it has caught failures
   that every lens and the final pass missed.
+
+### Physics refuses; everything else is a flag (Ed, 2026-10-05)
+
+Ed's ruling of 2026-10-05 (D-187) prunes the checks around a measurement
+window, the unattended run that collects data, as the 2026-09-29 prune
+above thinned the gates around reviews and merges. The forcing problem: a
+window could start only after a chain of receipts and records had verified
+(a receipt is a file that an earlier step writes to state that it ran and
+what it observed; a later step reads the file instead of the machine), and
+most of those checks tested how something was written down, not the state
+of the machine. One of them refused the first attempt at a
+calibration window because the command that switches network time off
+printed `Network Time is already off.` and not the one wording the check
+accepted, while network time was in fact off.
+
+- **Before a window starts, only physics refuses.** The window's driver
+  program refuses to start collecting only on a physical hazard (a
+  condition of the machine that would corrupt a measured energy) that it
+  measures directly: the clock stepping or drifting beyond the limit on
+  timing error fixed in advance, the machine off AC power or its battery
+  charging,
+  thermal pressure, a competing process above 5% of one processor core,
+  too little free disk, or the power sampler not sampling at its set rate.
+  <!-- src: registration §0.15 l.750-753 -->
+  A check that reads a stand-in for one of these (a settings string, a
+  receipt, the wording a command printed) is rewritten to measure the
+  quantity. The agent census, the check that no agent session is running
+  on the machine, stays a refusal, since a running agent adds measured
+  joules.
+- **Every other check is a flag.** A flag is a recorded fact that never
+  stops collection. Receipt formats, the records that bind a run to its
+  plan, attempt history, the match between a committed digest and the
+  calibration ledger (the append-only record of calibration captures), and
+  provenance digests are flags. A missing or malformed record does not stop
+  a window.
+- **The numbers are always produced, with the flags beside them.** The
+  harvest (the program run on each window's bytes after it ends) emits
+  both. A catalog
+  fixed before any data exist gives each flag code one effect: remove the
+  member (one measured inference request) from the claims, remove the
+  window from the claims, or disclose only. Blinding (no one reads an
+  energy until the data are formally released), pre-registration (the
+  design is fixed before the data exist) and the cold gate's raw
+  re-derivation stay; they protect the science.
+- **What may still refuse, stop or exclude has two grounds only:** a
+  physical hazard measured directly, or number integrity (a number would be
+  wrong, or could not be attributed to what it claims to measure). A
+  checked-in list names every refusal in the window path's code, and a test
+  fails when one appears that the list does not carry
+  (`configs/gates/hazard_refusals.json`,
+  `tests/hazards/test_refusal_allowlist.py`).
+- **Reviews follow the same rule.** A review finding that concerns only how
+  something is recorded is dispositioned "flag, not refuse" and is not sent
+  to a fix round (a further round of code changes and review). A reviewer's
+  advice to fail closed (to refuse when in doubt) on such a condition gets
+  the same disposition. A refusal path (a place where a window's code, or
+  the document of shell steps a window runs, can refuse) is removed when in
+  three sessions it has caught nothing touching a number, that is, stopped
+  no defect that would have changed one. For a refusal path D-187 item 5
+  thus goes further than "The one pruning rule" below, which proposes a
+  deletion to Ed.
+- **No step waits for Ed's hands because an earlier ruling reserved it.**
+  The deliberate clock step that shows the clock check can see a step, once
+  reserved for Ed to perform, is run by the window's driver at the end of
+  the first claim-bearing window. Ed's NO on the arm notice is unchanged.
+
+Two rulings of the next two days extend it.
+
+- **Old rules don't bind the science (D-188, 2026-10-06).** A rule, ruling,
+  directive or clause of a registration (the document that fixes a
+  measurement's design before its data exist) is a past judgment about the
+  physics, not a constraint. When evidence shows a better rule, it is
+  written, through the gate described above: two blind seats on a science
+  question; then a cold gate if the registration is not yet sealed (frozen
+  against further change), or one erratum if it is. "The existing rule
+  says" is never the reason a worse rule stays.
+- **T3 is retired as a control plane (D-189, 2026-10-07).** The agent
+  census recognizes agent sessions by their own executables and carries no
+  rule specific to T3, the application Ed formerly drove sessions from.
+
+The design that implements these rulings is the registration of the first
+claim-bearing measurement block (a block is a set of windows registered
+together), `configs/campaigns/v5_claim_25g83/registration_block5.md`. It
+is a draft until its cold gate seals it. D-187 maps each item of the ruling
+to the sections that carry it. None of this changes cadence: windows still
+run back-to-back, with only physics waits between them.
 
 ### Records
 

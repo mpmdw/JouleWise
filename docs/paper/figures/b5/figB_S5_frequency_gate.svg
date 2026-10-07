@@ -1,0 +1,125 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="688" viewBox="0 0 1000 688" role="img" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" data-figure="B-S5">
+<title>Figure B-S5. The clock check before a window starts (the frequency gate)</title>
+<desc>A straight line gives the largest member clock bound the gate predicts, as a function of the size of the frequency word; a dashed horizontal line marks the 5 ms limit; the gate passes only where the line is at or below the limit. Two worked points are marked, one that passes and one that is refused.</desc>
+<rect data-role="background" width="1000" height="688" fill="#ffffff"/>
+<g data-role="figure-title">
+<text x="30" y="34" font-size="20" fill="#0b0b0b" font-weight="bold">Figure B-S5. The clock check before a window starts (the frequency gate)</text>
+<text x="30" y="56" font-size="13.5" fill="#52514e">Computed from the registered constants. The frequency word at point A was read on this machine on 2026-10-05; point B is hypothetical.</text>
+</g>
+<g data-element="formula"><title>formula</title>
+<text x="30" y="94" font-size="17" fill="#0b0b0b" font-weight="bold">formula: predicted member clock bound = 3.7 ms + ( |f| + 0.25 ppm ) × 335 s</text>
+<text x="30" y="116" font-size="13" fill="#52514e">The gate passes only if the prediction is at most 5 ms. A rate of 1 ppm (part per million) held for 1 s moves a clock by 1 microsecond.</text>
+</g>
+<g data-element="3.7 ms"><title>3.7 ms</title>
+<rect x="30" y="130" width="229" height="78" fill="#f4f3ef" rx="6"/>
+<text x="42" y="150" font-size="14" fill="#0b0b0b" font-weight="bold">3.7 ms</text>
+<text x="42" y="168" font-size="12" fill="#52514e">largest h in the October probe</text>
+<text x="42" y="183" font-size="12" fill="#52514e">(3.6 ms) plus 0.1 ms of margin;</text>
+<text x="42" y="198" font-size="12" fill="#52514e">h: half-width of the label fit</text>
+</g>
+<g data-element="|f|"><title>|f|</title>
+<rect x="267" y="130" width="229" height="78" fill="#f4f3ef" rx="6"/>
+<text x="279" y="150" font-size="14" fill="#0b0b0b" font-weight="bold">|f|</text>
+<text x="279" y="168" font-size="12" fill="#52514e">size of the frequency word f,</text>
+<text x="279" y="183" font-size="12" fill="#52514e">the kernel's rate correction</text>
+<text x="279" y="198" font-size="12" fill="#52514e">for the wall clock, in ppm</text>
+</g>
+<g data-element="0.25 ppm"><title>0.25 ppm</title>
+<rect x="504" y="130" width="229" height="78" fill="#f4f3ef" rx="6"/>
+<text x="516" y="150" font-size="14" fill="#0b0b0b" font-weight="bold">0.25 ppm</text>
+<text x="516" y="168" font-size="12" fill="#52514e">allowance for the rate differing</text>
+<text x="516" y="183" font-size="12" fill="#52514e">during a member's stream</text>
+</g>
+<g data-element="335 s"><title>335 s</title>
+<rect x="741" y="130" width="229" height="78" fill="#f4f3ef" rx="6"/>
+<text x="753" y="150" font-size="14" fill="#0b0b0b" font-weight="bold">335 s</text>
+<text x="753" y="168" font-size="12" fill="#52514e">longest stream</text>
+<text x="753" y="183" font-size="12" fill="#52514e">any member can have</text>
+</g>
+<g data-element="REFUSE"><title>REFUSE</title>
+<rect x="721.72" y="268" width="238.28" height="270" fill="#fbeaea"/>
+<rect x="723.22" y="252" width="236.78" height="5" fill="#d03b3b"/>
+<text x="840.86" y="244" font-size="12.5" fill="#0b0b0b" text-anchor="middle" font-weight="bold">REFUSE: the window does not start</text>
+</g>
+<g data-element="PASS"><title>PASS</title>
+<rect x="90" y="252" width="630.22" height="5" fill="#0ca30c"/>
+<text x="405.86" y="244" font-size="12.5" fill="#0b0b0b" text-anchor="middle" font-weight="bold">PASS: the arm goes on to its other checks</text>
+</g>
+<g data-element="vertical axis"><title>vertical axis</title>
+<line x1="90" y1="538" x2="960" y2="538" stroke="#e1e0d9" stroke-width="1"/>
+<text x="80" y="542.5" font-size="12" fill="#52514e" text-anchor="end">3.5</text>
+<line x1="90" y1="470.5" x2="960" y2="470.5" stroke="#e1e0d9" stroke-width="1"/>
+<text x="80" y="475" font-size="12" fill="#52514e" text-anchor="end">4.0</text>
+<line x1="90" y1="403" x2="960" y2="403" stroke="#e1e0d9" stroke-width="1"/>
+<text x="80" y="407.5" font-size="12" fill="#52514e" text-anchor="end">4.5</text>
+<line x1="90" y1="335.5" x2="960" y2="335.5" stroke="#e1e0d9" stroke-width="1"/>
+<text x="80" y="340" font-size="12" fill="#52514e" text-anchor="end">5.0</text>
+<line x1="90" y1="268" x2="960" y2="268" stroke="#e1e0d9" stroke-width="1"/>
+<text x="80" y="272.5" font-size="12" fill="#52514e" text-anchor="end">5.5</text>
+<line x1="90" y1="268" x2="90" y2="538" stroke="#c3c2b7" stroke-width="1"/>
+<text x="34" y="403" font-size="12.5" fill="#52514e" text-anchor="middle" transform="rotate(-90 34 403)">vertical axis: predicted member clock bound (ms)</text>
+</g>
+<g data-element="horizontal axis"><title>horizontal axis</title>
+<line x1="90" y1="538" x2="90" y2="543" stroke="#c3c2b7" stroke-width="1"/>
+<text x="90" y="558" font-size="12" fill="#52514e" text-anchor="middle">0</text>
+<line x1="264" y1="538" x2="264" y2="543" stroke="#c3c2b7" stroke-width="1"/>
+<text x="264" y="558" font-size="12" fill="#52514e" text-anchor="middle">1</text>
+<line x1="438" y1="538" x2="438" y2="543" stroke="#c3c2b7" stroke-width="1"/>
+<text x="438" y="558" font-size="12" fill="#52514e" text-anchor="middle">2</text>
+<line x1="612" y1="538" x2="612" y2="543" stroke="#c3c2b7" stroke-width="1"/>
+<text x="612" y="558" font-size="12" fill="#52514e" text-anchor="middle">3</text>
+<line x1="786" y1="538" x2="786" y2="543" stroke="#c3c2b7" stroke-width="1"/>
+<text x="786" y="558" font-size="12" fill="#52514e" text-anchor="middle">4</text>
+<line x1="960" y1="538" x2="960" y2="543" stroke="#c3c2b7" stroke-width="1"/>
+<text x="960" y="558" font-size="12" fill="#52514e" text-anchor="middle">5</text>
+<line x1="90" y1="538" x2="960" y2="538" stroke="#c3c2b7" stroke-width="1"/>
+<text x="525" y="580" font-size="12.5" fill="#52514e" text-anchor="middle">horizontal axis: |f|, the size of the frequency word (ppm)</text>
+</g>
+<g data-element="5 ms limit"><title>5 ms limit</title>
+<line x1="90" y1="335.5" x2="960" y2="335.5" stroke="#0b0b0b" stroke-width="1.6" stroke-dasharray="8 5"/>
+<text x="100" y="327.5" font-size="13" fill="#0b0b0b" font-weight="bold">5 ms limit</text>
+</g>
+<g data-element="largest passing rate"><title>largest passing rate</title>
+<line x1="721.72" y1="268" x2="721.72" y2="538" stroke="#52514e" stroke-width="1.2"/>
+<text x="712.72" y="504" font-size="12.5" fill="#0b0b0b" text-anchor="end">largest passing rate</text>
+<text x="712.72" y="520" font-size="12.5" fill="#0b0b0b" text-anchor="end">|f| = 3.6306 ppm</text>
+</g>
+<g data-element="predicted bound"><title>predicted bound</title>
+<line x1="90" y1="499.69" x2="960" y2="273.57" stroke="#2a78d6" stroke-width="2.4" stroke-linecap="round"/>
+<text x="270" y="488.47" font-size="13" fill="#0b0b0b" font-weight="bold">predicted bound: rises 0.335 ms for each ppm of |f|</text>
+</g>
+<g data-element="starting value"><title>starting value</title>
+<circle cx="90" cy="499.69" r="5" fill="#ffffff" stroke="#2a78d6" stroke-width="2.2"/>
+<text x="104" y="521.69" font-size="12.5" fill="#0b0b0b">starting value at |f| = 0: 3.7 ms + 0.25 ppm × 335 s = 3.784 ms</text>
+</g>
+<g data-element="Point A" data-role="worked-point" data-abs-f-ppm="3.17" data-bound-ms="4.846" data-verdict="PASS" data-plot-x="641.58" data-plot-y="356.33"><title>Point A</title>
+<line x1="641.58" y1="364.33" x2="641.58" y2="418.33" stroke="#52514e" stroke-width="1"/>
+<circle cx="641.58" cy="356.33" r="6.5" fill="#0ca30c" stroke="#ffffff" stroke-width="2"/>
+<text x="651.58" y="433.33" font-size="12.5" fill="#0b0b0b" text-anchor="end" font-weight="bold">Point A: 3.17 ppm → 4.846 ms, PASS</text>
+</g>
+<g data-element="Point B" data-role="worked-point" data-abs-f-ppm="3.7" data-bound-ms="5.023" data-verdict="REFUSE" data-plot-x="733.8" data-plot-y="332.36"><title>Point B</title>
+<line x1="738.8" y1="338.36" x2="753.8" y2="362.36" stroke="#52514e" stroke-width="1"/>
+<polygon points="733.8,324.36 741.8,332.36 733.8,340.36 725.8,332.36" fill="#d03b3b" stroke="#ffffff" stroke-width="2" stroke-linejoin="round"/>
+<text x="954" y="378.36" font-size="12.5" fill="#0b0b0b" text-anchor="end" font-weight="bold">Point B: 3.7 ppm → 5.023 ms, REFUSE</text>
+</g>
+<g data-element="Point A"><title>Point A</title>
+<rect x="30" y="600" width="306" height="74" fill="#f4f3ef" rx="6"/>
+<circle cx="48" cy="619" r="6.5" fill="#0ca30c"/>
+<text x="64" y="623.5" font-size="12.5" fill="#0b0b0b" font-weight="bold">Point A: f = −3.17 ppm, read 2026-10-05</text>
+<text x="44" y="644" font-size="12.5" fill="#52514e">3.7 + (3.17 + 0.25) × 0.335 = 4.846 ms</text>
+<text x="44" y="661" font-size="12.5" fill="#52514e">4.846 ms ≤ 5 ms: PASS</text>
+</g>
+<g data-element="Point B"><title>Point B</title>
+<rect x="347" y="600" width="306" height="74" fill="#f4f3ef" rx="6"/>
+<polygon points="365,611 373,619 365,627 357,619" fill="#d03b3b"/>
+<text x="381" y="623.5" font-size="12.5" fill="#0b0b0b" font-weight="bold">Point B: a hypothetical |f| = 3.7 ppm</text>
+<text x="361" y="644" font-size="12.5" fill="#52514e">3.7 + (3.7 + 0.25) × 0.335 = 5.023 ms</text>
+<text x="361" y="661" font-size="12.5" fill="#52514e">5.023 ms &gt; 5 ms: REFUSE</text>
+</g>
+<g data-element="largest passing rate"><title>largest passing rate</title>
+<rect x="664" y="600" width="306" height="74" fill="#f4f3ef" rx="6"/>
+<text x="678" y="623.5" font-size="12.5" fill="#0b0b0b" font-weight="bold">largest passing rate</text>
+<text x="678" y="644" font-size="12.5" fill="#52514e">(5 − 3.7) ÷ 0.335 − 0.25 = 3.6306 ppm</text>
+<text x="678" y="661" font-size="12.5" fill="#52514e">(rounded to four decimals)</text>
+</g>
+</svg>

@@ -1,0 +1,303 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1113" viewBox="0 0 1200 1113" role="img" aria-labelledby="bs1-title bs1-desc">
+<title id="bs1-title">Figure B-S1. One measurement window, in order of time</title>
+<desc id="bs1-desc">Schematic timeline of one measurement window, in four rows read top to bottom. Row 1: the scheduled start, the arm and GO. Row 2: the bracket reservation, a settle, the pre calibration with its screen, the reference corpus, the reference drift bound, and the start triplet of reference members with its spares. Row 3: the stages of science members, each preceded by a settle, with a midpoint reference between the decode workload and the prefill workload; one version for a single-model window and one for the contrast window. Row 4: the end triplet, the post calibration, the chain&#x27;s exit, and the tail with the clock-step control. A bar under rows 2 to 4 shows the monitor and the whole-machine meter recording. An inset expands one stage into its settle, its members and the cooldowns between them. No measured data is shown.</desc>
+<defs>
+<marker id="bs1-arrow" markerWidth="10" markerHeight="10" refX="9" refY="4.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L9,4.5 L0,9 z" fill="#333333"/></marker>
+<pattern id="bs1-hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="6" stroke="#555555" stroke-width="2"/></pattern>
+</defs>
+<g data-element="background"><rect x="0" y="0" width="1200" height="1113" fill="#ffffff"/></g>
+<text x="40" y="32" font-family="sans-serif" font-size="18" fill="#1b1b1b" font-weight="bold">Figure B-S1. One measurement window, in order of time</text>
+<text x="40" y="54" font-family="sans-serif" font-size="13" fill="#555555">Schematic of the registered design. Widths are not proportional to time. No measured data is shown.</text>
+<text x="40" y="82" font-family="sans-serif" font-size="13.5" fill="#1b1b1b" font-weight="bold">1   The arm: the checks that decide whether the window&#x27;s chain starts</text>
+<g data-element="instant marker" data-label="scheduled start"><line x1="93" y1="116" x2="93" y2="190" stroke="#1b1b1b" stroke-width="2.6"/></g>
+<text x="93" y="110" font-family="sans-serif" font-size="11.5" fill="#1b1b1b" font-weight="bold" text-anchor="middle">scheduled start</text>
+<g data-element="time arrow"><line x1="97" y1="153" x2="109" y2="153" stroke="#333333" stroke-width="1.6" marker-end="url(#bs1-arrow)"/></g>
+<g data-element="arm box" data-label="the arm"><rect x="110" y="124" width="540" height="58" fill="#ffffff" stroke="#1b1b1b" stroke-width="2.2" rx="14"/></g>
+<text x="380" y="141.9" font-family="sans-serif" font-size="12.5" fill="#1b1b1b" text-anchor="middle">the arm: six physical hazards are measured directly (Figure B-S3)</text>
+<text x="380" y="157.4" font-family="sans-serif" font-size="12.5" fill="#1b1b1b" text-anchor="middle">about 41 s of reads and probes, then the dwell:</text>
+<text x="380" y="172.9" font-family="sans-serif" font-size="12.5" fill="#1b1b1b" text-anchor="middle">a wait of 180 s to 2,700 s for a quiet machine</text>
+<g data-element="time arrow"><line x1="651" y1="153" x2="663" y2="153" stroke="#333333" stroke-width="1.6" marker-end="url(#bs1-arrow)"/></g>
+<g data-element="instant marker" data-label="GO"><line x1="667" y1="116" x2="667" y2="190" stroke="#1b1b1b" stroke-width="2.6"/></g>
+<text x="667" y="110" font-family="sans-serif" font-size="11.5" fill="#1b1b1b" font-weight="bold" text-anchor="middle">GO</text>
+<text x="690" y="129" font-family="sans-serif" font-size="12" fill="#1b1b1b">At GO the chain starts: the script that runs the stages of rows</text>
+<text x="690" y="144.5" font-family="sans-serif" font-size="12" fill="#1b1b1b">2 to 4. That is about 4 to 47 minutes after the scheduled start.</text>
+<text x="690" y="160" font-family="sans-serif" font-size="12" fill="#1b1b1b">From GO to the tail, the monitor and the whole-machine meter</text>
+<text x="690" y="175.5" font-family="sans-serif" font-size="12" fill="#1b1b1b">record (grey bar under rows 2 to 4).</text>
+<text x="40" y="220" font-family="sans-serif" font-size="13.5" fill="#1b1b1b" font-weight="bold">2   Opening: the same in all three windows</text>
+<g data-element="computing or recording step" data-label="bracket reservation"><rect x="40" y="246" width="100" height="58" fill="#f2f2f2" stroke="#333333" stroke-width="1.8"/></g>
+<text x="90" y="271.6" font-family="sans-serif" font-size="12.5" fill="#1b1b1b" text-anchor="middle">bracket</text>
+<text x="90" y="287.1" font-family="sans-serif" font-size="12.5" fill="#1b1b1b" text-anchor="middle">reservation</text>
+<g data-element="time arrow"><line x1="141" y1="275" x2="153" y2="275" stroke="#333333" stroke-width="1.6" marker-end="url(#bs1-arrow)"/></g>
+<g data-element="settle"><rect x="154" y="254" width="12" height="42" fill="url(#bs1-hatch)" stroke="#555555" stroke-width="1.2"/></g>
+<text x="160" y="249" font-family="sans-serif" font-size="10" fill="#555555" text-anchor="middle">60 s</text>
+<g data-element="time arrow"><line x1="167" y1="275" x2="179" y2="275" stroke="#333333" stroke-width="1.6" marker-end="url(#bs1-arrow)"/></g>
+<g data-element="pulse calibration" data-label="pre calibration"><rect x="180" y="246" width="116" height="58" fill="#1b6ca8" stroke="#1b6ca8" stroke-width="2.2" fill-opacity="0.12"/></g>
+<text x="238" y="271.6" font-family="sans-serif" font-size="12.5" fill="#1b1b1b" text-anchor="middle">pre calibration</text>
+<text x="238" y="287.1" font-family="sans-serif" font-size="12.5" fill="#1b1b1b" text-anchor="middle">and its screen</text>
+<g data-element="chain stop" data-label="chain stop 1"><circle cx="131" cy="246" r="9.5" fill="#a32a1f"/></g>
+<text x="131" y="250" font-family="sans-serif" font-size="11.5" fill="#ffffff" font-weight="bold" text-anchor="middle">1</text>
+<g data-element="chain stop" data-label="chain stop 2"><circle cx="265" cy="246" r="9.5" fill="#a32a1f"/></g>
+<text x="265" y="250" font-family="sans-serif" font-size="11.5" fill="#ffffff" font-weight="bold" text-anchor="middle">2</text>
+<g data-element="chain stop" data-label="chain stop 3"><circle cx="287" cy="246" r="9.5" fill="#a32a1f"/></g>
+<text x="287" y="250" font-family="sans-serif" font-size="11.5" fill="#ffffff" font-weight="bold" text-anchor="middle">3</text>
+<g data-element="time arrow"><line x1="297" y1="275" x2="309" y2="275" stroke="#333333" stroke-width="1.6" marker-end="url(#bs1-arrow)"/></g>
+<g data-element="settle"><rect x="310" y="254" width="12" height="42" fill="url(#bs1-hatch)" stroke="#555555" stroke-width="1.2"/></g>
+<text x="316" y="249" font-family="sans-serif" font-size="10" fill="#555555" text-anchor="middle">60 s</text>
+<g data-element="time arrow"><line x1="323" y1="275" x2="335" y2="275" stroke="#333333" stroke-width="1.6" marker-end="url(#bs1-arrow)"/></g>
+<g data-element="reference member" data-label="reference corpus"><rect x="336" y="267" width="16" height="16" fill="#bdbdbd" stroke="#333333" stroke-width="1.4"/></g>
+<g data-element="reference member" data-label="reference corpus"><rect x="356" y="267" width="16" height="16" fill="#bdbdbd" stroke="#333333" stroke-width="1.4"/></g>
+<g data-element="reference member" data-label="reference corpus"><rect x="376" y="267" width="16" height="16" fill="#bdbdbd" stroke="#333333" stroke-width="1.4"/></g>
+<g data-element="reference member" data-label="reference corpus"><rect x="396" y="267" width="16" height="16" fill="#bdbdbd" stroke="#333333" stroke-width="1.4"/></g>
+<g data-element="reference member" data-label="reference corpus"><rect x="416" y="267" width="16" height="16" fill="#bdbdbd" stroke="#333333" stroke-width="1.4"/></g>
+<g data-element="reference member" data-label="reference corpus"><rect x="436" y="267" width="16" height="16" fill="#bdbdbd" stroke="#333333" stroke-width="1.4"/></g>
+<g data-element="reference member" data-label="reference corpus"><rect x="456" y="267" width="16" height="16" fill="#bdbdbd" stroke="#333333" stroke-width="1.4"/></g>
+<g data-element="reference member" data-label="reference corpus"><rect x="476" y="267" width="16" height="16" fill="#bdbdbd" stroke="#333333" stroke-width="1.4"/></g>
+<g data-element="reference member" data-label="reference corpus"><rect x="496" y="267" width="16" height="16" fill="#bdbdbd" stroke="#333333" stroke-width="1.4"/></g>
+<g data-element="reference member" data-label="reference corpus"><rect x="516" y="267" width="16" height="16" fill="#bdbdbd" stroke="#333333" stroke-width="1.4"/></g>
+<g data-element="reference member" data-label="reference corpus"><rect x="536" y="267" width="16" height="16" fill="#bdbdbd" stroke="#333333" stroke-width="1.4"/></g>
+<g data-element="reference member" data-label="reference corpus"><rect x="556" y="267" width="16" height="16" fill="#bdbdbd" stroke="#333333" stroke-width="1.4"/></g>
+<text x="454" y="317" font-family="sans-serif" font-size="11" fill="#1b1b1b" text-anchor="middle">reference corpus: 12 reference members</text>
+<g data-element="time arrow"><line x1="573" y1="275" x2="585" y2="275" stroke="#333333" stroke-width="1.6" marker-end="url(#bs1-arrow)"/></g>
+<g data-element="computing or recording step" data-label="reference drift bound computed"><rect x="586" y="246" width="100" height="58" fill="#f2f2f2" stroke="#333333" stroke-width="1.8"/></g>
+<text x="636" y="263.9" font-family="sans-serif" font-size="12.5" fill="#1b1b1b" text-anchor="middle">reference</text>
+<text x="636" y="279.4" font-family="sans-serif" font-size="12.5" fill="#1b1b1b" text-anchor="middle">drift bound</text>
+<text x="636" y="294.9" font-family="sans-serif" font-size="12.5" fill="#1b1b1b" text-anchor="middle">computed</text>
+<g data-element="time arrow"><line x1="687" y1="275" x2="699" y2="275" stroke="#333333" stroke-width="1.6" marker-end="url(#bs1-arrow)"/></g>
+<g data-element="settle"><rect x="700" y="254" width="12" height="42" fill="url(#bs1-hatch)" stroke="#555555" stroke-width="1.2"/></g>
+<text x="706" y="249" font-family="sans-serif" font-size="10" fill="#555555" text-anchor="middle">60 s</text>
+<g data-element="time arrow"><line x1="713" y1="275" x2="725" y2="275" stroke="#333333" stroke-width="1.6" marker-end="url(#bs1-arrow)"/></g>
+<g data-element="reference member" data-label="start triplet"><rect x="726" y="267" width="16" height="16" fill="#bdbdbd" stroke="#333333" stroke-width="1.4"/></g>
+<g data-element="reference member" data-label="start triplet"><rect x="746" y="267" width="16" height="16" fill="#bdbdbd" stroke="#333333" stroke-width="1.4"/></g>
+<g data-element="reference member" data-label="start triplet"><rect x="766" y="267" width="16" height="16" fill="#bdbdbd" stroke="#333333" stroke-width="1.4"/></g>
+<g data-element="spare" data-label="start triplet"><rect x="786" y="267" width="16" height="16" fill="#ffffff" stroke="#333333" stroke-width="1.3" stroke-dasharray="3 2"/></g>
+<g data-element="spare" data-label="start triplet"><rect x="806" y="267" width="16" height="16" fill="#ffffff" stroke="#333333" stroke-width="1.3" stroke-dasharray="3 2"/></g>
+<g data-element="spare" data-label="start triplet"><rect x="826" y="267" width="16" height="16" fill="#ffffff" stroke="#333333" stroke-width="1.3" stroke-dasharray="3 2"/></g>
+<text x="784" y="317" font-family="sans-serif" font-size="11" fill="#1b1b1b" text-anchor="middle">start triplet, 3 spares</text>
+<g data-element="monitor and meter bar"><rect x="40" y="338" width="802" height="5" fill="#9a9a9a"/></g>
+<text x="870" y="240" font-family="sans-serif" font-size="12" fill="#1b1b1b">Chain stops 1, 2, 3: the only points at which</text>
+<text x="870" y="255.5" font-family="sans-serif" font-size="12" fill="#1b1b1b">the chain itself ends the window.</text>
+<text x="870" y="271" font-family="sans-serif" font-size="12" fill="#1b1b1b">1  the bracket reservation fails</text>
+<text x="870" y="286.5" font-family="sans-serif" font-size="12" fill="#1b1b1b">2  the pre calibration cannot be recorded</text>
+<text x="870" y="302" font-family="sans-serif" font-size="12" fill="#1b1b1b">3  its pulse timing bound is above the pre</text>
+<text x="870" y="317.5" font-family="sans-serif" font-size="12" fill="#1b1b1b">    screen, 36.5 ms</text>
+<text x="870" y="333" font-family="sans-serif" font-size="12" fill="#1b1b1b">All three come before the first member.</text>
+<text x="40" y="362" font-family="sans-serif" font-size="13.5" fill="#1b1b1b" font-weight="bold">3a   Science stages of a single-model window (the 1.7B window and the 8B window): 100 science members, 119 members in all</text>
+<g data-element="settle"><rect x="40" y="422" width="12" height="42" fill="url(#bs1-hatch)" stroke="#555555" stroke-width="1.2"/></g>
+<text x="46" y="417" font-family="sans-serif" font-size="10" fill="#555555" text-anchor="middle">60 s</text>
+<g data-element="time arrow"><line x1="53" y1="443" x2="65" y2="443" stroke="#333333" stroke-width="1.6" marker-end="url(#bs1-arrow)"/></g>
+<g data-element="science stage" data-label="10 absolute repeats"><rect x="66" y="414" width="88" height="58" fill="#ffffff" stroke="#1b1b1b" stroke-width="2.4"/></g>
+<text x="110" y="439.6" font-family="sans-serif" font-size="12.5" fill="#1b1b1b" text-anchor="middle">10 absolute</text>
+<text x="110" y="455.1" font-family="sans-serif" font-size="12.5" fill="#1b1b1b" text-anchor="middle">repeats</text>
+<g data-element="time arrow"><line x1="155" y1="443" x2="167" y2="443" stroke="#333333" stroke-width="1.6" marker-end="url(#bs1-arrow)"/></g>
+<g data-element="settle"><rect x="168" y="422" width="12" height="42" fill="url(#bs1-hatch)" stroke="#555555" stroke-width="1.2"/></g>
+<text x="174" y="417" font-family="sans-serif" font-size="10" fill="#555555" text-anchor="middle">60 s</text>
+<g data-element="time arrow"><line x1="181" y1="443" x2="193" y2="443" stroke="#333333" stroke-width="1.6" marker-end="url(#bs1-arrow)"/></g>
+<g data-element="science stage" data-label="quads 1–5"><rect x="194" y="414" width="88" height="58" fill="#ffffff" stroke="#1b1b1b" stroke-width="2.4"/></g>
+<text x="238" y="439.6" font-family="sans-serif" font-size="12.5" fill="#1b1b1b" text-anchor="middle">quads 1–5</text>
+<text x="238" y="455.1" font-family="sans-serif" font-size="12.5" fill="#1b1b1b" text-anchor="middle">20 members</text>
+<g data-element="time arrow"><line x1="283" y1="443" x2="295" y2="443" stroke="#333333" stroke-width="1.6" marker-end="url(#bs1-arrow)"/></g>
+<g data-element="settle"><rect x="296" y="422" width="12" height="42" fill="url(#bs1-hatch)" stroke="#555555" stroke-width="1.2"/></g>
+<text x="302" y="417" font-family="sans-serif" font-size="10" fill="#555555" text-anchor="middle">60 s</text>
+<g data-element="time arrow"><line x1="309" y1="443" x2="321" y2="443" stroke="#333333" stroke-width="1.6" marker-end="url(#bs1-arrow)"/></g>
+<g data-element="science stage" data-label="quads 6–10"><rect x="322" y="414" width="88" height="58" fill="#ffffff" stroke="#1b1b1b" stroke-width="2.4"/></g>
+<text x="366" y="439.6" font-family="sans-serif" font-size="12.5" fill="#1b1b1b" text-anchor="middle">quads 6–10</text>
+<text x="366" y="455.1" font-family="sans-serif" font-size="12.5" fill="#1b1b1b" text-anchor="middle">20 members</text>
+<g data-element="time arrow"><line x1="411" y1="443" x2="423" y2="443" stroke="#333333" stroke-width="1.6" marker-end="url(#bs1-arrow)"/></g>
+<g data-element="settle"><rect x="424" y="422" width="12" height="42" fill="url(#bs1-hatch)" stroke="#555555" stroke-width="1.2"/></g>
+<text x="430" y="417" font-family="sans-serif" font-size="10" fill="#555555" text-anchor="middle">60 s</text>
+<g data-element="time arrow"><line x1="437" y1="443" x2="449" y2="443" stroke="#333333" stroke-width="1.6" marker-end="url(#bs1-arrow)"/></g>
+<g data-element="reference member" data-label="midpoint reference"><rect x="450" y="435" width="16" height="16" fill="#bdbdbd" stroke="#333333" stroke-width="1.4"/></g>
+<g data-element="spare" data-label="midpoint reference"><rect x="470" y="435" width="16" height="16" fill="#ffffff" stroke="#333333" stroke-width="1.3" stroke-dasharray="3 2"/></g>
+<text x="468" y="485" font-family="sans-serif" font-size="11" fill="#1b1b1b" text-anchor="middle">midpoint</text>
+<text x="468" y="498.5" font-family="sans-serif" font-size="11" fill="#1b1b1b" text-anchor="middle">reference</text>
+<g data-element="time arrow"><line x1="487" y1="443" x2="499" y2="443" stroke="#333333" stroke-width="1.6" marker-end="url(#bs1-arrow)"/></g>
+<g data-element="settle"><rect x="500" y="422" width="12" height="42" fill="url(#bs1-hatch)" stroke="#555555" stroke-width="1.2"/></g>
+<text x="506" y="417" font-family="sans-serif" font-size="10" fill="#555555" text-anchor="middle">60 s</text>
+<g data-element="time arrow"><line x1="513" y1="443" x2="525" y2="443" stroke="#333333" stroke-width="1.6" marker-end="url(#bs1-arrow)"/></g>
+<g data-element="science stage" data-label="10 absolute repeats"><rect x="526" y="414" width="88" height="58" fill="#ffffff" stroke="#1b1b1b" stroke-width="2.4"/></g>
+<text x="570" y="439.6" font-family="sans-serif" font-size="12.5" fill="#1b1b1b" text-anchor="middle">10 absolute</text>
+<text x="570" y="455.1" font-family="sans-serif" font-size="12.5" fill="#1b1b1b" text-anchor="middle">repeats</text>
+<g data-element="time arrow"><line x1="615" y1="443" x2="627" y2="443" stroke="#333333" stroke-width="1.6" marker-end="url(#bs1-arrow)"/></g>
+<g data-element="settle"><rect x="628" y="422" width="12" height="42" fill="url(#bs1-hatch)" stroke="#555555" stroke-width="1.2"/></g>
+<text x="634" y="417" font-family="sans-serif" font-size="10" fill="#555555" text-anchor="middle">60 s</text>
+<g data-element="time arrow"><line x1="641" y1="443" x2="653" y2="443" stroke="#333333" stroke-width="1.6" marker-end="url(#bs1-arrow)"/></g>
+<g data-element="science stage" data-label="quads 1–5"><rect x="654" y="414" width="88" height="58" fill="#ffffff" stroke="#1b1b1b" stroke-width="2.4"/></g>
+<text x="698" y="439.6" font-family="sans-serif" font-size="12.5" fill="#1b1b1b" text-anchor="middle">quads 1–5</text>
+<text x="698" y="455.1" font-family="sans-serif" font-size="12.5" fill="#1b1b1b" text-anchor="middle">20 members</text>
+<g data-element="time arrow"><line x1="743" y1="443" x2="755" y2="443" stroke="#333333" stroke-width="1.6" marker-end="url(#bs1-arrow)"/></g>
+<g data-element="settle"><rect x="756" y="422" width="12" height="42" fill="url(#bs1-hatch)" stroke="#555555" stroke-width="1.2"/></g>
+<text x="762" y="417" font-family="sans-serif" font-size="10" fill="#555555" text-anchor="middle">60 s</text>
+<g data-element="time arrow"><line x1="769" y1="443" x2="781" y2="443" stroke="#333333" stroke-width="1.6" marker-end="url(#bs1-arrow)"/></g>
+<g data-element="science stage" data-label="quads 6–10"><rect x="782" y="414" width="88" height="58" fill="#ffffff" stroke="#1b1b1b" stroke-width="2.4"/></g>
+<text x="826" y="439.6" font-family="sans-serif" font-size="12.5" fill="#1b1b1b" text-anchor="middle">quads 6–10</text>
+<text x="826" y="455.1" font-family="sans-serif" font-size="12.5" fill="#1b1b1b" text-anchor="middle">20 members</text>
+<g data-element="monitor and meter bar"><rect x="40" y="506" width="830" height="5" fill="#9a9a9a"/></g>
+<text x="894" y="416" font-family="sans-serif" font-size="12" fill="#1b1b1b">A window runs row 3a or row 3b,</text>
+<text x="894" y="431.5" font-family="sans-serif" font-size="12" fill="#1b1b1b">never both.</text>
+<text x="894" y="447" font-family="sans-serif" font-size="12" fill="#1b1b1b">Absolute repeat: one member</text>
+<text x="894" y="462.5" font-family="sans-serif" font-size="12" fill="#1b1b1b">on its own.</text>
+<text x="894" y="478" font-family="sans-serif" font-size="12" fill="#1b1b1b">Quad: four members in the order</text>
+<text x="894" y="493.5" font-family="sans-serif" font-size="12" fill="#1b1b1b">A, B, B, A.</text>
+<text x="40" y="537" font-family="sans-serif" font-size="13.5" fill="#1b1b1b" font-weight="bold">3b   Science stages of the contrast window (side A the 1.7B model, side B the 8B model): 80 science members, 101 members in all</text>
+<g data-element="settle"><rect x="40" y="597" width="12" height="42" fill="url(#bs1-hatch)" stroke="#555555" stroke-width="1.2"/></g>
+<text x="46" y="592" font-family="sans-serif" font-size="10" fill="#555555" text-anchor="middle">60 s</text>
+<g data-element="time arrow"><line x1="53" y1="618" x2="65" y2="618" stroke="#333333" stroke-width="1.6" marker-end="url(#bs1-arrow)"/></g>
+<g data-element="science stage" data-label="quads 1–5"><rect x="66" y="589" width="88" height="58" fill="#ffffff" stroke="#1b1b1b" stroke-width="2.4"/></g>
+<text x="110" y="614.6" font-family="sans-serif" font-size="12.5" fill="#1b1b1b" text-anchor="middle">quads 1–5</text>
+<text x="110" y="630.1" font-family="sans-serif" font-size="12.5" fill="#1b1b1b" text-anchor="middle">20 members</text>
+<g data-element="time arrow"><line x1="155" y1="618" x2="167" y2="618" stroke="#333333" stroke-width="1.6" marker-end="url(#bs1-arrow)"/></g>
+<g data-element="settle"><rect x="168" y="597" width="12" height="42" fill="url(#bs1-hatch)" stroke="#555555" stroke-width="1.2"/></g>
+<text x="174" y="592" font-family="sans-serif" font-size="10" fill="#555555" text-anchor="middle">60 s</text>
+<g data-element="time arrow"><line x1="181" y1="618" x2="193" y2="618" stroke="#333333" stroke-width="1.6" marker-end="url(#bs1-arrow)"/></g>
+<g data-element="interior reference" data-label="interior reference"><rect x="194" y="610" width="16" height="16" fill="#ffffff" stroke="#333333" stroke-width="1.6"/><line x1="194" y1="626" x2="210" y2="610" stroke="#333333" stroke-width="1.2"/></g>
+<text x="202" y="660" font-family="sans-serif" font-size="11" fill="#1b1b1b" text-anchor="middle">interior</text>
+<text x="202" y="673.5" font-family="sans-serif" font-size="11" fill="#1b1b1b" text-anchor="middle">reference</text>
+<g data-element="time arrow"><line x1="211" y1="618" x2="223" y2="618" stroke="#333333" stroke-width="1.6" marker-end="url(#bs1-arrow)"/></g>
+<g data-element="settle"><rect x="224" y="597" width="12" height="42" fill="url(#bs1-hatch)" stroke="#555555" stroke-width="1.2"/></g>
+<text x="230" y="592" font-family="sans-serif" font-size="10" fill="#555555" text-anchor="middle">60 s</text>
+<g data-element="time arrow"><line x1="237" y1="618" x2="249" y2="618" stroke="#333333" stroke-width="1.6" marker-end="url(#bs1-arrow)"/></g>
+<g data-element="science stage" data-label="quads 6–10"><rect x="250" y="589" width="88" height="58" fill="#ffffff" stroke="#1b1b1b" stroke-width="2.4"/></g>
+<text x="294" y="614.6" font-family="sans-serif" font-size="12.5" fill="#1b1b1b" text-anchor="middle">quads 6–10</text>
+<text x="294" y="630.1" font-family="sans-serif" font-size="12.5" fill="#1b1b1b" text-anchor="middle">20 members</text>
+<g data-element="time arrow"><line x1="339" y1="618" x2="351" y2="618" stroke="#333333" stroke-width="1.6" marker-end="url(#bs1-arrow)"/></g>
+<g data-element="settle"><rect x="352" y="597" width="12" height="42" fill="url(#bs1-hatch)" stroke="#555555" stroke-width="1.2"/></g>
+<text x="358" y="592" font-family="sans-serif" font-size="10" fill="#555555" text-anchor="middle">60 s</text>
+<g data-element="time arrow"><line x1="365" y1="618" x2="377" y2="618" stroke="#333333" stroke-width="1.6" marker-end="url(#bs1-arrow)"/></g>
+<g data-element="reference member" data-label="midpoint reference"><rect x="378" y="610" width="16" height="16" fill="#bdbdbd" stroke="#333333" stroke-width="1.4"/></g>
+<g data-element="spare" data-label="midpoint reference"><rect x="398" y="610" width="16" height="16" fill="#ffffff" stroke="#333333" stroke-width="1.3" stroke-dasharray="3 2"/></g>
+<text x="396" y="660" font-family="sans-serif" font-size="11" fill="#1b1b1b" text-anchor="middle">midpoint</text>
+<text x="396" y="673.5" font-family="sans-serif" font-size="11" fill="#1b1b1b" text-anchor="middle">reference</text>
+<g data-element="time arrow"><line x1="415" y1="618" x2="427" y2="618" stroke="#333333" stroke-width="1.6" marker-end="url(#bs1-arrow)"/></g>
+<g data-element="settle"><rect x="428" y="597" width="12" height="42" fill="url(#bs1-hatch)" stroke="#555555" stroke-width="1.2"/></g>
+<text x="434" y="592" font-family="sans-serif" font-size="10" fill="#555555" text-anchor="middle">60 s</text>
+<g data-element="time arrow"><line x1="441" y1="618" x2="453" y2="618" stroke="#333333" stroke-width="1.6" marker-end="url(#bs1-arrow)"/></g>
+<g data-element="science stage" data-label="quads 1–5"><rect x="454" y="589" width="88" height="58" fill="#ffffff" stroke="#1b1b1b" stroke-width="2.4"/></g>
+<text x="498" y="614.6" font-family="sans-serif" font-size="12.5" fill="#1b1b1b" text-anchor="middle">quads 1–5</text>
+<text x="498" y="630.1" font-family="sans-serif" font-size="12.5" fill="#1b1b1b" text-anchor="middle">20 members</text>
+<g data-element="time arrow"><line x1="543" y1="618" x2="555" y2="618" stroke="#333333" stroke-width="1.6" marker-end="url(#bs1-arrow)"/></g>
+<g data-element="settle"><rect x="556" y="597" width="12" height="42" fill="url(#bs1-hatch)" stroke="#555555" stroke-width="1.2"/></g>
+<text x="562" y="592" font-family="sans-serif" font-size="10" fill="#555555" text-anchor="middle">60 s</text>
+<g data-element="time arrow"><line x1="569" y1="618" x2="581" y2="618" stroke="#333333" stroke-width="1.6" marker-end="url(#bs1-arrow)"/></g>
+<g data-element="interior reference" data-label="interior reference"><rect x="582" y="610" width="16" height="16" fill="#ffffff" stroke="#333333" stroke-width="1.6"/><line x1="582" y1="626" x2="598" y2="610" stroke="#333333" stroke-width="1.2"/></g>
+<text x="590" y="660" font-family="sans-serif" font-size="11" fill="#1b1b1b" text-anchor="middle">interior</text>
+<text x="590" y="673.5" font-family="sans-serif" font-size="11" fill="#1b1b1b" text-anchor="middle">reference</text>
+<g data-element="time arrow"><line x1="599" y1="618" x2="611" y2="618" stroke="#333333" stroke-width="1.6" marker-end="url(#bs1-arrow)"/></g>
+<g data-element="settle"><rect x="612" y="597" width="12" height="42" fill="url(#bs1-hatch)" stroke="#555555" stroke-width="1.2"/></g>
+<text x="618" y="592" font-family="sans-serif" font-size="10" fill="#555555" text-anchor="middle">60 s</text>
+<g data-element="time arrow"><line x1="625" y1="618" x2="637" y2="618" stroke="#333333" stroke-width="1.6" marker-end="url(#bs1-arrow)"/></g>
+<g data-element="science stage" data-label="quads 6–10"><rect x="638" y="589" width="88" height="58" fill="#ffffff" stroke="#1b1b1b" stroke-width="2.4"/></g>
+<text x="682" y="614.6" font-family="sans-serif" font-size="12.5" fill="#1b1b1b" text-anchor="middle">quads 6–10</text>
+<text x="682" y="630.1" font-family="sans-serif" font-size="12.5" fill="#1b1b1b" text-anchor="middle">20 members</text>
+<g data-element="monitor and meter bar"><rect x="40" y="681" width="686" height="5" fill="#9a9a9a"/></g>
+<g data-element="workload bracket" data-label="decode workload"><line x1="40" y1="392" x2="410" y2="392" stroke="#555555" stroke-width="1.4"/><line x1="40" y1="392" x2="40" y2="398" stroke="#555555" stroke-width="1.4"/><line x1="410" y1="392" x2="410" y2="398" stroke="#555555" stroke-width="1.4"/></g>
+<text x="225" y="387" font-family="sans-serif" font-size="11.5" fill="#555555" text-anchor="middle">decode workload: 42-token prompt</text>
+<g data-element="workload bracket" data-label="prefill workload"><line x1="500" y1="392" x2="870" y2="392" stroke="#555555" stroke-width="1.4"/><line x1="500" y1="392" x2="500" y2="398" stroke="#555555" stroke-width="1.4"/><line x1="870" y1="392" x2="870" y2="398" stroke="#555555" stroke-width="1.4"/></g>
+<text x="685" y="387" font-family="sans-serif" font-size="11.5" fill="#555555" text-anchor="middle">prefill workload: 2,048-token prompt</text>
+<g data-element="workload bracket" data-label="decode workload"><line x1="40" y1="567" x2="338" y2="567" stroke="#555555" stroke-width="1.4"/><line x1="40" y1="567" x2="40" y2="573" stroke="#555555" stroke-width="1.4"/><line x1="338" y1="567" x2="338" y2="573" stroke="#555555" stroke-width="1.4"/></g>
+<text x="189" y="562" font-family="sans-serif" font-size="11.5" fill="#555555" text-anchor="middle">decode workload: 42-token prompt</text>
+<g data-element="workload bracket" data-label="prefill workload"><line x1="428" y1="567" x2="726" y2="567" stroke="#555555" stroke-width="1.4"/><line x1="428" y1="567" x2="428" y2="573" stroke="#555555" stroke-width="1.4"/><line x1="726" y1="567" x2="726" y2="573" stroke="#555555" stroke-width="1.4"/></g>
+<text x="577" y="562" font-family="sans-serif" font-size="11.5" fill="#555555" text-anchor="middle">prefill workload: 2,048-token prompt</text>
+<g data-element="inset"><rect x="826" y="551" width="334" height="178" fill="#ffffff" stroke="#d9d9d9" stroke-width="1.5"/></g>
+<text x="838" y="572" font-family="sans-serif" font-size="13" fill="#1b1b1b" font-weight="bold">Inset: inside one stage of members</text>
+<g data-element="settle"><rect x="838" y="588" width="12" height="26" fill="url(#bs1-hatch)" stroke="#555555" stroke-width="1.2"/></g>
+<g data-element="member"><rect x="855" y="585" width="62" height="32" fill="#ffffff" stroke="#1b1b1b" stroke-width="1.8"/></g>
+<text x="886" y="605" font-family="sans-serif" font-size="11.5" fill="#1b1b1b" text-anchor="middle">member</text>
+<g data-element="cooldown"><rect x="921" y="595" width="34" height="12" fill="#e3e3e3" stroke="#555555" stroke-width="1.2" stroke-dasharray="2 2"/></g>
+<g data-element="member"><rect x="959" y="585" width="62" height="32" fill="#ffffff" stroke="#1b1b1b" stroke-width="1.8"/></g>
+<text x="990" y="605" font-family="sans-serif" font-size="11.5" fill="#1b1b1b" text-anchor="middle">member</text>
+<g data-element="cooldown"><rect x="1025" y="595" width="34" height="12" fill="#e3e3e3" stroke="#555555" stroke-width="1.2" stroke-dasharray="2 2"/></g>
+<g data-element="member"><rect x="1063" y="585" width="62" height="32" fill="#ffffff" stroke="#1b1b1b" stroke-width="1.8"/></g>
+<text x="1094" y="605" font-family="sans-serif" font-size="11.5" fill="#1b1b1b" text-anchor="middle">member</text>
+<text x="1133" y="606" font-family="sans-serif" font-size="14" fill="#555555">…</text>
+<text x="838" y="639" font-family="sans-serif" font-size="11.5" fill="#1b1b1b">A member is one inference request run in its own</text>
+<text x="838" y="654" font-family="sans-serif" font-size="11.5" fill="#1b1b1b">process: about 75 s of idle baseline, one warm-up, then</text>
+<text x="838" y="669" font-family="sans-serif" font-size="11.5" fill="#1b1b1b">the measured request. The dashed bar between members</text>
+<text x="838" y="684" font-family="sans-serif" font-size="11.5" fill="#1b1b1b">is the cooldown. It ends at the first 5 s idle reading that</text>
+<text x="838" y="699" font-family="sans-serif" font-size="11.5" fill="#1b1b1b">is at most 2 times the previous member&#x27;s idle baseline,</text>
+<text x="838" y="714" font-family="sans-serif" font-size="11.5" fill="#1b1b1b">or after 300 s.</text>
+<text x="40" y="712" font-family="sans-serif" font-size="13.5" fill="#1b1b1b" font-weight="bold">4   Closing and tail: the same in all three windows</text>
+<g data-element="settle"><rect x="40" y="762" width="12" height="42" fill="url(#bs1-hatch)" stroke="#555555" stroke-width="1.2"/></g>
+<text x="46" y="757" font-family="sans-serif" font-size="10" fill="#555555" text-anchor="middle">60 s</text>
+<g data-element="time arrow"><line x1="53" y1="783" x2="65" y2="783" stroke="#333333" stroke-width="1.6" marker-end="url(#bs1-arrow)"/></g>
+<g data-element="reference member" data-label="end triplet"><rect x="66" y="775" width="16" height="16" fill="#bdbdbd" stroke="#333333" stroke-width="1.4"/></g>
+<g data-element="reference member" data-label="end triplet"><rect x="86" y="775" width="16" height="16" fill="#bdbdbd" stroke="#333333" stroke-width="1.4"/></g>
+<g data-element="reference member" data-label="end triplet"><rect x="106" y="775" width="16" height="16" fill="#bdbdbd" stroke="#333333" stroke-width="1.4"/></g>
+<g data-element="spare" data-label="end triplet"><rect x="126" y="775" width="16" height="16" fill="#ffffff" stroke="#333333" stroke-width="1.3" stroke-dasharray="3 2"/></g>
+<g data-element="spare" data-label="end triplet"><rect x="146" y="775" width="16" height="16" fill="#ffffff" stroke="#333333" stroke-width="1.3" stroke-dasharray="3 2"/></g>
+<g data-element="spare" data-label="end triplet"><rect x="166" y="775" width="16" height="16" fill="#ffffff" stroke="#333333" stroke-width="1.3" stroke-dasharray="3 2"/></g>
+<text x="124" y="825" font-family="sans-serif" font-size="11" fill="#1b1b1b" text-anchor="middle">end triplet, 3 spares</text>
+<g data-element="time arrow"><line x1="183" y1="783" x2="195" y2="783" stroke="#333333" stroke-width="1.6" marker-end="url(#bs1-arrow)"/></g>
+<g data-element="pulse calibration" data-label="post calibration"><rect x="196" y="754" width="100" height="58" fill="#1b6ca8" stroke="#1b6ca8" stroke-width="2.2" fill-opacity="0.12"/></g>
+<text x="246" y="779.6" font-family="sans-serif" font-size="12.5" fill="#1b1b1b" text-anchor="middle">post</text>
+<text x="246" y="795.1" font-family="sans-serif" font-size="12.5" fill="#1b1b1b" text-anchor="middle">calibration</text>
+<g data-element="time arrow"><line x1="297" y1="783" x2="309" y2="783" stroke="#333333" stroke-width="1.6" marker-end="url(#bs1-arrow)"/></g>
+<g data-element="instant marker" data-label="chain exits"><line x1="313" y1="746" x2="313" y2="820" stroke="#1b1b1b" stroke-width="2.6"/></g>
+<text x="313" y="740" font-family="sans-serif" font-size="11.5" fill="#1b1b1b" font-weight="bold" text-anchor="middle">chain exits</text>
+<g data-element="time arrow"><line x1="317" y1="783" x2="329" y2="783" stroke="#333333" stroke-width="1.6" marker-end="url(#bs1-arrow)"/></g>
+<g data-element="computing or recording step" data-label="chain&#x27;s processes confirmed gone; members counted"><rect x="330" y="754" width="124" height="58" fill="#f2f2f2" stroke="#333333" stroke-width="1.8"/></g>
+<text x="392" y="771.9" font-family="sans-serif" font-size="12.5" fill="#1b1b1b" text-anchor="middle">chain&#x27;s processes</text>
+<text x="392" y="787.4" font-family="sans-serif" font-size="12.5" fill="#1b1b1b" text-anchor="middle">confirmed gone;</text>
+<text x="392" y="802.9" font-family="sans-serif" font-size="12.5" fill="#1b1b1b" text-anchor="middle">members counted</text>
+<g data-element="time arrow"><line x1="455" y1="783" x2="467" y2="783" stroke="#333333" stroke-width="1.6" marker-end="url(#bs1-arrow)"/></g>
+<g data-element="clock-step control" data-label="clock-step control"><polygon points="490,761 512,783 490,805 468,783" fill="#1b6ca8" stroke="#1b6ca8" stroke-width="2" fill-opacity="0.12"/></g>
+<text x="490" y="825" font-family="sans-serif" font-size="11" fill="#1b1b1b" text-anchor="middle">clock-step control</text>
+<text x="490" y="838.5" font-family="sans-serif" font-size="11" fill="#1b1b1b" text-anchor="middle">(once per measurement block)</text>
+<g data-element="time arrow"><line x1="513" y1="783" x2="525" y2="783" stroke="#333333" stroke-width="1.6" marker-end="url(#bs1-arrow)"/></g>
+<g data-element="computing or recording step" data-label="monitor and meter stopped"><rect x="526" y="754" width="108" height="58" fill="#f2f2f2" stroke="#333333" stroke-width="1.8"/></g>
+<text x="580" y="779.6" font-family="sans-serif" font-size="12.5" fill="#1b1b1b" text-anchor="middle">monitor and</text>
+<text x="580" y="795.1" font-family="sans-serif" font-size="12.5" fill="#1b1b1b" text-anchor="middle">meter stopped</text>
+<g data-element="time arrow"><line x1="635" y1="783" x2="647" y2="783" stroke="#333333" stroke-width="1.6" marker-end="url(#bs1-arrow)"/></g>
+<g data-element="computing or recording step" data-label="final record written"><rect x="648" y="754" width="100" height="58" fill="#f2f2f2" stroke="#333333" stroke-width="1.8"/></g>
+<text x="698" y="779.6" font-family="sans-serif" font-size="12.5" fill="#1b1b1b" text-anchor="middle">final record</text>
+<text x="698" y="795.1" font-family="sans-serif" font-size="12.5" fill="#1b1b1b" text-anchor="middle">written</text>
+<g data-element="monitor and meter bar"><rect x="40" y="846" width="486" height="5" fill="#9a9a9a"/></g>
+<text x="772" y="779" font-family="sans-serif" font-size="12" fill="#1b1b1b">Once the final record is written, the harvest</text>
+<text x="772" y="794.5" font-family="sans-serif" font-size="12" fill="#1b1b1b">may begin (Figure B-S3).</text>
+<text x="40" y="880" font-family="sans-serif" font-size="12.5" fill="#1b1b1b" font-weight="bold">Worked count.</text>
+<text x="140" y="880" font-family="sans-serif" font-size="12.5" fill="#1b1b1b">Single-model window: 12 + 3 + (10 + 20 + 20) + 1 + (10 + 20 + 20) + 3 = 119 members.   Contrast window: 12 + 3 + 20 + 1 + 20 + 1 + 20 + 1 + 20 + 3 = 101 members.</text>
+<text x="140" y="897" font-family="sans-serif" font-size="12.5" fill="#1b1b1b">Either way: 1 settle before the pre calibration + 10 before stages of members = 11 settles of 60 s = 660 s.</text>
+<g data-element="separator rule"><line x1="40" y1="918" x2="1160" y2="918" stroke="#d9d9d9" stroke-width="1.5"/></g>
+<text x="40" y="938" font-family="sans-serif" font-size="13.5" fill="#1b1b1b" font-weight="bold">Key</text>
+<g data-element="time arrow"><line x1="40" y1="960" x2="62" y2="960" stroke="#333333" stroke-width="1.6" marker-end="url(#bs1-arrow)"/></g>
+<text x="72" y="964" font-family="sans-serif" font-size="12" fill="#1b1b1b" font-weight="bold">time arrow</text>
+<text x="276" y="964" font-family="sans-serif" font-size="11.5" fill="#555555">order in time: left to right, then the next row</text>
+<g data-element="instant marker"><line x1="51" y1="973" x2="51" y2="989" stroke="#1b1b1b" stroke-width="2.6"/></g>
+<text x="72" y="985" font-family="sans-serif" font-size="12" fill="#1b1b1b" font-weight="bold">instant marker</text>
+<text x="276" y="985" font-family="sans-serif" font-size="11.5" fill="#555555">an instant: the scheduled start, GO, the chain&#x27;s exit</text>
+<g data-element="arm box"><rect x="40" y="995" width="24" height="14" fill="#ffffff" stroke="#1b1b1b" stroke-width="2.2" rx="5"/></g>
+<text x="72" y="1006" font-family="sans-serif" font-size="12" fill="#1b1b1b" font-weight="bold">arm box</text>
+<text x="276" y="1006" font-family="sans-serif" font-size="11.5" fill="#555555">the checks that decide whether the chain starts</text>
+<g data-element="pulse calibration"><rect x="40" y="1016" width="24" height="14" fill="#1b6ca8" stroke="#1b6ca8" stroke-width="2.2" fill-opacity="0.12"/></g>
+<text x="72" y="1027" font-family="sans-serif" font-size="12" fill="#1b1b1b" font-weight="bold">pulse calibration</text>
+<text x="276" y="1027" font-family="sans-serif" font-size="11.5" fill="#555555">a timing recording: 59 on/off pulses of a GPU load</text>
+<g data-element="computing or recording step"><rect x="40" y="1037" width="24" height="14" fill="#f2f2f2" stroke="#333333" stroke-width="1.8"/></g>
+<text x="72" y="1048" font-family="sans-serif" font-size="12" fill="#1b1b1b" font-weight="bold">computing or recording step</text>
+<text x="276" y="1048" font-family="sans-serif" font-size="11.5" fill="#555555">a step in which no member runs</text>
+<g data-element="settle"><rect x="46" y="1057" width="12" height="16" fill="url(#bs1-hatch)" stroke="#555555" stroke-width="1.2"/></g>
+<text x="72" y="1069" font-family="sans-serif" font-size="12" fill="#1b1b1b" font-weight="bold">settle</text>
+<text x="276" y="1069" font-family="sans-serif" font-size="11.5" fill="#555555">a 60 s sleep that lets the machine return to idle</text>
+<g data-element="reference member"><rect x="44" y="1078" width="16" height="16" fill="#bdbdbd" stroke="#333333" stroke-width="1.4"/></g>
+<text x="72" y="1090" font-family="sans-serif" font-size="12" fill="#1b1b1b" font-weight="bold">reference member</text>
+<text x="276" y="1090" font-family="sans-serif" font-size="11.5" fill="#555555">one run of the fixed reference workload</text>
+<g data-element="spare"><rect x="604" y="952" width="16" height="16" fill="#ffffff" stroke="#333333" stroke-width="1.3" stroke-dasharray="3 2"/></g>
+<text x="632" y="964" font-family="sans-serif" font-size="12" fill="#1b1b1b" font-weight="bold">spare</text>
+<text x="836" y="964" font-family="sans-serif" font-size="11.5" fill="#555555">runs, after one more settle, only if its stage lost a member</text>
+<g data-element="interior reference"><rect x="604" y="973" width="16" height="16" fill="#ffffff" stroke="#333333" stroke-width="1.6"/><line x1="604" y1="989" x2="620" y2="973" stroke="#333333" stroke-width="1.2"/></g>
+<text x="632" y="985" font-family="sans-serif" font-size="12" fill="#1b1b1b" font-weight="bold">interior reference</text>
+<text x="836" y="985" font-family="sans-serif" font-size="11.5" fill="#555555">recorded, but not read by the reference drift check</text>
+<g data-element="science stage"><rect x="600" y="995" width="24" height="14" fill="#ffffff" stroke="#1b1b1b" stroke-width="2.4"/></g>
+<text x="632" y="1006" font-family="sans-serif" font-size="12" fill="#1b1b1b" font-weight="bold">science stage</text>
+<text x="836" y="1006" font-family="sans-serif" font-size="11.5" fill="#555555">members whose energies feed the reported numbers</text>
+<g data-element="chain stop"><circle cx="612" cy="1023" r="8" fill="#a32a1f"/></g>
+<text x="632" y="1027" font-family="sans-serif" font-size="12" fill="#1b1b1b" font-weight="bold">chain stop</text>
+<text x="836" y="1027" font-family="sans-serif" font-size="11.5" fill="#555555">a point at which the chain itself ends the window</text>
+<g data-element="clock-step control"><polygon points="612,1035 621,1044 612,1053 603,1044" fill="#1b6ca8" stroke="#1b6ca8" stroke-width="2" fill-opacity="0.12"/></g>
+<text x="632" y="1048" font-family="sans-serif" font-size="12" fill="#1b1b1b" font-weight="bold">clock-step control</text>
+<text x="836" y="1048" font-family="sans-serif" font-size="11.5" fill="#555555">a deliberate clock step, to test the clock check</text>
+<g data-element="monitor and meter bar"><rect x="600" y="1063" width="24" height="5" fill="#9a9a9a"/></g>
+<text x="632" y="1069" font-family="sans-serif" font-size="12" fill="#1b1b1b" font-weight="bold">monitor and meter bar</text>
+<text x="836" y="1069" font-family="sans-serif" font-size="11.5" fill="#555555">the monitor and the whole-machine meter are recording</text>
+<g data-element="workload bracket"><line x1="600" y1="1083" x2="624" y2="1083" stroke="#555555" stroke-width="1.4"/><line x1="600" y1="1083" x2="600" y2="1089" stroke="#555555" stroke-width="1.4"/><line x1="624" y1="1083" x2="624" y2="1089" stroke="#555555" stroke-width="1.4"/></g>
+<text x="632" y="1090" font-family="sans-serif" font-size="12" fill="#1b1b1b" font-weight="bold">workload bracket</text>
+<text x="836" y="1090" font-family="sans-serif" font-size="11.5" fill="#555555">the request that the stages under it run</text>
+</svg>

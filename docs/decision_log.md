@@ -229,6 +229,9 @@ be re-derived by a future agent gets an entry here.
 | D-183 | NO ARTIFICIAL OWNER STOPS — the process exists to prevent bad science, not to idle; any precondition an agent can satisfy itself with its own authority (git, gh, launchctl at the documented interfaces) is satisfied by the agent, never queued as an owner action. First instance: the canonical checkout `/Users/edr/code/JouleWise` behind a merged cure stalled the loop 40 h (05:10 09-20 → 21:40 09-21) because the relaunch prompt fenced every git operation there; now a clean canonical tree behind H is fast-forwarded by the evidence-night `check` itself (`git pull --ff-only`, evidence `fast_forward`) whenever no night agent is loaded, the relaunch prompt licenses that one move and requires the session to exit for a fresh supervisor instead of holding, and owner actions remain ONLY hardware, sudo, and the notice NO. Soundness fences unchanged: no move while anything is armed or loaded, no reset/force, dirty trees refuse | ratified by Ed (2026-09-21 21:50 PDT, interactive session: "make sure no more idiotic stops artificially, you have gh auth for a reason"; "the process is meant to prevent bad science not work for 40h") |
 | D-184 | FOUR-MODEL COUNCIL FOR MAJOR CHANGES — for major changes and important science, Fable 5.1, Opus 5.5, Sol 6.0 (`gpt-6-sol`) and Astra 6 (`gpt-6-astra`) are all useful, diverse sources of insight; the magistrate seeks council from all four whenever usage allows, and usage is the ONLY reason to consult fewer. Supersedes "Astra sparingly" as a default (it remains the usage fallback). Ed's stated purpose of the whole orchestration (same session): preventing bad science, not progress on the paper when models agree | ratified by Ed (2026-09-24 ≈04:25 PDT, interactive session 02a24110: "new policy for major changes, fable 5.1, opus 5.5 , sol 6 and astra 6 are all useful diverse sources of insight for important science, only usage is a block to seeking council all the time from all 4 models") |
 | D-186 | GATES ARE ANTI-SPIRAL; NETWORK TIME STAYS OFF; THE 09-29 TEAM — a fixed-round stop rule sends the question to a consult, a cold gate or the owner and never bars refining a component whose defects are shrinking (round-limit clauses name where the question goes, never "stop for good"); network time stays OFF on the measurement Mac with one OFF receipt per window at arm and no restore-ON (H6 log attestation and the restore machinery withdrawn; H7 report-only); Opus 5.5 orchestrates interactively, Sol 6.1 is the default Codex seat (Astra only on a recorded weakness), Fable 5.1 is the cold final pass on merge code, Sonnet 5.5 agents at will | ratified by Ed (2026-09-29, interactive sessions bc060503 and ff50b201; quotes in the body) |
+| D-187 | PHYSICS REFUSES; EVERYTHING ELSE IS A FLAG — a measurement window is refused before it starts only on a physical hazard measured directly (the clock, the battery, thermal pressure, a competing process, free disk, the power sampler) or because an agent session is running; every other check is written down as a flag and never stops collection; the program run on each window's bytes after it ends (the harvest) always emits the numbers together with the flags, and the sealed flag catalog and analysis plan decide what each flag removes from a claim; the separate qualification block 4 is folded into block 5; a review finding that concerns only how something is recorded is dispositioned "flag, not refuse"; the deliberate clock step (G10) and every other step once reserved for Ed's hands are run by the agents | ratified by Ed (2026-10-05, interactive session 0a4039c8; quotes in the body; implemented on the block-5 integration branch and in the block-5 registration draft, neither merged to main nor sealed when recorded) |
+| D-188 | OLD RULES DON'T BIND THE SCIENCE — a rule, ruling, directive or registered clause is a past judgment about the physics, not a constraint; when evidence shows a better rule it is written, through the normal gate (two blind seats on a science question; a cold gate before a seal, or an erratum after it), and "the existing rule says" is never the reason a worse rule stays. First application: the battery-assist ruling of 2026-10-06, which stops removing a member because its battery helped supply the load and discloses it instead, with every reported number printed with and without those members | ratified by Ed (2026-10-06; quote in the body) |
+| D-189 | T3 IS RETIRED AS A CONTROL PLANE — Ed has abandoned the T3 Code application as the tool agent sessions are driven from, and nothing in the project treats T3 as an agent: the agent census matches agent sessions by their own executables, and the T3-specific matching, test cases and fixture rules are removed; one sealed script keeps the name `t3` in its list because a sealed calibration registration pins its bytes. Supersedes D-114 ruling item 1 | ratified by Ed (2026-10-07; quote in the body; installed on the block-5 integration branch by the revert 430f3b8ef and commits 63d2b9bad and fe28e5a0c) |
 
 ---
 
@@ -7858,6 +7861,11 @@ RUN_STATE's parked-decisions list drops D-113.
 D-117 is retained unchanged as historical context. Current rule ownership:
 D-117.
 
+**2026-10-07 supersession note:** Ruling item 1 below (t3 as the interactive
+control plane) is superseded by D-189: Ed has abandoned T3 as a control
+plane, and the agent census no longer matches it. The text is retained
+unchanged as historical context.
+
 **Date:** 2026-08-05 (Ed, in-thread, during the desk session).
 **Status:** RATIFIED by the directive's own author. This reverses Ed's
 2026-08-03 ~23:55 T3-DRIVE-PRIORITY directive. Under rule 11 a
@@ -12232,3 +12240,518 @@ Ratification: docs/process_traces/2026-09-25-activation-ed17a643/41-coldgate-pac
 **Network time (Ed, interactive session ff50b201, ≈13:45 PDT 2026-09-29, verbatim):** "then go ahead, i agree with the logic of thinning all that clock enforcement nonsense, just turn it off ...". Binding reading: network time ("set time automatically") stays OFF on the dedicated measurement Mac; nothing turns it back ON after a capture; each window's arm step takes one authenticated OFF receipt at least 600 s before its first capture (a brief resync of the clock is allowed only in the arm step, before that receipt, while no capture exists). The per-capture system-log attestation (H6 of SCI-25G83-CANDIDATE-01-A3) and the restore-ON machinery (restore recipe, capture-absence proof before ON, dead-man ON) are withdrawn prospectively; H7 (the first OFF-vs-ON comparison) stays as report-only science. Set OFF at 2026-09-29T20:34:38Z (receipt in `docs/process_traces/2026-09-29-interactive-ff50b201/70-ntp-off/`). Design basis: consult NTP-THIN-01 (same directory), which lists the superseded clauses.
 
 **Team (Ed, session ff50b201, 2026-09-29, verbatim):** "resume all work, opus 5.5 im leaving you as orchestrator now, still refer to fable for a pass on merge code, but you, sol 6.1 (new codex model, use on high) and fable are the new a team. you and fable can dispatch sonnet 5.5 agents at will"; later: "astra audit? should be mainly relying on 6.1 sol unless it proves weaker than astra noticeably"; and "if we're that far from numbers then keep orchestration here where it's easier to interact". Binding reading: Opus 5.5 orchestrates from the interactive session (the headless magistrate stays held by its STOP file); Sol 6.1 (`gpt-6.1-sol`, effort high, Codex CLI ≥ 0.159.0) is the default Codex seat for implementation, audits, lenses and consults, with Astra only on a recorded, noticeable Sol weakness; Fable 5.1 is the cold final pass on merge code; Sonnet 5.5 agents are dispatched at will for investigations. This amends D-184's model list for its consults.
+
+**2026-10-07 note (see D-187):** for the windows of measurement block 5 the network-time reading above is amended. The OFF command still runs at every arm, but as an action whose printed output is recorded and never judged, and no fixed 600 s wait follows it. Network time is switched ON deliberately in two places. One is at the end of the first block-5 window, as the clock check's positive control (G10). The other is between windows, when the clock check of the next window refuses on the clock's stored rate correction: network time is then switched ON until that correction reads a value the check accepts, or for 15 minutes at most, and then OFF again. Whether the clock was disturbed is measured directly (D-187 item 1; block-5 registration §3, §4.2 and §4.4).
+
+## D-187: Physics refuses; everything else is a flag (Ed, 2026-10-05)
+
+**Status:** ratified by Ed on 2026-10-05, interactive session 0a4039c8. Recorded here
+on 2026-10-07. Until this entry the ruling's only home was Ed's private, untracked
+project notes (`CLAUDE.local.md`, section "Physics refuses; everything else is a flag
+(Ed, 2026-10-05)"). This entry records items 1 to 6 of that section; item 7 is D-188.
+
+**Terms, so the entry can be applied without that session's context.**
+
+- A *measurement window* is one unattended run on the dedicated measurement Mac. It
+  collects a fixed sequence of *members* (a member is one measured inference
+  request), with a timing calibration before and after them (a capture of commanded
+  on/off power pulses that bounds how far the timing of the power records can be
+  off). A *measurement block* is a set of windows registered together: one document,
+  the block's *registration*, fixes their design before any of their data exist.
+  Block 5 is the first block whose windows can support claims in the paper. Block 4
+  was a qualification block planned to run before it: a short window and a few
+  controls whose only purpose was to show that the window machinery and its checks
+  work.
+- *t0* is a window's scheduled start. The *arm* is the sequence of checks that the
+  window's driver program runs after t0 to decide whether collection starts. To
+  *arm* a window is to schedule it, so that those checks run at its t0.
+- A *physical hazard* is a condition of the machine that would corrupt a measured
+  energy if collection ran through it. A check *measures a hazard directly* when it
+  reads the physical quantity. It reads a *proxy* when it reads something that only
+  stands for the quantity: a settings string, the wording a command printed, or a
+  *receipt* (a file that an earlier step writes to state that it ran and what it
+  observed; a later step reads the file instead of the machine).
+- A *flag* is one recorded fact (a code, what was observed, where the evidence is)
+  that never stops collection.
+- The *harvest* is the program run after each window, on a copy of the window's
+  bytes. Work done outside any window, as the harvest is, is what the project's
+  records call *desk* work.
+- The *flag catalog* is the table that gives every flag code exactly one effect:
+  remove the member, remove the window, or disclose only. "Remove" means remove from
+  the claims; the bytes are kept. Such a removal is an *exclusion*.
+- A window is *claim-usable* when no window-removing flag fired and every number the
+  window exists to report still rests on enough of its planned measurements (at
+  least 8 of every 10 planned; fact 3 below works an example).
+- A *pack* is the frozen, hash-pinned set of member configurations and plans for one
+  window. Block 5 has three packs. Each run of a pack is an *attempt*, and a pack is
+  armed again (a new window is scheduled from it), as a new attempt, until one of
+  its windows is claim-usable.
+- The *agent census* is the check that no AI agent session is running on the machine.
+  A running session is itself a load, and its energy would be measured with the
+  model's.
+- *G10* is a positive control for the clock check. Network time (the operating
+  system's automatic setting of the clock from a time server) is kept off on the
+  measurement Mac. G10 switches it on deliberately so that the wall clock steps
+  (jumps), to show that the check can see a step.
+- A registration's *analysis plan* fixes, also before the data exist, what will be
+  computed from them. A *cold gate* is a ruling by a fresh judge session, checked by
+  a refuter session whose job is to show the ruling wrong. The *seal* is the cold
+  gate after which the registration, the analysis plan and the flag catalog change
+  only by an *erratum*: a dated change that is itself judged and recorded.
+
+**Ed's words (verbatim, as his notes record them for that session):** "this again
+feels like in ability to prune silly gates that prevent data collection for the sake
+of semantics not science"; "totally agree with changes 1-4, workflows authorized to
+get all those implemented asa"; "also yes on the doctrine change". On G10, the same
+day: "make it all agent run, don't let old decisions stop progress on the paper.
+remember those are vestiges of weaker models, scaffolding i had to build to corral
+weaker models working on this".
+
+The session's record shows what the second and third quotes answer. His "changes 1-4"
+were four changes the lead agent session had just proposed to him: refuse a window
+only on physics and make every other check a recorded flag (items 1 and 2 below);
+have the harvest always produce the numbers plus the flags (item 3); fold block 4
+into block 5 (item 4); and apply the pruning rule (item 5). The phrase "the doctrine
+change" refers to writing those four into his project notes as a standing rule,
+which the same proposal had asked him to approve; the section this entry records is
+the result.
+<!-- src: session record 0a4039c8 (`~/.claude/projects/-Users-edr-code-JouleWise/0a4039c8-3a55-4151-82ba-e66d8a0e9397.jsonl`): the lead session's message of 2026-10-05T22:50:05Z ("What I'd change", numbered 1 to 4, and "This is a doctrine change, so it's your call"); Ed's replies at 22:54:45Z and 22:55:56Z -->
+
+**Where it is implemented.** In code, on the block-5 integration branch
+(`integrate/2026-10-07-int5`, head `9b0c680ed`). In text, in the block-5 registration,
+`configs/campaigns/v5_claim_25g83/registration_block5.md`, revision 9, which cites
+Ed's notes for the ruling. Neither had merged to `main` when this entry was written,
+and the registration was a draft, not yet sealed. Section numbers below are those of
+revision 9 at `9b0c680ed`; they are rechecked after the seal.
+
+**Forcing problem.** Before the ruling, a window could start only after a chain of
+receipts and records had verified, and one failed member discarded the whole window
+(registration preamble, "What changed from revision 2"). Most of those checks tested
+how something was written down, not the state of the machine. Three measured facts:
+
+1. *A correct state was refused for its wording.* The calibration registration
+   required the command that switches network time off to print exactly
+   `setUsingNetworkTime: Off`. When the setting is already off, macOS prints
+   `Network Time is already off.` instead. The first attempt at C1, the first
+   calibration window of block 1, was refused at t0 while network time was off, which
+   is the condition the check existed to prove
+   (`docs/process_traces/2026-10-02-interactive/41-erratum-nt1-ruling.md`, Question 1).
+2. *How many such checks there were.* The inventory taken on 2026-10-05 to implement
+   this ruling has one row for every place on the block-5 window path where code, or
+   the runbook (the document holding the shell steps a window runs), could refuse:
+   7,783 rows. Of these, 5,010 tested how something was represented, 1,674 protected
+   a number, 639 were steps that cannot run at all (an unreadable file, a directory
+   that cannot be created), 251 read a physical hazard through a proxy, and 209
+   measured one directly (`/Users/edr/night-archive/gate-prune/INVENTORY.md`, at
+   integration commit `a0a4f5a7`).
+3. *What one failed member cost.* Two of block 5's three packs have 119 members each.
+   Before each request the machine must pass an idle check (displays asleep,
+   processor quiet); a second failure of that check aborts the member, and in blocks 2
+   and 3 this happened to about 1 member in 37. Under the old rule that any aborted
+   member aborts the window, and if aborts strike members independently, the chance of
+   completing such a window is (36/37)^119, about 0.04. Under this ruling the member is
+   removed and the window goes on. Such a window exists to report two numbers. Each is
+   planned as 10 single repeats (a repeat is one member measured on its own) and 10
+   groups of four members, and must keep at least 8 of the 10 repeats and 8 of the 10
+   groups. A removed member removes its own repeat, or its whole group of four: the
+   four are measured in a balanced order so that a slow drift cancels within the
+   group, and a partial group would lose that. On the same assumption a repeat is lost
+   with probability 1/37 = 0.027 and a group with probability 1 − (36/37)^4 = 0.104.
+   The chance of keeping at least 8 of 10 is then 0.998 for the repeats and 0.923 for
+   the groups, and the chance that the window keeps both of its numbers is
+   (0.998 × 0.923)^2, about 0.85.
+   <!-- src: registration §4.2 l.1312 (119 members); §0.13 l.709-716 (idle check, retry, abort); §0.8 l.418-424 (the balanced order, drift cancels), l.429-432 (repeat; 10 repeats and 10 groups per number); §0.9 l.438-443 (two target numbers per such window, each from its own 50 members); §6.6 l.2473-2474 (a removed member removes its repeat or its whole group), l.2476 (8 of 10), l.2484-2486 (1/37, 0.027, 0.104, 0.85, 0.04) -->
+   <!-- calc: P(at most 2 of 10 lost) with p = 1/37 is 0.99795, with p = 1 − (36/37)^4 = 0.10380 is 0.92311; (0.99795 × 0.92311)^2 = 0.8486; (36/37)^119 = 0.0384 -->
+
+**The ruling, as binding reading.** Each item names the registration sections that
+implement it.
+
+1. **A window is refused before it starts only on a physical hazard, measured
+   directly.** Six hazards are registered: the clock stepping or drifting beyond its
+   budget (5 ms of timing error per member; worked example below); the machine off AC
+   power, or its battery charging; thermal pressure reported by the operating system;
+   a competing process using more than 5% of one processor core; too little free disk
+   for the window; the power sampler not sampling at its set rate. A check that read a
+   proxy for one of these is rewritten to measure the quantity.
+   <!-- src: registration §0.15 l.750-753; §0.14 l.730-731 (5 ms per member) -->
+   *Implemented by* registration §0.14 and §0.15 (the terms), §4.1 (the order of the
+   arm), §4.2 (the six hazards, each with its forcing problem and its measurement),
+   §4.3 (the registered limit for each hazard) and §4.4 (network time is switched off
+   as an action at every arm; what the command prints is recorded and never judged).
+
+   *Worked example, the clock.* The old check compared a command's printed text (fact
+   1 above). The new one measures. A timing error of 5 ms moves at most 0.2 J across
+   the boundary between two phases of a request (prompt processing and generation) at
+   40 W, and the registration takes 5 ms as the limit on each member's timing error.
+   Part of that error grows with time. A member's power records carry wall-clock
+   labels, and the edges of its phases are stamped on a monotonic counter (one that
+   only moves forward and that nothing sets), so placing the records against the
+   edges needs the offset between the two time bases. The kernel keeps a stored rate
+   correction for the wall clock, f, in parts per million (ppm). With network time
+   off, the offset drifts steadily at that rate for as long as the member's recording
+   runs, and the drift counts toward the member's timing error: a larger |f| or a
+   longer recording means a larger error.
+   The arm reads f and predicts the worst timing error a member could carry: 3.7 ms
+   (the largest timing uncertainty computed for any single member in block 3, plus a
+   margin) + (|f| + 0.25 ppm) × 335 s. Here 0.25 ppm is an allowance for the wall
+   clock's rate during one recording differing from the stored value, and 335 s is the
+   longest recording any member can have. The sum must not exceed 5 ms. One ppm of
+   335 s is 0.335 ms. At f = −3.17 ppm, the value read on 2026-10-05, the drift term
+   is 3.42 ppm × 335 s = 1.146 ms and the sum is 3.7 + 1.146 = 4.846 ms, so the arm
+   passes. At |f| = 3.7 ppm the drift term is 3.95 ppm × 335 s = 1.323 ms and the sum
+   is 5.023 ms, so the arm refuses. While the arm waits for the machine to be quiet,
+   it also samples the wall clock's offset from an unadjusted hardware counter once a
+   second. The offset must stay within 1 ms of the steady drift that f predicts, and a
+   clock step larger than that breaks it at once.
+   <!-- src: registration §0.14 l.720-723 (two time bases; 5 ms, 0.2 J at 40 W), l.725-730 (the change in wall minus monotonic over a recording is part of a member's bound), l.734-737 (f; steady drift at rate f with network time off; f = −3.17 ppm on 2026-10-05), l.740-745 (the bound grows with abs(f) times the recording's length; 335 s; 3.598 ms); §4.2 l.1199-1204 (gate, 3.7 ms, what 0.25 ppm allows for, both worked values, 1 Hz, ±1 ms) -->
+   <!-- calc: 3.42e-6 × 335 s = 1.1457 ms; 3.7 + 1.1457 = 4.8457; 3.95e-6 × 335 s = 1.32325 ms; 3.7 + 1.32325 = 5.02325 -->
+
+   At the arm, two refusals stand beside the six hazards. The agent census (§4.5) is
+   kept by the standing rule that no quiet-machine measurement starts or continues
+   while an agent session is active (tracked `CLAUDE.md`). One identity check (§4.7)
+   refuses an operating-system build and machine model on which none of the captures
+   behind the accepted timing calibration was taken. It was kept over a recorded
+   dissent: the program that writes each calibration would refuse the same window
+   later in any case, so the arm adds no new outcome and only refuses sooner.
+2. **Every other check becomes a recorded flag, not a refusal.** Receipt formats, the
+   records that bind a run to its plan, attempt history, the match between a committed
+   digest and the calibration ledger (the append-only record of calibration captures),
+   provenance digests and similar records are written as flags. A missing or malformed
+   record never stops collection. *Implemented by* §0.16 (flag, catalog, effects),
+   §6.1 (where flags are written), §6.2 (the catalog's groups of codes and their
+   effects), §6.8 (codes that are disclosed only), §6.10 (each check in the
+   measurement code that used to refuse, and what is recorded now) and §6.11 (which
+   refusals remain).
+
+   §6.11 states the reading the code enforces: a refusal, a stop or an exclusion is
+   allowed on two grounds only. One is a physical hazard measured directly. The other
+   is *number integrity*: a number would be wrong, or could not be attributed to what
+   it claims to measure, for example because bytes differ from their recorded hash or
+   because the model or code that ran differs from the sealed one. The file
+   `configs/gates/hazard_refusals.json` lists every place in the scanned block-5 code
+   where the code can refuse, each with a category. A refusal reviewed since the
+   ruling is classed as physics or number integrity and says what it protects. The
+   remainder, present before the review and not yet reviewed one by one, is frozen so
+   that it can only shrink. `tests/hazards/test_refusal_allowlist.py` fails when a
+   refusal appears that the file does not list.
+3. **The harvest always emits the numbers plus the flags.** Whatever the flags say,
+   the harvest of a window that started collecting writes the window's numbers and its
+   flags. The numbers go into restricted storage that only automation reads until the
+   block's release, the recorded moment after the block closes from which its energies
+   may be read. The catalog's effects and the analysis plan, both fixed before the data
+   exist, decide which flags remove a member or a window from a claim. Blinding (no
+   person or agent session reads an energy before the release), pre-registration and
+   the cold gate's re-derivation of a calibration from raw bytes stay, because they
+   protect the science. *Implemented by* §7.1 (the harvest's four verdicts), §0.16 and
+   §6.3 to §6.7 (the function that applies the catalog, and each exclusion), §6.6 (the
+   minimum of 8 kept of 10 planned, fact 3 above), §8 (blinding), and analysis plan §2
+   (inclusion and exclusion) and §8.1 (disclosures).
+
+   The catalog at `9b0c680ed` lists 192 codes: 120 are disclosed only, 40 remove a
+   member and 32 remove a window (counted from `flag_catalog.json` in the registration's
+   directory). The function that applies them reads each flag's code, scope and time
+   interval and never an energy, and the scheduler that decides whether to arm a pack
+   again reads only the claim-usable result. So a decision to run a window again
+   cannot select on an outcome (§0.16, §7.2).
+   <!-- src: configs/campaigns/v5_claim_25g83/flag_catalog.json at 9b0c680ed, codes counted by effect (120 DISCLOSE, 40 EXCLUDE_MEMBER, 32 EXCLUDE_WINDOW); registration §0.16 l.781-787 (what the function reads), §7.2 l.2794-2796 (the scheduler) -->
+4. **Block 4 folds into block 5.** The separate qualification block does not run. G10
+   runs as a recorded diagnostic at the end of the first block-5 window, after that
+   window's last recording, where it can touch none of the window's numbers. Block 4
+   also planned two controls that ran a window's arm on purpose and then launched
+   nothing. They were to show that a refusal before launch leaves nothing launched
+   and nothing changed on the machine, and that the arm runs end to end on the
+   machine's real output. Both questions are now answered without a window: tests of
+   the driver inject each hazard's refusal and compare the machine's state before and
+   after, a dry run of the arm is made at the desk, and every real arm writes its own
+   record. The checks that the short qualification window existed to run are run at
+   the first window's harvest and reported as diagnostics that remove nothing. Real
+   windows test the machinery. *Implemented by* §3.
+5. **The pruning rule is applied, not only stated.** A refusal path that has caught
+   nothing touching a number in three sessions (no case in which it stopped a defect
+   that would have changed a number) is removed. A review finding that concerns only
+   how something is recorded is dispositioned "flag, not refuse" and is never sent to
+   a fix round (a further round of code changes and review). *Implemented by* §10 (the
+   disposition rule) and §6.11 (a new refusal cannot enter the block-5 path without
+   stating its ground and what it protects). No registration section carries the
+   removal clause. The tracked process rule "The one pruning rule" in
+   `docs/orchestration.md` says that such a mechanism is proposed to Ed for deletion;
+   for a refusal path this ruling goes further and removes it.
+6. **G10 and every other step once reserved for Ed's hands are run by the agents.**
+   The block-4 design had Ed perform the clock step himself
+   (`scripts/ed_session/capture_t0_anchor_positive_control.py` records
+   `performed_by: "Ed"`). The window's driver now runs it
+   (`scripts/g10_clock_step_control.py`). *Implemented by* §3. Ed's NO on the notice
+   sent before each arm is unchanged (§7.2): it is a veto, not a step.
+
+**Options considered.**
+
+- *Keep refusing on record checks, and repair each wording as it fails.* This was the
+  practice: the erratum cited in fact 1 widened the accepted wording from one string
+  to two. The ruling rejects it. The check stays a proxy, and the next wording nobody
+  foresaw refuses another window.
+- *Convert each refusal in place inside the existing arm path.* Rejected by the
+  implementation plan (`/Users/edr/night-archive/gate-prune/PLAN.md` §1). That path
+  authorizes a launch through a chain of receipts, and the measurement code checks a
+  record published at the end of the chain before it writes any member's bytes. If an
+  early receipt cannot be produced, that record is never published and every member
+  is refused inside the window. Collection still stops, only later and at the cost of
+  a whole window.
+- *A new, thin arm path for block 5,* whose only refusals are the six hazard checks
+  and the agent census. Chosen (plan §1). The record checks inside the measurement
+  code were converted afterwards, one by one; registration §6.10 lists each.
+- *Reduce the agent census to a record as well.* Rejected (plan §1, "What is
+  rejected"): the standing quiet-machine rule keeps it a refusal.
+
+**Considerations.**
+
+- *What still protects a number.* A flag is not a waiver. 72 of the 192 catalog codes
+  remove a member or a window from the claims. `hazard_refusals.json` lists all 72.
+  68 of them state the quantity or number they protect. The other four are member
+  exclusions that predate the review (idle admission aborted, cooldown evidence
+  unverified, strict validation failed, target-phase precheck failed) and are listed
+  as not yet reviewed one by one (§6.11). What changed is when the decision
+  is taken (after collection, from preserved bytes, by a rule fixed in advance) and
+  how much one failure costs (a member, not a window).
+- *Exclusions can bias a mean.* Thermal pressure and contention (a competing process)
+  plausibly correlate with load, so removing the members they flag may select by
+  load. The 8-of-10 minimum bounds the effect and the disclosures expose it. Whether
+  an extra labelled line of results is printed to show the size of that effect is
+  left to the seal (§14 Q6).
+- *The contention limit is untested at this breadth.* "Any outside process above 5%
+  of one core" has not been applied to every process on this machine through a whole
+  window. If its flag rate costs reported numbers, the registered route is an erratum
+  tuned on flag rates, which reveal no energy (§14 Q3).
+- *Reviews tend to ask for a refusal.* A reviewer's advice to "fail closed" (to
+  refuse when in doubt) on a record condition gets the disposition of item 5. Every
+  review brief on this path carries the rule
+  (`/Users/edr/night-archive/gate-prune/REVIEW_BRIEF_RULE.md`).
+<!-- src: flag_catalog.json at 9b0c680ed (72 = 40 + 32 of 192); configs/gates/hazard_refusals.json at 9b0c680ed, `window_exclusions` and `member_exclusions` (all 72 listed; 68 carry `protects`; the four with category BASELINE and a `note` only are member.admission_aborted, member.cooldown_evidence_unverified, member.strict_validation_failed, member.target_phase_precheck_failed); registration §6.11 l.2743-2747 (the two lists; its closing words "each with the quantity or number it protects" overstate the file by these four), l.2754 (the test requires that text of a non-BASELINE entry only), l.2757-2760 (the BASELINE codes the test names); §14 Q3 l.3296-3299 (5% of one core, erratum from flag rates); §14 Q6 l.3304-3307 (sensitivity line, correlation with load) -->
+
+**What this amends.**
+
+- D-161 kept refusals where the failure was physics, evidence or pre-registration,
+  and D-183 repeats that. Under this ruling a missing or malformed piece of evidence
+  no longer stops a window. It becomes a flag whose catalog effect may remove the
+  member or the window from a claim. Refusals remain for a measured hazard, for the
+  agent census and for number integrity (§6.11).
+- D-186's reading of network time, for block-5 windows; the dated note under D-186
+  states the change.
+- D-179 ruling 1 and D-078's text, under which no member is excluded after collection
+  and no mean is computed on fewer members than planned: amended by §6.6 and analysis
+  plan §2.2 and §4. The registration declares this in advance, as item 4 of its list
+  of deviations from committed text (§10).
+- D-183 and the addendum to D-184 list what remained Ed's: hardware, sudo, the notice
+  NO and, in D-184, publishing claims. Item 6 takes the steps of the measurement
+  procedure off that list, including a step that runs a privileged command
+  non-interactively, as G10 does (`sudo -n`). The notice NO and publishing claims are
+  untouched, and a physical action that needs a person's hands is still Ed's.
+
+**What this does not change.** Blinding, pre-registration and the cold gate's raw
+re-derivation (item 3). The audit by three model families before the first window of
+a frozen code or protocol change (§9.1). The rule that no agent edits the four pinned
+estimator source files, whose hashes define the calibration. Cadence: windows run
+whenever the machine is quiet, several in a day when the checks pass (D-181). This
+ruling removes reasons for which a window fails to start or is thrown away; it adds
+no wait between windows. The registration estimates the three block-5 windows, run
+back to back and each claim-usable at its first attempt, at about 18 to 23 hours in
+all if the members run as fast as projected, and about 28 to 33 hours at the speed
+measured in block 3 (§5.5, "Block duration").
+<!-- src: registration §5.5 l.1903-1908 -->
+
+**Revisit trigger.** Ed set none. Where the two open risks under Considerations go is
+registered (§14 Q3 and Q6), and any change to a sealed rule is an erratum made before
+the bytes it governs exist (§10).
+
+## D-188: Old rules don't bind the science (Ed, 2026-10-06)
+
+**Status:** ratified by Ed on 2026-10-06. Recorded here on 2026-10-07 from item 7 of
+the section of Ed's private notes named in D-187.
+
+**Ed's words (verbatim),** on the battery rule of #421, his directive of 2026-09-25
+that made the battery's state mandatory evidence for every recorded measurement:
+"'under the existing rule' - should not preclude you from sensible changes - if the
+science is improved by a new rule make a new rule or remove the old one - obviously
+this needs to be durably remedied".
+
+**Binding reading.** A rule, ruling, directive or clause of a registration (the
+document that fixes a measurement's design before its data exist) is a past judgment
+about the physics, not a constraint. When evidence shows a better rule, the better
+rule is written. The normal gate applies to the change: a council of two blind seats
+(two model sessions that answer the same question without seeing each other's answer)
+on a science question; and, for a clause of a registration, a cold gate (a ruling by a
+fresh judge session, checked by a refuter) when the change comes before the
+registration is sealed (frozen by that gate), or an erratum (a dated change to the
+sealed text, itself judged and recorded) when it comes after. "The existing rule says"
+is never presented as the reason a worse rule stays.
+
+**Terms.** D-187 defines measurement window, measurement block (block 5 is the one
+meant here), member, arm and flag; a *disclosed* flag is recorded and reported and
+removes nothing from the claims. *Battery float* is the state #421 asked for: the
+adapter connected and the battery neither charging nor discharging. The *battery
+registry* is the operating system's record of the battery, read with `ioreg`; it
+publishes new values about once every 60 s. The *SMC* is the Mac's power controller,
+whose battery-current reading refreshes about once a second. That current is signed:
+it is negative when the battery discharges into the machine. *Assist* is the battery
+supplying part of the load while the adapter is connected and the battery is not
+charging. *8B* is the larger of the two models block 5 measures (Qwen3-8B). The
+*sampler* is macOS `powermetrics`, which reports the power of the processor's supply
+rails. The *orchestrator* is the lead agent session, which rules on design questions
+and records dissent. Section numbers in this entry are those of the block-5
+registration, revision 9, a draft not yet sealed, at commit `9b0c680ed`.
+<!-- src: registration §9.2 l.2985-2990 (#421); §4.2 l.1242-1243 (60 s), l.1246-1248 (signed, negative on discharge; about once a second); preamble l.83-84 (assist) -->
+
+**Forcing problem, with the numbers.** Until 2026-10-06 the rule in force removed a
+member from the claims if the battery discharged more than 200 mA during it, and that
+current was read from the registry. Two measurements that day showed that the rule
+had been reading a 60 s snapshot, and what the snapshot missed. In one registry
+interval the SMC read as low as −3,580 mA while the registry published 0. Under a
+heavy load (four 8B generations beside a 16-process CPU burner, on the 140 W adapter)
+the SMC current was nonzero in 126 of 170 s and reached −5,331 mA. Moving the old rule
+onto the 1 s readings would therefore have removed the heaviest members in large numbers,
+most of all the 8B members with the 2,048-token prompt. That selects members by load
+and pulls down the means of the members that remain. Following the existing rule would
+have made the result worse, and "the existing rule" was the reason Ed had been given
+for the exclusions: his reply quotes the phrase back.
+<!-- src: registration §9.2 l.2992-2996 (200 mA, snapshot, 126 of 170 s, −5,331 mA, heaviest members, the 2,048-token prefill members); §4.2 l.1253-1254 (−3,580 mA, registry 0), l.1259-1260 (the load, 140 W adapter) -->
+
+**First application: the battery-assist ruling of 2026-10-06.** Two blind council
+seats agreed, so no judge was convened, and the orchestrator ruled
+(`/Users/edr/night-archive/wallmeter-probe/verify/RULING_battery_assist_2026-10-06.md`).
+The registration carries it in §9.2, with the rule itself in §4.2 ("Battery") and
+§6.4 and the reporting in analysis plan §8.1.
+
+- Assist is disclosed (flag `battery.assist`), not excluded. Every reported number is
+  printed both with and without the members that carry the flag, and neither value is
+  chosen after the fact.
+- Charging, loss of AC power and missing battery evidence still remove a member. The
+  arm still refuses a battery current above 200 mA in either direction, because on an
+  idle machine it means the adapter is not supplying the machine.
+- The reasons: the processor rails the sampler reads are regulated downstream of the
+  supply, so their energy is the same whether the adapter or the battery delivered
+  it; excluding assisted members would bias the result; and the evidence on hand is
+  benign, since 8B generation ran at 69.1 to 72.6 tokens per second under assist
+  against 68.9 to 71.1 without.
+- What would reopen the ruling is registered: power-mode or power-limit transitions
+  that reproducibly accompany assist; lower rail power, frequency or tokens per second
+  in assisted seconds against matched unassisted seconds; or a battery-temperature
+  rise concentrated in assisted stages.
+<!-- src: registration §9.2 l.3002-3025; §4.2 l.1269-1272 (arm, 200 mA) -->
+
+**Options considered** (for the battery rule; registration §9.2 and §4.2).
+
+- *Leave the rule on the registry's 60 s snapshot.* Not tenable once the measurement
+  existed: the snapshot does not see the discharge the rule was written to catch.
+- *Keep the exclusion and read the current once a second.* Rejected: it removes
+  members by load and biases the means of those that remain.
+- *Disclose assist and report both ways.* Chosen.
+
+**Considerations.**
+
+- The ruling removes deference, not process. A changed rule still passes the gate
+  named above and is recorded, and this log's instruction not to re-decide a settled
+  question silently stands. What changes is that a recorded rule is no longer a
+  reason by itself.
+- A rule changed after its data exist could select on an outcome. The registration
+  therefore requires a change to a sealed rule to be an erratum made before the bytes
+  it governs exist (§0.1, §10).
+- D-187 item 6 applies the same principle to process steps instead of measurement
+  rules.
+
+**What this does not change.** The two hazards that motivated #421 stay covered.
+Charging and loss of AC power still exclude, and the energy the battery supplies is
+added explicitly to the whole-machine cross-check, the comparison against an inline
+meter on the Mac's power input (§9.2 item 4, §5.8).
+
+**Revisit trigger.** Ed set none.
+
+## D-189: T3 is retired as a control plane (Ed, 2026-10-07)
+
+**Status:** ratified by Ed on 2026-10-07. Recorded here the same day.
+
+**Terms.** D-187 defines measurement window, arm, block 5, registration, seal and
+erratum. *T3* (T3 Code) is a desktop application from which Ed started and steered
+agent sessions; a *control plane* here means the tool that sessions are driven from.
+D-114 kept T3 in that role in August 2026. The *agent census* is the check, run in a
+window's arm and then every 30 s while the window collects, that no AI agent session
+is running on the measurement machine (registration §4.5). Section numbers in this entry
+are those of the block-5 registration, revision 9, a draft not yet sealed, at commit
+`9b0c680ed`.
+<!-- src: registration §4.5 l.1418 (first at the arm, again just before GO, every 30 s in the window) -->
+
+**Ed's words (verbatim):** "I've abandoned all t3 integration as a control plane so
+you can prune all that out".
+
+**Where it is recorded and installed.** The ruling is recorded in the integrator's
+note on the block-5 integration branch at a commit held fixed for review
+(`/Users/edr/night-archive/gate-prune/FROZEN_HEAD_4.md`, section "T3 prune"). It is
+installed on that branch (`integrate/2026-10-07-int5`) by commits `430f3b8ef`,
+`63d2b9bad` and `fe28e5a0c`, which had not merged to `main` when this entry was
+written.
+
+**Forcing problem.** Because T3 started agent sessions, the census treated it as an
+agent. The census's first step is a command that lists candidate processes. Through
+registration revision 8 that command matched every process whose command line
+contained `codex`, `claude` or `t3`, and separate rules named the T3 Code application
+and its helpers. That matching had costs. A two-character string is easy to hit by
+accident: the audit of the frozen code before the first window found that a run
+identifier containing "t3" could stop a window, and the fix was to decide each listed
+process from its executable (registration preamble, revision 7 item 3). Test fixtures
+had to keep their temporary paths free of "t3". On 2026-10-07 one more commit extended
+the matching to the T3 Code application's install paths (`7786b24d6`). Ed then ruled
+that he had abandoned T3 as a control plane, so all of this served a tool that is no
+longer part of how the project is run.
+
+**The ruling, as binding reading.**
+
+1. T3 is not a control plane for this project, and nothing in the project carries
+   T3-specific handling. This supersedes D-114 ruling item 1, which kept T3 as the
+   interactive control plane.
+2. T3 is not an agent to the census. The listing command is
+   `/usr/bin/pgrep -a -lf '[c]odex|[c]laude'`, and Codex and Claude sessions are still
+   recognized by their own executables. *Implemented by* registration §4.5 ("T3 is not
+   an agent").
+3. A T3 process, if one runs, is treated like any other process outside the
+   measurement: its processor use counts toward the contention hazard, a competing
+   process above the registered limit (registration §4.2, "Contention").
+<!-- src: registration §4.5 l.1372 (the listing command), l.1382-1384 (executable identity), l.1406-1408 (T3) -->
+
+**What was removed** (the integrator's note; the commits above). The `t3` alternative
+in the census pattern (`joulewise/night_gate.py`, `joulewise/hazards/arm.py`). The rules
+that named the T3 Code application and its helpers as agents
+(`joulewise/agent_identity.py`) and its command-line tool as the root of an
+interactive session (`joulewise/arm_census.py`). `t3` in the process-name lists of
+`joulewise/t0_rehearsal.py` and `joulewise/prewindow.py`, in the census substring list
+of `scripts/gen_derivation_night.py` and in the path guards of
+`scripts/gen_g2_phase_d.py`. The T3-specific test cases and fixture rules. The commit
+that had added the T3 Code application as an agent by its install paths (`7786b24d6`)
+was reverted first (`430f3b8ef`).
+
+**Kept on purpose.**
+
+- `scripts/prewindow_check.sh` still names `t3` among the process names it refuses.
+  Its bytes are pinned by the sealed revision-6 calibration registration
+  (`prewindow_check_sha256`), so changing it needs an erratum to that registration. A
+  block-5 window does not run this script. It runs at the start of a calibration
+  window, in the wait before the first capture for the machine to be free of other
+  processes. There the only effect of the extra name is to refuse a process that
+  happens to be named `t3`; it cannot miss an agent.
+- `joulewise/t0_rehearsal.py` keeps the two former listing commands in its registry
+  beside the new one, so records of earlier windows that name them can still be read.
+
+**Options considered.**
+
+- *Keep T3 in the census and extend the matching to its install paths* (commit
+  `7786b24d6`). Reverted on Ed's ruling.
+- *Also edit the sealed pre-window script.* Rejected: an erratum to a sealed
+  registration for a change that protects no number.
+- *Prune everywhere except the sealed script.* Chosen.
+
+**Considerations.** The census is a superset match followed by a decision per
+process, so removing a pattern can only make it list fewer candidates. The decision
+rule for Codex and Claude sessions is unchanged by this entry.
+
+**What this does not change.** The census itself, and the rule it enforces that no
+quiet-machine measurement starts or continues while an agent session is running. The
+other rulings of D-114.
+
+**Revisit trigger.** Ed set none.

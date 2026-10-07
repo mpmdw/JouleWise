@@ -1,0 +1,175 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1319" viewBox="0 0 1200 1319" role="img" aria-labelledby="bs3-title bs3-desc">
+<title id="bs3-title">Figure B-S3. What can stop a window, what is only recorded, and when a window may carry a claim</title>
+<desc id="bs3-desc">Schematic decision flow in three bands, read top to bottom. Band 1, at the scheduled start: the arm measures six physical hazards directly and makes two further checks; if any check fails the attempt ends with nothing launched, otherwise the chain starts. Band 2, during the window: every other check writes a flag and nothing stops collection except seven named stops. Band 3, after the window: the harvest writes every flag, the sealed flag catalog gives each code one of three consequences, and a three-part test decides whether the window is claim-usable; if it is not, the same pack is re-armed. A worked example follows. No measured data is shown.</desc>
+<defs>
+<marker id="bs3-arrow" markerWidth="10" markerHeight="10" refX="9" refY="4.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L9,4.5 L0,9 z" fill="#333333"/></marker>
+<pattern id="bs3-hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="6" stroke="#555555" stroke-width="2"/></pattern>
+</defs>
+<g data-element="background"><rect x="0" y="0" width="1200" height="1319" fill="#ffffff"/></g>
+<text x="40" y="32" font-family="sans-serif" font-size="18" fill="#1b1b1b" font-weight="bold">Figure B-S3. What can stop a window, what is only recorded, and when a window may carry a claim</text>
+<text x="40" y="54" font-family="sans-serif" font-size="13" fill="#555555">Schematic decision flow of the registered design. No measured data is shown.</text>
+<g data-element="stage band" data-label="band 1"><rect x="26" y="74" width="1148" height="352" fill="#f7f7f7" stroke="#d9d9d9" stroke-width="1.2"/></g>
+<text x="40" y="98" font-family="sans-serif" font-size="14.5" fill="#1b1b1b" font-weight="bold">1   At the scheduled start: the arm</text>
+<g data-element="check box" data-label="six physical hazards"><rect x="40" y="112" width="620" height="300" fill="#ffffff" stroke="#333333" stroke-width="1.8"/></g>
+<text x="52" y="134" font-family="sans-serif" font-size="13" fill="#1b1b1b" font-weight="bold">Six physical hazards, each measured directly by its hazard check</text>
+<text x="52" y="158" font-family="sans-serif" font-size="12.5" fill="#1b1b1b" font-weight="bold">competing process</text>
+<text x="180" y="158" font-family="sans-serif" font-size="12.5" fill="#1b1b1b">for 180 s in a row, no process outside the measurement uses more than 0.05</text>
+<text x="180" y="174.5" font-family="sans-serif" font-size="12.5" fill="#1b1b1b">CPU-seconds per second; the check waits up to 2,700 s for such a stretch (this</text>
+<text x="180" y="191" font-family="sans-serif" font-size="12.5" fill="#1b1b1b">wait is the dwell)</text>
+<text x="52" y="216.5" font-family="sans-serif" font-size="12.5" fill="#1b1b1b" font-weight="bold">clock</text>
+<text x="180" y="216.5" font-family="sans-serif" font-size="12.5" fill="#1b1b1b">the largest member clock bound the window could produce, predicted for the</text>
+<text x="180" y="233" font-family="sans-serif" font-size="12.5" fill="#1b1b1b">longest stream (335 s), is at most 5 ms; during the dwell the wall clock stays</text>
+<text x="180" y="249.5" font-family="sans-serif" font-size="12.5" fill="#1b1b1b">within 1 ms of its steady course and its rate correction does not change</text>
+<text x="52" y="275" font-family="sans-serif" font-size="12.5" fill="#1b1b1b" font-weight="bold">battery</text>
+<text x="180" y="275" font-family="sans-serif" font-size="12.5" fill="#1b1b1b">the adapter is connected, the battery is not charging, and its current is within</text>
+<text x="180" y="291.5" font-family="sans-serif" font-size="12.5" fill="#1b1b1b">±200 mA</text>
+<text x="52" y="317" font-family="sans-serif" font-size="12.5" fill="#1b1b1b" font-weight="bold">thermal</text>
+<text x="180" y="317" font-family="sans-serif" font-size="12.5" fill="#1b1b1b">the operating system reports thermal-pressure level 0</text>
+<text x="52" y="342.5" font-family="sans-serif" font-size="12.5" fill="#1b1b1b" font-weight="bold">disk</text>
+<text x="180" y="342.5" font-family="sans-serif" font-size="12.5" fill="#1b1b1b">every volume has room for each planned copy of the window&#x27;s bytes plus</text>
+<text x="180" y="359" font-family="sans-serif" font-size="12.5" fill="#1b1b1b">20 GiB</text>
+<text x="52" y="384.5" font-family="sans-serif" font-size="12.5" fill="#1b1b1b" font-weight="bold">sampler</text>
+<text x="180" y="384.5" font-family="sans-serif" font-size="12.5" fill="#1b1b1b">a 300-record idle capture ends within 55 s, with a median record interval of at</text>
+<text x="180" y="401" font-family="sans-serif" font-size="12.5" fill="#1b1b1b">most 150 ms and none above 200 ms</text>
+<g data-element="check box" data-label="two further checks"><rect x="680" y="112" width="480" height="84" fill="#ffffff" stroke="#333333" stroke-width="1.8"/></g>
+<text x="692" y="133" font-family="sans-serif" font-size="13" fill="#1b1b1b" font-weight="bold">Two further checks</text>
+<text x="692" y="151.5" font-family="sans-serif" font-size="12" fill="#1b1b1b">The agent census is clean: no AI agent session is running on the machine.</text>
+<text x="692" y="171" font-family="sans-serif" font-size="12" fill="#1b1b1b">The OS build and Mac model are ones the calibration acceptance covers.</text>
+<g data-element="decision" data-label="every check passes?"><polygon points="760,218 826,264 760,310 694,264" fill="#ffffff" stroke="#1b1b1b" stroke-width="2.2"/></g>
+<text x="760" y="260.5" font-family="sans-serif" font-size="12.5" fill="#1b1b1b" text-anchor="middle">every check</text>
+<text x="760" y="276.5" font-family="sans-serif" font-size="12.5" fill="#1b1b1b" text-anchor="middle">passes?</text>
+<g data-element="flow arrow"><line x1="660" y1="264" x2="694" y2="264" stroke="#333333" stroke-width="1.8" marker-end="url(#bs3-arrow)"/></g>
+<g data-element="flow arrow"><line x1="760" y1="196" x2="760" y2="218" stroke="#333333" stroke-width="1.8" marker-end="url(#bs3-arrow)"/></g>
+<g data-element="outcome" data-label="NULL attempt"><rect x="870" y="218" width="290" height="92" fill="#ffffff" stroke="#1b1b1b" stroke-width="3"/></g>
+<text x="882" y="239" font-family="sans-serif" font-size="13" fill="#1b1b1b" font-weight="bold">NULL attempt</text>
+<text x="882" y="257.5" font-family="sans-serif" font-size="12" fill="#1b1b1b">Nothing is launched or collected. The pack (the</text>
+<text x="882" y="273" font-family="sans-serif" font-size="12" fill="#1b1b1b">window&#x27;s plan) is re-armed, that is, scheduled</text>
+<text x="882" y="288.5" font-family="sans-serif" font-size="12" fill="#1b1b1b">again, once the cause is removed.</text>
+<g data-element="flow arrow" data-label="no"><line x1="826" y1="264" x2="870" y2="264" stroke="#333333" stroke-width="1.8" marker-end="url(#bs3-arrow)"/></g>
+<text x="847" y="257" font-family="sans-serif" font-size="12" fill="#1b1b1b" text-anchor="middle">no</text>
+<g data-element="note" data-label="unmeasured hazard check"><rect x="836" y="324" width="324" height="88" fill="#ffffff" stroke="#555555" stroke-width="1.4" stroke-dasharray="5 4"/></g>
+<text x="848" y="345" font-family="sans-serif" font-size="11.5" fill="#1b1b1b">A hazard check that cannot take its reading answers</text>
+<text x="848" y="360" font-family="sans-serif" font-size="11.5" fill="#1b1b1b">UNMEASURED. For the sampler that refuses: a sampler</text>
+<text x="848" y="375" font-family="sans-serif" font-size="11.5" fill="#1b1b1b">that cannot sample is the hazard. For the other five it is</text>
+<text x="848" y="390" font-family="sans-serif" font-size="11.5" fill="#1b1b1b">recorded as a flag (band 2) and the arm goes on; the</text>
+<text x="848" y="405" font-family="sans-serif" font-size="11.5" fill="#1b1b1b">monitor measures them during the window.</text>
+<g data-element="stage band" data-label="band 2"><rect x="26" y="452" width="1148" height="206" fill="#f7f7f7" stroke="#d9d9d9" stroke-width="1.2"/></g>
+<text x="40" y="476" font-family="sans-serif" font-size="14.5" fill="#1b1b1b" font-weight="bold">2   During the window: collection</text>
+<g data-element="process box" data-label="the chain runs the stages"><rect x="40" y="490" width="520" height="154" fill="#f2f2f2" stroke="#333333" stroke-width="1.8"/></g>
+<text x="52" y="511" font-family="sans-serif" font-size="13" fill="#1b1b1b" font-weight="bold">The chain runs the stages of Figure B-S1</text>
+<text x="52" y="530" font-family="sans-serif" font-size="12.5" fill="#1b1b1b">A failed member costs only itself. Every check other than the stops at right writes</text>
+<text x="52" y="546" font-family="sans-serif" font-size="12.5" fill="#1b1b1b">what it finds as a flag: one line holding a code, what it applies to (the window, a</text>
+<text x="52" y="562" font-family="sans-serif" font-size="12.5" fill="#1b1b1b">stage, a quad or a member), a time interval, the observed and expected values, and</text>
+<text x="52" y="578" font-family="sans-serif" font-size="12.5" fill="#1b1b1b">digests of the evidence. A flag never stops collection.</text>
+<text x="52" y="598" font-family="sans-serif" font-size="12.5" fill="#1b1b1b">A hazard that appears now is recorded by the monitor and becomes a flag on each</text>
+<text x="52" y="614" font-family="sans-serif" font-size="12.5" fill="#1b1b1b">member it overlaps.</text>
+<g data-element="flow arrow" data-label="yes: GO"><line x1="760" y1="310" x2="760" y2="439" stroke="#333333" stroke-width="1.8"/><line x1="760" y1="439" x2="300" y2="439" stroke="#333333" stroke-width="1.8"/><line x1="300" y1="439" x2="300" y2="490" stroke="#333333" stroke-width="1.8" marker-end="url(#bs3-arrow)"/></g>
+<text x="772" y="330" font-family="sans-serif" font-size="12" fill="#1b1b1b">yes: GO</text>
+<text x="312" y="433" font-family="sans-serif" font-size="12" fill="#555555">the monitor starts, then the chain</text>
+<g data-element="stop box" data-label="the only stops"><rect x="580" y="490" width="580" height="154" fill="#ffffff" stroke="#a32a1f" stroke-width="2.2"/></g>
+<text x="592" y="511" font-family="sans-serif" font-size="13" fill="#1b1b1b" font-weight="bold">The only stops</text>
+<text x="592" y="532" font-family="sans-serif" font-size="12" fill="#1b1b1b" font-weight="bold">By the chain, before the first member</text>
+<text x="592" y="549" font-family="sans-serif" font-size="12" fill="#1b1b1b">1  the bracket reservation fails</text>
+<text x="592" y="565" font-family="sans-serif" font-size="12" fill="#1b1b1b">2  the pre calibration cannot be recorded</text>
+<text x="592" y="581" font-family="sans-serif" font-size="12" fill="#1b1b1b">3  its pulse timing bound is above the pre</text>
+<text x="592" y="597" font-family="sans-serif" font-size="12" fill="#1b1b1b">    screen, 36.5 ms</text>
+<text x="878" y="532" font-family="sans-serif" font-size="12" fill="#1b1b1b" font-weight="bold">By the driver, at any time</text>
+<text x="878" y="549" font-family="sans-serif" font-size="12" fill="#1b1b1b">free disk falls below 10 GiB</text>
+<text x="878" y="565" font-family="sans-serif" font-size="12" fill="#1b1b1b">the agent census finds an agent session</text>
+<text x="878" y="581" font-family="sans-serif" font-size="12" fill="#1b1b1b">the monitor is silent for 10 minutes</text>
+<text x="878" y="597" font-family="sans-serif" font-size="12" fill="#1b1b1b">the window&#x27;s deadline passes</text>
+<text x="592" y="618" font-family="sans-serif" font-size="12" fill="#1b1b1b">A stopped window is still harvested. With no member, or with no post calibration, it cannot be</text>
+<text x="592" y="634" font-family="sans-serif" font-size="12" fill="#1b1b1b">claim-usable.</text>
+<g data-element="stage band" data-label="band 3"><rect x="26" y="684" width="1148" height="378" fill="#f7f7f7" stroke="#d9d9d9" stroke-width="1.2"/></g>
+<text x="40" y="708" font-family="sans-serif" font-size="14.5" fill="#1b1b1b" font-weight="bold">3   After the window: the harvest</text>
+<g data-element="process box" data-label="the harvest"><rect x="40" y="722" width="350" height="150" fill="#f2f2f2" stroke="#333333" stroke-width="1.8"/></g>
+<text x="52" y="743" font-family="sans-serif" font-size="13" fill="#1b1b1b" font-weight="bold">The harvest</text>
+<text x="52" y="762" font-family="sans-serif" font-size="12.5" fill="#1b1b1b">The program run on the window&#x27;s preserved bytes after</text>
+<text x="52" y="778" font-family="sans-serif" font-size="12.5" fill="#1b1b1b">the chain exits. It re-derives each check that protects a</text>
+<text x="52" y="794" font-family="sans-serif" font-size="12.5" fill="#1b1b1b">number, joins the monitor&#x27;s readings to each member&#x27;s</text>
+<text x="52" y="810" font-family="sans-serif" font-size="12.5" fill="#1b1b1b">time span, and writes every flag. The numbers are</text>
+<text x="52" y="826" font-family="sans-serif" font-size="12.5" fill="#1b1b1b">always emitted, together with the flags.</text>
+<g data-element="flow arrow" data-label="the chain exits"><line x1="300" y1="644" x2="300" y2="722" stroke="#333333" stroke-width="1.8" marker-end="url(#bs3-arrow)"/></g>
+<text x="312" y="675" font-family="sans-serif" font-size="12" fill="#555555">the chain exits</text>
+<g data-element="process box" data-label="sealed flag catalog"><rect x="420" y="722" width="196" height="150" fill="#f2f2f2" stroke="#333333" stroke-width="1.8"/></g>
+<text x="432" y="743" font-family="sans-serif" font-size="13" fill="#1b1b1b" font-weight="bold">Sealed flag catalog</text>
+<text x="432" y="762" font-family="sans-serif" font-size="12.5" fill="#1b1b1b">The harvest looks up each</text>
+<text x="432" y="778" font-family="sans-serif" font-size="12.5" fill="#1b1b1b">flag&#x27;s code here: 192 codes,</text>
+<text x="432" y="794" font-family="sans-serif" font-size="12.5" fill="#1b1b1b">each with exactly one of</text>
+<text x="432" y="810" font-family="sans-serif" font-size="12.5" fill="#1b1b1b">three consequences.</text>
+<g data-element="flow arrow"><line x1="390" y1="797" x2="420" y2="797" stroke="#333333" stroke-width="1.8" marker-end="url(#bs3-arrow)"/></g>
+<g data-element="consequence box" data-label="disclose"><rect x="646" y="722" width="514" height="42" fill="#1b6ca8" stroke="#1b6ca8" stroke-width="2" fill-opacity="0.12"/></g>
+<text x="658" y="740" font-family="sans-serif" font-size="12.5" fill="#1b1b1b" font-weight="bold">disclose (DISCLOSE): 120 codes</text>
+<text x="658" y="756" font-family="sans-serif" font-size="12" fill="#1b1b1b">the flag is recorded and reported; it removes nothing</text>
+<g data-element="flow arrow"><line x1="616" y1="797" x2="630" y2="797" stroke="#333333" stroke-width="1.8"/><line x1="630" y1="797" x2="630" y2="743" stroke="#333333" stroke-width="1.8"/><line x1="630" y1="743" x2="646" y2="743" stroke="#333333" stroke-width="1.8" marker-end="url(#bs3-arrow)"/></g>
+<g data-element="consequence box" data-label="remove the member"><rect x="646" y="768" width="514" height="58" fill="#1b6ca8" stroke="#1b6ca8" stroke-width="2" fill-opacity="0.12"/></g>
+<text x="658" y="786" font-family="sans-serif" font-size="12.5" fill="#1b1b1b" font-weight="bold">remove the member (EXCLUDE_MEMBER): 40 codes</text>
+<text x="658" y="802" font-family="sans-serif" font-size="12" fill="#1b1b1b">the member leaves every number it feeds, and its unit goes with it: one absolute</text>
+<text x="658" y="817.5" font-family="sans-serif" font-size="12" fill="#1b1b1b">repeat, or the whole quad</text>
+<g data-element="flow arrow"><line x1="616" y1="797" x2="630" y2="797" stroke="#333333" stroke-width="1.8"/><line x1="630" y1="797" x2="630" y2="797" stroke="#333333" stroke-width="1.8"/><line x1="630" y1="797" x2="646" y2="797" stroke="#333333" stroke-width="1.8" marker-end="url(#bs3-arrow)"/></g>
+<g data-element="consequence box" data-label="remove the window"><rect x="646" y="830" width="514" height="42" fill="#1b6ca8" stroke="#1b6ca8" stroke-width="2" fill-opacity="0.12"/></g>
+<text x="658" y="848" font-family="sans-serif" font-size="12.5" fill="#1b1b1b" font-weight="bold">remove the window (EXCLUDE_WINDOW): 32 codes</text>
+<text x="658" y="864" font-family="sans-serif" font-size="12" fill="#1b1b1b">the window is not claim-usable</text>
+<g data-element="flow arrow"><line x1="616" y1="797" x2="630" y2="797" stroke="#333333" stroke-width="1.8"/><line x1="630" y1="797" x2="630" y2="851" stroke="#333333" stroke-width="1.8"/><line x1="630" y1="851" x2="646" y2="851" stroke="#333333" stroke-width="1.8" marker-end="url(#bs3-arrow)"/></g>
+<g data-element="note" data-label="unclassified code"><rect x="420" y="884" width="740" height="34" fill="#ffffff" stroke="#555555" stroke-width="1.4" stroke-dasharray="5 4"/></g>
+<text x="432" y="905" font-family="sans-serif" font-size="11.5" fill="#1b1b1b">A code missing from the catalog is unclassified: it holds back only the later release of energies, never collection.</text>
+<g data-element="check box" data-label="claim-usable test"><rect x="40" y="944" width="470" height="106" fill="#ffffff" stroke="#333333" stroke-width="1.8"/></g>
+<text x="52" y="965" font-family="sans-serif" font-size="13" fill="#1b1b1b" font-weight="bold">Claim-usable when all three hold</text>
+<text x="52" y="985" font-family="sans-serif" font-size="12" fill="#1b1b1b" font-weight="bold">a</text>
+<text x="70" y="985" font-family="sans-serif" font-size="12" fill="#1b1b1b">no flag with the consequence “remove the window” fired</text>
+<text x="52" y="1002.5" font-family="sans-serif" font-size="12" fill="#1b1b1b" font-weight="bold">b</text>
+<text x="70" y="1002.5" font-family="sans-serif" font-size="12" fill="#1b1b1b">in the contrast window, the midpoint reference is not a lost reference</text>
+<text x="52" y="1020" font-family="sans-serif" font-size="12" fill="#1b1b1b" font-weight="bold">c</text>
+<text x="70" y="1020" font-family="sans-serif" font-size="12" fill="#1b1b1b">every paper cell keeps at least 8 of its 10 absolute repeats and 8 of its 10</text>
+<text x="70" y="1035.5" font-family="sans-serif" font-size="12" fill="#1b1b1b">quads; each contrast keeps at least 8 of its 10 quads</text>
+<g data-element="flow arrow" data-label="the consequences are applied to the flags"><line x1="190" y1="872" x2="190" y2="944" stroke="#333333" stroke-width="1.8" marker-end="url(#bs3-arrow)"/></g>
+<text x="202" y="899" font-family="sans-serif" font-size="12" fill="#555555">the consequences are</text>
+<text x="202" y="914" font-family="sans-serif" font-size="12" fill="#555555">applied to the flags</text>
+<g data-element="decision" data-label="claim-usable?"><polygon points="594,957 658,997 594,1037 530,997" fill="#ffffff" stroke="#1b1b1b" stroke-width="2.2"/></g>
+<text x="594" y="993.5" font-family="sans-serif" font-size="12.5" fill="#1b1b1b" text-anchor="middle">claim-</text>
+<text x="594" y="1009.5" font-family="sans-serif" font-size="12.5" fill="#1b1b1b" text-anchor="middle">usable?</text>
+<g data-element="flow arrow"><line x1="510" y1="997" x2="530" y2="997" stroke="#333333" stroke-width="1.8" marker-end="url(#bs3-arrow)"/></g>
+<g data-element="outcome" data-label="claim-usable"><rect x="702" y="946" width="458" height="46" fill="#ffffff" stroke="#1b1b1b" stroke-width="3"/></g>
+<text x="714" y="967" font-family="sans-serif" font-size="12" fill="#1b1b1b">Yes: this attempt is its pack&#x27;s analysed window. The next pack is armed.</text>
+<g data-element="outcome" data-label="not claim-usable"><rect x="702" y="1002" width="458" height="46" fill="#ffffff" stroke="#1b1b1b" stroke-width="3"/></g>
+<text x="714" y="1023" font-family="sans-serif" font-size="12" fill="#1b1b1b">No: the attempt feeds no number and its cause is listed. The same pack is</text>
+<text x="714" y="1038.5" font-family="sans-serif" font-size="12" fill="#1b1b1b">re-armed.</text>
+<g data-element="flow arrow" data-label="yes"><line x1="658" y1="997" x2="680" y2="997" stroke="#333333" stroke-width="1.8"/><line x1="680" y1="997" x2="680" y2="969" stroke="#333333" stroke-width="1.8"/><line x1="680" y1="969" x2="702" y2="969" stroke="#333333" stroke-width="1.8" marker-end="url(#bs3-arrow)"/></g>
+<g data-element="flow arrow" data-label="no"><line x1="680" y1="997" x2="680" y2="1025" stroke="#333333" stroke-width="1.8"/><line x1="680" y1="1025" x2="702" y2="1025" stroke="#333333" stroke-width="1.8" marker-end="url(#bs3-arrow)"/></g>
+<text x="675" y="965" font-family="sans-serif" font-size="11.5" fill="#1b1b1b" text-anchor="end">yes</text>
+<text x="675" y="1038" font-family="sans-serif" font-size="11.5" fill="#1b1b1b" text-anchor="end">no</text>
+<text x="40" y="1092" font-family="sans-serif" font-size="12.5" fill="#1b1b1b" font-weight="bold">Worked example (synthetic).</text>
+<text x="230" y="1092" font-family="sans-serif" font-size="12.5" fill="#1b1b1b">In a single-model window, one member of decode quad 4 is aborted because the machine was not quiet during its idle baseline, and a competing process</text>
+<text x="230" y="1109" font-family="sans-serif" font-size="12.5" fill="#1b1b1b">overlaps a request in decode quad 7. Both flags have the consequence “remove the member”, so both quads are removed whole. The decode paper cell keeps</text>
+<text x="230" y="1126" font-family="sans-serif" font-size="12.5" fill="#1b1b1b">10 of 10 absolute repeats and 8 of 10 quads, which meets condition c. Had a third quad lost a member, 7 of 10 would remain: condition c fails, the window is</text>
+<text x="230" y="1143" font-family="sans-serif" font-size="12.5" fill="#1b1b1b">not claim-usable, and the same pack is re-armed.</text>
+<g data-element="separator rule"><line x1="40" y1="1166" x2="1160" y2="1166" stroke="#d9d9d9" stroke-width="1.5"/></g>
+<text x="40" y="1186" font-family="sans-serif" font-size="13.5" fill="#1b1b1b" font-weight="bold">Key</text>
+<g data-element="stage band"><rect x="40" y="1201" width="24" height="14" fill="#f7f7f7" stroke="#d9d9d9" stroke-width="1.2"/></g>
+<text x="72" y="1212" font-family="sans-serif" font-size="12" fill="#1b1b1b" font-weight="bold">stage band</text>
+<text x="200" y="1212" font-family="sans-serif" font-size="11.5" fill="#555555">one of three times: start, window, afterwards</text>
+<g data-element="flow arrow"><line x1="40" y1="1229" x2="62" y2="1229" stroke="#333333" stroke-width="1.8" marker-end="url(#bs3-arrow)"/></g>
+<text x="72" y="1233" font-family="sans-serif" font-size="12" fill="#1b1b1b" font-weight="bold">flow arrow</text>
+<text x="200" y="1233" font-family="sans-serif" font-size="11.5" fill="#555555">what happens next</text>
+<g data-element="check box"><rect x="40" y="1243" width="24" height="14" fill="#ffffff" stroke="#333333" stroke-width="1.8"/></g>
+<text x="72" y="1254" font-family="sans-serif" font-size="12" fill="#1b1b1b" font-weight="bold">check box</text>
+<text x="200" y="1254" font-family="sans-serif" font-size="11.5" fill="#555555">conditions that are tested</text>
+<g data-element="decision"><polygon points="52,1262 64,1271 52,1280 40,1271" fill="#ffffff" stroke="#1b1b1b" stroke-width="2"/></g>
+<text x="72" y="1275" font-family="sans-serif" font-size="12" fill="#1b1b1b" font-weight="bold">decision</text>
+<text x="200" y="1275" font-family="sans-serif" font-size="11.5" fill="#555555">a yes-or-no question</text>
+<g data-element="process box"><rect x="40" y="1285" width="24" height="14" fill="#f2f2f2" stroke="#333333" stroke-width="1.8"/></g>
+<text x="72" y="1296" font-family="sans-serif" font-size="12" fill="#1b1b1b" font-weight="bold">process box</text>
+<text x="200" y="1296" font-family="sans-serif" font-size="11.5" fill="#555555">work that is done</text>
+<g data-element="stop box"><rect x="600" y="1201" width="24" height="14" fill="#ffffff" stroke="#a32a1f" stroke-width="2.2"/></g>
+<text x="632" y="1212" font-family="sans-serif" font-size="12" fill="#1b1b1b" font-weight="bold">stop box</text>
+<text x="760" y="1212" font-family="sans-serif" font-size="11.5" fill="#555555">the only events that end a running window</text>
+<g data-element="consequence box"><rect x="600" y="1222" width="24" height="14" fill="#1b6ca8" stroke="#1b6ca8" stroke-width="2" fill-opacity="0.12"/></g>
+<text x="632" y="1233" font-family="sans-serif" font-size="12" fill="#1b1b1b" font-weight="bold">consequence box</text>
+<text x="760" y="1233" font-family="sans-serif" font-size="11.5" fill="#555555">what the flag catalog does with a flag</text>
+<g data-element="note"><rect x="600" y="1243" width="24" height="14" fill="#ffffff" stroke="#555555" stroke-width="1.4" stroke-dasharray="5 4"/></g>
+<text x="632" y="1254" font-family="sans-serif" font-size="12" fill="#1b1b1b" font-weight="bold">note</text>
+<text x="760" y="1254" font-family="sans-serif" font-size="11.5" fill="#555555">the rule for a missing reading or a missing code</text>
+<g data-element="outcome"><rect x="600" y="1264" width="24" height="14" fill="#ffffff" stroke="#1b1b1b" stroke-width="3"/></g>
+<text x="632" y="1275" font-family="sans-serif" font-size="12" fill="#1b1b1b" font-weight="bold">outcome</text>
+<text x="760" y="1275" font-family="sans-serif" font-size="11.5" fill="#555555">how an attempt ends</text>
+</svg>

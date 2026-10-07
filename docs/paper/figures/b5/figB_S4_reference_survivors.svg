@@ -1,0 +1,251 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="806" viewBox="0 0 1000 806" role="img" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" data-figure="B-S4">
+<title>Figure B-S4. Testing a window for drift when some reference members cannot be used</title>
+<desc>Panel (a): one window's reference members in running order, with one start member lost and replaced by a spare and one end member lost with no replacement. Panel (b): the same members on an energy axis, the reference drift bound computed from the reference corpus, and the difference between the end and start means.</desc>
+<rect data-role="background" width="1000" height="806" fill="#ffffff"/>
+<g data-role="figure-title">
+<text x="30" y="34" font-size="20" fill="#0b0b0b" font-weight="bold">Figure B-S4. Testing a window for drift when some reference members cannot be used</text>
+<text x="30" y="56" font-size="13.5" fill="#52514e">SYNTHETIC worked example: every energy in this figure is invented for illustration; none is a measurement.</text>
+</g>
+<g data-element="Panel (a)"><title>Panel (a)</title>
+<text x="30" y="90" font-size="14" fill="#0b0b0b" font-weight="bold">Panel (a). One window's reference members (runs of one fixed workload), in running order, left to right; not to scale</text>
+</g>
+<g data-element="reference corpus"><title>reference corpus</title>
+<text x="32" y="132" font-size="12.5" fill="#0b0b0b" font-weight="bold">reference corpus</text>
+<text x="32" y="148" font-size="12" fill="#52514e">12 members</text>
+</g>
+<g data-element="corpus member"><title>corpus member</title>
+<rect x="32" y="170" width="12" height="12" fill="#898781" rx="1.5"/>
+<rect x="50" y="170" width="12" height="12" fill="#898781" rx="1.5"/>
+<rect x="68" y="170" width="12" height="12" fill="#898781" rx="1.5"/>
+<rect x="86" y="170" width="12" height="12" fill="#898781" rx="1.5"/>
+<rect x="104" y="170" width="12" height="12" fill="#898781" rx="1.5"/>
+<rect x="122" y="170" width="12" height="12" fill="#898781" rx="1.5"/>
+<rect x="140" y="170" width="12" height="12" fill="#898781" rx="1.5"/>
+<rect x="158" y="170" width="12" height="12" fill="#898781" rx="1.5"/>
+<rect x="176" y="170" width="12" height="12" fill="#898781" rx="1.5"/>
+<rect x="194" y="170" width="12" height="12" fill="#898781" rx="1.5"/>
+<rect x="212" y="170" width="12" height="12" fill="#898781" rx="1.5"/>
+<rect x="230" y="170" width="12" height="12" fill="#898781" rx="1.5"/>
+</g>
+<g data-element="start triplet"><title>start triplet</title>
+<text x="310" y="140" font-size="12.5" fill="#0b0b0b" text-anchor="middle" font-weight="bold">start triplet</text>
+</g>
+<g data-element="midpoint reference"><title>midpoint reference</title>
+<text x="590" y="132" font-size="12.5" fill="#0b0b0b" text-anchor="middle" font-weight="bold">midpoint</text>
+<text x="590" y="147" font-size="12.5" fill="#0b0b0b" text-anchor="middle" font-weight="bold">reference</text>
+</g>
+<g data-element="end triplet"><title>end triplet</title>
+<text x="842" y="140" font-size="12.5" fill="#0b0b0b" text-anchor="middle" font-weight="bold">end triplet</text>
+</g>
+<g data-element="spares"><title>spares</title>
+<text x="402" y="140" font-size="12.5" fill="#0b0b0b" text-anchor="middle" font-weight="bold">spares</text>
+<text x="646" y="140" font-size="12.5" fill="#0b0b0b" text-anchor="middle" font-weight="bold">spare</text>
+<text x="932" y="140" font-size="12.5" fill="#0b0b0b" text-anchor="middle" font-weight="bold">spares</text>
+</g>
+<g data-element="science members"><title>science members</title>
+<rect x="452" y="163" width="118" height="26" fill="#f4f3ef" stroke="#c3c2b7" stroke-width="1" rx="4"/>
+<text x="511" y="180" font-size="12" fill="#52514e" text-anchor="middle">science members</text>
+<text x="511" y="140" font-size="12" fill="#52514e" text-anchor="middle">first half</text>
+<rect x="676" y="163" width="118" height="26" fill="#f4f3ef" stroke="#c3c2b7" stroke-width="1" rx="4"/>
+<text x="735" y="180" font-size="12" fill="#52514e" text-anchor="middle">science members</text>
+<text x="735" y="140" font-size="12" fill="#52514e" text-anchor="middle">second half</text>
+</g>
+<g data-element="surviving reference"><title>surviving reference</title>
+<circle cx="286" cy="176" r="7" fill="#2a78d6" stroke="#ffffff" stroke-width="2"/>
+<circle cx="334" cy="176" r="7" fill="#2a78d6" stroke="#ffffff" stroke-width="2"/>
+<circle cx="590" cy="176" r="7" fill="#2a78d6" stroke="#ffffff" stroke-width="2"/>
+<circle cx="818" cy="176" r="7" fill="#2a78d6" stroke="#ffffff" stroke-width="2"/>
+<circle cx="842" cy="176" r="7" fill="#2a78d6" stroke="#ffffff" stroke-width="2"/>
+</g>
+<g data-element="lost reference"><title>lost reference</title>
+<circle cx="310" cy="176" r="7" fill="#ffffff" stroke="#898781" stroke-width="1.5"/>
+<line x1="305.5" y1="171.5" x2="314.5" y2="180.5" stroke="#d03b3b" stroke-width="2.4" stroke-linecap="round"/>
+<line x1="305.5" y1="180.5" x2="314.5" y2="171.5" stroke="#d03b3b" stroke-width="2.4" stroke-linecap="round"/>
+<circle cx="866" cy="176" r="7" fill="#ffffff" stroke="#898781" stroke-width="1.5"/>
+<line x1="861.5" y1="171.5" x2="870.5" y2="180.5" stroke="#d03b3b" stroke-width="2.4" stroke-linecap="round"/>
+<line x1="861.5" y1="180.5" x2="870.5" y2="171.5" stroke="#d03b3b" stroke-width="2.4" stroke-linecap="round"/>
+</g>
+<g data-element="spare that ran"><title>spare that ran</title>
+<polygon points="378,167 387,176 378,185 369,176" fill="#2a78d6" stroke="#ffffff" stroke-width="2" stroke-linejoin="round"/>
+</g>
+<g data-element="spare that did not run"><title>spare that did not run</title>
+<polygon points="402,168 410,176 402,184 394,176" fill="#ffffff" stroke="#898781" stroke-width="1.4" stroke-linejoin="round" stroke-dasharray="3 2"/>
+<polygon points="426,168 434,176 426,184 418,176" fill="#ffffff" stroke="#898781" stroke-width="1.4" stroke-linejoin="round" stroke-dasharray="3 2"/>
+<polygon points="646,168 654,176 646,184 638,176" fill="#ffffff" stroke="#898781" stroke-width="1.4" stroke-linejoin="round" stroke-dasharray="3 2"/>
+<polygon points="908,168 916,176 908,184 900,176" fill="#ffffff" stroke="#898781" stroke-width="1.4" stroke-linejoin="round" stroke-dasharray="3 2"/>
+<polygon points="932,168 940,176 932,184 924,176" fill="#ffffff" stroke="#898781" stroke-width="1.4" stroke-linejoin="round" stroke-dasharray="3 2"/>
+<polygon points="956,168 964,176 956,184 948,176" fill="#ffffff" stroke="#898781" stroke-width="1.4" stroke-linejoin="round" stroke-dasharray="3 2"/>
+</g>
+<g data-element="one retry"><title>one retry</title>
+<path d="M 374 188 Q 344 216 317 190" fill="none" stroke="#52514e" stroke-width="1.6"/>
+<polygon points="313,186.5 321.24,189.23 316.76,194.33" fill="#52514e"/>
+<text x="356" y="232" font-size="12" fill="#52514e" text-anchor="middle">one retry: member 2 was lost during the</text>
+<text x="356" y="247" font-size="12" fill="#52514e" text-anchor="middle">window, so spare 1 ran and takes its place</text>
+</g>
+<g data-element="no retry"><title>no retry</title>
+<line x1="866" y1="187" x2="866" y2="218" stroke="#898781" stroke-width="1"/>
+<text x="968" y="232" font-size="12" fill="#52514e" text-anchor="end">no retry: member 3's loss was found only</text>
+<text x="968" y="247" font-size="12" fill="#52514e" text-anchor="end">after the window, when its records were checked</text>
+</g>
+<g data-element="surviving references"><title>surviving references</title>
+<text x="356" y="274" font-size="12.5" fill="#0b0b0b" text-anchor="middle" font-weight="bold">surviving references: 3 of 3</text>
+<text x="618" y="274" font-size="12.5" fill="#0b0b0b" text-anchor="middle" font-weight="bold">surviving references: 1 of 1</text>
+<text x="886" y="274" font-size="12.5" fill="#0b0b0b" text-anchor="middle" font-weight="bold">surviving references: 2 of 3</text>
+</g>
+<g data-element="Minimum to run the check"><title>Minimum to run the check</title>
+<text x="30" y="300" font-size="12.5" fill="#0b0b0b">Minimum to run the check: 2 surviving references in the start triplet and 2 in the end triplet; the midpoint reference is not required.</text>
+</g>
+<g data-element="corpus member"><title>corpus member</title>
+<rect x="30" y="317.5" width="12" height="12" fill="#898781" rx="1.5"/>
+<text x="51" y="328" font-size="12.5" fill="#0b0b0b">corpus member</text>
+</g>
+<g data-element="surviving reference"><title>surviving reference</title>
+<circle cx="175.5" cy="323.5" r="7" fill="#2a78d6" stroke="#ffffff" stroke-width="2"/>
+<text x="190.5" y="328" font-size="12.5" fill="#0b0b0b">surviving reference</text>
+</g>
+<g data-element="spare that ran"><title>spare that ran</title>
+<polygon points="337,314.5 346,323.5 337,332.5 328,323.5" fill="#2a78d6" stroke="#ffffff" stroke-width="2" stroke-linejoin="round"/>
+<text x="352" y="328" font-size="12.5" fill="#0b0b0b">spare that ran</text>
+</g>
+<g data-element="lost reference"><title>lost reference</title>
+<circle cx="467" cy="323.5" r="7" fill="#ffffff" stroke="#898781" stroke-width="1.5"/>
+<line x1="462.5" y1="319" x2="471.5" y2="328" stroke="#d03b3b" stroke-width="2.4" stroke-linecap="round"/>
+<line x1="462.5" y1="328" x2="471.5" y2="319" stroke="#d03b3b" stroke-width="2.4" stroke-linecap="round"/>
+<text x="482" y="328" font-size="12.5" fill="#0b0b0b">lost reference</text>
+</g>
+<g data-element="spare that did not run"><title>spare that did not run</title>
+<polygon points="597,315.5 605,323.5 597,331.5 589,323.5" fill="#ffffff" stroke="#898781" stroke-width="1.4" stroke-linejoin="round" stroke-dasharray="3 2"/>
+<text x="612" y="328" font-size="12.5" fill="#0b0b0b">spare that did not run</text>
+</g>
+<g data-element="Panel (b)"><title>Panel (b)</title>
+<text x="30" y="372" font-size="14" fill="#0b0b0b" font-weight="bold">Panel (b). The reference drift check, drawn on one energy axis</text>
+</g>
+<g data-element="energy axis"><title>energy axis</title>
+<line x1="244.71" y1="392" x2="244.71" y2="724" stroke="#e1e0d9" stroke-width="1"/>
+<line x1="244.71" y1="724" x2="244.71" y2="729" stroke="#c3c2b7" stroke-width="1"/>
+<text x="244.71" y="744" font-size="12" fill="#52514e" text-anchor="middle">99.6</text>
+<line x1="334.12" y1="392" x2="334.12" y2="724" stroke="#e1e0d9" stroke-width="1"/>
+<line x1="334.12" y1="724" x2="334.12" y2="729" stroke="#c3c2b7" stroke-width="1"/>
+<text x="334.12" y="744" font-size="12" fill="#52514e" text-anchor="middle">99.8</text>
+<line x1="423.53" y1="392" x2="423.53" y2="724" stroke="#e1e0d9" stroke-width="1"/>
+<line x1="423.53" y1="724" x2="423.53" y2="729" stroke="#c3c2b7" stroke-width="1"/>
+<text x="423.53" y="744" font-size="12" fill="#52514e" text-anchor="middle">100.0</text>
+<line x1="512.94" y1="392" x2="512.94" y2="724" stroke="#e1e0d9" stroke-width="1"/>
+<line x1="512.94" y1="724" x2="512.94" y2="729" stroke="#c3c2b7" stroke-width="1"/>
+<text x="512.94" y="744" font-size="12" fill="#52514e" text-anchor="middle">100.2</text>
+<line x1="602.35" y1="392" x2="602.35" y2="724" stroke="#e1e0d9" stroke-width="1"/>
+<line x1="602.35" y1="724" x2="602.35" y2="729" stroke="#c3c2b7" stroke-width="1"/>
+<text x="602.35" y="744" font-size="12" fill="#52514e" text-anchor="middle">100.4</text>
+<line x1="691.76" y1="392" x2="691.76" y2="724" stroke="#e1e0d9" stroke-width="1"/>
+<line x1="691.76" y1="724" x2="691.76" y2="729" stroke="#c3c2b7" stroke-width="1"/>
+<text x="691.76" y="744" font-size="12" fill="#52514e" text-anchor="middle">100.6</text>
+<line x1="781.18" y1="392" x2="781.18" y2="724" stroke="#e1e0d9" stroke-width="1"/>
+<line x1="781.18" y1="724" x2="781.18" y2="729" stroke="#c3c2b7" stroke-width="1"/>
+<text x="781.18" y="744" font-size="12" fill="#52514e" text-anchor="middle">100.8</text>
+<line x1="870.59" y1="392" x2="870.59" y2="724" stroke="#e1e0d9" stroke-width="1"/>
+<line x1="870.59" y1="724" x2="870.59" y2="729" stroke="#c3c2b7" stroke-width="1"/>
+<text x="870.59" y="744" font-size="12" fill="#52514e" text-anchor="middle">101.0</text>
+<line x1="960" y1="392" x2="960" y2="724" stroke="#e1e0d9" stroke-width="1"/>
+<line x1="960" y1="724" x2="960" y2="729" stroke="#c3c2b7" stroke-width="1"/>
+<text x="960" y="744" font-size="12" fill="#52514e" text-anchor="middle">101.2</text>
+<line x1="200" y1="724" x2="960" y2="724" stroke="#c3c2b7" stroke-width="1"/>
+<text x="580" y="764" font-size="12.5" fill="#52514e" text-anchor="middle">energy axis: energy of one reference member, in joules (J)</text>
+</g>
+<g data-element="reference corpus"><title>reference corpus</title>
+<text x="186" y="414" font-size="12.5" fill="#0b0b0b" text-anchor="end" font-weight="bold">reference corpus</text>
+</g>
+<g data-element="corpus member"><title>corpus member</title>
+<rect x="247.65" y="404" width="12" height="12" fill="#898781" rx="1.5"/>
+<rect x="287.88" y="404" width="12" height="12" fill="#898781" rx="1.5"/>
+<rect x="328.12" y="404" width="12" height="12" fill="#898781" rx="1.5"/>
+<rect x="363.88" y="404" width="12" height="12" fill="#898781" rx="1.5"/>
+<rect x="386.24" y="404" width="12" height="12" fill="#898781" rx="1.5"/>
+<rect x="404.12" y="404" width="12" height="12" fill="#898781" rx="1.5"/>
+<rect x="435.41" y="404" width="12" height="12" fill="#898781" rx="1.5"/>
+<rect x="457.76" y="404" width="12" height="12" fill="#898781" rx="1.5"/>
+<rect x="484.59" y="404" width="12" height="12" fill="#898781" rx="1.5"/>
+<rect x="515.88" y="404" width="12" height="12" fill="#898781" rx="1.5"/>
+<rect x="556.12" y="404" width="12" height="12" fill="#898781" rx="1.5"/>
+<rect x="587.41" y="404" width="12" height="12" fill="#898781" rx="1.5"/>
+</g>
+<g data-element="mean of the 2 lowest"><title>mean of the 2 lowest</title>
+<polyline points="245.65,422 245.65,426 301.88,426 301.88,422" fill="none" stroke="#52514e" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"/>
+<line x1="273.76" y1="426" x2="273.76" y2="472" stroke="#52514e" stroke-width="1.2"/>
+<text x="266.76" y="443" font-size="12" fill="#52514e" text-anchor="end">mean of the 2 lowest</text>
+<text x="266.76" y="458" font-size="12" fill="#52514e" text-anchor="end">99.6650 J</text>
+</g>
+<g data-element="mean of the 3 highest"><title>mean of the 3 highest</title>
+<polyline points="513.88,422 513.88,426 601.41,426 601.41,422" fill="none" stroke="#52514e" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"/>
+<line x1="559.14" y1="426" x2="559.14" y2="472" stroke="#52514e" stroke-width="1.2"/>
+<text x="552.14" y="443" font-size="12" fill="#52514e" text-anchor="end">mean of the 3 highest</text>
+<text x="552.14" y="458" font-size="12" fill="#52514e" text-anchor="end">100.3033 J</text>
+</g>
+<g data-element="gap term"><title>gap term</title>
+<line x1="281.76" y1="472" x2="551.14" y2="472" stroke="#0b0b0b" stroke-width="1.8"/>
+<polygon points="559.14,472 550.14,475.8 550.14,468.2" fill="#0b0b0b"/>
+<polygon points="273.76,472 282.76,468.2 282.76,475.8" fill="#0b0b0b"/>
+<text x="416.45" y="491" font-size="12.5" fill="#0b0b0b" text-anchor="middle" font-weight="bold">gap term: 100.3033 − 99.6650 = 0.6383 J</text>
+</g>
+<g data-element="reference drift bound"><title>reference drift bound</title>
+<rect x="624" y="394" width="342" height="146" fill="#f4f3ef" rx="6"/>
+<text x="636" y="414" font-size="12.5" fill="#0b0b0b" font-weight="bold">reference drift bound</text>
+<text x="636" y="431" font-size="12" fill="#52514e">for 3 surviving references at the start, 2 at the end</text>
+<text x="636" y="446.5" font-size="12" fill="#52514e">= the larger of two terms:</text>
+<text x="636" y="462" font-size="12" fill="#52514e">gap term (drawn at left): 0.6383 J</text>
+<text x="636" y="477.5" font-size="12" fill="#52514e">repeatability term:</text>
+<text x="636" y="493" font-size="12" fill="#52514e">2.201 × 0.2353 × √(1/3 + 1/2) = 0.4727 J</text>
+<text x="636" y="512" font-size="12.5" fill="#0b0b0b" font-weight="bold">reference drift bound = 0.6383 J</text>
+<text x="636" y="529" font-size="12" fill="#52514e">(with 3 and 3 surviving references: 0.5933 J)</text>
+</g>
+<g data-element="start triplet"><title>start triplet</title>
+<text x="186" y="570" font-size="12.5" fill="#0b0b0b" text-anchor="end" font-weight="bold">start triplet</text>
+</g>
+<g data-element="midpoint reference"><title>midpoint reference</title>
+<text x="186" y="614" font-size="12.5" fill="#0b0b0b" text-anchor="end" font-weight="bold">midpoint reference</text>
+<text x="526.94" y="614" font-size="12" fill="#52514e">100.20 J; not read by this check</text>
+</g>
+<g data-element="end triplet"><title>end triplet</title>
+<text x="186" y="658" font-size="12.5" fill="#0b0b0b" text-anchor="end" font-weight="bold">end triplet</text>
+</g>
+<g data-element="surviving references"><title>surviving references</title>
+<text x="186" y="586" font-size="12" fill="#52514e" text-anchor="end">3 surviving references</text>
+<text x="186" y="674" font-size="12" fill="#52514e" text-anchor="end">2 surviving references</text>
+</g>
+<g data-element="surviving reference"><title>surviving reference</title>
+<circle cx="432.47" cy="566" r="7" fill="#2a78d6" stroke="#ffffff" stroke-width="2"/>
+<circle cx="383.29" cy="566" r="7" fill="#2a78d6" stroke="#ffffff" stroke-width="2"/>
+<circle cx="512.94" cy="610" r="7" fill="#2a78d6" stroke="#ffffff" stroke-width="2"/>
+<circle cx="539.76" cy="654" r="7" fill="#2a78d6" stroke="#ffffff" stroke-width="2"/>
+<circle cx="508.47" cy="654" r="7" fill="#2a78d6" stroke="#ffffff" stroke-width="2"/>
+</g>
+<g data-element="spare that ran"><title>spare that ran</title>
+<polygon points="401.18,557 410.18,566 401.18,575 392.18,566" fill="#2a78d6" stroke="#ffffff" stroke-width="2" stroke-linejoin="round"/>
+</g>
+<g data-element="lost reference"><title>lost reference</title>
+<circle cx="906.35" cy="654" r="7" fill="#ffffff" stroke="#898781" stroke-width="1.5"/>
+<line x1="901.85" y1="649.5" x2="910.85" y2="658.5" stroke="#d03b3b" stroke-width="2.4" stroke-linecap="round"/>
+<line x1="901.85" y1="658.5" x2="910.85" y2="649.5" stroke="#d03b3b" stroke-width="2.4" stroke-linecap="round"/>
+<text x="892.35" y="658" font-size="12" fill="#52514e" text-anchor="end">lost reference, 101.08 J: not read</text>
+</g>
+<g data-element="start mean"><title>start mean</title>
+<polyline points="373.29,577 373.29,581 442.47,581 442.47,577" fill="none" stroke="#0b0b0b" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"/>
+<line x1="405.65" y1="581" x2="405.65" y2="694" stroke="#0b0b0b" stroke-width="1.6"/>
+<text x="448.47" y="570" font-size="12" fill="#52514e">start mean 99.9600 J</text>
+</g>
+<g data-element="end mean"><title>end mean</title>
+<polyline points="498.47,665 498.47,669 549.76,669 549.76,665" fill="none" stroke="#0b0b0b" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"/>
+<line x1="524.12" y1="669" x2="524.12" y2="694" stroke="#0b0b0b" stroke-width="1.6"/>
+<text x="555.76" y="658" font-size="12" fill="#52514e">end mean 100.2250 J</text>
+</g>
+<g data-element="difference of the means"><title>difference of the means</title>
+<line x1="413.65" y1="694" x2="516.12" y2="694" stroke="#2a78d6" stroke-width="2.2"/>
+<polygon points="524.12,694 515.12,697.8 515.12,690.2" fill="#2a78d6"/>
+<polygon points="405.65,694 414.65,690.2 414.65,697.8" fill="#2a78d6"/>
+<text x="536.12" y="698.5" font-size="12.5" fill="#0b0b0b" font-weight="bold">difference of the means: 100.2250 − 99.9600 = 0.2650 J</text>
+</g>
+<g data-element="Verdict"><title>Verdict</title>
+<circle cx="40" cy="788" r="7" fill="#0ca30c"/>
+<polyline points="36.4,788.2 39,791 43.8,785" fill="none" stroke="#ffffff" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/>
+<text x="56" y="793" font-size="14" fill="#0b0b0b" font-weight="bold">Verdict: 0.2650 J ≤ 0.6383 J, so the reference drift check passes.</text>
+</g>
+</svg>
