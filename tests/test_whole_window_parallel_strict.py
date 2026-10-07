@@ -32,9 +32,19 @@ class ParallelStrictValidationTests(unittest.TestCase):
                     (path / "metadata.json").write_text("{not json\n")
                 paths.append(path)
             serial = [cli.validate_bundle(path, strict=True) for path in paths]
-            pooled = whole_window.strict_validate_bundles(paths, workers=3)
+            # The pool is started by "spawn". Under the whole-suite runner every worker died
+            # while re-importing the runner's main module (tests/runner_isolation.py, item
+            # 1), the in-process fallback produced the same answers, and this test passed
+            # without a pool. Hide the main module so the workers start, and count the
+            # fallback's calls in this process so a pool that did no work fails the test.
+            from tests import runner_isolation
+            in_process = whole_window._strict_validation_problems
+            with runner_isolation.hide_main_from_spawned_children(), \
+                    patch.object(whole_window, "_strict_validation_problems", side_effect=in_process) as fallback:
+                pooled = whole_window.strict_validate_bundles(paths, workers=3)
         self.assertEqual(pooled, serial)
         self.assertTrue(all(problems for problems in pooled))
+        self.assertEqual(fallback.call_count, 0, "the pool did not validate these bundles; the fallback did")
 
     def test_a_validator_exception_is_recorded_as_the_serial_path_records_it(self) -> None:
         def boom(_path, strict):

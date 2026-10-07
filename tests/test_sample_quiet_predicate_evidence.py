@@ -15,6 +15,7 @@ from unittest.mock import Mock, patch
 
 from scripts import sample_quiet_predicate_evidence as harness
 from joulewise import battery_float
+from tests import runner_isolation
 from tests import test_battery_float as battery_float_tests
 from tests.test_battery_float import UPDATE, raw as battery_raw
 
@@ -1197,6 +1198,14 @@ runpy.run_path(script, run_name="__main__")
 
 
 class LoadTests(unittest.TestCase):
+    def setUp(self):
+        # load() starts each worker by "spawn": a fresh interpreter that first re-imports
+        # the parent's main module. Under the whole-suite runner that re-import fails or
+        # re-runs the runner (tests/runner_isolation.py, item 1), the worker never reports
+        # ready, and both real-worker tests below fail for a reason unrelated to load().
+        # The workers live in importable modules, so the child needs no main module.
+        self.enterContext(runner_isolation.hide_main_from_spawned_children())
+
     def test_burn_profiles_advance_their_generator(self):
         for profile in ("scalar", "memory"):
             burn = harness.burn_profile(profile, 1)

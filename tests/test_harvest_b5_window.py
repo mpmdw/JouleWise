@@ -1144,6 +1144,15 @@ class CollectedWindowTests(WindowTestCase):
 class WorkerPoolTests(WindowTestCase):
     CACHE_ASSESSMENTS = False
 
+    def setUp(self):
+        super().setUp()
+        # assess_members(workers=2) runs a process pool, started by "spawn" on macOS. Under
+        # the whole-suite runner each pool worker died while re-importing the runner's main
+        # module and the test errored with BrokenProcessPool (tests/runner_isolation.py,
+        # item 1). assess_member lives in an importable module, so the worker needs no main.
+        from tests import runner_isolation
+        self.enterContext(runner_isolation.hide_main_from_spawned_children())
+
     def test_worker_pool_matches_serial_assessment(self):
         window = self.window()
         tasks = [{"run_id": run_id, "bundle_path": str(window.claim / run_id), "withheld_dir": str(self.tmp / f"w{n}")}

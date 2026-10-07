@@ -126,6 +126,12 @@ class HazardWholeWindowVerdictTests(_SentinelMixin, unittest.TestCase):
         self.addCleanup(remove_night_records, self.w)
         self.addCleanup(self._reset_claim_records)
         write_night_records(self.w)
+        # The verdict writer validates members in a process pool started by "spawn". Under
+        # the whole-suite runner every worker died while re-importing the runner's main
+        # module and the in-process fallback did the work (tests/runner_isolation.py, item
+        # 1). Hide the main module so these tests run the pool there as they do alone.
+        from tests import runner_isolation
+        self.enterContext(runner_isolation.hide_main_from_spawned_children())
 
     def tearDown(self) -> None:
         self.assertEqual(type(self).sentinel_calls, [], "a hazard path reached the ARM replay")
