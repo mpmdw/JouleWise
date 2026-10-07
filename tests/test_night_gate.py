@@ -2196,7 +2196,7 @@ class HazardPackPlanTests(unittest.TestCase):
         self.assertNotIn(night_gate.HAZARD_PACK, night_gate.class_table())
         self.assertEqual({"night_refused_hazard", "night_stopped_disk_low",
                           "night_stopped_census_unmeasured", "night_stopped_monitor_outage",
-                          "night_refused_instrument_not_sampling", "night_lineage_unpublished",
+                          "night_refused_instrument_not_sampling", "night_refused_boot_changed",
                           "night_refused_launch_abandoned"},
                          set(night_gate.HAZARD_DRIVER_REASON_CODES))
         self.assertFalse(night_gate.HAZARD_DRIVER_REASON_CODES

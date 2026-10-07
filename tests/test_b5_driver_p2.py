@@ -319,7 +319,9 @@ class MonitorTests(unittest.TestCase):
 
 
 class LineageTests(unittest.TestCase):
-    def test_an_absent_locator_after_one_retry_refuses_before_launch(self):
+    # Doctrine 2026-10-05 (int4): an unpublished or absent locator is a flag
+    # after one retry of publication, never a refusal; the chain launches.
+    def test_an_absent_locator_after_one_retry_is_a_flag_and_the_chain_launches(self):
         harness = Harness(self, g10=False)
         harness.replace_chain("#!/bin/zsh -f\nexit 0\n")
         patch(self, b5_driver, "LINEAGE_RETRY_S", 0.0)
@@ -330,16 +332,75 @@ class LineageTests(unittest.TestCase):
             raise RuntimeError("window_lineage unavailable")
         harness.publish_lineage = broken
         harness.lineage_valid = False
-        self.assertEqual(harness.driver.EXIT_REFUSED, harness.run())
+        self.assertEqual(harness.driver.EXIT_GO, harness.run())
         self.assertEqual(2, len(calls))
+        self.assertEqual("GO", harness.result()["verdict"])
+        self.assertTrue((harness.night / "chain.started").exists())
+        codes = [item["code"] for item in harness.flags]
+        self.assertIn("records.lineage_formality", codes)
+        self.assertIn(b5_driver.LINEAGE_PRELAUNCH_MISMATCH, codes)
+        mismatch = next(item for item in harness.flags if item["code"] == b5_driver.LINEAGE_PRELAUNCH_MISMATCH)
+        self.assertEqual({"claim", "bound"}, set(mismatch["observed"]))
+        self.assertEqual(harness.plan.hazard_window["pack"]["pack_plan_id"], mismatch["expected"]["plan_id"])
+        self.assertFalse((harness.night / "refusal.json").exists())
+
+    def test_a_locator_absent_after_a_successful_publication_is_republished_once(self):
+        harness = Harness(self, g10=False)
+        harness.replace_chain("#!/bin/zsh -f\nexit 0\n")
+        patch(self, b5_driver, "LINEAGE_RETRY_S", 0.0)
+        published, checks = [], []
+
+        def publish(request):
+            published.append(request)
+            return {"ok": True}
+
+        def verify(request):
+            checks.append(request)
+            absent = len(published) < 2
+            return {role: {"valid": not absent, "locator_absent": absent} for role in ("claim", "bound")}
+        harness.publish_lineage = publish
+        harness.verify_lineage = verify
+        self.assertEqual(harness.driver.EXIT_GO, harness.run())
+        self.assertEqual((2, 2), (len(published), len(checks)))
+        self.assertNotIn(b5_driver.LINEAGE_PRELAUNCH_MISMATCH, [item["code"] for item in harness.flags])
+        record = json.loads((harness.night / b5_driver.LINEAGE_RECORD).read_text())
+        self.assertTrue(record["locators_valid"])
+
+    def test_a_bookkeeping_mismatch_is_a_flag_and_the_chain_launches(self):
+        harness = Harness(self, g10=False)
+        harness.replace_chain("#!/bin/zsh -f\nexit 0\n")
+        mismatches = {"plan_id": {"observed": "plan-of-another-window", "expected": "the-pack-plan"}}
+        harness.verify_lineage = lambda request: {
+            role: {"valid": False, "boot_changed": False, "mismatches": mismatches,
+                   "error": "the locator names plan_id 'plan-of-another-window'"} for role in ("claim", "bound")}
+        self.assertEqual(harness.driver.EXIT_GO, harness.run())
+        self.assertTrue((harness.night / "chain.started").exists())
+        flag = next(item for item in harness.flags if item["code"] == b5_driver.LINEAGE_PRELAUNCH_MISMATCH)
+        self.assertEqual(("RECORDS", "REPRESENTATION"), (flag["family"], flag["klass"]))
+        self.assertEqual(mismatches, flag["observed"]["claim"]["mismatches"])
+        self.assertEqual(["night/" + b5_driver.LINEAGE_RECORD], [item["path"] for item in flag["evidence"]])
+        from joulewise.flags.catalog import DRAFT_CODES
+        self.assertEqual("DISCLOSE", DRAFT_CODES[b5_driver.LINEAGE_PRELAUNCH_MISMATCH]["effect"])
+        record = json.loads((harness.night / b5_driver.LINEAGE_RECORD).read_text())
+        self.assertEqual((False, []), (record["locators_valid"], record["boot_changed"]))
+
+    def test_a_boot_changed_since_publication_refuses_before_launch(self):
+        harness = Harness(self, g10=False)
+        harness.replace_chain("#!/bin/zsh -f\nexit 0\n")
+        recorded, current = "11111111-1111-4111-8111-111111111111", "22222222-2222-4222-8222-222222222222"
+        harness.verify_lineage = lambda request: {
+            role: {"valid": False, "boot_changed": True, "recorded_boot_session_id": recorded,
+                   "current_boot_session_id": current, "error": "collection boot differs"}
+            for role in ("claim", "bound")}
+        self.assertEqual(harness.driver.EXIT_REFUSED, harness.run())
         result = harness.result()
-        self.assertEqual(("REFUSED", b5_driver.LINEAGE_UNPUBLISHED), (result["verdict"], result["aborted_reason"]))
+        self.assertEqual(("REFUSED", b5_driver.REFUSED_BOOT_CHANGED), (result["verdict"], result["aborted_reason"]))
         self.assertFalse((harness.night / "chain.started").exists())
         self.assertFalse((harness.night / b5_driver.MONITOR_JOURNAL).exists())
-        self.assertIn("records.lineage_formality", [item["code"] for item in harness.flags])
         refusal = json.loads((harness.night / "refusal.json").read_text())
         self.assertEqual([], harness.driver.validate_refusal(refusal))
         self.assertEqual(["bound", "claim"], refusal["refusal"]["evidence"]["roots"])
+        self.assertEqual({"recorded": recorded, "current": current}, refusal["refusal"]["evidence"]["boots"]["claim"])
 
     def test_the_production_check_reads_both_locators(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -594,10 +655,15 @@ class SolReviewFixTests(unittest.TestCase):
         self.assertIn("supervision_failed:disk", report["fault_reasons"])
         self.assertIn("supervision_failed:disk", harness.hazard()["faults"]["reasons"])
 
-    # F2: a locator the members' own authenticator rejects is not valid.
-    def lineage_request(self, w, plan_id):
-        return b5_driver.LineageRequest(mock.Mock(plan_id=plan_id), Path(w.base), w.custody, w.night, {},
-                                        w.claim, w.bound, None, None, None)
+    # F2: a locator the members' own authenticator rejects is not valid (a
+    # flag since int4). The window plan id differs from the pack plan id, as
+    # in every real window; the lineage carries the pack plan id.
+    def lineage_request(self, w, pack_plan_id):
+        from tests import test_window_lineage as lineage_fixture
+        window = {"pack": {"pack_plan_id": pack_plan_id, "window_id": lineage_fixture.WINDOW_ID},
+                  "bracket_session_id": lineage_fixture.SESSION_ID}
+        return b5_driver.LineageRequest(mock.Mock(plan_id="REH-a-window-plan-id"), Path(w.base), w.custody,
+                                        w.night, window, w.claim, w.bound, None, None, None)
 
     def test_a_stale_locator_from_an_ended_window_is_not_valid(self):
         from tests import test_window_lineage as lineage_fixture
@@ -618,6 +684,9 @@ class SolReviewFixTests(unittest.TestCase):
             checks = b5_driver._production_lineage_check(self.lineage_request(w, "plan-some-later-window"))
             self.assertEqual((False, False), (checks["claim"]["valid"], checks["bound"]["valid"]))
             self.assertIn("plan-some-later-window", checks["bound"]["error"])
+            self.assertEqual({"plan_id": {"observed": lineage_fixture.PLAN_ID, "expected": "plan-some-later-window"}},
+                             checks["claim"]["mismatches"])
+            self.assertFalse(checks["claim"]["boot_changed"])
 
     # F3: counting only in the settle after a stage, never into a capture.
     def test_the_last_collection_stage_counts_only_at_the_terminal_record(self):

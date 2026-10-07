@@ -67,7 +67,7 @@ HAZARD_DRIVER_REASON_CODES = frozenset(
         "night_stopped_census_unmeasured",       # 4 consecutive in-window agent censuses unmeasured (row 7)
         "night_stopped_monitor_outage",          # no battery or contention reading for the outage bound (row 11)
         "night_refused_instrument_not_sampling",  # the hazard monitor never journaled before launch (row 11)
-        "night_lineage_unpublished",             # a runs-root lineage locator is absent after one retry (row 9)
+        "night_refused_boot_changed",            # the boot changed since the lineage was published (row 9; physics)
         "night_refused_launch_abandoned",        # the watchdog released this launch (J4) before the arm
     }
 )

@@ -281,6 +281,15 @@ _PRUNE3_CODES = {
     "records.window_not_launched": _code("RECORDS", "REPRESENTATION", DISCLOSE),
 }
 
+# Integration int4 (cooldown smoke, 2026-10-06; doctrine "physics refuses;
+# everything else is a flag"): the driver's pre-launch lineage check found a
+# locator that is absent, unreadable, rejected by the members' authenticator
+# or naming another window's identity. It is recorded and the chain launches;
+# only a changed boot refuses (night_refused_boot_changed).
+_INT4_CODES = {
+    "records.lineage_prelaunch_mismatch": _code("RECORDS", "REPRESENTATION", DISCLOSE),
+}
+
 DRAFT_CODES: Mapping[str, Mapping[str, str]] = {
     **_WINDOW_CODES,
     **_MEMBER_CODES,
@@ -288,6 +297,7 @@ DRAFT_CODES: Mapping[str, Mapping[str, str]] = {
     **_CORE_PRUNE_CODES,
     **_PRUNE2_CODES,
     **_PRUNE3_CODES,
+    **_INT4_CODES,
 }
 
 # Codes the cell rule and the roster rule of exclusions.compute derive

@@ -356,6 +356,8 @@ CODES: dict[str, CodeSpec] = {
     "monitor.outage": _spec("DIAGNOSTIC", "PHYSICS"),
     # P3-DRV's driver code (the KM003C wall meter's supervision; DISCLOSE):
     "meter.supervision_fault": _spec("DIAGNOSTIC", "PHYSICS"),
+    # int4's driver code: the pre-launch lineage check disagreed; recorded, the chain launched.
+    "records.lineage_prelaunch_mismatch": _spec("RECORDS", "REPRESENTATION"),
     # Emitted by this harvest:
     "records.runs_root_override": _spec("RECORDS", "REPRESENTATION"),
     "yield.harvest_disagrees_with_window": _spec("RECORDS", "REPRESENTATION"),

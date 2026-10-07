@@ -762,6 +762,12 @@
       "family": "RECORDS",
       "klass": "REPRESENTATION"
     },
+    "records.lineage_prelaunch_mismatch": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "RECORDS",
+      "klass": "REPRESENTATION"
+    },
     "records.monitor_journal_absent": {
       "blinding": "STRUCTURE",
       "effect": "DISCLOSE",

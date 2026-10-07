@@ -74,10 +74,12 @@ STOPPED_DISK_LOW = "night_stopped_disk_low"
 STOPPED_CENSUS_UNMEASURED = "night_stopped_census_unmeasured"
 STOPPED_MONITOR_OUTAGE = "night_stopped_monitor_outage"
 REFUSED_INSTRUMENT_NOT_SAMPLING = "night_refused_instrument_not_sampling"
-LINEAGE_UNPUBLISHED = "night_lineage_unpublished"
+# The one lineage refusal left is physics: the boot changed since the lineage
+# was published, so monotonic clocks do not join (doctrine 2026-10-05).
+REFUSED_BOOT_CHANGED = "night_refused_boot_changed"
 REFUSED_LAUNCH_ABANDONED = "night_refused_launch_abandoned"
 if {REFUSED_HAZARD, STOPPED_DISK_LOW, STOPPED_CENSUS_UNMEASURED, STOPPED_MONITOR_OUTAGE,
-        REFUSED_INSTRUMENT_NOT_SAMPLING, LINEAGE_UNPUBLISHED,
+        REFUSED_INSTRUMENT_NOT_SAMPLING, REFUSED_BOOT_CHANGED,
         REFUSED_LAUNCH_ABANDONED} != set(night_gate.HAZARD_DRIVER_REASON_CODES):
     raise RuntimeError("hazard driver codes drifted from night_gate.HAZARD_DRIVER_REASON_CODES")
 
@@ -279,13 +281,17 @@ def _git(root: Path, args: Sequence[str]) -> bytes:
 
 
 def _boot_session_uuid() -> str | None:
-    try:
-        completed = subprocess.run(["/usr/sbin/sysctl", "-n", "kern.bootsessionuuid"],
-                                   capture_output=True, text=True, timeout=5, check=False)
-    except (OSError, subprocess.SubprocessError):
-        return None
-    value = completed.stdout.strip()
-    return value or None
+    """``kern.bootsessionuuid`` in the one canonical form members compare.
+
+    This is ``window_lineage.current_boot_session_id`` itself (a lowercase
+    canonical UUID, or None when unreadable), so the boot the driver publishes
+    and the boot the pre-launch check reads are the members' own reading.
+    sysctl prints the UUID in uppercase; a raw reading never equals the
+    lineage's canonical id (cooldown smoke run 1, 2026-10-06).
+    """
+
+    from joulewise import window_lineage
+    return window_lineage.current_boot_session_id()
 
 
 # --------------------------------------------------------------------------
@@ -411,33 +417,88 @@ class CollectorRequest:
     stage: str  # "arm"
 
 
-def _production_lineage_check(request: LineageRequest) -> dict[str, Any]:
-    """Re-read both runs roots' lineage locators (PLAN2 row 9, interim).
+# The flag for every pre-launch lineage disagreement that is not physics.
+LINEAGE_PRELAUNCH_MISMATCH = "records.lineage_prelaunch_mismatch"
 
-    A member can be collected only when its runs root carries a HAZARD
-    locator that the member's own window-level authenticator accepts
-    (``window_lineage.authenticate_campaign``: structure, this boot, the chain
-    not yet ended, the pack's config inventory) and that names this plan;
-    otherwise every member refuses before its bundle. A structurally valid
-    locator left by an earlier window is therefore not valid here (Sol review
-    F2). Returns ``{"claim": {...}, "bound": {...}}``, each with ``valid`` and,
-    when invalid, the reader's error.
+
+def lineage_identity(window: Mapping[str, Any]) -> dict[str, Any]:
+    """The identity the window's lineage carries, from the fields publication writes.
+
+    ``plan_id`` is the PACK plan id: members compare it with the pack's plan
+    tree (``controller``: ``plan["plan_id"] != lineage["plan_id"]`` refuses),
+    and the chain reserves the bracket session under it. A window plan id is
+    a different string (cooldown smoke run 2, 2026-10-06).
+    """
+
+    pack = window["pack"]
+    return {"plan_id": pack["pack_plan_id"], "window_id": pack["window_id"],
+            "bracket_session_id": window["bracket_session_id"]}
+
+
+def _production_lineage_check(request: LineageRequest) -> dict[str, Any]:
+    """Re-read both runs roots' lineage locators before launch (PLAN2 row 9).
+
+    Each root is read the way a member reads it: the members' own
+    window-level authenticator (``window_lineage.authenticate_campaign``, with
+    its default boot reader ``window_lineage.current_boot_session_id``), and
+    the lineage's identity compared with the identity this window publishes
+    (:func:`lineage_identity`). Returns ``{"claim": {...}, "bound": {...}}``;
+    each entry has ``valid``, ``boot_changed`` and, when not valid, ``error``
+    and ``mismatches`` (``{field: {"observed", "expected"}}``).
+
+    Only ``boot_changed`` is physics: the lineage records a boot and the
+    canonical reader now reads a different one, so monotonic clocks do not
+    join. Every other disagreement is bookkeeping, which the driver records
+    as a flag and launches anyway (doctrine 2026-10-05).
     """
 
     from joulewise import window_lineage
-    plan_id = getattr(request.plan, "plan_id", None)
-    boot = request.boot_session_uuid
+    try:
+        current_boot = window_lineage.current_boot_session_id()
+    except Exception:  # noqa: BLE001 - an unreadable boot judges nothing, as for members
+        current_boot = None
+    window = request.hazard_window
     checks: dict[str, Any] = {}
     for role, root in (("claim", request.claim_runs_root), ("bound", request.bound_runs_root)):
-        entry: dict[str, Any] = {"root": str(root), "valid": False}
+        entry: dict[str, Any] = {"root": str(root), "valid": False, "boot_changed": False,
+                                 "current_boot_session_id": current_boot}
+        errors: list[str] = []
         try:
-            context = window_lineage.authenticate_campaign(Path(root), boot_reader=lambda: boot)
-            named = context["launch_lineage"].get("plan_id")
-            if plan_id is not None and named != plan_id:
-                raise ValueError(f"the locator names plan {named!r}, not this window's plan {plan_id!r}")
-            entry.update(valid=True, sha256=context["locator_sha256"])
-        except Exception as error:  # noqa: BLE001 - an unusable locator is not valid
-            entry["error"] = _error_text(error)
+            locator, digest = window_lineage.read_locator(Path(root) / window_lineage.LOCATOR_BASENAME)
+        except Exception as error:  # noqa: BLE001 - an unreadable locator is a record
+            entry.update(locator_absent=isinstance(error, window_lineage.HazardLineageError)
+                         and error.reason_code == "launch_consumption_missing",
+                         error=_error_text(error))
+            checks[role] = entry
+            continue
+        lineage = locator.get("launch_lineage") if isinstance(locator, Mapping) else None
+        lineage = lineage if isinstance(lineage, Mapping) else {}
+        recorded_boot = lineage.get("collection_boot_session_id")
+        entry.update(sha256=digest, recorded_boot_session_id=recorded_boot,
+                     boot_changed=recorded_boot is not None and current_boot is not None
+                     and recorded_boot != current_boot)
+        try:
+            window_lineage.authenticate_campaign(Path(root))
+        except Exception as error:  # noqa: BLE001 - a member would refuse; the driver records it
+            errors.append(_error_text(error))
+        mismatches: dict[str, Any] = {}
+        try:
+            expected = lineage_identity(window)
+        except Exception as error:  # noqa: BLE001 - an unreadable window identity is a record
+            errors.append(f"window identity unreadable: {_error_text(error)}")
+            expected = {}
+        for field, value in expected.items():
+            if lineage.get(field) != value:
+                mismatches[field] = {"observed": lineage.get(field), "expected": value}
+        if mismatches:
+            errors.append("the locator names " + ", ".join(
+                f"{field} {item['observed']!r}, not this window's {item['expected']!r}"
+                for field, item in sorted(mismatches.items())))
+            entry["mismatches"] = mismatches
+        if errors:
+            entry["error"] = "; ".join(errors)
+        else:
+            entry["valid"] = True
         checks[role] = entry
     return checks
 
@@ -567,9 +628,10 @@ def _production_lineage(request: LineageRequest) -> Any:
     from joulewise import window_lineage
     window = request.hazard_window
     pack = window["pack"]
+    identity = lineage_identity(window)
     return window_lineage.publish_window_lineage(
-        pack_root=pack["pack_root"], pack_id=pack["pack_id"], plan_id=pack["pack_plan_id"],
-        window_id=pack["window_id"], bracket_session_id=window["bracket_session_id"],
+        pack_root=pack["pack_root"], pack_id=pack["pack_id"], plan_id=identity["plan_id"],
+        window_id=identity["window_id"], bracket_session_id=identity["bracket_session_id"],
         pre_attempt_id=window["bindings"]["pre_attempt_id"],
         post_attempt_id=window["bindings"]["post_attempt_id"],
         claim_runs_root=request.claim_runs_root, bound_runs_root=request.bound_runs_root,
@@ -2032,10 +2094,13 @@ def run_hazard_night(rt: Any, plan_path: Path, plan: Any, probes: Any, initial_c
                     evidence=[{"path": os.path.relpath(chain_path, custody) if chain_path.is_relative_to(custody)
                                else str(chain_path), "sha256": chain_sha256}])
 
-    # 3. Launch lineage into both runs roots. A publication failure is a flag;
-    # it is retried once (PLAN2 row 9, interim). Then both locators are re-read:
-    # without a valid locator in a runs root every member refuses before its
-    # bundle, so the window is refused before launch instead of run hollow.
+    # 3. Launch lineage into both runs roots, then re-read both locators the
+    # way members read them (PLAN2 row 9). Physics refuses; everything else is
+    # a flag (doctrine 2026-10-05): a publication failure, an absent locator or
+    # any bookkeeping disagreement is recorded and the chain launches. A
+    # publication that failed, or left a locator absent, is retried once. The
+    # one refusal is a boot that changed since the lineage was published:
+    # monotonic clocks do not join across a reboot.
     if window.boot is None:
         window.boot = seams.boot_session_uuid()
     roots = plan.hazard_window["runs_roots"]
@@ -2048,48 +2113,83 @@ def run_hazard_night(rt: Any, plan_path: Path, plan: Any, probes: Any, initial_c
         boot_session_uuid=window.boot)
     lineage_record: dict[str, Any] = {"schema": LINEAGE_SCHEMA, "requested": stamp(), "attempts": []}
     lineage_error: str | None = None
-    for attempt in (1, 2):
-        if attempt > 1:
-            time.sleep(LINEAGE_RETRY_S)
+
+    def publish(attempt: int) -> None:
+        nonlocal lineage_error
         try:
             published = seams.publish_lineage(lineage_request)
             lineage_record.update(published=True, result=json.loads(json.dumps(published, default=str)))
             lineage_record["attempts"].append({"attempt": attempt, "published": True})
             lineage_error = None
-            break
         except Exception as error:  # noqa: BLE001
             lineage_error = _error_text(error)
             lineage_record["attempts"].append({"attempt": attempt, "published": False, "error": lineage_error})
+
+    def verify() -> Any:
+        try:
+            return seams.verify_lineage(lineage_request)
+        except Exception as error:  # noqa: BLE001 - an unreadable check is not a valid locator
+            return {"error": _error_text(error)}
+
+    def role_entry(found: Any, role: str) -> Mapping[str, Any]:
+        entry = found.get(role) if isinstance(found, Mapping) else None
+        return entry if isinstance(entry, Mapping) else {}
+
+    publish(1)
+    if lineage_error is not None:
+        time.sleep(LINEAGE_RETRY_S)
+        publish(2)
+        locators = verify()
+    else:
+        locators = verify()
+        if any(role_entry(locators, role).get("locator_absent") for role in ("claim", "bound")):
+            time.sleep(LINEAGE_RETRY_S)
+            publish(2)
+            locators = verify()
     if lineage_error is not None:
         lineage_record.update(published=False, error=lineage_error)
         window.flag("records.lineage_formality", "RECORDS", "REPRESENTATION",
                     observed={"error": lineage_error, "attempts": len(lineage_record["attempts"])},
                     detail="the hazard-window lineage could not be published before launch")
-    try:
-        locators = seams.verify_lineage(lineage_request)
-    except Exception as error:  # noqa: BLE001 - an unreadable check is not a valid locator
-        locators = {"error": _error_text(error)}
-    locators_valid = isinstance(locators, Mapping) and all(
-        isinstance(locators.get(role), Mapping) and locators[role].get("valid") is True
-        for role in ("claim", "bound"))
+    else:
+        lineage_record["published"] = True
+    invalid = sorted(role for role in ("claim", "bound") if role_entry(locators, role).get("valid") is not True)
+    boot_changed = sorted(role for role in ("claim", "bound") if role_entry(locators, role).get("boot_changed") is True)
+    locators_valid = not invalid
     lineage_record.update(locators=json.loads(json.dumps(locators, default=str)),
-                          locators_valid=locators_valid, ended=stamp())
+                          locators_valid=locators_valid, boot_changed=boot_changed, ended=stamp())
     try:
         _create_once(night / LINEAGE_RECORD, lineage_record)
     except OSError as error:
         window.note(f"lineage record could not be written: {_error_text(error)}")
     hazard["lineage"] = {"published": lineage_record["published"], "error": lineage_record.get("error"),
-                         "locators_valid": locators_valid}
-    if not locators_valid:
-        invalid = sorted(role for role in ("claim", "bound")
-                         if not (isinstance(locators, Mapping) and isinstance(locators.get(role), Mapping)
-                                 and locators[role].get("valid") is True))
-        return refuse("lineage", LINEAGE_UNPUBLISHED,
-                      "the launch lineage locator is absent or unreadable in the "
-                      + " and ".join(invalid) + " runs root after one retry; every member would refuse "
-                      "before its bundle, so the chain was not launched",
-                      {"roots": invalid, "publication_error": lineage_error,
-                       "lineage_record": f"night/{LINEAGE_RECORD}"})
+                         "locators_valid": locators_valid, "boot_changed": boot_changed}
+    if boot_changed:
+        boots = {role: {"recorded": role_entry(locators, role).get("recorded_boot_session_id"),
+                        "current": role_entry(locators, role).get("current_boot_session_id")}
+                 for role in boot_changed}
+        return refuse("lineage", REFUSED_BOOT_CHANGED,
+                      "the boot changed since the launch lineage was published in the "
+                      + " and ".join(boot_changed) + " runs root; monotonic clocks do not join across a "
+                      "reboot, so the chain was not launched",
+                      {"roots": boot_changed, "boots": boots, "lineage_record": f"night/{LINEAGE_RECORD}"})
+    if invalid:
+        try:
+            expected = lineage_identity(plan.hazard_window)
+        except Exception as error:  # noqa: BLE001 - a record
+            expected = {"error": _error_text(error)}
+        observed = {role: {key: role_entry(locators, role).get(key)
+                           for key in ("error", "mismatches", "locator_absent", "sha256",
+                                       "recorded_boot_session_id")}
+                    for role in invalid}
+        if isinstance(locators, Mapping) and "error" in locators:
+            observed["check_error"] = locators["error"]
+        window.flag(LINEAGE_PRELAUNCH_MISMATCH, "RECORDS", "REPRESENTATION", observed=observed,
+                    expected={**expected, "boot_session_id": window.boot},
+                    detail="the pre-launch lineage check disagrees with this window in the "
+                           + " and ".join(invalid) + " runs root; recorded, and the chain launched",
+                    evidence=[{"path": f"night/{LINEAGE_RECORD}", "sha256": digest}
+                              for digest in (_sha256_file(night / LINEAGE_RECORD),) if digest])
 
     # 4. The executed-file inventory.
     try:
