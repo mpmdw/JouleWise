@@ -1420,7 +1420,7 @@ All flag files are append-only, with an fsync per line.
 |---|---|---|
 | Desk, before an arm (never during a dwell or a window) | `<custody>/flags/desk.jsonl` | the record-only collectors run by the lead; a window-removing flag here means the cause is fixed before scheduling; the driver never reads these flags |
 | Arm | `<custody>/hazards/arm.json` (verdicts and measurements); `<custody>/flags/arm.jsonl` (collectors) | the hazard arm; the collectors |
-| Window | `<custody>/hazards/monitor/{clock,battery,thermal,contention,disk}.jsonl` plus raw bytes; the driver's flags | the monitor; the driver |
+| Window | `<custody>/hazards/monitor/{clock,battery,thermal,contention,disk}.jsonl` plus raw bytes; `<custody>/hazards/meter/stream-*.jsonl` (§5.8); the driver's flags, `night/stage_yield.jsonl` and `night/yield_alert-*.json` (§5.7) | the monitor; the meter reader; the driver |
 | Harvest | `derived/flags.jsonl` (every flag, de-duplicated); `derived/window_flags.json` (summary); `derived/exclusions.json`; numbers under restricted custody `withheld/` | the harvest |
 
 ### 6.2 The catalog
@@ -2148,7 +2148,7 @@ battery evidence map (§9.2).
 | 1 | Network time OFF as an action; no wording check; ONs only at G10 and the redraw | §4.4, §3 |
 | 2 | Clock gate 3.7 ms + (\|f\| + 0.25 ppm) × 335 s ≤ 5 ms; dwell linearity ±1 ms; 1 ms step; per-member 5 ms bound authoritative | §0.14, §4.2, §6.4 |
 | 3 | Idle admission unchanged; `member.admission_aborted` removes the member; stage continues; L11 option | §0.13, §6.3, §5.2, §7.5 |
-| 4 | Battery: arm check, 5 s journal, 60 s publication, in-force rule, accumulator rule with units, unmeasured, pairs as data, measured limitation | §4.2, §6.4, §9.2 |
+| 4 | Battery: arm check, 5 s journal, 60 s publication, in-force rule, accumulator rule with units, unmeasured, pairs as data, measured limitation (revision 5: current from the SMC at 1 s; assist disclosed, §9.2) | §4.2, §6.4, §9.2 |
 | 5 | Census kept; contention measured directly; load average and name lists recorded only | §4.5, §4.2, §6.4 |
 | 6 | Disk arm rule and in-window stop; dwell replaces `prewindow_check.sh` | §4.2, §4.1 |
 | 7 | Thermal (OS level and powermetrics); instrument cadence probe | §4.2, §6.4 |
