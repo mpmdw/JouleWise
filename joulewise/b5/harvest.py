@@ -89,8 +89,14 @@ NEG8_PHYSICS_LOSS_CODES = ("contention.request_overlap", "battery.member_span", 
 # A reference is also lost when the runner stopped it (timeout, admission
 # abort) or it fails strict validation.  The "unmeasured" codes are not here:
 # unknown evidence never authorises an omission.
+# Orchestrator ruling N8 (2026-10-07, cold pass 2): a reference whose model
+# identity is not the sealed one (model.identity_mismatch), or could not be
+# derived from its own record (model.identity_underivable), measures a
+# different workload, so it is lost and the survivors rule decides.  These
+# are identity findings of the reference's own bytes, not unmeasured hazards.
 NEG8_REFERENCE_LOSS_CODES = (*NEG8_PHYSICS_LOSS_CODES, "member.timeout", "member.admission_aborted",
-                             "member.strict_validation_failed")
+                             "member.strict_validation_failed", "model.identity_mismatch",
+                             "model.identity_underivable")
 # How a reference the verdict writer dropped for its status (or an unreadable
 # summary) is named, when the harvest has the member's own flag.  The timeout
 # comes first: a member SIGKILLed at the hung-process cap has no summary, and
@@ -4570,7 +4576,8 @@ class _Harvest:
         * a reference the verdict names carries a reference-loss flag the
           stored bracket did not drop (``NEG8_REFERENCE_LOSS_CODES``: a 6.4
           physics exclusion, a timeout, an admission abort, failed strict
-          validation): the screen runs on the survivors (NEG-8 ruling
+          validation, a model identity that is not the sealed one or cannot
+          be derived (ruling N8)): the screen runs on the survivors (NEG-8 ruling
           2026-10-07, registration 0.12);
         * a corpus member carries a 6.4 physics exclusion, so the bound was
           re-derived from the clean members (``neg8_corpus_physics``, 5.3).

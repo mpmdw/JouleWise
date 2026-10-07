@@ -685,6 +685,34 @@ class HarvestSurvivorTests(_hb().WindowTestCase):
         self.assertIn("neg8.screen_failed", window.exclusions()["reasons"])
         self.assertIn("neg8.reference_lost", window.codes())
 
+    def test_a_reference_of_another_model_is_dropped_and_named(self) -> None:
+        """Ruling N8 (2026-10-07): a reference whose model identity is not the sealed one is lost."""
+        from joulewise.b5.harvest import NEG8_REFERENCE_LOSS_CODES
+        self.assertIn("model.identity_mismatch", NEG8_REFERENCE_LOSS_CODES)
+        self.assertIn("model.identity_underivable", NEG8_REFERENCE_LOSS_CODES)
+        probe = _hb().Window(self.tmp / "probe", catalog_overrides=self.ISOLATE)
+        _hb().neg8_corpus(probe)
+        other_model = self.points(0.0, **{"b5t-neg8-end-3": 30.34 + 3 * self.bound_j(probe)})
+        window = self.run_window("other-model", other_model,
+                                 reference_flags=[("b5t-neg8-end-3", "model.identity_mismatch")])
+        self.assertNotIn("neg8.screen_failed", window.codes())
+        (lost,) = [flag for flag in window.flags() if flag["code"] == "neg8.reference_lost"]
+        self.assertEqual(lost["observed"]["reference_counts"], {"start": 3, "midpoint": 1, "end": 2})
+        self.assertEqual([(row["run_id"], row["slot"], row["reason"]) for row in lost["observed"]["lost"]],
+                         [("b5t-neg8-end-3", "end", "model.identity_mismatch")])
+        record = self.screen_record(window)
+        self.assertEqual(record["harvest_reference_losses"], {"b5t-neg8-end-3": "model.identity_mismatch"})
+        self.assertEqual(record["rescreen"]["survivors"]["reference_counts"], {"start": 3, "midpoint": 1, "end": 2})
+
+    def test_two_references_of_another_model_at_one_endpoint_fail_as_references_insufficient(self) -> None:
+        window = self.run_window("other-model-two", self.points(0.0), reference_flags=[
+            ("b5t-neg8-start-1", "model.identity_mismatch"), ("b5t-neg8-start-2", "model.identity_underivable")])
+        (flag,) = [flag for flag in window.flags() if flag["code"] == "neg8.screen_failed"]
+        self.assertEqual(flag["observed"]["reason"], "references_insufficient")
+        self.assertEqual({(row["run_id"], row["reason"]) for row in flag["observed"]["lost"]},
+                         {("b5t-neg8-start-1", "model.identity_mismatch"),
+                          ("b5t-neg8-start-2", "model.identity_underivable")})
+
     def test_two_lost_start_references_fail_as_references_insufficient(self) -> None:
         window = self.run_window("insufficient", self.points(0.0), reference_flags=[
             ("b5t-neg8-start-1", "thermal.os_level_nonzero"), ("b5t-neg8-start-3", "clock.step_overlap")])
