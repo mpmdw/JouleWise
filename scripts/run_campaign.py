@@ -7218,8 +7218,21 @@ def _idle_admission_core_evaluation(
     survivor_shape = (
         counts[0] in (2, 3) and counts[1] in (0, 1) and counts[2] in (2, 3)
     )
+    # A planned roster is also recognised with no loss recorded when a
+    # reference was never run at all (its bundle is absent, so it reaches
+    # neither the list nor ``neg8_lost``): a midpoint, or a full triplet at an
+    # endpoint, is never part of the legacy single pair.  Such a shape goes to
+    # the evaluator, which names it ``references_insufficient`` (cold pass 2
+    # N3), instead of ``neg8_bracket_ambiguous_reference``.  Whole-window mode
+    # only: a per-segment invocation keeps its historical conditions.
+    planned_roster_shape = bool(
+        whole_window and (counts[1] == 1 or 3 in (counts[0], counts[2]))
+    )
     within_plan_after_losses = bool(
-        neg8_lost and counts[0] <= 3 and counts[1] <= 1 and counts[2] <= 3
+        (neg8_lost or planned_roster_shape)
+        and counts[0] <= 3
+        and counts[1] <= 1
+        and counts[2] <= 3
     )
     ambiguous = bool(
         (neg8_references["start"] or neg8_references["end"])

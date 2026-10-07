@@ -2196,7 +2196,9 @@ def evaluate_neg8_point_drift(
     only when no reference was lost, so a modern roster that lost references
     never downgrades to it.  Fewer than two survivors at an endpoint, or more
     references than planned, is ``neg8_bracket_reference_invalid``; with a
-    loss behind it the record names ``references_insufficient``.
+    loss behind it, or on a planned roster (a midpoint, or a full triplet at
+    an endpoint) whose missing references were never run, the record names
+    ``references_insufficient``.
     """
 
     conditions: set[str] = set()
@@ -2387,6 +2389,21 @@ def evaluate_neg8_point_drift(
         decision = "failed"
     else:
         decision = "passed"
+    # A planned roster short of references with no loss recorded: a reference
+    # whose stage never ran it is absent from every list (cold pass 2 N3).  A
+    # midpoint, or a full triplet at an endpoint, is never the legacy pair.
+    short_planned_roster = bool(
+        not losses
+        and gross_counts[0] <= NEG8_REPLICATED_ENDPOINT_N
+        and gross_counts[1] <= 1
+        and gross_counts[2] <= NEG8_REPLICATED_ENDPOINT_N
+        and (
+            gross_counts[1] == 1
+            or NEG8_REPLICATED_ENDPOINT_N in (gross_counts[0], gross_counts[2])
+        )
+        and min(gross_counts[0], gross_counts[2])
+        < min(NEG8_SURVIVOR_ENDPOINT_COUNTS)
+    )
     # Recorded only when a reference was lost or the survivor protocol ran, so
     # a full (3, 1, 3) or legacy bracket keeps its historical bytes.
     survivor_record: dict[str, Any] = (
@@ -2406,7 +2423,7 @@ def evaluate_neg8_point_drift(
             and gross_counts[1] == 0,
             "survivor_screen": (
                 "references_insufficient"
-                if losses
+                if (losses or short_planned_roster)
                 and (
                     gross_counts[0] < min(NEG8_SURVIVOR_ENDPOINT_COUNTS)
                     or gross_counts[2] < min(NEG8_SURVIVOR_ENDPOINT_COUNTS)
@@ -2423,7 +2440,7 @@ def evaluate_neg8_point_drift(
                 else "evaluated"
             ),
         }
-        if losses or protocol == NEG8_SURVIVOR_PROTOCOL
+        if losses or protocol == NEG8_SURVIVOR_PROTOCOL or short_planned_roster
         else {}
     )
     return {

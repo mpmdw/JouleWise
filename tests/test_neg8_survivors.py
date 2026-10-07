@@ -216,6 +216,17 @@ class SurvivorScreenEvaluatorTests(unittest.TestCase):
         self.assertEqual(bracket["reference_losses"], lost)
         self.assertEqual(bracket["claim_families"], {})
 
+    def test_a_planned_roster_short_of_never_run_references_is_references_insufficient(self) -> None:
+        """Cold pass 2 N3: two start references never ran, so no loss is recorded; the label is the ruling's."""
+        bracket = evaluate(self.ruling, [100.0], [100.1], [100.0, 100.1, 100.2])
+        self.assertEqual((bracket["endpoint_protocol"], bracket["decision"]), ("invalid", "failed"))
+        self.assertIn("neg8_bracket_reference_invalid", bracket["conditions"])
+        self.assertEqual((bracket["survivor_screen"], bracket["reference_losses"]), ("references_insufficient", []))
+        # The legacy pair, and a legacy-shaped remnant, keep their historical records.
+        for start, end in (([100.0], [100.1]), ([100.0], []), ([], [])):
+            with self.subTest(start=start, end=end):
+                self.assertNotIn("survivor_screen", evaluate(self.ruling, start, [], end))
+
     def test_a_lost_roster_never_downgrades_to_the_legacy_single_pair(self) -> None:
         legacy = evaluate(self.ruling, [100.0], [], [100.1])
         self.assertEqual((legacy["endpoint_protocol"], legacy["decision"]),
@@ -353,6 +364,16 @@ class VerdictWriterSurvivorTests(unittest.TestCase):
         bracket = self.bracket(members)
         self.assertEqual((bracket["decision"], bracket["survivor_screen"]), ("failed", "references_insufficient"))
         self.assertNotIn("neg8_bracket_ambiguous_reference", bracket["conditions"])
+
+    def test_two_never_run_start_references_are_insufficient_not_ambiguous(self) -> None:
+        """Cold pass 2 N3: absent references reach neither the list nor the losses; before: ambiguous."""
+        members = [member for member in self.references((8.00, 8.02, 7.98), (8.01,), (8.01, 8.03, 7.99))
+                   if member.bundle_id not in {"neg8-start-r1", "neg8-start-r3"}]
+        bracket = self.bracket(members)
+        self.assertNotIn("neg8_bracket_ambiguous_reference", bracket["conditions"])
+        self.assertIn("neg8_bracket_reference_invalid", bracket["conditions"])
+        self.assertEqual((bracket["decision"], bracket["survivor_screen"]), ("failed", "references_insufficient"))
+        self.assertEqual(bracket["reference_counts"], {"start": 1, "midpoint": 1, "end": 3})
 
     def test_a_full_trajectory_keeps_the_historical_bracket(self) -> None:
         bracket = self.bracket(self.references((8.00, 8.02, 7.98), (8.5,), (8.01, 8.03, 7.99)))
@@ -791,6 +812,17 @@ class HarvestSurvivorTests(_hb().WindowTestCase):
         self.assertEqual(lost["observed"]["reference_counts"], {"start": 3, "midpoint": 1, "end": 2})
         self.assertEqual([(row["run_id"], row["slot"], row["reason"]) for row in lost["observed"]["lost"]],
                          [("b5t-neg8-end-3", "end", "bundle_absent")])
+
+    def test_two_never_run_start_references_fail_as_references_insufficient_and_are_named(self) -> None:
+        """Cold pass 2 N2 and N3 together: the reason is the ruling's and both absent references are named."""
+        window = self.run_window_with_absent_references(
+            "absent-two", {"b5t-neg8-start-1": "start", "b5t-neg8-start-3": "start"})
+        (flag,) = [flag for flag in window.flags() if flag["code"] == "neg8.screen_failed"]
+        self.assertEqual(flag["observed"]["reason"], "references_insufficient")
+        self.assertEqual({(row["run_id"], row["slot"], row["reason"]) for row in flag["observed"]["lost"]},
+                         {("b5t-neg8-start-1", "start", "bundle_absent"),
+                          ("b5t-neg8-start-3", "start", "bundle_absent")})
+        self.assertIn("neg8.screen_failed", window.exclusions()["reasons"])
 
     def test_an_unmeasured_reference_is_kept(self) -> None:
         window = self.run_window("unmeasured", self.points(0.0),
