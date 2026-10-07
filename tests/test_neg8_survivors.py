@@ -414,3 +414,196 @@ class SurvivorCodeCatalogTests(unittest.TestCase):
                 self.assertEqual(DRAFT_CODES[code]["effect"], "DISCLOSE")
                 self.assertEqual(fixture[code]["effect"], "DISCLOSE")
                 self.assertIn(code, h.NEG8_SURVIVOR_CODES)
+
+
+# ---------------------------------------------------------------------------
+# Part 3: the harvest drops physics-excluded references and corpus members
+# before aggregation and re-screens on the survivors (registration 0.12, 5.3).
+# ---------------------------------------------------------------------------
+
+def _hb():
+    from tests import test_harvest_b5_window as hb
+    return hb
+
+
+class HarvestSurvivorTests(_hb().WindowTestCase):
+    """``_Harvest.neg8_corpus_physics`` and ``neg8_screen`` on a synthetic window, after the physics joins.
+
+    The window's NEG-8 references and corpus are the harvest suite's synthetic
+    bundles (``tests/test_harvest_b5_window.py``); a member-level 6.4 physics
+    flag is emitted in the meter step, which runs just before the NEG-8 steps,
+    standing in for a monitor-journal join on that member.
+    """
+
+    ISOLATE = {**_hb().Neg8ScreenTests.ISOLATE}
+
+    def run_window(self, name, points, *, stored_points=None, reference_flags=(), corpus_flags=(), failed=()):
+        import json
+        from unittest import mock
+
+        hb = _hb()
+        h = hb.h
+        window = hb.Window(self.tmp / name, catalog_overrides=self.ISOLATE)
+        self.assertIsNone(hb.neg8_corpus(window, list(failed)))
+        bound = json.loads((window.bound / "neg8-drift-bound.json").read_bytes())
+        self.write_verdict(window, stored_points or points, bound)
+        injected = [(run_id, code) for run_id, code in (*reference_flags, *corpus_flags)]
+
+        def meter(run):
+            for run_id, code in injected:
+                run.emit(code, level="member", run_id=run_id, collector="monitor", observed={"injected": True})
+
+        with hb.neg8_reference_gates(points), mock.patch.object(h._Harvest, "meter_joins", meter):
+            window.harvest()
+        return window
+
+    @staticmethod
+    def write_verdict(window, points, bound):
+        """As ``write_neg8_reference_verdict``, but the writer was given the window's bound."""
+        import hashlib
+        import json
+        from datetime import datetime, timezone
+
+        hb = _hb()
+        members = []
+        for bundle_id, role in hb.NEG8_REFERENCES:
+            bundle = window.claim / bundle_id
+            hb.put(bundle / "config.json", {"run_id": bundle_id})
+            hb.put(bundle / "metadata.json", {"run_id": bundle_id})
+            hb.put(bundle / "summary_metrics.json", {"status": "succeeded"})
+            members.append({"execution": "invoked", "run_id": bundle_id, "bundle_ids": [bundle_id], "role": role,
+                            "canonical_neg8_workload": True, "scientific_config_sha256": "d" * 64})
+        policy_sha = hb.sha(hb.ROOT / hb.POLICY)
+        raw = hb.put(window.claim / hb.NEG8_REFERENCE_MANIFEST, {
+            "schema_version": "joulewise.campaign_provenance.v1", "campaign_policy": {"sha256": policy_sha},
+            "members": members})
+        completed_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        with hb.neg8_reference_gates(points):
+            bracket, problem = ww._derived_neg8_decision(
+                [json.loads(raw)], window.claim, ww._registered_bracket_policy(policy_sha), current=True,
+                point_drift=True, drift_bound_artifact=bound, return_bracket=True,
+                freshness_evaluated_at_s=hb.h._epoch_s(completed_at))
+        assert problem is None, problem
+        hb.put(window.claim / "whole-window-verdict.json", {
+            "record_type": "idle_admission_whole_window_verdict",
+            "status": "passed" if bracket["decision"] == "passed" else "failed", "timestamp": completed_at,
+            "evaluation_scope": {"runs_root": str(window.claim.resolve()), "completed_at": completed_at},
+            "campaign_policy": {"sha256": policy_sha},
+            "row_provenance": {"source_campaign_manifests": [{"path": hb.NEG8_REFERENCE_MANIFEST,
+                                                              "sha256": hashlib.sha256(raw).hexdigest()}]},
+            "bundle_ids": [bundle_id for bundle_id, _role in hb.NEG8_REFERENCES],
+            "member_failures": [],
+            "idle_admission_core": {"conditions": sorted(bracket["conditions"]), "neg8_bracket": bracket}})
+        return bracket
+
+    @staticmethod
+    def bound_j(window) -> float:
+        import json
+        artifact = json.loads((window.bound / "neg8-drift-bound.json").read_bytes())
+        return artifact["claim_family_bounds"][ww.NEG8_CLAIM_FAMILY_GROSS]["estimator"]["replicated_endpoint_bound_j"]
+
+    def points(self, drift_j: float, **overrides) -> dict:
+        points = _hb().neg8_trajectory(drift_j)
+        points.update(overrides)
+        return points
+
+    def screen_record(self, window) -> dict:
+        import json
+        return json.loads((window.archive / "derived" / "neg8-screen.json").read_bytes())
+
+    def test_a_contaminated_end_reference_is_dropped_and_the_survivors_pass(self) -> None:
+        """Before the rule the stored screen, failed by the contender's energy, removed the window."""
+        probe = _hb().Window(self.tmp / "probe", catalog_overrides=self.ISOLATE)
+        _hb().neg8_corpus(probe)
+        contaminated = self.points(0.0, **{"b5t-neg8-end-3": 30.34 + 3 * self.bound_j(probe)})
+        window = self.run_window("contaminated", contaminated,
+                                 reference_flags=[("b5t-neg8-end-3", "contention.request_overlap")])
+        self.assertNotIn("neg8.screen_failed", window.codes())
+        (lost,) = [flag for flag in window.flags() if flag["code"] == "neg8.reference_lost"]
+        self.assertEqual(lost["observed"]["reference_counts"], {"start": 3, "midpoint": 1, "end": 2})
+        self.assertEqual([(row["run_id"], row["slot"], row["reason"]) for row in lost["observed"]["lost"]],
+                         [("b5t-neg8-end-3", "end", "contention.request_overlap")])
+        self.assertEqual(lost["observed"]["bound_formula"], ww.NEG8_COUNT_ADJUSTED_BOUND_FORMULA)
+        self.assertEqual(lost["observed"]["bound_record"], "withheld/neg8-rescreen-bracket.json")
+        record = self.screen_record(window)
+        self.assertEqual(record["rescreen"]["survivors"]["reference_counts"], {"start": 3, "midpoint": 1, "end": 2})
+        self.assertEqual(record["harvest_reference_losses"], {"b5t-neg8-end-3": "contention.request_overlap"})
+        self.assertEqual(record["bound_formula"], ww.NEG8_COUNT_ADJUSTED_BOUND_FORMULA)
+        self.assertNotIn("neg8.screen_failed", window.exclusions()["reasons"])
+        self.assertNotIn('_j"', (window.archive / "derived" / "neg8-screen.json").read_text())
+
+    def test_a_contaminated_start_reference_that_hid_drift_fails_on_the_survivors(self) -> None:
+        """Sol's example: the stored screen passed only because a contender raised one start reference."""
+        probe = _hb().Window(self.tmp / "probe", catalog_overrides=self.ISOLATE)
+        _hb().neg8_corpus(probe)
+        drift = 1.2 * self.bound_j(probe)
+        hidden = self.points(drift, **{"b5t-neg8-start-1": 30.30 + 3 * drift})
+        window = self.run_window("hidden", hidden, reference_flags=[("b5t-neg8-start-1", "battery.member_span")])
+        stored = __import__("json").loads((window.claim / "whole-window-verdict.json").read_bytes())
+        self.assertEqual(stored["idle_admission_core"]["neg8_bracket"]["decision"], "passed")
+        (flag,) = [flag for flag in window.flags() if flag["code"] == "neg8.screen_failed"]
+        self.assertEqual(flag["observed"]["reasons"], ["survivor_rescreen"])
+        self.assertIn(ww.CONDITION_NEG8_GROSS_POINT_DRIFT_EXCEEDED, flag["observed"]["collected_bound_rescreen"][
+            "conditions"])
+        self.assertIn("neg8.screen_failed", window.exclusions()["reasons"])
+        self.assertIn("neg8.reference_lost", window.codes())
+
+    def test_two_lost_start_references_fail_as_references_insufficient(self) -> None:
+        window = self.run_window("insufficient", self.points(0.0), reference_flags=[
+            ("b5t-neg8-start-1", "thermal.os_level_nonzero"), ("b5t-neg8-start-3", "clock.step_overlap")])
+        (flag,) = [flag for flag in window.flags() if flag["code"] == "neg8.screen_failed"]
+        self.assertEqual(flag["observed"]["reason"], "references_insufficient")
+        self.assertEqual({(row["run_id"], row["reason"]) for row in flag["observed"]["lost"]},
+                         {("b5t-neg8-start-1", "thermal.os_level_nonzero"),
+                          ("b5t-neg8-start-3", "clock.step_overlap")})
+        self.assertIn("neg8.screen_failed", window.exclusions()["reasons"])
+
+    def test_a_lost_midpoint_keeps_the_window_and_is_disclosed(self) -> None:
+        window = self.run_window("midpoint", self.points(0.0),
+                                 reference_flags=[("b5t-neg8-midpoint", "member.timeout")])
+        self.assertNotIn("neg8.screen_failed", window.codes())
+        (flag,) = [flag for flag in window.flags() if flag["code"] == "neg8.midpoint_lost"]
+        self.assertEqual([row["run_id"] for row in flag["observed"]["lost"]], ["b5t-neg8-midpoint"])
+        self.assertIn("neg8.reference_lost", window.codes())
+        self.assertFalse({"neg8.midpoint_lost", "neg8.reference_lost"} & set(window.exclusions()["reasons"]))
+
+    def test_an_unmeasured_reference_is_kept(self) -> None:
+        window = self.run_window("unmeasured", self.points(0.0),
+                                 reference_flags=[("b5t-neg8-end-1", "contention.unmeasured")])
+        self.assertFalse({"neg8.reference_lost", "neg8.screen_failed"} & window.codes())
+        self.assertFalse((window.archive / "derived" / "neg8-screen.json").exists())
+
+    def test_corpus_members_with_physics_exclusions_are_dropped_from_the_bound(self) -> None:
+        """Registration 5.3 amendment: the clean bound is narrower, and the screen fails against it."""
+        hb = _hb()
+        probe = hb.Window(self.tmp / "probe", catalog_overrides=self.ISOLATE)
+        hb.neg8_corpus(probe)
+        # Synthetic corpus points are 30.0 + 0.1 * r: dropping r01 and r12 narrows U_3 - L_3 from 0.9 to 0.7 J.
+        self.assertAlmostEqual(self.bound_j(probe), 0.9, places=9)
+        window = self.run_window("corpus", self.points(0.8), corpus_flags=[
+            (hb.CORPUS_IDS[0], "contention.request_overlap"), (hb.CORPUS_IDS[11], "thermal.os_level_nonzero")])
+        stored = __import__("json").loads((window.claim / "whole-window-verdict.json").read_bytes())
+        self.assertEqual(stored["idle_admission_core"]["neg8_bracket"]["decision"], "passed")
+        dropped = [flag for flag in window.flags() if flag["code"] == "neg8.corpus_member_dropped"]
+        self.assertEqual({(flag["scope"]["run_id"], flag["observed"]["reason"], flag["observed"]["source"])
+                          for flag in dropped},
+                         {(hb.CORPUS_IDS[0], "contention.request_overlap", "harvest_physics"),
+                          (hb.CORPUS_IDS[11], "thermal.os_level_nonzero", "harvest_physics")})
+        physics = __import__("json").loads((window.archive / "derived" / "neg8-corpus-physics.json").read_bytes())
+        self.assertEqual((physics["members_kept"], physics["clean_bound_validated"], physics["problems"]),
+                         (10, True, []))
+        clean = __import__("json").loads((window.archive / "withheld" / "neg8-clean-bound.json").read_bytes())
+        self.assertAlmostEqual(clean["bound"]["claim_family_bounds"][ww.NEG8_CLAIM_FAMILY_GROSS]["estimator"][
+            "replicated_endpoint_bound_j"], 0.7, places=9)
+        (flag,) = [flag for flag in window.flags() if flag["code"] == "neg8.screen_failed"]
+        self.assertTrue(flag["observed"]["survivor_rescreen"]["corpus_clean_bound"])
+        self.assertNotIn("neg8.bound_not_derived", window.codes())
+
+    def test_a_corpus_left_below_ten_clean_members_is_not_derived(self) -> None:
+        hb = _hb()
+        window = self.run_window("below-ten", self.points(0.0), failed=[hb.CORPUS_IDS[5]], corpus_flags=[
+            (hb.CORPUS_IDS[index], "battery.accumulator_excursion") for index in (0, 1)])
+        (flag,) = [flag for flag in window.flags() if flag["code"] == "neg8.bound_not_derived"]
+        self.assertEqual(flag["observed"]["source"], "corpus_physics")
+        self.assertIn("clean_members_below_minimum", flag["observed"]["problems"])
+        self.assertIn("neg8.bound_not_derived", window.exclusions()["reasons"])
