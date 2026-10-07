@@ -1356,6 +1356,26 @@ NEG8_FRESHNESS = {"os_build": "fixture-os", "power_supply_identity_sha256": "e" 
                   "calibration_identity_sha256": "f" * 64}
 
 
+# The corpus members' measured windows end before the chain starts (epoch
+# 1786206000): the HAZARD mint dates its bound by the latest kept member's
+# sampling_stopped (whole_window._hazard_bound_derived_at_s) and never by its
+# own clock (P2-B1 review F2).
+CORPUS_MEASURED_END_S = 1786205000.0
+
+
+def put_corpus_stub(bundle: Path, bundle_id: str, status: str) -> None:
+    """A synthetic NEG-8 corpus bundle: run id, status and a measured window (its sampling markers)."""
+    put(bundle / "config.json", {"run_id": bundle_id})
+    put(bundle / "metadata.json", {"run_id": bundle_id})
+    put(bundle / "summary_metrics.json", {"status": status})
+    end = CORPUS_MEASURED_END_S + CORPUS_IDS.index(bundle_id) if bundle_id in CORPUS_IDS else CORPUS_MEASURED_END_S
+    (bundle / "events.jsonl").write_text("".join(json.dumps(event, sort_keys=True) + "\n" for event in (
+        {"timestamp_s": end - 5.0, "event_type": "sampling_started", "phase": "measured_run",
+         "message": "sampling_started", "metadata": {}},
+        {"timestamp_s": end, "event_type": "sampling_stopped", "phase": "measured_run",
+         "message": "sampling_stopped", "metadata": {}})))
+
+
 def corpus_point(path: Path):
     """A corpus member's two NEG-8 points (the synthetic bundles carry no energies)."""
     value = 30.0 + 0.1 * int(path.name.rsplit("-r", 1)[1])
@@ -1398,11 +1418,9 @@ def neg8_corpus(window: "Window", failed=(), *, manifest_members=None, derive=Tr
     for bundle_id in sorted(ids):
         bundle = window.bound / bundle_id
         bundle.mkdir(parents=True, exist_ok=True)
-        for name in ("config.json", "metadata.json", "summary_metrics.json"):
+        for name in ("config.json", "metadata.json", "summary_metrics.json", "events.jsonl"):
             (bundle / name).unlink(missing_ok=True)
-        put(bundle / "config.json", {"run_id": bundle_id})
-        put(bundle / "metadata.json", {"run_id": bundle_id})
-        put(bundle / "summary_metrics.json", {"status": "failed" if bundle_id in failed else "succeeded"})
+        put_corpus_stub(bundle, bundle_id, "failed" if bundle_id in failed else "succeeded")
     night = window.custody / "night"
     collected = night / "transcript" / b5_chain.NEG8_COLLECTED_MANIFEST
     summary = night / "transcript" / b5_chain.NEG8_COLLECTED_SUMMARY
@@ -3472,10 +3490,7 @@ def neg8_corpus_in_process(window: "Window", failed=()) -> dict:
     the driver write them.
     """
     for bundle_id in CORPUS_IDS:
-        put(window.bound / bundle_id / "config.json", {"run_id": bundle_id})
-        put(window.bound / bundle_id / "metadata.json", {"run_id": bundle_id})
-        put(window.bound / bundle_id / "summary_metrics.json",
-            {"status": "failed" if bundle_id in failed else "succeeded"})
+        put_corpus_stub(window.bound / bundle_id, bundle_id, "failed" if bundle_id in failed else "succeeded")
     night = window.custody / "night"
     collected = night / "transcript" / b5_chain.NEG8_COLLECTED_MANIFEST
     summary = night / "transcript" / b5_chain.NEG8_COLLECTED_SUMMARY

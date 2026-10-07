@@ -4387,15 +4387,15 @@ def _hazard_bound_derived_at_s(rows: Sequence[Mapping[str, Any]]) -> float:
     Every kept member passed a fresh reduction, which raises without a
     measured window (reduce.py ``_ReduceError``: "no measured_run window"), so
     each real kept member has one; the maximum is taken over those that read
-    (a subset can only make the bound older, never fresher).  Only a corpus
-    whose energy evaluation never reduced anything (a synthetic fixture) has
-    no readable end; then the mint falls back to its own clock, as before.
-    Making that fallback a refusal waits for the harvest fixtures that rely
-    on it (P2-B1 review F2, deferred to P2-HARV).
+    (a subset can only make the bound older, never fresher).  A corpus with
+    no readable end has no physical derivation time, so the mint refuses
+    (raises) rather than date the bound by its own clock (P2-B1 review F2).
     """
 
     ends = [row["span_end_s"] for row in rows if row.get("span_end_s") is not None]
-    return max(ends) if ends else time.time()
+    if not ends:
+        raise ValueError("NEG-8 reference corpus: no kept member has a measured window end")
+    return max(ends)
 
 
 def _mint_hazard_neg8_drift_bound(
