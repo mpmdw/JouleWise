@@ -402,8 +402,10 @@ estimates":
 
 ## 8. Disclosures computed beside the claims
 
-All are computed by code from structural or non-science evidence, except the cross-window check and the sensitivity
-line (which use the released energies by rules fixed here), and printed with the results.
+### 8.1 Disclosures
+
+All are computed by code from structural or non-science evidence, except the cross-window check and the two
+sensitivity lines (which use the released energies by rules fixed here), and printed with the results.
 
 - **Kept units:** beside every reported cell, floor and contrast: n_r and n_b (or the kept quads), the removed units
   with the catalog families of the codes that removed them, and their positions in the window (stage and ordinal),
@@ -413,16 +415,32 @@ line (which use the released energies by rules fixed here), and printed with the
   family, printed as "attempts of this pack: N (causes …)". Fixed sentence: "These numbers are conditional on a window
   that passed the registered physical-hazard checks at arm and kept at least 8 of 10 units per stratum after the
   registered exclusions."
-- **Sensitivity line (PROPOSED; the seal gate adopts or strikes it, registration §14 Q6).** *Forcing problem:* battery
-  assist, thermal pressure and contention plausibly correlate with load, most of all on 8B prefill-p2048 members, so
-  removing the members they touched could bias a cell's mean downward. *Rule:* when any unit of a cell or contrast was
+- **Sensitivity line (PROPOSED; the seal gate adopts or strikes it, registration §14 Q6).** *Forcing problem:*
+  thermal pressure and contention plausibly correlate with load, most of all on 8B prefill-p2048 members, so removing
+  the members they touched could bias a cell's mean downward. (Battery assist, the case that first raised this, is no
+  longer an exclusion; it has its own registered line below.) *Rule:* when any unit of a cell or contrast was
   removed by a PHYSICS_IN_SPAN code, the same estimator is recomputed over the units that would be kept if
   PHYSICS_IN_SPAN codes were ignored (units removed by any other family stay removed), and printed beside the primary
   value as "sensitivity: physics-in-span exclusions not applied (n_r = …, n_b = …)". It never replaces the primary
   value, never gates anything and licenses no claim.
+- **Battery-assist sensitivity line (REGISTERED; ruling of 2026-10-06, registration §9.2).** *Forcing problem:*
+  battery assist (the battery helping the adapter, registration §6.4) is disclosed, not excluded, because excluding
+  it would select members by load. A reader still needs to see whether the members it touched move the number.
+  *Rule:* an **assist member** is a kept member whose `battery.assist` flag records at least one read below −200 mA
+  inside its measured request; reads in prepare, idle baseline and warm-up do not make an assist member. For every
+  reported cell (§4) the same estimator is computed twice: over the kept units (the primary value), and over the kept
+  units with every unit that contains an assist member removed (a quad with one assist member is removed whole, as
+  in §2.2). Both are printed, side by side, as "with assisted members" and "without assisted members (n_r = …,
+  n_b = …)", with the count of assist members per stratum. Neither value is chosen after the fact; the first is the
+  reported cell. If removing assisted units leaves fewer than 8 units in a stratum, the second value is still printed,
+  with its n and the words "below the registered minimum of 8 units", and it decides nothing. *Worked example
+  (synthetic, the §4 data).* If repeat 3 (9.9 J) and quad 7 (mean 10.2 J) contain assist members, the second value
+  uses n_r = 9, n_b = 9: fmean(r) = 10.01111 J, fmean(b) = 10.2 J, m = 0.2 × 10.01111 + 0.8 × 10.2 = 10.16222 J, printed
+  beside the primary 10.16 J. Whether GAMMA's contrasts also get this line is open (registration §14 Q9).
 - **Monitor cost:** the hazard monitor's own CPU time per window and the number of its probes that fell inside target
-  phases (registration §0.17), with the fixed sentence "The hazard monitor ran on efficiency cores at background
-  priority during collection; its CPU share is disclosed and was not subtracted."
+  phases (registration §0.17), and the meter reader's CPU time (registration §5.8), with the fixed sentence "The
+  hazard monitor ran on efficiency cores at background priority during collection, and the whole-machine meter's
+  reader at ordinary priority; their CPU share is disclosed and was not subtracted."
 - **Single window:** "The units of this cell were measured in one window; the interval covers variation within that
   window, not between days or windows. The repeats and quads are modelled as independent units; that is an
   assumption (D-179 dependence caveat)."
@@ -442,8 +460,13 @@ line (which use the released energies by rules fixed here), and printed with the
   assumes the quad differences are independent."
 - **Conservative contrast interval:** the se_met double count of §7.1 step 3, and the rounded t*.
 - **Battery, thermal, contention, clock:** per window, the hazard measurements at arm, the counts of each
-  physics-in-span code, the count of members with anchor status `bounded` and the largest effective bound, and
-  `kernel_task`'s largest CPU share during a request.
+  physics-in-span code, the count of members with anchor status `bounded` and the largest effective bound, and the
+  host's total busy CPU during requests (journaled by the monitor; `kernel_task` cannot be named by an unprivileged
+  `ps`, registration §6.8). For battery assist: per window and per phase (prepare, idle baseline, warm-up, measured
+  request), the number of members with `battery.assist`, the number of reads below −200 mA, the minimum B0AC and the
+  total duration below −200 mA; the discharged energies are released with the other energies after the release
+  event. Per window, the count of members whose current was judged on the registry because the SMC did not cover them
+  (`battery.smc_unavailable`).
 - **Reference drift:** each window's NEG-8 screen result, allowance and corpus size (10, 11 or 12). For a corpus of 10
   or 11, also disclose that the bound was validated against the collected members and that the harvest's re-screen,
   not the stored verdict, decided the screen (registration §5.3; `derived/neg8-bound.json`, `derived/neg8-screen.json`).
@@ -453,8 +476,8 @@ line (which use the released energies by rules fixed here), and printed with the
   `thermal.stage_battery_rise` (rise above 3 K, no plateau) or `thermal.battery_temperature_unmeasured` named.
   Fixed sentence for a flagged stage: "Stage S warmed by X K without levelling off; the window's NEG-8 screen
   [passed/failed], and the reported numbers rest on that screen, not on this reading." It changes no number and
-  removes nothing. Until the logging code lands (`scripts/run_campaign.py`, a later lane), the line reads "battery
-  temperature not recorded for this window.
+  removes nothing. A stage with no reading (the logging code is at `b9d02700a`; a failed read is
+  `thermal.battery_temperature_unmeasured`) reads "battery temperature not recorded for this stage".
 - **G10:** its result and the redraw cycles that followed (registration §3).
 - **p42:** "The 42-token prefill of the decode workload is shorter than one power record and could not be resolved;
   as registered, no p42 value is reported."
@@ -464,6 +487,46 @@ line (which use the released energies by rules fixed here), and printed with the
 - **Dominance:** "R is a point diagnostic with no interval; 'independent' names the independent-corner component."
 - **D-177:** phase attribution is reported without a measured instrument phase-accounting check.
 - **Fixed prompt:** the decode contrast uses one fixed prompt; no prompt-population generality is claimed.
+
+### 8.2 Whole-machine cross-check (registered descriptive analysis; never a claim number)
+
+*Forcing problem.* Every claim is a processor-rail energy. Whether the rail estimate moves with the machine's own
+energy from member to member is a question the rails cannot answer; the whole-machine meter of registration §5.8 can.
+This section fixes, before any byte exists, exactly what is computed from it, so that nothing about it is chosen
+after the numbers are seen.
+
+*Inputs.* For each kept or removed member of each analysed attempt (the meter describes every collected member) and
+each analysed window of that member (its measured request; and its prefill and decode phases where the bundle records
+phase boundaries), the harvest's restricted record `withheld/meter/<run_id>.json` gives ΔE_rail, ΔE_machine and
+ρ = ΔE_rail ÷ ΔE_machine, defined in registration §5.8, with the member's `meter.*` flags and whether the battery term
+was available.
+
+*What is reported, per pack, model and window kind:*
+
+1. per member: ΔE_rail, ΔE_machine and ρ;
+2. per model: the median of ρ, its minimum and maximum, and its interquartile range (the 25th and 75th percentiles,
+   linear interpolation between order statistics, as `km003c_parse.percentile`);
+3. **hard plausibility band:** a member window is plausible when 0 < ρ ≤ 1 and ΔE_machine − ΔE_rail ≥ 0 (the rails
+   are part of the machine, so their extra energy can be neither negative nor larger than the machine's). Every member
+   window outside it is listed individually with its `meter.*` flags; it is reported, never removed;
+4. **within-model spread:** (max ρ − min ρ) ÷ median ρ over the model's plausible member windows, reported; a spread
+   of at most 0.2 is described as "consistent". It is reported only and excludes nothing;
+5. **central band:** set from the first clean window, meaning the first analysed window of the block in which no
+   member carries any `meter.*` flag, as that window's per-model minimum-to-maximum range of ρ over its plausible
+   member windows. It is disclosed with that window's identifier before any later window is described against it.
+   Later windows are described against it ("k of n member windows inside the first clean window's band"), never
+   filtered by it. If no window is clean, no central band is set and the line says so.
+
+*Worked example (synthetic).* A model's ten repeats give ρ = 0.78, 0.80, 0.81, 0.79, 0.82, 0.80, 0.77, 0.81, 0.80,
+0.83. Median 0.80; range 0.77–0.83; interquartile range 0.7925–0.81; all inside the hard band; spread
+(0.83 − 0.77) ÷ 0.80 = 0.075, at most 0.2, so "consistent". A member window with ΔE_machine = 600 J and
+ΔE_rail = 640 J has ρ = 1.07: outside the hard band, listed with its flags (for example `meter.clock_fit_residual`),
+and kept in every claim it feeds.
+
+*What it never does.* It never refuses a window, never excludes a member, never enters a claim-bearing number, never
+replaces the rail estimate, and is never pooled into a cell. Its energies are restricted until the release event,
+like every other energy. The boundary is stated with it every time it is printed: "whole-machine DC input plus the
+battery term, measured at the USB-C input; the adapter's AC-to-DC loss is not included."
 
 ## 9. What is printed, and from which artifact
 

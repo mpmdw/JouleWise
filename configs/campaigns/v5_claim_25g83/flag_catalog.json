@@ -19,7 +19,7 @@
       "effect": "EXCLUDE_MEMBER",
       "family": "PHYSICS_IN_SPAN",
       "klass": "PHYSICS",
-      "note": "An accumulator interval overlapping the span implies a mean battery power above 200 mA x V (0.001 W per unit, lane L1 units check)."
+      "note": "An accumulator interval overlapping the span implies a mean battery power above 200 mA x V (0.001 W per unit, lane L1 units check). Under the ruling of 2026-10-06 only the charge accumulator excludes; a discharge-accumulator excursion is battery.assist (DISCLOSE). At b9d02700a this code fires on either sign; P3 restricts it to the charge sign or folds the charge test into battery.member_span (registration FILL[P3-BATTERY-CODES])."
     },
     "battery.accumulator_unavailable": {
       "blinding": "STRUCTURE",
@@ -28,12 +28,19 @@
       "klass": "PHYSICS",
       "note": "The accumulator rule could not be evaluated on an interval; the publication rule still applies (60 s limitation)."
     },
+    "battery.assist": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "PHYSICS",
+      "note": "Battery assist (ruling of 2026-10-06): an SMC B0AC read below -200 mA with ExternalConnected Yes and IsCharging No (under the registry fallback, InstantAmperage or Amperage below -200 mA; or the discharge accumulator above 200 mA x V). Recorded per phase (prepare, idle baseline, warm-up, measured request): reads below -200 mA, minimum B0AC, sampled duration below -200 mA. The discharged energy goes to withheld/ only. Never removes a member or a window (calibration captures included); the analysis prints every reported cell with and without members that carry it in their measured request (analysis plan 8.1). Emitted once P3 lands."
+    },
     "battery.capture_pair_failed": {
       "blinding": "STRUCTURE",
       "effect": "EXCLUDE_MEMBER",
       "family": "MEMBER_VALIDITY",
       "klass": "PHYSICS",
-      "note": "The member's #421 per-capture battery pair is present and fails."
+      "note": "The member's #421 per-capture battery pair is present and shows charging or AC lost. Under the ruling of 2026-10-06 a pair failing only on discharge current is battery.assist (DISCLOSE); at b9d02700a a discharge-only pair failure still fires this code, which P3 changes."
     },
     "battery.capture_pair_missing": {
       "blinding": "STRUCTURE",
@@ -54,21 +61,21 @@
       "effect": "EXCLUDE_MEMBER",
       "family": "PHYSICS_IN_SPAN",
       "klass": "PHYSICS",
-      "note": "An in-force gauge publication is out of float (|InstantAmperage| or |Amperage| > 200 mA, charging, or external power disconnected), or a 5 s poll inside the span reads charging or disconnected."
+      "note": "Charging or AC lost in the member's span (ruling of 2026-10-06): an SMC B0AC read above +200 mA (registry InstantAmperage or Amperage above +200 mA under the SMC fallback); IsCharging Yes or ExternalConnected No at an in-force publication or a 5 s registry poll; or the charge accumulator implying a mean charging power above 200 mA x V. Discharge alone is battery.assist (DISCLOSE). At b9d02700a the harvest still fires this code on |InstantAmperage| or |Amperage| > 200 mA in either direction; P3 applies the ruling."
     },
     "battery.smc_unavailable": {
       "blinding": "STRUCTURE",
       "effect": "DISCLOSE",
       "family": "DIAGNOSTIC",
       "klass": "PHYSICS",
-      "note": "SMC B0AC reads (1 Hz) did not cover the span with good, fresh reads at most 5 s apart, so the battery current was judged on the registry InstantAmperage (republished every 60 s), as before the SMC lane."
+      "note": "SMC B0AC reads (1 Hz) did not cover the span with good, fresh reads at most 5 s apart, so the registry InstantAmperage and Amperage at the in-force publications (republished about every 60 s) stood in for the current, under the same charging/assist split."
     },
     "battery.unmeasured": {
       "blinding": "STRUCTURE",
       "effect": "EXCLUDE_MEMBER",
       "family": "PHYSICS_IN_SPAN",
       "klass": "PHYSICS",
-      "note": "No gauge publication observed for more than 120 s overlapping the span, or an in-force publication lacks a needed field."
+      "note": "The registered missing-evidence predicate: no registry publication observed for more than 120 s overlapping the span, or an in-force publication lacks a needed field, so the charging and AC state is unknown. (An SMC gap alone is battery.smc_unavailable: the registry current stands in.)"
     },
     "calibration.acceptance_mismatch": {
       "blinding": "STRUCTURE",
@@ -96,7 +103,7 @@
       "effect": "EXCLUDE_WINDOW",
       "family": "CALIBRATION",
       "klass": "PHYSICS",
-      "note": "A calibration capture's #421 battery pair shows the battery not floating; the bracket feeds every member's clock bound."
+      "note": "A calibration capture's #421 battery pair shows charging or AC lost; the bracket feeds every member's clock bound. A discharge-only pair failure is battery.assist at window scope (ruling of 2026-10-06; P3)."
     },
     "calibration.capture_battery_pair_unverified": {
       "blinding": "STRUCTURE",
@@ -110,14 +117,14 @@
       "effect": "EXCLUDE_WINDOW",
       "family": "CALIBRATION",
       "klass": "PHYSICS",
-      "note": "Core-prune N7: the continuous battery journal joined over a calibration capture's span gives battery.member_span or battery.accumulator_excursion (the battery-float rule of #421 applied to the capture as to members). The capture is not a valid calibration anchor."
+      "note": "Core-prune N7 with the ruling of 2026-10-06: the battery rule joined over a calibration capture's span gives charging, AC lost or the charge accumulator above the limit (registration 6.4). The capture is not a valid calibration anchor. Discharge alone is battery.assist (DISCLOSE). P3 moves the join to the 1 s SMC reads."
     },
     "calibration.capture_battery_unmeasured": {
       "blinding": "STRUCTURE",
       "effect": "EXCLUDE_WINDOW",
       "family": "CALIBRATION",
       "klass": "PHYSICS",
-      "note": "Core-prune N7: a calibration capture's battery pair verdict did not pass and the journal cannot stand in for it (the capture has no span, the battery journal is absent, or its join over the span gives battery.unmeasured). The capture's battery state is unmeasured."
+      "note": "Core-prune N7: a calibration capture's battery pair verdict did not pass and the journal cannot stand in for it (no span, no battery journal, or the missing-evidence predicate of registration 6.4 over its span). P3 makes the join read the 1 s SMC reads and stops the monitor no sooner than 5 s after the chain exits (mock rehearsal round 3, R3-5: at b9d02700a the post capture was always unmeasured)."
     },
     "calibration.capture_invalid": {
       "blinding": "STRUCTURE",
@@ -299,7 +306,7 @@
       "effect": "DISCLOSE",
       "family": "DIAGNOSTIC",
       "klass": "PHYSICS",
-      "note": "kernel_task's largest CPU share during a request (excluded from the contention rule in the window)."
+      "note": "kernel_task's CPU share during a request (excluded from the contention rule in the window). Cannot fire today: unprivileged ps never lists kernel_task (pid 0), so no share is journaled by name; its work is inside the host busy total, journaled and not judged."
     },
     "contention.request_overlap": {
       "blinding": "STRUCTURE",
@@ -726,7 +733,7 @@
       "effect": "DISCLOSE",
       "family": "DIAGNOSTIC",
       "klass": "PHYSICS",
-      "note": "KM003C stream: an SMC B0AC read inside a member window is nonzero (battery discharge or charge)."
+      "note": "KM003C stream: an SMC B0AC read inside a member window is nonzero (battery discharge or charge). A diagnostic of the meter's battery term; the member rule is battery.member_span / battery.assist."
     },
     "meter.clock_fit_residual": {
       "blinding": "STRUCTURE",

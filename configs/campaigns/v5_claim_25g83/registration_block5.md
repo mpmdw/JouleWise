@@ -413,16 +413,17 @@ that member's unit (§6.3).
 ### 0.15 Hazards and the arm
 
 - **Physical hazard.** A condition of the machine that would corrupt a measured energy if collection ran through it.
-  Six are registered (§4.2): the clock stepping or drifting beyond budget; the battery charging or discharging; OS
-  thermal pressure; a competing process above 5% of one core; too little free disk for the window; the sampler not
-  sampling at its cadence.
+  Six are registered (§4.2): the clock stepping or drifting beyond budget; the machine off AC power or its battery
+  charging (and, at the arm, any battery current while the machine is idle); OS thermal pressure; a competing process
+  above 5% of one core; too little free disk for the window; the sampler not sampling at its cadence.
 - **Hazard module.** Code (`joulewise/hazards/`, one module per hazard) that measures one physical quantity
   directly, keeps the raw bytes with their SHA-256, and returns **PASS**, **REFUSE** or **UNMEASURED** (the probe
   failed or timed out). A check that reads a proxy for a hazard (a settings string, a receipt, a setter's wording) is
   not a hazard module; doctrine requires measuring the quantity itself.
 - **Arm.** The sequence the driver runs after t0 that decides whether this window's chain starts (§4.1). It returns
-  **GO** only if every hazard verdict is PASS and the agent census (§4.5) is clean. UNMEASURED refuses, because an
-  unread hazard may be present. Nothing else enters the decision.
+  **GO** only if every hazard verdict is PASS, the agent census (§4.5) is clean, and the machine's OS build and model
+  are ones the calibration acceptance has judged (§4.7). UNMEASURED refuses, because an unread hazard may be present.
+  Nothing else enters the decision.
 
 ### 0.16 Flags, the catalog, exclusions and claim-usable
 
@@ -459,10 +460,16 @@ that member's unit (§6.3).
   `joulewise.hazard_window_lineage.v1`). The measurement code reads it before writing a `_v5` bundle and refuses a
   member whose configuration bytes are not in the pack's committed inventory (§6.3).
 - **Monitor.** `scripts/hazard_monitor.py`, a background process that runs from GO until the chain's processes are
-  proven gone. It journals the clock anchor every 1 s and the frequency word every 5 s, the battery and thermal
-  readings every 5 s, per-process CPU every 10 s and free disk every 60 s, one append-only file per hazard. Every
-  reading carries three timestamps (wall time, the controller's `time.monotonic_ns()`, and CLOCK_MONOTONIC_RAW), so
-  readings join member spans exactly.
+  proven gone. It journals the clock anchor every 1 s and the frequency word every 5 s, the battery state (from the
+  **registry**, the OS's record of the battery that `ioreg` prints) and the thermal level every 5 s, the battery
+  current (from the **SMC**, the Mac's power-management controller; both sources are built in §4.2) every 1 s,
+  per-process CPU every 10 s and free disk every 60 s, one append-only file per hazard. Every reading carries three
+  timestamps (wall time, the controller's `time.monotonic_ns()`, and CLOCK_MONOTONIC_RAW), so readings join member
+  spans exactly. The driver stops it no sooner than 5 s after the chain exits, so that the 1 s battery reads cover
+  the end of the post calibration (§6.5; P3-DRV, a sync point of §13).
+- **Meter.** `scripts/km003c_monitor.py`, a second background process, started and stopped with the monitor, that
+  records the whole machine's DC input through an inline USB-C power meter (§5.8). It is a diagnostic: it never
+  refuses, removes or enters a claim number (P3-DRV wires it into the driver; §13).
 - **Harvest.** `scripts/harvest_b5_window.py`, the desk program run after the chain exits. It archives the window,
   re-derives every number-protecting check from the preserved bytes, joins the monitor's journals to the member
   spans, writes every flag, and runs the exclusion function (§7.1).
@@ -518,7 +525,8 @@ the same boundary as `"boundary": "Apple SoC CPU + GPU + ANE package power"` wit
 `ane_power` (`joulewise/adapters/powermetrics.py`, `_base_device_metadata` and `RAIL_MANIFEST`). The identity pins
 record it for each identity unit, that is, each model running one workload in one pack
 (`stack_identity.measurement_boundary_label` in `identity_pins.json`, §4.6). The energy reported is therefore that
-of the processor package rails, never wall power or the whole machine.
+of the processor package rails, never wall power or the whole machine. The whole-machine meter of §5.8 measures a
+wider boundary (the Mac's DC input); its numbers are a descriptive cross-check (analysis plan §8.2) and never a claim.
 
 What the paper prints, and from which artifact, is fixed in analysis plan §9; printing anything needs the placement
 ruling of §14 Q4.
@@ -663,15 +671,49 @@ the longest streams exceed the 5 ms bound (§0.14).
   no resync at the arm: the wall clock's absolute offset enters no energy, because the anchor fit and every phase
   edge use relative times.
 
-**Battery** (directive #421). *Forcing problem:* a capture taken while the battery charges, or supplies part of the
-load, is registered as confounded (`battery_float_confounded`; decision log, amendment A-R5b of 2026-09-25): the
-machine is not in the one power state, everything from the adapter and the battery idle, that every registered
-number assumes. The rule is decided from instrument state alone, never from an outcome.
-- *Measurement:* `ioreg -r -c AppleSmartBattery`, raw bytes kept: ExternalConnected, IsCharging, InstantAmperage
-  (signed), Amperage (the gauge's average), UpdateTime, Voltage, and the `PowerTelemetryData` accumulators. The gauge
-  **publishes** a new reading once every 60 s.
-- *Arm:* ExternalConnected Yes; IsCharging No; |InstantAmperage| ≤ 200 mA; the reading no older than 180 s.
-- *In window:* polled every 5 s; raw bytes stored at every publication. The member rule is §6.4.
+**Battery** (directive #421; ruling of 2026-10-06, §9.2). *Forcing problem:* while the battery charges, the
+battery heats and the machine draws more from the adapter than the work needs; with the adapter disconnected the
+machine runs on battery under a different power policy. Either way the machine is not in the power state every
+registered number assumes. A capture taken while charging was registered as confounded (`battery_float_confounded`;
+decision log, amendment A-R5b of 2026-09-25). The rule is decided from instrument state alone, never from an
+outcome.
+
+- *Two sources.*
+  - **State, from the registry.** `ioreg -r -c AppleSmartBattery` prints the OS's record of the battery; raw bytes
+    are kept. It gives ExternalConnected (an adapter is supplying power), IsCharging, InstantAmperage (signed),
+    Amperage, UpdateTime, Voltage and the `PowerTelemetryData` accumulators. The registry **publishes** a new set of
+    values about once every 60 s (and on some events); between publications every value is frozen.
+  - **Current, from the SMC.** The SMC (System Management Controller) is the chip that manages the Mac's power and
+    exposes its sensor readings as four-letter **keys**, read in process without privileges
+    (`joulewise/hazards/smc.py`). **B0AC** is the battery current in mA, signed, negative when the battery
+    discharges into the machine; **B0AV** is the battery voltage in mV. The SMC refreshes them about once a second
+    (largest gap 1.01 s over 580 s on 2026-10-06). Three more keys are recorded, not judged: PDTR (the DC input power
+    from the adapter, W), PSTR (the system's total power, W) and PPBR (the SMC's own battery-power figure).
+  - *Why the current comes from the SMC.* The registry's current is a snapshot, not an average. On 2026-10-06, at
+    each of nine registry publications InstantAmperage equalled Amperage, and both equalled the last B0AC read before
+    the publication (at one, −793 mA against a B0AC read of −727 mA taken 0.7 s earlier, within one SMC refresh), not
+    the mean over the preceding interval. Between publications the registry misses discharge entirely: over the interval ending at
+    UpdateTime 1791324894, B0AC read as low as −3,580 mA (mean −351 mA), and the registry published 0. A probe
+    earlier that day saw −865 mA bursts during Qwen3-8B decode while every registry value read 0. So the registry
+    now supplies only the state, and the SMC the current (`joulewise/hazards/battery.py` at `b9d02700a`).
+  - *Validation of B0AC* (`/Users/edr/night-archive/wallmeter-probe/verify/b0ac_validation.md`, 2026-10-06 22:12Z).
+    25 s idle, then 170 s of load (a 16-process CPU burner plus four Qwen3-8B generations; DC input peaked at
+    135.7 W on the 140 W adapter, so the battery had to help), then 200 s of recovery. *Sign:* B0AC was negative
+    exactly when PSTR exceeded PDTR, that is, when the machine drew more than the adapter supplied: at 126 of 536
+    distinct SMC publications, all during the load; it read exactly 0 throughout the idle and the recovery.
+    *Magnitude:* over the load, ∫ −B0AC × B0AV dt = 606.9 J against ∫ (PSTR − PDTR) dt = 595.4 J, 1.9% apart; on 20 s
+    bins the slope of PSTR − PDTR on −B0AC × B0AV is 1.027 (r = 0.954). Single 1 s reads disagree (r = 0.32),
+    because the SMC refreshes its keys out of phase with one another; time averages agree. *Charging direction:* not
+    observed (the battery sat at its 80% charge limit). Positive B0AC is read as charging by the registry's
+    convention: the archived charging capture shows InstantAmperage +1,716 mA with IsCharging Yes, and the registry
+    current is B0AC's snapshot.
+- *Arm:* ExternalConnected Yes; IsCharging No; |B0AC| ≤ 200 mA (|InstantAmperage| ≤ 200 mA when B0AC cannot be read,
+  recorded as `battery.smc_unavailable`); the registry reading no older than 180 s. The arm runs on an idle machine,
+  so battery current in either direction means the adapter is not supplying the machine, a real hazard; this refusal
+  is unchanged by the ruling (§9.2).
+- *In window:* the registry polled every 5 s, its raw bytes stored at every publication; the SMC read every 1 s.
+  The member rule is §6.4: charging, loss of AC power and missing evidence remove the member; discharge with the
+  adapter connected (**assist**) is disclosed.
 
 **Thermal.** *Forcing problem:* under thermal pressure the processor throttles, which changes both power and
 duration.
@@ -996,6 +1038,100 @@ modified).
 
 The disk hazard re-measures free space at every arm, so no separate disk ledger is kept.
 
+### 5.8 The whole-machine meter (a recorded diagnostic)
+
+*Forcing problem.* Every registered number is a processor-rail energy (§1): the CPU, GPU and ANE package as the
+sampler reports it. A reader will ask what share of the machine's energy that is, and whether the rail estimate moves
+with the machine's energy from member to member. The sampler cannot answer: it sees only the rails. An independent
+instrument at the machine's power input can, without touching any claim.
+
+*Boundary.* Every element of the path, from the wall to the rails:
+
+```
+ mains AC --> [adapter, 140 W] --USB-C cable, 28 V--> [KM003C meter] --USB-C--> [Mac DC input]
+               AC-to-DC loss here:                    Vbus and Ibus,               |
+               NOT measured                           50 samples/s                 +--> processor rails, CPU+GPU+ANE
+                                                                                   |    (powermetrics: the claim boundary)
+                                                                                   +--> rest of the machine (memory,
+                                                                                   |    storage, fans, display asleep)
+                                [battery] <--- B0AC x B0AV, SMC, 1 read/s -------->+
+```
+
+- *mains AC* and the *adapter*: the 140 W charger; its conversion loss happens before the meter and is not measured;
+- *USB-C cable, 28 V*: the adapter and the Mac agree to 28 V under USB Power Delivery's extended power range;
+- *KM003C meter*: an inline USB-C power meter (POWER-Z KM003C) in that cable, reporting the bus voltage (Vbus) and
+  current (Ibus) 50 times a second;
+- *Mac DC input*: the meter measures what enters the Mac; the Mac's own reading of the same quantity is the SMC key
+  PDTR (§4.2);
+- *battery*: when it assists, it supplies the machine beside the DC input, and the meter cannot see that energy; the
+  battery term −B0AC × B0AV (SMC, once a second) adds it back;
+- *processor rails* inside the machine are the claim boundary; the *rest of the machine* is everything else the
+  DC input feeds.
+
+So the meter's boundary is **whole-machine DC input plus the battery term**, not wall AC: the charger's loss is
+excluded.
+
+*The reader.* `scripts/km003c_monitor.py` (at `b9d02700a`) polls the meter every 200 ms at ordinary scheduling
+priority (the probe rejected background priority) and reads B0AC, B0AV, PDTR, PSTR and PPBR from the SMC at every
+poll. It writes one create-once stream file per start, `<custody>/hazards/meter/stream-NNN.jsonl`: a header (status
+`streaming` or `absent`), one line per poll, error lines, and a trailer. The header and trailer each carry a pair of
+clock readings (CLOCK_MONOTONIC_RAW and `time.monotonic_ns`), so the stream can be placed on the members' clock. When
+no meter is attached it writes an `absent` header and exits 0, and the driver does not restart it. Its cost: 0.302
+CPU-s over a 120 s live run, 0.25% of one core. It runs outside the chain's process tree, so the contention monitor
+counts it, at about 0.0025 CPU-s/s, one twentieth of the 0.05 limit; its own energy is on the rails like the
+monitor's and is disclosed with it (analysis plan §8.1).
+
+*Quantities* (`joulewise/external/km003c_parse.py`, at `b9d02700a`), for each member and each analysed window (the
+member's measured request, and each phase where the bundle records phase boundaries):
+
+- **ΔE_rail**: the rail energy above the member's idle baseline, the bundle's `idle_subtracted_energy_j` as the
+  harvest re-derives it from the raw records;
+- **ΔE_machine** = [E_meter(window) − P_meter(baseline) × T] + [E_battery(window) − P_battery(baseline) × T], where
+  T is the window's length, E(window) is the mean of the samples inside the window times T, P(baseline) is the mean
+  over the member's idle-baseline stage, the meter power is Vbus × Ibus and the battery power is −B0AC × B0AV at each
+  SMC read. When no SMC read falls in the window or the baseline, the battery term is marked unavailable and
+  ΔE_machine is the meter term alone;
+- **ρ** = ΔE_rail ÷ ΔE_machine, the rails' share of the machine's extra energy; undefined when ΔE_machine ≤ 0.
+
+The meter's timestamps are CLOCK_MONOTONIC_RAW; member spans are in `time.monotonic_ns`. The two differ by a constant
+except across a system sleep, taken from the stream's own clock pairs (rejected if its start and end pairs disagree
+by more than 1 ms) or, failing that, from the monitor's clock journal line nearest the span.
+
+*Worked example (synthetic).* A member's idle baseline reads a meter mean of 9.0 W and a battery power of 0 W. Its
+measured request lasts 20.0 s with a meter mean of 52.0 W and a battery mean of 1.5 W (assist). The meter term is
+52.0 × 20 − 9.0 × 20 = 860 J; the battery term is 1.5 × 20 − 0 = 30 J; ΔE_machine = 890 J. With ΔE_rail = 712 J,
+ρ = 712 ÷ 890 = 0.80, inside the hard band of analysis plan §8.2 (0 < 0.80 ≤ 1, and 890 − 712 = 178 J ≥ 0). Without
+the battery term ρ would read 712 ÷ 860 = 0.83: leaving the battery out overstates the rails' share whenever the
+battery helps.
+
+*How well it reads* (all on 2026-10-06). At the desk, 120 s idle: 0 dropped and 0 duplicated samples, largest
+clock-fit residual 10.0 ms (the parser fits the meter's sample clock to the host's clock from the poll times; the
+residual is how late a batch arrived beyond that fit), median PDTR/meter ratio 0.992, Vbus 27.44–27.50 V, no flag.
+The probe's 300 s run: largest residual 16.8 ms; PDTR/meter median 0.986. Under the B0AC validation load (§4.2), on
+20 s bins: PDTR = 0.955 × meter + 2.3 W (r = 0.9975), median per-second ratio 0.987; and PSTR = 0.959 × (meter +
+battery power) + 2.1 W (r = 0.993), so the system's total is accounted for by the DC input plus the battery term. The
+probe could not test ρ itself: on the loaded desk machine background work moved the baseline and gave negative ρ. So
+the central band for ρ is set by the first clean window (analysis plan §8.2).
+
+*Flags* (all DISCLOSE; their observed fields hold counts, mA, V, milliseconds and the PDTR/meter ratio, never an
+energy, so they are structure):
+
+| Code | Fires when |
+|---|---|
+| `meter.absent` | the stream header says `absent`, the stream has no samples, or no stream file exists |
+| `meter.drops_excess` | dropped samples ÷ (kept + dropped) > 0.5% |
+| `meter.duplicates` | the meter re-delivered samples that the parser dropped (count > 0) |
+| `meter.clock_fit_residual` | the largest clock-fit residual > 2 sample periods (40 ms at 50 samples/s), or no fit |
+| `meter.pdtr_gain_out_of_band` | the median over 1 s bins of mean PDTR ÷ mean meter power is outside 0.95–1.02, or cannot be computed |
+| `meter.battery_activity` | a B0AC read inside a member window is nonzero (either direction) |
+| `meter.vbus_out_of_contract` | a sample's Vbus is outside 26.6–29.4 V (28 V ± 5%) |
+
+*What it can never do.* The meter never refuses an arm or a window, never removes a member, and never enters a
+claim-bearing number. ΔE_rail, ΔE_machine and ρ are energies and an energy ratio: they go to restricted custody
+(`withheld/meter/<run_id>.json`) until the release event, like every other energy (§8). The driver wiring (start,
+stop, the supervisor's name, no restart after `absent`) is P3-DRV's and the harvest hook is P3-HARV's; both are sync
+points (§13).
+
 ## 6. Flags and exclusions
 
 ### 6.1 Where flags come from
@@ -1024,10 +1160,10 @@ are always UNCLASSIFIED, so they always block the release event until a person r
 | INSTRUMENT | the pre-calibration screen failed | EXCLUDE_WINDOW |
 | CLOCK_SYSTEMATIC | a step during a calibration capture; most recorded anchors not `bounded` | EXCLUDE_WINDOW |
 | MEMBER_VALIDITY | §6.3 | EXCLUDE_MEMBER |
-| PHYSICS_IN_SPAN | §6.4 | EXCLUDE_MEMBER |
+| PHYSICS_IN_SPAN | §6.4 (battery assist is DIAGNOSTIC, not this family) | EXCLUDE_MEMBER |
 | ROSTER | §6.7 | EXCLUDE_MEMBER (window-level roster failures: EXCLUDE_WINDOW) |
 | RECORDS | receipts, lineage formalities, attempt history, pin ledger, provenance digests, naming, notices, missing journals | DISCLOSE (one exception: source bytes changed during the harvest, EXCLUDE_WINDOW) |
-| DIAGNOSTIC | network-time output, clock steps and frequency changes outside any span, `kernel_task` share, G10, s1-structural checks, the battery-temperature rise across a stage (§0.6) | DISCLOSE |
+| DIAGNOSTIC | network-time output, clock steps and frequency changes outside any span, G10, s1-structural checks, the battery-temperature rise across a stage (§0.6), battery assist (§6.4), the whole-machine meter (§5.8), the yield counts (§5.7) | DISCLOSE |
 
 ### 6.3 Member exclusions: validity
 
@@ -1051,7 +1187,9 @@ A member is removed from every cell it feeds when any of these is flagged:
 - its configuration bytes are not in the pack's committed inventory (`member.config_not_in_inventory`; the lineage
   check refuses such a member at write time, so normally its bundle is simply absent);
 - its model identity cannot be derived from its metadata (`model.identity_underivable`);
-- its #421 per-capture battery pair is present and fails (`battery.capture_pair_failed`);
+- its #421 per-capture battery pair (the registry read just before and just after its sampler stream, kept as raw
+  bytes) is present and shows charging or AC lost (`battery.capture_pair_failed`); a pair that fails only on
+  discharge current is disclosed as `battery.assist` (§6.4; P3 sync point, §13);
 - the whole-window verdict lists it among its per-member failures (`member_failures` in the verdict row) for a reason
   that no other member code carries (`member.whole_window_member_failure`). Those reasons are:
   - its environment evidence is missing or failed (`environment_admission_missing`, `environment_admission_failed`);
@@ -1076,29 +1214,66 @@ A member's **span** is its sampler stream, from the `start_sampling` stamp to th
 `time.monotonic_ns()` domain. A member whose span cannot be placed is removed (`member.span_unknown`), because the
 rules below cannot be applied to it.
 
-**Battery.** The publications **in force** for a span are the last publication at or before its start, every
-publication inside it, and the first publication at or after its end.
-- `battery.member_span`: any in-force publication has |InstantAmperage| > 200 mA, |Amperage| > 200 mA, IsCharging
-  Yes or ExternalConnected No; or any 5 s poll inside the span reads IsCharging Yes or ExternalConnected No.
-- `battery.accumulator_excursion`: for an interval between two consecutive publications that overlaps the span, an
-  accumulator implies a mean battery power above 200 mA × the publication's voltage over its counted ticks. **Units
-  (lane L1, 2026-10-05, on 66 archived publications and a live read):** each `Accumulated*` field adds its
-  instantaneous value in mW once per tick (about 1.01 s), each `*AccumulatorCount` counts ticks, and battery power is
-  split by sign into a charge accumulator (`AccumulatedBatteryPower` / `BatteryPowerAccumulatorCount`) and a
-  discharge accumulator (`AccumulatedBatteryDischarge` / `BatteryDischargeAccumulatorCount`); the split was proven by
-  an exact identity on all 65 intervals. So Δ(accumulated) ÷ Δ(count) is the mean power in mW over the ticks on which
-  that sign occurred, and the registered scale is 0.001 W per unit. *Positive control:* between the 2026-09-25 20:47
-  and 2026-10-01 06:17 publications the discharge accumulator gained 15,043 ticks at a mean of −5,415 mW; the gauge
-  reading inside that interval was −447 mA at 12,180 mV = −5,444 mW; they agree within 0.6%.
-- *Worked example (synthetic):* a span runs from 1,000 s to 1,240 s; publications at 950, 1,010, 1,070, 1,130, 1,190
-  and 1,250 s are all in force. If the 1,250 s publication reads InstantAmperage −447 mA, the member is flagged even
-  if the discharge began after the span ended: the rule is conservative and can also flag a neighbouring member. If
-  between 1,190 s and 1,250 s the discharge accumulator gained 40 ticks totalling −216,000 mW·ticks, its mean is
-  −5,400 mW, above 200 mA × 12.18 V = 2,436 mW, and the member is flagged.
-- `battery.unmeasured`: no publication was observed for more than 120 s overlapping the span, or an in-force
-  publication lacks a needed field.
-- Brief battery assist below the limit is disclosed, not excluded (`battery.accumulator_activity`): every archived
-  calibration capture shows 7–32 discharge ticks at −122 to −151 mW while InstantAmperage read 0.
+**Battery** (ruling of 2026-10-06, §9.2; sources and validation in §4.2). Terms used below:
+
+- The registry publications **in force** for a span are the last publication at or before its start, every
+  publication inside it, and the first publication at or after its end.
+- An SMC read is **good** when B0AC is an integer with no read error, and **fresh** when its five recorded keys
+  (B0AC, B0AV, PDTR, PSTR, PPBR) differ from the previous good read's: a frozen SMC repeats its block, and repeats
+  are not new measurements. The SMC **covers** a span when good, fresh reads are no more than 5 s apart across it
+  (`battery.SMC_MAX_GAP_S`). When it does not, the registry's InstantAmperage and Amperage at the in-force
+  publications stand in for B0AC in every rule below, and `battery.smc_unavailable` (DISCLOSE) records the fallback.
+- **Assist**: the battery discharging into the machine while the adapter is connected and the battery is not
+  charging: a B0AC read below −200 mA with ExternalConnected Yes and IsCharging No.
+
+Rules:
+
+- `battery.member_span` (EXCLUDE_MEMBER) fires on any of:
+  1. *charging current:* a B0AC read inside the span above +200 mA;
+  2. *charging or AC lost:* IsCharging Yes or ExternalConnected No at any in-force publication or any 5 s registry
+     poll inside the span;
+  3. *charging energy:* over an interval between two consecutive in-force publications, the charge accumulator
+     implies a mean charging power above 200 mA × the publication's voltage (units below).
+- `battery.unmeasured` (EXCLUDE_MEMBER), the missing-evidence predicate, unchanged: no registry publication was
+  observed for more than 120 s overlapping the span, or an in-force publication lacks a needed field. Without the
+  registry the state (charging, AC connected) is unknown, so the member cannot be kept.
+- `battery.assist` (DISCLOSE): assist inside the member. For each phase of the member, prepare (before the sampler
+  starts), idle baseline, warm-up and measured request, the flag records the number of reads below −200 mA, the
+  minimum B0AC, the sampled duration below −200 mA (each read counts for the time until the next read) and the
+  discharged energy, ∫ max(0, −B0AC × B0AV) dt (the mean of max(0, −B0AC × B0AV) over the phase's reads times the
+  phase's length, the rule the meter uses, §5.8). The counts, minimum and duration are structure; the energy goes to
+  restricted custody (`withheld/`) with the other machine energies (§8). Battery energy is never added to or
+  subtracted from a rail energy. A discharge accumulator above 200 mA × V on an interval overlapping the span is also
+  recorded here. Reads in prepare, idle baseline and warm-up are reported separately and decide nothing; the
+  battery-assist sensitivity line (analysis plan §8.1) marks a member only by reads in its measured request.
+- `battery.accumulator_activity` (DISCLOSE): an accumulator mean that is nonzero but at or below the limit. Every
+  archived calibration capture shows 7–32 discharge ticks at −122 to −151 mW while InstantAmperage read 0.
+
+*Code state.* At `b9d02700a` the harvest still judges the current on the registry publications and removes a member
+on |InstantAmperage| or |Amperage| above 200 mA in either direction, and `battery.accumulator_excursion`
+(EXCLUDE_MEMBER) fires on either accumulator sign. P3 (lanes P3-HARV and P3-HAZ) moves the harvest and the hazard
+module to the SMC reads and to the rule above: discharge becomes `battery.assist`; the charge-accumulator test stays
+excluding, under `battery.member_span` or `battery.accumulator_excursion` restricted to the charge sign
+(`FILL[P3-BATTERY-CODES]`, §13).
+
+*Accumulator units* (lane L1, 2026-10-05, on 66 archived publications and a live read): each `Accumulated*` field
+adds its instantaneous value in mW once per tick (about 1.01 s), each `*AccumulatorCount` counts ticks, and battery
+power is split by sign into a charge accumulator (`AccumulatedBatteryPower` / `BatteryPowerAccumulatorCount`) and a
+discharge accumulator (`AccumulatedBatteryDischarge` / `BatteryDischargeAccumulatorCount`); the split was proven by
+an exact identity on all 65 intervals. So Δ(accumulated) ÷ Δ(count) is the mean power in mW over the ticks on which
+that sign occurred, and the registered scale is 0.001 W per unit. *Positive control:* between the 2026-09-25 20:47
+and 2026-10-01 06:17 publications the discharge accumulator gained 15,043 ticks at a mean of −5,415 mW; the registry
+reading inside that interval was −447 mA at 12,180 mV = −5,444 mW; they agree within 0.6%.
+
+*Worked example (synthetic).* A member's measured request runs 5 s, with B0AC reads one second apart of −865,
+−1,200, −400, −150 and 0 mA, B0AV 12,180 mV, ExternalConnected Yes and IsCharging No throughout. Three reads are below
+−200 mA; the minimum is −1,200 mA; the sampled duration below −200 mA is 3 s. The discharged powers are 10.54, 14.62,
+4.87, 1.83 and 0 W (the −150 mA read counts toward the energy, not toward the count); their mean, 6.37 W, times 5 s
+is 31.85 J of discharged energy. The member is kept and carries `battery.assist`. Had one read been +450 mA, or one
+registry poll in the span read IsCharging Yes, the member would be removed by `battery.member_span`. If between two
+in-force publications the charge accumulator gained 40 ticks totalling +216,000 mW·ticks, its mean is +5,400 mW,
+above 200 mA × 12.18 V = 2,436 mW, and the member is removed; the same numbers on the discharge accumulator give
+`battery.assist` only.
 
 **Thermal.** `thermal.os_level_nonzero`: any in-force 5 s sample of the OS level is nonzero (in force as for the
 battery). `thermal.powermetrics_pressure_elevated`: the member's own records show thermal pressure
@@ -1131,8 +1306,8 @@ The window is not claim-usable when any of these fired:
   checkout lacks `identity_pins.json`).
 - `*.identity_unmeasured` for pack, code or model: a number-protecting identity check could not run. This is a
   harvest problem first (§7.2).
-- `calibration.capture_invalid`, `calibration.capture_battery_pair_failed` (a calibration captured while the
-  battery was not floating), `calibration.bracket_acceptance_failed` (evaluated with the acceptance's ledger-cutoff
+- `calibration.capture_invalid`, `calibration.capture_battery_pair_failed` (a calibration capture's #421 pair
+  shows charging or AC lost), `calibration.bracket_acceptance_failed` (evaluated with the acceptance's ledger-cutoff
   baseline), `calibration.acceptance_mismatch` (the acceptance bytes differ from the plan tree's pin),
   `calibration.session_not_bound` (the bracket session names another plan, window or runs root),
   `calibration.binding_failed`, and `calibration.no_bracket` (including a chain stopped before its post calibration
@@ -1143,6 +1318,18 @@ The window is not claim-usable when any of these fired:
   acceptance's screens are authenticated through this ledger. The bracket evaluation reads the same snapshot and
   refuses with the same reasons, so `calibration.bracket_acceptance_failed` fires as well. Classing this code as
   window-removing therefore costs no extra window, and it keeps the window removed even if that propagation changed.
+- `calibration.capture_battery_span` and `calibration.capture_battery_unmeasured`: the battery rule of §6.4 applied
+  to each calibration capture's span, as to a member's. Charging, AC lost or the charge accumulator above the limit
+  gives `calibration.capture_battery_span`; a capture whose #421 pair did not pass and whose span the journal cannot
+  stand in for (no span, no battery journal, or the §6.4 missing-evidence predicate) gives
+  `calibration.capture_battery_unmeasured`. A capture with only discharge is disclosed (`battery.assist`, window
+  scope). *Forcing problem for the 1 s reads:* at `b9d02700a` this join reads the registry, and the monitor stops
+  right after the chain exits, before the registry's next publication; so the post capture's last in-force
+  publication never exists and every window would get `calibration.capture_battery_unmeasured` (mock rehearsal
+  round 3, finding R3-5). P3 makes the join read the 1 s SMC reads and stops the monitor no sooner than 5 s after the
+  chain exits (§0.17; sync point, §13).
+- `calibration.historical_custody_mismatch`: a file of an earlier calibration capture, re-hashed by the harvest,
+  differs from the SHA-256 its ledger entry recorded (§6.10).
 - `clock.step_overlap_calibration`: a clock step inside a calibration capture.
 - `neg8.bound_not_derived` (§5.3) and `neg8.screen_failed`; also `whole_window.verdict_absent`, because the NEG-8
   screen's result is held in the whole-window verdict.
@@ -1214,14 +1401,21 @@ REPRESENTATION; the catalog restates it as NUMBER for that reason. It costs one 
 All REPRESENTATION flags: receipts, lineage formalities other than the configuration bytes (`lineage.*` except the
 plan-tree digest), attempt history, the pin ledger, provenance digests, naming, notices, missing or malformed
 monitor journals, missing arm or terminal records, collector failures; the OFF action's output and the time-server
-offset; `kernel_task`'s CPU share and monitor probes falling inside phases; a missing #421 per-capture pair
+offset; monitor probes falling inside phases; a missing #421 per-capture pair
 (`battery.capture_pair_missing_covered` when the continuous journal covers the span; `battery.capture_pair_missing`
 otherwise, beside the `battery.unmeasured` that then removes the member); `battery.accumulator_unavailable` (the
 accumulator rule could not run on an interval; the publication rule still applies); clock steps and frequency
 changes outside any span; `disk.low` (its effect arrives through `calibration.no_bracket`); the desk's ledger
 readiness checks before an arm (`calibration.ledger_not_ready`, `calibration.ledger_readiness_unmeasured`); the G10
 result; the s1-structural diagnostics; the battery-temperature diagnostic of §0.6 (`thermal.stage_battery_rise`,
-`thermal.battery_temperature_unmeasured`), reported beside the window's NEG-8 result.
+`thermal.battery_temperature_unmeasured`), reported beside the window's NEG-8 result; battery assist
+(`battery.assist`, §6.4) and the SMC fallback (`battery.smc_unavailable`); the whole-machine meter's flags
+(`meter.*`, §5.8); the yield flags (§5.7); and the records of §6.10.
+
+`contention.kernel_task_share` stays in the catalog but cannot fire today: an unprivileged `ps` never lists
+`kernel_task` (process id 0; checked 2026-10-05), so neither the arm nor the monitor sees its CPU time by name. Its
+work is inside the host's total busy time, which the monitor journals every 10 s and nothing judges in the window
+(§4.2, Contention).
 
 ### 6.9 Harvest thresholds
 
@@ -1343,14 +1537,50 @@ families, findings cross-verified, BLOCKERs challenged by a refuter from another
 Seats: `FILL[416-SEATS]`. It runs once per frozen code or protocol change, never per window; a later change to
 collection code (§7.5) triggers a diff-scoped re-audit of that change. No audit work runs during a window.
 
-### 9.2 #421: battery float
+### 9.2 #421: battery float, and the battery-assist ruling of 2026-10-06
 
-Checked at the arm (§4.2) and journaled continuously in the window (§6.4). Every capture's raw pre/post `ioreg` pair
-is kept as data and authenticated at harvest; a pair that fails removes its member (or, for a calibration, the
-window), and a missing pair is disclosed. **Limitation, measured:** the gauge publishes InstantAmperage once every
-60 s. An excursion shorter than that is seen through the averaged Amperage and the 1 s accumulators (§6.4); the
-in-force rule over-excludes rather than under-excludes. This replaces revision 2's "endpoint pairs cannot see an
-excursion" limitation.
+**What #421 asked for.** Ed's directive #421 (2026-09-25) made the battery's state mandatory evidence for every
+capture: a number taken while the battery was charging, or while the machine was not drawing everything from the
+adapter, should not stand unexamined. Its motivating hazards were two. *Charging heat:* a change of the battery's
+charge limit from 80% to 100% would start a long charge, warming the battery and adding load beside the workload.
+*An incomplete wall reading:* a wall or USB-C meter on the adapter does not see energy the battery supplies, so the
+machine's total energy cannot be read from the adapter side alone while the battery helps.
+
+**What changed, and why.** Until 2026-10-06 any discharge above 200 mA in a member's span removed the member. Two
+measurements on 2026-10-06 showed that this rule had been reading a 60 s snapshot (§4.2) and that the battery
+assists under heavy load on the 140 W adapter: B0AC was nonzero in 126 of 170 s under an 8B-plus-CPU-burner load,
+down to −5,331 mA. Under the old rule switched to the 1 s SMC reads, the heaviest members, most of all 8B
+prefill-p2048, would be removed in numbers. Ed, 2026-10-06: "'under the existing rule' - should not preclude you from
+sensible changes - if the science is improved by a new rule make a new rule or remove the old one - obviously this
+needs to be durably remedied" (doctrine item 7 in the ruling). Two blind council seats (Opus 5.5 and Sol 6.1 xhigh)
+agreed; the orchestrator ruled
+(`/Users/edr/night-archive/wallmeter-probe/verify/RULING_battery_assist_2026-10-06.md`):
+
+1. *The rail number does not depend on the source.* The processor rails are regulated downstream of the supply, so
+   the rail energy the sampler reports is the same whether the adapter or the battery delivered it.
+2. *Excluding assisted members would bias the result.* Assist happens when the load is highest, so removing those
+   members selects members by load and pulls the kept means down, most of all for 8B.
+3. *The evidence on hand is benign.* Qwen3-8B decode ran at 69.1–72.6 tokens/s under up to −5.3 A of assist against
+   68.9–71.1 tokens/s without it. (The −865 mA reading of the earlier probe was at model load, not during decode.)
+4. *#421's two hazards stay covered.* Charging (current above +200 mA, IsCharging, the charge accumulator) and loss
+   of AC power still remove the member (§6.4), and the arm still refuses any battery current at idle (§4.2). The
+   wall-reading gap is closed by adding the battery term explicitly to the whole-machine energy (§5.8).
+
+So discharge with the adapter connected is disclosed (`battery.assist`), with its counts, minimum, duration and
+discharged energy per phase, and every reported cell is printed both with and without the members that carry it
+(analysis plan §8.1); neither value is chosen after the fact. The same disposition applies to calibration captures,
+to the #421 endpoint pairs and to the accumulator bounds (§6.3, §6.5): a discharge-only failure is disclosed; charging
+or AC loss keeps its exclusion. No discharge exclusion remains anywhere once P3 lands (§13).
+
+**What would reopen the ruling** (by erratum to an exclusion scoped to the affected phase): power-mode or power-limit
+transitions that reproducibly accompany assist; lower rail power, frequency or tokens per second in assisted seconds
+against matched unassisted seconds; or a battery-temperature rise concentrated in assisted stages (§0.6). GAMMA's 8B
+members and the battery-temperature diagnostic are where this is watched. No qualification run is required before
+the seal, because the rule does not depend on how often assist occurs.
+
+**Records kept.** Every capture's raw pre/post `ioreg` pair is kept as data and authenticated at harvest; a missing
+pair is disclosed. The registry's 60 s snapshot limitation of revision 4 no longer limits the current rule, which
+reads the SMC once a second; the registry still supplies the charging and AC state, polled every 5 s.
 
 ## 10. Changes after the seal, and registered deviations
 
@@ -1455,9 +1685,10 @@ battery evidence map (§9.2).
   adoption ruling.
 - **Q5. Attribution floor (lead, before seal).** Bind the ~1 J value and artifact, and rule whether D-078's derivation
   applies on 25G83.
-- **Q6. The sensitivity line (seal gate).** Analysis plan §8 proposes a labelled line over all members removed only
-  by physics-in-span codes, to expose the bias that such exclusions can introduce (battery assist, thermal pressure
-  and contention plausibly correlate with load, most of all on 8B prefill-p2048 members). Adopt or strike.
+- **Q6. The sensitivity line (seal gate).** Analysis plan §8.1 proposes a labelled line over all members removed
+  only by physics-in-span codes, to expose the bias that such exclusions can introduce (thermal pressure and
+  contention plausibly correlate with load, most of all on 8B prefill-p2048 members). Adopt or strike. Battery assist
+  no longer belongs here: it is disclosed, and its own two-way line is registered (§9.2, analysis plan §8.1).
 - **Q7. Ed's hardware setting (optional).** A fixed 80% charge limit with Optimized Battery Charging off avoids arms
   refused because the OS chose to charge.
 - **Q8. The watchdog holds each window open until its deadline (lead; code lane before ALPHA-1).** §5.5 gives the
@@ -1467,6 +1698,14 @@ battery evidence map (§9.2).
   the terminal `result.json`, `courier.sent`, and no driver process alive). The watchdog already releases a delivered
   refusal that captured nothing on the same kind of evidence. The change touches no number. It should land before
   the seal, so that H_claim carries it.
+
+- **Q9. The battery-assist line for GAMMA's contrasts (seal gate).** The ruling of 2026-10-06 prints every reported
+  cell with and without assisted members (analysis plan §8.1). GAMMA's contrasts are not reported cells (§0.9), and
+  8B members, one side of every quad, are the ones that assist most. Should each contrast's estimate also be printed
+  without the quads that hold an assist member? Adopt (the line is descriptive and gates nothing) or strike.
+- **Q10. Whole-machine meter, central band (none; recorded).** The band for ρ is set by the first clean window
+  (analysis plan §8.2). If no window of the block is clean, no band is set, and the cross-check reports only the hard
+  plausibility band and the spreads. Nothing waits on this.
 
 ## 15. Where each gate-prune change lives
 
