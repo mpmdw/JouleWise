@@ -329,7 +329,7 @@ class CheckoutIdentityTests(FixtureCase):
         fixture.commit("code change after the seal")
         result = collect_checkout_identity(fixture.params(h_claim=fixture.head))
         self.assertEqual(checks(result, "code.executed_differs_from_sealed"), ["head_is_h_claim"])
-        self.assertEqual(result["flags"][0]["observed"]["non_pin_changes"], ["joulewise/core.py"])
+        self.assertEqual(result["flags"][0]["observed"]["window_input_changes"], ["joulewise/core.py"])
 
     def test_pin_only_commit_keeps_the_code_identity(self) -> None:
         fixture = PackFixture(self.root)
@@ -338,6 +338,125 @@ class CheckoutIdentityTests(FixtureCase):
         result = collect_checkout_identity(fixture.params(h_claim=fixture.head))
         self.assertEqual(result["flags"], [])
         self.assertEqual(result["observed"]["changed_paths"], ["configs/calibration/calibration_ledger_head.json"])
+
+    # -- the seal landing (registration section 11) ---------------------------
+    # H_claim is the last code commit. The seal commit, its child, adds the
+    # filled inventory (which names H_claim) and the final registration and
+    # analysis-plan text. Later commits may add documents, tests and status
+    # files, and pin advances. None of these changes a byte a window reads.
+
+    SEAL_DOCUMENTS = tuple(f"configs/campaigns/v5_claim_25g83/{name}" for name in (
+        "sealed_inventory.json", "registration_block5.md", "analysis_plan_block5.md"))
+
+    def write(self, fixture: PackFixture, relative: str, text: str) -> None:
+        target = fixture.repo / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(text)
+
+    def landed(self, root: Path | None = None) -> PackFixture:
+        """H_claim (drafts and a stub), then the seal commit, a record commit and a pin advance."""
+        fixture = PackFixture(root or self.root)
+        for relative in self.SEAL_DOCUMENTS:
+            self.write(fixture, relative, "draft\n")
+        self.write(fixture, "configs/campaigns/v5_claim_25g83/flag_catalog.json", '{"codes": {}}\n')
+        self.write(fixture, "configs/campaigns/v5_claim_25g83/identity_pins.json", '{"units": {}}\n')
+        self.write(fixture, "docs/phase_2/window_runbook.md", "screen v1\n")
+        fixture.head = fixture.commit("H_claim: the last code commit")
+        for relative in self.SEAL_DOCUMENTS:
+            self.write(fixture, relative, f"sealed, names {fixture.head}\n")
+        fixture.commit("the seal commit: three sealed documents")
+        self.write(fixture, "docs/process_traces/seal/52-seal-record.md", "seal record\n")
+        self.write(fixture, "tests/test_new.py", "pass\n")
+        self.write(fixture, "RUN_STATE.md", "state\n")
+        self.write(fixture, "TASK_QUEUE.md", "queue\n")
+        fixture.commit("records only")
+        self.write(fixture, "configs/calibration/calibration_ledger_head.json", '{"sequence": 2}\n')
+        fixture.commit("pin advance")
+        return fixture
+
+    def test_the_seal_commit_records_and_a_pin_advance_keep_the_code_identity(self) -> None:
+        fixture = self.landed()
+        result = collect_checkout_identity(fixture.params(h_claim=fixture.head))
+        self.assertEqual(result["flags"], [])
+        observed = result["observed"]
+        self.assertEqual(observed["changed_path_counts"],
+                         {"pin_only": 1, "seal_document": 3, "window_input": 0, "record_only": 4})
+        self.assertEqual(observed["seal_document_changes"], sorted(self.SEAL_DOCUMENTS))
+        self.assertEqual(observed["record_only_changes"],
+                         ["RUN_STATE.md", "TASK_QUEUE.md", "docs/process_traces/seal/52-seal-record.md",
+                          "tests/test_new.py"])
+
+    def test_a_changed_window_input_after_the_seal_is_still_a_difference(self) -> None:
+        # The counterfactual, one path at a time: code, a script, a pack file,
+        # the catalog, the identity pins, any other configuration, and the
+        # runbook the chain's screen is copied from.
+        for index, relative in enumerate((
+                "joulewise/core.py", "scripts/tool.py", f"{PACK_REL}/plan_tree.json",
+                "configs/campaigns/v5_claim_25g83/flag_catalog.json",
+                "configs/campaigns/v5_claim_25g83/identity_pins.json",
+                "configs/campaign_policies/policy.json", "docs/phase_2/window_runbook.md")):
+            with self.subTest(relative):
+                root = self.root / f"case-{index}"
+                root.mkdir()
+                fixture = self.landed(root)
+                self.write(fixture, relative, "changed after the seal\n")
+                fixture.commit("a window input changed")
+                result = collect_checkout_identity(fixture.params(h_claim=fixture.head))
+                self.assertEqual(checks(result, "code.executed_differs_from_sealed"), ["head_is_h_claim"])
+                self.assertEqual(result["flags"][0]["observed"]["window_input_changes"], [relative])
+
+    def test_a_window_input_moved_out_of_its_directory_is_still_listed(self) -> None:
+        fixture = self.landed()
+        git(fixture.repo, "mv", "configs/campaigns/v5_claim_25g83/identity_pins.json", "docs/identity_pins.json")
+        fixture.commit("moved")
+        result = collect_checkout_identity(fixture.params(h_claim=fixture.head))
+        self.assertEqual(result["flags"][0]["observed"]["window_input_changes"],
+                         ["configs/campaigns/v5_claim_25g83/identity_pins.json"])
+
+    def test_a_window_input_with_a_quoted_name_is_classed_by_its_real_path(self) -> None:
+        fixture = self.landed()
+        self.write(fixture, "joulewise/café.py", "X = 1\n")
+        fixture.commit("a module git would quote")
+        result = collect_checkout_identity(fixture.params(h_claim=fixture.head))
+        self.assertEqual(result["flags"][0]["observed"]["window_input_changes"], ["joulewise/café.py"])
+
+    def test_the_harvest_and_the_collector_class_every_path_alike(self) -> None:
+        from joulewise.b5 import chain, harvest
+        from joulewise.flags import collect
+
+        self.assertEqual(set(collect.SEAL_DOCUMENT_PATHS), set(harvest.SEAL_DOCUMENT_PATHS))
+        self.assertEqual(set(collect.DEFAULT_PIN_ONLY_PATHS), set(harvest.PIN_ONLY_PATHS))
+        self.assertEqual(collect.HEAD_CHANGE_CLASSES, harvest.HEAD_CHANGE_CLASSES)
+        self.assertEqual(set(collect.WINDOW_INPUT_PREFIXES), set(harvest.WINDOW_INPUT_PREFIXES))
+        # The one document a window reads: the plan writer copies its screen into the chain.
+        self.assertEqual(set(collect.WINDOW_INPUT_FILES), {chain.RUNBOOK_RELATIVE})
+        self.assertEqual(set(harvest.WINDOW_INPUT_FILES), {chain.RUNBOOK_RELATIVE})
+        expected = {
+            "configs/calibration/calibration_ledger_head.json": "pin_only",
+            "configs/campaigns/v5_claim_25g83/sealed_inventory.json": "seal_document",
+            "configs/campaigns/v5_claim_25g83/registration_block5.md": "seal_document",
+            "configs/campaigns/v5_claim_25g83/analysis_plan_block5.md": "seal_document",
+            "configs/campaigns/v5_claim_25g83/flag_catalog.json": "window_input",
+            "configs/campaigns/v5_claim_25g83/identity_pins.json": "window_input",
+            "configs/campaigns/v5_claim_25g83/sizing_b5.json": "window_input",
+            "configs/campaigns/d117_floor_qwen3-8b_v5/plan_tree.json": "window_input",
+            "configs/campaign_policies/quiet_mac_p2_production.json": "window_input",
+            "joulewise/b5/harvest.py": "window_input",
+            "scripts/run_campaign.py": "window_input",
+            "docs/phase_2/window_runbook.md": "window_input",
+            "docs/phase_2/window_runbook.md.bak": "record_only",
+            "docs/decision_log.md": "record_only",
+            "tests/test_b5_driver.py": "record_only",
+            "RUN_STATE.md": "record_only",
+            "TASK_QUEUE.md": "record_only",
+            "README.md": "record_only",
+            "joulewise.md": "record_only",
+            "configs.md": "record_only",
+        }
+        for relative, klass in expected.items():
+            with self.subTest(relative):
+                self.assertEqual(collect.head_change_class(relative), klass)
+                self.assertEqual(harvest.head_change_class(relative), klass)
 
     def test_dirty_checkout_flags_code_identity(self) -> None:
         fixture = PackFixture(self.root)
