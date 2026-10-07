@@ -20,6 +20,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from tests import child_guard
 
 
 LABELS = ("com.joulewise.night", "com.joulewise.night.deadman")
@@ -2480,6 +2481,11 @@ class HazardPackInstallTests(unittest.TestCase):
         self.assertIn("no install-time launchd probe", err)
         self.assertFalse(any(argv and argv[0].endswith("launchctl") for argv in calls))
         self.assertFalse((self.root / "CHAIN-EXECUTED").exists())
+
+
+# Test hygiene (2026-10-07): a test or class in this module that leaves a child process running
+# is reported as failed, and the child is stopped (tests/child_guard.py).
+child_guard.guard_test_classes(globals())
 
 
 if __name__ == "__main__":
