@@ -129,7 +129,7 @@ class QualificationSubsetTests(unittest.TestCase):
                 courier.setUp()
                 mapping = ObservedDeskMappingTests()
                 try:
-                    outcome = courier.delivered_child(hang=hang, budget=0.2 if hang else 2)
+                    outcome = courier.delivered_child(hang=hang)
                     mapping.setUp()
                     go = producer.read(mapping.night / "go_receipt.json")
                     go["purpose"] = go["authorization"]["purpose"] = "G2B_SHAKEDOWN"

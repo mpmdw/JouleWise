@@ -7,6 +7,7 @@ import io
 import json
 import os
 from pathlib import Path
+import signal
 import subprocess
 import sys
 import tempfile
@@ -18,6 +19,7 @@ from joulewise import night_agent_install as install, night_gate
 from joulewise.night_plan_writer import write_night_plan
 from scripts import gen_g2_phase_d as generator, run_night
 from tests import battery_float_fixture
+from tests import runner_isolation
 
 ROOT = Path(__file__).resolve().parents[1]
 HEAD = 'a' * 40
@@ -194,12 +196,19 @@ class G2aInspectionTests(unittest.TestCase):
                 head = self.f.plan.repo_head if str(argv[2]) == str(ROOT) else HEAD
                 return subprocess.CompletedProcess(argv, 0, head+'\n', '')
             return real_run(argv, *a, **kw)
-        with self.f.environment(), mock.patch.object(install.subprocess, 'run', side_effect=run), \
+        # install.main() is a command-line entry point: it ends by setting SIGINT, SIGTERM
+        # and SIGHUP to "ignore" for the rest of its process. Called here, that process is
+        # the test runner, and every child started by a later test inherits the ignored
+        # SIGTERM (tests/runner_isolation.py, item 2), so the dispositions are put back.
+        with runner_isolation.signal_dispositions_restored() as before, \
+                self.f.environment(), mock.patch.object(install.subprocess, 'run', side_effect=run), \
                 mock.patch.object(install, 'BATTERY_PROBE_RUNNER', battery_float_fixture.runner()), \
                 mock.patch.object(run_night, 'install_spans_for_day', return_value=[(0, time.time()+10000)]), \
                 redirect_stdout(io.StringIO()):
             result = install.main(['--plan', str(self.f.plan_path), '--python', sys.executable,
                                    '--render-only', str(self.f.base/'rendered')])
+        self.assertEqual({number: signal.getsignal(number) for number in before}, before,
+                         'the in-process installer call changed a signal disposition for later tests')
         self.assertEqual(result, 0)
         self.assertFalse(self.f.reservation.with_suffix('.CALLED').exists())
         self.assertTrue(list((self.f.base/'rendered').glob('*.plist')))

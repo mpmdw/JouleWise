@@ -6545,11 +6545,71 @@ class CourierReapingTests(unittest.TestCase):
                 process.kill()
                 process.wait(timeout=5)
 
-    def delivered_child(self, *, hang=False, code=0, budget=2, deadman_epoch_s=None):
+    # Timing of the stand-in courier (a Python child that creates courier.sent).
+    #
+    # The driver gives one courier attempt a budget (COURIER_DEADLINE_S, patched here):
+    # the child must create courier.sent inside it, and after delivery the driver waits
+    # only what is left of it for the child to exit, then stops the child. So the budget
+    # has to cover the child's start-up, which is a property of the machine at that
+    # moment, not of the driver. child_start_up_s() measures it in the same run and the
+    # budget is never smaller than START_UP_HEADROOM times the measurement.
+    #
+    # The bound asserted on the whole call is the property under test: a delivered
+    # courier costs its budget plus a prompt stop. STOP_ALLOWANCE_S is the room for that
+    # stop on a quiet machine; it grows with the measured start-up and is capped at
+    # STOP_ALLOWANCE_CAP_S, below the smallest duration the driver shows when a courier
+    # does NOT stop promptly: 30 s (GROUP_WAIT_S, its wait between SIGTERM and SIGKILL),
+    # then 60 s (the first retry backoff, and the stand-in's own sleep).
+    START_UP_HEADROOM = 10
+    HANG_BUDGET_S = 1.0
+    EXIT_BUDGET_S = 2.0
+    STOP_ALLOWANCE_S = 5.0
+    STOP_ALLOWANCE_CAP_S = 20.0
+
+    def child_start_up_s(self):
+        """Seconds a Python child needs, on this machine now, to start and create a file."""
+        marker = self.root / "start-up.marker"
+        script = self.root / "start_up.py"
+        script.write_text(f"from pathlib import Path\nPath({str(marker)!r}).write_text('started')\n")
+        started = time.monotonic()
+        process = subprocess.Popen([sys.executable, "-B", str(script)], stdin=subprocess.DEVNULL)
+        self.addCleanup(process_reaper.kill_and_wait, process)
+        while not marker.is_file():
+            self.assertLess(time.monotonic() - started, 120, "a Python child did not start within 120 s")
+            time.sleep(0.002)
+        elapsed = time.monotonic() - started
+        process.wait(timeout=120)
+        marker.unlink()
+        return elapsed
+
+    def delivered_child(self, *, hang=False, code=0, budget=None, deadman_after_s=None, ignore_sigterm=False):
+        """Run one delivered courier attempt through the real driver and return its outcome.
+
+        ``hang``: the stand-in keeps running after delivery (the driver must stop it).
+        ``budget``: the attempt budget in seconds; raised to cover the measured start-up.
+        ``deadman_after_s``: place the dead-man epoch this many seconds after the launch.
+        ``ignore_sigterm``: the stand-in ignores SIGTERM, so the driver's stop takes its
+        30 s group wait and a SIGKILL (the injected hang of the counterfactual test).
+        """
         from joulewise import t0_rehearsal as t0
+        start_up_allowance = self.START_UP_HEADROOM * self.child_start_up_s()
+        if budget is None:
+            budget = self.HANG_BUDGET_S if hang else self.EXIT_BUDGET_S
+        budget = max(budget, start_up_allowance)
+        waited = budget
+        if deadman_after_s is not None:
+            deadman_after_s = max(deadman_after_s, start_up_allowance)
+            waited = min(budget, deadman_after_s)
+        bound = waited + min(self.STOP_ALLOWANCE_S + start_up_allowance, self.STOP_ALLOWANCE_CAP_S)
         child = self.root / "courier.py"
         child.write_text(
-            "from pathlib import Path\nimport time\n"
+            "from pathlib import Path\nimport signal, time\n"
+            # The stand-in sets its own SIGTERM disposition before it reports delivery. A
+            # child inherits an ignored SIGTERM from the process that starts it, so without
+            # this line a test runner left ignoring SIGTERM by an earlier test (see
+            # tests/runner_isolation.py, item 2) made this stand-in survive the driver's
+            # SIGTERM for the full 30 s group wait.
+            f"signal.signal(signal.SIGTERM, signal.{'SIG_IGN' if ignore_sigterm else 'SIG_DFL'})\n"
             f"Path({str(self.night / 'courier.sent')!r}).write_text('fixture delivery')\n"
             + ("time.sleep(60)\n" if hang else f"raise SystemExit({code})\n")
         )
@@ -6561,6 +6621,7 @@ class CourierReapingTests(unittest.TestCase):
             process = spawn(*args, **kwargs)
             self.children.append(process)
             return process
+        deadman_epoch_s = None if deadman_after_s is None else time.time() + deadman_after_s
         started = time.monotonic()
         with t0.process_journal(self.journal, observe_only=True), \
                 mock.patch.object(t0, "observed_popen", side_effect=retain), \
@@ -6569,7 +6630,11 @@ class CourierReapingTests(unittest.TestCase):
             outcome = self.driver.run_courier(
                 self.root, types.SimpleNamespace(plan_id="s1-local"), child,
                 deadman_epoch_s=deadman_epoch_s)
-        self.assertLess(time.monotonic() - started, 5)
+        elapsed = time.monotonic() - started
+        self.assertLess(elapsed, bound,
+                        f"a delivered courier took {elapsed:.1f} s; its budget was {waited:.2f} s and a prompt "
+                        f"stop fits in {bound - waited:.1f} s more (measured child start-up "
+                        f"{start_up_allowance / self.START_UP_HEADROOM:.3f} s)")
         self.assertEqual(structural.read_bytes(), before)
         self.assertTrue(outcome["sent"])
         self.assertEqual(outcome["attempted"], 1)
@@ -6594,9 +6659,21 @@ class CourierReapingTests(unittest.TestCase):
         self.assertFalse(outcome["timed_out"])
 
     def test_still_running_delivered_courier_records_timeout_without_revoking_delivery(self):
-        outcome = self.delivered_child(hang=True, budget=0.2)
+        outcome = self.delivered_child(hang=True)
         self.assertTrue(outcome["timed_out"])
         self.assertEqual(outcome["exit_code"], -signal.SIGTERM)
+
+    def test_a_delivered_courier_that_ignores_sigterm_fails_the_time_bound(self):
+        """Counterfactual for the bound in delivered_child: a real hang still fails it.
+
+        The stand-in ignores SIGTERM. The driver then spends its 30 s group wait before
+        SIGKILL, and the bound (budget plus at most 20 s) must reject that run. This is
+        the same symptom a leaked "ignore SIGTERM" produced in the whole suite, injected
+        on purpose; the test costs those 30 s once per suite.
+        """
+        with self.assertRaisesRegex(AssertionError, r"a delivered courier took \d+\.\d s"):
+            self.delivered_child(hang=True, ignore_sigterm=True)
+        self.assertEqual(self.children[0].returncode, -signal.SIGKILL)
 
     def test_delivered_courier_nonzero_exit_does_not_revoke_delivery(self):
         outcome = self.delivered_child(code=7)
@@ -6604,7 +6681,10 @@ class CourierReapingTests(unittest.TestCase):
         self.assertFalse(outcome["timed_out"])
 
     def test_delivered_courier_exit_wait_respects_deadman_epoch(self):
-        outcome = self.delivered_child(hang=True, deadman_epoch_s=time.time() + 0.2)
+        # The budget is a minute and the dead-man epoch a second away: the bound in
+        # delivered_child (dead-man plus at most 20 s) holds only if the exit wait stops at
+        # the dead-man. A wait that ran to the end of the budget would take the minute.
+        outcome = self.delivered_child(hang=True, budget=60, deadman_after_s=self.HANG_BUDGET_S)
         self.assertTrue(outcome["timed_out"])
 
     def test_exit_wait_uses_remaining_attempt_budget_capped_by_deadman(self):
