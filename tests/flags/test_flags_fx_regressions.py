@@ -184,7 +184,12 @@ class OneSpanJoinTests(unittest.TestCase):
         result = exclusions.compute(flags, roster, spans, catalog)
         self.assertEqual(result["unclassified"], [])
         got = {item["run_id"]: item["codes"] for item in result["members_excluded"]}
-        want = {name: sorted(case["l1_codes"]) for name, case in expected.items() if case["l1_codes"]}
+        # The fixtures' only battery excursion is the -447 mA discharge (publication
+        # 3), which L1's recorded join excluded; under the battery-assist ruling
+        # (2026-10-06) the harvest discloses discharge (battery.assist), so it
+        # excludes no member.
+        want = {name: sorted(set(case["l1_codes"]) - {"battery.member_span"}) for name, case in expected.items()}
+        want = {name: codes for name, codes in want.items() if codes}
         self.assertEqual(got, want)
 
 

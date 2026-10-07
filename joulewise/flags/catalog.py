@@ -250,12 +250,37 @@ _PRUNE2_CODES = {
     "monitor.outage": _code("DIAGNOSTIC", "PHYSICS", DISCLOSE),
 }
 
+# Gate-prune round 3, lane P3-HARV (joulewise.b5.harvest PRUNE3_CODES).  The
+# battery-assist ruling (2026-10-06): discharge while on AC and not charging is
+# disclosed, never excluded; charging, AC loss, a charge accumulator above the
+# limit and missing evidence stay exclusions (battery.member_span,
+# battery.accumulator_excursion, battery.unmeasured).  battery.assist marks a
+# member whose measured request was assisted (the analysis's sensitivity line
+# recomputes every cell without those members); assist only outside the
+# request decides nothing.  A #421 endpoint pair (member or capture) that failed
+# on its endpoint current alone, where the SMC journal shows no charging, is
+# disclosed in place of the pair exclusion.  The historical calibration
+# custody pass (P2-VPF S5): an earlier capture whose bytes changed excludes the
+# window, a pass that could not run is disclosed.  battery.smc_unavailable and
+# the meter.* codes are in _DISCLOSE_CODES above.
+_PRUNE3_CODES = {
+    "battery.assist": _code("DIAGNOSTIC", "PHYSICS", DISCLOSE),
+    "battery.assist_outside_request": _code("DIAGNOSTIC", "PHYSICS", DISCLOSE),
+    "battery.capture_pair_assist": _code("DIAGNOSTIC", "PHYSICS", DISCLOSE),
+    "calibration.capture_battery_assist": _code("CALIBRATION", "PHYSICS", DISCLOSE),
+    "calibration.capture_battery_pair_assist": _code("CALIBRATION", "PHYSICS", DISCLOSE),
+    "calibration.historical_custody_mismatch": _code("CALIBRATION", "NUMBER", EXCLUDE_WINDOW),
+    "calibration.historical_custody_unmeasured": _code("CALIBRATION", "NUMBER", DISCLOSE),
+    "records.window_not_launched": _code("RECORDS", "REPRESENTATION", DISCLOSE),
+}
+
 DRAFT_CODES: Mapping[str, Mapping[str, str]] = {
     **_WINDOW_CODES,
     **_MEMBER_CODES,
     **_DISCLOSE_CODES,
     **_CORE_PRUNE_CODES,
     **_PRUNE2_CODES,
+    **_PRUNE3_CODES,
 }
 
 # Codes the cell rule and the roster rule of exclusions.compute derive

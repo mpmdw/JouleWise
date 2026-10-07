@@ -327,7 +327,7 @@ def disk_values(free_bytes: int, low_bytes: int = 10 * GIB) -> dict:
 
 def write_journals(directory: Path, *, extra_publications=(), thermal_levels=(), contention_extra=(),
                    clock_steps=(), omit=(), battery_gap=None, contention_gap=None, disk_low=False,
-                   telemetry=None) -> None:
+                   telemetry=None, smc_current=None) -> None:
     """Every module from 300 s before the first member to 300 s after the last, in L1's format.
 
     ``extra_publications``: (monotonic_ns, battery-value overrides); each is a
@@ -335,6 +335,9 @@ def write_journals(directory: Path, *, extra_publications=(), thermal_levels=(),
     UpdateTime).  ``contention_extra``: ((lo, hi), {pid, command, cpu_s_per_s}).
     ``telemetry``: publication monotonic_ns -> its ``PowerTelemetryData``
     accumulators (default: an idle float, no tick of either sign).
+    ``smc_current``: monotonic_ns -> B0AC mA; when given, the battery journal
+    also holds the monitor's 1 s ``source: smc`` reads (B0AV 12,500 mV) from
+    the journal's start to its end (default: none, a registry-only journal).
     """
     directory.mkdir(parents=True, exist_ok=True)
     spans = [member_span_ns(row[0]) for row in MEMBERS]
@@ -357,6 +360,13 @@ def write_journals(directory: Path, *, extra_publications=(), thermal_levels=(),
         values = {"power_telemetry": dict(STEADY_TELEMETRY if telemetry is None else telemetry(effect)), **values}
         journals["battery"].write("reading", effect + 2 * NS, effect + 2 * NS + 30_000_000,
                                   values=battery_values(update, **values))
+    if smc_current is not None:
+        from joulewise.hazards import battery as l1_battery
+        for index, poll in enumerate(range(start, end, NS)):
+            values = {"B0AC": smc_current(poll), "B0AV": 12500, "PDTR": 60.0, "PSTR": 60.0 + index / 1000,
+                      "PPBR": 0.0}
+            sample = l1_battery.smc_sample(lambda values=values: {"values": values, "errors": {}})
+            journals["battery"].write("reading", poll - 400_000, poll, values={"source": "smc", "smc": sample})
     levels = dict(thermal_levels)
     for poll in range(start, end, 5 * NS):
         level = next((value for (lo, hi), value in levels.items() if lo <= poll <= hi), 0)
@@ -806,8 +816,9 @@ class CollectedWindowTests(WindowTestCase):
             self.assertIn(flag["blinding"], (h.STRUCTURE, h.RESTRICTED))
         member_codes = {flag["code"] for flag in flags if flag["scope"]["level"] == "member"}
         # The seed bundle has no #421 pair; the journal covers every member, so
-        # the missing pair is the disclosed "covered" case (plan 3.5).
-        self.assertEqual(member_codes - {"battery.capture_pair_missing_covered",
+        # the missing pair is the disclosed "covered" case (plan 3.5).  These
+        # journals hold no SMC B0AC read, so the registry fallback is disclosed.
+        self.assertEqual(member_codes - {"battery.capture_pair_missing_covered", "battery.smc_unavailable",
                                          "member.cooldown_evidence_unverified"}, set())
         for flag in flags:  # L4's flag schema, field for field
             self.assertEqual(h.flag_problems(flag), [], flag["code"])
@@ -881,7 +892,9 @@ class CollectedWindowTests(WindowTestCase):
     def test_battery_excursion_excludes_the_named_member_and_its_quad(self):
         target = "b5t-cmp-b01-b1"
         start, end = member_span_ns(target)
-        excursion = ((start + end) // 2, {"instant_amperage_ma": -447, "amperage_ma": -380})
+        # A charge current: under the battery-assist ruling (2026-10-06) the same
+        # discharge would be disclosed (tests/test_harvest_b5_p3harv.py).
+        excursion = ((start + end) // 2, {"instant_amperage_ma": 447, "amperage_ma": 380})
         window = self.window(journals={"extra_publications": [excursion]})
         record = window.harvest()
         self.assertEqual(record["verdict"], "COLLECTED")
@@ -1356,6 +1369,26 @@ NEG8_FRESHNESS = {"os_build": "fixture-os", "power_supply_identity_sha256": "e" 
                   "calibration_identity_sha256": "f" * 64}
 
 
+# The corpus members' measured windows end before the chain starts (epoch
+# 1786206000): the HAZARD mint dates its bound by the latest kept member's
+# sampling_stopped (whole_window._hazard_bound_derived_at_s) and never by its
+# own clock (P2-B1 review F2).
+CORPUS_MEASURED_END_S = 1786205000.0
+
+
+def put_corpus_stub(bundle: Path, bundle_id: str, status: str) -> None:
+    """A synthetic NEG-8 corpus bundle: run id, status and a measured window (its sampling markers)."""
+    put(bundle / "config.json", {"run_id": bundle_id})
+    put(bundle / "metadata.json", {"run_id": bundle_id})
+    put(bundle / "summary_metrics.json", {"status": status})
+    end = CORPUS_MEASURED_END_S + CORPUS_IDS.index(bundle_id) if bundle_id in CORPUS_IDS else CORPUS_MEASURED_END_S
+    (bundle / "events.jsonl").write_text("".join(json.dumps(event, sort_keys=True) + "\n" for event in (
+        {"timestamp_s": end - 5.0, "event_type": "sampling_started", "phase": "measured_run",
+         "message": "sampling_started", "metadata": {}},
+        {"timestamp_s": end, "event_type": "sampling_stopped", "phase": "measured_run",
+         "message": "sampling_stopped", "metadata": {}})))
+
+
 def corpus_point(path: Path):
     """A corpus member's two NEG-8 points (the synthetic bundles carry no energies)."""
     value = 30.0 + 0.1 * int(path.name.rsplit("-r", 1)[1])
@@ -1398,11 +1431,9 @@ def neg8_corpus(window: "Window", failed=(), *, manifest_members=None, derive=Tr
     for bundle_id in sorted(ids):
         bundle = window.bound / bundle_id
         bundle.mkdir(parents=True, exist_ok=True)
-        for name in ("config.json", "metadata.json", "summary_metrics.json"):
+        for name in ("config.json", "metadata.json", "summary_metrics.json", "events.jsonl"):
             (bundle / name).unlink(missing_ok=True)
-        put(bundle / "config.json", {"run_id": bundle_id})
-        put(bundle / "metadata.json", {"run_id": bundle_id})
-        put(bundle / "summary_metrics.json", {"status": "failed" if bundle_id in failed else "succeeded"})
+        put_corpus_stub(bundle, bundle_id, "failed" if bundle_id in failed else "succeeded")
     night = window.custody / "night"
     collected = night / "transcript" / b5_chain.NEG8_COLLECTED_MANIFEST
     summary = night / "transcript" / b5_chain.NEG8_COLLECTED_SUMMARY
@@ -2050,10 +2081,10 @@ class ThresholdAndAccumulatorHarvestTests(WindowTestCase):
         lo, hi = member_span_ns(target)
         start = lo - 10 * NS
 
-        def telemetry(effect_ns):  # discharging at -5,400 mW from 10 s before the target's stream to its end
+        def telemetry(effect_ns):  # charging at +5,400 mW from 10 s before the target's stream to its end
             ticks = max(0, min(effect_ns, hi) - start) // NS
-            return {**STEADY_TELEMETRY, "AccumulatedBatteryDischarge": -2_000_000 - 5_400 * ticks,
-                    "BatteryDischargeAccumulatorCount": 22670 + ticks}
+            return {**STEADY_TELEMETRY, "AccumulatedBatteryPower": 1_000_000 + 5_400 * ticks,
+                    "BatteryPowerAccumulatorCount": 4727 + ticks}
 
         window = self.window(journals={"telemetry": telemetry})
         record = window.harvest()
@@ -2183,10 +2214,10 @@ class EmittedCodeTests(unittest.TestCase):
         if raw is None:
             self.skipTest("neither the sealed catalog nor the block-5 design branch is in this clone")
         codes = json.loads(raw)["codes"]
-        # The gate-prune round-2 codes reach the draft through the registration
-        # row (REG) before the seal; any other unclassified code fails here.
+        # The gate-prune round-2 and round-3 codes reach the draft through the
+        # registration row (REG) before the seal; any other unclassified code fails here.
         missing = set(h.CODES) - set(codes)
-        self.assertEqual(missing - h.PRUNE2_CODES, set(h.NEVER_CLASSIFIED_CODES))
+        self.assertEqual(missing - h.PRUNE2_CODES - h.PRUNE3_CODES, set(h.NEVER_CLASSIFIED_CODES))
         self.assertTrue(h.NEVER_CLASSIFIED_CODES.isdisjoint(codes))
 
 
@@ -2265,11 +2296,17 @@ class JoinTests(unittest.TestCase):
                          [publication_ns(0), publication_ns(60)])  # one per UpdateTime, not per read
 
     def test_publication_before_the_span_is_in_force(self):
-        readings = battery_journal([(0, {}), (60, {"instant_amperage_ma": -447}), (120, {}), (180, {})])
+        # A charge current (positive) in force excludes; the battery-assist
+        # ruling (2026-10-06) discloses the same magnitude of discharge.
+        readings = battery_journal([(0, {}), (60, {"instant_amperage_ma": 447}), (120, {}), (180, {})])
         span = [publication_ns(70), publication_ns(100)]
         self.assertIn("battery.member_span", [code for code, *_ in h.battery_member_flags(span, readings, self.T)])
         clean = h.battery_member_flags([publication_ns(130), publication_ns(170)], readings, self.T)
         self.assertNotIn("battery.member_span", [code for code, *_ in clean])
+        discharge = battery_journal([(0, {}), (60, {"instant_amperage_ma": -447}), (120, {}), (180, {})])
+        codes = [code for code, *_ in h.battery_member_flags(span, discharge, self.T)]
+        self.assertNotIn("battery.member_span", codes)
+        self.assertIn("battery.assist", codes)
 
     def test_charging_and_disconnected_publications(self):
         for values, reason in (({"is_charging": True}, "is_charging"),
@@ -2282,9 +2319,15 @@ class JoinTests(unittest.TestCase):
             self.assertIn(reason, observed["violations"][0]["reasons"])
 
     def test_float_reading_at_the_limit_passes(self):
-        readings = battery_journal([(0, {}), (60, {"instant_amperage_ma": -200}), (120, {})])
-        codes = [code for code, *_ in h.battery_member_flags([publication_ns(65), publication_ns(70)], readings, self.T)]
-        self.assertEqual(codes, [])
+        # No SMC read in these journals: the registry is judged and the fallback disclosed.
+        # Neither excludes; a discharge is assist (any negative current, ruling
+        # item 1 and review F5), disclosed.
+        for current, expected in ((-200, ["battery.smc_unavailable", "battery.assist"]),
+                                  (200, ["battery.smc_unavailable"])):
+            readings = battery_journal([(0, {}), (60, {"instant_amperage_ma": current}), (120, {})])
+            codes = [code for code, *_ in h.battery_member_flags([publication_ns(65), publication_ns(70)],
+                                                                 readings, self.T)]
+            self.assertEqual(codes, expected, current)
 
     def test_publication_gap_over_120_s_is_unmeasured(self):
         readings = battery_journal([(0, {}), (200, {}), (260, {})], end_s=300)
@@ -2303,7 +2346,7 @@ class JoinTests(unittest.TestCase):
         readings = parsed(journal)
         self.assertEqual({reading.status for reading in readings}, {"error"})
         codes = [code for code, *_ in h.battery_member_flags([publication_ns(70), publication_ns(80)], readings, self.T)]
-        self.assertEqual(codes, ["battery.unmeasured"])
+        self.assertEqual(codes, ["battery.unmeasured", "battery.smc_unavailable"])
 
     # Registration 6.4's worked example: between two publications the discharge
     # accumulator gains 40 ticks totalling -216,000 (mW x tick): mean -5,400 mW,
@@ -2314,21 +2357,35 @@ class JoinTests(unittest.TestCase):
     ASSIST = [STEADY_TELEMETRY, {**STEADY_TELEMETRY, "AccumulatedBatteryDischarge": -2_002_600,
                                  "BatteryDischargeAccumulatorCount": 22690}]
     RESET = [STEADY_TELEMETRY, {**STEADY_TELEMETRY, "BatteryDischargeAccumulatorCount": 12}]
+    # The same mean on the charge accumulator: +216,000 over 40 ticks, +5,400 mW.
+    CHARGE_EXCURSION = [STEADY_TELEMETRY, {**STEADY_TELEMETRY, "AccumulatedBatteryPower": 1_216_000,
+                                           "BatteryPowerAccumulatorCount": 4767}]
 
     def accumulator_codes(self, telemetry, thresholds=None):
+        """The battery flags but the SMC fallback disclosure (these journals hold no SMC read)."""
         readings = battery_journal([(0, {"power_telemetry": telemetry[0]}), (60, {"power_telemetry": telemetry[1]})],
                                    end_s=120)
-        return h.battery_member_flags([publication_ns(10), publication_ns(20)], readings, thresholds or self.T)
+        return [flag for flag in h.battery_member_flags([publication_ns(10), publication_ns(20)], readings,
+                                                        thresholds or self.T)
+                if flag[0] != "battery.smc_unavailable"]
 
     def test_accumulator_rule_runs_at_the_registered_scale(self):
-        """Fix lane fx-harvest (4): one rule with L1; the scale is registered (0.001 W per unit), never None."""
-        ((code, observed, interval),) = self.accumulator_codes(self.EXCURSION)
+        """Fix lane fx-harvest (4): one rule with L1; the scale is registered (0.001 W per unit), never None.
+
+        Under the battery-assist ruling (2026-10-06) only the charge
+        accumulator above the limit excludes; the discharge accumulator above
+        it is battery.assist (DISCLOSE).
+        """
+        ((code, observed, interval),) = self.accumulator_codes(self.CHARGE_EXCURSION)
         self.assertEqual(code, "battery.accumulator_excursion")
         (row,) = observed["intervals"]
-        self.assertEqual((row["accumulator"], row["ticks"], row["mean_per_tick"]), ("discharge", 40, -5400.0))
+        self.assertEqual((row["accumulator"], row["ticks"], row["mean_per_tick"]), ("charge", 40, 5400.0))
         self.assertAlmostEqual(row["mean_w"], 5.4)
         self.assertAlmostEqual(row["limit_w"], 2.436)
         self.assertEqual(interval, {"monotonic_ns": [publication_ns(0), publication_ns(60)]})
+        ((code, observed, _interval),) = self.accumulator_codes(self.EXCURSION)
+        self.assertEqual(code, "battery.assist")
+        self.assertEqual(observed["phases"]["span"]["accumulator_intervals_over_limit"], 1)
         self.assertEqual([code for code, *_ in self.accumulator_codes(self.ASSIST)], ["battery.accumulator_activity"])
         self.assertEqual([code for code, *_ in self.accumulator_codes([STEADY_TELEMETRY, STEADY_TELEMETRY])], [])
         ((code, observed, _interval),) = self.accumulator_codes(self.RESET)
@@ -2362,20 +2419,19 @@ class JoinTests(unittest.TestCase):
                                   values=battery_values(second + 10_000, power_telemetry=values))
                 span = {"monotonic_ns": [publication_ns(10), publication_ns(20)]}
                 limits = {"limit_ma": 200, "max_update_age_s": 180, "max_unobserved_s": 120}
-                ours = {code for code, *_ in h.battery_member_flags(span["monotonic_ns"], parsed(journal), self.T)
-                        if code.startswith("battery.accumulator")}
-                # battery.smc_unavailable: these journals hold no SMC B0AC reads, so L1
-                # discloses its registry fallback; the harvest copy has no SMC rule yet
-                # (lane 2026-10-06-smc-battery-meter, WIRING.md).
+                found = {code for code, *_ in h.battery_member_flags(span["monotonic_ns"], parsed(journal), self.T)}
+                ours = {code for code in found if code.startswith("battery.accumulator")}
+                # battery.smc_unavailable: these journals hold no SMC B0AC reads, so both
+                # disclose their registry fallback.
                 theirs = {l1_name.get(finding["code"], finding["code"])
                           for finding in l1.span_findings(journal.lines, span, limits)
                           if finding["code"] not in ("battery.unmeasured", "battery.smc_unavailable")}
                 if name == "excursion":
                     # A discharge accumulator above the limit is battery assist under the
-                    # ruling of 2026-10-06: L1 discloses it (battery.assist).  This tree's
-                    # harvest copy still names it battery.accumulator_excursion; P3-HARV's
-                    # discloses it as assist (no accumulator code).  Both readings pass here.
+                    # ruling of 2026-10-06: L1 discloses it (battery.assist), and so does the
+                    # harvest copy (no accumulator code); neither excludes it.
                     self.assertIn("battery.assist", theirs)
+                    self.assertIn("battery.assist", found)
                     theirs.discard("battery.assist")
                     ours.discard("battery.accumulator_excursion")
                 self.assertEqual(ours, theirs)
@@ -2591,12 +2647,23 @@ class L1JournalFormatTests(unittest.TestCase):
 
     def test_joins_equal_l1s_own_join_on_l1s_bytes(self):
         physics = {"battery.member_span", "battery.unmeasured", "thermal.os_level_nonzero", "thermal.unmeasured",
-                   "contention.request_overlap", "contention.unmeasured", "clock.step_overlap", "clock.unmeasured"}
+                   "contention.request_overlap", "contention.unmeasured", "clock.step_overlap", "clock.unmeasured",
+                   "battery.assist"}
         for name, case in sorted(self.expected["cases"].items()):
             with self.subTest(name):
                 span = case["span"]["monotonic_ns"]
                 request = (case["request"] or case["span"])["monotonic_ns"]
-                self.assertEqual(self.l5_codes(span, request) & physics, set(case["l1_codes"]) & physics)
+                # The recorded excursion is the -447 mA discharge (publication 3): L1's
+                # recorded join named it battery.member_span; under the battery-assist
+                # ruling (2026-10-06) the harvest discloses it as battery.assist.
+                expected = {"battery.assist" if code == "battery.member_span" else code for code in case["l1_codes"]}
+                if name == "contention_burst":
+                    # L1's in-force rule also takes the first publication after
+                    # the span; that -447 mA snapshot was taken 35 s after the
+                    # span ended, so it is no evidence about the span's current
+                    # and assists nothing in it (review F3).
+                    expected.discard("battery.assist")
+                self.assertEqual(self.l5_codes(span, request) & physics, expected & physics)
         # The cases cover each rule firing at least once.
         fired = set().union(*(case["l1_codes"] for case in self.expected["cases"].values()))
         self.assertTrue({"battery.member_span", "contention.request_overlap", "thermal.os_level_nonzero",
@@ -3363,8 +3430,19 @@ class CaptureBatteryTests(WindowTestCase):
     def capture(pair, span):
         return {"pre-attempt": {"slot": "pre", "battery_pair": pair, "span": span}}
 
-    def test_out_of_float_over_the_capture_removes_the_window(self):
+    def test_discharge_alone_over_the_capture_is_disclosed(self):
+        """Battery-assist ruling item 4: a discharge-only excursion over a capture is never an exclusion."""
         readings = battery_journal([(0, {}), (60, {"instant_amperage_ma": -447}), (120, {}), (180, {})])
+        span = [publication_ns(70), publication_ns(100)]
+        for pair in ("pass", "battery_float_evidence_missing"):
+            with self.subTest(pair=pair):
+                emitted, errors = self.join(self.capture(pair, span), readings)
+                self.assertEqual([code for code, _ in emitted], ["calibration.capture_battery_assist"])
+                self.assertTrue(emitted[0][1]["observed"]["request_assist"])
+                self.assertEqual(errors, [])
+
+    def test_out_of_float_over_the_capture_removes_the_window(self):
+        readings = battery_journal([(0, {}), (60, {"instant_amperage_ma": 447}), (120, {}), (180, {})])
         span = [publication_ns(70), publication_ns(100)]
         for pair in ("pass", "battery_float_evidence_missing"):
             with self.subTest(pair=pair):
@@ -3544,10 +3622,7 @@ def neg8_corpus_in_process(window: "Window", failed=()) -> dict:
     the driver write them.
     """
     for bundle_id in CORPUS_IDS:
-        put(window.bound / bundle_id / "config.json", {"run_id": bundle_id})
-        put(window.bound / bundle_id / "metadata.json", {"run_id": bundle_id})
-        put(window.bound / bundle_id / "summary_metrics.json",
-            {"status": "failed" if bundle_id in failed else "succeeded"})
+        put_corpus_stub(window.bound / bundle_id, bundle_id, "failed" if bundle_id in failed else "succeeded")
     night = window.custody / "night"
     collected = night / "transcript" / b5_chain.NEG8_COLLECTED_MANIFEST
     summary = night / "transcript" / b5_chain.NEG8_COLLECTED_SUMMARY
