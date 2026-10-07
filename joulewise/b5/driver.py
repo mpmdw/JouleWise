@@ -14,15 +14,20 @@ Inside the launchd job, after t0, this branch runs:
    into both runs roots;
 4. the executed-file inventory of the measurement checkout (local reads only);
 5. the hazard monitor (``scripts/hazard_monitor.py``) in its own process group
-   under ``taskpolicy -b``; a one-second supervision pass restarts it if it dies;
+   under ``taskpolicy -b``; a one-second supervision pass restarts it if it dies.
+   Then the KM003C wall meter (``scripts/km003c_monitor.py``, plain QoS), a
+   disclosed diagnostic supervised the same way except that its exit 0 (meter
+   absent) is final; it never refuses or stops the window;
 6. the chain, launched once through the driver's no-pack path
    (``_claim_chain_start`` / ``_run_chain_once`` / ``_WindowDeadline`` /
    ``_terminate_process_group``), with the in-chain agent census kept as an
    abort and a driver stop when free disk falls under the in-window floor;
 7. G10 (``scripts/g10_clock_step_control.py``) when the plan asks for it, after
    the chain's process group is proven gone, with the monitor still journaling;
-8. the monitor stop, then the terminal records (``night/hazard_result.json``,
-   ``night/result.json``) and the structure-only courier.
+8. the monitor and meter stop (SIGTERM to each group, proven gone), no sooner
+   than ``MONITOR_POST_CHAIN_HOLD_S`` after the chain returned, then the
+   terminal records (``night/hazard_result.json``, ``night/result.json``) and
+   the structure-only courier.
 
 Facts that are not physics -- the chain's bytes against its sidecar, the OFF
 setter's wording, a lineage publication failure, a disk stop -- are written as
@@ -104,6 +109,15 @@ MONITOR_RAPID_EXIT_S = 30.0
 MONITOR_OUTAGE_S = 600.0
 MONITOR_LIVENESS_CHECK_S = 10.0
 MONITOR_JOURNAL_DIR = ("hazards", "monitor")
+# P3-DRV (mock rehearsal R3-5): the hazard monitor and the meter are stopped no
+# sooner than this after the chain returns, so the 1 Hz SMC battery reads cover
+# the end of the post capture (the battery join needs a read at most
+# battery.SMC_MAX_GAP_S = 5 s after the span it judges).
+MONITOR_POST_CHAIN_HOLD_S = 5.0
+# The KM003C wall meter (scripts/km003c_monitor.py; WIRING.md): a disclosed
+# diagnostic supervised like the monitor. It never refuses or stops a window.
+METER_NAME = "meter"
+METER_STREAM_DIR = ("hazards", "meter")
 # PLAN2 row 9 (interim): one publication retry, then both locators re-read.
 LINEAGE_RETRY_S = 5.0
 # PLAN2 yield tripwire (section 2.2).
@@ -126,6 +140,7 @@ COLLECTORS_RECORD = "arm_collectors.json"
 INVENTORY_RECORD = "executed_inventory.json"
 LINEAGE_RECORD = "lineage.json"
 MONITOR_JOURNAL = "monitor_supervision.jsonl"
+METER_JOURNAL = "meter_supervision.jsonl"
 G10_RECORD = "g10.json"
 G10_DRIVER_RECORD = "g10.driver.json"
 DRIVER_FLAGS = "driver.jsonl"
@@ -441,6 +456,8 @@ class Seams:
     emit_flag: Callable[[Path, Mapping[str, Any]], None] = _emit_flag_production
     boot_session_uuid: Callable[[], str | None] = _boot_session_uuid
     verify_lineage: Callable[[LineageRequest], Mapping[str, Any]] = _production_lineage_check
+    # The KM003C wall meter's command line; None runs the window without it.
+    meter_argv: Callable[[MonitorRequest], Sequence[str]] | None = None
 
 
 _STATUS_ORDER = {PASS: 0, "NOT_EVALUATED": 1, UNMEASURED: 2, REFUSE: 3}
@@ -619,8 +636,55 @@ def production_seams(repo_root: Path) -> Seams:
         return [sys.executable, "-B", str(repo_root / "scripts/g10_clock_step_control.py"),
                 "--night-dir", str(night_dir), "--t-stream-max-s", repr(float(t_stream_max_s))]
 
+    def meter_argv(request: MonitorRequest) -> list[str]:
+        """The meter's command line; a new create-once stream file per (re)start.
+
+        Plain QoS, no ``taskpolicy -b``: the 2026-10-06 probe found 200 ms
+        polls clean at plain QoS and rejected the background configuration.
+        """
+
+        out_dir = Path(request.custody_root).joinpath(*METER_STREAM_DIR)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        return [sys.executable, "-B", str(repo_root / "scripts/km003c_monitor.py"),
+                "--out", str(next_meter_stream(out_dir))]
+
     return Seams(arm=_production_arm, publish_lineage=_production_lineage,
-                 monitor_argv=monitor_argv, collectors_argv=collectors_argv, g10_argv=g10_argv)
+                 monitor_argv=monitor_argv, collectors_argv=collectors_argv, g10_argv=g10_argv,
+                 meter_argv=meter_argv)
+
+
+def next_meter_stream(out_dir: Path) -> Path:
+    """The first ``stream-NNN.jsonl`` not yet in ``out_dir`` (the meter's ``--out`` is create-once)."""
+
+    index = 1
+    while (Path(out_dir) / f"stream-{index:03d}.jsonl").exists():
+        index += 1
+    return Path(out_dir) / f"stream-{index:03d}.jsonl"
+
+
+def meter_streams(custody: Path, *, digests: bool) -> list[dict[str, Any]]:
+    """The meter's stream files in custody: path, header status and (once stopped) SHA-256.
+
+    Structure only. The stream bytes (power samples) stay in custody, where
+    the harvest archives them with the rest of the custody root.
+    """
+
+    rows: list[dict[str, Any]] = []
+    custody = Path(custody)
+    for path in sorted(custody.joinpath(*METER_STREAM_DIR).glob("stream-*.jsonl")):
+        status = None
+        try:
+            with path.open("rb") as handle:
+                header = json.loads(handle.readline() or b"null")
+            if isinstance(header, dict) and header.get("k") == "h" and isinstance(header.get("status"), str):
+                status = header["status"]
+        except (OSError, ValueError):
+            status = None
+        row: dict[str, Any] = {"path": path.relative_to(custody).as_posix(), "status": status}
+        if digests:
+            row["sha256"] = _sha256_file(path)
+        rows.append(row)
+    return rows
 
 
 # --------------------------------------------------------------------------
@@ -676,16 +740,29 @@ def normalize_decision(raw: Any) -> dict[str, Any]:
 
 
 class MonitorSupervisor:
-    """Start, supervise and stop the hazard monitor in its own process group."""
+    """Start, supervise and stop a monitor process in its own process group.
+
+    ``name`` names its journal (``<name>_supervision.jsonl``) and logs
+    (``<name>.stdout.log``, ``<name>.stderr.log``) under the night directory;
+    the default is the hazard monitor's. With ``restart_on_clean_exit`` false
+    an exit with code 0 is final (the meter's recorded "absent" exit): it is
+    journaled and never restarted. A nonzero exit or a signal death is
+    restarted either way.
+    """
 
     def __init__(self, argv: Sequence[str] | Callable[[], Sequence[str]], *, night_dir: Path,
                  popen: Callable[..., Any],
                  group_census: Callable[[int, float], tuple[bool, list[str]]] | None = None,
-                 identity: Callable[[int], Any] | None = None) -> None:
+                 identity: Callable[[int], Any] | None = None, name: str = "monitor",
+                 restart_on_clean_exit: bool = True) -> None:
         self.argv_factory = argv if callable(argv) else (lambda: argv)
         self.argv: list[str] = []
         self.night_dir = Path(night_dir)
-        self.journal = self.night_dir / MONITOR_JOURNAL
+        self.name = name
+        self.journal = self.night_dir / f"{name}_supervision.jsonl"
+        self.restart_on_clean_exit = restart_on_clean_exit
+        self.final_exit: dict[str, Any] | None = None
+        self.last_start_error: str | None = None
         self.popen = popen
         self.group_census = group_census
         self.identity = identity
@@ -718,14 +795,15 @@ class MonitorSupervisor:
         self.last_attempt = time.monotonic()
         try:
             self.argv = [str(item) for item in self.argv_factory()]
-            with open(self.night_dir / "monitor.stdout.log", "ab") as out, \
-                    open(self.night_dir / "monitor.stderr.log", "ab") as err:
+            with open(self.night_dir / f"{self.name}.stdout.log", "ab") as out, \
+                    open(self.night_dir / f"{self.name}.stderr.log", "ab") as err:
                 process = self.popen(self.argv, stdin=subprocess.DEVNULL, stdout=out, stderr=err,
                                      start_new_session=True, close_fds=True)
         except Exception as error:  # noqa: BLE001 - recorded; the chain is never held for it
             self.start_failures += 1
             self.consecutive_failures += 1
-            self._record("start_failed", argv=self.argv, error=_error_text(error))
+            self.last_start_error = _error_text(error)
+            self._record("start_failed", argv=self.argv, error=self.last_start_error)
             if self.down_since is None:
                 self.down_since = stamp()
             return False
@@ -752,7 +830,7 @@ class MonitorSupervisor:
     def poll(self) -> None:
         """One supervision pass: observe an exit, restart when the interval allows."""
 
-        if self.stopped:
+        if self.stopped or self.final_exit is not None:
             return
         if self.process is not None:
             code = self.process.poll()
@@ -760,6 +838,13 @@ class MonitorSupervisor:
             if code is None:
                 if lived >= MONITOR_RAPID_EXIT_S:
                     self.consecutive_failures = 0
+                return
+            if code == 0 and not self.restart_on_clean_exit:
+                self.final_exit = {"pid": self.process.pid, "returncode": code, "at": stamp(),
+                                   "lived_s": round(lived, 3), "final": True}
+                self.exits.append(self.final_exit)
+                self._record("exit", pid=self.process.pid, returncode=code, lived_s=round(lived, 3), final=True)
+                self.process = None
                 return
             self.exits.append({"pid": self.process.pid, "returncode": code, "at": stamp(),
                                "lived_s": round(lived, 3)})
@@ -855,10 +940,13 @@ class MonitorSupervisor:
         return self.summary()
 
     def summary(self) -> dict[str, Any]:
-        return {"schema": MONITOR_JOURNAL_SCHEMA, "argv": self.argv, "starts": self.starts,
-                "restarts": max(0, self.starts - 1), "start_failures": self.start_failures,
-                "exits": self.exits, "gaps": self.gaps, "stop": self.stop_record,
-                "journal": MONITOR_JOURNAL, "errors": self.errors, "crash_loop": self.crash_loop}
+        summary = {"schema": MONITOR_JOURNAL_SCHEMA, "argv": self.argv, "starts": self.starts,
+                   "restarts": max(0, self.starts - 1), "start_failures": self.start_failures,
+                   "exits": self.exits, "gaps": self.gaps, "stop": self.stop_record,
+                   "journal": self.journal.name, "errors": self.errors, "crash_loop": self.crash_loop}
+        if not self.restart_on_clean_exit:
+            summary["final_exit"] = self.final_exit
+        return summary
 
 
 class DiskFloor:
@@ -2038,6 +2126,69 @@ def run_hazard_night(rt: Any, plan_path: Path, plan: Any, probes: Any, initial_c
                       f"{MONITOR_READY_TRIES} starts; the instrument is not sampling",
                       {"attempts": readiness}, fault_reasons=("instrument_not_sampling",))
     liveness = MonitorLiveness(journal_dir)
+
+    # 5b. The KM003C wall meter (WIRING.md), supervised like the monitor but
+    # never awaited and never a refusal: an absent meter exits 0 once and is
+    # not restarted; its supervision failures are DISCLOSE flags.
+    meter: MonitorSupervisor | None = None
+    meter_faults: set[str] = set()
+
+    def meter_fault(event: str, observed: Mapping[str, Any]) -> None:
+        if event in meter_faults:
+            return
+        meter_faults.add(event)
+        window.flag("meter.supervision_fault", "DIAGNOSTIC", "PHYSICS", stage="window",
+                    observed={"event": event, **observed},
+                    detail="the wall-meter process could not be supervised as planned (" + event + "); the "
+                           "meter is a disclosed diagnostic and collection went on")
+
+    if seams.meter_argv is not None:
+        meter_argv = seams.meter_argv
+        meter = MonitorSupervisor(
+            lambda: meter_argv(monitor_request), night_dir=night, popen=seams.popen,
+            group_census=getattr(rt, "_group_census", None), identity=getattr(rt, "observe_identity", None),
+            name=METER_NAME, restart_on_clean_exit=False)
+        meter.on_crash_loop = lambda details: meter_fault("crash_loop", details)
+        meter.start()
+
+    def meter_records() -> None:
+        """Disclose what the meter's supervisor recorded and never flagged (Sol review F2, F3).
+
+        Any failed start (the first or a restart in ``poll``) is a
+        ``start_failed`` event. Anything in the supervisor's ``errors`` (a
+        failed journal append, which is the dead-man's locator for an orphaned
+        meter, or a failed crash-loop callback) is a ``record_failed`` event.
+        Each is flagged once.
+        """
+
+        if meter is None:
+            return
+        if meter.start_failures:
+            meter_fault("start_failed", {"error": meter.last_start_error, "start_failures": meter.start_failures})
+        if meter.errors:
+            meter_fault("record_failed", {"errors": list(meter.errors[:3]), "count": len(meter.errors)})
+
+    def poll_meter() -> None:
+        if meter is not None:
+            meter.poll()
+            meter_records()
+
+    meter_records()
+
+    def stop_meter(*, left_running: bool = False) -> dict[str, Any] | None:
+        if meter is None:
+            return None
+        if left_running:
+            meter_records()
+            return {**meter.summary(), "left_running": True, "streams": meter_streams(custody, digests=False)}
+        summary = meter.stop()
+        meter_records()
+        stop_record = summary.get("stop") or {}
+        if not stop_record.get("proven_stopped"):
+            meter_fault("not_proven_stopped", {"returncode": stop_record.get("returncode"),
+                                               "group_absent": stop_record.get("group_absent")})
+        return {**summary, "streams": meter_streams(custody, digests=True)}
+
     thresholds = plan.hazard_window["thresholds"].get("disk", {})
     low = thresholds.get("low_bytes", DISK_LOW_BYTES_DEFAULT) if isinstance(thresholds, Mapping) else DISK_LOW_BYTES_DEFAULT
     disk = DiskFloor([Path(roots["claim"]), Path(roots["bound"]), custody], int(low), seams.disk_free_bytes,
@@ -2080,6 +2231,8 @@ def run_hazard_night(rt: Any, plan_path: Path, plan: Any, probes: Any, initial_c
 
     def supervise() -> dict[str, Any] | None:
         guarded("monitor", monitor.poll)
+        if meter is not None:
+            guarded("meter", poll_meter)
         reading = guarded("disk", disk.check)
         if reading is not None:
             window.flag("disk.low", "DIAGNOSTIC", "PHYSICS", stage="window",
@@ -2124,6 +2277,8 @@ def run_hazard_night(rt: Any, plan_path: Path, plan: Any, probes: Any, initial_c
     claim = rt._claim_chain_start(night)
     if claim is None:
         hazard["monitor"] = monitor.stop()
+        if meter is not None:
+            hazard["meter"] = stop_meter()
         return refuse("launch", rt._CODES["chain_already_started"],
                       "chain.started already exists; the night chain is once-only", None)
     exit_code: int | None = None
@@ -2139,6 +2294,8 @@ def run_hazard_night(rt: Any, plan_path: Path, plan: Any, probes: Any, initial_c
         abort = rt._refusal_mapping(rt._CODES["chain_alive"],
                                     f"the driver's chain supervision raised {_error_text(error)}", None)
         proven = False
+    # The chain exited no later than this instant (R3-5: the monitor stop is held from here).
+    chain_returned = stamp()
     started = (night / "chain.started").exists()
     journal = b5_chain.stage_journal(night)
     hazard["chain"].update(exit_code=exit_code, started=started, termination_proven=proven,
@@ -2175,15 +2332,38 @@ def run_hazard_night(rt: Any, plan_path: Path, plan: Any, probes: Any, initial_c
                                     "chain termination not proven" if not proven else
                                     "chain stopped by the driver")}
 
-    # 8. The monitor stops only once the chain's process group is proven gone;
-    # otherwise it keeps journaling and the dead-man stops it after its own proof.
+    # 8. The monitor (and the meter) stop only once the chain's process group is
+    # proven gone, and no sooner than MONITOR_POST_CHAIN_HOLD_S after the chain
+    # returned (R3-5: the SMC battery reads must cover the end of the post
+    # capture); otherwise they keep journaling and the dead-man stops them
+    # after its own proof.
     if proven or not started:
+        if started:
+            hazard["monitor_stop"] = hold_monitors_after_chain(
+                chain_returned, lambda: (guarded("monitor", monitor.poll),
+                                         meter is not None and guarded("meter", poll_meter)))
         hazard["monitor"] = monitor.stop()
+        if started:
+            hazard["monitor_stop"]["monitor_stop_requested"] = (hazard["monitor"].get("stop") or {}).get("requested")
+        if meter is not None:
+            hazard["meter"] = stop_meter()
     else:
         window.note("chain termination not proven: the hazard monitor is left running for the dead-man")
         hazard["monitor"] = {**monitor.summary(), "left_running": True}
+        if meter is not None:
+            hazard["meter"] = stop_meter(left_running=True)
     hazard["disk_floor"] = {"low_bytes": disk.low_bytes, "stops": disk.readings, "errors": disk.errors}
     chain_stop = next((row for row in journal if row.get("stage_id") == "chain.stop"), None)
+    # The chain's stop exits (10/11/12) come only from its stop_chain, which
+    # journals chain.stop first. A stop exit whose journal line is missing (an
+    # append that failed) is still a stop, never a GO: the exit code names it.
+    stop_kinds = {code: kind for kind, code in b5_chain.STOP_EXITS.items()}
+    if chain_stop is None and abort is None and started and exit_code in stop_kinds:
+        chain_stop = {"stage_id": "chain.stop", "kind": stop_kinds[exit_code], "rc": exit_code,
+                      "source": "exit_code"}
+        hazard["chain"]["stop_from_exit_code"] = chain_stop
+        window.note(f"the chain exited {exit_code} ({stop_kinds[exit_code]}) without a chain.stop journal "
+                    "line; the window is recorded as CHAIN_STOPPED from the exit code")
     stage_reached = "chain"
     yield_status = yield_record.get("yield_status")
     if abort is not None:
@@ -2250,7 +2430,7 @@ def run_hazard_night(rt: Any, plan_path: Path, plan: Any, probes: Any, initial_c
         "chain_exit_code": exit_code,
         "termination_proven": proven, "census_count": census_count, "arm_verdicts": decision["verdicts"],
         "stages_total": len(stages), "stages_nonzero": sum(1 for row in stages if row.get("rc") not in (0, None)),
-        "chain_stop": next((row.get("kind") for row in stages if row.get("stage_id") == "chain.stop"), None),
+        "chain_stop": chain_stop.get("kind") if chain_stop is not None else None,
         "g10_ran": hazard["g10"].get("ran"), "g10_returncode": hazard["g10"].get("returncode"),
         "monitor_restarts": hazard["monitor"]["restarts"], "flags": sorted(set(window.flags)),
         "yield_line": yield_line, "yield_status": yield_status,
@@ -2278,6 +2458,31 @@ def run_hazard_night(rt: Any, plan_path: Path, plan: Any, probes: Any, initial_c
     return rt._finish_reporting(custody, night, plan, report["base_exit_code"], courier,
                                 courier_error=courier_error, deadman_epoch_s=deadman, report=report,
                                 courier_bin_substitution=substitution, allow_courier=courier is not None)
+
+
+def hold_monitors_after_chain(chain_returned: Mapping[str, Any], poll: Callable[[], Any], *,
+                              hold_s: float | None = None) -> dict[str, Any]:
+    """Wait until ``hold_s`` (MONITOR_POST_CHAIN_HOLD_S) has passed since the chain returned.
+
+    ``chain_returned`` is the driver's stamp taken when the chain supervision
+    returned, which is no earlier than the chain's exit, so a stop after the
+    hold is at least ``hold_s`` after the exit. ``poll`` keeps the supervisors
+    respawning about once a second while waiting. Returns the record kept in
+    ``hazard_result.json`` under ``monitor_stop``.
+    """
+
+    hold = MONITOR_POST_CHAIN_HOLD_S if hold_s is None else float(hold_s)
+    start_ns = int(chain_returned["monotonic_ns"])
+    deadline_ns = start_ns + int(hold * 1e9)
+    while True:
+        remaining = (deadline_ns - time.monotonic_ns()) / 1e9
+        if remaining <= 0:
+            break
+        poll()
+        time.sleep(min(1.0, max(remaining, 0.0)))
+    released = stamp()
+    return {"chain_returned": dict(chain_returned), "hold_s": hold, "released": released,
+            "released_after_chain_s": round((released["monotonic_ns"] - start_ns) / 1e9, 3)}
 
 
 def _run_g10(window: _Window, night: Path, t_stream_max_s: float) -> dict[str, Any]:
@@ -2363,15 +2568,18 @@ def dry_arm(rt: Any, plan_path: Path, plan: Any, probes: Any, initial_census: tu
     return 0 if record["verdict"] == "GO" else rt.EXIT_REFUSED
 
 
-def reap_orphan_monitor(night_dir: Path, *, identity: Callable[[int], Any] | None = None) -> dict[str, Any] | None:
+def reap_orphan_monitor(night_dir: Path, *, identity: Callable[[int], Any] | None = None,
+                        journal: str = MONITOR_JOURNAL) -> dict[str, Any] | None:
     """Dead-man helper: stop a monitor group the driver started and never proved stopped.
 
-    The group is signalled only when its leader is still the process the
-    journal recorded (same start time), so a reused pid is never touched.
+    ``journal`` names the supervision journal: the hazard monitor's by
+    default, ``METER_JOURNAL`` for the wall meter. The group is signalled only
+    when its leader is still the process the journal recorded (same start
+    time), so a reused pid is never touched.
     """
 
     try:
-        lines = (Path(night_dir) / MONITOR_JOURNAL).read_text(encoding="utf-8").splitlines()
+        lines = (Path(night_dir) / journal).read_text(encoding="utf-8").splitlines()
     except (OSError, UnicodeError):
         return None
     last_start, stopped = None, False
@@ -2385,6 +2593,11 @@ def reap_orphan_monitor(night_dir: Path, *, identity: Callable[[int], Any] | Non
         if event.get("event") in {"start", "restart"}:
             last_start, stopped = event, False
         elif event.get("event") == "stop" and event.get("proven_stopped"):
+            stopped = True
+        elif event.get("event") == "exit" and event.get("final") is True:
+            # A final exit (the meter's "absent" exit 0) ended the recorded
+            # process and nothing restarted it: there is no group to stop, and
+            # its pid may since have been reused (Sol review F1).
             stopped = True
     if last_start is None or stopped:
         return None

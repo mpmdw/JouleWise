@@ -198,6 +198,8 @@ class Harness:
         self.collectors_factory = lambda request: list(self.collector_argv)
         # A callable gets the MonitorRequest; a list is used as it is.
         self.monitor_argv = lambda request: fake_monitor_argv(request.custody_root)
+        # The wall meter's command line (a callable getting the MonitorRequest); None runs without it.
+        self.meter_argv = None
         self.lineage_valid = True
         self.g10_source = ("import json, pathlib, sys; night = pathlib.Path(sys.argv[1]); "
                            "journal = (night / 'monitor_supervision.jsonl').read_text(); "
@@ -213,6 +215,12 @@ class Harness:
         patcher = mock.patch.dict(os.environ, {"HOME": str(self.home)})
         patcher.start()
         test.addCleanup(patcher.stop)
+        if hasattr(b5_driver, "MONITOR_POST_CHAIN_HOLD_S"):
+            # R3-5's 5 s post-chain hold is exercised by its own tests; here it
+            # would only add 5 s to every window.
+            hold = mock.patch.object(b5_driver, "MONITOR_POST_CHAIN_HOLD_S", 0.0)
+            hold.start()
+            test.addCleanup(hold.stop)
         home = mock.patch.object(Path, "home", return_value=self.home)
         home.start()
         test.addCleanup(home.stop)
@@ -239,8 +247,11 @@ class Harness:
 
     def seams(self):
         extra = {}
-        if "verify_lineage" in {field.name for field in dataclasses.fields(b5_driver.Seams)}:
+        fields = {field.name for field in dataclasses.fields(b5_driver.Seams)}
+        if "verify_lineage" in fields:
             extra["verify_lineage"] = self.verify_lineage
+        if "meter_argv" in fields and self.meter_argv is not None:
+            extra["meter_argv"] = self.meter_argv
         return b5_driver.Seams(
             arm=self.arm, publish_lineage=self.publish_lineage,
             monitor_argv=lambda request: (self.monitor_argv(request) if callable(self.monitor_argv)

@@ -648,6 +648,12 @@
       "family": "DIAGNOSTIC",
       "klass": "PHYSICS"
     },
+    "meter.supervision_fault": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "PHYSICS"
+    },
     "meter.vbus_out_of_contract": {
       "blinding": "STRUCTURE",
       "effect": "DISCLOSE",
