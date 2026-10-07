@@ -44,6 +44,22 @@ through ``runtime.prepare``, which this program must not do. So:
   transformers versions and the same ``platform.platform()`` as that
   interpreter reports now, or the stack would be stale; otherwise it refuses.
 
+The NEG-8 reference workload (unit ``neg8_reference``)
+--------------------------------------------------------
+Every NEG-8 window reference (start, midpoint, end) and every spare runs one
+reference workload (Qwen2.5-1.5B, ``configs/campaigns/window_references_v5`` and
+``window_reference_spares_v5``); the harvest compares each of them with this
+unit's pin (``harvest.NEG8_REFERENCE_IDENTITY_UNIT``, audit A2; orchestrator
+call 2026-10-07: the pin is sealed, not left to a majority). It is derived the
+same way as a pack unit: all its committed configs must name one model,
+quantization and target and run under one output policy; the runtime stack
+comes from real NEG-8 reference bundles under the block-5 runtime (the
+real-model rehearsal of 2026-10-06, ``DEFAULT_NEG8_REFERENCE_ROOTS``), which
+must pass the same runtime-environment check. The model artifact digest the
+bundles recorded must also equal every frozen pin of the same model source and
+revision in the committed plan trees (``NEG8_REFERENCE_PANEL_TREES``), so it is
+never taken from the bundles alone.
+
 The file is a draft: ``status`` is ``UNSEALED_DRAFT`` until the seal replaces
 it. Nothing here arms, installs, launches, or loads a model.
 
@@ -107,6 +123,21 @@ DEFAULT_PACKS = (
 DEFAULT_REFERENCE_ROOTS = (
     "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261004T1305Z-r2/g2a-root/runs",
 )
+# The NEG-8 reference workload (unit NEG8_REFERENCE_UNIT): its committed configs
+# (every *.json but order manifests, recursively) and real bundles of it under
+# the block-5 runtime (the real-model rehearsal of 2026-10-06, its harvest archive).
+NEG8_REFERENCE_UNIT = "neg8_reference"  # joulewise.b5.harvest.NEG8_REFERENCE_IDENTITY_UNIT
+NEG8_REFERENCE_CONFIG_DIRS = ("configs/campaigns/window_references_v5",
+                              "configs/campaigns/window_reference_spares_v5")
+DEFAULT_NEG8_REFERENCE_ROOTS = (
+    "/Users/edr/night-archive/gate-prune/rehearsal-real/alpha-1/archive/sources/claim-runs",
+    "/Users/edr/night-archive/gate-prune/rehearsal-real/gamma-2/archive/sources/claim-runs",
+)
+NEG8_REFERENCE_RUN_PREFIX = "neg8-window-"
+# Committed plan trees whose frozen identity projection pins the same model
+# (Qwen2.5-1.5B at the same revision): the reference digest must equal them.
+NEG8_REFERENCE_PANEL_TREES = ("configs/campaigns/d117_floor_qwen25_1p5b_v1/plan_tree.json",
+                              "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v1/plan_tree.json")
 # The measurement interpreter: the chain runs <checkout>/.venv/bin/python.
 DEFAULT_RUNTIME_PYTHON = "/Users/edr/code/JouleWise/.venv/bin/python"
 
@@ -381,10 +412,53 @@ def _artifact_digest(identity: Mapping[str, Any]) -> str | None:
     return identity.get("sha256") or identity.get("folded_sha256")
 
 
+def load_neg8_reference_unit(repo_root: Path, config_dirs: Sequence[str]) -> Unit:
+    """The NEG-8 reference workload as an identity unit: every committed reference and spare config."""
+
+    configs = []
+    for directory in config_dirs:
+        root = repo_root / directory
+        _require(root.is_dir(), f"NEG-8 reference config directory {directory} is missing")
+        for path in sorted(root.rglob("*.json")):
+            if path.name == "order_manifest.json":
+                continue
+            config, raw = _read_json(path, "NEG-8 reference config")
+            _require(isinstance(config, Mapping), f"{path} is not a JSON object")
+            configs.append((path.relative_to(repo_root).as_posix(), config, sha256_bytes(raw)))
+    _require(bool(configs), "no NEG-8 reference config was found")
+    model = configs[0][1].get("model") or {}
+    declared = {"model_source": model.get("source"), "model_revision": model.get("revision")}
+    return Unit("window_references_v5", NEG8_REFERENCE_UNIT, declared, tuple(configs), {})
+
+
+def panel_model_pins(repo_root: Path, trees: Sequence[str], source: str, revision: str) -> set[str]:
+    """Frozen model pins of ``source`` at ``revision`` in committed plan trees' identity projections."""
+
+    pins = set()
+    for relative in trees:
+        tree, _raw = _read_json(repo_root / relative, "model panel plan tree")
+        projection = ((tree.get("arm_attachments") or {}).get("identity_pin_projection") or {}) \
+            if isinstance(tree, Mapping) else {}
+        for unit in projection.get("identity_units") or []:
+            declared = unit.get("declared_identity") or {}
+            pinned = (unit.get("model_runtime_config") or {}).get("model_artifact_sha256")
+            if declared.get("model_source") == source and declared.get("model_revision") == revision and pinned:
+                pins.add(pinned)
+    return pins
+
+
 def derive_document(*, repo_root: Path, packs: Sequence[Path], reference_roots: Sequence[Path],
                     runtime_probe: Mapping[str, Any], runtime_python: str,
-                    local_artifact: Callable[[str], Mapping[str, Any]] | None = None) -> dict[str, Any]:
-    """The pins document. ``runtime_probe`` is :func:`probe_runtime`'s result; tests pass a fixed one."""
+                    local_artifact: Callable[[str], Mapping[str, Any]] | None = None,
+                    neg8_reference_roots: Sequence[Path] = (),
+                    neg8_reference_config_dirs: Sequence[str] = NEG8_REFERENCE_CONFIG_DIRS,
+                    neg8_reference_panel_trees: Sequence[str] = NEG8_REFERENCE_PANEL_TREES) -> dict[str, Any]:
+    """The pins document. ``runtime_probe`` is :func:`probe_runtime`'s result; tests pass a fixed one.
+
+    With ``neg8_reference_roots`` the document also carries the unit
+    ``NEG8_REFERENCE_UNIT``, whose runtime stack comes from those roots'
+    ``neg8-window-*`` bundles only (the pack units keep their own references).
+    """
 
     versions = dict(runtime_probe["versions"])
     references, skipped = load_references(reference_roots)
@@ -395,60 +469,77 @@ def derive_document(*, repo_root: Path, packs: Sequence[Path], reference_roots: 
     pack_sources = []
     used: dict[str, Reference] = {}
     local_checks: dict[str, str] = {}
+    work: list[tuple[Unit, Sequence[Reference]]] = []
     for pack in packs:
         units, source = load_pack_units(pack, repo_root)
         pack_sources.append(source)
-        for unit in units:
-            where = f"{unit.pack_id} unit {unit.unit_id}"
-            _require(unit.unit_id not in units_out, f"{where}: identity unit id is also declared by another pack")
-            keys = {canonical_json_sha256(stack_relevant_config(config, f"{where} {path}")): path
+        work.extend((unit, references) for unit in units)
+    if neg8_reference_roots:
+        neg8_references, neg8_skipped = load_references(neg8_reference_roots)
+        skipped = skipped + neg8_skipped
+        neg8_references = [reference for reference in neg8_references
+                           if reference.run_id.startswith(NEG8_REFERENCE_RUN_PREFIX)]
+        _require(bool(neg8_references), "no NEG-8 reference bundle with a derivable stack identity was found")
+        check_runtime_environment(neg8_references, {**versions, "platform": runtime_probe.get("platform"),
+                                                    "machine": runtime_probe.get("machine")})
+        work.append((load_neg8_reference_unit(repo_root, neg8_reference_config_dirs), neg8_references))
+    for unit, unit_references in work:
+        where = f"{unit.pack_id} unit {unit.unit_id}"
+        _require(unit.unit_id not in units_out, f"{where}: identity unit id is also declared by another pack")
+        keys = {canonical_json_sha256(stack_relevant_config(config, f"{where} {path}")): path
+                for path, config, _digest in unit.configs}
+        _require(len(keys) == 1, f"{where}: its configs name more than one model, quantization or target")
+        key = stack_relevant_config(unit.configs[0][1], where)
+        declared = unit.declared
+        _require(declared.get("model_source") == key["model"]["source"]
+                 and declared.get("model_revision") == key["model"]["revision"],
+                 f"{where}: the configs' model differs from the unit's declared identity")
+        policies = {canonical_json_sha256(predicted_output_policy(config, repo_root, f"{where} {path}")): path
                     for path, config, _digest in unit.configs}
-            _require(len(keys) == 1, f"{where}: its configs name more than one model, quantization or target")
-            key = stack_relevant_config(unit.configs[0][1], where)
-            declared = unit.declared
-            _require(declared.get("model_source") == key["model"]["source"]
-                     and declared.get("model_revision") == key["model"]["revision"],
-                     f"{where}: the configs' model differs from the unit's declared identity")
-            policies = {canonical_json_sha256(predicted_output_policy(config, repo_root, f"{where} {path}")): path
-                        for path, config, _digest in unit.configs}
-            _require(len(policies) == 1, f"{where}: its configs run under more than one output policy")
-            policy = predicted_output_policy(unit.configs[0][1], repo_root, where)
-            invariant, matching = select_reference_stack(key, references, repo_root, where)
-            for reference in matching:
-                used[reference.run_id + "\0" + str(reference.path)] = reference
-            stack = copy.deepcopy(invariant)
-            stack["sampler_output_policy"]["output_policy"] = {name: policy[name] for name in OUTPUT_POLICY_KEYS}
-            _require(set(stack) == set(STACK_IDENTITY_FIELDS), f"{where}: stack identity fields are not the governed set")
-            model_sha256 = stack["model_artifact_sha256"]
-            runtime_sha256 = stack_identity_sha256(stack)
-            frozen_model = unit.frozen.get("model_artifact_sha256")
-            _require(frozen_model in (None, model_sha256),
-                     f"{where}: the plan tree's frozen model pin {frozen_model} differs from the bundles' {model_sha256}")
-            if local_artifact is not None:
-                source_path = key["model"]["source"]
-                if source_path not in local_checks:
-                    digest = _artifact_digest(local_artifact(source_path))
-                    _require(digest == model_sha256, f"{where}: the local model mirror {source_path} hashes to "
-                                                     f"{digest}, the reference bundles recorded {model_sha256}")
-                    local_checks[source_path] = digest
-            scientific = [scientific_config_identity_sha256(config) for _path, config, _digest in unit.configs]
-            units_out[unit.unit_id] = {
-                "model_artifact_sha256": model_sha256,
-                "runtime_identity_sha256": runtime_sha256,
-                "config_set_sha256": identity_unit_config_set_sha256(scientific),
-                "pack_id": unit.pack_id,
-                "model_name": key["model"]["name"],
-                "model_source": key["model"]["source"],
-                "model_revision": key["model"]["revision"],
-                "execution_path": "run_suite" if policy["stop_condition"] == SUITE_STOP_CONDITION else "run_workload",
-                "output_policy": {name: policy[name] for name in OUTPUT_POLICY_KEYS},
-                "config_count": len(unit.configs),
-                "config_inventory_sha256": canonical_json_sha256(
-                    [{"path": path, "sha256": digest} for path, _config, digest in unit.configs]),
-                "frozen_projection_runtime_identity_sha256": unit.frozen.get("runtime_identity_sha256"),
-                "reference_run_ids": sorted({reference.run_id for reference in matching}),
-                "stack_identity": stack,
-            }
+        _require(len(policies) == 1, f"{where}: its configs run under more than one output policy")
+        policy = predicted_output_policy(unit.configs[0][1], repo_root, where)
+        invariant, matching = select_reference_stack(key, unit_references, repo_root, where)
+        for reference in matching:
+            used[reference.run_id + "\0" + str(reference.path)] = reference
+        stack = copy.deepcopy(invariant)
+        stack["sampler_output_policy"]["output_policy"] = {name: policy[name] for name in OUTPUT_POLICY_KEYS}
+        _require(set(stack) == set(STACK_IDENTITY_FIELDS), f"{where}: stack identity fields are not the governed set")
+        model_sha256 = stack["model_artifact_sha256"]
+        runtime_sha256 = stack_identity_sha256(stack)
+        frozen_model = unit.frozen.get("model_artifact_sha256")
+        _require(frozen_model in (None, model_sha256),
+                 f"{where}: the plan tree's frozen model pin {frozen_model} differs from the bundles' {model_sha256}")
+        if unit.unit_id == NEG8_REFERENCE_UNIT:
+            panel = panel_model_pins(repo_root, neg8_reference_panel_trees, key["model"]["source"],
+                                     key["model"]["revision"])
+            _require(panel == {model_sha256},
+                     f"{where}: the committed model panel pins {sorted(panel)} for {key['model']['name']}, "
+                     f"the reference bundles recorded {model_sha256}")
+        if local_artifact is not None:
+            source_path = key["model"]["source"]
+            if source_path not in local_checks:
+                digest = _artifact_digest(local_artifact(source_path))
+                _require(digest == model_sha256, f"{where}: the local model mirror {source_path} hashes to "
+                                                 f"{digest}, the reference bundles recorded {model_sha256}")
+                local_checks[source_path] = digest
+        scientific = [scientific_config_identity_sha256(config) for _path, config, _digest in unit.configs]
+        units_out[unit.unit_id] = {
+            "model_artifact_sha256": model_sha256,
+            "runtime_identity_sha256": runtime_sha256,
+            "config_set_sha256": identity_unit_config_set_sha256(scientific),
+            "pack_id": unit.pack_id,
+            "model_name": key["model"]["name"],
+            "model_source": key["model"]["source"],
+            "model_revision": key["model"]["revision"],
+            "execution_path": "run_suite" if policy["stop_condition"] == SUITE_STOP_CONDITION else "run_workload",
+            "output_policy": {name: policy[name] for name in OUTPUT_POLICY_KEYS},
+            "config_count": len(unit.configs),
+            "config_inventory_sha256": canonical_json_sha256(
+                [{"path": path, "sha256": digest} for path, _config, digest in unit.configs]),
+            "frozen_projection_runtime_identity_sha256": unit.frozen.get("runtime_identity_sha256"),
+            "reference_run_ids": sorted({reference.run_id for reference in matching}),
+            "stack_identity": stack,
+        }
     reference_rows = sorted(({"run_id": reference.run_id, "path": str(reference.path),
                               "model_name": reference.config.get("model", {}).get("name"),
                               "config_sha256": reference.config_sha256,
@@ -460,7 +551,9 @@ def derive_document(*, repo_root: Path, packs: Sequence[Path], reference_roots: 
         "status": STATUS_UNSEALED,
         "sealed": False,
         "note": ("UNSEALED DRAFT. Generated by scripts/write_b5_identity_pins.py from the three _v5 packs' "
-                 "identity units, real block-3 reference bundles of the same models and the measurement "
+                 "identity units and the NEG-8 reference workload (unit neg8_reference), real reference bundles "
+                 "of the same models (block 3; for neg8_reference the real-model rehearsal of 2026-10-06, its "
+                 "model digest checked against the committed panel pins) and the measurement "
                  "interpreter's package versions; no model was loaded. The seal replaces status and binds "
                  "this file's SHA-256 (registration 12)."),
         "units": dict(sorted(units_out.items())),
@@ -512,6 +605,8 @@ def build_parser() -> argparse.ArgumentParser:
                         help="pack directory, relative to --repo (repeatable; default: the three _v5 packs)")
     parser.add_argument("--reference-root", action="append", type=Path, default=None,
                         help="directory of real bundles to take the runtime stack from (repeatable)")
+    parser.add_argument("--neg8-reference-root", action="append", type=Path, default=None,
+                        help="directory of real NEG-8 reference bundles for the neg8_reference unit (repeatable)")
     parser.add_argument("--runtime-python", default=DEFAULT_RUNTIME_PYTHON,
                         help="the measurement interpreter (package metadata and platform only)")
     parser.add_argument("--hash-local-models", action="store_true",
@@ -526,12 +621,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     repo = args.repo.resolve()
     packs = [repo / relative for relative in (args.pack or DEFAULT_PACKS)]
     roots = list(args.reference_root or [Path(root) for root in DEFAULT_REFERENCE_ROOTS])
+    neg8_roots = list(args.neg8_reference_root or [Path(root) for root in DEFAULT_NEG8_REFERENCE_ROOTS])
     out = args.out or (repo / DEFAULT_OUTPUT)
     try:
         probe = probe_runtime(args.runtime_python)
         document = derive_document(repo_root=repo, packs=packs, reference_roots=roots, runtime_probe=probe,
                                    runtime_python=args.runtime_python,
-                                   local_artifact=model_artifact_identity if args.hash_local_models else None)
+                                   local_artifact=model_artifact_identity if args.hash_local_models else None,
+                                   neg8_reference_roots=neg8_roots)
     except Exception as exc:  # noqa: BLE001 - every refusal is reported the same way
         print(f"REFUSED: {type(exc).__name__}: {exc}", file=sys.stderr)
         return 2

@@ -363,14 +363,38 @@ class CommittedDraft(unittest.TestCase):
                                      entry["stack_identity"]["sampler_output_policy"]["output_policy"])
                     self.assertEqual(stack_identity_sha256(entry["stack_identity"]), entry["runtime_identity_sha256"])
                     self.assertEqual(entry["stack_identity"]["model_artifact_sha256"], entry["model_artifact_sha256"])
-        self.assertEqual(seen, set(self.document["units"]))
+        self.assertEqual(seen | {W.NEG8_REFERENCE_UNIT}, set(self.document["units"]))
 
     def test_one_model_has_one_artifact_pin(self) -> None:
         by_source: dict[str, set[str]] = {}
         for entry in self.document["units"].values():
             by_source.setdefault(entry["model_source"], set()).add(entry["model_artifact_sha256"])
-        self.assertEqual(2, len(by_source))
+        self.assertEqual(3, len(by_source))  # Qwen3-1.7B, Qwen3-8B, the NEG-8 reference Qwen2.5-1.5B
         self.assertTrue(all(len(pins) == 1 for pins in by_source.values()))
+
+    def test_the_neg8_reference_unit_covers_every_reference_and_spare_config(self) -> None:
+        """Orchestrator call (2026-10-07): a sealed pin for the NEG-8 reference workload (audit A2's unit)."""
+        from joulewise.b5.harvest import NEG8_REFERENCE_IDENTITY_UNIT
+        self.assertEqual(W.NEG8_REFERENCE_UNIT, NEG8_REFERENCE_IDENTITY_UNIT)
+        entry = self.document["units"][W.NEG8_REFERENCE_UNIT]
+        unit = W.load_neg8_reference_unit(ROOT, W.NEG8_REFERENCE_CONFIG_DIRS)
+        configs = [config for _path, config, _digest in unit.configs]
+        self.assertEqual(20, len(configs))  # 3 + 1 + 3 references, 13 committed spares
+        self.assertEqual({"neg8-window-start-r1", "neg8-window-midpoint", "neg8-window-end-r3",
+                          "neg8-window-end-spare-3"} - {config["run_id"] for config in configs}, set())
+        self.assertEqual(identity_unit_config_set_sha256(map(scientific_config_identity_sha256, configs)),
+                         entry["config_set_sha256"])
+        self.assertEqual(("Qwen2.5-1.5B-Instruct-4bit", "run_workload"), (entry["model_name"], entry["execution_path"]))
+        self.assertEqual(W.predicted_output_policy(configs[0], ROOT), entry["output_policy"])
+        self.assertEqual(stack_identity_sha256(entry["stack_identity"]), entry["runtime_identity_sha256"])
+        # The digest is the committed panel's frozen pin of the same model and revision.
+        self.assertEqual({entry["model_artifact_sha256"]},
+                         W.panel_model_pins(ROOT, W.NEG8_REFERENCE_PANEL_TREES, entry["model_source"],
+                                            entry["model_revision"]))
+        # The rest of the stack is the pack units' runtime (same OS, MLX, hardware).
+        alpha = self.document["units"]["alpha"]["stack_identity"]
+        for field in ("os_version", "runtime_version", "hardware_unit", "measurement_boundary_label"):
+            self.assertEqual(alpha[field], entry["stack_identity"][field], field)
 
     @unittest.skipUnless(all(Path(root).is_dir() for root in W.DEFAULT_REFERENCE_ROOTS)
                          and Path(W.DEFAULT_RUNTIME_PYTHON).is_file(),

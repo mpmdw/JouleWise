@@ -1558,6 +1558,10 @@ class ReferenceModelIdentityTests(unittest.TestCase):
     identities; the references and spares carry ``A`` unless a case says
     otherwise.  Before the fix the spare's own ``.spares`` group had no pin and
     no sibling, so a spare of another model emitted no flag at all.
+
+    The committed pins carry a sealed ``neg8_reference`` pin since integration
+    (orchestrator call, 2026-10-07).  The majority cases remove it to test the
+    fallback; ``reference_pin="committed"`` keeps the committed one.
     """
 
     A, F = ("a" * 64, "b" * 64), ("f" * 64, "b" * 64)
@@ -1576,7 +1580,9 @@ class ReferenceModelIdentityTests(unittest.TestCase):
         repo, pack = _repo(), _repo() / "configs/campaigns" / self.PACK
         archive = Path(tmp.name) / "archive"
         pins = json.loads((repo / "configs/campaigns/v5_claim_25g83/identity_pins.json").read_bytes())
-        if reference_pin is not None:
+        if reference_pin is None:
+            pins["units"].pop(h.NEG8_REFERENCE_IDENTITY_UNIT, None)  # the majority fallback
+        elif reference_pin != "committed":
             pins["units"][h.NEG8_REFERENCE_IDENTITY_UNIT] = {"model_artifact_sha256": reference_pin[0],
                                                              "runtime_identity_sha256": reference_pin[1]}
         _hb().put(archive / "sources/inputs/identity_pins.json", pins)
@@ -1654,6 +1660,22 @@ class ReferenceModelIdentityTests(unittest.TestCase):
 
     def test_one_identity_everywhere_emits_nothing(self) -> None:
         self.assertEqual(self.run_identity(self.references()), [])
+
+    def test_the_committed_sealed_pin_is_the_expected_reference_identity(self) -> None:
+        import json
+        pins = json.loads((_repo() / "configs/campaigns/v5_claim_25g83/identity_pins.json").read_bytes())
+        sealed = pins["units"]["neg8_reference"]
+        expected = (sealed["model_artifact_sha256"], sealed["runtime_identity_sha256"])
+        # A majority on another identity than the sealed pin: every measured reference is a mismatch.
+        outvoted = self.member_flags(self.run_identity(self.references(), reference_pin="committed"))
+        self.assertEqual(set(outvoted.values()), {"model.identity_mismatch"})
+        self.assertEqual(len(outvoted), 7)  # start r2, r3, the spare, the midpoint, the end triplet
+        everywhere = {run_id: expected for run_id in self.references()}
+        self.assertEqual(self.run_identity(everywhere, reference_pin="committed"), [])
+        flags = self.run_identity({**everywhere, "neg8-window-start-spare-1": self.F}, reference_pin="committed")
+        self.assertEqual(self.member_flags(flags), {"neg8-window-start-spare-1": "model.identity_mismatch"})
+        (observed,) = [kwargs["observed"] for code, kwargs in flags if code == "model.identity_mismatch"]
+        self.assertEqual(observed["pin_source"], "sealed_pin")
 
 
 # ---------------------------------------------------------------------------
