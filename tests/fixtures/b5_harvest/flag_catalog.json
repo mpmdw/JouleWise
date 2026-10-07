@@ -138,6 +138,12 @@
       "family": "RECORDS",
       "klass": "REPRESENTATION"
     },
+    "census.journal_write_failed": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "RECORDS",
+      "klass": "REPRESENTATION"
+    },
     "census.unmeasured": {
       "blinding": "STRUCTURE",
       "effect": "DISCLOSE",
@@ -594,6 +600,12 @@
       "family": "DIAGNOSTIC",
       "klass": "PHYSICS"
     },
+    "monitor.outage": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "PHYSICS"
+    },
     "neg8.bound_not_derived": {
       "blinding": "STRUCTURE",
       "effect": "EXCLUDE_WINDOW",
@@ -625,6 +637,12 @@
       "klass": "NUMBER"
     },
     "records.arm_record_absent": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "RECORDS",
+      "klass": "REPRESENTATION"
+    },
+    "records.auxiliary_match_raised": {
       "blinding": "STRUCTURE",
       "effect": "DISCLOSE",
       "family": "RECORDS",
@@ -724,6 +742,12 @@
       "blinding": "STRUCTURE",
       "effect": "DISCLOSE",
       "family": "DIAGNOSTIC",
+      "klass": "REPRESENTATION"
+    },
+    "supervision.pass_failed": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "RECORDS",
       "klass": "REPRESENTATION"
     },
     "teardown.survivors": {

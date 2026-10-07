@@ -64,12 +64,14 @@ SECTION_5 = {
     # Gate-prune round 2, lane P2-RC.
     "member.timeout": ("MEMBER_VALIDITY", "NUMBER", EXCLUDE_MEMBER),
     "member.stderr_uncopied": ("MEMBER_VALIDITY", "NUMBER", EXCLUDE_MEMBER),
+    # Gate-prune round 2, lane P2-CTL (controller).
+    "calibration.refit_cache_miss": ("CALIBRATION", "REPRESENTATION", DISCLOSE),
+    "records.auxiliary_match_raised": ("RECORDS", "REPRESENTATION", DISCLOSE),
 }
 # Core codes whose consumer tables (DRAFT_CODES, the harvest's CODES and
-# CORE_WRITER_CODES, the fixture catalog) lane P2-HARV fills: until that lane
-# is merged only the core table is checked for them; once a table carries one,
-# the full cross-check applies to it.
-PRUNE2_CONSUMER_PENDING = frozenset({"roster.horizon_truncated", "member.retried"})
+# CORE_WRITER_CODES, the fixture catalog) were still to be filled by lane
+# P2-HARV.  Empty since integration int3: every core code is cross-checked in full.
+PRUNE2_CONSUMER_PENDING = frozenset()
 HARVEST_NONCORE_CODES = ("neg8.corpus_member_dropped", "calibration.capture_battery_span",
                          "calibration.capture_battery_unmeasured", "calibration.capture_invalid")
 # The protected-core files whose literal codes must be in CORE_FLAG_CODES.

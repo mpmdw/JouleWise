@@ -227,6 +227,17 @@ _PRUNE2_CODES = {
     "records.identity_unmeasured_superseded": _code("RECORDS", "REPRESENTATION", DISCLOSE),
     "thermal.stage_battery_rise": _code("DIAGNOSTIC", "PHYSICS", DISCLOSE),
     "thermal.battery_temperature_unmeasured": _code("DIAGNOSTIC", "PHYSICS", DISCLOSE),
+    # Registered at integration (int3).  P2-CTL: the external-member match raised
+    # (the refusal stands; its cause is recorded).  P2-DRV: a census journal
+    # append failed; a supervision step raised and the pass went on; the
+    # monitor wrote no battery or contention reading for the outage bound and
+    # the driver stopped the chain (PLAN2 row 11: a stop like disk.low, which
+    # is DISCLOSE; the members in the silent stretch carry battery.unmeasured
+    # and contention.unmeasured, EXCLUDE_MEMBER, from the joins).
+    "records.auxiliary_match_raised": _code("RECORDS", "REPRESENTATION", DISCLOSE),
+    "census.journal_write_failed": _code("RECORDS", "REPRESENTATION", DISCLOSE),
+    "supervision.pass_failed": _code("RECORDS", "REPRESENTATION", DISCLOSE),
+    "monitor.outage": _code("DIAGNOSTIC", "PHYSICS", DISCLOSE),
 }
 
 DRAFT_CODES: Mapping[str, Mapping[str, str]] = {

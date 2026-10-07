@@ -326,6 +326,8 @@ CODES: dict[str, CodeSpec] = {
         # Gate-prune round 2, lane P2-RC (PLAN2 row 8, yield E).
         ("member.timeout", ("MEMBER_VALIDITY", "NUMBER")),
         ("member.stderr_uncopied", ("MEMBER_VALIDITY", "NUMBER")),
+        # Gate-prune round 2, lane P2-CTL (controller; PLAN2 row 5).
+        ("records.auxiliary_match_raised", ("RECORDS", "REPRESENTATION")),
     )},
     # Gate-prune round 2 (PLAN2 sections 2.2 G and 3.1).  Written by other
     # lanes' code and folded here (P2-RC member.timeout, P2-CTL
@@ -341,6 +343,10 @@ CODES: dict[str, CodeSpec] = {
     "yield.stage_low": _spec("DIAGNOSTIC", "REPRESENTATION"),
     "yield.stage_stalled": _spec("DIAGNOSTIC", "REPRESENTATION"),
     "stage.members_refused_pre_bundle_identical": _spec("DIAGNOSTIC", "REPRESENTATION"),
+    # P2-DRV's driver codes (PLAN2 rows 7, 10 and 11), with the family and klass it writes:
+    "census.journal_write_failed": _spec("RECORDS", "REPRESENTATION"),
+    "supervision.pass_failed": _spec("RECORDS", "REPRESENTATION"),
+    "monitor.outage": _spec("DIAGNOSTIC", "PHYSICS"),
     # Emitted by this harvest:
     "records.runs_root_override": _spec("RECORDS", "REPRESENTATION"),
     "yield.harvest_disagrees_with_window": _spec("RECORDS", "REPRESENTATION"),
@@ -360,6 +366,8 @@ CORE_WRITER_CODES = frozenset({
     "env.stage_preflight_not_admitted", "campaign.runner_record_flagged", "calibration.writer_record_flagged",
     # Gate-prune round 2, lane P2-RC.
     "member.timeout", "member.stderr_uncopied",
+    # Gate-prune round 2, lanes P2-CTL (controller) and P2-CHAIN (writer b5-chain, through joulewise.flags.core).
+    "calibration.refit_cache_miss", "records.auxiliary_match_raised", "roster.horizon_truncated", "member.retried",
 })
 # joulewise.flags.core.UNWRITTEN_MARKER, read and never imported: a core flag
 # whose write failed is printed whole to the stage's stderr behind it (N8).
@@ -378,6 +386,9 @@ PRUNE2_CODES = frozenset({
     "yield.harvest_disagrees_with_window", "collection.zero_yield", "collection.failure_histogram",
     "chain.stopped_before_collection", "roster.dispatch_unresolved", "records.identity_unmeasured_superseded",
     "thermal.stage_battery_rise", "thermal.battery_temperature_unmeasured",
+    # Registered at integration (int3): the other lanes' remaining round-2 codes.
+    "member.stderr_uncopied", "records.auxiliary_match_raised", "census.journal_write_failed",
+    "supervision.pass_failed", "monitor.outage",
 })
 # joulewise.flags.collect.UNMEASURED_BY_COLLECTOR, read and never imported: the
 # flag each arm collector leaves when its checks did not (all) run.

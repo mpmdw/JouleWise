@@ -343,6 +343,12 @@ class Prune2CodeRegistrationTests(unittest.TestCase):
         "records.identity_unmeasured_superseded": ("RECORDS", "REPRESENTATION", "DISCLOSE"),
         "thermal.stage_battery_rise": ("DIAGNOSTIC", "PHYSICS", "DISCLOSE"),
         "thermal.battery_temperature_unmeasured": ("DIAGNOSTIC", "PHYSICS", "DISCLOSE"),
+        # Registered at integration (int3).
+        "member.stderr_uncopied": ("MEMBER_VALIDITY", "NUMBER", "EXCLUDE_MEMBER"),
+        "records.auxiliary_match_raised": ("RECORDS", "REPRESENTATION", "DISCLOSE"),
+        "census.journal_write_failed": ("RECORDS", "REPRESENTATION", "DISCLOSE"),
+        "supervision.pass_failed": ("RECORDS", "REPRESENTATION", "DISCLOSE"),
+        "monitor.outage": ("DIAGNOSTIC", "PHYSICS", "DISCLOSE"),
     }
 
     def test_every_round_two_code_is_classified_everywhere(self):
