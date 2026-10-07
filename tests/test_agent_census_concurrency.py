@@ -24,6 +24,7 @@ import time
 import unittest
 
 from joulewise.night_gate import AGENT_CENSUS_ARGV
+from tests import child_guard
 
 
 def _pids(stdout):
@@ -202,6 +203,11 @@ class AgentCensusConcurrencyTests(unittest.TestCase):
                         finally:
                             process.terminate()
                             process.wait(timeout=5)
+
+
+# Test hygiene (2026-10-07): a test or class in this module that leaves a child process running
+# is reported as failed, and the child is stopped (tests/child_guard.py).
+child_guard.guard_test_classes(globals())
 
 
 if __name__ == "__main__":

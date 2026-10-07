@@ -49,6 +49,7 @@ from tests.test_controller import (
     make_config,
 )
 from tests.test_window_lineage import EVIDENCE, ROOT, _MockWorkloadRegistry, build_window
+from tests import child_guard
 
 WRITER = "core-controller"
 
@@ -1266,6 +1267,11 @@ class DispatchTests(unittest.TestCase):
                 make_config("legacy-dispatch"), Path(tmp) / "runs", FakeClock(start=1_700_000_000.0))
             self.assertEqual(summary.status, RunStatus.SUCCEEDED)
             self.assertFalse((Path(tmp) / "runs" / flags_core.FLAGS_DIRNAME).exists())
+
+
+# Test hygiene (2026-10-07): a test or class in this module that leaves a child process running
+# is reported as failed, and the child is stopped (tests/child_guard.py).
+child_guard.guard_test_classes(globals())
 
 
 if __name__ == "__main__":

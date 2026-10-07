@@ -15,6 +15,7 @@ from unittest import mock
 
 from joulewise import calibration_ledger as ledger
 from joulewise import calibration_custody_worker as worker
+from tests import child_guard
 
 
 class BoundedBackupDiagnosticTests(unittest.TestCase):
@@ -303,6 +304,11 @@ class CustodyWorkerTests(unittest.TestCase):
                     children[0].kill()
                     children[0].wait(timeout=2)
         self.assertIsNotNone(children[0].returncode)
+
+
+# Test hygiene (2026-10-07): a test or class in this module that leaves a child process running
+# is reported as failed, and the child is stopped (tests/child_guard.py).
+child_guard.guard_test_classes(globals())
 
 
 if __name__ == "__main__":

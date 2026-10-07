@@ -12,6 +12,7 @@ from joulewise import battery_float
 from joulewise.hazards import base, battery, smc
 from tests.hazards.fakes import BATTERY, FakeClocks, FakeSmc, Runner, battery_bytes, completed, update_time
 from tests.hazards.fakes import ROOT
+from tests import child_guard
 
 LIMITS = dict(battery.DEFAULT_THRESHOLDS)
 REPO_BATTERY_FLOAT = ROOT / "tests" / "fixtures" / "battery_float"
@@ -802,6 +803,11 @@ class LiveReadOnlyTests(unittest.TestCase):
                                   "InstantAmperage": values["instant_amperage_ma"],
                                   "Amperage": values["amperage_ma"], "Voltage": values["voltage_mv"]})
         self.assertEqual(before, registry_values(completed_ioreg.stdout))
+
+
+# Test hygiene (2026-10-07): a test or class in this module that leaves a child process running
+# is reported as failed, and the child is stopped (tests/child_guard.py).
+child_guard.guard_test_classes(globals())
 
 
 if __name__ == "__main__":

@@ -24,6 +24,7 @@ import sys
 import unittest
 from functools import lru_cache
 from pathlib import Path
+from tests import child_guard
 
 ROOT = Path(__file__).resolve().parents[2]
 RETIRED = (
@@ -221,6 +222,11 @@ print(json.dumps({"decision": result.decision, "modules": sorted(sys.modules)}))
         # the instrument probe really ran its child (the adapter is not loaded here)
         self.assertNotIn("joulewise.adapters.powermetrics", report["modules"])
         self.assertNotIn("joulewise.bundle", report["modules"])
+
+
+# Test hygiene (2026-10-07): a test or class in this module that leaves a child process running
+# is reported as failed, and the child is stopped (tests/child_guard.py).
+child_guard.guard_test_classes(globals())
 
 
 if __name__ == "__main__":

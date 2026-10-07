@@ -12,6 +12,7 @@ import sys
 import tempfile
 import time
 import unittest
+from tests import child_guard
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -345,6 +346,11 @@ class CodexBridgeSandboxEnforcementTests(_BridgeHarness, unittest.TestCase):
             "variable so the launched value is the recorded value",
         )
         self.assertIn('sandbox_args=(-s "$observer_sandbox")', source)
+
+
+# Test hygiene (2026-10-07): a test or class in this module that leaves a child process running
+# is reported as failed, and the child is stopped (tests/child_guard.py).
+child_guard.guard_test_classes(globals())
 
 
 if __name__ == "__main__":

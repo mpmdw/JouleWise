@@ -38,6 +38,7 @@ from joulewise import measurement_liveness, window_lineage
 from joulewise.flags.schema import validate_flag
 from joulewise.measurement_liveness import Identity
 import scripts.run_campaign as run_campaign
+from tests import child_guard
 
 ROOT = Path(__file__).resolve().parents[1]
 BASE_CONFIG = ROOT / "configs" / "examples" / "mock_local.json"
@@ -1158,6 +1159,11 @@ class DispatchTests(unittest.TestCase):
 
     def test_lock_ownership_error_is_a_runtime_error(self) -> None:
         self.assertTrue(issubclass(run_campaign.CampaignLockOwnershipError, RuntimeError))
+
+
+# Test hygiene (2026-10-07): a test or class in this module that leaves a child process running
+# is reported as failed, and the child is stopped (tests/child_guard.py).
+child_guard.guard_test_classes(globals())
 
 
 if __name__ == "__main__":

@@ -39,6 +39,7 @@ from joulewise.schemas import (
     SummaryMetrics,
 )
 from tests.git_fixture import init_git_fixture
+from tests import child_guard
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 EXAMPLE_CONFIG_PATH = REPO_ROOT / "configs" / "examples" / "mock_local.json"
@@ -1612,6 +1613,11 @@ with mock.patch("joulewise.bundle.os.fdopen", side_effect=PartialWriteHandle):
         destination = self.runs_root / "experiments" / "atomic-claim.json"
         if destination.exists():
             self.assertEqual(json.loads(destination.read_text()), rejection)
+
+
+# Test hygiene (2026-10-07): a test or class in this module that leaves a child process running
+# is reported as failed, and the child is stopped (tests/child_guard.py).
+child_guard.guard_test_classes(globals())
 
 
 if __name__ == "__main__":

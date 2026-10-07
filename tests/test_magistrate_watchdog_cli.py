@@ -20,6 +20,7 @@ from joulewise.night_gate import NightPlan
 from joulewise.night_plan_writer import write_night_plan
 from scripts import magistrate_watchdog as wd
 from tests.git_fixture import init_git_fixture
+from tests import child_guard
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -536,6 +537,11 @@ class MagistrateWatchdogCliTests(unittest.TestCase):
                 except subprocess.TimeoutExpired:
                     stub.kill()
                     stub.wait(timeout=2)
+
+
+# Test hygiene (2026-10-07): a test or class in this module that leaves a child process running
+# is reported as failed, and the child is stopped (tests/child_guard.py).
+child_guard.guard_test_classes(globals())
 
 
 if __name__ == "__main__":

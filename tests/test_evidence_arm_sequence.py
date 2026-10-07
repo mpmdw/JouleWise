@@ -17,6 +17,7 @@ from unittest.mock import patch
 from scripts import gen_evidence_night
 from tests import battery_float_fixture
 from tests.test_gen_evidence_night import EvidenceFixture, ROOT
+from tests import child_guard
 
 
 class EvidenceArmSequenceTests(unittest.TestCase):
@@ -159,3 +160,8 @@ with patch.object(run_night, '_probe_group_absent', return_value=True):
             self.assertEqual(argv[0], python)
             self.assertEqual(argv[argv.index('--plan') + 1], str(f.plan_path.resolve()))
             self.assertEqual(plist['StartCalendarInterval'], prepared.schedule[calendar_key])
+
+
+# Test hygiene (2026-10-07): a test or class in this module that leaves a child process running
+# is reported as failed, and the child is stopped (tests/child_guard.py).
+child_guard.guard_test_classes(globals())

@@ -14,6 +14,7 @@ from unittest import mock
 from scripts import quick_suite as quick
 from scripts import shard_tests
 from tests.git_fixture import init_git_fixture
+from tests import child_guard
 
 
 class SelectionTests(unittest.TestCase):
@@ -228,6 +229,11 @@ class RunnerTests(unittest.TestCase):
                 with self.assertRaises(SystemExit) as raised:
                     quick.main(args)
                 self.assertEqual(raised.exception.code, 2)
+
+
+# Test hygiene (2026-10-07): a test or class in this module that leaves a child process running
+# is reported as failed, and the child is stopped (tests/child_guard.py).
+child_guard.guard_test_classes(globals())
 
 
 if __name__ == "__main__":

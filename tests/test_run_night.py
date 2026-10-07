@@ -34,6 +34,7 @@ from joulewise.night_plan_writer import write_night_plan
 from tests import process_reaper
 from tests.git_fixture import init_git_fixture
 from tests import battery_float_fixture
+from tests import child_guard
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -5019,6 +5020,11 @@ class ProcessGroupRetryTests(unittest.TestCase):
                                 (False, ["4242 /bin/sleep 20"]),
                                 self.driver._prove_group_absent(4242, phase))
                         self.assertGreater(len(sent), 1)
+
+
+# Test hygiene (2026-10-07): a test or class in this module that leaves a child process running
+# is reported as failed, and the child is stopped (tests/child_guard.py).
+child_guard.guard_test_classes(globals())
 
 
 if __name__ == "__main__":

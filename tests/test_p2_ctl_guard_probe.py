@@ -27,6 +27,7 @@ from tests.test_controller import (
 )
 from tests.test_controller_hazard_flags import WRITER
 from tests.test_sampler_teardown import FakeProcess
+from tests import child_guard
 
 
 def sha256(raw: bytes) -> str:
@@ -257,6 +258,11 @@ class GuardProbeSafetyTests(unittest.TestCase):
         finally:
             release.set()
             done.wait(10)
+
+
+# Test hygiene (2026-10-07): a test or class in this module that leaves a child process running
+# is reported as failed, and the child is stopped (tests/child_guard.py).
+child_guard.guard_test_classes(globals())
 
 
 if __name__ == "__main__":

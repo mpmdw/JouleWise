@@ -37,6 +37,7 @@ from joulewise.hazards import monitor as hazard_monitor
 from tests.fixtures.b5_plan import fake_window
 from tests.hazards.fakes import FAKE_POWERMETRICS
 from tests.hazards.test_arm import DRIVER, Rig
+from tests import child_guard
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SIX = ("clock", "battery", "thermal", "contention", "disk", "instrument")
@@ -236,6 +237,11 @@ class DriverCommandLinesMeetTheirTools(WrittenPlans):
                 from joulewise import window_lineage
                 import inspect
                 self.assertEqual(set(inspect.signature(window_lineage.publish_window_lineage).parameters), set(seen))
+
+
+# Test hygiene (2026-10-07): a test or class in this module that leaves a child process running
+# is reported as failed, and the child is stopped (tests/child_guard.py).
+child_guard.guard_test_classes(globals())
 
 
 if __name__ == "__main__":

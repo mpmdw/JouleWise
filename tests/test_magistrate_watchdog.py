@@ -31,6 +31,7 @@ from joulewise.night_plan_writer import (
     write_night_plan,
 )
 from scripts import magistrate_watchdog as wd
+from tests import child_guard
 
 
 RETIRED_V1 = (
@@ -3249,6 +3250,11 @@ class TerminalWindowReleasePredicateTests(unittest.TestCase):
             with self.subTest(result=repr(broken)):
                 decision = self.decide(broken)
                 self.assertFalse(decision.allowed)
+
+
+# Test hygiene (2026-10-07): a test or class in this module that leaves a child process running
+# is reported as failed, and the child is stopped (tests/child_guard.py).
+child_guard.guard_test_classes(globals())
 
 
 if __name__ == "__main__":

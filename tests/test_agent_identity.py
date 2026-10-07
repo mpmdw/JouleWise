@@ -24,6 +24,7 @@ from types import SimpleNamespace
 
 from joulewise import agent_identity, night_gate
 from joulewise.hazards import arm, base
+from tests import child_guard
 
 ATTEMPT3_ROOT = "/Users/edr/night-custody/b5-gamma-attempt3/custody"
 
@@ -471,6 +472,11 @@ class AncestorCensusLiveTests(unittest.TestCase):
         self.assertEqual("own_tree", reasons.get(result["own_pid"]))
         self.assertEqual("not_agent_executable", reasons.get(result["chain_pid"]))
         self.assertEqual("not_agent_executable", reasons.get(foreign.pid))
+
+
+# Test hygiene (2026-10-07): a test or class in this module that leaves a child process running
+# is reported as failed, and the child is stopped (tests/child_guard.py).
+child_guard.guard_test_classes(globals())
 
 
 if __name__ == "__main__":

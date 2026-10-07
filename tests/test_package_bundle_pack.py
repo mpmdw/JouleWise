@@ -19,6 +19,7 @@ from joulewise.publication_privacy import verify_public_bundle
 from joulewise.schemas import BenchmarkConfig, RunStatus
 from joulewise.suite import suite_manifest_sha256
 from scripts import package_bundle_pack
+from tests import child_guard
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -744,6 +745,11 @@ class BundlePackTests(unittest.TestCase):
             any("symlink not allowed in packed bundle: link-to-config" in problem for problem in problems),
             problems,
         )
+
+
+# Test hygiene (2026-10-07): a test or class in this module that leaves a child process running
+# is reported as failed, and the child is stopped (tests/child_guard.py).
+child_guard.guard_test_classes(globals())
 
 
 if __name__ == "__main__":

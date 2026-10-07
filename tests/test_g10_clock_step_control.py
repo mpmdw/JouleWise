@@ -26,6 +26,7 @@ import time
 import unittest
 
 from joulewise import kernel_clock, network_time_off
+from tests import child_guard
 
 
 # --------------------------------------------------------------------------
@@ -1123,3 +1124,8 @@ for _name, _function in list(globals().items()):
             setattr(G10ControlTests, f"{_name}_{_label}", _bind(_function, {_argname: _value}))
     del globals()[_name]
 del _name, _function
+
+
+# Test hygiene (2026-10-07): a test or class in this module that leaves a child process running
+# is reported as failed, and the child is stopped (tests/child_guard.py).
+child_guard.guard_test_classes(globals())

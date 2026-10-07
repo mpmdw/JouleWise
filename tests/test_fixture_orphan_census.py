@@ -16,6 +16,7 @@ from unittest import mock
 
 from scripts import fixture_orphan_census as sentinel
 from scripts import magistrate_watchdog as watchdog
+from tests import child_guard
 
 
 VLLM = (
@@ -246,6 +247,11 @@ class FixtureOrphanCensusTests(unittest.TestCase):
         for item in rows:
             self.assertEqual(set(item), {"pid", "ppid", "start", "age_s", "rss_kb", "signature"})
             self.assertEqual(item["ppid"], 1)
+
+
+# Test hygiene (2026-10-07): a test or class in this module that leaves a child process running
+# is reported as failed, and the child is stopped (tests/child_guard.py).
+child_guard.guard_test_classes(globals())
 
 
 if __name__ == "__main__":

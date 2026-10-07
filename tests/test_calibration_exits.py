@@ -58,6 +58,7 @@ from tests.owned_process_runner import (
     owned_thread_survivors,
 )
 from tests.receipt_corpus import ReceiptCorpus
+from tests import child_guard
 
 # Liveness-guard nominal for the shared sampler-ack driver: raised 1.0 -> 4.0
 # after four hosted-runner starvation firings (runs 32578576711, 32601988870,
@@ -3387,6 +3388,8 @@ class SamplerLifecycleHardeningTests(unittest.TestCase):
                     stderr=subprocess.DEVNULL,
                     env=env,
                 )
+                # A capture that never completes raises below: stop the fake sampler then too.
+                child_guard.own(self, process)
                 wait_for_complete_capture()
                 process.terminate()
                 process.communicate(timeout=2.0)
@@ -6037,6 +6040,8 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
             stderr=subprocess.DEVNULL,
             start_new_session=True,
         )
+        # The try/finally that stops the decoy starts after the fake ps is written.
+        child_guard.own(self, decoy)
         fake_bin = self.repo / "fake-bin"
         fake_bin.mkdir()
         fake_ps = fake_bin / "ps"
@@ -6303,6 +6308,11 @@ class ResumeFinalizeAcceptanceUnderivableTests(unittest.TestCase):
         self.assertEqual(
             payload["context"]["reason"], "acceptance_artifact_underivable"
         )
+
+
+# Test hygiene (2026-10-07): a test or class in this module that leaves a child process running
+# is reported as failed, and the child is stopped (tests/child_guard.py).
+child_guard.guard_test_classes(globals())
 
 
 if __name__ == "__main__":

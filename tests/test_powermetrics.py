@@ -46,6 +46,7 @@ from joulewise.uncertainty_evidence import (
     derive_powermetrics_clock_evidence_v2,
     derive_powermetrics_clock_evidence_v3,
 )
+from tests import child_guard
 
 FIXTURE = Path(__file__).resolve().parent / "fixtures" / "powermetrics_sample.plist"
 CORRUPT_PLIST = b"<?xml version='1.0'?><plist><dict><key>timestamp</key>"
@@ -2436,6 +2437,11 @@ class PowermetricsAdapterTests(unittest.TestCase):
         self.assertIsNone(failure)
         self.assertIsInstance(adapter, TelemetryAdapter)
         self.assertEqual(adapter.name, "powermetrics")
+
+
+# Test hygiene (2026-10-07): a test or class in this module that leaves a child process running
+# is reported as failed, and the child is stopped (tests/child_guard.py).
+child_guard.guard_test_classes(globals())
 
 
 if __name__ == "__main__":

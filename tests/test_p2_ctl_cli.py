@@ -22,6 +22,7 @@ from unittest.mock import patch
 from joulewise import cli, controller
 from joulewise.schemas import RunStatus
 from tests.test_controller import make_config
+from tests import child_guard
 
 REPO = Path(__file__).resolve().parents[1]
 
@@ -220,6 +221,11 @@ class SigtermDuringInstallTests(unittest.TestCase):
             self.assertEqual(summary["failure_message"], f"SystemExit: {128 + signal.SIGTERM}")
             events = [json.loads(line) for line in (bundle / "events.jsonl").read_text().splitlines()]
             self.assertEqual(events[-1]["event_type"], "run_finalized")
+
+
+# Test hygiene (2026-10-07): a test or class in this module that leaves a child process running
+# is reported as failed, and the child is stopped (tests/child_guard.py).
+child_guard.guard_test_classes(globals())
 
 
 if __name__ == "__main__":

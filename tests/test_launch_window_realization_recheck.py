@@ -23,6 +23,7 @@ from joulewise.schemas import BenchmarkConfig
 from scripts import launch_window
 from tests import test_identity_pins as projection_fixtures
 from tests import test_run_night as night_fixtures
+from tests import child_guard
 
 
 class LaunchRealizationRecheckTests(unittest.TestCase):
@@ -552,6 +553,11 @@ class NonPackLaunchRouteTests(unittest.TestCase):
         self.assertEqual(code, case.driver.EXIT_REFUSED)
         self.assertEqual(commands, [["/bin/zsh", "-c", "sleep 2; echo REHEARSAL"]])
         self.assertEqual(receipt["verdict"], "REHEARSAL_ONLY")
+
+
+# Test hygiene (2026-10-07): a test or class in this module that leaves a child process running
+# is reported as failed, and the child is stopped (tests/child_guard.py).
+child_guard.guard_test_classes(globals())
 
 
 if __name__ == "__main__":

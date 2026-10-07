@@ -18,6 +18,7 @@ from joulewise.adapters.node_client import NodeWorkerClient
 from joulewise.clock import SystemClock
 from joulewise.interfaces import AdapterResult
 from joulewise.schemas import FailureReason
+from tests import child_guard
 
 
 def _localhost_socket_probe() -> tuple[bool, str | None]:
@@ -450,6 +451,11 @@ done
             encoding="utf-8",
         )
         path.chmod(0o755)
+
+
+# Test hygiene (2026-10-07): a test or class in this module that leaves a child process running
+# is reported as failed, and the child is stopped (tests/child_guard.py).
+child_guard.guard_test_classes(globals())
 
 
 if __name__ == "__main__":
