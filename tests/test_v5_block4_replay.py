@@ -41,8 +41,10 @@ SCRATCH = (Path(tempfile.gettempdir()) / "v5-block4-replay").resolve()
 PACK_RELATIVE = "configs/campaigns/" + writer.GAMMA
 # The GAMMA pack's reviewed source: bda1c180 until the block-5 timing lane regenerated the
 # _v5 packs (idle_seconds 57.6, block-5 policy file) at f4cf9047; lane L10's distinct interior
-# reference run ids (GAMMA-INTERIOR-REFERENCES-01) regenerated it again, and that commit is now the source.
-PACK_SOURCE_COMMIT = "c6309e1a816ee5c1b07e3c5466ea2a6de1250bc5"
+# reference run ids (GAMMA-INTERIOR-REFERENCES-01) regenerated it again (c6309e1a); the NEG-8
+# survivors lane's spare-slot retry (2026-10-07) regenerated it with its own generator, and that
+# commit is now the source.
+PACK_SOURCE_COMMIT = "2011ec285ce6e4e22a3056ebbc806cf218a3b805"
 
 
 def put(path, value):

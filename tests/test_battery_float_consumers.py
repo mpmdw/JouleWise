@@ -31,12 +31,16 @@ REPLACE_REASON = "predates PairVerdict (64e39bb9); cannot receive a PairVerdict"
 # (repo-relative path, enclosing function qualname, ast.unparse(call)).
 # The replaced values are, in order: _ProbeResult; ProbeResult; Receipt;
 # Receipt; Refusal; Receipt; Probes; FiducialDetection; FiducialDetection;
-# RuntimeEvent; BenchmarkConfig; SamplingConfig; BenchmarkConfig.
+# RuntimeEvent; BenchmarkConfig; SamplingConfig; BenchmarkConfig; ProbeResult
+# (night_gate.decide_census, audit-fix 2 2026-10-07: the agent census's
+# identity matcher rewrites the pgrep result it filtered).
 REPLACE_CALL_ALLOWLIST = {
     ("joulewise/arm_readiness_evidence_t0.py", "_derive_power",
      "_replace(battery, stdout=battery.stdout_bytes)"): REPLACE_REASON,
     ("joulewise/night_gate.py", "_check_machine.battery_runner",
      "replace(battery_result, stdout=battery_result.stdout_bytes)"): REPLACE_REASON,
+    ("joulewise/night_gate.py", "decide_census",
+     "replace(result, exit_code=exit_code, stdout=decided.kept_text, stderr=result.stderr + ('\\n' if result.stderr else '') + note)"): REPLACE_REASON,
     ("joulewise/night_gate.py", "evaluate_static",
      "replace(_finish(plan, probes, rows, None), verdict='PENDING')"): REPLACE_REASON,
     ("joulewise/night_gate.py", "evaluate_dynamic_hard",
@@ -373,7 +377,7 @@ class ConsumerGuardTests(unittest.TestCase):
                 if _tracked(ROOT, relative):
                     violations(relative, path.read_text(encoding="utf-8", errors="replace"), sites)
         self.assertEqual(Counter(sites), Counter(REPLACE_CALL_ALLOWLIST.keys()))
-        self.assertEqual(len(REPLACE_CALL_ALLOWLIST), 13)
+        self.assertEqual(len(REPLACE_CALL_ALLOWLIST), 14)
         self.assertEqual(set(REPLACE_CALL_ALLOWLIST.values()), {REPLACE_REASON})
 
     def test_new_replace_is_flagged_existing_one_is_allowed_and_stale_row_fails(self) -> None:
