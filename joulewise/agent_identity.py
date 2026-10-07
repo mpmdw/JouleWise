@@ -1,8 +1,10 @@
 """Which agent-census hits are agent processes: one matcher for every census site.
 
 The agent census (``night_gate.AGENT_CENSUS_ARGV``, ``hazards.arm.AGENT_CENSUS_ARGV``)
-is ``pgrep -lf '[c]odex|[c]laude|[t]3'``: a regular expression over every
-process's whole command line.  That list is a superset.  Any id or path that
+is ``pgrep -a -lf '[c]odex|[c]laude|[t]3'``: a regular expression over every
+process's whole command line, including the caller's own ancestors (``-a``;
+without it Darwin pgrep drops them, and an agent session that launched the
+census was invisible: dry-records F1, 2026-10-07).  That list is a superset.  Any id or path that
 contains one of the three substrings (``b5-gamma-attempt3``, a custody root under
 ``.claude``) puts the window's own ``python``, ``zsh`` and ``run_campaign``
 processes on it, and the census then stopped the window for a string (Opus
@@ -26,7 +28,11 @@ never by its arguments:
   ``claude-code``).
 * **The caller's own tree.**  With ``own_tree_root`` set, a listed process
   whose parent chain reaches that pid, or whose process group is led by such a
-  process, is the window itself and is ignored whatever it runs.
+  process, is the window itself and is ignored whatever it runs.  The tree
+  runs downward only: the root's ancestors (the agent session or shell that
+  launched it, launchd) are not in it and are decided by executable identity
+  like any other listed process, so an agent that launched the window stays a
+  hit and a shell running ``chain.zsh`` from an ``attempt3`` path does not.
 
 A listed line is decided only when the live process's argument vector, joined
 as pgrep joins it, equals the line's text: that proves the line is that pid and

@@ -10,6 +10,7 @@ by spaces) from the kernel's argv, so they hold on Darwin and Linux alike.
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
@@ -203,6 +204,140 @@ class AgentIdentityTests(unittest.TestCase):
         self.assertFalse(census["clean"])
         self.assertIn(str(pid), census["detail"])
         self.assertEqual(line, census["stdout"])
+
+
+# The census as the driver and the hazard arm run it, from inside a process
+# tree the test builds (see AncestorCensusLiveTests).  It prints one JSON line.
+_ANCESTOR_CENSUS_CHILD = r"""
+import json, os, subprocess, sys, time
+from types import SimpleNamespace
+from joulewise import agent_identity, night_gate
+from joulewise.hazards import arm, base
+
+own_marker = sys.argv[1]
+own = subprocess.Popen([own_marker, "60"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+try:
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline:
+        info = agent_identity.inspect(own.pid)
+        if info is not None and info.argv and info.argv[0] == own_marker:
+            break
+        time.sleep(0.02)
+
+    def run(argv):
+        done = subprocess.run(argv, capture_output=True, text=True, timeout=30)
+        return night_gate.ProbeResult(tuple(argv), done.returncode, done.stdout, done.stderr,
+                                      time.monotonic_ns())
+
+    probes = SimpleNamespace(run=run, monotonic_ns=time.monotonic_ns)
+    gate, refusal = night_gate.agent_census(probes, own_tree_root=os.getpid())
+
+    def ctx_run(argv, timeout):
+        done = subprocess.run(argv, capture_output=True, timeout=timeout)
+        return base.Completed(tuple(argv), done.returncode, done.stdout, done.stderr)
+
+    stamp = SimpleNamespace(to_json=lambda: {})
+    hazard = arm.agent_census(SimpleNamespace(run=ctx_run, stamp=lambda: stamp))
+finally:
+    own.kill()
+    own.wait()
+print(json.dumps({"census_pid": os.getpid(), "chain_pid": os.getppid(), "own_pid": own.pid,
+                  "gate": {"argv": list(gate.argv), "exit_code": gate.exit_code, "stdout": gate.stdout,
+                           "stderr": gate.stderr, "refusal": refusal.reason if refusal else None},
+                  "hazard": {"argv": hazard["argv"], "stdout": hazard["stdout"], "clean": hazard["clean"],
+                             "ignored": hazard.get("ignored", [])}}))
+"""
+
+
+def _listed_pids(stdout: str) -> set[int]:
+    return {int(line.split(" ", 1)[0]) for line in stdout.splitlines() if line.split(" ", 1)[0].isdecimal()}
+
+
+class AncestorCensusLiveTests(unittest.TestCase):
+    """Dry-records F1 (2026-10-07): the census must see an agent that is its ancestor.
+
+    Darwin pgrep leaves the caller and all of its ancestors out of its list
+    unless given ``-a``.  The tree built here is the desk dry arm's shape:
+
+        test -> "claude" (a zsh named claude: the agent session)
+             -> zsh running .../b5-gamma-attempt3/chain.zsh (argv-substring only)
+             -> python running the census (the driver: own_tree_root)
+             -> "codex" (a sleep named codex: the window's own descendant)
+
+    plus a foreign ``run_campaign`` under an ``attempt3`` path.  Only owned pids
+    are asserted: this test may run inside a real agent session, whose own
+    processes the census also (correctly) lists.
+    """
+
+    def setUp(self) -> None:
+        if sys.platform != "darwin":
+            self.skipTest("Darwin pgrep ancestor exclusion; Linux pgrep has no such rule")
+        probe = subprocess.run(night_gate.AGENT_CENSUS_ARGV, capture_output=True, text=True, timeout=30)
+        if probe.returncode == 3 and "Cannot get process list" in probe.stderr:
+            self.skipTest("/usr/bin/pgrep unavailable in sandbox: exit 3, Cannot get process list")
+        self.tmp = tempfile.TemporaryDirectory(prefix="census-ancestor-")
+        self.addCleanup(self.tmp.cleanup)
+        self.processes: list[subprocess.Popen] = []
+        self.addCleanup(self._reap)
+
+    def _reap(self) -> None:
+        for process in self.processes:
+            if process.poll() is None:
+                process.kill()
+            process.wait()
+
+    def test_an_agent_ancestor_is_a_hit_and_the_window_is_not(self):
+        root = Path(self.tmp.name)
+        agent = root / "claude"
+        agent.symlink_to("/bin/zsh")
+        own_marker = root / "codex"
+        own_marker.symlink_to("/bin/sleep")
+        custody = root / "night-custody" / "b5-gamma-attempt3" / "custody"
+        custody.mkdir(parents=True)
+        chain = custody / "chain.zsh"
+        chain.write_text('#!/bin/zsh -f\n"$1" "$2" "$3"\n:\n', encoding="utf-8")
+        chain.chmod(0o755)
+        child = root / "census_child.py"
+        child.write_text(_ANCESTOR_CENSUS_CHILD, encoding="utf-8")
+        runner = custody / "run_campaign"
+        runner.symlink_to("/bin/sleep")
+        foreign = _live([str(runner), "60"])
+        self.processes.append(foreign)
+
+        env = {**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[1])}
+        command = f"'{chain}' '{sys.executable}' '{child}' '{own_marker}'; :"
+        session = subprocess.Popen([str(agent), "-f", "-c", command], stdout=subprocess.PIPE,
+                                   stderr=subprocess.PIPE, text=True, env=env)
+        self.processes.append(session)
+        stdout, stderr = session.communicate(timeout=120)
+        self.assertEqual(0, session.returncode, stderr)
+        result = json.loads(stdout.strip().splitlines()[-1])
+
+        for name in ("gate", "hazard"):
+            with self.subTest(census=name):
+                observed = result[name]
+                self.assertEqual(list(night_gate.AGENT_CENSUS_ARGV), observed["argv"])
+                kept = _listed_pids(observed["stdout"])
+                # (1) the agent that launched the census is a hit.
+                self.assertIn(session.pid, kept, f"argv={observed['argv']} kept={sorted(kept)}")
+                # (2) the window's own descendant, though agent-named, is ignored as own tree.
+                self.assertNotIn(result["own_pid"], kept)
+                # (3) argv-substring-only processes are ignored by executable identity:
+                # the ancestor shell running .../attempt3/chain.zsh and a foreign run_campaign.
+                self.assertNotIn(result["chain_pid"], kept)
+                self.assertNotIn(foreign.pid, kept)
+                self.assertNotIn(result["census_pid"], kept)
+        gate = result["gate"]
+        self.assertEqual("night_refused_agent_present", gate["refusal"])
+        self.assertIn(f"pid {result['own_pid']} own_tree", gate["stderr"])
+        self.assertIn(f"pid {result['chain_pid']} not_agent_executable", gate["stderr"])
+        self.assertIn(f"pid {foreign.pid} not_agent_executable", gate["stderr"])
+        hazard = result["hazard"]
+        self.assertFalse(hazard["clean"])
+        reasons = {item["pid"]: item["reason"] for item in hazard["ignored"]}
+        self.assertEqual("own_tree", reasons.get(result["own_pid"]))
+        self.assertEqual("not_agent_executable", reasons.get(result["chain_pid"]))
+        self.assertEqual("not_agent_executable", reasons.get(foreign.pid))
 
 
 if __name__ == "__main__":

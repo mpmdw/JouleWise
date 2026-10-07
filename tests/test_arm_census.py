@@ -456,7 +456,7 @@ class ArmCensusTests(unittest.TestCase):
         self.assertEqual("night_refused_agent_present", receipt.refusal.reason)
         self.assertEqual("FAIL", next(c.status for c in receipt.conditions if c.condition_id == "C3"))
         self.assertEqual("20 claude\n", receipt.refusal.evidence[0].stdout)
-        self.assertEqual(("/usr/bin/pgrep", "-lf", "[c]odex|[c]laude|[t]3"), receipt.refusal.evidence[0].argv)
+        self.assertEqual(("/usr/bin/pgrep", "-a", "-lf", "[c]odex|[c]laude|[t]3"), receipt.refusal.evidence[0].argv)
         source.results[night_gate.AGENT_CENSUS_ARGV] = result(night_gate.AGENT_CENSUS_ARGV, exit_code=1)
         with mock.patch.object(night_gate, "D166_REGISTRATION_SHA256",
                                hashlib.sha256(source.text[stub.registration_path].encode()).hexdigest()):

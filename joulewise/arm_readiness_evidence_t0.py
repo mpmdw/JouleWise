@@ -1840,6 +1840,25 @@ def _derive_machine_readiness(context: _Context) -> _DerivedRow:
     )
 
 
+def _agent_lines_decided(probe: _ProbeResult) -> _ProbeResult:
+    """The agent probe judged by the shared matcher (joulewise/agent_identity.py).
+
+    The census argv carries -a (dry-records F1, 2026-10-07), so it lists this
+    process's ancestors; a driver whose argv carries a ``claude`` path is not an
+    agent and an agent ancestor is.  The recorded probe stays the raw one.
+    """
+
+    from joulewise import agent_identity
+
+    if not probe.stdout.strip():
+        return probe
+    decided = agent_identity.filter_census(probe.stdout, own_tree_root=_os.getpid())
+    if not decided.ignored:
+        return probe
+    exit_code = 1 if not decided.kept_text.strip() and probe.exit_code == 0 else probe.exit_code
+    return _replace(probe, exit_code=exit_code, stdout=decided.kept_text)
+
+
 def _derive_process_census(context: _Context) -> _DerivedRow:
     from joulewise.night_gate import AGENT_CENSUS_ARGV
 
@@ -1851,7 +1870,7 @@ def _derive_process_census(context: _Context) -> _DerivedRow:
         _fresh_probe(context, kind, "monitor", ("/usr/bin/pgrep", "-lf", _MONITOR_CENSUS_PATTERN)),
     )
     for label, probe in zip(("keep-awake", "agent", "browser", "monitor"), probes, strict=True):
-        _expect_absent(probe, kind=kind, label=label)
+        _expect_absent(_agent_lines_decided(probe) if label == "agent" else probe, kind=kind, label=label)
     return _DerivedRow(
         "t0.no_stray_keepawake",
         kind,
