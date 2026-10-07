@@ -302,7 +302,17 @@ class MeterWindowTests(unittest.TestCase):
         harness = self.harness()
         harness.night.mkdir(parents=True, exist_ok=True)
         real = harness.driver._claim_chain_start
-        harness.driver._claim_chain_start = lambda night: None
+        stream = harness.custody / "hazards/meter/stream-001.jsonl"
+
+        def refuse_once_streaming(night):
+            # Sol review F5: the meter starts asynchronously; refuse only once
+            # it has written its header, so the stream assertion is not a race.
+            deadline = time.monotonic() + 10.0
+            while not (stream.exists() and stream.read_text().endswith("\n")):
+                self.assertLess(time.monotonic(), deadline)
+                time.sleep(0.02)
+            return None
+        harness.driver._claim_chain_start = refuse_once_streaming
         self.addCleanup(setattr, harness.driver, "_claim_chain_start", real)
         self.assertEqual(harness.driver.EXIT_REFUSED, harness.run())
         meter = harness.hazard()["meter"]
@@ -318,6 +328,135 @@ class MeterWindowTests(unittest.TestCase):
         artifacts = [row["path"] for row in harness.driver._artifact_list(harness.custody, harness.night)]
         self.assertIn(f"night/{b5_driver.METER_JOURNAL}", artifacts)
         self.assertFalse(any(path.startswith("hazards/") for path in artifacts))
+
+
+# --------------------------------------------------------------------------
+# Sol review (final round): every meter supervision failure reaches the flag
+# ledger, an unproven chain leaves the meter running, and a meter that cannot
+# be proven stopped is disclosed.
+
+
+class MeterDisclosureTests(unittest.TestCase):
+    def harness(self, chain="/bin/sleep 3\nexit 0\n"):
+        harness = Harness(self, g10=False)
+        harness.replace_chain("#!/bin/zsh -f\n" + chain)
+        harness.meter_argv = fake_meter_argv()
+        return harness
+
+    def test_a_failed_meter_restart_is_a_disclose_flag(self):
+        # F2: crash, then a restart that cannot start, then an absent exit.
+        patch(self, b5_driver, "MONITOR_RESTART_INTERVAL_S", 0.0)
+        harness = self.harness()
+        calls, crash, absent = [0], fake_meter_argv("crash"), fake_meter_argv("absent")
+
+        def argv(request):
+            calls[0] += 1
+            if calls[0] == 1:
+                return crash(request)
+            if calls[0] == 2:
+                return [str(harness.root / "no-such-meter")]
+            return absent(request)
+        harness.meter_argv = argv
+        self.assertEqual(harness.driver.EXIT_GO, harness.run())
+        meter = harness.hazard()["meter"]
+        self.assertEqual(1, meter["start_failures"])
+        found = [item for item in flags(harness, "meter.supervision_fault")
+                 if item["observed"]["event"] == "start_failed"]
+        self.assertEqual(1, len(found))
+        self.assertEqual(1, found[0]["observed"]["start_failures"])
+        self.assertFalse(harness.driver.run_courier.call_args.kwargs["report"]["facts"]["fault"])
+
+    def test_a_meter_journal_that_cannot_be_written_is_a_disclose_flag(self):
+        # F3: the meter journal is the dead-man's locator; losing it is disclosed.
+        harness = self.harness("/bin/sleep 1\nexit 0\n")
+        append = b5_driver._append_line
+
+        def failing(path, value):
+            if Path(path).name == b5_driver.METER_JOURNAL:
+                raise OSError("injected meter journal failure")
+            return append(path, value)
+        patch(self, b5_driver, "_append_line", failing)
+        self.assertEqual(harness.driver.EXIT_GO, harness.run())
+        self.assertEqual("GO", harness.result()["verdict"])
+        found = [item for item in flags(harness, "meter.supervision_fault")
+                 if item["observed"]["event"] == "record_failed"]
+        self.assertEqual(1, len(found))
+        self.assertIn("injected meter journal failure", found[0]["observed"]["errors"][0])
+        self.assertTrue(harness.hazard()["meter"]["stop"]["proven_stopped"])
+
+    def test_a_meter_that_cannot_be_proven_stopped_is_a_disclose_flag(self):
+        # Sol mutation M26: the not_proven_stopped event had no test.
+        harness = self.harness("/bin/sleep 2\nexit 0\n")
+        real = harness.driver._group_census
+        meter_journal = harness.night / b5_driver.METER_JOURNAL
+
+        def census(pgid, *args, **kwargs):
+            meter_groups = {line.get("pgid") for line in journal(meter_journal) if line.get("pgid")}
+            if pgid in meter_groups:
+                return False, ["held by the test"]
+            return real(pgid, *args, **kwargs)
+        harness.driver._group_census = census
+        self.assertEqual(harness.driver.EXIT_GO, harness.run())
+        meter = harness.hazard()["meter"]
+        self.assertFalse(meter["stop"]["proven_stopped"])
+        found = [item for item in flags(harness, "meter.supervision_fault")
+                 if item["observed"]["event"] == "not_proven_stopped"]
+        self.assertEqual(1, len(found))
+        self.assertIs(False, found[0]["observed"]["group_absent"])
+        report = harness.driver.run_courier.call_args.kwargs["report"]["facts"]
+        self.assertFalse(report["fault"])
+        self.assertEqual("GO", harness.result()["verdict"])
+
+    def test_an_unproven_chain_leaves_the_meter_running_for_the_dead_man(self):
+        # Sol mutation M10: the meter is never stopped while the chain may live.
+        harness = self.harness("/bin/sleep 120 &\nexit 0\n")
+        attempts = []
+
+        def unproven(process, *args, **kwargs):
+            attempts.append(kwargs.get("pgid"))
+            return False
+        harness.driver._terminate_process_group = unproven
+
+        def cleanup():
+            for name in (b5_driver.MONITOR_JOURNAL, b5_driver.METER_JOURNAL):
+                path = harness.night / name
+                for event in (journal(path) if path.exists() else []):
+                    if event.get("pgid"):
+                        try:
+                            os.killpg(event["pgid"], signal.SIGKILL)
+                        except (ProcessLookupError, PermissionError):
+                            pass
+            for pgid in attempts:
+                try:
+                    os.killpg(pgid, signal.SIGKILL)
+                except (ProcessLookupError, PermissionError, TypeError):
+                    pass
+        self.addCleanup(cleanup)
+        self.assertEqual(harness.driver.EXIT_COURIER_FAILED, harness.run())
+        meter = harness.hazard()["meter"]
+        self.assertTrue(meter["left_running"])
+        self.assertIsNone(meter["stop"])
+        self.assertEqual(["hazards/meter/stream-001.jsonl"], [row["path"] for row in meter["streams"]])
+        self.assertTrue(all("sha256" not in row for row in meter["streams"]))
+        events = journal(harness.night / b5_driver.METER_JOURNAL)
+        self.assertEqual(["start"], [event["event"] for event in events])
+        os.killpg(events[0]["pgid"], 0)   # the meter's group is still alive
+        self.assertNotIn("monitor_stop", harness.hazard())
+
+    def test_the_reaper_leaves_a_meter_that_exited_finally(self):
+        # F1: after a final exit nothing restarted the meter; its recorded pid
+        # may be reused, so the dead-man signals nothing.
+        with tempfile.TemporaryDirectory(prefix="b5-p3-reap-final-") as directory:
+            night = Path(directory)
+            stranger = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"],
+                                        start_new_session=True)
+            self.addCleanup(lambda: stranger.poll() is None and stranger.kill())
+            lines = [{"event": "start", "pid": stranger.pid, "pgid": stranger.pid},
+                     {"event": "exit", "pid": stranger.pid, "returncode": 0, "lived_s": 0.1, "final": True}]
+            (night / b5_driver.METER_JOURNAL).write_text("".join(json.dumps(line) + "\n" for line in lines))
+            self.assertIsNone(b5_driver.reap_orphan_monitor(night, journal=b5_driver.METER_JOURNAL))
+            time.sleep(0.2)
+            self.assertIsNone(stranger.poll())
 
 
 # --------------------------------------------------------------------------

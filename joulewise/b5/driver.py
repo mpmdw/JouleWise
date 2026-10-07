@@ -2149,15 +2149,40 @@ def run_hazard_night(rt: Any, plan_path: Path, plan: Any, probes: Any, initial_c
             group_census=getattr(rt, "_group_census", None), identity=getattr(rt, "observe_identity", None),
             name=METER_NAME, restart_on_clean_exit=False)
         meter.on_crash_loop = lambda details: meter_fault("crash_loop", details)
-        if not meter.start():
-            meter_fault("start_failed", {"error": meter.last_start_error})
+        meter.start()
+
+    def meter_records() -> None:
+        """Disclose what the meter's supervisor recorded and never flagged (Sol review F2, F3).
+
+        Any failed start (the first or a restart in ``poll``) is a
+        ``start_failed`` event. Anything in the supervisor's ``errors`` (a
+        failed journal append, which is the dead-man's locator for an orphaned
+        meter, or a failed crash-loop callback) is a ``record_failed`` event.
+        Each is flagged once.
+        """
+
+        if meter is None:
+            return
+        if meter.start_failures:
+            meter_fault("start_failed", {"error": meter.last_start_error, "start_failures": meter.start_failures})
+        if meter.errors:
+            meter_fault("record_failed", {"errors": list(meter.errors[:3]), "count": len(meter.errors)})
+
+    def poll_meter() -> None:
+        if meter is not None:
+            meter.poll()
+            meter_records()
+
+    meter_records()
 
     def stop_meter(*, left_running: bool = False) -> dict[str, Any] | None:
         if meter is None:
             return None
         if left_running:
+            meter_records()
             return {**meter.summary(), "left_running": True, "streams": meter_streams(custody, digests=False)}
         summary = meter.stop()
+        meter_records()
         stop_record = summary.get("stop") or {}
         if not stop_record.get("proven_stopped"):
             meter_fault("not_proven_stopped", {"returncode": stop_record.get("returncode"),
@@ -2207,7 +2232,7 @@ def run_hazard_night(rt: Any, plan_path: Path, plan: Any, probes: Any, initial_c
     def supervise() -> dict[str, Any] | None:
         guarded("monitor", monitor.poll)
         if meter is not None:
-            guarded("meter", meter.poll)
+            guarded("meter", poll_meter)
         reading = guarded("disk", disk.check)
         if reading is not None:
             window.flag("disk.low", "DIAGNOSTIC", "PHYSICS", stage="window",
@@ -2316,7 +2341,7 @@ def run_hazard_night(rt: Any, plan_path: Path, plan: Any, probes: Any, initial_c
         if started:
             hazard["monitor_stop"] = hold_monitors_after_chain(
                 chain_returned, lambda: (guarded("monitor", monitor.poll),
-                                         meter is not None and guarded("meter", meter.poll)))
+                                         meter is not None and guarded("meter", poll_meter)))
         hazard["monitor"] = monitor.stop()
         if started:
             hazard["monitor_stop"]["monitor_stop_requested"] = (hazard["monitor"].get("stop") or {}).get("requested")
@@ -2568,6 +2593,11 @@ def reap_orphan_monitor(night_dir: Path, *, identity: Callable[[int], Any] | Non
         if event.get("event") in {"start", "restart"}:
             last_start, stopped = event, False
         elif event.get("event") == "stop" and event.get("proven_stopped"):
+            stopped = True
+        elif event.get("event") == "exit" and event.get("final") is True:
+            # A final exit (the meter's "absent" exit 0) ended the recorded
+            # process and nothing restarted it: there is no group to stop, and
+            # its pid may since have been reused (Sol review F1).
             stopped = True
     if last_start is None or stopped:
         return None
