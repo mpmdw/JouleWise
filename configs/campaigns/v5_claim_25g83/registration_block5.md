@@ -2930,15 +2930,44 @@ revision 7's catalog).
 The harvest opens when the driver's terminal record exists (§5.4), works from an archive copy of the window, and
 writes one verdict:
 
-- **COLLECTED:** `night/chain.started` exists. The numbers (into restricted custody) and the flags are emitted
-  whatever the flags say, and the exclusion function computes `claim_usable`.
-- **NULL:** no chain start: the arm refused, or the driver failed before the chain. `claim_usable` is false.
-- **NO_COLLECTION:** the chain started but no collection stage ran (for example a stop at exit 10, 11 or 12):
-  every collector still runs, `chain.stopped_before_collection` is recorded, and `claim_usable` is false.
-- **HARVEST_FAULT:** the harvest program failed on bytes that are present. Cured by R3 and re-harvested from
-  identical bytes into a distinct derived directory; never a science outcome.
+- **COLLECTED:** `night/chain.started` exists, and the stage journal does not show the NO_COLLECTION case below. The
+  numbers (into restricted custody) and the flags are emitted whatever the flags say, and the exclusion function
+  computes `claim_usable`. If the exclusion function cannot be run (it is absent, it raises, or its inputs could not
+  be built), the numbers and the flags still stand, `records.collector_failed` is recorded, and `claim_usable` is
+  false with the single reason `exclusions.function_unavailable` in the record's `reasons` list (§0.16).
+- **NULL:** no chain start: the arm refused, or the driver failed before the chain. `claim_usable` is false, with the
+  single reason `window.null`.
+- **NO_COLLECTION:** the chain started and its record of stages shows that no collection stage ran to its end. That
+  record is the **stage journal**, `night/chain-stages.jsonl`: the chain appends one line to it each time one of its
+  stages ends, giving the stage's id, its kind and its return code. (It also writes a line of another kind when it
+  stops itself, and one for each stage it skips at the collection deadline, §5.1.) The verdict is NO_COLLECTION when
+  the file exists and holds no line of kind `campaign_collection`, the kind of a collection stage that ended. That is
+  every chain that stopped itself at exit 10, 11 or 12, because all three stops come before the first collection
+  stage (§5.1), and also a chain that the driver stopped from outside (§5.1) after the first stage had ended and
+  before the first collection stage had. Every collector still runs, `chain.stopped_before_collection` is recorded
+  (DISCLOSE), and `claim_usable` is false whatever the flags say, because only a COLLECTED window can be
+  claim-usable.
+  *The case the journal cannot show.* A chain that started and was stopped before its first stage, the bracket
+  reservation, had ended has written no journal. The harvest reads a missing journal as no evidence against
+  collection, so this window's verdict is COLLECTED and `chain.stopped_before_collection` is not recorded. The
+  window is still not claim-usable: its bracket session was never finalized, so `calibration.no_bracket` removes it
+  (§6.5), and `collection.zero_yield` (DISCLOSE) records that none of its planned bundles is present.
+- **HARVEST_FAULT:** the harvest program failed on bytes that are present. `claim_usable` is false, and
+  `derived/window_flags.json` adds the reason `harvest.fault`. Cured by R3 and re-harvested from identical bytes
+  into a distinct derived directory; never a science outcome.
+
+`window.null`, `exclusions.function_unavailable` and `harvest.fault` are reasons the harvest writes itself. Like the
+pack-scoped window reason of §0.16, they are not catalog codes.
 
 ### 7.2 What happens next
+
+**Who applies these rules.** No program schedules the block. The harvest writes each attempt's verdict and
+`claim_usable` (`harvest.json`, `derived/window_flags.json`). The rules of this section, of §7.4 and of §7.6 are then
+applied to those records by the lead: in an unattended run, by the magistrate, the headless lead session that the
+watchdog launches (§5.7). They are process rules, as the rule of §7.3 is, and the brief the magistrate is launched
+with carries them. Wherever this file says "the scheduler", it means the lead applying these rules. The code holds a
+function for the first rule below, `first_claim_usable` in `joulewise/flags/exclusions.py`, which returns a pack's
+first claim-usable attempt; it is tested, and no block-5 program calls it.
 
 - **The analysed window of each pack is its first claim-usable attempt** in arm order. All of a model's cells come
   from that one window, so attempts are never mixed: no member, quad or cell is pooled, topped up or replaced across
@@ -2964,9 +2993,24 @@ writes one verdict:
   collector performs (pack: the pins, the config run ids and the registered digests; checkout: HEAD, tracked edits
   and untracked files under the executed roots; executed code: the executed inventory and the chain sidecar), the
   harvest's own result stands and the arm's flag is moved, whole, into `records.identity_unmeasured_superseded`
-  (DISCLOSE). Without this, a collector that errors deterministically would remove every re-armed window. Model
-  identity is superseded the same way since Opus audit F5: the arm's model-identity collector has a 55 s budget,
-  and a slow one left `model.identity_unmeasured`, which removed the window. Every member's metadata carries the
+  (DISCLOSE). Without this, a collector that errors deterministically would remove every re-armed window.
+  *Two more conditions for the pack collector.* The three pack checks named above are needed and are not enough.
+  The arm's pack collector also checks that the pack files in the checkout are the committed ones and that no run id
+  is used twice, and the harvest can stand in for those two checks only through two of its other steps. (i) The
+  harvest ran the checkout's tracked-edits check and its untracked-files check. It can run them only when the
+  listing of the working tree taken at the arm is present: the output of `git status --porcelain`, which the driver
+  saves in the executed-file inventory. (ii) The harvest resolved the member dispatch of every collection stage,
+  that is, the list of run ids the stage launches, read from the stage's order manifest (the file that lists the
+  stage's members in launch order). The run ids of a stage it could not resolve that way
+  (`roster.dispatch_unresolved`) enter no duplicate check (`roster.duplicate_run_id`, which removes the window).
+  If (i) or (ii) fails, the arm's `pack.identity_unmeasured` stays and removes the window. Condition (ii) is the one
+  that changes an outcome: `roster.dispatch_unresolved` alone is only disclosed, so the window would otherwise have
+  been kept. When the listing of (i) is missing, the harvest's own `code.identity_unmeasured` normally removes the
+  window anyway. The checkout and executed-code collectors carry no further condition
+  (`harvest.supersede_identity_unmeasured`).
+  *Model identity* is superseded the same way since Opus audit F5 (commit `a28e8611e`): the arm's model-identity
+  collector has a 55 s budget, and a slow one left `model.identity_unmeasured`, which removed the window. Every
+  member's metadata carries the
   content hash of the model tree its own process loaded and its runtime stack, and the harvest compares them with the
   pins (`harvest.model_identity`). When the harvest read the pins and compared the identity of every succeeded science
   member (at least one) with a pin, its own result (a mismatch, or clean) stands and the arm's flag moves into
@@ -2979,7 +3023,9 @@ writes one verdict:
   emitter, reading no energy) by a cold erratum to the catalog before the release event. If that makes the attempt
   not claim-usable, its pack is re-armed after the packs already scheduled, and the changed order is disclosed.
 - **NULL:** re-arm after the named hazard is gone (a contention dwell timeout: identify the process; charging: wait
-  for float; the frequency gate: the desk redraw of §3; disk: offload).
+  until the arm's battery rule of §4.2 would pass, which is the adapter connected, IsCharging No and a battery
+  current of at most 200 mA in either direction, the state this file calls battery float; the frequency gate: the
+  desk redraw of §3; disk: offload).
 - Ed's NO, on the arm notice before each arm, stops that arm.
 
 ### 7.3 Anti-spiral routing
@@ -2997,24 +3043,53 @@ harvest's `collection.failure_histogram`). It fixes the cause first, by the R3 r
 repeats identically in every window; under back-to-back cadence each repeat costs a whole arm and chain and teaches
 nothing new.
 
+*One LOW that does not hold the next arm* (orchestrator ruling of 2026-10-07 on the fidelity sweep's item C1). On
+GAMMA, each of the two diagnostic interior references (§0.12) is a stage of one member, and the driver counts such a
+stage as a science stage, whose minimum is then 1 of 1 (§5.7). So one lost diagnostic member makes the window's
+yield status LOW, and a single lost member always "shares one cause" with itself. At the recorded loss rate of 1
+member in 37 this happens by chance in 1 − (36/37)² ≈ 5.3% of GAMMA windows, so for these two stages a LOW does
+not indicate a systematic cause. The diagnostic member is no NEG-8 reference and enters no reported cell and no
+contrast. A LOW that comes from one lost diagnostic member alone therefore does not hold the next arm. The yield
+status itself stops nothing and removes nothing in any case; it sends a notice (§5.7). The magistrate's brief
+carries this rule. Giving the diagnostic role its own minimum in the driver is deferred until after block 5.
+
 ### 7.4 END STATE
 
-Counting across every started attempt of this measurement block: if at least 5 members have a recorded anchor status
-and more than half of them are not `bounded`, the clock instrument is failing and re-arming cannot cure it; the
-measurement block goes to **END STATE** at once. (A single window meeting the same rule is already `clock.systematic`,
-§6.5.) END STATE also follows a cold-gate ruling to stop. At END STATE no further window arms, Ed is emailed, and the
-next step is a design record naming the cause, with a consult and a cold gate. Claim-usable windows keep their bytes;
-their analysis is fixed in analysis plan §2.3.
+*What is counted.* A member's metadata records the outcome of its per-member anchor bound (§0.14) as one status
+word, its **anchor status**: `bounded`, or another word when the bound failed or could not be computed. A
+calibration capture has a sampler stream of its own and records the same status in its evidence file,
+`instrument_evidence.json`. A status is **recorded** when that field holds a value; a member or capture with no
+value is left out of the count. Captures are counted only for a window whose bracket session was finalized: its pre
+and post slots, at most two per window. A calibration capture is not a member (§0.3), but the code counts members
+and captures together.
+
+*The rule.* Counting across every started attempt of this measurement block: if at least 5 members and captures
+together have a recorded anchor status and more than half of those are not `bounded`, the clock instrument is
+failing and re-arming cannot cure it; the measurement block goes to **END STATE** at once. (A single window meeting
+the same rule is already `clock.systematic`, §6.5, which counts the same way: three members and two captures reach
+its minimum of 5, and a capture that is not `bounded` counts toward the majority.) END STATE also follows a
+cold-gate ruling to stop. At END STATE no further window arms, Ed is emailed, and the next step is a design record
+naming the cause, with a consult and a cold gate. Claim-usable windows keep their bytes; their analysis is fixed in
+analysis plan §2.3.
+
+*Who counts.* The harvest applies the rule to one window only (`harvest.clock_systematic`). No program adds the
+counts of several attempts: this is a rule the lead applies (§7.2). Its inputs are status words, not energies. The
+harvest writes a window's two counts (`recorded`, `non_bounded`) only into the `observed` of `clock.systematic`,
+when that window's own rule fired. For any other window the statuses are the per-member `anchor_recorded` values of
+the harvest's `withheld/member-assessments.json` (restricted custody, so read by automation, §0.1) and the
+`clock_anchor.status` of each capture's `instrument_evidence.json`.
 
 ### 7.5 A defect found in the middle of the block
 
 **Collection code** is any file in the sealed inventory that executes during a window or changes how a window's bytes
 are produced. GAMMA's contrasts are judged against floors from ALPHA and BETA, so all three windows must share one
-acceptance, one macOS build and one collection head for the code they executed.
+acceptance, one macOS build and the same collection code: no collection-code file that a completed window executed
+may differ, byte for byte, in the commit a later window runs.
 
 - A cure confined to collection code that no completed window executed (for example GAMMA-only stages) does not
-  supersede completed windows; the changed-path map must show that no file executed by a completed window changed,
-  and a diff-scoped #416 re-audit covers the change.
+  supersede completed windows. The cure carries a **changed-path map**: the list of files that differ between
+  H_claim and the cure's commit, as `git diff --name-only` prints it. The map must show that no file executed by a
+  completed window changed, and a diff-scoped #416 re-audit covers the change.
 - A cure touching collection code that a completed window executed **supersedes the whole block**: completed windows
   are retained and disclosed structurally, their energies are never analysed, a new registration or a cold erratum is
   written, and the block restarts at ALPHA.
@@ -3026,6 +3101,9 @@ acceptance, one macOS build and one collection head for the code they executed.
 
 ### 7.6 What re-arming can and cannot select on
 
+The decision to re-arm is a rule the lead applies (§7.2), not code. It reads the harvest's structural records only:
+`claim_usable`, the verdict and the flag codes. So a measured value can influence re-arming only through what
+`claim_usable` itself reads.
 `claim_usable` reads no science member's energy except the single pass/fail precheck ratio of §6.3, which is
 RESTRICTED. It does read reference-workload energies (the NEG-8 screen), power (idle admission, the bracket), timing,
 and the physical hazards. So re-arming cannot select on the science outcome, but every reported number is
