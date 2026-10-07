@@ -1,78 +1,182 @@
 #!/usr/bin/env python3
-"""Paper-number inventory checker with bound-slot enforcement and count ratchets.
+"""Compare each number printed in the paper draft with its source file, and cap the count of numbers not yet compared.
 
-``--check`` fails on a slot mismatch, missing/ambiguous anchor, refused
-source, invalid binding, failed cross-check, or growth above the inventory's
-unbound-results / unaccounted ceilings. Existing unresolved literals and the
-spelled-out census are informational. ``--report`` always exits 0 (default).
+WHERE IT LIVES AND HOW TO RUN IT.  The draft is
+``docs/paper/draft-v2-skeleton.md``, the methods paper that the project's plans
+call Paper A; the code and the command-line options call that file the
+*skeleton*.  This checker lives in ``docs/paper/tools/`` beside its generator
+(``gen_paper_number_inventory.py``, which writes the list of reviewed numbers
+that this checker reads).  From the repository root:
 
-THE PROBLEM IT ADDRESSES.  The existing paper checkers compare a printed number
-with its source only where the number carries a ``[FILL:...]`` marker or sits
-after a quoted sentence head.  A census on 2026-09-28 changed each of the 1,106
-numeric literals in ``docs/paper/draft-v2-skeleton.md`` one at a time and found
-241 printed results numbers that no checker notices when they change (for
-example ``49 of 59`` and ``+13.0 ms`` in Section 2).  The numbers were right;
-nothing would have caught them going wrong.
+    python3 -B docs/paper/tools/check_paper_number_inventory.py --check
+    python3 -B -m unittest tests.test_paper_number_inventory
+
+``--report`` (the default) prints the full report and always exits 0.
+``--check`` prints the same report and exits 1 if any comparison described
+below fails; EXIT STATUS, near the end, names the failing outcomes.  The
+unittest module runs ``--check`` on the tracked draft, then repeats it on
+scratch copies with one digit changed to prove that the check notices.
+
+THE PROBLEM IT ADDRESSES.  A number in the draft was copied by hand from a
+result file.  Nothing connects the printed digits to that file afterwards, so
+a later edit can change a digit and the paper then states a number that its
+own evidence does not support.  The two older paper checkers compare a
+printed number with its source only at the sites each was written for:
+``scripts/check_paper_replay_fence.py`` reads the numbers of two worked
+examples in Section 4, which it finds by their fixed surrounding words, and
+``scripts/check_paper_round7_artifacts.py`` reads numbers that carry a
+``[FILL:DX-nnn]`` marker (a tag written in the draft beside the number).  A
+*results number* is a number that reports a measurement or a count taken from
+data, as opposed to a section number, a date or a constant of the method.  A
+census on 2026-09-28 listed every number written in digits in the draft,
+1,106 of them, and found 241 printed results numbers that no checker compares
+with a source (for example ``49 of 59`` and ``+13.0 ms`` in Section 4).  The
+census list is tracked under
+``docs/process_traces/2026-09-27-activation-d528efb2/62-paper-number-census/``.
 
 THE MECHANISM, in the order the checker runs it.
 
-1. **Extract.**  Every numeric literal in the visible text is found with the
-   census extractor (ported below unchanged in effect: HTML comments, the
-   reference list, heading numbers, URLs, identifiers such as ``DX-010``,
-   cross-references such as ``Section 4``, month-name dates, model sizes such
-   as ``1.5B``, LaTeX command names, hashes and run ids are masked first).  On
-   the 2026-09-28 skeleton it finds 1,106 literals, the census count.
-   Spelled-out numbers (``zero`` ... ``twenty``, tens, ``hundred``,
-   ``thousand``) are found separately.
+1. **Extract.**  A *literal* is one number written in digits in the draft's
+   visible text, meaning the text outside HTML comments (comments do not
+   print).  Other text that looks numeric but states no quantity is blanked
+   out before the search: the reference list, heading numbers, URLs and link
+   targets, identifiers such as ``DX-010``, cross-references such as
+   ``Section 4``, month-name dates, model sizes such as ``1.5B``, LaTeX command
+   names, file and run identifiers, hashes, bracketed citation numbers and
+   list-item numbers.  What remains is searched for runs of characters shaped
+   like a number: an optional sign, digits with optional thousands commas, an
+   optional decimal part, an optional exponent and an optional percent sign.
+   On the draft as it stood at the census this finds 1,106 literals, the
+   census count.  Numbers written as words (``zero`` to ``twenty``, the tens,
+   ``hundred``, ``thousand``) are found separately; there are 307.
 
-2. **Account.**  The inventory file ``docs/paper/number-inventory.json`` holds
-   *entries*.  An entry is an **anchor**: a short piece of the paper's text in
-   which each number is replaced by a named **slot** written ``⟦name⟧``.  For
+2. **Account.**  The *inventory*, ``docs/paper/number-inventory.json``, is the
+   list of number sites that have been reviewed.  It holds *entries*.  An
+   entry is an **anchor**: a short piece of the draft's own wording in which
+   each number is replaced by a named **slot**, written ``⟦name⟧``.  For
    example ``Their medians are ⟦onset_median⟧ ms and ⟦offset_median⟧ ms.``
-   The checker turns the anchor into a pattern (any run of whitespace in the
-   anchor matches any run of whitespace in the paper, so line wrapping does not
-   matter; a slot matches any number-shaped token) and requires it to match
-   the visible text exactly once.  Each slot then *claims* the extracted
-   literals inside the text it matched.  A slot has one of three classes:
+   The checker turns the anchor into a search pattern and requires the
+   pattern to occur in the visible text exactly once.  In the pattern, any run
+   of whitespace in the anchor matches any run of whitespace in the draft, so
+   line wrapping does not matter.  A slot matches any number (any word, where
+   the draft spells the number out; any unbroken run of characters, where the
+   slot holds an identifier or a date), so that a wrong value still matches
+   its anchor and is reported as a wrong value rather than as a missing
+   anchor.  Each slot then *claims* the literal it matched, which makes that
+   literal accounted for.  Every slot states how its expected text is
+   obtained, in one of three classes:
 
-   - ``bound``: its expected text is re-derived from a hash-pinned source
-     artefact with a named **rendering rule** (``signed_1`` prints an explicit
-     sign, ``+`` or the Unicode minus ``−``, and one decimal; see RENDERERS).
-   - ``tied``: its expected text comes from a named code constant or fixture
-     field (a method constant, not a measurement).
-   - ``classed``: a reviewed non-result (notation, index, date, framing); its
-     expected text is the fixed literal written in the inventory, with a
-     reason.
+   - ``bound``: the expected text is re-derived from a *source*, a tracked
+     result file named in the inventory, by a named **rendering rule** that
+     fixes sign, rounding and digits (``signed_1`` prints an explicit sign,
+     ``+`` or the Unicode minus ``−``, and one decimal; see RENDERERS).
+   - ``tied``: the expected text comes from a named constant in the code (a
+     constant of the method, not a measurement).
+   - ``classed``: a reviewed number that reports no result (notation, an
+     index, a date, framing).  Its expected text is the fixed text written in
+     the inventory, with the reason.
 
-   A literal that no slot claims may instead be listed in ``unbound_results``
-   (a results number that is known and not yet bound; the census list).
-   Anything else is **unaccounted**.
+   A literal that no slot claims may instead be listed under
+   ``unbound_results``: a results number from the census list that is known
+   and not yet bound to a source.  The inventory locates such a number by its
+   *context string*, which is the number itself with up to 40 characters
+   before it and up to 30 after it on the same line.  A literal that is
+   neither claimed by a slot nor located by an ``unbound_results`` row is
+   **unaccounted**.
 
-3. **Compare.**  For every slot of a found anchor, the printed text must equal
-   the expected text character for character: ``MATCH`` or ``MISMATCH``.  If
-   an anchor is not found (the surrounding words changed), the entry is
-   ``ANCHOR_MISSING`` and its numbers fall through to unaccounted: a moved or
+3. **Compare.**  For every slot of an anchor that was found, the printed text
+   must equal the expected text character for character.  Equal is ``MATCH``;
+   anything else is ``MISMATCH``, reported with the line and the anchor.  If
+   an anchor is not found (the surrounding words changed), its entry is
+   ``ANCHOR_MISSING`` and its numbers are left unaccounted: a moved or
    rewritten number is never silently passed.  An anchor found more than once
    is ``ANCHOR_AMBIGUOUS``.
 
-4. **Refuse bad sources.**  Before any value is read, each source file's
-   SHA-256 must equal the inventory's pin, and the inventory's pin must equal
-   the pin in its authority (a registry line, or a named code constant).  A
-   source failing either is ``REFUSED``: none of its slots can MATCH.
+4. **Refuse bad sources.**  The inventory records, for each source, the
+   SHA-256 digest of the bytes that were reviewed; this recorded digest is the
+   source's *pin*.  The same digest is also recorded in a place the inventory
+   does not control, the pin's *authority*: one or more lines of the
+   results-fill registry (``docs/paper/results-fill-registry.md``, the table
+   that names the file and field supplying each registered number), or a named
+   constant in the code.  Before any value is read, the inventory's pin must
+   equal the authority's digest and the file's digest must equal the pin.  A
+   source that fails either test is ``REFUSED``: none of its slots can
+   ``MATCH``, so editing a source and the inventory's pin together does not
+   pass.
 
-5. **Cross-check.**  ``predicates`` re-derive summary numbers from the raw rows
-   of the same artefact (for example the offset median recomputed from the 59
-   per-pulse lags) and ``registry_checks`` require the registry row's printed
-   value to equal the rendering, the row's supplier text to name the same field
-   path, and the row not to be retired.
+5. **Cross-check.**  Three further comparisons guard against a plausible
+   number read from the wrong place.  A ``predicate`` re-derives a summary
+   number from the raw rows of the same source (for example a median
+   recomputed from the 59 per-pulse values it summarises); disagreement is
+   ``PRED_FAIL``.  A slot may carry a ``cross`` rule, a second derivation that
+   must render the same text; disagreement is also ``PRED_FAIL``.  A
+   ``registry_check`` requires the registry row's printed value to equal the
+   rendering, the row's supplier cell to name the same file and field, and the
+   row not to be marked retired; disagreement is ``REG_FAIL``.  A malformed
+   entry, or an expression that cannot be evaluated, is ``ERROR``.
 
-Worked example (Section 2, 2026-09-28): XD's ``summary.offset_best_fit_lag``
-has ``count_negative`` 49 and ``count`` 59.  The anchor ``⟦neg⟧ of ⟦off_n⟧
-offset lags are negative`` matches ``49 of 59 offset lags are negative``; the
-slot ``neg`` renders 49 with rule ``integer`` as ``49`` and the printed text is
-``49``: MATCH.  Edit the paper to ``50 of 59`` and the same anchor still
-matches, the printed text is ``50``, the expected text is ``49``: MISMATCH,
-reported with the line and anchor.
+6. **Cap what is not yet compared.**  Most literals are not bound yet: as of
+   2026-10-07, 155 are located ``unbound_results`` rows and 853 are
+   unaccounted.  The inventory stores those two counts as *ceilings* under
+   ``ratchet``.  If either count rises above its ceiling the outcome is
+   ``RATCHET_GROWTH``; a ceiling that is missing or is not a non-negative
+   integer is an ``ERROR``.  The ceilings are written by hand in the generator
+   and repeated in a test; the working rule is that they are only ever
+   lowered, as numbers are bound, which is why the code calls them a ratchet.
+   Two reports are for information only and never fail a check: ``STALE`` (an
+   ``unbound_results`` row whose context string no longer occurs as recorded)
+   and ``CLASS_COUNT_CHANGED`` (the count of numbers written as words differs
+   from the 307 the inventory records).
+
+WHAT THE CEILINGS DO AND DO NOT CATCH.  A ceiling notices a number only
+through a change of count, never by its value.  Two one-digit edits show both
+sides.  Changing the first ``9.724`` of Section 2 to ``9.725`` fails the
+check: that number is an ``unbound_results`` row, the edit changes its own
+context string and that of the ``17`` printed 33 characters after it (a
+context string reaches back 40), both rows become ``STALE``, both numbers fall
+to unaccounted, and 853 + 2 = 855 exceeds the ceiling of 853.  Changing
+``37 of 50`` to ``38 of 50`` in the abstract passes: that ``37`` is unaccounted
+before the edit and ``38`` is unaccounted after it, so the count is still 853.
+Only a slot compares a value.
+
+EXIT STATUS.  ``--report`` exits 0 whatever it finds.  ``--check`` exits 1 if
+the report holds any ``MISMATCH``, ``ANCHOR_MISSING``, ``ANCHOR_AMBIGUOUS``,
+``REFUSED``, ``PRED_FAIL``, ``REG_FAIL``, ``ERROR`` or ``RATCHET_GROWTH``, and
+exits 0 otherwise.
+
+WHAT IT COMPARES AS OF 2026-10-07.  118 slots: 111 bound, 1 tied and 6
+classed, at three places in the draft.  Two are in Section 4: the subsection
+"Historical current-method edge result" with the Figure 2 caption, and the
+record-overlap example with its table.  The third is the calibration table of
+Appendix A.3.8.  An audit on 2026-09-29
+(``docs/process_traces/2026-09-29-interactive-ff50b201/85-paper-custody/10-sol-audit.md``)
+changed one digit at each of five printed sites.  Neither older checker, run
+in the mode that reads only the draft (``--literals-only``), noticed any of
+the five.  This checker:
+
+    site and edit                                   outcome of --check
+    abstract, 37 of 50 -> 38 of 50                  passes (the gap above)
+    Section 2, 9.724 ms -> 9.725 ms                 fails, by count only
+    Section 4, +13.0 ms -> +13.1 ms                 MISMATCH
+    Section 4 table, 0.0533655 -> 0.0533656         MISMATCH
+    Appendix A.3.8, ...18542 -> ...18543            MISMATCH
+
+``tests.test_paper_number_inventory.AuditMutations`` repeats the five edits on
+scratch copies.  (A test in ``tests/test_paper_terms_lint.py`` requires the
+words ``37 of 50`` in the abstract, so the unit suite does notice that one
+edit; it compares the draft with words typed into the test, not with the
+source.)
+
+WORKED EXAMPLE OF ONE COMPARISON (Section 4).  The source that the inventory
+names ``XD`` is ``docs/paper/round7/excursion-decomposition.json``.  Its field
+``summary.offset_best_fit_lag`` has ``count_negative`` 49 and ``count`` 59.
+The anchor of entry ``dx.counts`` contains ``⟦off_neg⟧ of ⟦off_n⟧ offset lags
+are negative``, which matches the draft's ``49 of 59 offset lags are
+negative``.  The slot ``off_neg`` renders 49 with the rule ``integer`` as
+``49`` and the printed text is ``49``: ``MATCH``.  Edit the draft to
+``50 of 59`` and the same anchor still matches, the printed text is ``50``,
+the expected text is ``49``: ``MISMATCH``, reported with the line and the
+anchor.
 """
 
 from __future__ import annotations

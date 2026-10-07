@@ -1,7 +1,16 @@
-"""Bound-slot, source-pin, ratchet and deterministic-generation checks.
+"""Tests of the paper-number inventory: the checker and generator in docs/paper/tools/.
 
-All paper locations use textual anchors; line numbers are diagnostic output only.
-Mutations and CLI probes use scratch files and never write the tracked skeleton.
+The checker (``docs/paper/tools/check_paper_number_inventory.py``; its docstring
+builds the terms used below) compares numbers printed in the Paper A draft,
+``docs/paper/draft-v2-skeleton.md``, with values re-derived from the files they
+were copied from, and caps the count of numbers that are not yet compared.  This module
+runs that check on the tracked draft (``RealSkeleton``), then on copies with one
+digit, one word or one source byte changed, to prove each failure is noticed
+(``Mutations``, ``AuditMutations``, ``Ratchets``, ``SourceRefusal``).
+
+Every site in the draft is found by its wording, never by line number; line
+numbers appear only in diagnostic output.  Changed copies are held in memory or
+written to scratch files.  No test writes the tracked draft.
 """
 
 from __future__ import annotations
@@ -118,8 +127,18 @@ class RealSkeleton(unittest.TestCase):
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
                 self.assertEqual(output.read_bytes(), (ROOT / "docs/paper/number-inventory.json").read_bytes())
 
+    def test_census_file_matches_recorded_digest(self):
+        # The unbound_results rows come from the tracked census list; its digest is recorded beside them.
+        provenance = INVENTORY["unbound_results_provenance"]
+        census = ROOT / provenance["census"]
+        self.assertTrue(census.is_file(), census)
+        self.assertEqual(hashlib.sha256(census.read_bytes()).hexdigest(), provenance["census_sha256"])
+        self.assertEqual(len(INVENTORY["unbound_results"]), INVENTORY["ratchet"]["unbound-results"])
 
-class Mutations(unittest.TestCase):
+
+class SingleMismatch:
+    """Shared assertion: an edited draft yields exactly one MISMATCH, in process and from the command line."""
+
     def assert_single_mismatch(self, text: str, slot: str, printed: str, expected: str, anchor_bit: str):
         rep = inv.run_check(ROOT, text, INVENTORY)
         bad = BAD(rep)
@@ -139,6 +158,8 @@ class Mutations(unittest.TestCase):
             self.assertEqual(sum(line.startswith("MISMATCH ") for line in result.stdout.splitlines()), 1)
             self.assertIn(f"MISMATCH {slot} ", result.stdout)
 
+
+class Mutations(SingleMismatch, unittest.TestCase):
     def test_dx_median(self):
         self.assert_single_mismatch(
             mutated("Their medians are +13.0 ms", "Their medians are +14.0 ms"),
@@ -215,6 +236,79 @@ class Mutations(unittest.TestCase):
         rep = inv.run_check(ROOT, mutated("from one capture,\nnot independent", "from one capture and three runs,\nnot independent"), INVENTORY)
         self.assertEqual(len(rep.by_status("CLASS_COUNT_CHANGED")), 1)
         self.assertEqual(rep.check_failures(), [])
+
+
+class AuditMutations(SingleMismatch, unittest.TestCase):
+    """The five one-digit edits of the 2026-09-29 paper-custody audit, each at the audit's own site.
+
+    The audit (docs/process_traces/2026-09-29-interactive-ff50b201/85-paper-custody/10-sol-audit.md)
+    changed one digit at each of five printed sites of the draft and recorded which
+    checker noticed.  The two older checkers (scripts/check_paper_replay_fence.py and
+    scripts/check_paper_round7_artifacts.py) noticed none.  One test below records
+    what this checker does with each edit:
+
+        test  site and edit                                 outcome of the check
+        m1    abstract, 37 of 50 -> 38 of 50                passes: the number is not compared
+        m2    Section 2, 9.724 ms -> 9.725 ms               fails, through a count ceiling only
+        m3    Section 4, +13.0 ms -> +13.1 ms               MISMATCH against the source value
+        m4    Section 4 table, 0.0533655 -> 0.0533656       MISMATCH against the source value
+        m5    Appendix A.3.8, ...18542 -> ...18543          MISMATCH against the source value
+
+    m1 and m2 record gaps, not properties to keep.  When the abstract count and the
+    9.724 ms value are bound to their sources, each of those two tests will fail, and
+    the right repair is to replace it with an ``assert_single_mismatch`` call.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.baseline = inv.run_check(ROOT, SKELETON, INVENTORY)
+
+    def test_m1_abstract_count_is_not_yet_compared(self):
+        old = "requests, 37 of 50 prompt-processing"
+        text = mutated(old, "requests, 38 of 50 prompt-processing")
+        at = SKELETON.index(old) + len("requests, ")
+        before = [l for l in self.baseline.literals if l.start == at]
+        self.assertEqual([(l.lit, l.claim) for l in before], [("37", None)])  # unaccounted: no slot, no census row
+        rep = inv.run_check(ROOT, text, INVENTORY)
+        self.assertEqual([(l.lit, l.claim) for l in rep.literals if l.start == at], [("38", None)])
+        gap = "the abstract count is now compared: replace this recorded gap with assert_single_mismatch"
+        self.assertEqual(BAD(rep), [], gap)
+        self.assertEqual(rep.check_failures(), [], gap)
+        self.assertEqual(rep.counts(), self.baseline.counts(), gap)  # one unaccounted number before, one after
+
+    def test_m2_section_2_value_fails_by_count_only(self):
+        rep = inv.run_check(ROOT, mutated("giving \\(9.724\\) ms", "giving \\(9.725\\) ms"), INVENTORY)
+        # The edit changes the context string of two census rows (9.724 itself and the 17
+        # printed 33 characters after it); both rows go STALE and both numbers become unaccounted.
+        self.assertEqual([(f.status, f.where) for f in BAD(rep)], [
+            ("STALE", "unbound_results"), ("STALE", "unbound_results"), ("RATCHET_GROWTH", "unaccounted"),
+        ])
+        self.assertEqual([f.detail.split(" ctx ")[0] for f in rep.by_status("STALE")], ["'9.724'", "'17'"])
+        counts, base = rep.counts(), self.baseline.counts()
+        self.assertEqual(counts["unbound-results"], base["unbound-results"] - 2)
+        self.assertEqual(counts["unaccounted"], base["unaccounted"] + 2)
+        self.assertEqual(counts["unaccounted"], INVENTORY["ratchet"]["unaccounted"] + 2)
+        self.assertEqual(rep.check_failures(), ["RATCHET_GROWTH unaccounted"])
+        self.assertEqual(rep.by_status("MISMATCH"), [], "9.724 is now compared by value: assert the MISMATCH instead")
+
+    def test_m3_onset_median(self):
+        self.assert_single_mismatch(
+            mutated("Their medians are +13.0 ms", "Their medians are +13.1 ms"),
+            "dx.medians.onset_median", "+13.1", "+13.0", "Their medians are",
+        )
+
+    def test_m4_overlap_cell(self):
+        self.assert_single_mismatch(
+            mutated("| r03 | 365 | 0.1945653 | 0.3210495 | 0.0533655 |",
+                    "| r03 | 365 | 0.1945653 | 0.3210495 | 0.0533656 |"),
+            "s4.table.r03_1_ov", "0.0533656", "0.0533655", "Positive-overlap duration",
+        )
+
+    def test_m5_calibration_bound(self):
+        self.assert_single_mismatch(
+            mutated("| 0.027365018417518542 |", "| 0.027365018417518543 |"),
+            "a38.table.v1", "0.027365018417518543", "0.027365018417518542", "Capture member",
+        )
 
 
 class Ratchets(unittest.TestCase):

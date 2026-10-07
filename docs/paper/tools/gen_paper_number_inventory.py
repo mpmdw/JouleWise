@@ -1,11 +1,41 @@
 #!/usr/bin/env python3
-"""Regenerate the reviewed paper-number inventory; --check compares committed bytes.
+"""Write the paper-number inventory JSON from the reviewed definitions in this file; --check compares it with the committed bytes.
 
-Bindings and census seeds are authoring inputs here, independent of the generated
-JSON. Pins and ratchet ceilings are deliberately fixed, never renewed from the
-current paper or source bytes. Census contexts locate literals without line
-numbers. The original census TSV was external to this checkout; its retained
-unbound rows below preserve the context, offset, and duplicate occurrence data.
+The inventory, ``docs/paper/number-inventory.json``, is the list of number
+sites that ``check_paper_number_inventory.py`` (same directory) compares with
+their source files.  That checker's docstring builds each term used here, in
+order.  The JSON is generated and never edited by hand: the definitions below
+are the reviewed input, and a test requires the committed JSON to equal this
+file's output byte for byte.
+
+Three kinds of definition are written here by hand.  None is ever recomputed
+from the current draft or from the current bytes of a source file, because a
+value recomputed from the thing being checked would always agree with it.
+
+- For each source file: the SHA-256 digest of the bytes that were reviewed
+  (the file's pin), and the place outside the inventory where the same digest
+  is recorded (the pin's authority).
+- The entries: each anchor (a piece of the draft's wording with every number
+  replaced by a named slot), and for each slot the rule that produces the text
+  the draft must print there.
+- The two ceilings, under ``ratchet``, on the counts of numbers that are not
+  yet compared with a source.
+
+The census of 2026-09-28 listed 241 results numbers in the draft (numbers
+that report a measurement or a count from data) that no checker then compared
+with a source.  Slots now compare 86 of them.  ``UNBOUND_RESULTS`` holds the
+other 155, one row each.  The census file is tracked at
+``docs/process_traces/2026-09-27-activation-d528efb2/62-paper-number-census/results_bearing_unpoliced.tsv``
+and ``CENSUS_PROVENANCE`` records its SHA-256.  Each row keeps the census's
+context string for its number (the number with the characters around it on
+its line), the number's offset inside that string and, where the same context
+string occurs more than once in the draft, which occurrence is meant.  The
+checker finds a row by that string, never by line number, so text added
+elsewhere in the draft does not disturb it.
+
+To change the inventory: edit the definitions here, run this file with no
+option to rewrite the JSON, then run the checker with ``--check`` and the
+module ``tests.test_paper_number_inventory``.
 """
 from __future__ import annotations
 
@@ -45,7 +75,7 @@ ON = "XD:summary.onset_best_fit_lag"
 OFF = "XD:summary.offset_best_fit_lag"
 DX = {
  "id": "dx",
- "title": "Section 2 historical current-method edge result and Figure 2 caption; registry DX-010/011/012/013, D-174 amendment",
+ "title": "Section 4 historical current-method edge result and Figure 2 caption; registry DX-010/011/012/013, D-174 amendment",
  "entries": [
   {"id": "dx.capture", "anchor": "The source is the single capture `⟦capture⟧`, re-derived under the current rate-aware anchor `⟦anchor⟧`.",
    "slots": {"capture": B("XD:capture_member_id", "text", kind="text"),
