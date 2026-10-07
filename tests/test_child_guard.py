@@ -28,6 +28,15 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 LONG_S = "45"   # how long a deliberately left child would live if nothing stopped it
 
 
+def setUpModule() -> None:   # noqa: N802 (unittest hook)
+    # Every check below asks the system which processes exist. Some sandboxes deny ``ps``;
+    # there the guard itself falls back to the children it recorded, and these tests cannot look.
+    try:
+        child_guard.table()
+    except child_guard.ProcessTableUnavailable as problem:
+        raise unittest.SkipTest(f"no process list in this environment: {problem}")
+
+
 def running(pid: int) -> bool:
     """Whether the system lists ``pid`` as a process that has not exited."""
 
