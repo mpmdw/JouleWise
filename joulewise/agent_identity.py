@@ -20,7 +20,10 @@ never by its arguments:
   ``claude/versions/<version>`` or ``codex/versions/<version>`` install (the
   Claude Code native binary is ``~/.local/share/claude/versions/2.1.289``), or
   when it is a script interpreter (``node``, ``bun``, ``deno``) whose script is
-  named ``claude*`` or ``codex*`` (``node /opt/homebrew/bin/codex exec``).
+  named ``claude*`` or ``codex*`` (``node /opt/homebrew/bin/codex exec``) or
+  whose script path runs through an agent's npm package directory
+  (``node .../node_modules/@anthropic-ai/claude-code/cli.js``, ``@openai/codex*``,
+  ``claude-code``).
 * **The caller's own tree.**  With ``own_tree_root`` set, a listed process
   whose parent chain reaches that pid, or whose process group is led by such a
   process, is the window itself and is ignored whatever it runs.
@@ -51,6 +54,13 @@ from typing import Callable
 AGENT_PREFIXES = ("claude", "codex", "t3 code", "t3code")
 AGENT_INSTALL_DIRS = ("claude", "codex")
 SCRIPT_INTERPRETERS = ("node", "bun", "deno")
+# An agent's npm package, as a directory of the interpreter's script path
+# (cold pass 2 N5): ``node .../@anthropic-ai/claude-code/cli.js`` runs Claude
+# Code by its real path, whose basename (``cli.js``) is no agent name.  A
+# scope matches only with a package named for its agent; ``claude-code`` also
+# matches unscoped.
+AGENT_PACKAGE_SCOPES = {"@anthropic-ai": ("claude",), "@openai": ("codex",)}
+AGENT_PACKAGE_DIRS = ("claude-code",)
 _PID_PREFIX = re.compile(r"([0-9]+) ")
 
 
@@ -108,7 +118,20 @@ def is_agent(executable: str | None, argv: tuple[str, ...] | None) -> bool:
         for token in argv[1:]:
             if token.startswith("-"):
                 continue
-            return _agent_name(_basename(token))
+            return _agent_name(_basename(token)) or _agent_package_script(token)
+    return False
+
+
+def _agent_package_script(script: str) -> bool:
+    """True when a directory of ``script`` is an agent's npm package (``@anthropic-ai/claude-code``)."""
+
+    parts = [part.lower() for part in PurePosixPath(script).parts[:-1]]
+    for index, part in enumerate(parts):
+        if part in AGENT_PACKAGE_DIRS:
+            return True
+        prefixes = AGENT_PACKAGE_SCOPES.get(part)
+        if prefixes and index + 1 < len(parts) and parts[index + 1].startswith(prefixes):
+            return True
     return False
 
 

@@ -3928,6 +3928,9 @@ class UnwrittenCoreFlagTests(WindowTestCase):
                              "records.malformed_flag_member_exclusion_possible", "member", run_id),
             # torn before the code: nothing recoverable, disclosed only
             "no_code": (full_member[:60], None, None, None),
+            # torn just after the code's opening quote: an empty prefix shows no code (cold pass 2 N7;
+            # before, "" prefixed every known code and the window was excluded)
+            "empty_prefix": (full_window[:full_window.index('"calibration.capt') + 1], None, None, None),
             # a member code but torn before the run id: disclosed only
             "member_unplaced": (full_member[:full_member.index('"battery.member_span"') + 22], None, None, None),
         }

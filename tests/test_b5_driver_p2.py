@@ -380,7 +380,7 @@ class LineageTests(unittest.TestCase):
 
         def unusable(request):
             calls.append(request)
-            raise window_lineage.LineagePublicationError(
+            raise window_lineage.PackInventoryUnusableError(
                 "pack inventory is unusable: plan_tree.json: [Errno 2] No such file or directory")
         harness.publish_lineage = unusable
         harness.lineage_valid = False
@@ -394,6 +394,29 @@ class LineageTests(unittest.TestCase):
         refusal = json.loads((harness.night / "refusal.json").read_text())
         self.assertEqual([], harness.driver.validate_refusal(refusal))
         self.assertEqual(2, refusal["refusal"]["evidence"]["attempts"])
+
+    def test_a5_the_refusal_keys_on_the_exception_type_not_its_message(self):
+        """Cold pass 2 N6: before, a reworded message turned the refusal into a hollow launch, and a
+        base-class error carrying the message refused."""
+        from joulewise import window_lineage
+        for error, refused in ((window_lineage.PackInventoryUnusableError("config inventory unreadable: x"), True),
+                               (window_lineage.LineagePublicationError("pack inventory is unusable: x"), False)):
+            with self.subTest(error=repr(error)):
+                harness = Harness(self, g10=False)
+                harness.replace_chain("#!/bin/zsh -f\nexit 0\n")
+                patch(self, b5_driver, "LINEAGE_RETRY_S", 0.0)
+
+                def failing(request, error=error):
+                    raise error
+                harness.publish_lineage = failing
+                harness.lineage_valid = False
+                code = harness.run()
+                if refused:
+                    self.assertEqual(harness.driver.EXIT_REFUSED, code)
+                    self.assertEqual(b5_driver.REFUSED_PACK_INVENTORY_UNUSABLE, harness.result()["aborted_reason"])
+                else:
+                    self.assertNotEqual(b5_driver.REFUSED_PACK_INVENTORY_UNUSABLE,
+                                        harness.result().get("aborted_reason"))
 
     def test_a5_any_other_publication_failure_still_launches(self):
         from joulewise import window_lineage

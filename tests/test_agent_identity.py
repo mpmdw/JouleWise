@@ -149,6 +149,28 @@ class AgentIdentityTests(unittest.TestCase):
             with self.subTest(executable=executable, argv=argv):
                 self.assertIs(expected, agent_identity.is_agent(executable, argv))
 
+    def test_an_agent_package_script_run_by_its_real_path_is_an_agent(self):
+        """Cold pass 2 N5: ``node .../@anthropic-ai/claude-code/cli.js`` (basename ``cli.js``) was missed."""
+        modules = "/opt/homebrew/lib/node_modules"
+        cases = {
+            ("/opt/homebrew/bin/node", ("node", f"{modules}/@anthropic-ai/claude-code/cli.js", "-p", "x")): True,
+            ("/opt/homebrew/bin/node", ("node", "--no-warnings", f"{modules}/@anthropic-ai/claude-code/cli.js")):
+                True,
+            ("/opt/homebrew/bin/bun", ("bun", "/Users/edr/.bun/install/global/node_modules/@anthropic-ai/"
+                                              "claude-agent-sdk/cli.js")): True,
+            ("/opt/homebrew/bin/node", ("node", f"{modules}/@openai/codex/dist/main.js", "exec")): True,
+            ("/usr/local/bin/node", ("node", "/usr/local/lib/node_modules/claude-code/cli.js")): True,
+            # Not agent packages: other scopes, a path that merely mentions an agent, a .claude directory.
+            ("/opt/homebrew/bin/node", ("node", f"{modules}/@anthropic-ai/sdk/dist/index.js")): False,
+            ("/opt/homebrew/bin/node", ("node", f"{modules}/@openai/agents/cli.js")): False,
+            ("/opt/homebrew/bin/node", ("node", "/Users/edr/.claude/hooks/notify.js")): False,
+            ("/opt/homebrew/bin/node", ("node", "scripts/run.mjs", f"{modules}/@anthropic-ai/claude-code/cli.js")):
+                False,
+        }
+        for (executable, argv), expected in cases.items():
+            with self.subTest(argv=argv):
+                self.assertIs(expected, agent_identity.is_agent(executable, argv))
+
     def test_the_hazard_arm_census_uses_the_same_matcher(self):
         window = self.window_process()
 

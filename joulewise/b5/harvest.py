@@ -91,9 +91,11 @@ NEG8_PHYSICS_LOSS_CODES = ("contention.request_overlap", "battery.member_span", 
 # unknown evidence never authorises an omission.
 NEG8_REFERENCE_LOSS_CODES = (*NEG8_PHYSICS_LOSS_CODES, "member.timeout", "member.admission_aborted",
                              "member.strict_validation_failed")
-# How a reference the verdict writer dropped for its status is named, when the
-# harvest has the member's own flag.
-NEG8_STATUS_LOSS_CODES = ("member.admission_aborted", "member.timeout", "member.status_not_succeeded")
+# How a reference the verdict writer dropped for its status (or an unreadable
+# summary) is named, when the harvest has the member's own flag.  The timeout
+# comes first: a member SIGKILLed at the hung-process cap has no summary, and
+# its timeout is the physical cause (cold pass 2 D1).
+NEG8_STATUS_LOSS_CODES = ("member.timeout", "member.admission_aborted", "member.status_not_succeeded")
 NEG8_BOUND_NAME = "neg8-drift-bound.json"      # in the bound runs root (the pack's bound-derivation output)
 HAZARD_RESULT_NAME = "hazard_result.json"      # L2's driver terminal record, night/
 ARM_DECISION_NAME = "arm_decision.json"        # joulewise.b5.driver ARM_DECISION, night/
@@ -843,6 +845,28 @@ def _epoch_s(text: Any) -> float | None:
     except ValueError:
         return None
     return moment.timestamp() if moment.tzinfo is not None else None
+
+
+def _claim_campaign_manifests_as_written(runs_root: Path) -> list[Mapping[str, Any]]:
+    """Every decodable ``campaign_manifests/*.json`` object under the claim root, unauthenticated.
+
+    Used only to name a window's NEG-8 references when the verdict's own
+    sources do not authenticate (``_Harvest._neg8_reference_losses``); an
+    unreadable file is skipped.
+    """
+    manifests: list[Mapping[str, Any]] = []
+    try:
+        paths = sorted((Path(runs_root) / "campaign_manifests").glob("*.json"))
+    except OSError:
+        return manifests
+    for path in paths:
+        try:
+            value = json.loads(path.read_bytes())
+        except (OSError, ValueError):
+            continue
+        if isinstance(value, Mapping):
+            manifests.append(value)
+    return manifests
 
 
 def verdict_neg8_sources(row: Mapping[str, Any], runs_root: Path) \
@@ -1605,6 +1629,31 @@ def build_roster(pack_root: Path, repo_root: Path) -> dict[str, Any]:
                 "stage_id": f"{stage.get('stage_id')}.spares", "role": "neg8_reference_spare", "block_id": None,
                 "position": None, "arm": None, "config_path": row.get("path"), "config_sha256": row.get("sha256"),
                 "cells": [], "spare_slot": retry.get("slot")})
+    # The planned NEG-8 references: the external-input members of each stage
+    # that carries a spare-slot retry (exactly the start, midpoint and end
+    # reference stages), with the slot they fill.  A floor stage names its
+    # input by the order manifest's path, a contrast stage by input id.  Read
+    # by the harvest to name a reference whose bundle is wholly absent
+    # (``bundle_absent``, cold pass 2 N2).
+    for stage in tree.get("stage_graph") or []:
+        retry = stage.get("spare_retry") if isinstance(stage, Mapping) else None
+        if not isinstance(retry, Mapping) or not isinstance(retry.get("slot"), str):
+            continue
+        ref = stage.get("input_ref") if isinstance(stage.get("input_ref"), Mapping) else {}
+        stage_input = stage.get("input") if isinstance(stage.get("input"), Mapping) else {}
+        for manifest in manifests:
+            if not isinstance(manifest, Mapping):
+                continue
+            input_id = manifest.get("external_input_id") or manifest.get("input_id")
+            inner = manifest.get("manifest") if isinstance(manifest.get("manifest"), Mapping) else {}
+            manifest_path = inner.get("path") or manifest.get("manifest_path")
+            if not ((ref.get("input_id") is not None and ref.get("input_id") == input_id)
+                    or (stage_input.get("path") is not None and stage_input.get("path") == manifest_path)):
+                continue
+            for row in manifest.get("members") or []:
+                member = members.get(row.get("run_id")) if isinstance(row, Mapping) else None
+                if member is not None and member.get("spare_slot") is None:
+                    member["neg8_slot"] = retry["slot"]
     cells: list[dict[str, Any]] = []
 
     def attach(run_id: str, cell: Mapping[str, Any], unit_kind: str, unit_id: str) -> None:
@@ -4586,6 +4635,9 @@ class _Harvest:
         if isinstance(screened, Mapping) and screened.get("survivor_screen") == "references_insufficient":
             observed["reason"] = "references_insufficient"
             observed["lost"] = self._neg8_lost_rows(screened, harvest_losses)
+        reference_source = getattr(self, "neg8_reference_source", None)
+        if isinstance(reference_source, Mapping) and reference_source.get("source") != "verdict_sources":
+            observed["reference_source"] = dict(reference_source)
         self.emit("neg8.screen_failed", level="window", collector="whole_window", observed=observed)
 
     def _neg8_reference_losses(self, row: Mapping[str, Any]) -> dict[str, str]:
@@ -4594,8 +4646,16 @@ class _Harvest:
         The references are the invoked start, midpoint and end members of the
         verdict's own source manifests (``verdict_neg8_sources``); the codes
         are ``NEG8_REFERENCE_LOSS_CODES`` at member level, the first in that
-        order naming the loss.  No energy is read.  Empty when the sources do
-        not read (the stored screen then stands, as before the rule).
+        order naming the loss.  No energy is read.
+
+        When the verdict's sources do not authenticate, the references are
+        read from the claim root's campaign manifests as written
+        (``campaign_manifests/*.json``, unauthenticated; cold pass 2 N1), so a
+        loss-flagged reference is still mapped: the re-screen then cannot run
+        and ``neg8.screen_failed`` is emitted, instead of a stored screen that
+        holds the reference's energy standing silently.  The fallback names
+        references only; it never supplies an energy or a passing screen.
+        ``self.neg8_reference_source`` records which source was used.
         """
         from joulewise import whole_window as ww
         runs = getattr(getattr(self, "inputs", None), "claim_runs_root", None)
@@ -4603,12 +4663,17 @@ class _Harvest:
             return {}
         try:
             sources = verdict_neg8_sources(row, runs)
-        except Exception:
-            return {}
+        except Exception as exc:
+            sources = f"sources_raised:{type(exc).__name__}"
         if isinstance(sources, str):
-            return {}
+            manifests = _claim_campaign_manifests_as_written(Path(runs))
+            self.neg8_reference_source = {"source": "claim_campaign_manifests_unauthenticated",
+                                          "verdict_sources_problem": sources}
+        else:
+            manifests = sources[0]
+            self.neg8_reference_source = {"source": "verdict_sources"}
         references: set[str] = set()
-        for manifest in sources[0]:
+        for manifest in manifests:
             for member in manifest.get("members") or [] if isinstance(manifest, Mapping) else []:
                 if not isinstance(member, Mapping) or member.get("execution") != "invoked":
                     continue
@@ -4649,12 +4714,27 @@ class _Harvest:
                 continue
             run_id, slot = item.get("bundle_id"), item.get("position")
             reason = harvest_losses.get(run_id) if isinstance(run_id, str) else None
-            if reason is None and item.get("reason") == "status_not_succeeded":
+            if reason is None and item.get("reason") in ("status_not_succeeded", "summary_unreadable"):
                 reason = next((code for code in NEG8_STATUS_LOSS_CODES if code in flags_by_member.get(run_id, ())),
-                              "status_not_succeeded")
+                              item.get("reason"))
             measured = [spare for spare in spares.get(slot, []) if (members.get(spare) or {}).get("present")]
             rows.append({"run_id": run_id, "slot": slot, "reason": reason or item.get("reason"),
                          "status": item.get("status"),
+                         "retry": {"spares_measured": measured,
+                                   "spares_succeeded": [spare for spare in measured
+                                                        if (members.get(spare) or {}).get("status") == "succeeded"]}})
+        # A planned reference whose bundle is wholly absent never reaches the
+        # verdict writer (its stage did not run it), so no bracket records it;
+        # the roster names it (``neg8_slot``, cold pass 2 N2).
+        named = {row["run_id"] for row in rows}
+        for member in (getattr(self, "roster", None) or {}).get("members") or []:
+            slot = member.get("neg8_slot") if isinstance(member, Mapping) else None
+            run_id = member.get("run_id") if isinstance(slot, str) else None
+            if not isinstance(run_id, str) or run_id in named or (members.get(run_id) or {}).get("present") \
+                    or self._bundle_on_disk(run_id):
+                continue
+            measured = [spare for spare in spares.get(slot, []) if (members.get(spare) or {}).get("present")]
+            rows.append({"run_id": run_id, "slot": slot, "reason": "bundle_absent", "status": None,
                          "retry": {"spares_measured": measured,
                                    "spares_succeeded": [spare for spare in measured
                                                         if (members.get(spare) or {}).get("status") == "succeeded"]}})
@@ -6226,7 +6306,7 @@ class _Harvest:
                     "salvaged_code_prefix": None if exact else code,
                     "salvaged_run_id": run_id, "problems": list(problems)[:5]}
         flag = self.emit("records.malformed_flag", level="window", collector="flags", observed=observed)
-        if code is None:
+        if not code:  # None, or an empty prefix (torn just after the opening quote): no code shows
             return
         rule = {"malformed_flag_id": flag["flag_id"], **observed,
                 "candidate_codes": sorted(candidates)[:20], "candidate_count": len(candidates)}
@@ -6241,8 +6321,11 @@ class _Harvest:
                                                             if self.catalog.effect(item) == "EXCLUDE_MEMBER")[:20]})
 
     def _candidate_codes(self, code: str | None, exact: bool) -> set[str]:
-        """Every code the catalog or this harvest knows that ``code`` (or its prefix) could be."""
-        if code is None:
+        """Every code the catalog or this harvest knows that ``code`` (or its prefix) could be.
+
+        An empty prefix shows no code and names none (cold pass 2 N7).
+        """
+        if not code:
             return set()
         known = set(self.catalog.entries) | set(CODES)
         return {code} if exact else {item for item in known if item.startswith(code)}

@@ -201,6 +201,14 @@ class LineagePublicationError(RuntimeError):
     """The driver could not publish the window lineage (before the chain)."""
 
 
+class PackInventoryUnusableError(LineagePublicationError):
+    """The pack's config inventory cannot be read or verified, so the lineage cannot bind it.
+
+    The driver's audit-A5 refusal (``night_refused_pack_inventory_unusable``)
+    keys on this type, never on the message text (cold pass 2 N6).
+    """
+
+
 # ---------------------------------------------------------------------------
 # Bytes
 
@@ -950,7 +958,7 @@ def publish_window_lineage(
         plan_tree_sha256 = sha256_bytes(plan_tree_raw)
         config_inventory(pack, plan_tree_sha256)
     except (OSError, HazardLineageError) as exc:
-        raise LineagePublicationError(f"pack inventory is unusable: {exc}") from exc
+        raise PackInventoryUnusableError(f"pack inventory is unusable: {exc}") from exc
 
     # Records, not inputs to any collection-time check: an unavailable value
     # is written as null and listed, never a reason to lose the window.
@@ -1414,6 +1422,7 @@ __all__ = [
     "LAUNCH_RECORD_SCHEMA",
     "LOCATOR_BASENAME",
     "LineagePublicationError",
+    "PackInventoryUnusableError",
     "REASON_CODES",
     "ROOT_ROLES",
     "UNRECORDABLE_FIELDS",
