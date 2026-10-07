@@ -158,7 +158,7 @@ _DISCLOSE_CODES = {
     # to the registry InstantAmperage and is disclosed.
     "battery.smc_unavailable": _code("DIAGNOSTIC", "PHYSICS", DISCLOSE),
     # Battery-assist ruling (orchestrator, 2026-10-06): discharge on AC in a
-    # member's measured request (B0AC below -200 mA, or the registry fallback,
+    # member's measured request (a negative B0AC, or the registry fallback,
     # or a discharge-accumulator mean beyond 200 mA x V) is disclosed, never
     # excluded; charging, AC loss and missing evidence stay battery.member_span
     # / battery.unmeasured.  The discharged energy goes to withheld/, never

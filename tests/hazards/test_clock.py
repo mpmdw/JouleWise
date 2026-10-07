@@ -2,8 +2,10 @@
 steps, skew, frequency-word changes, reboots and probe failure."""
 from __future__ import annotations
 
+import os
 import sys
 import unittest
+import unittest.mock
 from fractions import Fraction
 
 from joulewise import kernel_clock
@@ -382,6 +384,89 @@ class PreemptedReadTests(unittest.TestCase):
         measurement = clock.measure(ctx, frequency_reader=FrequencyReader(clocks))
         self.assertEqual(clock.judge(measurement, LIMITS).status, base.PASS)
         self.assertEqual(measurement.values["rejected_anchors"][0]["read_skew_ns"], 3_000_400)
+
+
+class PreemptedReadReviewTests(unittest.TestCase):
+    """P3-HAZ final review (Sol 6.1): F5, F6 and the coverage and journaling
+    mutations M9 and M14 that the shipped tests did not kill."""
+
+    journal = PreemptedReadTests.journal
+
+    def test_an_f_read_beside_a_rejected_anchor_still_records_the_change(self):
+        # F5: sample 30 read a new f but its anchor was preempted (8.3 ms
+        # skew, 4.15 ms low).  The change and the change back are recorded;
+        # the preempted anchor is never compared.
+        samples = self.journal({})
+        new_word = samples[0]["frequency"]["raw_word"] + 65_536
+        samples[30] = dict(samples[30], frequency=dict(samples[30]["frequency"], raw_word=new_word),
+                           anchor=dict(samples[30]["anchor"],
+                                       anchor_ns=samples[30]["anchor"]["anchor_ns"] - 4_150_000,
+                                       read_skew_ns=8_300_400))
+        samples[35] = dict(samples[35], frequency=dict(samples[35]["frequency"],
+                                                       raw_word=samples[0]["frequency"]["raw_word"]))
+        events = clock.window_events(samples)
+        self.assertEqual([(event["code"], event["observed"]) for event in events],
+                         [("clock.frequency_changed", new_word),
+                          ("clock.frequency_changed", samples[0]["frequency"]["raw_word"])])
+
+    def test_rejected_reads_survive_a_later_read_that_raises(self):
+        # F6: the first read is preempted (8.3 ms), the second raises.
+        clocks = FakeClocks()
+        ctx = base.Context(run=boot_runner(), clocks=clocks)
+        preempted = {"realtime_ns": 1, "monotonic_raw_ns": 2, "read_skew_ns": 8_300_400, "anchor_ns": -1}
+        with unittest.mock.patch.object(clock, "_anchor_record",
+                                        side_effect=[preempted, OSError("clock_gettime failed")]):
+            item = clock.sample(ctx, frequency_reader=None)
+        self.assertIsNone(item["anchor"])
+        self.assertIn("OSError: clock_gettime failed", item["error"])
+        self.assertEqual(item["rejected_anchors"], [preempted])
+        with unittest.mock.patch.object(clock, "_anchor_record",
+                                        side_effect=[dict(preempted, read_skew_ns=3_000_400),
+                                                     OSError("clock_gettime failed")]):
+            measurement = clock.measure(ctx, frequency_reader=FrequencyReader(clocks))
+        self.assertIn("OSError", measurement.error)
+        self.assertEqual(measurement.values["rejected_anchors"][0]["read_skew_ns"], 3_000_400)
+        self.assertEqual(clock.judge(measurement, LIMITS).status, base.UNMEASURED)
+
+    def test_anchors_over_the_bound_are_not_coverage(self):
+        # M9: six recorded anchors over the bound leave a 7 s hole in the
+        # 1 Hz journal; the coverage rule sees the hole as well as the samples.
+        samples = self.journal({})
+        for second in range(28, 34):
+            samples[second] = dict(samples[second], anchor=dict(samples[second]["anchor"],
+                                                                read_skew_ns=8_300_400))
+        mid = samples[30]["finished"]["monotonic_ns"]
+        span = {"monotonic_ns": [mid - 1 * 10**9, mid + 1 * 10**9]}
+        found = clock.span_findings(samples, span)
+        self.assertEqual([f["code"] for f in found], ["clock.unmeasured", "clock.unmeasured"])
+        self.assertEqual(found[0]["observed"], [samples[27]["finished"]["monotonic_ns"],
+                                                samples[34]["finished"]["monotonic_ns"]])
+        inside = sum(1 for second in range(28, 34)
+                     if span["monotonic_ns"][0] <= samples[second]["finished"]["monotonic_ns"]
+                     <= span["monotonic_ns"][1])
+        self.assertGreaterEqual(inside, 1)
+        self.assertEqual((found[1]["observed"]["rule"], found[1]["observed"]["samples"]), ("read_skew", inside))
+
+    def test_the_running_monitor_journals_rejected_reads(self):
+        # M14: the production monitor writes the rejected reads and no anchor.
+        import tempfile
+        from pathlib import Path
+        from joulewise.hazards import monitor
+        from tests.hazards.test_monitor import FakeMac
+        with tempfile.TemporaryDirectory(dir=os.environ.get("TMPDIR")) as tmp:
+            mac = FakeMac(Path(tmp))
+            instance = mac.monitor()
+            instance.open_session(["test"])
+            mac.clocks.preempt_ns = [8_000_000] * clock.ANCHOR_TRIES
+            instance.run(max_seconds=3)
+            instance.close_session("test end")
+            lines = [line for line in monitor.load_journals(mac.custody)["clock"] if line["kind"] == "reading"]
+        preempted = [line for line in lines if (line["values"] or {}).get("rejected_anchors")]
+        self.assertEqual(len(preempted), 1)
+        self.assertIsNone(preempted[0]["values"]["anchor"])
+        self.assertEqual(len(preempted[0]["values"]["rejected_anchors"]), clock.ANCHOR_TRIES)
+        self.assertTrue(preempted[0]["error"].startswith("clock.unmeasured"))
+        self.assertTrue(all(line["values"]["anchor"] for line in lines if line is not preempted[0]))
 
 
 @unittest.skipUnless(sys.platform == "darwin", "reads the real kernel clock (macOS)")

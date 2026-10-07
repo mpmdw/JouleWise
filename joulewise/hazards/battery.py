@@ -35,10 +35,11 @@ The member rule of plan §3.4 is :func:`span_findings`; its current half is
 :func:`smc_span_findings`.
 
 Battery assist (ruling 2026-10-06, ``RULING_battery_assist_2026-10-06.md``):
-in a member's span, discharge on AC (a current below -200 mA, or a
-discharge-accumulator mean beyond 200 mA x V) is ``battery.assist``
-(DISCLOSE; ``battery.assist_outside_request`` when only the phases around the
-measured request were assisted, which decides nothing): the processor rails are regulated downstream of the supply, so
+in a member's span, discharge on AC while not charging (a negative battery
+current, or a discharge-accumulator mean beyond 200 mA x V; the reads below
+-200 mA are counted in its report) is ``battery.assist`` (DISCLOSE;
+``battery.assist_outside_request`` when only the phases around the measured
+request were assisted, which decides nothing): the processor rails are regulated downstream of the supply, so
 their energy does not depend on whether the adapter or the battery supplied
 it, and excluding assisted members would select members by load.  Charging
 (above +200 mA, IsCharging Yes, a charge-accumulator mean above 200 mA x V),
@@ -639,26 +640,34 @@ def assist_phases(span: Mapping[str, Any], request: Mapping[str, Any] | None
 
 
 def smc_phase(good: Sequence[Mapping[str, Any]], window: Sequence[int], limit_ma: float | int,
-              hold_ns: int) -> tuple[dict[str, Any], dict[str, Any]]:
-    """``(structure, energy)`` of the good SMC B0AC reads over one phase window.
+              hold_ns: int) -> tuple[dict[str, Any], dict[str, Any], list[int]]:
+    """``(structure, energy, negative stamps)`` of the good SMC B0AC reads over one phase window.
 
-    ``good`` is the good reads of :func:`smc_samples` in time order.
-    Structure (public; no energy): ``smc_reads_in_force`` (in force as in
-    :func:`_in_force`), ``smc_reads_below`` (of those, B0AC below
-    -``limit_ma``), ``smc_min_ma`` (the smallest in-force B0AC) and
-    ``smc_duration_below_s`` (each good read holds its value until the next
-    good read, never longer than ``hold_ns``, clipped to the window; the held
-    time of reads below -``limit_ma``).  Energy (to ``withheld/`` only):
-    ``discharged_energy_j`` = the held time of each read below 0 mA times
-    -B0AC x B0AV / 10^6 W, and ``voltage_unread_s`` for held time whose read
-    has no positive integer B0AV.
+    ``good`` is the good reads of :func:`smc_samples` in time order.  Each
+    read holds its value until the next good read, never longer than
+    ``hold_ns`` (a read older than the coverage gap stands for nothing).  A
+    read belongs to the phase when its hold overlaps the window for a
+    positive time: the read in force at the start does; a read taken at or
+    after the stop does not (it measured the next phase; review F3).  This is
+    the harvest copy's rule (``harvest._smc_phase``).
+
+    Structure (public; no energy): ``smc_reads_in_force`` (the reads that
+    belong to the phase), ``smc_reads_negative`` (of those, B0AC below 0 mA:
+    assist, ruling item 1), ``smc_reads_below`` (B0AC below -``limit_ma``),
+    ``smc_min_ma`` and ``smc_duration_below_s`` (the clipped held time of the
+    reads below -``limit_ma``).  Energy (to ``withheld/`` only):
+    ``discharged_energy_j`` = the clipped held time of each read below 0 mA
+    times -B0AC x B0AV / 10^6 W, and ``voltage_unread_s`` for held time
+    whose read has no positive integer B0AV.  The stamps are those of the
+    negative reads.
 
     Example: limit 200 mA, window [100 s, 110 s], reads every second at 0 mA
-    except -865 mA at 104 s (B0AV 12180 mV): 12 reads in force, 1 below,
+    except -865 mA at 104 s (B0AV 12180 mV): 10 reads belong (100 s to
+    109 s; the read at 110 s measured the next phase), 1 negative, 1 below,
     minimum -865 mA, 1.0 s below, 10.53570 J.
     """
 
-    reads = _in_force(good, window)
+    reads: list[Mapping[str, Any]] = []
     below_ns = unread_ns = 0
     joules = 0.0
     for index, entry in enumerate(good):
@@ -669,6 +678,7 @@ def smc_phase(good: Sequence[Mapping[str, Any]], window: Sequence[int], limit_ma
         lo, hi = max(begin, window[0]), min(end, window[1])
         if hi <= lo:
             continue
+        reads.append(entry)
         if entry["current_ma"] < -limit_ma:
             below_ns += hi - lo
         if entry["current_ma"] < 0:
@@ -677,11 +687,14 @@ def smc_phase(good: Sequence[Mapping[str, Any]], window: Sequence[int], limit_ma
                 joules += -entry["current_ma"] * voltage / 1e6 * (hi - lo) / 1e9
             else:
                 unread_ns += hi - lo
+    negative = [entry for entry in reads if entry["current_ma"] < 0]
     structure = {"smc_reads_in_force": len(reads),
+                 "smc_reads_negative": len(negative),
                  "smc_reads_below": sum(1 for entry in reads if entry["current_ma"] < -limit_ma),
                  "smc_min_ma": min((entry["current_ma"] for entry in reads), default=None),
                  "smc_duration_below_s": round(below_ns / 1e9, 3)}
-    return structure, {"discharged_energy_j": joules, "voltage_unread_s": round(unread_ns / 1e9, 3)}
+    energy = {"discharged_energy_j": joules, "voltage_unread_s": round(unread_ns / 1e9, 3)}
+    return structure, energy, [entry["monotonic_ns"] for entry in negative]
 
 
 def smc_span_findings(readings: Sequence[Mapping[str, Any]], span: Mapping[str, Any],
@@ -748,67 +761,87 @@ def assist_finding(readings: Sequence[Mapping[str, Any]], span: Mapping[str, Any
                    request: Mapping[str, Any] | None, publications_in_force: Sequence[Mapping[str, Any]],
                    discharge_intervals: Sequence[Sequence[int]], *, limit_ma: float | int,
                    smc_covered: bool, hold_ns: int = SMC_MAX_GAP_S * 1_000_000_000,
-                   ) -> dict[str, Any] | None:
+                   state_unread: bool = False) -> dict[str, Any] | None:
     """The member's battery-assist disclosure (ruling 2026-10-06, items 1 and 5), or None.
 
+    Assist is a negative battery current on AC while not charging (ruling
+    item 1); the caller drops a span whose state read charging or AC loss.
     For each phase of :func:`assist_phases` it counts the evidence of
-    discharge beyond -``limit_ma`` on AC: SMC B0AC reads (:func:`smc_phase`);
-    without SMC coverage only, registry publications in force for the phase
-    whose InstantAmperage or Amperage is below -``limit_ma``; and
-    discharge-accumulator intervals over their limit that overlap the phase
-    (``discharge_intervals``, closed).  A phase is assisted when any of these
-    is nonzero.  The member is marked ``battery.assist`` (the sensitivity
-    line's marker) when a deciding phase (the request, or the span without
-    one) has SMC reads below the limit, or, without SMC coverage, any of the
-    other evidence; otherwise, when some phase is assisted,
-    ``battery.assist_outside_request``.  Both are DISCLOSE.  The discharged
-    energy per phase is under ``withheld`` (it goes to ``withheld/`` only),
-    never in ``observed``.  This is the harvest copy's predicate
-    (``harvest._battery_assist``) on the hazard journals.
+    discharge: SMC B0AC reads below 0 mA (:func:`smc_phase`, by hold
+    overlap); without SMC coverage only, registry publications in force for
+    the phase and taken before it ends whose InstantAmperage or Amperage is
+    below 0 mA; and discharge-accumulator intervals over their limit
+    (``discharge_intervals``, closed) that overlap the phase.  A phase is
+    assisted when any of these is nonzero.  The member is marked
+    ``battery.assist`` (the sensitivity line's marker) when a deciding phase
+    (the request, or the span without one) has negative SMC reads, or,
+    without SMC coverage, any of the other evidence; otherwise, when some
+    phase is assisted, ``battery.assist_outside_request``.  With SMC
+    coverage the 1 s B0AC reads locate the discharge, so a ~60 s accumulator
+    interval that overlaps the request without a negative read in it is
+    reported in that phase's ``accumulator_intervals_over_limit`` and does not
+    decide (review F4: the detail says so).  Both codes are DISCLOSE.  The
+    discharged energy per phase is under ``withheld`` (it goes to
+    ``withheld/`` only), never in ``observed``.  ``state_unread`` marks a
+    span with a publication in force whose IsCharging or ExternalConnected
+    was not read (excluded elsewhere; its discharge is still disclosed).
+    This is the harvest copy's predicate (``harvest._battery_assist``).
     """
 
     good = [entry for entry in smc_samples(readings) if entry["current_ma"] is not None]
     phases: dict[str, Any] = {}
     energies: dict[str, Any] = {}
     seen = decided = False
+    request_other = False
     stamps: list[int] = []
     for name, window, decides in assist_phases(span, request):
-        structure, energy = smc_phase(good, window, limit_ma, hold_ns)
+        structure, energy, negative = smc_phase(good, window, limit_ma, hold_ns)
         low = [] if smc_covered else [
             pub for pub in _in_force(publications_in_force, window)
-            if any(current_disposition(pub["values"].get(key), limit_ma) == "assist"
-                   for key in ("instant_amperage_ma", "amperage_ma"))]
+            if pub["monotonic_ns"] < window[1]
+            and any(_is_number(pub["values"].get(key)) and pub["values"][key] < 0
+                    for key in ("instant_amperage_ma", "amperage_ma"))]
         rows = [interval for interval in discharge_intervals
                 if interval[0] <= window[1] and window[0] <= interval[1]]
         registry_values = [pub["values"].get(key) for pub in low
                            for key in ("instant_amperage_ma", "amperage_ma")]
         structure.update({
-            "decides": decides, "registry_publications_below": len(low),
-            "registry_min_ma": min((value for value in registry_values
-                                    if isinstance(value, (int, float)) and not isinstance(value, bool)),
-                                   default=None),
+            "decides": decides, "registry_publications_negative": len(low),
+            "registry_min_ma": min((value for value in registry_values if _is_number(value)), default=None),
             "accumulator_intervals_over_limit": len(rows)})
         phases[name], energies[name] = structure, energy
-        smc_assisted = structure["smc_reads_below"] > 0
+        smc_assisted = bool(negative)
         other = bool(low or rows)
         seen = seen or smc_assisted or other
         if decides and (smc_assisted or (other and not smc_covered)):
             decided = True
-        stamps += [entry["monotonic_ns"] for entry in good
-                   if entry["current_ma"] < -limit_ma and window[0] <= entry["monotonic_ns"] <= window[1]]
+        if decides and other:
+            request_other = True
+        stamps += negative
     if not seen:
         return None
     code = ASSIST if decided else ASSIST_OUTSIDE_REQUEST
+    if decided:
+        detail = "battery assist on AC (negative battery current) in the measured request"
+    elif request_other:
+        detail = ("battery assist on AC (negative battery current) not located in the measured request: "
+                  "its SMC B0AC reads were all at or above 0 mA, and an accumulator interval over the "
+                  "limit that overlaps it is reported in its phase")
+    else:
+        detail = "battery assist on AC (negative battery current) outside the measured request only"
     item = finding(
-        code, span=span, expected=-limit_ma,
+        code, span=span, expected=0,
         observed={"rule": "battery_assist_ruling_2026_10_06", "limit_ma": limit_ma,
                   "current_source": "smc" if smc_covered else "smc_partial_registry_fallback",
-                  "request_assist": decided, "phases": phases},
+                  "state_unread": state_unread, "request_assist": decided, "phases": phases},
         interval={"monotonic_ns": [min(stamps), max(stamps)] if stamps else None},
-        detail=("battery assist on AC (discharge beyond -%s mA) %s; disclosed, never excluded"
-                % (limit_ma, "in the measured request" if decided else "outside the measured request only")))
+        detail=detail + "; disclosed, never excluded")
     item["withheld"] = {"phases": energies, "smc_covered": smc_covered}
     return item
+
+
+def _is_number(value: Any) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
 
 
 def span_findings(readings: Sequence[Mapping[str, Any]], span: Mapping[str, Any],
@@ -833,9 +866,12 @@ def span_findings(readings: Sequence[Mapping[str, Any]], span: Mapping[str, Any]
       charge-accumulator mean above 200 mA x Voltage.  No publication for
       more than ``max_unobserved_s`` overlapping the span is
       ``battery.unmeasured`` (EXCLUDE_MEMBER).
-    - **Disclosed**: discharge beyond -200 mA on AC, by the same sources and
-      a discharge-accumulator mean beyond 200 mA x Voltage, is
-      :func:`assist_finding`.  Discharge alone never excludes.
+    - **Disclosed**: discharge on AC while not charging (a negative current
+      by the same sources, or a discharge-accumulator mean beyond 200 mA x
+      Voltage) is :func:`assist_finding`; none is disclosed for a span that
+      read IsCharging Yes or ExternalConnected No (ruling item 1).  Discharge
+      alone never excludes; a positive discharge-accumulator mean beyond the
+      limit is sign-inconsistent and stays ``battery.member_span``.
 
     The publications in force are the last one at or before the start,
     every one inside the span and the first one at or after the end.
@@ -848,7 +884,16 @@ def span_findings(readings: Sequence[Mapping[str, Any]], span: Mapping[str, Any]
     found, smc_covered = smc_span_findings(readings, span, limits)
     pubs = publications(readings)
     in_force = _in_force(pubs, (start, stop))
+    # Ruling item 1: assist is discharge on AC while not charging.  A span with
+    # a read of IsCharging Yes or ExternalConnected No is excluded and its
+    # discharge is not assist; an unread state is excluded (missing evidence)
+    # and its discharge is still disclosed, marked state_unread.
+    state_bad = state_unread = False
     for pub in in_force:
+        state_bad = state_bad or (pub["values"].get("is_charging") is True
+                                  or pub["values"].get("external_connected") is False)
+        state_unread = state_unread or (pub["values"].get("is_charging") is None
+                                        or pub["values"].get("external_connected") is None)
         reasons = reading_reasons(pub["values"], limits, include_amperage=False, include_instant=False)
         if not smc_covered:
             for key, label in (("instant_amperage_ma", "InstantAmperage"), ("amperage_ma", "Amperage")):
@@ -876,6 +921,7 @@ def span_findings(readings: Sequence[Mapping[str, Any]], span: Mapping[str, Any]
         if values.get("external_connected") is False:
             reasons.append("ExternalConnected is No (on battery)")
         if reasons:
+            state_bad = True
             found.append(finding(
                 "battery.member_span", span=span, expected=limits, detail="; ".join(reasons),
                 observed={key: values.get(key) for key in ("update_time_s", "external_connected",
@@ -922,13 +968,22 @@ def span_findings(readings: Sequence[Mapping[str, Any]], span: Mapping[str, Any]
                 found.append(finding("battery.member_span", span=span,
                                      observed={**delta, "voltage_mv": voltage}, expected=limit_mw,
                                      interval=interval, detail=detail + " (charging)"))
+            elif mean > 0:
+                # The discharge accumulator sums negative ticks only; a positive
+                # mean beyond the limit is sign-inconsistent evidence, not
+                # discharge, and keeps the exclusion (review F2).
+                found.append(finding("battery.member_span", span=span,
+                                     observed={**delta, "voltage_mv": voltage}, expected=limit_mw,
+                                     interval=interval,
+                                     detail=detail + " (sign-inconsistent: the discharge accumulator rose)"))
             else:  # discharge beyond the limit: battery assist, disclosed below
                 discharge_intervals.append(list(interval["monotonic_ns"]))
-    assist = assist_finding(readings, span, request, in_force, discharge_intervals, limit_ma=limit,
-                            smc_covered=smc_covered,
-                            hold_ns=int(limits.get("smc_max_gap_s", SMC_MAX_GAP_S) * 1_000_000_000))
-    if assist is not None:
-        found.append(assist)
+    if not state_bad:
+        assist = assist_finding(readings, span, request, in_force, discharge_intervals, limit_ma=limit,
+                                smc_covered=smc_covered, state_unread=state_unread,
+                                hold_ns=int(limits.get("smc_max_gap_s", SMC_MAX_GAP_S) * 1_000_000_000))
+        if assist is not None:
+            found.append(assist)
     gap = coverage_gap([p["monotonic_ns"] for p in pubs], start, stop,
                        int(limits["max_unobserved_s"] * 1_000_000_000))
     if gap is not None:

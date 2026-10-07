@@ -150,14 +150,17 @@ def _anchor_record(ctx: Context) -> dict[str, int]:
 
 
 def read_anchor(ctx: Context, *, max_skew_ns: int, tries: int = ANCHOR_TRIES,
+                rejected: list[dict[str, int]] | None = None,
                 ) -> tuple[dict[str, int] | None, list[dict[str, int]]]:
     """Up to ``tries`` anchor reads: ``(first read with 0 <= skew <= max_skew_ns, rejected reads)``.
 
     The anchor is None when every read was rejected.  A read that raises
     propagates (a clock that cannot be read is a probe failure, not a skew).
+    Rejected reads are appended to ``rejected`` when the caller passes a
+    list, so the reads rejected before a read that raises are kept (review F6).
     """
 
-    rejected: list[dict[str, int]] = []
+    rejected = [] if rejected is None else rejected
     for _ in range(max(1, int(tries))):
         anchor = _anchor_record(ctx)
         if 0 <= anchor["read_skew_ns"] <= max_skew_ns:
@@ -183,7 +186,7 @@ def sample(ctx: Context, *, frequency_reader: FrequencyReader | None = read_freq
     anchor = frequency = None
     rejected: list[dict[str, int]] = []
     try:
-        anchor, rejected = read_anchor(ctx, max_skew_ns=max_skew_ns, tries=tries)
+        anchor, _ = read_anchor(ctx, max_skew_ns=max_skew_ns, tries=tries, rejected=rejected)
         if anchor is None:
             skews = [item["read_skew_ns"] for item in rejected]
             errors.append(f"clock.unmeasured: anchor read skew above {max_skew_ns} ns on all "
@@ -208,19 +211,20 @@ def measure(ctx: Context, *, frequency_reader: FrequencyReader = read_frequency,
     values: dict[str, Any] = {"anchor": None, "frequency": None, "boot_session_uuid": None}
     raw: list[RawRef] = []
     error = None
+    rejected: list[dict[str, int]] = []
     try:
         values["boot_session_uuid"] = boot_reader(ctx)
         # Re-read a preempted anchor (R3-1) against the arm's own 1 ms bound;
         # when every read is over it, the last is judged and refuses (rule iii).
-        anchor, rejected = read_anchor(ctx, max_skew_ns=DEFAULT_THRESHOLDS["skew_max_ns"])
+        anchor, _ = read_anchor(ctx, max_skew_ns=DEFAULT_THRESHOLDS["skew_max_ns"], rejected=rejected)
         values["anchor"] = anchor if anchor is not None else rejected[-1]
-        if rejected:
-            values["rejected_anchors"] = rejected
         frequency = dict(kernel_clock.validate_probe(dict(frequency_reader())))
         values["frequency"] = frequency
         raw.append(ctx.keep_raw("timex.bin", bytes.fromhex(frequency["raw_hex"])))
     except Exception as exc:
         error = f"{type(exc).__name__}: {exc}"
+    if rejected:  # kept even when a later read raised (review F6)
+        values["rejected_anchors"] = rejected
     finished = ctx.stamp()
     return Measurement(MODULE, "instant", values, tuple(raw), started, finished, error)
 
@@ -365,17 +369,18 @@ def window_events(samples: Sequence[Mapping[str, Any]], *, step_ns: int = 1_000_
 
     An anchor whose read skew is over :func:`window_skew_max_ns` of
     ``step_ns`` (or unknown) is unmeasured and skipped like a failed read:
-    its anchor error could be most of a step (R3-1).
+    its anchor error could be most of a step (R3-1).  The f such a sample
+    read is still used (review F5): a frequency change is recorded where it
+    was read, and the f in force for the next comparison is the latest read.
     """
 
     max_skew_ns = window_skew_max_ns(step_ns)
     events: list[dict[str, Any]] = []
-    word = None       # the f in force at ``previous``
+    word = None       # the latest f read (in force at ``previous`` or read since)
     previous = None   # the last sample that read a usable anchor
     for item in samples:
-        if not usable_anchor(item, max_skew_ns):
-            continue
-        if previous is not None and word is not None:
+        usable = usable_anchor(item, max_skew_ns)
+        if usable and previous is not None and word is not None:
             moved = residual_ns(previous["anchor"], item["anchor"], word)
             if abs(moved) > step_ns:
                 events.append({"code": "clock.step", "interval": _interval(previous, item),
@@ -387,7 +392,8 @@ def window_events(samples: Sequence[Mapping[str, Any]], *, step_ns: int = 1_000_
                                "interval": _interval(previous or item, item),
                                "observed": frequency["raw_word"], "expected": word})
             word = frequency["raw_word"]
-        previous = item
+        if usable:
+            previous = item
     return events
 
 

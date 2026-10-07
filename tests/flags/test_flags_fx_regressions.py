@@ -96,8 +96,10 @@ class BatteryNamingTests(unittest.TestCase):
         rig.setUp()
         smc = rig.smc_lines(600)  # the monitor's 1 s SMC B0AC reads, 0 mA
         scenarios = {
-            # the 09-30 0555Z publication: -447 mA on AC, judged on the registry (no SMC reads)
-            "publication": rig.series(10, special={3: {"instant": -447}}),
+            # the 09-30 0555Z publication: -447 mA on AC, judged on the registry (no SMC
+            # reads); the publication at 120 s, in force at the span's start (one taken
+            # after the stop measured a later member: P3-HAZ review F3)
+            "publication": rig.series(10, special={2: {"instant": -447}}),
             # a +447 mA charging publication, judged on the registry
             "charging": rig.series(10, special={3: {"instant": 447}}),
             # the 10-06 probe burst: B0AC -865 mA between clean publications

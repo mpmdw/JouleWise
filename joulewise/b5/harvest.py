@@ -2312,38 +2312,82 @@ def contention_member_flags(request: Sequence[int], readings: Sequence[Reading],
     return out
 
 
+def _clock_skew_max_ns(thresholds: Mapping[str, Any]) -> int:
+    """L1's in-window anchor read-skew bound for the registered step threshold (R3-1): step / 4."""
+    from joulewise.hazards.clock import window_skew_max_ns
+    return window_skew_max_ns(int(thresholds["clock_step_ns"]))
+
+
+def _clock_point(reading: Reading, max_skew_ns: int) -> tuple[int, int] | None:
+    """(anchor_ns, monotonic_raw_ns) of a good reading whose anchor read skew is within ``max_skew_ns``.
+
+    L1's ``clock.usable_anchor``: an anchor read across a preemption (skew
+    3.9-8.3 ms in the 10-06 rehearsal, R3-1) carries up to half its skew of
+    anchor error and is never compared; nor is one whose skew is unrecorded.
+    """
+    anchor = reading.values.get("anchor") if reading.status == "ok" else None
+    if not isinstance(anchor, Mapping):
+        return None
+    skew = anchor.get("read_skew_ns")
+    if not _is_int(skew) or not 0 <= skew <= max_skew_ns:
+        return None
+    point = (_int(anchor.get("anchor_ns")), _int(anchor.get("monotonic_raw_ns")))
+    return None if point[0] is None or point[1] is None else point
+
+
+def _clock_skew_unmeasured(reading: Reading, max_skew_ns: int) -> bool:
+    """L1's ``clock.skew_unmeasured``: every anchor read was rejected, or the anchor is over the bound."""
+    anchor = reading.values.get("anchor")
+    if isinstance(anchor, Mapping):
+        skew = anchor.get("read_skew_ns")
+        return not (_is_int(skew) and 0 <= skew <= max_skew_ns)
+    return bool(reading.values.get("rejected_anchors"))
+
+
 def clock_member_flags(span: Sequence[int], readings: Sequence[Reading], thresholds: Mapping[str, Any]
                        ) -> list[tuple[str, dict[str, Any], dict[str, Any]]]:
-    """``clock.unmeasured`` when the 1 Hz anchor journal has a hole overlapping the span."""
-    times = [reading.monotonic_ns for reading in readings
-             if reading.status == "ok" and isinstance(reading.values.get("anchor"), Mapping)]
+    """``clock.unmeasured`` when the 1 Hz anchor journal has a hole overlapping the span, or a
+    sample inside the span read no anchor within the read-skew bound (L1's ``clock.span_findings``)."""
+    max_skew_ns = _clock_skew_max_ns(thresholds)
+    times = [reading.monotonic_ns for reading in readings if _clock_point(reading, max_skew_ns) is not None]
     holes = _uncovered(times, span, int(float(thresholds["clock_unmeasured_gap_s"]) * 1e9))
-    return [("clock.unmeasured", {"holes_monotonic_ns": holes[:8]}, _hole_interval(holes[0]))] if holes else []
+    out = [("clock.unmeasured", {"holes_monotonic_ns": holes[:8]}, _hole_interval(holes[0]))] if holes else []
+    skewed = [reading for reading in readings
+              if span[0] <= reading.monotonic_ns <= span[1] and _clock_skew_unmeasured(reading, max_skew_ns)]
+    if skewed:
+        skews = []
+        for reading in skewed[:8]:
+            reads = reading.values.get("rejected_anchors") or [reading.values.get("anchor")]
+            skews.append([read.get("read_skew_ns") for read in reads if isinstance(read, Mapping)])
+        out.append(("clock.unmeasured", {"rule": "read_skew", "samples": len(skewed), "max_skew_ns": max_skew_ns,
+                                         "read_skews_ns": skews},
+                    {"monotonic_ns": [skewed[0].started_monotonic_ns, skewed[-1].monotonic_ns]}))
+    return out
 
 
 def clock_steps(readings: Sequence[Reading], thresholds: Mapping[str, Any]
                 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Clock steps and frequency-word changes in the 1 Hz journal (L1's ``clock.window_events`` rule).
 
-    A step is a residual move above ``clock_step_ns`` between consecutive good
-    samples: the anchor's movement (REALTIME - MONOTONIC_RAW) minus f times the
-    MONOTONIC_RAW time elapsed, exactly, with the f in force at the earlier
-    sample.  Samples before the first f read cannot be judged; a failed sample
-    breaks the chain.
+    A step is a residual move above ``clock_step_ns`` between consecutive
+    good samples: the anchor's movement (REALTIME - MONOTONIC_RAW) minus f times the
+    MONOTONIC_RAW time elapsed, exactly, with the latest f read.  Samples
+    before the first f read cannot be judged.  A sample without a usable
+    anchor (a failed read, every read rejected for skew, or a recorded
+    anchor over the skew bound, :func:`_clock_point`) is skipped without
+    breaking the chain: the next good anchor is compared with the last one
+    across it, so a step that falls beside an unmeasured sample is still seen
+    (review F1).  An f such a sample read is still used (review F5).
     """
     step_ns = int(thresholds["clock_step_ns"])
+    max_skew_ns = _clock_skew_max_ns(thresholds)
     steps: list[dict[str, Any]] = []
     changes: list[dict[str, Any]] = []
     word: int | None = None
     previous: tuple[Reading, tuple[int, int]] | None = None
     for reading in readings:
-        anchor = reading.values.get("anchor") if reading.status == "ok" else None
-        point = (_int(anchor.get("anchor_ns")), _int(anchor.get("monotonic_raw_ns"))) \
-            if isinstance(anchor, Mapping) else (None, None)
-        if point[0] is None or point[1] is None:
-            previous = None
-            continue
-        if previous is not None and word is not None:
+        point = _clock_point(reading, max_skew_ns)
+        if point is not None and previous is not None and word is not None:
             (earlier, (anchor0, raw0)) = previous
             moved = Fraction(point[0] - anchor0) - Fraction(word * (point[1] - raw0), FREQUENCY_SCALE * 1_000_000)
             if abs(moved) > step_ns:
@@ -2356,7 +2400,8 @@ def clock_steps(readings: Sequence[Reading], thresholds: Mapping[str, Any]
                 changes.append({"monotonic_ns": reading.monotonic_ns, "ppm": raw_word / FREQUENCY_SCALE,
                                 "previous_ppm": word / FREQUENCY_SCALE})
             word = raw_word
-        previous = (reading, point)
+        if point is not None:
+            previous = (reading, point)
     return steps, changes
 
 
