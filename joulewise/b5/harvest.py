@@ -357,6 +357,23 @@ CODES: dict[str, CodeSpec] = {
     "records.identity_unmeasured_superseded": _spec("RECORDS", "REPRESENTATION"),
     "thermal.stage_battery_rise": _spec("DIAGNOSTIC", "PHYSICS"),
     "thermal.battery_temperature_unmeasured": _spec("DIAGNOSTIC", "PHYSICS"),
+    # Gate-prune round 3, lane P3-HARV (PRUNE3_CODES).  The SMC battery
+    # current and the battery-assist ruling (2026-10-06):
+    "battery.smc_unavailable": _spec("DIAGNOSTIC", "PHYSICS"),
+    "battery.assist": _spec("DIAGNOSTIC", "PHYSICS"),
+    "battery.assist_outside_request": _spec("DIAGNOSTIC", "PHYSICS"),
+    "battery.capture_pair_assist": _spec("DIAGNOSTIC", "PHYSICS"),
+    "calibration.capture_battery_assist": _spec("CALIBRATION", "PHYSICS"),
+    "calibration.capture_battery_pair_assist": _spec("CALIBRATION", "PHYSICS"),
+    # The historical calibration custody pass (P2-VPF S5):
+    "calibration.historical_custody_mismatch": _spec("CALIBRATION", "NUMBER"),
+    "calibration.historical_custody_unmeasured": _spec("CALIBRATION", "NUMBER"),
+    # Why a NULL window never launched (R3-4):
+    "records.window_not_launched": _spec("RECORDS", "REPRESENTATION"),
+    # The KM003C wall meter (joulewise.external.km003c_parse.CODES), all DISCLOSE:
+    **{code: _spec("DIAGNOSTIC", "PHYSICS") for code in (
+        "meter.absent", "meter.drops_excess", "meter.duplicates", "meter.clock_fit_residual",
+        "meter.pdtr_gain_out_of_band", "meter.battery_activity", "meter.vbus_out_of_contract")},
 }
 # The codes above that only protected-core writers emit (the harvest folds them).
 CORE_WRITER_CODES = frozenset({
@@ -389,6 +406,17 @@ PRUNE2_CODES = frozenset({
     # Registered at integration (int3): the other lanes' remaining round-2 codes.
     "member.stderr_uncopied", "records.auxiliary_match_raised", "census.journal_write_failed",
     "supervision.pass_failed", "monitor.outage",
+})
+# The gate-prune round-3 codes (lane P3-HARV): classified in the L4 draft
+# (joulewise.flags.catalog._PRUNE3_CODES) and the test fixture; the design
+# branch's draft sealed catalog gains them through REG before the seal.
+PRUNE3_CODES = frozenset({
+    "battery.smc_unavailable", "battery.assist", "battery.assist_outside_request", "battery.capture_pair_assist",
+    "calibration.capture_battery_assist", "calibration.capture_battery_pair_assist",
+    "calibration.historical_custody_mismatch", "calibration.historical_custody_unmeasured",
+    "records.window_not_launched",
+    "meter.absent", "meter.drops_excess", "meter.duplicates", "meter.clock_fit_residual",
+    "meter.pdtr_gain_out_of_band", "meter.battery_activity", "meter.vbus_out_of_contract",
 })
 # joulewise.flags.collect.UNMEASURED_BY_COLLECTOR, read and never imported: the
 # flag each arm collector leaves when its checks did not (all) run.
@@ -2123,10 +2151,17 @@ def battery_publications(readings: Sequence[Reading]) -> list[Publication]:
 
 
 def _float_reasons(instant: Any, amperage: Any, charging: Any, external: Any, limit: float) -> list[str]:
+    """The exclusion reasons of one registry reading (battery-assist ruling, 2026-10-06).
+
+    The current exclusion is signed: only a charge current above the limit
+    (positive, the registry's and B0AC's convention) is a reason here.  A
+    discharge beyond the limit while the machine is on AC and not charging is
+    battery assist, which is disclosed (``battery.assist``), never excluded.
+    """
     reasons = []
-    if instant is not None and abs(instant) > limit:
+    if instant is not None and instant > limit:
         reasons.append("instant_amperage_above_limit")
-    if amperage is not None and abs(amperage) > limit:
+    if amperage is not None and amperage > limit:
         reasons.append("amperage_above_limit")
     if charging is True:
         reasons.append("is_charging")
@@ -2135,19 +2170,167 @@ def _float_reasons(instant: Any, amperage: Any, charging: Any, external: Any, li
     return reasons
 
 
-def battery_member_flags(span: Sequence[int], readings: Sequence[Reading], thresholds: Mapping[str, Any]
-                         ) -> list[tuple[str, dict[str, Any], dict[str, Any]]]:
-    """(code, observed, interval) for one member span under the in-force rule (plan 3.4)."""
+# ---------------------------------------------------------------------------
+# The SMC battery current (lane 2026-10-06-smc-battery-meter) and the
+# battery-assist ruling (orchestrator, 2026-10-06,
+# night-archive/wallmeter-probe/verify/RULING_battery_assist_2026-10-06.md).
+#
+# The monitor reads SMC key B0AC (battery current, mA, negative =
+# discharging) once a second, on its own ``source: smc`` battery lines and
+# beside every ``ioreg`` read.  The registry's InstantAmperage is only a
+# snapshot of the same current, republished about every 60 s, so it misses
+# discharge between publications (b0ac_validation.md section 3).
+#
+# Worked example (limit 200 mA): a member whose request holds SMC reads 0,
+# -865, -1200, 0 mA one second apart at 12.5 V gets no exclusion; it gets
+# battery.assist with 2 request reads below -200 mA, minimum -1200 mA, 2.0 s
+# below the limit, and (to withheld/ only) the discharged energy
+# 0.865 A x 12.5 V x 1 s + 1.2 A x 12.5 V x 1 s = 25.8 J.  The same reads at
+# +865 mA are charging: battery.member_span (EXCLUDE_MEMBER).
+# ---------------------------------------------------------------------------
+
+BATTERY_ASSIST_SCHEMA = "joulewise.b5_battery_assist.v1"
+# The battery-journal codes that keep a member (or capture) out of a claim
+# under the ruling: charging or AC loss, a charge accumulator above the limit,
+# and missing evidence.
+BATTERY_EXCLUDING_CODES = frozenset({"battery.member_span", "battery.accumulator_excursion", "battery.unmeasured"})
+# battery_float's per-endpoint current reason (|InstantAmperage| > 200 mA), as
+# the pair verdict prefixes it with its endpoint.
+PAIR_CURRENT_REASON = "InstantAmperage exceeds 200 mA"
+
+
+def smc_battery_reads(readings: Sequence[Reading]) -> list[dict[str, Any]]:
+    """Every SMC B0AC read of the battery journal in time order, through L1's own reader.
+
+    ``joulewise.hazards.battery.smc_samples`` gives each read its time (the
+    sample's own ``finished`` stamp, else the line's), ``current_ma`` (None
+    with ``error`` when B0AC was not a clean integer), ``voltage_mv`` (B0AV)
+    and ``fresh`` (the five-key SMC block changed since the previous good read,
+    so a frozen SMC does not count as coverage).
+    """
+    from joulewise.hazards.battery import smc_samples
+    items = [{"values": reading.values, "finished": {"monotonic_ns": reading.monotonic_ns},
+              "error": None if reading.status == "ok" else "probe error"}
+             for reading in readings if isinstance(reading.values.get("smc"), Mapping)]
+    return smc_samples(items)
+
+
+def battery_phases(span: Sequence[int], request: Sequence[int] | None) -> list[tuple[str, list[int], bool]]:
+    """``(phase, [start, stop], decides)`` for a battery span.
+
+    With a request span inside it: ``pre_request`` (prepare's tail, idle
+    baseline, warm-up), ``request`` (the measured run) and ``post_request``
+    (the idle drift sentinel).  Only the request decides the member's assist
+    marker; the others are reported and decide nothing (ruling item 5).
+    Without a request span inside it (a calibration capture, or a member whose
+    request is unknown) the whole span is one deciding phase, ``span``.
+    """
+    if request is None or not (span[0] <= request[0] <= request[1] <= span[1]):
+        return [("span", [span[0], span[1]], True)]
+    phases = []
+    if span[0] < request[0]:
+        phases.append(("pre_request", [span[0], request[0]], False))
+    phases.append(("request", [request[0], request[1]], True))
+    if request[1] < span[1]:
+        phases.append(("post_request", [request[1], span[1]], False))
+    return phases
+
+
+def _smc_phase(good: Sequence[Mapping[str, Any]], window: Sequence[int], limit: float, hold_ns: int
+               ) -> tuple[dict[str, Any], dict[str, Any]]:
+    """(structure, energy) of the good SMC reads over one phase window.
+
+    Counts and the minimum use the reads in force (the last at or before the
+    start, every one inside, the first at or after the stop).  Duration and
+    energy treat each read as holding until the next good read, at most
+    ``hold_ns`` (a read older than the coverage gap stands for nothing),
+    clipped to the window: duration below -limit, and the discharged energy
+    integral of max(0, -B0AC x B0AV) dt in J (mA x mV / 1e6 = W).
+    """
+    times = [entry["monotonic_ns"] for entry in good]
+    reads = [good[index] for index in in_force(times, window[0], window[1])]
+    below = [entry for entry in reads if entry["current_ma"] < -limit]
+    below_ns = unknown_ns = 0
+    joules = 0.0
+    for index, entry in enumerate(good):
+        start = entry["monotonic_ns"]
+        end = min(start + hold_ns, good[index + 1]["monotonic_ns"] if index + 1 < len(good) else start + hold_ns)
+        lo, hi = max(start, window[0]), min(end, window[1])
+        if hi <= lo:
+            continue
+        if entry["current_ma"] < -limit:
+            below_ns += hi - lo
+        if entry["current_ma"] < 0:
+            voltage = entry.get("voltage_mv")
+            if _is_int(voltage) and voltage > 0:
+                joules += -entry["current_ma"] * voltage / 1e6 * (hi - lo) / 1e9
+            else:
+                unknown_ns += hi - lo
+    structure = {"smc_reads_in_force": len(reads), "smc_reads_below": len(below),
+                 "smc_min_ma": min((entry["current_ma"] for entry in reads), default=None),
+                 "smc_duration_below_s": round(below_ns / 1e9, 3)}
+    energy = {"discharged_energy_j": joules, "voltage_unread_s": round(unknown_ns / 1e9, 3)}
+    return structure, energy
+
+
+def battery_join(span: Sequence[int], readings: Sequence[Reading], thresholds: Mapping[str, Any], *,
+                 request: Sequence[int] | None = None
+                 ) -> tuple[list[tuple[str, dict[str, Any], dict[str, Any]]], dict[str, Any] | None]:
+    """The battery rule for one span (plan 3.4 under the battery-assist ruling): (flags, assist energy).
+
+    Exclusions (``battery.member_span`` unless named otherwise):
+
+    * an SMC B0AC read in force above +limit (charging);
+    * IsCharging Yes or ExternalConnected No at a publication in force or at
+      any good poll inside the span;
+    * without SMC coverage only, the registry InstantAmperage/Amperage above
+      +limit at a publication in force;
+    * ``battery.accumulator_excursion``: the charge accumulator's mean above
+      limit x voltage between in-force publications;
+    * ``battery.unmeasured`` (the missing-evidence predicate): with SMC
+      coverage, no publication in force at or before the span's start, or an
+      in-force publication missing IsCharging/ExternalConnected; without it,
+      as before, a publication gap above ``battery_unmeasured_gap_s`` or an
+      in-force publication missing a field.
+
+    SMC coverage is good, fresh B0AC reads no more than
+    ``hazards.battery.SMC_MAX_GAP_S`` apart across the span; without it
+    ``battery.smc_unavailable`` (DISCLOSE) is added and the registry current
+    is judged instead.  With it the registry's own publication holes are
+    disclosed (``battery.accumulator_unavailable``, rule
+    ``publication_hole_smc_covered``): the current is measured once a second,
+    the monitor's 5 s poll writes an ioreg line on any state change, and only
+    the accumulator interval over the hole goes unevaluated.
+
+    Discharge beyond -limit (SMC reads, registry publications without SMC
+    coverage, the discharge accumulator above its limit) is disclosed, per
+    phase (:func:`battery_phases`): ``battery.assist`` when the deciding phase
+    (the measured request) was assisted, the member's marker for the
+    sensitivity line; ``battery.assist_outside_request`` when only the other
+    phases were, which decides nothing.  With SMC coverage the SMC reads
+    decide the marker; without it any discharge evidence attributable to the
+    request does.  The discharged energy is returned separately (it goes to
+    ``withheld/`` only), with None when no discharge was seen.
+    """
+    from joulewise.hazards.battery import SMC_MAX_GAP_S
     out: list[tuple[str, dict[str, Any], dict[str, Any]]] = []
     limit = float(thresholds["battery_limit_ma"])
+    hold_ns = int(SMC_MAX_GAP_S * 1_000_000_000)
     publications = battery_publications(readings)
     times = [item.monotonic_ns for item in publications]
+    in_force_pubs = [publications[index] for index in in_force(times, span[0], span[1])]
+    reads = smc_battery_reads(readings)
+    good = [entry for entry in reads if entry["current_ma"] is not None]
+    fresh = [entry["monotonic_ns"] for entry in good if entry["fresh"]]
+    smc_holes = _uncovered(fresh, span, hold_ns)
+    covered = not smc_holes
     violations, missing_fields = [], []
-    for index in in_force(times, span[0], span[1]):
-        item = publications[index]
-        if None in (item.instant_ma, item.amperage_ma, item.is_charging, item.external_connected):
+    for item in in_force_pubs:
+        state_missing = item.is_charging is None or item.external_connected is None
+        if state_missing or (not covered and (item.instant_ma is None or item.amperage_ma is None)):
             missing_fields.append(item.monotonic_ns)
-        reasons = _float_reasons(item.instant_ma, item.amperage_ma, item.is_charging, item.external_connected, limit)
+        instant, amperage = (None, None) if covered else (item.instant_ma, item.amperage_ma)
+        reasons = _float_reasons(instant, amperage, item.is_charging, item.external_connected, limit)
         if reasons:
             violations.append({"publication_monotonic_ns": item.monotonic_ns, "update_time_s": item.update_time_s,
                                "instant_ma": item.instant_ma, "amperage_ma": item.amperage_ma, "reasons": reasons})
@@ -2158,22 +2341,112 @@ def battery_member_flags(span: Sequence[int], readings: Sequence[Reading], thres
                                      _bool(values.get("external_connected")), limit)
             if reasons:
                 violations.append({"poll_monotonic_ns": reading.monotonic_ns, "reasons": reasons})
+    smc_times = [entry["monotonic_ns"] for entry in good]
+    for index in in_force(smc_times, span[0], span[1]):
+        entry = good[index]
+        if entry["current_ma"] > limit:
+            violations.append({"smc_monotonic_ns": entry["monotonic_ns"], "b0ac_ma": entry["current_ma"],
+                               "reasons": ["smc_b0ac_charging_above_limit"]})
     if violations:
-        first = violations[0].get("publication_monotonic_ns", violations[0].get("poll_monotonic_ns"))
+        first = next(violations[0][key] for key in ("publication_monotonic_ns", "poll_monotonic_ns",
+                                                     "smc_monotonic_ns") if key in violations[0])
         out.append(("battery.member_span", {"rule": "in_force_publication", "violations": violations[:8],
                                             "violation_count": len(violations)},
                     {"monotonic_ns": [first, first]}))
     holes = _uncovered(times, span, int(float(thresholds["battery_unmeasured_gap_s"]) * 1e9))
-    if holes or missing_fields:
-        out.append(("battery.unmeasured", {"holes_monotonic_ns": holes[:8],
-                                           "publications_missing_fields": missing_fields[:8]},
-                    _hole_interval(holes[0]) if holes else {"monotonic_ns": [missing_fields[0]] * 2}))
-    out.extend(accumulator_member_flags([publications[index] for index in in_force(times, span[0], span[1])],
-                                        thresholds))
-    return out
+    if covered:
+        start_unknown = not in_force_pubs or in_force_pubs[0].monotonic_ns > span[0]
+        if start_unknown or missing_fields:
+            out.append(("battery.unmeasured", {"rule": "smc_covered_state_unknown",
+                                               "no_publication_at_or_before_start": start_unknown,
+                                               "publications_missing_fields": missing_fields[:8]},
+                        {"monotonic_ns": [missing_fields[0]] * 2} if missing_fields else {"monotonic_ns": None}))
+        if holes:
+            out.append(("battery.accumulator_unavailable", {"rule": "publication_hole_smc_covered",
+                                                            "holes_monotonic_ns": holes[:8]},
+                        _hole_interval(holes[0])))
+    else:
+        if holes or missing_fields:
+            out.append(("battery.unmeasured", {"holes_monotonic_ns": holes[:8],
+                                               "publications_missing_fields": missing_fields[:8]},
+                        _hole_interval(holes[0]) if holes else {"monotonic_ns": [missing_fields[0]] * 2}))
+        out.append(("battery.smc_unavailable", {"holes_monotonic_ns": smc_holes[:8], "good_reads": len(good),
+                                                "fresh_reads": len(fresh), "reads": len(reads),
+                                                "max_gap_s": SMC_MAX_GAP_S},
+                    _hole_interval(smc_holes[0])))
+    discharge_rows: list[dict[str, Any]] = []
+    out.extend(accumulator_member_flags(in_force_pubs, thresholds, discharge_out=discharge_rows))
+    assist, energy = _battery_assist(span, request, good, in_force_pubs, discharge_rows, limit, hold_ns, covered)
+    if assist is not None:
+        out.append(assist)
+    return out, energy
 
 
-def accumulator_member_flags(in_force_publications: Sequence[Publication], thresholds: Mapping[str, Any]
+def _battery_assist(span: Sequence[int], request: Sequence[int] | None, good: Sequence[Mapping[str, Any]],
+                    publications: Sequence[Publication], discharge_rows: Sequence[Mapping[str, Any]], limit: float,
+                    hold_ns: int, covered: bool) -> tuple[tuple[str, dict[str, Any], dict[str, Any]] | None,
+                                                          dict[str, Any] | None]:
+    """``battery.assist`` / ``battery.assist_outside_request`` and the discharged energy (see :func:`battery_join`)."""
+    phases, energies = {}, {}
+    seen = decided = False
+    stamps: list[int] = []
+    for name, window, decides in battery_phases(span, request):
+        structure, energy = _smc_phase(good, window, limit, hold_ns)
+        pub_times = [item.monotonic_ns for item in publications]
+        low_pubs = [] if covered else [
+            publications[index] for index in in_force(pub_times, window[0], window[1])
+            if any(value is not None and value < -limit
+                   for value in (publications[index].instant_ma, publications[index].amperage_ma))]
+        rows = [row for row in discharge_rows if _overlaps(row["interval_monotonic_ns"], window)]
+        structure.update({"decides": decides,
+                          "registry_publications_below": len(low_pubs),
+                          "registry_min_ma": min((value for item in low_pubs for value in (item.instant_ma,
+                                                                                            item.amperage_ma)
+                                                  if value is not None), default=None),
+                          "accumulator_intervals_over_limit": len(rows)})
+        phases[name] = structure
+        energies[name] = energy
+        smc_assisted = structure["smc_reads_below"] > 0
+        other = bool(low_pubs or rows)
+        assisted = smc_assisted or other
+        seen = seen or assisted
+        if decides and (smc_assisted or (other and not covered)):
+            decided = True
+        stamps += [entry["monotonic_ns"] for entry in good
+                   if entry["current_ma"] < -limit and window[0] <= entry["monotonic_ns"] <= window[1]]
+    if not seen:
+        return None, None
+    observed = {"rule": "battery_assist_ruling_2026_10_06", "limit_ma": limit,
+                "current_source": "smc" if covered else "smc_partial_registry_fallback",
+                "request_assist": decided, "phases": phases}
+    interval = {"monotonic_ns": [min(stamps), max(stamps)] if stamps else None}
+    code = "battery.assist" if decided else "battery.assist_outside_request"
+    return (code, observed, interval), {"schema": BATTERY_ASSIST_SCHEMA, "code": code, "smc_covered": covered,
+                                        "phases": energies}
+
+
+def battery_member_flags(span: Sequence[int], readings: Sequence[Reading], thresholds: Mapping[str, Any], *,
+                         request: Sequence[int] | None = None) -> list[tuple[str, dict[str, Any], dict[str, Any]]]:
+    """(code, observed, interval) for one member span: :func:`battery_join` without the energy."""
+    return battery_join(span, readings, thresholds, request=request)[0]
+
+
+def pair_current_only(reasons: Any) -> bool:
+    """True when a confounded #421 pair failed only on its endpoints' |InstantAmperage| (no state reason).
+
+    The frozen grammar does not sign that reason.  The pair is then re-read
+    against the battery journal (:meth:`_Harvest.monitor_joins`): a span the
+    SMC covers with no charging, AC-loss or missing-evidence exclusion is
+    discharge, which the ruling discloses.
+    """
+    if not isinstance(reasons, (list, tuple)) or not reasons:
+        return False
+    return all(isinstance(reason, str) and reason in (f"pre {PAIR_CURRENT_REASON}", f"post {PAIR_CURRENT_REASON}")
+               for reason in reasons)
+
+
+def accumulator_member_flags(in_force_publications: Sequence[Publication], thresholds: Mapping[str, Any], *,
+                             discharge_out: list[dict[str, Any]] | None = None
                              ) -> list[tuple[str, dict[str, Any], dict[str, Any]]]:
     """The accumulator rule of registration 6.4, on L1's own interval reader.
 
@@ -2182,9 +2455,11 @@ def accumulator_member_flags(in_force_publications: Sequence[Publication], thres
     ``joulewise.hazards.battery.accumulator_interval`` gives, per sign, the
     accumulated value per counted tick (mW on L1's units check) or why that
     sign cannot be read.  With the registered scale (W per accumulator unit,
-    0.001) a sign whose mean battery power exceeds limit_ma x the
-    publication's voltage is ``battery.accumulator_excursion``; a nonzero
-    mean at or below it is ``battery.accumulator_activity``; a sign that
+    0.001) a charge mean above limit_ma x the publication's voltage is
+    ``battery.accumulator_excursion``; a discharge mean above it is battery
+    assist (ruling 2026-10-06): never an excursion, its row goes to
+    ``discharge_out`` for ``battery.assist``; a nonzero mean at or below the
+    limit is ``battery.accumulator_activity``; a sign that
     cannot be read, or an interval without a voltage, is
     ``battery.accumulator_unavailable`` (the publication rule still applies).
     There is no unscaled path: without a registered positive scale this
@@ -2218,7 +2493,12 @@ def accumulator_member_flags(in_force_publications: Sequence[Publication], thres
             entry = {"accumulator": label, "ticks": delta[f"{label}_ticks"], "mean_per_tick": mean,
                      "mean_w": abs(mean) * float(unit), "limit_w": limit_w, "voltage_mv": voltage,
                      "interval_monotonic_ns": interval}
-            (excursions if entry["mean_w"] > limit_w else activity).append(entry)
+            if entry["mean_w"] <= limit_w:
+                activity.append(entry)
+            elif label == "charge":
+                excursions.append(entry)
+            elif discharge_out is not None:
+                discharge_out.append(entry)
     out: list[tuple[str, dict[str, Any], dict[str, Any]]] = []
     for code, rows, rule in (("battery.accumulator_excursion", excursions, "accumulator_mean_power"),
                              ("battery.accumulator_activity", activity, "accumulator_mean_power_at_or_below_limit"),
@@ -2873,6 +3153,11 @@ class _Harvest:
         self.outputs: dict[str, str] = {}
         self.repo_copy: Path | None = None
         self.pair_missing: dict[str, Any] = {}  # run_id -> #421 pair status, joined to coverage later
+        # run_id -> flag_id of a battery.capture_pair_failed whose pair failed on
+        # its endpoint current alone (re-read against the journal later).
+        self.pair_current_only: dict[str, str] = {}
+        # The discharged energies of battery.assist (withheld/battery-assist.json).
+        self.battery_assist: dict[str, dict[str, Any]] = {"members": {}, "captures": {}}
         self.exclusion_roster: dict[str, Any] | None = None
         self.exclusion_spans: dict[str, Any] | None = None
         self.h_claim = inputs.h_claim
@@ -3129,8 +3414,14 @@ class _Harvest:
             self._token_flags(member, result, kwargs)
             pair = result.get("battery_pair")
             if isinstance(pair, Mapping) and pair.get("status") in ("battery_float_confounded",):
-                self.emit("battery.capture_pair_failed", observed={"status": pair["status"],
-                                                                   "reasons": pair.get("reasons", [])[:8]}, **kwargs)
+                record = self.emit("battery.capture_pair_failed", observed={"status": pair["status"],
+                                                                            "reasons": pair.get("reasons", [])[:8]},
+                                   **kwargs)
+                if pair_current_only(pair.get("reasons")):
+                    # Fail closed: the exclusion stands unless the battery
+                    # journal shows the endpoint current was discharge
+                    # (monitor_joins, battery-assist ruling item 4).
+                    self.pair_current_only[run_id] = record["flag_id"]
             elif not isinstance(pair, Mapping) or pair.get("status") in ("battery_float_evidence_missing",
                                                                         "unobserved_historical"):
                 # Emitted by monitor_joins, which knows whether the journal covers the member.
@@ -3389,8 +3680,12 @@ class _Harvest:
                 verdict = battery_float.authenticate_capture(capture)
                 assessment["battery_pair"] = verdict.status
                 if verdict.status == "battery_float_confounded":
-                    self.emit("calibration.capture_battery_pair_failed", level="window", collector="calibration",
-                              observed={"slot": slot, "reasons": list(verdict.reasons)[:8]})
+                    record = self.emit("calibration.capture_battery_pair_failed", level="window",
+                                       collector="calibration",
+                                       observed={"slot": slot, "reasons": list(verdict.reasons)[:8]})
+                    if pair_current_only(list(verdict.reasons)):
+                        # Fail closed; re-read against the journal (_capture_battery_joins).
+                        assessment["pair_current_only_flag_id"] = record["flag_id"]
             except battery_float.CustodyFailure:
                 # A battery raw file whose recorded digest no longer matches its
                 # bytes.  Battery raw files are not governed ledger artifacts,
@@ -4553,8 +4848,10 @@ class _Harvest:
                 "phase": "continuous", "journal": {
                     "path": f"{module}.jsonl", "sha256": sha256_file(path), "readings": len(readings),
                     "failed_probes": sum(reading.status == "error" for reading in readings), "malformed": malformed}}
+        self._journals = journals
         roster = {member["run_id"]: member for member in self.roster["members"]}
         battery_covered: set[str] = set()
+        battery_codes: dict[str, set[str]] = {}
         failed: set[str] = set()  # a module whose join raised (a missing threshold): a fault, recorded once
         for run_id, spans in sorted(self.spans.items()):
             member_span, request = spans.get("member"), spans.get("request")
@@ -4562,7 +4859,15 @@ class _Harvest:
                       "collector": "monitor"}
             if member_span is None:
                 continue
-            for module, join, span in (("battery", battery_member_flags, member_span),
+
+            def battery(span: Sequence[int], readings: Sequence[Reading], thresholds: Mapping[str, Any],
+                        run_id: str = run_id, request: Any = request) -> list[tuple[str, Any, Any]]:
+                found, energy = battery_join(span, readings, thresholds, request=request)
+                if energy is not None:
+                    self.battery_assist["members"][run_id] = energy
+                return found
+
+            for module, join, span in (("battery", battery, member_span),
                                        ("thermal", thermal_member_flags, member_span),
                                        ("contention", contention_member_flags, request or member_span),
                                        ("clock", clock_member_flags, member_span)):
@@ -4578,8 +4883,10 @@ class _Harvest:
                     self._record_error(f"monitor.{module}", exc, 0.0, fault=True)
                     failed.add(module)
                     continue
-                if module == "battery" and not any(code == "battery.unmeasured" for code, *_rest in found):
-                    battery_covered.add(run_id)
+                if module == "battery":
+                    battery_codes[run_id] = {code for code, *_rest in found}
+                    if "battery.unmeasured" not in battery_codes[run_id]:
+                        battery_covered.add(run_id)
                 for code, observed, interval in found:
                     self.emit(code, observed=observed, interval=interval, **kwargs)
         # Plan 3.5: a missing #421 per-capture pair is only disclosed when the
@@ -4589,7 +4896,11 @@ class _Harvest:
             code = "battery.capture_pair_missing_covered" if run_id in battery_covered else "battery.capture_pair_missing"
             self.emit(code, level="member", run_id=run_id, stage_id=roster.get(run_id, {}).get("stage_id"),
                       collector="battery_pair", observed={"status": status})
+        self._pair_assist(battery_codes, roster)
         self._capture_battery_joins(journals.get("battery"), thresholds)
+        if self.battery_assist["members"] or self.battery_assist["captures"]:
+            write_json_once(self.withheld / "battery-assist.json", {"schema": BATTERY_ASSIST_SCHEMA,
+                                                                   **self.battery_assist})
         steps, changes = clock_steps(journals.get("clock", []), thresholds)
         if changes:
             self.emit("clock.frequency_changed", level="window", collector="monitor",
@@ -4619,18 +4930,52 @@ class _Harvest:
                       interval={"monotonic_ns": [low[0].monotonic_ns, low[-1].monotonic_ns]})
         self._kernel_task_share(journals.get("contention", []))
 
+    def _pair_assist(self, battery_codes: Mapping[str, set[str]], roster: Mapping[str, Any]) -> None:
+        """A #421 member pair that failed on its endpoint current alone, re-read against the journal.
+
+        The battery-assist ruling (item 4) leaves no discharge-only
+        exclusion: when the battery journal's SMC reads cover the member and
+        its join found no charging, AC-loss or missing-evidence exclusion
+        (``BATTERY_EXCLUDING_CODES``), the endpoint current was discharge, so
+        ``battery.capture_pair_failed`` is replaced by
+        ``battery.capture_pair_assist`` (DISCLOSE), which records the flag it
+        replaced.  Otherwise the exclusion stands.
+        """
+        for run_id, flag_id in sorted(self.pair_current_only.items()):
+            codes = battery_codes.get(run_id)
+            if codes is None or codes & BATTERY_EXCLUDING_CODES or "battery.smc_unavailable" in codes:
+                continue
+            replaced = self.flags.remove(flag_id)
+            if replaced is None:
+                continue
+            self.emit("battery.capture_pair_assist", level="member", run_id=run_id,
+                      stage_id=roster.get(run_id, {}).get("stage_id"), collector="battery_pair",
+                      observed={"replaced_code": replaced["code"], "replaced_flag_id": flag_id,
+                                "pair": replaced.get("observed"), "journal_codes": sorted(codes)})
+
     def _capture_battery_joins(self, readings: Sequence[Reading] | None, thresholds: Mapping[str, Any]) -> None:
         """Each calibration capture's battery physics from the continuous journal (core-prune N7.2).
 
         The controller no longer refuses a window whose pre-slot battery pair
         did not pass (core-prune A1), so the capture's battery is measured here
-        as members have it: the member join over the capture's span.  An
-        on-battery or accumulator excursion in the span removes the window;
-        a pair that did not pass with no journal coverage (no span, no
-        journal, a hole, or a join that could not run) removes it too.
+        as members have it: :func:`battery_join` over the capture's span, its
+        current judged on the 1 Hz SMC B0AC reads (so a post capture is
+        covered by the reads after it, not by the next 60 s gauge
+        publication, R3-5).  Under the battery-assist ruling (item 4) a
+        charging or AC-loss exclusion, or a charge accumulator excursion, in
+        the span removes the window (``calibration.capture_battery_span``); a
+        pair that did not pass with no journal coverage (no span, no journal,
+        missing evidence, or a join that could not run) removes it too
+        (``calibration.capture_battery_unmeasured``).  Discharge alone is
+        ``calibration.capture_battery_assist`` (DISCLOSE; its energy goes to
+        ``withheld/battery-assist.json``), and a pair that failed on its
+        endpoint current alone, with the span SMC-covered and free of those
+        exclusions, is ``calibration.capture_battery_pair_assist`` in place of
+        ``calibration.capture_battery_pair_failed``.
         """
         for attempt, capture in sorted(self.capture_assessments.items()):
             span, pair = capture.get("span"), capture.get("battery_pair")
+            found: list[tuple[str, Any, Any]] = []
             codes: list[str] = []
             reason = None
             if not span:
@@ -4639,10 +4984,14 @@ class _Harvest:
                 reason = "battery_journal_absent"
             else:
                 try:
-                    codes = sorted({code for code, *_rest in battery_member_flags(span, readings, thresholds)})
+                    found, energy = battery_join(span, readings, thresholds)
+                    codes = sorted({code for code, *_rest in found})
                 except Exception as exc:  # a missing threshold: also a recorded fault
                     self._record_error("monitor.capture_battery", exc, 0.0, fault=True)
                     reason = "join_failed"
+                else:
+                    if energy is not None and hasattr(self, "battery_assist"):
+                        self.battery_assist["captures"][attempt] = energy
                 if "battery.unmeasured" in codes:
                     reason = "journal_gap"
             observed = {"capture": attempt, "slot": capture.get("slot"), "pair": pair, "codes": codes}
@@ -4653,6 +5002,21 @@ class _Harvest:
             if pair != "pass" and reason is not None:
                 self.emit("calibration.capture_battery_unmeasured", level="window", collector="monitor",
                           observed={**observed, "reason": reason}, interval=interval)
+            for code, assist, _interval in found:
+                if code in ("battery.assist", "battery.assist_outside_request"):
+                    self.emit("calibration.capture_battery_assist", level="window", collector="monitor",
+                              observed={"capture": attempt, "slot": capture.get("slot"), **assist},
+                              interval=interval)
+            flag_id = capture.get("pair_current_only_flag_id")
+            if flag_id and codes and not set(codes) & BATTERY_EXCLUDING_CODES \
+                    and "battery.smc_unavailable" not in codes and hasattr(self, "flags"):
+                replaced = self.flags.remove(flag_id)
+                if replaced is not None:
+                    self.emit("calibration.capture_battery_pair_assist", level="window", collector="monitor",
+                              observed={"capture": attempt, "slot": capture.get("slot"),
+                                        "replaced_code": replaced["code"], "replaced_flag_id": flag_id,
+                                        "pair": replaced.get("observed"), "journal_codes": codes},
+                              interval=interval)
 
     def _kernel_task_share(self, readings: Sequence[Reading]) -> None:
         """kernel_task's CPU-seconds during requests (excluded in window, disclosed)."""
