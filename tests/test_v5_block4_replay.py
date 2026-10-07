@@ -40,8 +40,9 @@ from tests.test_kernel_clock import frequency_probe
 SCRATCH = (Path(tempfile.gettempdir()) / "v5-block4-replay").resolve()
 PACK_RELATIVE = "configs/campaigns/" + writer.GAMMA
 # The GAMMA pack's reviewed source: bda1c180 until the block-5 timing lane regenerated the
-# _v5 packs (idle_seconds 57.6, block-5 policy file); that regeneration commit is now the source.
-PACK_SOURCE_COMMIT = "f4cf904720992972527bb43444361e51266f68db"
+# _v5 packs (idle_seconds 57.6, block-5 policy file) at f4cf9047; lane L10's distinct interior
+# reference run ids (GAMMA-INTERIOR-REFERENCES-01) regenerated it again, and that commit is now the source.
+PACK_SOURCE_COMMIT = "c6309e1a816ee5c1b07e3c5466ea2a6de1250bc5"
 
 
 def put(path, value):

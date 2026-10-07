@@ -303,8 +303,15 @@ def dispatched_stages(root, graph, science_stage):
             paths = [arg.get("value") for command in row.get("launch", {}).get("commands", [])
                      for arg in command.get("argv_template", {}).get("arguments", [])
                      if arg.get("kind") == "repo_path"]
+            # GAMMA-INTERIOR-REFERENCES-01 (lane L10): GAMMA's first interior reference stage now
+            # launches a run-id-only copy of the shared midpoint config (gamma_interior_references_v5/),
+            # and the shared midpoint runs at the arm boundary. The one-block chain's midpoint dispatch
+            # still sits after block 1, so it resolves to that first interior stage by stage id; its
+            # member is the same config and class, so the sizing is unchanged.
             match = (row.get("stage_id") == value if kind == "science" else
-                     value in paths if kind == "config" else
+                     (value in paths or (value.endswith("/midpoint")
+                                         and row.get("stage_id") == "gamma-reference-decode-midpoint"))
+                     if kind == "config" else
                      row.get("kind") == value if kind == "kind" else
                      row.get("kind") == "calibration_capture" and row.get("input_ref", {}).get("slot") == value)
             if match:
