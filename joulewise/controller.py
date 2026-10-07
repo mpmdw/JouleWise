@@ -887,8 +887,9 @@ def _authenticate_g2b_pre_slot_attachment(
     authenticated consumption/start/settle chain, with completion absent.
 
     HAZARD (``hazard`` not None): no Git per member (the repository is the
-    pack's ``<repo>/configs/campaigns/<pack>`` ancestor, the ledger pin is not
-    compared with HEAD), the ledger's governed-extension shape and a
+    pack's ``<repo>/configs/campaigns/<pack>`` ancestor, or for any other
+    layout one git lookup plus a ``records.pin_ledger`` flag; the ledger pin
+    is not compared with HEAD), the ledger's governed-extension shape and a
     non-passing pre-slot battery verdict become window flags.  Every
     session/slot/plan/custody/digest/T1 term stays a refusal, and a battery
     phase whose record names a raw digest must still carry those bytes.
@@ -920,8 +921,23 @@ def _authenticate_g2b_pre_slot_attachment(
             and pack_root.parent.parent.name == "configs"):
         repo = pack_root.parents[2]
     else:
-        raise ValueError(
-            "G2-b attachment pack root is not <repo>/configs/campaigns/<pack>"
+        # Refusal census 2026-10-06: a pack outside <repo>/configs/campaigns
+        # is a path-shape fact, not a physical hazard.  Find the repository
+        # the legacy way (one git call) and record the layout; the
+        # session/slot/plan/custody/digest keepers below still refuse a
+        # repository whose ledger does not bind this member.
+        from joulewise.flags import core as flags_core  # noqa: PLC0415
+
+        repo = _repo_for_pack(pack_root)
+        flags_core.emit(
+            hazard, "records.pin_ledger", level="window",
+            observed={"kind": "pack_root_layout", "pack_root": str(pack_root),
+                      "repository": str(repo)},
+            expected={"pack_root": "<repo>/configs/campaigns/<pack>"},
+            detail="the pack root is not <repo>/configs/campaigns/<pack>; the repository "
+                   "was found with git and the member was collected",
+            legacy_site="joulewise/controller.py:923@ba0e0c72e",
+            legacy_code="G2-b attachment pack root is not <repo>/configs/campaigns/<pack>",
         )
     tree, _ = _plan_tree(pack_root)
     if member_lineage is None and not _g2b_auxiliary_config_matches(

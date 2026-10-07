@@ -216,6 +216,52 @@ class HazardWindowAttachmentTests(unittest.TestCase):
         metadata = json.loads((bundle / "metadata.json").read_bytes())
         self.assertEqual(metadata["instrument_calibration"]["g2b_pre_slot"]["slot"], "pre")
 
+    def _relocated_pack_context(self):
+        """The window's authenticated context, its pack copied outside configs/campaigns."""
+
+        import shutil
+
+        moved = self.w.repo / "packs" / self.w.pack.name
+        shutil.copytree(self.w.pack, moved)
+        real = arm_readiness.authenticate_campaign_launch_lineage
+
+        def relocated(*args, **kwargs):
+            context = dict(real(*args, **kwargs))
+            context["pack_root"] = str(moved)
+            return context
+
+        return moved, relocated
+
+    def test_census_pack_outside_configs_campaigns_collects_and_flags(self) -> None:
+        # Refusal census 2026-10-06: at ba0e0c72e this raised
+        # "G2-b attachment pack root is not <repo>/configs/campaigns/<pack>"
+        # and every member of the window refused before its bundle.
+        moved, relocated = self._relocated_pack_context()
+        with patch.object(arm_readiness, "authenticate_campaign_launch_lineage", side_effect=relocated):
+            attachment = load_attachment(self.w, hazard=self.hazard)
+        self.assertIsNotNone(attachment)
+        flags = [flag for flag in read_flags(self.custody) if flag["code"] == "records.pin_ledger"]
+        self.assertEqual(len(flags), 1, flags)
+        self.assertEqual(flags[0]["scope"]["level"], "window")
+        value = observed(flags[0])
+        self.assertEqual(value["kind"], "pack_root_layout")
+        self.assertEqual(value["pack_root"], str(moved))
+        self.assertEqual(Path(value["repository"]).resolve(), self.w.repo.resolve())
+
+    def test_census_relocated_pack_keeper_session_binding_still_refuses(self) -> None:
+        _moved, relocated = self._relocated_pack_context()
+        real = ledger.calibration_session_status
+
+        def unfinalized(*args, **kwargs):
+            status = json.loads(json.dumps(real(*args, **kwargs), default=str))
+            status["slots"]["pre"]["finalized"] = False
+            return status
+
+        with patch.object(arm_readiness, "authenticate_campaign_launch_lineage", side_effect=relocated), \
+                patch.object(ledger, "calibration_session_status", side_effect=unfinalized):
+            with self.assertRaisesRegex(ValueError, "requires its session's finalized pre slot"):
+                load_attachment(self.w, hazard=self.hazard)
+
     def test_a5_legacy_path_still_runs_git(self) -> None:
         with patch.object(arm_readiness, "_run_git",
                           side_effect=arm_readiness.ArmReadinessError("readiness_pack_unreadable", "refused")):

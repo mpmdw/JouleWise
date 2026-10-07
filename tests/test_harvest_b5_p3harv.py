@@ -340,6 +340,19 @@ class HistoricalCustodyTests(base.WindowTestCase):
         self.assertEqual(flag["observed"]["attempt_ids"], ["old-pre"])
         self.assertIn("calibration.historical_custody_mismatch", window.exclusions()["reasons"])
 
+    def test_census_an_evicted_capture_is_disclosed_and_keeps_the_window(self):
+        # Refusal census 2026-10-06: the report now calls an evicted capture
+        # unmeasured; the harvest discloses the count and does not exclude.
+        window = self.window()
+        evicted = [{"attempt_id": "old-pre", "custody_locator": "/x", "reasons": ["x"], "evicted": True}]
+        with self.report("unmeasured", unmeasured=evicted):
+            window.harvest()
+        (flag,) = [flag for flag in window.flags() if flag["code"].startswith("calibration.historical_custody")]
+        self.assertEqual(flag["code"], "calibration.historical_custody_unmeasured")
+        self.assertEqual((flag["observed"]["unmeasured"], flag["observed"]["evicted"]), (1, 1))
+        self.assertNotIn("calibration.historical_custody_unmeasured", window.exclusions()["reasons"])
+        self.assertNotIn("calibration.historical_custody_mismatch", window.exclusions()["reasons"])
+
     def test_verified_emits_nothing(self):
         window = self.window()
         with self.report("verified"):
