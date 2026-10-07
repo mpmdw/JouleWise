@@ -640,6 +640,21 @@ def _production_lineage(request: LineageRequest) -> Any:
         boot_session_id=request.boot_session_uuid)
 
 
+def _plan_clock_step_ns(window: Mapping[str, Any]) -> int | None:
+    """The plan's clock-step threshold for the monitor's skew bound (cold pass N5), or None.
+
+    The harvest judges steps with ``hazard_window.harvest_thresholds.clock_step_ns``;
+    the arm's block carries the same registered value as ``thresholds.clock.step_ns``.
+    """
+
+    for value in ((window.get("harvest_thresholds") or {}).get("clock_step_ns"),
+                  ((window.get("thresholds") or {}).get("clock") or {}).get("step_ns")):
+        if not isinstance(value, bool) and isinstance(value, (int, float)) and value > 0 \
+                and float(value) == int(value):
+            return int(value)
+    return None
+
+
 def production_seams(repo_root: Path) -> Seams:
     """The production seams; ``repo_root`` is the driver's own checkout."""
 
@@ -659,7 +674,8 @@ def production_seams(repo_root: Path) -> Seams:
             disk_targets=disk_targets(window, arm=False),
             low_bytes=int(thresholds.get("disk", {}).get("low_bytes", DISK_LOW_BYTES_DEFAULT)),
             cpu_limit_s_per_s=float(thresholds.get("contention", {}).get("cpu_limit_s_per_s", 0.05)),
-            tree_root_files=(str(Path(request.night_dir) / "chain.started"),))
+            tree_root_files=(str(Path(request.night_dir) / "chain.started"),),
+            clock_step_ns=_plan_clock_step_ns(window))
         path = hazard_monitor.monitor_dir(request.custody_root) / "config.json"
         path.parent.mkdir(parents=True, exist_ok=True)
         if not path.exists():
