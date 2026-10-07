@@ -289,6 +289,9 @@ _PRUNE3_CODES = {
 # only a changed boot refuses (night_refused_boot_changed).
 _INT4_CODES = {
     "records.lineage_prelaunch_mismatch": _code("RECORDS", "REPRESENTATION", DISCLOSE),
+    # Refusal-census triage (d), 2026-10-07: present bytes differ in an earlier
+    # capture this window's acceptance neither derived from nor judged.
+    "calibration.historical_custody_mismatch_unused": _code("CALIBRATION", "NUMBER", DISCLOSE),
 }
 
 DRAFT_CODES: Mapping[str, Mapping[str, str]] = {

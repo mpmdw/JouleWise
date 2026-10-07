@@ -138,6 +138,12 @@
       "family": "CALIBRATION",
       "klass": "NUMBER"
     },
+    "calibration.historical_custody_mismatch_unused": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "CALIBRATION",
+      "klass": "NUMBER"
+    },
     "calibration.historical_custody_unmeasured": {
       "blinding": "STRUCTURE",
       "effect": "DISCLOSE",

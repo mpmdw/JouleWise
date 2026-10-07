@@ -379,6 +379,9 @@ CODES: dict[str, CodeSpec] = {
     # The historical calibration custody pass (P2-VPF S5):
     "calibration.historical_custody_mismatch": _spec("CALIBRATION", "NUMBER"),
     "calibration.historical_custody_unmeasured": _spec("CALIBRATION", "NUMBER"),
+    # Triage (d), 2026-10-07: present bytes differ in a capture this window's
+    # acceptance neither derived from nor judged (DISCLOSE).
+    "calibration.historical_custody_mismatch_unused": _spec("CALIBRATION", "NUMBER"),
     # Why a NULL window never launched (R3-4):
     "records.window_not_launched": _spec("RECORDS", "REPRESENTATION"),
     # The KM003C wall meter (joulewise.external.km003c_parse.CODES), all DISCLOSE:
@@ -5448,7 +5451,15 @@ class _Harvest:
         acceptance preflight read, so
         ``calibration_ledger.historical_custody_report`` re-hashes each one.
         ``mismatch`` (an earlier capture whose present bytes changed) is
-        ``calibration.historical_custody_mismatch`` (EXCLUDE_WINDOW);
+        ``calibration.historical_custody_mismatch`` (EXCLUDE_WINDOW) when this
+        window's acceptance relies on that capture
+        (:meth:`acceptance_relied_attempt_ids`: its derivation corpus, which
+        sets both screens, and the prior observations it judged), and
+        ``calibration.historical_custody_mismatch_unused`` (DISCLOSE) when it
+        does not (refusal-census triage d, 2026-10-07: another window's
+        bracket capture changing does not change this window's numbers).  An
+        acceptance that cannot be read names nothing, so then every mismatch
+        excludes;
         ``unmeasured`` (the ledger or a row could not be read, a capture was
         evicted, or nothing was checked) is
         ``calibration.historical_custody_unmeasured`` (DISCLOSE).  An evicted
@@ -5467,9 +5478,21 @@ class _Harvest:
                    "excluded_observations": report.get("excluded_observations")}
         if report.get("status") == "mismatch":
             mismatched = report.get("mismatched") or []
-            self.emit("calibration.historical_custody_mismatch", level="window", collector="calibration",
-                      observed={**summary, "mismatched": len(mismatched),
-                                "attempt_ids": [row.get("attempt_id") for row in mismatched][:8]})
+            relied = self.acceptance_relied_attempt_ids()
+            used = [row for row in mismatched
+                    if relied is None or not isinstance(row, Mapping) or row.get("attempt_id") in relied]
+            unused = [row for row in mismatched if isinstance(row, Mapping) and row not in used]
+            scope = "acceptance_unreadable" if relied is None else "acceptance_relied"
+            if used:
+                self.emit("calibration.historical_custody_mismatch", level="window", collector="calibration",
+                          observed={**summary, "mismatched": len(used), "scope": scope,
+                                    "attempt_ids": [row.get("attempt_id") if isinstance(row, Mapping) else None
+                                                    for row in used][:8]})
+            if unused:
+                self.emit("calibration.historical_custody_mismatch_unused", level="window",
+                          collector="calibration",
+                          observed={**summary, "mismatched": len(unused),
+                                    "attempt_ids": [row.get("attempt_id") for row in unused][:8]})
         elif report.get("status") != "verified":
             self.emit("calibration.historical_custody_unmeasured", level="window", collector="calibration",
                       observed={**summary, "unmeasured": len(report.get("unmeasured") or []),
@@ -5478,6 +5501,34 @@ class _Harvest:
                                 "reason": report.get("unmeasured_reason")
                                 or ("error" if report.get("error") else "rows_unmeasured"),
                                 "ledger_reasons": list(report.get("ledger_reasons") or [])[:8]})
+
+    def acceptance_relied_attempt_ids(self) -> frozenset[str] | None:
+        """The ledger attempts this window's calibration acceptance relies on, or None if unreadable.
+
+        The acceptance's two screens (the preflight level screen is the
+        corpus maximum, the bracket screen its range) are computed from its
+        ``derivation_corpus`` members, whose ``member_id`` is the ledger
+        attempt id; its ``prior_observation_set`` lists the earlier
+        observations it judged before issuance (``attempt_id``).  A capture in
+        neither does not enter this window's numbers.  The acceptance's bytes
+        are pinned by the calibration step (``calibration.acceptance_mismatch``).
+        """
+        path = self.archive / "sources" / "inputs" / "acceptance.json"
+        try:
+            value = json.loads(path.read_bytes())
+        except (OSError, ValueError):
+            return None
+        corpus = value.get("derivation_corpus") if isinstance(value, Mapping) else None
+        prior = value.get("prior_observation_set") if isinstance(value, Mapping) else None
+        members = corpus.get("members") if isinstance(corpus, Mapping) else None
+        observations = prior.get("observations") if isinstance(prior, Mapping) else None
+        if not isinstance(members, list) or not isinstance(observations, list):
+            return None
+        ids = [row.get("member_id") if isinstance(row, Mapping) else None for row in members] + \
+              [row.get("attempt_id") if isinstance(row, Mapping) else None for row in observations]
+        if not ids or not all(isinstance(item, str) and item for item in ids):
+            return None
+        return frozenset(ids)
 
     # -- a window that never launched (R3-4) -----------------------------------
     def window_not_launched(self) -> None:

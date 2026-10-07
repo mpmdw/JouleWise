@@ -332,12 +332,58 @@ class HistoricalCustodyTests(base.WindowTestCase):
         report = json.loads((window.archive / "derived" / "historical-custody.json").read_bytes())
         self.assertEqual(report["excluded_session_id"], base.SESSION_ID)
 
-    def test_a_mismatch_removes_the_window(self):
+    # The real acceptance's corpus maximum: its b_fiducial_s (0.03646286164497997 s)
+    # is the preflight level screen every capture of this window is judged by.
+    SCREEN_MAXIMUM = "d079-epoch-25g83-r6-20261001T2252Z-d08"
+    # A ledger attempt the acceptance neither derived from nor judged: an
+    # earlier block-5 window's bracket capture.
+    OTHER_WINDOW = "b5-earlier-window-session-pre"
+
+    def test_a_mismatch_in_a_capture_the_acceptance_relies_on_removes_the_window(self):
         window = self.window()
-        with self.report("mismatch", mismatched=[{"attempt_id": "old-pre", "reasons": ["x"]}]):
+        acceptance = json.loads((base.ROOT / base.ACCEPTANCE).read_bytes())
+        self.assertEqual(acceptance["decimal_derivation"]["source_statistics"]["maximum_member_id"],
+                         self.SCREEN_MAXIMUM)
+        with self.report("mismatch", mismatched=[{"attempt_id": self.SCREEN_MAXIMUM, "reasons": ["x"]}]):
             window.harvest()
         (flag,) = [flag for flag in window.flags() if flag["code"] == "calibration.historical_custody_mismatch"]
-        self.assertEqual(flag["observed"]["attempt_ids"], ["old-pre"])
+        self.assertEqual((flag["observed"]["attempt_ids"], flag["observed"]["scope"]),
+                         ([self.SCREEN_MAXIMUM], "acceptance_relied"))
+        self.assertIn("calibration.historical_custody_mismatch", window.exclusions()["reasons"])
+        self.assertNotIn("calibration.historical_custody_mismatch_unused", window.codes())
+
+    def test_triage_d_a_mismatch_in_a_capture_this_window_does_not_use_is_disclosed(self):
+        # Refusal-census triage (d), 2026-10-07: before, any historical
+        # capture whose present bytes differ excluded the window.
+        window = self.window()
+        with self.report("mismatch", mismatched=[{"attempt_id": self.OTHER_WINDOW, "reasons": ["x"]}]):
+            window.harvest()
+        (flag,) = [flag for flag in window.flags()
+                   if flag["code"].startswith("calibration.historical_custody")]
+        self.assertEqual((flag["code"], flag["observed"]["attempt_ids"]),
+                         ("calibration.historical_custody_mismatch_unused", [self.OTHER_WINDOW]))
+        self.assertNotIn("calibration.historical_custody_mismatch", window.exclusions()["reasons"])
+        self.assertNotIn("calibration.historical_custody_mismatch_unused", window.exclusions()["reasons"])
+
+    def test_triage_d_both_kinds_give_both_codes(self):
+        window = self.window()
+        rows = [{"attempt_id": self.OTHER_WINDOW, "reasons": ["x"]},
+                {"attempt_id": self.SCREEN_MAXIMUM, "reasons": ["x"]}]
+        with self.report("mismatch", mismatched=rows):
+            window.harvest()
+        observed = {flag["code"]: flag["observed"]["attempt_ids"] for flag in window.flags()
+                    if flag["code"].startswith("calibration.historical_custody")}
+        self.assertEqual(observed, {"calibration.historical_custody_mismatch": [self.SCREEN_MAXIMUM],
+                                    "calibration.historical_custody_mismatch_unused": [self.OTHER_WINDOW]})
+        self.assertIn("calibration.historical_custody_mismatch", window.exclusions()["reasons"])
+
+    def test_triage_d_an_unreadable_acceptance_names_nothing_so_every_mismatch_excludes(self):
+        window = self.window()
+        with self.report("mismatch", mismatched=[{"attempt_id": self.OTHER_WINDOW, "reasons": ["x"]}]), \
+                mock.patch.object(h._Harvest, "acceptance_relied_attempt_ids", return_value=None):
+            window.harvest()
+        (flag,) = [flag for flag in window.flags() if flag["code"] == "calibration.historical_custody_mismatch"]
+        self.assertEqual(flag["observed"]["scope"], "acceptance_unreadable")
         self.assertIn("calibration.historical_custody_mismatch", window.exclusions()["reasons"])
 
     def test_census_an_evicted_capture_is_disclosed_and_keeps_the_window(self):
