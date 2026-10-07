@@ -10,7 +10,6 @@ silent).
 
 from __future__ import annotations
 
-import io
 import os
 import signal
 import subprocess
@@ -51,10 +50,6 @@ def wait_not_running(pid: int, timeout_s: float = 10.0) -> bool:
             return False
         time.sleep(0.05)
     return True
-
-
-def group_members(pgid: int) -> list[int]:
-    return [row.pid for row in child_guard.table() if row.pgid == pgid and not row.zombie]
 
 
 def run_class(case: type) -> unittest.TestResult:
