@@ -2329,6 +2329,16 @@ def run_hazard_night(rt: Any, plan_path: Path, plan: Any, probes: Any, initial_c
             hazard["meter"] = stop_meter(left_running=True)
     hazard["disk_floor"] = {"low_bytes": disk.low_bytes, "stops": disk.readings, "errors": disk.errors}
     chain_stop = next((row for row in journal if row.get("stage_id") == "chain.stop"), None)
+    # The chain's stop exits (10/11/12) come only from its stop_chain, which
+    # journals chain.stop first. A stop exit whose journal line is missing (an
+    # append that failed) is still a stop, never a GO: the exit code names it.
+    stop_kinds = {code: kind for kind, code in b5_chain.STOP_EXITS.items()}
+    if chain_stop is None and abort is None and started and exit_code in stop_kinds:
+        chain_stop = {"stage_id": "chain.stop", "kind": stop_kinds[exit_code], "rc": exit_code,
+                      "source": "exit_code"}
+        hazard["chain"]["stop_from_exit_code"] = chain_stop
+        window.note(f"the chain exited {exit_code} ({stop_kinds[exit_code]}) without a chain.stop journal "
+                    "line; the window is recorded as CHAIN_STOPPED from the exit code")
     stage_reached = "chain"
     yield_status = yield_record.get("yield_status")
     if abort is not None:
@@ -2395,7 +2405,7 @@ def run_hazard_night(rt: Any, plan_path: Path, plan: Any, probes: Any, initial_c
         "chain_exit_code": exit_code,
         "termination_proven": proven, "census_count": census_count, "arm_verdicts": decision["verdicts"],
         "stages_total": len(stages), "stages_nonzero": sum(1 for row in stages if row.get("rc") not in (0, None)),
-        "chain_stop": next((row.get("kind") for row in stages if row.get("stage_id") == "chain.stop"), None),
+        "chain_stop": chain_stop.get("kind") if chain_stop is not None else None,
         "g10_ran": hazard["g10"].get("ran"), "g10_returncode": hazard["g10"].get("returncode"),
         "monitor_restarts": hazard["monitor"]["restarts"], "flags": sorted(set(window.flags)),
         "yield_line": yield_line, "yield_status": yield_status,

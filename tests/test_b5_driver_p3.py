@@ -3,9 +3,10 @@
 Covered: the KM003C wall meter wired per ``~/night-archive/wallmeter-probe/WIRING.md``
 (a named supervisor, no restart after a clean "absent" exit, a SIGTERM stop
 proven gone, its stream listed in the custody record, the dead-man reaping an
-orphaned meter, and DISCLOSE flags for its supervision failures); and the R3-5
+orphaned meter, and DISCLOSE flags for its supervision failures); the R3-5
 hold, which stops the hazard monitor and the meter no sooner than 5 s after the
-chain exits.
+chain exits; and CHAIN_STOPPED for the pre-calibration stops (exits 11 and 12),
+including a stop exit whose journal line is missing.
 
 Each end-to-end test drives the real driver through the shared harness of
 ``tests/test_b5_driver.py``; the meter program is a stand-in with the real
@@ -25,6 +26,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+from joulewise import arm_retry
 from joulewise.b5 import driver as b5_driver
 from tests.test_b5_driver import Harness, load_driver
 
@@ -401,6 +403,48 @@ class DeadManMeterTests(unittest.TestCase):
             self.assertIsNone(process.poll())
             self.assertTrue(b5_driver.reap_orphan_monitor(night, journal=b5_driver.METER_JOURNAL)["signalled"])
             self.assertEqual(-signal.SIGTERM, process.wait(timeout=10))
+
+
+# --------------------------------------------------------------------------
+# The real rehearsal's "GO on a chain stopped at exit 11" (P2-DRV CHAIN_STOPPED)
+
+
+class ChainStoppedTests(unittest.TestCase):
+    def assert_chain_stopped(self, harness, exit_code, kind):
+        self.assertEqual(harness.driver.EXIT_CHAIN_FAILED, harness.run())
+        result = harness.result()
+        self.assertEqual(("CHAIN_STOPPED", exit_code), (result["verdict"], result["chain_exit_code"]))
+        hazard = harness.hazard()
+        self.assertEqual(("CHAIN_STOPPED", f"chain:{kind}"), (hazard["verdict"], hazard["stage_reached"]))
+        report = harness.driver.run_courier.call_args.kwargs["report"]["facts"]
+        self.assertEqual(("CHAIN_STOPPED", kind), (report["verdict"], report["chain_stop"]))
+        self.assertIn(f"chain_stopped:{kind}", report["fault_reasons"])
+        decision = arm_retry.terminal_window_release(
+            result, plan_id=harness.plan.plan_id, receipt_class=harness.plan.receipt_class,
+            now_epoch_s=time.time() + 1, chain_started=True, chain_exited=True, courier_sent=True)
+        self.assertEqual((True, "chain_stopped"), (decision.allowed, decision.reason))
+        return hazard
+
+    def test_a_failed_pre_calibration_capture_exit_11_is_chain_stopped_not_go(self):
+        harness = Harness(self, "alpha", g10=False, behavior={"capture_rc": {"pre": 1}})
+        self.assert_chain_stopped(harness, 11, "pre_calibration_capture_failed")
+
+    def test_a_failed_pre_calibration_screen_exit_12_is_chain_stopped_not_go(self):
+        harness = Harness(self, "alpha", g10=False, behavior={"b_fiducial_s": 0.04})
+        self.assert_chain_stopped(harness, 12, "pre_calibration_screen_failed")
+
+    def test_a_stop_exit_without_its_journal_line_is_still_chain_stopped(self):
+        harness = Harness(self, "alpha", g10=False)
+        harness.replace_chain("#!/bin/zsh -f\nexit 11\n")
+        hazard = self.assert_chain_stopped(harness, 11, "pre_calibration_capture_failed")
+        self.assertEqual("exit_code", hazard["chain"]["stop_from_exit_code"]["source"])
+
+    def test_an_ordinary_nonzero_exit_stays_go_with_a_failed_chain_exit(self):
+        harness = Harness(self, "alpha", g10=False)
+        harness.replace_chain("#!/bin/zsh -f\nexit 3\n")
+        self.assertEqual(harness.driver.EXIT_CHAIN_FAILED, harness.run())
+        self.assertEqual("GO", harness.result()["verdict"])
+        self.assertNotIn("stop_from_exit_code", harness.hazard()["chain"])
 
 
 if __name__ == "__main__":
