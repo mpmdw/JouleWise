@@ -676,26 +676,25 @@ class SupervisorTests(unittest.TestCase):
 # --------------------------------------------------------------------------
 # The monitor's CPU cost on a desk run (MonitorCostTests)
 
-# The reference workload: the two child processes the monitor is designed to
-# start.  They are written out here, not read from the code under test, so a
-# change to the monitor's own commands is measured against the old ones.
-REFERENCE_PS = ("/bin/ps", "-Ao", "pid,ppid,lstart,time,ucomm")
-REFERENCE_IOREG = ("/usr/sbin/ioreg", "-r", "-c", "AppleSmartBattery")
-# The designed schedule of those two children, also written out here.
-PS_PERIOD_S = 10.0                 # one ps every 10 s
-GAUGE_PUBLICATION_PERIOD_S = 60.0  # one ioreg for each battery-gauge publication, one a minute
-# The two bounds, in multiples of the schedule's price in the same run (see MonitorCostTests).
-CHILDREN_BOUND = 1.7
-TOTAL_BOUND = 2.6
-REFERENCE_TIMEOUT_S = 10.0  # the monitor's own probe timeout
-REFERENCE_PAUSE_S = 2.0
-MIN_REFERENCE_SAMPLES = 5
-COST_PERIODS = 3            # the judged window: three of the monitor's 10 s cost periods
+# The reference workload.  The commands are written out here, not read from the
+# code under test, so a change to the monitor's own commands is measured
+# against the old ones.
+REFERENCE_PS = ("/bin/ps", "-Ao", "pid,ppid,lstart,time,ucomm")         # the monitor starts one every 10 s
+REFERENCE_IOREG = ("/usr/sbin/ioreg", "-r", "-c", "AppleSmartBattery")  # ... and one per gauge publication
+REFERENCE_PYTHON = (sys.executable, "-I", "-S", "-B", "-c", "pass")     # the yardstick for in-process work
+PERIOD_S = 10.0                    # the monitor's ps period; also its cost-line period in this test
+GAUGE_PUBLICATION_PERIOD_S = 60.0  # the battery gauge publishes once a minute
+COST_PERIODS = 3                   # the judged window: three periods
+CHILDREN_BOUND = 1.75              # both bounds: see MonitorCostTests
+WHOLE_BOUND = 1.55
+REFERENCE_TIMEOUT_S = 10.0         # the monitor's own probe timeout
+REFERENCE_PAUSE_S = 2.0            # between two rounds of the reference commands
+REFERENCE_ROUND_LIMIT_S = 3.0      # slower rounds: work at that priority is not getting the CPU
 
 # The counterfactual monitor: the production code with every sampling task run
 # three times whenever it is due (three clock reads, three ps, three ioreg ...).
 # Its idle wake-ups are not tripled, so it costs a little under three times the
-# unchanged monitor (2.5 to 2.8 times its CPU in the same run, measured 10-07).
+# unchanged monitor (2.4 to 3.0 times its CPU in the same run, measured 10-07).
 TRIPLED_MONITOR = '''\
 import sys
 from pathlib import Path
@@ -727,8 +726,9 @@ def _cost_lines(root: Path) -> list[dict]:
 
 
 def _reference_cpu_s(argv: Sequence[str]) -> float | None:
-    """CPU seconds (user + system) one reference child used, from its own exit
-    record (``wait4``); None when it did not finish in ``REFERENCE_TIMEOUT_S``."""
+    """CPU seconds (user plus system) one reference child used, from the kernel's
+    record of the exited child (``wait4``); None when it did not finish in
+    ``REFERENCE_TIMEOUT_S``."""
 
     null = [(os.POSIX_SPAWN_OPEN, fd, os.devnull, flags, 0)
             for fd, flags in ((0, os.O_RDONLY), (1, os.O_WRONLY), (2, os.O_WRONLY))]
@@ -757,13 +757,14 @@ def _reference_cpu_s(argv: Sequence[str]) -> float | None:
 
 
 def _sample_reference(prefix: Sequence[str], samples: dict, stop: threading.Event) -> None:
-    """Until ``stop``: one reference ps and one reference ioreg at this priority,
+    """Until ``stop``: one round of the three reference commands at this priority,
     then a pause.  Each sample is (start on ``time.monotonic_ns``, CPU seconds).
     The first child that does not finish ends the sampling with the reason."""
 
     try:
         while not stop.is_set():
-            for kind, argv in (("ps", REFERENCE_PS), ("ioreg", REFERENCE_IOREG)):
+            for kind, argv in (("ps", REFERENCE_PS), ("ioreg", REFERENCE_IOREG),
+                               ("python", REFERENCE_PYTHON)):
                 at = time.monotonic_ns()
                 cpu = _reference_cpu_s((*prefix, *argv))
                 if cpu is None:
@@ -779,8 +780,9 @@ def _sample_reference(prefix: Sequence[str], samples: dict, stop: threading.Even
 def desk_cost_run(top: Path) -> dict[str, dict]:
     """Run four real monitors side by side beside the reference sampling; one result each.
 
-    A result is either ``{"unmeasured": reason}`` or the monitor's CPU over its
-    judged window, the reference prices inside that window and the two ratios.
+    A result is ``{"unmeasured": reason}``, ``{"failed": reason}`` or the monitor's
+    CPU over its judged window, the reference prices inside that window and the
+    two ratios (:func:`_cost_result`).
     """
 
     tripled = top / "tripled_monitor.py"
@@ -790,7 +792,7 @@ def desk_cost_run(top: Path) -> dict[str, dict]:
             "unchanged, background priority": ("background", monitor.MONITOR_SCRIPT),
             "tripled, normal priority": ("normal", tripled),
             "tripled, background priority": ("background", tripled)}
-    reference = {priority: {"ps": [], "ioreg": []} for priority in priorities}
+    reference = {priority: {"ps": [], "ioreg": [], "python": []} for priority in priorities}
     stop = threading.Event()
     samplers = [threading.Thread(target=_sample_reference, args=(prefix, reference[priority], stop),
                                  name=f"reference-{priority}", daemon=True)
@@ -803,13 +805,13 @@ def desk_cost_run(top: Path) -> dict[str, dict]:
             roots[name].mkdir()
             config = monitor.build_config(custody_dir=roots[name], tree_roots=[os.getpid()],
                                           disk_targets=[{"path": str(roots[name]), "copies": 1}],
-                                          cadence={"self_s": PS_PERIOD_S})
+                                          cadence={"self_s": PERIOD_S})
             supervisors[name] = monitor.Supervisor(roots[name], config, prefix=priorities[priority],
                                                    script=script)
             supervisors[name].start()
         for sampler in samplers:
             sampler.start()
-        # One cost line at start-up, then one every 10 s: the window needs lines 1 to 1 + COST_PERIODS.
+        # One cost line at start-up, then one a period: the window is lines 1 to 1 + COST_PERIODS.
         deadline = time.monotonic() + 80
         while time.monotonic() < deadline:
             if all(len(_cost_lines(roots[name])) >= COST_PERIODS + 2
@@ -828,10 +830,13 @@ def desk_cost_run(top: Path) -> dict[str, dict]:
     for samples in reference.values():
         if "error" in samples:
             raise samples["error"]
-    return {name: _cost_result(roots[name], reference[priority]) for name, (priority, _script) in plan.items()}
+    return {name: _cost_result(roots[name], reference[priority])
+            for name, (priority, _script) in plan.items()}
 
 
 def _cost_result(root: Path, reference: Mapping[str, Any]) -> dict[str, Any]:
+    """One monitor's CPU over its judged window against the reference prices inside it."""
+
     if "starved" in reference:
         return {"unmeasured": reference["starved"]}
     lines = _cost_lines(root)
@@ -844,96 +849,117 @@ def _cost_result(root: Path, reference: Mapping[str, Any]) -> dict[str, Any]:
     def spent(key):
         return last["values"][key] - first["values"][key]
 
-    prices = {}
-    for kind in ("ps", "ioreg"):
+    prices, rounds = {}, None
+    for kind in ("ps", "ioreg", "python"):
         inside = [cpu for at, cpu in reference[kind] if start <= at <= end]
-        if len(inside) < MIN_REFERENCE_SAMPLES:
-            return {"unmeasured": f"only {len(inside)} reference {kind} samples inside the window"}
+        if len(inside) < elapsed / REFERENCE_ROUND_LIMIT_S:
+            return {"unmeasured": f"only {len(inside)} reference {kind} children ran inside the "
+                                  f"{elapsed:.0f} s window, fewer than one per "
+                                  f"{REFERENCE_ROUND_LIMIT_S:g} s: work at this priority was not "
+                                  f"getting the CPU"}
         prices[kind] = statistics.fmean(inside)
-        prices[f"{kind}_samples"] = len(inside)
-    scheduled_ps = elapsed / PS_PERIOD_S
+        rounds = len(inside) if rounds is None else min(rounds, len(inside))
+    periods = elapsed / PERIOD_S
+    # The monitor's own ioreg reads, at most the one per started minute that the gauge can cause.
     scheduled_ioreg = min(spent("battery_ioreg_reads"), math.ceil(elapsed / GAUGE_PUBLICATION_PERIOD_S))
-    schedule_price = scheduled_ps * prices["ps"] + scheduled_ioreg * prices["ioreg"]
+    children_price = periods * prices["ps"] + scheduled_ioreg * prices["ioreg"]
+    reference_price = children_price + periods * prices["python"]
     journals = monitor.load_journals(root)
     probe_errors = [f"{name}: {line['error']}" for name in ("battery", "thermal", "contention")
                     for line in journals[name]
                     if line["kind"] in ("reading", "snapshot", "interval") and line["error"] is not None]
     children, own = spent("cpu_children_s"), spent("cpu_self_s")
     return {"elapsed_s": elapsed, "children_s": children, "own_s": own, "prices": prices,
-            "scheduled_ps": scheduled_ps, "scheduled_ioreg": scheduled_ioreg,
-            "schedule_price_s": schedule_price, "ioreg_reads": spent("battery_ioreg_reads"),
-            "polls": spent("battery_polls"), "probe_errors": probe_errors,
-            "children_ratio": children / schedule_price,
-            "total_ratio": (children + own) / schedule_price}
+            "reference_rounds": rounds, "periods": periods, "scheduled_ioreg": scheduled_ioreg,
+            "children_price_s": children_price, "reference_price_s": reference_price,
+            "ioreg_reads": spent("battery_ioreg_reads"), "polls": spent("battery_polls"),
+            "probe_errors": probe_errors, "children_ratio": children / children_price,
+            "whole_ratio": (children + own) / reference_price}
 
 
 @unittest.skipUnless(sys.platform == "darwin", "a desk run of the real read-only probes (macOS)")
 class MonitorCostTests(unittest.TestCase):
-    """The monitor's CPU cost, as a multiple of a reference timed in the same seconds.
+    """The monitor's CPU cost as a multiple of a reference workload timed in the same seconds.
 
-    The problem.  The monitor's CPU time lands inside every member's measured
-    energy, so it is designed to cost under 0.5 % of one core.  This test used to
-    assert that figure directly: CPU-seconds over elapsed seconds, at most 0.005.
-    But the CPU time one ``ps`` child needs belongs to the machine, not to the
-    monitor.  On this Mac on 10-07 one ``ps`` took 10 ms on a quiet desk, 14 ms
-    beside other agents' work, 19 ms beside four memory-writing processes and
-    23 ms with 800 more processes to list.  ``ps`` is over half of the monitor's
-    cost, so the same monitor measured 0.19 to 0.25 % of one core on a quiet desk
-    and 0.52 to 0.57 % beside a review seat: the test failed on the machine's load.
+    The problem.  The monitor runs during every measurement, so its CPU time
+    lands inside the measured energy; it is designed to cost under 0.5 % of one
+    core.  This test used to assert that figure directly: CPU-seconds over
+    elapsed seconds, at most 0.005.  But the CPU time a fixed piece of work
+    needs belongs to the machine as much as to the work.  On this Mac on 10-07
+    one ``ps`` child needed 10 ms with no other work running, 12 to 14 ms beside
+    other agents' work, 19 ms beside four memory-writing processes and 23 ms
+    with 800 more processes to list.  ``ps`` is over half of the monitor's cost,
+    so the unchanged monitor measured 0.19 to 0.25 % of one core on the quiet
+    machine and 0.52 to 0.57 % beside another agent's review run, and the test
+    failed on the machine's load.
 
     The measurement.  Four real monitors run side by side for about 40 s: the
-    production code at normal priority and at background priority (production:
-    ``taskpolicy -b``, which runs it on slowed efficiency cores), and the tripled
-    counterfactual (``TRIPLED_MONITOR``) at each priority.  Each monitor writes a
-    cost line every 10 s with its own CPU time and that of the children it has
-    reaped (``getrusage``); the judged window is three of those periods, 30 s,
-    after the line that holds the interpreter's start-up.
+    production code at normal priority and at background priority (as in
+    production, under ``taskpolicy -b``, which keeps it on slowed efficiency
+    cores), and the tripled counterfactual (``TRIPLED_MONITOR``) at each of the
+    two.  Each monitor writes a cost line every 10 s holding its own CPU time
+    (its in-process work) and the CPU time of the child processes it started
+    and waited for.  The judged window is the three 10 s periods after the
+    first line, which holds the interpreter's start-up.
 
-    While they run, the test starts the same two commands the monitor is designed
-    to start (``REFERENCE_PS``, ``REFERENCE_IOREG``) about every 2 s at each
-    priority and reads the CPU time each child used.  The mean over a monitor's
-    window is that command's price in this run, at this load.  The monitor is
-    designed to start one ``ps`` every 10 s and one ``ioreg`` per gauge
-    publication (one a minute); everything else it reads in process.  What that
-    design costs at this run's prices is the schedule price:
+    The reference.  While the monitors run, the test starts three commands
+    about every 2 s at each priority and reads the CPU time each child used.
+    The mean over a monitor's window is that command's price in this run, at
+    this load:
 
-        schedule price = (window / 10 s) x ps price
-                         + (ioreg reads in the window, at most one per started minute) x ioreg price
+    - ``REFERENCE_PS`` and ``REFERENCE_IOREG``, the two commands the monitor is
+      designed to start: one ``ps`` every 10 s, and one ``ioreg`` for each
+      publication of the battery gauge, once a minute.
+    - ``REFERENCE_PYTHON``, one bare interpreter start: the yardstick for the
+      monitor's in-process work (starting its children, parsing, journal
+      writes, the 1 s clock and battery-current reads, idle wake-ups).  That
+      work needs a yardstick of its own because its price does not follow the
+      ``ps`` price: ``ps`` costs more with every process on the machine,
+      interpreter work does not.
 
-    Two ratios are bounded.  Both divide by the schedule price, so load cancels:
-    a busier machine raises the monitor's CPU and the reference's alike.
+    With periods = window / 10 s, and the monitor's own ``ioreg`` reads in the
+    window counted at most once per started minute::
 
-    - children / schedule price <= 1.7 (``CHILDREN_BOUND``): the CPU of the child
-      processes the monitor started.  The unchanged monitor starts exactly the
-      schedule and measures 0.8 to 1.1.
-    - (children + in-process) / schedule price <= 2.6 (``TOTAL_BOUND``): its whole
-      CPU.  The unchanged monitor measures 1.4 to 1.9; its in-process work
-      (process start-up for the children, parsing, journal writes, the 1 s clock
-      and SMC reads) costs 0.4 to 0.9 schedules.
+        children price  = periods x ps price + ioreg reads x ioreg price
+        reference price = children price + periods x interpreter-start price
 
-    Worked example (10-07, 800 added processes): ps price 23.1 ms, no ioreg read
-    in the window, so the schedule price is 3.0 x 23.1 = 69.4 ms.  The unchanged
-    monitor at normal priority used 74 ms in children and 35 ms in process:
-    74 / 69.4 = 1.07 and 109 / 69.4 = 1.57, inside both bounds, although its
-    share of one core was 0.36 %, and 1.03 % at background priority, over the
-    old 1 % cap.  The tripled monitor in the same seconds: 2.99 and 4.07.
+    The two bounds.  Machine load raises the monitor's CPU and the reference
+    prices alike, so it cancels in both ratios:
 
-    Each bound sits midway, as a ratio, between the unchanged monitor's largest
-    value and the tripled monitor's smallest over the windows measured on 10-07
-    under five kinds of load (other agents' work alone, 12 spinning processes,
-    4 process-starting loops, 800 added processes, 4 memory writers): children
-    0.80 to 1.10 against 2.61 to 3.25, whole CPU 1.38 to 1.85 against 3.56 to
-    4.93.  At the quiet-desk prices (ps 10.1 ms, ioreg 13.4 ms, so 12.3 ms per
-    10 s, 0.12 % of one core) the whole-CPU bound is 0.32 % of one core, inside
-    the 0.5 % design budget.  The share of one core is printed, not judged.
+    - children ratio = the monitor's children CPU / children price, at most
+      1.75 (``CHILDREN_BOUND``).  The unchanged monitor starts exactly the
+      designed children: it measured 0.83 to 1.21 on 10-07.
+    - whole-CPU ratio = (children + in-process CPU) / reference price, at most
+      1.55 (``WHOLE_BOUND``).  The unchanged monitor measured 0.75 to 1.09.
 
-    Unmeasured is a recorded skip, not a failure.  With every core busy at normal
-    priority, macOS stops running background-priority work: on 10-07, with 12
-    spinning processes added, a background ``ps`` did not finish in 10 s.  The
-    monitor at that priority cannot be measured then.  A reference child that
-    does not finish in 10 s, or fewer than 5 reference samples inside a window,
-    skips the monitors at that priority with that reason; the other priority is
-    still judged.
+    Worked example (10-07, beside four memory writers, normal priority): prices
+    ps 19.5 ms, ioreg 21.7 ms, interpreter start 20.6 ms; window 30.0 s with one
+    ioreg read.  Children price = 3.0 x 19.5 + 21.7 = 80.2 ms; reference price =
+    80.2 + 3.0 x 20.6 = 142.0 ms.  The unchanged monitor used 91.4 ms in
+    children and 62.6 ms in process: 91.4 / 80.2 = 1.14 and 154.0 / 142.0 =
+    1.08, inside both bounds.  Its share of one core was 0.513 %, which the old
+    assertion failed.  The tripled monitor in the same seconds: 259.0 / 80.2 =
+    3.23 and 386.2 / 142.0 = 2.72, over both.
+
+    Where the bounds come from.  Each is the midpoint, as a ratio, between the
+    unchanged monitor's largest value and the tripled monitor's smallest in the
+    runs of 10-07 that set them (other agents' work alone, 800 added processes,
+    four memory writers, four process-starting loops): children 1.21 against
+    2.56, whole CPU 1.09 against 2.20.  The whole-CPU bound is about one and a half
+    times the unchanged monitor's cost; on the quiet machine, where that cost
+    is 0.19 to 0.25 % of one core, the bound is 0.3 to 0.4 %, inside the 0.5 %
+    design budget.  The share of one core is printed for the record, not judged.
+
+    Unmeasured is a recorded skip, not a failure.  When every core is busy at
+    normal priority, macOS barely runs background-priority work: on 10-07, with
+    12 spinning processes added, a background ``ps`` did not finish in 10 s,
+    and with four memory writers the background monitors needed about 70 s to
+    write the cost lines they schedule in 40 s.  A monitor cannot be measured
+    in that state.  The reference shows the state: one round of its three
+    children and the 2 s pause takes 2.1 to 2.3 s when the children get the
+    CPU.  If a reference child does not finish in 10 s, or fewer than one round
+    per 3 s ran inside a monitor's window, the monitors at that priority are
+    skipped with that reason, and the other priority is still judged.
     """
 
     @classmethod
@@ -955,11 +981,14 @@ class MonitorCostTests(unittest.TestCase):
         prices = result["prices"]
         print(f"monitor desk cost ({name}): {cpu:.3f} CPU-s over {result['elapsed_s']:.1f} s = "
               f"{100 * cpu / result['elapsed_s']:.3f} % of one core (printed, not judged); "
-              f"same-run prices: ps {1e3 * prices['ps']:.1f} ms, ioreg {1e3 * prices['ioreg']:.1f} ms "
-              f"({prices['ps_samples']} samples each); schedule {result['scheduled_ps']:.1f} ps + "
-              f"{result['scheduled_ioreg']} ioreg = {1e3 * result['schedule_price_s']:.1f} ms; "
-              f"children / schedule {result['children_ratio']:.2f} (bound {CHILDREN_BOUND}), "
-              f"whole CPU / schedule {result['total_ratio']:.2f} (bound {TOTAL_BOUND}); "
+              f"children {1e3 * result['children_s']:.1f} ms, in process {1e3 * result['own_s']:.1f} ms; "
+              f"same-run prices: ps {1e3 * prices['ps']:.1f} ms, ioreg {1e3 * prices['ioreg']:.1f} ms, "
+              f"interpreter start {1e3 * prices['python']:.1f} ms ({result['reference_rounds']} rounds); "
+              f"for {result['periods']:.1f} periods and {result['scheduled_ioreg']} ioreg: "
+              f"children price {1e3 * result['children_price_s']:.1f} ms, "
+              f"reference price {1e3 * result['reference_price_s']:.1f} ms; "
+              f"children ratio {result['children_ratio']:.2f} (bound {CHILDREN_BOUND}), "
+              f"whole-CPU ratio {result['whole_ratio']:.2f} (bound {WHOLE_BOUND}); "
               f"battery ioreg reads {result['ioreg_reads']}, polls {result['polls']}")
         self.assertGreaterEqual(result["elapsed_s"], 25)
         return result
@@ -971,14 +1000,14 @@ class MonitorCostTests(unittest.TestCase):
                 # A probe that fails is cheap: the cost is judged only on a monitor that sampled.
                 self.assertEqual(result["probe_errors"], [])
                 self.assertLessEqual(result["children_ratio"], CHILDREN_BOUND)
-                self.assertLessEqual(result["total_ratio"], TOTAL_BOUND)
+                self.assertLessEqual(result["whole_ratio"], WHOLE_BOUND)
 
     def test_counterfactual_every_task_run_three_times_is_over_both_bounds(self):
         for name in ("tripled, normal priority", "tripled, background priority"):
             with self.subTest(monitor=name):
                 result = self.measured(name)
                 self.assertGreater(result["children_ratio"], CHILDREN_BOUND)
-                self.assertGreater(result["total_ratio"], TOTAL_BOUND)
+                self.assertGreater(result["whole_ratio"], WHOLE_BOUND)
 
 
 class SlowProbeIsolationTests(unittest.TestCase):
