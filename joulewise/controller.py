@@ -1427,9 +1427,11 @@ def _hazard_guard_observation(**kwargs: Any) -> dict[str, Any]:
     exception from it becomes an observation whose readings are all null
     (unmeasured) with ``collector_error`` naming it.  The controller records it
     as an ``env.member_guard_flagged`` finding (``collector_raised``); the
-    readings of every other observation still apply, and a post-run
-    observation recorded this way is missing evidence to the whole-window
-    verdict (``post_run_environment_refusals``) as before.
+    readings of every other observation still apply.  A post-run observation
+    recorded this way is disclosed the same way (phase ``post_run``) and is
+    unmeasured, not missing, evidence to the whole-window verdict
+    (``environment_admission.post_run_observation_collector_raised``;
+    audit-fix batch 1, item 6, 2026-10-07).
     """
 
     try:
@@ -3606,6 +3608,11 @@ class _Execution:
             }
         )
         self._environment["post_run_observation"] = observation
+        if self._hazard is not None and isinstance(observation.get("collector_error"), str):
+            # Audit-fix batch 1 (item 6): disclosed like an admission-phase
+            # observation whose collector raised; the member keeps its evidence.
+            self._record_hazard_guard_observation(
+                {**observation, "phase": "post_run"}, "post-run guard collector raised")
 
     def _settle_before_idle(self) -> None:
         if not isinstance(self._environment, dict):

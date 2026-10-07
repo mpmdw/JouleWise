@@ -45,8 +45,41 @@ def environment_observation_failure(observation: Any) -> str | None:
     return None
 
 
+# The readings of one environment-guard observation
+# (``collect_environment_guard_observation``).
+GUARD_READING_KEYS = ("display_power_state", "screensaver_engaged", "screensaver_module",
+                      "screensaver_delay_s", "hid_idle_s")
+
+
+def post_run_observation_collector_raised(observation: Any) -> bool:
+    """True for the HAZARD controller's record of a post-run guard collector that raised.
+
+    ``controller._hazard_guard_observation`` writes it (only on the HAZARD
+    path): every reading null, ``collector_error`` naming the exception.  It is
+    an observation that was not measured, not a measured quiet-state
+    violation.  Audit-fix batch 1 (item 6, 2026-10-07): it is disclosed
+    (``env.member_guard_flagged``, finding ``collector_raised``, phase
+    ``post_run``) and no longer fails the member's environment evidence.  AC
+    and charging over the member's span are measured directly by the hazard
+    monitor's battery journal (``battery.member_span``).
+    """
+
+    return (
+        isinstance(observation, Mapping)
+        and isinstance(observation.get("collector_error"), str)
+        and observation.get("capture_skipped") is False
+        and all(observation.get(key) is None for key in GUARD_READING_KEYS)
+    )
+
+
 def post_run_environment_refusals(metadata: Any) -> tuple[str, ...]:
-    """Validate the post-run observation used by whole-window claims."""
+    """Validate the post-run observation used by whole-window claims.
+
+    A HAZARD post-run observation whose collector raised
+    (:func:`post_run_observation_collector_raised`) is unmeasured, never a
+    refusal; any measured reading (an awake display, an engaged screensaver)
+    still refuses.
+    """
 
     environment = metadata.get("environment") if isinstance(metadata, Mapping) else None
     observation = (
@@ -54,6 +87,8 @@ def post_run_environment_refusals(metadata: Any) -> tuple[str, ...]:
         if isinstance(environment, Mapping)
         else None
     )
+    if post_run_observation_collector_raised(observation):
+        return ()
     if (
         not isinstance(observation, Mapping)
         or observation.get("capture_skipped") is not False
