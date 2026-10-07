@@ -2933,8 +2933,9 @@ writes one verdict:
 - **COLLECTED:** `night/chain.started` exists, and the stage journal does not show the NO_COLLECTION case below. The
   numbers (into restricted custody) and the flags are emitted whatever the flags say, and the exclusion function
   computes `claim_usable`. If the exclusion function cannot be run (it is absent, it raises, or its inputs could not
-  be built), the numbers and the flags still stand, `records.collector_failed` is recorded, and `claim_usable` is
-  false with the single reason `exclusions.function_unavailable` in the record's `reasons` list (§0.16).
+  be built), the numbers and the flags still stand, `records.collector_failed` (DISCLOSE) is recorded, and
+  `claim_usable` is false with the single reason `exclusions.function_unavailable` in the record's `reasons` list
+  (§0.16).
 - **NULL:** no chain start: the arm refused, or the driver failed before the chain. `claim_usable` is false, with the
   single reason `window.null`.
 - **NO_COLLECTION:** the chain started and its record of stages shows that no collection stage ran to its end. That
@@ -2952,22 +2953,25 @@ writes one verdict:
   collection, so this window's verdict is COLLECTED and `chain.stopped_before_collection` is not recorded. The
   window is still not claim-usable: its bracket session was never finalized, so `calibration.no_bracket` removes it
   (§6.5), and `collection.zero_yield` (DISCLOSE) records that none of its planned bundles is present.
-- **HARVEST_FAULT:** the harvest program failed on bytes that are present. `claim_usable` is false, and
-  `derived/window_flags.json` adds the reason `harvest.fault`. Cured by R3 and re-harvested from identical bytes
-  into a distinct derived directory; never a science outcome.
+- **HARVEST_FAULT:** the harvest program failed on bytes that are present. `claim_usable` is false, and the reason
+  `harvest.fault` is added to the window's reasons. Cured by R3 and re-harvested from identical bytes into a
+  distinct derived directory; never a science outcome.
 
 `window.null`, `exclusions.function_unavailable` and `harvest.fault` are reasons the harvest writes itself. Like the
-pack-scoped window reason of §0.16, they are not catalog codes.
+pack-scoped window reason of §0.16, they are not catalog codes. The harvest's record `harvest.json` carries the
+verdict, `claim_usable`, the window's reasons (`exclude_window_reasons`: these three, the window-removing codes that
+fired, any pack-scoped reason and `cell.below_minimum`) and the yield counts, and the harvest command prints them.
 
 ### 7.2 What happens next
 
-**Who applies these rules.** No program schedules the block. The harvest writes each attempt's verdict and
-`claim_usable` (`harvest.json`, `derived/window_flags.json`). The rules of this section, of §7.4 and of §7.6 are then
+**Who applies these rules.** No program schedules the block. The harvest writes each attempt's verdict,
+`claim_usable` and reasons into `harvest.json` (§7.1). The rules of this section, of §7.4 and of §7.6 are then
 applied to those records by the lead: in an unattended run, by the magistrate, the headless lead session that the
-watchdog launches (§5.7). They are process rules, as the rule of §7.3 is, and the brief the magistrate is launched
-with carries them. Wherever this file says "the scheduler", it means the lead applying these rules. The code holds a
-function for the first rule below, `first_claim_usable` in `joulewise/flags/exclusions.py`, which returns a pack's
-first claim-usable attempt; it is tested, and no block-5 program calls it.
+watchdog launches (§5.7). They are rules a session follows, not code, like the process rule of §7.3, and the written
+brief the magistrate is launched with carries them. Wherever this file says "the scheduler", it means the lead
+applying these rules. The code holds a function for the first rule below, `first_claim_usable` in
+`joulewise/flags/exclusions.py`, which returns a pack's first claim-usable attempt; it is tested, and no block-5
+program calls it.
 
 - **The analysed window of each pack is its first claim-usable attempt** in arm order. All of a model's cells come
   from that one window, so attempts are never mixed: no member, quad or cell is pooled, topped up or replaced across
@@ -3043,15 +3047,15 @@ harvest's `collection.failure_histogram`). It fixes the cause first, by the R3 r
 repeats identically in every window; under back-to-back cadence each repeat costs a whole arm and chain and teaches
 nothing new.
 
-*One LOW that does not hold the next arm* (orchestrator ruling of 2026-10-07 on the fidelity sweep's item C1). On
-GAMMA, each of the two diagnostic interior references (§0.12) is a stage of one member, and the driver counts such a
-stage as a science stage, whose minimum is then 1 of 1 (§5.7). So one lost diagnostic member makes the window's
-yield status LOW, and a single lost member always "shares one cause" with itself. At the recorded loss rate of 1
-member in 37 this happens by chance in 1 − (36/37)² ≈ 5.3% of GAMMA windows, so for these two stages a LOW does
-not indicate a systematic cause. The diagnostic member is no NEG-8 reference and enters no reported cell and no
-contrast. A LOW that comes from one lost diagnostic member alone therefore does not hold the next arm. The yield
-status itself stops nothing and removes nothing in any case; it sends a notice (§5.7). The magistrate's brief
-carries this rule. Giving the diagnostic role its own minimum in the driver is deferred until after block 5.
+*One LOW that does not hold the next arm* (orchestrator ruling of 2026-10-07, on a case found when revision 11 checked
+this file against the code). On GAMMA, each of the two diagnostic interior references (§0.12) is a stage of one
+member, and the driver counts such a stage as a science stage, whose minimum is then 1 of 1 (§5.7). So one lost
+diagnostic member makes the window's yield status LOW, and a single lost member always "shares one cause" with itself.
+At the recorded loss rate of 1 member in 37 this happens by chance in 1 − (36/37)² ≈ 5.3% of GAMMA windows, so for
+these two stages a LOW does not indicate a systematic cause. The diagnostic member is no NEG-8 reference and enters no
+reported cell and no contrast. A LOW that comes from one lost diagnostic member alone therefore does not hold the next
+arm. The yield status itself stops nothing and removes nothing in any case; it sends a notice (§5.7). The magistrate's
+brief carries this rule. Giving the diagnostic role its own minimum in the driver is deferred until after block 5.
 
 ### 7.4 END STATE
 
@@ -3101,8 +3105,8 @@ may differ, byte for byte, in the commit a later window runs.
 
 ### 7.6 What re-arming can and cannot select on
 
-The decision to re-arm is a rule the lead applies (§7.2), not code. It reads the harvest's structural records only:
-`claim_usable`, the verdict and the flag codes. So a measured value can influence re-arming only through what
+The decision to re-arm is a rule the lead applies (§7.2), not code. It reads only `claim_usable`, the verdict, the
+flag codes and the yield counts, never an energy. So a measured value can influence re-arming only through what
 `claim_usable` itself reads.
 `claim_usable` reads no science member's energy except the single pass/fail precheck ratio of §6.3, which is
 RESTRICTED. It does read reference-workload energies (the NEG-8 screen), power (idle admission, the bracket), timing,
@@ -3202,24 +3206,22 @@ finding went:
 Sol R2 and Sol R3 were the third review in a row to find a defect in the NEG-8 survivor logic, which lives in three
 places (the verdict writer, the replay that authenticates a verdict row, the harvest). By the rule that sends a
 twice-failing defect class to a consult rather than a third fix round, the orchestrator took a consult: Fable's cold
-pass 4 view together with Sol R2 and Sol R3. Cold pass 4 called the three places "consistent enough to seal", for
-two reasons. First, three parts of the logic already exist once only and are shared: the **evaluator**, the function
-that screens the surviving references (`whole_window.evaluate_neg8_point_drift`, called by the verdict writer and by
-the re-derivation); the count-adjusted bound, which is bound(n_s, n_e) of §0.12
+pass 4 view together with Sol R2 and Sol R3. Cold pass 4 called the three places "consistent enough to seal", for two
+reasons. First, three parts of the logic already exist once only and are shared: the **evaluator**, the function that
+screens the surviving references (`whole_window.evaluate_neg8_point_drift`, called by the verdict writer and by the
+re-derivation); the count-adjusted bound, which is bound(n_s, n_e) of §0.12
 (`whole_window.neg8_count_adjusted_bound`); and the re-derivation, the function that rebuilds a verdict from the
-reference bundles instead of trusting the stored row (`whole_window._derived_neg8_decision`, which the replay and
-the harvest both call). Second, every disagreement
-between the three places ends in an exclusion, never in a passing screen or a read of a dropped energy. What still
-differs between the places is their test of whether a reference is strict-invalid (§0.12, "The strict check of a
-reference"; cold pass 4 note N-3). The decision: seal on this code, and fix Sol R2, Sol R3, cold pass 4 D1 and that
-difference (one strict predicate shared by all three places) in one named lane, L9-NEG8, which runs after the seal
-and before any claim (§11 item 1 (ii) and item 4), with one design round by Sol and Fable before code. None of it is
-collection code: none of it runs during a window or changes a window's bytes, so it does not block the arm. Cold
-pass 3's notes (N-A, N-B) and cold pass 4's notes (N-1, N-2) are catalog questions that this directory's catalog
-already answers:
-`model.identity_mismatch` and `model.identity_inconsistent_in_window` are EXCLUDE_WINDOW (§6.5),
-`model.identity_underivable` is EXCLUDE_MEMBER, and `whole_window.verdict_unauthenticated` is DISCLOSE; the seal rules
-on them.
+reference bundles instead of trusting the stored row (`whole_window._derived_neg8_decision`, which the replay and the
+harvest both call). Second, every disagreement between the three places ends in an exclusion, never in a passing
+screen or a read of a dropped energy. What still differs between the places is their test of whether a reference is
+strict-invalid (§0.12, "The strict check of a reference"; cold pass 4 note N-3). The decision: seal on this code, and
+fix Sol R2, Sol R3, cold pass 4 D1 and that difference (by one test shared by all three places, the shared predicate
+of §0.12) in one named lane, L9-NEG8, which runs after the seal and before any claim (§11 item 1 (ii) and item 4),
+with one design round by Sol and Fable before code. None of it is collection code: none of it runs during a window or
+changes a window's bytes, so it does not block the arm. Cold pass 3's notes (N-A, N-B) and cold pass 4's notes (N-1,
+N-2) are catalog questions that this directory's catalog already answers: `model.identity_mismatch` and
+`model.identity_inconsistent_in_window` are EXCLUDE_WINDOW (§6.5), `model.identity_underivable` is EXCLUDE_MEMBER, and
+`whole_window.verdict_unauthenticated` is DISCLOSE; the seal rules on them.
 
 ### 9.2 #421: battery float, and the battery-assist ruling of 2026-10-06
 
@@ -3302,17 +3304,17 @@ never sent to a fix round.
 6. The chain adds two arguments to both calibration capture stages (the pre and the post slot), which carry neither
    in the packs: `--arm-countdown-s N` and `--sleep-display-before-capture` (§5.1).
    - *The countdown.* N is 0 for the pre slot and 20 for the post slot. With no such argument the capture tool
-     counts down for its default, 0 s. So against pack bytes the pre slot is unchanged at 0 s and the post slot
-     gains 20 s. The 20 is not a pack literal: it is the countdown that the block-3 runbook's calibration step
-     passes for every slot (`docs/phase_2/window_runbook.md`, `calibrate_slot`). Against that runbook the pre slot
-     drops 20 s, because a 60 s settle already precedes it, and the post slot keeps 20 s, because no settle does.
+     (`scripts/validate_powermetrics_fiducial.py`) counts down for its default, 0 s. So against pack bytes the pre
+     slot is unchanged at 0 s and the post slot gains 20 s. The 20 is not a pack literal: it is the countdown that
+     the block-3 runbook's calibration step passes for every slot (`docs/phase_2/window_runbook.md`,
+     `calibrate_slot`). Against that runbook the pre slot drops 20 s, because a 60 s settle already precedes it, and
+     the post slot keeps 20 s, because no settle does.
    - *The display sleep.* The second argument makes the capture tool run `pmset displaysleepnow`, the macOS command
      that turns the display off at once, after the countdown, and then wait 5 s before the capture starts. The
      runbook's calibration step passes it too. If the command fails, the capture goes on and the failure is recorded
      as `calibration.writer_record_flagged` with kind `display_sleep_action_failed` (§6.10).
-   - The chain refuses to render a calibration stage whose pack template already carries either argument
-     (`joulewise/b5/chain.py` `calibration_runbook_flags`, `stage_argv`; the tool is
-     `scripts/validate_powermetrics_fiducial.py`).
+   - The program that writes the chain script refuses a pack whose calibration stage already carries either
+     argument (`joulewise/b5/chain.py` `calibration_runbook_flags`, `stage_argv`).
 
 The chain's other changes of round 2 (the 60 s settles, the window calibration verdict, the wall budgets, the
 collection deadline, the corpus retry) and the spare-slot retry of revision 7 are not deviations from pack bytes: they
@@ -3522,7 +3524,7 @@ not touched), from the diff `43ac12d0c..fe28e5a0c` (14 commits; 19 files under `
 | census lists its ancestors | `night_gate.AGENT_CENSUS_ARGV` and `hazards.arm.AGENT_CENSUS_ARGV` = `/usr/bin/pgrep -a -lf '[c]odex\|[c]laude'` (`c0f37974a`); `agent_identity.filter_census` follows the caller's tree downward only; `arm_census` discovery keeps no `-a` (a diagnostic that reads its own ancestors from the kernel) | changed: §4.5 |
 | T3 removed from the census | `agent_identity.AGENT_PREFIXES` = (`claude`, `codex`); the T3 rules removed from `arm_census`, `t0_rehearsal`, `prewindow.py` and the generators (`63d2b9bad`); `scripts/prewindow_check.sh` keeps its sealed bytes, `t3` included (`fe28e5a0c`; SHA-256 prefix `d8458eea588a746f`, recomputed by this author) | changed: §4.5 |
 | interpreter rule | at `fe28e5a0c` the matcher still parsed options (`agent_identity._VALUE_OPTIONS`, `ca25d9299`); the rule of §4.5 was then a pending commit of `lane/2026-10-07-census-interp`, and this row listed what to confirm when it landed: any command-line element of `node`, `bun` or `deno` that names `@anthropic-ai/claude*`, `@openai/codex*`, `claude-code` or the `claude` or `codex` install directories makes it an agent, with no option parsing; `node /opt/homebrew/bin/codex exec` (an agent in the dry arm) is still an agent; the window's own Python and shell processes are not. Revision 10 confirmed all three at `9b0c680ed` (`B5-REV10-SYNC` below) | changed in revision 9: §4.5 (to the pending rule); restated from the code in revision 10 |
-| A1: which bracket carries the allowance | `harvest.neg8_allowance` writes `derived/neg8-allowance.json` (`joulewise.b5_neg8_allowance.v1`); `whole_window.harvest_neg8_allowance_bracket`; `whole_window_drift_allowances(..., neg8_harvest_archive=)`; `analyze-claims --neg8-harvest-archive`; the archive bytes are read through `authentication_io.read_authentication_input`, the read function that, while a claim's authentication session is open, parses each file strictly and records its SHA-256 at first read, and that is a plain file read otherwise (`bbdae1e86`) | changed: §0.12; analysis plan §3.1, §4, §7.1, §11 |
+| A1: which bracket carries the allowance | `harvest.neg8_allowance` writes `derived/neg8-allowance.json` (`joulewise.b5_neg8_allowance.v1`); `whole_window.harvest_neg8_allowance_bracket`; `whole_window_drift_allowances(..., neg8_harvest_archive=)`; `analyze-claims --neg8-harvest-archive`; the archive bytes are read through `authentication_io.read_authentication_input`, the read function for files that claim code treats as evidence: inside a session that records what a claim consumed, it parses the file strictly as JSON and registers its SHA-256 at the first read; outside such a session it is a plain file read (`bbdae1e86`) | changed: §0.12; analysis plan §3.1, §4, §7.1, §11 |
 | A2: the reference identity unit | `harvest.NEG8_REFERENCE_IDENTITY_UNIT` = `neg8_reference`, `_reference_model_identity` (sealed pin, else strict majority); pin written by `scripts/write_b5_identity_pins.py` (`754c8c093`) | changed: §0.12, §4.6 item 3, §6.3, §6.5 |
 | N8 with call (ii): a reference of another model | `model.identity_mismatch` (member level) and `model.identity_inconsistent_in_window` (window level) both emitted; both EXCLUDE_WINDOW in this catalog; `exclusions.compute` applies EXCLUDE_WINDOW at any scope | changed: §0.12, §6.5 ("window excluded", not "survivors decide"); catalog notes |
 | A3: references named from the sealed roster | `harvest._neg8_reference_losses` adds every member with `neg8_slot` or `spare_slot`; the stored loss list is trusted only when `neg8_reference_source` is `verdict_sources` | changed: §0.12, §6.5 |
@@ -3836,3 +3838,33 @@ lines; the probe scripts are kept beside the catalog scripts in
 with `shasum -a 256` on the copy; the empty diffs with `git diff`; `tests.test_agent_identity` and
 `tests.hazards.test_refusal_allowlist` were run on the copy with `/opt/homebrew/bin/python3.13 -B`. The dry-arm record's
 census output was not read (§2 item 6). No energy or power value of any window was read.
+
+Revision 11 follows a comparison of every checkable statement of this file, the analysis plan and the catalog with
+the code at the int5 head `9b0c680ed`; four writers then each corrected one part. This paragraph records the reading
+of the writer of §§7–10 and §§13–16. It read the list of mismatches the comparison confirmed and the orchestrator's
+rulings on them (`/Users/edr/night-archive/gate-prune/wave-1007b/reg-fidelity/REG_FIDELITY.md` and
+`ORCHESTRATOR_RULINGS.md`, with the notes of the two readers who had checked these sections). At `9b0c680ed` (the
+integration worktree, read only) it read:
+- in `joulewise/b5/harvest.py`: how the verdict is chosen and what `finish` writes, the stage-journal reader, the
+  call of the exclusion function, the `clock.systematic` rule and the capture assessment that feeds it, the
+  identity supersession with its table of checks, the code-identity and roster-dispatch steps, and the emit sites of
+  `calibration.no_bracket` and `collection.zero_yield`;
+- in `joulewise/b5/chain.py`: the stage journal, the chain's stops, the calibration arguments, the `DEVIATIONS`
+  list and the function that builds each stage's command; and, in the three plan trees, which stages carry a
+  countdown;
+- in `joulewise/b5/driver.py`: the stage roles, the minimums and the yield status;
+- the arm's battery rule (`joulewise/hazards/battery.py`, `joulewise/battery_float.py`) and the arm's pack collector
+  (`joulewise/flags/collect.py`);
+- `first_claim_usable` and every place that names it;
+- the capture tool's countdown and display-sleep code (`scripts/validate_powermetrics_fiducial.py`) and the
+  runbook's `calibrate_slot`;
+- the sizer's arguments (`scripts/size_b5_window.py`) and the member allowances of `sizing_b5.json`;
+- `joulewise/authentication_io.py`, and the call sites of the NEG-8 evaluator, bound and re-derivation in
+  `joulewise/whole_window.py`, `scripts/run_campaign.py` and the harvest;
+- commit `a28e8611e`, and the section of Fable's cold pass 4 report that §9.1 quotes.
+
+It computed three things itself. The role and the minimum of a GAMMA diagnostic stage came from the driver's own
+`_stage_role` and `_min_valid` (`science`, 1). The 5.3% of §7.3 is 1 − (36/37)². The publication counts and the
+63 s of §9.2 came from the B0AC validation run's SMC reads and phase marks
+(`/Users/edr/night-archive/wallmeter-probe/verify/run-20261006T221233Z/`), which is a probe run and not a window.
+No energy or power value of any window was read.
