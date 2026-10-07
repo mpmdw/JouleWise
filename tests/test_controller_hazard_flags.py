@@ -597,6 +597,71 @@ class EnvironmentGuardTests(_LifecycleBase):
         self.assertEqual(admission["decision"], "admitted")
         self.assertIs(admission["critical_environment_passed"], True)
 
+    def run_raising_guard(self, run_id: str, raise_on: set[int]):
+        """The fixture's real-valued guard observations, except that the listed calls raise."""
+
+        policy, binding, preflight, snapshot = campaign_policy_fixture(exploratory=False)
+        calls = iter(range(10_000))
+        seen: list[int] = []
+
+        def observe(**_kwargs):
+            index = next(calls)
+            seen.append(index)
+            if index in raise_on or (-1 in raise_on):
+                raise OSError(5, "Input/output error", "system_profiler")
+            return _guard()
+
+        with patch("joulewise.controller.collect_environment_guard_observation", side_effect=observe):
+            result = controller.run_benchmark(
+                make_config(run_id), self.runs_root, DeterministicClock(),
+                registry=AdmissionIdleRegistry([False]), environment_snapshot=snapshot,
+                campaign_policy=policy, campaign_policy_binding=binding,
+                campaign_environment_preflight=preflight)
+        return result, seen
+
+    def test_triage_c_a_guard_collector_exception_is_a_flag_not_a_failed_member(self) -> None:
+        # Refusal-census triage (c), 2026-10-07: the collector raising inside
+        # one guard observation failed the member (the probe re-raised it on
+        # the controller thread).  Now that observation is unmeasured: one
+        # env.member_guard_flagged finding names it, the other observations'
+        # physics readings still apply, and the member is collected.
+        with self.hazard():
+            (bundle, summary), seen = self.run_raising_guard("hazard-triage-c-one", {1})
+        self.assertEqual(summary.status, RunStatus.SUCCEEDED, summary.failure_message)
+        self.assertGreaterEqual(len(seen), 3)
+        self.assertEqual(self.member_flags("env.member_quiet_state_violated"), [])
+        flags = self.member_flags("env.member_guard_flagged")
+        self.assertEqual(len(flags), 1)
+        raised = [row for row in observed(flags[0])["findings"] if row.get("status") == "collector_raised"]
+        self.assertEqual(len(raised), 1, observed(flags[0]))
+        self.assertIn("OSError", raised[0]["error"])
+        admission = json.loads((bundle / "metadata.json").read_bytes())["environment_admission"]
+        self.assertEqual(admission["decision"], "admitted")
+        self.assertIs(admission["critical_environment_passed"], True)
+
+    def test_triage_c_every_guard_observation_raising_still_collects_unmeasured(self) -> None:
+        # No physics reading at all: every guard observation (admission and
+        # post-run) is unmeasured.  The member is collected with the guard
+        # flag; the post-run observation records the collector error, which
+        # the whole-window verdict reads as missing environment evidence
+        # (environment_admission_failed -> member.whole_window_member_failure,
+        # the registered treatment of a missing post-run observation).
+        from joulewise.environment_admission import post_run_environment_refusals
+        with self.hazard():
+            (bundle, summary), _seen = self.run_raising_guard("hazard-triage-c-all", {-1})
+        self.assertEqual(summary.status, RunStatus.SUCCEEDED, summary.failure_message)
+        flags = self.member_flags("env.member_guard_flagged")
+        self.assertEqual(len(flags), 1)
+        self.assertTrue(any(row.get("status") == "collector_raised" for row in observed(flags[0])["findings"]))
+        metadata = json.loads((bundle / "metadata.json").read_bytes())
+        post_run = metadata["environment"]["post_run_observation"]
+        self.assertIn("OSError", post_run["collector_error"])
+        self.assertEqual(post_run_environment_refusals(metadata), ("environment_admission_failed",))
+
+    def test_triage_c_legacy_guard_collector_exception_still_fails(self) -> None:
+        (_bundle, summary), _seen = self.run_raising_guard("legacy-triage-c", {1})
+        self.assertEqual(summary.status, RunStatus.FAILED)
+
     def test_a11_legacy_unknown_display_still_aborts(self) -> None:
         unknown = _guard(display_power_state=None)
         bundle, summary = self.run_live_guard("legacy-a11-unknown", [unknown, unknown])

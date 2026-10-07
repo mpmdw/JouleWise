@@ -1417,6 +1417,35 @@ def _clock_stamp(clock: Clock) -> ClockStamp:
     return ClockStamp(epoch_s, epoch_s, epoch_s, 0.0, 0.0)
 
 
+def _hazard_guard_observation(**kwargs: Any) -> dict[str, Any]:
+    """``collect_environment_guard_observation`` on the HAZARD path, never raising.
+
+    Refusal-census triage (c), 2026-10-07: an exception inside the collector
+    failed the member, although it only means this one observation was not
+    measured (doctrine 2026-10-05: physics refuses; everything else is a
+    flag).  The collector already returns null on each probe's failure; an
+    exception from it becomes an observation whose readings are all null
+    (unmeasured) with ``collector_error`` naming it.  The controller records it
+    as an ``env.member_guard_flagged`` finding (``collector_raised``); the
+    readings of every other observation still apply, and a post-run
+    observation recorded this way is missing evidence to the whole-window
+    verdict (``post_run_environment_refusals``) as before.
+    """
+
+    try:
+        return collect_environment_guard_observation(**kwargs)
+    except Exception as exc:  # noqa: BLE001 - an unmeasured observation, recorded
+        return {
+            "display_power_state": None,
+            "screensaver_engaged": None,
+            "screensaver_module": None,
+            "screensaver_delay_s": None,
+            "hid_idle_s": None,
+            "errors": {"collector": type(exc).__name__},
+            "collector_error": f"{type(exc).__name__}: {exc}"[:300],
+        }
+
+
 class _GuardProbe:
     """One guard observation collected on a helper thread (M4, HAZARD only).
 
@@ -2132,9 +2161,12 @@ class _Execution:
                 "skip_reason": "fake_clock",
             }
         else:
-            observation = collect_environment_guard_observation(
-                include_adapter_power=True
+            collect = (
+                collect_environment_guard_observation
+                if self._hazard is None
+                else _hazard_guard_observation
             )
+            observation = collect(include_adapter_power=True)
             observation["capture_skipped"] = False
         return observation
 
@@ -2194,6 +2226,9 @@ class _Execution:
             guard.append({"phase": phase, "field": "screensaver_engaged", "status": "unknown"})
         if not isinstance(observation, dict):
             guard.append({"phase": phase, "field": "observation", "status": "missing"})
+        if isinstance(source.get("collector_error"), str):
+            guard.append({"phase": phase, "field": "observation", "status": "collector_raised",
+                          "error": source["collector_error"]})
         if error_fields:
             guard.append({"phase": phase, "field": "errors", "keys": error_fields})
         if not quiet and not guard:
@@ -3556,9 +3591,12 @@ class _Execution:
         # Adapter continuity must bracket the workload.  In particular, a
         # renegotiation during the final member is invisible without this
         # post-workload power observation.
-        observation = collect_environment_guard_observation(
-            include_adapter_power=True
+        collect = (
+            collect_environment_guard_observation
+            if self._hazard is None
+            else _hazard_guard_observation
         )
+        observation = collect(include_adapter_power=True)
         captured_at_s = self._clock.now()
         observation.update(
             {
