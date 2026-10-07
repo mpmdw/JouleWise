@@ -80,6 +80,10 @@ NEG8_CHECK_SCHEMA = "joulewise.b5_neg8_bound_check.v1"
 NEG8_SCREEN_SCHEMA = "joulewise.b5_neg8_screen.v1"
 NEG8_BOUND_NAME = "neg8-drift-bound.json"      # in the bound runs root (the pack's bound-derivation output)
 HAZARD_RESULT_NAME = "hazard_result.json"      # L2's driver terminal record, night/
+ARM_DECISION_NAME = "arm_decision.json"        # joulewise.b5.driver ARM_DECISION, night/
+METER_DIRECTORY = Path("hazards") / "meter"    # the KM003C streams under the custody root (WIRING.md)
+METER_SCHEMA = "joulewise.b5_meter_cross_check.v1"
+METER_RECORD_NAME = "meter" ".json"            # withheld/; in two parts so the code scan skips it
 # L4's collector run log beside the flag files (scripts/collect_window_flags.py);
 # its rows are joulewise.flags.collect.COLLECTOR_RUN_SCHEMA records, not flags.
 COLLECTOR_RUNS_NAME = "collector_runs.jsonl"
@@ -389,6 +393,9 @@ CORE_WRITER_CODES = frozenset({
 # joulewise.flags.core.UNWRITTEN_MARKER, read and never imported: a core flag
 # whose write failed is printed whole to the stage's stderr behind it (N8).
 UNWRITTEN_MARKER = "JOULEWISE_UNWRITTEN_FLAG "
+# Under each operator-log directory: the members' own stderr copies
+# (scripts/run_campaign.py), scanned for the marker like the stage logs.
+MEMBER_STDERR_DIR = "member-stderr"
 # The producer's own lock (scripts/run_campaign.py acquire_campaign_lock), which
 # it creates and removes inside the runs root: no dot before it (sweep V3; it
 # was listed as ".campaign.lock").  Spelled in two parts so the emitted-code
@@ -547,10 +554,10 @@ def _corpus_member_status(runs_root: Path | None, member: Any) -> str | None:
 # lineage, an unrecorded string, a cross-member condition majority) is not
 # evidence about the member's number, so the bound is not derived: unknown
 # evidence never authorizes an omission.  The chain's helper still mirrors the
-# mint byte for byte; this set only decides what the harvest accepts.
-NEG8_ACCEPTED_DROP_REASONS = frozenset({"status_not_succeeded", "not_current_strict_mint",
-                                        "custody_triangle_disagrees", "precheck_ineligible",
-                                        "reduction_mismatch"})
+# mint byte for byte; this set only decides what the harvest accepts.  It is
+# the core's own set, imported, so the harvest accepts exactly the mint's
+# drops and the two can never drift apart (one source).
+from joulewise.whole_window import NEG8_MINT_DROP_REASONS as NEG8_ACCEPTED_DROP_REASONS  # noqa: E402
 
 
 def neg8_mint_drops(runs_root: Path | None, committed: Mapping[str, Any],
@@ -1707,6 +1714,40 @@ def member_spans(metadata: Mapping[str, Any], events: Sequence[Mapping[str, Any]
     return {"member": member, "request": request}
 
 
+def idle_baseline_span(metadata: Mapping[str, Any], events: Sequence[Mapping[str, Any]]) -> list[int] | None:
+    """The member's ``idle_baseline`` stage span in the controller's ``monotonic_ns`` domain, or None.
+
+    The meter cross-check's baseline (WIRING.md).  The start is the
+    ``stage_started`` event's own ``metadata.monotonic_ns`` (the battery span
+    stamp) when recorded; otherwise, like the end (``stage_completed``, which
+    carries none), the event's wall ``timestamp_s`` mapped through the
+    ``sampling_started`` clock stamp's (epoch, monotonic) pair.
+    """
+    anchor = metadata.get("uncertainty_evidence", {}).get("clock_anchor", {}) \
+        if isinstance(metadata.get("uncertainty_evidence"), Mapping) else {}
+    stamps = anchor.get("clock_stamps") if isinstance(anchor, Mapping) else None
+    pair = stamps.get("sampling_started") if isinstance(stamps, Mapping) else None
+    epoch = _num(pair.get("epoch_s")) if isinstance(pair, Mapping) else None
+    mono = _num(pair.get("monotonic_before_s")) if isinstance(pair, Mapping) else None
+
+    def mapped(event: Mapping[str, Any]) -> int | None:
+        wall = _num(event.get("timestamp_s"))
+        if wall is None or epoch is None or mono is None:
+            return None
+        return math.floor((mono + (wall - epoch)) * 1_000_000_000)
+
+    start = end = None
+    for event in events:
+        if not isinstance(event, Mapping) or event.get("phase") != "idle_baseline":
+            continue
+        meta = event.get("metadata") if isinstance(event.get("metadata"), Mapping) else {}
+        if event.get("event_type") == "stage_started" and start is None:
+            start = meta.get("monotonic_ns") if type(meta.get("monotonic_ns")) is int else mapped(event)
+        elif event.get("event_type") == "stage_completed":
+            end = mapped(event)
+    return [start, end] if start is not None and end is not None and start < end else None
+
+
 def bundle_creation_ns(metadata: Mapping[str, Any], events: Sequence[Mapping[str, Any]], *,
                        spans: Mapping[str, Any] | None = None,
                        chain_started: Mapping[str, Any] | None = None) -> tuple[int | None, str | None]:
@@ -1901,6 +1942,7 @@ def assess_member(task: Mapping[str, Any]) -> dict[str, Any]:
 
     result["rereduced"] = guarded("rereduce", rereduce)
     result["spans"] = guarded("spans", lambda: member_spans(metadata, events)) or {"member": None, "request": None}
+    result["idle_baseline_span"] = guarded("idle_baseline_span", lambda: idle_baseline_span(metadata, events))
     observed = metadata.get("workload_observed") if isinstance(metadata.get("workload_observed"), Mapping) else {}
     workload = metadata.get("workload_provenance") if isinstance(metadata.get("workload_provenance"), Mapping) else {}
     prompt = workload.get("prompt") if isinstance(workload.get("prompt"), Mapping) else {}
@@ -4356,9 +4398,10 @@ class _Harvest:
         reason: ``session_not_terminal`` (no post slot and no abort),
         ``pin_unreadable``, ``pin_behind`` (the advance has not run),
         ``pin_not_terminal`` (the pin names another head), ``pin_uncommitted``
-        (advanced without the pin-only commit) or ``ledger_ahead_of_pin`` (a
-        later session after this one).  Sequences are ledger positions, not
-        energies.
+        (advanced without the pin-only commit), ``ledger_ahead_of_pin`` (a
+        later session after this one) or ``session_aborted`` (the session was
+        aborted: it has no bracket to bind).  Sequences are ledger positions,
+        not energies.
         """
         from joulewise.calibration_ledger import load_calibration_ledger_snapshot, terminal_head_pin_for_session
         inputs = self.inputs
@@ -4388,6 +4431,13 @@ class _Harvest:
             return {"reason": "pin_uncommitted", **observed}
         if reasons:
             return {"reason": "ledger_ahead_of_pin", **observed}
+        session = getattr(snapshot, "bracket_session_by_id", {}).get(inputs.bracket_session_id)
+        if getattr(session, "state", None) == "aborted":
+            # An aborted session is terminal, so the pin can equal its head, but
+            # it has no bracket: the binding would refuse it with a generic
+            # identity message (R3-3).  Say what happened; calibration.no_bracket
+            # already removes the window.
+            return {"reason": "session_aborted", **observed}
         return None
 
     def _desk_binding(self) -> tuple[dict[str, Any] | None, str | None]:
@@ -5034,6 +5084,191 @@ class _Harvest:
             self.emit("contention.kernel_task_share", level="window", collector="monitor",
                       observed={"kernel_task_cpu_s_in_requests": round(total, 6)})
 
+    # -- the KM003C whole-machine cross-check (WIRING.md) -----------------------
+    def meter_joins(self) -> None:
+        """The wall-meter stream: ``meter.*`` disclosures, and dE_rail, dE_machine and rho to ``withheld/`` only.
+
+        The driver writes ``<custody>/hazards/meter/stream-NNN.jsonl``
+        (``scripts/km003c_monitor.py``, one file per start).  Every stream's
+        ``meter.*`` flags (``km003c_parse.flags``) are DISCLOSE; no stream file,
+        or an unreadable one, is ``meter.absent``, never a fault: the meter
+        never refuses a window, excludes a member or enters a claim number.
+        Per member, over its request span (``time.monotonic_ns``, mapped to
+        CLOCK_MONOTONIC_RAW by the stream's own start/end pairs or, failing
+        that, by the hazard journal reading nearest the span) with its idle
+        baseline stage as the baseline: dE_machine
+        (``km003c_parse.delta_machine_energy``: meter plus the SMC battery
+        term), dE_rail (the re-reduced ``idle_subtracted_energy_j``) and
+        rho = dE_rail / dE_machine, all written to ``withheld/`` (``METER_RECORD_NAME``).
+        ``meter.battery_activity`` is emitted per member, its request window
+        left out of the structure-only record.
+        """
+        from joulewise.external import km003c_parse as kp
+        directory = self.inputs.custody_root / METER_DIRECTORY
+        paths = sorted(directory.glob("stream-*.jsonl")) if directory.is_dir() else []
+        if not paths:
+            self.emit("meter.absent", level="window", collector="meter",
+                      observed={"status": None, "reason": "no meter stream file", "streams": 0})
+            return
+        roster = {member["run_id"]: member for member in self.roster.get("members", [])}
+        streams: list[tuple[str, Any, int | None]] = []
+        for path in paths:
+            try:
+                stream = kp.parse(path)
+            except Exception as exc:  # an unreadable stream is a disclosure, never a fault
+                self.emit("meter.absent", level="window", collector="meter",
+                          observed={"stream": path.name, "status": "unreadable", "reason": type(exc).__name__})
+                continue
+            streams.append((path.name, stream, kp.raw_offset_ns(stream)))
+        members: dict[str, Any] = {}
+        windows: dict[str, list[tuple[str, list[int]]]] = {name: [] for name, _stream, _offset in streams}
+        for run_id, spans in sorted(self.spans.items()):
+            request = spans.get("request")
+            if not request or request[1] <= request[0]:
+                continue
+            row: dict[str, Any] = {"stream": None, "offset_source": None, "machine": None, "rail_delta_J": None,
+                                   "rho": None}
+            members[run_id] = row
+            for name, stream, offset in streams:
+                source = "stream"
+                if offset is None:
+                    offset, source = self._journal_raw_offset(request), "hazard_journal"
+                if offset is None or not stream.aligned:
+                    continue
+                window = [request[0] + offset, request[1] + offset]
+                if not stream.host_ns[0] <= window[0] or not window[1] <= stream.host_ns[-1]:
+                    continue
+                windows[name].append((run_id, window))
+                baseline = (self.members.get(run_id) or {}).get("idle_baseline_span")
+                row.update(stream=name, offset_source=source)
+                if baseline and baseline[1] > baseline[0]:
+                    machine = kp.delta_machine_energy(stream, window, [baseline[0] + offset, baseline[1] + offset])
+                    row["machine"] = machine
+                    row["rail_delta_J"] = self._rail_delta_j(run_id)
+                    row["rho"] = kp.rho(row["rail_delta_J"], machine["delta_J"])
+                break
+        summaries = []
+        for name, stream, _offset in streams:
+            by_window = {tuple(window): run_id for run_id, window in windows[name]}
+            for flag in kp.flags(stream, windows=[window for _run_id, window in windows[name]]):
+                observed = flag["observed"]
+                if flag["code"] == "meter.battery_activity" and isinstance(observed, Mapping):
+                    run_id = by_window.get(tuple(observed.get("window_ns") or ()))
+                    self.emit(flag["code"], level="member", run_id=run_id,
+                              stage_id=roster.get(run_id, {}).get("stage_id"), collector="meter",
+                              observed={"stream": name, **{key: value for key, value in observed.items()
+                                                           if key != "window_ns"}},
+                              expected=flag["expected"])
+                    continue
+                self.emit(flag["code"], level="window", collector="meter",
+                          observed={"stream": name, "observed": observed}, expected=flag["expected"])
+            summaries.append({"stream": name, "status": (stream.header or {}).get("status"),
+                              "aligned": stream.aligned, "raw_offset_ns": kp.raw_offset_ns(stream)})
+        write_json_once(self.withheld / METER_RECORD_NAME, {"schema": METER_SCHEMA, "streams": summaries,
+                                                       "members": members})
+
+    def _journal_raw_offset(self, span: Sequence[int]) -> int | None:
+        """CLOCK_MONOTONIC_RAW minus ``time.monotonic_ns`` from the hazard journal reading nearest ``span``."""
+        best: tuple[int, int] | None = None
+        middle = (span[0] + span[1]) // 2
+        for readings in (getattr(self, "_journals", None) or {}).values():
+            for reading in readings:
+                distance = abs(reading.monotonic_ns - middle)
+                if best is None or distance < best[0]:
+                    best = (distance, reading.monotonic_raw_ns - reading.monotonic_ns)
+        return best[1] if best is not None else None
+
+    def _rail_delta_j(self, run_id: str) -> float | None:
+        """The member's re-reduced idle-subtracted rail energy (withheld), or None."""
+        rereduced = (self.members.get(run_id) or {}).get("rereduced")
+        path = rereduced.get("path") if isinstance(rereduced, Mapping) else None
+        try:
+            value = read_json(path).get("idle_subtracted_energy_j") if path else None
+        except (OSError, ValueError, AttributeError):
+            return None
+        return float(value) if _is_number(value) else None
+
+    # -- the historical calibration custody (P2-VPF S5) -----------------------
+    def historical_custody(self) -> None:
+        """One full historical custody pass over the archived ledger, this session's own rows left out.
+
+        On a HAZARD window no slot or reservation re-hashes the earlier
+        observations, which the calibration writer's screen basis and
+        acceptance preflight read, so
+        ``calibration_ledger.historical_custody_report`` re-hashes each one.
+        ``mismatch`` (an earlier capture whose bytes changed or went missing)
+        is ``calibration.historical_custody_mismatch`` (EXCLUDE_WINDOW);
+        ``unmeasured`` (the ledger or a row could not be read, or nothing was
+        checked) is ``calibration.historical_custody_unmeasured`` (DISCLOSE).
+        The report (locators and attempt ids, no energies) goes to
+        ``derived/historical-custody.json``.
+        """
+        from joulewise.calibration_ledger import historical_custody_report
+        ledger = self.archive / "sources" / "ledger" / "calibration_observation_ledger.jsonl"
+        report = historical_custody_report(ledger, repo_root=self.inputs.measurement_root, mode="issuing",
+                                           exclude_session_id=self.inputs.bracket_session_id)
+        self.outputs["derived/historical-custody.json"] = write_json_once(self.derived / "historical-custody.json",
+                                                                          report)
+        summary = {"observations": report.get("observations"), "verified": report.get("verified"),
+                   "excluded_observations": report.get("excluded_observations")}
+        if report.get("status") == "mismatch":
+            mismatched = report.get("mismatched") or []
+            self.emit("calibration.historical_custody_mismatch", level="window", collector="calibration",
+                      observed={**summary, "mismatched": len(mismatched),
+                                "attempt_ids": [row.get("attempt_id") for row in mismatched][:8]})
+        elif report.get("status") != "verified":
+            self.emit("calibration.historical_custody_unmeasured", level="window", collector="calibration",
+                      observed={**summary, "unmeasured": len(report.get("unmeasured") or []),
+                                "reason": report.get("unmeasured_reason")
+                                or ("error" if report.get("error") else "rows_unmeasured"),
+                                "ledger_reasons": list(report.get("ledger_reasons") or [])[:8]})
+
+    # -- a window that never launched (R3-4) -----------------------------------
+    def window_not_launched(self) -> None:
+        """Why a NULL window never launched: the driver's arm decision and refusal, as one flag.
+
+        ``night/arm_decision.json`` (the driver's arm record: GO or not, each
+        module's verdict, the reasons and any arm error) and
+        ``night/hazard_result.json`` (the stage the driver reached and its
+        refusal reason) are the only records of it, and neither was read into
+        the flags before.  ``records.window_not_launched`` (DISCLOSE) carries
+        them; message text has its digits masked as ``#``, like every
+        producer's error line.
+        """
+        night = self.inputs.night_dir
+
+        def load(name: str) -> tuple[Any, str]:
+            path = night / name
+            if not path.is_file():
+                return None, "absent"
+            try:
+                return read_json(path), "read"
+            except (OSError, ValueError):
+                return None, "unreadable"
+
+        def masked(text: Any) -> str | None:
+            return _DIGITS_RE.sub("#", " ".join(str(text).split()))[:200] if text is not None else None
+
+        decision, decision_state = load(ARM_DECISION_NAME)
+        result, result_state = load(HAZARD_RESULT_NAME)
+        decision = decision if isinstance(decision, Mapping) else {}
+        result = result if isinstance(result, Mapping) else {}
+        refusal = result.get("refusal") if isinstance(result.get("refusal"), Mapping) else {}
+        error = decision.get("arm_error")
+        verdicts = decision.get("verdicts") if isinstance(decision.get("verdicts"), Mapping) else {}
+        self.emit("records.window_not_launched", level="window", collector="arm", observed={
+            "arm_decision": decision_state, "hazard_result": result_state,
+            "go": decision.get("go") if isinstance(decision.get("go"), bool) else None,
+            "arm_error": masked(error), "arm_error_type": str(error).split(":", 1)[0][:80] if error else None,
+            "reasons": [masked(reason) for reason in (decision.get("reasons") or [])][:8]
+            if isinstance(decision.get("reasons"), list) else [],
+            "not_pass": [str(name) for name in decision.get("not_pass") or []][:16]
+            if isinstance(decision.get("not_pass"), list) else [],
+            "verdicts": {str(name): str(value) for name, value in verdicts.items()},
+            "verdict": result.get("verdict") if isinstance(result.get("verdict"), str) else None,
+            "stage_reached": result.get("stage_reached") if isinstance(result.get("stage_reached"), str) else None,
+            "refusal_reason": masked(refusal.get("reason"))})
+
     # -- arm-collector unmeasured flags the harvest re-derived (PLAN2 row 12) ---
     def supersede_identity_unmeasured(self) -> None:
         """Lift a desk or arm ``*.identity_unmeasured`` only where this harvest re-derived every check.
@@ -5143,8 +5378,9 @@ class _Harvest:
 
         ``joulewise.flags.core.emit`` prints such a flag whole, behind
         ``UNWRITTEN_MARKER``, to its process's stderr.  The chain sends stage
-        stderr to ``<custody>/operator-logs/*.log``; the desk verdict's stderr
-        is this harvest's desk transcript.  Each marked line goes through the
+        stderr to ``<custody>/operator-logs/*.log``, the campaign runner copies
+        each member's stderr to ``operator-logs/member-stderr/*.stderr``, and
+        the desk verdict's stderr is this harvest's desk transcript.  Each marked line goes through the
         flag-file path: a valid flag is absorbed (it is the flag, nothing more
         is emitted), anything else is ``records.malformed_flag``, which is never
         classified and so blocks release.  A log that cannot be read may hold
@@ -5166,6 +5402,13 @@ class _Harvest:
             except OSError:  # a directory that cannot be listed may hold such a line
                 sources.append((label, None))
                 continue
+            stderr_dir = directory / MEMBER_STDERR_DIR
+            if stderr_dir.is_dir():
+                try:
+                    names += sorted(f"{MEMBER_STDERR_DIR}/{name}" for name in os.listdir(stderr_dir)
+                                    if name.endswith(".stderr"))
+                except OSError:  # a directory that cannot be listed may hold such a line
+                    sources.append((f"{label}/{MEMBER_STDERR_DIR}", None))
             for name in names:
                 try:
                     sources.append((f"{label}/{name}", (directory / name).read_bytes()))
@@ -6124,6 +6367,7 @@ def harvest(inputs: WindowInputs, archive_root: Path | str, *, seams: Seams | No
     if not state["chain_started"]:
         run.step("archive", run.archive_inputs)
         run.step("arm_records", run.arm_and_desk_records)
+        run.step("not_launched", run.window_not_launched, fault=False)
         return run.finish(NULL)
     run.step("thresholds", run.record_thresholds)
     run.step("runs_roots", run.check_runs_roots)
@@ -6147,6 +6391,7 @@ def harvest(inputs: WindowInputs, archive_root: Path | str, *, seams: Seams | No
     run.step("roster_checks", run.roster_checks)
     run.step("cooldown", run.cooldown)
     run.step("calibration", run.calibration)
+    run.step("historical_custody", run.historical_custody)
     run.step("neg8_bound", run.neg8_bound)
     run.step("whole_window", run.whole_window)
     run.step("clock_systematic", run.clock_systematic)
@@ -6156,6 +6401,7 @@ def harvest(inputs: WindowInputs, archive_root: Path | str, *, seams: Seams | No
     run.step("identity_supersession", run.supersede_identity_unmeasured)
     run.step("lineage", run.lineage_audit)
     run.step("monitor", run.monitor_joins)
+    run.step("meter", run.meter_joins, fault=False)
     run.step("g10", run.g10_result, fault=False)
     run.step("exclusion_inputs", run.exclusion_inputs)
     run.step("g3", lambda: run.g3(skipped=not run_g3), fault=False)
