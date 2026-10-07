@@ -464,7 +464,8 @@ sensitivity lines (which use the released energies by rules fixed here), and pri
   physics-in-span code, the count of members with anchor status `bounded` and the largest effective bound, and the
   host's total busy CPU during requests (journaled by the monitor; `kernel_task` cannot be named by an unprivileged
   `ps`, registration §6.8). For battery assist: per window and per phase (prepare, idle baseline, warm-up, measured
-  request), the number of members with `battery.assist`, the number of reads below −200 mA, the minimum B0AC and the
+  request), the number of members with `battery.assist`, the number of reads below −200 mA, the minimum B0AC (the
+  battery current read from the SMC, registration §4.2) and the
   total duration below −200 mA; the discharged energies are released with the other energies after the release
   event. Per window, the count of members whose current was judged on the registry because the SMC did not cover them
   (`battery.smc_unavailable`).
@@ -498,9 +499,11 @@ after the numbers are seen.
 
 *Inputs.* For each kept or removed member of each analysed attempt (the meter describes every collected member) and
 each analysed window of that member (its measured request; and its prefill and decode phases where the bundle records
-phase boundaries), the harvest's restricted record `withheld/meter/<run_id>.json` gives ΔE_rail, ΔE_machine and
-ρ = ΔE_rail ÷ ΔE_machine, defined in registration §5.8, with the member's `meter.*` flags and whether the battery term
-was available.
+phase boundaries), the harvest's restricted record `withheld/meter/<run_id>.json` gives three numbers, defined in
+registration §5.8: **ΔE_rail**, the processor-rail energy above the member's idle baseline; **ΔE_machine**, the energy
+entering the machine (the meter's DC input plus the battery's discharge, −B0AC × B0AV) above the same baseline; and
+**ρ** = ΔE_rail ÷ ΔE_machine, the rails' share. It also gives the member's `meter.*` flags and whether the battery
+term was available.
 
 *What is reported, per pack, model and window kind:*
 

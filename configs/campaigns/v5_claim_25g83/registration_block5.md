@@ -67,7 +67,8 @@ after a chain of receipts verified, and discarded a whole window when one member
 claim use, checked against the integration head `b9d02700a` (branch `integrate/2026-10-06-gate-prune-3`, whole suite
 green). A last code round (P3: lanes `lane/2026-10-06-p3-{harv,haz,drv,wd}`) is in flight; where this text describes
 behaviour that only P3 installs, it says so, and the item is listed under §13 as a sync point to check before the
-seal.
+seal. Lane names (P2-…, P3-…, L10) and design-row ids in parentheses (PLAN2 row 8, core-prune A14, interface J1) are
+citations for tracing a rule to the record that motivated it; no rule here depends on them for its meaning.
 
 1. **Battery** (§0.17, §4.2, §6.4, §6.5, §9.2): the battery current is read from the SMC (the Mac's power
    controller) once a second instead of from the battery registry, which republishes only once a minute. The battery
@@ -547,8 +548,8 @@ Each is evidenced by a path and SHA-256 before the point named.
    `FILL[416-AUDIT-RECORD]`.
 3. This file, the analysis plan, the flag catalog and the sealed inventory are sealed (§12). `FILL[B5-SEAL-RECORD]`.
 4. The three packs as the timing lane regenerated them, with GAMMA as lane L10 changed it (§0.7), are at H_claim,
-   and their files are in the sealed inventory. Every window plan and plan-input template is written from the
-   sealed threshold block of §4.3 (contention `clean_s` 180); any written before the seal is regenerated
+   and their files are in the sealed inventory. Every window plan, and every plan-input file it is written from, uses
+   the sealed threshold block of §4.3 (contention `clean_s` 180); any written before the seal is regenerated
    (`FILL[B5-PLANS-REGENERATED]`).
 5. The measurement checkout (the dedicated clone a window runs from) is fast-forwarded to H_claim with its Python
    environment relocked, and the ledger seed (§4.6 item 6) is installed at its default ledger path.
@@ -648,8 +649,9 @@ after; the desk dry arm of §2 item 6), and does arming run end to end on native
 
 **Stand-down leads.** *Forcing problem:* the agent census at t0 (§4.5) refuses the window if any agent session is
 alive, so every session must be gone by t0; but every second of agent-free idle before t0 is time the machine does
-nothing, and the arm's own dwell measures contention after t0 anyway. The supervising watchdog
-(`scripts/magistrate_watchdog.py` at `b9d02700a`, P2-WD) therefore stops launching sessions and asks every agent
+nothing, and the arm's own dwell measures contention after t0 anyway. The supervising watchdog (a scheduled job,
+`scripts/magistrate_watchdog.py` at `b9d02700a`, P2-WD, that starts and stops the agent sessions on this machine
+around each window) therefore stops launching sessions and asks every agent
 session to exit at t0 − 180 s, sends SIGTERM to any that remain at t0 − 90 s, and SIGKILL at t0 − 60 s (revision 4:
 t0 − 8, −6 and −5 min, about 450 s of idle; now about 125 s). *Why these numbers:* real sessions took 20–31 s to
 exit after the request (c1, c2 and the d117 magistrate events), so a request at t0 − 180 s leaves about 150 s of
@@ -828,8 +830,9 @@ the per-process limit decides.
 `clean_s` is 180 in revision 5 (was 600). The hazard module's default is already 180 at `b9d02700a`, but the arm
 judges the value the window plan copied from this block (`joulewise/b5/driver.py` `_arm_thresholds`), and the plan
 writer records any copied value that differs from a module default. So the change takes effect only in plans written
-from this block after the seal: any window plan or plan-input template written earlier carries 600 and must be
-regenerated (`FILL[B5-PLANS-REGENERATED]`, §13).
+from this block after the seal: any window plan written earlier, and any plan-input file (the input from which the
+plan writer copies this block) prepared earlier, carries 600 and must be regenerated (`FILL[B5-PLANS-REGENERATED]`,
+§13).
 
 ### 4.4 Network time
 
@@ -1070,8 +1073,10 @@ corpus member one of three verdicts:
 
 - **keep:** it passes every per-member test the mint applies;
 - **omit:** it fails a registered member-validity test that would also remove a science member. The reasons are a
-  closed set, `whole_window.NEG8_MINT_DROP_REASONS`: `status_not_succeeded`, `not_current_strict_mint` (the bundle is
-  not the current strict mint), `custody_triangle_disagrees` (its custody records disagree with each other),
+  closed set, `whole_window.NEG8_MINT_DROP_REASONS`: `status_not_succeeded`, `not_current_strict_mint` (its summary
+  was not produced by the current reducer from real, non-mock sampler records, so it cannot bear a strict claim),
+  `custody_triangle_disagrees` (the three records that name the bundle's sampler, its config, metadata and summary,
+  disagree about which sampler produced it),
   `precheck_ineligible` (the fresh re-reduction's gross or idle-subtracted precheck is not eligible) and
   `reduction_mismatch` (the fresh re-reduction differs from the stored summary). The bound is derived from the rest;
 - **indeterminate:** the evaluation could not run or could not classify what it saw (a reducer exception, an absent
@@ -1103,7 +1108,7 @@ reference at 08:40: the bound is 7.5 h old when used, whether the verdict is wri
 **OS-build and power-supply strings are disclosed, not staleness triggers** (V2). The bound records the OS build and
 a digest of the power-supply identity its corpus saw. A difference against the references used to mark the bound
 stale and remove the window; both are labels (a string the OS prints, a hash of the adapter's description), not
-measurements of the machine's state. On a hazard window a difference is now recorded in the verdict's
+measurements of the machine's state. On a block-5 window (the hazard route) a difference is now recorded in the verdict's
 `disclosed_binding_changes`; a change of calibration identity stays a staleness trigger, because the bracket is
 judged against that identity.
 
@@ -1774,8 +1779,9 @@ power would still be falling and the test would keep waiting, up to 300 s.
 `scripts/reserve_calibration_window_bracket.py`, `joulewise/calibration_ledger.py`). Every row is
 `calibration.writer_record_flagged` (DISCLOSE) with the `kind` named:
 
-- `desk_identity_differs` (A6-R1): the reservation now measures the OS build, machine model and the T1 bindings
-  itself instead of copying a desk-typed prediction, and records any difference. The writer's own comparison of two
+- `desk_identity_differs` (A6-R1): the reservation now measures the OS build, the machine model and the T1 bindings
+  (the digest of the sampler binary and the MLX version a capture is bound to) itself, instead of copying a
+  prediction typed at the desk, and records any difference. The writer's own comparison of two
   measurements stays a refusal: within one boot minutes apart, a difference is a real identity change.
 - `historical_custody_unverified` (A6-R2/R3): the writer and the reservation skip the committed-pin check and the
   re-hash of every historical calibration file. *Forcing problem:* the reservation re-verified 190 historical files,
@@ -2058,7 +2064,7 @@ sensitivity line of analysis plan §8.
 | Audit, seats | `416-AUDIT-RECORD`, `416-SEATS`, `B5-SEAL-SEATS` | Seats at seal; audit before ALPHA-1 |
 | Sizing | `B5-SIZING-OUTPUTS`: draft values at `b9d02700a` (§5.5); re-derived after L10 merges; pinned at H_claim | Seal |
 | Cooldown smoke | `B5-COOLDOWN-SMOKE-RECORD` (§2 item 7), run at the head to be sealed | Seal |
-| Plans | `B5-PLANS-REGENERATED`: every window plan and plan-input template written from the sealed §4.3 block (contention `clean_s` 180) | Before ALPHA-1 arms |
+| Plans | `B5-PLANS-REGENERATED`: every window plan and plan-input file written from the sealed §4.3 block (contention `clean_s` 180) | Before ALPHA-1 arms |
 | P3 sync | `P3-SYNC-RECORD` (§2 item 8), covering `P3-BATTERY-CODES` and `P3-CLOCK-SKEW-BOUND` and the sync points below | Seal |
 | Disk | `BACKUP-DESTINATIONS`: filled in revision 4 (§5.6) | Seal |
 | Identity pins | `identity_pins.json` (§4.6 item 3): draft after L10; pinned at H_claim | Seal |
