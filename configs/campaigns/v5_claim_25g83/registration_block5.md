@@ -3179,33 +3179,44 @@ its own probes, read-only in the repository:
 | Pass | Seat | Diff | Verdict | Record (SHA-256 computed by this author) |
 |---|---|---|---|---|
 | Delta re-audit | Sol 6.1 (`gpt-6.1-sol`, OpenAI) at effort xhigh, through the audited Codex route | `a434e363d..43ac12d0c` | BLOCKERS FOUND: A1–A5 | `/Users/edr/night-archive/gate-prune/delta-audit-sol/REPORT.md`, `86a8236f519a7740e0da18a2035210ddf58f55fe9dd946dac05c843206694359` |
-| Re-verification | Sol 6.1 at effort xhigh | `43ac12d0c..fe28e5a0c` | A1–A5 FIXED; new R1, R2, R3 | `delta-audit-sol-2/REPORT.md`, `f03e949f3276d561000a9f3da0a67a8a2f3ac37470803e6dedca2fedb11f2068` |
+| Re-verification | Sol 6.1 at effort xhigh | `43ac12d0c..fe28e5a0c` | A1–A5 FIXED; three new findings, which the report numbers R1, R2 and R3 (Sol R1, Sol R2 and Sol R3 below) | `delta-audit-sol-2/REPORT.md`, `f03e949f3276d561000a9f3da0a67a8a2f3ac37470803e6dedca2fedb11f2068` |
 | Cold pass 3 | Fable 5.1 (Anthropic) | `821b58f8b..43ac12d0c` | PASS WITH NOTES, no defect | `cold-pass-3/REPORT.md`, `eb78baac58a72cfae9ea060302a4213c598f578e8e051f02a164aed1db09f7a5` |
 | Cold pass 4 | Fable 5.1 | `43ac12d0c..fe28e5a0c` | PASS WITH NOTES; one claim-time defect (D1) | `cold-pass-4/REPORT.md`, `4ab433c78c832754ac19f5993ed666a858a045a373e3e20bec2c43e34b937eb7` |
 
-Every finding of the Sol passes was shown by an executed probe (the report marks each EXECUTED). Where each went:
+Every finding of the Sol passes was shown by an executed probe (the report marks each EXECUTED). The
+re-verification numbers its three new findings R1, R2 and R3. This file writes them **Sol R1**, **Sol R2** and
+**Sol R3**, because "R3" alone already names the fix route of §0.1, which has nothing to do with them. Where each
+finding went:
 
 | Finding | What it was | Where it went |
 |---|---|---|
 | A1 (BLOCKER) | an accepted survivor re-screen did not replace the bracket the claims read: 0.5933 J where the survivors' allowance is 0.6383 J (§0.12) | fixed, lane `neg8-delta-fixes` (`6fd863645`): `derived/neg8-allowance.json` and its consumer; re-verified FIXED |
 | A2 (BLOCKER) | a spare that ran another model sat in an unpinned group and raised no identity flag | fixed (`66c956dba`, pin `754c8c093`): the `neg8_reference` unit; re-verified FIXED |
 | A3 (BLOCKER) | absent or unreadable manifests erased a known reference loss, and the stored passing screen stood | fixed (`3cf9d6b2f`): the sealed roster names the references; re-verified FIXED |
-| A4 (should fix) | the census read a `node` option's value as the script, so a live agent read as clean | fixed, lane `census-ancestors` (`ca25d9299`), by parsing options; re-verified FIXED; the parsing was then withdrawn (R1 below) |
+| A4 (should fix) | the census read a `node` option's value as the script, so a live agent read as clean | fixed, lane `census-ancestors` (`ca25d9299`), by parsing options; re-verified FIXED; the parsing was then withdrawn (Sol R1 below) |
 | A5 (should fix) | a strict-invalid reference failed the whole screen instead of being lost | fixed (`294f6e573`): reason `strict_invalid` in writer, replay and harvest; re-verified FIXED |
-| R1 (should fix) | a second `node` option (`--trace-require-module all`) was read as the script: the same class as A4, a second time | fixed, lane `census-interp` (`2524637ae`, merged into int5 by `84661ddb3`): the option parsing is withdrawn and every argument of a JavaScript runtime is read (§4.5). The merge came after the four passes above, so no pass has reviewed it yet; its review is part of fixing H_claim (§2 item 1), at the final head `FILL[B5-FINAL-HASHES]` |
-| R2 (BLOCKER) | floor extraction cannot pass the harvest archive, so every block-5 floor cell has no allowance (the same defect as cold pass 4 D1) | lane L9-NEG8 (analysis plan §11): claim-time code, safe direction (refuses) |
-| R3 (BLOCKER) | the claim validator rejects a row whose stored screen failed before reading the harvest's passing survivor re-screen | lane L9-NEG8: claim-time code, safe direction (refuses) |
+| Sol R1 (should fix) | a second `node` option (`--trace-require-module all`) was read as the script: the same class as A4, a second time | fixed, lane `census-interp` (`2524637ae`, merged into int5 by `84661ddb3`): the option parsing is withdrawn and every argument of a JavaScript runtime is read (§4.5). The merge came after the four passes above, so no pass has reviewed it yet; its review is part of fixing H_claim (§2 item 1), at the final head `FILL[B5-FINAL-HASHES]` |
+| Sol R2 (BLOCKER) | floor extraction cannot pass the harvest archive, so every block-5 floor cell has no allowance (the same defect as cold pass 4 D1) | lane L9-NEG8 (analysis plan §11): claim-time code, safe direction (refuses) |
+| Sol R3 (BLOCKER) | the claim validator rejects a row whose stored screen failed before reading the harvest's passing survivor re-screen | lane L9-NEG8: claim-time code, safe direction (refuses) |
 
-R2 and R3 were the third review in a row to find a defect in the NEG-8 survivor logic, which lives in three places
-(the verdict writer, the replay that authenticates a verdict row, the harvest). By the rule that sends a twice-failing
-defect class to a consult rather than a third fix round, the orchestrator took a consult: Fable's cold pass 4 view
-("consistent enough to seal now": the evaluator, the count-adjusted bound and the re-derivation are already single
-implementations, every disagreement between the three places ends in an exclusion, never in a passing screen or a
-read of a dropped energy) together with Sol's R2 and R3. The decision: seal on this code, and fix R2, R3, cold pass 4
-D1 and the single strict predicate (cold pass 4 N-3) in one named lane, L9-NEG8, which runs after the seal and before
-any claim (§11 item 1 (ii) and item 4), with one design round by Sol and Fable before code. None of it is collection
-code: none of it runs during a window or changes a window's bytes, so it does not block the arm. Cold pass 3's notes
-(N-A, N-B) and cold pass 4's notes (N-1, N-2) are catalog questions that this directory's catalog already answers:
+Sol R2 and Sol R3 were the third review in a row to find a defect in the NEG-8 survivor logic, which lives in three
+places (the verdict writer, the replay that authenticates a verdict row, the harvest). By the rule that sends a
+twice-failing defect class to a consult rather than a third fix round, the orchestrator took a consult: Fable's cold
+pass 4 view together with Sol R2 and Sol R3. Cold pass 4 called the three places "consistent enough to seal", for
+two reasons. First, three parts of the logic already exist once only and are shared: the **evaluator**, the function
+that screens the surviving references (`whole_window.evaluate_neg8_point_drift`, called by the verdict writer and by
+the re-derivation); the count-adjusted bound, which is bound(n_s, n_e) of §0.12
+(`whole_window.neg8_count_adjusted_bound`); and the re-derivation, the function that rebuilds a verdict from the
+reference bundles instead of trusting the stored row (`whole_window._derived_neg8_decision`, which the replay and
+the harvest both call). Second, every disagreement
+between the three places ends in an exclusion, never in a passing screen or a read of a dropped energy. What still
+differs between the places is their test of whether a reference is strict-invalid (§0.12, "The strict check of a
+reference"; cold pass 4 note N-3). The decision: seal on this code, and fix Sol R2, Sol R3, cold pass 4 D1 and that
+difference (one strict predicate shared by all three places) in one named lane, L9-NEG8, which runs after the seal
+and before any claim (§11 item 1 (ii) and item 4), with one design round by Sol and Fable before code. None of it is
+collection code: none of it runs during a window or changes a window's bytes, so it does not block the arm. Cold
+pass 3's notes (N-A, N-B) and cold pass 4's notes (N-1, N-2) are catalog questions that this directory's catalog
+already answers:
 `model.identity_mismatch` and `model.identity_inconsistent_in_window` are EXCLUDE_WINDOW (§6.5),
 `model.identity_underivable` is EXCLUDE_MEMBER, and `whole_window.verdict_unauthenticated` is DISCLOSE; the seal rules
 on them.
@@ -3214,16 +3225,23 @@ on them.
 
 **What #421 asked for.** Ed's directive #421 (2026-09-25) made the battery's state mandatory evidence for every
 capture: a number taken while the battery was charging, or while the machine was not drawing everything from the
-adapter, should not stand unexamined. Its motivating hazards were two. *Charging heat:* a change of the battery's
-charge limit from 80% to 100% would start a long charge, warming the battery and adding load beside the workload.
+adapter, should not stand unexamined. **Battery float** is the state the directive wants a capture taken in: the
+adapter connected and the battery neither charging nor discharging, so that the adapter supplies everything the
+machine draws. Its measured form is the arm's battery rule (§4.2): ExternalConnected Yes, IsCharging No and a
+battery current of at most 200 mA in either direction. The directive's motivating hazards were two.
+*Charging heat:* a change of the battery's charge limit from 80% to 100% would start a long charge, warming the
+battery and adding load beside the workload.
 *An incomplete wall reading:* a wall or USB-C meter on the adapter does not see energy the battery supplies, so the
 machine's total energy cannot be read from the adapter side alone while the battery helps.
 
 **What changed, and why.** Until 2026-10-06 any discharge above 200 mA in a member's span removed the member. Two
 measurements on 2026-10-06 showed that this rule had been reading a 60 s snapshot (§4.2) and that the battery
-assists under heavy load on the 140 W adapter: B0AC was nonzero in 126 of 170 s under an 8B-plus-CPU-burner load,
-down to −5,331 mA. Under the old rule switched to the 1 s SMC reads, the heaviest members, most of all 8B
-prefill-p2048, would be removed in numbers. Ed, 2026-10-06: "'under the existing rule' - should not preclude you from
+assists under heavy load on the 140 W adapter. In the validation run of §4.2 (25 s idle, 170 s of an
+8B-plus-CPU-burner load, 200 s of recovery), B0AC was nonzero at 126 of the 536 distinct SMC publications the run
+saw (a publication is one refresh of the SMC's values; the run read them every 0.2 s). All 126 fell among the 270
+publications of the load phase, where they cover about 63 s of the 170 s; the lowest read was −5,331 mA. Under the
+old rule switched to the 1 s SMC reads, the heaviest members, most of all 8B prefill-p2048, would be removed in
+numbers. Ed, 2026-10-06: "'under the existing rule' - should not preclude you from
 sensible changes - if the science is improved by a new rule make a new rule or remove the old one - obviously this
 needs to be durably remedied" (doctrine item 7 in the ruling). Two blind council seats (Opus 5.5 and Sol 6.1 xhigh)
 agreed; the orchestrator ruled
@@ -3236,8 +3254,9 @@ agreed; the orchestrator ruled
 3. *The evidence on hand is benign.* Qwen3-8B decode ran at 69.1–72.6 tokens/s under up to −5.3 A of assist against
    68.9–71.1 tokens/s without it. (The −865 mA reading of the earlier probe was at model load, not during decode.)
 4. *#421's two hazards stay covered.* Charging (current above +200 mA, IsCharging, the charge accumulator) and loss
-   of AC power still remove the member (§6.4), and the arm still refuses any battery current at idle (§4.2). The
-   wall-reading gap is closed by adding the battery term explicitly to the whole-machine energy (§5.8).
+   of AC power still remove the member (§6.4), and the arm still refuses a battery current above 200 mA in either
+   direction at idle (§4.2). The wall-reading gap is closed by adding the battery term explicitly to the
+   whole-machine energy (§5.8).
 
 So discharge with the adapter connected is disclosed (`battery.assist`), with its counts, minimum, duration and
 discharged energy per phase, and every reported cell is printed both with and without the members that carry it
@@ -3261,9 +3280,14 @@ reads the SMC once a second; the registry still supplies the charging and AC sta
 ## 10. Changes after the seal, and registered deviations
 
 None to §§3–9 for an armed or completed attempt. A rule, threshold, catalog effect, roster or blinding change is a
-prospective cold erratum (one judge, one refuter), settled in one erratum. The §5.5 resizing rule and the §3
-frequency redraw need no erratum. A review finding that concerns only how something is recorded (receipts, naming,
-schema formality) is dispositioned "flag, not refuse" and never sent to a fix round.
+prospective cold erratum (one judge, one refuter), settled in one erratum. The §3 frequency redraw needs no erratum.
+A larger per-member time allowance after a deadline stop (§5.5) does need one. The allowance is a value of the sealed
+sizing output (`sizing_b5.json`, `member_allowance_s`), and no program derives a new one from an observed member
+cycle: the sizer (`scripts/size_b5_window.py`) takes no such input, and its `--check` mode passes only when it
+reproduces the sealed file byte for byte. A larger allowance is therefore a cold erratum with a new sizing file,
+pinned by an addendum to the seal record (§12), and the question goes to a consult first. A review finding that
+concerns only how something is recorded (receipts, naming, schema formality) is dispositioned "flag, not refuse" and
+never sent to a fix round.
 
 **Registered deviations from committed bytes, made prospectively here:**
 
@@ -3273,13 +3297,28 @@ schema formality) is dispositioned "flag, not refuse" and never sent to a fix ro
 4. Analysis: D-179 ruling 1 ("no member is excluded after collection"; no reduced mean) and D-078's no-reduced-mean
    text are amended by §6.6 and analysis plan §2.2 and §4, as Ed's 2026-10-05 ruling requires; GAMMA's prospective
    manifest's fixed n = 10 quads becomes "at least 8 kept quads" (analysis plan §7).
-5. The chain passes `--arm-countdown-s 0` on every collection stage and on the pre calibration slot in place of the
-   packs' literal 20; the post calibration slot keeps 20 s (§5.1).
+5. The chain passes `--arm-countdown-s 0` on every collection stage, in place of the literal 20 that each of a
+   pack's ten collection stages carries (§5.1).
+6. The chain adds two arguments to both calibration capture stages (the pre and the post slot), which carry neither
+   in the packs: `--arm-countdown-s N` and `--sleep-display-before-capture` (§5.1).
+   - *The countdown.* N is 0 for the pre slot and 20 for the post slot. With no such argument the capture tool
+     counts down for its default, 0 s. So against pack bytes the pre slot is unchanged at 0 s and the post slot
+     gains 20 s. The 20 is not a pack literal: it is the countdown that the block-3 runbook's calibration step
+     passes for every slot (`docs/phase_2/window_runbook.md`, `calibrate_slot`). Against that runbook the pre slot
+     drops 20 s, because a 60 s settle already precedes it, and the post slot keeps 20 s, because no settle does.
+   - *The display sleep.* The second argument makes the capture tool run `pmset displaysleepnow`, the macOS command
+     that turns the display off at once, after the countdown, and then wait 5 s before the capture starts. The
+     runbook's calibration step passes it too. If the command fails, the capture goes on and the failure is recorded
+     as `calibration.writer_record_flagged` with kind `display_sleep_action_failed` (§6.10).
+   - The chain refuses to render a calibration stage whose pack template already carries either argument
+     (`joulewise/b5/chain.py` `calibration_runbook_flags`, `stage_argv`; the tool is
+     `scripts/validate_powermetrics_fiducial.py`).
 
 The chain's other changes of round 2 (the 60 s settles, the window calibration verdict, the wall budgets, the
 collection deadline, the corpus retry) and the spare-slot retry of revision 7 are not deviations from pack bytes: they
-are the chain's own steps, listed in `joulewise/b5/chain.py` `DEVIATIONS` and registered in §5.1, §0.6 and §0.12. The
-spare members themselves are committed bytes that each pack's plan tree pins (§0.12).
+are the chain's own steps, listed in `joulewise/b5/chain.py` `DEVIATIONS` and registered in §5.1, §0.6 and §0.12.
+(That list also carries deviations 1, 3, 5 and 6 above; deviation 6 is its second entry.) The spare members
+themselves are committed bytes that each pack's plan tree pins (§0.12).
 
 ## 11. Commit rule and the sealed inventory
 
@@ -3483,12 +3522,12 @@ not touched), from the diff `43ac12d0c..fe28e5a0c` (14 commits; 19 files under `
 | census lists its ancestors | `night_gate.AGENT_CENSUS_ARGV` and `hazards.arm.AGENT_CENSUS_ARGV` = `/usr/bin/pgrep -a -lf '[c]odex\|[c]laude'` (`c0f37974a`); `agent_identity.filter_census` follows the caller's tree downward only; `arm_census` discovery keeps no `-a` (a diagnostic that reads its own ancestors from the kernel) | changed: §4.5 |
 | T3 removed from the census | `agent_identity.AGENT_PREFIXES` = (`claude`, `codex`); the T3 rules removed from `arm_census`, `t0_rehearsal`, `prewindow.py` and the generators (`63d2b9bad`); `scripts/prewindow_check.sh` keeps its sealed bytes, `t3` included (`fe28e5a0c`; SHA-256 prefix `d8458eea588a746f`, recomputed by this author) | changed: §4.5 |
 | interpreter rule | at `fe28e5a0c` the matcher still parsed options (`agent_identity._VALUE_OPTIONS`, `ca25d9299`); the rule of §4.5 was then a pending commit of `lane/2026-10-07-census-interp`, and this row listed what to confirm when it landed: any command-line element of `node`, `bun` or `deno` that names `@anthropic-ai/claude*`, `@openai/codex*`, `claude-code` or the `claude` or `codex` install directories makes it an agent, with no option parsing; `node /opt/homebrew/bin/codex exec` (an agent in the dry arm) is still an agent; the window's own Python and shell processes are not. Revision 10 confirmed all three at `9b0c680ed` (`B5-REV10-SYNC` below) | changed in revision 9: §4.5 (to the pending rule); restated from the code in revision 10 |
-| A1: which bracket carries the allowance | `harvest.neg8_allowance` writes `derived/neg8-allowance.json` (`joulewise.b5_neg8_allowance.v1`); `whole_window.harvest_neg8_allowance_bracket`; `whole_window_drift_allowances(..., neg8_harvest_archive=)`; `analyze-claims --neg8-harvest-archive`; the archive bytes read through the governed reader (`bbdae1e86`) | changed: §0.12; analysis plan §3.1, §4, §7.1, §11 |
+| A1: which bracket carries the allowance | `harvest.neg8_allowance` writes `derived/neg8-allowance.json` (`joulewise.b5_neg8_allowance.v1`); `whole_window.harvest_neg8_allowance_bracket`; `whole_window_drift_allowances(..., neg8_harvest_archive=)`; `analyze-claims --neg8-harvest-archive`; the archive bytes are read through `authentication_io.read_authentication_input`, the read function that, while a claim's authentication session is open, parses each file strictly and records its SHA-256 at first read, and that is a plain file read otherwise (`bbdae1e86`) | changed: §0.12; analysis plan §3.1, §4, §7.1, §11 |
 | A2: the reference identity unit | `harvest.NEG8_REFERENCE_IDENTITY_UNIT` = `neg8_reference`, `_reference_model_identity` (sealed pin, else strict majority); pin written by `scripts/write_b5_identity_pins.py` (`754c8c093`) | changed: §0.12, §4.6 item 3, §6.3, §6.5 |
 | N8 with call (ii): a reference of another model | `model.identity_mismatch` (member level) and `model.identity_inconsistent_in_window` (window level) both emitted; both EXCLUDE_WINDOW in this catalog; `exclusions.compute` applies EXCLUDE_WINDOW at any scope | changed: §0.12, §6.5 ("window excluded", not "survivors decide"); catalog notes |
 | A3: references named from the sealed roster | `harvest._neg8_reference_losses` adds every member with `neg8_slot` or `spare_slot`; the stored loss list is trusted only when `neg8_reference_source` is `verdict_sources` | changed: §0.12, §6.5 |
 | A5: a strict-invalid reference is lost | `run_campaign._idle_admission_core_evaluation` reason `strict_invalid`; `whole_window._derived_neg8_decision` (`stored_strict_losses`, `unlisted_strict_invalid`); the harvest's exclusion pass always runs | changed: §0.12 |
-| R2, R3, cold pass 4 D1: claim-time allowance gaps | not fixed at this head: `floor_extraction.extract_cells` has no archive parameter; the claim validator rejects a stored failed screen (`whole_window_neg8_verdict_failed`) before the harvest record is read | changed: §0.12, §9.1; analysis plan §11 (lane L9-NEG8) |
+| Sol R2, Sol R3 (the Sol re-verification's findings, §9.1; not the fix route R3), cold pass 4 D1: claim-time allowance gaps | not fixed at this head: `floor_extraction.extract_cells` has no archive parameter; the claim validator rejects a stored failed screen (`whole_window_neg8_verdict_failed`) before the harvest record is read | changed: §0.12, §9.1; analysis plan §11 (lane L9-NEG8) |
 | Q11 and the anti-spiral rule | no code computes the cause key of §7.3 | changed: §7.2 (sentence struck) |
 | sizing, pins, plan trees | the three `plan_tree.json` and `sizing_b5.json` unchanged; `identity_pins.json` `a0865895dc7eeb4ecea28c611b65fab9eee69d5e16f5f8126dbe08ac5255bda9` (was `f78a27f8…`); `configs/pins/registry.json` `a4a2be94912c4a3c33b1fb04e0f91e9e691290e2a7b7ee98898783ff307033b2`, unchanged | recomputed: `B5-FINAL-HASHES` |
 | refusal allowlist | `configs/gates/hazard_refusals.json` byte-identical to `43ac12d0c`; counts unchanged (§6.11) | matched |
@@ -3608,8 +3647,9 @@ battery evidence map (§9.2).
   survivors decide. Text: §0.12, §6.5; catalog notes.
 - **Q13. One NEG-8 survivor logic instead of three (lane L9-NEG8, after the seal, before any claim).** The survivor
   logic lives in the verdict writer, the replay and the harvest; three reviews in a row found defects in it, and the
-  last two (Sol R2, R3; cold pass 4 D1) are in claim-time code. A consult (§9.1) chose to seal on this code and fix
-  them in one lane, with one design round by Sol and Fable before code. Analysis plan §11 lists what the lane must do.
+  last two (the Sol re-verification's findings Sol R2 and Sol R3, §9.1; cold pass 4 D1) are in claim-time code. A
+  consult (§9.1) chose to seal on this code and fix them in one lane, with one design round by Sol and Fable before
+  code. Analysis plan §11 lists what the lane must do.
   Until it lands, no block-5 floor and no contrast resting on a recorded survivor re-screen is claimable (§0.12).
   Nothing here changes collection; a change to the writer would be collection code and is not planned.
 - **Q14. What the census's rule for JavaScript runtimes can miss. Set by orchestrator ruling of 2026-10-07; the seal
