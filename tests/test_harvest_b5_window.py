@@ -3203,10 +3203,11 @@ def desk_seams(desk_runner, **extra):
 
 def commit_checkout(window: "Window") -> None:
     """Make the fixture's measurement checkout a git checkout with its pin committed (as H_claim has it)."""
+    from tests.git_fixture import init_git_fixture
     git = ["git", "-C", str(window.measurement)]
     if (window.measurement / ".git").exists():
         return
-    subprocess.run([*git, "init", "-q"], check=True)
+    init_git_fixture(window.measurement, "-q")  # the shared helper: no detached auto-maintenance
     for key, value in (("user.name", "fixture"), ("user.email", "fixture@example.invalid"),
                        ("commit.gpgsign", "false")):
         subprocess.run([*git, "config", "--local", key, value], check=True)

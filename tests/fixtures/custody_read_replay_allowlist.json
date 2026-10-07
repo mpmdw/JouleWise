@@ -226,5 +226,12 @@
     "ordinal": 1,
     "line": 424,
     "reason": "Desk pre-check of the measurement ledger head against its committed pin (write_window_plan refusal; advance_ledger_pin before/after status); verify_custody=False and the result only names blocking reasons, while the pin advance itself runs the guarded advance_calibration_head_pin path."
+  },
+  {
+    "file": "joulewise/b5/harvest.py",
+    "function": "_Harvest._desk_pin_problem",
+    "ordinal": 1,
+    "line": 4077,
+    "reason": "Desk pre-check that the committed pin is the bracket session's terminal head before the verdict writer runs (rehearsal R2-1); the same snapshot the writer loads (require_committed_pin=True), verify_custody=False, and the result only names why no verdict is written."
   }
 ]
