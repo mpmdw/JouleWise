@@ -14,6 +14,7 @@ from pathlib import Path
 
 from joulewise.external import km003c_parse as kp
 from joulewise.external import km003c_usb as usb
+from tests import child_guard
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "scripts" / "km003c_monitor.py"
@@ -213,6 +214,7 @@ class RealMeterSmokeTests(unittest.TestCase):
             out = Path(directory) / "stream.jsonl"
             process = subprocess.Popen([sys.executable, str(SCRIPT), "--out", str(out)],
                                        stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            child_guard.own(self, process)   # a failed wait or assertion must not leave the meter program running
             time.sleep(6.0)
             process.send_signal(signal.SIGTERM)
             _stdout, stderr = process.communicate(timeout=30)
@@ -235,6 +237,11 @@ class RealMeterSmokeTests(unittest.TestCase):
             self.assertIsNotNone(offset)
             self.assertLess(abs(offset - (time.clock_gettime_ns(time.CLOCK_MONOTONIC_RAW) - time.monotonic_ns())),
                             1_000_000)
+
+
+# Test hygiene (2026-10-07): a test or class in this module that leaves a child process running
+# is reported as failed, and the child is stopped (tests/child_guard.py).
+child_guard.guard_test_classes(globals())
 
 
 if __name__ == "__main__":

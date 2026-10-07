@@ -18,6 +18,7 @@ from tests.hazards.fakes import (
     FakeClocks, FakeProcessTable, FakeRegistry, FakeSmc, FrequencyReader, Runner, battery_bytes,
     completed, frequency_probe,
 )
+from tests import child_guard
 
 GIB = 1024 ** 3
 DRIVER = 4000
@@ -803,6 +804,11 @@ def _kill_quietly(supervisor: monitor.Supervisor) -> None:
         except ProcessLookupError:
             pass
         process.wait(timeout=5)
+
+
+# Test hygiene (2026-10-07): a test or class in this module that leaves a child process running
+# is reported as failed, and the child is stopped (tests/child_guard.py).
+child_guard.guard_test_classes(globals())
 
 
 if __name__ == "__main__":

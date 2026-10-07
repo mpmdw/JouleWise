@@ -532,6 +532,7 @@ class BridgeTests(unittest.TestCase):
             stderr=subprocess.PIPE,
             text=True,
         )
+        child_guard.own(self, holder)   # the finally below only asks the holder to exit, then waits 5 s
         expand = None
         try:
             self.assertIsNotNone(holder.stdout)

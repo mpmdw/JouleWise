@@ -29,6 +29,7 @@ from unittest import mock
 
 from joulewise.b5 import harvest as h
 from tests import test_harvest_b5_window as base
+from tests import child_guard
 
 ROOT = base.ROOT
 EXCLUSIONS = base.EXCLUSIONS
@@ -129,6 +130,10 @@ class DeskVerdictTeardownTests(base.WindowTestCase):
             runs = argv[argv.index("--runs-dir") + 1]
             process = subprocess.Popen([sys.executable, "-B", str(script), runs, str(pidfile)],
                                        env={**os.environ, "PYTHONPATH": str(ROOT)}, **kwargs)
+            # The writer leads its own group and starts a 600 s sleeper in it. The cleanup below
+            # kills by the pids in the pid file, which does not exist if the writer failed early;
+            # this stops the writer and its group either way.
+            child_guard.own(self, process)
             spawned.append(process)
             return process
 
@@ -948,6 +953,11 @@ class ThermistorManifestTests(unittest.TestCase):
 
     def test_a_json_object_that_is_not_a_stage_manifest_is_skipped(self):
         self.assertEqual(self.emitted('{"kind": "other"}'), [])
+
+
+# Test hygiene (2026-10-07): a test or class in this module that leaves a child process running
+# is reported as failed, and the child is stopped (tests/child_guard.py).
+child_guard.guard_test_classes(globals())
 
 
 if __name__ == "__main__":

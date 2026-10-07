@@ -17,6 +17,7 @@ from scripts import sample_quiet_predicate_evidence as harness
 from joulewise import battery_float
 from tests import test_battery_float as battery_float_tests
 from tests.test_battery_float import UPDATE, raw as battery_raw
+from tests import child_guard
 
 
 # Headroom on the kernel-charged CPU ceiling: measured child start-up plus
@@ -1597,6 +1598,11 @@ class SummaryTests(NetworkTimeOffMixin, unittest.TestCase):
                     harness.aggregate([row])
 
 
+# Test hygiene (2026-10-07): a test or class in this module that leaves a child process running
+# is reported as failed, and the child is stopped (tests/child_guard.py).
+child_guard.guard_test_classes(globals())
+
+
 if __name__ == "__main__":
     unittest.main()
 
@@ -2135,6 +2141,7 @@ class BenchReplayRecorderSeamTests(unittest.TestCase):
              "--out", str(out), "--interval-ms", "100", "--label-shift", label_shift,
              "--sidecar", str(sidecar)],
             env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"})
+        child_guard.own(self, process)   # a feeder that outlives its 30 s wait is stopped, not left
         time_module.sleep(seconds)
         process.send_signal(signal_module.SIGTERM)
         code = process.wait(timeout=30)
@@ -2207,6 +2214,7 @@ class BenchReplayRecorderSeamTests(unittest.TestCase):
                  "--out", str(out), "--interval-ms", "100", "--label-shift", "none",
                  "--sidecar", str(sidecar)],
                 env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"})
+            child_guard.own(self, process)   # as in feed(): stopped if the wait below times out
             time_module.sleep(1.0)
             process.send_signal(signal_module.SIGTERM)
             self.assertEqual(process.wait(timeout=30), 0)
@@ -2333,6 +2341,7 @@ class BenchReplayRecorderSeamTests(unittest.TestCase):
         arrivals = []
         spawn = time_module.monotonic()
         process = subprocess.Popen(argv, env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"})
+        child_guard.own(self, process)   # the finally below sends SIGTERM and waits; a timed-out wait left it
         try:
             deadline = spawn + patience_s
             while len(arrivals) < wanted and time_module.monotonic() < deadline:
