@@ -24,8 +24,14 @@ Runs inside the launchd job after t0, in this fixed order:
    its dwell value), then the **agent census again** (an agent that started
    during the dwell must not get GO), then GO.
 
-GO only if every verdict is PASS and both censuses are clean; otherwise NULL.
-UNMEASURED refuses.  The record is ``<custody>/hazards/arm.json``, written
+GO only if no verdict is REFUSE, the instrument verdict is PASS and both
+censuses are clean; otherwise NULL.  An UNMEASURED verdict refuses only for the
+instrument (powermetrics not sampling is the hazard itself); an UNMEASURED
+clock, battery, thermal, contention or disk verdict is a failed probe, not a
+measured hazard (audit A3, 2026-10-07): it is recorded under ``unmeasured`` in
+``arm.json`` with its flag code ``<module>.arm_unmeasured`` (DISCLOSE), and the
+arm goes on.  The in-window monitor re-measures every module over each member
+span.  The record is ``<custody>/hazards/arm.json``, written
 create-once with fsync; every step is also appended to
 ``<custody>/hazards/arm.steps.jsonl`` as it happens, and raw probe bytes go to
 ``<custody>/hazards/arm-raw/``.
@@ -47,7 +53,7 @@ from typing import Any
 
 from joulewise.hazards import battery, clock, contention, disk, instrument, smc, thermal
 from joulewise.hazards.base import (
-    PASS, Context, Measurement, Verdict, canonical_json, row, write_create_once,
+    PASS, UNMEASURED, Context, Measurement, Verdict, canonical_json, row, write_create_once,
 )
 
 ARM_SCHEMA = "joulewise.hazard_arm.v1"
@@ -68,6 +74,9 @@ CENSUS_TIMEOUT_S = 10.0
 NETWORK_TIME_OFF_TIMEOUT_S = 30.0
 DEFAULT_COLLECTOR_TIMEOUT_S = 120.0
 MODULES = ("clock", "battery", "thermal", "contention", "disk", "instrument")
+# The one module whose UNMEASURED verdict refuses: powermetrics that did not
+# start or produced no samples is the hazard "the instrument not sampling".
+UNMEASURED_REFUSES = frozenset({"instrument"})
 GO, NULL = "GO", "NULL"
 
 
@@ -176,7 +185,19 @@ def run(config: ArmConfig, seams: Seams | None = None) -> ArmResult:
         "tree_roots": list(config.tree_roots), "census": None, "census_at_go": None,
         "network_time_off": None,
         "record_only": [], "diagnostics": [], "decision": None, "refused_at": None,
-        "reasons": []}
+        "reasons": [], "unmeasured": []}
+
+    def refusals(step: str, verdicts: Sequence[Verdict]) -> list[str]:
+        """The verdicts that refuse; each other UNMEASURED one is recorded as a flag."""
+        for item in verdicts:
+            if item.status == UNMEASURED and item.module not in UNMEASURED_REFUSES:
+                entries = recorder.hazards.get(item.module) or [{}]
+                phase = entries[-1].get("phase", step)  # the phase the verdict was recorded under
+                record["unmeasured"].append({"module": item.module, "phase": phase,
+                                             "code": unmeasured_code(item.module),
+                                             "reasons": list(item.reasons)})
+                recorder.step("unmeasured", module=item.module, phase=phase, code=unmeasured_code(item.module))
+        return _refusals(verdicts)
 
     def finish(decision: str, refused_at: str | None, reasons: Sequence[str]) -> ArmResult:
         record.update(decision=decision, refused_at=refused_at, reasons=list(reasons),
@@ -209,7 +230,7 @@ def run(config: ArmConfig, seams: Seams | None = None) -> ArmResult:
     ]
     for argv in DIAGNOSTIC_ARGVS:
         record["diagnostics"].append(_completed_json(ctx.run(argv, CENSUS_TIMEOUT_S)))
-    refused = _refusals(verdicts)
+    refused = refusals("instant", verdicts)
     if refused:
         return finish(NULL, "instant", refused)
     if config.expected_epochs is not None:
@@ -253,11 +274,12 @@ def run(config: ArmConfig, seams: Seams | None = None) -> ArmResult:
     boot_end = _boot(seams, ctx)
     contention_verdict = recorder.hazard(
         "dwell", dwell, contention.judge(dwell, thresholds["contention"]))
-    if not contention_verdict.passed:
+    refused = refusals("dwell", [contention_verdict])
+    if refused:
         series = clock.series(samples, boot_start=boot_start, boot_end=boot_end,
                               started=dwell_started, finished=ctx.stamp())
         recorder.hazard("dwell", series, clock.judge(series, thresholds["clock"]))
-        return finish(NULL, "dwell", _refusals([contention_verdict]))
+        return finish(NULL, "dwell", refused)
 
     # 7. Final reads, then GO.  The GO clock sample closes the dwell series, so
     # f is compared at dwell start, dwell end and GO.
@@ -273,7 +295,7 @@ def run(config: ArmConfig, seams: Seams | None = None) -> ArmResult:
     series = clock.series(samples, boot_start=boot_start, boot_end=_boot(seams, ctx),
                           started=dwell_started, finished=ctx.stamp())
     finals.append(recorder.hazard("dwell_and_go", series, clock.judge(series, thresholds["clock"])))
-    refused = _refusals(finals)
+    refused = refusals("final", finals)
     if refused:
         return finish(NULL, "final", refused)
 
@@ -352,9 +374,16 @@ def _labelled(ctx: Context, label: str) -> Context:
     return dataclasses.replace(ctx, label=label)
 
 
+def unmeasured_code(module: str) -> str:
+    """The flag code an UNMEASURED arm verdict of ``module`` is recorded under."""
+    return f"{module}.arm_unmeasured"
+
+
 def _refusals(verdicts: Sequence[Verdict]) -> list[str]:
+    """REFUSE refuses; UNMEASURED refuses only for the instrument (audit A3)."""
     return [f"{item.module} {item.status}: {'; '.join(item.reasons)}"
-            for item in verdicts if item.status != PASS]
+            for item in verdicts
+            if item.status != PASS and (item.status != UNMEASURED or item.module in UNMEASURED_REFUSES)]
 
 
 def _boot(seams: Seams, ctx: Context) -> str | None:

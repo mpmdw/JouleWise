@@ -120,19 +120,20 @@ class CensusTests(unittest.TestCase):
         self.assertEqual((0, 1), (summary["unmeasured_censuses"], summary["retried_probes"]))
         self.assertEqual([], flags(harness, "census.unmeasured"))
 
-    def test_four_unmeasured_censuses_in_a_row_stop_the_chain_under_their_own_code(self):
-        harness = self.harness("/bin/sleep 30\n")
+    def test_unmeasured_censuses_in_a_row_are_flags_and_the_chain_runs_on(self):
+        """Audit A3 (2026-10-07). Before: four in a row stopped the chain (night_stopped_census_unmeasured)."""
+        harness = self.harness("/bin/sleep 2\nexit 0\n")
         harness.census.responses += [probe(CENSUS), probe(CENSUS)] + [
-            probe(CENSUS, exit_code=127) for _ in range(4 * (1 + b5_driver.CENSUS_RETRIES))]
-        self.assertEqual(harness.driver.EXIT_ABORTED, harness.run())
+            probe(CENSUS, exit_code=127) for _ in range(5 * (1 + b5_driver.CENSUS_RETRIES))]
+        self.assertEqual(harness.driver.EXIT_GO, harness.run())
         result = harness.result()
-        self.assertEqual(("ABORTED", b5_driver.STOPPED_CENSUS_UNMEASURED),
-                         (result["verdict"], result["aborted_reason"]))
+        self.assertEqual("GO", result["verdict"])
+        self.assertNotEqual(b5_driver.STOPPED_CENSUS_UNMEASURED, result.get("aborted_reason"))
         unmeasured = flags(harness, "census.unmeasured")
-        self.assertEqual([1, 2, 3, 4], [item["observed"]["consecutive"] for item in unmeasured])
+        self.assertEqual([1, 2, 3, 4, 5], [item["observed"]["consecutive"] for item in unmeasured][:5])
+        self.assertTrue(all("stop_after" not in item["observed"] for item in unmeasured))
         self.assertTrue(all(item["interval"]["monotonic_ns"] for item in unmeasured))
-        refusal = json.loads((harness.night / "refusal.json").read_text())
-        self.assertEqual([], harness.driver.validate_refusal(refusal))
+        self.assertFalse((harness.night / "refusal.json").exists())
         self.assertTrue((harness.night / "chain.exited").exists())
 
     def test_output_with_a_timeout_exit_is_still_an_agent(self):
@@ -277,6 +278,26 @@ class MonitorTests(unittest.TestCase):
         self.assertTrue(report["fault"])
         self.assertIn("monitor_crash_loop", report["fault_reasons"])
 
+    def test_each_monitor_restart_is_the_flag_monitor_restarted(self):
+        """Audit-fix batch 1 (item 8). Before: the catalog classified monitor.restarted, and nothing wrote it."""
+        harness = Harness(self, g10=False)
+        harness.replace_chain("#!/bin/zsh -f\n/bin/sleep 4\nexit 0\n")
+        patch(self, b5_driver, "MONITOR_RESTART_INTERVAL_S", 0.0)
+        harness.monitor_argv = lambda request: fake_monitor_argv(request.custody_root, life=1.0, code=3)
+        self.assertEqual(harness.driver.EXIT_GO, harness.run())
+        starts = harness.hazard()["monitor"]["starts"]
+        self.assertGreaterEqual(starts, 2)
+        restarted = flags(harness, "monitor.restarted")
+        self.assertEqual(starts - 1, len(restarted))
+        first = restarted[0]
+        self.assertEqual(("DIAGNOSTIC", "REPRESENTATION", "window"),
+                         (first["family"], first["klass"], first["scope"]["level"]))
+        self.assertEqual(3, first["observed"]["last_exit"]["returncode"])
+        lo, hi = first["interval"]["monotonic_ns"]
+        self.assertLessEqual(lo, hi)
+        from joulewise.flags.catalog import DRAFT_CODES
+        self.assertEqual("DISCLOSE", DRAFT_CODES["monitor.restarted"]["effect"])
+
     def test_a_silent_monitor_stops_the_chain_like_disk_low(self):
         harness = Harness(self, g10=False)
         harness.replace_chain("#!/bin/zsh -f\n/bin/sleep 8\nexit 0\n")
@@ -340,9 +361,53 @@ class LineageTests(unittest.TestCase):
         self.assertIn("records.lineage_formality", codes)
         self.assertIn(b5_driver.LINEAGE_PRELAUNCH_MISMATCH, codes)
         mismatch = next(item for item in harness.flags if item["code"] == b5_driver.LINEAGE_PRELAUNCH_MISMATCH)
-        self.assertEqual({"claim", "bound"}, set(mismatch["observed"]))
+        self.assertEqual({"claim", "bound", "science_members_expected_to_refuse"}, set(mismatch["observed"]))
         self.assertEqual(harness.plan.hazard_window["pack"]["pack_plan_id"], mismatch["expected"]["plan_id"])
         self.assertFalse((harness.night / "refusal.json").exists())
+        # Audit A5: with no readable locator, the members of both roots take the
+        # legacy path and refuse (launch_consumption_missing); both flags say so.
+        formality = next(item for item in harness.flags if item["code"] == "records.lineage_formality")
+        for flag in (mismatch, formality):
+            self.assertEqual(["bound", "claim"], flag["observed"]["science_members_expected_to_refuse"])
+
+    def test_a5_an_unusable_pack_inventory_refuses_before_launch(self):
+        """Audit A5 (2026-10-07). Before: flagged and launched; every tagged member then refused."""
+        from joulewise import window_lineage
+        harness = Harness(self, g10=False)
+        harness.replace_chain("#!/bin/zsh -f\nexit 0\n")
+        patch(self, b5_driver, "LINEAGE_RETRY_S", 0.0)
+        calls = []
+
+        def unusable(request):
+            calls.append(request)
+            raise window_lineage.LineagePublicationError(
+                "pack inventory is unusable: plan_tree.json: [Errno 2] No such file or directory")
+        harness.publish_lineage = unusable
+        harness.lineage_valid = False
+        self.assertEqual(harness.driver.EXIT_REFUSED, harness.run())
+        self.assertEqual(2, len(calls))
+        result = harness.result()
+        self.assertEqual(("REFUSED", b5_driver.REFUSED_PACK_INVENTORY_UNUSABLE),
+                         (result["verdict"], result["aborted_reason"]))
+        self.assertEqual("lineage_pack_inventory", harness.hazard()["stage_reached"])
+        self.assertFalse((harness.night / "chain.started").exists())
+        refusal = json.loads((harness.night / "refusal.json").read_text())
+        self.assertEqual([], harness.driver.validate_refusal(refusal))
+        self.assertEqual(2, refusal["refusal"]["evidence"]["attempts"])
+
+    def test_a5_any_other_publication_failure_still_launches(self):
+        from joulewise import window_lineage
+        harness = Harness(self, g10=False)
+        harness.replace_chain("#!/bin/zsh -f\nexit 0\n")
+        patch(self, b5_driver, "LINEAGE_RETRY_S", 0.0)
+
+        def unwritable(request):
+            raise window_lineage.LineagePublicationError("locator could not be written: [Errno 13] Permission denied")
+        harness.publish_lineage = unwritable
+        self.assertEqual(harness.driver.EXIT_GO, harness.run())
+        self.assertTrue((harness.night / "chain.started").exists())
+        formality = next(item for item in harness.flags if item["code"] == "records.lineage_formality")
+        self.assertEqual([], formality["observed"]["science_members_expected_to_refuse"])  # the locators read valid
 
     def test_a_locator_absent_after_a_successful_publication_is_republished_once(self):
         harness = Harness(self, g10=False)

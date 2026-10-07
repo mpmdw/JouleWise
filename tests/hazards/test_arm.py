@@ -1,5 +1,6 @@
-"""The thin arm: order, GO only on all-PASS plus a clean census, NULL on any
-REFUSE or UNMEASURED, record-only collectors outside the decision, and a
+"""The thin arm: order, GO with no REFUSE, a PASS instrument and a clean census,
+NULL on any REFUSE or an UNMEASURED instrument (another module's UNMEASURED is a
+recorded flag, audit A3), record-only collectors outside the decision, and a
 create-once arm.json.  Hardware is faked at the seams; the instrument probe
 runs its real child process against the fake powermetrics."""
 from __future__ import annotations
@@ -218,21 +219,56 @@ class ArmTests(unittest.TestCase):
                                 result.reasons)
                 self.assertNotIn(arm.NETWORK_TIME_OFF_ARGV, rig.runner.calls)
 
-    def test_unmeasured_refuses_at_arm_for_every_module(self):
-        for module in ("battery", "thermal", "disk", "clock", "instrument", "contention"):
+    def test_unmeasured_refuses_at_arm_only_for_the_instrument(self):
+        """Audit A3 (2026-10-07): a failed probe is not a measured hazard.
+
+        Before: every module's UNMEASURED gave NULL.  Now only the instrument
+        (powermetrics that cannot start is the hazard itself) refuses; the
+        other five are recorded in arm.json as ``<module>.arm_unmeasured`` and
+        the arm goes on to GO.
+        """
+        thresholds = {**arm.default_thresholds(),
+                      "contention": {**arm.default_thresholds()["contention"], "cap_s": 120}}
+        rig = Rig(Path(tempfile.mkdtemp(dir=self.tmp.name)))
+        rig.cadence_fixture = Path("/no/such/fixture.json")  # the fake powermetrics cannot start
+        result = rig.run(thresholds=thresholds)
+        self.assertEqual((result.decision, result.refused_at), (arm.NULL, "instrument"))
+        self.assertTrue(result.reasons[0].startswith("instrument "), result.reasons)
+        self.assertEqual(result.document["unmeasured"], [])
+        # The rule itself, on real verdicts: an UNMEASURED instrument refuses, an UNMEASURED disk does not.
+        verdicts = [base.Verdict("instrument", base.UNMEASURED, ("powermetrics did not start",), {}),
+                    base.Verdict("disk", base.UNMEASURED, ("statvfs failed",), {}),
+                    base.Verdict("battery", base.PASS, (), {})]
+        self.assertEqual(arm._refusals(verdicts), ["instrument UNMEASURED: powermetrics did not start"])
+        phases = {"battery": ["instant", "final"], "thermal": ["instant", "final"], "disk": ["instant"],
+                  "clock": ["instant", "dwell_and_go"], "contention": ["dwell"]}
+        for module in ("battery", "thermal", "disk", "clock", "contention"):
             with self.subTest(module=module):
                 rig = Rig(Path(tempfile.mkdtemp(dir=self.tmp.name)))
                 if module == "clock":
                     rig.reader.fail = True
-                elif module == "instrument":
-                    rig.cadence_fixture = Path("/no/such/fixture.json")  # the fake cannot start
                 else:
                     rig.fail.add(module)
-                result = rig.run(thresholds={**arm.default_thresholds(),
-                                             "contention": {**arm.default_thresholds()["contention"],
-                                                            "cap_s": 120}})
-                self.assertEqual(result.decision, arm.NULL)
-                self.assertTrue(any(module in reason for reason in result.reasons), result.reasons)
+                # A short dwell cap only where every dwell snapshot fails (it then ends at the cap).
+                result = rig.run(thresholds=thresholds) if module == "contention" else rig.run()
+                self.assertEqual((result.decision, result.refused_at, list(result.reasons)), (arm.GO, None, []))
+                record = json.loads(result.path.read_text())
+                self.assertEqual({row["module"] for row in record["unmeasured"]}, {module})
+                self.assertEqual({row["code"] for row in record["unmeasured"]}, {f"{module}.arm_unmeasured"})
+                self.assertEqual([row["phase"] for row in record["unmeasured"]], phases[module])
+                self.assertTrue(all(row["reasons"] for row in record["unmeasured"]))
+                statuses = {entry["verdict"]["status"] for entry in record["hazards"][module]}
+                self.assertIn("UNMEASURED", statuses)
+                self.assertNotIn("REFUSE", statuses)
+
+    def test_a_refuse_still_refuses_beside_an_unmeasured_module(self):
+        rig = Rig(Path(tempfile.mkdtemp(dir=self.tmp.name)))
+        rig.fail.add("disk")
+        rig.thermal_level = 1
+        result = rig.run()
+        self.assertEqual((result.decision, result.refused_at), (arm.NULL, "instant"))
+        self.assertEqual([reason.split(":")[0] for reason in result.reasons], ["thermal REFUSE"])
+        self.assertEqual([row["module"] for row in result.document["unmeasured"]], ["disk"])
 
     def test_slow_launchd_cadence_refuses(self):
         self.rig.cadence_fixture = INSTRUMENT / "cadence-20260919-n1-d01-launchd.json"

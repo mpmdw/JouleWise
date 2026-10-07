@@ -18,6 +18,12 @@
       "family": "DIAGNOSTIC",
       "klass": "PHYSICS"
     },
+    "battery.arm_unmeasured": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "PHYSICS"
+    },
     "battery.assist": {
       "blinding": "STRUCTURE",
       "effect": "DISCLOSE",
@@ -210,6 +216,12 @@
       "family": "RECORDS",
       "klass": "REPRESENTATION"
     },
+    "clock.arm_unmeasured": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "PHYSICS"
+    },
     "clock.frequency_changed": {
       "blinding": "STRUCTURE",
       "effect": "DISCLOSE",
@@ -270,6 +282,12 @@
       "family": "ROSTER",
       "klass": "REPRESENTATION"
     },
+    "contention.arm_unmeasured": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "PHYSICS"
+    },
     "contention.kernel_task_share": {
       "blinding": "STRUCTURE",
       "effect": "DISCLOSE",
@@ -299,6 +317,12 @@
       "effect": "DISCLOSE",
       "family": "DIAGNOSTIC",
       "klass": "REPRESENTATION"
+    },
+    "disk.arm_unmeasured": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "PHYSICS"
     },
     "disk.low": {
       "blinding": "STRUCTURE",
@@ -708,11 +732,23 @@
       "family": "DIAGNOSTIC",
       "klass": "PHYSICS"
     },
+    "monitor.orphan_unverified": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "REPRESENTATION"
+    },
     "monitor.outage": {
       "blinding": "STRUCTURE",
       "effect": "DISCLOSE",
       "family": "DIAGNOSTIC",
       "klass": "PHYSICS"
+    },
+    "monitor.restarted": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "REPRESENTATION"
     },
     "neg8.bound_not_derived": {
       "blinding": "STRUCTURE",
@@ -725,6 +761,12 @@
       "effect": "DISCLOSE",
       "family": "NEG8",
       "klass": "REPRESENTATION"
+    },
+    "neg8.reference_member_excluded": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_WINDOW",
+      "family": "NEG8",
+      "klass": "PHYSICS"
     },
     "neg8.screen_failed": {
       "blinding": "STRUCTURE",
@@ -854,9 +896,9 @@
     },
     "roster.run_id_mismatch": {
       "blinding": "STRUCTURE",
-      "effect": "DISCLOSE",
+      "effect": "EXCLUDE_MEMBER",
       "family": "ROSTER",
-      "klass": "REPRESENTATION"
+      "klass": "NUMBER"
     },
     "stage.members_refused_pre_bundle_identical": {
       "blinding": "STRUCTURE",
@@ -871,6 +913,12 @@
       "klass": "REPRESENTATION"
     },
     "teardown.survivors": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "PHYSICS"
+    },
+    "thermal.arm_unmeasured": {
       "blinding": "STRUCTURE",
       "effect": "DISCLOSE",
       "family": "DIAGNOSTIC",

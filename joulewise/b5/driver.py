@@ -7,11 +7,17 @@ Inside the launchd job, after t0, this branch runs:
 1. the agent census (``pgrep`` must exit 1 with empty output; doctrine keeps it);
 2. the hazard arm (``joulewise.hazards.arm``): instant reads, network time OFF
    as an action, the record-only collectors, the cadence probe, the dwell and
-   the final reads. Only PASS from all six modules -- clock, battery, thermal,
-   contention, disk, instrument -- is GO. A REFUSE or an UNMEASURED verdict is
-   a NULL window: nothing is published, started or launched;
+   the final reads. GO needs the arm's GO, no REFUSE from the six modules --
+   clock, battery, thermal, contention, disk, instrument -- and PASS from the
+   instrument. A REFUSE, or an UNMEASURED instrument, is a NULL window: nothing
+   is published, started or launched. An UNMEASURED clock, battery, thermal,
+   contention or disk verdict is a failed probe, not a measured hazard (audit
+   A3, 2026-10-07): it is the DISCLOSE flag ``<module>.arm_unmeasured`` and the
+   window goes on. An arm that raised or timed out as a whole stays NULL (the
+   instrument is then unverified);
 3. a final census, then the launch-lineage files (``joulewise.window_lineage``)
-   into both runs roots;
+   into both runs roots (refused only on a changed boot, or on a pack whose
+   config inventory is unusable, audit A5);
 4. the executed-file inventory of the measurement checkout (local reads only);
 5. the hazard monitor (``scripts/hazard_monitor.py``) in its own process group
    under ``taskpolicy -b``; a one-second supervision pass restarts it if it dies.
@@ -39,6 +45,7 @@ drive the real branch with fakes only at those seams.
 
 from __future__ import annotations
 
+import calendar
 import dataclasses
 import hashlib
 import json
@@ -70,7 +77,9 @@ PASS, REFUSE, UNMEASURED = "PASS", "REFUSE", "UNMEASURED"
 HAZARD_MODULES = night_gate.HAZARD_MODULES
 REFUSED_HAZARD = "night_refused_hazard"
 STOPPED_DISK_LOW = "night_stopped_disk_low"
-# PLAN2 P2-DRV (gate prune round 2).
+# PLAN2 P2-DRV (gate prune round 2).  STOPPED_CENSUS_UNMEASURED is retired
+# (audit A3, 2026-10-07): an unreadable census is a failed probe, never a
+# stop; the code stays registered (night_gate) so earlier records still read.
 STOPPED_CENSUS_UNMEASURED = "night_stopped_census_unmeasured"
 STOPPED_MONITOR_OUTAGE = "night_stopped_monitor_outage"
 REFUSED_INSTRUMENT_NOT_SAMPLING = "night_refused_instrument_not_sampling"
@@ -78,9 +87,15 @@ REFUSED_INSTRUMENT_NOT_SAMPLING = "night_refused_instrument_not_sampling"
 # was published, so monotonic clocks do not join (doctrine 2026-10-05).
 REFUSED_BOOT_CHANGED = "night_refused_boot_changed"
 REFUSED_LAUNCH_ABANDONED = "night_refused_launch_abandoned"
+# Audit A5 (2026-10-07): the lineage could not be published because the pack's
+# config inventory is unusable, so no member's config bytes can be checked
+# against the sealed inventory and every tagged member would refuse anyway.
+REFUSED_PACK_INVENTORY_UNUSABLE = "night_refused_pack_inventory_unusable"
+# window_lineage.publish_window_lineage's message for that case.
+PACK_INVENTORY_UNUSABLE_MESSAGE = "pack inventory is unusable"
 if {REFUSED_HAZARD, STOPPED_DISK_LOW, STOPPED_CENSUS_UNMEASURED, STOPPED_MONITOR_OUTAGE,
         REFUSED_INSTRUMENT_NOT_SAMPLING, REFUSED_BOOT_CHANGED,
-        REFUSED_LAUNCH_ABANDONED} != set(night_gate.HAZARD_DRIVER_REASON_CODES):
+        REFUSED_LAUNCH_ABANDONED, REFUSED_PACK_INVENTORY_UNUSABLE} != set(night_gate.HAZARD_DRIVER_REASON_CODES):
     raise RuntimeError("hazard driver codes drifted from night_gate.HAZARD_DRIVER_REASON_CODES")
 
 NETWORK_TIME_OFF_ARGV = ("/usr/bin/sudo", "-n", "/usr/sbin/systemsetup", "-setusingnetworktime", "off")
@@ -99,10 +114,11 @@ G10_TERM_GRACE_S = 120.0
 GIT_TIMEOUT_S = 60.0
 # PLAN2 row 7: the in-window census. A probe that is neither clean (exit 1,
 # empty stdout) nor a detection (any stdout) is unmeasured: retried, then a
-# flag; this many unmeasured censuses in a row (about 2 min) stop the chain.
+# flag carrying its consecutive count. It never stops the chain (audit A3,
+# 2026-10-07: a failed probe is not a measured agent; the monitor's ps journal
+# measures contention over every member span).
 CENSUS_RETRIES = 3
 CENSUS_RETRY_S = 1.0
-CENSUS_UNMEASURED_STOP_AFTER = 4
 # PLAN2 row 11: the monitor must journal before launch, and keep journaling.
 MONITOR_READY_TRIES = 3
 MONITOR_READY_TIMEOUT_S = 20.0
@@ -614,7 +630,7 @@ def _production_arm(context: ArmContext) -> dict[str, Any]:
     return {"go": bool(result.go), "verdicts": verdicts, "reasons": list(result.reasons),
             "refused_at": result.refused_at, "record_path": str(result.path),
             "network_time_off": document.get("network_time_off"),
-            "record_only": document.get("record_only")}
+            "record_only": document.get("record_only"), "arm_unmeasured": document.get("unmeasured")}
 
 
 def _production_lineage(request: LineageRequest) -> Any:
@@ -764,10 +780,24 @@ def _verdict_status(value: Any) -> str | None:
     return status if isinstance(status, str) else None
 
 
-def normalize_decision(raw: Any) -> dict[str, Any]:
-    """Read an arm result conservatively: GO needs ``go`` true AND six PASS verdicts.
+# The module whose UNMEASURED (or unreadable) verdict refuses: the instrument
+# not sampling is itself the hazard (hazards.arm.UNMEASURED_REFUSES).
+ARM_UNMEASURED_REFUSES = frozenset({"instrument"})
 
-    Anything unreadable is UNMEASURED, which refuses (plan section 2.1).
+
+def arm_unmeasured_code(module: str) -> str:
+    """The DISCLOSE flag an UNMEASURED arm verdict of ``module`` is recorded under (audit A3)."""
+    return f"{module}.arm_unmeasured"
+
+
+def normalize_decision(raw: Any) -> dict[str, Any]:
+    """Read an arm result: GO needs ``go`` true, no REFUSE verdict and a PASS instrument.
+
+    Anything unreadable is UNMEASURED.  An UNMEASURED (or NOT_EVALUATED, or
+    unreadable) verdict refuses only for the instrument; for the other five
+    modules it is listed in ``unmeasured`` and recorded as the DISCLOSE flag
+    ``<module>.arm_unmeasured`` (audit A3, 2026-10-07).  ``not_pass`` still
+    lists every module without PASS, for the record.
     """
 
     def get(name: str) -> Any:
@@ -786,12 +816,19 @@ def normalize_decision(raw: Any) -> dict[str, Any]:
     reasons_raw = get("reasons")
     reasons = [str(item) for item in reasons_raw] if isinstance(reasons_raw, (list, tuple)) else []
     not_pass = sorted(name for name in HAZARD_MODULES if verdicts[name] != PASS)
+    blocking = sorted(name for name in not_pass
+                      if verdicts[name] == REFUSE or name in ARM_UNMEASURED_REFUSES)
+    unmeasured = sorted(name for name in not_pass if name not in blocking)
     record_path = get("record_path") or get("path")
-    decision_go = go is True and not not_pass
-    if go is True and not_pass:
-        reasons.append("arm reported GO without PASS from: " + ", ".join(not_pass))
+    decision_go = go is True and not blocking
+    if go is True and blocking:
+        reasons.append("arm reported GO with REFUSE or an unverified instrument from: " + ", ".join(blocking))
     refused_at = get("refused_at")
-    return {"go": decision_go, "verdicts": verdicts, "not_pass": not_pass,
+    details_raw = get("arm_unmeasured")
+    details = [dict(item) for item in details_raw if isinstance(item, Mapping)] \
+        if isinstance(details_raw, (list, tuple)) else []
+    return {"go": decision_go, "verdicts": verdicts, "not_pass": not_pass, "unmeasured": unmeasured,
+            "unmeasured_detail": details,
             "reasons": reasons, "record_path": str(record_path) if record_path else None,
             "refused_at": refused_at if isinstance(refused_at, str) else None,
             "network_time_off": get("network_time_off"), "record_only": get("record_only")}
@@ -845,6 +882,9 @@ class MonitorSupervisor:
         self.started_at: float | None = None
         self.crash_loop = False
         self.on_crash_loop: Callable[[dict[str, Any]], None] | None = None
+        # Audit-fix batch 1 (item 8): called with the restart's details each
+        # time a process is started after the previous one exited or was discarded.
+        self.on_restart: Callable[[dict[str, Any]], None] | None = None
 
     def _record(self, event: str, **fields: Any) -> None:
         try:
@@ -881,10 +921,17 @@ class MonitorSupervisor:
                 start_time = None
         now = stamp()
         if self.down_since is not None:
-            self.gaps.append({"down_from": self.down_since, "up_at": now})
+            gap = {"down_from": self.down_since, "up_at": now}
+            self.gaps.append(gap)
             self._record("restart", pid=process.pid, pgid=process.pid, start_time=start_time,
-                         argv=self.argv, gap={"down_from": self.down_since, "up_at": now})
+                         argv=self.argv, gap=gap)
             self.down_since = None
+            if self.on_restart is not None:
+                try:
+                    self.on_restart({"pid": process.pid, "starts": self.starts, "gap": gap,
+                                     "last_exit": self.exits[-1] if self.exits else None})
+                except Exception as error:  # noqa: BLE001 - a flag is a record
+                    self.errors.append(_error_text(error))
         else:
             self._record("start", pid=process.pid, pgid=process.pid, start_time=start_time, argv=self.argv)
         return True
@@ -1211,10 +1258,10 @@ class HazardCensus:
     the chain stops as today. CLEAN (exit 1, empty stdout): nothing. Anything
     else (a timeout 124 or spawn failure 127 with empty output, exit 0/2/3
     with empty output, a probe error) is UNMEASURED: retried CENSUS_RETRIES
-    times CENSUS_RETRY_S apart, then flagged ``census.unmeasured`` and the
-    chain goes on. CENSUS_UNMEASURED_STOP_AFTER unmeasured censuses in a row
-    stop the chain under ``night_stopped_census_unmeasured``. The arm and
-    pre-GO censuses are not this class: they stay strict.
+    times CENSUS_RETRY_S apart, then flagged ``census.unmeasured`` (with the
+    count of unmeasured censuses in a row) and the chain goes on, however many
+    follow (audit A3, 2026-10-07: the former stop after four protected no
+    number). The arm and pre-GO censuses are not this class: they stay strict.
     """
 
     def __init__(self, window: "_Window", probes: Any, *, sleep: Callable[[float], None] = time.sleep) -> None:
@@ -1271,8 +1318,7 @@ class HazardCensus:
         self.unmeasured_censuses += 1
         self.window.flag(
             "census.unmeasured", "DIAGNOSTIC", "PHYSICS", stage="window",
-            observed={"attempts": observed, "consecutive": self.consecutive_unmeasured,
-                      "stop_after": CENSUS_UNMEASURED_STOP_AFTER},
+            observed={"attempts": observed, "consecutive": self.consecutive_unmeasured},
             detail="the in-window agent census could not be read on any retry; collection continued",
             legacy_site="scripts/run_night.py:_run_chain_once_impl", legacy_code="night_refused_agent_present",
             interval={"monotonic_ns": [first["monotonic_ns"], last["monotonic_ns"]],
@@ -1280,10 +1326,6 @@ class HazardCensus:
                                            if first["monotonic_raw_ns"] is not None
                                            and last["monotonic_raw_ns"] is not None else None),
                       "wall_s": [first["wall_s"], last["wall_s"]]})
-        if self.consecutive_unmeasured >= CENSUS_UNMEASURED_STOP_AFTER:
-            detail = (f"{self.consecutive_unmeasured} consecutive in-window agent censuses were unmeasured "
-                      f"(each after {CENSUS_RETRIES} retries); the driver stopped the chain")
-            return probe, night_gate.Refusal(STOPPED_CENSUS_UNMEASURED, detail, (probe,))
         return probe, None
 
     def append(self, path: Path, probe: Any, refusal: Any) -> None:
@@ -1966,6 +2008,7 @@ class _Window:
         record = {
             "schema": ARM_DECISION_SCHEMA, "plan_id": self.plan.plan_id, "dry_arm": self.dry_arm,
             "go": decision["go"], "verdicts": decision["verdicts"], "not_pass": decision["not_pass"],
+            "unmeasured": decision["unmeasured"],
             "reasons": decision["reasons"], "arm_error": decision.get("arm_error"),
             "arm_record": {"path": decision["record_path"],
                            "sha256": _sha256_file(Path(decision["record_path"])) if decision["record_path"] else None},
@@ -2058,6 +2101,18 @@ def run_hazard_night(rt: Any, plan_path: Path, plan: Any, probes: Any, initial_c
         window.note(f"arm decision record could not be written: {_error_text(error)}")
     hazard["arm"] = {"go": decision["go"], "verdicts": decision["verdicts"], "reasons": decision["reasons"],
                      "record_path": decision["record_path"]}
+    if decision["go"]:
+        # Audit A3: an UNMEASURED clock, battery, thermal, contention or disk
+        # verdict at arm is a failed probe, recorded and never a refusal.
+        for module in decision.get("unmeasured", ()):
+            detail_rows = [row for row in decision.get("unmeasured_detail", ()) if row.get("module") == module]
+            window.flag(arm_unmeasured_code(module), "DIAGNOSTIC", "PHYSICS", stage="arm",
+                        observed={"module": module, "verdict": decision["verdicts"].get(module),
+                                  "phases": [row.get("phase") for row in detail_rows],
+                                  "reasons": [reason for row in detail_rows for reason in row.get("reasons") or ()]},
+                        detail=f"the arm could not measure {module}; the in-window monitor measures it over "
+                               "every member span; the window went on",
+                        legacy_site="joulewise/hazards/arm.py:_refusals", legacy_code=UNMEASURED)
     if not decision["go"]:
         detail = ("hazard arm did not return GO; non-PASS: "
                   + (", ".join(f"{name}={decision['verdicts'][name]}" for name in decision["not_pass"]) or "none")
@@ -2098,9 +2153,12 @@ def run_hazard_night(rt: Any, plan_path: Path, plan: Any, probes: Any, initial_c
     # way members read them (PLAN2 row 9). Physics refuses; everything else is
     # a flag (doctrine 2026-10-05): a publication failure, an absent locator or
     # any bookkeeping disagreement is recorded and the chain launches. A
-    # publication that failed, or left a locator absent, is retried once. The
-    # one refusal is a boot that changed since the lineage was published:
-    # monotonic clocks do not join across a reboot.
+    # publication that failed, or left a locator absent, is retried once. Two
+    # refusals remain: a boot that changed since the lineage was published
+    # (physics: monotonic clocks do not join across a reboot), and a
+    # publication that still fails because the pack's config inventory is
+    # unusable (number integrity, audit A5: no member's config bytes can be
+    # checked against the sealed inventory, so every tagged member would refuse).
     if window.boot is None:
         window.boot = seams.boot_session_uuid()
     roots = plan.hazard_window["runs_roots"]
@@ -2113,16 +2171,20 @@ def run_hazard_night(rt: Any, plan_path: Path, plan: Any, probes: Any, initial_c
         boot_session_uuid=window.boot)
     lineage_record: dict[str, Any] = {"schema": LINEAGE_SCHEMA, "requested": stamp(), "attempts": []}
     lineage_error: str | None = None
+    inventory_unusable = False
 
     def publish(attempt: int) -> None:
-        nonlocal lineage_error
+        nonlocal lineage_error, inventory_unusable
         try:
             published = seams.publish_lineage(lineage_request)
             lineage_record.update(published=True, result=json.loads(json.dumps(published, default=str)))
             lineage_record["attempts"].append({"attempt": attempt, "published": True})
             lineage_error = None
+            inventory_unusable = False
         except Exception as error:  # noqa: BLE001
             lineage_error = _error_text(error)
+            inventory_unusable = (type(error).__name__ == "LineagePublicationError"
+                                  and str(error).startswith(PACK_INVENTORY_UNUSABLE_MESSAGE))
             lineage_record["attempts"].append({"attempt": attempt, "published": False, "error": lineage_error})
 
     def verify() -> Any:
@@ -2146,11 +2208,21 @@ def run_hazard_night(rt: Any, plan_path: Path, plan: Any, probes: Any, initial_c
             time.sleep(LINEAGE_RETRY_S)
             publish(2)
             locators = verify()
+    # Audit A5: members find HAZARD mode through the locator itself
+    # (window_lineage.is_hazard_runs_root). In a root whose locator is absent
+    # or unreadable after the retry, every marker-bearing member takes the
+    # legacy path and refuses (launch_consumption_missing); the flags say so.
+    expected_to_refuse = sorted(role for role in ("claim", "bound")
+                                if role_entry(locators, role).get("valid") is not True
+                                and "sha256" not in role_entry(locators, role))
     if lineage_error is not None:
         lineage_record.update(published=False, error=lineage_error)
         window.flag("records.lineage_formality", "RECORDS", "REPRESENTATION",
-                    observed={"error": lineage_error, "attempts": len(lineage_record["attempts"])},
-                    detail="the hazard-window lineage could not be published before launch")
+                    observed={"error": lineage_error, "attempts": len(lineage_record["attempts"]),
+                              "science_members_expected_to_refuse": expected_to_refuse},
+                    detail="the hazard-window lineage could not be published before launch"
+                           + ("; members in the " + " and ".join(expected_to_refuse) + " runs root will refuse "
+                              "(launch_consumption_missing)" if expected_to_refuse else ""))
     else:
         lineage_record["published"] = True
     invalid = sorted(role for role in ("claim", "bound") if role_entry(locators, role).get("valid") is not True)
@@ -2173,6 +2245,13 @@ def run_hazard_night(rt: Any, plan_path: Path, plan: Any, probes: Any, initial_c
                       + " and ".join(boot_changed) + " runs root; monotonic clocks do not join across a "
                       "reboot, so the chain was not launched",
                       {"roots": boot_changed, "boots": boots, "lineage_record": f"night/{LINEAGE_RECORD}"})
+    if lineage_error is not None and inventory_unusable:
+        return refuse("lineage_pack_inventory", REFUSED_PACK_INVENTORY_UNUSABLE,
+                      "the launch lineage could not be published because the pack's config inventory is "
+                      "unusable; no member's config bytes can be checked against the sealed inventory, so every "
+                      "tagged member would refuse; the chain was not launched",
+                      {"error": lineage_error, "attempts": len(lineage_record["attempts"]),
+                       "lineage_record": f"night/{LINEAGE_RECORD}"})
     if invalid:
         try:
             expected = lineage_identity(plan.hazard_window)
@@ -2184,6 +2263,7 @@ def run_hazard_night(rt: Any, plan_path: Path, plan: Any, probes: Any, initial_c
                     for role in invalid}
         if isinstance(locators, Mapping) and "error" in locators:
             observed["check_error"] = locators["error"]
+        observed["science_members_expected_to_refuse"] = expected_to_refuse
         window.flag(LINEAGE_PRELAUNCH_MISMATCH, "RECORDS", "REPRESENTATION", observed=observed,
                     expected={**expected, "boot_session_id": window.boot},
                     detail="the pre-launch lineage check disagrees with this window in the "
@@ -2215,6 +2295,23 @@ def run_hazard_night(rt: Any, plan_path: Path, plan: Any, probes: Any, initial_c
     monitor.on_crash_loop = lambda details: window.flag(
         "monitor.crash_loop", "DIAGNOSTIC", "PHYSICS", stage="window", observed=details,
         detail="the hazard monitor kept exiting within 30 s of its start; it is restarted with backoff")
+
+    def monitor_restarted(details: Mapping[str, Any]) -> None:
+        """Audit-fix batch 1 (item 8): every restart of the hazard monitor is the DISCLOSE flag monitor.restarted.
+
+        The gap itself reaches the members as the modules' unmeasured flags.
+        """
+        gap = details.get("gap") or {}
+        down, up = gap.get("down_from") or {}, gap.get("up_at") or {}
+        raw = [down.get("monotonic_raw_ns"), up.get("monotonic_raw_ns")]
+        window.flag("monitor.restarted", "DIAGNOSTIC", "REPRESENTATION", stage="window",
+                    observed={"pid": details.get("pid"), "starts": details.get("starts"),
+                              "last_exit": details.get("last_exit")},
+                    detail="the hazard monitor was restarted; its journals have a gap between the two sessions",
+                    interval={"monotonic_ns": [down.get("monotonic_ns"), up.get("monotonic_ns")],
+                              "monotonic_raw_ns": raw if None not in raw else None,
+                              "wall_s": [down.get("wall_s"), up.get("wall_s")]})
+    monitor.on_restart = monitor_restarted
     journal_dir = custody.joinpath(*MONITOR_JOURNAL_DIR)
     ready, readiness = await_monitor_ready(monitor, journal_dir)
     hazard["monitor_readiness"] = {"ready": ready, "attempts": readiness}
@@ -2668,6 +2765,82 @@ def dry_arm(rt: Any, plan_path: Path, plan: Any, probes: Any, initial_census: tu
     return 0 if record["verdict"] == "GO" else rt.EXIT_REFUSED
 
 
+# Audit-fix batch 1 (item 9): the dead-man left a recorded monitor or meter
+# group alone because its identity could not be verified (DISCLOSE).
+ORPHAN_UNVERIFIED = "monitor.orphan_unverified"
+# How far the ps start time (one-second lstart) may sit from the journal's
+# start record, which the supervisor writes right after the spawn.
+ORPHAN_START_TOLERANCE_S = 5.0
+
+
+def _ps_command_matches(pid: int, start_event: Mapping[str, Any]) -> tuple[bool, str]:
+    """Is ``pid`` the process the journal's start event recorded? (``ps`` command line and start time.)
+
+    The recorded argv from its script (the first ``.py`` element) onward, or
+    from its second element when it names none, must appear in the command
+    ``ps`` shows (an interpreter or ``taskpolicy`` may rewrite what precedes
+    it), and the ``ps`` start time must lie within ORPHAN_START_TOLERANCE_S
+    before (or one second after) the event's wall stamp.
+    """
+
+    argv = start_event.get("argv")
+    at = start_event.get("at")
+    wall_s = at.get("wall_s") if isinstance(at, Mapping) else None
+    if not isinstance(argv, list) or not argv or not all(isinstance(item, str) for item in argv):
+        return False, "no recorded command line"
+    if isinstance(wall_s, bool) or not isinstance(wall_s, (int, float)):
+        return False, "no recorded start stamp"
+    script = next((index for index, item in enumerate(argv) if item.endswith(".py")), None)
+    tail = " ".join(argv[script:] if script is not None else argv[1:])
+    if not tail:
+        return False, "recorded command line too short to match"
+    try:
+        result = subprocess.run(["/bin/ps", "-p", str(pid), "-o", "lstart=", "-o", "command="],
+                                capture_output=True, text=True, timeout=5,
+                                env={**os.environ, "LC_ALL": "C", "LANG": "C", "TZ": "UTC"})
+    except (OSError, subprocess.SubprocessError, UnicodeError) as error:
+        return False, f"ps failed: {_error_text(error)}"
+    parts = result.stdout.split(None, 5)
+    if result.returncode != 0 or len(parts) < 6:
+        return False, "ps shows no such process"
+    try:
+        started = calendar.timegm(time.strptime(" ".join(parts[:5]), "%a %b %d %H:%M:%S %Y"))
+    except ValueError:
+        return False, "ps start time unreadable"
+    if tail not in parts[5]:
+        return False, "ps command line differs from the recorded one"
+    if not (wall_s - ORPHAN_START_TOLERANCE_S <= started <= wall_s + 1.0):
+        return False, "ps start time differs from the recorded start"
+    return True, "command line and start time match"
+
+
+def _flag_orphan_unverified(night_dir: Path, journal: str, pgid: int, why: str) -> None:
+    """Record, best effort, that the dead-man left a recorded group alone (DISCLOSE)."""
+
+    custody = Path(night_dir).parent
+    plan_id = attempt = None
+    try:
+        plan = json.loads((custody / "night_plan.json").read_text(encoding="utf-8"))
+        plan_id = plan.get("plan_id")
+        window = plan.get("hazard_window")
+        attempt = window.get("attempt") if isinstance(window, Mapping) else None
+    except (OSError, ValueError, AttributeError):
+        pass
+    fields = {
+        "code": ORPHAN_UNVERIFIED, "family": "DIAGNOSTIC", "klass": "REPRESENTATION",
+        "scope": {"level": "window", "plan_id": plan_id, "attempt": attempt, "stage_id": None,
+                  "run_id": None, "bundle_id": None},
+        "source": {"stage": "window", "collector": "b5.driver.dead_man", "legacy_site": None, "legacy_code": None},
+        "observed": {"journal": journal, "pgid": pgid, "reason": why},
+        "expected": None, "evidence": [],
+        "detail": "the dead-man could not verify the recorded group's identity and left it alone",
+    }
+    try:
+        _emit_flag_production(custody, fields)
+    except Exception:  # noqa: BLE001 - a record; the dead-man's own log keeps the outcome
+        pass
+
+
 def reap_orphan_monitor(night_dir: Path, *, identity: Callable[[int], Any] | None = None,
                         journal: str = MONITOR_JOURNAL) -> dict[str, Any] | None:
     """Dead-man helper: stop a monitor group the driver started and never proved stopped.
@@ -2676,6 +2849,12 @@ def reap_orphan_monitor(night_dir: Path, *, identity: Callable[[int], Any] | Non
     default, ``METER_JOURNAL`` for the wall meter. The group is signalled only
     when its leader is still the process the journal recorded (same start
     time), so a reused pid is never touched.
+
+    Audit-fix batch 1 (item 9): when the journal recorded no start time, or no
+    identity reader is given, the group is never signalled blind. ``ps`` must
+    show the recorded command line (:func:`_ps_command_matches`) on a process
+    started within seconds of the recorded start; otherwise the group is left
+    alone and ``monitor.orphan_unverified`` (DISCLOSE) is recorded.
     """
 
     try:
@@ -2708,6 +2887,13 @@ def reap_orphan_monitor(night_dir: Path, *, identity: Callable[[int], Any] | Non
         observed = identity(pgid)
         if getattr(observed, "state", None) != "LIVE" or getattr(observed, "start_time", None) != last_start["start_time"]:
             return {"pgid": pgid, "signalled": False, "reason": "recorded monitor is not the live process"}
+    else:
+        verified, why = _ps_command_matches(pgid, last_start)
+        if not verified:
+            outcome = {"pgid": pgid, "signalled": False, "reason": f"identity unverified: {why}",
+                       "flag": ORPHAN_UNVERIFIED}
+            _flag_orphan_unverified(Path(night_dir), journal, pgid, why)
+            return outcome
     try:
         os.killpg(pgid, signal.SIGTERM)
     except ProcessLookupError:

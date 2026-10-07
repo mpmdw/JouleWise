@@ -256,6 +256,9 @@ _PRUNE2_CODES = {
     "census.journal_write_failed": _code("RECORDS", "REPRESENTATION", DISCLOSE),
     "supervision.pass_failed": _code("RECORDS", "REPRESENTATION", DISCLOSE),
     "monitor.outage": _code("DIAGNOSTIC", "PHYSICS", DISCLOSE),
+    # Audit-fix batch 1 (item 8): the driver now writes it on each restart of
+    # the hazard monitor (the design catalog's classification).
+    "monitor.restarted": _code("DIAGNOSTIC", "REPRESENTATION", DISCLOSE),
 }
 
 # Gate-prune round 3, lane P3-HARV (joulewise.b5.harvest PRUNE3_CODES).  The
@@ -298,6 +301,24 @@ _INT4_CODES = {
     "whole_window.member_failures_unreadable": _code("NEG8", "NUMBER", EXCLUDE_WINDOW),
 }
 
+# Audit-fix batch 1 (2026-10-07, Astra triple audit).  A1: a NEG-8 window
+# reference (start, midpoint or end) carries a PHYSICS member exclusion
+# (contention, battery, thermal, clock step, instrument sampling).  The
+# reference has no cells, so the member exclusion removes nothing, while the
+# drift allowance and screen computed from it stay in use; the bracket cannot
+# be re-derived without it (3+1+3), so the window is excluded.
+_AUDFIX1_CODES = {
+    "neg8.reference_member_excluded": _code("NEG8", "PHYSICS", EXCLUDE_WINDOW),
+    # Audit A3: an UNMEASURED arm verdict of a module other than the instrument
+    # (a failed probe, not a measured hazard) is recorded by the driver and the
+    # window goes on; the in-window monitor measures the module per member span.
+    **{f"{module}.arm_unmeasured": _code("DIAGNOSTIC", "PHYSICS", DISCLOSE)
+       for module in ("clock", "battery", "thermal", "contention", "disk")},
+    # Item 9: the dead-man left a recorded monitor or meter group alone because
+    # its identity (command line and start time) could not be verified.
+    "monitor.orphan_unverified": _code("DIAGNOSTIC", "REPRESENTATION", DISCLOSE),
+}
+
 DRAFT_CODES: Mapping[str, Mapping[str, str]] = {
     **_WINDOW_CODES,
     **_MEMBER_CODES,
@@ -306,6 +327,7 @@ DRAFT_CODES: Mapping[str, Mapping[str, str]] = {
     **_PRUNE2_CODES,
     **_PRUNE3_CODES,
     **_INT4_CODES,
+    **_AUDFIX1_CODES,
 }
 
 # Codes the cell rule and the roster rule of exclusions.compute derive

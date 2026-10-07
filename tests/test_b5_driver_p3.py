@@ -536,15 +536,49 @@ class DeadManMeterTests(unittest.TestCase):
     def test_the_reaper_reads_the_named_journal(self):
         with tempfile.TemporaryDirectory(prefix="b5-p3-reap-") as directory:
             night = Path(directory)
-            process = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"],
-                                       start_new_session=True)
+            argv = [sys.executable, "-c", "import time; time.sleep(60)"]
+            process = subprocess.Popen(argv, start_new_session=True)
             self.addCleanup(process_reaper.kill_and_wait, process)
-            (night / b5_driver.METER_JOURNAL).write_text(
-                json.dumps({"event": "start", "pid": process.pid, "pgid": process.pid}) + "\n")
+            # The supervisor's start record (no identity reader: start_time None).
+            (night / b5_driver.METER_JOURNAL).write_text(json.dumps(
+                {"event": "start", "pid": process.pid, "pgid": process.pid, "start_time": None, "argv": argv,
+                 "at": b5_driver.stamp()}) + "\n")
             self.assertIsNone(b5_driver.reap_orphan_monitor(night))
             self.assertIsNone(process.poll())
             self.assertTrue(b5_driver.reap_orphan_monitor(night, journal=b5_driver.METER_JOURNAL)["signalled"])
             self.assertEqual(-signal.SIGTERM, process.wait(timeout=10))
+
+    def test_item9_a_group_without_a_recorded_identity_is_never_signalled_blind(self):
+        """Audit-fix batch 1 (item 9). Before: a start record without start_time was SIGTERMed unverified."""
+        with tempfile.TemporaryDirectory(prefix="b5-p3-reap-") as directory:
+            custody = Path(directory)
+            night = custody / "night"
+            night.mkdir()
+            (custody / "night_plan.json").write_text(json.dumps({"plan_id": "plan-x", "hazard_window": {"attempt": 2}}))
+            process = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"],
+                                       start_new_session=True)
+            self.addCleanup(process_reaper.kill_and_wait, process)
+            for label, start in (
+                    ("no command line", {"event": "start", "pid": process.pid, "pgid": process.pid}),
+                    ("another command line", {"event": "start", "pid": process.pid, "pgid": process.pid,
+                                              "argv": [sys.executable, "-B", "/x/scripts/km003c_monitor.py"],
+                                              "at": b5_driver.stamp()}),
+                    ("an older start", {"event": "start", "pid": process.pid, "pgid": process.pid,
+                                        "argv": [sys.executable, "-c", "import time; time.sleep(60)"],
+                                        "at": {**b5_driver.stamp(), "wall_s": time.time() + 3600}})):
+                with self.subTest(label):
+                    (night / b5_driver.METER_JOURNAL).write_text(json.dumps(start) + "\n")
+                    outcome = b5_driver.reap_orphan_monitor(night, journal=b5_driver.METER_JOURNAL)
+                    self.assertFalse(outcome["signalled"])
+                    self.assertEqual(b5_driver.ORPHAN_UNVERIFIED, outcome["flag"])
+                    self.assertIsNone(process.poll())
+            flags = [json.loads(line) for line in (custody / "flags" / b5_driver.DRIVER_FLAGS).read_text().splitlines()]
+            self.assertEqual(3, len(flags))
+            self.assertEqual({b5_driver.ORPHAN_UNVERIFIED}, {flag["code"] for flag in flags})
+            self.assertEqual(("plan-x", 2), (flags[0]["scope"]["plan_id"], flags[0]["scope"]["attempt"]))
+            self.assertEqual(["no recorded command line", "ps command line differs from the recorded one",
+                              "ps start time differs from the recorded start"],
+                             [flag["observed"]["reason"] for flag in flags])
 
 
 # --------------------------------------------------------------------------

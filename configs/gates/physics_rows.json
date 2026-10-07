@@ -1594,7 +1594,7 @@
    "line_at_base": 492,
    "mapping": "protected by arm",
    "module": "arm",
-   "test": "tests/hazards/test_arm.py::ArmTests::test_unmeasured_refuses_at_arm_for_every_module"
+   "test": "tests/hazards/test_arm.py::ArmTests::test_unmeasured_refuses_at_arm_only_for_the_instrument"
   },
   {
    "checks": "A probe exceeded its timeout (45 s default, 5 s for ps, the battery probe's own bound).",
@@ -1610,7 +1610,7 @@
    "line_at_base": 494,
    "mapping": "protected by arm",
    "module": "arm",
-   "test": "tests/hazards/test_arm.py::ArmTests::test_unmeasured_refuses_at_arm_for_every_module"
+   "test": "tests/hazards/test_arm.py::ArmTests::test_unmeasured_refuses_at_arm_only_for_the_instrument"
   },
   {
    "checks": "Any fresh live probe could not execute or timed out: sntp R1, pgrep, ps, pmset batt/custom/therm, system_profiler, ioreg battery, sudo -n powermetrics.",
@@ -1626,7 +1626,7 @@
    "line_at_base": 524,
    "mapping": "protected by arm",
    "module": "arm",
-   "test": "tests/hazards/test_arm.py::ArmTests::test_unmeasured_refuses_at_arm_for_every_module"
+   "test": "tests/hazards/test_arm.py::ArmTests::test_unmeasured_refuses_at_arm_only_for_the_instrument"
   },
   {
    "checks": "Fewer than two sntp servers answered, for R0 (via 772) or R1 (via 1185). Absolute UTC offset needs a network reference.",
@@ -7253,7 +7253,7 @@
    "line_at_base": 3901,
    "mapping": "protected by arm",
    "module": "arm",
-   "test": "tests/hazards/test_arm.py::ArmTests::test_unmeasured_refuses_at_arm_for_every_module"
+   "test": "tests/hazards/test_arm.py::ArmTests::test_unmeasured_refuses_at_arm_only_for_the_instrument"
   },
   {
    "checks": "The driver's first agent census on a pack night exits 1 with empty stdout (no agent process).",

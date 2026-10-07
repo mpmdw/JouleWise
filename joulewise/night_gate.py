@@ -61,14 +61,15 @@ HAZARD_MODULES = ("clock", "battery", "thermal", "contention", "disk", "instrume
 # retired path's tests and by arm_retry's cold-gate table.
 HAZARD_DRIVER_REASON_CODES = frozenset(
     {
-        "night_refused_hazard",    # a hazard module refused, or was UNMEASURED, at arm (NULL window)
+        "night_refused_hazard",    # a hazard module refused (or the instrument was UNMEASURED) at arm (NULL window)
         "night_stopped_disk_low",  # free space fell under the in-window floor; the driver stopped the chain
         # PLAN2 P2-DRV (gate prune round 2):
-        "night_stopped_census_unmeasured",       # 4 consecutive in-window agent censuses unmeasured (row 7)
+        "night_stopped_census_unmeasured",       # retired 2026-10-07 (audit A3): no emitter; earlier records read
         "night_stopped_monitor_outage",          # no battery or contention reading for the outage bound (row 11)
         "night_refused_instrument_not_sampling",  # the hazard monitor never journaled before launch (row 11)
         "night_refused_boot_changed",            # the boot changed since the lineage was published (row 9; physics)
         "night_refused_launch_abandoned",        # the watchdog released this launch (J4) before the arm
+        "night_refused_pack_inventory_unusable",  # lineage unpublishable: pack inventory unusable (audit A5)
     }
 )
 # 2026-09-05: D-165 v2 relabel supersedes the v1 registration digest

@@ -122,11 +122,24 @@ class PlanThresholdsReachTheRealArm(WrittenPlans):
                 normalized = b5_driver.normalize_decision(decision)
                 self.assertTrue(normalized["go"])
 
-    def test_refusals_and_unmeasured_reads_reach_the_driver_as_no_go(self) -> None:
+    def test_an_unmeasured_disk_read_reaches_the_driver_as_go_with_its_flag(self) -> None:
+        """Audit A3 (2026-10-07): a failed probe is recorded, never a refusal (it was NULL before)."""
+        plan = self.plans["alpha"]
+        with tempfile.TemporaryDirectory(dir=self.root) as directory:
+            rig = Rig(Path(directory))
+            rig.fail.add("disk")
+            decision = self.arm(plan, rig)
+            normalized = b5_driver.normalize_decision(decision)
+            self.assertTrue(decision["go"], decision["reasons"])
+            self.assertTrue(normalized["go"])
+            self.assertEqual("UNMEASURED", decision["verdicts"]["disk"])
+            self.assertEqual((["disk"], ["disk"]), (normalized["not_pass"], normalized["unmeasured"]))
+            self.assertEqual(["disk.arm_unmeasured"], [row["code"] for row in normalized["unmeasured_detail"]])
+
+    def test_refusals_reach_the_driver_as_no_go(self) -> None:
         plan = self.plans["alpha"]
         for label, change, module, status in (
                 ("thermal level 1", lambda rig: setattr(rig, "thermal_level", 1), "thermal", "REFUSE"),
-                ("disk unreadable", lambda rig: rig.fail.add("disk"), "disk", "UNMEASURED"),
                 ("agent alive", lambda rig: setattr(rig, "census", (0, b"9 claude\n")), None, None)):
             with self.subTest(label), tempfile.TemporaryDirectory(dir=self.root) as directory:
                 rig = Rig(Path(directory))
