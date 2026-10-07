@@ -60,6 +60,7 @@ CATALOG_R3_BATTERY = {
     "battery.smc_unavailable": ("DIAGNOSTIC", "PHYSICS", "DISCLOSE"),
     # the battery-assist ruling of 2026-10-06: discharge on AC is disclosed
     "battery.assist": ("DIAGNOSTIC", "PHYSICS", "DISCLOSE"),
+    "battery.assist_outside_request": ("DIAGNOSTIC", "PHYSICS", "DISCLOSE"),
 }
 
 
@@ -75,7 +76,7 @@ class BatteryNamingTests(unittest.TestCase):
         l4 = {code: _entry(DRAFT_CODES, code) for code in DRAFT_CODES
               if code == "battery.member_span" or code == "battery.unmeasured"
               or code.startswith("battery.accumulator_") or code == "battery.smc_unavailable"
-              or code == "battery.assist"}
+              or code.startswith("battery.assist")}
         self.assertEqual(l4, CATALOG_R3_BATTERY)
 
     def test_sealed_catalog_battery_entries_match_l4_when_present(self) -> None:
@@ -115,7 +116,8 @@ class BatteryNamingTests(unittest.TestCase):
         self.assertEqual(emitted["publication"], {"battery.smc_unavailable", "battery.assist"})
         self.assertEqual(emitted["charging"], {"battery.smc_unavailable", "battery.member_span"})
         self.assertEqual(emitted["smc_burst"], {"battery.assist"})
-        self.assertEqual(emitted["accumulator_excursion"], {"battery.assist"})
+        # with SMC B0AC reading 0 the accumulator's interval mean is disclosed apart
+        self.assertEqual(emitted["accumulator_excursion"], {"battery.assist_outside_request"})
         self.assertEqual(emitted["assist"], {"battery.accumulator_activity"})
         self.assertEqual(emitted["counter_reset"], {"battery.accumulator_unavailable"})
         catalog = draft_catalog()

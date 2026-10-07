@@ -37,7 +37,8 @@ The member rule of plan §3.4 is :func:`span_findings`; its current half is
 Battery assist (ruling 2026-10-06, ``RULING_battery_assist_2026-10-06.md``):
 in a member's span, discharge on AC (a current below -200 mA, or a
 discharge-accumulator mean beyond 200 mA x V) is ``battery.assist``
-(DISCLOSE): the processor rails are regulated downstream of the supply, so
+(DISCLOSE; ``battery.assist_outside_request`` when only the phases around the
+measured request were assisted, which decides nothing): the processor rails are regulated downstream of the supply, so
 their energy does not depend on whether the adapter or the battery supplied
 it, and excluding assisted members would select members by load.  Charging
 (above +200 mA, IsCharging Yes, a charge-accumulator mean above 200 mA x V),
@@ -143,6 +144,10 @@ SMC_UNAVAILABLE = "battery.smc_unavailable"
 # Ruling 2026-10-06 (night-archive wallmeter-probe/verify/RULING_battery_assist):
 # discharge on AC in a member's span is disclosed, never excluded.
 ASSIST = "battery.assist"
+# The same disclosure when only the phases outside the measured request
+# (prepare, idle baseline, warm-up, the post-request sentinel) were assisted:
+# they are reported and decide nothing (ruling item 5).
+ASSIST_OUTSIDE_REQUEST = "battery.assist_outside_request"
 ARM_THRESHOLD_KEYS = ("limit_ma", "max_update_age_s")
 
 ACCUMULATOR_FIELDS = (
@@ -583,9 +588,9 @@ def current_disposition(current_ma: float | int | None, limit_ma: float | int) -
 
     ``"charge"`` when the current is above +``limit_ma`` (charging: the
     member is excluded, ``battery.member_span``); ``"assist"`` when it is
-    below -``limit_ma`` (the battery assisting the adapter on AC: disclosed,
-    ``battery.assist``); None within the limit or when there is no current.
-    Positive = charging, negative = discharging, for B0AC and the registry's
+    below -``limit_ma`` (the battery assisting the adapter on AC: disclosed);
+    None within the limit or when there is no current.  Positive = charging,
+    negative = discharging, for B0AC and the registry's
     InstantAmperage/Amperage alike (``verify/b0ac_validation.md``).
     """
 
@@ -598,115 +603,98 @@ def current_disposition(current_ma: float | int | None, limit_ma: float | int) -
     return None
 
 
-def _hold_seconds(good: Sequence[Mapping[str, Any]], window: Sequence[int],
-                  max_gap_ns: int) -> list[tuple[Mapping[str, Any], float]]:
-    """Each good read with the seconds of ``window`` it holds.
-
-    A read holds its value from its own time until the next good read, never
-    for longer than ``max_gap_ns`` (a longer stretch is uncovered, not
-    extrapolated), clipped to ``window``.  Reads that hold none of it are left out.
-    """
+def _in_force(entries: Sequence[Mapping[str, Any]], window: Sequence[int]) -> list[Mapping[str, Any]]:
+    """The entries in force for ``window`` (time-ordered ``monotonic_ns``): the last
+    at or before its start, every one inside it, the first at or after its stop."""
 
     start, stop = window
-    out = []
-    for index, entry in enumerate(good):
-        begin = entry["monotonic_ns"]
-        end = begin + max_gap_ns
-        if index + 1 < len(good):
-            end = min(end, good[index + 1]["monotonic_ns"])
-        held = min(end, stop) - max(begin, start)
-        if held > 0:
-            out.append((entry, held / 1e9))
-    return out
+    before = [entry for entry in entries if entry["monotonic_ns"] <= start]
+    inside = [entry for entry in entries if start < entry["monotonic_ns"] < stop]
+    after = [entry for entry in entries if entry["monotonic_ns"] >= stop]
+    return ([before[-1]] if before else []) + inside + ([after[0]] if after else [])
 
 
-def assist_summary(samples: Sequence[Mapping[str, Any]], window: Sequence[int],
-                   limit_ma: float | int, max_gap_ns: int) -> dict[str, Any]:
-    """Battery assist over one window from SMC B0AC reads (ruling 2026-10-06, item 1).
+def assist_phases(span: Mapping[str, Any], request: Mapping[str, Any] | None
+                  ) -> list[tuple[str, list[int], bool]]:
+    """``(phase, [start, stop], decides)`` for a member span (ruling item 5).
 
-    ``samples`` is :func:`smc_samples` output.
+    With a request window inside the span: ``pre_request`` (prepare's tail,
+    idle baseline, warm-up), ``request`` (the measured run) and
+    ``post_request``; only the request decides the member's assist marker.
+    Without a request inside the span, the whole span is one deciding phase,
+    ``span``.  (The same phases as the harvest copy, ``harvest.battery_phases``.)
+    """
 
-    ``observed`` (public; no energy): ``reads_below`` (in-force good reads
-    with B0AC below -``limit_ma``; in force = the last read at or before the
-    window's start, every read inside it and the first at or after its stop),
-    ``in_force_reads``, ``min_current_ma`` (the smallest in-force B0AC) and
-    ``seconds_below`` (the seconds of the window held by a read below
-    -``limit_ma``, :func:`_hold_seconds`).  ``withheld`` (an energy: it goes
-    to ``withheld/`` with the other machine energies): ``discharged_energy_j``
-    = the sum over held seconds of max(0, -B0AC) x B0AV / 10^6 W, and
-    ``energy_unread_seconds`` for held seconds whose read has no integer B0AV.
+    start, stop = span["monotonic_ns"]
+    window = (request or {}).get("monotonic_ns") if isinstance(request, Mapping) else None
+    if not window or not start <= window[0] <= window[1] <= stop:
+        return [("span", [start, stop], True)]
+    phases = []
+    if start < window[0]:
+        phases.append(("pre_request", [start, window[0]], False))
+    phases.append(("request", [window[0], window[1]], True))
+    if window[1] < stop:
+        phases.append(("post_request", [window[1], stop], False))
+    return phases
+
+
+def smc_phase(good: Sequence[Mapping[str, Any]], window: Sequence[int], limit_ma: float | int,
+              hold_ns: int) -> tuple[dict[str, Any], dict[str, Any]]:
+    """``(structure, energy)`` of the good SMC B0AC reads over one phase window.
+
+    ``good`` is the good reads of :func:`smc_samples` in time order.
+    Structure (public; no energy): ``smc_reads_in_force`` (in force as in
+    :func:`_in_force`), ``smc_reads_below`` (of those, B0AC below
+    -``limit_ma``), ``smc_min_ma`` (the smallest in-force B0AC) and
+    ``smc_duration_below_s`` (each good read holds its value until the next
+    good read, never longer than ``hold_ns``, clipped to the window; the held
+    time of reads below -``limit_ma``).  Energy (to ``withheld/`` only):
+    ``discharged_energy_j`` = the held time of each read below 0 mA times
+    -B0AC x B0AV / 10^6 W, and ``voltage_unread_s`` for held time whose read
+    has no positive integer B0AV.
 
     Example: limit 200 mA, window [100 s, 110 s], reads every second at 0 mA
-    except -865 mA at 104 s (B0AV 12180 mV): reads_below 1 of 12 in force,
-    min_current_ma -865, seconds_below 1.0, discharged_energy_j 10.536.
+    except -865 mA at 104 s (B0AV 12180 mV): 12 reads in force, 1 below,
+    minimum -865 mA, 1.0 s below, 10.53570 J.
     """
 
-    good = [entry for entry in samples if entry["current_ma"] is not None]
-    start, stop = window
-    before = [entry for entry in good if entry["monotonic_ns"] <= start]
-    inside = [entry for entry in good if start < entry["monotonic_ns"] < stop]
-    after = [entry for entry in good if entry["monotonic_ns"] >= stop]
-    in_force = ([before[-1]] if before else []) + inside + ([after[0]] if after else [])
-    seconds_below = energy_j = unread_s = 0.0
-    for entry, held in _hold_seconds(good, window, max_gap_ns):
-        current = entry["current_ma"]
-        if current < -limit_ma:
-            seconds_below += held
-        if current < 0:
+    reads = _in_force(good, window)
+    below_ns = unread_ns = 0
+    joules = 0.0
+    for index, entry in enumerate(good):
+        begin = entry["monotonic_ns"]
+        end = begin + hold_ns
+        if index + 1 < len(good):
+            end = min(end, good[index + 1]["monotonic_ns"])
+        lo, hi = max(begin, window[0]), min(end, window[1])
+        if hi <= lo:
+            continue
+        if entry["current_ma"] < -limit_ma:
+            below_ns += hi - lo
+        if entry["current_ma"] < 0:
             voltage = entry.get("voltage_mv")
-            if isinstance(voltage, bool) or not isinstance(voltage, int):
-                unread_s += held
+            if isinstance(voltage, int) and not isinstance(voltage, bool) and voltage > 0:
+                joules += -entry["current_ma"] * voltage / 1e6 * (hi - lo) / 1e9
             else:
-                energy_j += -current * voltage / 1e6 * held
-    return {"observed": {"reads_below": sum(1 for entry in in_force if entry["current_ma"] < -limit_ma),
-                         "in_force_reads": len(in_force),
-                         "min_current_ma": min((entry["current_ma"] for entry in in_force), default=None),
-                         "seconds_below": round(seconds_below, 9)},
-            "withheld": {"discharged_energy_j": round(energy_j, 9),
-                         "energy_unread_seconds": round(unread_s, 9)}}
-
-
-def _phase_windows(span: Mapping[str, Any],
-                   phases: Mapping[str, Mapping[str, Any]] | None) -> dict[str, list[int]]:
-    windows = {"span": list(span["monotonic_ns"])}
-    for name, phase in (phases or {}).items():
-        if isinstance(phase, Mapping) and phase.get("monotonic_ns"):
-            windows[str(name)] = list(phase["monotonic_ns"])
-    return windows
-
-
-def _assist_finding(span: Mapping[str, Any], *, source: str, observed: Mapping[str, Any],
-                    expected: Any, interval: Mapping[str, Any] | None, detail: str,
-                    withheld: Mapping[str, Any] | None = None,
-                    evidence: Sequence[Mapping[str, Any]] = ()) -> dict[str, Any]:
-    """One ``battery.assist`` (DISCLOSE).  An energy never goes in ``observed``:
-    it is under ``withheld``, which the flag writer routes to ``withheld/``."""
-
-    item = finding(ASSIST, span=span, observed={"source": source, **observed}, expected=expected,
-                   interval=interval, detail=detail, evidence=evidence)
-    if withheld is not None:
-        item["withheld"] = dict(withheld)
-    return item
+                unread_ns += hi - lo
+    structure = {"smc_reads_in_force": len(reads),
+                 "smc_reads_below": sum(1 for entry in reads if entry["current_ma"] < -limit_ma),
+                 "smc_min_ma": min((entry["current_ma"] for entry in reads), default=None),
+                 "smc_duration_below_s": round(below_ns / 1e9, 3)}
+    return structure, {"discharged_energy_j": joules, "voltage_unread_s": round(unread_ns / 1e9, 3)}
 
 
 def smc_span_findings(readings: Sequence[Mapping[str, Any]], span: Mapping[str, Any],
-                      thresholds: Mapping[str, Any] = DEFAULT_THRESHOLDS, *,
-                      phases: Mapping[str, Mapping[str, Any]] | None = None,
+                      thresholds: Mapping[str, Any] = DEFAULT_THRESHOLDS,
                       ) -> tuple[list[dict[str, Any]], bool]:
-    """The 200 mA rule on SMC B0AC: ``(findings, covered)``.
+    """The charging half of the 200 mA rule on SMC B0AC, and its coverage: ``(findings, covered)``.
 
     The good B0AC reads in force are the last at or before the span's start,
     every one inside it and the first at or after its stop (the publication
-    rule's conservative choice).  Under the battery-assist ruling of
-    2026-10-06 the sign decides:
-
-    - any in-force read above +``limit_ma`` (charging) gives one
-      ``battery.member_span`` (EXCLUDE_MEMBER) listing them;
-    - any in-force read below -``limit_ma`` (discharge on AC: the battery
-      assisting the adapter) gives one ``battery.assist`` (DISCLOSE) with
-      :func:`assist_summary` for the span and for each named ``phases``
-      window (``{"request": {"monotonic_ns": [a, b]}}``; reads outside the
-      request are reported apart and decide nothing).
+    rule's conservative choice).  Any in-force read above +``limit_ma``
+    (charging) gives one ``battery.member_span`` (EXCLUDE_MEMBER) listing
+    them.  Reads below -``limit_ma`` (battery assist on AC) never exclude;
+    :func:`span_findings` discloses them (``battery.assist``).
 
     ``covered`` is True when good, fresh reads (:func:`smc_samples`: the SMC
     block changed since the previous read, so a frozen SMC does not count as
@@ -715,10 +703,9 @@ def smc_span_findings(readings: Sequence[Mapping[str, Any]], span: Mapping[str, 
     (DISCLOSE) is added and the caller judges the registry current instead.
 
     Example: limit 200 mA, span [100 s, 110 s], reads every second reading 0
-    except -865 mA at 104 s: one battery.assist (1 of 12 in-force reads below
-    -200 mA), covered; +865 mA at 104 s instead: one member_span.  The same
-    span with no read between 101 s and 109 s: smc_unavailable (an 8 s gap >
-    5 s), not covered.
+    except +865 mA at 104 s: one member_span (1 of 12 in-force reads above the
+    limit), covered.  The same span with no read between 101 s and 109 s:
+    smc_unavailable (an 8 s gap > 5 s), not covered.
     """
 
     limit = thresholds["limit_ma"]
@@ -726,10 +713,7 @@ def smc_span_findings(readings: Sequence[Mapping[str, Any]], span: Mapping[str, 
     start, stop = span["monotonic_ns"]
     samples = smc_samples(readings)
     good = [entry for entry in samples if entry["current_ma"] is not None]
-    before = [entry for entry in good if entry["monotonic_ns"] <= start]
-    inside = [entry for entry in good if start < entry["monotonic_ns"] < stop]
-    after = [entry for entry in good if entry["monotonic_ns"] >= stop]
-    in_force = ([before[-1]] if before else []) + inside + ([after[0]] if after else [])
+    in_force = _in_force(good, (start, stop))
     found: list[dict[str, Any]] = []
     charging = [entry for entry in in_force if current_disposition(entry["current_ma"], limit) == "charge"]
     if charging:
@@ -742,20 +726,6 @@ def smc_span_findings(readings: Sequence[Mapping[str, Any]], span: Mapping[str, 
             interval={"monotonic_ns": [charging[0]["monotonic_ns"], charging[-1]["monotonic_ns"]]},
             detail=(f"SMC B0AC above +{limit} mA (charging) in {len(charging)} of {len(in_force)} "
                     f"reads in force (largest {worst['current_ma']:+d} mA)")))
-    assisting = [entry for entry in in_force if current_disposition(entry["current_ma"], limit) == "assist"]
-    if assisting:
-        windows = _phase_windows(span, phases)
-        summaries = {name: assist_summary(samples, window, limit, max_gap_ns)
-                     for name, window in windows.items()}
-        worst = min(assisting, key=lambda entry: entry["current_ma"])
-        found.append(_assist_finding(
-            span, source="smc", expected=-limit,
-            observed={"key": SMC_CURRENT_KEY, "below_limit": assisting[:8],
-                      "phases": {name: item["observed"] for name, item in summaries.items()}},
-            withheld={"phases": {name: item["withheld"] for name, item in summaries.items()}},
-            interval={"monotonic_ns": [assisting[0]["monotonic_ns"], assisting[-1]["monotonic_ns"]]},
-            detail=(f"SMC B0AC below -{limit} mA on AC (battery assist) in {len(assisting)} of "
-                    f"{len(in_force)} reads in force (smallest {worst['current_ma']:+d} mA)")))
     fresh = [entry for entry in good if entry["fresh"]]
     gap = coverage_gap([entry["monotonic_ns"] for entry in fresh], start, stop, max_gap_ns)
     if gap is not None:
@@ -774,45 +744,98 @@ def smc_span_findings(readings: Sequence[Mapping[str, Any]], span: Mapping[str, 
     return found, gap is None
 
 
-def registry_current_dispositions(values: Mapping[str, Any], limit_ma: float | int
-                                  ) -> dict[str, list[str]]:
-    """The registry's InstantAmperage and Amperage read by :func:`current_disposition`:
-    ``{"charge": [reasons], "assist": [reasons]}`` (the member rule's fallback
-    when SMC B0AC does not cover the span)."""
+def assist_finding(readings: Sequence[Mapping[str, Any]], span: Mapping[str, Any],
+                   request: Mapping[str, Any] | None, publications_in_force: Sequence[Mapping[str, Any]],
+                   discharge_intervals: Sequence[Sequence[int]], *, limit_ma: float | int,
+                   smc_covered: bool, hold_ns: int = SMC_MAX_GAP_S * 1_000_000_000,
+                   ) -> dict[str, Any] | None:
+    """The member's battery-assist disclosure (ruling 2026-10-06, items 1 and 5), or None.
 
-    out: dict[str, list[str]] = {"charge": [], "assist": []}
-    for key, label in (("instant_amperage_ma", "InstantAmperage"), ("amperage_ma", "Amperage")):
-        value = values.get(key)
-        kind = current_disposition(value, limit_ma)
-        if kind == "charge":
-            out["charge"].append(f"{label} {value:+} mA > +{limit_ma} mA (charging)")
-        elif kind == "assist":
-            out["assist"].append(f"{label} {value:+} mA < -{limit_ma} mA (battery assist)")
-    return out
+    For each phase of :func:`assist_phases` it counts the evidence of
+    discharge beyond -``limit_ma`` on AC: SMC B0AC reads (:func:`smc_phase`);
+    without SMC coverage only, registry publications in force for the phase
+    whose InstantAmperage or Amperage is below -``limit_ma``; and
+    discharge-accumulator intervals over their limit that overlap the phase
+    (``discharge_intervals``, closed).  A phase is assisted when any of these
+    is nonzero.  The member is marked ``battery.assist`` (the sensitivity
+    line's marker) when a deciding phase (the request, or the span without
+    one) has SMC reads below the limit, or, without SMC coverage, any of the
+    other evidence; otherwise, when some phase is assisted,
+    ``battery.assist_outside_request``.  Both are DISCLOSE.  The discharged
+    energy per phase is under ``withheld`` (it goes to ``withheld/`` only),
+    never in ``observed``.  This is the harvest copy's predicate
+    (``harvest._battery_assist``) on the hazard journals.
+    """
+
+    good = [entry for entry in smc_samples(readings) if entry["current_ma"] is not None]
+    phases: dict[str, Any] = {}
+    energies: dict[str, Any] = {}
+    seen = decided = False
+    stamps: list[int] = []
+    for name, window, decides in assist_phases(span, request):
+        structure, energy = smc_phase(good, window, limit_ma, hold_ns)
+        low = [] if smc_covered else [
+            pub for pub in _in_force(publications_in_force, window)
+            if any(current_disposition(pub["values"].get(key), limit_ma) == "assist"
+                   for key in ("instant_amperage_ma", "amperage_ma"))]
+        rows = [interval for interval in discharge_intervals
+                if interval[0] <= window[1] and window[0] <= interval[1]]
+        registry_values = [pub["values"].get(key) for pub in low
+                           for key in ("instant_amperage_ma", "amperage_ma")]
+        structure.update({
+            "decides": decides, "registry_publications_below": len(low),
+            "registry_min_ma": min((value for value in registry_values
+                                    if isinstance(value, (int, float)) and not isinstance(value, bool)),
+                                   default=None),
+            "accumulator_intervals_over_limit": len(rows)})
+        phases[name], energies[name] = structure, energy
+        smc_assisted = structure["smc_reads_below"] > 0
+        other = bool(low or rows)
+        seen = seen or smc_assisted or other
+        if decides and (smc_assisted or (other and not smc_covered)):
+            decided = True
+        stamps += [entry["monotonic_ns"] for entry in good
+                   if entry["current_ma"] < -limit_ma and window[0] <= entry["monotonic_ns"] <= window[1]]
+    if not seen:
+        return None
+    code = ASSIST if decided else ASSIST_OUTSIDE_REQUEST
+    item = finding(
+        code, span=span, expected=-limit_ma,
+        observed={"rule": "battery_assist_ruling_2026_10_06", "limit_ma": limit_ma,
+                  "current_source": "smc" if smc_covered else "smc_partial_registry_fallback",
+                  "request_assist": decided, "phases": phases},
+        interval={"monotonic_ns": [min(stamps), max(stamps)] if stamps else None},
+        detail=("battery assist on AC (discharge beyond -%s mA) %s; disclosed, never excluded"
+                % (limit_ma, "in the measured request" if decided else "outside the measured request only")))
+    item["withheld"] = {"phases": energies, "smc_covered": smc_covered}
+    return item
 
 
 def span_findings(readings: Sequence[Mapping[str, Any]], span: Mapping[str, Any],
                   thresholds: Mapping[str, Any] = DEFAULT_THRESHOLDS, *,
-                  phases: Mapping[str, Mapping[str, Any]] | None = None) -> list[dict[str, Any]]:
-    """``battery.member_span``, ``battery.assist``, ``battery.accumulator_activity``,
-    ``battery.accumulator_unavailable``, ``battery.unmeasured`` and
-    ``battery.smc_unavailable``.
+                  request: Mapping[str, Any] | None = None) -> list[dict[str, Any]]:
+    """``battery.member_span``, ``battery.assist``, ``battery.assist_outside_request``,
+    ``battery.accumulator_activity``, ``battery.accumulator_unavailable``,
+    ``battery.unmeasured`` and ``battery.smc_unavailable``.
 
     ``span`` is ``{"monotonic_ns": [start, stop], ...}`` (the member's
-    sampler stream, controller ``time.monotonic_ns``).  The member rule under
-    the battery-assist ruling of 2026-10-06:
+    sampler stream, controller ``time.monotonic_ns``); ``request`` its
+    request window, when known.  The member rule under the battery-assist
+    ruling of 2026-10-06:
 
     - **Excluded** (``battery.member_span``, EXCLUDE_MEMBER): a current above
-      +200 mA (charging) on SMC B0AC (:func:`smc_span_findings`), or on the
-      registry's InstantAmperage/Amperage when B0AC does not cover the span;
-      IsCharging not No or ExternalConnected not Yes at a publication in
-      force (an unread state is not a pass); IsCharging Yes or
+      +200 mA (charging) on an SMC B0AC read in force
+      (:func:`smc_span_findings`), or on the registry's
+      InstantAmperage/Amperage at a publication in force when B0AC does not
+      cover the span; IsCharging not No or ExternalConnected not Yes at a
+      publication in force (an unread state is not a pass); IsCharging Yes or
       ExternalConnected No on any good registry read inside the span; a
       charge-accumulator mean above 200 mA x Voltage.  No publication for
-      more than ``max_unobserved_s`` is ``battery.unmeasured`` (EXCLUDE_MEMBER).
-    - **Disclosed** (``battery.assist``, DISCLOSE): a current below -200 mA
-      on AC, by the same sources, and a discharge-accumulator mean beyond
-      200 mA x Voltage.  Discharge alone never excludes.
+      more than ``max_unobserved_s`` overlapping the span is
+      ``battery.unmeasured`` (EXCLUDE_MEMBER).
+    - **Disclosed**: discharge beyond -200 mA on AC, by the same sources and
+      a discharge-accumulator mean beyond 200 mA x Voltage, is
+      :func:`assist_finding`.  Discharge alone never excludes.
 
     The publications in force are the last one at or before the start,
     every one inside the span and the first one at or after the end.
@@ -822,27 +845,21 @@ def span_findings(readings: Sequence[Mapping[str, Any]], span: Mapping[str, Any]
     limits = dict(thresholds)
     limit = limits["limit_ma"]
     start, stop = span["monotonic_ns"]
-    found, smc_covered = smc_span_findings(readings, span, limits, phases=phases)
+    found, smc_covered = smc_span_findings(readings, span, limits)
     pubs = publications(readings)
-    before = [p for p in pubs if p["monotonic_ns"] <= start]
-    inside = [p for p in pubs if start < p["monotonic_ns"] < stop]
-    after = [p for p in pubs if p["monotonic_ns"] >= stop]
-    in_force = ([before[-1]] if before else []) + inside + ([after[0]] if after else [])
+    in_force = _in_force(pubs, (start, stop))
     for pub in in_force:
         reasons = reading_reasons(pub["values"], limits, include_amperage=False, include_instant=False)
-        currents = ({"charge": [], "assist": []} if smc_covered
-                    else registry_current_dispositions(pub["values"], limit))
-        reasons += currents["charge"]
-        interval = {"monotonic_ns": [pub["monotonic_ns"], pub["monotonic_ns"]]}
-        evidence = pub["reading"].get("raw") or ()
+        if not smc_covered:
+            for key, label in (("instant_amperage_ma", "InstantAmperage"), ("amperage_ma", "Amperage")):
+                value = pub["values"].get(key)
+                if current_disposition(value, limit) == "charge":
+                    reasons.append(f"{label} {value:+} mA > +{limit} mA (charging)")
         if reasons:
             found.append(finding(
                 "battery.member_span", span=span, observed=_observed(pub), expected=limits,
-                detail="; ".join(reasons), evidence=evidence, interval=interval))
-        if currents["assist"]:
-            found.append(_assist_finding(
-                span, source="registry", observed=_observed(pub), expected=-limit,
-                interval=interval, evidence=evidence, detail="; ".join(currents["assist"])))
+                detail="; ".join(reasons), evidence=pub["reading"].get("raw") or (),
+                interval={"monotonic_ns": [pub["monotonic_ns"], pub["monotonic_ns"]]}))
     for item in readings:
         # Every good registry read inside the span, a new publication or not:
         # a state change between publications (charging begins, the adapter is
@@ -864,6 +881,7 @@ def span_findings(readings: Sequence[Mapping[str, Any]], span: Mapping[str, Any]
                 observed={key: values.get(key) for key in ("update_time_s", "external_connected",
                                                            "is_charging")},
                 evidence=item.get("raw") or (), interval={"monotonic_ns": [moment, moment]}))
+    discharge_intervals: list[list[int]] = []
     for earlier, later in zip(in_force, in_force[1:]):
         delta = accumulator_interval(earlier["values"], later["values"])
         voltage = later["values"].get("voltage_mv") or earlier["values"].get("voltage_mv")
@@ -904,13 +922,13 @@ def span_findings(readings: Sequence[Mapping[str, Any]], span: Mapping[str, Any]
                 found.append(finding("battery.member_span", span=span,
                                      observed={**delta, "voltage_mv": voltage}, expected=limit_mw,
                                      interval=interval, detail=detail + " (charging)"))
-            else:
-                energy = {key: value for key, value in delta.items() if key.endswith("_energy_mw_ticks")}
-                found.append(_assist_finding(
-                    span, source="accumulator", expected=-limit_mw, interval=interval,
-                    observed={**{key: value for key, value in delta.items() if key not in energy},
-                              "voltage_mv": voltage},
-                    withheld=energy, detail=detail + " (battery assist)"))
+            else:  # discharge beyond the limit: battery assist, disclosed below
+                discharge_intervals.append(list(interval["monotonic_ns"]))
+    assist = assist_finding(readings, span, request, in_force, discharge_intervals, limit_ma=limit,
+                            smc_covered=smc_covered,
+                            hold_ns=int(limits.get("smc_max_gap_s", SMC_MAX_GAP_S) * 1_000_000_000))
+    if assist is not None:
+        found.append(assist)
     gap = coverage_gap([p["monotonic_ns"] for p in pubs], start, stop,
                        int(limits["max_unobserved_s"] * 1_000_000_000))
     if gap is not None:

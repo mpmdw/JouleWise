@@ -158,12 +158,15 @@ _DISCLOSE_CODES = {
     # to the registry InstantAmperage and is disclosed.
     "battery.smc_unavailable": _code("DIAGNOSTIC", "PHYSICS", DISCLOSE),
     # Battery-assist ruling (orchestrator, 2026-10-06): discharge on AC in a
-    # member's span (B0AC below -200 mA, or the registry fallback, or a
-    # discharge-accumulator mean beyond 200 mA x V) is disclosed, never
+    # member's measured request (B0AC below -200 mA, or the registry fallback,
+    # or a discharge-accumulator mean beyond 200 mA x V) is disclosed, never
     # excluded; charging, AC loss and missing evidence stay battery.member_span
     # / battery.unmeasured.  The discharged energy goes to withheld/, never
     # into the flag's observed fields.
     "battery.assist": _code("DIAGNOSTIC", "PHYSICS", DISCLOSE),
+    # The same when only the phases outside the measured request were
+    # assisted (ruling item 5: reported apart, decides nothing).
+    "battery.assist_outside_request": _code("DIAGNOSTIC", "PHYSICS", DISCLOSE),
     # The KM003C whole-machine DC-in stream (joulewise.external.km003c_parse):
     # a recorded diagnostic, never a refusal or a claim number.
     "meter.absent": _code("DIAGNOSTIC", "PHYSICS", DISCLOSE),

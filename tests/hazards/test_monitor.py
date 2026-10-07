@@ -523,13 +523,17 @@ class SmcMonitorTests(unittest.TestCase):
         request = {"monotonic_ns": [at + 5 * 10**9, at + 10 * 10**9]}
         all_found = monitor.member_findings(journals, span=inside, request=request)
         self.assertNotIn("battery.member_span", [f["code"] for f in all_found])
-        found = [f for f in all_found if f["code"] == battery.ASSIST]
+        # the burst is before the request: reported apart, not the member's assist marker
+        found = [f for f in all_found if f["code"] == battery.ASSIST_OUTSIDE_REQUEST]
         self.assertEqual(len(found), 1)
         phases = found[0]["observed"]["phases"]
-        self.assertEqual((found[0]["observed"]["source"], phases["span"]["min_current_ma"],
-                          phases["span"]["reads_below"]), ("smc", -865, 2))
-        # the burst is outside the request: reported apart, below the limit there
-        self.assertEqual(phases["request"]["reads_below"], 0)
+        self.assertEqual((found[0]["observed"]["current_source"], phases["pre_request"]["smc_min_ma"],
+                          phases["pre_request"]["smc_reads_below"]), ("smc", -865, 2))
+        self.assertEqual(phases["request"]["smc_reads_below"], 0)
+        # with the burst inside the request it is the member's assist marker
+        found = [f for f in monitor.member_findings(journals, span=inside, request=inside)
+                 if f["code"].startswith("battery.")]
+        self.assertEqual([f["code"] for f in found], [battery.ASSIST])
         later = {"monotonic_ns": [at + 30 * 10**9, at + 60 * 10**9]}
         self.assertEqual(monitor.member_findings(journals, span=later), [])
 

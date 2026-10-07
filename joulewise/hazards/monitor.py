@@ -804,7 +804,8 @@ def member_findings(journals: Mapping[str, Sequence[Mapping[str, Any]]], *,
 
     ``span`` is the member's sampler stream ``{"monotonic_ns": [start, stop]}``
     and ``request`` its request window (contention is judged on the request;
-    battery assist is reported for the span and the request apart); both in
+    battery assist is decided on the request and reported for the phases
+    around it); both in
     the controller's ``time.monotonic_ns`` domain.
     """
 
@@ -814,7 +815,7 @@ def member_findings(journals: Mapping[str, Sequence[Mapping[str, Any]]], *,
     found = []
     found += battery.span_findings(readings(journals.get("battery", ())), span,
                                    limits["battery"],
-                                   phases={"request": request} if request else None)
+                                   request=request)
     found += thermal.span_findings(readings(journals.get("thermal", ())), span,
                                    limits["thermal"])
     found += clock.span_findings(clock_samples(journals.get("clock", ())), span,

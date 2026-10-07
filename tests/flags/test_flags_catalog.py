@@ -118,7 +118,8 @@ EMITTED_BY_THIS_LANE = (
 EMITTED_BY_THE_SPAN_JOINS = (
     "battery.member_span", "battery.unmeasured", "battery.accumulator_excursion",
     "battery.accumulator_diagnostic", "battery.accumulator_activity", "battery.accumulator_unavailable",
-    "battery.smc_unavailable", "battery.assist", "thermal.os_level_nonzero", "thermal.unmeasured", "contention.request_overlap", "contention.unmeasured",
+    "battery.smc_unavailable", "battery.assist", "battery.assist_outside_request",
+    "thermal.os_level_nonzero", "thermal.unmeasured", "contention.request_overlap", "contention.unmeasured",
     "contention.kernel_task_share", "clock.step_overlap", "clock.step_overlap_calibration", "clock.unmeasured",
     "clock.systematic",
 )
