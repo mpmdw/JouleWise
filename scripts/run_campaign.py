@@ -7081,6 +7081,10 @@ def _idle_admission_core_evaluation(
     # NEG-8 ruling 2026-10-07 (registration 0.12): a reference the runner
     # recorded with a status other than succeeded is lost; the screen runs on
     # the survivors.  The loss test reads the runner's status, never an energy.
+    # A reference whose bundle exists but reads no status (no summary after a
+    # SIGKILL at the hung-process cap, an undecodable summary, a summary
+    # without a string status) is lost too, as ``summary_unreadable``: it has
+    # no energy to aggregate (cold pass 2 D1).
     neg8_lost: list[dict[str, Any]] = []
     for evaluation in evaluations:
         # Orchestrator ruling on audit-fix batch 1 item 6 (2026-10-07): on
@@ -7167,15 +7171,17 @@ def _idle_admission_core_evaluation(
             conditions.add("neg8_bracket_reference_invalid")
         elif (
             neg8_position in neg8_references
-            and isinstance(evaluation.status, str)
             and evaluation.status != "succeeded"
         ):
+            readable = isinstance(evaluation.status, str)
             neg8_lost.append(
                 {
                     "bundle_id": evaluation.bundle_id,
                     "position": neg8_position,
-                    "reason": "status_not_succeeded",
-                    "status": evaluation.status,
+                    "reason": (
+                        "status_not_succeeded" if readable else "summary_unreadable"
+                    ),
+                    "status": evaluation.status if readable else None,
                 }
             )
         elif neg8_position in neg8_references:

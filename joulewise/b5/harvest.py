@@ -91,9 +91,11 @@ NEG8_PHYSICS_LOSS_CODES = ("contention.request_overlap", "battery.member_span", 
 # unknown evidence never authorises an omission.
 NEG8_REFERENCE_LOSS_CODES = (*NEG8_PHYSICS_LOSS_CODES, "member.timeout", "member.admission_aborted",
                              "member.strict_validation_failed")
-# How a reference the verdict writer dropped for its status is named, when the
-# harvest has the member's own flag.
-NEG8_STATUS_LOSS_CODES = ("member.admission_aborted", "member.timeout", "member.status_not_succeeded")
+# How a reference the verdict writer dropped for its status (or an unreadable
+# summary) is named, when the harvest has the member's own flag.  The timeout
+# comes first: a member SIGKILLed at the hung-process cap has no summary, and
+# its timeout is the physical cause (cold pass 2 D1).
+NEG8_STATUS_LOSS_CODES = ("member.timeout", "member.admission_aborted", "member.status_not_succeeded")
 NEG8_BOUND_NAME = "neg8-drift-bound.json"      # in the bound runs root (the pack's bound-derivation output)
 HAZARD_RESULT_NAME = "hazard_result.json"      # L2's driver terminal record, night/
 ARM_DECISION_NAME = "arm_decision.json"        # joulewise.b5.driver ARM_DECISION, night/
@@ -4649,9 +4651,9 @@ class _Harvest:
                 continue
             run_id, slot = item.get("bundle_id"), item.get("position")
             reason = harvest_losses.get(run_id) if isinstance(run_id, str) else None
-            if reason is None and item.get("reason") == "status_not_succeeded":
+            if reason is None and item.get("reason") in ("status_not_succeeded", "summary_unreadable"):
                 reason = next((code for code in NEG8_STATUS_LOSS_CODES if code in flags_by_member.get(run_id, ())),
-                              "status_not_succeeded")
+                              item.get("reason"))
             measured = [spare for spare in spares.get(slot, []) if (members.get(spare) or {}).get("present")]
             rows.append({"run_id": run_id, "slot": slot, "reason": reason or item.get("reason"),
                          "status": item.get("status"),

@@ -271,9 +271,10 @@ class VerdictWriterSurvivorTests(unittest.TestCase):
         self.addCleanup(self._tmp.cleanup)
         self.root = Path(self._tmp.name)
 
-    def references(self, start, midpoint, end, *, failed=()):
+    def references(self, start, midpoint, end, *, failed=(), unreadable=None):
         from dataclasses import replace
 
+        unreadable = dict(unreadable or {})
         members = []
         for position, values in (("start", start), ("midpoint", midpoint), ("end", end)):
             for index, gross in enumerate(values, 1):
@@ -282,6 +283,10 @@ class VerdictWriterSurvivorTests(unittest.TestCase):
                                       idle_subtracted_energy_j=gross - 0.2, neg8_position=position)
                 if bundle_id in failed:
                     member = replace(member, status="failed", summary={"status": "failed"})
+                if bundle_id in unreadable:
+                    # ``_whole_window_member`` reads status None from an absent
+                    # or undecodable summary, or one with no string status.
+                    member = replace(member, status=None, summary=unreadable[bundle_id])
                 members.append(member)
         return members
 
@@ -324,12 +329,79 @@ class VerdictWriterSurvivorTests(unittest.TestCase):
         self.assertAlmostEqual(gross["trajectory_excursion_max_j"], 0.01, places=9)
         self.assertEqual(gross["drift_allowance_j"], gross["derived_repeatability_bound_j"])
 
+    def test_a_reference_with_no_readable_summary_is_lost_not_invalid(self) -> None:
+        """Cold pass 2 D1: a SIGKILLed member (no summary_metrics.json) reached the evaluator as None energy.
+
+        Before the fix the bracket was ``neg8_bracket_reference_invalid``,
+        decision failed, with no losses recorded.
+        """
+        for label, summary in (("summary_absent", None), ("summary_without_status", {"gross_energy_j": 8.0})):
+            with self.subTest(label):
+                members = self.references((8.00, 8.02, 7.98), (8.01,), (8.01, 8.03, 7.99),
+                                          unreadable={"neg8-start-r2": summary})
+                bracket = self.bracket(members)
+                self.assertNotIn("neg8_bracket_reference_invalid", bracket["conditions"])
+                self.assertEqual((bracket["endpoint_protocol"], bracket["decision"]),
+                                 (ww.NEG8_SURVIVOR_PROTOCOL, "passed"), bracket["conditions"])
+                self.assertEqual(bracket["reference_counts"], {"start": 2, "midpoint": 1, "end": 3})
+                self.assertEqual(bracket["reference_losses"], [{"bundle_id": "neg8-start-r2", "position": "start",
+                                                                "reason": "summary_unreadable", "status": None}])
+
+    def test_two_unreadable_end_references_fail_as_references_insufficient(self) -> None:
+        members = self.references((8.00, 8.02, 7.98), (8.01,), (8.01, 8.03, 7.99),
+                                  unreadable={"neg8-end-r1": None, "neg8-end-r2": None})
+        bracket = self.bracket(members)
+        self.assertEqual((bracket["decision"], bracket["survivor_screen"]), ("failed", "references_insufficient"))
+        self.assertNotIn("neg8_bracket_ambiguous_reference", bracket["conditions"])
+
     def test_a_full_trajectory_keeps_the_historical_bracket(self) -> None:
         bracket = self.bracket(self.references((8.00, 8.02, 7.98), (8.5,), (8.01, 8.03, 7.99)))
         self.assertEqual(bracket["endpoint_protocol"], "replicated_endpoints_with_midpoint")
         self.assertNotIn("reference_losses", bracket)
         self.assertNotIn("endpoint_counts", bracket["claim_families"][ww.NEG8_CLAIM_FAMILY_GROSS])
         self.assertAlmostEqual(bracket["claim_families"][ww.NEG8_CLAIM_FAMILY_GROSS]["drift_allowance_j"], 0.5)
+
+
+def write_unreadable_reference(hb, bundle, kind: str) -> None:
+    """A reference bundle with no readable summary, custody-bound as a real runner bundle is.
+
+    ``kind``: ``absent`` (the member child was SIGKILLed after the 1,800 s cap,
+    so no summary was finalized), ``malformed`` (undecodable bytes) or
+    ``no_status`` (a summary without a string status).
+    """
+    import hashlib
+
+    config_raw = hb.put(bundle / "config.json", {"run_id": bundle.name})
+    hb.put(bundle / "metadata.json", {"run_id": bundle.name,
+                                      "config_sha256": hashlib.sha256(config_raw).hexdigest()})
+    if kind == "malformed":
+        (bundle / "summary_metrics.json").write_bytes(b'{"status": "succ')
+    elif kind == "no_status":
+        hb.put(bundle / "summary_metrics.json", {"gross_energy_j": 30.32})
+    else:
+        assert kind == "absent", kind
+
+
+def real_strict_check_for(bundle_ids):
+    """Route ``_custody_strict_invalid`` to the real function for ``bundle_ids`` (inside ``neg8_reference_gates``)."""
+    import contextlib
+    from pathlib import Path
+    from unittest import mock
+
+    names = set(bundle_ids)
+    if not names:
+        return contextlib.nullcontext()
+    stubbed = ww._custody_strict_invalid  # the gates' stub: this is entered inside them
+
+    def strict(path, *args, **kwargs):
+        if path is not None and Path(path).name in names:
+            return REAL_CUSTODY_STRICT_INVALID(path, *args, **kwargs)
+        return stubbed(path, *args, **kwargs)
+
+    return mock.patch.object(ww, "_custody_strict_invalid", strict)
+
+
+REAL_CUSTODY_STRICT_INVALID = ww._custody_strict_invalid
 
 
 class ReplaySurvivorTests(unittest.TestCase):
@@ -346,26 +418,57 @@ class ReplaySurvivorTests(unittest.TestCase):
         self.addCleanup(self._tmp.cleanup)
         self.root = Path(self._tmp.name)
 
-    def derive(self, points, *, failed=(), exclude=None):
+    def derive(self, points, *, failed=(), exclude=None, unreadable=None):
         import json
 
         hb = self.hb
+        unreadable = dict(unreadable or {})
         members = []
         for bundle_id, role in hb.NEG8_REFERENCES:
             bundle = self.root / bundle_id
-            hb.put(bundle / "config.json", {"run_id": bundle_id})
-            hb.put(bundle / "metadata.json", {"run_id": bundle_id})
-            hb.put(bundle / "summary_metrics.json", {"status": "failed" if bundle_id in failed else "succeeded"})
+            if bundle_id in unreadable:
+                write_unreadable_reference(hb, bundle, unreadable[bundle_id])
+            else:
+                hb.put(bundle / "config.json", {"run_id": bundle_id})
+                hb.put(bundle / "metadata.json", {"run_id": bundle_id})
+                hb.put(bundle / "summary_metrics.json",
+                       {"status": "failed" if bundle_id in failed else "succeeded"})
             members.append({"execution": "invoked", "run_id": bundle_id, "bundle_ids": [bundle_id], "role": role,
                             "canonical_neg8_workload": True, "scientific_config_sha256": "d" * 64})
         policy_sha = hb.sha(hb.ROOT / hb.POLICY)
         raw = hb.put(self.root / hb.NEG8_REFERENCE_MANIFEST, {
             "schema_version": "joulewise.campaign_provenance.v1", "campaign_policy": {"sha256": policy_sha},
             "members": members})
-        with hb.neg8_reference_gates(points):
+        with hb.neg8_reference_gates(points), real_strict_check_for(unreadable):
             return ww._derived_neg8_decision(
                 [json.loads(raw)], self.root, ww._registered_bracket_policy(policy_sha), current=True,
                 point_drift=True, drift_bound_artifact=None, return_bracket=True, exclude_bundle_ids=exclude)
+
+    def test_a_reference_with_no_readable_summary_is_lost_in_both_harvest_passes(self) -> None:
+        """Cold pass 2 D1: ``rederive(None)`` returned ``bundle_strict_invalid`` and the window was excluded.
+
+        The bundle is custody-bound (``metadata.config_sha256`` binds its
+        config), so the real ``_custody_strict_invalid`` sees no summary class
+        and reports the triangle broken; the loss test must run first.
+        """
+        base = self.root
+        for kind in ("absent", "malformed", "no_status"):
+            with self.subTest(kind):
+                self.root = base / kind
+                for exclude, reason in ((None, "summary_unreadable"),
+                                        ({"b5t-neg8-start-2": "member.timeout"}, "member.timeout")):
+                    bracket, problem = self.derive(self.hb.neg8_trajectory(0.0), exclude=exclude,
+                                                   unreadable={"b5t-neg8-start-2": kind})
+                    self.assertIsNone(problem)
+                    # No bound is given here (as in the other replay tests), so only the shape is checked.
+                    self.assertEqual(bracket["endpoint_protocol"], ww.NEG8_SURVIVOR_PROTOCOL)
+                    self.assertNotIn("neg8_bracket_reference_invalid", bracket["conditions"])
+                    self.assertEqual(set(bracket["claim_families"]),
+                                     {ww.NEG8_CLAIM_FAMILY_GROSS, ww.NEG8_CLAIM_FAMILY_IDLE_SUBTRACTED})
+                    self.assertEqual(bracket["reference_counts"], {"start": 2, "midpoint": 1, "end": 3})
+                    self.assertEqual(bracket["reference_losses"], [{"bundle_id": "b5t-neg8-start-2",
+                                                                    "position": "start", "reason": reason,
+                                                                    "status": None}])
 
     def test_status_and_physics_losses_are_dropped_before_aggregation(self) -> None:
         points = self.hb.neg8_trajectory(0.0)
@@ -437,7 +540,8 @@ class HarvestSurvivorTests(_hb().WindowTestCase):
 
     ISOLATE = {**_hb().Neg8ScreenTests.ISOLATE}
 
-    def run_window(self, name, points, *, stored_points=None, reference_flags=(), corpus_flags=(), failed=()):
+    def run_window(self, name, points, *, stored_points=None, reference_flags=(), corpus_flags=(), failed=(),
+                   references=None, unreadable=()):
         import json
         from unittest import mock
 
@@ -446,28 +550,40 @@ class HarvestSurvivorTests(_hb().WindowTestCase):
         window = hb.Window(self.tmp / name, catalog_overrides=self.ISOLATE)
         self.assertIsNone(hb.neg8_corpus(window, list(failed)))
         bound = json.loads((window.bound / "neg8-drift-bound.json").read_bytes())
-        self.write_verdict(window, stored_points or points, bound)
+        self.write_verdict(window, stored_points or points, bound, references=references, unreadable=unreadable)
         injected = [(run_id, code) for run_id, code in (*reference_flags, *corpus_flags)]
 
         def meter(run):
             for run_id, code in injected:
                 run.emit(code, level="member", run_id=run_id, collector="monitor", observed={"injected": True})
 
-        with hb.neg8_reference_gates(points), mock.patch.object(h._Harvest, "meter_joins", meter):
+        with hb.neg8_reference_gates(points), real_strict_check_for(unreadable), \
+                mock.patch.object(h._Harvest, "meter_joins", meter):
             window.harvest()
         return window
 
     @staticmethod
-    def write_verdict(window, points, bound):
-        """As ``write_neg8_reference_verdict``, but the writer was given the window's bound."""
+    def write_verdict(window, points, bound, *, references=None, unreadable=()):
+        """As ``write_neg8_reference_verdict``, but the writer was given the window's bound.
+
+        ``references`` replaces the window's (bundle id, role) list (a spare is
+        one more member with its slot's role); a bundle in ``unreadable`` has
+        no summary (``write_unreadable_reference``).
+        """
         import hashlib
         import json
         from datetime import datetime, timezone
 
         hb = _hb()
+        references = tuple(references or hb.NEG8_REFERENCES)
         members = []
-        for bundle_id, role in hb.NEG8_REFERENCES:
+        for bundle_id, role in references:
             bundle = window.claim / bundle_id
+            if bundle_id in unreadable:
+                write_unreadable_reference(hb, bundle, "absent")
+                members.append({"execution": "invoked", "run_id": bundle_id, "bundle_ids": [bundle_id],
+                                "role": role, "canonical_neg8_workload": True, "scientific_config_sha256": "d" * 64})
+                continue
             hb.put(bundle / "config.json", {"run_id": bundle_id})
             hb.put(bundle / "metadata.json", {"run_id": bundle_id})
             hb.put(bundle / "summary_metrics.json", {"status": "succeeded"})
@@ -478,7 +594,7 @@ class HarvestSurvivorTests(_hb().WindowTestCase):
             "schema_version": "joulewise.campaign_provenance.v1", "campaign_policy": {"sha256": policy_sha},
             "members": members})
         completed_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-        with hb.neg8_reference_gates(points):
+        with hb.neg8_reference_gates(points), real_strict_check_for(unreadable):
             bracket, problem = ww._derived_neg8_decision(
                 [json.loads(raw)], window.claim, ww._registered_bracket_policy(policy_sha), current=True,
                 point_drift=True, drift_bound_artifact=bound, return_bracket=True,
@@ -491,7 +607,7 @@ class HarvestSurvivorTests(_hb().WindowTestCase):
             "campaign_policy": {"sha256": policy_sha},
             "row_provenance": {"source_campaign_manifests": [{"path": hb.NEG8_REFERENCE_MANIFEST,
                                                               "sha256": hashlib.sha256(raw).hexdigest()}]},
-            "bundle_ids": [bundle_id for bundle_id, _role in hb.NEG8_REFERENCES],
+            "bundle_ids": [bundle_id for bundle_id, _role in references],
             "member_failures": [],
             "idle_admission_core": {"conditions": sorted(bracket["conditions"]), "neg8_bracket": bracket}})
         return bracket
@@ -566,6 +682,45 @@ class HarvestSurvivorTests(_hb().WindowTestCase):
         self.assertEqual([row["run_id"] for row in flag["observed"]["lost"]], ["b5t-neg8-midpoint"])
         self.assertIn("neg8.reference_lost", window.codes())
         self.assertFalse({"neg8.midpoint_lost", "neg8.reference_lost"} & set(window.exclusions()["reasons"]))
+
+    def test_a_sigkilled_reference_with_no_summary_is_lost_and_the_window_kept(self) -> None:
+        """Cold pass 2 D1 trigger: start r2 SIGKILLed after the 1,800 s cap leaves no summary_metrics.json.
+
+        The runner flags it ``member.timeout`` and the harvest ``member.strict_validation_failed``.  With the
+        spare run and succeeded the survivors are (3, 1, 3); without it (2, 1, 3).  Both pass on the survivors.
+        Before the fix the authenticity re-derivation returned ``bundle_strict_invalid`` and the window carried
+        ``neg8.screen_failed`` (EXCLUDE_WINDOW).
+        """
+        hb = _hb()
+        killed = "b5t-neg8-start-2"
+        spare = ("b5t-neg8-start-spare-1", "neg8_daily_reference_start")
+        flags = [(killed, "member.timeout"), (killed, "member.strict_validation_failed")]
+        for label, references, counts in (
+                ("with_spare", (*hb.NEG8_REFERENCES, spare), {"start": 3, "midpoint": 1, "end": 3}),
+                ("without_spare", hb.NEG8_REFERENCES, {"start": 2, "midpoint": 1, "end": 3})):
+            with self.subTest(label):
+                points = self.points(0.0, **{spare[0]: 30.32})
+                window = self.run_window(f"sigkill-{label}", points, references=references, unreadable={killed},
+                                         reference_flags=flags)
+                self.assertNotIn("neg8.screen_failed", window.codes())
+                self.assertNotIn("neg8.screen_failed", window.exclusions()["reasons"])
+                stored = __import__("json").loads((window.claim / "whole-window-verdict.json").read_bytes())
+                bracket = stored["idle_admission_core"]["neg8_bracket"]
+                self.assertEqual((bracket["decision"], bracket["reference_counts"]), ("passed", counts))
+                self.assertEqual([(row["bundle_id"], row["reason"]) for row in bracket["reference_losses"]],
+                                 [(killed, "summary_unreadable")])
+                record = self.screen_record(window)
+                self.assertEqual(record["reference_counts"], counts)
+                self.assertEqual([(row["run_id"], row["reason"]) for row in record["lost"]],
+                                 [(killed, "member.timeout")])
+                lost = [flag for flag in window.flags() if flag["code"] == "neg8.reference_lost"]
+                if label == "with_spare":
+                    self.assertEqual(lost, [])
+                else:
+                    (flag,) = lost
+                    self.assertEqual(flag["observed"]["reference_counts"], counts)
+                    self.assertEqual([(row["run_id"], row["reason"]) for row in flag["observed"]["lost"]],
+                                     [(killed, "member.timeout")])
 
     def test_an_unmeasured_reference_is_kept(self) -> None:
         window = self.run_window("unmeasured", self.points(0.0),

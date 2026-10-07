@@ -4827,8 +4827,9 @@ def _derived_neg8_decision(
 
     On the current point-drift path the screen runs on the surviving
     references (NEG-8 ruling 2026-10-07, registration 0.12): a reference
-    whose stored summary records a status other than ``succeeded`` is lost
-    (the verdict writer drops the same references), and so is one named in
+    whose stored summary records a status other than ``succeeded``, or whose
+    summary does not read (``summary_unreadable``), is lost (the verdict
+    writer drops the same references), and so is one named in
     ``exclude_bundle_ids`` ({bundle_id: reason}, the harvest's physics and
     strict-validation losses).  The loss test never reads an energy.  Lost
     references go to the evaluator as ``lost_references``.
@@ -4919,14 +4920,20 @@ def _derived_neg8_decision(
                         if isinstance(stored_summary, Mapping)
                         else None
                     )
-                    # A recorded status other than succeeded is a loss; a summary
-                    # with no status falls through to the evidence checks below.
+                    # A recorded status other than succeeded is a loss, and so
+                    # is a summary that does not read (absent after a SIGKILL,
+                    # undecodable, or with no string status): the verdict
+                    # writer drops the same reference as ``summary_unreadable``
+                    # (cold pass 2 D1).  Both are decided here, before the
+                    # custody strict check, so a summary-less reference is
+                    # lost rather than failing the whole re-derivation.
                     reason = (
                         excluded[bundle_id]
                         if bundle_id in excluded
+                        else "summary_unreadable"
+                        if not isinstance(stored_status, str)
                         else "status_not_succeeded"
-                        if isinstance(stored_status, str)
-                        and stored_status != "succeeded"
+                        if stored_status != "succeeded"
                         else None
                     )
                     if reason is not None:
