@@ -432,6 +432,71 @@ class ExitSweepTests(unittest.TestCase):
         self.assertTrue(wait_not_running(child), "the child of the interrupted run is still running")
         self.assertTrue(wait_not_running(member), "the owned child's orphaned group member is still running")
 
+    TERMINATED = textwrap.dedent("""
+        import subprocess, sys, time, unittest
+        from tests import child_guard
+
+        class Terminated(unittest.TestCase):
+            def test_it(self):
+                child = subprocess.Popen(["/bin/sleep", "{long_s}"], stdout=subprocess.DEVNULL,
+                                         stderr=subprocess.DEVNULL)
+                self.addCleanup(child.kill)
+                leader = subprocess.Popen(["/bin/sh", "-c", "/bin/sleep {long_s} >/dev/null 2>&1 & echo $!; wait"],
+                                          stdout=subprocess.PIPE, text=True, start_new_session=True)
+                member = int(leader.stdout.readline())
+                print(child.pid, leader.pid, member, flush=True)
+                time.sleep({long_s})
+
+        {decorate}
+        unittest.main(argv=["terminated"])
+        """)
+
+    def terminated_run(self, *, guarded: bool) -> tuple[int, list[int]]:
+        script = self.TERMINATED.format(
+            decorate="child_guard.guard_test_classes(globals())" if guarded else "", long_s=LONG_S)
+        run = subprocess.Popen([sys.executable, "-B", "-c", script], cwd=REPO_ROOT, stdout=subprocess.PIPE,
+                               stderr=subprocess.DEVNULL, text=True)
+        child_guard.own(self, run)
+        self.addCleanup(run.stdout.close)
+        pids = [int(field) for field in run.stdout.readline().split()]
+        self.assertEqual(3, len(pids), "the run did not report its children")
+        for pid in pids:
+            self.addCleanup(lambda pid=pid: running(pid) and os.kill(pid, signal.SIGKILL))
+        run.send_signal(signal.SIGTERM)
+        return run.wait(timeout=60), pids
+
+    def test_without_the_guard_a_terminated_run_leaves_its_children(self):
+        # The control: SIGTERM kills the run at once; the child, the group leader and its member stay.
+        code, pids = self.terminated_run(guarded=False)
+        self.assertEqual(-signal.SIGTERM, code)
+        self.assertEqual([True, True, True], [running(pid) for pid in pids])
+
+    def test_with_the_guard_a_terminated_run_stops_its_children_and_still_dies_of_the_signal(self):
+        code, pids = self.terminated_run(guarded=True)
+        self.assertEqual(-signal.SIGTERM, code)
+        for pid, what in zip(pids, ("the child", "the group leader", "the group member")):
+            self.assertTrue(wait_not_running(pid), f"{what} of the terminated run is still running")
+
+    def test_a_forked_copy_of_a_guarded_run_keeps_the_default_action(self):
+        script = textwrap.dedent("""
+            import os, signal, sys, unittest
+            from tests import child_guard
+
+            class Forking(unittest.TestCase):
+                def test_it(self):
+                    self.assertIs(signal.getsignal(signal.SIGTERM), child_guard._sweep_then_die)
+                    pid = os.fork()
+                    if pid == 0:
+                        os._exit(0 if signal.getsignal(signal.SIGTERM) is signal.SIG_DFL else 9)
+                    self.assertEqual(0, os.waitstatus_to_exitcode(os.waitpid(pid, 0)[1]))
+
+            child_guard.guard_test_classes(globals())
+            unittest.main(argv=["forking"])
+            """)
+        run = subprocess.run([sys.executable, "-B", "-c", script], cwd=REPO_ROOT, capture_output=True,
+                             text=True, timeout=120)
+        self.assertEqual(0, run.returncode, run.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()

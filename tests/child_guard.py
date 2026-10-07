@@ -51,8 +51,11 @@ The exit sweep
     registered with ``addCleanup(child.kill)`` was still alive after the
     interrupted run exited. So importing this module registers an ``atexit``
     function that stops every child registered with ``own`` and every running
-    descendant when the interpreter exits. It cannot run when the test process
-    itself is killed by a signal it does not handle (SIGTERM, SIGKILL).
+    descendant when the interpreter exits. ``atexit`` functions do not run when
+    the process dies of a signal, so when the first guarded class starts, the
+    same sweep is also installed as the handler of SIGTERM and SIGHUP (what an
+    outer time limit or a closed terminal sends); after the sweep the process
+    dies of that signal as before. Nothing can run on SIGKILL.
 
 Not covered, by construction: a process that left this process's family (its
 parent exited, so its parent id is 1) and is not in a group led by a child
@@ -371,6 +374,26 @@ def owned(process, *, grace_s: float = DEFAULT_GRACE_S, tree: bool = False) -> I
         stop(process)
 
 
+def stop_worker(worker, *, grace_s: float = DEFAULT_GRACE_S) -> None:
+    """Terminate, wait, then kill one ``multiprocessing.Process`` (nothing to do once it has exited)."""
+
+    with contextlib.suppress(ValueError, AssertionError):   # a closed worker, or one never started
+        if worker.is_alive():
+            worker.terminate()
+            worker.join(grace_s)
+        if worker.is_alive():
+            worker.kill()
+            worker.join(KILL_WAIT_S)
+
+
+def own_worker(test, worker, *, grace_s: float = DEFAULT_GRACE_S):
+    """``own`` for a ``multiprocessing.Process``: stopped among the test's cleanups; returns ``worker``."""
+
+    register = test.addClassCleanup if isinstance(test, type) else test.addCleanup
+    register(stop_worker, worker, grace_s=grace_s)
+    return worker
+
+
 def stop_rows(rows: Iterable[Row], *, grace_s: float = DEFAULT_GRACE_S) -> None:
     """Terminate, wait, then kill the listed processes (a whole group where a row leads one)."""
 
@@ -408,6 +431,46 @@ def _exit_sweep() -> None:
 
 
 atexit.register(_exit_sweep)
+
+_SWEEP_SIGNALS = (signal.SIGTERM, signal.SIGHUP)
+_SIGNALS_ARMED = False
+
+
+def _sweep_then_die(number, _frame) -> None:
+    """SIGTERM or SIGHUP to the test process: run the exit sweep, then die of the same signal."""
+
+    if _getpid() == _HOME_PID:
+        _exit_sweep()
+    signal.signal(number, signal.SIG_DFL)
+    _kill(_getpid(), number)
+
+
+def _forked_child_keeps_the_default() -> None:
+    for number in _SWEEP_SIGNALS:
+        if signal.getsignal(number) is _sweep_then_die:
+            signal.signal(number, signal.SIG_DFL)
+
+
+def _arm_signal_sweep() -> None:
+    """Have a terminated test run stop its children before it dies (once, when a guarded class starts).
+
+    A runner killed by an outer time limit gets SIGTERM, and atexit functions
+    do not run for a signal that is not handled: measured 2026-10-07, a child
+    of a terminated run stayed alive. The handler is installed only where the
+    signal still has its default action, only from the main thread, and never
+    at import (a multiprocessing worker imports test modules too, and its
+    signals are the tests' business). A forked copy of this process gets the
+    default action back.
+    """
+
+    global _SIGNALS_ARMED
+    if _SIGNALS_ARMED or _getpid() != _HOME_PID or threading.current_thread() is not threading.main_thread():
+        return
+    _SIGNALS_ARMED = True
+    for number in _SWEEP_SIGNALS:
+        if signal.getsignal(number) is signal.SIG_DFL:
+            signal.signal(number, _sweep_then_die)
+    os.register_at_fork(after_in_child=_forked_child_keeps_the_default)
 
 
 # --------------------------------------------------------------------------
@@ -575,6 +638,7 @@ def fails_on_leftover_children(cls=None, *, settle_s: float = SETTLE_S):
         def setUpClass(inner):   # noqa: N802 (unittest hook)
             if inner in _GUARDED_CLASSES:   # an outer decoration already watches this class
                 return class_setup(inner)
+            _arm_signal_sweep()
             label = f"{inner.__module__}.{inner.__qualname__}"
             try:
                 known = {row.pid for row in running_descendants()}
