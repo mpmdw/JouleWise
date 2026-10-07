@@ -7213,7 +7213,13 @@ def _archive_bytes(
     ):
         return None
     try:
-        raw = (archive / expected_path).read_bytes()
+        # Through the governed reader, so an authenticated consumption
+        # session records the harvest bytes the claim's allowance rests on.
+        raw = read_authentication_input(
+            archive / expected_path,
+            grammar="json",
+            label=f"harvest archive {expected_path}",
+        )
     except OSError:
         return None
     return raw if hashlib.sha256(raw).hexdigest() == entry["sha256"] else None
@@ -7260,7 +7266,11 @@ def harvest_neg8_allowance_bracket(
         return None, "harvest_archive_required"
     archive = Path(archive_root)
     try:
-        harvest_record = json.loads((archive / "harvest.json").read_bytes())
+        harvest_record = json.loads(
+            read_authentication_input(
+                archive / "harvest.json", grammar="json", label="harvest record"
+            )
+        )
     except (OSError, UnicodeDecodeError, json.JSONDecodeError):
         return None, "harvest_record_unreadable"
     outputs = (
