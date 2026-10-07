@@ -502,15 +502,20 @@ class BudgetHelperTests(unittest.TestCase):
             # A child that ignores SIGTERM and a grandchild: both must be gone.
             script = (f"trap '' TERM; /bin/sleep 300 & echo $! > {pids}; echo $$ >> {pids}; wait")
             started = time.monotonic()
-            completed = self.run_helper(1, "/bin/sh", "-c", script, grace=1)
-            elapsed = time.monotonic() - started
-            self.assertEqual(b5_chain.BUDGET_EXPIRED_RC, completed.returncode, completed.stderr)
-            self.assertLess(elapsed, 30)
-            self.assertIn("wall budget 1 s expired", completed.stderr)
-            self.assertIn("survivors none", completed.stderr)
-            for pid in map(int, pids.read_text().split()):
-                with self.assertRaises(ProcessLookupError):
-                    os.kill(pid, 0)
+            try:
+                completed = self.run_helper(1, "/bin/sh", "-c", script, grace=1)
+                elapsed = time.monotonic() - started
+                self.assertEqual(b5_chain.BUDGET_EXPIRED_RC, completed.returncode, completed.stderr)
+                self.assertLess(elapsed, 30)
+                self.assertIn("wall budget 1 s expired", completed.stderr)
+                self.assertIn("survivors none", completed.stderr)
+                for pid in map(int, pids.read_text().split()):
+                    with self.assertRaises(ProcessLookupError):
+                        os.kill(pid, 0)
+            finally:
+                # If the helper under test ever fails to stop them, the shell that ignores SIGTERM
+                # and its 300 s sleeper would outlive the test; the three tests below already do this.
+                self._reap(pids)
 
     def test_a_missing_program_is_127(self):
         self.assertEqual(127, self.run_helper(5, "/nonexistent/program").returncode)
