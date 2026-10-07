@@ -16,6 +16,7 @@ import signal
 import subprocess
 import sys
 import textwrap
+import threading
 import time
 import unittest
 import warnings
@@ -368,6 +369,23 @@ class GuardTests(unittest.TestCase):
         self.assertEqual(1, len(run_class(Local).failures))
         self.assertEqual([], problems(run_class(Imported)))
         self.assertFalse(any(running(child.pid) for child in kept))
+
+    def test_short_probes_started_by_a_helper_thread_are_not_leftovers(self):
+        # A thread that outlives the test and starts a 0.2 s process again and again: at every
+        # look some process is running, but never the same one, so nothing was left behind.
+        stop = threading.Event()
+
+        def probe():
+            while not stop.is_set():
+                subprocess.Popen(["/bin/sleep", "0.2"]).wait()
+
+        thread = threading.Thread(target=probe, daemon=True)
+        try:
+            result = self.guarded(lambda inner: thread.start())
+        finally:
+            stop.set()
+            thread.join(timeout=10)
+        self.assertEqual([], problems(result))
 
     def test_a_skipped_test_leaves_no_recorder_open(self):
         before = len(child_guard._RECORDERS)

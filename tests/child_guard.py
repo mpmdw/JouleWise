@@ -563,14 +563,20 @@ def left_spawns(spawns: Iterable[Spawn], settle_s: float = SETTLE_S) -> list[Spa
 
 
 def left_descendants(known: Iterable[int], settle_s: float = SETTLE_S) -> list[Row]:
-    """Running descendants of this process that are not in ``known``, after ``settle_s``."""
+    """Descendants of this process, not in ``known``, that are running now and still running after ``settle_s``.
+
+    Only a process seen at the first look can count. A helper thread that
+    starts a short probe now and then shows a different process at each look;
+    none of them is a process left behind.
+    """
 
     known = set(known)
     deadline = _monotonic() + settle_s
     left = running_descendants(known=known)
     while left and _monotonic() < deadline:
         _sleep(0.1)
-        left = running_descendants(known=known)
+        still = {row.pid for row in running_descendants(known=known)}
+        left = [row for row in left if row.pid in still]
     return left
 
 
