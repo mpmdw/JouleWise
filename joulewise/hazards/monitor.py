@@ -389,9 +389,11 @@ class Monitor:
             reader = self.frequency_reader
             self.next_frequency_ns = now + int(self.cadence["frequency_s"] * 1e9)
         item = clock.sample(self.ctx, frequency_reader=reader)
+        values = {"anchor": item["anchor"], "frequency": item["frequency"]}
+        if item.get("rejected_anchors"):  # preempted reads (R3-1): kept, never compared
+            values["rejected_anchors"] = item["rejected_anchors"]
         self._write("clock", "reading", started=item["started"], finished=item["finished"],
-                    values={"anchor": item["anchor"], "frequency": item["frequency"]},
-                    error=item["error"])
+                    values=values, error=item["error"])
 
     def _smc_read(self) -> Mapping[str, Any]:
         with self._smc_lock:
@@ -771,7 +773,8 @@ def last_line_stamp(custody_dir: Path | str, *, pid: int) -> dict[str, int] | No
 def clock_samples(lines: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
     return [{"started": line["started"], "finished": line["finished"],
              "anchor": (line.get("values") or {}).get("anchor"),
-             "frequency": (line.get("values") or {}).get("frequency"), "error": line.get("error")}
+             "frequency": (line.get("values") or {}).get("frequency"), "error": line.get("error"),
+             "rejected_anchors": (line.get("values") or {}).get("rejected_anchors")}
             for line in lines if line.get("kind") == "reading"]
 
 

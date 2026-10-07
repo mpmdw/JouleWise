@@ -280,6 +280,110 @@ class WindowEventTests(unittest.TestCase):
         self.assertIn("clock.unmeasured", [f["code"] for f in clock.span_findings(samples, span)])
 
 
+class PreemptedReadTests(unittest.TestCase):
+    """Mock rehearsal round 3, R3-1: a ps child preempted the monitor's anchor
+    read (RAW, REALTIME, RAW) for 3.9-8.3 ms, and the anchor error read as a
+    false clock.step / clock.step_overlap.  No wall-clock step happens here."""
+
+    def journal(self, preempt: dict[int, list[int]], seconds: int = 60):
+        clocks = FakeClocks()
+        reader = FrequencyReader(clocks)
+        ctx = base.Context(run=boot_runner(), clocks=clocks)
+        samples = []
+        for second in range(seconds):
+            clocks.preempt_ns = list(preempt.get(second, ()))
+            samples.append(clock.sample(ctx, frequency_reader=reader if second % 5 == 0 else None))
+            clocks.preempt_ns = []
+            clocks.sleep(1.0)
+        return samples
+
+    def test_the_bound_is_a_quarter_of_the_step_threshold(self):
+        self.assertEqual(clock.window_skew_max_ns(LIMITS["step_ns"]), 250_000)
+        self.assertEqual(clock.WINDOW_SKEW_MAX_NS, 250_000)
+        self.assertLess(clock.WINDOW_SKEW_MAX_NS, LIMITS["step_ns"])
+
+    def test_a_preempted_anchor_read_is_re_read_and_gives_no_step(self):
+        # One 8.3 ms preemption at 30 s (the rehearsal's worst): the second read is clean.
+        samples = self.journal({30: [8_300_000]})
+        self.assertEqual(clock.window_events(samples), [])
+        self.assertEqual([read["read_skew_ns"] for read in samples[30]["rejected_anchors"]],
+                         [8_300_400])
+        self.assertLessEqual(samples[30]["anchor"]["read_skew_ns"], clock.WINDOW_SKEW_MAX_NS)
+        self.assertIsNone(samples[30]["error"])
+        mid = samples[30]["finished"]["monotonic_ns"]
+        span = {"monotonic_ns": [mid - 5 * 10**9, mid + 5 * 10**9]}
+        self.assertEqual(clock.span_findings(samples, span), [])
+
+    def test_every_read_preempted_is_unmeasured_never_a_step(self):
+        samples = self.journal({30: [3_900_000, 8_300_000, 5_000_000, 4_000_000, 6_000_000]})
+        self.assertIsNone(samples[30]["anchor"])
+        self.assertTrue(samples[30]["error"].startswith("clock.unmeasured"))
+        self.assertEqual(len(samples[30]["rejected_anchors"]), clock.ANCHOR_TRIES)
+        self.assertEqual(clock.window_events(samples), [])
+        mid = samples[30]["finished"]["monotonic_ns"]
+        span = {"monotonic_ns": [mid - 5 * 10**9, mid + 5 * 10**9]}
+        found = clock.span_findings(samples, span)
+        self.assertEqual([f["code"] for f in found], ["clock.unmeasured"])
+        self.assertEqual(found[0]["observed"]["rule"], "read_skew")
+        # a member clear of the preempted sample is clean
+        clear = {"monotonic_ns": [mid + 10 * 10**9, mid + 20 * 10**9]}
+        self.assertEqual(clock.span_findings(samples, clear), [])
+
+    def test_a_recorded_anchor_over_the_bound_is_never_compared(self):
+        # A journal written before the re-read (or by any other writer): the
+        # 8.3 ms anchor stays in the record but is skipped, not read as a step.
+        # The anchor is 4.15 ms low, as an 8.3 ms preemption after the REALTIME read leaves it.
+        samples = self.journal({})
+        samples[30] = dict(samples[30], anchor=dict(samples[30]["anchor"],
+                                                   anchor_ns=samples[30]["anchor"]["anchor_ns"] - 4_150_000,
+                                                   read_skew_ns=8_300_400))
+        self.assertEqual(clock.window_events(samples), [])
+        mid = samples[30]["finished"]["monotonic_ns"]
+        span = {"monotonic_ns": [mid - 5 * 10**9, mid + 5 * 10**9]}
+        self.assertEqual([f["code"] for f in clock.span_findings(samples, span)], ["clock.unmeasured"])
+
+    def test_a_real_step_next_to_a_preempted_read_is_still_seen(self):
+        clocks = FakeClocks()
+        clocks.step_at(30.5, 2_000_000)
+        reader = FrequencyReader(clocks)
+        ctx = base.Context(run=boot_runner(), clocks=clocks)
+        samples = []
+        for second in range(60):
+            clocks.preempt_ns = [8_000_000] * clock.ANCHOR_TRIES if second == 30 else []
+            samples.append(clock.sample(ctx, frequency_reader=reader if second % 5 == 0 else None))
+            clocks.preempt_ns = []
+            clocks.sleep(1.0)
+        events = clock.window_events(samples)
+        self.assertEqual([event["code"] for event in events], ["clock.step"])
+        self.assertAlmostEqual(events[0]["observed"], 2_000_000, delta=1_000)
+
+    def test_the_monitor_journals_the_preempted_reads(self):
+        from joulewise.hazards import monitor
+        lines = [{"kind": "reading", "started": item["started"], "finished": item["finished"],
+                  "values": {"anchor": item["anchor"], "frequency": item["frequency"],
+                             **({"rejected_anchors": item["rejected_anchors"]}
+                                if item.get("rejected_anchors") else {})},
+                  "error": item["error"]}
+                 for item in self.journal({30: [8_300_000] * clock.ANCHOR_TRIES})]
+        samples = monitor.clock_samples(lines)
+        self.assertEqual(len(samples[30]["rejected_anchors"]), clock.ANCHOR_TRIES)
+        self.assertEqual(clock.window_events(samples), [])
+
+    def test_the_arm_dwell_keeps_its_own_1_ms_bound(self):
+        clocks = FakeClocks()
+        ctx = base.Context(run=boot_runner(), clocks=clocks)
+        clocks.preempt_ns = [600_000]  # over the in-window bound, under the arm's
+        item = clock.sample(ctx, frequency_reader=FrequencyReader(clocks),
+                            max_skew_ns=LIMITS["skew_max_ns"])
+        self.assertEqual(item["anchor"]["read_skew_ns"], 600_400)
+        self.assertNotIn("rejected_anchors", item)
+        # the instant read re-reads a preempted anchor against 1 ms too
+        clocks.preempt_ns = [3_000_000]
+        measurement = clock.measure(ctx, frequency_reader=FrequencyReader(clocks))
+        self.assertEqual(clock.judge(measurement, LIMITS).status, base.PASS)
+        self.assertEqual(measurement.values["rejected_anchors"][0]["read_skew_ns"], 3_000_400)
+
+
 @unittest.skipUnless(sys.platform == "darwin", "reads the real kernel clock (macOS)")
 class LiveReadOnlyTests(unittest.TestCase):
     def test_real_anchor_frequency_and_boot_read_without_privileges(self):
