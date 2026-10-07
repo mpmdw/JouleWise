@@ -30,6 +30,7 @@ from tests.test_arm_readiness_lifecycle import (
     predecessor_pack_root,
 )
 from tests.test_arm_readiness_schemas import TEST_BOOT_SESSION_ID
+from tests import child_guard
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -1484,6 +1485,11 @@ class ArmReadinessEvidenceAuthorTests(unittest.TestCase):
                     ),
                     ("PASS", False, result["receipt_sha256"]),
                 )
+
+
+# Test hygiene (2026-10-07): a test or class in this module that leaves a child process running
+# is reported as failed, and the child is stopped (tests/child_guard.py).
+child_guard.guard_test_classes(globals())
 
 
 if __name__ == "__main__":
