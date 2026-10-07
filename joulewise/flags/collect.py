@@ -547,7 +547,10 @@ def head_change_class(path: str, pin_only: Iterable[str] = DEFAULT_PIN_ONLY_PATH
         return "pin_only"
     if path in SEAL_DOCUMENT_PATHS:
         return "seal_document"
-    if path.startswith(WINDOW_INPUT_PREFIXES) or path in WINDOW_INPUT_FILES:
+    # Letter case is ignored here: the measurement Mac's volume does not
+    # distinguish case, so a tracked "Joulewise/x.py" lands in joulewise/.
+    folded = path.casefold()
+    if folded.startswith(WINDOW_INPUT_PREFIXES) or folded in WINDOW_INPUT_FILES:
         return "window_input"
     return "record_only"
 

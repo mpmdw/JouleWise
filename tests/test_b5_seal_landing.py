@@ -126,6 +126,8 @@ def seal_landing_problems(repo: Path, *, inventory: str = INVENTORY, roots: tupl
 class RepositorySealLandingTests(unittest.TestCase):
     def test_the_committed_inventory_is_the_stub_or_a_correct_landing(self):
         state, problems = seal_landing_problems(ROOT)
+        if state == "sealed" and _git(ROOT, "rev-parse", "--is-shallow-repository").stdout.strip() == b"true":
+            self.skipTest("a shallow clone may not hold H_claim; the landing is checked in a full clone (CI fetches all history)")
         self.assertIn(state, ("stub", "sealed"))
         self.assertEqual(problems, [])
 

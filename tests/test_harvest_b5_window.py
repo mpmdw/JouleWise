@@ -3253,6 +3253,8 @@ class IdentityReplayTests(WindowTestCase):
                          ("joulewise.b5_code_identity.v1", "identical", H_CLAIM, H_CLAIM, "sealed_inventory", H_CLAIM))
         self.assertEqual(identity["sealed_inventory_sha256"],
                          sha(window.archive / "sources" / "inputs" / "sealed_inventory.json"))
+        # The driver ran from the measurement checkout itself: no second checkout to record.
+        self.assertIsNone(identity["driver_checkout"])
         self.assertEqual(record["outputs"]["derived/code-identity.json"],
                          sha(window.archive / "derived" / "code-identity.json"))
 
@@ -3279,10 +3281,10 @@ class IdentityReplayTests(WindowTestCase):
                                         f"{H_CLAIM}..{self.EXECUTED_HEAD}"])
 
     def test_a_changed_window_input_after_the_seal_is_still_a_difference(self):
+        # One path of each kind: code, configuration no per-file check covers, and the
+        # chain-source runbook.  tests.flags.test_flags_collect classes every other kind.
         for index, relative in enumerate((
-                "joulewise/b5t_stub.py", "scripts/new_tool.py", f"configs/campaigns/{PACK_ID}/plan_tree.json",
-                f"{SEALED_DIR}/flag_catalog.json", f"{SEALED_DIR}/identity_pins.json", POLICY,
-                "docs/phase_2/window_runbook.md")):
+                "joulewise/b5t_stub.py", f"{SEALED_DIR}/identity_pins.json", "docs/phase_2/window_runbook.md")):
             with self.subTest(relative):
                 window = Window(self.tmp / f"input-{index}", catalog_overrides=self.ISOLATE,
                                 executed_overrides={"head": self.EXECUTED_HEAD})
@@ -3304,6 +3306,24 @@ class IdentityReplayTests(WindowTestCase):
         self.assertIn("code.identity_unmeasured", window.exclusions()["reasons"])
         self.assertNotIn("code.executed_differs_from_sealed", window.codes())
         self.assertEqual(self.code_identity_record(window)["comparison"], "git_diff_unavailable")
+
+    def test_a_separate_driver_checkout_is_recorded_and_raises_no_flag(self):
+        """The driver ran from another checkout whose copy of one code file differs from the sealed bytes."""
+        window = self.window()
+        path = window.custody / "night" / "executed_inventory.json"
+        value = json.loads(path.read_bytes())
+        code = {relative: digest for relative, digest in value["measurement_checkout"]["files"].items()
+                if relative.startswith(("joulewise/", "scripts/"))}
+        value["driver_checkout"] = {"root": "/elsewhere/driver", "head": "c" * 40, "status_porcelain": "",
+                                    "status_clean": True, "errors": [],
+                                    "files": {**code, "joulewise/b5t_stub.py": "f" * 64}}
+        put(path, value)
+        window.harvest()
+        self.assertNotIn("code.executed_differs_from_sealed", window.codes())
+        self.assertNotIn("code.identity_unmeasured", window.codes())
+        self.assertEqual(self.code_identity_record(window)["driver_checkout"], {
+            "root": "/elsewhere/driver", "head": "c" * 40, "status_clean": True, "file_count": len(code),
+            "files_differing_from_sealed": ["joulewise/b5t_stub.py"], "files_differing_from_sealed_count": 1})
 
     def test_the_real_git_history_of_a_seal_landing(self):
         """The whole landing against real git: H_claim, the seal commit, a records commit; then a counterfactual.

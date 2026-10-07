@@ -187,7 +187,10 @@ def head_change_class(relative: str) -> str:
         return "pin_only"
     if relative in SEAL_DOCUMENT_PATHS:
         return "seal_document"
-    if relative.startswith(WINDOW_INPUT_PREFIXES) or relative in WINDOW_INPUT_FILES:
+    # Letter case is ignored here: the measurement Mac's volume does not
+    # distinguish case, so a tracked "Joulewise/x.py" lands in joulewise/.
+    folded = relative.casefold()
+    if folded.startswith(WINDOW_INPUT_PREFIXES) or folded in WINDOW_INPUT_FILES:
         return "window_input"
     return "record_only"
 
@@ -5611,8 +5614,10 @@ class _Harvest:
         sealed, sealed_head = _inventory_map(sealed_value)
         executed_path = inputs.executed_inventory_path
         executed = executed_head = porcelain = None
+        driver_checkout: Any = None
         if executed_path is not None and executed_path.is_file():
             value = read_json(executed_path)
+            driver_checkout = value.get("driver_checkout") if isinstance(value, Mapping) else None
             executed, executed_head = _inventory_map(value)
             porcelain = _inventory_checkout(value).get("status_porcelain")
             if not executed:
@@ -5708,6 +5713,23 @@ class _Harvest:
         if unmeasured:
             self.emit("code.identity_unmeasured", level="window", collector="code_identity",
                       observed={"unmeasured": unmeasured})
+        # The driver, the hazard modules, the monitor and the collectors run from
+        # the checkout that installed the launch agent.  When that is not the
+        # measurement checkout the driver inventories it separately (L2,
+        # ``driver_checkout``).  It is recorded here with the number of its code
+        # files that differ from the sealed inventory; it raises no flag
+        # (registration: the agents are installed from the measurement checkout).
+        head_record["driver_checkout"] = None
+        if isinstance(driver_checkout, Mapping):
+            driver_files = driver_checkout.get("files") if isinstance(driver_checkout.get("files"), Mapping) else {}
+            differing = None if sealed is None else sorted(
+                relative for relative in set(sealed) | set(driver_files)
+                if relative.startswith(CODE_PREFIXES) and sealed.get(relative) != driver_files.get(relative))
+            head_record["driver_checkout"] = {
+                "root": driver_checkout.get("root"), "head": driver_checkout.get("head"),
+                "status_clean": driver_checkout.get("status_clean"), "file_count": len(driver_files),
+                "files_differing_from_sealed": None if differing is None else differing[:64],
+                "files_differing_from_sealed_count": None if differing is None else len(differing)}
         # Written last: the flags above stand even if this record cannot be written.
         self.outputs["derived/code-identity.json"] = write_json_once(self.derived / "code-identity.json", head_record)
 

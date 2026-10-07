@@ -452,6 +452,12 @@ class CheckoutIdentityTests(FixtureCase):
             "README.md": "record_only",
             "joulewise.md": "record_only",
             "configs.md": "record_only",
+            # The measurement Mac's volume does not distinguish letter case.
+            "Joulewise/evil.py": "window_input",
+            "CONFIGS/campaign_policies/policy.json": "window_input",
+            "Docs/Phase_2/Window_Runbook.md": "window_input",
+            "configs/calibration/Calibration_Ledger_Head.json": "window_input",
+            "configs/campaigns/v5_claim_25g83/Sealed_Inventory.json": "window_input",
         }
         for relative, klass in expected.items():
             with self.subTest(relative):
