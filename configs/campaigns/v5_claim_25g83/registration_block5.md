@@ -610,8 +610,12 @@ build to corral weaker models working on this".
   the result is UNMEASURED). (2) `sudo -n systemsetup -setusingnetworktime on`; its output is recorded only.
   (3) Poll the anchor at 1 Hz for up to 300 s until the residual moves more than 5 ms. (4) Evaluate the clock
   module's own arm check (§4.2) on the before/after pair; a REFUSE whose measured residual exceeds 1 ms is
-  **DISCHARGED**. (5) Keep network time ON while reading f each minute; switch OFF when |f| ≤ 3.0 ppm or 15 min after
-  ON. OFF always runs, including on an exception or a SIGTERM or SIGHUP. (6) Write `night/g10.json` write-once.
+  **DISCHARGED**. (5) Keep network time ON while reading f each minute; switch OFF at the first read, at least 60 s
+  after ON, at which the next arm's frequency gate (§4.2: 3.7 ms + (|f| + 0.25 ppm) × T_stream_max ≤ 5 ms) would pass,
+  or 15 min after ON. (Revision 4's |f| ≤ 3.0 ppm target sat below this machine's own f of about −3.17 ppm, so it
+  would always have run the full 15 min; each read still records whether |f| ≤ 3.0 ppm. PLAN2 item S7,
+  `scripts/g10_clock_step_control.py` at `b9d02700a`.) OFF always runs, including on an exception or a SIGTERM or
+  SIGHUP. (6) Write `night/g10.json` write-once.
 - *Why it should discharge.* With network time OFF the wall clock's offset from a time server was about 1.15 s on
   2026-10-05 and grows about 0.3–0.5 s per day (gate-prune plan §4), so turning network time ON one night later
   corrects roughly 1.3–1.8 s, far above 5 ms.
@@ -619,15 +623,25 @@ build to corral weaker models working on this".
   `g10.interrupted`, `g10.error`). It touches no ALPHA-1 number, because each member carries its own anchor bound. A
   result other than DISCHARGED goes to one consult before BETA arms.
 - *Frequency redraw.* G10 leaves a new f. If the next arm's frequency gate refuses (§4.2), the desk redraws f before
-  re-arming: network time ON; read f once a minute; OFF as soon as |f| ≤ 3.0 ppm or after 15 min; re-read f 10 min
-  later; up to three cycles, then a consult. This loop reads only the frequency word, never an energy.
+  re-arming: network time ON; read f once a minute; OFF at the first read, at least 60 s after ON, at which the
+  frequency gate passes, or after 15 min; re-read f 10 min later; up to three cycles, then a consult. This loop reads
+  only the frequency word, never an energy.
 
 **a1 and a2 (the arm-then-abort controls) retire.** Their two physical questions are answered without a window:
 does a refusal before launch leave nothing launched and nothing changed (the driver's tests inject each hazard
 REFUSE and compare the ledger, `~/Library/LaunchAgents`, the custody roots and the network-time state before and
 after; the desk dry arm of §2 item 6), and does arming run end to end on native output (every real arm writes
-`hazards/arm.json`). The watchdog's stand-down (the supervising process asks every agent session to exit, then
-terminates and kills any that remain, at t0 − 8, −6 and −5 min) is recorded live at ALPHA-1's arm.
+`hazards/arm.json`). The watchdog's stand-down is recorded live at ALPHA-1's arm.
+
+**Stand-down leads.** *Forcing problem:* the agent census at t0 (§4.5) refuses the window if any agent session is
+alive, so every session must be gone by t0; but every second of agent-free idle before t0 is time the machine does
+nothing, and the arm's own dwell measures contention after t0 anyway. The supervising watchdog
+(`scripts/magistrate_watchdog.py` at `b9d02700a`, P2-WD) therefore stops launching sessions and asks every agent
+session to exit at t0 − 180 s, sends SIGTERM to any that remain at t0 − 90 s, and SIGKILL at t0 − 60 s (revision 4:
+t0 − 8, −6 and −5 min, about 450 s of idle; now about 125 s). *Why these numbers:* real sessions took 20–31 s to
+exit after the request (c1, c2 and the d117 magistrate events), so a request at t0 − 180 s leaves about 150 s of
+margin, and the watchdog's 10 s poll gives 9 polls between request and SIGTERM and 3 between SIGTERM and SIGKILL. A
+session that survives all three is refused by the t0 census, which stays the backstop.
 
 **s1 (the one-quad qualification window) becomes ALPHA-1.** ALPHA-1 contains everything s1 had: pre calibration, the
 NEG-8 corpus and bound, references, null quads and post calibration. s1's structural checks run at ALPHA-1's harvest
@@ -641,16 +655,19 @@ finalization; the p42 precheck counts; the longest and shortest stream sizes; st
 Everything below runs inside the launchd job after t0, so no person or agent session is present.
 
 1. **Agent census** (§4.5).
-2. **Instant reads:** battery, thermal, disk, and the clock's frequency gate.
+2. **Instant reads:** battery, thermal, disk, and the clock's frequency gate; then the OS build and machine model
+   against the acceptance's judged epochs (§4.7).
 3. **Network time OFF, as an action** (§4.4).
 4. **Record-only collectors:** the executed-file inventory, the model-identity check, and the checkout identity,
    each in a subprocess with a timeout. Their findings are flags (§6); they never change the arm decision.
 5. **Instrument cadence probe:** about 40 s.
-6. **Dwell:** 600 to 2700 s, during which contention and clock linearity are measured.
+6. **Dwell:** 180 to 2700 s, during which contention and clock linearity are measured.
 7. **Final reads** of battery, thermal and the frequency word, and the agent census again; then GO; then the monitor
    starts; then the chain launches.
 
-The chain therefore starts 11–47 min after t0. A refusal at any step ends the attempt as NULL (§7.1) with nothing
+The chain therefore starts about 4–47 min after t0: about 41 s of reads, collectors and cadence probe, then a dwell
+of 180 s at the least and 2,700 s at the most (revision 4: 11–47 min, with a 600 s minimum dwell). A refusal at any
+step ends the attempt as NULL (§7.1) with nothing
 launched. The arm writes `<custody>/hazards/arm.json` write-once with every measurement, verdict and raw-byte digest.
 
 ### 4.2 The six hazards
@@ -666,7 +683,14 @@ the longest streams exceed the 5 ms bound (§0.14).
   (iii) Each anchor read pair is taken within 1 ms. (iv) f is identical at dwell start, dwell end and GO; any change
   means something adjusted the clock.
 - *In window:* the monitor journals the anchor at 1 Hz and f every 5 s. A residual move of more than 1 ms between
-  consecutive samples is a `clock.step`; a change of f is `clock.frequency_changed`.
+  consecutive samples is a `clock.step`; a change of f is `clock.frequency_changed`. Each anchor sample is three
+  reads in a row, RAW, REALTIME, RAW; its **read skew** is the time between the two RAW reads. *Forcing problem:* in
+  mock rehearsal round 3 a `ps` probe pre-empted the monitor between those reads, giving skews of 3.9–8.3 ms, and the
+  residual computed from such a sample moved by more than 1 ms with no clock step, so the harvest recorded false
+  `clock.step` and `clock.step_overlap` (finding R3-1). P3 (lane P3-HAZ) re-reads a sample whose skew exceeds a bound
+  well under the 1 ms step limit, up to a fixed number of tries, and then records the sample as unmeasured
+  (`clock.unmeasured`, DISCLOSE), never as a step (`FILL[P3-CLOCK-SKEW-BOUND]`, §13). A real step moves every later
+  sample, so a skipped sample cannot hide one.
 - *Replaces:* the 8 ppm sizing convention of revision 2 and the network-time OFF receipt's wording check. There is
   no resync at the arm: the wall clock's absolute offset enters no energy, because the anchor fit and every phase
   edge use relative times.
@@ -730,10 +754,21 @@ to the model; idle admission screens only the idle baseline before the request. 
   CPU time between two `ps` snapshots, not from the decaying `%CPU`. *Worked example:* a process whose cumulative
   CPU time goes from 12.40 s to 13.10 s across a 10 s interval used 0.07 CPU-s/s, above the 0.05 limit (5% of one
   core).
-- *Arm (the dwell):* 30 s intervals; an interval is clean when no outside process exceeds 0.05 CPU-s/s, including
-  `kernel_task`. GO needs 600 s of consecutive clean intervals; none within 2700 s refuses.
-- *In window:* every 10 s. `kernel_task` is excluded in the window, because its time during a request is the
-  workload's own driver and I/O work; its share is journaled and disclosed. The member rule is §6.4.
+- *Arm (the dwell):* 30 s intervals; an interval is clean when no outside process exceeds 0.05 CPU-s/s. GO needs
+  180 s (six intervals) of consecutive clean intervals; none within 2,700 s refuses. *Why 180 s, not revision 4's
+  600 s* (PLAN2 finding t2-08; `joulewise/hazards/contention.py` `HAZARD_ARM_CLEAN_S` at `b9d02700a`): no number
+  depends on the dwell. Each member's idle admission screens its own baseline, the monitor checks contention every
+  10 s through the window, and a persistent contender still fails the 0.05 limit in every interval and is refused at
+  the cap. The dwell also carries the clock's linearity check, and 180 s still sees a step or a timed slew: a slew of
+  500 ppm over 180 s moves the clock 90 ms, ninety times the 1 ms limit. Under revision 4 the dwell took 633–1,477 s;
+  the change saves at least 420 s per window. (The legacy prewindow dwell, `prewindow.MIN_CLEAN_DWELL_S`, keeps its
+  600 s; only the hazard arm changed.)
+- *`kernel_task`.* An unprivileged `ps` never lists `kernel_task` (process id 0; checked 2026-10-05), so neither the
+  dwell nor the window can judge it by name. Its work is inside the host's total busy time, which every interval
+  journals (`host_busy_cpu_s_per_s`) and nothing judges: `aggregate_cpu_limit_s_per_s` is null (§4.3) until ALPHA-1's
+  journal measures this Mac's idle total under a launchd job. (Revision 4 said the dwell included `kernel_task` and
+  the window disclosed its share; neither could happen.)
+- *In window:* every 10 s. The member rule is §6.4.
 
 **Disk.** *Forcing problem:* a write failure mid-window loses bytes.
 - *Measurement:* `statvfs` free bytes on the runs-root volume and each backup destination.
@@ -767,7 +802,7 @@ by the window's own values (§5.5); the values shown are ALPHA's.
                  "skew_max_ns": 1000000, "residual_max_ns": 1000000, "step_ns": 1000000},
   "battery":    {"limit_ma": 200, "max_update_age_s": 180, "max_unobserved_s": 120},
   "thermal":    {"max_level": 0, "max_gap_s": 15},
-  "contention": {"cpu_limit_s_per_s": 0.05, "interval_s": 30, "clean_s": 600, "cap_s": 2700,
+  "contention": {"cpu_limit_s_per_s": 0.05, "interval_s": 30, "clean_s": 180, "cap_s": 2700,
                  "window_interval_s": 10, "aggregate_cpu_limit_s_per_s": null},
   "disk":       {"planned_bytes": 22710059008, "headroom_bytes": 21474836480, "low_bytes": 10737418240},
   "instrument": {"frames": 300, "bound_s": 55.0, "median_ms_max": 150.0, "max_ms_max": 200.0}
@@ -776,6 +811,12 @@ by the window's own values (§5.5); the values shown are ALPHA's.
 
 `aggregate_cpu_limit_s_per_s: null` means the whole-machine CPU total is journaled at the dwell but not judged; only
 the per-process limit decides.
+
+`clean_s` is 180 in revision 5 (was 600). The hazard module's default is already 180 at `b9d02700a`, but the arm
+judges the value the window plan copied from this block (`joulewise/b5/driver.py` `_arm_thresholds`), and the plan
+writer records any copied value that differs from a module default. So the change takes effect only in plans written
+from this block after the seal: any window plan or plan-input template written earlier carries 600 and must be
+regenerated (`FILL[B5-PLANS-REGENERATED]`, §13).
 
 ### 4.4 Network time
 
@@ -839,8 +880,11 @@ Load average, process-name lists and the `corecaptured` spawn count, which revis
    path, `<checkout>/runs/calibration_observation_ledger.jsonl`, because the controller's pre-calibration route reads
    that path; the plan writer refuses at the desk if the plan names another. Before each arm the desk runs the
    read-only ledger readiness check; a session left open by an abandoned attempt is closed with the existing abort
-   plus a committed pin advance. For each later attempt the seed is the previous attempt's harvested terminal ledger,
-   whose tip the merged pin advance names.
+   plus a pin advance. For each later attempt the seed is the previous attempt's harvested terminal ledger, whose tip
+   the pin advance names. A pin advance is a pin-only commit made in the measurement checkout (H_claim plus pin-only
+   commits, §0.18, §11), not a merged pull request: the merge path took 15–60 min per window for a one-file data
+   change (PLAN2 X4). The order stays harvest, then pin advance, then the next arm, because the harvest reads the live
+   ledger and an append before it would drop the harvested window from it.
 
 A change to any item after the seal needs a prospective cold erratum before the next arm (§10).
 
@@ -854,17 +898,68 @@ the pack's interior references in their places (the midpoint reference in every 
 diagnostic interior references, §0.12); the end triplet; the post calibration and a record of the bracket
 session's status. Every collection stage starts with its own 60 s settle (§0.6; block 3 used 180 s).
 
-- **The only stops**, all before member 1 (about 13 min into the chain): a failed reservation, a failed pre
-  calibration capture, and a pre fiducial bound above the pre screen 0.036462861644980 s
-  (`instrument.precal_screen_failed`). Outside the chain, the driver stops it on `disk.low`, on a non-clean census
-  and at the window deadline (§5.5).
+- **The only stops**, all before member 1 (about 13 min into the chain): a failed reservation (chain exit 10), a
+  failed pre calibration capture (exit 11), and a pre fiducial bound above the pre screen 0.036462861644980 s
+  (`instrument.precal_screen_failed`, exit 12). The driver records such a window as CHAIN_STOPPED, not GO (§5.7).
+  Outside the chain, the driver stops it on `disk.low`, on a non-clean census, when the monitor has written no
+  battery or contention reading for about 10 min (`monitor.outage`, PLAN2 row 11), and at the window deadline
+  (§5.5).
 - Every other stage records its return code and the chain continues. A chain that reaches its end exits 0 whatever
   its stages returned; the flags, not the return code, decide claim use.
+- **Operator countdowns: 0 s, except 20 s at the post calibration** (registered deviation 5, §10; P2-CHAIN,
+  `joulewise/b5/chain.py` `COLLECTION_ARM_COUNTDOWN_S`, `CALIBRATION_ARM_COUNTDOWN_S`). Each pack stage passes
+  `--arm-countdown-s 20`, a pause written for an operator to step away from the machine before collection. A window
+  runs headless, and every collection stage and the pre calibration already follow a 60 s settle, so the pause waits
+  for nothing: the chain passes 0 on the ten collection stages and the pre slot, saving 11 × 20 = 220 s per window.
+  The post calibration keeps 20 s because no settle precedes it: it follows the last end-triplet member directly.
+- **The window calibration verdict, computed once** (P2-CHAIN and P2-CTL, interface J1). *Forcing problem:* the
+  timing estimator's fit of the pre calibration (the **refit**: re-running the pulse fit on the stored 90 MB raw
+  capture) is a constant of the window, because its inputs are the same bytes for every member. Yet each member
+  recomputed it three times, about 13.5–15 s each: in the child before the run, in the child's reduction, and in the
+  parent's strict validation, 357 times per ALPHA window. *Mechanism:* right after the pre-calibration screen the
+  chain runs the refit once (`scripts/b5_window_calibration_verdict.py`) and writes the create-once file
+  `<claim runs root>/instrument_validation/window_calibration_verdict.json`, holding the SHA-256s of the calibration
+  evidence, its manifest, the raw capture, its events and the estimator's code files, and the effective fiducial
+  bound. A member uses it only when every digest equals that of its own installed copy and the bound is finite and at
+  least the stored bound; otherwise it refits as before and records `calibration.refit_cache_miss` (DISCLOSE). It
+  never refuses. The harvest never reads this file: it refits from the raw bytes itself. Saving: 1,654 s before the
+  runs and 1,642 s in the reductions per ALPHA window (PLAN2 M1, M2), about 0.92 h.
+- **Wall budgets on non-member stages** (PLAN2 row 8, `STAGE_WALL_BUDGET_S`): bracket reservation 900 s, pre
+  calibration capture 1,800 s, window calibration verdict 600 s, the corpus-retry decision 300 s, the collected-corpus
+  copy 1,800 s, the bound derivation 1,800 s, the session-status record 600 s, each chain flag record 120 s. On
+  expiry the stage's process tree gets SIGTERM, then SIGKILL 30 s later, and the stage records return code 124; the
+  chain continues as after any failure of that stage. The post calibration capture has no budget: it must be allowed
+  to finish, or the window loses its bracket.
+- **The collection deadline** (PLAN2 row 17; `chain.py` `CALIBRATION_HORIZON_S`, `HORIZON_*`). *Forcing problem:* a
+  bracket is fresh for 24 h from the pre calibration capture, and the window's deadline (§5.5, 26.9 h for ALPHA) is
+  longer. A chain that overran past 24 h would lose its bracket, and with it the whole window, not just a tail. The
+  deadline cannot simply be lowered: it is the driver's kill time, and a kill loses the post calibration.
+  *Mechanism:* a collection stage, the corpus retry and the bound derivation launch only when now + the stage's
+  allowance ≤ pre-capture start + 86,400 s − 1,430 s. The 1,430 s reserve is a 60 s settle, the 770 s calibration
+  pair allowance and 600 s of margin. A collection stage's allowance is 60 s settle + 180 s stage overhead + its
+  members × 620 s (at least block 4's largest member allowance, 619 s). Once one stage is refused (return code 75),
+  every later stage is skipped, the chain goes to the post capture, and `roster.horizon_truncated` (DISCLOSE) is
+  recorded once; the units lost are then judged by the cell minimum like any other loss. *Worked example:* a
+  20-member stage needs 60 + 180 + 20 × 620 = 12,640 s, so it launches only if it starts within 84,970 − 12,640 =
+  72,330 s (20.1 h) of the pre capture. A normal ALPHA chain reaches its last stage 5–9 h after the pre capture
+  (§5.5), so this fires only on a chain running more than twice its slowest expected length.
+- **One retry of the NEG-8 corpus** (PLAN2 row 13; `chain.py` `NEG8_RETRY_MINIMUM`). *Forcing problem:* a corpus
+  with fewer than 10 succeeded members cannot give a bound, so the window is lost about 1 h into the chain while the
+  chain runs about 7 h more. *Mechanism:* when fewer than 10 of the 12 corpus members succeeded, the corpus stage runs
+  once more into the same bound root, inside the collection deadline. The campaign runner skips a member whose bundle
+  succeeded, refuses (never re-measures, never replaces) a member whose bundle exists and failed, and measures a
+  member that has no bundle. So the retry recovers exactly the members refused before their bundle existed (a
+  blocked cooldown, a lineage read failure), never a member that was measured and failed. Each member it measures is
+  recorded `member.retried` (DISCLOSE). There is no drain (no early jump to the end references): a window whose corpus
+  still has fewer than 10 is removed by `neg8.bound_not_derived` and collects the rest as data. *Worked example:*
+  members 4, 5 and 6 are refused before their bundles exist and member 9 is aborted by idle admission (a failed
+  bundle), so 8 of 12 succeeded. The retry measures 4, 5 and 6, each flagged `member.retried`, and leaves 9 alone. If
+  all three succeed, 11 have succeeded and the bound is derived from those 11 (§5.3).
 - The bracket binding and the whole-window verdict are not chain stages. The harvest produces them at the desk with
   the production writers (`prepare_desk_verdict`). The backups are not chain stages either: they are a desk step after
   the harvest (§5.6).
 
-### 5.2 A failed member costs only itself
+### 5.2 A failed member costs only itself, and only up to 30 minutes
 
 Every science and auxiliary stage in the committed packs passes `--max-failures 1`, so one admission abort today
 drops the rest of a 20-member stage. The chain writer passes `--max-failures <the stage's expected member count>`
@@ -872,6 +967,25 @@ instead. This is a **registered deviation** from the pack bytes (§10). The plan
 (`abort_window_on_any_required_member_failure` in ALPHA and BETA, `abort_window_and_demote_to_non_claim_bearing` in
 GAMMA) is read only by the retired freeze author (`arm_readiness_evidence.py`); it is superseded by the flag catalog
 and disclosed, not regenerated.
+
+**The member cap** (PLAN2 row 8; `scripts/run_campaign.py` `HAZARD_MEMBER_CAP_S` at `b9d02700a`). *Forcing problem:*
+no member had a wall-clock limit. A hung member held the chain until the window deadline, whose kill then lost the
+post calibration and so the whole window, plus about 15 h of machine time; on 2026-09-16 a blocked file open held a
+driver for 11 h. *Mechanism:* a member's child process gets 1,800 s. On expiry it gets SIGTERM, then SIGKILL 30 s
+later, to its whole process tree; the runner proves no sampler process of that member is left, writes a `timeout`
+row, records `member.timeout` (EXCLUDE_MEMBER) and goes on to the next member. After 2 consecutive timed-out members
+the stage drains: only end references still run, then the post calibration. *Why 1,800 s:* the longest member the
+sizing allows is an 8B member with both admission attempts and the cooldown at its cap, 619 s, plus 77 s of
+bookkeeping; block 3's longest member cycle was 274.9 s. 1,800 s is 2.6 times the first, so it cuts only a member
+that is not progressing.
+
+**Strict validation moves to the harvest** (PLAN2 M3; P2-RC). In revision 4 the runner strictly validated each bundle
+right after it was written: a fresh reduction including a third refit, about 28–30 s per member, all of which the
+harvest repeats. Now the runner checks each bundle's structure only (files present and hashed, the config binding,
+the prompt hash, the custody identity) and records `strict_validation: "deferred_to_harvest"`; the harvest runs the
+full strict validation on every bundle, and a failure is `member.strict_validation_failed` (EXCLUDE_MEMBER) as
+before. The runner's stage-end verdict row is labelled provisional, and its idle-admission summary
+`deferred_to_desk`: nothing in block 5 reads it. Saving: about 3,475 s plus 655 s per ALPHA window.
 
 ### 5.3 The NEG-8 corpus may lose up to two members
 
@@ -918,10 +1032,21 @@ Structure (decisions, conditions, member counts, digests) goes to `derived/neg8-
 ### 5.4 The window's tail
 
 After the post calibration: the chain exits; the driver proves the chain's process group gone (a census of the
-group with no signal, then the existing termination proof); the monitor stops; G10 runs if the plan asks (§3); the
-driver writes its terminal record. The harvest may open as soon as that terminal record exists (§7.1), because the
-driver holds nothing after it. The supervising watchdog does not yet release the window at that point (§5.5,
-§14 Q8).
+group with no signal, then the existing termination proof); the monitor and the meter stop, no sooner than 5 s after
+the chain exited (§0.17); G10 runs if the plan asks (§3); the driver writes its terminal record with the window's
+yield (§5.7). The harvest may open as soon as that terminal record exists (§7.1), because the driver holds nothing
+after it.
+
+**The watchdog releases a finished window at once** (PLAN2 X1; `scripts/magistrate_watchdog.py` at `b9d02700a`,
+P2-WD). *Forcing problem:* in revision 4 the watchdog treated a window as running until t0 + `WINDOW_MAX_S` + 300 s
+even after its chain had exited, and launched no headless session meanwhile, so the machine sat idle about 15 h after
+every chain. *Mechanism:* the watchdog releases the window's hold, once and for good (a one-way latch keyed on the
+plan id, the custody root and the SHA-256 of `result.json`), when it sees on one tick: `chain.started` and
+`chain.exited`; the driver's terminal `result.json` with this plan's id and a finite end time no later than now;
+`courier.sent`; and an empty agent census and no driver process. The same release applies to a NULL window and to a
+CHAIN_STOPPED one. A driver that never wrote its first record is released through a create-once
+`night/launch_abandoned.json`. A failed courier keeps the old dead-man timing. After the release, `WINDOW_MAX_S`
+bounds only a hung chain or a dead driver.
 
 ### 5.5 Sizing
 
@@ -929,93 +1054,103 @@ driver holds nothing after it. The supervising watchdog does not yet release the
   ALPHA's is 314 s (its members are all 1.7B-class), and BETA's and GAMMA's are 335 s (their 8B members). It sets
   every pack's `T_stream_max_s` to the block's longest, 335 s, at which the frequency gate passes for
   |f| ≤ 3.6306 ppm.
-- **Programmed span.** The programmed span is the chain's length if every member takes its longest allowed path.
-  The rule keeps block 4's conventions and uses block 5's chain:
-  - span = (1 + collection stages) × 60 s settle + the stages' 20 s arm countdowns + the pre and post calibration
-    pair (770 s) + the bound derivation (60 s) + the sum of member allowances + stage custody + the terminal shutdown
-    (300 s);
+- **Programmed span.** The programmed span is the chain's length if every member takes its longest allowed path. The
+  rule keeps block 4's conventions and uses the chain at `b9d02700a` (`scripts/size_b5_window.py`, its
+  `conventions` list):
+  - span = (1 + collection stages) × 60 s settle + the collection stages' countdowns (0 s, §5.1) + the pre and post
+    calibration pair (770 s) + the bound derivation (320 s) + the corpus prune (320 s) + the window calibration
+    verdict (60 s) + the sum of member allowances + stage custody + the terminal shutdown (300 s) + one corpus retry;
   - a **member allowance** is load + warm-up + prefill + forced decode + the cooldown at its 300 s cap + both
     idle-admission attempts (275 s: two attempts of 110 s each plus guards, against an observed attempt maximum of
     103.6 s at the former 750 records). That is 595 s for a 1.7B member and 619 s for an 8B member. NEG-8 and
     reference members are charged as 1.7B members. These allowances come from block 4's committed source, which
-    predates the 576-record idle baseline (§0.3); an attempt now takes about 83 s (75 s of capture plus block 3's
-    8 s of attempt overhead), so the allowance over-covers it and is kept;
+    predates the 576-record idle baseline (§0.3); an attempt now takes about 83 s (75 s of capture plus block 3's 8 s
+    of attempt overhead), so the allowance over-covers it and is kept;
   - **stage custody** (the bookkeeping time around members) is 180 s per collection stage, plus 77 s per member
     (45 s reduction, 32 s sampler start and wind-down), plus 2 × 240 s bracket-writer custody, 300 s reservation and
-    120 s terminal custody.
-- **`WINDOW_MAX_S`**, the window's deadline measured from t0, = 60 × ceil((span + 3300 s) / 60). The 3300 s is the
-  arm's allowance: the dwell cap of 2700 s plus the census, reads, network-time OFF, collectors and cadence probe.
-- **`B5-SIZING-OUTPUTS`** (filled; draft values, re-derived and sealed at H_claim):
+    120 s terminal custody;
+  - **one corpus retry** (§5.1) is charged as one more corpus stage: 60 s settle + 180 s overhead + 12 × (595 + 45 +
+    32) s = 8,304 s;
+  - the **bound derivation** is now charged 320 s, not block 4's 60 s: a real derivation re-reduces 12 bundles,
+    about 270–320 s (PLAN2 §1.4 item 6; never measured live). The **corpus prune**, which asks the NEG-8 mint which
+    corpus members it would drop (§5.3), reads the same 12 bundles and is charged the same. The **window calibration
+    verdict** (§5.1) is charged 60 s for one refit of about 15 s.
+- **`WINDOW_MAX_S`**, the window's deadline measured from t0, = 60 × ceil((span + 3,300 s) / 60). The 3,300 s is the
+  arm's allowance: the dwell cap of 2,700 s plus the census, reads, network-time OFF, collectors and cadence probe.
+- **`B5-SIZING-OUTPUTS`** (draft values at the integration head `b9d02700a`; re-derived and sealed at H_claim):
   `configs/campaigns/v5_claim_25g83/sizing_b5.json`, schema `joulewise.b5_sizing.v1`, SHA-256
-  `b31a27b5433306f08aa22ff6eec8842b74d085410816fc60f7f72ae22b935edb` after the timing lane (`f4cf9047`; it was
-  `9d16edfe…` at `f8164893`) (status `UNSEALED_DRAFT`).
-  `scripts/size_b5_window.py` writes it from block 4's committed sizing source
+  `a5c6ec05c8cd0df84b7ee2c8e21709d17a96f87a5de5cfdbf711087e2944ca52` at `b9d02700a` (status `UNSEALED_DRAFT`;
+  `7c53ebc8…` on lane L10's branch with the older sizer, `b31a27b5…` after the timing lane `f4cf9047`, `9d16edfe…` at
+  `f8164893`). The next integration merges L10 and re-derives it with the current sizer; the value in force is the
+  one sealed at H_claim. `scripts/size_b5_window.py` writes it from block 4's committed sizing source
   (`configs/campaigns/v5_qualification_25g83/sizing_sources/sizing_source_v2.json`, SHA-256
   `f414301cd0328236f9309962b60ff4635026dac973ca3b0ce564b677c47baa81`) and from the packs' stage graphs, order
-  manifests and configs. `--check` reproduces the file byte for byte. The program also refuses unless its
-  arithmetic reproduces block 4's committed 22,494 s span and 25,800 s window. Block 4's source names four GAMMA
-  configs to fix which model is 1.7B-class and which 8B; the timing lane's regeneration changed their bytes (their
-  `idle_seconds` and plan tag), so the program reads them at the bytes GAMMA's plan tree now records and lists them
-  under `class_map.superseded_block4_configs`; bytes recorded by neither still refuse. Each window plan reads
-  `/packs/<label>/programmed_span_s` and `/packs/<label>/T_stream_max_s` from it. GAMMA's pack changes before GAMMA-1
-  (§2), so GAMMA's row is re-derived then.
+  manifests and configs. `--check` reproduces the file byte for byte. The program also refuses unless its arithmetic
+  reproduces block 4's committed 22,494 s span and 25,800 s window. Block 4's source names four GAMMA configs to fix
+  which model is 1.7B-class and which 8B; the timing lane's regeneration changed their bytes (their `idle_seconds` and
+  plan tag), so the program reads them at the bytes GAMMA's plan tree now records and lists them under
+  `class_map.superseded_block4_configs`; bytes recorded by neither still refuse. Each window plan reads
+  `/packs/<label>/programmed_span_s` and `/packs/<label>/T_stream_max_s` from it. Lane L10 changes only GAMMA's
+  plan-tree digest and the two diagnostic stages' order-manifest paths and digests; the members per class (61 / 40),
+  the programmed span and `WINDOW_MAX_S` do not change, because each diagnostic stage is still one auxiliary member
+  of the reference class.
 
-  | Pack | Members, 1.7B-class / 8B | Programmed span | `WINDOW_MAX_S` | Expected chain (below) |
-  |---|---|---|---|---|
-  | ALPHA | 119 / 0 | 84,658 s (23.5 h) | 87,960 s (24.4 h) | 30,944 s (8.6 h) |
-  | BETA | 19 / 100 | 87,058 s (24.2 h) | 90,360 s (25.1 h) | 31,994 s (8.9 h) |
-  | GAMMA | 61 / 40 | 73,522 s (20.4 h) | 76,860 s (21.4 h) | 27,107 s (7.5 h) |
+  | Pack | Members, 1.7B-class / 8B | Programmed span | `WINDOW_MAX_S` | Expected chain, block-3 basis | Expected chain, projected |
+  |---|---|---|---|---|---|
+  | ALPHA | 119 / 0 | 93,402 s (25.9 h) | 96,720 s (26.9 h) | 31,584 s (8.8 h) | 19,460 s (5.4 h) |
+  | BETA | 19 / 100 | 95,802 s (26.6 h) | 99,120 s (27.5 h) | 32,634 s (9.1 h) | 20,510 s (5.7 h) |
+  | GAMMA | 61 / 40 | 82,266 s (22.9 h) | 85,620 s (23.8 h) | 27,747 s (7.7 h) | 17,426 s (4.8 h) |
 
-- **Why the deadline is about 2.7 times the expected chain.** The rule charges every member, at once, both worst
-  cases: the cooldown runs to its cap and idle admission needs its second attempt. *Worked decomposition, ALPHA:*
-  119 members × 595 s = 70,805 s. Of that, 35,700 s is every member's cooldown at its 300 s cap and 32,725 s is
-  every member's two admission attempts. Per-member custody adds 119 × 77 = 9,163 s. Settles, countdowns,
-  calibration, derivation, stage custody and shutdown add the other 4,690 s, for a span of 84,658 s. Block 3 measured
-  a start-to-start member cycle, which already includes cooldown and custody, with a median of 236.5 s and a maximum
-  of 274.9 s. Each member here is charged 672 s (595 + 77).
+- **Why the deadline is about three times the expected chain.** The rule charges every member, at once, both worst
+  cases: the cooldown runs to its cap and idle admission needs its second attempt; and it charges a corpus retry that
+  most windows never run. *Worked decomposition, ALPHA:* 119 members × 595 s = 70,805 s, of which 35,700 s is every
+  member's cooldown at its 300 s cap and 32,725 s is every member's two admission attempts. Per-member custody adds
+  119 × 77 = 9,163 s; the corpus retry 8,304 s; settles, calibration, derivation, prune, the window calibration
+  verdict, stage custody and shutdown the other 5,130 s; span 93,402 s. Block 3 measured a start-to-start member
+  cycle, cooldown and custody included, with a median of 236.5 s and a maximum of 274.9 s; each member here is
+  charged 672 s (595 + 77).
 - **Is that right? As a deadline, yes.** A chain stopped at its deadline loses its post calibration, and so the
   whole window. The deadline must therefore never cut a slow window that could still be claim-usable. A chain
   anywhere near this bound would have most members at the cooldown cap, and `member.cooldown_cap_hit` removes such
-  members, so that window would fail the 8-of-10 minimum anyway. The generous size cannot cut a usable window and
-  touches no number.
-- **What it costs: withdrawn claim.** Revision 3 said a large `WINDOW_MAX_S` costs nothing because the harvest opens
-  at chain exit. The code says otherwise. The supervising watchdog (`scripts/magistrate_watchdog.py`,
-  `plan_span_active`) treats a window's plan as active until t0 + `WINDOW_MAX_S` + 300 s, even after `chain.exited`
-  exists. While any plan is active it launches no **headless agent session**, meaning a model session that the
-  watchdog starts with no person present, which is how unattended work resumes after a window. The watchdog records
-  this hold as `FENCED`. The dead-man job, the second scheduled job that cleans up if the driver dies, is timed from
-  the same instant. ALPHA's chain normally ends 8.8–9.4 h after t0 (an 11–47 min arm plus an 8.6 h chain), but the
-  fence holds until 24.5 h after t0. That leaves about 15 h in which the machine is idle and no headless session may
-  run the harvest or arm BETA. Across the three windows, that is about 44 h.
-- **Fix (code, before ALPHA-1; §14 Q8).** End a collected window's span at the driver's terminal evidence:
-  `chain.exited`, the driver's terminal `result.json`, `courier.sent` (the marker that the driver's structure-only
-  notice went out), and no driver process alive. The watchdog already releases a delivered refusal that captured
-  nothing on the same kind of evidence: the terminal `result.json`, `courier.sent`, and an empty census and driver
-  probe. After the fix, `WINDOW_MAX_S` bounds only a hung chain or a dead driver, and the size
-  above costs only the time to notice one. Shrinking the size is not proposed: it would save hang-detection time
-  only, and every cut would risk stopping a usable window.
-- **Expected chain time** (planning only; it gates nothing). From block 3 at 75 s idle: median start-to-start member
-  cycle 236.5 s, plus 10.5 s for an 8B member; per collection stage 60 s settle + 39 s head + 62 s tail; fixed
-  60 s settle + 770 s calibration pair + 60 s bound derivation + 300 s terminal (scratch `sizing_v2.json`, SHA-256
-  `6a82745f47b40c8aa1ea6aefe2c45c2d4cce2b7a7e65d114165057e64fae00de`). Each pack has 10 collection stages.
-  - ALPHA: 1,190 + 10 × 161 + 119 × 236.5 = 30,944 s ≈ 8.6 h.
-  - BETA: 1,190 + 1,610 + 19 × 236.5 + 100 × 247.0 = 31,994 s ≈ 8.9 h.
-  - GAMMA: 1,190 + 1,610 + 61 × 236.5 + 40 × 247.0 = 27,107 s ≈ 7.5 h.
-  The member cycle above is block 3's, measured with 750 idle records and block 3's cooldown rule. The timing
-  ruling projects, from replays of block-3 traces, that each ALPHA window saves about 1.4 h through the cooldown
-  rule, 0.8 h through the shorter idle capture and, once a later lane halves the software time between members,
-  0.7 h more; these are projections, not measurements, and the table does not include them.
-  Each window adds its 11–47 min arm. (The gate-prune plan's 9.1, 9.4 and 8.0 h include a 360 s launch allowance that
-  is no longer inside the chain.)
+  members, so that window would fail the 8-of-10 minimum anyway. The deadline now exceeds the 24 h calibration
+  horizon; the collection deadline (§5.1) keeps the post calibration inside the horizon, so a slow chain is truncated
+  to a usable tail rather than killed. Since the watchdog releases a finished window at once (§5.4), the generous
+  size costs only the time to notice a hung chain or a dead driver.
+- **Expected chain time** (planning only; it gates nothing). Two figures:
+  - *Block-3 basis* (measured, an upper planning figure). Block 3's median start-to-start member cycle at 750 idle
+    records, 236.5 s, plus 10.5 s for an 8B member; per collection stage 60 s settle + 39 s head + 62 s tail (block-3
+    maxima); fixed 60 s pre-calibration settle + 770 s calibration pair + 320 s bound derivation + 320 s corpus prune
+    + 60 s window calibration verdict + 300 s terminal = 1,830 s (scratch `sizing_v2.json`, SHA-256
+    `6a82745f47b40c8aa1ea6aefe2c45c2d4cce2b7a7e65d114165057e64fae00de`). Each pack has 10 collection stages.
+    - ALPHA: 1,830 + 10 × 161 + 119 × 236.5 = 31,584 s ≈ 8.8 h.
+    - BETA: 1,830 + 1,610 + 19 × 236.5 + 100 × 247.0 = 32,634 s ≈ 9.1 h.
+    - GAMMA: 1,830 + 1,610 + 61 × 236.5 + 40 × 247.0 = 27,747 s ≈ 7.7 h.
+  - *Projected* (not measured; built from the measured block-3 mean cycle and the savings of the changes now in the
+    code). Block 3's mean start-to-start cycle was 257.1 s (PLAN2 §1.1). Per member, subtract 22.9 s for the
+    576-record idle baseline (2,725 s over 119 members, timing ruling), 41.0 s for the 2× cooldown rule (mean wait
+    53.9 → 9.1 s over 109 cooldowns, 4,883 s over 119 members, timing ruling) and 56.9 s for the refit done once and
+    strict validation moved to the harvest (1,654 + 1,642 + 3,475 s over 119 members, PLAN2 M1–M3): 136.3 s for a
+    1.7B member, 146.8 s for an 8B member. Per collection stage subtract the 20 s countdown (assuming, as PLAN2's
+    budget does, that it ran inside the 39 s head): 141 s. The stage-end verdict saving (PLAN2 S4, about 655 s per
+    window) is not subtracted, because the 62 s tail is not decomposed.
+    - ALPHA: 1,830 + 10 × 141 + 119 × 136.3 = 19,460 s ≈ 5.4 h.
+    - BETA: 1,830 + 1,410 + 19 × 136.3 + 100 × 146.8 = 20,510 s ≈ 5.7 h.
+    - GAMMA: 1,830 + 1,410 + 61 × 136.3 + 40 × 146.8 = 17,426 s ≈ 4.8 h.
+  ALPHA-1 measures which figure is right. Each window adds its 4–47 min arm. Below about 119 s from one decode's end
+  to the next idle capture, recovery is untested (archived gaps 119–740 s); ALPHA-1 records idle medians and cooldown
+  waits against block 3's 30.6 mW reference as a diagnostic (PLAN2 §1.4 item 4).
 - **Deadline stop.** A chain still running at t0 + `WINDOW_MAX_S` is stopped by the driver; the window then has no
   post calibration, so it is not claim-usable (`calibration.no_bracket`). The next attempt's per-member allowance
   becomes the larger of the sizing output's and the stopped attempt's largest observed member cycle, plus the sizing
   margin, and `WINDOW_MAX_S` is re-derived by the rule above without an erratum (member cycles are structural timing,
   releasable under §8).
-- **Block duration.** Assume every window is claim-usable on its first attempt. If the watchdog releases each window
-  at its chain's exit (the fix above), the block takes about 35–45 h, including desk gaps and any frequency redraw
-  before BETA. With the watchdog as it is at `f8164893`, each window holds headless work off until
-  t0 + `WINDOW_MAX_S` + 300 s. That is 88,260 + 90,660 + 77,160 s ≈ 71 h for the three windows, before desk gaps.
+- **Block duration.** Assume every window is claim-usable on its first attempt. With the watchdog releasing each
+  window at its terminal record (§5.4), one window to the next is the window plus about 0.6–1.6 h: the driver's tail
+  and courier about 0.1 h, a watchdog tick of up to 5 min, the harvest 0.5–1.5 h, the pin-only commit and the next
+  plan a few minutes, and the 180 s stand-down lead (PLAN2 §1.3). Adding three arms of 4–47 min, the three windows
+  take about 18–23 h at the projected chains (15.9 h of chain) and about 28–33 h at the block-3 basis (25.6 h of
+  chain), before any re-arm or frequency redraw. (Revision 4, with the
+  fence held to t0 + `WINDOW_MAX_S` + 300 s, gave about 71 h before desk gaps.)
 
 ### 5.6 Disk between windows
 
@@ -1597,6 +1732,12 @@ schema formality) is dispositioned "flag, not refuse" and never sent to a fix ro
 4. Analysis: D-179 ruling 1 ("no member is excluded after collection"; no reduced mean) and D-078's no-reduced-mean
    text are amended by §6.6 and analysis plan §2.2 and §4, as Ed's 2026-10-05 ruling requires; GAMMA's prospective
    manifest's fixed n = 10 quads becomes "at least 8 kept quads" (analysis plan §7).
+5. The chain passes `--arm-countdown-s 0` on every collection stage and on the pre calibration slot in place of the
+   packs' literal 20; the post calibration slot keeps 20 s (§5.1).
+
+The chain's other changes of round 2 (the 60 s settles, the window calibration verdict, the wall budgets, the
+collection deadline, the corpus retry) are not deviations from pack bytes: they are the chain's own steps, listed in
+`joulewise/b5/chain.py` `DEVIATIONS` and registered in §5.1 and §0.6.
 
 ## 11. Commit rule and the sealed inventory
 
@@ -1691,14 +1832,8 @@ battery evidence map (§9.2).
   no longer belongs here: it is disclosed, and its own two-way line is registered (§9.2, analysis plan §8.1).
 - **Q7. Ed's hardware setting (optional).** A fixed 80% charge limit with Optimized Battery Charging off avoids arms
   refused because the OS chose to charge.
-- **Q8. The watchdog holds each window open until its deadline (lead; code lane before ALPHA-1).** §5.5 gives the
-  arithmetic. `plan_span_active` in `scripts/magistrate_watchdog.py` keeps a collected window's plan active until
-  t0 + `WINDOW_MAX_S` + 300 s even after `chain.exited`, so about 15 h of each window passes with no headless session
-  able to harvest or arm. Fix: release a collected window's span on the driver's terminal evidence (`chain.exited`,
-  the terminal `result.json`, `courier.sent`, and no driver process alive). The watchdog already releases a delivered
-  refusal that captured nothing on the same kind of evidence. The change touches no number. It should land before
-  the seal, so that H_claim carries it.
-
+- **Q8. The watchdog held each window open until its deadline. Closed in revision 5.** The watchdog now releases a
+  finished window on its terminal evidence (§5.4; P2-WD at `b9d02700a`).
 - **Q9. The battery-assist line for GAMMA's contrasts (seal gate).** The ruling of 2026-10-06 prints every reported
   cell with and without assisted members (analysis plan §8.1). GAMMA's contrasts are not reported cells (§0.9), and
   8B members, one side of every quad, are the ones that assist most. Should each contrast's estimate also be printed
