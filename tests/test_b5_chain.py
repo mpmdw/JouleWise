@@ -324,22 +324,43 @@ class StopTests(RenderedChainFixture):
         self.assertEqual(3, rows["alpha-post-calibration"])
 
 
-class GammaRenderTests(unittest.TestCase):
-    def test_gamma_is_refused_at_the_desk_for_its_interior_reference_collision(self):
-        # GAMMA-INTERIOR-REFERENCES-01 (lane L10): three graph stages share one
-        # midpoint config, so the second and third would collect nothing new and
-        # the harvest would exclude the window (roster.duplicate_run_id). The
-        # desk refuses the plan (gate-prune 2 row 14, interface J3) until L10.
+class GammaRenderTests(RenderedChainFixture):
+    pack = "gamma"
+
+    def test_gamma_renders_every_graph_stage_and_collects_each_interior_reference(self):
+        completed = self.run_chain()
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        calls = [call for call in fake_window.calls(self.measurement) if call["tool"] == "collect"]
+        # GAMMA-INTERIOR-REFERENCES-01 (lane L10): the three interior reference
+        # stages launch three distinct configs, so each collects its member. The
+        # arm boundary runs the shared NEG-8 midpoint; the two arm midpoints run
+        # the diagnostic copies.
+        interior = [call for call in calls if call["config_dir"].endswith((
+            "window_references_v5/midpoint", "gamma_interior_references_v5/decode_midpoint",
+            "gamma_interior_references_v5/prefill_midpoint"))]
+        self.assertEqual(["gamma_interior_references_v5/decode_midpoint", "window_references_v5/midpoint",
+                          "gamma_interior_references_v5/prefill_midpoint"],
+                         ["/".join(Path(call["config_dir"]).parts[-2:]) for call in interior])
+        self.assertEqual([1, 1, 1], [len(call["attempted"]) for call in interior])
+        bundles = fake_window.expected_bundles(self.plan)
+        for name, run_ids in bundles.items():
+            root = Path(self.plan.hazard_window["runs_roots"][name])
+            self.assertEqual(run_ids, {path.name for path in root.iterdir() if (path / "summary_metrics.json").is_file()})
+
+    def test_gamma_plans_cleanly_at_the_desk_after_l10(self):
+        # GAMMA-INTERIOR-REFERENCES-01 (lane L10): the three interior reference
+        # stages now launch three distinct configs, so the desk's duplicate
+        # midpoint refusal (gate-prune 2 row 14, interface J3) no longer fires
+        # for GAMMA and the plan is written with its custody.
         with tempfile.TemporaryDirectory(prefix="b5-chain-gamma-") as directory:
             root = Path(directory).resolve()
             measurement = fake_window.build_checkout(root)
-            with self.assertRaises(b5_plan.WindowPlanError) as raised:
-                b5_plan.write_window_plan(
-                    fake_window.inputs(root, measurement, "gamma", plan_id="b5-gamma-1",
-                                       t0_epoch_s=(int(time.time()) // 60) * 60),
-                    settle_s=0, pack_digest=lambda _root: "e" * 64, threshold_defaults=fake_window.threshold_defaults)
-            self.assertIn("neg8-window-midpoint into claim_runs_root", str(raised.exception))
-            self.assertFalse((root / "custody").exists())
+            record = b5_plan.write_window_plan(
+                fake_window.inputs(root, measurement, "gamma", plan_id="b5-gamma-1",
+                                   t0_epoch_s=(int(time.time()) // 60) * 60),
+                settle_s=0, pack_digest=lambda _root: "e" * 64, threshold_defaults=fake_window.threshold_defaults)
+            self.assertTrue(Path(record["plan"]["path"]).is_file())
+            self.assertTrue((root / "custody").is_dir())
 
     def test_gamma_still_renders_every_graph_stage(self):
         stages = b5_chain.stage_plan(tree("gamma"))

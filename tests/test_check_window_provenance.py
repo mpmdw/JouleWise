@@ -1320,23 +1320,28 @@ class FullWindowRosterTests(unittest.TestCase):
             self.assertIn(f"expected={len(members)} ", output)
             self.assertIn("window_mode=full references=0", output)
 
-    def test_the_v5_gamma_whole_window_roster_adds_the_seven_claim_root_references(self) -> None:
+    def test_the_v5_gamma_whole_window_roster_adds_the_nine_claim_root_references(self) -> None:
         from scripts.check_window_provenance import _window_reference_roster
         references, digests = _window_reference_roster(self.GAMMA_V5 / "plan_tree.json", self.REPO)
+        # Lane L10: the two arm-midpoint diagnostic references have their own run ids.
         self.assertEqual(references, ["neg8-window-start-r1", "neg8-window-start-r2", "neg8-window-start-r3",
-                                      "neg8-window-midpoint", "neg8-window-end-r1", "neg8-window-end-r2",
-                                      "neg8-window-end-r3"])
+                                      "gamma-interior-reference-decode-midpoint", "neg8-window-midpoint",
+                                      "gamma-interior-reference-prefill-midpoint", "neg8-window-end-r1",
+                                      "neg8-window-end-r2", "neg8-window-end-r3"])
         self.assertEqual([item.split(":")[0] for item in digests.split(",")],
-                         ["start_references", "midpoint_reference", "end_references"])
+                         ["start_references", "decode_midpoint_reference", "midpoint_reference",
+                          "prefill_midpoint_reference", "end_references"])
         # The NEG-8 corpus is collected into the bound root and is not a claim-root member.
         self.assertFalse(any(item.startswith("neg8-refcorpus") for item in references))
         # A reference manifest whose bytes differ from the plan tree's pin is refused.
         with tempfile.TemporaryDirectory(dir=_REAL_TMP) as tmp:
             repo = Path(tmp)
             relative = "configs/campaigns/window_references_v5/midpoint/order_manifest.json"
-            for name in ("start_triplet", "midpoint", "end_triplet"):
-                source = self.REPO / f"configs/campaigns/window_references_v5/{name}/order_manifest.json"
-                target = repo / f"configs/campaigns/window_references_v5/{name}/order_manifest.json"
+            for name in ("window_references_v5/start_triplet", "window_references_v5/midpoint",
+                         "window_references_v5/end_triplet", "gamma_interior_references_v5/decode_midpoint",
+                         "gamma_interior_references_v5/prefill_midpoint"):
+                source = self.REPO / f"configs/campaigns/{name}/order_manifest.json"
+                target = repo / f"configs/campaigns/{name}/order_manifest.json"
                 target.parent.mkdir(parents=True)
                 target.write_bytes(source.read_bytes())
             (repo / relative).write_bytes((repo / relative).read_bytes() + b"\n")

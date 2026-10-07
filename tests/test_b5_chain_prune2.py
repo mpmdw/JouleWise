@@ -333,8 +333,28 @@ class DispatchResolverTests(unittest.TestCase):
                 self.assertEqual("configs/campaigns/neg8_reference_corpus_v5", corpus.config_dir)
                 self.assertEqual(tuple(f"neg8-refcorpus-r{index:02d}" for index in range(1, 13)), corpus.run_ids)
 
-    def test_gamma_launches_its_midpoint_reference_three_times(self):
+    def test_gamma_launches_each_interior_reference_once_after_l10(self):
+        # Before L10 the three GAMMA reference stages all launched
+        # neg8-window-midpoint into claim_runs_root. L10 gives the two arm
+        # midpoints their own diagnostic configs: no duplicate, no refusal.
         dispatches = b5_plan.resolve_stage_dispatches(tree("gamma"), REPO_ROOT)
+        self.assertEqual([], b5_plan.duplicate_dispatches(dispatches))
+        self.assertIsNone(b5_plan.dispatch_refusal(dispatches))
+        interior = {dispatch.stage_id: dispatch.run_ids for dispatch in dispatches
+                    if dispatch.stage_id in ("gamma-reference-decode-midpoint", "gamma-reference-arm-boundary",
+                                             "gamma-reference-prefill-midpoint")}
+        self.assertEqual(3, len(interior))
+        self.assertEqual(("neg8-window-midpoint",), interior["gamma-reference-arm-boundary"])
+        self.assertEqual(3, len({run_id for run_ids in interior.values() for run_id in run_ids}))
+
+    def test_a_synthetic_duplicate_midpoint_is_still_refused(self):
+        # The refusal itself stays: GAMMA's pre-L10 shape (the arm-boundary
+        # launch copied onto both arm midpoints) is refused as before.
+        graph = copy.deepcopy(tree("gamma"))
+        rows = {row["stage_id"]: row for row in graph["stage_graph"]}
+        for stage_id in ("gamma-reference-decode-midpoint", "gamma-reference-prefill-midpoint"):
+            rows[stage_id]["launch"] = copy.deepcopy(rows["gamma-reference-arm-boundary"]["launch"])
+        dispatches = b5_plan.resolve_stage_dispatches(graph, REPO_ROOT)
         self.assertEqual([{"runs_root_binding": "claim_runs_root", "run_id": "neg8-window-midpoint",
                            "stages": ["gamma-reference-decode-midpoint", "gamma-reference-arm-boundary",
                                       "gamma-reference-prefill-midpoint"]}],
@@ -382,9 +402,27 @@ class DeskDispatchTests(unittest.TestCase):
                                t0_epoch_s=(int(time.time()) // 60 + 60) * 60),
             pack_digest=lambda _root: "e" * 64, threshold_defaults=fake_window.threshold_defaults)
 
-    def test_gamma_is_refused_at_the_desk_and_nothing_is_written(self):
-        """Before: GAMMA's plan was written and its window would lose two midpoint positions and be excluded."""
-        with self.assertRaises(b5_plan.WindowPlanError) as raised:
+    def test_gamma_plans_cleanly_at_the_desk_after_l10(self):
+        """L10 gave GAMMA's arm midpoints their own configs, so its plan is written with no duplicate dispatch."""
+        record = self.write("gamma")
+        self.assertTrue(Path(record["plan"]["path"]).is_file())
+        dispatches = record["stage_dispatches"]
+        pairs = [(row["runs_root_binding"], run_id) for row in dispatches for run_id in row["run_ids"]]
+        self.assertEqual(len(pairs), len(set(pairs)))
+
+    def test_a_duplicate_dispatch_is_refused_at_the_desk_and_nothing_is_written(self):
+        """Before: a plan of GAMMA's pre-L10 shape was written and its window would lose two midpoint positions."""
+        real = b5_plan.resolve_stage_dispatches
+
+        def pre_l10(tree_, repo_root, **keywords):
+            graph = copy.deepcopy(tree_)
+            rows = {row["stage_id"]: row for row in graph["stage_graph"]}
+            for stage_id in ("gamma-reference-decode-midpoint", "gamma-reference-prefill-midpoint"):
+                rows[stage_id]["launch"] = copy.deepcopy(rows["gamma-reference-arm-boundary"]["launch"])
+            return real(graph, repo_root, **keywords)
+
+        with mock.patch.object(b5_plan, "resolve_stage_dispatches", side_effect=pre_l10), \
+                self.assertRaises(b5_plan.WindowPlanError) as raised:
             self.write("gamma")
         self.assertIn("neg8-window-midpoint into claim_runs_root by gamma-reference-decode-midpoint, "
                       "gamma-reference-arm-boundary, gamma-reference-prefill-midpoint", str(raised.exception))
@@ -412,12 +450,12 @@ class LintTests(unittest.TestCase):
             code = check_b5_chain.main(list(argv))
         return code, json.loads(stdout.getvalue())
 
-    def test_the_lint_fails_gamma_on_the_duplicate_dispatch_and_only_on_it(self):
+    def test_the_lint_passes_gamma_after_l10(self):
+        # Before L10 the lint failed GAMMA on one duplicate_dispatch (the
+        # midpoint launched by 3 stages); L10 removes it and GAMMA checks clean.
         code, report = self.run_main("--pack-root", str(PACKS["gamma"]), "--no-live-identity")
-        self.assertEqual(1, code)
-        self.assertEqual([("duplicate_dispatch", "gamma-reference-arm-boundary")],
-                         [(item["check"], item["stage_id"]) for item in report["findings"]])
-        self.assertIn("by 3 stages", report["findings"][0]["detail"])
+        self.assertEqual((0, []), (code, report["findings"]))
+        self.assertIn("duplicate_dispatch", report["checks"])
 
     def test_a_duplicate_across_two_floor_stages_is_a_finding(self):
         graph = copy.deepcopy(tree("alpha"))

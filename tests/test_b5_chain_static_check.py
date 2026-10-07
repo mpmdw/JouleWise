@@ -39,12 +39,11 @@ def run_main(*argv: str) -> tuple[int, dict]:
     return code, json.loads(stdout.getvalue())
 
 
-# GAMMA launches its midpoint reference from three stages into one runs root
-# (lane GAMMA-INTERIOR-REFERENCES-01, L10): the lint fails it until L10 lands
-# (gate-prune 2 row 14). When it does, this map empties and GAMMA must check clean.
-KNOWN_PACK_FINDINGS = {
-    "d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5": [("duplicate_dispatch", "gamma-reference-arm-boundary")],
-}
+# GAMMA launched its midpoint reference from three stages into one runs root
+# until lane GAMMA-INTERIOR-REFERENCES-01 (L10) gave the two arm midpoints their
+# own diagnostic configs (gate-prune 2 row 14). L10 has landed (int4), so this
+# map is empty and every committed pack, GAMMA included, must check clean.
+KNOWN_PACK_FINDINGS: dict[str, list[tuple[str, str]]] = {}
 
 
 class CommittedPackTests(unittest.TestCase):

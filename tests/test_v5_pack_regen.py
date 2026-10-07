@@ -96,40 +96,99 @@ class V5PackRegenerationTests(unittest.TestCase):
                     self.assertEqual(json.loads(path.read_bytes())["sampling"]["idle_seconds"], V5_IDLE_SECONDS)
         self.assertEqual(count, 15)
 
-    def test_gamma_interior_stages_retain_shared_midpoint_until_block5_design(self):
-        """GAMMA-INTERIOR-REFERENCES-01 owns three-point evaluator semantics."""
+    def gamma_dispatches(self):
+        """(stage id, runs-root binding, run id) for every member GAMMA's collection stages launch."""
         pack = ROOT / "configs/campaigns" / PACKS[-1]
         tree = json.loads((pack / "plan_tree.json").read_bytes())
-        stage_ids = {"gamma-reference-decode-midpoint", "gamma-reference-arm-boundary",
-                     "gamma-reference-prefill-midpoint"}
         external = {row["input_id"]: row for row in tree["external_inputs"]}
-        stages = [stage for stage in tree["stage_graph"] if stage["stage_id"] in stage_ids]
-        self.assertEqual(len(stages), 3)
-        for stage in stages:
-            self.assertEqual(stage["input_ref"], {"kind": "external_input", "input_id": "midpoint_reference"})
-            source = external["midpoint_reference"]
-            manifest_path = ROOT / source["manifest_path"]
-            self.assertEqual(source["manifest_path"],
-                             "configs/campaigns/window_references_v5/midpoint/order_manifest.json")
-            self.assertEqual(hashlib.sha256(manifest_path.read_bytes()).hexdigest(), source["manifest_sha256"])
-            row, = json.loads(manifest_path.read_bytes())["executed_order"]
-            self.assertEqual(row["run_id"], "neg8-window-midpoint")
-            argument = stage["launch"]["commands"][0]["argv_template"]["arguments"][0]
-            self.assertEqual(ROOT / argument["value"], manifest_path.parent)
-        self.assertFalse((pack / "references").exists())
-
-        run_ids = []
+        rows = []
         for stage in tree["stage_graph"]:
             if stage["kind"] != "campaign_collection":
                 continue
+            arguments = stage["launch"]["commands"][0]["argv_template"]["arguments"]
+            root = next(value["value"] for flag, value in zip(arguments, arguments[1:])
+                        if flag == {"kind": "literal", "value": "--runs-dir"})
             reference = stage["input_ref"]
-            rows = (external[reference["input_id"]]["members"]
-                    if reference["kind"] == "external_input" else
-                    json.loads((pack / reference["path"]).read_bytes())["executed_order"])
-            run_ids.extend(row["run_id"] for row in rows)
-        self.assertEqual(len(run_ids), 101)
-        self.assertEqual(len(set(run_ids)), 99)
-        self.assertEqual(run_ids.count("neg8-window-midpoint"), 3)
+            if reference["kind"] == "external_input":
+                source = external[reference["input_id"]]
+                manifest_path = ROOT / source["manifest_path"]
+                self.assertEqual(hashlib.sha256(manifest_path.read_bytes()).hexdigest(), source["manifest_sha256"])
+                # The stage launches the directory whose manifest the plan tree pins.
+                self.assertEqual(ROOT / arguments[0]["value"], manifest_path.parent)
+                order = json.loads(manifest_path.read_bytes())["executed_order"]
+                self.assertEqual([row["run_id"] for row in order], [row["run_id"] for row in source["members"]])
+            else:
+                order = json.loads((pack / reference["path"]).read_bytes())["executed_order"]
+            rows.extend((stage["stage_id"], root, row["run_id"], row.get("role"), row.get("sentinel_position"))
+                        for row in order)
+        return tree, rows
+
+    def test_gamma_launches_no_run_id_twice_into_one_runs_root(self):
+        """GAMMA-INTERIOR-REFERENCES-01 (lane L10): run_campaign skips a run id whose bundle exists."""
+        _tree, rows = self.gamma_dispatches()
+        self.assertEqual(len(rows), 101)
+        pairs = [(root, run_id) for _stage, root, run_id, _role, _position in rows]
+        self.assertEqual(len(set(pairs)), len(pairs),
+                         [pair for pair in set(pairs) if pairs.count(pair) > 1])
+        self.assertEqual(len({run_id for _root, run_id in pairs}), 101)
+
+    def test_gamma_has_one_neg8_midpoint_and_two_diagnostic_interior_references(self):
+        """The whole-window NEG-8 screen accepts exactly 3 start + 1 midpoint + 3 end references."""
+        from scripts.run_campaign import _declared_neg8_reference_position
+
+        tree, rows = self.gamma_dispatches()
+        claim = [row for row in rows if row[1] == "claim_runs_root"]
+        positions = [_declared_neg8_reference_position(role, position) for _s, _r, _i, role, position in claim]
+        self.assertEqual((positions.count("start"), positions.count("midpoint"), positions.count("end")), (3, 1, 3))
+        self.assertNotIn("invalid", positions)
+        interior = {stage: (run_id, role) for stage, _root, run_id, role, _position in claim
+                    if stage in {"gamma-reference-decode-midpoint", "gamma-reference-arm-boundary",
+                                 "gamma-reference-prefill-midpoint"}}
+        self.assertEqual(interior, {
+            "gamma-reference-decode-midpoint": ("gamma-interior-reference-decode-midpoint",
+                                                "window_interior_reference_diagnostic"),
+            "gamma-reference-arm-boundary": ("neg8-window-midpoint", "neg8_daily_reference_midpoint"),
+            "gamma-reference-prefill-midpoint": ("gamma-interior-reference-prefill-midpoint",
+                                                 "window_interior_reference_diagnostic"),
+        })
+        # The arm boundary sits at the window's temporal midpoint: 40 science members on each side.
+        order = [stage["stage_id"] for stage in tree["stage_graph"] if stage["kind"] == "campaign_collection"]
+        boundary = order.index("gamma-reference-arm-boundary")
+        science = [stage["stage_id"] for stage in tree["stage_graph"] if stage["stage_id"].startswith("gamma-science-")]
+        counts = {stage["stage_id"]: stage["expected_count"] for stage in tree["stage_graph"]}
+        self.assertEqual(sum(counts[s] for s in science if order.index(s) < boundary), 40)
+        self.assertEqual(sum(counts[s] for s in science if order.index(s) > boundary), 40)
+        # Each diagnostic config is the shared midpoint config byte for byte except run_id.
+        shared = (ROOT / "configs/campaigns/window_references_v5/midpoint/neg8-window-midpoint.json").read_bytes()
+        for name in ("decode_midpoint", "prefill_midpoint"):
+            run_id = f"gamma-interior-reference-{name.replace('_', '-')}"
+            raw = (ROOT / "configs/campaigns/gamma_interior_references_v5" / name / f"{run_id}.json").read_bytes()
+            self.assertEqual(raw, shared.replace(b'"run_id": "neg8-window-midpoint"', f'"run_id": "{run_id}"'.encode()))
+            self.assertEqual(json.loads(raw)["sampling"]["idle_seconds"], V5_IDLE_SECONDS)
+
+    def test_generator_refuses_interior_reference_bytes_that_drift_from_the_shared_midpoint(self):
+        import importlib.util
+        import shutil
+
+        spec = importlib.util.spec_from_file_location(
+            "gamma_generator_under_test", ROOT / "configs/campaigns" / PACKS[-1] / "generate_configs.py")
+        generator = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = generator
+        self.addCleanup(sys.modules.pop, spec.name, None)
+        spec.loader.exec_module(generator)
+        self.assertEqual(set(generator.interior_reference_inputs()),
+                         {"gamma-reference-decode-midpoint", "gamma-reference-prefill-midpoint"})
+        with tempfile.TemporaryDirectory(prefix="v5-interior-") as temporary:
+            root = Path(temporary)
+            for relative in ("configs/campaigns/window_references_v5", "configs/campaigns/gamma_interior_references_v5"):
+                shutil.copytree(ROOT / relative, root / relative)
+            generator.REPO_ROOT = root
+            generator.interior_reference_inputs()
+            config = (root / "configs/campaigns/gamma_interior_references_v5/prefill_midpoint"
+                      "/gamma-interior-reference-prefill-midpoint.json")
+            config.write_bytes(config.read_bytes().replace(b'"output_tokens": 256', b'"output_tokens": 255'))
+            with self.assertRaisesRegex(ValueError, "interior reference bytes differ"):
+                generator.interior_reference_inputs()
 
 
 if __name__ == "__main__":

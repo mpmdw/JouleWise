@@ -64,9 +64,8 @@ class WrittenPlans(unittest.TestCase):
         cls.measurement = fake_window.build_checkout(cls.root)
         t0 = (int(time.time()) // 60 + 60) * 60
         cls.records, cls.plans = {}, {}
-        # GAMMA's plan is refused at the desk until lane L10 removes its duplicate
-        # midpoint dispatch (gate-prune 2 row 14, tests/test_b5_chain_prune2.py).
-        for pack in ("alpha", "beta"):
+        # GAMMA plans again since lane L10 removed its duplicate midpoint dispatch.
+        for pack in ("alpha", "beta", "gamma"):
             root = cls.root / pack
             root.mkdir()
             inputs = fake_window.inputs(root, cls.measurement, pack, plan_id=f"b5-{pack}-1", t0_epoch_s=t0)

@@ -347,10 +347,10 @@ class G2bOneBlockChainTests(unittest.TestCase):
             self.assertEqual(len(set(run_ids)), 23)
             self.assertEqual(sum("contrast-b01-" in run_id for run_id in run_ids), 4)
             self.assertEqual(sum("midpoint" in run_id for run_id in run_ids), 1)
-            midpoint_stage = next(row for row in tree["stage_graph"]
-                                  if row["stage_id"] == "gamma-reference-decode-midpoint")
+            # G2-b's one midpoint dispatch is the shared NEG-8 midpoint reference, which GAMMA
+            # runs at its arm boundary (lane L10).
             external = next(row for row in tree["external_inputs"]
-                            if row["input_id"] == midpoint_stage["input_ref"]["input_id"])
+                            if row["input_id"] == "midpoint_reference")
             self.assertEqual(run_ids[19], external["members"][0]["run_id"])
 
     @unittest.skipUnless(shutil.which("zsh"), "zsh required for generated chain")
