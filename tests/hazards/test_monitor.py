@@ -126,9 +126,11 @@ class MonitorJournalTests(unittest.TestCase):
         # the member whose stream contains it is flagged; a member two minutes later is not
         inside = {"monotonic_ns": [pub["monotonic_ns"] - 20 * 10**9, pub["monotonic_ns"] + 20 * 10**9]}
         later = {"monotonic_ns": [pub["monotonic_ns"] + 70 * 10**9, pub["monotonic_ns"] + 110 * 10**9]}
+        # (ruling 2026-10-06: -447 mA on AC is battery assist, disclosed, not excluded)
         codes = [f["code"] for f in monitor.member_findings(journals, span=inside)]
-        self.assertIn("battery.member_span", codes)
-        self.assertNotIn("battery.member_span",
+        self.assertIn(battery.ASSIST, codes)
+        self.assertNotIn("battery.member_span", codes)
+        self.assertNotIn(battery.ASSIST,
                          [f["code"] for f in monitor.member_findings(journals, span=later)])
 
     def test_every_line_carries_three_clock_stamps_and_the_cadence_holds(self):
@@ -506,7 +508,7 @@ class SmcMonitorTests(unittest.TestCase):
                                  clock_lines[20]["finished"]["monotonic_ns"]]}
         self.assertEqual(monitor.member_findings(journals, span=span), [])
 
-    def test_a_burst_the_registry_never_shows_flags_the_member_it_overlaps(self):
+    def test_a_burst_the_registry_never_shows_is_disclosed_on_the_member_it_overlaps(self):
         # -865 mA for two seconds at t = 100 s; every registry value stays 0.
         self.mac.smc.current = lambda t: -865 if 100.0 <= t < 102.0 else 0
         journals = self.run_monitor(240)
@@ -518,11 +520,16 @@ class SmcMonitorTests(unittest.TestCase):
                             for line in monitor.readings(journals["battery"])
                             if line["values"].get("source") != "smc"))
         inside = {"monotonic_ns": [at - 10 * 10**9, at + 10 * 10**9]}
-        found = [f for f in monitor.member_findings(journals, span=inside)
-                 if f["code"] == "battery.member_span"]
+        request = {"monotonic_ns": [at + 5 * 10**9, at + 10 * 10**9]}
+        all_found = monitor.member_findings(journals, span=inside, request=request)
+        self.assertNotIn("battery.member_span", [f["code"] for f in all_found])
+        found = [f for f in all_found if f["code"] == battery.ASSIST]
         self.assertEqual(len(found), 1)
-        self.assertEqual((found[0]["observed"]["source"], found[0]["observed"]["max_abs_ma"]),
-                         ("smc", 865))
+        phases = found[0]["observed"]["phases"]
+        self.assertEqual((found[0]["observed"]["source"], phases["span"]["min_current_ma"],
+                          phases["span"]["reads_below"]), ("smc", -865, 2))
+        # the burst is outside the request: reported apart, below the limit there
+        self.assertEqual(phases["request"]["reads_below"], 0)
         later = {"monotonic_ns": [at + 30 * 10**9, at + 60 * 10**9]}
         self.assertEqual(monitor.member_findings(journals, span=later), [])
 
@@ -537,7 +544,7 @@ class SmcMonitorTests(unittest.TestCase):
                if p["values"]["instant_amperage_ma"] == -447][0]
         span = {"monotonic_ns": [pub["monotonic_ns"] - 20 * 10**9, pub["monotonic_ns"] + 20 * 10**9]}
         codes = [f["code"] for f in monitor.member_findings(journals, span=span)]
-        self.assertEqual(codes[:2], [battery.SMC_UNAVAILABLE, "battery.member_span"])
+        self.assertEqual(codes[:2], [battery.SMC_UNAVAILABLE, battery.ASSIST])
 
 
 class SupervisorTests(unittest.TestCase):

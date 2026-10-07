@@ -800,8 +800,9 @@ def member_findings(journals: Mapping[str, Sequence[Mapping[str, Any]]], *,
     """Every physics-in-span finding for one member.
 
     ``span`` is the member's sampler stream ``{"monotonic_ns": [start, stop]}``
-    and ``request`` its request window (contention is judged on the request);
-    both in the controller's ``time.monotonic_ns`` domain.
+    and ``request`` its request window (contention is judged on the request;
+    battery assist is reported for the span and the request apart); both in
+    the controller's ``time.monotonic_ns`` domain.
     """
 
     limits = {"battery": battery.DEFAULT_THRESHOLDS, "thermal": thermal.DEFAULT_THRESHOLDS,
@@ -809,7 +810,8 @@ def member_findings(journals: Mapping[str, Sequence[Mapping[str, Any]]], *,
     limits.update(thresholds or {})
     found = []
     found += battery.span_findings(readings(journals.get("battery", ())), span,
-                                   limits["battery"])
+                                   limits["battery"],
+                                   phases={"request": request} if request else None)
     found += thermal.span_findings(readings(journals.get("thermal", ())), span,
                                    limits["thermal"])
     found += clock.span_findings(clock_samples(journals.get("clock", ())), span,

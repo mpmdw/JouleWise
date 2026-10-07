@@ -244,24 +244,49 @@ class MemberSpanTests(SpanRig, unittest.TestCase):
     def test_clean_float_gives_no_finding(self):
         self.assertEqual(self.registry_only(self.series(10), self.span(130, 250)), [])
 
-    def test_minus_447_ma_publication_inside_the_span_flags_the_member(self):
+    def test_minus_447_ma_publication_inside_the_span_is_assist_not_exclusion(self):
+        # Ruling 2026-10-06: discharge on AC is disclosed (battery.assist), never excluded.
         readings = self.series(10, special={3: {"instant": -447}})
-        codes = [f["code"] for f in self.registry_only(readings, self.span(130, 250))]
-        self.assertEqual(codes, ["battery.member_span"])
+        found = self.registry_only(readings, self.span(130, 250))
+        self.assertEqual([f["code"] for f in found], [battery.ASSIST])
+        self.assertEqual(found[0]["observed"]["source"], "registry")
+        self.assertIn("InstantAmperage -447 mA < -200 mA", found[0]["detail"])
+
+    def test_plus_447_ma_charging_publication_inside_the_span_flags_the_member(self):
+        readings = self.series(10, special={3: {"instant": 447}})
+        found = self.registry_only(readings, self.span(130, 250))
+        self.assertEqual([f["code"] for f in found], ["battery.member_span"])
+        self.assertIn("InstantAmperage +447 mA > +200 mA (charging)", found[0]["detail"])
 
     def test_publication_after_the_span_is_in_force(self):
-        readings = self.series(10, special={5: {"instant": -447}})  # publication at +300 s
+        readings = self.series(10, special={5: {"instant": 447}})  # publication at +300 s
         found = self.registry_only(readings, self.span(200, 280))
         self.assertEqual([f["code"] for f in found], ["battery.member_span"])
         # ...but the one after that is not in force for an earlier span
         self.assertEqual(self.registry_only(readings, self.span(10, 110)), [])
 
-    def test_accumulator_mean_above_200_ma_times_volts_flags_between_clean_publications(self):
+    def test_discharge_accumulator_mean_above_200_ma_times_volts_is_assist(self):
         # 20 discharge ticks averaging -3 W between two publications that both read 0 mA.
         readings = self.series(10, special={3: {"ticks": 20, "energy": -60_000}})
         found = self.registry_only(readings, self.span(130, 170))
-        self.assertEqual([f["code"] for f in found], ["battery.member_span"])
+        self.assertEqual([f["code"] for f in found], [battery.ASSIST])
         self.assertIn("discharge accumulator mean -3000.0 mW", found[0]["detail"])
+        self.assertEqual(found[0]["observed"]["source"], "accumulator")
+        # the accumulated energy is withheld, not in the public observed fields
+        self.assertNotIn("discharge_energy_mw_ticks", found[0]["observed"])
+        self.assertEqual(found[0]["withheld"]["discharge_energy_mw_ticks"], -60_000)
+
+    def test_charge_accumulator_mean_above_200_ma_times_volts_flags_the_member(self):
+        readings = self.series(10)
+        base_telemetry = readings[3]["values"]["power_telemetry"]
+        for item in readings[3:]:
+            item["values"]["power_telemetry"] = dict(
+                item["values"]["power_telemetry"],
+                BatteryPowerAccumulatorCount=base_telemetry["BatteryPowerAccumulatorCount"] + 20,
+                AccumulatedBatteryPower=base_telemetry["AccumulatedBatteryPower"] + 60_000)
+        found = self.registry_only(readings, self.span(130, 170))
+        self.assertEqual([f["code"] for f in found], ["battery.member_span"])
+        self.assertIn("charge accumulator mean +3000.0 mW", found[0]["detail"])
 
     def test_small_assist_is_disclosed_not_excluding(self):
         readings = self.series(10, special={3: {"ticks": 21, "energy": -2927}})
@@ -279,13 +304,17 @@ class MemberSpanGapTests(SpanRig, unittest.TestCase):
     """Review findings (gate-prune L1 review): the gauge-averaged Amperage rule
     and the accumulator rule when one of its inputs cannot be read."""
 
-    def test_gauge_averaged_amperage_above_200_ma_flags_even_at_zero_instant_current(self):
+    def test_gauge_averaged_amperage_above_200_ma_is_judged_even_at_zero_instant_current(self):
         readings = self.series(10)
-        readings[3]["values"]["amperage_ma"] = -300  # InstantAmperage stays 0
+        readings[3]["values"]["amperage_ma"] = 300  # InstantAmperage stays 0
         self.assertEqual(readings[3]["values"]["instant_amperage_ma"], 0)
         found = self.registry_only(readings, self.span(130, 170))
         self.assertEqual([f["code"] for f in found], ["battery.member_span"])
-        self.assertIn("|Amperage| 300 mA > 200 mA", found[0]["detail"])
+        self.assertIn("Amperage +300 mA > +200 mA", found[0]["detail"])
+        readings[3]["values"]["amperage_ma"] = -300
+        found = self.registry_only(readings, self.span(130, 170))
+        self.assertEqual([f["code"] for f in found], [battery.ASSIST])
+        self.assertIn("Amperage -300 mA < -200 mA", found[0]["detail"])
 
     def test_unreadable_charge_counter_still_judges_discharge_and_discloses(self):
         # -3 W of discharge between two 0 mA publications, while the charge
@@ -294,7 +323,7 @@ class MemberSpanGapTests(SpanRig, unittest.TestCase):
         readings[3]["values"]["power_telemetry"]["BatteryPowerAccumulatorCount"] = None
         found = self.registry_only(readings, self.span(130, 170))
         codes = [f["code"] for f in found]
-        self.assertIn("battery.member_span", codes)
+        self.assertIn(battery.ASSIST, codes)
         self.assertIn("battery.accumulator_unavailable", codes)
         disclosed = next(f for f in found if f["code"] == "battery.accumulator_unavailable")
         self.assertIn("charge", disclosed["observed"]["unavailable"])
@@ -394,26 +423,58 @@ class SmcMemberSpanTests(SpanRig, unittest.TestCase):
         readings = self.series(10) + self.smc_lines(600)
         self.assertEqual(battery.span_findings(readings, self.span(130, 250)), [])
 
-    def test_a_minus_865_ma_burst_between_clean_publications_flags_the_member(self):
+    def test_a_minus_865_ma_burst_between_clean_publications_is_assist_not_exclusion(self):
+        # The probe's 10-06 burst.  Ruling 2026-10-06: disclosed, never excluded.
         readings = self.series(10) + self.smc_lines(600, current={150: -865, 151: -352})
         found = battery.span_findings(readings, self.span(130, 170))
-        self.assertEqual([f["code"] for f in found], ["battery.member_span"])
+        self.assertEqual([f["code"] for f in found], [battery.ASSIST])
         observed = found[0]["observed"]
-        self.assertEqual((observed["source"], observed["over_count"], observed["max_abs_ma"]),
-                         ("smc", 2, 865))
+        self.assertEqual(observed["source"], "smc")
+        self.assertEqual(observed["phases"]["span"],
+                         {"reads_below": 2, "in_force_reads": 41, "min_current_ma": -865,
+                          "seconds_below": 2.0})
+        # -865 mA x 12.18 V for 1 s plus -352 mA x 12.18 V for 1 s, withheld
+        self.assertAlmostEqual(found[0]["withheld"]["phases"]["span"]["discharged_energy_j"],
+                               (865 + 352) * 12180 / 1e6, places=9)
+        self.assertNotIn("discharged_energy_j", json.dumps(found[0]["observed"]))
         self.assertEqual(found[0]["interval"]["monotonic_ns"],
                          [self.mono0 + 150 * 10**9, self.mono0 + 151 * 10**9])
         # a member a minute later is clean: B0AC is judged where it was read
         self.assertEqual(battery.span_findings(readings, self.span(200, 240)), [])
+
+    def test_a_plus_865_ma_charging_burst_flags_the_member(self):
+        readings = self.series(10) + self.smc_lines(600, current={150: 865, 151: 352})
+        found = battery.span_findings(readings, self.span(130, 170))
+        self.assertEqual([f["code"] for f in found], ["battery.member_span"])
+        observed = found[0]["observed"]
+        self.assertEqual((observed["source"], observed["rule"], observed["over_count"],
+                          observed["max_abs_ma"]), ("smc", "charging", 2, 865))
+
+    def test_assist_is_reported_per_phase_and_outside_the_request_decides_nothing(self):
+        # Assist in warm-up (140 s) and in the request (160-161 s); the request is [150, 170].
+        readings = self.series(10) + self.smc_lines(600, current={140: -900, 160: -500, 161: -500})
+        request = {"request": {"monotonic_ns": self.span(150, 170)["monotonic_ns"]}}
+        found = battery.span_findings(readings, self.span(130, 170), phases=request)
+        self.assertEqual([f["code"] for f in found], [battery.ASSIST])
+        phases = found[0]["observed"]["phases"]
+        self.assertEqual(phases["span"]["reads_below"], 3)
+        self.assertEqual(phases["span"]["min_current_ma"], -900)
+        self.assertEqual(phases["request"], {"reads_below": 2, "in_force_reads": 21,
+                                             "min_current_ma": -500, "seconds_below": 2.0})
+        self.assertAlmostEqual(found[0]["withheld"]["phases"]["request"]["discharged_energy_j"],
+                               2 * 500 * 12180 / 1e6, places=9)
 
     def test_the_read_in_force_at_the_start_and_at_the_stop_counts(self):
         readings = self.series(10) + self.smc_lines(600, current={129: 250})
         self.assertEqual([f["code"] for f in battery.span_findings(readings, self.span(129.5, 170))],
                          ["battery.member_span"])
         self.assertEqual(battery.span_findings(readings, self.span(130.5, 170)), [])
-        readings = self.series(10) + self.smc_lines(600, current={171: -250})
+        readings = self.series(10) + self.smc_lines(600, current={171: 250})
         self.assertEqual([f["code"] for f in battery.span_findings(readings, self.span(130, 170.5))],
                          ["battery.member_span"])
+        readings = self.series(10) + self.smc_lines(600, current={171: -250})
+        self.assertEqual([f["code"] for f in battery.span_findings(readings, self.span(130, 170.5))],
+                         [battery.ASSIST])
 
     def test_the_registry_current_is_not_judged_when_smc_covers_the_span(self):
         # A -447 mA InstantAmperage and a -300 mA Amperage publication, B0AC 0 throughout.
@@ -428,20 +489,44 @@ class SmcMemberSpanTests(SpanRig, unittest.TestCase):
         self.assertEqual([f["code"] for f in found], ["battery.member_span"])
         self.assertIn("IsCharging", found[0]["detail"])
 
+    def test_a_state_change_read_between_publications_flags_the_member(self):
+        # The monitor re-reads ioreg when a polled field changes; a line with the
+        # same UpdateTime is not a new publication, but its state is judged
+        # where it was read (the harvest copy's per-poll rule).
+        readings = self.series(10) + self.smc_lines(600)
+        for field, value, text in (("is_charging", True, "IsCharging is Yes"),
+                                   ("external_connected", False, "ExternalConnected is No")):
+            with self.subTest(field=field):
+                changed = json.loads(json.dumps(readings[3]))
+                changed["values"][field] = value
+                stamp = {"wall_ns": changed["started"]["wall_ns"] + 20 * 10**9,
+                         "monotonic_ns": self.mono0 + 150 * 10**9, "monotonic_raw_ns": 0}
+                changed["started"] = changed["finished"] = stamp
+                found = battery.span_findings(readings + [changed], self.span(130, 170))
+                self.assertEqual([f["code"] for f in found], ["battery.member_span"])
+                self.assertIn(text, found[0]["detail"])
+                self.assertEqual(battery.span_findings(readings + [changed], self.span(160, 200)), [])
+
+    def test_an_unread_state_at_a_publication_is_missing_evidence_and_excludes(self):
+        readings = self.series(10) + self.smc_lines(600)
+        readings[3]["values"]["external_connected"] = None
+        found = battery.span_findings(readings, self.span(130, 170))
+        self.assertEqual([f["code"] for f in found], ["battery.member_span"])
+
     def test_the_accumulator_rule_still_runs_with_smc(self):
         readings = self.series(10, special={3: {"ticks": 20, "energy": -60_000}}) + self.smc_lines(600)
         found = battery.span_findings(readings, self.span(130, 170))
-        self.assertEqual([f["code"] for f in found], ["battery.member_span"])
+        self.assertEqual([f["code"] for f in found], [battery.ASSIST])
         self.assertIn("discharge accumulator mean -3000.0 mW", found[0]["detail"])
 
     def test_a_gap_in_smc_reads_falls_back_to_the_registry_and_discloses(self):
         readings = (self.series(10, special={3: {"instant": -447}})
                     + self.smc_lines(600, missing=range(140, 150)))
         found = battery.span_findings(readings, self.span(130, 250))
-        self.assertEqual([f["code"] for f in found], [battery.SMC_UNAVAILABLE, "battery.member_span"])
+        self.assertEqual([f["code"] for f in found], [battery.SMC_UNAVAILABLE, battery.ASSIST])
         self.assertEqual(found[0]["observed"]["gap_monotonic_ns"],
                          [self.mono0 + 139 * 10**9, self.mono0 + 150 * 10**9])
-        self.assertIn("|InstantAmperage| 447 mA", found[1]["detail"])
+        self.assertIn("InstantAmperage -447 mA", found[1]["detail"])
         # a 5 s gap is still covered (the limit is "more than 5 s")
         readings = self.series(10) + self.smc_lines(600, missing=range(141, 145))
         self.assertEqual(battery.span_findings(readings, self.span(130, 250)), [])
@@ -454,13 +539,16 @@ class SmcMemberSpanTests(SpanRig, unittest.TestCase):
 
     def test_a_burst_inside_a_gap_covered_span_still_flags(self):
         # SMC does not cover the span, but the reads it has are still judged.
-        readings = self.series(10) + self.smc_lines(600, missing=range(160, 200), current={140: -865})
+        readings = self.series(10) + self.smc_lines(600, missing=range(160, 200), current={140: 865})
         codes = [f["code"] for f in battery.span_findings(readings, self.span(130, 250))]
         self.assertEqual(codes, ["battery.member_span", battery.SMC_UNAVAILABLE])
+        readings = self.series(10) + self.smc_lines(600, missing=range(160, 200), current={140: -865})
+        codes = [f["code"] for f in battery.span_findings(readings, self.span(130, 250))]
+        self.assertEqual(codes, [battery.ASSIST, battery.SMC_UNAVAILABLE])
 
     def test_200_ma_either_way_is_within_the_limit_and_201_is_not(self):
         for value, codes in ((200, []), (-200, []), (201, ["battery.member_span"]),
-                             (-201, ["battery.member_span"])):
+                             (-201, [battery.ASSIST])):
             with self.subTest(value=value):
                 readings = self.series(10) + self.smc_lines(600, current={150: value})
                 self.assertEqual([f["code"] for f in battery.span_findings(readings, self.span(130, 170))],
@@ -494,7 +582,7 @@ class SmcMemberSpanTests(SpanRig, unittest.TestCase):
         readings = (self.series(10, special={3: {"instant": -447}})
                     + self.smc_lines(600, frozen=range(140, 160)))
         found = battery.span_findings(readings, self.span(130, 170))
-        self.assertEqual([f["code"] for f in found], [battery.SMC_UNAVAILABLE, "battery.member_span"])
+        self.assertEqual([f["code"] for f in found], [battery.SMC_UNAVAILABLE, battery.ASSIST])
         self.assertIn("repeated the previous SMC block", found[0]["detail"])
         self.assertEqual(found[0]["observed"]["gap_monotonic_ns"],
                          [self.mono0 + 139 * 10**9, self.mono0 + 160 * 10**9])
@@ -503,9 +591,12 @@ class SmcMemberSpanTests(SpanRig, unittest.TestCase):
         self.assertEqual(battery.span_findings(readings, self.span(130, 170)), [])
 
     def test_a_frozen_block_over_the_limit_still_flags(self):
-        readings = self.series(10) + self.smc_lines(600, current={139: -900}, frozen=range(140, 160))
+        readings = self.series(10) + self.smc_lines(600, current={139: 900}, frozen=range(140, 160))
         codes = [f["code"] for f in battery.span_findings(readings, self.span(130, 170))]
         self.assertEqual(codes, ["battery.member_span", battery.SMC_UNAVAILABLE])
+        readings = self.series(10) + self.smc_lines(600, current={139: -900}, frozen=range(140, 160))
+        codes = [f["code"] for f in battery.span_findings(readings, self.span(130, 170))]
+        self.assertEqual(codes, [battery.ASSIST, battery.SMC_UNAVAILABLE])
 
     def test_the_smc_read_attached_to_an_ioreg_line_counts(self):
         readings = self.series(10)
