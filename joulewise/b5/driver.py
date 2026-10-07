@@ -7,9 +7,14 @@ Inside the launchd job, after t0, this branch runs:
 1. the agent census (``pgrep`` must exit 1 with empty output; doctrine keeps it);
 2. the hazard arm (``joulewise.hazards.arm``): instant reads, network time OFF
    as an action, the record-only collectors, the cadence probe, the dwell and
-   the final reads. Only PASS from all six modules -- clock, battery, thermal,
-   contention, disk, instrument -- is GO. A REFUSE or an UNMEASURED verdict is
-   a NULL window: nothing is published, started or launched;
+   the final reads. GO needs the arm's GO, no REFUSE from the six modules --
+   clock, battery, thermal, contention, disk, instrument -- and PASS from the
+   instrument. A REFUSE, or an UNMEASURED instrument, is a NULL window: nothing
+   is published, started or launched. An UNMEASURED clock, battery, thermal,
+   contention or disk verdict is a failed probe, not a measured hazard (audit
+   A3, 2026-10-07): it is the DISCLOSE flag ``<module>.arm_unmeasured`` and the
+   window goes on. An arm that raised or timed out as a whole stays NULL (the
+   instrument is then unverified);
 3. a final census, then the launch-lineage files (``joulewise.window_lineage``)
    into both runs roots;
 4. the executed-file inventory of the measurement checkout (local reads only);
@@ -70,7 +75,9 @@ PASS, REFUSE, UNMEASURED = "PASS", "REFUSE", "UNMEASURED"
 HAZARD_MODULES = night_gate.HAZARD_MODULES
 REFUSED_HAZARD = "night_refused_hazard"
 STOPPED_DISK_LOW = "night_stopped_disk_low"
-# PLAN2 P2-DRV (gate prune round 2).
+# PLAN2 P2-DRV (gate prune round 2).  STOPPED_CENSUS_UNMEASURED is retired
+# (audit A3, 2026-10-07): an unreadable census is a failed probe, never a
+# stop; the code stays registered (night_gate) so earlier records still read.
 STOPPED_CENSUS_UNMEASURED = "night_stopped_census_unmeasured"
 STOPPED_MONITOR_OUTAGE = "night_stopped_monitor_outage"
 REFUSED_INSTRUMENT_NOT_SAMPLING = "night_refused_instrument_not_sampling"
@@ -99,10 +106,11 @@ G10_TERM_GRACE_S = 120.0
 GIT_TIMEOUT_S = 60.0
 # PLAN2 row 7: the in-window census. A probe that is neither clean (exit 1,
 # empty stdout) nor a detection (any stdout) is unmeasured: retried, then a
-# flag; this many unmeasured censuses in a row (about 2 min) stop the chain.
+# flag carrying its consecutive count. It never stops the chain (audit A3,
+# 2026-10-07: a failed probe is not a measured agent; the monitor's ps journal
+# measures contention over every member span).
 CENSUS_RETRIES = 3
 CENSUS_RETRY_S = 1.0
-CENSUS_UNMEASURED_STOP_AFTER = 4
 # PLAN2 row 11: the monitor must journal before launch, and keep journaling.
 MONITOR_READY_TRIES = 3
 MONITOR_READY_TIMEOUT_S = 20.0
@@ -614,7 +622,7 @@ def _production_arm(context: ArmContext) -> dict[str, Any]:
     return {"go": bool(result.go), "verdicts": verdicts, "reasons": list(result.reasons),
             "refused_at": result.refused_at, "record_path": str(result.path),
             "network_time_off": document.get("network_time_off"),
-            "record_only": document.get("record_only")}
+            "record_only": document.get("record_only"), "arm_unmeasured": document.get("unmeasured")}
 
 
 def _production_lineage(request: LineageRequest) -> Any:
@@ -764,10 +772,24 @@ def _verdict_status(value: Any) -> str | None:
     return status if isinstance(status, str) else None
 
 
-def normalize_decision(raw: Any) -> dict[str, Any]:
-    """Read an arm result conservatively: GO needs ``go`` true AND six PASS verdicts.
+# The module whose UNMEASURED (or unreadable) verdict refuses: the instrument
+# not sampling is itself the hazard (hazards.arm.UNMEASURED_REFUSES).
+ARM_UNMEASURED_REFUSES = frozenset({"instrument"})
 
-    Anything unreadable is UNMEASURED, which refuses (plan section 2.1).
+
+def arm_unmeasured_code(module: str) -> str:
+    """The DISCLOSE flag an UNMEASURED arm verdict of ``module`` is recorded under (audit A3)."""
+    return f"{module}.arm_unmeasured"
+
+
+def normalize_decision(raw: Any) -> dict[str, Any]:
+    """Read an arm result: GO needs ``go`` true, no REFUSE verdict and a PASS instrument.
+
+    Anything unreadable is UNMEASURED.  An UNMEASURED (or NOT_EVALUATED, or
+    unreadable) verdict refuses only for the instrument; for the other five
+    modules it is listed in ``unmeasured`` and recorded as the DISCLOSE flag
+    ``<module>.arm_unmeasured`` (audit A3, 2026-10-07).  ``not_pass`` still
+    lists every module without PASS, for the record.
     """
 
     def get(name: str) -> Any:
@@ -786,12 +808,19 @@ def normalize_decision(raw: Any) -> dict[str, Any]:
     reasons_raw = get("reasons")
     reasons = [str(item) for item in reasons_raw] if isinstance(reasons_raw, (list, tuple)) else []
     not_pass = sorted(name for name in HAZARD_MODULES if verdicts[name] != PASS)
+    blocking = sorted(name for name in not_pass
+                      if verdicts[name] == REFUSE or name in ARM_UNMEASURED_REFUSES)
+    unmeasured = sorted(name for name in not_pass if name not in blocking)
     record_path = get("record_path") or get("path")
-    decision_go = go is True and not not_pass
-    if go is True and not_pass:
-        reasons.append("arm reported GO without PASS from: " + ", ".join(not_pass))
+    decision_go = go is True and not blocking
+    if go is True and blocking:
+        reasons.append("arm reported GO with REFUSE or an unverified instrument from: " + ", ".join(blocking))
     refused_at = get("refused_at")
-    return {"go": decision_go, "verdicts": verdicts, "not_pass": not_pass,
+    details_raw = get("arm_unmeasured")
+    details = [dict(item) for item in details_raw if isinstance(item, Mapping)] \
+        if isinstance(details_raw, (list, tuple)) else []
+    return {"go": decision_go, "verdicts": verdicts, "not_pass": not_pass, "unmeasured": unmeasured,
+            "unmeasured_detail": details,
             "reasons": reasons, "record_path": str(record_path) if record_path else None,
             "refused_at": refused_at if isinstance(refused_at, str) else None,
             "network_time_off": get("network_time_off"), "record_only": get("record_only")}
@@ -1211,10 +1240,10 @@ class HazardCensus:
     the chain stops as today. CLEAN (exit 1, empty stdout): nothing. Anything
     else (a timeout 124 or spawn failure 127 with empty output, exit 0/2/3
     with empty output, a probe error) is UNMEASURED: retried CENSUS_RETRIES
-    times CENSUS_RETRY_S apart, then flagged ``census.unmeasured`` and the
-    chain goes on. CENSUS_UNMEASURED_STOP_AFTER unmeasured censuses in a row
-    stop the chain under ``night_stopped_census_unmeasured``. The arm and
-    pre-GO censuses are not this class: they stay strict.
+    times CENSUS_RETRY_S apart, then flagged ``census.unmeasured`` (with the
+    count of unmeasured censuses in a row) and the chain goes on, however many
+    follow (audit A3, 2026-10-07: the former stop after four protected no
+    number). The arm and pre-GO censuses are not this class: they stay strict.
     """
 
     def __init__(self, window: "_Window", probes: Any, *, sleep: Callable[[float], None] = time.sleep) -> None:
@@ -1271,8 +1300,7 @@ class HazardCensus:
         self.unmeasured_censuses += 1
         self.window.flag(
             "census.unmeasured", "DIAGNOSTIC", "PHYSICS", stage="window",
-            observed={"attempts": observed, "consecutive": self.consecutive_unmeasured,
-                      "stop_after": CENSUS_UNMEASURED_STOP_AFTER},
+            observed={"attempts": observed, "consecutive": self.consecutive_unmeasured},
             detail="the in-window agent census could not be read on any retry; collection continued",
             legacy_site="scripts/run_night.py:_run_chain_once_impl", legacy_code="night_refused_agent_present",
             interval={"monotonic_ns": [first["monotonic_ns"], last["monotonic_ns"]],
@@ -1280,10 +1308,6 @@ class HazardCensus:
                                            if first["monotonic_raw_ns"] is not None
                                            and last["monotonic_raw_ns"] is not None else None),
                       "wall_s": [first["wall_s"], last["wall_s"]]})
-        if self.consecutive_unmeasured >= CENSUS_UNMEASURED_STOP_AFTER:
-            detail = (f"{self.consecutive_unmeasured} consecutive in-window agent censuses were unmeasured "
-                      f"(each after {CENSUS_RETRIES} retries); the driver stopped the chain")
-            return probe, night_gate.Refusal(STOPPED_CENSUS_UNMEASURED, detail, (probe,))
         return probe, None
 
     def append(self, path: Path, probe: Any, refusal: Any) -> None:
@@ -1966,6 +1990,7 @@ class _Window:
         record = {
             "schema": ARM_DECISION_SCHEMA, "plan_id": self.plan.plan_id, "dry_arm": self.dry_arm,
             "go": decision["go"], "verdicts": decision["verdicts"], "not_pass": decision["not_pass"],
+            "unmeasured": decision["unmeasured"],
             "reasons": decision["reasons"], "arm_error": decision.get("arm_error"),
             "arm_record": {"path": decision["record_path"],
                            "sha256": _sha256_file(Path(decision["record_path"])) if decision["record_path"] else None},
@@ -2058,6 +2083,18 @@ def run_hazard_night(rt: Any, plan_path: Path, plan: Any, probes: Any, initial_c
         window.note(f"arm decision record could not be written: {_error_text(error)}")
     hazard["arm"] = {"go": decision["go"], "verdicts": decision["verdicts"], "reasons": decision["reasons"],
                      "record_path": decision["record_path"]}
+    if decision["go"]:
+        # Audit A3: an UNMEASURED clock, battery, thermal, contention or disk
+        # verdict at arm is a failed probe, recorded and never a refusal.
+        for module in decision.get("unmeasured", ()):
+            detail_rows = [row for row in decision.get("unmeasured_detail", ()) if row.get("module") == module]
+            window.flag(arm_unmeasured_code(module), "DIAGNOSTIC", "PHYSICS", stage="arm",
+                        observed={"module": module, "verdict": decision["verdicts"].get(module),
+                                  "phases": [row.get("phase") for row in detail_rows],
+                                  "reasons": [reason for row in detail_rows for reason in row.get("reasons") or ()]},
+                        detail=f"the arm could not measure {module}; the in-window monitor measures it over "
+                               "every member span; the window went on",
+                        legacy_site="joulewise/hazards/arm.py:_refusals", legacy_code=UNMEASURED)
     if not decision["go"]:
         detail = ("hazard arm did not return GO; non-PASS: "
                   + (", ".join(f"{name}={decision['verdicts'][name]}" for name in decision["not_pass"]) or "none")

@@ -61,7 +61,7 @@ T = {
     "in_start": H + "test_instrument.py::CadenceProbeTests::test_powermetrics_that_cannot_start_is_unmeasured",
     "arm_census": H + "test_arm.py::ArmTests::test_agent_present_refuses_at_the_census_before_any_action",
     "arm_census_fail": H + "test_arm.py::ArmTests::test_census_that_cannot_run_refuses",
-    "arm_unmeasured": H + "test_arm.py::ArmTests::test_unmeasured_refuses_at_arm_for_every_module",
+    "arm_unmeasured": H + "test_arm.py::ArmTests::test_unmeasured_refuses_at_arm_only_for_the_instrument",
     "arm_go": H + "test_arm.py::ArmTests::test_quiet_float_mac_arms_go_in_the_registered_order",
     "imp": H + "test_import_graph.py::ImportGraphTests::test_hazard_modules_reach_no_retired_module",
 }

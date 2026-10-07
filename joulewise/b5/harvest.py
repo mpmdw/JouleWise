@@ -389,6 +389,10 @@ CODES: dict[str, CodeSpec] = {
     # Triage (d), 2026-10-07: present bytes differ in a capture this window's
     # acceptance neither derived from nor judged (DISCLOSE).
     "calibration.historical_custody_mismatch_unused": _spec("CALIBRATION", "NUMBER"),
+    # Audit A3 (2026-10-07): the driver's record of an UNMEASURED arm verdict of
+    # a module other than the instrument (the window went on; DISCLOSE).
+    **{f"{module}.arm_unmeasured": _spec("DIAGNOSTIC", "PHYSICS")
+       for module in ("clock", "battery", "thermal", "contention", "disk")},
     # Why a NULL window never launched (R3-4):
     "records.window_not_launched": _spec("RECORDS", "REPRESENTATION"),
     # The KM003C wall meter (joulewise.external.km003c_parse.CODES), all DISCLOSE:
@@ -525,7 +529,9 @@ NEG8_REFERENCE_INPUT_IDS = frozenset({"start_reference", "start_references", "mi
                                       "end_reference", "end_references"})
 # Codes added by audit-fix batch 1 (2026-10-07) that the design branch's draft
 # sealed catalog gains through the registration row (REG) before the seal.
-AUDFIX1_CODES = frozenset({"neg8.reference_member_excluded"})
+AUDFIX1_CODES = frozenset({"neg8.reference_member_excluded",
+                           *(f"{module}.arm_unmeasured" for module in ("clock", "battery", "thermal", "contention",
+                                                                       "disk"))})
 PIN_REFUSAL_REASONS = frozenset({"calibration_ledger_head_mismatch", "calibration_ledger_rollback",
                                  "calibration_ledger_head_uncommitted", "calibration_ledger_missing",
                                  "calibration_ledger_malformed"})

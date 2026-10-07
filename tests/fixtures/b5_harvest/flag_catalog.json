@@ -18,6 +18,12 @@
       "family": "DIAGNOSTIC",
       "klass": "PHYSICS"
     },
+    "battery.arm_unmeasured": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "PHYSICS"
+    },
     "battery.assist": {
       "blinding": "STRUCTURE",
       "effect": "DISCLOSE",
@@ -210,6 +216,12 @@
       "family": "RECORDS",
       "klass": "REPRESENTATION"
     },
+    "clock.arm_unmeasured": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "PHYSICS"
+    },
     "clock.frequency_changed": {
       "blinding": "STRUCTURE",
       "effect": "DISCLOSE",
@@ -270,6 +282,12 @@
       "family": "ROSTER",
       "klass": "REPRESENTATION"
     },
+    "contention.arm_unmeasured": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "PHYSICS"
+    },
     "contention.kernel_task_share": {
       "blinding": "STRUCTURE",
       "effect": "DISCLOSE",
@@ -299,6 +317,12 @@
       "effect": "DISCLOSE",
       "family": "DIAGNOSTIC",
       "klass": "REPRESENTATION"
+    },
+    "disk.arm_unmeasured": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "PHYSICS"
     },
     "disk.low": {
       "blinding": "STRUCTURE",
@@ -877,6 +901,12 @@
       "klass": "REPRESENTATION"
     },
     "teardown.survivors": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "PHYSICS"
+    },
+    "thermal.arm_unmeasured": {
       "blinding": "STRUCTURE",
       "effect": "DISCLOSE",
       "family": "DIAGNOSTIC",

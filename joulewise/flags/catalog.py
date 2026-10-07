@@ -306,6 +306,11 @@ _INT4_CODES = {
 # be re-derived without it (3+1+3), so the window is excluded.
 _AUDFIX1_CODES = {
     "neg8.reference_member_excluded": _code("NEG8", "PHYSICS", EXCLUDE_WINDOW),
+    # Audit A3: an UNMEASURED arm verdict of a module other than the instrument
+    # (a failed probe, not a measured hazard) is recorded by the driver and the
+    # window goes on; the in-window monitor measures the module per member span.
+    **{f"{module}.arm_unmeasured": _code("DIAGNOSTIC", "PHYSICS", DISCLOSE)
+       for module in ("clock", "battery", "thermal", "contention", "disk")},
 }
 
 DRAFT_CODES: Mapping[str, Mapping[str, str]] = {

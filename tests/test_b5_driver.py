@@ -126,7 +126,13 @@ class FakeArm:
         verdicts = {name: b5_driver.PASS for name in SIX}
 
         def refuse_if_any(modules):
-            hit = {name: self.verdicts[name] for name in modules if self.verdicts.get(name, "PASS") != "PASS"}
+            # joulewise.hazards.arm since audit A3: REFUSE refuses, UNMEASURED only for the instrument;
+            # another module's UNMEASURED is recorded and the arm goes on.
+            for name in modules:
+                if self.verdicts.get(name) == b5_driver.UNMEASURED and name != "instrument":
+                    verdicts[name] = b5_driver.UNMEASURED
+            hit = {name: self.verdicts[name] for name in modules if self.verdicts.get(name, "PASS") != "PASS"
+                   and (self.verdicts[name] != b5_driver.UNMEASURED or name == "instrument")}
             if not hit:
                 return None
             verdicts.update(hit)
@@ -303,7 +309,7 @@ class Harness:
 
 
 class HazardRefusalTests(unittest.TestCase):
-    """Each hazard REFUSE (or UNMEASURED) is NULL: nothing launched, nothing changed."""
+    """Each hazard REFUSE (or an UNMEASURED instrument) is NULL: nothing launched, nothing changed."""
 
     def assert_null(self, harness, *, off_expected: bool):
         before = harness.custody_digests()
@@ -322,19 +328,36 @@ class HazardRefusalTests(unittest.TestCase):
         self.assertEqual([], harness.driver.validate_refusal(refusal))
         return result, refusal
 
-    def test_every_hazard_refuse_and_unmeasured_is_a_null_window(self):
-        for module in SIX:
-            for status in (b5_driver.REFUSE, b5_driver.UNMEASURED):
-                with self.subTest(module=module, status=status):
-                    harness = Harness(self, arm=FakeArm(verdicts={module: status}))
-                    result, refusal = self.assert_null(harness, off_expected=module not in FakeArm.INSTANT)
-                    self.assertEqual(b5_driver.REFUSED_HAZARD, result["aborted_reason"])
-                    self.assertEqual(status, refusal["refusal"]["evidence"]["verdicts"][module])
-                    decision = json.loads((harness.night / b5_driver.ARM_DECISION).read_text())
-                    self.assertFalse(decision["go"])
-                    self.assertEqual([module], decision["not_pass"])
-                    hazard = harness.hazard()
-                    self.assertEqual(("REFUSED", "arm"), (hazard["verdict"], hazard["stage_reached"]))
+    def test_every_hazard_refuse_and_an_unmeasured_instrument_is_a_null_window(self):
+        cases = [(module, b5_driver.REFUSE) for module in SIX] + [("instrument", b5_driver.UNMEASURED)]
+        for module, status in cases:
+            with self.subTest(module=module, status=status):
+                harness = Harness(self, arm=FakeArm(verdicts={module: status}))
+                result, refusal = self.assert_null(harness, off_expected=module not in FakeArm.INSTANT)
+                self.assertEqual(b5_driver.REFUSED_HAZARD, result["aborted_reason"])
+                self.assertEqual(status, refusal["refusal"]["evidence"]["verdicts"][module])
+                decision = json.loads((harness.night / b5_driver.ARM_DECISION).read_text())
+                self.assertFalse(decision["go"])
+                self.assertEqual([module], decision["not_pass"])
+                hazard = harness.hazard()
+                self.assertEqual(("REFUSED", "arm"), (hazard["verdict"], hazard["stage_reached"]))
+
+    def test_an_unmeasured_module_other_than_the_instrument_is_a_flag_and_the_window_runs(self):
+        """Audit A3 (2026-10-07). Before: any UNMEASURED verdict was a NULL window."""
+        for module in ("battery", "thermal", "disk", "clock", "contention"):
+            with self.subTest(module=module):
+                harness = Harness(self, g10=False, arm=FakeArm(verdicts={module: b5_driver.UNMEASURED}))
+                harness.replace_chain("#!/bin/zsh -f\nexit 0\n")
+                self.assertEqual(harness.driver.EXIT_GO, harness.run())
+                decision = json.loads((harness.night / b5_driver.ARM_DECISION).read_text())
+                self.assertEqual((True, [module], [module]), (decision["go"], decision["not_pass"],
+                                                              decision["unmeasured"]))
+                (flag,) = [item for item in harness.flags if item["code"] == f"{module}.arm_unmeasured"]
+                self.assertEqual(("DIAGNOSTIC", "PHYSICS", "window"),
+                                 (flag["family"], flag["klass"], flag["scope"]["level"]))
+                self.assertEqual((module, "UNMEASURED"), (flag["observed"]["module"], flag["observed"]["verdict"]))
+                self.assertEqual("GO", harness.result()["verdict"])
+                self.assertTrue((harness.night / "chain.started").exists())
 
     def test_an_arm_that_raises_or_answers_unreadably_is_unmeasured(self):
         cases = {"raises": FakeArm(raises=RuntimeError("probe exploded")),
@@ -805,11 +828,24 @@ class UnitTests(unittest.TestCase):
         self.assertTrue(b5_driver.normalize_decision({"go": True, "verdicts": go})["go"])
         self.assertTrue(b5_driver.normalize_decision({"verdict": "GO", "verdicts": {
             name: {"status": "PASS"} for name in SIX}})["go"])
-        for raw in ({"go": True, "verdicts": {**go, "thermal": "UNMEASURED"}},
-                    {"go": True, "verdicts": {k: v for k, v in go.items() if k != "disk"}},
+        for raw in ({"go": True, "verdicts": {**go, "thermal": "REFUSE"}},
+                    {"go": True, "verdicts": {**go, "instrument": "UNMEASURED"}},
+                    {"go": True, "verdicts": {**go, "instrument": "NOT_EVALUATED"}},
+                    {"go": True, "verdicts": {k: v for k, v in go.items() if k != "instrument"}},
+                    {"go": True},
                     {"go": "yes", "verdicts": go}, {"go": False, "verdicts": go}, None, "GO", 1):
             with self.subTest(raw=raw):
                 self.assertFalse(b5_driver.normalize_decision(raw)["go"])
+        # Audit A3: another module's UNMEASURED (or missing) verdict is listed, never a refusal.
+        for raw, unmeasured in (({"go": True, "verdicts": {**go, "thermal": "UNMEASURED"}}, ["thermal"]),
+                                ({"go": True, "verdicts": {k: v for k, v in go.items() if k != "disk"}}, ["disk"]),
+                                ({"go": True, "verdicts": {**go, "clock": "NOT_EVALUATED",
+                                                           "contention": "UNMEASURED"}}, ["clock", "contention"])):
+            with self.subTest(raw=raw):
+                decision = b5_driver.normalize_decision(raw)
+                self.assertTrue(decision["go"])
+                self.assertEqual(unmeasured, decision["unmeasured"])
+                self.assertEqual(unmeasured, decision["not_pass"])
 
     def test_executed_inventory_hashes_tracked_files_and_records_head_and_status(self):
         with tempfile.TemporaryDirectory() as directory:

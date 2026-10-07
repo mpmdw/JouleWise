@@ -120,19 +120,20 @@ class CensusTests(unittest.TestCase):
         self.assertEqual((0, 1), (summary["unmeasured_censuses"], summary["retried_probes"]))
         self.assertEqual([], flags(harness, "census.unmeasured"))
 
-    def test_four_unmeasured_censuses_in_a_row_stop_the_chain_under_their_own_code(self):
-        harness = self.harness("/bin/sleep 30\n")
+    def test_unmeasured_censuses_in_a_row_are_flags_and_the_chain_runs_on(self):
+        """Audit A3 (2026-10-07). Before: four in a row stopped the chain (night_stopped_census_unmeasured)."""
+        harness = self.harness("/bin/sleep 2\nexit 0\n")
         harness.census.responses += [probe(CENSUS), probe(CENSUS)] + [
-            probe(CENSUS, exit_code=127) for _ in range(4 * (1 + b5_driver.CENSUS_RETRIES))]
-        self.assertEqual(harness.driver.EXIT_ABORTED, harness.run())
+            probe(CENSUS, exit_code=127) for _ in range(5 * (1 + b5_driver.CENSUS_RETRIES))]
+        self.assertEqual(harness.driver.EXIT_GO, harness.run())
         result = harness.result()
-        self.assertEqual(("ABORTED", b5_driver.STOPPED_CENSUS_UNMEASURED),
-                         (result["verdict"], result["aborted_reason"]))
+        self.assertEqual("GO", result["verdict"])
+        self.assertNotEqual(b5_driver.STOPPED_CENSUS_UNMEASURED, result.get("aborted_reason"))
         unmeasured = flags(harness, "census.unmeasured")
-        self.assertEqual([1, 2, 3, 4], [item["observed"]["consecutive"] for item in unmeasured])
+        self.assertEqual([1, 2, 3, 4, 5], [item["observed"]["consecutive"] for item in unmeasured][:5])
+        self.assertTrue(all("stop_after" not in item["observed"] for item in unmeasured))
         self.assertTrue(all(item["interval"]["monotonic_ns"] for item in unmeasured))
-        refusal = json.loads((harness.night / "refusal.json").read_text())
-        self.assertEqual([], harness.driver.validate_refusal(refusal))
+        self.assertFalse((harness.night / "refusal.json").exists())
         self.assertTrue((harness.night / "chain.exited").exists())
 
     def test_output_with_a_timeout_exit_is_still_an_agent(self):
