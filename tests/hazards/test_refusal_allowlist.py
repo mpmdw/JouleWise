@@ -43,6 +43,7 @@ from tests.hazards import refusal_census as census
 ROOT = census.ROOT
 FIXTURE_CATALOG = ROOT / "tests" / "fixtures" / "b5_harvest" / "flag_catalog.json"
 SEALED_CATALOG = ROOT / "configs" / "campaigns" / "v5_claim_25g83" / "flag_catalog.json"
+DESIGN_BRANCH = "design/2026-10-05-v5-claim-block-draft"
 
 FROZEN_BASELINE = Path(__file__).with_name("refusal_baseline_frozen.txt")
 # The frozen BASELINE list (sites present at e6b6a0ce and unchanged at
@@ -209,6 +210,23 @@ class RefusalAllowlistTests(unittest.TestCase):
 
     def test_every_window_exclusion_names_what_it_protects(self):
         self.assertEqual(window_exclusion_problems(self.document, current_catalogs()), [])
+
+    def test_the_design_catalogs_exclusions_are_listed_before_the_seal(self):
+        """Audit-fix batch 1 (item 7): the draft sealed catalog on the design branch makes
+        roster.run_id_mismatch EXCLUDE_MEMBER; the seal would otherwise fail the test above."""
+        import subprocess
+        try:
+            raw = subprocess.run(["git", "-C", str(ROOT), "show", f"{DESIGN_BRANCH}:{SEALED_CATALOG.relative_to(ROOT)}"],
+                                 capture_output=True, check=False, timeout=60).stdout
+            design = json.loads(raw)["codes"] if raw else None
+        except (OSError, subprocess.SubprocessError, ValueError, KeyError):
+            design = None
+        if design is None:
+            self.skipTest("the block-5 design branch is not in this clone")
+        missing = [problem for problem in window_exclusion_problems(self.document, current_catalogs() + [design])
+                   if " is not in " in problem]
+        self.assertEqual(missing, [])
+        self.assertEqual("NUMBER_INTEGRITY", self.document["member_exclusions"]["roster.run_id_mismatch"]["category"])
 
     # ---------------------------------------------------------- the guard fails
 

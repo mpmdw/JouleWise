@@ -264,6 +264,7 @@
   "roster.before_chain_started": {"category": "NUMBER_INTEGRITY", "protects": "a bundle created before this window's chain started is not this window's member"},
   "roster.creation_unplaced": {"category": "NUMBER_INTEGRITY", "protects": "a bundle whose creation cannot be placed inside this window"},
   "roster.foreign_attempt": {"category": "NUMBER_INTEGRITY", "protects": "a bundle from another attempt of this window: not this attempt's member"},
+  "roster.run_id_mismatch": {"category": "NUMBER_INTEGRITY", "protects": "the bundle's metadata.json run_id differs from its directory: the member's records disagree about which member it is, so its energy could count under the wrong unit or quad position", "added": "audit-fix batch 1 (item 7), 2026-10-07; the design catalog makes it EXCLUDE_MEMBER"},
   "roster.not_in_plan": {"category": "NUMBER_INTEGRITY", "protects": "a bundle the plan does not name"},
   "thermal.os_level_nonzero": {"category": "PHYSICS", "protects": "OS thermal pressure not nominal during the member"},
   "thermal.powermetrics_pressure_elevated": {"category": "PHYSICS", "protects": "powermetrics thermal pressure elevated during the member"}

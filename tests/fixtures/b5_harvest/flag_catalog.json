@@ -884,9 +884,9 @@
     },
     "roster.run_id_mismatch": {
       "blinding": "STRUCTURE",
-      "effect": "DISCLOSE",
+      "effect": "EXCLUDE_MEMBER",
       "family": "ROSTER",
-      "klass": "REPRESENTATION"
+      "klass": "NUMBER"
     },
     "stage.members_refused_pre_bundle_identical": {
       "blinding": "STRUCTURE",
