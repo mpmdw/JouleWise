@@ -1,8 +1,9 @@
 # Registration V5-CLAIM-25G83-B5: the first claim-bearing `_v5` windows (measurement block 5)
 
-Status: **DRAFT, NOT SEALED. Revision 4, 2026-10-06.** Written by Opus 5.5, as lane L6 of the gate-prune workflow
-(revision 3, commit `71c91d74`) and then as the registration-sync side lane (revision 4), on branch
-`design/2026-10-05-v5-claim-block-draft` (revision 2 is commit `bfd1ee8c`). This file authorizes no arm, no
+Status: **DRAFT, NOT SEALED. Revision 5, 2026-10-06.** Written by Opus 5.5, as lane L6 of the gate-prune workflow
+(revision 3, commit `71c91d74`), then as the registration-sync side lane (revision 4, last commit `7261a585`), then
+as the REG lane of gate-prune round 3 (revision 5), on branch `design/2026-10-05-v5-claim-block-draft` (revision 2
+is commit `bfd1ee8c`). This file authorizes no arm, no
 launch and no analysis. It binds only when one cold gate (§0.1, §12) seals it together with three companions in the
 same directory:
 
@@ -61,6 +62,42 @@ after a chain of receipts verified, and discarded a whole window when one member
    98 s), with the admission tests unchanged; all eleven settles are 60 s (was 180 s); a battery-temperature
    diagnostic is added as a disclosed flag; and one 15-minute machinery smoke of the new cooldown is required before
    the seal. The packs, the identity pins and the sizing output were regenerated.
+
+**What changed in revision 5.** This revision registers every decision of 2026-10-06 that changes collection or
+claim use, checked against the integration head `b9d02700a` (branch `integrate/2026-10-06-gate-prune-3`, whole suite
+green). A last code round (P3: lanes `lane/2026-10-06-p3-{harv,haz,drv,wd}`) is in flight; where this text describes
+behaviour that only P3 installs, it says so, and the item is listed under §13 as a sync point to check before the
+seal.
+
+1. **Battery** (§0.17, §4.2, §6.4, §6.5, §9.2): the battery current is read from the SMC (the Mac's power
+   controller) once a second instead of from the battery registry, which republishes only once a minute. The battery
+   supplying part of the load while the adapter is connected and the battery is not charging ("assist") is now
+   disclosed (`battery.assist`), not excluded; charging, loss of AC power and missing evidence still exclude. The same
+   rule applies to calibration captures. The arm refusal is unchanged. The orchestrator's ruling of 2026-10-06
+   (`/Users/edr/night-archive/wallmeter-probe/verify/RULING_battery_assist_2026-10-06.md`) and its reasons are in
+   §9.2.
+2. **Whole-machine meter** (§0.17, §1, §6.8; analysis plan §8.2): an inline USB-C power meter records the Mac's
+   DC input at 50 samples per second. It is a recorded diagnostic with a pre-registered descriptive analysis. It never
+   refuses, excludes or enters a claim number.
+3. **Timing** (§3, §4.1–4.3, §5.1–5.5, §10): stand-down leads of 180, 90 and 60 s; operator countdowns of 0 s
+   except at the post calibration (the fifth registered deviation); a contention dwell of 180 s instead of 600 s; a
+   collection deadline that keeps the post calibration inside the 24 h calibration horizon; one retry of the NEG-8
+   corpus; a 1,800 s cap per member; strict validation moved to the harvest; the calibration refit done once per
+   window; the watchdog releasing a finished window at once; the sizing and the expected chain re-derived.
+4. **Yield tripwire** (§5.7, §7.3): the driver counts collected bundles per stage and at the window's end, flags
+   empty and short stages, and gives the window a yield status; a process rule stops a deterministic loss from
+   repeating through back-to-back windows.
+5. **Checks that now record instead of refusing** (§5.3, §6.10): the NEG-8 corpus drop rule (one closed list shared
+   by the mint and the harvest), physical timestamps for the NEG-8 bound's age, the power-supply and OS-build
+   strings disclosed, the cooldown fallback reference, and the controller, fiducial-writer and reservation records.
+   Historical calibration custody is re-verified at the harvest, and a mismatch removes the window. The arm's one
+   identity refusal, an OS build no acceptance judged, is registered (§4.7).
+6. **GAMMA's interior references** (§0.7, §0.12, §2, §4.6, §5.1, §5.5): lane L10's erratum is applied.
+7. **Era pins** (§11 item 5): two older documents' digests are records of their era; the block's live pins are the
+   sealed inventory at H_claim.
+8. **Catalog** (`flag_catalog.json`): `battery.assist` (DISCLOSE), `calibration.historical_custody_mismatch`
+   (EXCLUDE_WINDOW) and `calibration.historical_custody_unmeasured` (DISCLOSE) are added; the battery notes follow
+   the ruling.
 
 ## 0. Terms, built in the order they are used
 
@@ -201,9 +238,9 @@ The values in this section follow the cold-judge ruling on block-5 per-member ti
   no cooldown and no reading. Both are DISCLOSE (§6.8) and are reported beside the window's NEG-8
   result. If the NEG-8 screen passes, the numbers stand and the kelvin figure sizes future gaps; if it fails, the
   window is already removed by `neg8.screen_failed`. *Worked example (synthetic).* Readings 30.1, 31.0, 31.9, 32.6,
-  33.3 and 33.9 °C: rise 3.8 K; the last three span 1.3 K, so no plateau; the stage is flagged. The code lands in
-  `scripts/run_campaign.py` in a later lane; until it does, no reading exists and the reference members alone carry
-  the drift check. Adding it changes no exclusion, so it needs no erratum.
+  33.3 and 33.9 °C: rise 3.8 K; the last three span 1.3 K, so no plateau; the stage is flagged. The reading is
+  taken by `scripts/run_campaign.py` (`_hazard_read_battery_temperature`, manifest key
+  `battery_temperature_readings`) and judged by the harvest; both are at `b9d02700a`.
 
 ### 0.7 Packs, attempts, windows and the measurement block
 
@@ -215,12 +252,13 @@ The values in this section follow the cold-judge ruling on block-5 per-member ti
   `configs/campaigns/d117_floor_qwen3-8b_v5` (Qwen3-8B, 4-bit) and **GAMMA**
   `configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5` (both models). Their plan-tree SHA-256s after the
   timing lane regenerated them (branch `lane/2026-10-06-timing-policy`, commit `f4cf9047`) are ALPHA
-  `5218c2709274765c706f38766ae68cce30892a673e9ae5cc290701362f615eb1`, BETA
-  `5bab773a481e4a06fae564217b178d8e1d76a5334f99a3b264c1174db692a6e4`, GAMMA
-  `523864e25be4e94424dcc366b4e8ae2719f41d6c222d36679588a0c6aa087ab6`. (At the gate-prune integration head
+  `5218c2709274765c706f38766ae68cce30892a673e9ae5cc290701362f615eb1` and BETA
+  `5bab773a481e4a06fae564217b178d8e1d76a5334f99a3b264c1174db692a6e4`. GAMMA's, after lane L10 gave its interior
+  references distinct run ids (branch `lane/2026-10-06-l10-gamma-refs`, commit `c6309e1a`; §2, "Before GAMMA-1
+  arms"), is `fb51b4aa0c47fb36bbc838369fd6b5af0db4656becf01ebc5051c9794b8b8bc3` (`523864e2…` after the timing lane,
+  and still at the integration head `b9d02700a`, which does not yet carry L10). (At the gate-prune integration head
   `f8164893`, before the timing lane, they were `a0076ae7…`, `ebd8c160…` and `7cdf1891…`.) The values in force are
-  those in the sealed inventory at H_claim (§11), and GAMMA's changes once more before GAMMA-1 (§2, "Before GAMMA-1
-  arms").
+  those in the sealed inventory at H_claim (§11).
 - **Attempt.** One arm-to-harvest occurrence of one pack, labelled `ALPHA-n`, `BETA-n` or `GAMMA-n`, n = 1, 2, …
 - **Window.** The stretch of machine time an attempt occupies, from its scheduled start t0 (§0.17) to its chain's
   exit.
@@ -295,17 +333,30 @@ printed. GAMMA's two contrasts are its target cells, each over 10 quads.
 
 - **Reference member.** A member of one fixed reference workload (Qwen2.5-1.5B, 1024-token prompt, 256 output
   tokens). Each window runs 12 at its start, the **NEG-8 corpus** (NEG-8 is an inherited label from the project's
-  negative-control list; it is a name, not an abbreviation), then a **start triplet**, interior references, and an
-  **end triplet**.
+  negative-control list; it is a name, not an abbreviation), then a **start triplet**, one **midpoint reference**,
+  and an **end triplet**. The midpoint reference runs at the boundary between the window's decode arm and its
+  prefill arm, which is also its temporal midpoint: after science member 50 of 100 in ALPHA and BETA, after science
+  member 40 of 80 in GAMMA.
+- **Diagnostic interior reference (GAMMA only).** GAMMA also runs one reference in the middle of each arm, after
+  science members 20 and 60. Each is the midpoint reference's config under its own run id
+  (`gamma-interior-reference-decode-midpoint`, `gamma-interior-reference-prefill-midpoint`), with the role
+  `window_interior_reference_diagnostic`. That role is not a NEG-8 role, so neither the NEG-8 screen nor the drift
+  allowance below reads these two members; they are recorded as a measure of drift within each arm. (The screen
+  accepts exactly three start, one midpoint and three end references; a window with three midpoint-role references
+  fails it.)
 - **NEG-8 bound.** From the corpus members' gross energies (and separately their idle-subtracted energies), with s
   their sample standard deviation and t = t(0.975, n − 1): bound = max(mean of the largest 3 − mean of the smallest
   3, t × s × √(2/3)) (`whole_window.py` `build_neg8_drift_bound_artifact`).
 - **NEG-8 screen.** The window passes when |mean(end triplet) − mean(start triplet)| ≤ that bound, for both the gross
   and the idle-subtracted energies. The
-  **whole-window drift allowance** is max(largest spread among the start, interior and end means, the bound); each
-  member carries half of it (`E_whole_window_drift_allowance_j`), so a contrast carries it once in total.
-  *Worked example (synthetic).* A bound of 0.40 J; start mean 20.10 J, end mean 20.35 J: 0.25 ≤ 0.40 passes; with an
-  interior mean of 19.90 J the spread is 0.45 J, so the allowance is 0.45 J and each member carries 0.225 J.
+  **whole-window drift allowance** is max(spread, the bound), where the spread is the largest minus the smallest of
+  three values: the start-triplet mean, the midpoint reference's energy and the end-triplet mean
+  (`whole_window.py`, `trajectory_excursion_max_j`). Each member carries half of the allowance
+  (`E_whole_window_drift_allowance_j`), so a contrast carries it once in total.
+  *Worked example (synthetic).* A bound of 0.40 J; start mean 20.10 J, end mean 20.35 J: 0.25 ≤ 0.40 passes; with a
+  midpoint reference of 19.90 J the spread is 20.35 − 19.90 = 0.45 J, so the allowance is 0.45 J and each member
+  carries 0.225 J. In GAMMA, a diagnostic interior reference of 19.70 J would change nothing: it is not one of the
+  three values, so the spread stays 0.45 J.
 - The NEG-8 screen reads reference-workload energies, never a science member's energy.
 
 ### 0.13 Idle admission
@@ -503,11 +554,23 @@ Each is evidenced by a path and SHA-256 before the point named.
 the whole-window verdict fails (§6.3, §6.5; the integration head `f8164893` does not emit it yet), has passed its
 Fable final pass, and is pinned by an addendum to the seal record (§11 item 4).
 
-**Before GAMMA-1 arms:** GAMMA's three interior reference stages launch three distinct `run_id`s (lane L10). In the
-current pack all three launch the same one-member input, and `run_campaign.py` skips a `run_id` whose complete bundle
-already exists, so the second and third would be skipped. The fix changes GAMMA pack bytes only. If it lands before
-the seal its bytes are sealed directly; otherwise a prospective cold erratum seals them before GAMMA-1 arms. Under
-§7.5 it supersedes no completed ALPHA or BETA window, because neither executes GAMMA's files.
+**Before GAMMA-1 arms:** GAMMA's three interior reference stages launch three distinct `run_id`s (lane L10, branch
+`lane/2026-10-06-l10-gamma-refs`, commits `c6309e1a` and `7bfd7c2c`). Before L10 all three launched the same
+one-member input, `window_references_v5/midpoint` (run id `neg8-window-midpoint`), and `run_campaign.py` skips a
+`run_id` whose complete bundle already exists, so the second and third were never measured and the harvest removed
+the window (`roster.duplicate_run_id`). Giving all three the midpoint role would instead fail the NEG-8 screen,
+which accepts one midpoint (§0.12). So the arm boundary (stage `gamma-reference-arm-boundary`, after science member
+40) keeps the shared midpoint reference and is GAMMA's one NEG-8 midpoint, and the two arm-midpoint stages run the
+diagnostic interior references under `configs/campaigns/gamma_interior_references_v5/` (§0.12). GAMMA's plan tree
+pins those two manifests and configs by SHA-256 as external inputs, as it pins the window references, and its
+generator refuses if their bytes differ from the shared midpoint's in anything other than `run_id`. No science
+config, calibration plan, analysis manifest or root order manifest changed; GAMMA still runs 80 science and 21
+auxiliary members. Besides GAMMA's pack and the two new reference directories, the change touches only the retired
+block-4 writer (`scripts/write_v5_qualification_plan.py`, which no block-5 window runs) and tests. L10 is not in
+the integration head `b9d02700a`; it merges into the next integration (with the sizing and identity pins re-derived
+there by the current sizer and `repin.py`). If it lands before the seal its bytes are sealed directly; otherwise a
+prospective cold erratum seals them before GAMMA-1 arms. Under §7.5 it supersedes no completed ALPHA or BETA
+window, because neither executes GAMMA's files.
 
 **Before the release event:** the analysis code (lane L9) is written blind, pinned by an addendum, and the blind dry
 run of analysis plan §3.2 has completed.
@@ -716,10 +779,11 @@ Load average, process-name lists and the `corecaptured` spawn count, which revis
    `9033a69906aab1f0ff5724b5a6c2f3efd623512ee49a7048713e2410e701c794`. That digest covers Python 3.13.1, mlx 0.31.2,
    mlx-lm 0.31.3, mlx-metal 0.31.2, numpy 2.5.1, safetensors 0.8.0, tokenizers 0.22.2 and transformers 5.12.1.
    `scripts/write_b5_identity_pins.py` generated the file from the packs' identity units and 24 block-3 reference
-   bundles of the same two models, without loading a model. Its draft SHA-256 after the timing lane
-   (`f4cf9047`) is `9c2ecd89ba4fb88b87a12065754f596e3642206886b2b0913b6febe7644d5322` (`039d3e3c…` at `f8164893`;
-   only the packs' plan-tree and config-inventory digests changed, not the model or runtime pins); the seal binds
-   the bytes at H_claim.
+   bundles of the same two models, without loading a model. Its draft SHA-256 after lane L10 (`c6309e1a`) is
+   `ccce59f908ddefd881ac0d8ba9b510e7de9e54adced1ae77d9353da398999c32` (`9c2ecd89…` after the timing lane
+   `f4cf9047` and still at the integration head `b9d02700a`; `039d3e3c…` at `f8164893`; each change moved only the
+   packs' plan-tree and config-inventory digests, L10's only GAMMA's plan-tree digest, never the model or runtime
+   pins); the seal binds the bytes at H_claim.
    Two programs compare against these pins. At the arm, the driver passes the file to the model-identity collector
    (`--identity-pins`) when the measurement checkout holds it. At harvest, the harvest reads its archived copy. If
    either finds no pin to compare against, it records `model.identity_unpinned`, which removes the window (§6.5).
@@ -744,7 +808,8 @@ A change to any item after the seal needs a prospective cold erratum before the 
 
 The chain runs its pack's stage graph in block 3's order: the bracket reservation; a 60 s settle; the pre
 calibration and its screen; the NEG-8 corpus and the bound derivation; the start triplet; the science stages with
-the pack's interior references in their places; the end triplet; the post calibration and a record of the bracket
+the pack's interior references in their places (the midpoint reference in every pack; in GAMMA also the two
+diagnostic interior references, §0.12); the end triplet; the post calibration and a record of the bracket
 session's status. Every collection stage starts with its own 60 s settle (§0.6; block 3 used 180 s).
 
 - **The only stops**, all before member 1 (about 13 min into the chain): a failed reservation, a failed pre

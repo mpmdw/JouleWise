@@ -1013,7 +1013,7 @@
       "effect": "EXCLUDE_WINDOW",
       "family": "ROSTER",
       "klass": "NUMBER",
-      "note": "The plan tree launches (or lists) one run id more than once; the campaign runner skips a run id whose bundle exists, so every planned position after the first is never measured and the window is not the registered design (GAMMA's interior references until lane L10 gives them distinct run ids). Added after the end-to-end rehearsal, round 1 (B3)."
+      "note": "The plan tree launches (or lists) one run id more than once; the campaign runner skips a run id whose bundle exists, so every planned position after the first is never measured and the window is not the registered design (as GAMMA's interior references did until lane L10 gave them distinct run ids). Added after the end-to-end rehearsal, round 1 (B3)."
     },
     "roster.foreign_attempt": {
       "blinding": "STRUCTURE",
