@@ -842,7 +842,10 @@ class WholeWindowSelectionTests(unittest.TestCase):
             "max_abs_delta_j": 0.05,
             "max_rel_delta": 0.25,
         }
+        # A reducer summary records its status; since cold pass 2 D1 a
+        # reference summary without one is a lost reference (summary_unreadable).
         summary = {
+            "status": "succeeded",
             "gross_energy_j": 5.0,
             "idle_subtracted_energy_j": 4.5,
             "energy_anchor_shift_envelopes": {

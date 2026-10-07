@@ -269,9 +269,12 @@ class ValidatorEndReferenceTimeTests(unittest.TestCase):
             return {"evaluated_at_s": evaluated_at_s}
 
         energy = ({"point_j": 1.0, "lower_j": 1.0, "upper_j": 1.0}, 1.0, None)
+        # Every reference's stored summary reads as succeeded: since cold pass 2
+        # D1 a summary with no status is a lost reference (summary_unreadable),
+        # which is not what these tests are about.
         with patch.object(whole_window.Neg8BracketPolicy, "from_mapping", return_value=object()), \
                 patch.object(whole_window, "_manifest_bundle_paths", return_value=paths), \
-                patch.object(whole_window, "_read_json_object", return_value={}), \
+                patch.object(whole_window, "_read_json_object", return_value={"status": "succeeded"}), \
                 patch.object(whole_window, "_custody_strict_invalid", return_value=False), \
                 patch.object(whole_window, "_current_strict_summary", return_value=False), \
                 patch.object(whole_window, "_reference_energy_evidence", return_value=energy), \
