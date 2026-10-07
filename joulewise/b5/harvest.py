@@ -476,6 +476,9 @@ IDENTITY_SUPERSESSION_CHECKS = {
     "pack_identity": frozenset({"pins", "config_run_id", "registered_digests"}),
     "checkout_identity": frozenset({"head", "tracked_edits", "untracked_in_executed_roots"}),
     "executed_code": frozenset({"executed_inventory", "chain_sidecar"}),
+    # Opus audit F5: the pins were read and every succeeded science member's
+    # recorded model and runtime identity was derived and compared with them.
+    "model_identity": frozenset({"pins", "members_compared"}),
 }
 LINEAGE_CODES = frozenset(code for code in CODES if code.startswith("lineage."))
 # Empty since the Opus triple audit F2 fix (2026-10-07): a never-classified
@@ -5129,6 +5132,11 @@ class _Harvest:
                       observed={"identity_units": [unit.get("identity_unit_id") for unit in units]})
         pack_relative = _relative_to(self.pack_copy, self.repo_root_copy) or ""
         seen: dict[str, set[tuple[str, str]]] = {}
+        # Opus audit F5: every succeeded science member's identity (the
+        # weights tree hash its process took at prepare, and its runtime
+        # stack) compared with a pin is the model check itself, so it may
+        # supersede an arm model_identity collector that did not finish.
+        science_compared, science_complete = 0, bool(frozen)
         for member in self.roster["members"]:
             result = self.members.get(member["run_id"])
             if result is None or result.get("status") != "succeeded":
@@ -5140,12 +5148,17 @@ class _Harvest:
             # each auxiliary input is its own consistency group.
             unit_id = unit_of.get(relative) or f"{member.get('kind')}:{member.get('stage_id')}"
             triple = result.get("identity")
+            science = member.get("kind") == "science"
             if not isinstance(triple, Mapping):
+                science_complete = science_complete and not science
                 self.emit("model.identity_underivable", level="member", run_id=member["run_id"],
                           collector="model_identity", observed={"error": "identity" in result.get("errors", {})})
                 continue
             seen.setdefault(str(unit_id), set()).add((triple["model_artifact_sha256"], triple["runtime_identity_sha256"]))
             pins = frozen.get(unit_id)
+            if science:
+                science_complete = science_complete and pins is not None
+                science_compared += pins is not None
             if pins is not None and (triple["model_artifact_sha256"] != pins.get("model_artifact_sha256")
                                      or triple["runtime_identity_sha256"] != pins.get("runtime_identity_sha256")):
                 self.emit("model.identity_mismatch", level="member", run_id=member["run_id"],
@@ -5155,6 +5168,8 @@ class _Harvest:
             if len(identities) > 1:
                 self.emit("model.identity_inconsistent_in_window", level="window", collector="model_identity",
                           observed={"identity_unit": unit_id, "distinct": sorted(map(list, identities))[:8]})
+        self.identity_checks["model_identity"] = {"pins": bool(frozen),
+                                                  "members_compared": science_complete and science_compared > 0}
 
     # -- launch lineage (lane L3's records audit) ------------------------------
     def lineage_audit(self) -> None:
@@ -5743,12 +5758,13 @@ class _Harvest:
         inventory against the sealed one, chain sidecar) and pack_identity
         (plan-tree pins, the registered plan-tree digest, config run ids;
         run-id uniqueness is ``roster.duplicate_run_id``, so every collection
-        stage must have resolved).  The checks required are
-        ``IDENTITY_SUPERSESSION_CHECKS``, named explicitly.  The harvest's
-        own result, mismatch or clean, then stands.  model_identity is never
-        superseded: the harvest does not re-hash the model artifact,
-        tokenizer or runtime packages.  The removed flag is recorded whole in
-        ``records.identity_unmeasured_superseded``.
+        stage must have resolved) and model_identity (Opus audit F5: the
+        pins were read and every succeeded science member's identity, the
+        model tree hash and runtime stack its own process recorded at
+        prepare, was derived and compared with them).  The checks required
+        are ``IDENTITY_SUPERSESSION_CHECKS``, named explicitly.  The harvest's
+        own result, mismatch or clean, then stands.  The removed flag is
+        recorded whole in ``records.identity_unmeasured_superseded``.
         """
         for record in list(self.flags.records):
             code = record.get("code")
